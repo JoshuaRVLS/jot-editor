@@ -1,20 +1,6 @@
 # jcode - Modern Terminal Editor
 
-Terminal-based code editor dengan fitur modern dan non-modal editing.
-
-## Struktur Project
-
-```
-jcode/
-├── src/          # Source code
-│   ├── main.cpp
-│   ├── editor.h/cpp
-│   ├── config.h/cpp
-│   └── features.h/cpp
-├── bin/          # Executable
-│   └── jcode
-└── Makefile
-```
+Cuman di test di arch linux
 
 ## Fitur
 
