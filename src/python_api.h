@@ -1,6 +1,7 @@
 #ifndef PYTHON_API_H
 #define PYTHON_API_H
 
+#include "features.h"
 #include <functional>
 #include <map>
 #include <string>
@@ -78,11 +79,9 @@ public:
   void py_show_input_prompt(const std::string &msg,
                             const std::string &callback);
   void py_hide_popup();
-  void py_set_diagnostics(
-      const std::string &filepath,
-      const std::string &json_diagnostics); // Parsing list of dicts from python
-                                            // is hard in C++, stick to JSON
-                                            // string or simple parallel arrays?
+
+  // is hard in C++, stick to JSON
+  // string or simple parallel arrays?
   // Actually, passing Python object directly requires PyObject*. We are
   // avoiding that in C++ logic if possible. Let's assume we pass primitives. Or
   // strict JSON string which we parse? Let's use parallel arrays for simplicity
@@ -95,6 +94,8 @@ public:
   void py_add_diagnostic(const std::string &filepath, int line, int col,
                          int end_line, int end_col, const std::string &message,
                          int severity);
+  void py_set_diagnostics(const std::string &filepath,
+                          const std::vector<Diagnostic> &diagnostics); // New
 
   std::string py_get_mode();
   int py_get_cursor_x();

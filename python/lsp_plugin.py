@@ -63,7 +63,7 @@ def on_change(filepath):
     if filepath in change_timers:
         change_timers[filepath].cancel()
     
-    t = threading.Timer(0.2, perform_change, [filepath])
+    t = threading.Timer(0.1, perform_change, [filepath])
     change_timers[filepath] = t
     t.start()
 

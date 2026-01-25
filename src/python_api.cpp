@@ -177,6 +177,52 @@ static PyObject *py_add_diagnostic(PyObject *self, PyObject *args) {
   Py_RETURN_NONE;
 }
 
+static PyObject *py_set_diagnostics(PyObject *self, PyObject *args) {
+  char *path;
+  PyObject *list;
+  if (!PyArg_ParseTuple(args, "sO", &path, &list))
+    return nullptr;
+  if (!PyList_Check(list)) {
+    PyErr_SetString(PyExc_TypeError, "Expected a list of diagnostics");
+    return nullptr;
+  }
+
+  std::vector<Diagnostic> diagnostics;
+  int size = PyList_Size(list);
+  for (int i = 0; i < size; i++) {
+    PyObject *item = PyList_GetItem(list, i);
+    if (!PyDict_Check(item))
+      continue;
+
+    Diagnostic d;
+    // Helper to get int from dict
+    PyObject *pLine = PyDict_GetItemString(item, "line");
+    d.line = pLine ? PyLong_AsLong(pLine) : 0;
+
+    PyObject *pCol = PyDict_GetItemString(item, "col");
+    d.col = pCol ? PyLong_AsLong(pCol) : 0;
+
+    PyObject *pEndLine = PyDict_GetItemString(item, "end_line");
+    d.end_line = pEndLine ? PyLong_AsLong(pEndLine) : d.line;
+
+    PyObject *pEndCol = PyDict_GetItemString(item, "end_col");
+    d.end_col = pEndCol ? PyLong_AsLong(pEndCol) : d.col;
+
+    PyObject *pSeverity = PyDict_GetItemString(item, "severity");
+    d.severity = pSeverity ? PyLong_AsLong(pSeverity) : 1;
+
+    PyObject *pMsg = PyDict_GetItemString(item, "message");
+    if (pMsg) {
+      d.message = PyUnicode_AsUTF8(pMsg);
+    }
+    diagnostics.push_back(d);
+  }
+
+  if (g_python_api)
+    g_python_api->py_set_diagnostics(path, diagnostics);
+  Py_RETURN_NONE;
+}
+
 // Register Keybind from Python
 static PyObject *py_register_keybind(PyObject *self, PyObject *args) {
   char *key, *mode, *cb;
@@ -230,6 +276,8 @@ static PyMethodDef JCodeMethods[] = {
     {"hide_popup", py_hide_popup, METH_VARARGS, "Hide popup"},
     {"clear_diagnostics", py_clear_diagnostics, METH_VARARGS,
      "Clear diagnostics"},
+    {"set_diagnostics", py_set_diagnostics, METH_VARARGS,
+     "Set diagnostics"}, // New
     {"add_diagnostic", py_add_diagnostic, METH_VARARGS, "Add diagnostic"},
     {"register_keybind", py_register_keybind, METH_VARARGS,
      "Register key binding"},
@@ -758,5 +806,12 @@ void PythonAPI::py_add_diagnostic(const std::string &filepath, int line,
     d.message = message;
     d.severity = severity;
     editor->add_diagnostic(filepath, d);
+  }
+}
+
+void PythonAPI::py_set_diagnostics(const std::string &filepath,
+                                   const std::vector<Diagnostic> &diagnostics) {
+  if (editor) {
+    editor->set_diagnostics(filepath, diagnostics);
   }
 }

@@ -15,6 +15,15 @@ void Editor::insert_char(char c) {
     buf.lines[buf.cursor.y].insert(buf.cursor.x, spaces);
     buf.cursor.x += tab_size;
   } else {
+    // Check if we should skip closing bracket
+    if (AutoClose::is_closing_bracket(c) &&
+        AutoClose::should_skip_closing(c, buf.lines[buf.cursor.y],
+                                       buf.cursor.x)) {
+      buf.cursor.x++;
+      needs_redraw = true;
+      return;
+    }
+
     buf.lines[buf.cursor.y].insert(buf.cursor.x, 1, c);
     buf.cursor.x++;
 

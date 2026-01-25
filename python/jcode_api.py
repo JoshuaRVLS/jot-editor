@@ -36,25 +36,32 @@ def move_line_down(): core.move_line_down()
 def show_popup(text, x, y): core.show_popup(text, x, y)
 def hide_popup(): core.hide_popup()
 def clear_diagnostics(filepath): core.clear_diagnostics(filepath)
+def set_diagnostics(filepath, diagnostics): core.set_diagnostics(filepath, diagnostics) # New
 def add_diagnostic(filepath, line, col, end_line, end_col, message, severity): 
     core.add_diagnostic(filepath, line, col, end_line, end_col, message, severity)
+# Callback Registry
+_callback_registry = {}
+
+def register_callback(func):
+    if not callable(func): return None
+    name = func.__name__
+    # Handle duplicates by appending ID if needed? For now simple overwrite or unique name
+    # Let's use the function name, but maybe we should use a unique ID mapping
+    # Actually, the C++ side expects a string name.
+    # If we use a unique ID, we pass that to C++.
+    
+    # Simple approach: store in dict, ensure unique name?
+    # Or just trust names are unique enough or use id(func)
+    unique_name = f"{name}_{id(func)}"
+    _callback_registry[unique_name] = func
+    return unique_name
+
 def register_keybind(key, mode, callback):
-    # Check if callback is a function name or callable
     cb_name = ""
     if isinstance(callback, str):
         cb_name = callback
     elif callable(callback):
-        # We need to expose it to __main__ so C++ can find it if simpler lookup used,
-        # BUT our new _jcode_internal.register_keybind probably expects a Name?
-        # Actually in src/python_api.cpp we implemented py_register_keybind to call C++ register_keybind.
-        # And C++ register_keybind stores method name.
-        # So we really need a name.
-        if hasattr(callback, "__name__"):
-            cb_name = callback.__name__
-            # Helper: inject into __main__ if needed?
-            # Or reliance on user putting it there.
-            import __main__
-            setattr(__main__, cb_name, callback)
+        cb_name = register_callback(callback)
     
     if cb_name:
         core.register_keybind(key, mode, cb_name)
@@ -64,10 +71,7 @@ def register_command(name, callback):
     if isinstance(callback, str):
         cb_name = callback
     elif callable(callback):
-        if hasattr(callback, "__name__"):
-            cb_name = callback.__name__
-            import __main__
-            setattr(__main__, cb_name, callback)
+        cb_name = register_callback(callback)
     
     if cb_name:
         core.register_command(name, cb_name)
@@ -77,15 +81,20 @@ def show_input(prompt, callback):
     if isinstance(callback, str):
         cb_name = callback
     elif callable(callback):
-        if hasattr(callback, "__name__"):
-            cb_name = callback.__name__
-            import __main__
-            setattr(__main__, cb_name, callback)
+        cb_name = register_callback(callback)
             
     if cb_name:
         core.show_input(prompt, cb_name)
 
 def _internal_call_callback(cb_name, arg):
+    if cb_name in _callback_registry:
+        try:
+            _callback_registry[cb_name](arg)
+        except Exception as e:
+            print(f"Error in callback {cb_name}: {e}")
+        return
+
+    # Fallback to __main__ for legacy or string-based callbacks
     import __main__
     if hasattr(__main__, cb_name):
         func = getattr(__main__, cb_name)
@@ -95,7 +104,6 @@ def _internal_call_callback(cb_name, arg):
             except Exception as e:
                 print(f"Error in callback {cb_name}: {e}")
     else:
-        # Search in jcode_api provided callbacks? No, usually in main or plugins
         print(f"Callback {cb_name} not found")
 
 # Event Callbacks
@@ -170,6 +178,8 @@ class Editor:
     def set_theme_color(name, fg, bg): set_theme_color(name, fg, bg)
     @staticmethod
     def clear_diagnostics(filepath): clear_diagnostics(filepath)
+    @staticmethod
+    def set_diagnostics(filepath, diagnostics): set_diagnostics(filepath, diagnostics)
     @staticmethod
     def add_diagnostic(filepath, line, col, end_line, end_col, message, severity): 
         add_diagnostic(filepath, line, col, end_line, end_col, message, severity)

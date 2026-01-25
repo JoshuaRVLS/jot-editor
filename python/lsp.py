@@ -125,17 +125,32 @@ class LSPClient:
 
             diagnostics = params["diagnostics"]
             
-            self.log(f"DIAGNOSTICS: {len(diagnostics)} for {filepath}")
-            # Editor.show_message(f"LSP: Got {len(diagnostics)} diagnostics")
-            Editor.clear_diagnostics(filepath)
+            flat_diagnostics = []
             for d in diagnostics:
-                line = d["range"]["start"]["line"]
-                col = d["range"]["start"]["character"]
-                end_line = d["range"]["end"]["line"]
-                end_col = d["range"]["end"]["character"]
-                message = d["message"]
-                severity = d.get("severity", 1) # 1=Error
-                Editor.add_diagnostic(filepath, line, col, end_line, end_col, message, severity)
+                flat_d = {
+                    "line": d["range"]["start"]["line"],
+                    "col": d["range"]["start"]["character"],
+                    "end_line": d["range"]["end"]["line"],
+                    "end_col": d["range"]["end"]["character"],
+                    "message": d["message"],
+                    "severity": d.get("severity", 1)
+                }
+                flat_diagnostics.append(flat_d)
+            
+            self.log(f"DIAGNOSTICS: {len(diagnostics)} for {filepath}")
+            try:
+                Editor.set_diagnostics(filepath, flat_diagnostics)
+            except AttributeError:
+                # Fallback if API hasn't updated yet (reloading plugin issue?)
+                Editor.clear_diagnostics(filepath)
+                for d in diagnostics:
+                    line = d["range"]["start"]["line"]
+                    col = d["range"]["start"]["character"]
+                    end_line = d["range"]["end"]["line"]
+                    end_col = d["range"]["end"]["character"]
+                    message = d["message"]
+                    severity = d.get("severity", 1) 
+                    Editor.add_diagnostic(filepath, line, col, end_line, end_col, message, severity)
 
     def flush_queue(self):
         self.log(f"Flushing {len(self.message_queue)} queued messages")

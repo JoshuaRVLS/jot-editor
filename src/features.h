@@ -4,6 +4,15 @@
 #include <string>
 #include <vector>
 
+struct Diagnostic {
+  int line;
+  int col;
+  int end_line;
+  int end_col;
+  std::string message;
+  int severity; // 1=Error, 2=Warning, 3=Info, 4=Hint
+};
+
 class EditorFeatures {
 public:
   static int get_indent_level(const std::string &line);

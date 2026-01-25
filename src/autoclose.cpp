@@ -4,6 +4,8 @@ bool AutoClose::should_auto_close(char c) {
     return c == '(' || c == '{' || c == '[';
 }
 
+
+
 char AutoClose::get_closing_bracket(char c) {
     switch (c) {
         case '(': return ')';
