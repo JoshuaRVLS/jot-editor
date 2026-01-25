@@ -1,54 +1,55 @@
-# jcode - Modern Terminal Editor
+# jcode
 
-Cuman di test di arch linux
+A lightweight, terminal-based code editor written in C++ with Python scripting support.
 
-## Fitur
+![jcode screenshot](screenshot.png)
 
-### Editing
-- Auto-indent saat enter
-- Bracket matching (Ctrl+B)
-- Format document (Ctrl+L)
-- Duplicate line (Ctrl+D)
-- Toggle comment (Ctrl+/)
-- Undo/Redo (Ctrl+Z/Y)
-- Copy/Cut/Paste (Ctrl+C/X/V)
-- **Mouse selection** - Click & drag untuk select text
+## Features
+*   **Performance**: Written in C++ for speed.
+*   **Python Plugins**: Extend functionality using Python.
+*   **Syntax Highlighting**: Supports C++, Python, JS, etc.
+*   **Themes**: Fully customizable color schemes.
+*   **Telescope**: Fuzzy file finder (`Ctrl+P`).
+*   **File Tree**: Sidebar explorer (`Ctrl+B`).
+*   **Minimap**: Code overview on the right.
 
-### UI
-- Command palette (Ctrl+P)
-- File explorer sidebar
-- Minimap (fixed)
-- **Image Viewer** - View images in terminal (click image file in explorer)
-- Search panel (Ctrl+F)
-- Multiple tabs
-- Syntax highlighting
+## Installation
 
-### Konfigurasi
-- Config file di `~/.config/jcode/config`
-- Bisa set: tab size, auto indent, explorer width, dll
+### Dependencies
+*   CMake
+*   C++17 Compiler (GCC/Clang)
+*   Python 3 check `python3-config`
+*   ncurses? (Uses custom terminal handling or raw escape codes? (It uses termios + raw VT100 escapes, no ncurses dependency))
 
-## Keybindings
-
-**File:** Ctrl+N (new), Ctrl+O (explorer), Ctrl+S (save), Ctrl+W (close), Ctrl+Q (quit)
-
-**Edit:** Ctrl+Z (undo), Ctrl+Y (redo), Ctrl+C (copy), Ctrl+X (cut), Ctrl+V (paste), Ctrl+A (select all)
-
-**Features:** Ctrl+P (palette), Ctrl+F (search), Ctrl+M (minimap), Ctrl+B (bracket), Ctrl+L (format), Ctrl+D (duplicate), Ctrl+/ (comment)
-
-**Navigation:** Arrow keys, Home/End, Page Up/Down
-
-**Mouse:** Click untuk move cursor, Drag untuk select text
-
-**Image Viewer:** 
-- Click image file di explorer untuk open
-- Press 'q' untuk close
-- Press 'o' untuk open dengan external viewer
-
-## Build & Run
-
+### Build
 ```bash
-make
-./bin/jcode [file]
+mkdir build
+cd build
+cmake ..
+make -j$(nproc)
 ```
 
-Config otomatis dibuat di `~/.config/jcode/config` saat pertama kali run.
+### Run
+```bash
+./jcode [filename]
+```
+
+## Configuration
+
+Configuration and plugins live in `~/.config/jcode/`.
+
+*   **Plugins**: Read [docs/PLUGINS.md](docs/PLUGINS.md)
+*   **Themes**: Read [docs/THEMES.md](docs/THEMES.md)
+
+## Keybindings
+*   `Ctrl+Q`: Quit
+*   `Ctrl+S`: Save
+*   `Ctrl+F`: Find
+*   `Ctrl+P`: Fuzzy Finder (Telescope)
+*   `Ctrl+B`: Toggle Sidebar
+*   `Ctrl+N`: New File/Tab
+*   `Ctrl+W`: Close Tab
+*   `Ctrl+Space`: Command Palette
+
+## License
+MIT
