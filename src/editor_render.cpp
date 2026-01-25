@@ -1,451 +1,431 @@
-#include "editor.h"
 #include "bracket.h"
-#include <sstream>
+#include "editor.h"
 #include <cstdio>
+#include <sstream>
 
 void Editor::render() {
-    if (!needs_redraw) {
-        if (!show_command_palette && !show_search) {
-            auto& pane = get_pane();
-            auto& buf = get_buffer(pane.buffer_id);
-            int display_y = buf.cursor.y - buf.scroll_offset + pane.y + 1;
-            int display_x = buf.cursor.x - buf.scroll_x + pane.x + 6;
-            if (display_y >= pane.y && display_y < pane.y + pane.h &&
-                display_x >= pane.x && display_x < pane.x + pane.w) {
-                ui->set_cursor(display_x, display_y);
-            }
+  if (!needs_redraw) {
+    if (!show_command_palette && !show_search) {
+      if (!panes.empty()) {
+        auto &pane = get_pane();
+        auto &buf = get_buffer(pane.buffer_id);
+        int display_y = buf.cursor.y - buf.scroll_offset + pane.y + 1;
+        int display_x = buf.cursor.x - buf.scroll_x + pane.x + 7;
+        if (display_y >= pane.y && display_y < pane.y + pane.h &&
+            display_x >= pane.x && display_x < pane.x + pane.w) {
+          ui->set_cursor(display_x, display_y);
         }
-        return;
+      }
     }
-    
-    ui->clear();
-    int h = ui->get_height();
-    int w = ui->get_width();
-    
-    render_tabs();
-    
-    update_pane_layout();
-    
-    if (telescope.is_active()) {
-        render_telescope();
-    } else {
-        if (image_viewer.is_active()) {
-            int img_w = w / 2;
-            int editor_w = w - img_w;
-            if (!panes.empty()) {
-                panes[0].w = editor_w;
-            }
-            render_panes();
-            if (image_viewer.is_active()) {
-                render_image_viewer();
-            }
-        } else {
-            render_panes();
-            if (show_minimap && !panes.empty()) {
-                int minimap_x = w - minimap_width;
-                render_minimap(minimap_x, tab_height, minimap_width, h - tab_height - status_height, get_pane().buffer_id);
-            }
-        }
-        
-        if (show_search) {
-            render_search_panel();
-        }
-        
-        if (show_command_palette) {
-            render_command_palette();
-        }
-    }
-    
-    render_status_line();
-    
-    if (show_context_menu) {
-        render_context_menu();
-    }
-    
-    idle_frame_count++;
-    
-    if (idle_frame_count <= 30) {
-        cursor_visible = true;
-    } else {
-        cursor_blink_frame++;
-        if (cursor_blink_frame >= 15) {
-            cursor_visible = !cursor_visible;
-            cursor_blink_frame = 0;
-            needs_redraw = true;
-        } else {
-            needs_redraw = true;
-        }
-    }
-    
-    ui->hide_cursor();
-    
-    bool should_redraw = needs_redraw;
-    needs_redraw = false;
-    ui->render();
-    
-    if (should_redraw || idle_frame_count > 30) {
-        needs_redraw = true;
-    }
-}
+    return;
+  }
 
-void Editor::render_tabs() {
-    int w = ui->get_width();
-    int x = 0;
-    
-    for (size_t i = 0; i < buffers.size(); i++) {
-        std::string name = buffers[i].filepath.empty() ? "[New File]" : get_filename(buffers[i].filepath);
-        if (buffers[i].modified) name += " ●";
-        
-        int fg = 7, bg = 0;
-        if (i == current_buffer) {
-            fg = 0;
-            bg = 6;
+  ui->clear();
+  int h = ui->get_height();
+  int w = ui->get_width();
+
+  // Render Tabs
+  render_tabs();
+
+  update_pane_layout();
+
+  if (telescope.is_active()) {
+    render_telescope();
+  } else {
+    if (image_viewer.is_active()) {
+      int img_w = w / 2;
+      int editor_w = w - img_w;
+      if (!panes.empty()) {
+        panes[0].w = editor_w;
+      }
+      render_image_viewer();
+    } else if (show_save_prompt) {
+      render_save_prompt();
+    } else if (show_quit_prompt) {
+      render_quit_prompt();
+    } else {
+      if (show_sidebar) {
+        int editor_x = sidebar_width;
+        int editor_w = ui->get_width() - sidebar_width;
+
+        render_sidebar();
+
+        // Adjust panes
+        if (!panes.empty()) {
+          panes[0].x = editor_x;
+          panes[0].w = editor_w;
         }
-        
-        ui->draw_text(x, 0, " " + name + " ", fg, bg);
-        x += name.length() + 2;
+      } else {
+        // Reset pane layout
+        if (!panes.empty()) {
+          panes[0].x = 0;
+          panes[0].w = ui->get_width();
+        }
+      }
+
+      render_panes();
+
+      if (show_minimap && !panes.empty()) {
+        render_minimap(
+            ui->get_width() - minimap_width, tab_height, minimap_width,
+            ui->get_height() - tab_height - status_height, panes[0].buffer_id);
+      }
     }
-    
-    for (int i = x; i < w; i++) {
-        ui->draw_text(i, 0, " ", 7, 0);
+
+    render_status_line();
+    render_command_palette();
+    render_search_panel();
+    render_popup();
+    render_context_menu();
+
+    // Final render to terminal
+    ui->render();
+
+    // Cursor Handling
+    if (show_command_palette || show_search || show_save_prompt ||
+        show_quit_prompt) {
+      // Leave cursor handling to prompts or default
+    } else if (show_sidebar && focus_state == FOCUS_SIDEBAR) {
+      ui->hide_cursor();
+    } else if (!telescope.is_active()) {
+      // Editor cursor
+      if (!panes.empty()) {
+        auto &pane = get_pane();
+        auto &buf = get_buffer(pane.buffer_id);
+        int display_y = buf.cursor.y - buf.scroll_offset + pane.y + 1;
+        int display_x = buf.cursor.x - buf.scroll_x + pane.x + 7;
+        if (display_y >= pane.y && display_y < pane.y + pane.h &&
+            display_x >= pane.x && display_x < pane.x + pane.w) {
+          ui->set_cursor(display_x, display_y);
+        } else {
+          ui->set_cursor(
+              display_x,
+              display_y); // Should we hide? Actually original code unsets it
+          // But here in main render loop we should just hide if OOB
+          ui->hide_cursor();
+        }
+      }
     }
+
+    needs_redraw = false;
+  }
 }
 
 void Editor::render_telescope() {
-    int h = ui->get_height();
-    int w = ui->get_width();
-    
-    int list_w = w / 2;
-    int preview_w = w - list_w;
-    int list_h = h - 2;
-    
-    ui->fill_rect({0, 0, w, h}, ' ', COLOR_TELESCOPE_BG, COLOR_TELESCOPE_BG);
-    
-    ui->draw_text(1, 0, " FIND FILES ", COLOR_TELESCOPE_FG, COLOR_TELESCOPE_BG);
-    
-    std::string query = telescope.get_query();
-    ui->draw_text(1, 1, "> " + query, COLOR_TELESCOPE_FG, COLOR_TELESCOPE_BG);
-    
-    auto& results = telescope.get_results();
-    int selected = telescope.get_selected_index();
-    int start_idx = std::max(0, selected - (list_h - 3));
-    int end_idx = std::min((int)results.size(), start_idx + list_h - 2);
-    
-    for (int i = start_idx; i < end_idx; i++) {
-        int y = 2 + (i - start_idx);
-        int fg = COLOR_TELESCOPE_FG, bg = COLOR_TELESCOPE_BG;
-        
-        if (i == selected) {
-            fg = COLOR_TELESCOPE_SELECTED_FG;
-            bg = COLOR_TELESCOPE_SELECTED_BG;
-        }
-        
-        std::string icon = results[i].is_directory ? "📁 " : "📄 ";
-        std::string name = results[i].name;
-        if ((int)name.length() > list_w - 5) {
-            name = name.substr(0, list_w - 8) + "...";
-        }
-        
-        ui->draw_text(1, y, icon + name, fg, bg);
+  int h = ui->get_height();
+  int w = ui->get_width();
+
+  int list_w = w / 2;
+  int preview_w = w - list_w;
+  int list_h = h - 2;
+
+  UIRect rect = {0, 0, w, h};
+  ui->fill_rect(rect, " ", theme.fg_telescope, theme.bg_telescope);
+
+  ui->draw_text(1, 0, " FIND FILES ", theme.fg_telescope, theme.bg_telescope);
+
+  std::string query = telescope.get_query();
+  ui->draw_text(1, 1, "> " + query, theme.fg_telescope, theme.bg_telescope);
+
+  const auto &results = telescope.get_results();
+  int selected = telescope.get_selected_index();
+  int start_idx = std::max(0, selected - (list_h - 3));
+  int end_idx = std::min((int)results.size(), start_idx + list_h - 2);
+
+  for (int i = start_idx; i < end_idx; i++) {
+    int y = 2 + (i - start_idx);
+    int fg = theme.fg_telescope, bg = theme.bg_telescope;
+
+    if (i == selected) {
+      fg = theme.fg_telescope_selected;
+      bg = theme.bg_telescope_selected;
     }
-    
-    if (!results.empty() && selected >= 0 && selected < (int)results.size()) {
-        auto preview_lines = telescope.get_preview_lines();
-        int preview_x = list_w;
-        int preview_h = h - 2;
-        
-        ui->draw_text(preview_x, 0, " PREVIEW ", COLOR_TELESCOPE_FG, COLOR_TELESCOPE_BG);
-        
-        std::string path = telescope.get_selected_path();
-        if (!path.empty()) {
-            std::string path_display = path;
-            if ((int)path_display.length() > preview_w - 2) {
-                path_display = "..." + path_display.substr(path_display.length() - preview_w + 5);
-            }
-            ui->draw_text(preview_x + 1, 1, path_display, COLOR_TELESCOPE_PREVIEW_FG, COLOR_TELESCOPE_PREVIEW_BG);
-            
-            for (size_t i = 0; i < preview_lines.size() && i < (size_t)(preview_h - 2); i++) {
-                std::string line = preview_lines[i];
-                if ((int)line.length() > preview_w - 2) {
-                    line = line.substr(0, preview_w - 5) + "...";
-                }
-                ui->draw_text(preview_x + 1, 2 + (int)i, line, COLOR_TELESCOPE_PREVIEW_FG, COLOR_TELESCOPE_PREVIEW_BG);
-            }
-        }
+
+    std::string icon = results[i].is_directory ? "D " : "F ";
+    std::string name = results[i].name;
+    if ((int)name.length() > list_w - 5) {
+      name = name.substr(0, list_w - 8) + "...";
     }
+
+    ui->draw_text(1, y, icon + name, fg, bg);
+  }
+
+  if (!results.empty() && selected >= 0 && selected < (int)results.size()) {
+    auto preview_lines = telescope.get_preview_lines();
+    int preview_x = list_w;
+    int preview_h = h - 2;
+
+    ui->draw_text(preview_x, 0, " PREVIEW ", theme.fg_telescope,
+                  theme.bg_telescope);
+
+    std::string path = telescope.get_selected_path();
+    if (!path.empty()) {
+      std::string path_display = path;
+      if ((int)path_display.length() > preview_w - 2) {
+        path_display =
+            "..." + path_display.substr(path_display.length() - preview_w + 5);
+      }
+      ui->draw_text(preview_x + 1, 1, path_display, theme.fg_telescope_preview,
+                    theme.bg_telescope_preview);
+
+      for (size_t i = 0;
+           i < preview_lines.size() && i < (size_t)(preview_h - 2); i++) {
+        std::string line = preview_lines[i];
+        if ((int)line.length() > preview_w - 2) {
+          line = line.substr(0, preview_w - 5) + "...";
+        }
+        ui->draw_text(preview_x + 1, 2 + (int)i, line,
+                      theme.fg_telescope_preview, theme.bg_telescope_preview);
+      }
+    }
+  }
 }
 
 void Editor::render_image_viewer() {
-    int h = ui->get_height();
-    int w = ui->get_width();
-    
-    int img_w = w / 2;
-    int img_h = h - tab_height - status_height;
-    int img_x = w - img_w;
-    int img_y = tab_height;
-    
-    image_viewer.render(img_x, img_y, img_w, img_h);
+  int w = ui->get_width();
+  int h = ui->get_height();
+  int img_w = w / 2;
+  int img_h = h - status_height - tab_height;
+
+  image_viewer.render(w - img_w, tab_height, img_w, img_h,
+                      theme.fg_image_border, theme.bg_image_border);
 }
 
 void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
-    for (int i = 0; i < h; i++) {
-        ui->draw_text(x, y + i, "|", COLOR_PANEL_BORDER_FG, COLOR_PANEL_BORDER_BG);
+  if (buffer_id < 0 || buffer_id >= (int)buffers.size())
+    return;
+  auto &buf = buffers[buffer_id];
+
+  // Draw background
+  UIRect rect = {x, y, w, h};
+  ui->fill_rect(rect, " ", 7, theme.bg_minimap);
+
+  // Simple compressed view
+  // Map total lines to h
+  int total_lines = buf.lines.size();
+  if (total_lines == 0)
+    return;
+
+  // Viewport indicator
+  auto &pane = get_pane();
+  float ratio = (float)h / total_lines;
+
+  int viewport_y = (int)(buf.scroll_offset * ratio);
+  int viewport_h = (int)(pane.h * ratio);
+  if (viewport_h < 1)
+    viewport_h = 1;
+
+  UIRect viewport = {x, y + viewport_y, w, viewport_h};
+  ui->fill_rect(viewport, " ", 7, theme.bg_selection);
+
+  // Draw content (simplified blocks)
+  for (int i = 0; i < h; i++) {
+    int line_idx = (int)(i / ratio);
+    if (line_idx < total_lines) {
+      std::string line = buf.lines[line_idx];
+      // Simply draw a few dots based on line length
+      int dots = line.length() / 4;
+      if (dots > w - 2)
+        dots = w - 2;
+      std::string miniline(dots, '.');
+      ui->draw_text(x + 1, y + i, miniline, 8, -1);
     }
-    ui->draw_text(x + 1, y, " MINIMAP ", COLOR_PANEL_BORDER_FG, COLOR_PANEL_BORDER_BG);
-    
-    auto& buf = get_buffer(buffer_id);
-    int total_lines = buf.lines.size();
-    if (total_lines == 0) return;
-    
-    int visible_lines = h - 1;
-    if (visible_lines <= 0) return;
-    
-    double scale = total_lines > 0 ? (double)total_lines / visible_lines : 1.0;
-    if (scale < 1.0) scale = 1.0;
-    
-    for (int i = 0; i < visible_lines; i++) {
-        int line_idx = (int)(i * scale);
-        if (line_idx >= total_lines) line_idx = total_lines - 1;
-        
-        int fg = COLOR_MINIMAP_FG, bg = COLOR_MINIMAP_BG;
-        if (line_idx == buf.cursor.y) {
-            fg = 0;
-            bg = 7;
-        }
-        
-        std::string preview = buf.lines[line_idx];
-        if ((int)preview.length() > w - 2) {
-            preview = preview.substr(0, w - 2);
-        }
-        ui->draw_text(x + 1, y + i + 1, preview, fg, bg);
-    }
+  }
 }
 
 void Editor::render_panes() {
-    for (auto& pane : panes) {
-        render_pane(pane);
-    }
+  for (const auto &pane : panes) {
+    render_pane(pane);
+  }
 }
 
-void Editor::render_pane(const SplitPane& pane) {
-    for (int i = 0; i < pane.h; i++) {
-        if (i == 0) {
-            for (int j = 0; j < pane.w; j++) {
-                ui->draw_text(pane.x + j, pane.y, "-", COLOR_PANEL_BORDER_FG, COLOR_PANEL_BORDER_BG);
-            }
-        }
-        ui->draw_text(pane.x, pane.y + i, "|", COLOR_PANEL_BORDER_FG, COLOR_PANEL_BORDER_BG);
-        ui->draw_text(pane.x + pane.w - 1, pane.y + i, "|", COLOR_PANEL_BORDER_FG, COLOR_PANEL_BORDER_BG);
-    }
-    
-    render_buffer_content(pane, pane.buffer_id);
+void Editor::render_pane(const SplitPane &pane) {
+  // Calculate geometry
+  int w = pane.w;
+
+  if (show_minimap) {
+    w -= minimap_width;
+  }
+
+  render_buffer_content(pane, pane.buffer_id);
+
+  // Border
+  UIRect rect = {pane.x, pane.y, w, pane.h};
+  ui->draw_border(rect, theme.fg_panel_border, theme.bg_panel_border);
 }
 
-void Editor::render_buffer_content(const SplitPane& pane, int buffer_id) {
-    auto& buf = get_buffer(buffer_id);
-    
-    if (buf.cursor.y < buf.scroll_offset) {
-        buf.scroll_offset = buf.cursor.y;
-    }
-    if (buf.cursor.y >= buf.scroll_offset + pane.h - 2) {
-        buf.scroll_offset = buf.cursor.y - pane.h + 3;
-    }
-    
-    if (buf.cursor.x < buf.scroll_x) {
-        buf.scroll_x = buf.cursor.x;
-    }
-    if (buf.cursor.x >= buf.scroll_x + pane.w - 7) {
-        buf.scroll_x = buf.cursor.x - pane.w + 8;
-    }
-    
-    for (int i = 0; i < pane.h - 1; i++) {
-        int line_num = i + buf.scroll_offset;
-        if (line_num >= (int)buf.lines.size()) break;
-        
-        char line_num_str[16];
-        snprintf(line_num_str, sizeof(line_num_str), "%4d ", line_num + 1);
-        ui->draw_text(pane.x + 1, pane.y + i + 1, line_num_str, COLOR_LINE_NUM_FG, COLOR_LINE_NUM_BG);
-        
-        bool in_selection = false;
-        if (buf.selection.active) {
-            int sel_start_y = std::min(buf.selection.start.y, buf.selection.end.y);
-            int sel_end_y = std::max(buf.selection.start.y, buf.selection.end.y);
-            if (line_num >= sel_start_y && line_num <= sel_end_y) {
-                in_selection = true;
+void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
+  auto &buf = get_buffer(buffer_id);
+  int x = pane.x;
+  int y = pane.y + tab_height;
+  int w = pane.w;
+  int h = pane.h - tab_height;
+
+  // Fill pane background first
+  UIRect pane_rect = {x, y, w, h};
+  // We can fill the whole pane first to ensure no artifacts
+  ui->fill_rect(pane_rect, " ", theme.fg_default, theme.bg_default);
+
+  if (show_minimap)
+    w -= minimap_width;
+
+  int line_num_width = 6;
+
+  for (int i = 0; i < h; i++) {
+    int line_idx = i + buf.scroll_offset;
+
+    // Calculate drawing y position
+    int draw_y = y + i;
+
+    // Clear the specific line area again just to be safe or rely on pane fill?
+    // Pane fill is safer for "empty" space.
+    // But let's define the line rect for text drawing context
+    UIRect line_rect = {x, draw_y, w, 1};
+    // ui->fill_rect(line_rect, " ", theme.fg_default, theme.bg_default);
+
+    if (line_idx < (int)buf.lines.size()) {
+      // Line number
+      char num_buf[16];
+      snprintf(num_buf, sizeof(num_buf), "%4d ", line_idx + 1);
+      int ln_bg = theme.bg_line_num;
+      int ln_fg = theme.fg_line_num;
+      if (line_idx == buf.cursor.y) {
+        ln_fg = theme.fg_default;
+      }
+      ui->draw_text(x + 1, draw_y, num_buf, ln_fg, ln_bg);
+
+      // Content
+      std::string &line = buf.lines[line_idx];
+      int scroll_x = buf.scroll_x;
+
+      if (scroll_x < (int)line.length()) {
+        auto colors = highlighter.get_colors(line);
+
+        int current_x = x + 1 + line_num_width;
+        int visible_len = w - 2 - line_num_width;
+
+        // Helper for rendering
+        auto draw_chunk = [&](int start_idx, int len, int color) {
+          if (len <= 0)
+            return;
+
+          // Selection logic
+          int ch_start = start_idx;
+          int ch_end = start_idx + len;
+
+          for (int k = 0; k < len; k++) {
+            int char_idx = ch_start + k;
+            if (char_idx < scroll_x)
+              continue;
+            int vis_idx = char_idx - scroll_x;
+            if (vis_idx >= visible_len)
+              break;
+
+            int fg = color;
+            int bg = theme.bg_default;
+
+            // Check selection
+            if (buf.selection.active) {
+              // Assuming single line selection for simplicity first or
+              // multi-line Need full selection logic
+              Cursor p = {char_idx, line_idx};
+
+              // Order start/end
+              Cursor s = buf.selection.start;
+              Cursor e = buf.selection.end;
+
+              if (s.y > e.y || (s.y == e.y && s.x > e.x))
+                std::swap(s, e);
+
+              bool in_sel = false;
+              if (p.y > s.y && p.y < e.y)
+                in_sel = true;
+              else if (p.y == s.y && p.y == e.y) {
+                if (p.x >= s.x && p.x <= e.x)
+                  in_sel = true;
+              } else if (p.y == s.y) {
+                if (p.x >= s.x)
+                  in_sel = true;
+              } else if (p.y == e.y) {
+                if (p.x <= e.x)
+                  in_sel = true;
+              }
+
+              if (in_sel) {
+                bg = theme.bg_selection;
+                fg = theme.fg_selection;
+              }
             }
-        }
-        
-        int x = pane.x + 6;
-        auto colors = highlighter.get_colors(buf.lines[line_num]);
-        auto bracket_pairs = BracketHighlighter::find_all_pairs(buf.lines);
-        auto matching_bracket = BracketHighlighter::find_matching_bracket_near_cursor(
-            buf.lines, buf.cursor.y, buf.cursor.x
-        );
-        
-        for (size_t j = buf.scroll_x; j < buf.lines[line_num].length() && x < pane.x + pane.w - 1; j++) {
-            bool is_cursor = (line_num == buf.cursor.y && (int)j == buf.cursor.x);
-            bool selected = in_selection;
-            if (selected && line_num == buf.selection.start.y && (int)j < buf.selection.start.x) selected = false;
-            if (selected && line_num == buf.selection.end.y && (int)j > buf.selection.end.x) selected = false;
-            if (selected && line_num == buf.selection.start.y && line_num == buf.selection.end.y) {
-                selected = (int)j >= std::min(buf.selection.start.x, buf.selection.end.x) &&
-                          (int)j <= std::max(buf.selection.start.x, buf.selection.end.x);
+
+            char c = line[char_idx];
+            ui->draw_text(current_x + vis_idx, draw_y, std::string(1, c), fg,
+                          bg);
+          }
+        };
+
+        if (colors.empty()) {
+          // No syntax highlighting (or failed), draw as default
+          draw_chunk(0, (int)line.length(), theme.fg_default);
+        } else {
+          // Iterate per-character colors and batch them into chunks
+          int chunk_start = 0;
+          int last_type = -1; // -1 = default, otherwise color ID
+          int last_token = 0; // 0 = no token, 1 = token
+
+          for (int i = 0; i <= (int)line.length(); i++) {
+            int current_type = -1;
+            int current_token = 0;
+
+            if (i < (int)line.length() && i < (int)colors.size()) {
+              current_token = colors[i].first;
+              current_type = colors[i].second;
             }
-            
-            bool is_matching_bracket = (matching_bracket.first == line_num && 
-                                       matching_bracket.second == (int)j);
-            bool is_near_bracket = ((line_num == buf.cursor.y && (int)j == buf.cursor.x - 1) ||
-                                   (line_num == buf.cursor.y && (int)j == buf.cursor.x) ||
-                                   (line_num == buf.cursor.y && (int)j == buf.cursor.x + 1)) &&
-                                   BracketHighlighter::is_bracket(buf.lines[line_num][j]);
-            
-            int fg = 7, bg = 0;
-            if (is_cursor && cursor_visible) {
-                fg = COLOR_CURSOR_FG;
-                bg = COLOR_CURSOR_BG;
-            } else if (selected) {
-                fg = COLOR_SELECTION_FG;
-                bg = COLOR_SELECTION_BG;
-            } else if (is_matching_bracket || (is_near_bracket && matching_bracket.first != -1)) {
-                fg = COLOR_BRACKET_MATCH_FG;
-                bg = COLOR_BRACKET_MATCH_BG;
-            } else {
-                int bracket_color = BracketHighlighter::get_bracket_color_at(
-                    buf.lines, line_num, j, bracket_pairs
-                );
-                if (bracket_color > 0) {
-                    switch(bracket_color) {
-                        case 1: fg = COLOR_BRACKET1_FG; break;
-                        case 2: fg = COLOR_BRACKET2_FG; break;
-                        case 3: fg = COLOR_BRACKET3_FG; break;
-                        case 4: fg = COLOR_BRACKET4_FG; break;
-                        case 5: fg = COLOR_BRACKET5_FG; break;
-                        case 6: fg = COLOR_BRACKET6_FG; break;
-                        default: fg = 7;
-                    }
-                } else if (colors[j].first) {
-                    switch(colors[j].second) {
-                        case 1: fg = COLOR_KEYWORD_FG; break;
-                        case 2: fg = COLOR_STRING_FG; break;
-                        case 3: fg = COLOR_COMMENT_FG; break;
-                        case 4: fg = COLOR_NUMBER_FG; break;
-                        case 5: fg = COLOR_FUNCTION_FG; break;
-                        case 6: fg = COLOR_TYPE_FG; break;
-                        default: fg = 7;
-                    }
+
+            // If color changed or end of line, draw previous chunk
+            bool changed = (current_token != last_token) ||
+                           (current_token == 1 && current_type != last_type);
+
+            if (i > 0 && (changed || i == (int)line.length())) {
+              int len = i - chunk_start;
+              int color = theme.fg_default;
+
+              if (last_token == 1) {
+                switch (last_type) {
+                case 1:
+                  color = theme.fg_keyword;
+                  break;
+                case 2:
+                  color = theme.fg_string;
+                  break;
+                case 3:
+                  color = theme.fg_comment;
+                  break;
+                case 4:
+                  color = theme.fg_number;
+                  break;
+                case 5:
+                  color = theme.fg_type;
+                  break; // Map 5 to Type/Function? Need strict map
+                case 6:
+                  color = theme.fg_function;
+                  break;
+                default:
+                  color = theme.fg_default;
+                  break;
                 }
-            }
-            
-            char ch = buf.lines[line_num][j];
-            ui->draw_text(x, pane.y + i + 1, std::string(1, ch), fg, bg);
-            x++;
-        }
-        
-        if (line_num == buf.cursor.y && buf.cursor.x >= (int)buf.lines[line_num].length()) {
-            int cursor_x = pane.x + 6 + (buf.cursor.x - buf.scroll_x);
-            if (cursor_x >= pane.x + 6 && cursor_x < pane.x + pane.w - 1) {
-                if (cursor_visible) {
-                    ui->draw_text(cursor_x, pane.y + i + 1, " ", COLOR_CURSOR_FG, COLOR_CURSOR_BG);
-                }
-            }
-        }
-        
-    }
-}
+              }
 
-void Editor::render_status_line() {
-    int h = ui->get_height();
-    int w = ui->get_width();
-    auto& buf = get_buffer();
-    
-    std::string status = " Line " + std::to_string(buf.cursor.y + 1) + 
-                        " Col " + std::to_string(buf.cursor.x + 1);
-    if (buf.selection.active) {
-        status += " [SELECTED]";
-    }
-    if (buf.modified) {
-        status += " [MODIFIED]";
-    }
-    if (!buf.filepath.empty()) {
-        status += " | " + buf.filepath;
-    }
-    if ((int)status.length() > w) {
-        status = status.substr(0, w);
-    }
-    
-    ui->draw_text(0, h - 2, status, COLOR_STATUS_FG, COLOR_STATUS_BG);
-    
-    if (!message.empty()) {
-        ui->draw_text(0, h - 1, message, 7, 0);
-        message.clear();
+              draw_chunk(chunk_start, len, color);
+              chunk_start = i;
+            }
+
+            last_token = current_token;
+            last_type = current_type;
+          }
+        }
+      }
     } else {
-        std::string help = "Ctrl+P: Command | Ctrl+F: Search | Ctrl+S: Save | Ctrl+W: Close | Ctrl+Q: Quit";
-        if ((int)help.length() > w) {
-            help = help.substr(0, w);
-        }
-        ui->draw_text(0, h - 1, help, 7, 0);
+      ui->draw_text(x + 1, draw_y, "~", theme.fg_line_num, theme.bg_default);
     }
+  }
 }
-
-void Editor::render_command_palette() {
-    int h = ui->get_height();
-    int w = ui->get_width();
-    
-    int palette_h = std::min(10, (int)command_palette_results.size() + 2);
-    int palette_y = h / 2 - palette_h / 2;
-    
-    UIRect rect = {0, palette_y, w, palette_h};
-    ui->draw_rect(rect, COLOR_COMMAND_FG, COLOR_COMMAND_BG);
-    
-    ui->draw_text(w / 2 - 10, palette_y, " COMMAND PALETTE ", COLOR_COMMAND_FG, COLOR_COMMAND_BG);
-    ui->draw_text(1, palette_y + 1, "> " + command_palette_query, COLOR_COMMAND_FG, COLOR_COMMAND_BG);
-    
-    for (size_t i = 0; i < command_palette_results.size() && i < (size_t)(palette_h - 2); i++) {
-        int fg = COLOR_COMMAND_FG, bg = COLOR_COMMAND_BG;
-        if ((int)i == command_palette_selected) {
-            fg = 0;
-            bg = 7;
-        }
-        ui->draw_text(3, palette_y + 2 + (int)i, command_palette_results[i], fg, bg);
-    }
-}
-
-void Editor::render_search_panel() {
-    int h = ui->get_height();
-    int w = ui->get_width();
-    
-    UIRect rect = {0, h - 3, w, 1};
-    ui->draw_rect(rect, COLOR_COMMAND_FG, COLOR_COMMAND_BG);
-    
-    std::string search_text = "Search: " + search_query;
-    ui->draw_text(1, h - 3, search_text, COLOR_COMMAND_FG, COLOR_COMMAND_BG);
-    if (search_result_index >= 0) {
-        char result_str[32];
-        snprintf(result_str, sizeof(result_str), "[%d/%zu]", search_result_index + 1, search_results.size());
-        ui->draw_text(w - 20, h - 3, result_str, COLOR_COMMAND_FG, COLOR_COMMAND_BG);
-    }
-}
-
-void Editor::render_context_menu() {
-    int menu_w = 20;
-    int menu_h = 4;
-    int x = context_menu_x;
-    int y = context_menu_y;
-    
-    if (x + menu_w > ui->get_width()) x = ui->get_width() - menu_w;
-    if (y + menu_h > ui->get_height()) y = ui->get_height() - menu_h;
-    
-    UIRect rect = {x, y, menu_w, menu_h};
-    ui->draw_rect(rect, COLOR_COMMAND_FG, COLOR_COMMAND_BG);
-    
-    std::vector<std::string> items = {"Copy", "Cut", "Paste"};
-    for (size_t i = 0; i < items.size(); i++) {
-        int fg = COLOR_COMMAND_FG, bg = COLOR_COMMAND_BG;
-        if ((int)i == context_menu_selected) {
-            fg = 0;
-            bg = 7;
-        }
-        ui->draw_text(x + 1, y + 1 + (int)i, items[i], fg, bg);
-    }
-}
-

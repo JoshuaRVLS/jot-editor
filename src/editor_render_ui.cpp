@@ -1,0 +1,266 @@
+#include "editor.h"
+#include "python_api.h"
+#include <cstdio>
+#include <sstream>
+
+void Editor::render_status_line() {
+  int y = ui->get_height() - status_height;
+  int w = ui->get_width();
+
+  UIRect rect = {0, y, w, status_height};
+  ui->fill_rect(rect, " ", theme.fg_status, theme.bg_status);
+
+  std::string l_text = "  ";
+  if (!buffers.empty() && current_buffer < (int)buffers.size()) {
+    std::string name = buffers[current_buffer].filepath;
+    if (name.empty())
+      name = "[No Name]";
+
+    // Add modified marker
+    if (buffers[current_buffer].modified) {
+      name += " [+]";
+    }
+
+    l_text += name;
+
+    // Add cursor pos
+    auto &buf = buffers[current_buffer];
+    l_text += "  Ln " + std::to_string(buf.cursor.y + 1) + ", Col " +
+              std::to_string(buf.cursor.x + 1);
+  }
+
+  ui->draw_text(0, y, l_text, theme.fg_status, theme.bg_status, true);
+
+  // Right side (Mode, Encoding, etc.)
+  std::string mode_str = " NORMAL "; // Legacy/Default
+  // if (mode == MODE_INSERT) mode_str = " INSERT ";
+  // if (mode == MODE_VISUAL) mode_str = " VISUAL ";
+  // Mode logic removed/delegated?
+  // Let's check python api mode if possible?
+  // For now static or simple.
+  if (python_api) {
+    mode_str = " " + python_api->py_get_mode() + " ";
+    // Uppercase it?
+    std::transform(mode_str.begin(), mode_str.end(), mode_str.begin(),
+                   ::toupper);
+  }
+
+  std::string r_text = mode_str + "  UTF-8  ";
+
+  if (w > (int)l_text.length() + (int)r_text.length()) {
+    ui->draw_text(w - r_text.length() - 2, y, r_text, theme.fg_status,
+                  theme.bg_status);
+  }
+
+  // Message area (status line 2)
+  if (!message.empty()) {
+    ui->draw_text(0, y + 1, message, theme.fg_default, theme.bg_status);
+  }
+}
+
+void Editor::render_command_palette() {
+  if (!show_command_palette)
+    return;
+
+  int w = 40;
+  int h = 10;
+  int x = ui->get_width() / 2 - w / 2;
+  int y = ui->get_height() / 4;
+
+  UIRect rect = {x, y, w, h};
+  UIRect shadow = {x + 1, y + 1, w, h};
+  ui->draw_rect(shadow, 8, 0);
+
+  ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
+  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+
+  ui->draw_text(x + 1, y + 1, "> " + command_palette_query, theme.fg_command,
+                theme.bg_command);
+
+  for (int i = 0; i < (int)command_palette_results.size(); i++) {
+    if (i >= h - 3)
+      break;
+
+    std::string item = command_palette_results[i];
+    int fg = theme.fg_command;
+    int bg = theme.bg_command;
+    if (i == command_palette_selected) {
+      bg = theme.bg_selection;
+      fg = theme.fg_selection;
+    }
+
+    // Truncate
+    if ((int)item.length() > w - 4)
+      item = item.substr(0, w - 4) + "..";
+
+    ui->draw_text(x + 2, y + 3 + i, item, fg, bg);
+  }
+}
+
+void Editor::render_search_panel() {
+  if (!show_search)
+    return;
+
+  int w = 40;
+  int h = 3;
+  int x = ui->get_width() - w - 2;
+  int y = 1 + tab_height;
+
+  UIRect rect = {x, y, w, h};
+  ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
+  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+
+  std::string q = "Find: " + search_query;
+  ui->draw_text(x + 1, y + 1, q, theme.fg_command, theme.bg_command);
+
+  if (search_result_index >= 0) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%d/%lu", search_result_index + 1,
+             search_results.size());
+    ui->draw_text(x + w - 10, y + 1, buf, theme.fg_comment, theme.bg_command);
+  }
+}
+
+void Editor::render_context_menu() {
+  if (!show_context_menu)
+    return;
+
+  std::vector<std::string> options = {"Copy", "Paste", "Cut", "Close Buffer"};
+
+  int w = 20;
+  int h = options.size() + 2;
+  int x = context_menu_x;
+  int y = context_menu_y;
+
+  if (x + w > ui->get_width())
+    x = ui->get_width() - w;
+  if (y + h > ui->get_height())
+    y = ui->get_height() - h;
+
+  UIRect rect = {x, y, w, h};
+  UIRect shadow = {x + 1, y + 1, w, h};
+  ui->draw_rect(shadow, 8, 0);
+
+  ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
+  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+
+  for (size_t i = 0; i < options.size(); i++) {
+    int fg = theme.fg_command;
+    int bg = theme.bg_command;
+    if ((int)i == context_menu_selected) {
+      bg = theme.bg_selection;
+    }
+    ui->draw_text(x + 1, y + 1 + i, options[i], fg, bg);
+  }
+}
+
+void Editor::render_save_prompt() {
+  int h = ui->get_height();
+  int w = ui->get_width();
+
+  std::string prompt = "Save changes? (y/n/Esc)";
+  int x = w / 2 - prompt.length() / 2;
+  int y = h / 2;
+
+  UIRect rect = {x - 2, y - 1, (int)prompt.length() + 4, 3};
+  UIRect shadow = {rect.x + 1, rect.y + 1, rect.w, rect.h};
+  ui->draw_rect(shadow, 8, 0);
+
+  ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
+  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+
+  ui->draw_text(x, y, prompt, theme.fg_command, theme.bg_command);
+
+  // Input area for filename if needed?
+  if (save_prompt_input.length() > 0 || get_buffer().filepath.empty()) {
+    std::string disp = "Filename: " + save_prompt_input;
+    ui->draw_text(x, y + 1, disp, theme.fg_command, theme.bg_command);
+  }
+}
+
+void Editor::render_quit_prompt() {
+  int h = ui->get_height();
+  int w = ui->get_width();
+
+  std::string prompt = "Unsaved changes! Quit anyway? (y/n)";
+  int x = w / 2 - prompt.length() / 2;
+  int y = h / 2;
+
+  UIRect rect = {x - 2, y - 1, (int)prompt.length() + 4, 3};
+  // Draw shadow
+  UIRect shadow = {rect.x + 1, rect.y + 1, rect.w, rect.h};
+  ui->draw_rect(shadow, 8, 0);
+
+  ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
+  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+
+  ui->draw_text(x, y, prompt, theme.fg_command, theme.bg_command);
+}
+
+void Editor::render_popup() {
+  if (!popup.visible)
+    return;
+
+  UIRect rect = {popup.x, popup.y, popup.w, popup.h};
+  UIRect shadow = {rect.x + 1, rect.y + 1, rect.w, rect.h};
+  ui->draw_rect(shadow, 8, 0);
+
+  ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
+  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+
+  // Split text by newlines
+  std::vector<std::string> lines;
+  std::istringstream stream(popup.text);
+  std::string line;
+  while (std::getline(stream, line)) {
+    lines.push_back(line);
+  }
+
+  for (int i = 0; i < (int)lines.size(); i++) {
+    if (i >= popup.h - 2)
+      break;
+    ui->draw_text(popup.x + 1, popup.y + 1 + i, lines[i], theme.fg_command,
+                  theme.bg_command);
+  }
+}
+
+void Editor::render_tabs() {
+  int x = 0;
+  int y = 0;
+  int w = ui->get_width();
+
+  // Background bar
+  if (show_sidebar)
+    x += sidebar_width;
+
+  UIRect bar = {x, y, w - x, tab_height};
+  ui->fill_rect(bar, " ", theme.fg_status, theme.bg_status);
+
+  // Render open buffers as tabs
+  int tab_x = x;
+  for (int i = 0; i < (int)buffers.size(); i++) {
+    std::string name = get_filename(buffers[i].filepath);
+    if (name.empty())
+      name = "[No Name]";
+    if (buffers[i].modified)
+      name += "+";
+
+    std::string disp = " " + name + " ";
+    int bg = theme.bg_status;
+    int fg = theme.fg_status;
+
+    if (i == current_buffer) {
+      bg = theme.bg_default; // Active tab matches editor bg? or distinct?
+      fg = theme.fg_default;
+    }
+
+    ui->draw_text(tab_x, y, disp, fg, bg);
+    // Vertical separator
+    ui->draw_text(tab_x + disp.length(), y, "|", theme.fg_panel_border,
+                  theme.bg_status);
+
+    tab_x += disp.length() + 1;
+    if (tab_x >= w)
+      break;
+  }
+}
