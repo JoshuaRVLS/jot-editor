@@ -167,11 +167,13 @@ static PyObject *py_clear_diagnostics(PyObject *self, PyObject *args) {
 static PyObject *py_add_diagnostic(PyObject *self, PyObject *args) {
   char *path;
   char *msg;
-  int line, col, severity;
-  if (!PyArg_ParseTuple(args, "siisi", &path, &line, &col, &msg, &severity))
+  int line, col, end_line, end_col, severity;
+  if (!PyArg_ParseTuple(args, "siiiisi", &path, &line, &col, &end_line,
+                        &end_col, &msg, &severity))
     return nullptr;
   if (g_python_api)
-    g_python_api->py_add_diagnostic(path, line, col, msg, severity);
+    g_python_api->py_add_diagnostic(path, line, col, end_line, end_col, msg,
+                                    severity);
   Py_RETURN_NONE;
 }
 
@@ -182,6 +184,24 @@ static PyObject *py_register_keybind(PyObject *self, PyObject *args) {
     return nullptr;
   if (g_python_api)
     g_python_api->register_keybind(key, mode, cb);
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_register_command(PyObject *self, PyObject *args) {
+  char *name, *cb;
+  if (!PyArg_ParseTuple(args, "ss", &name, &cb))
+    return nullptr;
+  if (g_python_api)
+    g_python_api->register_command(name, cb);
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_show_input_prompt(PyObject *self, PyObject *args) {
+  char *msg, *cb;
+  if (!PyArg_ParseTuple(args, "ss", &msg, &cb))
+    return nullptr;
+  if (g_python_api)
+    g_python_api->py_show_input_prompt(msg, cb);
   Py_RETURN_NONE;
 }
 
@@ -213,6 +233,8 @@ static PyMethodDef JCodeMethods[] = {
     {"add_diagnostic", py_add_diagnostic, METH_VARARGS, "Add diagnostic"},
     {"register_keybind", py_register_keybind, METH_VARARGS,
      "Register key binding"},
+    {"register_command", py_register_command, METH_VARARGS, "Register command"},
+    {"show_input", py_show_input_prompt, METH_VARARGS, "Show input prompt"},
     {NULL, NULL, 0, NULL}};
 
 static struct PyModuleDef jcode_module = {
@@ -254,14 +276,32 @@ bool PythonAPI::init() {
 
   // Add path to ensure imports work - including CWD for jcode_api.py
   // wrappers/plugins
-  PyRun_SimpleString("import sys, os\nsys.path.append(os.getcwd())\n");
+  // Add path to ensure imports work - including CWD/python for jcode_api.py and
+  // plugins
+  PyRun_SimpleString("import sys, "
+                     "os\nsys.path.append(os.getcwd())\nsys.path.append(os."
+                     "path.join(os.getcwd(), 'python'))\n");
 
-  // Load plugins
+  // Load core plugins
+  load_plugin("python/jcode_api.py");
+  load_plugin("python/lsp.py");
+  load_plugin("python/lsp_plugin.py"); // Load LSP plugin specifically
+
+  // Load user plugins from python/ directory if exists
+  if (fs::exists("python") && fs::is_directory("python")) {
+    load_plugins("python");
+  }
+
+  // Load from standard config path
   const char *home = getenv("HOME");
   if (home) {
     std::string config_path = std::string(home) + "/.config/jcode";
+    std::string plugins_path = config_path + "/plugins";
     PyRun_SimpleString(("sys.path.append('" + config_path + "')").c_str());
+    PyRun_SimpleString(("sys.path.append('" + plugins_path + "')").c_str());
 
+    std::string plugin_dir = std::string(home) + "/.config/jcode/plugins";
+    load_plugins(plugin_dir);
     // Add themes to sys.path FIRST so config.py can import them
     std::string themes_path = config_path + "/themes";
     if (fs::exists(themes_path) && fs::is_directory(themes_path)) {
@@ -271,9 +311,10 @@ bool PythonAPI::init() {
     // Load plugins/config from root config dir
     load_plugins(config_path);
 
-    // Also load plugins from themes dir (if any are plugins)
-    if (fs::exists(themes_path) && fs::is_directory(themes_path)) {
-      load_plugins(themes_path);
+    // Load default theme (dark_clean) explicitly
+    std::string default_theme = themes_path + "/dark_clean.py";
+    if (fs::exists(default_theme)) {
+      load_plugin(default_theme);
     }
   } else {
     load_plugins("plugins");
@@ -292,6 +333,61 @@ void PythonAPI::cleanup() {
     Py_Finalize();
     python_initialized = false;
   }
+}
+
+void PythonAPI::execute_code(const std::string &code) {
+  if (!python_initialized)
+    return;
+  PyRun_SimpleString(code.c_str());
+}
+
+// Helper to call python function
+static void call_python_hook(const char *func_name, const std::string &arg) {
+  PyObject *module = PyImport_ImportModule("jcode_api");
+  if (!module) {
+    std::cerr << "Failed to import jcode_api for " << func_name << std::endl;
+    PyErr_Print();
+    return;
+  }
+
+  PyObject *func = PyObject_GetAttrString(module, func_name);
+  if (func && PyCallable_Check(func)) {
+    PyObject *args = PyTuple_Pack(1, PyUnicode_FromString(arg.c_str()));
+    PyObject *result = PyObject_CallObject(func, args);
+    if (!result) {
+      std::cerr << "Error calling " << func_name << std::endl;
+      PyErr_Print();
+    } else {
+      Py_DECREF(result);
+    }
+    Py_DECREF(args);
+    Py_DECREF(func);
+  } else {
+    std::cerr << "Function " << func_name << " not found in jcode_api"
+              << std::endl;
+    if (PyErr_Occurred())
+      PyErr_Print();
+  }
+  Py_DECREF(module);
+}
+
+void PythonAPI::on_buffer_open(const std::string &filepath) {
+  if (!python_initialized)
+    return;
+  call_python_hook("_on_buffer_open", filepath);
+}
+
+void PythonAPI::on_buffer_change(const std::string &filepath,
+                                 const std::string &content) {
+  if (!python_initialized)
+    return;
+  call_python_hook("_on_buffer_change", filepath);
+}
+
+void PythonAPI::on_buffer_save(const std::string &filepath) {
+  if (!python_initialized)
+    return;
+  call_python_hook("_on_buffer_save", filepath);
 }
 
 void PythonAPI::load_plugins(const std::string &plugin_dir) {
@@ -391,6 +487,18 @@ bool PythonAPI::register_keybind(const std::string &key_str,
 
   registered_keybinds.push_back(kb);
   return true;
+}
+
+void PythonAPI::register_command(const std::string &name,
+                                 const std::string &callback) {
+  if (editor)
+    editor->register_command(name, callback);
+}
+
+void PythonAPI::py_show_input_prompt(const std::string &msg,
+                                     const std::string &callback) {
+  if (editor)
+    editor->show_input_prompt(msg, callback);
 }
 
 bool PythonAPI::handle_keybind(int key, bool ctrl, bool shift, bool alt,
@@ -549,21 +657,48 @@ void PythonAPI::py_set_theme_color(const std::string &name, int fg, int bg) {
   } else if (name == "panel_border") {
     theme.fg_panel_border = fg;
     theme.bg_panel_border = bg;
-  } else if (name == "selection") {
-    theme.fg_selection = fg;
-    theme.bg_selection = bg;
-  } else if (name == "line_num") {
-    theme.fg_line_num = fg;
-    theme.bg_line_num = bg;
-  } else if (name == "cursor") {
-    theme.fg_cursor = fg;
-    theme.bg_cursor = bg;
-  } else if (name == "status") {
-    theme.fg_status = fg;
+  } else if (name == "bg_default") {
+    theme.bg_default = bg;
+  } else if (name == "fg_default") {
+    theme.fg_default = fg;
+  } else if (name == "selection" || name == "bg_selection" ||
+             name == "fg_selection") {
+    if (bg != -1)
+      theme.bg_selection = bg;
+    if (fg != -1)
+      theme.fg_selection = fg;
+  } else if (name == "line_num" || name == "fg_line_num" ||
+             name == "bg_line_num") {
+    if (fg != -1)
+      theme.fg_line_num = fg;
+    if (bg != -1)
+      theme.bg_line_num = bg;
+  } else if (name == "cursor" || name == "fg_cursor") {
+    if (fg != -1)
+      theme.fg_cursor = fg;
+    if (bg != -1)
+      theme.bg_cursor = bg;
+  } else if (name == "bg_status_bar") {
     theme.bg_status = bg;
-  } else if (name == "command") {
-    theme.fg_command = fg;
-    theme.bg_command = bg;
+  } else if (name == "fg_status_bar") {
+    theme.fg_status = fg;
+  } else if (name == "fg_keyword") {
+    theme.fg_keyword = fg;
+  } else if (name == "fg_string") {
+    theme.fg_string = fg;
+  } else if (name == "fg_comment") {
+    theme.fg_comment = fg;
+  } else if (name == "fg_function") {
+    theme.fg_function = fg;
+  } else if (name == "fg_type") {
+    theme.fg_type = fg;
+  } else if (name == "fg_number") {
+    theme.fg_number = fg;
+  } else if (name == "fg_command" || name == "bg_command") {
+    if (fg != -1)
+      theme.fg_command = fg;
+    if (bg != -1)
+      theme.bg_command = bg;
   } else if (name == "minimap") {
     theme.fg_minimap = fg;
     theme.bg_minimap = bg;
@@ -612,12 +747,14 @@ void PythonAPI::py_clear_diagnostics(const std::string &filepath) {
 }
 
 void PythonAPI::py_add_diagnostic(const std::string &filepath, int line,
-                                  int col, const std::string &message,
-                                  int severity) {
+                                  int col, int end_line, int end_col,
+                                  const std::string &message, int severity) {
   if (editor) {
     Diagnostic d;
     d.line = line;
     d.col = col;
+    d.end_line = end_line;
+    d.end_col = end_col;
     d.message = message;
     d.severity = severity;
     editor->add_diagnostic(filepath, d);

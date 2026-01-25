@@ -18,8 +18,6 @@
 #include <vector>
 // #include "python_api.h"
 
-namespace fs = std::filesystem;
-
 enum PanelType {
   PANEL_EDITOR,
   PANEL_MINIMAP,
@@ -99,6 +97,8 @@ struct State {
 struct Diagnostic {
   int line;
   int col;
+  int end_line;
+  int end_col;
   std::string message;
   int severity; // 1=Error, 2=Warning, 3=Info, 4=Hint
 };
@@ -223,6 +223,19 @@ private:
 
   Popup popup; // New
 
+  // Custom Commands
+  struct CustomCommand {
+    std::string name;
+    std::string callback;
+  };
+  std::vector<CustomCommand> custom_commands;
+
+  // Input Prompt
+  bool input_prompt_visible;
+  std::string input_prompt_message;
+  std::string input_prompt_buffer;
+  std::string input_prompt_callback;
+
   // Sidebar
   bool show_sidebar;
   int sidebar_width;
@@ -256,6 +269,7 @@ private:
   void render_save_prompt();
   void render_quit_prompt();
   void render_popup(); // New
+  void render_input_prompt();
   void render_buffer_content(const SplitPane &pane, int buffer_id);
 
   void handle_input(int ch, bool is_ctrl = false, bool is_shift = false,
@@ -272,6 +286,7 @@ private:
   void handle_search_panel(int ch);
   void handle_telescope(int ch);
   void handle_save_prompt(int ch);
+  void handle_input_prompt(int ch);
   void handle_mouse(void *event);
 
   // void enter_normal_mode();
@@ -289,7 +304,10 @@ private:
   void delete_char(bool forward = true);
   void delete_selection();
   void delete_line();
+
   void new_line();
+  void insert_line_below();
+  void insert_line_above();
   void duplicate_line();
   void move_line_up();
   void move_line_down();
@@ -298,10 +316,15 @@ private:
   // API methods
   void show_popup(const std::string &text, int x, int y);
   void hide_popup();
+  void register_command(const std::string &name, const std::string &callback);
+  void show_input_prompt(const std::string &message,
+                         const std::string &callback);
+  void hide_input_prompt();
   void set_diagnostics(const std::string &filepath,
                        const std::vector<Diagnostic> &diagnostics);
   void add_diagnostic(const std::string &filepath,
                       const Diagnostic &diagnostic);
+  void run_python_script(const std::string &script);
 
 public:
   // Sidebar methods
@@ -330,7 +353,7 @@ private:
   void move_to_line_end(bool extend_selection = false);
   void move_to_file_start(bool extend_selection = false);
   void move_to_file_end(bool extend_selection = false);
-
+  void ensure_cursor_visible(); // New method
   void select_all();
   void clear_selection();
 

@@ -3,6 +3,7 @@ project(jcode)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Find Python3
 find_package(Python3 COMPONENTS Development REQUIRED)

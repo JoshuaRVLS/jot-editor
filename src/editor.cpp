@@ -44,6 +44,7 @@ Editor::Editor() {
   context_menu_x = 0;
   context_menu_y = 0;
   context_menu_selected = 0;
+  input_prompt_visible = false;
 
   // Mode initialization removed
   // mode = MODE_NORMAL;
@@ -91,10 +92,19 @@ void Editor::set_message(const std::string &msg) {
 void Editor::set_diagnostics(const std::string &filepath,
                              const std::vector<Diagnostic> &diagnostics) {
   for (auto &buf : buffers) {
-    if (fs::equivalent(buf.filepath, filepath) || buf.filepath == filepath) {
+    bool match = (buf.filepath == filepath);
+    if (!match && !buf.filepath.empty() && !filepath.empty()) {
+      std::error_code ec;
+      if (fs::exists(buf.filepath, ec) && fs::exists(filepath, ec) &&
+          fs::equivalent(buf.filepath, filepath, ec)) {
+        match = true;
+      }
+    }
+
+    if (match) {
       buf.diagnostics = diagnostics;
       needs_redraw = true;
-      return;
+      // Continue to check other buffers in case of duplicates
     }
   }
 }
@@ -102,10 +112,19 @@ void Editor::set_diagnostics(const std::string &filepath,
 void Editor::add_diagnostic(const std::string &filepath,
                             const Diagnostic &diagnostic) {
   for (auto &buf : buffers) {
-    if (fs::equivalent(buf.filepath, filepath) || buf.filepath == filepath) {
+    bool match = (buf.filepath == filepath);
+    if (!match && !buf.filepath.empty() && !filepath.empty()) {
+      std::error_code ec;
+      if (fs::exists(buf.filepath, ec) && fs::exists(filepath, ec) &&
+          fs::equivalent(buf.filepath, filepath, ec)) {
+        match = true;
+      }
+    }
+
+    if (match) {
       buf.diagnostics.push_back(diagnostic);
       needs_redraw = true;
-      return;
+      // Continue search
     }
   }
 }
@@ -285,4 +304,13 @@ void Editor::show_popup(const std::string &text, int x, int y) {
 void Editor::hide_popup() {
   popup.visible = false;
   needs_redraw = true;
+}
+
+void Editor::run_python_script(const std::string &script) {
+  if (python_api) {
+    // Ensure lsp_manager is available if needed, or just execute
+    // We might want to ensure cwd is sys.path
+    python_api->execute_code("import sys, os; sys.path.append(os.getcwd())");
+    python_api->execute_code(script);
+  }
 }

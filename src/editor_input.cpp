@@ -87,6 +87,21 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     return;
   }
 
+  if (show_search) {
+    handle_search_panel(ch);
+    return;
+  }
+
+  if (show_command_palette) {
+    handle_command_palette(ch);
+    return;
+  }
+
+  if (input_prompt_visible) {
+    handle_input_prompt(ch);
+    return;
+  }
+
   if (image_viewer.is_active()) {
     if (ch == 'q' || ch == 27) {
       image_viewer.close();
@@ -221,7 +236,15 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
 
   // Enter / Tab
   else if (ch == '\n' || ch == 13) {
-    new_line();
+    if (is_ctrl) {
+      if (is_shift) {
+        insert_line_above();
+      } else {
+        insert_line_below();
+      }
+    } else {
+      new_line();
+    }
     needs_redraw = true;
   } else if (ch == '\t' || ch == 9) {
     insert_char('\t');
@@ -405,6 +428,92 @@ void Editor::handle_mouse(void *event_ptr) {
     }
   }
 
+  // Check if click is in minimap
+  // Geometry: Minimap is at the right edge of pane
+  if (show_minimap && is_click) {
+    if (event->x >= pane.x + pane.w - minimap_width &&
+        event->x < pane.x + pane.w) {
+      if (event->y >= pane.y + tab_height && event->y < pane.y + pane.h) {
+        // Click in minimap
+        // Map Y relative to content area
+        int rel_y = event->y - (pane.y + tab_height);
+
+        // Calculate ratio
+        int h = pane.h - tab_height;
+        int total_lines = buf.lines.size();
+
+        if (total_lines > 0) {
+          float ratio = (float)h / total_lines;
+          if (ratio > 1.0f)
+            ratio = 1.0f;
+
+          // target line = rel_y / ratio
+          int target_line = (int)(rel_y / ratio);
+
+          buf.scroll_offset = target_line;
+
+          // Clamp
+          if (buf.scroll_offset < 0)
+            buf.scroll_offset = 0;
+          if (buf.scroll_offset > (int)buf.lines.size() - 1)
+            buf.scroll_offset = (int)buf.lines.size() - 1;
+
+          needs_redraw = true;
+          return;
+        }
+      }
+    }
+  }
+
+  // Check if click is in tab bar (Top)
+  if (is_click && event->y < tab_height) {
+    int tab_x = show_sidebar ? sidebar_width : 0;
+    for (int i = 0; i < (int)buffers.size(); i++) {
+      std::string name = get_filename(buffers[i].filepath);
+      if (name.empty())
+        name = "[No Name]";
+      if (buffers[i].modified)
+        name += "+";
+      std::string disp = " " + name + " ";
+      int w = disp.length() + 1;
+
+      if (event->x >= tab_x && event->x < tab_x + w) {
+        current_buffer = i;
+        get_pane().buffer_id = current_buffer;
+        needs_redraw = true;
+        return;
+      }
+      tab_x += w;
+      if (tab_x >= ui->get_width())
+        break;
+    }
+  }
+
+  // Check if click is in tab bar (Top)
+  if (is_click && event->y < tab_height) {
+    int tab_x = show_sidebar ? sidebar_width : 0;
+    // Simple hit test similar to render loop
+    for (int i = 0; i < (int)buffers.size(); i++) {
+      std::string name = get_filename(buffers[i].filepath);
+      if (name.empty())
+        name = "[No Name]";
+      if (buffers[i].modified)
+        name += "+";
+      std::string disp = " " + name + " ";
+      int w = disp.length() + 1; // +1 for separator
+
+      if (event->x >= tab_x && event->x < tab_x + w) {
+        current_buffer = i;
+        get_pane().buffer_id = current_buffer;
+        needs_redraw = true;
+        return;
+      }
+      tab_x += w;
+      if (tab_x >= ui->get_width())
+        break;
+    }
+  }
+
   bool inside_pane = (event->x >= pane.x && event->x < pane.x + pane.w &&
                       event->y >= pane.y && event->y < pane.y + pane.h);
 
@@ -528,7 +637,7 @@ void Editor::run() {
       bool is_shift = ev.key.shift;
 
       if (ch == '\n' || ch == 13) {
-        is_ctrl = false;
+        // Allow is_ctrl to pass through
       }
 
       // Store original ch for Python keybinds (before conversion)

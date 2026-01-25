@@ -36,8 +36,8 @@ def move_line_down(): core.move_line_down()
 def show_popup(text, x, y): core.show_popup(text, x, y)
 def hide_popup(): core.hide_popup()
 def clear_diagnostics(filepath): core.clear_diagnostics(filepath)
-def add_diagnostic(filepath, line, col, message, severity): 
-    core.add_diagnostic(filepath, line, col, message, severity)
+def add_diagnostic(filepath, line, col, end_line, end_col, message, severity): 
+    core.add_diagnostic(filepath, line, col, end_line, end_col, message, severity)
 def register_keybind(key, mode, callback):
     # Check if callback is a function name or callable
     cb_name = ""
@@ -58,6 +58,87 @@ def register_keybind(key, mode, callback):
     
     if cb_name:
         core.register_keybind(key, mode, cb_name)
+
+def register_command(name, callback):
+    cb_name = ""
+    if isinstance(callback, str):
+        cb_name = callback
+    elif callable(callback):
+        if hasattr(callback, "__name__"):
+            cb_name = callback.__name__
+            import __main__
+            setattr(__main__, cb_name, callback)
+    
+    if cb_name:
+        core.register_command(name, cb_name)
+
+def show_input(prompt, callback):
+    cb_name = ""
+    if isinstance(callback, str):
+        cb_name = callback
+    elif callable(callback):
+        if hasattr(callback, "__name__"):
+            cb_name = callback.__name__
+            import __main__
+            setattr(__main__, cb_name, callback)
+            
+    if cb_name:
+        core.show_input(prompt, cb_name)
+
+def _internal_call_callback(cb_name, arg):
+    import __main__
+    if hasattr(__main__, cb_name):
+        func = getattr(__main__, cb_name)
+        if callable(func):
+            try:
+                func(arg)
+            except Exception as e:
+                print(f"Error in callback {cb_name}: {e}")
+    else:
+        # Search in jcode_api provided callbacks? No, usually in main or plugins
+        print(f"Callback {cb_name} not found")
+
+# Event Callbacks
+_buffer_open_callbacks = []
+_buffer_change_callbacks = []
+_buffer_save_callbacks = []
+
+def on_buffer_open(callback):
+    _buffer_open_callbacks.append(callback)
+    return callback
+
+def on_buffer_change(callback):
+    _buffer_change_callbacks.append(callback)
+    return callback
+
+def on_buffer_save(callback):
+    _buffer_save_callbacks.append(callback)
+    return callback
+
+# Internal hooks called by C++
+def _on_buffer_open(filepath):
+    for cb in _buffer_open_callbacks:
+        try: cb(filepath)
+        except: pass
+
+def _on_buffer_change(filepath):
+    # Retrieve content only if needed by callback? 
+    # For now, just pass filepath. Callbacks can call get_buffer_content.
+    for cb in _buffer_change_callbacks:
+        try: cb(filepath)
+        except: pass
+
+def _on_buffer_save(filepath):
+    for cb in _buffer_save_callbacks:
+        try: cb(filepath)
+        except: pass
+
+def get_buffer_content():
+    lines = []
+    count = get_line_count()
+    for i in range(count):
+        lines.append(get_line(i))
+    return "\n".join(lines)
 
 # Editor Class wrapper for backward compatibility
 class Editor:
@@ -87,6 +168,11 @@ class Editor:
     def get_cursor_y(): return get_cursor_y()
     @staticmethod
     def set_theme_color(name, fg, bg): set_theme_color(name, fg, bg)
+    @staticmethod
+    def clear_diagnostics(filepath): clear_diagnostics(filepath)
+    @staticmethod
+    def add_diagnostic(filepath, line, col, end_line, end_col, message, severity): 
+        add_diagnostic(filepath, line, col, end_line, end_col, message, severity)
 
 def on_keybind(key_str, mode="all"):
     def decorator(func):

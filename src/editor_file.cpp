@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "python_api.h"
 #include <algorithm>
 #include <dirent.h>
 #include <fstream>
@@ -42,6 +43,8 @@ void Editor::open_file(const std::string &path) {
   get_pane().buffer_id = current_buffer;
 
   highlighter.set_language(get_file_extension(path));
+  if (python_api)
+    python_api->on_buffer_open(path);
 }
 
 void Editor::create_new_buffer() {
@@ -72,6 +75,8 @@ void Editor::save_file() {
   file.close();
   buf.modified = false;
   message = "Saved: " + get_filename(buf.filepath);
+  if (python_api)
+    python_api->on_buffer_save(buf.filepath);
 }
 
 void Editor::save_file_as() {

@@ -3,6 +3,8 @@
 #include <regex>
 
 void SyntaxHighlighter::set_language(const std::string &ext) {
+  if (file_extension == ext)
+    return;
   file_extension = ext;
   rules.clear();
 

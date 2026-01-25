@@ -77,14 +77,26 @@ void Editor::render_command_palette() {
   ui->draw_text(x + 1, y + 1, "> " + command_palette_query, theme.fg_command,
                 theme.bg_command);
 
-  for (int i = 0; i < (int)command_palette_results.size(); i++) {
-    if (i >= h - 3)
+  int list_h = h - 3;
+  int start_idx = 0;
+  if ((int)command_palette_results.size() > list_h) {
+    // Center selection in the list if possible
+    start_idx = command_palette_selected - (list_h / 2);
+    if (start_idx < 0)
+      start_idx = 0;
+    if (start_idx > (int)command_palette_results.size() - list_h)
+      start_idx = (int)command_palette_results.size() - list_h;
+  }
+
+  for (int i = 0; i < list_h - 1; i++) {
+    int idx = start_idx + i;
+    if (idx >= (int)command_palette_results.size())
       break;
 
-    std::string item = command_palette_results[i];
+    std::string item = command_palette_results[idx];
     int fg = theme.fg_command;
     int bg = theme.bg_command;
-    if (i == command_palette_selected) {
+    if (idx == command_palette_selected) {
       bg = theme.bg_selection;
       fg = theme.fg_selection;
     }
@@ -95,6 +107,26 @@ void Editor::render_command_palette() {
 
     ui->draw_text(x + 2, y + 3 + i, item, fg, bg);
   }
+}
+
+void Editor::render_input_prompt() {
+  if (!input_prompt_visible)
+    return;
+
+  int w = 40;
+  int h = 3;
+  int x = ui->get_width() / 2 - w / 2;
+  int y = ui->get_height() / 4;
+
+  UIRect rect = {x, y, w, h};
+  UIRect shadow = {x + 1, y + 1, w, h};
+  ui->draw_rect(shadow, 8, 0);
+
+  ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
+  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+
+  ui->draw_text(x + 1, y + 1, input_prompt_message + input_prompt_buffer,
+                theme.fg_command, theme.bg_command);
 }
 
 void Editor::render_search_panel() {
@@ -246,12 +278,12 @@ void Editor::render_tabs() {
       name += "+";
 
     std::string disp = " " + name + " ";
-    int bg = theme.bg_status;
-    int fg = theme.fg_status;
+    int bg = theme.bg_status; // Default background (Black/Dark)
+    int fg = 8;               // Grey for inactive tabs
 
     if (i == current_buffer) {
-      bg = theme.bg_default; // Active tab matches editor bg? or distinct?
-      fg = theme.fg_default;
+      bg = 4; // Blue background for active tab
+      fg = 7; // White text
     }
 
     ui->draw_text(tab_x, y, disp, fg, bg);

@@ -28,3 +28,10 @@ __pycache__/
 
 # Temp
 tmp/
+.cache/
+
+# Local Dev
+*.log
+key_debug
+debug_api.py
+compile_commands.json

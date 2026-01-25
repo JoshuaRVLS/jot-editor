@@ -39,6 +39,11 @@ public:
 
   bool init();
   void cleanup();
+  void execute_code(const std::string &code);
+  void on_buffer_open(const std::string &filepath);
+  void on_buffer_change(const std::string &filepath,
+                        const std::string &content);
+  void on_buffer_save(const std::string &filepath);
 
   // Load plugins from directory
   void load_plugins(const std::string &plugin_dir = "plugins");
@@ -50,6 +55,9 @@ public:
   // Check if a keybind should be handled by Python
   bool handle_keybind(int key, bool ctrl, bool shift, bool alt,
                       const std::string &mode);
+
+  void register_command(const std::string &name,
+                        const std::string &callback); // New
 
   // Python API functions (called from Python)
   void py_enter_normal_mode();
@@ -67,6 +75,8 @@ public:
 
   // LSP / UI
   void py_show_popup(const std::string &text, int x, int y);
+  void py_show_input_prompt(const std::string &msg,
+                            const std::string &callback);
   void py_hide_popup();
   void py_set_diagnostics(
       const std::string &filepath,
@@ -83,7 +93,8 @@ public:
   // py_clear_diagnostics(file), void py_add_diagnostic(file, ...).
   void py_clear_diagnostics(const std::string &filepath);
   void py_add_diagnostic(const std::string &filepath, int line, int col,
-                         const std::string &message, int severity);
+                         int end_line, int end_col, const std::string &message,
+                         int severity);
 
   std::string py_get_mode();
   int py_get_cursor_x();

@@ -1,6 +1,7 @@
 #include "terminal.h"
 #include <cstring>
 #include <fcntl.h>
+
 #include <iostream>
 #include <sys/ioctl.h>
 #include <termios.h>
@@ -42,11 +43,13 @@ void Terminal::setup_terminal() {
   write("\x1b[?25l");
   write("\x1b[2J");
   write("\x1b[H");
+  write("\x1b[>4;2m"); // Enable modifyOtherKeys mode 2
 }
 
 void Terminal::restore_terminal() {
   write("\x1b[?25h");
   write("\x1b[?1049l");
+  write("\x1b[>4m"); // Disable modifyOtherKeys
   show_cursor();
   reset_color();
   flush();
@@ -71,10 +74,17 @@ void Terminal::cleanup() {
   restore_terminal();
 }
 
+// ... inside read_key
 int Terminal::read_key() {
   char c;
   if (read(STDIN_FILENO, &c, 1) != 1)
     return 0;
+
+  // Debug logging
+  // std::ofstream log("key_debug.log", std::ios::app);
+  // if (log.is_open())
+  //   log << "Read char: " << (int)c << " (" << (c >= 32 ? c : '.') << ")"
+  //       << std::endl;
 
   if (c == '\x1b') {
     char seq[3];
@@ -83,84 +93,146 @@ int Terminal::read_key() {
     if (read(STDIN_FILENO, &seq[1], 1) != 1)
       return '\x1b';
 
+    // if (log.is_open())
+    //   log << "Seq header: " << seq[0] << seq[1] << std::endl;
+
     if (seq[0] == '[') {
+      // Parse params: [param1;param2;...terminator
+      std::vector<int> params;
+      std::string current_param;
       if (seq[1] >= '0' && seq[1] <= '9') {
+        current_param += seq[1];
         char next;
-        if (read(STDIN_FILENO, &next, 1) != 1)
-          return '\x1b';
-        if (next == ';') {
-          char mod;
-          if (read(STDIN_FILENO, &mod, 1) != 1)
+        while (read(STDIN_FILENO, &next, 1) == 1) {
+          // log << "Param char: " << (int)next << std::endl;
+          if (next >= '0' && next <= '9') {
+            current_param += next;
+          } else if (next == ';') {
+            if (!current_param.empty())
+              params.push_back(std::stoi(current_param));
+            current_param.clear();
+          } else {
+            // Terminator found
+            if (!current_param.empty())
+              params.push_back(std::stoi(current_param));
+
+            // Logic based on terminator
+            if (next == '~') {
+              if (params.size() >= 1) {
+                int key = params[0];
+                int mod = (params.size() >= 2) ? params[1] : 1;
+
+                // if (log.is_open())
+                //   log << "Sequence parsed: key=" << key << " mod=" << mod
+                //       << std::endl;
+
+                // Handle modifyOtherKeys: 27;mod;key~
+                if (key == 27 && params.size() >= 3) {
+                  mod = params[1];
+                  key = params[2];
+                }
+
+                int flags = 0;
+                if (mod == 2)
+                  flags |= 0x80000; // Shift
+                else if (mod == 3)
+                  flags |= 0x40000; // Alt
+                else if (mod == 4)
+                  flags |= 0x80000 | 0x40000;
+                else if (mod == 5)
+                  flags |= 0x20000; // Ctrl
+                else if (mod == 6)
+                  flags |= 0x80000 | 0x20000; // Ctrl+Shift
+                else if (mod == 7)
+                  flags |= 0x40000 | 0x20000;
+                else if (mod == 8)
+                  flags |= 0x80000 | 0x40000 | 0x20000;
+
+                // Map special keys
+                int mapped_key = 0;
+                switch (key) {
+                case 15:
+                  mapped_key = 1005;
+                  break; // F5
+                case 17:
+                  mapped_key = 1006;
+                  break; // F6
+                case 18:
+                  mapped_key = 1007;
+                  break; // F7
+                case 19:
+                  mapped_key = 1008;
+                  break; // F8? No, F8 is 19 usually
+                         // Add arrow mappings if they come as numbers
+                         // But usually they are 1;modA or similar?
+                  // Standard 1;5A is parsed differently (see below logic if we
+                  // preserve it) Actually, generic keys: 13 -> Enter
+                }
+
+                if (mapped_key)
+                  return mapped_key | flags;
+                return key | flags;
+              }
+            } else if (next == 'u') { // Kitty protocol: key;modu
+              if (params.size() >= 2) {
+                int key = params[0];
+                int mod = params[1];
+                int flags = 0;
+                // Kitty mods: 1=None, 2=Shift, 3=Alt, 4=Ctrl+Shift?
+                // Wait, Kitty uses 1-based bitmask?
+                // 1=Shift, 2=Alt, 4=Ctrl?
+                // Actually usually standard masks:
+                // 1: Shift=1, Alt=2, Ctrl=4, Super=8 -> +1 offset?
+                // Standard xterm: 2=Shift, 3=Alt, 5=Ctrl
+
+                // Assuming standard XTerm modifiers for now as 'u' often
+                // follows that
+                if (mod == 2)
+                  flags |= 0x80000;
+                else if (mod == 5)
+                  flags |= 0x20000;
+                else if (mod == 6)
+                  flags |= 0x80000 | 0x20000;
+
+                return key | flags;
+              }
+            } else if (next == 'A' || next == 'B' || next == 'C' ||
+                       next == 'D' || next == 'F' || next == 'H') {
+              // 1;5A style
+              int mod = params.empty() ? 1 : params[0];
+              // If format is [1;5A, params[0] is 1, params[1] is 5
+              if (params.size() == 2 && params[0] == 1)
+                mod = params[1];
+
+              int flags = 0;
+              if (mod == 2)
+                flags |= 0x80000;
+              else if (mod == 5)
+                flags |= 0x20000;
+              // ...
+
+              int code = 0;
+              if (next == 'A')
+                code = 1008;
+              if (next == 'B')
+                code = 1009;
+              if (next == 'C')
+                code = 1010;
+              if (next == 'D')
+                code = 1011;
+              if (next == 'F')
+                code = 1013;
+              if (next == 'H')
+                code = 1012;
+
+              return code | flags;
+            }
+
             return '\x1b';
-          char final;
-          if (read(STDIN_FILENO, &final, 1) != 1)
-            return '\x1b';
-
-          int key_code = 0;
-          switch (final) {
-          case 'A':
-            key_code = 1008;
-            break; // Up
-          case 'B':
-            key_code = 1009;
-            break; // Down
-          case 'C':
-            key_code = 1010;
-            break; // Right
-          case 'D':
-            key_code = 1011;
-            break; // Left
-          case 'F':
-            key_code = 1013;
-            break; // End
-          case 'H':
-            key_code = 1012;
-            break; // Home
-          }
-
-          if (key_code != 0) {
-            int flags = 0;
-            // 2=Shift, 3=Alt, 5=Ctrl, 4=Shift+Alt, 6=Shift+Ctrl, 7=Alt+Ctrl,
-            // 8=Shift+Alt+Ctrl
-            if (mod == '2')
-              flags |= 0x80000; // Shift
-            else if (mod == '3')
-              flags |= 0x40000; // Alt
-            else if (mod == '4')
-              flags |= 0x80000 | 0x40000; // Shift+Alt
-            else if (mod == '5')
-              flags |= 0x20000; // Ctrl
-            else if (mod == '6')
-              flags |= 0x80000 | 0x20000; // Shift+Ctrl
-            else if (mod == '7')
-              flags |= 0x40000 | 0x20000; // Alt+Ctrl
-            else if (mod == '8')
-              flags |= 0x80000 | 0x40000 | 0x20000; // Shift+Alt+Ctrl
-
-            return key_code | flags;
-          }
-          return '\x1b';
-        } else if (next == '~') {
-          switch (seq[1]) {
-          case '1':
-            return 1000;
-          case '3':
-            return 1001;
-          case '4':
-            return 1002;
-          case '5':
-            return 1003;
-          case '6':
-            return 1004;
-          case '7':
-            return 1005;
-          case '8':
-            return 1006;
-          case '9':
-            return 1007;
           }
         }
       } else if (seq[1] == '<') {
+        // Mouse
         mouse_event_buffer.clear();
         char mouse_seq[32] = {0};
         int mouse_pos = 0;
@@ -176,6 +248,7 @@ int Terminal::read_key() {
         mouse_event_buffer = std::string(mouse_seq);
         return 1014;
       } else {
+        // Handle [A, [B directly (no numbers)
         switch (seq[1]) {
         case 'A':
           return 1008;
@@ -190,11 +263,7 @@ int Terminal::read_key() {
         case 'F':
           return 1013;
         case 'M':
-          return 1014;
-        case '5':
-          return 1015;
-        case '6':
-          return 1016;
+          return 1014; // Mouse X10
         }
       }
     } else if (seq[0] == 'O') {
@@ -232,7 +301,7 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
     event.x = x - 1;
     event.y = y - 1;
 
-    int button_code = button & 0x03;
+    // int button_code = button & 0x03;
     bool is_motion = (button & 0x20) != 0;
     bool is_wheel = (button >= 64 && button <= 67);
 

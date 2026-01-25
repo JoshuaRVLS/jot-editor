@@ -191,6 +191,7 @@ void Editor::render_image_viewer() {
                       theme.fg_image_border, theme.bg_image_border);
 }
 
+// Improved render_minimap with color approximation
 void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
   if (buffer_id < 0 || buffer_id >= (int)buffers.size())
     return;
@@ -201,7 +202,6 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
   ui->fill_rect(rect, " ", 7, theme.bg_minimap);
 
   // Simple compressed view
-  // Map total lines to h
   int total_lines = buf.lines.size();
   if (total_lines == 0)
     return;
@@ -209,26 +209,75 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
   // Viewport indicator
   auto &pane = get_pane();
   float ratio = (float)h / total_lines;
+  if (ratio > 1.0f)
+    ratio = 1.0f;
 
   int viewport_y = (int)(buf.scroll_offset * ratio);
   int viewport_h = (int)(pane.h * ratio);
   if (viewport_h < 1)
     viewport_h = 1;
 
+  // Highlight viewport background
   UIRect viewport = {x, y + viewport_y, w, viewport_h};
   ui->fill_rect(viewport, " ", 7, theme.bg_selection);
 
-  // Draw content (simplified blocks)
+  // Draw content (blocks)
+  // Ensure syntax rules are loaded
+  highlighter.set_language(get_file_extension(buf.filepath));
+
   for (int i = 0; i < h; i++) {
     int line_idx = (int)(i / ratio);
     if (line_idx < total_lines) {
       std::string line = buf.lines[line_idx];
-      // Simply draw a few dots based on line length
-      int dots = line.length() / 4;
-      if (dots > w - 2)
-        dots = w - 2;
-      std::string miniline(dots, '.');
-      ui->draw_text(x + 1, y + i, miniline, 8, -1);
+      auto colors = highlighter.get_colors(line);
+
+      int draw_x = x;
+      int max_x = x + w;
+      // Draw blocks: 1 block per 4 chars approx, or just sample colors
+      // Let's iterate through colors.
+      // We will draw a block for every ~4 characters.
+      // But we need to pick the color of that chunk.
+      // Simplest: Just iterate through the line,
+      // if char is space, skip. If char is code, draw block with its color.
+
+      // We need to map linear char index to color
+      // Colors are pair<style, color_code> for ranges?
+      // No, get_colors returns vector of pairs per character?
+      // Let's check syntax.cpp...
+      // get_colors(line) returns vector<pair<int, int>> which is one pair per
+      // character. Pair is {bold, color}.
+
+      for (size_t k = 0; k < line.length(); k += 4) {
+        if (draw_x >= max_x)
+          break;
+
+        // Check if chunk has non-space
+        bool has_code = false;
+        int chunk_color = theme.fg_default;
+
+        for (size_t j = 0; j < 4 && k + j < line.length(); j++) {
+          if (!std::isspace(line[k + j])) {
+            has_code = true;
+            // Get color of this char
+            if (k + j < colors.size()) {
+              int c = colors[k + j].second;
+              if (c != 0)
+                chunk_color = c;
+            }
+            break; // Found code, use this color
+          }
+        }
+
+        if (has_code) {
+          // Block character: UTF-8 for full block is \xE2\x96\x88
+          // ui->draw_text expects std::string.
+          // Windows/Curses might need special handling but we are on Linux zsh.
+          // We can use a simple pipe | or # or just unicode block.
+          // Let's try unicode block.
+          ui->draw_text(draw_x, y + i, "\u2588", chunk_color, -1);
+        }
+        draw_x++;
+      }
     }
   }
 }
@@ -249,6 +298,11 @@ void Editor::render_pane(const SplitPane &pane) {
 
   render_buffer_content(pane, pane.buffer_id);
 
+  if (show_minimap) {
+    render_minimap(pane.x + w, pane.y + 1, minimap_width, pane.h - 1,
+                   pane.buffer_id);
+  }
+
   // Border
   UIRect rect = {pane.x, pane.y, w, pane.h};
   ui->draw_border(rect, theme.fg_panel_border, theme.bg_panel_border);
@@ -256,6 +310,7 @@ void Editor::render_pane(const SplitPane &pane) {
 
 void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
   auto &buf = get_buffer(buffer_id);
+  highlighter.set_language(get_file_extension(buf.filepath));
   int x = pane.x;
   int y = pane.y + tab_height;
   int w = pane.w;
@@ -326,11 +381,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
 
             // Check selection
             if (buf.selection.active) {
-              // Assuming single line selection for simplicity first or
-              // multi-line Need full selection logic
+              // ... selection logic ...
               Cursor p = {char_idx, line_idx};
-
-              // Order start/end
               Cursor s = buf.selection.start;
               Cursor e = buf.selection.end;
 
@@ -354,6 +406,32 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
               if (in_sel) {
                 bg = theme.bg_selection;
                 fg = theme.fg_selection;
+              }
+            }
+
+            // Check Search Highlights
+            if (show_search && !search_query.empty()) {
+              // Determine if char_idx is within a search match on this line
+              // This is slightly inefficient (nested loop), but for visible
+              // chars ok Better: Pre-calculate matches for this line? But we
+              // have global search_results. Let's just check if (line_idx,
+              // char_idx) is in search_results Actually search_results stores
+              // (line, start_col). We need to check if char_idx >= start_col &&
+              // char_idx < start_col + query_len
+
+              // Optimize: binary search finding matches on this line?
+              // Or just iterate linear if count is low?
+              for (const auto &res : search_results) {
+                if (res.first == line_idx) {
+                  if (char_idx >= res.second &&
+                      char_idx < res.second + (int)search_query.length()) {
+                    bg = 3; // Yellow background for search
+                    fg = 0; // Black text
+                    break;
+                  }
+                } else if (res.first > line_idx) {
+                  break; // Sorted by line usually
+                }
               }
             }
 
@@ -426,6 +504,78 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
       }
     } else {
       ui->draw_text(x + 1, draw_y, "~", theme.fg_line_num, theme.bg_default);
+    }
+  }
+
+  // Render Diagnostics (Underline)
+  // We do this after text so it overlays or we could do it during text render
+  // Doing it after is easier to manage overlapping logic, though TUI text cells
+  // only hold FG/BG. We can't "underline" easily in TUI unless we have a
+  // specific attribute. Our UI class `draw_text` takes FG/BG. Only some
+  // terminals support underline. Alternatively, we can change the BG color of
+  // the error text or the FG color to Red. Let's iterate diagnostics and
+  // override colors if we haven't drawn them yet? But we already drew text.
+  // Let's redraw text for diagnostics? Inefficient but works.
+  // Better: Check diagnostics loop INSIDE the text render loop.
+  // Wait, I can't modify the previous massive loop easily with
+  // `replace_file_content`. Let's implement a "post-render" pass for
+  // diagnostics that just redraws the affect characters with red color?
+
+  // Render Diagnostics (Background Highlight)
+  for (const auto &diag : buf.diagnostics) {
+    // Only single line highlighting effectively implemented for now
+    // If multi-line, we clip to current line logic or expand logic
+    // Let's iterate over the lines affected by diagnostic that are visible
+
+    int start_l = diag.line;
+    int end_l = diag.end_line;
+
+    // Bounds check visibility
+    if (end_l < buf.scroll_offset || start_l >= buf.scroll_offset + h)
+      continue;
+
+    // Iterate visible lines involved in this diagnostic
+    for (int l = std::max(start_l, buf.scroll_offset);
+         l <= std::min(end_l, buf.scroll_offset + h - 1); l++) {
+
+      if (l < 0 || l >= (int)buf.lines.size())
+        continue;
+
+      int draw_y = y + (l - buf.scroll_offset);
+      std::string &line = buf.lines[l];
+      int line_len = line.length();
+
+      int s_col = (l == start_l) ? diag.col : 0;
+      int e_col = (l == end_l) ? diag.end_col : line_len; // Exclusive
+
+      // Clip to line length
+      if (s_col > line_len)
+        s_col = line_len;
+      if (e_col > line_len)
+        e_col = line_len;
+
+      // Virtual Text (Gray message at end of line)
+      if (l == start_l) {
+        int vt_dist = 4; // Padding
+        int vis_x_end = line_len - buf.scroll_x;
+        if (vis_x_end < 0)
+          vis_x_end = 0;
+
+        int cx = x + 1 + line_num_width + vis_x_end + vt_dist;
+
+        // Check if we have space (soft check)
+        if (cx < x + w) {
+          std::string msg = "  " + diag.message;
+          int msg_fg = 8; // Gray
+          if (diag.severity == 1)
+            msg_fg = 1; // Red
+          else if (diag.severity == 2)
+            msg_fg = 3; // Yellow
+
+          // Draw
+          ui->draw_text(cx, draw_y, msg, msg_fg, theme.bg_default);
+        }
+      }
     }
   }
 }
