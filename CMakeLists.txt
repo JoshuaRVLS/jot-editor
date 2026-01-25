@@ -27,26 +27,34 @@ foreach(INC_FLAG ${PYTHON_INCLUDE_FLAGS})
 endforeach()
 
 # Add system includes
-if(PYTHON_INCLUDES)
-    list(REMOVE_DUPLICATES PYTHON_INCLUDES)
-    message(STATUS "Adding Python SYSTEM includes: ${PYTHON_INCLUDES}")
-    include_directories(SYSTEM ${PYTHON_INCLUDES})
-endif()
+# if(PYTHON_INCLUDES)
+#     list(REMOVE_DUPLICATES PYTHON_INCLUDES)
+#     message(STATUS "Adding Python SYSTEM includes: ${PYTHON_INCLUDES}")
+#     include_directories(SYSTEM ${PYTHON_INCLUDES})
+# endif()
+# MOVED to target_include_directories below
 
 # Remove -I flags from PYTHON_CFLAGS to avoid adding them twice or as non-system
 string(REGEX REPLACE "-I[^ ]+" "" PYTHON_OTHER_FLAGS "${PYTHON_CFLAGS}")
 
-# Add remaining Python cflags
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${PYTHON_OTHER_FLAGS}")
+# Add remaining Python cflags ONLY to jcode target
+string(STRIP "${PYTHON_OTHER_FLAGS}" PYTHON_OTHER_FLAGS)
+separate_arguments(PYTHON_OTHER_FLAGS_LIST UNIX_COMMAND "${PYTHON_OTHER_FLAGS}")
 
 # Source files
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 
 # Add executable
 add_executable(jcode ${SOURCES})
+target_compile_options(jcode PRIVATE ${PYTHON_OTHER_FLAGS_LIST}) # Apply flags locally
 
 # Include src directory
 # target_include_directories(jcode PRIVATE src)
+
+if(PYTHON_INCLUDES)
+    list(REMOVE_DUPLICATES PYTHON_INCLUDES)
+    target_include_directories(jcode SYSTEM PRIVATE ${PYTHON_INCLUDES})
+endif()
 
 
 # Link libraries
@@ -62,3 +70,10 @@ string(STRIP "${PYTHON_LDFLAGS}" PYTHON_LDFLAGS)
 separate_arguments(PYTHON_LDFLAGS_LIST UNIX_COMMAND "${PYTHON_LDFLAGS}")
 
 target_link_libraries(jcode PRIVATE stdc++fs ${PYTHON_LDFLAGS_LIST})
+
+# Tests
+# enable_testing()
+# add_executable(jcode_tests tests/test_main.cpp tests/test_features.cpp src/features.cpp)
+# target_include_directories(jcode_tests PRIVATE src)
+# target_compile_options(jcode_tests PRIVATE ${PYTHON_OTHER_FLAGS_LIST})
+# add_test(NAME FeaturesTest COMMAND jcode_tests)

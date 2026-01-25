@@ -85,7 +85,8 @@ class LSPClient:
                 if not parts:
                     # Empty line -> End of headers?
                     if content_length is not None:
-                         # Read content                         content = self.process.stdout.read(content_length).decode('utf-8')
+                         # Read content
+                         content = self.process.stdout.read(content_length).decode('utf-8')
                          self.log(f"RECV: {content}")
                          try:
                              self._handle_message(json.loads(content))
@@ -244,7 +245,7 @@ class LSPClient:
              uri = f"file://{abs_path}"
 
         if abs_path not in self.open_files: return
-        self.open_files[abs_path] += 1[<65;78;33M]
+        self.open_files[abs_path] += 1
         
         self.send_notification("textDocument/didChange", {
             "textDocument": {
