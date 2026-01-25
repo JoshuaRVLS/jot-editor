@@ -1,1 +1,30 @@
-src/*.o
+# Build artifacts
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Binary
+jcode
+jcode_local
+*.o
+*.a
+*.so
+
+# Python
+__pycache__/
+*.pyc
+
+# IDEs/Editors
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Agent
+.agent/
+
+# Temp
+tmp/
