@@ -1,9 +1,13 @@
 """
-JCode Editor Python API
-This module provides Python bindings for the JCode editor.
+JCode Editor Python API.
+
+This module keeps the low-level wrapper intact and also exposes a
+Neovim-inspired facade for config and themes.
 """
 
+import os
 import sys
+from pathlib import Path
 
 # Try to import internal module provided by C++ host
 try:
@@ -14,6 +18,49 @@ except ImportError:
         def __getattr__(self, name):
             return lambda *args: None
     core = MockCore()
+
+CONFIG_HOME = Path(os.environ.get("JCODE_CONFIG_HOME", Path.home() / ".config" / "jcode"))
+CONFIGS_DIR = CONFIG_HOME / "configs"
+COLORS_DIR = CONFIGS_DIR / "colors"
+PLUGINS_DIR = CONFIGS_DIR / "plugins"
+LEGACY_THEMES_DIR = CONFIG_HOME / "themes"
+
+_HIGHLIGHT_MAP = {
+    "Normal": "default",
+    "NormalFloat": "command",
+    "Comment": "comment",
+    "Constant": "number",
+    "String": "string",
+    "Character": "string",
+    "Number": "number",
+    "Boolean": "number",
+    "Float": "number",
+    "Identifier": "default",
+    "Function": "function",
+    "Statement": "keyword",
+    "Conditional": "keyword",
+    "Repeat": "keyword",
+    "Label": "keyword",
+    "Operator": "keyword",
+    "Keyword": "keyword",
+    "Exception": "keyword",
+    "PreProc": "keyword",
+    "Type": "type",
+    "Special": "bracket_match",
+    "LineNr": "line_num",
+    "Cursor": "cursor",
+    "CursorLine": "selection",
+    "Visual": "selection",
+    "StatusLine": "status",
+    "StatusLineNC": "status",
+    "FloatBorder": "panel_border",
+    "WinSeparator": "panel_border",
+    "Pmenu": "command",
+    "PmenuSel": "selection",
+    "TelescopeNormal": "telescope",
+    "TelescopeSelection": "telescope_selected",
+    "TelescopePreviewNormal": "telescope_preview",
+}
 
 # Expose core functions directly
 def enter_normal_mode(): core.enter_normal_mode()
@@ -39,6 +86,76 @@ def clear_diagnostics(filepath): core.clear_diagnostics(filepath)
 def set_diagnostics(filepath, diagnostics): core.set_diagnostics(filepath, diagnostics) # New
 def add_diagnostic(filepath, line, col, end_line, end_col, message, severity): 
     core.add_diagnostic(filepath, line, col, end_line, end_col, message, severity)
+
+def config_path(*parts):
+    return str(CONFIG_HOME.joinpath(*parts))
+
+def colors_path(*parts):
+    return str(COLORS_DIR.joinpath(*parts))
+
+def plugins_path(*parts):
+    return str(PLUGINS_DIR.joinpath(*parts))
+
+def _normalize_theme_value(value):
+    if isinstance(value, str):
+        lookup = {
+            "none": -1,
+            "default": -1,
+            "fg": -1,
+            "bg": -1,
+        }
+        return lookup.get(value.lower(), -1)
+    if value is None:
+        return -1
+    return int(value)
+
+def set_hl(group, spec):
+    slot = _HIGHLIGHT_MAP.get(group, group)
+    fg = _normalize_theme_value(spec.get("fg"))
+    bg = _normalize_theme_value(spec.get("bg"))
+    set_theme_color(slot, fg, bg)
+
+def apply_colorscheme(name):
+    candidates = [
+        COLORS_DIR / f"{name}.py",
+        LEGACY_THEMES_DIR / f"{name}.py",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            namespace = {"__file__": str(candidate), "__name__": "__main__"}
+            with open(candidate, "r", encoding="utf-8") as handle:
+                code = compile(handle.read(), str(candidate), "exec")
+                exec(code, namespace, namespace)
+
+            if callable(namespace.get("setup")):
+                namespace["setup"](sys.modules[__name__])
+            elif callable(namespace.get("apply")):
+                namespace["apply"]()
+            elif isinstance(namespace.get("theme"), dict):
+                for group, hl in namespace["theme"].items():
+                    set_hl(group, hl)
+
+            return True
+    show_message(f"Colorscheme '{name}' not found")
+    return False
+
+def command(command_line):
+    command_line = command_line.strip()
+    if not command_line:
+        return
+
+    if command_line.startswith(":"):
+        command_line = command_line[1:].strip()
+
+    if command_line in {"w", "write"}:
+        save_file()
+        return
+    if command_line.startswith("colorscheme "):
+        _, name = command_line.split(None, 1)
+        apply_colorscheme(name.strip())
+        return
+
+    show_message(f"Unsupported command: {command_line}")
 # Callback Registry
 _callback_registry = {}
 
@@ -189,3 +306,34 @@ def on_keybind(key_str, mode="all"):
         register_keybind(key_str, mode, func)
         return func
     return decorator
+
+class _Keymap:
+    @staticmethod
+    def set(mode, lhs, rhs):
+        register_keybind(lhs, mode, rhs)
+
+class _Api:
+    @staticmethod
+    def nvim_set_hl(_, group, spec):
+        set_hl(group, spec)
+
+class _Cmd:
+    def __call__(self, command_line):
+        command(command_line)
+
+    @staticmethod
+    def colorscheme(name):
+        apply_colorscheme(name)
+
+class _Vim:
+    def __init__(self):
+        self.g = {}
+        self.keymap = _Keymap()
+        self.api = _Api()
+        self.cmd = _Cmd()
+
+    @staticmethod
+    def notify(message, level="info"):
+        show_message(f"[{level}] {message}")
+
+vim = _Vim()

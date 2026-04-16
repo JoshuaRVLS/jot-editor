@@ -21,7 +21,6 @@ void Editor::render() {
   }
 
   ui->clear();
-  int h = ui->get_height();
   int w = ui->get_width();
 
   // Render Tabs
@@ -45,8 +44,9 @@ void Editor::render() {
       render_quit_prompt();
     } else {
       if (show_sidebar) {
-        int editor_x = sidebar_width;
-        int editor_w = ui->get_width() - sidebar_width;
+        int editor_x =
+            std::min(sidebar_width, std::max(0, ui->get_width() - 20));
+        int editor_w = std::max(1, ui->get_width() - editor_x);
 
         render_sidebar();
 
@@ -59,13 +59,13 @@ void Editor::render() {
         // Reset pane layout
         if (!panes.empty()) {
           panes[0].x = 0;
-          panes[0].w = ui->get_width();
+          panes[0].w = std::max(1, ui->get_width());
         }
       }
 
       render_panes();
 
-      if (show_minimap && !panes.empty()) {
+      if (show_minimap && !panes.empty() && panes[0].w > 20) {
         render_minimap(
             ui->get_width() - minimap_width, tab_height, minimap_width,
             ui->get_height() - tab_height - status_height, panes[0].buffer_id);
@@ -78,8 +78,27 @@ void Editor::render() {
     render_popup();
     render_context_menu();
 
+    // Easter egg overlay (on top of everything)
+    if (easter_egg_timer > 0) {
+      render_easter_egg();
+      easter_egg_timer--;
+      needs_redraw = true; // keep animating until timer expires
+    }
+
     // Final render to terminal
     ui->render();
+
+    // Cursor shape via terminal escape codes
+    // \e[2 q = steady block (Normal/Visual), \e[6 q = steady bar (Insert)
+    if (mode == MODE_INSERT) {
+      // Blinking bar cursor for insert
+      printf("\033[5 q");
+      fflush(stdout);
+    } else {
+      // Steady block cursor for normal / visual
+      printf("\033[1 q");
+      fflush(stdout);
+    }
 
     // Cursor Handling
     if (show_command_palette || show_search || show_save_prompt ||
@@ -98,10 +117,7 @@ void Editor::render() {
             display_x >= pane.x && display_x < pane.x + pane.w) {
           ui->set_cursor(display_x, display_y);
         } else {
-          ui->set_cursor(
-              display_x,
-              display_y); // Should we hide? Actually original code unsets it
-          // But here in main render loop we should just hide if OOB
+          ui->set_cursor(display_x, display_y);
           ui->hide_cursor();
         }
       }
@@ -111,176 +127,6 @@ void Editor::render() {
   }
 }
 
-void Editor::render_telescope() {
-  int h = ui->get_height();
-  int w = ui->get_width();
-
-  int list_w = w / 2;
-  int preview_w = w - list_w;
-  int list_h = h - 2;
-
-  UIRect rect = {0, 0, w, h};
-  ui->fill_rect(rect, " ", theme.fg_telescope, theme.bg_telescope);
-
-  ui->draw_text(1, 0, " FIND FILES ", theme.fg_telescope, theme.bg_telescope);
-
-  std::string query = telescope.get_query();
-  ui->draw_text(1, 1, "> " + query, theme.fg_telescope, theme.bg_telescope);
-
-  const auto &results = telescope.get_results();
-  int selected = telescope.get_selected_index();
-  int start_idx = std::max(0, selected - (list_h - 3));
-  int end_idx = std::min((int)results.size(), start_idx + list_h - 2);
-
-  for (int i = start_idx; i < end_idx; i++) {
-    int y = 2 + (i - start_idx);
-    int fg = theme.fg_telescope, bg = theme.bg_telescope;
-
-    if (i == selected) {
-      fg = theme.fg_telescope_selected;
-      bg = theme.bg_telescope_selected;
-    }
-
-    std::string icon = results[i].is_directory ? "D " : "F ";
-    std::string name = results[i].name;
-    if ((int)name.length() > list_w - 5) {
-      name = name.substr(0, list_w - 8) + "...";
-    }
-
-    ui->draw_text(1, y, icon + name, fg, bg);
-  }
-
-  if (!results.empty() && selected >= 0 && selected < (int)results.size()) {
-    auto preview_lines = telescope.get_preview_lines();
-    int preview_x = list_w;
-    int preview_h = h - 2;
-
-    ui->draw_text(preview_x, 0, " PREVIEW ", theme.fg_telescope,
-                  theme.bg_telescope);
-
-    std::string path = telescope.get_selected_path();
-    if (!path.empty()) {
-      std::string path_display = path;
-      if ((int)path_display.length() > preview_w - 2) {
-        path_display =
-            "..." + path_display.substr(path_display.length() - preview_w + 5);
-      }
-      ui->draw_text(preview_x + 1, 1, path_display, theme.fg_telescope_preview,
-                    theme.bg_telescope_preview);
-
-      for (size_t i = 0;
-           i < preview_lines.size() && i < (size_t)(preview_h - 2); i++) {
-        std::string line = preview_lines[i];
-        if ((int)line.length() > preview_w - 2) {
-          line = line.substr(0, preview_w - 5) + "...";
-        }
-        ui->draw_text(preview_x + 1, 2 + (int)i, line,
-                      theme.fg_telescope_preview, theme.bg_telescope_preview);
-      }
-    }
-  }
-}
-
-void Editor::render_image_viewer() {
-  int w = ui->get_width();
-  int h = ui->get_height();
-  int img_w = w / 2;
-  int img_h = h - status_height - tab_height;
-
-  image_viewer.render(w - img_w, tab_height, img_w, img_h,
-                      theme.fg_image_border, theme.bg_image_border);
-}
-
-// Improved render_minimap with color approximation
-void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
-  if (buffer_id < 0 || buffer_id >= (int)buffers.size())
-    return;
-  auto &buf = buffers[buffer_id];
-
-  // Draw background
-  UIRect rect = {x, y, w, h};
-  ui->fill_rect(rect, " ", 7, theme.bg_minimap);
-
-  // Simple compressed view
-  int total_lines = buf.lines.size();
-  if (total_lines == 0)
-    return;
-
-  // Viewport indicator
-  auto &pane = get_pane();
-  float ratio = (float)h / total_lines;
-  if (ratio > 1.0f)
-    ratio = 1.0f;
-
-  int viewport_y = (int)(buf.scroll_offset * ratio);
-  int viewport_h = (int)(pane.h * ratio);
-  if (viewport_h < 1)
-    viewport_h = 1;
-
-  // Highlight viewport background
-  UIRect viewport = {x, y + viewport_y, w, viewport_h};
-  ui->fill_rect(viewport, " ", 7, theme.bg_selection);
-
-  // Draw content (blocks)
-  // Ensure syntax rules are loaded
-  highlighter.set_language(get_file_extension(buf.filepath));
-
-  for (int i = 0; i < h; i++) {
-    int line_idx = (int)(i / ratio);
-    if (line_idx < total_lines) {
-      std::string line = buf.lines[line_idx];
-      auto colors = highlighter.get_colors(line);
-
-      int draw_x = x;
-      int max_x = x + w;
-      // Draw blocks: 1 block per 4 chars approx, or just sample colors
-      // Let's iterate through colors.
-      // We will draw a block for every ~4 characters.
-      // But we need to pick the color of that chunk.
-      // Simplest: Just iterate through the line,
-      // if char is space, skip. If char is code, draw block with its color.
-
-      // We need to map linear char index to color
-      // Colors are pair<style, color_code> for ranges?
-      // No, get_colors returns vector of pairs per character?
-      // Let's check syntax.cpp...
-      // get_colors(line) returns vector<pair<int, int>> which is one pair per
-      // character. Pair is {bold, color}.
-
-      for (size_t k = 0; k < line.length(); k += 4) {
-        if (draw_x >= max_x)
-          break;
-
-        // Check if chunk has non-space
-        bool has_code = false;
-        int chunk_color = theme.fg_default;
-
-        for (size_t j = 0; j < 4 && k + j < line.length(); j++) {
-          if (!std::isspace(line[k + j])) {
-            has_code = true;
-            // Get color of this char
-            if (k + j < colors.size()) {
-              int c = colors[k + j].second;
-              if (c != 0)
-                chunk_color = c;
-            }
-            break; // Found code, use this color
-          }
-        }
-
-        if (has_code) {
-          // Block character: UTF-8 for full block is \xE2\x96\x88
-          // ui->draw_text expects std::string.
-          // Windows/Curses might need special handling but we are on Linux zsh.
-          // We can use a simple pipe | or # or just unicode block.
-          // Let's try unicode block.
-          ui->draw_text(draw_x, y + i, "\u2588", chunk_color, -1);
-        }
-        draw_x++;
-      }
-    }
-  }
-}
 
 void Editor::render_panes() {
   for (const auto &pane : panes) {
@@ -290,15 +136,17 @@ void Editor::render_panes() {
 
 void Editor::render_pane(const SplitPane &pane) {
   // Calculate geometry
-  int w = pane.w;
+  int w = std::max(1, pane.w);
+  if (pane.h <= 0)
+    return;
 
-  if (show_minimap) {
-    w -= minimap_width;
+  if (show_minimap && w > 20) {
+    w = std::max(1, w - minimap_width);
   }
 
   render_buffer_content(pane, pane.buffer_id);
 
-  if (show_minimap) {
+  if (show_minimap && pane.w > 20) {
     render_minimap(pane.x + w, pane.y + 1, minimap_width, pane.h - 1,
                    pane.buffer_id);
   }
@@ -313,16 +161,18 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
   highlighter.set_language(get_file_extension(buf.filepath));
   int x = pane.x;
   int y = pane.y + tab_height;
-  int w = pane.w;
-  int h = pane.h - tab_height;
+  int w = std::max(1, pane.w);
+  int h = std::max(0, pane.h - tab_height);
+  if (h <= 0)
+    return;
 
   // Fill pane background first
   UIRect pane_rect = {x, y, w, h};
   // We can fill the whole pane first to ensure no artifacts
   ui->fill_rect(pane_rect, " ", theme.fg_default, theme.bg_default);
 
-  if (show_minimap)
-    w -= minimap_width;
+  if (show_minimap && w > 20)
+    w = std::max(1, w - minimap_width);
 
   int line_num_width = 6;
 

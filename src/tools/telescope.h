@@ -18,7 +18,7 @@ class Telescope {
 public:
     Telescope();
     
-    void open();
+    void open(const std::string& root = "");
     void close();
     bool is_active() const { return active; }
     
@@ -28,6 +28,7 @@ public:
     void move_up();
     void move_down();
     void select();
+    void go_parent();
     
     std::string get_selected_path() const;
     std::vector<std::string> get_preview_lines() const;
@@ -35,6 +36,7 @@ public:
     const std::vector<FileMatch>& get_results() const { return results; }
     int get_selected_index() const { return selected_index; }
     std::string get_query() const { return query; }
+    std::string get_root_dir() const { return root_dir.string(); }
     
     static bool fuzzy_match(const std::string& text, const std::string& pattern);
     static int fuzzy_score(const std::string& text, const std::string& pattern);
@@ -51,4 +53,3 @@ private:
 };
 
 #endif
-

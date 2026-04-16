@@ -16,11 +16,13 @@ void Editor::render_sidebar() {
   if (!show_sidebar)
     return;
 
-  int w = sidebar_width;
-  int h = ui->get_height() - status_height -
-          tab_height; // Full height minus components
+  int w = std::min(sidebar_width, std::max(0, ui->get_width() - 20));
+  int h = std::max(0, ui->get_height() - status_height -
+                          tab_height); // Full height minus components
   int x = 0;
   int y = tab_height;
+  if (w < 2 || h < 1)
+    return;
 
   // Background
   UIRect rect = {x, y, w, h};
@@ -51,7 +53,7 @@ void Editor::render_sidebar() {
 
     std::string name = node->name;
     // Truncate name
-    int max_len = w - 4 - indent.length();
+    int max_len = std::max(0, w - 4 - (int)indent.length());
     if ((int)name.length() > max_len)
       name = name.substr(0, max_len) + "..";
 

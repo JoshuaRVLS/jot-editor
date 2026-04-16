@@ -37,6 +37,7 @@ private:
 public:
   UI(Terminal *t);
   void resize(int w, int h);
+  void invalidate();
 
   void clear();
   void render();

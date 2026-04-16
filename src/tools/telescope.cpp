@@ -9,8 +9,13 @@ Telescope::Telescope() {
     root_dir = fs::current_path();
 }
 
-void Telescope::open() {
+void Telescope::open(const std::string& root) {
     active = true;
+    if (!root.empty()) {
+        root_dir = fs::path(root);
+    } else if (!fs::exists(root_dir)) {
+        root_dir = fs::current_path();
+    }
     query = "";
     selected_index = 0;
     results.clear();
@@ -96,8 +101,19 @@ void Telescope::select() {
     if (selected_index >= 0 && selected_index < (int)results.size()) {
         if (results[selected_index].is_directory) {
             root_dir = results[selected_index].path;
+            query.clear();
+            selected_index = 0;
             update_results();
         }
+    }
+}
+
+void Telescope::go_parent() {
+    if (root_dir.has_parent_path()) {
+        root_dir = root_dir.parent_path();
+        query.clear();
+        selected_index = 0;
+        update_results();
     }
 }
 
@@ -186,4 +202,3 @@ int Telescope::fuzzy_score(const std::string& text, const std::string& pattern) 
     
     return 0;
 }
-

@@ -11,9 +11,9 @@ namespace fs = std::filesystem;
 Config::Config() {
   const char *home = getenv("HOME");
   if (home) {
-    config_path = std::string(home) + "/.config/jcode";
-    fs::create_directories(config_path);
-    config_path += "/config";
+    std::string config_root = std::string(home) + "/.config/jcode";
+    fs::create_directories(config_root + "/configs");
+    config_path = config_root + "/configs/settings.conf";
   }
   load_defaults();
 }
@@ -52,7 +52,16 @@ void Config::load() {
   if (config_path.empty())
     return;
 
+  
+
   std::ifstream file(config_path);
+  if (!file.is_open()) {
+    const char *home = getenv("HOME");
+    if (home) {
+      std::string legacy_path = std::string(home) + "/.config/jcode/config";
+      file.open(legacy_path);
+    }
+  }
   if (!file.is_open()) {
     save();
     return;

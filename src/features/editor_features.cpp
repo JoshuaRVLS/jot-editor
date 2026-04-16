@@ -1,4 +1,4 @@
-#include "features.h"
+#include "editor_features.h"
 #include <algorithm>
 #include <cctype>
 

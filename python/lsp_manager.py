@@ -3,7 +3,7 @@ import threading
 import sys
 import shutil
 import os
-from jcode_api import Editor
+from jcode_api import Editor, config_path
 
 def _run_silent(cmd):
     try:
@@ -14,7 +14,7 @@ def _run_silent(cmd):
 
 def _install_python():
     Editor.show_message("Installing Python LSP (background)...")
-    venv_path = os.path.expanduser("~/.config/jcode/venv")
+    venv_path = config_path("venv")
     
     try:
         # 1. Create venv
@@ -72,7 +72,7 @@ def install_server(name):
 def remove_server(name):
     if name == "python":
         Editor.show_message("Removing Python LSP...")
-        venv_path = os.path.expanduser("~/.config/jcode/venv")
+        venv_path = config_path("venv")
         if os.path.exists(venv_path):
             shutil.rmtree(venv_path)
             Editor.show_message("Python LSP (venv) removed.")

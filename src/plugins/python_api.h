@@ -1,7 +1,7 @@
 #ifndef PYTHON_API_H
 #define PYTHON_API_H
 
-#include "features.h"
+#include "editor_features.h"
 #include <functional>
 #include <map>
 #include <string>

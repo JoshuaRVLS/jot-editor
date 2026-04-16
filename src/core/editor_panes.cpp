@@ -16,9 +16,11 @@ void Editor::update_pane_layout() {
   // For now simple 1 column layout
   // Update active pane to full size minus sidebar
   if (panes.size() == 1) {
-    int x = show_sidebar ? sidebar_width : 0;
-    int w = ui->get_width() - x;
-    int h = ui->get_height() - status_height - tab_height;
+    int available_w = std::max(1, ui->get_width());
+    int max_sidebar = std::max(0, available_w - 20);
+    int x = show_sidebar ? std::min(sidebar_width, max_sidebar) : 0;
+    int w = std::max(1, available_w - x);
+    int h = std::max(1, ui->get_height() - status_height - tab_height);
 
     panes[0].x = x;
     panes[0].y = tab_height;

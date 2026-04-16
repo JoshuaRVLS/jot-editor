@@ -4,7 +4,7 @@
 #include "autoclose.h"
 #include "bracket.h"
 #include "config.h"
-#include "features.h"
+#include "editor_features.h"
 #include "imageviewer.h"
 #include "telescope.h"
 #include "terminal.h"
@@ -26,7 +26,7 @@ enum PanelType {
   PANEL_TELESCOPE
 };
 
-// enum EditorMode { MODE_NORMAL, MODE_INSERT, MODE_VISUAL };
+enum EditorMode { MODE_NORMAL, MODE_INSERT, MODE_VISUAL };
 
 struct Theme {
   int fg_default = 7;
@@ -206,6 +206,7 @@ private:
   Terminal terminal;
   UI *ui;
   Theme theme;
+  std::string current_theme_name; // tracks active color scheme
 
   int status_height;
   int tab_height;
@@ -250,17 +251,23 @@ private:
   enum EditorFocus { FOCUS_EDITOR, FOCUS_SIDEBAR };
   EditorFocus focus_state;
 
-  // Mode variables removed (modeless)
-  // EditorMode mode;
-  // Cursor visual_start; // Replaced by selection logic in buffers
-  // char pending_key;
-  // bool has_pending_key;
+  // Vim-like modal editing
+  EditorMode mode;
+  Cursor visual_start;      // anchor position when entering Visual mode
+  bool visual_line_mode;    // true = V (line visual), false = v (char visual)
+  char pending_key;         // first char of a two-key sequence (g, d, y, c…)
+  bool has_pending_key;
+
+  // Easter egg — Konami code
+  std::vector<int> recent_keys;   // ring buffer of last 8 normal-mode keys
+  int easter_egg_timer;           // frames remaining to show the easter egg
 
   PythonAPI *python_api;
 
   void render();
   void render_tabs();
   void render_panes();
+  void render_easter_egg();
   void render_pane(const SplitPane &pane);
   void render_telescope();
   void render_minimap(int x, int y, int w, int h, int buffer_id);
@@ -280,10 +287,9 @@ private:
   void handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
                           bool is_scroll_down);
 
-  // Old mode handlers removed
-  // void handle_normal_mode(int ch, bool is_ctrl, bool is_shift);
-  // void handle_insert_mode(int ch, bool is_ctrl, bool is_shift);
-  // void handle_visual_mode(int ch, bool is_ctrl, bool is_shift);
+  void handle_normal_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt);
+  void handle_insert_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt);
+  void handle_visual_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt);
 
   void handle_command_palette(int ch);
   void handle_search_panel(int ch);
@@ -292,9 +298,9 @@ private:
   void handle_input_prompt(int ch);
   void handle_mouse(void *event);
 
-  // void enter_normal_mode();
-  // void enter_insert_mode();
-  // void enter_visual_mode();
+  void enter_normal_mode();
+  void enter_insert_mode();
+  void enter_visual_mode(bool line_mode = false);
 
   void vim_delete_line();
   void vim_delete_char();
@@ -387,6 +393,10 @@ private:
 
   void jump_to_matching_bracket();
   void format_document();
+  void trim_trailing_whitespace();
+  void toggle_auto_indent_setting();
+  void change_tab_size(int delta);
+  void apply_theme(const std::string &name);
 
   FileBuffer &get_buffer(int id = -1);
   SplitPane &get_pane(int id = -1);

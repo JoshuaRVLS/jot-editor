@@ -1,25 +1,41 @@
 # jcode Theme Guide
 
-Themes are Python scripts located in `~/.config/jcode/themes/`.
+The primary theme location is `~/.config/jcode/configs/colors/`.
+
+Legacy themes in `~/.config/jcode/themes/` still load.
 
 ## Creating a Theme
 
-1.  Create a file `~/.config/jcode/themes/my_theme.py`.
-2.  Import `jcode_api` (ensure it's in path).
-3.  Use `jcode_api.set_theme_color` to define colors.
+1. Create `~/.config/jcode/configs/colors/my_theme.py`.
+2. Use the Neovim-style `vim.api.nvim_set_hl(...)` facade, or the lower-level `set_theme_color(...)`.
 
 ```python
-import jcode_api
+from jcode_api import vim
 
-# Define colors
-BG_DARK = 235
-FG_LIGHT = 250
+theme = {
+    "Normal": {"fg": 252, "bg": 234},
+    "LineNr": {"fg": 240, "bg": 234},
+    "Comment": {"fg": 244, "bg": 234},
+    "Keyword": {"fg": 81, "bg": 234},
+    "String": {"fg": 114, "bg": 234},
+    "Function": {"fg": 223, "bg": 234},
+    "Type": {"fg": 110, "bg": 234},
+    "Visual": {"fg": 234, "bg": 110},
+    "StatusLine": {"fg": 252, "bg": 236},
+    "FloatBorder": {"fg": 239, "bg": 234},
+    "TelescopeSelection": {"fg": 234, "bg": 110},
+}
 
-# Apply
-jcode_api.set_theme_color("default", FG_LIGHT, BG_DARK)
-jcode_api.set_theme_color("line_num", 240, BG_DARK)
-jcode_api.set_theme_color("keyword", 208, BG_DARK) # Orange
-# ...
+for group, spec in theme.items():
+    vim.api.nvim_set_hl(0, group, spec)
+```
+
+To load a theme from config:
+
+```python
+from jcode_api import vim
+
+vim.cmd.colorscheme("my_theme")
 ```
 
 ## Color Slots

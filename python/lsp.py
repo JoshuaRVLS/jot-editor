@@ -4,13 +4,13 @@ import json
 import time
 import os
 import pathlib
-from jcode_api import Editor
+from jcode_api import Editor, config_path
 
 class LSPClient:
     def __init__(self, command, root_uri):
         # Resolve command path if it's pylsp and installed in venv
         if command == "pylsp" or command == "python-lsp-server":
-             venv_pylsp = os.path.expanduser("~/.config/jcode/venv/bin/pylsp")
+             venv_pylsp = config_path("venv", "bin", "pylsp")
              if os.path.exists(venv_pylsp):
                  command = venv_pylsp
      
@@ -43,7 +43,7 @@ class LSPClient:
         self.reader_thread.daemon = True
         self.reader_thread.start()
 
-        # Start stderr drain thread (Prevent deadlock)
+       # Start stderr drain thread (Prevent deadlock)
         self.stderr_thread = threading.Thread(target=self._stderr_loop)
         self.stderr_thread.daemon = True
         self.stderr_thread.start()

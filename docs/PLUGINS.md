@@ -1,38 +1,37 @@
 # jcode Plugin Development Guide
 
-jcode supports plugins written in Python. Plugins are loaded from `~/.config/jcode/*.py`.
+jcode supports plugins written in Python.
+
+Primary config is loaded from `~/.config/jcode/configs/init.py`.
+Plugin files are loaded from `~/.config/jcode/configs/plugins/`.
+
+Legacy files in `~/.config/jcode/*.py` and `~/.config/jcode/plugins/` still load.
 
 ## Directory Structure
 
 ```
 ~/.config/jcode/
-  ├── config.py         # Main configuration (auto-loaded)
-  ├── my_plugin.py      # Custom plugin
-  ├── jcode_api.py      # API Wrapper (required for type hinting/docs)
-  └── themes/
-      └── my_theme.py   # Custom themes
+  ├── configs/
+  │   ├── init.py
+  │   ├── colors/
+  │   │   └── my_theme.py
+  │   └── plugins/
+  │       └── my_plugin.py
+  ├── plugins/          # Legacy plugin dir
+  └── themes/           # Legacy theme dir
 ```
 
 ## Creating a Plugin
 
-Create a `.py` file in `~/.config/jcode/`.
+Create a `.py` file in `~/.config/jcode/configs/plugins/` or wire it from `init.py`.
 
 ```python
-import jcode_api
+from jcode_api import vim
 
 def my_command():
-    jcode_api.show_message("Hello from Plugin!")
+    vim.notify("Hello from Plugin!")
 
-# Register a command
-# Usage in editor: :my_command (if command palette supports it)
-# Or binding:
-jcode_api.register_keybind("ctrl+h", "normal", "my_command_func")
-
-# Map function names to global scope if needed for C++ to call them by name?
-# Currently C++ calls registered commands internal map?
-# Actually, register_keybind maps "key" to "command_name". 
-# But how does C++ know "command_name" -> python function?
-# The current implementations of `register_keybind` in python_api.cpp might need inspection.
+vim.keymap.set("normal", "ctrl+h", my_command)
 ```
 
 ## API Reference
@@ -58,6 +57,10 @@ jcode_api.register_keybind("ctrl+h", "normal", "my_command_func")
     *   `name`: "keyword", "string", "comment", "background", etc.
     *   `fg`: Terminal color code (0-255).
     *   `bg`: Terminal color code (0-255). -1 for transparent/default.
+*   `vim.api.nvim_set_hl(0, group, spec)`: Neovim-style highlight mapping for common groups.
+*   `vim.cmd("colorscheme my_theme")` or `vim.cmd.colorscheme("my_theme")`
+*   `vim.notify(text, level="info")`
+*   `vim.keymap.set(mode, lhs, rhs)`
 
 ## Example: Auto-Save Plugin
 

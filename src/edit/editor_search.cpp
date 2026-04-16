@@ -15,8 +15,11 @@ void Editor::perform_search() {
   search_results.clear();
   search_result_index = -1;
 
-  if (search_query.empty())
+  if (search_query.empty()) {
+    set_message(search_case_sensitive ? "Search cleared (Aa)"
+                                      : "Search cleared (aa)");
     return;
+  }
 
   std::string query = search_query;
   if (!search_case_sensitive) {
@@ -42,6 +45,10 @@ void Editor::perform_search() {
     buf.cursor.x = search_results[0].second;
     clamp_cursor(get_pane().buffer_id);
   }
+
+  std::string case_label = search_case_sensitive ? "Aa" : "aa";
+  message = std::to_string(search_results.size()) + " match(es) [" + case_label +
+            "] - Tab toggles case";
 }
 
 void Editor::find_next() {
@@ -104,6 +111,13 @@ void Editor::handle_search_panel(int ch) {
       perform_search();
       needs_redraw = true;
     }
+    return;
+  }
+
+  if (ch == '\t' || ch == 9) { // Toggle case sensitivity
+    search_case_sensitive = !search_case_sensitive;
+    perform_search();
+    needs_redraw = true;
     return;
   }
 

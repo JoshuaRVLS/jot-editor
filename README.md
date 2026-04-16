@@ -27,6 +27,7 @@ mkdir build
 cd build
 cmake ..
 make -j$(nproc)
+cmake --install . --prefix "$HOME/.local"
 ```
 
 ### Run
@@ -37,6 +38,19 @@ make -j$(nproc)
 ## Configuration
 
 Configuration and plugins live in `~/.config/jcode/`.
+
+Primary layout:
+
+```text
+~/.config/jcode/
+  configs/
+    init.py
+    colors/
+      jcode_nvim.py
+    plugins/
+  plugins/         # legacy, still loaded
+  themes/          # legacy, still loaded
+```
 
 *   **Plugins**: Read [docs/PLUGINS.md](docs/PLUGINS.md)
 *   **Themes**: Read [docs/THEMES.md](docs/THEMES.md)
@@ -50,6 +64,15 @@ Configuration and plugins live in `~/.config/jcode/`.
 *   `Ctrl+N`: New File/Tab
 *   `Ctrl+W`: Close Tab
 *   `Ctrl+Space`: Command Palette
+*   `m` (Normal mode): Toggle bookmark on current line
+*   `[` / `]` (Normal mode): Jump to previous/next bookmark
+*   `#` (Normal mode): Toggle comment on current line/selection
+*   `Y` (Normal mode): Duplicate current line
+*   `=` (Normal mode): Format document
+*   `T` (Normal mode): Trim trailing whitespace across the file
+*   `\` (Normal mode): Toggle auto-indent on/off
+*   `+` / `-` (Normal mode): Increase/decrease tab size (1-8, persisted)
+*   `Tab` (Search panel): Toggle case-sensitive search
 
 ## License
 MIT

@@ -31,25 +31,37 @@ void Editor::render_status_line() {
 
   ui->draw_text(0, y, l_text, theme.fg_status, theme.bg_status, true);
 
-  // Right side (Mode, Encoding, etc.)
-  std::string mode_str = " NORMAL "; // Legacy/Default
-  // if (mode == MODE_INSERT) mode_str = " INSERT ";
-  // if (mode == MODE_VISUAL) mode_str = " VISUAL ";
-  // Mode logic removed/delegated?
-  // Let's check python api mode if possible?
-  // For now static or simple.
-  if (python_api) {
-    mode_str = " " + python_api->py_get_mode() + " ";
-    // Uppercase it?
-    std::transform(mode_str.begin(), mode_str.end(), mode_str.begin(),
-                   ::toupper);
+  // Right side — mode indicator (color-coded) + encoding
+  std::string mode_str;
+  int mode_fg, mode_bg;
+  switch (mode) {
+  case MODE_INSERT:
+    mode_str = " INSERT ";
+    mode_fg  = 0; // Black text
+    mode_bg  = 2; // Green background
+    break;
+  case MODE_VISUAL:
+    mode_str = " VISUAL ";
+    mode_fg  = 0; // Black text
+    mode_bg  = 3; // Yellow background
+    break;
+  case MODE_NORMAL:
+  default:
+    mode_str = " NORMAL ";
+    mode_fg  = 0; // Black text
+    mode_bg  = 6; // Cyan background
+    break;
   }
 
-  std::string r_text = mode_str + "  UTF-8  ";
+  std::string enc_str = "  UTF-8  ";
+  int r_len = (int)mode_str.length() + (int)enc_str.length();
 
-  if (w > (int)l_text.length() + (int)r_text.length()) {
-    ui->draw_text(w - r_text.length() - 2, y, r_text, theme.fg_status,
-                  theme.bg_status);
+  if (w > (int)l_text.length() + r_len + 2) {
+    // Draw encoding first (right-most)
+    ui->draw_text(w - (int)enc_str.length() - 2, y, enc_str,
+                  theme.fg_status, theme.bg_status);
+    // Draw mode badge to the left of encoding
+    ui->draw_text(w - r_len - 2, y, mode_str, mode_fg, mode_bg);
   }
 
   // Message area (status line 2)
@@ -142,7 +154,11 @@ void Editor::render_search_panel() {
   ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
   ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
 
-  std::string q = "Find: " + search_query;
+  std::string mode = search_case_sensitive ? "Aa" : "aa";
+  std::string q = "Find[" + mode + "]: " + search_query;
+  if ((int)q.length() > w - 12) {
+    q = q.substr(0, w - 14) + "..";
+  }
   ui->draw_text(x + 1, y + 1, q, theme.fg_command, theme.bg_command);
 
   if (search_result_index >= 0) {
@@ -263,7 +279,10 @@ void Editor::render_tabs() {
 
   // Background bar
   if (show_sidebar)
-    x += sidebar_width;
+    x += std::min(sidebar_width, std::max(0, ui->get_width() - 20));
+
+  if (x >= w)
+    return;
 
   UIRect bar = {x, y, w - x, tab_height};
   ui->fill_rect(bar, " ", theme.fg_status, theme.bg_status);
@@ -296,3 +315,7 @@ void Editor::render_tabs() {
       break;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Easter egg: Konami code (↑↑↓↓←→←→) rainbow popup
+// ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 #include <cstring>
 #include <fcntl.h>
 
+#include <algorithm>
 #include <iostream>
 #include <sys/ioctl.h>
 #include <termios.h>
@@ -24,8 +25,8 @@ void Terminal::enable_raw_mode() {
   raw.c_oflag &= ~(OPOST);
   raw.c_cflag |= (CS8);
   raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
-  raw.c_cc[VMIN] = 1;
-  raw.c_cc[VTIME] = 0;
+  raw.c_cc[VMIN] = 0;
+  raw.c_cc[VTIME] = 1;
 
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
   raw_mode = true;
@@ -61,8 +62,8 @@ void Terminal::init() {
 
   struct winsize ws;
   if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != -1) {
-    width = ws.ws_col;
-    height = ws.ws_row;
+    width = std::max(1, (int)ws.ws_col);
+    height = std::max(1, (int)ws.ws_row);
   }
 
   enable_mouse();
@@ -336,8 +337,8 @@ Event Terminal::poll_event() {
   struct winsize ws;
   if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != -1) {
     if (ws.ws_col != width || ws.ws_row != height) {
-      width = ws.ws_col;
-      height = ws.ws_row;
+      width = std::max(1, (int)ws.ws_col);
+      height = std::max(1, (int)ws.ws_row);
       ev.type = EVENT_RESIZE;
       ev.resize.width = width;
       ev.resize.height = height;
@@ -364,8 +365,8 @@ Event Terminal::poll_event() {
     // Also check on explicit resize character
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != -1) {
       if (ws.ws_col != width || ws.ws_row != height) {
-        width = ws.ws_col;
-        height = ws.ws_row;
+        width = std::max(1, (int)ws.ws_col);
+        height = std::max(1, (int)ws.ws_row);
         ev.type = EVENT_RESIZE;
         ev.resize.width = width;
         ev.resize.height = height;

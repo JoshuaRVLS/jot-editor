@@ -15,8 +15,8 @@ UI::UI(Terminal *t) : term(t), width(80), height(24) {
 }
 
 void UI::resize(int w, int h) {
-  width = w;
-  height = h;
+  width = std::max(1, w);
+  height = std::max(1, h);
   grid.resize(height);
   last_grid.resize(height);
   for (int y = 0; y < height; y++) {
@@ -28,6 +28,15 @@ void UI::resize(int w, int h) {
     }
   }
   term->clear(); // Clear only on resize
+}
+
+void UI::invalidate() {
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      last_grid[y][x] = {"", -1, -1, false, false};
+    }
+  }
+  term->clear();
 }
 
 void UI::clear() {

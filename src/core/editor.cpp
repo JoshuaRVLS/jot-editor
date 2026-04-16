@@ -46,11 +46,24 @@ Editor::Editor() {
   context_menu_selected = 0;
   input_prompt_visible = false;
 
-  // Mode initialization removed
-  // mode = MODE_NORMAL;
-  // has_pending_key = false;
-  // pending_key = 0;
-  // visual_start = {0, 0}; // Removed
+  // Mode initialization
+  mode = MODE_NORMAL;
+  visual_start = {0, 0};
+  visual_line_mode = false;
+  has_pending_key = false;
+  pending_key = 0;
+
+  // Easter egg
+  easter_egg_timer = 0;
+
+  // Default theme
+  current_theme_name = "Dark";
+
+  // Restore saved color scheme
+  {
+    std::string saved = config.get("color_scheme", "Dark");
+    apply_theme(saved);
+  }
 
   python_api = new PythonAPI(this);
   python_api->init();
