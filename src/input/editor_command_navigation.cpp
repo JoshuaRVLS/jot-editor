@@ -89,6 +89,7 @@ void Editor::jump_to_matching_bracket() {
     buf.cursor.y = match / 10000;
     buf.cursor.x = match % 10000;
     clamp_cursor(get_pane().buffer_id);
+    ensure_cursor_visible();
     needs_redraw = true;
     message = "Jumped to matching bracket";
   }
