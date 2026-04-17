@@ -64,8 +64,7 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
       return;
     case 'p':
     case 'P':
-      show_command_palette = false;
-      telescope.open(root_dir);
+      toggle_command_palette();
       needs_redraw = true;
       return;
     case 'm':
@@ -73,12 +72,58 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
       toggle_minimap();
       needs_redraw = true;
       return;
+    case 't':
+    case 'T':
+      open_theme_chooser();
+      needs_redraw = true;
+      return;
+    case 'd':
+    case 'D':
+      duplicate_line();
+      return;
+    case 'k':
+    case 'K':
+      delete_line();
+      return;
+    case '/':
+    case '?':
+    case 31:
+      toggle_comment();
+      return;
+    case 'h':
+    case 'H':
+    case 'w':
+    case 'W':
+      delete_word_backward();
+      return;
+    case 127:
+    case 8:
+    case 23:
+      delete_word_backward();
+      return;
+    case 1001:
+      delete_word_forward();
+      return;
+    case 0:
+    case ' ':
+      return;
     }
     return;
   }
 
   if (ch == 27) {
-    enter_normal_mode();
+    clear_selection();
+    needs_redraw = true;
+    return;
+  }
+
+  // Terminal fallback mappings for Ctrl+Backspace / Ctrl+/
+  if (ch == 23) {
+    delete_word_backward();
+    return;
+  }
+  if (ch == 31) {
+    toggle_comment();
     return;
   }
 
