@@ -1,4 +1,4 @@
-#include "../src/features.h"
+#include "../src/features/editor_features.h"
 #include "test_framework.h"
 
 TEST(TestIndentLevel) {
@@ -19,12 +19,14 @@ TEST(TestAutoIndent) {
   ASSERT_TRUE(EditorFeatures::should_auto_indent("if (x) {"));
   ASSERT_TRUE(EditorFeatures::should_auto_indent("def foo():"));
   ASSERT_TRUE(!EditorFeatures::should_auto_indent("x = 1"));
+  ASSERT_TRUE(!EditorFeatures::should_auto_indent("defaultValue = 1"));
 }
 
 TEST(TestDedent) {
   ASSERT_TRUE(EditorFeatures::should_dedent("}"));
   ASSERT_TRUE(EditorFeatures::should_dedent("  }"));
   ASSERT_TRUE(!EditorFeatures::should_dedent("{"));
+  ASSERT_TRUE(!EditorFeatures::should_dedent("defaultValue = 1"));
 }
 
 TEST(TestMatchingBracket) {
