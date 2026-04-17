@@ -25,6 +25,7 @@ void Editor::undo() {
         buf.cursor = prev.cursor;
         buf.selection = prev.selection;
         clamp_cursor(get_pane().buffer_id);
+        ensure_cursor_visible();
     }
 }
 
@@ -43,6 +44,6 @@ void Editor::redo() {
         buf.cursor = next.cursor;
         buf.selection = next.selection;
         clamp_cursor(get_pane().buffer_id);
+        ensure_cursor_visible();
     }
 }
-
