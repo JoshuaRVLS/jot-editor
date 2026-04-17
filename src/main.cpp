@@ -23,7 +23,12 @@ int main(int argc, char *argv[]) {
 
   if (argc > 1) {
     if (std::filesystem::is_directory(argv[1])) {
-      editor.load_file_tree(argv[1]);
+      std::error_code ec;
+      std::filesystem::path workspace = std::filesystem::absolute(argv[1], ec);
+      if (!ec) {
+        std::filesystem::current_path(workspace, ec);
+      }
+      editor.load_file_tree(!ec ? workspace.string() : argv[1]);
       editor.toggle_sidebar(); // Show sidebar by default for dirs
     } else {
       editor.load_file(argv[1]);
