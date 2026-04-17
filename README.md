@@ -67,15 +67,29 @@ Primary layout:
 *   `Ctrl+N`: New File/Tab
 *   `Ctrl+W`: Close Tab
 *   `Ctrl+Space`: Command Palette
-*   `m` (Normal mode): Toggle bookmark on current line
-*   `[` / `]` (Normal mode): Jump to previous/next bookmark
-*   `#` (Normal mode): Toggle comment on current line/selection
-*   `Y` (Normal mode): Duplicate current line
-*   `=` (Normal mode): Format document
-*   `T` (Normal mode): Trim trailing whitespace across the file
-*   `\` (Normal mode): Toggle auto-indent on/off
-*   `+` / `-` (Normal mode): Increase/decrease tab size (1-8, persisted)
+*   `Ctrl+D`: Duplicate current line
+*   `Ctrl+K`: Delete current line
+*   `Ctrl+/`: Toggle comment on current line/selection
+*   `Ctrl+Backspace`: Delete previous word
+*   `Ctrl+Delete`: Delete next word
+*   `m`: Toggle bookmark on current line
+*   `[` / `]`: Jump to previous/next bookmark
+*   `#`: Toggle comment on current line/selection
+*   `Y`: Duplicate current line
+*   `=`: Format document
+*   `T`: Trim trailing whitespace across the file
+*   `\`: Toggle auto-indent on/off
+*   `+` / `-`: Increase/decrease tab size (1-8, persisted)
 *   `Tab` (Search panel): Toggle case-sensitive search
+
+Sidebar explorer (`Ctrl+B`) controls:
+*   `j` / `k` or Arrow Up/Down: Move selection
+*   `l` or Arrow Right: Expand folder / open file
+*   `h` or Arrow Left: Collapse folder / jump to parent node
+*   `Enter`: Toggle folder or open file
+*   `r`: Refresh tree
+*   `.`: Toggle hidden files
+*   `Backspace`: Open parent folder as workspace root
 
 ## License
 MIT
