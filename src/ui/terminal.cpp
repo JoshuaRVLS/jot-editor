@@ -167,6 +167,9 @@ int Terminal::read_key() {
                 // Map special keys
                 int mapped_key = 0;
                 switch (key) {
+                case 3:
+                  mapped_key = 1001;
+                  break; // Delete (3~), possibly with modifiers
                 case 15:
                   mapped_key = 1005;
                   break; // F5
