@@ -44,8 +44,7 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
       return;
     case 'p':
     case 'P':
-      show_command_palette = false;
-      telescope.open(root_dir);
+      toggle_command_palette();
       needs_redraw = true;
       return;
     case 'b':
