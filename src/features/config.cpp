@@ -28,6 +28,8 @@ void Config::load_defaults() {
   settings["show_line_numbers"] = "true";
   settings["word_wrap"] = "false";
   settings["cursor_style"] = "block";
+  settings["render_fps"] = "120";
+  settings["idle_fps"] = "60";
 }
 
 void Config::parse_line(const std::string &line) {

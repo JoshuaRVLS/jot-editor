@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "python_api.h"
+#include <algorithm>
 
 Editor::Editor() {
   config.load();
@@ -7,6 +8,7 @@ Editor::Editor() {
   running = true;
   current_pane = 0;
   waiting_for_space_f = false;
+  pane_layout_mode = PANE_LAYOUT_SINGLE;
   show_minimap = false;
   minimap_width = 10; // Fixed width for now
   show_search = false;
@@ -40,6 +42,9 @@ Editor::Editor() {
   idle_frame_count = 0;
   cursor_blink_frame = 0;
   cursor_visible = true;
+  render_fps = std::clamp(config.get_int("render_fps", 120), 30, 240);
+  idle_fps = std::clamp(config.get_int("idle_fps", 60), 5, 240);
+  last_cursor_shape = -1;
   show_context_menu = false;
   context_menu_x = 0;
   context_menu_y = 0;
@@ -69,6 +74,7 @@ Editor::Editor() {
   python_api->init();
 
   terminal.init();
+  terminal.set_poll_timeout_ms(std::max(1, 1000 / std::max(render_fps, idle_fps)));
   ui = new UI(&terminal);
   ui->resize(terminal.get_width(), terminal.get_height());
 

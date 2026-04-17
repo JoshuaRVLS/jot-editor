@@ -44,32 +44,10 @@ void Editor::render() {
       render_quit_prompt();
     } else {
       if (show_sidebar) {
-        int editor_x =
-            std::min(sidebar_width, std::max(0, ui->get_width() - 20));
-        int editor_w = std::max(1, ui->get_width() - editor_x);
-
         render_sidebar();
-
-        // Adjust panes
-        if (!panes.empty()) {
-          panes[0].x = editor_x;
-          panes[0].w = editor_w;
-        }
-      } else {
-        // Reset pane layout
-        if (!panes.empty()) {
-          panes[0].x = 0;
-          panes[0].w = std::max(1, ui->get_width());
-        }
       }
 
       render_panes();
-
-      if (show_minimap && !panes.empty() && panes[0].w > 20) {
-        render_minimap(
-            ui->get_width() - minimap_width, tab_height, minimap_width,
-            ui->get_height() - tab_height - status_height, panes[0].buffer_id);
-      }
     }
 
     render_status_line();
@@ -88,16 +66,16 @@ void Editor::render() {
     // Final render to terminal
     ui->render();
 
-    // Cursor shape via terminal escape codes
-    // \e[2 q = steady block (Normal/Visual), \e[6 q = steady bar (Insert)
-    if (mode == MODE_INSERT) {
-      // Blinking bar cursor for insert
-      printf("\033[5 q");
+    // Cursor shape: only update when mode actually changes to avoid jitter.
+    int target_cursor_shape = (mode == MODE_INSERT) ? 1 : 0;
+    if (target_cursor_shape != last_cursor_shape) {
+      if (mode == MODE_INSERT) {
+        printf("\033[5 q"); // Blinking bar cursor
+      } else {
+        printf("\033[1 q"); // Steady block cursor
+      }
       fflush(stdout);
-    } else {
-      // Steady block cursor for normal / visual
-      printf("\033[1 q");
-      fflush(stdout);
+      last_cursor_shape = target_cursor_shape;
     }
 
     // Cursor Handling
@@ -153,7 +131,8 @@ void Editor::render_pane(const SplitPane &pane) {
 
   // Border
   UIRect rect = {pane.x, pane.y, w, pane.h};
-  ui->draw_border(rect, theme.fg_panel_border, theme.bg_panel_border);
+  int border_fg = pane.active ? theme.fg_bracket_match : theme.fg_panel_border;
+  ui->draw_border(rect, border_fg, theme.bg_panel_border);
 }
 
 void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {

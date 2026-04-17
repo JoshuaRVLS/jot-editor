@@ -80,9 +80,6 @@ void Editor::render_command_palette() {
   int y = ui->get_height() / 4;
 
   UIRect rect = {x, y, w, h};
-  UIRect shadow = {x + 1, y + 1, w, h};
-  ui->draw_rect(shadow, 8, 0);
-
   ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
   ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
 

@@ -30,6 +30,8 @@ private:
   std::vector<std::vector<UICell>> grid;
   std::vector<std::vector<UICell>> last_grid;
   int width, height;
+  int cursor_x, cursor_y;
+  bool cursor_hidden;
 
   void set_cell(int x, int y, const UICell &cell);
   UICell get_cell(int x, int y) const;

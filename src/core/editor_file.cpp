@@ -88,8 +88,18 @@ void Editor::save_file_as() {
 void Editor::close_buffer() {
   if (buffers.size() <= 1)
     return;
+  int removed = current_buffer;
   buffers.erase(buffers.begin() + current_buffer);
-  if (current_buffer >= buffers.size())
-    current_buffer = buffers.size() - 1;
+  if (current_buffer >= (int)buffers.size())
+    current_buffer = (int)buffers.size() - 1;
+
+  for (auto &pane : panes) {
+    if (pane.buffer_id == removed) {
+      pane.buffer_id = current_buffer;
+    } else if (pane.buffer_id > removed) {
+      pane.buffer_id--;
+    }
+  }
+
   get_pane().buffer_id = current_buffer;
 }

@@ -142,6 +142,8 @@ struct SplitPane {
   bool active;
 };
 
+enum PaneLayoutMode { PANE_LAYOUT_SINGLE, PANE_LAYOUT_VERTICAL, PANE_LAYOUT_HORIZONTAL };
+
 struct SyntaxRule {
   std::regex pattern;
   int color;
@@ -167,6 +169,7 @@ private:
   std::vector<SplitPane> panes;
   int current_pane;
   int current_buffer;
+  PaneLayoutMode pane_layout_mode;
 
   bool running;
   std::string message;
@@ -219,6 +222,9 @@ private:
   int idle_frame_count;
   int cursor_blink_frame;
   bool cursor_visible;
+  int render_fps;
+  int idle_fps;
+  int last_cursor_shape;
 
   bool show_context_menu;
   int context_menu_x;

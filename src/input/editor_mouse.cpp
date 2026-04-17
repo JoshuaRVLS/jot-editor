@@ -2,6 +2,7 @@
 #include "editor.h"
 #include "editor_features.h"
 #include "python_api.h"
+#include <algorithm>
 #include <sstream>
 
 // Local definition of MEVENT used by handle_mouse()
@@ -36,8 +37,27 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
     focus_state = FOCUS_EDITOR;
   }
 
-  auto &buf = get_buffer();
-  auto &pane = get_pane();
+  int pane_index = -1;
+  for (int i = 0; i < (int)panes.size(); i++) {
+    const auto &pane = panes[i];
+    if (x >= pane.x && x < pane.x + pane.w && y >= pane.y &&
+        y < pane.y + pane.h) {
+      pane_index = i;
+      break;
+    }
+  }
+  if (pane_index == -1)
+    return;
+
+  if (is_click && pane_index != current_pane) {
+    panes[current_pane].active = false;
+    current_pane = pane_index;
+    panes[current_pane].active = true;
+    current_buffer = panes[current_pane].buffer_id;
+  }
+
+  auto &pane = get_pane(current_pane);
+  auto &buf = get_buffer(pane.buffer_id);
 
   if (is_scroll_up) {
     if (buf.scroll_offset > 0) {
@@ -63,7 +83,6 @@ void Editor::handle_mouse(void *event_ptr) {
   if (panes.empty())
     return;
 
-  auto &pane = get_pane();
   int bstate = event->bstate;
 
   if (bstate == 3) {
@@ -74,8 +93,6 @@ void Editor::handle_mouse(void *event_ptr) {
     needs_redraw = true;
     return;
   }
-
-  auto &buf = get_buffer(pane.buffer_id);
 
   bool is_click = (bstate == 1);
 
@@ -88,6 +105,26 @@ void Editor::handle_mouse(void *event_ptr) {
       return;
     }
   }
+
+  int target_pane = current_pane;
+  for (int i = 0; i < (int)panes.size(); i++) {
+    const auto &candidate = panes[i];
+    if (event->x >= candidate.x && event->x < candidate.x + candidate.w &&
+        event->y >= candidate.y && event->y < candidate.y + candidate.h) {
+      target_pane = i;
+      break;
+    }
+  }
+
+  if (is_click && target_pane != current_pane) {
+    panes[current_pane].active = false;
+    current_pane = target_pane;
+    panes[current_pane].active = true;
+    current_buffer = panes[current_pane].buffer_id;
+  }
+
+  auto &pane = get_pane(current_pane);
+  auto &buf = get_buffer(pane.buffer_id);
 
   // Check if click is in minimap
   if (show_minimap && is_click) {
@@ -225,6 +262,8 @@ void Editor::run() {
   while (running) {
     render();
 
+    int target_fps = needs_redraw ? render_fps : idle_fps;
+    terminal.set_poll_timeout_ms(std::max(1, 1000 / target_fps));
     Event ev = terminal.poll_event();
 
     if (ev.type == EVENT_REDRAW) {

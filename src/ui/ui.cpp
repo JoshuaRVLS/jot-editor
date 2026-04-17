@@ -1,7 +1,9 @@
 #include "ui.h"
 #include <algorithm>
 
-UI::UI(Terminal *t) : term(t), width(80), height(24) {
+UI::UI(Terminal *t)
+    : term(t), width(80), height(24), cursor_x(-1), cursor_y(-1),
+      cursor_hidden(true) {
   grid.resize(height);
   last_grid.resize(height);
   for (int y = 0; y < height; y++) {
@@ -17,6 +19,9 @@ UI::UI(Terminal *t) : term(t), width(80), height(24) {
 void UI::resize(int w, int h) {
   width = std::max(1, w);
   height = std::max(1, h);
+  cursor_x = -1;
+  cursor_y = -1;
+  cursor_hidden = true;
   grid.resize(height);
   last_grid.resize(height);
   for (int y = 0; y < height; y++) {
@@ -31,6 +36,9 @@ void UI::resize(int w, int h) {
 }
 
 void UI::invalidate() {
+  cursor_x = -1;
+  cursor_y = -1;
+  cursor_hidden = true;
   for (int y = 0; y < height; y++) {
     for (int x = 0; x < width; x++) {
       last_grid[y][x] = {"", -1, -1, false, false};
@@ -218,13 +226,23 @@ void UI::fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg) {
 
 void UI::set_cursor(int x, int y) {
   if (x >= 0 && x < width && y >= 0 && y < height) {
+    if (!cursor_hidden && cursor_x == x && cursor_y == y) {
+      return;
+    }
     term->move_cursor(x, y);
     term->show_cursor();
+    cursor_x = x;
+    cursor_y = y;
+    cursor_hidden = false;
     term->flush(); // Ensure it takes effect
   }
 }
 
 void UI::hide_cursor() {
+  if (cursor_hidden) {
+    return;
+  }
   term->hide_cursor();
+  cursor_hidden = true;
   term->flush();
 }

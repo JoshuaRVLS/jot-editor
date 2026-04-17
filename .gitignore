@@ -35,3 +35,4 @@ tmp/
 key_debug
 debug_api.py
 compile_commands.json
+AGENTS.md

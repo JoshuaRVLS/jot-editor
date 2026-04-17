@@ -54,6 +54,9 @@ Primary layout:
 
 *   **Plugins**: Read [docs/PLUGINS.md](docs/PLUGINS.md)
 *   **Themes**: Read [docs/THEMES.md](docs/THEMES.md)
+*   **Smoothness tuning** (`~/.config/jcode/configs/settings.conf`):
+    * `render_fps=120` for active editing redraw cadence
+    * `idle_fps=60` for idle redraw cadence
 
 ## Keybindings
 *   `Ctrl+Q`: Quit

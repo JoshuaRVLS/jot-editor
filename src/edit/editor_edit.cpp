@@ -173,25 +173,45 @@ void Editor::delete_line() {
 void Editor::new_line() {
   save_state();
   auto &buf = get_buffer();
-  std::string remaining = buf.lines[buf.cursor.y].substr(buf.cursor.x);
-  buf.lines[buf.cursor.y] = buf.lines[buf.cursor.y].substr(0, buf.cursor.x);
+  std::string current_line = buf.lines[buf.cursor.y];
+  std::string remaining = current_line.substr(buf.cursor.x);
+  buf.lines[buf.cursor.y] = current_line.substr(0, buf.cursor.x);
 
   std::string new_line_str = "";
+  bool split_closing_bracket_line = false;
+  std::string closing_line_str = remaining;
   if (auto_indent && buf.cursor.y >= 0) {
     int indent = EditorFeatures::get_indent_level(buf.lines[buf.cursor.y]);
     if (EditorFeatures::should_auto_indent(buf.lines[buf.cursor.y])) {
       indent += tab_size;
     }
     new_line_str = EditorFeatures::get_indent_string(indent, tab_size);
+
+    if (EditorFeatures::should_dedent(remaining)) {
+      size_t content_start = remaining.find_first_not_of(" \t");
+      std::string trimmed_remaining =
+          content_start == std::string::npos ? "" : remaining.substr(content_start);
+      int closing_indent = EditorFeatures::get_indent_level(buf.lines[buf.cursor.y]);
+      closing_line_str =
+          EditorFeatures::get_indent_string(closing_indent, tab_size) +
+          trimmed_remaining;
+      split_closing_bracket_line = true;
+    }
   }
 
-  buf.lines.insert(buf.lines.begin() + buf.cursor.y + 1,
-                   new_line_str + remaining);
-  buf.cursor.y++;
-  buf.cursor.x = new_line_str.length();
+  if (split_closing_bracket_line) {
+    buf.lines.insert(buf.lines.begin() + buf.cursor.y + 1, new_line_str);
+    buf.lines.insert(buf.lines.begin() + buf.cursor.y + 2, closing_line_str);
+    buf.cursor.y++;
+    buf.cursor.x = new_line_str.length();
+  } else {
+    buf.lines.insert(buf.lines.begin() + buf.cursor.y + 1,
+                     new_line_str + remaining);
+    buf.cursor.y++;
+    buf.cursor.x = new_line_str.length();
+  }
   buf.modified = true;
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
 }
-

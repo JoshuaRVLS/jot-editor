@@ -37,6 +37,7 @@ struct Event {
 class Terminal {
 private:
   int width, height;
+  int poll_timeout_ms;
   bool raw_mode;
   std::string buffer;
   std::string mouse_event_buffer;
@@ -59,6 +60,7 @@ public:
   int get_height() const { return height; }
 
   Event poll_event();
+  void set_poll_timeout_ms(int timeout_ms);
   void flush();
 
   void clear();

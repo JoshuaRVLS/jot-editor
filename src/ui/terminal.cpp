@@ -4,13 +4,28 @@
 
 #include <algorithm>
 #include <iostream>
+#include <poll.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 
 static struct termios orig_termios;
 
-Terminal::Terminal() : width(80), height(24), raw_mode(false) {}
+static bool read_char_with_timeout(char &out, int timeout_ms) {
+  struct pollfd pfd;
+  pfd.fd = STDIN_FILENO;
+  pfd.events = POLLIN;
+  pfd.revents = 0;
+
+  int ready = poll(&pfd, 1, std::max(0, timeout_ms));
+  if (ready <= 0 || !(pfd.revents & POLLIN)) {
+    return false;
+  }
+
+  return read(STDIN_FILENO, &out, 1) == 1;
+}
+
+Terminal::Terminal() : width(80), height(24), poll_timeout_ms(8), raw_mode(false) {}
 
 Terminal::~Terminal() { cleanup(); }
 
@@ -26,7 +41,7 @@ void Terminal::enable_raw_mode() {
   raw.c_cflag |= (CS8);
   raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
   raw.c_cc[VMIN] = 0;
-  raw.c_cc[VTIME] = 1;
+  raw.c_cc[VTIME] = 0;
 
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
   raw_mode = true;
@@ -89,9 +104,9 @@ int Terminal::read_key() {
 
   if (c == '\x1b') {
     char seq[3];
-    if (read(STDIN_FILENO, &seq[0], 1) != 1)
+    if (!read_char_with_timeout(seq[0], 5))
       return '\x1b';
-    if (read(STDIN_FILENO, &seq[1], 1) != 1)
+    if (!read_char_with_timeout(seq[1], 5))
       return '\x1b';
 
     // if (log.is_open())
@@ -104,7 +119,7 @@ int Terminal::read_key() {
       if (seq[1] >= '0' && seq[1] <= '9') {
         current_param += seq[1];
         char next;
-        while (read(STDIN_FILENO, &next, 1) == 1) {
+        while (read_char_with_timeout(next, 5)) {
           // log << "Param char: " << (int)next << std::endl;
           if (next >= '0' && next <= '9') {
             current_param += next;
@@ -238,7 +253,7 @@ int Terminal::read_key() {
         char mouse_seq[32] = {0};
         int mouse_pos = 0;
         while (mouse_pos < 31) {
-          if (read(STDIN_FILENO, &mouse_seq[mouse_pos], 1) != 1)
+          if (!read_char_with_timeout(mouse_seq[mouse_pos], 5))
             return '\x1b';
           if (mouse_seq[mouse_pos] == 'M' || mouse_seq[mouse_pos] == 'm') {
             mouse_seq[mouse_pos + 1] = '\0';
@@ -333,6 +348,12 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
 Event Terminal::poll_event() {
   Event ev;
 
+  struct pollfd pfd;
+  pfd.fd = STDIN_FILENO;
+  pfd.events = POLLIN;
+  pfd.revents = 0;
+  poll(&pfd, 1, std::max(0, poll_timeout_ms));
+
   // Check for terminal resize first (even when no input)
   struct winsize ws;
   if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != -1) {
@@ -405,6 +426,10 @@ Event Terminal::poll_event() {
   }
 
   return ev;
+}
+
+void Terminal::set_poll_timeout_ms(int timeout_ms) {
+  poll_timeout_ms = std::clamp(timeout_ms, 1, 250);
 }
 
 void Terminal::flush() {
