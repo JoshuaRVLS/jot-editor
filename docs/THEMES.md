@@ -1,16 +1,16 @@
-# jcode Theme Guide
+# jot Theme Guide
 
-The primary theme location is `~/.config/jcode/configs/colors/`.
+The primary theme location is `~/.config/jot/configs/colors/`.
 
-Legacy themes in `~/.config/jcode/themes/` still load.
+Legacy themes in `~/.config/jot/themes/` still load.
 
 ## Creating a Theme
 
-1. Create `~/.config/jcode/configs/colors/my_theme.py`.
+1. Create `~/.config/jot/configs/colors/my_theme.py`.
 2. Use the Neovim-style `vim.api.nvim_set_hl(...)` facade, or the lower-level `set_theme_color(...)`.
 
 ```python
-from jcode_api import vim
+from jot_api import vim
 
 theme = {
     "Normal": {"fg": 252, "bg": 234},
@@ -33,7 +33,7 @@ for group, spec in theme.items():
 To load a theme from config:
 
 ```python
-from jcode_api import vim
+from jot_api import vim
 
 vim.cmd.colorscheme("my_theme")
 ```
@@ -66,7 +66,7 @@ vim.cmd.colorscheme("my_theme")
 
 ## Terminal Colors
 
-jcode uses standard 256-color codes (Xterm).
+jot uses standard 256-color codes (Xterm).
 - 0-15: Standard ANSI colors (Black, Red, Green...)
 - 16-231: 6x6x6 Color Cube
 - 232-255: Grayscale (232=Black, 255=White)

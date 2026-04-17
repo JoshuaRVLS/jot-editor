@@ -6,7 +6,7 @@ int main(int argc, char *argv[]) {
   const char *home = getenv("HOME");
   std::string config_dir = "plugins"; // Default fallback
   if (home) {
-    config_dir = std::string(home) + "/.config/jcode";
+    config_dir = std::string(home) + "/.config/jot";
   }
 
   Editor editor;

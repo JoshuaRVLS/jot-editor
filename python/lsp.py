@@ -4,7 +4,7 @@ import json
 import time
 import os
 import pathlib
-from jcode_api import Editor, config_path
+from jot_api import Editor, config_path
 
 class LSPClient:
     def __init__(self, command, root_uri):
@@ -48,7 +48,7 @@ class LSPClient:
         self.stderr_thread.daemon = True
         self.stderr_thread.start()
         # Initialize
-        self.log_file = open("jcode_lsp.log", "a")
+        self.log_file = open("jot_lsp.log", "a")
         self.log("--- LSP Client Started ---")
         
         # Move request generation here to capture ID

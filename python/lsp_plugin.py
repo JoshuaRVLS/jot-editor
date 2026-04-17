@@ -1,5 +1,5 @@
 import os
-import jcode_api
+import jot_api
 from lsp import LSPClient
 
 # Map root_uri -> {lang -> client}
@@ -36,20 +36,20 @@ def get_client(filepath):
         try:
             client = LSPClient(cmd, root)
             clients[root][lang] = client
-            jcode_api.show_message(f"Started {lang} LSP")
+            jot_api.show_message(f"Started {lang} LSP")
             return client
         except Exception as e:
-            jcode_api.show_message(f"Failed to start LSP: {e}")
+            jot_api.show_message(f"Failed to start LSP: {e}")
             pass
             
     return None
 
-@jcode_api.on_buffer_open
+@jot_api.on_buffer_open
 def on_open(filepath):
-    jcode_api.show_message(f"DEBUG: on_open {filepath}")
+    jot_api.show_message(f"DEBUG: on_open {filepath}")
     client = get_client(filepath)
     if client:
-        content = jcode_api.get_buffer_content()
+        content = jot_api.get_buffer_content()
         client.did_open(filepath, content)
 
 import threading
@@ -57,7 +57,7 @@ import threading
 # Global timer for debounce
 change_timers = {}
 
-@jcode_api.on_buffer_change
+@jot_api.on_buffer_change
 def on_change(filepath):
     # Debounce typing
     if filepath in change_timers:
@@ -72,10 +72,10 @@ def perform_change(filepath):
     if client:
         # Optimization: Pass content if available, or fetch
         # The C++ hook passes empty string currently
-        content = jcode_api.get_buffer_content()
+        content = jot_api.get_buffer_content()
         client.did_change(filepath, content)
 
-@jcode_api.on_buffer_save
+@jot_api.on_buffer_save
 def on_save(filepath):
     # Could send didSave
     pass
@@ -84,27 +84,27 @@ import lsp_manager
 
 def install_lsp_callback(lang):
     if lang:
-        jcode_api.show_message(f"Installing {lang}...")
+        jot_api.show_message(f"Installing {lang}...")
         try:
             lsp_manager.install_server(lang)
-            jcode_api.show_message(f"Installed {lang}")
+            jot_api.show_message(f"Installed {lang}")
         except Exception as e:
-            jcode_api.show_message(f"Error installing {lang}: {e}")
+            jot_api.show_message(f"Error installing {lang}: {e}")
 
 def remove_lsp_callback(lang):
     if lang:
-        jcode_api.show_message(f"Removing {lang}...")
+        jot_api.show_message(f"Removing {lang}...")
         try:
             lsp_manager.remove_server(lang)
-            jcode_api.show_message(f"Removed {lang}")
+            jot_api.show_message(f"Removed {lang}")
         except Exception as e:
-            jcode_api.show_message(f"Error removing {lang}: {e}")
+            jot_api.show_message(f"Error removing {lang}: {e}")
 
 def cmd_lsp_install():
-    jcode_api.show_input("Install LSP for (python/typescript/clangd): ", install_lsp_callback)
+    jot_api.show_input("Install LSP for (python/typescript/clangd): ", install_lsp_callback)
 
 def cmd_lsp_remove():
-    jcode_api.show_input("Remove LSP for (python/typescript): ", remove_lsp_callback)
+    jot_api.show_input("Remove LSP for (python/typescript): ", remove_lsp_callback)
 
-jcode_api.register_command("LspInstall", cmd_lsp_install)
-jcode_api.register_command("LspRemove", cmd_lsp_remove)
+jot_api.register_command("LspInstall", cmd_lsp_install)
+jot_api.register_command("LspRemove", cmd_lsp_remove)

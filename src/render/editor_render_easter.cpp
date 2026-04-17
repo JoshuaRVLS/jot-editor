@@ -27,7 +27,7 @@ void Editor::render_easter_egg() {
     "   \xe2\x86\x91\xe2\x86\x91\xe2\x86\x93\xe2\x86\x93\xe2\x86\x90\xe2\x86\x92\xe2\x86\x90\xe2\x86\x92   KONAMI CODE ACTIVATED!   ",
     "",
     "    +30 Lives  \xc2\xb7  God Mode  \xc2\xb7  No Clip    ",
-    "       Welcome to jcode, player one.      ",
+    "       Welcome to jot, player one.      ",
     "",
   };
 

@@ -1,4 +1,4 @@
-Place Neovim-style jcode plugin files here.
+Place Neovim-style jot plugin files here.
 
 This directory mirrors the runtime path:
-`~/.config/jcode/configs/plugins/`
+`~/.config/jot/configs/plugins/`

@@ -13,8 +13,8 @@ bool PythonAPI::init() {
     return true;
 
   // Register built-in module BEFORE Py_Initialize
-  if (PyImport_AppendInittab("_jcode_internal", PyInit_jcode_api) == -1) {
-    std::cerr << "Failed to register _jcode_internal module" << std::endl;
+  if (PyImport_AppendInittab("_jot_internal", PyInit_jot_api) == -1) {
+    std::cerr << "Failed to register _jot_internal module" << std::endl;
     return false;
   }
 
@@ -33,7 +33,7 @@ bool PythonAPI::init() {
   }
 
   for (const auto &dir : runtime_dirs) {
-    fs::path api_path = dir / "jcode_api.py";
+    fs::path api_path = dir / "jot_api.py";
     if (fs::exists(api_path) && load_plugin(api_path.string())) {
       break;
     }
@@ -72,7 +72,7 @@ bool PythonAPI::init() {
     if (!fs::exists(config_root / "config.py") &&
         !fs::exists(config_root / "init.py") &&
         !fs::exists(config_root / "configs" / "init.py")) {
-      load_plugin((config_root / "configs" / "colors" / "jcode_nvim.py").string());
+      load_plugin((config_root / "configs" / "colors" / "jot_nvim.py").string());
     }
   }
 
@@ -99,9 +99,9 @@ void PythonAPI::execute_code(const std::string &code) {
 
 // Helper to call python function
 static void call_python_hook(const char *func_name, const std::string &arg) {
-  PyObject *module = PyImport_ImportModule("jcode_api");
+  PyObject *module = PyImport_ImportModule("jot_api");
   if (!module) {
-    std::cerr << "Failed to import jcode_api for " << func_name << std::endl;
+    std::cerr << "Failed to import jot_api for " << func_name << std::endl;
     PyErr_Print();
     return;
   }
@@ -119,7 +119,7 @@ static void call_python_hook(const char *func_name, const std::string &arg) {
     Py_DECREF(args);
     Py_DECREF(func);
   } else {
-    std::cerr << "Function " << func_name << " not found in jcode_api"
+    std::cerr << "Function " << func_name << " not found in jot_api"
               << std::endl;
     if (PyErr_Occurred())
       PyErr_Print();

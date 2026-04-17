@@ -34,7 +34,7 @@ static std::vector<fs::path> get_runtime_python_dirs() {
   if (!exe_path.empty()) {
     fs::path exe_dir = exe_path.parent_path();
     dirs.emplace_back(exe_dir / "python");
-    dirs.emplace_back(exe_dir.parent_path() / "share" / "jcode" / "python");
+    dirs.emplace_back(exe_dir.parent_path() / "share" / "jot" / "python");
   }
   return dirs;
 }
@@ -44,7 +44,7 @@ static fs::path get_user_config_root() {
   if (!home) {
     return {};
   }
-  return fs::path(home) / ".config" / "jcode";
+  return fs::path(home) / ".config" / "jot";
 }
 
 static void append_python_path(const fs::path &path) {
@@ -307,7 +307,7 @@ static PyObject *py_show_input_prompt(PyObject *self, PyObject *args) {
   Py_RETURN_NONE;
 }
 
-static PyMethodDef JCodeMethods[] = {
+static PyMethodDef JotMethods[] = {
     {"enter_normal_mode", py_enter_normal_mode, METH_VARARGS,
      "Switch to normal mode"},
     {"enter_insert_mode", py_enter_insert_mode, METH_VARARGS,
@@ -341,12 +341,12 @@ static PyMethodDef JCodeMethods[] = {
     {"show_input", py_show_input_prompt, METH_VARARGS, "Show input prompt"},
     {NULL, NULL, 0, NULL}};
 
-static struct PyModuleDef jcode_module = {
-    PyModuleDef_HEAD_INIT, "_jcode_internal", "JCode Editor Internal API", -1,
-    JCodeMethods};
+static struct PyModuleDef jot_module = {
+    PyModuleDef_HEAD_INIT, "_jot_internal", "Jot Editor Internal API", -1,
+    JotMethods};
 
-static PyObject *PyInit_jcode_api(void) {
-  return PyModule_Create(&jcode_module);
+static PyObject *PyInit_jot_api(void) {
+  return PyModule_Create(&jot_module);
 }
 
 // Include the PythonAPI class implementation in this same translation unit

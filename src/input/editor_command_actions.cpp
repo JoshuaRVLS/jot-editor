@@ -97,7 +97,7 @@ void Editor::handle_input_prompt(int ch) {
       }
 
       std::string code =
-          "import jcode_api; jcode_api._internal_call_callback('" +
+          "import jot_api; jot_api._internal_call_callback('" +
           input_prompt_callback + "', '" + safe_input + "')";
       python_api->execute_code(code);
     }

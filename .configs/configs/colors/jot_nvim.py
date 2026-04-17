@@ -1,4 +1,4 @@
-from jcode_api import vim
+from jot_api import vim
 
 theme = {
     "Normal": {"fg": 252, "bg": 234},

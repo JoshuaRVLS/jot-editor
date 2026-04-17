@@ -1,16 +1,16 @@
-# jcode Plugin Development Guide
+# jot Plugin Development Guide
 
-jcode supports plugins written in Python.
+jot supports plugins written in Python.
 
-Primary config is loaded from `~/.config/jcode/configs/init.py`.
-Plugin files are loaded from `~/.config/jcode/configs/plugins/`.
+Primary config is loaded from `~/.config/jot/configs/init.py`.
+Plugin files are loaded from `~/.config/jot/configs/plugins/`.
 
-Legacy files in `~/.config/jcode/*.py` and `~/.config/jcode/plugins/` still load.
+Legacy files in `~/.config/jot/*.py` and `~/.config/jot/plugins/` still load.
 
 ## Directory Structure
 
 ```
-~/.config/jcode/
+~/.config/jot/
   ├── configs/
   │   ├── init.py
   │   ├── colors/
@@ -23,10 +23,10 @@ Legacy files in `~/.config/jcode/*.py` and `~/.config/jcode/plugins/` still load
 
 ## Creating a Plugin
 
-Create a `.py` file in `~/.config/jcode/configs/plugins/` or wire it from `init.py`.
+Create a `.py` file in `~/.config/jot/configs/plugins/` or wire it from `init.py`.
 
 ```python
-from jcode_api import vim
+from jot_api import vim
 
 def my_command():
     vim.notify("Hello from Plugin!")
@@ -65,15 +65,15 @@ vim.keymap.set("normal", "ctrl+h", my_command)
 ## Example: Auto-Save Plugin
 
 ```python
-import jcode_api
+import jot_api
 import threading
 import time
 
 def auto_save_loop():
     while True:
         time.sleep(30)
-        jcode_api.save_file()
-        jcode_api.show_message("Auto-saved!")
+        jot_api.save_file()
+        jot_api.show_message("Auto-saved!")
 
 # threading.Thread(target=auto_save_loop).start()
 ```

@@ -1,8 +1,8 @@
-# jcode
+# jot
 
 A lightweight, terminal-based code editor written in C++ with Python scripting support.
 
-![jcode screenshot](screenshot.png)
+![jot screenshot](screenshot.png)
 
 ## Features
 *   **Performance**: Written in C++ for speed.
@@ -32,21 +32,21 @@ cmake --install . --prefix "$HOME/.local"
 
 ### Run
 ```bash
-./jcode [filename]
+./jot [filename]
 ```
 
 ## Configuration
 
-Configuration and plugins live in `~/.config/jcode/`.
+Configuration and plugins live in `~/.config/jot/`.
 
 Primary layout:
 
 ```text
-~/.config/jcode/
+~/.config/jot/
   configs/
     init.py
     colors/
-      jcode_nvim.py
+      jot_nvim.py
     plugins/
   plugins/         # legacy, still loaded
   themes/          # legacy, still loaded
@@ -54,7 +54,7 @@ Primary layout:
 
 *   **Plugins**: Read [docs/PLUGINS.md](docs/PLUGINS.md)
 *   **Themes**: Read [docs/THEMES.md](docs/THEMES.md)
-*   **Smoothness tuning** (`~/.config/jcode/configs/settings.conf`):
+*   **Smoothness tuning** (`~/.config/jot/configs/settings.conf`):
     * `render_fps=120` for active editing redraw cadence
     * `idle_fps=60` for idle redraw cadence
 

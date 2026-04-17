@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(jcode)
+project(jot)
 
 include(GNUInstallDirs)
 
@@ -39,7 +39,7 @@ endforeach()
 # Remove -I flags from PYTHON_CFLAGS to avoid adding them twice or as non-system
 string(REGEX REPLACE "-I[^ ]+" "" PYTHON_OTHER_FLAGS "${PYTHON_CFLAGS}")
 
-# Add remaining Python cflags ONLY to jcode target
+# Add remaining Python cflags ONLY to jot target
 string(STRIP "${PYTHON_OTHER_FLAGS}" PYTHON_OTHER_FLAGS)
 separate_arguments(PYTHON_OTHER_FLAGS_LIST UNIX_COMMAND "${PYTHON_OTHER_FLAGS}")
 
@@ -51,11 +51,11 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/plugins/python_api_impl.cpp")
 
 # Add executable
-add_executable(jcode ${SOURCES})
-target_compile_options(jcode PRIVATE ${PYTHON_OTHER_FLAGS_LIST}) # Apply flags locally
+add_executable(jot ${SOURCES})
+target_compile_options(jot PRIVATE ${PYTHON_OTHER_FLAGS_LIST}) # Apply flags locally
 
 # Include all source subdirectories (flat #include "file.h" style works everywhere)
-target_include_directories(jcode PRIVATE
+target_include_directories(jot PRIVATE
     src
     src/core
     src/input
@@ -69,7 +69,7 @@ target_include_directories(jcode PRIVATE
 
 if(PYTHON_INCLUDES)
     list(REMOVE_DUPLICATES PYTHON_INCLUDES)
-    target_include_directories(jcode SYSTEM PRIVATE ${PYTHON_INCLUDES})
+    target_include_directories(jot SYSTEM PRIVATE ${PYTHON_INCLUDES})
 endif()
 
 
@@ -85,24 +85,24 @@ execute_process(
 string(STRIP "${PYTHON_LDFLAGS}" PYTHON_LDFLAGS)
 separate_arguments(PYTHON_LDFLAGS_LIST UNIX_COMMAND "${PYTHON_LDFLAGS}")
 
-target_link_libraries(jcode PRIVATE stdc++fs ${PYTHON_LDFLAGS_LIST})
+target_link_libraries(jot PRIVATE stdc++fs ${PYTHON_LDFLAGS_LIST})
 
-install(TARGETS jcode
+install(TARGETS jot
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
 install(DIRECTORY python/
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/jcode/python
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/jot/python
     FILES_MATCHING PATTERN "*.py"
 )
 
 install(DIRECTORY .configs/configs
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/jcode
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/jot
 )
 
 # Tests
 # enable_testing()
-# add_executable(jcode_tests tests/test_main.cpp tests/test_features.cpp src/features.cpp)
-# target_include_directories(jcode_tests PRIVATE src)
-# target_compile_options(jcode_tests PRIVATE ${PYTHON_OTHER_FLAGS_LIST})
-# add_test(NAME FeaturesTest COMMAND jcode_tests)
+# add_executable(jot_tests tests/test_main.cpp tests/test_features.cpp src/features.cpp)
+# target_include_directories(jot_tests PRIVATE src)
+# target_compile_options(jot_tests PRIVATE ${PYTHON_OTHER_FLAGS_LIST})
+# add_test(NAME FeaturesTest COMMAND jot_tests)

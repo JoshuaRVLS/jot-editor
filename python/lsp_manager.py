@@ -3,7 +3,7 @@ import threading
 import sys
 import shutil
 import os
-from jcode_api import Editor, config_path
+from jot_api import Editor, config_path
 
 def _run_silent(cmd):
     try:

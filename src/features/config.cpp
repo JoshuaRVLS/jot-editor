@@ -11,7 +11,7 @@ namespace fs = std::filesystem;
 Config::Config() {
   const char *home = getenv("HOME");
   if (home) {
-    std::string config_root = std::string(home) + "/.config/jcode";
+    std::string config_root = std::string(home) + "/.config/jot";
     fs::create_directories(config_root + "/configs");
     config_path = config_root + "/configs/settings.conf";
   }
@@ -60,7 +60,7 @@ void Config::load() {
   if (!file.is_open()) {
     const char *home = getenv("HOME");
     if (home) {
-      std::string legacy_path = std::string(home) + "/.config/jcode/config";
+      std::string legacy_path = std::string(home) + "/.config/jot/config";
       file.open(legacy_path);
     }
   }
@@ -86,7 +86,7 @@ void Config::save() {
   if (!file.is_open())
     return;
 
-  file << "# jcode configuration file\n\n";
+  file << "# jot configuration file\n\n";
 
   for (const auto &[key, value] : settings) {
     file << key << "=" << value << "\n";
