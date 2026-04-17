@@ -2,6 +2,32 @@
 #include <algorithm>
 #include <cctype>
 
+namespace {
+std::string trim_left(const std::string &s) {
+  const size_t start = s.find_first_not_of(" \t");
+  return start == std::string::npos ? "" : s.substr(start);
+}
+
+std::string trim_right_ws(const std::string &s) {
+  const size_t end = s.find_last_not_of(" \t");
+  return end == std::string::npos ? "" : s.substr(0, end + 1);
+}
+
+bool starts_with_keyword(const std::string &line, const std::string &keyword) {
+  if (line.size() < keyword.size() ||
+      line.compare(0, keyword.size(), keyword) != 0) {
+    return false;
+  }
+
+  if (line.size() == keyword.size()) {
+    return true;
+  }
+
+  const unsigned char next = static_cast<unsigned char>(line[keyword.size()]);
+  return !std::isalnum(next) && next != '_';
+}
+} // namespace
+
 int EditorFeatures::get_indent_level(const std::string &line) {
   int level = 0;
   for (char c : line) {
@@ -16,60 +42,50 @@ int EditorFeatures::get_indent_level(const std::string &line) {
 }
 
 std::string EditorFeatures::get_indent_string(int level, int tab_size) {
-  return std::string(level, ' ');
+  if (level <= 0)
+    return "";
+
+  const int step = std::max(1, tab_size);
+  const int tabs = level / step;
+  const int spaces = level % step;
+  return std::string(tabs * step + spaces, ' ');
 }
 
 bool EditorFeatures::should_auto_indent(const std::string &line) {
-  std::string trimmed = line;
-  size_t start = trimmed.find_first_not_of(" \t");
-  if (start == std::string::npos)
+  std::string trimmed = trim_left(line);
+  if (trimmed.empty())
     return false;
-  trimmed.erase(0, start);
 
   // Remove comments
-  size_t comment_pos = trimmed.find("//");
+  const size_t comment_pos = trimmed.find("//");
   if (comment_pos != std::string::npos) {
-    trimmed = trimmed.substr(0, comment_pos);
-    // Trim right again after removing comment
-    size_t end = trimmed.find_last_not_of(" \t");
-    if (end == std::string::npos)
-      return false;
-    trimmed = trimmed.substr(0, end + 1);
+    trimmed = trim_right_ws(trimmed.substr(0, comment_pos));
   }
 
   if (trimmed.empty())
     return false;
 
   // Check for block starters
-  char last_char = trimmed.back();
-  if (last_char == '{' || last_char == ':' || last_char == '[')
+  const char last_char = trimmed.back();
+  if (last_char == '{' || last_char == '[' || last_char == '(' ||
+      last_char == ':')
     return true;
 
   // Check for specific keywords
   static const std::vector<std::string> keywords = {
-      "if",     "for",  "while",   "else", "def",  "class",
-      "switch", "case", "default", "try",  "catch"};
+      "if",    "for",    "while", "else", "def", "class", "switch",
+      "case",  "default", "try",   "catch", "do",  "finally"};
 
   for (const auto &kw : keywords) {
-    if (trimmed.compare(0, kw.length(), kw) == 0) {
-      // Check if it's the whole string or followed by a non-identifier char
-      if (trimmed.length() == kw.length())
-        return true;
-      char next_char = trimmed[kw.length()];
-      if (!isalnum(next_char) && next_char != '_')
-        return true;
-    }
+    if (starts_with_keyword(trimmed, kw))
+      return true;
   }
 
   return false;
 }
 
 bool EditorFeatures::should_dedent(const std::string &line) {
-  std::string trimmed = line;
-  size_t start = trimmed.find_first_not_of(" \t");
-  if (start == std::string::npos)
-    return false;
-  trimmed.erase(0, start);
+  const std::string trimmed = trim_left(line);
 
   if (trimmed.empty())
     return false;
@@ -79,15 +95,11 @@ bool EditorFeatures::should_dedent(const std::string &line) {
       trimmed.front() == ')')
     return true;
 
-  // Dedent for specific keywords that continue a block but are indented less
-  // (like 'else', 'catch') in some styles, though often 'else' is on the same
-  // line as '}' or indented to match 'if'. If we assume K&R or 1TBS, 'else' is
-  // after '}', but if it's on a new line it usually matches the 'if'.
-  if (trimmed.compare(0, 4, "else") == 0 ||
-      trimmed.compare(0, 5, "catch") == 0 ||
-      trimmed.compare(0, 7, "finally") == 0 ||
-      trimmed.compare(0, 4, "case") == 0 ||
-      trimmed.compare(0, 7, "default") == 0) {
+  if (starts_with_keyword(trimmed, "else") ||
+      starts_with_keyword(trimmed, "catch") ||
+      starts_with_keyword(trimmed, "finally") ||
+      starts_with_keyword(trimmed, "case") ||
+      starts_with_keyword(trimmed, "default")) {
     return true;
   }
 
