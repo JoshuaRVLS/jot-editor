@@ -2,6 +2,7 @@
 #include "editor.h"
 #include "editor_features.h"
 #include "python_api.h"
+#include <cctype>
 
 void Editor::insert_char(char c) {
   save_state();
@@ -105,6 +106,101 @@ void Editor::delete_char(bool forward) {
       buf.modified = true;
     }
   }
+  clamp_cursor(get_pane().buffer_id);
+  ensure_cursor_visible();
+  needs_redraw = true;
+  if (python_api)
+    python_api->on_buffer_change(buf.filepath, "");
+}
+
+void Editor::delete_word_backward() {
+  auto &buf = get_buffer();
+  if (buf.selection.active) {
+    delete_selection();
+    return;
+  }
+
+  if (buf.cursor.x == 0 && buf.cursor.y == 0)
+    return;
+
+  save_state();
+
+  if (buf.cursor.x == 0 && buf.cursor.y > 0) {
+    buf.cursor.y--;
+    buf.cursor.x = (int)buf.lines[buf.cursor.y].length();
+    buf.lines[buf.cursor.y] += buf.lines[buf.cursor.y + 1];
+    buf.lines.erase(buf.lines.begin() + buf.cursor.y + 1);
+    buf.modified = true;
+  } else {
+    auto &line = buf.lines[buf.cursor.y];
+    int start = buf.cursor.x;
+
+    while (start > 0 &&
+           std::isspace(static_cast<unsigned char>(line[start - 1]))) {
+      start--;
+    }
+    while (start > 0 &&
+           (std::isalnum(static_cast<unsigned char>(line[start - 1])) ||
+            line[start - 1] == '_')) {
+      start--;
+    }
+    if (start == buf.cursor.x) {
+      start = std::max(0, buf.cursor.x - 1);
+    }
+
+    line.erase(start, buf.cursor.x - start);
+    buf.cursor.x = start;
+    buf.modified = true;
+  }
+
+  clamp_cursor(get_pane().buffer_id);
+  ensure_cursor_visible();
+  needs_redraw = true;
+  if (python_api)
+    python_api->on_buffer_change(buf.filepath, "");
+}
+
+void Editor::delete_word_forward() {
+  auto &buf = get_buffer();
+  if (buf.selection.active) {
+    delete_selection();
+    return;
+  }
+
+  if (buf.cursor.y == (int)buf.lines.size() - 1 &&
+      buf.cursor.x == (int)buf.lines[buf.cursor.y].length())
+    return;
+
+  save_state();
+
+  auto &line = buf.lines[buf.cursor.y];
+  if (buf.cursor.x >= (int)line.length() &&
+      buf.cursor.y < (int)buf.lines.size() - 1) {
+    buf.lines[buf.cursor.y] += buf.lines[buf.cursor.y + 1];
+    buf.lines.erase(buf.lines.begin() + buf.cursor.y + 1);
+    buf.modified = true;
+  } else {
+    int end = buf.cursor.x;
+
+    while (end < (int)line.length() &&
+           std::isspace(static_cast<unsigned char>(line[end]))) {
+      end++;
+    }
+    while (end < (int)line.length() &&
+           (std::isalnum(static_cast<unsigned char>(line[end])) ||
+            line[end] == '_')) {
+      end++;
+    }
+    if (end == buf.cursor.x) {
+      end = std::min((int)line.length(), buf.cursor.x + 1);
+    }
+
+    line.erase(buf.cursor.x, end - buf.cursor.x);
+    buf.modified = true;
+  }
+
+  clamp_cursor(get_pane().buffer_id);
+  ensure_cursor_visible();
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
@@ -146,6 +242,7 @@ void Editor::delete_selection() {
   buf.selection.active = false;
   buf.modified = true;
   clamp_cursor(get_pane().buffer_id);
+  ensure_cursor_visible();
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
@@ -165,6 +262,7 @@ void Editor::delete_line() {
   }
   buf.modified = true;
   clamp_cursor(get_pane().buffer_id);
+  ensure_cursor_visible();
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
@@ -180,6 +278,7 @@ void Editor::new_line() {
   std::string new_line_str = "";
   bool split_closing_bracket_line = false;
   std::string closing_line_str = remaining;
+  bool preserve_remaining_as_is = false;
   if (auto_indent && buf.cursor.y >= 0) {
     int indent = EditorFeatures::get_indent_level(buf.lines[buf.cursor.y]);
     if (EditorFeatures::should_auto_indent(buf.lines[buf.cursor.y])) {
@@ -196,6 +295,16 @@ void Editor::new_line() {
           EditorFeatures::get_indent_string(closing_indent, tab_size) +
           trimmed_remaining;
       split_closing_bracket_line = true;
+    } else if (!remaining.empty() && buf.cursor.x > 0) {
+      const char left = current_line[buf.cursor.x - 1];
+      const bool has_non_space_remaining =
+          remaining.find_first_not_of(" \t") != std::string::npos;
+      if (!std::isspace(static_cast<unsigned char>(left)) &&
+          has_non_space_remaining) {
+        // When splitting in the middle of content, keep the moved text as-is
+        // to avoid adding unexpected extra indentation.
+        preserve_remaining_as_is = true;
+      }
     }
   }
 
@@ -204,6 +313,10 @@ void Editor::new_line() {
     buf.lines.insert(buf.lines.begin() + buf.cursor.y + 2, closing_line_str);
     buf.cursor.y++;
     buf.cursor.x = new_line_str.length();
+  } else if (preserve_remaining_as_is) {
+    buf.lines.insert(buf.lines.begin() + buf.cursor.y + 1, remaining);
+    buf.cursor.y++;
+    buf.cursor.x = 0;
   } else {
     buf.lines.insert(buf.lines.begin() + buf.cursor.y + 1,
                      new_line_str + remaining);
@@ -211,6 +324,7 @@ void Editor::new_line() {
     buf.cursor.x = new_line_str.length();
   }
   buf.modified = true;
+  ensure_cursor_visible();
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
