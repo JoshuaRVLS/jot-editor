@@ -74,6 +74,7 @@ void Editor::ensure_cursor_visible() {
 
 void Editor::move_word_forward(bool extend_selection) {
   auto &buf = get_buffer();
+  Cursor anchor = buf.cursor;
   int len = buf.lines[buf.cursor.y].length();
   while (buf.cursor.x < len &&
          !std::isalnum(buf.lines[buf.cursor.y][buf.cursor.x]))
@@ -85,7 +86,7 @@ void Editor::move_word_forward(bool extend_selection) {
   ensure_cursor_visible();
   if (extend_selection) {
     if (!buf.selection.active) {
-      buf.selection.start = buf.cursor;
+      buf.selection.start = anchor;
       buf.selection.active = true;
     }
     buf.selection.end = buf.cursor;
@@ -94,6 +95,7 @@ void Editor::move_word_forward(bool extend_selection) {
 
 void Editor::move_word_backward(bool extend_selection) {
   auto &buf = get_buffer();
+  Cursor anchor = buf.cursor;
   buf.cursor.x--;
   if (buf.cursor.x < 0) {
     if (buf.cursor.y > 0) {
@@ -114,7 +116,7 @@ void Editor::move_word_backward(bool extend_selection) {
   ensure_cursor_visible();
   if (extend_selection) {
     if (!buf.selection.active) {
-      buf.selection.start = buf.cursor;
+      buf.selection.start = anchor;
       buf.selection.active = true;
     }
     buf.selection.end = buf.cursor;
@@ -123,11 +125,12 @@ void Editor::move_word_backward(bool extend_selection) {
 
 void Editor::move_to_line_start(bool extend_selection) {
   auto &buf = get_buffer();
+  Cursor anchor = buf.cursor;
   buf.cursor.x = 0;
   ensure_cursor_visible();
   if (extend_selection) {
     if (!buf.selection.active) {
-      buf.selection.start = buf.cursor;
+      buf.selection.start = anchor;
       buf.selection.active = true;
     }
     buf.selection.end = buf.cursor;
@@ -136,12 +139,13 @@ void Editor::move_to_line_start(bool extend_selection) {
 
 void Editor::move_to_line_end(bool extend_selection) {
   auto &buf = get_buffer();
+  Cursor anchor = buf.cursor;
   buf.cursor.x = buf.lines[buf.cursor.y].length();
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
   if (extend_selection) {
     if (!buf.selection.active) {
-      buf.selection.start = buf.cursor;
+      buf.selection.start = anchor;
       buf.selection.active = true;
     }
     buf.selection.end = buf.cursor;
@@ -150,12 +154,13 @@ void Editor::move_to_line_end(bool extend_selection) {
 
 void Editor::move_to_file_start(bool extend_selection) {
   auto &buf = get_buffer();
+  Cursor anchor = buf.cursor;
   buf.cursor.y = 0;
   buf.cursor.x = 0;
   ensure_cursor_visible();
   if (extend_selection) {
     if (!buf.selection.active) {
-      buf.selection.start = buf.cursor;
+      buf.selection.start = anchor;
       buf.selection.active = true;
     }
     buf.selection.end = buf.cursor;
@@ -164,12 +169,13 @@ void Editor::move_to_file_start(bool extend_selection) {
 
 void Editor::move_to_file_end(bool extend_selection) {
   auto &buf = get_buffer();
+  Cursor anchor = buf.cursor;
   buf.cursor.y = buf.lines.size() - 1;
   buf.cursor.x = buf.lines[buf.cursor.y].length();
   ensure_cursor_visible();
   if (extend_selection) {
     if (!buf.selection.active) {
-      buf.selection.start = buf.cursor;
+      buf.selection.start = anchor;
       buf.selection.active = true;
     }
     buf.selection.end = buf.cursor;
