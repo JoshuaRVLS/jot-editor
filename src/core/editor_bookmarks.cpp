@@ -22,6 +22,7 @@ void Editor::next_bookmark() {
         buf.cursor.y = *buf.bookmarks.begin();
     }
     clamp_cursor(get_pane().buffer_id);
+    ensure_cursor_visible();
 }
 
 void Editor::prev_bookmark() {
@@ -36,5 +37,5 @@ void Editor::prev_bookmark() {
         buf.cursor.y = *buf.bookmarks.rbegin();
     }
     clamp_cursor(get_pane().buffer_id);
+    ensure_cursor_visible();
 }
-
