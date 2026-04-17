@@ -44,6 +44,7 @@ void Editor::perform_search() {
     buf.cursor.y = search_results[0].first;
     buf.cursor.x = search_results[0].second;
     clamp_cursor(get_pane().buffer_id);
+    ensure_cursor_visible();
   }
 
   std::string case_label = search_case_sensitive ? "Aa" : "aa";
@@ -67,6 +68,7 @@ void Editor::find_next() {
   buf.cursor.y = search_results[search_result_index].first;
   buf.cursor.x = search_results[search_result_index].second;
   clamp_cursor(get_pane().buffer_id);
+  ensure_cursor_visible();
 }
 
 void Editor::find_prev() {
@@ -83,6 +85,7 @@ void Editor::find_prev() {
   buf.cursor.y = search_results[search_result_index].first;
   buf.cursor.x = search_results[search_result_index].second;
   clamp_cursor(get_pane().buffer_id);
+  ensure_cursor_visible();
 }
 
 void Editor::handle_search_panel(int ch) {
