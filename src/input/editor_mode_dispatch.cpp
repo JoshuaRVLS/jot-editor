@@ -8,7 +8,7 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
   cursor_blink_frame = 0;
 
   if (python_api) {
-    std::string mode_str = (mode == MODE_INSERT) ? "insert" : "normal";
+    std::string mode_str = "all";
     if (python_api->handle_keybind(original_ch, is_ctrl, is_shift, is_alt,
                                    mode_str)) {
       needs_redraw = true;
@@ -16,10 +16,22 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     }
   }
 
+  // Global sidebar toggle should work regardless of current focus.
+  if (is_ctrl && (ch == 'b' || ch == 'B')) {
+    toggle_sidebar();
+    return;
+  }
+
   if (show_sidebar && focus_state == FOCUS_SIDEBAR) {
     if (ch == 27) {
       focus_state = FOCUS_EDITOR;
       needs_redraw = true;
+      return;
+    }
+    // Keep global/editor shortcuts usable while explorer is focused.
+    // Ctrl-based keybinds are routed through insert-mode handlers.
+    if (is_ctrl || ch == 23 || ch == 12) {
+      handle_insert_mode(ch, is_ctrl, is_shift, is_alt);
       return;
     }
     handle_sidebar_input(ch);
@@ -82,15 +94,6 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     return;
   }
 
-  switch (mode) {
-  case MODE_NORMAL:
-    handle_normal_mode(ch, is_ctrl, is_shift, is_alt);
-    break;
-  case MODE_INSERT:
-    handle_insert_mode(ch, is_ctrl, is_shift, is_alt);
-    break;
-  case MODE_VISUAL:
-    handle_visual_mode(ch, is_ctrl, is_shift, is_alt);
-    break;
-  }
+  // Modeless editor flow: always handle keys as direct editing commands.
+  handle_insert_mode(ch, is_ctrl, is_shift, is_alt);
 }
