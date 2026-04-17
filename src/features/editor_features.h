@@ -1,5 +1,5 @@
-#ifndef FEATURES_H
-#define FEATURES_H
+#ifndef EDITOR_FEATURES_H
+#define EDITOR_FEATURES_H
 
 #include <string>
 #include <vector>
@@ -26,4 +26,4 @@ public:
   static bool is_whitespace(const std::string &s);
 };
 
-#endif
+#endif // EDITOR_FEATURES_H
