@@ -180,6 +180,8 @@ private:
   std::string command_palette_query;
   std::vector<std::string> command_palette_results;
   int command_palette_selected;
+  bool command_palette_theme_mode;
+  std::string command_palette_theme_original;
 
   // Telescope finder
   Telescope telescope;
@@ -218,6 +220,8 @@ private:
   bool needs_redraw;
   bool mouse_selecting;
   Cursor mouse_start;
+  long long last_left_click_ms;
+  Cursor last_left_click_pos;
 
   int idle_frame_count;
   int cursor_blink_frame;
@@ -253,6 +257,7 @@ private:
   std::vector<FileNode> file_tree;
   int file_tree_selected;
   int file_tree_scroll; // New
+  bool sidebar_show_hidden;
 
   enum EditorFocus { FOCUS_EDITOR, FOCUS_SIDEBAR };
   EditorFocus focus_state;
@@ -317,6 +322,8 @@ private:
   void insert_char(char c);
   void insert_string(const std::string &str);
   void delete_char(bool forward = true);
+  void delete_word_backward();
+  void delete_word_forward();
   void delete_selection();
   void delete_line();
 
@@ -381,6 +388,7 @@ private:
   void toggle_minimap();
   void toggle_search();
   void toggle_command_palette();
+  void open_theme_chooser();
   void execute_command(const std::string &cmd);
 
   void find_next();
@@ -402,7 +410,8 @@ private:
   void trim_trailing_whitespace();
   void toggle_auto_indent_setting();
   void change_tab_size(int delta);
-  void apply_theme(const std::string &name);
+  void apply_theme(const std::string &name, bool persist = true,
+                   bool announce = true);
 
   FileBuffer &get_buffer(int id = -1);
   SplitPane &get_pane(int id = -1);
