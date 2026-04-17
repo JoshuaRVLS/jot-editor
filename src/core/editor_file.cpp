@@ -81,8 +81,8 @@ void Editor::save_file() {
 
 void Editor::save_file_as() {
   show_command_palette = true;
-  command_palette_query = "Save as: ";
-  command_palette_results.clear();
+  command_palette_query = "w ";
+  needs_redraw = true;
 }
 
 void Editor::close_buffer() {
