@@ -1,15 +1,14 @@
 #include "editor.h"
 
+namespace {
+bool fill_theme(Theme &t, const std::string &name) {
+  t = Theme();
 
 // ---------------------------------------------------------------------------
 // Theme / Color Scheme switching
 // Terminal color numbers used:
 //   0=Black  1=Red  2=Green  3=Yellow  4=Blue  5=Magenta  6=Cyan  7=White  8=Grey
 // ---------------------------------------------------------------------------
-
-void Editor::apply_theme(const std::string &name) {
-  current_theme_name = name;
-  Theme t; // start from default and override
 
   if (name == "Dark") {
     // Default dark theme — already the struct defaults, nothing to do
@@ -154,10 +153,30 @@ void Editor::apply_theme(const std::string &name) {
     t.bg_telescope_selected = 4;
     t.fg_telescope_preview  = 0;
     t.bg_telescope_preview  = 7;
+  } else {
+    return false;
   }
 
+  return true;
+}
+} // namespace
+
+void Editor::apply_theme(const std::string &name, bool persist, bool announce) {
+  Theme t;
+  if (!fill_theme(t, name)) {
+    set_message("Unknown theme: " + name);
+    return;
+  }
+
+  current_theme_name = name;
   theme = t;
-  config.set("color_scheme", name);
+
+  if (persist) {
+    config.set("color_scheme", name);
+  }
+
   needs_redraw = true;
-  set_message("Theme: " + name);
+  if (announce) {
+    set_message("Theme: " + name);
+  }
 }
