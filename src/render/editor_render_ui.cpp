@@ -31,37 +31,13 @@ void Editor::render_status_line() {
 
   ui->draw_text(0, y, l_text, theme.fg_status, theme.bg_status, true);
 
-  // Right side — mode indicator (color-coded) + encoding
-  std::string mode_str;
-  int mode_fg, mode_bg;
-  switch (mode) {
-  case MODE_INSERT:
-    mode_str = " INSERT ";
-    mode_fg  = 0; // Black text
-    mode_bg  = 2; // Green background
-    break;
-  case MODE_VISUAL:
-    mode_str = " VISUAL ";
-    mode_fg  = 0; // Black text
-    mode_bg  = 3; // Yellow background
-    break;
-  case MODE_NORMAL:
-  default:
-    mode_str = " NORMAL ";
-    mode_fg  = 0; // Black text
-    mode_bg  = 6; // Cyan background
-    break;
-  }
-
+  // Right side — encoding only
   std::string enc_str = "  UTF-8  ";
-  int r_len = (int)mode_str.length() + (int)enc_str.length();
+  int r_len = (int)enc_str.length();
 
   if (w > (int)l_text.length() + r_len + 2) {
-    // Draw encoding first (right-most)
     ui->draw_text(w - (int)enc_str.length() - 2, y, enc_str,
                   theme.fg_status, theme.bg_status);
-    // Draw mode badge to the left of encoding
-    ui->draw_text(w - r_len - 2, y, mode_str, mode_fg, mode_bg);
   }
 
   // Message area (status line 2)
@@ -74,48 +50,16 @@ void Editor::render_command_palette() {
   if (!show_command_palette)
     return;
 
-  int w = 40;
-  int h = 10;
-  int x = ui->get_width() / 2 - w / 2;
-  int y = ui->get_height() / 4;
-
-  UIRect rect = {x, y, w, h};
+  int y = ui->get_height() - 1;
+  int w = ui->get_width();
+  UIRect rect = {0, y, w, 1};
   ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
-  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
 
-  ui->draw_text(x + 1, y + 1, "> " + command_palette_query, theme.fg_command,
-                theme.bg_command);
-
-  int list_h = h - 3;
-  int start_idx = 0;
-  if ((int)command_palette_results.size() > list_h) {
-    // Center selection in the list if possible
-    start_idx = command_palette_selected - (list_h / 2);
-    if (start_idx < 0)
-      start_idx = 0;
-    if (start_idx > (int)command_palette_results.size() - list_h)
-      start_idx = (int)command_palette_results.size() - list_h;
+  std::string text = ":" + command_palette_query;
+  if ((int)text.length() > w - 1) {
+    text = text.substr(text.length() - (w - 1));
   }
-
-  for (int i = 0; i < list_h - 1; i++) {
-    int idx = start_idx + i;
-    if (idx >= (int)command_palette_results.size())
-      break;
-
-    std::string item = command_palette_results[idx];
-    int fg = theme.fg_command;
-    int bg = theme.bg_command;
-    if (idx == command_palette_selected) {
-      bg = theme.bg_selection;
-      fg = theme.fg_selection;
-    }
-
-    // Truncate
-    if ((int)item.length() > w - 4)
-      item = item.substr(0, w - 4) + "..";
-
-    ui->draw_text(x + 2, y + 3 + i, item, fg, bg);
-  }
+  ui->draw_text(0, y, text, theme.fg_command, theme.bg_command, true);
 }
 
 void Editor::render_input_prompt() {
