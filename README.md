@@ -352,6 +352,14 @@ Tab completion is supported in the command palette for commands and theme names.
 
 `jot` supports Python plugins.
 
+Plugin capabilities now include:
+
+- single-file plugins and plugin packages
+- user-defined commands with arguments
+- `autocmd`-style event hooks
+- plugin reload and plugin listing commands
+- richer editor-state access from Python
+
 Primary plugin paths:
 
 - `~/.config/jot/configs/init.py`

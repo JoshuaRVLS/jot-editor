@@ -1,9 +1,13 @@
 # jot Plugin Development Guide
 
-jot supports plugins written in Python.
+jot supports plugins written in Python and now has a more complete extension
+runtime: plugin packages, user commands with arguments, reload support, and a
+generic event system.
 
 Primary config is loaded from `~/.config/jot/configs/init.py`.
 Plugin files are loaded from `~/.config/jot/configs/plugins/`.
+Plugin directories are also supported. A plugin directory can contain either
+`plugin.py` or `__init__.py`.
 
 Legacy files in `~/.config/jot/*.py` and `~/.config/jot/plugins/` still load.
 
@@ -17,6 +21,8 @@ Legacy files in `~/.config/jot/*.py` and `~/.config/jot/plugins/` still load.
   │   │   └── my_theme.py
   │   └── plugins/
   │       └── my_plugin.py
+  │       └── git_tools/
+  │           └── plugin.py
   ├── plugins/          # Legacy plugin dir
   └── themes/           # Legacy theme dir
 ```
@@ -25,13 +31,32 @@ Legacy files in `~/.config/jot/*.py` and `~/.config/jot/plugins/` still load.
 
 Create a `.py` file in `~/.config/jot/configs/plugins/` or wire it from `init.py`.
 
+Single-file plugin:
+
 ```python
 from jot_api import vim
 
-def my_command():
+def my_command(_arg=""):
     vim.notify("Hello from Plugin!")
 
-vim.keymap.set("normal", "ctrl+h", my_command)
+vim.keymap.set("insert", "ctrl+h", my_command)
+vim.api.nvim_create_user_command("HelloPlugin", my_command, {})
+```
+
+Package-style plugin:
+
+```python
+# ~/.config/jot/configs/plugins/git_tools/plugin.py
+from jot_api import autocmd, create_user_command, current_file, vim
+
+@autocmd("startup")
+def on_start(_event):
+    vim.notify("git_tools ready")
+
+def blame_current_file(_arg=""):
+    vim.notify(f"Blame: {current_file()}")
+
+create_user_command("GitBlameFile", blame_current_file)
 ```
 
 ## API Reference
@@ -46,11 +71,17 @@ vim.keymap.set("normal", "ctrl+h", my_command)
 *   `save_file()`
 *   `open_file(path)`
 *   `show_message(text)`
+*   `execute_command(":w")` or `command(":w")`
 
 ### State Inspection
 *   `get_mode()` -> str ("normal", "insert", "visual")
 *   `get_cursor_x()` -> int
 *   `get_cursor_y()` -> int
+*   `get_current_file()` -> str
+*   `current_file()` -> str
+*   `get_buffer_content()` -> str
+*   `set_buffer_content(text)`
+*   `get_selected_text()` -> str
 
 ### Theme/UI
 *   `set_theme_color(name, fg, bg)`: Set color for a UI element.
@@ -61,6 +92,55 @@ vim.keymap.set("normal", "ctrl+h", my_command)
 *   `vim.cmd("colorscheme my_theme")` or `vim.cmd.colorscheme("my_theme")`
 *   `vim.notify(text, level="info")`
 *   `vim.keymap.set(mode, lhs, rhs)`
+*   `vim.api.nvim_create_user_command(name, callback, opts)`
+*   `vim.api.nvim_create_autocmd(event, opts)`
+
+## Events
+
+Use `autocmd(event, pattern="*")` for event-driven plugins.
+
+Built-in events:
+
+*   `startup`
+*   `buffer_open`
+*   `buffer_change`
+*   `buffer_save`
+
+Example:
+
+```python
+from jot_api import autocmd, vim
+
+@autocmd("buffer_save", pattern="*.py")
+def on_python_save(event):
+    vim.notify(f"saved {event['filepath']}")
+```
+
+## Commands
+
+User commands receive a single string argument.
+
+```python
+from jot_api import create_user_command, vim
+
+def grep_word(arg=""):
+    vim.notify(f"search for: {arg}")
+
+create_user_command("GrepWord", grep_word)
+```
+
+Inside jot:
+
+```text
+:GrepWord hello
+```
+
+## Plugin Management
+
+Built-in plugin commands:
+
+*   `:PlugReload`
+*   `:PlugList`
 
 ## Example: Auto-Save Plugin
 

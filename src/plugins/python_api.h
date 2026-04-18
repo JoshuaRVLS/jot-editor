@@ -24,12 +24,29 @@ private:
   Editor *editor;
   void *py_module; // PyObject* (using void* to avoid including Python.h in
                    // header)
+  void *py_buffer_open_hook;   // PyObject*
+  void *py_buffer_change_hook; // PyObject*
+  void *py_buffer_save_hook;   // PyObject*
+  void *py_internal_callback_hook; // PyObject*
+  void *py_event_hook;             // PyObject*
+  void *py_reset_runtime_hook;     // PyObject*
   std::map<std::string, std::function<bool(int, bool, bool)>> keybinds;
   std::vector<Keybind> registered_keybinds;
+  std::vector<std::string> plugin_entry_files;
+  std::vector<std::string> plugin_directories;
+  std::vector<std::string> loaded_plugins;
   bool python_initialized;
 
   bool init_python();
   void cleanup_python();
+  bool import_jot_api_module();
+  void refresh_python_hooks();
+  void call_python_hook(void *hook, const std::string &arg);
+  bool invoke_python_callback(const std::string &callback,
+                              const std::string &arg = "",
+                              bool *handled = nullptr);
+  void emit_python_event(const std::string &event_name,
+                         const std::string &payload_json);
   bool load_plugin(const std::string &path);
   bool execute_python_callback(const std::string &callback, int key, bool ctrl,
                                bool shift);
@@ -41,13 +58,22 @@ public:
   bool init();
   void cleanup();
   void execute_code(const std::string &code);
+  bool invoke_callback(const std::string &callback,
+                       const std::string &arg = "", bool *handled = nullptr) {
+    return invoke_python_callback(callback, arg, handled);
+  }
   void on_buffer_open(const std::string &filepath);
   void on_buffer_change(const std::string &filepath,
                         const std::string &content);
   void on_buffer_save(const std::string &filepath);
+  void on_editor_ready();
 
   // Load plugins from directory
   void load_plugins(const std::string &plugin_dir = "plugins");
+  int reload_user_plugins();
+  const std::vector<std::string> &get_loaded_plugins() const {
+    return loaded_plugins;
+  }
 
   // Register keybind from Python
   bool register_keybind(const std::string &key_str, const std::string &mode,
@@ -102,6 +128,13 @@ public:
   int py_get_cursor_y();
   std::string py_get_line(int line);
   int py_get_line_count();
+  std::string py_get_current_file();
+  std::string py_get_buffer_content();
+  void py_set_buffer_content(const std::string &text);
+  std::string py_get_selected_text();
+  void py_execute_command(const std::string &command);
+  int py_reload_plugins();
+  std::vector<std::string> py_list_plugins();
 };
 
 #endif

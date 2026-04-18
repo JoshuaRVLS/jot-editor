@@ -5,8 +5,11 @@ This module keeps the low-level wrapper intact and also exposes a
 Neovim-inspired facade for config and themes.
 """
 
+import fnmatch
+import json
 import os
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 # Try to import internal module provided by C++ host
@@ -77,6 +80,10 @@ def get_cursor_x(): return core.get_cursor_x()
 def get_cursor_y(): return core.get_cursor_y()
 def get_line(line): return core.get_line(line)
 def get_line_count(): return core.get_line_count()
+def get_current_file(): return core.get_current_file()
+def get_buffer_content(): return core.get_buffer_content()
+def set_buffer_content(text): core.set_buffer_content(text)
+def get_selected_text(): return core.get_selected_text()
 def set_theme_color(name, fg, bg): core.set_theme_color(name, fg, bg)
 def move_line_up(): core.move_line_up()
 def move_line_down(): core.move_line_down()
@@ -86,6 +93,11 @@ def clear_diagnostics(filepath): core.clear_diagnostics(filepath)
 def set_diagnostics(filepath, diagnostics): core.set_diagnostics(filepath, diagnostics) # New
 def add_diagnostic(filepath, line, col, end_line, end_col, message, severity): 
     core.add_diagnostic(filepath, line, col, end_line, end_col, message, severity)
+def execute_command(command_line): core.execute_command(command_line)
+def reload_plugins(): return core.reload_plugins() or 0
+def list_plugins():
+    plugins = core.list_plugins()
+    return list(plugins) if plugins else []
 
 def config_path(*parts):
     return str(CONFIG_HOME.joinpath(*parts))
@@ -95,6 +107,10 @@ def colors_path(*parts):
 
 def plugins_path(*parts):
     return str(PLUGINS_DIR.joinpath(*parts))
+
+
+def current_file():
+    return get_current_file()
 
 def _normalize_theme_value(value):
     if isinstance(value, str):
@@ -155,115 +171,163 @@ def command(command_line):
         apply_colorscheme(name.strip())
         return
 
-    show_message(f"Unsupported command: {command_line}")
+    execute_command(command_line)
 # Callback Registry
 _callback_registry = {}
-
-def register_callback(func):
-    if not callable(func): return None
-    name = func.__name__
-    # Handle duplicates by appending ID if needed? For now simple overwrite or unique name
-    # Let's use the function name, but maybe we should use a unique ID mapping
-    # Actually, the C++ side expects a string name.
-    # If we use a unique ID, we pass that to C++.
-    
-    # Simple approach: store in dict, ensure unique name?
-    # Or just trust names are unique enough or use id(func)
-    unique_name = f"{name}_{id(func)}"
-    _callback_registry[unique_name] = func
-    return unique_name
-
-def register_keybind(key, mode, callback):
-    cb_name = ""
-    if isinstance(callback, str):
-        cb_name = callback
-    elif callable(callback):
-        cb_name = register_callback(callback)
-    
-    if cb_name:
-        core.register_keybind(key, mode, cb_name)
-
-def register_command(name, callback):
-    cb_name = ""
-    if isinstance(callback, str):
-        cb_name = callback
-    elif callable(callback):
-        cb_name = register_callback(callback)
-    
-    if cb_name:
-        core.register_command(name, cb_name)
-
-def show_input(prompt, callback):
-    cb_name = ""
-    if isinstance(callback, str):
-        cb_name = callback
-    elif callable(callback):
-        cb_name = register_callback(callback)
-            
-    if cb_name:
-        core.show_input(prompt, cb_name)
-
-def _internal_call_callback(cb_name, arg):
-    if cb_name in _callback_registry:
-        try:
-            _callback_registry[cb_name](arg)
-        except Exception as e:
-            print(f"Error in callback {cb_name}: {e}")
-        return
-
-    # Fallback to __main__ for legacy or string-based callbacks
-    import __main__
-    if hasattr(__main__, cb_name):
-        func = getattr(__main__, cb_name)
-        if callable(func):
-            try:
-                func(arg)
-            except Exception as e:
-                print(f"Error in callback {cb_name}: {e}")
-    else:
-        print(f"Callback {cb_name} not found")
-
-# Event Callbacks
+_event_callbacks = defaultdict(list)
 _buffer_open_callbacks = []
 _buffer_change_callbacks = []
 _buffer_save_callbacks = []
+
+
+def _safe_call(func, *args, **kwargs):
+    try:
+        return func(*args, **kwargs)
+    except Exception as exc:
+        print(f"Plugin callback error in {getattr(func, '__name__', func)}: {exc}")
+        return None
+
+
+def _invoke_with_optional_arg(func, arg):
+    try:
+        return func(arg)
+    except TypeError:
+        return func()
+
+
+def register_callback(func):
+    if not callable(func):
+        return None
+    unique_name = f"{func.__name__}_{id(func)}"
+    _callback_registry[unique_name] = func
+    return unique_name
+
+
+def register_keybind(key, mode, callback):
+    cb_name = callback if isinstance(callback, str) else register_callback(callback)
+    if cb_name:
+        core.register_keybind(key, mode, cb_name)
+
+
+def register_command(name, callback):
+    cb_name = callback if isinstance(callback, str) else register_callback(callback)
+    if cb_name:
+        core.register_command(name, cb_name)
+
+
+def create_user_command(name, callback):
+    register_command(name, callback)
+
+
+def show_input(prompt, callback):
+    cb_name = callback if isinstance(callback, str) else register_callback(callback)
+    if cb_name:
+        core.show_input(prompt, cb_name)
+
+
+def _internal_call_callback(cb_name, arg):
+    if cb_name in _callback_registry:
+        return _safe_call(_invoke_with_optional_arg, _callback_registry[cb_name], arg)
+
+    import __main__
+
+    if hasattr(__main__, cb_name):
+        func = getattr(__main__, cb_name)
+        if callable(func):
+            return _safe_call(_invoke_with_optional_arg, func, arg)
+
+    print(f"Callback {cb_name} not found")
+    return False
+
+
+def _reset_runtime_state():
+    _callback_registry.clear()
+    _event_callbacks.clear()
+    _buffer_open_callbacks.clear()
+    _buffer_change_callbacks.clear()
+    _buffer_save_callbacks.clear()
+    _register_builtin_plugin_commands()
+
+
+def autocmd(event, pattern="*", group=None):
+    event_name = event.lower()
+
+    def decorator(func):
+        _event_callbacks[event_name].append(
+            {"callback": func, "pattern": pattern or "*", "group": group}
+        )
+        return func
+
+    return decorator
+
+
+def on_startup(callback):
+    @autocmd("startup")
+    def _wrapped(_event):
+        return callback()
+
+    return callback
+
+
+def _matches_event_pattern(pattern, payload):
+    if not pattern or pattern == "*":
+        return True
+    candidate = (
+        payload.get("filepath")
+        or payload.get("command")
+        or payload.get("name")
+        or ""
+    )
+    return fnmatch.fnmatch(candidate, pattern)
+
+
+def _emit_event(event, payload=None):
+    event_name = (event or "").lower()
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload or "{}")
+        except json.JSONDecodeError:
+            payload = {}
+    payload = payload or {}
+    payload.setdefault("event", event_name)
+
+    for entry in list(_event_callbacks.get(event_name, [])):
+        if _matches_event_pattern(entry["pattern"], payload):
+            _safe_call(entry["callback"], payload)
+
 
 def on_buffer_open(callback):
     _buffer_open_callbacks.append(callback)
     return callback
 
+
 def on_buffer_change(callback):
     _buffer_change_callbacks.append(callback)
     return callback
+
 
 def on_buffer_save(callback):
     _buffer_save_callbacks.append(callback)
     return callback
 
+
 # Internal hooks called by C++
 def _on_buffer_open(filepath):
-    for cb in _buffer_open_callbacks:
-        try: cb(filepath)
-        except: pass
+    for cb in list(_buffer_open_callbacks):
+        _safe_call(cb, filepath)
+    _emit_event("buffer_open", {"filepath": filepath})
+
 
 def _on_buffer_change(filepath):
-    # Retrieve content only if needed by callback? 
-    # For now, just pass filepath. Callbacks can call get_buffer_content.
-    for cb in _buffer_change_callbacks:
-        try: cb(filepath)
-        except: pass
+    for cb in list(_buffer_change_callbacks):
+        _safe_call(cb, filepath)
+    _emit_event("buffer_change", {"filepath": filepath})
+
 
 def _on_buffer_save(filepath):
-    for cb in _buffer_save_callbacks:
-        try: cb(filepath)
-        except: pass
-
-def get_buffer_content():
-    lines = []
-    count = get_line_count()
-    for i in range(count):
-        lines.append(get_line(i))
-    return "\n".join(lines)
+    for cb in list(_buffer_save_callbacks):
+        _safe_call(cb, filepath)
+    _emit_event("buffer_save", {"filepath": filepath})
 
 # Editor Class wrapper for backward compatibility
 class Editor:
@@ -292,6 +356,14 @@ class Editor:
     @staticmethod
     def get_cursor_y(): return get_cursor_y()
     @staticmethod
+    def get_current_file(): return get_current_file()
+    @staticmethod
+    def get_buffer_content(): return get_buffer_content()
+    @staticmethod
+    def set_buffer_content(text): set_buffer_content(text)
+    @staticmethod
+    def get_selected_text(): return get_selected_text()
+    @staticmethod
     def set_theme_color(name, fg, bg): set_theme_color(name, fg, bg)
     @staticmethod
     def clear_diagnostics(filepath): clear_diagnostics(filepath)
@@ -300,6 +372,8 @@ class Editor:
     @staticmethod
     def add_diagnostic(filepath, line, col, end_line, end_col, message, severity): 
         add_diagnostic(filepath, line, col, end_line, end_col, message, severity)
+    @staticmethod
+    def execute_command(command_line): execute_command(command_line)
 
 def on_keybind(key_str, mode="all"):
     def decorator(func):
@@ -316,6 +390,19 @@ class _Api:
     @staticmethod
     def nvim_set_hl(_, group, spec):
         set_hl(group, spec)
+
+    @staticmethod
+    def nvim_create_autocmd(event, opts):
+        pattern = opts.get("pattern", "*")
+        callback = opts.get("callback")
+        group = opts.get("group")
+        if callback:
+            return autocmd(event, pattern=pattern, group=group)(callback)
+        return None
+
+    @staticmethod
+    def nvim_create_user_command(name, callback, _opts=None):
+        create_user_command(name, callback)
 
 class _Cmd:
     def __call__(self, command_line):
@@ -337,3 +424,23 @@ class _Vim:
         show_message(f"[{level}] {message}")
 
 vim = _Vim()
+
+
+def _plugin_reload_command(_arg=""):
+    count = reload_plugins()
+    show_message(f"Reloaded {count} plugin file(s)")
+
+
+def _plugin_list_command(_arg=""):
+    plugins = list_plugins()
+    if not plugins:
+        show_message("No user plugins loaded")
+        return
+    show_message("Plugins: " + ", ".join(Path(p).name for p in plugins[:6]))
+
+def _register_builtin_plugin_commands():
+    register_command("PlugReload", _plugin_reload_command)
+    register_command("PlugList", _plugin_list_command)
+
+
+_register_builtin_plugin_commands()

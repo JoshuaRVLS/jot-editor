@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "python_api.h"
 #include <algorithm>
 #include <cctype>
 #include <sstream>
@@ -24,7 +25,9 @@ const std::vector<std::string> &ex_commands() {
       "split",  "splith",   "vsp",      "splitv",  "bn",     "nextpane",
       "bp",     "prevpane", "theme",    "colorscheme", "colo", "minimap",
       "term",   "terminal", "termnew",  "terminalnew", "search",
-      "format", "trim",     "line",     "goto",        "help"};
+      "format", "trim",     "line",     "goto",        "resizeleft",
+      "resizeright", "resizeup", "resizedown", "lspstart", "lspstatus",
+      "lspstop", "lsprestart", "help"};
   return commands;
 }
 
@@ -141,6 +144,9 @@ void Editor::refresh_command_palette() {
     for (const auto &c : ex_commands()) {
       command_palette_results.push_back(c);
     }
+    for (const auto &custom : custom_commands) {
+      command_palette_results.push_back(custom.name);
+    }
     return;
   }
 
@@ -152,6 +158,11 @@ void Editor::refresh_command_palette() {
     for (const auto &c : ex_commands()) {
       if (starts_with_icase(c, cmd)) {
         command_palette_results.push_back(c);
+      }
+    }
+    for (const auto &custom : custom_commands) {
+      if (starts_with_icase(custom.name, cmd)) {
+        command_palette_results.push_back(custom.name);
       }
     }
     return;
@@ -373,6 +384,22 @@ void Editor::handle_command_palette(int ch) {
       toggle_integrated_terminal();
     } else if (lcmd == "termnew" || lcmd == "terminalnew") {
       create_integrated_terminal();
+    } else if (lcmd == "lspstart") {
+      auto &buf = get_buffer();
+      if (buf.filepath.empty()) {
+        set_message("LSP start requires a saved file");
+      } else if (ensure_lsp_for_file(buf.filepath)) {
+        notify_lsp_open(buf.filepath);
+        set_message("LSP started for current file");
+      } else {
+        set_message("No LSP server configured for this file");
+      }
+    } else if (lcmd == "lspstatus") {
+      show_lsp_status();
+    } else if (lcmd == "lspstop") {
+      stop_all_lsp_clients();
+    } else if (lcmd == "lsprestart") {
+      restart_all_lsp_clients();
     } else if (lcmd == "search") {
       toggle_search();
     } else if (lcmd == "format") {
@@ -386,6 +413,30 @@ void Editor::handle_command_palette(int ch) {
         goto_line_col(parsed_line, parsed_col);
       } else {
         set_message("Invalid location: " + arg);
+      }
+    } else if (lcmd == "resizeleft") {
+      if (pane_layout_mode != PANE_LAYOUT_VERTICAL || !resize_current_pane(-2)) {
+        set_message("Resize left unavailable for current layout");
+      } else {
+        set_message("Pane resized left");
+      }
+    } else if (lcmd == "resizeright") {
+      if (pane_layout_mode != PANE_LAYOUT_VERTICAL || !resize_current_pane(2)) {
+        set_message("Resize right unavailable for current layout");
+      } else {
+        set_message("Pane resized right");
+      }
+    } else if (lcmd == "resizeup") {
+      if (pane_layout_mode != PANE_LAYOUT_HORIZONTAL || !resize_current_pane(-2)) {
+        set_message("Resize up unavailable for current layout");
+      } else {
+        set_message("Pane resized up");
+      }
+    } else if (lcmd == "resizedown") {
+      if (pane_layout_mode != PANE_LAYOUT_HORIZONTAL || !resize_current_pane(2)) {
+        set_message("Resize down unavailable for current layout");
+      } else {
+        set_message("Pane resized down");
       }
     } else if (lcmd == "theme" || lcmd == "colorscheme" || lcmd == "colo") {
       if (arg.empty()) {
@@ -406,9 +457,23 @@ void Editor::handle_command_palette(int ch) {
         }
       }
     } else if (lcmd == "help" || lcmd == "h") {
-      set_message("Commands: :w :q :wq :e <file> :line N[:C] :bd :sp :vsp :bn :bp :theme <name>");
+      set_message("Commands: :w :q :wq :e <file> :line N[:C] :bd :sp :vsp :bn :bp :resizeleft :resizeright :resizeup :resizedown :lspstart :lspstatus :lspstop :lsprestart :theme <name>");
     } else {
-      set_message("Unknown command: " + line);
+      bool handled_custom = false;
+      for (const auto &custom : custom_commands) {
+        if (to_lower_copy(custom.name) == lcmd) {
+          handled_custom = true;
+          if (python_api) {
+            python_api->invoke_callback(custom.callback, arg);
+          } else {
+            set_message("Python runtime unavailable for command: " + custom.name);
+          }
+          break;
+        }
+      }
+      if (!handled_custom) {
+        set_message("Unknown command: " + line);
+      }
     }
 
     if (close_prompt) {

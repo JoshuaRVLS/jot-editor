@@ -63,7 +63,14 @@ static void append_python_path(const fs::path &path) {
     escaped.replace(pos, 1, "\\'");
     pos += 2;
   }
-  PyRun_SimpleString(("import sys\nsys.path.append('" + escaped + "')\n").c_str());
+  PyRun_SimpleString(
+      ("import sys\n"
+       "p = '" +
+       escaped +
+       "'\n"
+       "if p not in sys.path:\n"
+       "    sys.path.append(p)\n")
+           .c_str());
 }
 
 // Global instance pointer for C wrappers
@@ -171,6 +178,33 @@ static PyObject *py_get_line_count(PyObject *self, PyObject *args) {
   if (g_python_api)
     return PyLong_FromLong(g_python_api->py_get_line_count());
   return PyLong_FromLong(0);
+}
+
+static PyObject *py_get_current_file(PyObject *self, PyObject *args) {
+  if (g_python_api)
+    return PyUnicode_FromString(g_python_api->py_get_current_file().c_str());
+  return PyUnicode_FromString("");
+}
+
+static PyObject *py_get_buffer_content(PyObject *self, PyObject *args) {
+  if (g_python_api)
+    return PyUnicode_FromString(g_python_api->py_get_buffer_content().c_str());
+  return PyUnicode_FromString("");
+}
+
+static PyObject *py_set_buffer_content(PyObject *self, PyObject *args) {
+  char *text;
+  if (!PyArg_ParseTuple(args, "s", &text))
+    return nullptr;
+  if (g_python_api)
+    g_python_api->py_set_buffer_content(text);
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_get_selected_text(PyObject *self, PyObject *args) {
+  if (g_python_api)
+    return PyUnicode_FromString(g_python_api->py_get_selected_text().c_str());
+  return PyUnicode_FromString("");
 }
 
 static PyObject *py_set_theme_color(PyObject *self, PyObject *args) {
@@ -307,6 +341,34 @@ static PyObject *py_show_input_prompt(PyObject *self, PyObject *args) {
   Py_RETURN_NONE;
 }
 
+static PyObject *py_execute_command(PyObject *self, PyObject *args) {
+  char *command;
+  if (!PyArg_ParseTuple(args, "s", &command))
+    return nullptr;
+  if (g_python_api)
+    g_python_api->py_execute_command(command);
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_reload_plugins(PyObject *self, PyObject *args) {
+  if (g_python_api)
+    return PyLong_FromLong(g_python_api->py_reload_plugins());
+  return PyLong_FromLong(0);
+}
+
+static PyObject *py_list_plugins(PyObject *self, PyObject *args) {
+  if (!g_python_api)
+    return PyList_New(0);
+
+  const auto plugins = g_python_api->py_list_plugins();
+  PyObject *list = PyList_New((Py_ssize_t)plugins.size());
+  for (Py_ssize_t i = 0; i < (Py_ssize_t)plugins.size(); i++) {
+    PyObject *item = PyUnicode_FromString(plugins[(size_t)i].c_str());
+    PyList_SET_ITEM(list, i, item);
+  }
+  return list;
+}
+
 static PyMethodDef JotMethods[] = {
     {"enter_normal_mode", py_enter_normal_mode, METH_VARARGS,
      "Switch to normal mode"},
@@ -325,6 +387,14 @@ static PyMethodDef JotMethods[] = {
     {"get_cursor_y", py_get_cursor_y, METH_VARARGS, "Get cursor Y"},
     {"get_line", py_get_line, METH_VARARGS, "Get line content"},
     {"get_line_count", py_get_line_count, METH_VARARGS, "Get line count"},
+    {"get_current_file", py_get_current_file, METH_VARARGS,
+     "Get current file path"},
+    {"get_buffer_content", py_get_buffer_content, METH_VARARGS,
+     "Get current buffer content"},
+    {"set_buffer_content", py_set_buffer_content, METH_VARARGS,
+     "Replace current buffer content"},
+    {"get_selected_text", py_get_selected_text, METH_VARARGS,
+     "Get selected text"},
     {"set_theme_color", py_set_theme_color, METH_VARARGS, "Set theme color"},
     {"move_line_up", py_move_line_up, METH_VARARGS, "Move line up"},
     {"move_line_down", py_move_line_down, METH_VARARGS, "Move line down"},
@@ -339,6 +409,11 @@ static PyMethodDef JotMethods[] = {
      "Register key binding"},
     {"register_command", py_register_command, METH_VARARGS, "Register command"},
     {"show_input", py_show_input_prompt, METH_VARARGS, "Show input prompt"},
+    {"execute_command", py_execute_command, METH_VARARGS,
+     "Execute an ex-style command"},
+    {"reload_plugins", py_reload_plugins, METH_VARARGS,
+     "Reload user plugins"},
+    {"list_plugins", py_list_plugins, METH_VARARGS, "List loaded plugins"},
     {NULL, NULL, 0, NULL}};
 
 static struct PyModuleDef jot_module = {

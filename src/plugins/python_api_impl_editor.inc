@@ -74,6 +74,95 @@ int PythonAPI::py_get_line_count() {
   return buf.lines.size();
 }
 
+std::string PythonAPI::py_get_current_file() {
+  if (!editor)
+    return "";
+  return editor->get_buffer().filepath;
+}
+
+std::string PythonAPI::py_get_buffer_content() {
+  if (!editor)
+    return "";
+  return editor->get_buffer_text(editor->get_buffer());
+}
+
+void PythonAPI::py_set_buffer_content(const std::string &text) {
+  if (!editor)
+    return;
+
+  editor->save_state();
+  FileBuffer &buf = editor->get_buffer();
+  buf.lines.clear();
+
+  std::stringstream ss(text);
+  std::string line;
+  while (std::getline(ss, line)) {
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    buf.lines.push_back(line);
+  }
+
+  if (!text.empty() && text.back() == '\n') {
+    buf.lines.push_back("");
+  }
+  if (buf.lines.empty()) {
+    buf.lines.push_back("");
+  }
+
+  buf.cursor = {0, 0};
+  buf.preferred_x = 0;
+  buf.selection = {{0, 0}, {0, 0}, false};
+  buf.scroll_offset = 0;
+  buf.scroll_x = 0;
+  buf.modified = true;
+  editor->invalidate_syntax_cache(buf);
+  editor->ensure_cursor_visible();
+  editor->needs_redraw = true;
+  on_buffer_change(buf.filepath, text);
+}
+
+std::string PythonAPI::py_get_selected_text() {
+  if (!editor)
+    return "";
+
+  FileBuffer &buf = editor->get_buffer();
+  if (!buf.selection.active) {
+    return "";
+  }
+
+  Cursor start = buf.selection.start;
+  Cursor end = buf.selection.end;
+  if (start.y > end.y || (start.y == end.y && start.x > end.x)) {
+    std::swap(start, end);
+  }
+
+  std::string result;
+  for (int y = start.y; y <= end.y && y < (int)buf.lines.size(); y++) {
+    const std::string &line = buf.lines[y];
+    int from = (y == start.y) ? std::max(0, start.x) : 0;
+    int to = (y == end.y) ? std::min((int)line.size(), end.x) : (int)line.size();
+    if (from < to) {
+      result += line.substr((size_t)from, (size_t)(to - from));
+    }
+    if (y != end.y) {
+      result.push_back('\n');
+    }
+  }
+  return result;
+}
+
+void PythonAPI::py_execute_command(const std::string &command) {
+  if (!editor)
+    return;
+  editor->command_palette_query = command;
+  editor->handle_command_palette('\n');
+}
+
+int PythonAPI::py_reload_plugins() { return reload_user_plugins(); }
+
+std::vector<std::string> PythonAPI::py_list_plugins() { return loaded_plugins; }
+
 void PythonAPI::py_set_theme_color(const std::string &name, int fg, int bg) {
   if (!editor)
     return;

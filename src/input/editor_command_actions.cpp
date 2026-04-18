@@ -66,6 +66,12 @@ void Editor::change_tab_size(int delta) {
 
 void Editor::register_command(const std::string &name,
                               const std::string &callback) {
+  for (auto &command : custom_commands) {
+    if (command.name == name) {
+      command.callback = callback;
+      return;
+    }
+  }
   custom_commands.push_back({name, callback});
 }
 
@@ -89,17 +95,7 @@ void Editor::handle_input_prompt(int ch) {
   } else if (ch == '\n' || ch == 13) {
     hide_input_prompt();
     if (python_api) {
-      std::string safe_input = input_prompt_buffer;
-      size_t pos = 0;
-      while ((pos = safe_input.find("'", pos)) != std::string::npos) {
-        safe_input.replace(pos, 1, "\\'");
-        pos += 2;
-      }
-
-      std::string code =
-          "import jot_api; jot_api._internal_call_callback('" +
-          input_prompt_callback + "', '" + safe_input + "')";
-      python_api->execute_code(code);
+      python_api->invoke_callback(input_prompt_callback, input_prompt_buffer);
     }
   } else if (ch == 127 || ch == 8) {
     if (!input_prompt_buffer.empty())
