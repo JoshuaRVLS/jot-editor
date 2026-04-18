@@ -42,6 +42,16 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
       save_file();
       needs_redraw = true;
       return;
+    case 'g':
+    case 'G':
+      show_command_palette = true;
+      command_palette_query = "line ";
+      command_palette_results.clear();
+      command_palette_selected = 0;
+      command_palette_theme_mode = false;
+      command_palette_theme_original.clear();
+      needs_redraw = true;
+      return;
     case 'p':
     case 'P':
       toggle_command_palette();
@@ -160,7 +170,7 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     enter_visual_mode(false);
     return;
   case 'V':
-    enter_visual_mode(true);
+    select_current_line();
     return;
 
   case 'h':
@@ -200,6 +210,9 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     move_to_file_end();
     needs_redraw = true;
     return;
+  case 'F':
+    select_current_function();
+    return;
   case 'g':
     has_pending_key = true;
     pending_key = 'g';
@@ -212,7 +225,7 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     move_cursor(0, 10);
     return;
   case 1012:
-    move_to_line_start();
+    move_to_line_smart_start();
     needs_redraw = true;
     return;
   case 1013:

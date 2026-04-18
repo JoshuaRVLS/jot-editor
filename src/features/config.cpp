@@ -23,13 +23,15 @@ void Config::load_defaults() {
   settings["minimap_width"] = "15";
   settings["show_explorer"] = "true";
   settings["show_minimap"] = "true";
-  settings["tab_size"] = "4";
+  settings["tab_size"] = "2";
   settings["auto_indent"] = "true";
+  settings["auto_detect_indent"] = "false";
   settings["show_line_numbers"] = "true";
   settings["word_wrap"] = "false";
   settings["cursor_style"] = "block";
   settings["render_fps"] = "120";
   settings["idle_fps"] = "60";
+  settings["terminal_height"] = "10";
 }
 
 void Config::parse_line(const std::string &line) {

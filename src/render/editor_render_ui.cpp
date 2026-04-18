@@ -147,7 +147,7 @@ void Editor::render_save_prompt() {
   int h = ui->get_height();
   int w = ui->get_width();
 
-  std::string prompt = "Save changes? (y/n/Esc)";
+  std::string prompt = "Save As: type filename, Enter=save, Esc=cancel";
   int x = w / 2 - prompt.length() / 2;
   int y = h / 2;
 
@@ -247,11 +247,14 @@ void Editor::render_tabs() {
     }
 
     ui->draw_text(tab_x, y, disp, fg, bg);
+    int close_x = tab_x + (int)disp.length();
+    int close_fg = buffers.size() > 1 ? 1 : fg;
+    ui->draw_text(close_x, y, "x", close_fg, bg);
     // Vertical separator
-    ui->draw_text(tab_x + disp.length(), y, "|", theme.fg_panel_border,
+    ui->draw_text(close_x + 1, y, "|", theme.fg_panel_border,
                   theme.bg_status);
 
-    tab_x += disp.length() + 1;
+    tab_x += (int)disp.length() + 2;
     if (tab_x >= w)
       break;
   }

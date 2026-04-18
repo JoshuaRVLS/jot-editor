@@ -56,6 +56,11 @@ bool EditorFeatures::should_auto_indent(const std::string &line) {
   if (trimmed.empty())
     return false;
 
+  // Treat trailing whitespace as non-semantic for indent decisions.
+  trimmed = trim_right_ws(trimmed);
+  if (trimmed.empty())
+    return false;
+
   // Remove comments
   const size_t comment_pos = trimmed.find("//");
   if (comment_pos != std::string::npos) {

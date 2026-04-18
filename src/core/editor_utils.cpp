@@ -6,6 +6,7 @@ FileBuffer& Editor::get_buffer(int id) {
         FileBuffer fb;
         fb.lines.push_back("");
         fb.cursor = {0, 0};
+        fb.preferred_x = 0;
         fb.selection = {{0, 0}, {0, 0}, false};
         fb.scroll_offset = 0;
         fb.scroll_x = 0;
@@ -49,7 +50,22 @@ void Editor::select_all() {
     buf.cursor = buf.selection.end;
 }
 
+void Editor::select_current_line() {
+    auto& buf = get_buffer();
+    if (buf.lines.empty()) {
+        return;
+    }
+    int y = std::max(0, std::min(buf.cursor.y, (int)buf.lines.size() - 1));
+    int line_len = (int)buf.lines[y].length();
+    buf.selection.start = {0, y};
+    buf.selection.end = {line_len, y};
+    buf.selection.active = true;
+    buf.cursor = buf.selection.end;
+    buf.preferred_x = buf.cursor.x;
+    ensure_cursor_visible();
+    needs_redraw = true;
+}
+
 void Editor::clear_selection() {
     get_buffer().selection.active = false;
 }
-

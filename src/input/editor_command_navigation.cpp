@@ -94,3 +94,69 @@ void Editor::jump_to_matching_bracket() {
     message = "Jumped to matching bracket";
   }
 }
+
+void Editor::select_current_function() {
+  auto &buf = get_buffer();
+  if (buf.lines.empty()) {
+    return;
+  }
+
+  int open_line = -1;
+  int open_col = -1;
+  int depth = 0;
+
+  for (int y = buf.cursor.y; y >= 0; --y) {
+    const std::string &line = buf.lines[y];
+    if (line.empty()) {
+      continue;
+    }
+
+    int start_x = (y == buf.cursor.y) ? std::min(buf.cursor.x, (int)line.size() - 1)
+                                      : (int)line.size() - 1;
+    for (int x = start_x; x >= 0; --x) {
+      char ch = line[x];
+      if (ch == '}') {
+        depth++;
+      } else if (ch == '{') {
+        if (depth == 0) {
+          open_line = y;
+          open_col = x;
+          break;
+        }
+        depth--;
+      }
+    }
+
+    if (open_line != -1) {
+      break;
+    }
+  }
+
+  if (open_line == -1 || open_col == -1) {
+    set_message("No surrounding function block found");
+    needs_redraw = true;
+    return;
+  }
+
+  int match = EditorFeatures::find_matching_bracket(buf.lines, open_line,
+                                                    open_col, '{', '}');
+  if (match < 0) {
+    set_message("Function end not found");
+    needs_redraw = true;
+    return;
+  }
+
+  int close_line = match / 10000;
+  int close_col = match % 10000;
+
+  buf.selection.start = {0, open_line};
+  buf.selection.end = {close_col + 1, close_line};
+  buf.selection.active = true;
+  buf.cursor = buf.selection.end;
+  buf.preferred_x = buf.cursor.x;
+
+  clamp_cursor(get_pane().buffer_id);
+  ensure_cursor_visible();
+  set_message("Selected function block");
+  needs_redraw = true;
+}

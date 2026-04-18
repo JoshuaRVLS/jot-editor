@@ -59,7 +59,6 @@ void Editor::render_sidebar() {
     return;
 
   // Background
-  UIRect rect = {x, y, w, h};
   // ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
   // Loop filling to be safe similar to original
   for (int i = y; i < y + h; i++) {

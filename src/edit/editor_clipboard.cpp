@@ -74,21 +74,59 @@ void Editor::paste() {
 void Editor::move_line_up() {
   save_state();
   auto &buf = get_buffer();
-  if (buf.cursor.y > 0) {
-    std::swap(buf.lines[buf.cursor.y], buf.lines[buf.cursor.y - 1]);
-    buf.cursor.y--;
-    buf.modified = true;
-    needs_redraw = true;
+  int start_y = buf.cursor.y;
+  int end_y = buf.cursor.y;
+  if (buf.selection.active) {
+    start_y = std::min(buf.selection.start.y, buf.selection.end.y);
+    end_y = std::max(buf.selection.start.y, buf.selection.end.y);
   }
+
+  if (start_y <= 0)
+    return;
+
+  // Move the whole selected line block up by one row.
+  std::rotate(buf.lines.begin() + start_y - 1, buf.lines.begin() + start_y,
+              buf.lines.begin() + end_y + 1);
+
+  buf.cursor.y = std::max(0, buf.cursor.y - 1);
+  if (buf.selection.active) {
+    buf.selection.start.y -= 1;
+    buf.selection.end.y -= 1;
+  }
+
+  buf.modified = true;
+  ensure_cursor_visible();
+  needs_redraw = true;
+  if (python_api)
+    python_api->on_buffer_change(buf.filepath, "");
 }
 
 void Editor::move_line_down() {
   save_state();
   auto &buf = get_buffer();
-  if (buf.cursor.y < (int)buf.lines.size() - 1) {
-    std::swap(buf.lines[buf.cursor.y], buf.lines[buf.cursor.y + 1]);
-    buf.cursor.y++;
-    buf.modified = true;
-    needs_redraw = true;
+  int start_y = buf.cursor.y;
+  int end_y = buf.cursor.y;
+  if (buf.selection.active) {
+    start_y = std::min(buf.selection.start.y, buf.selection.end.y);
+    end_y = std::max(buf.selection.start.y, buf.selection.end.y);
   }
+
+  if (end_y >= (int)buf.lines.size() - 1)
+    return;
+
+  // Move the whole selected line block down by one row.
+  std::rotate(buf.lines.begin() + start_y, buf.lines.begin() + end_y + 1,
+              buf.lines.begin() + end_y + 2);
+
+  buf.cursor.y = std::min((int)buf.lines.size() - 1, buf.cursor.y + 1);
+  if (buf.selection.active) {
+    buf.selection.start.y += 1;
+    buf.selection.end.y += 1;
+  }
+
+  buf.modified = true;
+  ensure_cursor_visible();
+  needs_redraw = true;
+  if (python_api)
+    python_api->on_buffer_change(buf.filepath, "");
 }

@@ -7,6 +7,48 @@
 void Editor::insert_char(char c) {
   save_state();
   auto &buf = get_buffer();
+
+  if (buf.selection.active && AutoClose::should_auto_close(c)) {
+    Cursor s = buf.selection.start;
+    Cursor e = buf.selection.end;
+    if (s.y > e.y || (s.y == e.y && s.x > e.x)) {
+      std::swap(s, e);
+    }
+
+    if (s.y >= 0 && s.y < (int)buf.lines.size() && e.y >= 0 &&
+        e.y < (int)buf.lines.size()) {
+      char closing = AutoClose::get_closing_bracket(c);
+      if (closing != '\0') {
+        if (s.y == e.y) {
+          auto &line = buf.lines[s.y];
+          s.x = std::max(0, std::min(s.x, (int)line.length()));
+          e.x = std::max(0, std::min(e.x, (int)line.length()));
+          line.insert(e.x, 1, closing);
+          line.insert(s.x, 1, c);
+        } else {
+          auto &end_line = buf.lines[e.y];
+          auto &start_line = buf.lines[s.y];
+          e.x = std::max(0, std::min(e.x, (int)end_line.length()));
+          s.x = std::max(0, std::min(s.x, (int)start_line.length()));
+          end_line.insert(e.x, 1, closing);
+          start_line.insert(s.x, 1, c);
+        }
+
+        buf.selection.start = {s.x + 1, s.y};
+        buf.selection.end = {e.x + 1, e.y};
+        buf.selection.active = true;
+        buf.cursor = buf.selection.end;
+        buf.preferred_x = buf.cursor.x;
+        buf.modified = true;
+        ensure_cursor_visible();
+        needs_redraw = true;
+        if (python_api)
+          python_api->on_buffer_change(buf.filepath, "");
+        return;
+      }
+    }
+  }
+
   if (buf.selection.active) {
     delete_selection();
   }
@@ -95,9 +137,26 @@ void Editor::delete_char(bool forward) {
     }
   } else {
     if (buf.cursor.x > 0) {
-      buf.cursor.x--;
-      buf.lines[buf.cursor.y].erase(buf.cursor.x, 1);
-      buf.modified = true;
+      auto &line = buf.lines[buf.cursor.y];
+      if (buf.cursor.x < (int)line.length()) {
+        char left = line[buf.cursor.x - 1];
+        char right = line[buf.cursor.x];
+        char expected = AutoClose::get_closing_bracket(left);
+        if (expected != '\0' && right == expected) {
+          line.erase(buf.cursor.x, 1);
+          buf.cursor.x--;
+          line.erase(buf.cursor.x, 1);
+          buf.modified = true;
+        } else {
+          buf.cursor.x--;
+          line.erase(buf.cursor.x, 1);
+          buf.modified = true;
+        }
+      } else {
+        buf.cursor.x--;
+        line.erase(buf.cursor.x, 1);
+        buf.modified = true;
+      }
     } else if (buf.cursor.y > 0) {
       buf.cursor.y--;
       buf.cursor.x = buf.lines[buf.cursor.y].length();

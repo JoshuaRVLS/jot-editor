@@ -13,10 +13,24 @@ void Editor::move_cursor(int dx, int dy, bool extend_selection) {
     buf.selection.active = true;
   }
 
-  buf.cursor.y =
-      std::max(0, std::min((int)buf.lines.size() - 1, buf.cursor.y + dy));
-  buf.cursor.x = std::max(0, buf.cursor.x + dx);
+  if (dy != 0 && dx == 0) {
+    int target_y =
+        std::max(0, std::min((int)buf.lines.size() - 1, buf.cursor.y + dy));
+    int desired_x = std::max(buf.cursor.x, std::max(0, buf.preferred_x));
+    buf.cursor.y = target_y;
+    int line_len = (int)buf.lines[buf.cursor.y].length();
+    buf.cursor.x = std::min(desired_x, line_len);
+  } else {
+    buf.cursor.y =
+        std::max(0, std::min((int)buf.lines.size() - 1, buf.cursor.y + dy));
+    buf.cursor.x = std::max(0, buf.cursor.x + dx);
+    // Horizontal movement (or mixed dx/dy) sets new preferred column.
+    buf.preferred_x = buf.cursor.x;
+  }
   clamp_cursor(get_pane().buffer_id);
+  if (dy == 0 && dx == 0) {
+    buf.preferred_x = buf.cursor.x;
+  }
   ensure_cursor_visible();
 
   if (extend_selection) {
@@ -83,6 +97,7 @@ void Editor::move_word_forward(bool extend_selection) {
          std::isalnum(buf.lines[buf.cursor.y][buf.cursor.x]))
     buf.cursor.x++;
   clamp_cursor(get_pane().buffer_id);
+  buf.preferred_x = buf.cursor.x;
   ensure_cursor_visible();
   if (extend_selection) {
     if (!buf.selection.active) {
@@ -113,7 +128,36 @@ void Editor::move_word_backward(bool extend_selection) {
       buf.cursor.x--;
   }
   clamp_cursor(get_pane().buffer_id);
+  buf.preferred_x = buf.cursor.x;
   ensure_cursor_visible();
+  if (extend_selection) {
+    if (!buf.selection.active) {
+      buf.selection.start = anchor;
+      buf.selection.active = true;
+    }
+    buf.selection.end = buf.cursor;
+  }
+}
+
+void Editor::move_to_line_smart_start(bool extend_selection) {
+  auto &buf = get_buffer();
+  Cursor anchor = buf.cursor;
+
+  const std::string &line = buf.lines[buf.cursor.y];
+  int first_non_ws = 0;
+  while (first_non_ws < (int)line.size() &&
+         (line[first_non_ws] == ' ' || line[first_non_ws] == '\t')) {
+    first_non_ws++;
+  }
+  if (first_non_ws >= (int)line.size()) {
+    first_non_ws = 0;
+  }
+
+  int target_x = (buf.cursor.x == first_non_ws) ? 0 : first_non_ws;
+  buf.cursor.x = target_x;
+  buf.preferred_x = buf.cursor.x;
+  ensure_cursor_visible();
+
   if (extend_selection) {
     if (!buf.selection.active) {
       buf.selection.start = anchor;
@@ -127,6 +171,7 @@ void Editor::move_to_line_start(bool extend_selection) {
   auto &buf = get_buffer();
   Cursor anchor = buf.cursor;
   buf.cursor.x = 0;
+  buf.preferred_x = buf.cursor.x;
   ensure_cursor_visible();
   if (extend_selection) {
     if (!buf.selection.active) {
@@ -142,6 +187,7 @@ void Editor::move_to_line_end(bool extend_selection) {
   Cursor anchor = buf.cursor;
   buf.cursor.x = buf.lines[buf.cursor.y].length();
   clamp_cursor(get_pane().buffer_id);
+  buf.preferred_x = buf.cursor.x;
   ensure_cursor_visible();
   if (extend_selection) {
     if (!buf.selection.active) {
@@ -157,6 +203,7 @@ void Editor::move_to_file_start(bool extend_selection) {
   Cursor anchor = buf.cursor;
   buf.cursor.y = 0;
   buf.cursor.x = 0;
+  buf.preferred_x = buf.cursor.x;
   ensure_cursor_visible();
   if (extend_selection) {
     if (!buf.selection.active) {
@@ -172,6 +219,7 @@ void Editor::move_to_file_end(bool extend_selection) {
   Cursor anchor = buf.cursor;
   buf.cursor.y = buf.lines.size() - 1;
   buf.cursor.x = buf.lines[buf.cursor.y].length();
+  buf.preferred_x = buf.cursor.x;
   ensure_cursor_visible();
   if (extend_selection) {
     if (!buf.selection.active) {

@@ -1,7 +1,16 @@
 #include "editor.h"
 
 void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
-                                bool /*is_alt*/) {
+                                bool is_alt) {
+  if (is_ctrl && is_shift && (ch == 'f' || ch == 'F')) {
+    select_current_function();
+    return;
+  }
+  if (is_ctrl && is_shift && (ch == 'l' || ch == 'L')) {
+    select_current_line();
+    return;
+  }
+
   if (is_ctrl) {
     switch (ch) {
     case 'q':
@@ -62,6 +71,16 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
       toggle_search();
       needs_redraw = true;
       return;
+    case 'g':
+    case 'G':
+      show_command_palette = true;
+      command_palette_query = "line ";
+      command_palette_results.clear();
+      command_palette_selected = 0;
+      command_palette_theme_mode = false;
+      command_palette_theme_original.clear();
+      needs_redraw = true;
+      return;
     case 'p':
     case 'P':
       toggle_command_palette();
@@ -117,6 +136,14 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
     return;
   }
 
+  // Terminal fallback mappings for control bytes that may arrive without the
+  // ctrl modifier bit on some terminals.
+  if (ch == 19) { // Ctrl+S
+    save_file();
+    needs_redraw = true;
+    return;
+  }
+
   // Terminal fallback mappings for Ctrl+Backspace / Ctrl+/
   if (ch == 23) {
     delete_word_backward();
@@ -124,6 +151,16 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
   }
   if (ch == 31) {
     toggle_comment();
+    return;
+  }
+
+  // VSCode-like line move shortcut.
+  if (is_alt && ch == 1008) {
+    move_line_up();
+    return;
+  }
+  if (is_alt && ch == 1009) {
+    move_line_down();
     return;
   }
 
@@ -144,7 +181,7 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
     return;
   }
   if (ch == 1012) {
-    move_to_line_start(is_shift);
+    move_to_line_smart_start(is_shift);
     return;
   }
   if (ch == 1013) {
@@ -178,7 +215,22 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
   }
 
   if (ch == '\t' || ch == 9) {
-    insert_char('\t');
+    auto &buf = get_buffer();
+    if (buf.selection.active) {
+      indent_selection();
+    } else {
+      insert_char('\t');
+    }
+    needs_redraw = true;
+    return;
+  }
+
+  // Shift+Tab (terminal escape \e[Z mapped in terminal.cpp)
+  if (ch == 1017) {
+    auto &buf = get_buffer();
+    if (buf.selection.active) {
+      outdent_selection();
+    }
     needs_redraw = true;
     return;
   }
