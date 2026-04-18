@@ -23,7 +23,8 @@ const std::vector<std::string> &ex_commands() {
       "new",    "enew",     "bd",       "bdelete", "close",  "sp",
       "split",  "splith",   "vsp",      "splitv",  "bn",     "nextpane",
       "bp",     "prevpane", "theme",    "colorscheme", "colo", "minimap",
-      "search", "format",   "trim",     "help"};
+      "term",   "terminal", "termnew",  "terminalnew", "search",
+      "format", "trim",     "line",     "goto",        "help"};
   return commands;
 }
 
@@ -44,7 +45,34 @@ bool command_takes_argument(const std::string &cmd) {
   const std::string lc = to_lower_copy(cmd);
   return lc == "e" || lc == "edit" || lc == "open" || lc == "w" ||
          lc == "write" || lc == "theme" || lc == "colorscheme" ||
-         lc == "colo";
+         lc == "colo" || lc == "line" || lc == "goto";
+}
+
+bool parse_line_col(const std::string &s, int &line_out, int &col_out) {
+  if (s.empty())
+    return false;
+
+  size_t colon = s.find(':');
+  std::string line_part = (colon == std::string::npos) ? s : s.substr(0, colon);
+  std::string col_part =
+      (colon == std::string::npos) ? "" : s.substr(colon + 1);
+
+  if (line_part.empty())
+    return false;
+  for (char c : line_part) {
+    if (!std::isdigit((unsigned char)c))
+      return false;
+  }
+  if (!col_part.empty()) {
+    for (char c : col_part) {
+      if (!std::isdigit((unsigned char)c))
+        return false;
+    }
+  }
+
+  line_out = std::max(1, std::stoi(line_part));
+  col_out = col_part.empty() ? 1 : std::max(1, std::stoi(col_part));
+  return true;
 }
 
 std::string trim_copy(const std::string &s) {
@@ -282,9 +310,26 @@ void Editor::handle_command_palette(int ch) {
     arg = trim_copy(arg);
     std::string lcmd = to_lower_copy(cmd);
 
+    auto goto_line_col = [&](int line_1based, int col_1based) {
+      auto &buf = get_buffer();
+      if (buf.lines.empty()) {
+        return;
+      }
+      buf.cursor.y = std::clamp(line_1based - 1, 0, (int)buf.lines.size() - 1);
+      int line_len = (int)buf.lines[buf.cursor.y].length();
+      buf.cursor.x = std::clamp(col_1based - 1, 0, line_len);
+      clear_selection();
+      ensure_cursor_visible();
+      set_message("Jumped to line " + std::to_string(buf.cursor.y + 1) +
+                  ", col " + std::to_string(buf.cursor.x + 1));
+    };
+
+    int parsed_line = 0, parsed_col = 1;
     bool close_prompt = true;
     if (lcmd.empty()) {
       // Nothing to execute, just close.
+    } else if (parse_line_col(lcmd, parsed_line, parsed_col)) {
+      goto_line_col(parsed_line, parsed_col);
     } else if (lcmd == "q" || lcmd == "quit") {
       if (has_unsaved_buffers()) {
         show_quit_prompt = true;
@@ -324,12 +369,24 @@ void Editor::handle_command_palette(int ch) {
       prev_pane();
     } else if (lcmd == "minimap") {
       toggle_minimap();
+    } else if (lcmd == "term" || lcmd == "terminal") {
+      toggle_integrated_terminal();
+    } else if (lcmd == "termnew" || lcmd == "terminalnew") {
+      create_integrated_terminal();
     } else if (lcmd == "search") {
       toggle_search();
     } else if (lcmd == "format") {
       format_document();
     } else if (lcmd == "trim") {
       trim_trailing_whitespace();
+    } else if (lcmd == "line" || lcmd == "goto") {
+      if (arg.empty()) {
+        set_message("Usage: :line <line>[:col]");
+      } else if (parse_line_col(arg, parsed_line, parsed_col)) {
+        goto_line_col(parsed_line, parsed_col);
+      } else {
+        set_message("Invalid location: " + arg);
+      }
     } else if (lcmd == "theme" || lcmd == "colorscheme" || lcmd == "colo") {
       if (arg.empty()) {
         std::string list = "Themes: ";
@@ -349,7 +406,7 @@ void Editor::handle_command_palette(int ch) {
         }
       }
     } else if (lcmd == "help" || lcmd == "h") {
-      set_message("Commands: :w :q :wq :e <file> :bd :sp :vsp :bn :bp :theme <name>");
+      set_message("Commands: :w :q :wq :e <file> :line N[:C] :bd :sp :vsp :bn :bp :theme <name>");
     } else {
       set_message("Unknown command: " + line);
     }

@@ -4,150 +4,17 @@
 #include "autoclose.h"
 #include "bracket.h"
 #include "config.h"
-#include "editor_features.h"
+#include "editor_types.h"
 #include "imageviewer.h"
+#include "integrated_terminal.h"
 #include "telescope.h"
 #include "terminal.h"
 #include "ui.h"
 #include <filesystem>
-#include <map>
-#include <regex>
-#include <set>
-#include <stack>
+#include <memory>
 #include <string>
 #include <vector>
 // #include "python_api.h"
-
-enum PanelType {
-  PANEL_EDITOR,
-  PANEL_MINIMAP,
-  PANEL_SEARCH,
-  PANEL_COMMAND_PALETTE,
-  PANEL_TELESCOPE
-};
-
-enum EditorMode { MODE_NORMAL, MODE_INSERT, MODE_VISUAL };
-
-struct Theme {
-  int fg_default = 7;
-  int bg_default = 0;
-  int fg_keyword = 6;
-  int bg_keyword = 0;
-  int fg_string = 2;
-  int bg_string = 0;
-  int fg_comment = 8; // Grey for comments
-  int bg_comment = 0;
-  int fg_number = 5;
-  int bg_number = 0;
-  int fg_function = 3;
-  int bg_function = 0;
-  int fg_type = 6;
-  int bg_type = 0;
-  int fg_panel_border = 8; // Grey border
-  int bg_panel_border = 0; // Black background (cleaner)
-  int fg_selection = 0;
-  int bg_selection = 6;
-  int fg_line_num = 8; // Grey line numbers
-  int bg_line_num = 0;
-  int fg_cursor = 0;
-  int bg_cursor = 7;
-  int fg_status = 7;
-  int bg_status = 0; // Clean status bar
-  int fg_command = 7;
-  int bg_command = 0;
-  int fg_minimap = 8;
-  int bg_minimap = 0;
-  int fg_image_border = 7;
-  int bg_image_border = 0;
-  int fg_bracket1 = 1;
-  int fg_bracket2 = 2;
-  int fg_bracket3 = 3;
-  int fg_bracket4 = 4;
-  int fg_bracket5 = 5;
-  int fg_bracket6 = 6;
-  int fg_bracket_match = 3;
-  int bg_bracket_match = 0;
-  int fg_telescope = 7;
-  int bg_telescope = 0;
-  int fg_telescope_selected = 0;
-  int bg_telescope_selected = 6;
-  int fg_telescope_preview = 7;
-  int bg_telescope_preview = 0;
-};
-
-struct Cursor {
-  int x, y;
-  bool operator==(const Cursor &other) const {
-    return x == other.x && y == other.y;
-  }
-};
-
-struct Selection {
-  Cursor start;
-  Cursor end;
-  bool active;
-};
-
-struct State {
-  std::vector<std::string> lines;
-  Cursor cursor;
-  Selection selection;
-};
-
-/*
-struct Diagnostic {
-  int line;
-  int col;
-  int end_line;
-  int end_col;
-  std::string message;
-  int severity;
-};
-*/
-// Moved to features.h // 1=Error, 2=Warning, 3=Info, 4=Hint
-
-struct FileBuffer {
-  std::vector<std::string> lines;
-  Cursor cursor;
-  Selection selection;
-  int scroll_offset;
-  int scroll_x;
-  std::string filepath;
-  bool modified;
-  std::stack<State> undo_stack;
-  std::stack<State> redo_stack;
-  std::set<int> bookmarks;
-  std::vector<Diagnostic> diagnostics; // New
-};
-
-struct Popup {
-  bool visible;
-  std::string text;
-  int x, y;
-  int w, h;
-};
-
-struct FileNode {
-  std::string name;
-  std::string path;
-  bool is_dir;
-  bool expanded;
-  int depth;
-  std::vector<FileNode> children;
-};
-
-struct SplitPane {
-  int x, y, w, h;
-  int buffer_id;
-  bool active;
-};
-
-enum PaneLayoutMode { PANE_LAYOUT_SINGLE, PANE_LAYOUT_VERTICAL, PANE_LAYOUT_HORIZONTAL };
-
-struct SyntaxRule {
-  std::regex pattern;
-  int color;
-};
 
 class SyntaxHighlighter {
 private:
@@ -204,10 +71,14 @@ private:
   // Minimap
   bool show_minimap;
   int minimap_width;
+  bool show_integrated_terminal;
+  int integrated_terminal_height;
 
   SyntaxHighlighter highlighter;
   Config config;
   ImageViewer image_viewer;
+  std::vector<std::unique_ptr<IntegratedTerminal>> integrated_terminals;
+  int current_integrated_terminal;
   Terminal terminal;
   UI *ui;
   Theme theme;
@@ -219,9 +90,17 @@ private:
   bool auto_indent;
   bool needs_redraw;
   bool mouse_selecting;
+  enum MouseSelectionMode {
+    MOUSE_SELECT_CHAR,
+    MOUSE_SELECT_WORD,
+    MOUSE_SELECT_LINE
+  };
+  MouseSelectionMode mouse_selection_mode;
   Cursor mouse_start;
+  Cursor mouse_anchor_end;
   long long last_left_click_ms;
   Cursor last_left_click_pos;
+  int last_left_click_count;
 
   int idle_frame_count;
   int cursor_blink_frame;
@@ -283,6 +162,7 @@ private:
   void render_telescope();
   void render_minimap(int x, int y, int w, int h, int buffer_id);
   void render_image_viewer();
+  void render_integrated_terminal();
   void render_status_line();
   void render_command_palette();
   void render_search_panel();
@@ -292,6 +172,9 @@ private:
   void render_popup(); // New
   void render_input_prompt();
   void render_buffer_content(const SplitPane &pane, int buffer_id);
+  const std::vector<std::pair<int, int>> &
+  get_line_syntax_colors(FileBuffer &buf, int line_idx);
+  void invalidate_syntax_cache(FileBuffer &buf);
 
   void handle_input(int ch, bool is_ctrl = false, bool is_shift = false,
                     bool is_alt = false, int original_ch = 0);
@@ -307,6 +190,10 @@ private:
   void handle_telescope(int ch);
   void handle_save_prompt(int ch);
   void handle_input_prompt(int ch);
+  void handle_integrated_terminal_input(int ch, bool is_ctrl, bool is_shift,
+                                        bool is_alt);
+  bool handle_integrated_terminal_mouse(int x, int y);
+  void place_integrated_terminal_cursor();
   void handle_mouse(void *event);
 
   void enter_normal_mode();
@@ -333,6 +220,8 @@ private:
   void duplicate_line();
   void move_line_up();
   void move_line_down();
+  void indent_selection();
+  void outdent_selection();
   void toggle_comment();
 
   // API methods
@@ -371,21 +260,28 @@ private:
   void clamp_cursor(int buffer_id);
   void move_word_forward(bool extend_selection = false);
   void move_word_backward(bool extend_selection = false);
+  void move_to_line_smart_start(bool extend_selection = false);
   void move_to_line_start(bool extend_selection = false);
   void move_to_line_end(bool extend_selection = false);
   void move_to_file_start(bool extend_selection = false);
   void move_to_file_end(bool extend_selection = false);
   void ensure_cursor_visible(); // New method
   void select_all();
+  void select_current_line();
   void clear_selection();
 
   void open_file(const std::string &path);
+  void close_buffer_at(int index);
   void close_buffer();
   void create_new_buffer();
   void save_file();
   void save_file_as();
 
   void toggle_minimap();
+  void toggle_integrated_terminal();
+  void create_integrated_terminal();
+  void close_integrated_terminal(int index);
+  void activate_integrated_terminal(int index, bool focus = true);
   void toggle_search();
   void toggle_command_palette();
   void open_theme_chooser();
@@ -406,12 +302,14 @@ private:
   void prev_bookmark();
 
   void jump_to_matching_bracket();
+  void select_current_function();
   void format_document();
   void trim_trailing_whitespace();
   void toggle_auto_indent_setting();
   void change_tab_size(int delta);
   void apply_theme(const std::string &name, bool persist = true,
                    bool announce = true);
+  int detect_indent_width(const std::vector<std::string> &lines) const;
 
   FileBuffer &get_buffer(int id = -1);
   SplitPane &get_pane(int id = -1);
@@ -419,6 +317,7 @@ private:
   std::string get_file_extension(const std::string &path);
   std::string get_filename(const std::string &path);
   Theme &get_theme() { return theme; }
+  IntegratedTerminal *get_integrated_terminal(int index = -1);
 
   int create_pane(int x, int y, int w, int h, int buffer_id);
   void update_pane_layout();

@@ -9,6 +9,12 @@ struct MEVENT {
 
 void Editor::run() {
   while (running) {
+    for (auto &term : integrated_terminals) {
+      if (term && term->poll_output()) {
+        needs_redraw = true;
+      }
+    }
+
     render();
 
     int target_fps = needs_redraw ? render_fps : idle_fps;
@@ -26,94 +32,67 @@ void Editor::run() {
       int ch = ev.key.key;
       bool is_ctrl = ev.key.ctrl;
       bool is_shift = ev.key.shift;
+      bool is_alt = ev.key.alt;
 
       int original_ch = ch;
+
+      // Global integrated terminal toggle (Ctrl+`), handled early so it works
+      // even while overlays like command palette/search are open.
+      bool toggle_terminal_shortcut =
+          (is_ctrl && (ch == '`' || ch == '~' || ch == '\\' || ch == '|')) ||
+          ch == 0 || original_ch == 0 || ch == 28 || original_ch == 28 ||
+          ch == 29 || original_ch == 29 || ch == 30 || original_ch == 30 ||
+          ch == 31 || original_ch == 31;
+      if (toggle_terminal_shortcut) {
+        toggle_integrated_terminal();
+        continue;
+      }
 
       if (is_ctrl && ch >= 1 && ch <= 26) {
         ch = ch + 96;
       }
 
-      if (show_context_menu) {
-        if (ch == 27) {
-          show_context_menu = false;
-          needs_redraw = true;
-        }
-      } else if (show_command_palette) {
+      if (show_command_palette) {
         handle_command_palette(ch);
       } else if (show_search) {
         handle_search_panel(ch);
       } else if (telescope.is_active()) {
         handle_telescope(ch);
       } else {
-        handle_input(ch, is_ctrl, is_shift, ev.key.alt, original_ch);
+        handle_input(ch, is_ctrl, is_shift, is_alt, original_ch);
       }
     } else if (ev.type == EVENT_MOUSE) {
-      if (show_context_menu) {
-        if (ev.mouse.pressed || ev.mouse.released) {
-          int menu_x = context_menu_x;
-          int menu_y = context_menu_y;
-          int menu_w = 20;
-          int menu_h = 4;
+      int button = ev.mouse.button;
+      bool is_wheel = (button >= 64 && button <= 67);
 
-          if (ev.mouse.x >= menu_x && ev.mouse.x < menu_x + menu_w &&
-              ev.mouse.y >= menu_y && ev.mouse.y < menu_y + menu_h) {
-            int item = ev.mouse.y - menu_y - 1;
-            if (item >= 0 && item < 3) {
-              if (ev.mouse.released) {
-                if (item == 0)
-                  copy();
-                else if (item == 1)
-                  cut();
-                else if (item == 2)
-                  paste();
-                show_context_menu = false;
-                needs_redraw = true;
-              } else {
-                context_menu_selected = item;
-                needs_redraw = true;
-              }
-            } else {
-              show_context_menu = false;
-              needs_redraw = true;
-            }
-          } else {
-            show_context_menu = false;
-            needs_redraw = true;
-          }
-        }
+      if (is_wheel && !telescope.is_active() && !show_command_palette &&
+          !show_search) {
+        handle_mouse_input(ev.mouse.x, ev.mouse.y, false, button == 64,
+                           button == 65);
       } else {
-        int button = ev.mouse.button;
-        bool is_wheel = (button >= 64 && button <= 67);
+        MEVENT mevent;
+        mevent.x = ev.mouse.x;
+        mevent.y = ev.mouse.y;
+        int bstate = 0;
 
-        if (is_wheel && !telescope.is_active() && !show_command_palette &&
-            !show_search) {
-          handle_mouse_input(ev.mouse.x, ev.mouse.y, false, button == 64,
-                             button == 65);
-        } else {
-          MEVENT mevent;
-          mevent.x = ev.mouse.x;
-          mevent.y = ev.mouse.y;
-          int bstate = 0;
+        int button_code = ev.mouse.button & 0x03;
+        bool is_motion = (ev.mouse.button & 0x20) != 0;
 
-          int button_code = ev.mouse.button & 0x03;
-          bool is_motion = (ev.mouse.button & 0x20) != 0;
-
-          if (is_motion) {
-            bstate = 32;
-          } else if (ev.mouse.pressed) {
-            if (button_code == 0)
-              bstate = 1;
-            else if (button_code == 1 || button_code == 2)
-              bstate = 3;
-            else
-              bstate = 1;
-          } else if (ev.mouse.released) {
-            bstate = 2;
-          }
-
-          mevent.bstate = bstate;
-          handle_mouse(&mevent);
+        if (is_motion) {
+          bstate = 32;
+        } else if (ev.mouse.pressed) {
+          if (button_code == 0)
+            bstate = 1;
+          else if (button_code == 1 || button_code == 2)
+            bstate = 3;
+          else
+            bstate = 1;
+        } else if (ev.mouse.released) {
+          bstate = 2;
         }
+
+        mevent.bstate = bstate;
+        handle_mouse(&mevent);
       }
     }
   }

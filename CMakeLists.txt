@@ -85,10 +85,16 @@ execute_process(
 string(STRIP "${PYTHON_LDFLAGS}" PYTHON_LDFLAGS)
 separate_arguments(PYTHON_LDFLAGS_LIST UNIX_COMMAND "${PYTHON_LDFLAGS}")
 
-target_link_libraries(jot PRIVATE stdc++fs ${PYTHON_LDFLAGS_LIST})
+target_link_libraries(jot PRIVATE stdc++fs util ${PYTHON_LDFLAGS_LIST})
 
 install(TARGETS jot
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+# Keep backwards-compatible CLI name.
+install(PROGRAMS $<TARGET_FILE:jot>
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RENAME jcode
 )
 
 install(DIRECTORY python/

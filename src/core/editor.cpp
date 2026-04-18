@@ -11,6 +11,9 @@ Editor::Editor() {
   pane_layout_mode = PANE_LAYOUT_SINGLE;
   show_minimap = false;
   minimap_width = 10; // Fixed width for now
+  show_integrated_terminal = false;
+  current_integrated_terminal = -1;
+  integrated_terminal_height = std::clamp(config.get_int("terminal_height", 10), 5, 20);
   show_search = false;
   show_command_palette = false;
   command_palette_selected = 0;
@@ -37,12 +40,15 @@ Editor::Editor() {
 
   status_height = 2;
   tab_height = 1;
-  tab_size = config.get_int("tab_size", 4);
+  tab_size = config.get_int("tab_size", 2);
   auto_indent = config.get_bool("auto_indent", true);
   needs_redraw = true;
   mouse_selecting = false;
+  mouse_selection_mode = MOUSE_SELECT_CHAR;
+  mouse_anchor_end = {0, 0};
   last_left_click_ms = 0;
   last_left_click_pos = {-1, -1};
+  last_left_click_count = 0;
   idle_frame_count = 0;
   cursor_blink_frame = 0;
   cursor_visible = true;
@@ -90,6 +96,7 @@ Editor::Editor() {
   FileBuffer fb;
   fb.lines.push_back("");
   fb.cursor = {0, 0};
+  fb.preferred_x = 0;
   fb.selection = {{0, 0}, {0, 0}, false};
   fb.scroll_offset = 0;
   fb.scroll_x = 0;
@@ -99,6 +106,11 @@ Editor::Editor() {
 }
 
 Editor::~Editor() {
+  for (auto &term : integrated_terminals) {
+    if (term) {
+      term->close_shell();
+    }
+  }
   if (python_api) {
     python_api->cleanup();
     delete python_api;

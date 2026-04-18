@@ -7,6 +7,41 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
   cursor_visible = true;
   cursor_blink_frame = 0;
 
+  // Terminals encode Ctrl+` inconsistently. Accept common variants:
+  // - explicit Ctrl modifier + '`'/'~'
+  // - control code 30 (Ctrl+^ / often emitted for Ctrl+`)
+  // - keycode 0 with Ctrl flag from modifyOtherKeys paths
+  bool ctrl_backtick = (is_ctrl && (ch == '`' || original_ch == '`' ||
+                                    ch == '~' || original_ch == '~' || ch == 0 ||
+                                    original_ch == 0)) ||
+                       ch == 28 || original_ch == 28 || ch == 29 ||
+                       original_ch == 29 || ch == 30 || original_ch == 30 ||
+                       ch == 31 || original_ch == 31;
+  if (ctrl_backtick) {
+    toggle_integrated_terminal();
+    return;
+  }
+
+  IntegratedTerminal *active_terminal = get_integrated_terminal();
+  if (show_integrated_terminal && active_terminal &&
+      active_terminal->is_focused()) {
+    handle_integrated_terminal_input(ch, is_ctrl, is_shift, is_alt);
+    return;
+  }
+
+  // Reserve Ctrl+S for save so plugin keybinds cannot swallow it.
+  if ((is_ctrl && (ch == 's' || ch == 'S')) || ch == 19 || original_ch == 19) {
+    save_file();
+    needs_redraw = true;
+    return;
+  }
+
+  // Save prompt input should always receive keystrokes first.
+  if (show_save_prompt) {
+    handle_save_prompt(ch);
+    return;
+  }
+
   if (python_api) {
     std::string mode_str = "all";
     if (python_api->handle_keybind(original_ch, is_ctrl, is_shift, is_alt,
@@ -30,7 +65,7 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     }
     // Keep global/editor shortcuts usable while explorer is focused.
     // Ctrl-based keybinds are routed through insert-mode handlers.
-    if (is_ctrl || ch == 23 || ch == 12) {
+    if (is_ctrl || (ch >= 1 && ch <= 26) || ch == 23 || ch == 12) {
       handle_insert_mode(ch, is_ctrl, is_shift, is_alt);
       return;
     }
@@ -63,11 +98,6 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
       needs_redraw = true;
       set_message("Quit cancelled");
     }
-    return;
-  }
-
-  if (show_save_prompt) {
-    handle_save_prompt(ch);
     return;
   }
 

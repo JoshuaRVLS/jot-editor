@@ -59,13 +59,11 @@ void Terminal::setup_terminal() {
   write("\x1b[?25l");
   write("\x1b[2J");
   write("\x1b[H");
-  write("\x1b[>4;2m"); // Enable modifyOtherKeys mode 2
 }
 
 void Terminal::restore_terminal() {
   write("\x1b[?25h");
   write("\x1b[?1049l");
-  write("\x1b[>4m"); // Disable modifyOtherKeys
   show_cursor();
   reset_color();
   flush();
@@ -94,7 +92,7 @@ void Terminal::cleanup() {
 int Terminal::read_key() {
   char c;
   if (read(STDIN_FILENO, &c, 1) != 1)
-    return 0;
+    return -1;
 
   // Debug logging
   // std::ofstream log("key_debug.log", std::ios::app);
@@ -208,10 +206,18 @@ int Terminal::read_key() {
                 // follows that
                 if (mod == 2)
                   flags |= 0x80000;
+                else if (mod == 3)
+                  flags |= 0x40000;
+                else if (mod == 4)
+                  flags |= 0x80000 | 0x40000;
                 else if (mod == 5)
                   flags |= 0x20000;
                 else if (mod == 6)
                   flags |= 0x80000 | 0x20000;
+                else if (mod == 7)
+                  flags |= 0x40000 | 0x20000;
+                else if (mod == 8)
+                  flags |= 0x80000 | 0x40000 | 0x20000;
 
                 return key | flags;
               }
@@ -226,8 +232,18 @@ int Terminal::read_key() {
               int flags = 0;
               if (mod == 2)
                 flags |= 0x80000;
+              else if (mod == 3)
+                flags |= 0x40000;
+              else if (mod == 4)
+                flags |= 0x80000 | 0x40000;
               else if (mod == 5)
                 flags |= 0x20000;
+              else if (mod == 6)
+                flags |= 0x80000 | 0x20000;
+              else if (mod == 7)
+                flags |= 0x40000 | 0x20000;
+              else if (mod == 8)
+                flags |= 0x80000 | 0x40000 | 0x20000;
               // ...
 
               int code = 0;
@@ -283,6 +299,8 @@ int Terminal::read_key() {
           return 1013;
         case 'M':
           return 1014; // Mouse X10
+        case 'Z':
+          return 1017; // Shift+Tab
         }
       }
     } else if (seq[0] == 'O') {
@@ -371,7 +389,7 @@ Event Terminal::poll_event() {
   }
 
   int ch = read_key();
-  if (ch == 0) {
+  if (ch < 0) {
     ev.type = EVENT_REDRAW;
     return ev;
   }

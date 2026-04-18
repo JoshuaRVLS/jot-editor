@@ -3,6 +3,8 @@
 #include <cstdio>
 
 void Editor::render() {
+  IntegratedTerminal *active_terminal = get_integrated_terminal();
+
   if (!needs_redraw) {
     // Keep cursor visibility in sync even when no redraw is needed.
     if (show_command_palette || show_search || show_save_prompt ||
@@ -13,6 +15,11 @@ void Editor::render() {
         int y = ui->get_height() - 1;
         ui->set_cursor(x, y);
       }
+      return;
+    }
+    if (show_integrated_terminal && active_terminal &&
+        active_terminal->is_focused()) {
+      place_integrated_terminal_cursor();
       return;
     }
     if (show_sidebar && focus_state == FOCUS_SIDEBAR) {
@@ -70,13 +77,13 @@ void Editor::render() {
         render_sidebar();
       }
       render_panes();
+      render_integrated_terminal();
     }
 
     render_status_line();
     render_command_palette();
     render_search_panel();
     render_popup();
-    render_context_menu();
 
     if (easter_egg_timer > 0) {
       render_easter_egg();
@@ -101,6 +108,9 @@ void Editor::render() {
         int y = ui->get_height() - 1;
         ui->set_cursor(x, y);
       }
+    } else if (show_integrated_terminal && active_terminal &&
+               active_terminal->is_focused()) {
+      place_integrated_terminal_cursor();
     } else if (show_sidebar && focus_state == FOCUS_SIDEBAR) {
       ui->hide_cursor();
     } else if (!telescope.is_active()) {
