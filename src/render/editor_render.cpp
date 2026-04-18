@@ -30,7 +30,7 @@ void Editor::render() {
       auto &pane = get_pane();
       auto &buf = get_buffer(pane.buffer_id);
       int display_y = buf.cursor.y - buf.scroll_offset + pane.y + 1;
-      int display_x = buf.cursor.x - buf.scroll_x + pane.x + 7;
+      int display_x = buf.cursor.x - buf.scroll_x + pane.x + 8;
       int min_y = pane.y + 1;
       int max_y = pane.y + pane.h - 1;
       int min_x = pane.x + 1;
@@ -118,7 +118,7 @@ void Editor::render() {
         auto &pane = get_pane();
         auto &buf = get_buffer(pane.buffer_id);
         int display_y = buf.cursor.y - buf.scroll_offset + pane.y + 1;
-        int display_x = buf.cursor.x - buf.scroll_x + pane.x + 7;
+        int display_x = buf.cursor.x - buf.scroll_x + pane.x + 8;
         int min_y = pane.y + 1;
         int max_y = pane.y + pane.h - 1;
         int min_x = pane.x + 1;

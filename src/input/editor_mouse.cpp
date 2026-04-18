@@ -204,12 +204,28 @@ void Editor::handle_mouse(void *event_ptr) {
   if (inside_pane && is_click)
     focus_state = FOCUS_EDITOR;
 
-  int rel_y = event->y - pane.y - 1;
-  int rel_x = event->x - pane.x - 7;
-  if (rel_y < 0)
-    rel_y = 0;
+  int raw_rel_y = event->y - pane.y - 1;
+  int rel_y = raw_rel_y;
+  int rel_x = event->x - pane.x - 8;
   if (rel_x < 0)
     rel_x = 0;
+  int visible_rows = std::max(1, pane.h - 2);
+  int max_scroll_offset =
+      std::max(0, (int)buf.lines.size() - visible_rows);
+
+  if (bstate == 32 && mouse_selecting) {
+    if (raw_rel_y < 0) {
+      int scroll_by = std::min(buf.scroll_offset, std::max(1, -raw_rel_y));
+      buf.scroll_offset -= scroll_by;
+    } else if (raw_rel_y >= visible_rows) {
+      int remaining = max_scroll_offset - buf.scroll_offset;
+      int scroll_by =
+          std::min(remaining, std::max(1, raw_rel_y - visible_rows + 1));
+      buf.scroll_offset += scroll_by;
+    }
+  }
+
+  rel_y = std::clamp(rel_y, 0, visible_rows - 1);
 
   int click_y = rel_y + buf.scroll_offset;
   int click_x = rel_x + buf.scroll_x;
@@ -408,10 +424,6 @@ void Editor::handle_mouse(void *event_ptr) {
             !(buf.selection.start.x == buf.selection.end.x &&
               buf.selection.start.y == buf.selection.end.y);
       }
-      if (buf.cursor.y < buf.scroll_offset)
-        buf.scroll_offset = std::max(0, buf.cursor.y - 2);
-      if (buf.cursor.y >= buf.scroll_offset + pane.h - 2)
-        buf.scroll_offset = buf.cursor.y - pane.h + 3;
       needs_redraw = true;
     }
   }

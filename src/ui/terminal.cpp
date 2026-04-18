@@ -104,6 +104,14 @@ int Terminal::read_key() {
     char seq[3];
     if (!read_char_with_timeout(seq[0], 5))
       return '\x1b';
+
+    // Treat ESC + regular character as Alt+key. This is the most common way
+    // terminals encode Alt-modified letters and is much safer than trying to
+    // force Ctrl+Alt+Arrow support through terminal escape parsing.
+    if (seq[0] != '[' && seq[0] != 'O') {
+      return ((unsigned char)seq[0]) | 0x40000;
+    }
+
     if (!read_char_with_timeout(seq[1], 5))
       return '\x1b';
 

@@ -70,7 +70,7 @@ void Editor::ensure_cursor_visible() {
   }
 
   // Horizontal scrolling
-  int viewport_w = pane.w - 6; // Minus line numbers
+  int viewport_w = pane.w - 9; // Border + diagnostics gutter + line numbers
   if (show_minimap)
     viewport_w -= minimap_width;
 

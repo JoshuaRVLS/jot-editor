@@ -22,6 +22,30 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     return;
   }
 
+  if (is_alt) {
+    bool resized = false;
+    if (pane_layout_mode == PANE_LAYOUT_VERTICAL) {
+      if (ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H') {
+        resized = resize_current_pane(-2);
+      } else if (ch == 'l' || ch == 'L' || original_ch == 'l' ||
+                 original_ch == 'L') {
+        resized = resize_current_pane(2);
+      }
+    } else if (pane_layout_mode == PANE_LAYOUT_HORIZONTAL) {
+      if (ch == 'k' || ch == 'K' || original_ch == 'k' || original_ch == 'K') {
+        resized = resize_current_pane(-2);
+      } else if (ch == 'j' || ch == 'J' || original_ch == 'j' ||
+                 original_ch == 'J') {
+        resized = resize_current_pane(2);
+      }
+    }
+
+    if (resized) {
+      set_message("Pane resized");
+      return;
+    }
+  }
+
   IntegratedTerminal *active_terminal = get_integrated_terminal();
   if (show_integrated_terminal && active_terminal &&
       active_terminal->is_focused()) {

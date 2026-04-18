@@ -93,6 +93,9 @@ void IntegratedTerminal::handle_csi_sequence(char final_char) {
     current_column = 0;
     break;
   case 'J':
+    // This terminal view is line-based, not a full VT screen grid.
+    // Treat erase-display requests as a complete visible clear so
+    // commands like `clear` and Ctrl+L behave as expected.
     lines.clear();
     current_line.clear();
     current_column = 0;
@@ -130,7 +133,7 @@ bool IntegratedTerminal::open_shell() {
 
   if (pid == 0) {
     const char *shell = getenv("SHELL");
-    setenv("TERM", "dumb", 1);
+    setenv("TERM", "xterm-256color", 1);
     setenv("NO_COLOR", "1", 1);
     setenv("CLICOLOR", "0", 1);
     setenv("CLICOLOR_FORCE", "0", 1);
@@ -286,6 +289,10 @@ bool IntegratedTerminal::poll_output() {
       }
 
       if (c == '\r') {
+        current_column = 0;
+      } else if (c == '\f') {
+        lines.clear();
+        current_line.clear();
         current_column = 0;
       } else if (c == '\n') {
         push_line(current_line);

@@ -1,6 +1,156 @@
 #include "editor.h"
 #include <algorithm>
 #include <cstdio>
+#include <sstream>
+
+namespace {
+int diagnostic_severity_color(const Theme &theme, int severity) {
+  switch (severity) {
+  case 1:
+    return 1;
+  case 2:
+    return 3;
+  case 3:
+    return 6;
+  case 4:
+    return 2;
+  default:
+    return theme.fg_comment;
+  }
+}
+
+char diagnostic_severity_marker(int severity) {
+  switch (severity) {
+  case 1:
+    return 'E';
+  case 2:
+    return 'W';
+  case 3:
+    return 'I';
+  case 4:
+    return 'H';
+  default:
+    return '!';
+  }
+}
+
+std::string diagnostic_severity_label(int severity) {
+  switch (severity) {
+  case 1:
+    return "Error";
+  case 2:
+    return "Warning";
+  case 3:
+    return "Info";
+  case 4:
+    return "Hint";
+  default:
+    return "Diagnostic";
+  }
+}
+
+bool diagnostic_covers_line(const Diagnostic &diag, int line) {
+  return line >= diag.line && line <= diag.end_line;
+}
+
+const Diagnostic *find_line_diagnostic(const FileBuffer &buf, int line,
+                                       int cursor_col) {
+  const Diagnostic *best = nullptr;
+  for (const auto &diag : buf.diagnostics) {
+    if (!diagnostic_covers_line(diag, line)) {
+      continue;
+    }
+
+    bool contains_cursor = false;
+    if (line == diag.line && line == diag.end_line) {
+      contains_cursor = cursor_col >= diag.col && cursor_col <= diag.end_col;
+    } else if (line == diag.line) {
+      contains_cursor = cursor_col >= diag.col;
+    } else if (line == diag.end_line) {
+      contains_cursor = cursor_col <= diag.end_col;
+    } else {
+      contains_cursor = true;
+    }
+
+    if (contains_cursor) {
+      if (!best || diag.severity < best->severity) {
+        best = &diag;
+      }
+      continue;
+    }
+
+    if (!best) {
+      best = &diag;
+    }
+  }
+  return best;
+}
+
+int line_diagnostic_severity(const FileBuffer &buf, int line) {
+  int best = 0;
+  for (const auto &diag : buf.diagnostics) {
+    if (!diagnostic_covers_line(diag, line)) {
+      continue;
+    }
+    if (best == 0 || diag.severity < best) {
+      best = diag.severity;
+    }
+  }
+  return best;
+}
+
+std::vector<std::string> wrap_diagnostic_text(const std::string &text,
+                                              int max_width) {
+  std::vector<std::string> lines;
+  if (max_width <= 0) {
+    return lines;
+  }
+
+  std::istringstream input(text);
+  std::string source_line;
+  while (std::getline(input, source_line)) {
+    if (source_line.empty()) {
+      lines.push_back("");
+      continue;
+    }
+
+    std::istringstream words(source_line);
+    std::string word;
+    std::string current;
+    while (words >> word) {
+      if ((int)word.size() > max_width) {
+        if (!current.empty()) {
+          lines.push_back(current);
+          current.clear();
+        }
+        for (size_t i = 0; i < word.size(); i += (size_t)max_width) {
+          lines.push_back(word.substr(i, (size_t)max_width));
+        }
+        continue;
+      }
+
+      if (current.empty()) {
+        current = word;
+      } else if ((int)current.size() + 1 + (int)word.size() <= max_width) {
+        current += " " + word;
+      } else {
+        lines.push_back(current);
+        current = word;
+      }
+    }
+
+    if (!current.empty()) {
+      lines.push_back(current);
+    }
+  }
+
+  if (lines.empty()) {
+    lines.push_back(text.substr(0, (size_t)max_width));
+  }
+
+  return lines;
+}
+} // namespace
 
 void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
   auto &buf = get_buffer(buffer_id);
@@ -17,21 +167,34 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
   if (show_minimap && w > 20)
     w = std::max(1, w - minimap_width);
 
-  int line_num_width = 6;
+  int line_num_width = 7;
 
   for (int i = 0; i < h; i++) {
     int line_idx = i + buf.scroll_offset;
     int draw_y = y + i;
 
     if (line_idx < (int)buf.lines.size()) {
+      int line_diag_severity = line_diagnostic_severity(buf, line_idx);
+      char diag_marker = line_diag_severity > 0
+                             ? diagnostic_severity_marker(line_diag_severity)
+                             : ' ';
+      int diag_fg = line_diag_severity > 0
+                        ? diagnostic_severity_color(theme, line_diag_severity)
+                        : theme.fg_line_num;
+
+      ui->draw_text(x + 1, draw_y, std::string(1, diag_marker), diag_fg,
+                    theme.bg_default, line_diag_severity > 0);
+
       char num_buf[16];
       snprintf(num_buf, sizeof(num_buf), "%4d ", line_idx + 1);
       int ln_bg = theme.bg_line_num;
       int ln_fg = theme.fg_line_num;
       if (line_idx == buf.cursor.y) {
         ln_fg = theme.fg_default;
+      } else if (line_diag_severity > 0) {
+        ln_fg = diag_fg;
       }
-      ui->draw_text(x + 1, draw_y, num_buf, ln_fg, ln_bg);
+      ui->draw_text(x + 2, draw_y, num_buf, ln_fg, ln_bg);
 
       std::string &line = buf.lines[line_idx];
       int scroll_x = buf.scroll_x;
@@ -198,48 +361,54 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
     }
   }
 
-  for (const auto &diag : buf.diagnostics) {
-    int start_l = diag.line;
-    int end_l = diag.end_line;
+  if (pane.active) {
+    const Diagnostic *active_diag =
+        find_line_diagnostic(buf, buf.cursor.y, buf.cursor.x);
+    if (active_diag && diagnostic_covers_line(*active_diag, buf.cursor.y) &&
+        buf.cursor.y >= buf.scroll_offset &&
+        buf.cursor.y < buf.scroll_offset + h) {
+      const int severity_fg =
+          diagnostic_severity_color(theme, active_diag->severity);
+      const std::string header =
+          diagnostic_severity_label(active_diag->severity) + "  Ln " +
+          std::to_string(active_diag->line + 1) + ":" +
+          std::to_string(active_diag->col + 1);
 
-    if (end_l < buf.scroll_offset || start_l >= buf.scroll_offset + h)
-      continue;
+      int max_box_width = std::max(24, std::min(w - 4, 56));
+      std::vector<std::string> body_lines =
+          wrap_diagnostic_text(active_diag->message, max_box_width - 4);
+      if (body_lines.size() > 4) {
+        body_lines.resize(4);
+      }
 
-    for (int l = std::max(start_l, buf.scroll_offset);
-         l <= std::min(end_l, buf.scroll_offset + h - 1); l++) {
+      int content_width = (int)header.size();
+      for (const auto &line : body_lines) {
+        content_width = std::max(content_width, (int)line.size());
+      }
 
-      if (l < 0 || l >= (int)buf.lines.size())
-        continue;
+      int box_w = std::min(w - 2, content_width + 4);
+      int box_h = std::min(h, (int)body_lines.size() + 3);
+      if (box_w >= 8 && box_h >= 3) {
+        int cursor_draw_y = y + (buf.cursor.y - buf.scroll_offset);
+        int box_x = x + w - box_w - 1;
+        int box_y = cursor_draw_y + 1;
+        if (box_y + box_h > y + h) {
+          box_y = cursor_draw_y - box_h;
+        }
+        box_y = std::max(y, std::min(box_y, y + h - box_h));
 
-      int draw_y = y + (l - buf.scroll_offset);
-      std::string &line = buf.lines[l];
-      int line_len = line.length();
+        UIRect shadow = {box_x + 1, box_y + 1, box_w, box_h};
+        UIRect rect = {box_x, box_y, box_w, box_h};
+        ui->draw_rect(shadow, 8, 0);
+        ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
+        ui->draw_border(rect, severity_fg, theme.bg_command);
+        ui->draw_text(box_x + 2, box_y + 1, header, severity_fg,
+                      theme.bg_command, true);
 
-      int s_col = (l == start_l) ? diag.col : 0;
-      int e_col = (l == end_l) ? diag.end_col : line_len;
-
-      if (s_col > line_len)
-        s_col = line_len;
-      if (e_col > line_len)
-        e_col = line_len;
-
-      if (l == start_l) {
-        int vt_dist = 4;
-        int vis_x_end = line_len - buf.scroll_x;
-        if (vis_x_end < 0)
-          vis_x_end = 0;
-
-        int cx = x + 1 + line_num_width + vis_x_end + vt_dist;
-
-        if (cx < x + w) {
-          std::string msg = "  " + diag.message;
-          int msg_fg = 8;
-          if (diag.severity == 1)
-            msg_fg = 1;
-          else if (diag.severity == 2)
-            msg_fg = 3;
-
-          ui->draw_text(cx, draw_y, msg, msg_fg, theme.bg_default);
+        int body_limit = box_h - 2;
+        for (int i = 0; i < (int)body_lines.size() && i < body_limit - 1; i++) {
+          ui->draw_text(box_x + 2, box_y + 2 + i, body_lines[i],
+                        theme.fg_command, theme.bg_command);
         }
       }
     }
