@@ -4,7 +4,6 @@
 
 void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
   auto &buf = get_buffer(buffer_id);
-  highlighter.set_language(get_file_extension(buf.filepath));
   int x = pane.x;
   int y = pane.y + tab_height;
   int w = std::max(1, pane.w);
@@ -36,12 +35,48 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
 
       std::string &line = buf.lines[line_idx];
       int scroll_x = buf.scroll_x;
+      int current_x = x + 1 + line_num_width;
+      int visible_len = w - 2 - line_num_width;
+      int leading_ws_end = 0;
+      while (leading_ws_end < (int)line.length() &&
+             (line[leading_ws_end] == ' ' || line[leading_ws_end] == '\t')) {
+        leading_ws_end++;
+      }
+
+      auto is_in_selection = [&](int char_idx) {
+        if (!buf.selection.active)
+          return false;
+
+        Cursor p = {char_idx, line_idx};
+        Cursor s = buf.selection.start;
+        Cursor e = buf.selection.end;
+
+        if (s.y > e.y || (s.y == e.y && s.x > e.x))
+          std::swap(s, e);
+
+        if (p.y > s.y && p.y < e.y)
+          return true;
+        if (p.y == s.y && p.y == e.y)
+          return (p.x >= s.x && p.x < e.x);
+        if (p.y == s.y)
+          return (p.x >= s.x);
+        if (p.y == e.y)
+          return (p.x < e.x);
+        return false;
+      };
 
       if (scroll_x < (int)line.length()) {
-        auto colors = highlighter.get_colors(line);
-
-        int current_x = x + 1 + line_num_width;
-        int visible_len = w - 2 - line_num_width;
+        const auto &colors = get_line_syntax_colors(buf, line_idx);
+        std::vector<int> search_hit_columns;
+        if (show_search && !search_query.empty()) {
+          auto it = std::lower_bound(search_results.begin(), search_results.end(),
+                                     std::make_pair(line_idx, 0));
+          while (it != search_results.end() && it->first == line_idx) {
+            search_hit_columns.push_back(it->second);
+            ++it;
+          }
+        }
+        size_t next_search_hit = 0;
 
         auto draw_chunk = [&](int start_idx, int len, int color) {
           if (len <= 0)
@@ -60,50 +95,40 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
             int fg = color;
             int bg = theme.bg_default;
 
-            if (buf.selection.active) {
-              Cursor p = {char_idx, line_idx};
-              Cursor s = buf.selection.start;
-              Cursor e = buf.selection.end;
-
-              if (s.y > e.y || (s.y == e.y && s.x > e.x))
-                std::swap(s, e);
-
-              bool in_sel = false;
-              if (p.y > s.y && p.y < e.y)
-                in_sel = true;
-              else if (p.y == s.y && p.y == e.y) {
-                if (p.x >= s.x && p.x < e.x)
-                  in_sel = true;
-              } else if (p.y == s.y) {
-                if (p.x >= s.x)
-                  in_sel = true;
-              } else if (p.y == e.y) {
-                if (p.x < e.x)
-                  in_sel = true;
-              }
-
-              if (in_sel) {
-                bg = theme.bg_selection;
-                fg = theme.fg_selection;
-              }
+            bool in_sel = is_in_selection(char_idx);
+            if (in_sel) {
+              bg = theme.bg_selection;
+              fg = theme.fg_selection;
             }
 
-            if (show_search && !search_query.empty()) {
-              for (const auto &res : search_results) {
-                if (res.first == line_idx) {
-                  if (char_idx >= res.second &&
-                      char_idx < res.second + (int)search_query.length()) {
-                    bg = 3;
-                    fg = 0;
-                    break;
-                  }
-                } else if (res.first > line_idx) {
-                  break;
-                }
+            if (!search_hit_columns.empty()) {
+              while (next_search_hit < search_hit_columns.size() &&
+                     char_idx >=
+                         search_hit_columns[next_search_hit] +
+                             (int)search_query.length()) {
+                next_search_hit++;
+              }
+              if (next_search_hit < search_hit_columns.size() &&
+                  char_idx >= search_hit_columns[next_search_hit] &&
+                  char_idx < search_hit_columns[next_search_hit] +
+                                 (int)search_query.length()) {
+                bg = 3;
+                fg = 0;
               }
             }
 
             char c = line[char_idx];
+            bool in_leading_indent = char_idx < leading_ws_end;
+            bool indent_guide_col =
+                (c == '\t') ||
+                (c == ' ' && tab_size > 0 && ((char_idx + 1) % tab_size == 0));
+
+            if (in_leading_indent && indent_guide_col) {
+              int guide_fg = in_sel ? theme.fg_selection : theme.fg_line_num;
+              ui->draw_text(current_x + vis_idx, draw_y, "|", guide_fg, bg);
+              continue;
+            }
+
             ui->draw_text(current_x + vis_idx, draw_y, std::string(1, c), fg,
                           bg);
           }
@@ -167,6 +192,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
           }
         }
       }
+
     } else {
       ui->draw_text(x + 1, draw_y, "~", theme.fg_line_num, theme.bg_default);
     }

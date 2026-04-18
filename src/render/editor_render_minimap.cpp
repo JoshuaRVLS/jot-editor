@@ -1,5 +1,6 @@
 #include "bracket.h"
 #include "editor.h"
+#include <cctype>
 #include <cstdio>
 #include <sstream>
 
@@ -35,14 +36,11 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
   ui->fill_rect(viewport, " ", 7, theme.bg_selection);
 
   // Draw content (blocks)
-  // Ensure syntax rules are loaded
-  highlighter.set_language(get_file_extension(buf.filepath));
-
   for (int i = 0; i < h; i++) {
     int line_idx = (int)(i / ratio);
     if (line_idx < total_lines) {
-      std::string line = buf.lines[line_idx];
-      auto colors = highlighter.get_colors(line);
+      const std::string &line = buf.lines[line_idx];
+      const auto &colors = get_line_syntax_colors(buf, line_idx);
 
       int draw_x = x;
       int max_x = x + w;
@@ -94,4 +92,3 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
     }
   }
 }
-

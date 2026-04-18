@@ -1,4 +1,5 @@
 #include "editor.h"
+#include <functional>
 #include <new>
 #include <regex>
 
@@ -32,8 +33,9 @@ void SyntaxHighlighter::set_language(const std::string &ext) {
         {std::regex("/\\*([^*]|[\\r\\n]|(\\*+([^*/]|[\\r\\n])))*\\*+/"),
          3}); // Block comment (simple regex)
     rules.push_back({std::regex("\\b[0-9]+\\b"), 4});
-    rules.push_back({std::regex("\\b[A-Za-z_][A-Za-z0-9_]*\\s*\\("),
-                     6}); // Function calls -> Cyan
+    rules.push_back(
+        {std::regex("\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()"),
+         6}); // Function calls: color only the identifier, not the bracket
 
   } else if (ext == ".py") {
     // Distinct colors for import/from/as
@@ -196,8 +198,10 @@ SyntaxHighlighter::get_colors(const std::string &line) {
 
     for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
       std::smatch match = *i;
-      for (size_t pos = match.position();
-           pos < match.position() + match.length() && pos < line.length();
+      size_t start = static_cast<size_t>(match.position());
+      size_t end =
+          static_cast<size_t>(match.position() + match.length());
+      for (size_t pos = start; pos < end && pos < line.length();
            pos++) {
         colors[pos] = {1, rule.color};
       }
@@ -205,4 +209,47 @@ SyntaxHighlighter::get_colors(const std::string &line) {
   }
 
   return colors;
+}
+
+const std::vector<std::pair<int, int>> &
+Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx) {
+  static const std::vector<std::pair<int, int>> empty_colors;
+
+  if (line_idx < 0 || line_idx >= (int)buf.lines.size()) {
+    return empty_colors;
+  }
+
+  const std::string extension = get_file_extension(buf.filepath);
+  if (buf.syntax_cache_extension != extension) {
+    buf.syntax_cache_extension = extension;
+    buf.syntax_cache_line_count = buf.lines.size();
+    buf.syntax_cache.clear();
+  }
+
+  if (buf.syntax_cache_line_count != buf.lines.size()) {
+    buf.syntax_cache_line_count = buf.lines.size();
+    buf.syntax_cache.clear();
+  }
+
+  const std::string &line = buf.lines[line_idx];
+  SyntaxLineCache &cache = buf.syntax_cache[line_idx];
+  const std::size_t line_hash = std::hash<std::string>{}(line);
+
+  if (cache.valid && cache.line_hash == line_hash &&
+      cache.line_length == line.length()) {
+    return cache.colors;
+  }
+
+  highlighter.set_language(extension);
+  cache.colors = highlighter.get_colors(line);
+  cache.line_hash = line_hash;
+  cache.line_length = line.length();
+  cache.valid = true;
+  return cache.colors;
+}
+
+void Editor::invalidate_syntax_cache(FileBuffer &buf) {
+  buf.syntax_cache_extension.clear();
+  buf.syntax_cache_line_count = 0;
+  buf.syntax_cache.clear();
 }
