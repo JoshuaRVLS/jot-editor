@@ -62,13 +62,12 @@ void Editor::render_sidebar() {
   // ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
   // Loop filling to be safe similar to original
   for (int i = y; i < y + h; i++) {
-    ui->draw_text(0, i, std::string(w, ' '), theme.fg_command,
-                  theme.bg_command);
+    ui->draw_text(0, i, std::string(w, ' '), theme.fg_sidebar, theme.bg_sidebar);
   }
 
   // Border line
   for (int i = y; i < y + h; i++) {
-    ui->draw_text(w - 1, i, "|", theme.fg_panel_border, theme.bg_command);
+    ui->draw_text(w - 1, i, "|", theme.fg_sidebar_border, theme.bg_sidebar);
   }
 
   // File Tree
@@ -97,15 +96,17 @@ void Editor::render_sidebar() {
 
     std::string display = indent + icon + name;
 
-    int fg = theme.fg_command;
-    int bg = theme.bg_command;
+    int fg = node->is_dir ? theme.fg_sidebar_directory : theme.fg_sidebar;
+    int bg = theme.bg_sidebar;
 
     if (idx == file_tree_selected) {
-      fg = 0;                                      // Black text
-      bg = (focus_state == FOCUS_SIDEBAR) ? 4 : 8; // Blue or Grey
-
-      if (focus_state != FOCUS_SIDEBAR)
-        bg = 5; // Distinct inactive selection
+      if (focus_state == FOCUS_SIDEBAR) {
+        fg = theme.fg_sidebar_selected;
+        bg = theme.bg_sidebar_selected;
+      } else {
+        fg = theme.fg_sidebar_selected_inactive;
+        bg = theme.bg_sidebar_selected_inactive;
+      }
     }
 
     ui->draw_text(x + 1, y + i, display, fg, bg);

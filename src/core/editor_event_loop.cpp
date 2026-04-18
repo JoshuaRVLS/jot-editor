@@ -1,5 +1,6 @@
 #include "editor.h"
 #include <algorithm>
+#include <chrono>
 
 // Local definition of MEVENT used by handle_mouse()
 struct MEVENT {
@@ -9,6 +10,18 @@ struct MEVENT {
 
 void Editor::run() {
   while (running) {
+    const auto now = std::chrono::steady_clock::now();
+    const long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 now.time_since_epoch())
+                                 .count();
+
+    if (auto_save_enabled && auto_save_interval_ms > 0 &&
+        (last_auto_save_ms <= 0 ||
+         now_ms - last_auto_save_ms >= auto_save_interval_ms)) {
+      auto_save_modified_buffers();
+      last_auto_save_ms = now_ms;
+    }
+
     poll_lsp_clients();
 
     for (auto &term : integrated_terminals) {
@@ -42,9 +55,7 @@ void Editor::run() {
       // even while overlays like command palette/search are open.
       bool toggle_terminal_shortcut =
           (is_ctrl && (ch == '`' || ch == '~' || ch == '\\' || ch == '|')) ||
-          ch == 0 || original_ch == 0 || ch == 28 || original_ch == 28 ||
-          ch == 29 || original_ch == 29 || ch == 30 || original_ch == 30 ||
-          ch == 31 || original_ch == 31;
+          ch == 28 || original_ch == 28 || ch == 30 || original_ch == 30;
       if (toggle_terminal_shortcut) {
         toggle_integrated_terminal();
         continue;

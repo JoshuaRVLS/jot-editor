@@ -40,7 +40,7 @@ private:
   int current_pane;
   int current_buffer;
   PaneLayoutMode pane_layout_mode;
-
+  
   bool running;
   std::string message;
   std::string clipboard;
@@ -120,6 +120,13 @@ private:
   int context_menu_y;
   int context_menu_selected;
 
+  bool lsp_completion_visible;
+  bool lsp_completion_manual_request;
+  int lsp_completion_selected;
+  Cursor lsp_completion_anchor;
+  std::string lsp_completion_filepath;
+  std::vector<LSPCompletionItem> lsp_completion_items;
+
   Popup popup; // New
 
   // Custom Commands
@@ -128,6 +135,36 @@ private:
     std::string callback;
   };
   std::vector<CustomCommand> custom_commands;
+
+  struct ClosedBufferSnapshot {
+    std::string filepath;
+    std::vector<std::string> lines;
+    Cursor cursor;
+    Selection selection;
+    int scroll_offset;
+    int scroll_x;
+    bool modified;
+  };
+  std::vector<ClosedBufferSnapshot> closed_buffer_history;
+  std::vector<std::string> recent_files;
+  bool auto_save_enabled;
+  int auto_save_interval_ms;
+  long long last_auto_save_ms;
+
+  struct HomeMenuEntry {
+    int action;
+    int recent_index;
+    int x;
+    int y;
+    int w;
+  };
+  bool show_home_menu;
+  int home_menu_selected;
+  int home_menu_panel_x;
+  int home_menu_panel_y;
+  int home_menu_panel_w;
+  int home_menu_panel_h;
+  std::vector<HomeMenuEntry> home_menu_entries;
 
   // Input Prompt
   bool input_prompt_visible;
@@ -165,6 +202,7 @@ private:
   void render_panes();
   void render_easter_egg();
   void render_pane(const SplitPane &pane);
+  void render_scrollbar(const SplitPane &pane, int draw_w);
   void render_telescope();
   void render_minimap(int x, int y, int w, int h, int buffer_id);
   void render_image_viewer();
@@ -176,6 +214,7 @@ private:
   void render_save_prompt();
   void render_quit_prompt();
   void render_popup(); // New
+  void render_home_menu();
   void render_input_prompt();
   void render_buffer_content(const SplitPane &pane, int buffer_id);
   void poll_lsp_clients();
@@ -188,6 +227,10 @@ private:
   void stop_all_lsp_clients();
   void restart_all_lsp_clients();
   void show_lsp_status();
+  void request_lsp_completion(bool manual, char trigger_character = '\0');
+  void hide_lsp_completion();
+  bool apply_selected_lsp_completion();
+  void render_lsp_completion();
   std::string get_buffer_text(const FileBuffer &buf) const;
   const std::vector<std::pair<int, int>> &
   get_line_syntax_colors(FileBuffer &buf, int line_idx);
@@ -209,6 +252,8 @@ private:
   void handle_input_prompt(int ch);
   void handle_integrated_terminal_input(int ch, bool is_ctrl, bool is_shift,
                                         bool is_alt);
+  bool handle_home_menu_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
+  bool handle_home_menu_mouse(int x, int y, bool is_click);
   bool handle_integrated_terminal_mouse(int x, int y);
   void place_integrated_terminal_cursor();
   void handle_mouse(void *event);
@@ -258,6 +303,7 @@ public:
   // Sidebar methods
   void toggle_sidebar();
   void load_file_tree(const std::string &path);
+  void set_home_menu_visible(bool visible);
 
 private:
   void handle_sidebar_input(int ch);
@@ -288,11 +334,20 @@ private:
   void clear_selection();
 
   void open_file(const std::string &path);
+  void open_recent_file(const std::string &query = "");
+  void reopen_last_closed_buffer();
   void close_buffer_at(int index);
   void close_buffer();
   void create_new_buffer();
   void save_file();
+  bool save_buffer_at(int index, bool announce = true);
   void save_file_as();
+  void auto_save_modified_buffers();
+  void set_auto_save(bool enabled, bool persist = true);
+  void set_auto_save_interval(int interval_ms, bool persist = true);
+  void track_recent_file(const std::string &path);
+  void load_recent_files();
+  void save_recent_files();
 
   void toggle_minimap();
   void toggle_integrated_terminal();
@@ -325,6 +380,7 @@ private:
   void trim_trailing_whitespace();
   void toggle_auto_indent_setting();
   void change_tab_size(int delta);
+  std::vector<std::string> list_available_themes();
   void apply_theme(const std::string &name, bool persist = true,
                    bool announce = true);
   int detect_indent_width(const std::vector<std::string> &lines) const;

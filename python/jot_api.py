@@ -27,10 +27,17 @@ CONFIGS_DIR = CONFIG_HOME / "configs"
 COLORS_DIR = CONFIGS_DIR / "colors"
 PLUGINS_DIR = CONFIGS_DIR / "plugins"
 LEGACY_THEMES_DIR = CONFIG_HOME / "themes"
+RUNTIME_ROOT = Path(__file__).resolve().parent.parent
+RUNTIME_THEME_DIRS = (
+    RUNTIME_ROOT / "configs" / "colors",
+    RUNTIME_ROOT / ".configs" / "configs" / "colors",
+)
 
 _HIGHLIGHT_MAP = {
     "Normal": "default",
     "NormalFloat": "command",
+    "Search": "search_match",
+    "IncSearch": "search_match",
     "Comment": "comment",
     "Constant": "number",
     "String": "string",
@@ -56,10 +63,32 @@ _HIGHLIGHT_MAP = {
     "Visual": "selection",
     "StatusLine": "status",
     "StatusLineNC": "status",
+    "StatusLineMsg": "status_message",
     "FloatBorder": "panel_border",
     "WinSeparator": "panel_border",
+    "WinActiveBorder": "active_border",
+    "TabLine": "tab_inactive",
+    "TabLineSel": "tab_active",
+    "TabLineFill": "tab_separator",
+    "TabClose": "tab_close",
     "Pmenu": "command",
     "PmenuSel": "selection",
+    "DiagnosticError": "diagnostic_error",
+    "DiagnosticWarn": "diagnostic_warning",
+    "DiagnosticInfo": "diagnostic_info",
+    "DiagnosticHint": "diagnostic_hint",
+    "Sidebar": "sidebar",
+    "SidebarDir": "sidebar_directory",
+    "SidebarSel": "sidebar_selected",
+    "SidebarSelNC": "sidebar_selected_inactive",
+    "SidebarBorder": "sidebar_border",
+    "Terminal": "terminal",
+    "TerminalTab": "terminal_tab_inactive",
+    "TerminalTabActive": "terminal_tab_active",
+    "TerminalTabFocused": "terminal_tab_focused",
+    "TerminalTabClose": "terminal_tab_close",
+    "TerminalTabPlus": "terminal_tab_plus",
+    "TerminalTabSeparator": "terminal_tab_separator",
     "TelescopeNormal": "telescope",
     "TelescopeSelection": "telescope_selected",
     "TelescopePreviewNormal": "telescope_preview",
@@ -131,11 +160,21 @@ def set_hl(group, spec):
     bg = _normalize_theme_value(spec.get("bg"))
     set_theme_color(slot, fg, bg)
 
+def list_colorschemes():
+    names = set()
+    for directory in (COLORS_DIR, LEGACY_THEMES_DIR, *RUNTIME_THEME_DIRS):
+        if not directory.exists():
+            continue
+        for file in directory.glob("*.py"):
+            if file.name == "__init__.py":
+                continue
+            names.add(file.stem)
+    return sorted(names)
+
 def apply_colorscheme(name):
-    candidates = [
-        COLORS_DIR / f"{name}.py",
-        LEGACY_THEMES_DIR / f"{name}.py",
-    ]
+    candidates = [COLORS_DIR / f"{name}.py", LEGACY_THEMES_DIR / f"{name}.py"]
+    for runtime_dir in RUNTIME_THEME_DIRS:
+        candidates.append(runtime_dir / f"{name}.py")
     for candidate in candidates:
         if candidate.exists():
             namespace = {"__file__": str(candidate), "__name__": "__main__"}

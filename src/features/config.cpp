@@ -25,6 +25,8 @@ void Config::load_defaults() {
   settings["show_minimap"] = "true";
   settings["tab_size"] = "2";
   settings["auto_indent"] = "true";
+  settings["auto_save"] = "false";
+  settings["auto_save_interval_ms"] = "2000";
   settings["auto_detect_indent"] = "false";
   settings["show_line_numbers"] = "true";
   settings["word_wrap"] = "false";

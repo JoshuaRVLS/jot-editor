@@ -3,9 +3,16 @@
 
 #include "editor_features.h"
 #include <map>
-#include <utility>
 #include <string>
+#include <utility>
 #include <vector>
+
+struct LSPCompletionItem {
+  std::string label;
+  std::string insert_text;
+  std::string detail;
+  int kind = 0;
+};
 
 class LSPClient {
 private:
@@ -25,6 +32,9 @@ private:
   std::string last_error;
   std::vector<std::pair<std::string, std::vector<Diagnostic>>>
       pending_diagnostics;
+  std::map<int, std::string> pending_completion_requests;
+  std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>>
+      pending_completions;
 
   bool send_message(const std::string &json);
   std::string json_escape(const std::string &value) const;
@@ -46,8 +56,12 @@ public:
                 const std::string &text);
   bool did_change(const std::string &filepath, const std::string &text);
   bool did_save(const std::string &filepath, const std::string &text);
+  bool request_completion(const std::string &filepath, int line, int character,
+                          char trigger_character = '\0');
   std::vector<std::pair<std::string, std::vector<Diagnostic>>>
   consume_published_diagnostics();
+  std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>>
+  consume_completion_items();
 
   bool is_running() const { return running; }
   bool is_initialized() const { return initialized; }

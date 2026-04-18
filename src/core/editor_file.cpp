@@ -1,9 +1,46 @@
 #include "editor.h"
 #include "python_api.h"
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <dirent.h>
+#include <filesystem>
 #include <fstream>
 #include <map>
+
+namespace fs = std::filesystem;
+
+namespace {
+constexpr int kMaxRecentFiles = 50;
+constexpr int kMaxClosedBufferHistory = 20;
+
+std::string normalize_existing_path(const std::string &path) {
+  if (path.empty()) {
+    return "";
+  }
+  std::error_code ec;
+  fs::path p(path);
+  fs::path absolute = fs::absolute(p, ec);
+  if (ec) {
+    return path;
+  }
+  fs::path canonical = fs::weakly_canonical(absolute, ec);
+  if (!ec) {
+    return canonical.string();
+  }
+  return absolute.string();
+}
+
+std::string recent_files_path() {
+  const char *home = std::getenv("HOME");
+  if (!home || !*home) {
+    return "";
+  }
+  fs::path p = fs::path(home) / ".config" / "jot" / "configs" /
+               "recent_files.txt";
+  return p.string();
+}
+} // namespace
 
 void Editor::load_file(const std::string &fname) { open_file(fname); }
 
@@ -68,16 +105,30 @@ int Editor::detect_indent_width(const std::vector<std::string> &lines) const {
 }
 
 void Editor::open_file(const std::string &path) {
+  show_home_menu = false;
+  hide_lsp_completion();
+
+  const std::string normalized = normalize_existing_path(path);
+  const std::string path_to_open = normalized.empty() ? path : normalized;
+
   for (size_t i = 0; i < buffers.size(); i++) {
-    if (buffers[i].filepath == path) {
+    const std::string candidate = normalize_existing_path(buffers[i].filepath);
+    if (!candidate.empty() && candidate == path_to_open) {
       current_buffer = i;
       get_pane().buffer_id = i;
+      track_recent_file(path_to_open);
+      return;
+    }
+    if (buffers[i].filepath == path_to_open || buffers[i].filepath == path) {
+      current_buffer = i;
+      get_pane().buffer_id = i;
+      track_recent_file(path_to_open);
       return;
     }
   }
 
   FileBuffer fb;
-  fb.filepath = path;
+  fb.filepath = path_to_open;
   fb.cursor = {0, 0};
   fb.preferred_x = 0;
   fb.selection = {{0, 0}, {0, 0}, false};
@@ -85,7 +136,7 @@ void Editor::open_file(const std::string &path) {
   fb.scroll_x = 0;
   fb.modified = false;
 
-  std::ifstream file(path);
+  std::ifstream file(path_to_open);
   if (file.is_open()) {
     std::string line;
     while (std::getline(file, line)) {
@@ -112,13 +163,18 @@ void Editor::open_file(const std::string &path) {
   buffers.push_back(fb);
   current_buffer = buffers.size() - 1;
   get_pane().buffer_id = current_buffer;
+  track_recent_file(path_to_open);
 
-  highlighter.set_language(get_file_extension(path));
+  highlighter.set_language(get_file_extension(path_to_open));
   if (python_api)
-    python_api->on_buffer_open(path);
+    python_api->on_buffer_open(path_to_open);
+  notify_lsp_open(path_to_open);
 }
 
 void Editor::create_new_buffer() {
+  show_home_menu = false;
+  hide_lsp_completion();
+
   FileBuffer fb;
   fb.lines.push_back("");
   fb.cursor = {0, 0};
@@ -133,32 +189,55 @@ void Editor::create_new_buffer() {
 }
 
 void Editor::save_file() {
-  auto &buf = get_buffer();
+  const auto &buf = get_buffer();
   if (buf.filepath.empty()) {
     show_save_prompt = true;
     save_prompt_input.clear();
     needs_redraw = true;
     return;
   }
+  save_buffer_at(current_buffer, true);
+}
+
+bool Editor::save_buffer_at(int index, bool announce) {
+  if (index < 0 || index >= (int)buffers.size()) {
+    return false;
+  }
+  auto &buf = buffers[index];
+  if (buf.filepath.empty()) {
+    return false;
+  }
+
   std::ofstream file(buf.filepath);
   if (!file.is_open()) {
-    message = "Save failed: cannot open " + buf.filepath;
-    needs_redraw = true;
-    return;
+    if (announce) {
+      message = "Save failed: cannot open " + buf.filepath;
+      needs_redraw = true;
+    }
+    return false;
   }
   for (const auto &line : buf.lines) {
     file << line << '\n';
   }
   if (!file.good()) {
-    message = "Save failed: write error";
-    needs_redraw = true;
-    return;
+    if (announce) {
+      message = "Save failed: write error";
+      needs_redraw = true;
+    }
+    return false;
   }
   file.close();
+
   buf.modified = false;
-  message = "Saved: " + get_filename(buf.filepath);
+  track_recent_file(buf.filepath);
+  if (announce) {
+    message = "Saved: " + get_filename(buf.filepath);
+    needs_redraw = true;
+  }
   if (python_api)
     python_api->on_buffer_save(buf.filepath);
+  notify_lsp_save(buf.filepath);
+  return true;
 }
 
 void Editor::save_file_as() {
@@ -170,6 +249,18 @@ void Editor::save_file_as() {
 void Editor::close_buffer_at(int index) {
   if (index < 0 || index >= (int)buffers.size())
     return;
+
+  const FileBuffer &snapshot_source = buffers[index];
+  if (closed_buffer_history.size() >= kMaxClosedBufferHistory) {
+    closed_buffer_history.erase(closed_buffer_history.begin());
+  }
+  if (!snapshot_source.filepath.empty() ||
+      (snapshot_source.modified && !snapshot_source.lines.empty())) {
+    closed_buffer_history.push_back(
+        {snapshot_source.filepath, snapshot_source.lines, snapshot_source.cursor,
+         snapshot_source.selection, snapshot_source.scroll_offset,
+         snapshot_source.scroll_x, snapshot_source.modified});
+  }
 
   if (buffers.size() == 1) {
     FileBuffer &buf = buffers[0];
@@ -221,4 +312,200 @@ void Editor::close_buffer_at(int index) {
 
 void Editor::close_buffer() {
   close_buffer_at(current_buffer);
+}
+
+void Editor::reopen_last_closed_buffer() {
+  if (closed_buffer_history.empty()) {
+    set_message("No recently closed buffer");
+    return;
+  }
+
+  ClosedBufferSnapshot snap = closed_buffer_history.back();
+  closed_buffer_history.pop_back();
+
+  FileBuffer fb;
+  fb.filepath = snap.filepath;
+  fb.lines = snap.lines;
+  if (fb.lines.empty()) {
+    fb.lines.push_back("");
+  }
+  fb.cursor = snap.cursor;
+  fb.preferred_x = snap.cursor.x;
+  fb.selection = snap.selection;
+  fb.scroll_offset = std::max(0, snap.scroll_offset);
+  fb.scroll_x = std::max(0, snap.scroll_x);
+  fb.modified = snap.modified;
+
+  buffers.push_back(std::move(fb));
+  current_buffer = (int)buffers.size() - 1;
+  get_pane().buffer_id = current_buffer;
+  clamp_cursor(current_buffer);
+  ensure_cursor_visible();
+
+  if (!buffers[current_buffer].filepath.empty()) {
+    track_recent_file(buffers[current_buffer].filepath);
+    highlighter.set_language(get_file_extension(buffers[current_buffer].filepath));
+    notify_lsp_open(buffers[current_buffer].filepath);
+  }
+
+  set_message("Reopened closed buffer");
+}
+
+void Editor::track_recent_file(const std::string &path) {
+  const std::string normalized = normalize_existing_path(path);
+  if (normalized.empty()) {
+    return;
+  }
+
+  recent_files.erase(
+      std::remove(recent_files.begin(), recent_files.end(), normalized),
+      recent_files.end());
+  recent_files.insert(recent_files.begin(), normalized);
+  if ((int)recent_files.size() > kMaxRecentFiles) {
+    recent_files.resize(kMaxRecentFiles);
+  }
+}
+
+void Editor::load_recent_files() {
+  recent_files.clear();
+  const std::string path = recent_files_path();
+  if (path.empty()) {
+    return;
+  }
+
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    return;
+  }
+
+  std::string line;
+  while (std::getline(file, line)) {
+    if (line.empty()) {
+      continue;
+    }
+    const std::string normalized = normalize_existing_path(line);
+    if (normalized.empty()) {
+      continue;
+    }
+    std::error_code ec;
+    if (!fs::exists(normalized, ec) || ec) {
+      continue;
+    }
+    recent_files.push_back(normalized);
+    if ((int)recent_files.size() >= kMaxRecentFiles) {
+      break;
+    }
+  }
+}
+
+void Editor::save_recent_files() {
+  const std::string path = recent_files_path();
+  if (path.empty()) {
+    return;
+  }
+
+  std::error_code ec;
+  fs::path output_path(path);
+  fs::create_directories(output_path.parent_path(), ec);
+
+  std::ofstream file(path);
+  if (!file.is_open()) {
+    return;
+  }
+  for (const auto &entry : recent_files) {
+    file << entry << '\n';
+  }
+}
+
+void Editor::open_recent_file(const std::string &query) {
+  if (recent_files.empty()) {
+    set_message("Recent files list is empty");
+    return;
+  }
+
+  auto open_path = [&](const std::string &path) {
+    std::error_code ec;
+    if (!fs::exists(path, ec) || ec) {
+      set_message("Recent file missing: " + path);
+      recent_files.erase(
+          std::remove(recent_files.begin(), recent_files.end(), path),
+          recent_files.end());
+      return;
+    }
+    open_file(path);
+    set_message("Opened recent: " + get_filename(path));
+  };
+
+  if (query.empty()) {
+    open_path(recent_files.front());
+    return;
+  }
+
+  bool numeric = true;
+  for (char c : query) {
+    if (!std::isdigit((unsigned char)c)) {
+      numeric = false;
+      break;
+    }
+  }
+  if (numeric) {
+    int idx = std::stoi(query);
+    if (idx >= 1 && idx <= (int)recent_files.size()) {
+      open_path(recent_files[idx - 1]);
+      return;
+    }
+    set_message("Recent index out of range: " + query);
+    return;
+  }
+
+  std::string needle = query;
+  std::transform(needle.begin(), needle.end(), needle.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  for (const auto &path : recent_files) {
+    std::string haystack = path;
+    std::transform(haystack.begin(), haystack.end(), haystack.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    if (haystack.find(needle) != std::string::npos) {
+      open_path(path);
+      return;
+    }
+  }
+
+  set_message("No recent file matched: " + query);
+}
+
+void Editor::set_auto_save(bool enabled, bool persist) {
+  auto_save_enabled = enabled;
+  if (persist) {
+    config.set("auto_save", enabled ? "true" : "false");
+    config.save();
+  }
+}
+
+void Editor::set_auto_save_interval(int interval_ms, bool persist) {
+  auto_save_interval_ms = std::clamp(interval_ms, 250, 60000);
+  if (persist) {
+    config.set("auto_save_interval_ms", std::to_string(auto_save_interval_ms));
+    config.save();
+  }
+}
+
+void Editor::auto_save_modified_buffers() {
+  if (!auto_save_enabled) {
+    return;
+  }
+
+  int saved = 0;
+  for (int i = 0; i < (int)buffers.size(); i++) {
+    if (!buffers[i].modified || buffers[i].filepath.empty()) {
+      continue;
+    }
+    if (save_buffer_at(i, false)) {
+      saved++;
+    }
+  }
+
+  if (saved > 0) {
+    set_message("Auto-saved " + std::to_string(saved) + " file(s)");
+  }
 }

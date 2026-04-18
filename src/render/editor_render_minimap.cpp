@@ -13,7 +13,7 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
 
   // Draw background
   UIRect rect = {x, y, w, h};
-  ui->fill_rect(rect, " ", 7, theme.bg_minimap);
+  ui->fill_rect(rect, " ", theme.fg_minimap, theme.bg_minimap);
 
   // Simple compressed view
   int total_lines = buf.lines.size();
@@ -33,7 +33,7 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
 
   // Highlight viewport background
   UIRect viewport = {x, y + viewport_y, w, viewport_h};
-  ui->fill_rect(viewport, " ", 7, theme.bg_selection);
+  ui->fill_rect(viewport, " ", theme.fg_minimap, theme.bg_selection);
 
   // Draw content (blocks)
   for (int i = 0; i < h; i++) {
@@ -64,7 +64,7 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
 
         // Check if chunk has non-space
         bool has_code = false;
-        int chunk_color = theme.fg_default;
+        int chunk_color = theme.fg_minimap;
 
         for (size_t j = 0; j < 4 && k + j < line.length(); j++) {
           if (!std::isspace(line[k + j])) {
@@ -85,7 +85,7 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
           // Windows/Curses might need special handling but we are on Linux zsh.
           // We can use a simple pipe | or # or just unicode block.
           // Let's try unicode block.
-          ui->draw_text(draw_x, y + i, "\u2588", chunk_color, -1);
+          ui->draw_text(draw_x, y + i, "\u2588", chunk_color, theme.bg_minimap);
         }
         draw_x++;
       }

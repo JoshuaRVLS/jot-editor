@@ -3,34 +3,40 @@
 #include <cstdio>
 #include <sstream>
 
+
 namespace {
+int tab_advance(int visual_col, int tab_size) {
+  const int ts = std::max(1, tab_size);
+  const int rem = visual_col % ts;
+  return rem == 0 ? ts : (ts - rem);
+}
+
+int compute_visual_column(const std::string &line, int logical_col,
+                          int tab_size) {
+  int clamped = std::clamp(logical_col, 0, (int)line.size());
+  int visual = 0;
+  for (int i = 0; i < clamped; i++) {
+    if (line[i] == '\t') {
+      visual += tab_advance(visual, tab_size);
+    } else {
+      visual += 1;
+    }
+  }
+  return visual;
+}
+
 int diagnostic_severity_color(const Theme &theme, int severity) {
   switch (severity) {
   case 1:
-    return 1;
+    return theme.fg_diagnostic_error;
   case 2:
-    return 3;
+    return theme.fg_diagnostic_warning;
   case 3:
-    return 6;
+    return theme.fg_diagnostic_info;
   case 4:
-    return 2;
+    return theme.fg_diagnostic_hint;
   default:
     return theme.fg_comment;
-  }
-}
-
-char diagnostic_severity_marker(int severity) {
-  switch (severity) {
-  case 1:
-    return 'E';
-  case 2:
-    return 'W';
-  case 3:
-    return 'I';
-  case 4:
-    return 'H';
-  default:
-    return '!';
   }
 }
 
@@ -99,56 +105,30 @@ int line_diagnostic_severity(const FileBuffer &buf, int line) {
   return best;
 }
 
-std::vector<std::string> wrap_diagnostic_text(const std::string &text,
-                                              int max_width) {
-  std::vector<std::string> lines;
-  if (max_width <= 0) {
-    return lines;
-  }
-
-  std::istringstream input(text);
-  std::string source_line;
-  while (std::getline(input, source_line)) {
-    if (source_line.empty()) {
-      lines.push_back("");
+std::string compact_diagnostic_text(const std::string &text) {
+  std::string out;
+  out.reserve(text.size());
+  bool last_space = false;
+  for (char ch : text) {
+    const bool is_space = (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r');
+    if (is_space) {
+      if (!last_space) {
+        out.push_back(' ');
+        last_space = true;
+      }
       continue;
     }
-
-    std::istringstream words(source_line);
-    std::string word;
-    std::string current;
-    while (words >> word) {
-      if ((int)word.size() > max_width) {
-        if (!current.empty()) {
-          lines.push_back(current);
-          current.clear();
-        }
-        for (size_t i = 0; i < word.size(); i += (size_t)max_width) {
-          lines.push_back(word.substr(i, (size_t)max_width));
-        }
-        continue;
-      }
-
-      if (current.empty()) {
-        current = word;
-      } else if ((int)current.size() + 1 + (int)word.size() <= max_width) {
-        current += " " + word;
-      } else {
-        lines.push_back(current);
-        current = word;
-      }
-    }
-
-    if (!current.empty()) {
-      lines.push_back(current);
-    }
+    out.push_back(ch);
+    last_space = false;
   }
 
-  if (lines.empty()) {
-    lines.push_back(text.substr(0, (size_t)max_width));
+  while (!out.empty() && out.front() == ' ') {
+    out.erase(out.begin());
   }
-
-  return lines;
+  while (!out.empty() && out.back() == ' ') {
+    out.pop_back();
+  }
+  return out;
 }
 } // namespace
 
@@ -175,15 +155,15 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
 
     if (line_idx < (int)buf.lines.size()) {
       int line_diag_severity = line_diagnostic_severity(buf, line_idx);
-      char diag_marker = line_diag_severity > 0
-                             ? diagnostic_severity_marker(line_diag_severity)
-                             : ' ';
       int diag_fg = line_diag_severity > 0
                         ? diagnostic_severity_color(theme, line_diag_severity)
                         : theme.fg_line_num;
-
-      ui->draw_text(x + 1, draw_y, std::string(1, diag_marker), diag_fg,
-                    theme.bg_default, line_diag_severity > 0);
+      if (line_diag_severity > 0) {
+        // VSCode-like gutter accent: a solid color block instead of W/E glyphs.
+        ui->draw_text(x + 1, draw_y, " ", diag_fg, diag_fg, true);
+      } else {
+        ui->draw_text(x + 1, draw_y, " ", theme.fg_line_num, theme.bg_default);
+      }
 
       char num_buf[16];
       snprintf(num_buf, sizeof(num_buf), "%4d ", line_idx + 1);
@@ -200,6 +180,14 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
       int scroll_x = buf.scroll_x;
       int current_x = x + 1 + line_num_width;
       int visible_len = w - 2 - line_num_width;
+      std::vector<int> visual_cols(line.size() + 1, 0);
+      for (int vi = 0; vi < (int)line.size(); vi++) {
+        visual_cols[vi + 1] = visual_cols[vi] +
+                              (line[vi] == '\t' ? tab_advance(visual_cols[vi], tab_size)
+                                                : 1);
+      }
+      int clamped_scroll_x = std::clamp(scroll_x, 0, (int)line.size());
+      int start_visual = visual_cols[clamped_scroll_x];
       int leading_ws_end = 0;
       while (leading_ws_end < (int)line.length() &&
              (line[leading_ws_end] == ' ' || line[leading_ws_end] == '\t')) {
@@ -251,9 +239,11 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
             int char_idx = ch_start + k;
             if (char_idx < scroll_x)
               continue;
-            int vis_idx = char_idx - scroll_x;
+            int vis_idx = visual_cols[char_idx] - start_visual;
             if (vis_idx >= visible_len)
               break;
+            int char_w =
+                std::max(1, visual_cols[char_idx + 1] - visual_cols[char_idx]);
 
             int fg = color;
             int bg = theme.bg_default;
@@ -275,8 +265,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
                   char_idx >= search_hit_columns[next_search_hit] &&
                   char_idx < search_hit_columns[next_search_hit] +
                                  (int)search_query.length()) {
-                bg = 3;
-                fg = 0;
+                bg = theme.bg_search_match;
+                fg = theme.fg_search_match;
               }
             }
 
@@ -288,12 +278,26 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
 
             if (in_leading_indent && indent_guide_col) {
               int guide_fg = in_sel ? theme.fg_selection : theme.fg_line_num;
-              ui->draw_text(current_x + vis_idx, draw_y, "|", guide_fg, bg);
+              ui->draw_text(current_x + vis_idx, draw_y, "·", guide_fg, bg);
+              if (c == '\t') {
+                for (int fill = 1; fill < char_w && vis_idx + fill < visible_len;
+                     fill++) {
+                  ui->draw_text(current_x + vis_idx + fill, draw_y, " ", guide_fg,
+                                bg);
+                }
+              }
               continue;
             }
 
-            ui->draw_text(current_x + vis_idx, draw_y, std::string(1, c), fg,
-                          bg);
+            if (c == '\t') {
+              for (int fill = 0; fill < char_w && vis_idx + fill < visible_len;
+                   fill++) {
+                ui->draw_text(current_x + vis_idx + fill, draw_y, " ", fg, bg);
+              }
+            } else {
+              ui->draw_text(current_x + vis_idx, draw_y, std::string(1, c), fg,
+                            bg);
+            }
           }
         };
 
@@ -367,48 +371,54 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
     if (active_diag && diagnostic_covers_line(*active_diag, buf.cursor.y) &&
         buf.cursor.y >= buf.scroll_offset &&
         buf.cursor.y < buf.scroll_offset + h) {
-      const int severity_fg =
-          diagnostic_severity_color(theme, active_diag->severity);
-      const std::string header =
-          diagnostic_severity_label(active_diag->severity) + "  Ln " +
-          std::to_string(active_diag->line + 1) + ":" +
-          std::to_string(active_diag->col + 1);
+      const int code_start_x = x + 1 + line_num_width;
+      const int code_end_x = x + w - 2;
 
-      int max_box_width = std::max(24, std::min(w - 4, 56));
-      std::vector<std::string> body_lines =
-          wrap_diagnostic_text(active_diag->message, max_box_width - 4);
-      if (body_lines.size() > 4) {
-        body_lines.resize(4);
+      int anchor_col = buf.cursor.x;
+      if (buf.cursor.y < active_diag->line) {
+        anchor_col = active_diag->col;
+      } else if (buf.cursor.y > active_diag->end_line) {
+        anchor_col = active_diag->end_col;
+      } else if (buf.cursor.y == active_diag->line &&
+                 buf.cursor.y == active_diag->end_line) {
+        anchor_col =
+            std::clamp(buf.cursor.x, active_diag->col, active_diag->end_col);
+      } else if (buf.cursor.y == active_diag->line) {
+        anchor_col = std::max(buf.cursor.x, active_diag->col);
+      } else if (buf.cursor.y == active_diag->end_line) {
+        anchor_col = std::min(buf.cursor.x, active_diag->end_col);
       }
 
-      int content_width = (int)header.size();
-      for (const auto &line : body_lines) {
-        content_width = std::max(content_width, (int)line.size());
-      }
-
-      int box_w = std::min(w - 2, content_width + 4);
-      int box_h = std::min(h, (int)body_lines.size() + 3);
-      if (box_w >= 8 && box_h >= 3) {
-        int cursor_draw_y = y + (buf.cursor.y - buf.scroll_offset);
-        int box_x = x + w - box_w - 1;
-        int box_y = cursor_draw_y + 1;
-        if (box_y + box_h > y + h) {
-          box_y = cursor_draw_y - box_h;
-        }
-        box_y = std::max(y, std::min(box_y, y + h - box_h));
-
-        UIRect shadow = {box_x + 1, box_y + 1, box_w, box_h};
-        UIRect rect = {box_x, box_y, box_w, box_h};
-        ui->draw_rect(shadow, 8, 0);
-        ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
-        ui->draw_border(rect, severity_fg, theme.bg_command);
-        ui->draw_text(box_x + 2, box_y + 1, header, severity_fg,
-                      theme.bg_command, true);
-
-        int body_limit = box_h - 2;
-        for (int i = 0; i < (int)body_lines.size() && i < body_limit - 1; i++) {
-          ui->draw_text(box_x + 2, box_y + 2 + i, body_lines[i],
-                        theme.fg_command, theme.bg_command);
+      int cursor_line = std::clamp(buf.cursor.y, 0, (int)buf.lines.size() - 1);
+      const std::string &anchor_line = buf.lines[cursor_line];
+      int anchor_visual = compute_visual_column(anchor_line, anchor_col, tab_size);
+      int scroll_visual =
+          compute_visual_column(anchor_line, buf.scroll_x, tab_size);
+      int anchor_x = code_start_x + (anchor_visual - scroll_visual);
+      anchor_x = std::clamp(anchor_x, code_start_x, code_end_x);
+      int anchor_y = y + (buf.cursor.y - buf.scroll_offset);
+      int line_end_visual =
+          compute_visual_column(anchor_line, (int)anchor_line.size(), tab_size);
+      int line_end_x = code_start_x + (line_end_visual - scroll_visual);
+      // Draw diagnostics only in trailing whitespace area, never over code.
+      int inline_x = std::max(anchor_x + 2, line_end_x + 1);
+      int inline_y = std::max(y, std::min(anchor_y, y + h - 1));
+      if (inline_x <= code_end_x) {
+        int available = code_end_x - inline_x + 1;
+        if (available >= 8) {
+          std::string msg = compact_diagnostic_text(active_diag->message);
+          std::string inline_text =
+              diagnostic_severity_label(active_diag->severity) + ": " + msg;
+          if ((int)inline_text.length() > available) {
+            if (available > 3) {
+              inline_text =
+                  inline_text.substr(0, (size_t)(available - 3)) + "...";
+            } else {
+              inline_text = inline_text.substr(0, (size_t)available);
+            }
+          }
+          ui->draw_text(inline_x, inline_y, inline_text, theme.fg_comment,
+                        theme.bg_default);
         }
       }
     }

@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "python_api.h"
+#include <algorithm>
 #include <cstdio>
 #include <sstream>
 
@@ -11,7 +12,9 @@ void Editor::render_status_line() {
   ui->fill_rect(rect, " ", theme.fg_status, theme.bg_status);
 
   std::string l_text = "  ";
-  if (!buffers.empty() && current_buffer < (int)buffers.size()) {
+  if (show_home_menu) {
+    l_text += "󰚩 Home  •  Enter: Open  •  1-9: Quick Recent  •  Esc: Hide";
+  } else if (!buffers.empty() && current_buffer < (int)buffers.size()) {
     std::string name = buffers[current_buffer].filepath;
     if (name.empty())
       name = "[No Name]";
@@ -31,8 +34,12 @@ void Editor::render_status_line() {
 
   ui->draw_text(0, y, l_text, theme.fg_status, theme.bg_status, true);
 
-  // Right side — encoding only
-  std::string enc_str = "  UTF-8  ";
+  // Right side — encoding + quick status flags
+  std::string enc_str = "  UTF-8";
+  if (auto_save_enabled) {
+    enc_str += "  AS";
+  }
+  enc_str += "  ";
   int r_len = (int)enc_str.length();
 
   if (w > (int)l_text.length() + r_len + 2) {
@@ -42,7 +49,7 @@ void Editor::render_status_line() {
 
   // Message area (status line 2)
   if (!message.empty()) {
-    ui->draw_text(0, y + 1, message, theme.fg_default, theme.bg_status);
+    ui->draw_text(0, y + 1, message, theme.fg_status_message, theme.bg_status);
   }
 }
 
@@ -60,6 +67,39 @@ void Editor::render_command_palette() {
     text = text.substr(text.length() - (w - 1));
   }
   ui->draw_text(0, y, text, theme.fg_command, theme.bg_command, true);
+
+  if (!command_palette_results.empty()) {
+    int max_items = std::min(6, (int)command_palette_results.size());
+    int selected = std::clamp(command_palette_selected, 0,
+                              (int)command_palette_results.size() - 1);
+    int start_idx = std::max(0, selected - max_items + 1);
+    if (start_idx + max_items > (int)command_palette_results.size()) {
+      start_idx = std::max(0, (int)command_palette_results.size() - max_items);
+    }
+
+    int top_y = std::max(0, y - max_items);
+    for (int row = 0; row < max_items; row++) {
+      int idx = start_idx + row;
+      if (idx < 0 || idx >= (int)command_palette_results.size()) {
+        break;
+      }
+      int row_y = top_y + row;
+      bool is_selected = (idx == selected);
+      int fg = is_selected ? theme.fg_selection : theme.fg_command;
+      int bg = is_selected ? theme.bg_selection : theme.bg_command;
+
+      UIRect row_rect = {0, row_y, w, 1};
+      ui->fill_rect(row_rect, " ", fg, bg);
+
+      std::string item = command_palette_results[idx];
+      if ((int)item.size() > w - 3) {
+        item = item.substr(0, std::max(0, w - 6)) + "...";
+      }
+
+      std::string prefix = is_selected ? "> " : "  ";
+      ui->draw_text(0, row_y, prefix + item, fg, bg, is_selected);
+    }
+  }
 }
 
 void Editor::render_input_prompt() {
@@ -72,9 +112,6 @@ void Editor::render_input_prompt() {
   int y = ui->get_height() / 4;
 
   UIRect rect = {x, y, w, h};
-  UIRect shadow = {x + 1, y + 1, w, h};
-  ui->draw_rect(shadow, 8, 0);
-
   ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
   ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
 
@@ -127,9 +164,6 @@ void Editor::render_context_menu() {
     y = ui->get_height() - h;
 
   UIRect rect = {x, y, w, h};
-  UIRect shadow = {x + 1, y + 1, w, h};
-  ui->draw_rect(shadow, 8, 0);
-
   ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
   ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
 
@@ -152,9 +186,6 @@ void Editor::render_save_prompt() {
   int y = h / 2;
 
   UIRect rect = {x - 2, y - 1, (int)prompt.length() + 4, 3};
-  UIRect shadow = {rect.x + 1, rect.y + 1, rect.w, rect.h};
-  ui->draw_rect(shadow, 8, 0);
-
   ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
   ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
 
@@ -176,10 +207,6 @@ void Editor::render_quit_prompt() {
   int y = h / 2;
 
   UIRect rect = {x - 2, y - 1, (int)prompt.length() + 4, 3};
-  // Draw shadow
-  UIRect shadow = {rect.x + 1, rect.y + 1, rect.w, rect.h};
-  ui->draw_rect(shadow, 8, 0);
-
   ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
   ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
 
@@ -191,9 +218,6 @@ void Editor::render_popup() {
     return;
 
   UIRect rect = {popup.x, popup.y, popup.w, popup.h};
-  UIRect shadow = {rect.x + 1, rect.y + 1, rect.w, rect.h};
-  ui->draw_rect(shadow, 8, 0);
-
   ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
   ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
 
@@ -238,21 +262,20 @@ void Editor::render_tabs() {
       name += "+";
 
     std::string disp = " " + name + " ";
-    int bg = theme.bg_status; // Default background (Black/Dark)
-    int fg = 8;               // Grey for inactive tabs
+    int bg = theme.bg_tab_inactive;
+    int fg = theme.fg_tab_inactive;
 
     if (i == current_buffer) {
-      bg = 4; // Blue background for active tab
-      fg = 7; // White text
+      bg = theme.bg_tab_active;
+      fg = theme.fg_tab_active;
     }
 
     ui->draw_text(tab_x, y, disp, fg, bg);
     int close_x = tab_x + (int)disp.length();
-    int close_fg = buffers.size() > 1 ? 1 : fg;
+    int close_fg = buffers.size() > 1 ? theme.fg_tab_close : fg;
     ui->draw_text(close_x, y, "x", close_fg, bg);
     // Vertical separator
-    ui->draw_text(close_x + 1, y, "|", theme.fg_panel_border,
-                  theme.bg_status);
+    ui->draw_text(close_x + 1, y, "|", theme.fg_tab_separator, theme.bg_status);
 
     tab_x += (int)disp.length() + 2;
     if (tab_x >= w)

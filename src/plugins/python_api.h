@@ -135,6 +135,8 @@ public:
   void py_execute_command(const std::string &command);
   int py_reload_plugins();
   std::vector<std::string> py_list_plugins();
+  bool py_apply_colorscheme(const std::string &name);
+  std::vector<std::string> py_list_themes();
 };
 
 #endif

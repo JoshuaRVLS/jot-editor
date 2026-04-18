@@ -42,9 +42,6 @@ void Editor::render_easter_egg() {
   if (by + box_h > h) box_h = h - by;
 
   // Shadow
-  UIRect shadow = {bx + 1, by + 1, box_w, box_h};
-  ui->draw_rect(shadow, 0, 0);
-
   // Background fill (dark)
   UIRect rect = {bx, by, box_w, box_h};
   ui->fill_rect(rect, " ", 7, 0);

@@ -1,4 +1,4 @@
-#include "../src/features/editor_features.h"
+#include "jot/editor_features.hpp"
 #include "test_framework.h"
 
 TEST(TestIndentLevel) {

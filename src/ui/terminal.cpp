@@ -317,6 +317,8 @@ int Terminal::read_key() {
         return 1012;
       case 'F':
         return 1013;
+      case 'M':
+        return 13; // Keypad Enter on some terminals
       }
     }
     return '\x1b';

@@ -11,6 +11,8 @@ void Editor::format_document() {
   buf.modified = true;
   needs_redraw = true;
   message = "Formatted document";
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::trim_trailing_whitespace() {
@@ -34,6 +36,8 @@ void Editor::trim_trailing_whitespace() {
     message = "No trailing whitespace found";
   }
   needs_redraw = true;
+  if (changed > 0 && !buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::toggle_auto_indent_setting() {

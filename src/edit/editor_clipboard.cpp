@@ -69,6 +69,8 @@ void Editor::paste() {
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::move_line_up() {
@@ -99,6 +101,8 @@ void Editor::move_line_up() {
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::move_line_down() {
@@ -129,4 +133,6 @@ void Editor::move_line_down() {
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }

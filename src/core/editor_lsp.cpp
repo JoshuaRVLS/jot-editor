@@ -1,5 +1,7 @@
 #include "editor.h"
+#include "python_api.h"
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -105,6 +107,26 @@ long long now_ms() {
   return duration_cast<milliseconds>(steady_clock::now().time_since_epoch())
       .count();
 }
+
+bool is_identifier_char(char c) {
+  unsigned char uc = (unsigned char)c;
+  return std::isalnum(uc) || c == '_';
+}
+
+bool same_path(const std::string &a, const std::string &b) {
+  if (a == b) {
+    return true;
+  }
+  if (a.empty() || b.empty()) {
+    return false;
+  }
+  std::error_code ec;
+  if (fs::exists(a, ec) && fs::exists(b, ec) && fs::equivalent(a, b, ec) &&
+      !ec) {
+    return true;
+  }
+  return false;
+}
 } // namespace
 
 void Editor::poll_lsp_clients() {
@@ -142,6 +164,29 @@ void Editor::poll_lsp_clients() {
     auto published = client->consume_published_diagnostics();
     for (auto &entry : published) {
       set_diagnostics(entry.first, entry.second);
+    }
+
+    auto completions = client->consume_completion_items();
+    for (auto &entry : completions) {
+      if (buffers.empty() || current_buffer < 0 ||
+          current_buffer >= (int)buffers.size()) {
+        continue;
+      }
+
+      auto &buf = get_buffer();
+      if (!same_path(entry.first, buf.filepath)) {
+        continue;
+      }
+
+      lsp_completion_items = std::move(entry.second);
+      lsp_completion_filepath = entry.first;
+      lsp_completion_selected = 0;
+      lsp_completion_visible = !lsp_completion_items.empty();
+      if (lsp_completion_manual_request && lsp_completion_items.empty()) {
+        set_message("No suggestions");
+      }
+      lsp_completion_manual_request = false;
+      needs_redraw = true;
     }
   }
 }
@@ -303,4 +348,123 @@ void Editor::show_lsp_status() {
     }
   }
   set_message(status);
+}
+
+void Editor::hide_lsp_completion() {
+  lsp_completion_visible = false;
+  lsp_completion_manual_request = false;
+  lsp_completion_selected = 0;
+  lsp_completion_items.clear();
+  lsp_completion_filepath.clear();
+}
+
+void Editor::request_lsp_completion(bool manual, char trigger_character) {
+  auto &buf = get_buffer();
+  if (buf.filepath.empty()) {
+    if (manual) {
+      set_message("Save file first to use LSP completion");
+    }
+    return;
+  }
+
+  if (!manual) {
+    if (!(std::isalnum((unsigned char)trigger_character) ||
+          trigger_character == '_' || trigger_character == '.' ||
+          trigger_character == ':' || trigger_character == '>')) {
+      return;
+    }
+
+    int prefix_len = 0;
+    int i = std::min(buf.cursor.x, (int)buf.lines[buf.cursor.y].size());
+    while (i > 0 && is_identifier_char(buf.lines[buf.cursor.y][i - 1])) {
+      prefix_len++;
+      i--;
+    }
+    bool punctuation_trigger = trigger_character == '.' || trigger_character == ':' ||
+                               trigger_character == '>';
+    if (!punctuation_trigger && prefix_len < 2) {
+      return;
+    }
+  }
+
+  LSPClient *client = ensure_lsp_for_file(buf.filepath);
+  if (!client) {
+    if (manual) {
+      set_message("No LSP server for this file");
+    }
+    return;
+  }
+
+  // Completion must use current text state, not debounced change state.
+  lsp_pending_changes.erase(buf.filepath);
+  client->did_change(buf.filepath, get_buffer_text(buf));
+
+  char trigger = '\0';
+  if (trigger_character == '.' || trigger_character == ':' ||
+      trigger_character == '>') {
+    trigger = trigger_character;
+  }
+
+  if (!client->request_completion(buf.filepath, buf.cursor.y, buf.cursor.x,
+                                  trigger)) {
+    if (manual) {
+      set_message("LSP completion request failed");
+    }
+    return;
+  }
+
+  lsp_completion_anchor = buf.cursor;
+  lsp_completion_filepath = buf.filepath;
+  lsp_completion_manual_request = manual;
+}
+
+bool Editor::apply_selected_lsp_completion() {
+  if (!lsp_completion_visible || lsp_completion_items.empty()) {
+    return false;
+  }
+
+  auto &buf = get_buffer();
+  if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.lines.size()) {
+    hide_lsp_completion();
+    return false;
+  }
+
+  int idx = std::clamp(lsp_completion_selected, 0,
+                       (int)lsp_completion_items.size() - 1);
+  const auto &item = lsp_completion_items[idx];
+  std::string text =
+      item.insert_text.empty() ? item.label : item.insert_text;
+  if (text.empty()) {
+    hide_lsp_completion();
+    return false;
+  }
+
+  save_state();
+
+  std::string &line = buf.lines[buf.cursor.y];
+  int cursor = std::clamp(buf.cursor.x, 0, (int)line.size());
+  int start = cursor;
+  while (start > 0 && is_identifier_char(line[start - 1])) {
+    start--;
+  }
+
+  if (start < cursor) {
+    line.erase(start, cursor - start);
+    cursor = start;
+  }
+  line.insert(cursor, text);
+  buf.cursor.x = cursor + (int)text.size();
+  buf.preferred_x = buf.cursor.x;
+  buf.modified = true;
+  buf.selection.active = false;
+  ensure_cursor_visible();
+  needs_redraw = true;
+
+  if (python_api) {
+    python_api->on_buffer_change(buf.filepath, "");
+  }
+  notify_lsp_change(buf.filepath);
+
+  hide_lsp_completion();
+  return true;
 }

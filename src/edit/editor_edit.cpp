@@ -44,6 +44,8 @@ void Editor::insert_char(char c) {
         needs_redraw = true;
         if (python_api)
           python_api->on_buffer_change(buf.filepath, "");
+        if (!buf.filepath.empty())
+          notify_lsp_change(buf.filepath);
         return;
       }
     }
@@ -102,6 +104,8 @@ void Editor::insert_char(char c) {
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::insert_string(const std::string &str) {
@@ -115,6 +119,8 @@ void Editor::insert_string(const std::string &str) {
   buf.modified = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::delete_char(bool forward) {
@@ -170,6 +176,8 @@ void Editor::delete_char(bool forward) {
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::delete_word_backward() {
@@ -217,6 +225,8 @@ void Editor::delete_word_backward() {
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::delete_word_forward() {
@@ -263,6 +273,8 @@ void Editor::delete_word_forward() {
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::delete_selection() {
@@ -305,6 +317,8 @@ void Editor::delete_selection() {
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::delete_line() {
@@ -325,6 +339,8 @@ void Editor::delete_line() {
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::new_line() {
@@ -387,4 +403,6 @@ void Editor::new_line() {
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }

@@ -6,6 +6,8 @@
 #include <fcntl.h>
 #include <pty.h>
 #include <signal.h>
+#include <sys/ioctl.h>
+#include <termios.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -40,6 +42,34 @@ int parse_csi_number(const std::string &value, int fallback) {
     result = result * 10 + (c - '0');
   }
   return result;
+}
+
+termios build_shell_termios() {
+  termios tio {};
+
+  // Start with a sane interactive TTY profile for the child shell instead of
+  // inheriting editor raw mode flags from stdin.
+  tio.c_iflag = BRKINT | ICRNL | IXON | IMAXBEL;
+  tio.c_oflag = OPOST | ONLCR;
+  tio.c_cflag = CREAD | CS8;
+  tio.c_lflag = ISIG | ICANON | IEXTEN | ECHO | ECHOE | ECHOK;
+
+#ifdef ECHOCTL
+  tio.c_lflag |= ECHOCTL;
+#endif
+#ifdef ECHOKE
+  tio.c_lflag |= ECHOKE;
+#endif
+
+  tio.c_cc[VINTR] = 3;   // Ctrl+C
+  tio.c_cc[VQUIT] = 28;  // Ctrl+backslash
+  tio.c_cc[VERASE] = 127;
+  tio.c_cc[VKILL] = 21;  // Ctrl+U
+  tio.c_cc[VEOF] = 4;    // Ctrl+D
+  tio.c_cc[VMIN] = 1;
+  tio.c_cc[VTIME] = 0;
+
+  return tio;
 }
 } // namespace
 
@@ -125,8 +155,15 @@ bool IntegratedTerminal::open_shell() {
     return true;
   }
 
+  termios shell_termios = build_shell_termios();
+  winsize shell_ws {};
+  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &shell_ws) != 0) {
+    shell_ws.ws_col = 120;
+    shell_ws.ws_row = 40;
+  }
+
   int fd = -1;
-  pid_t pid = forkpty(&fd, nullptr, nullptr, nullptr);
+  pid_t pid = forkpty(&fd, nullptr, &shell_termios, &shell_ws);
   if (pid < 0) {
     return false;
   }
@@ -385,8 +422,8 @@ bool IntegratedTerminal::send_key(int ch, bool is_ctrl, bool is_shift,
     send_bytes("\x1b[F");
     return true;
   }
-  if (ch == '\n' || ch == 13) {
-    send_bytes("\r");
+  if (ch == '\n' || ch == '\r' || ch == 10 || ch == 13) {
+    send_bytes("\n");
     return true;
   }
   if (ch == '\t' || ch == 9) {
@@ -399,6 +436,11 @@ bool IntegratedTerminal::send_key(int ch, bool is_ctrl, bool is_shift,
   }
 
   if (is_ctrl && ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z'))) {
+    // Treat Ctrl+J / Ctrl+M as Enter for shells that expect newline.
+    if (ch == 'j' || ch == 'J' || ch == 'm' || ch == 'M') {
+      send_bytes("\n");
+      return true;
+    }
     unsigned char ctrl = (unsigned char)(std::tolower(ch) - 'a' + 1);
     write_all(master_fd, (const char *)&ctrl, 1);
     return true;

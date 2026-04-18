@@ -33,6 +33,8 @@ void Editor::duplicate_line() {
   buf.cursor.y++;
   buf.modified = true;
   needs_redraw = true;
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::insert_line_below() {
@@ -52,6 +54,8 @@ void Editor::insert_line_below() {
   buf.modified = true;
   needs_redraw = true;
   if (python_api) python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::insert_line_above() {
@@ -67,6 +71,8 @@ void Editor::insert_line_above() {
   buf.modified = true;
   needs_redraw = true;
   if (python_api) python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::indent_selection() {
@@ -94,6 +100,8 @@ void Editor::indent_selection() {
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 void Editor::outdent_selection() {
@@ -130,6 +138,8 @@ void Editor::outdent_selection() {
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }
 
 
@@ -171,4 +181,6 @@ void Editor::toggle_comment() {
 
   buf.modified = true;
   needs_redraw = true;
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
 }

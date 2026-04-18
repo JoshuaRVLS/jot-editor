@@ -2,14 +2,11 @@
 #include "python_api.h"
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <sstream>
 
 namespace {
-const std::vector<std::string> &theme_names() {
-  static const std::vector<std::string> names = {
-      "Dark", "Gruvbox", "Dracula", "Nord", "Solarized", "Monokai", "Light"};
-  return names;
-}
+namespace fs = std::filesystem;
 
 std::string to_lower_copy(std::string s) {
   std::transform(s.begin(), s.end(), s.begin(),
@@ -27,7 +24,8 @@ const std::vector<std::string> &ex_commands() {
       "term",   "terminal", "termnew",  "terminalnew", "search",
       "format", "trim",     "line",     "goto",        "resizeleft",
       "resizeright", "resizeup", "resizedown", "lspstart", "lspstatus",
-      "lspstop", "lsprestart", "help"};
+      "lspstop", "lsprestart", "recent", "openrecent", "reopen",
+      "reopenlast", "autosave", "help"};
   return commands;
 }
 
@@ -47,8 +45,10 @@ bool starts_with_icase(const std::string &value, const std::string &prefix) {
 bool command_takes_argument(const std::string &cmd) {
   const std::string lc = to_lower_copy(cmd);
   return lc == "e" || lc == "edit" || lc == "open" || lc == "w" ||
-         lc == "write" || lc == "theme" || lc == "colorscheme" ||
-         lc == "colo" || lc == "line" || lc == "goto";
+         lc == "write" || lc == "wq" || lc == "x" || lc == "xit" ||
+         lc == "theme" || lc == "colorscheme" ||
+         lc == "colo" || lc == "line" || lc == "goto" ||
+         lc == "openrecent" || lc == "autosave" || lc == "help" || lc == "h";
 }
 
 bool parse_line_col(const std::string &s, int &line_out, int &col_out) {
@@ -86,14 +86,53 @@ std::string trim_copy(const std::string &s) {
   return s.substr(start, end - start + 1);
 }
 
-std::string normalize_theme_name(const std::string &name) {
-  const std::string needle = to_lower_copy(trim_copy(name));
-  for (const auto &theme : theme_names()) {
-    if (to_lower_copy(theme) == needle) {
-      return theme;
-    }
+std::vector<std::string> complete_path_argument(const std::string &arg) {
+  std::vector<std::string> out;
+
+  std::string dir_part;
+  std::string name_prefix = arg;
+  size_t slash = arg.find_last_of("/\\");
+  if (slash != std::string::npos) {
+    dir_part = arg.substr(0, slash + 1);
+    name_prefix = arg.substr(slash + 1);
   }
-  return "";
+
+  std::string list_dir = dir_part.empty() ? "." : dir_part;
+  std::error_code ec;
+  fs::path base(list_dir);
+  if (!fs::exists(base, ec) || !fs::is_directory(base, ec)) {
+    return out;
+  }
+
+  for (const auto &entry : fs::directory_iterator(base, ec)) {
+    if (ec) {
+      break;
+    }
+
+    std::string name = entry.path().filename().string();
+    if (name.empty()) {
+      continue;
+    }
+    if (!name_prefix.empty() && !starts_with_icase(name, name_prefix)) {
+      continue;
+    }
+
+    std::string suggestion = dir_part + name;
+    if (entry.is_directory(ec)) {
+      suggestion += "/";
+    }
+    out.push_back(suggestion);
+  }
+
+  std::sort(out.begin(), out.end(),
+            [](const std::string &a, const std::string &b) {
+              return to_lower_copy(a) < to_lower_copy(b);
+            });
+
+  if (out.size() > 64) {
+    out.resize(64);
+  }
+  return out;
 }
 } // namespace
 
@@ -126,6 +165,12 @@ void Editor::refresh_command_palette() {
                                ? command_palette_theme_original
                                : command_palette_query;
   if (seed.empty()) {
+    for (const auto &c : ex_commands()) {
+      command_palette_results.push_back(c);
+    }
+    for (const auto &custom : custom_commands) {
+      command_palette_results.push_back(custom.name);
+    }
     return;
   }
 
@@ -170,12 +215,75 @@ void Editor::refresh_command_palette() {
 
   const std::string lcmd = to_lower_copy(cmd);
   if (lcmd == "theme" || lcmd == "colorscheme" || lcmd == "colo") {
-    for (const auto &theme : theme_names()) {
+    for (const auto &theme : list_available_themes()) {
       if (arg.empty() || starts_with_icase(theme, arg)) {
         command_palette_results.push_back(theme);
       }
     }
+  } else if (lcmd == "openrecent") {
+    for (int i = 0; i < (int)recent_files.size() && i < 12; i++) {
+      std::string idx = std::to_string(i + 1);
+      if (arg.empty() || starts_with_icase(idx, arg)) {
+        command_palette_results.push_back(idx);
+      }
+
+      std::string recent_name = get_filename(recent_files[i]);
+      if (!recent_name.empty() &&
+          (arg.empty() || starts_with_icase(recent_name, arg))) {
+        command_palette_results.push_back(recent_name);
+      }
+    }
+  } else if (lcmd == "autosave") {
+    const std::vector<std::string> opts = {"on", "off", "toggle", "status",
+                                           "250", "500", "1000", "2000",
+                                           "5000", "10000"};
+    for (const auto &opt : opts) {
+      if (arg.empty() || starts_with_icase(opt, arg)) {
+        command_palette_results.push_back(opt);
+      }
+    }
+  } else if (lcmd == "line" || lcmd == "goto") {
+    auto &buf = get_buffer();
+    int cur_line = std::max(1, buf.cursor.y + 1);
+    int cur_col = std::max(1, buf.cursor.x + 1);
+    int last_line = std::max(1, (int)buf.lines.size());
+    std::vector<std::string> opts = {
+        std::to_string(cur_line),
+        std::to_string(cur_line) + ":" + std::to_string(cur_col),
+        std::to_string(std::max(1, cur_line - 10)),
+        std::to_string(std::min(last_line, cur_line + 10)),
+        std::to_string(last_line)};
+    for (const auto &opt : opts) {
+      if (arg.empty() || starts_with_icase(opt, arg)) {
+        command_palette_results.push_back(opt);
+      }
+    }
+  } else if (lcmd == "help" || lcmd == "h") {
+    for (const auto &c : ex_commands()) {
+      if (arg.empty() || starts_with_icase(c, arg)) {
+        command_palette_results.push_back(c);
+      }
+    }
+    for (const auto &custom : custom_commands) {
+      if (arg.empty() || starts_with_icase(custom.name, arg)) {
+        command_palette_results.push_back(custom.name);
+      }
+    }
+  } else if (lcmd == "e" || lcmd == "edit" || lcmd == "open" || lcmd == "w" ||
+             lcmd == "write" || lcmd == "wq" || lcmd == "x" ||
+             lcmd == "xit") {
+    auto paths = complete_path_argument(arg);
+    command_palette_results.insert(command_palette_results.end(), paths.begin(),
+                                   paths.end());
   }
+
+  std::sort(command_palette_results.begin(), command_palette_results.end(),
+            [](const std::string &a, const std::string &b) {
+              return to_lower_copy(a) < to_lower_copy(b);
+            });
+  command_palette_results.erase(
+      std::unique(command_palette_results.begin(), command_palette_results.end()),
+      command_palette_results.end());
 }
 
 void Editor::execute_command(const std::string &cmd) {
@@ -253,7 +361,6 @@ void Editor::handle_command_palette(int ch) {
   auto reset_completion_state = [&]() {
     command_palette_theme_mode = false;
     command_palette_theme_original.clear();
-    command_palette_results.clear();
     command_palette_selected = 0;
   };
 
@@ -297,8 +404,22 @@ void Editor::handle_command_palette(int ch) {
   if (ch == 27) {
     show_command_palette = false;
     command_palette_query.clear();
+    command_palette_results.clear();
     reset_completion_state();
     needs_redraw = true;
+  } else if (ch == 1008) { // Up
+    if (!command_palette_results.empty()) {
+      command_palette_selected =
+          (command_palette_selected - 1 + (int)command_palette_results.size()) %
+          (int)command_palette_results.size();
+      needs_redraw = true;
+    }
+  } else if (ch == 1009) { // Down
+    if (!command_palette_results.empty()) {
+      command_palette_selected =
+          (command_palette_selected + 1) % (int)command_palette_results.size();
+      needs_redraw = true;
+    }
   } else if (ch == '\n' || ch == 13) {
     auto has_unsaved_buffers = [&]() {
       for (const auto &b : buffers) {
@@ -400,6 +521,63 @@ void Editor::handle_command_palette(int ch) {
       stop_all_lsp_clients();
     } else if (lcmd == "lsprestart") {
       restart_all_lsp_clients();
+    } else if (lcmd == "recent") {
+      if (recent_files.empty()) {
+        set_message("Recent files: none");
+      } else {
+        std::string list = "Recent: ";
+        int shown = std::min(8, (int)recent_files.size());
+        for (int i = 0; i < shown; i++) {
+          if (i > 0) {
+            list += " | ";
+          }
+          list += std::to_string(i + 1) + ":" + get_filename(recent_files[i]);
+        }
+        if ((int)recent_files.size() > shown) {
+          list += " | ...";
+        }
+        set_message(list);
+      }
+    } else if (lcmd == "openrecent") {
+      open_recent_file(arg);
+    } else if (lcmd == "reopen" || lcmd == "reopenlast") {
+      reopen_last_closed_buffer();
+    } else if (lcmd == "autosave") {
+      if (arg.empty() || to_lower_copy(arg) == "status") {
+        set_message("Auto-save: " +
+                    std::string(auto_save_enabled ? "ON" : "OFF") + " (" +
+                    std::to_string(auto_save_interval_ms) + "ms)");
+      } else {
+        std::string mode = to_lower_copy(arg);
+        if (mode == "on" || mode == "true" || mode == "1") {
+          set_auto_save(true);
+          set_message("Auto-save enabled (" +
+                      std::to_string(auto_save_interval_ms) + "ms)");
+        } else if (mode == "off" || mode == "false" || mode == "0") {
+          set_auto_save(false);
+          set_message("Auto-save disabled");
+        } else if (mode == "toggle") {
+          set_auto_save(!auto_save_enabled);
+          set_message("Auto-save: " +
+                      std::string(auto_save_enabled ? "ON" : "OFF") + " (" +
+                      std::to_string(auto_save_interval_ms) + "ms)");
+        } else {
+          bool numeric = true;
+          for (char c : mode) {
+            if (!std::isdigit((unsigned char)c)) {
+              numeric = false;
+              break;
+            }
+          }
+          if (numeric) {
+            set_auto_save_interval(std::stoi(mode));
+            set_message("Auto-save interval set to " +
+                        std::to_string(auto_save_interval_ms) + "ms");
+          } else {
+            set_message("Usage: :autosave [on|off|toggle|status|<ms>]");
+          }
+        }
+      }
     } else if (lcmd == "search") {
       toggle_search();
     } else if (lcmd == "format") {
@@ -439,25 +617,37 @@ void Editor::handle_command_palette(int ch) {
         set_message("Pane resized down");
       }
     } else if (lcmd == "theme" || lcmd == "colorscheme" || lcmd == "colo") {
+      const auto themes = list_available_themes();
       if (arg.empty()) {
-        std::string list = "Themes: ";
-        const auto &themes = theme_names();
-        for (size_t i = 0; i < themes.size(); i++) {
-          if (i > 0)
-            list += ", ";
-          list += themes[i];
+        if (themes.empty()) {
+          set_message("No themes found");
+        } else {
+          std::string list = "Themes: ";
+          for (size_t i = 0; i < themes.size(); i++) {
+            if (i > 0)
+              list += ", ";
+            list += themes[i];
+          }
+          set_message(list);
         }
-        set_message(list);
       } else {
-        std::string theme = normalize_theme_name(arg);
-        if (theme.empty()) {
+        std::string theme = trim_copy(arg);
+        std::string resolved;
+        const std::string needle = to_lower_copy(theme);
+        for (const auto &candidate : themes) {
+          if (to_lower_copy(candidate) == needle) {
+            resolved = candidate;
+            break;
+          }
+        }
+        if (resolved.empty()) {
           set_message("Unknown theme: " + arg);
         } else {
-          apply_theme(theme);
+          apply_theme(resolved);
         }
       }
     } else if (lcmd == "help" || lcmd == "h") {
-      set_message("Commands: :w :q :wq :e <file> :line N[:C] :bd :sp :vsp :bn :bp :resizeleft :resizeright :resizeup :resizedown :lspstart :lspstatus :lspstop :lsprestart :theme <name>");
+      set_message("Commands: :w :q :wq :e <file> :line N[:C] :bd :sp :vsp :bn :bp :recent :openrecent [n] :reopen :autosave [on/off/ms] :lspstart :lspstatus :lspstop :lsprestart :theme <name>");
     } else {
       bool handled_custom = false;
       for (const auto &custom : custom_commands) {
@@ -480,6 +670,7 @@ void Editor::handle_command_palette(int ch) {
       show_command_palette = false;
       command_palette_query.clear();
     }
+    command_palette_results.clear();
     reset_completion_state();
     needs_redraw = true;
   } else if (ch == '\t' || ch == 9) {
@@ -492,6 +683,7 @@ void Editor::handle_command_palette(int ch) {
     refresh_command_palette();
     if (command_palette_results.empty()) {
       set_message("No completion");
+      command_palette_results.clear();
       reset_completion_state();
     } else {
       if (command_palette_selected >= (int)command_palette_results.size()) {
@@ -506,11 +698,13 @@ void Editor::handle_command_palette(int ch) {
     if (!command_palette_query.empty()) {
       command_palette_query.pop_back();
       reset_completion_state();
+      command_palette_results.clear();
       needs_redraw = true;
     }
   } else if (ch >= 32 && ch < 127) {
     command_palette_query += ch;
     reset_completion_state();
+    command_palette_results.clear();
     needs_redraw = true;
   }
 }

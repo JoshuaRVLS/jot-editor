@@ -1,23 +1,8 @@
-import os
-from pathlib import Path
-
 import jot_api
-
-THEME_DIRS = [
-    Path(jot_api.colors_path()),
-    Path(os.path.expanduser("~/.config/jot/themes")),
-]
 
 
 def get_available_themes():
-    names = set()
-    for directory in THEME_DIRS:
-        if not directory.exists():
-            continue
-        for file in directory.glob("*.py"):
-            if file.name != "__init__.py":
-                names.add(file.stem)
-    return sorted(names)
+    return jot_api.list_colorschemes()
 
 
 def theme_input_callback(choice):

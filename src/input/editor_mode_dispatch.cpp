@@ -8,18 +8,26 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
   cursor_blink_frame = 0;
 
   // Terminals encode Ctrl+` inconsistently. Accept common variants:
-  // - explicit Ctrl modifier + '`'/'~'
-  // - control code 30 (Ctrl+^ / often emitted for Ctrl+`)
-  // - keycode 0 with Ctrl flag from modifyOtherKeys paths
-  bool ctrl_backtick = (is_ctrl && (ch == '`' || original_ch == '`' ||
-                                    ch == '~' || original_ch == '~' || ch == 0 ||
-                                    original_ch == 0)) ||
-                       ch == 28 || original_ch == 28 || ch == 29 ||
-                       original_ch == 29 || ch == 30 || original_ch == 30 ||
-                       ch == 31 || original_ch == 31;
+  // - explicit Ctrl modifier + '`'/'~' (and fallback Ctrl+\ for layouts where
+  //   backtick is hard to emit)
+  // - control code 30 (Ctrl+^ / sometimes emitted for Ctrl+`)
+  bool ctrl_backtick =
+      (is_ctrl && (ch == '`' || original_ch == '`' || ch == '~' ||
+                   original_ch == '~' || ch == '\\' || original_ch == '\\' ||
+                   ch == '|' || original_ch == '|')) ||
+      ch == 28 || original_ch == 28 || ch == 30 || original_ch == 30;
   if (ctrl_backtick) {
+    if (show_home_menu) {
+      show_home_menu = false;
+    }
     toggle_integrated_terminal();
     return;
+  }
+
+  if (show_home_menu) {
+    if (handle_home_menu_input(ch, is_ctrl, is_shift, is_alt)) {
+      return;
+    }
   }
 
   if (is_alt) {

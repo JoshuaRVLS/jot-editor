@@ -28,6 +28,28 @@ static int compare_cursor_pos(const Cursor &a, const Cursor &b) {
 
 void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
                                 bool is_scroll_down) {
+  if (show_home_menu) {
+    if (is_click) {
+      handle_home_menu_mouse(x, y, true);
+      return;
+    }
+
+    if (is_scroll_up && !home_menu_entries.empty()) {
+      home_menu_selected =
+          (home_menu_selected - 1 + (int)home_menu_entries.size()) %
+          (int)home_menu_entries.size();
+      needs_redraw = true;
+      return;
+    }
+    if (is_scroll_down && !home_menu_entries.empty()) {
+      home_menu_selected =
+          (home_menu_selected + 1) % (int)home_menu_entries.size();
+      needs_redraw = true;
+      return;
+    }
+    return;
+  }
+
   if (show_sidebar) {
     if (x < sidebar_width) {
       if (is_scroll_up) {
@@ -102,6 +124,15 @@ void Editor::handle_mouse(void *event_ptr) {
     return;
 
   bool is_click = (bstate == 1);
+
+  if (show_home_menu) {
+    if (handle_home_menu_mouse(event->x, event->y, is_click)) {
+      return;
+    }
+    if (show_home_menu) {
+      return;
+    }
+  }
 
   if (show_sidebar && is_click) {
     if (event->x < sidebar_width && event->y >= tab_height &&
@@ -305,6 +336,7 @@ void Editor::handle_mouse(void *event_ptr) {
     idle_frame_count = 0;
     cursor_visible = true;
     cursor_blink_frame = 0;
+    hide_lsp_completion();
     auto now = std::chrono::steady_clock::now();
     long long now_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -380,6 +412,7 @@ void Editor::handle_mouse(void *event_ptr) {
     idle_frame_count = 0;
     cursor_visible = true;
     cursor_blink_frame = 0;
+    hide_lsp_completion();
     if (mouse_selecting) {
       const bool had_drag_range = !(buf.selection.start == buf.selection.end);
 
@@ -411,6 +444,7 @@ void Editor::handle_mouse(void *event_ptr) {
     idle_frame_count = 0;
     cursor_visible = true;
     cursor_blink_frame = 0;
+    hide_lsp_completion();
     if (mouse_selecting) {
       if (mouse_selection_mode == MOUSE_SELECT_WORD) {
         set_word_selection(mouse_start, mouse_anchor_end, {click_x, click_y});

@@ -240,8 +240,8 @@ void Editor::render_integrated_terminal() {
   int panel_w = ui->get_width();
   UIRect panel = {0, panel_y, panel_w, panel_h};
 
-  ui->fill_rect(panel, " ", theme.fg_command, theme.bg_command);
-  ui->draw_border(panel, theme.fg_panel_border, theme.bg_command);
+  ui->fill_rect(panel, " ", theme.fg_terminal, theme.bg_terminal);
+  ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal);
 
   int tab_y = panel_y + 1;
   int tab_x = 1;
@@ -249,9 +249,14 @@ void Editor::render_integrated_terminal() {
     std::string label = " term " + std::to_string(i + 1) + " ";
     bool active = (i == current_integrated_terminal);
     bool focused = active && integrated_terminals[i]->is_focused();
-    int fg = active ? theme.fg_default : theme.fg_status;
-    int bg = focused ? theme.bg_selection
-                     : (active ? theme.bg_status : theme.bg_command);
+    int fg = focused
+                 ? theme.fg_terminal_tab_focused
+                 : (active ? theme.fg_terminal_tab_active
+                           : theme.fg_terminal_tab_inactive);
+    int bg = focused
+                 ? theme.bg_terminal_tab_focused
+                 : (active ? theme.bg_terminal_tab_active
+                           : theme.bg_terminal_tab_inactive);
 
     if (tab_x + (int)label.size() + 2 >= panel_w) {
       break;
@@ -259,16 +264,17 @@ void Editor::render_integrated_terminal() {
 
     ui->draw_text(tab_x, tab_y, label, fg, bg, active);
     int close_x = tab_x + (int)label.size();
-    int close_fg = ((int)integrated_terminals.size() > 1) ? 1 : fg;
+    int close_fg =
+        ((int)integrated_terminals.size() > 1) ? theme.fg_terminal_tab_close : fg;
     ui->draw_text(close_x, tab_y, "x", close_fg, bg);
-    ui->draw_text(close_x + 1, tab_y, "|", theme.fg_panel_border,
-                  theme.bg_command);
+    ui->draw_text(close_x + 1, tab_y, "|", theme.fg_terminal_tab_separator,
+                  theme.bg_terminal);
     tab_x += (int)label.size() + 2;
   }
 
   if (tab_x + 3 < panel_w) {
-    ui->draw_text(tab_x, tab_y, " + ", theme.fg_command, theme.bg_status,
-                  true);
+    ui->draw_text(tab_x, tab_y, " + ", theme.fg_terminal_tab_plus,
+                  theme.bg_terminal_tab_plus, true);
   }
 
   int content_h = std::max(1, panel_h - 3);
@@ -284,6 +290,6 @@ void Editor::render_integrated_terminal() {
     if ((int)line.size() > panel_w - 2) {
       line = line.substr(std::max(0, (int)line.size() - (panel_w - 2)));
     }
-    ui->draw_text(1, start_y + i, line, theme.fg_default, theme.bg_command);
+    ui->draw_text(1, start_y + i, line, theme.fg_terminal, theme.bg_terminal);
   }
 }

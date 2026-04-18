@@ -2,10 +2,83 @@
 #include "editor.h"
 #include <cstdio>
 
+namespace {
+constexpr int kLineNumberGutterWidth = 7;
+
+int tab_advance(int visual_col, int tab_size) {
+  const int ts = std::max(1, tab_size);
+  const int rem = visual_col % ts;
+  return rem == 0 ? ts : (ts - rem);
+}
+
+int compute_visual_column(const std::string &line, int logical_col,
+                          int tab_size) {
+  int clamped = std::clamp(logical_col, 0, (int)line.size());
+  int visual = 0;
+  for (int i = 0; i < clamped; i++) {
+    if (line[i] == '\t') {
+      visual += tab_advance(visual, tab_size);
+    } else {
+      visual += 1;
+    }
+  }
+  return visual;
+}
+
+void compute_code_cursor_screen_pos(const SplitPane &pane, const FileBuffer &buf,
+                                    bool show_minimap, int minimap_width,
+                                    int tab_size,
+                                    int &display_x, int &display_y) {
+  int draw_w = std::max(1, pane.w);
+  if (show_minimap && draw_w > 20) {
+    draw_w = std::max(1, draw_w - minimap_width);
+  }
+
+  const int code_start_x = pane.x + 1 + kLineNumberGutterWidth;
+  const int code_end_x = pane.x + draw_w - 2;
+  const int min_y = pane.y + 1;
+  int max_y = pane.y + pane.h - 1;
+
+  display_y = buf.cursor.y - buf.scroll_offset + pane.y + 1;
+
+  int logical_cursor_x = buf.cursor.x;
+  int logical_scroll_x = buf.scroll_x;
+  if (buf.cursor.y >= 0 && buf.cursor.y < (int)buf.lines.size()) {
+    const std::string &line = buf.lines[buf.cursor.y];
+    int cursor_visual = compute_visual_column(line, logical_cursor_x, tab_size);
+    int scroll_visual = compute_visual_column(line, logical_scroll_x, tab_size);
+    display_x = code_start_x + (cursor_visual - scroll_visual);
+  } else {
+    display_x = code_start_x + (logical_cursor_x - logical_scroll_x);
+  }
+
+  if (max_y < min_y)
+    max_y = min_y;
+  if (display_y < min_y)
+    display_y = min_y;
+  if (display_y > max_y)
+    display_y = max_y;
+
+  if (code_end_x < code_start_x) {
+    display_x = code_start_x;
+    return;
+  }
+  if (display_x < code_start_x)
+    display_x = code_start_x;
+  if (display_x > code_end_x)
+    display_x = code_end_x;
+}
+} // namespace
+
 void Editor::render() {
   IntegratedTerminal *active_terminal = get_integrated_terminal();
 
   if (!needs_redraw) {
+    if (show_home_menu) {
+      ui->hide_cursor();
+      return;
+    }
+
     // Keep cursor visibility in sync even when no redraw is needed.
     if (show_command_palette || show_search || show_save_prompt ||
         show_quit_prompt) {
@@ -29,24 +102,11 @@ void Editor::render() {
     if (!telescope.is_active() && !panes.empty()) {
       auto &pane = get_pane();
       auto &buf = get_buffer(pane.buffer_id);
-      int display_y = buf.cursor.y - buf.scroll_offset + pane.y + 1;
-      int display_x = buf.cursor.x - buf.scroll_x + pane.x + 8;
-      int min_y = pane.y + 1;
-      int max_y = pane.y + pane.h - 1;
-      int min_x = pane.x + 1;
-      int max_x = pane.x + pane.w - 2;
-      if (max_y < min_y)
-        max_y = min_y;
-      if (max_x < min_x)
-        max_x = min_x;
-      if (display_y < min_y)
-        display_y = min_y;
-      if (display_y > max_y)
-        display_y = max_y;
-      if (display_x < min_x)
-        display_x = min_x;
-      if (display_x > max_x)
-        display_x = max_x;
+      int display_x = 0;
+      int display_y = 0;
+      compute_code_cursor_screen_pos(pane, buf, show_minimap, minimap_width,
+                                     tab_size,
+                                     display_x, display_y);
       ui->set_cursor(display_x, display_y);
     }
     return;
@@ -54,6 +114,15 @@ void Editor::render() {
 
   ui->clear();
   int w = ui->get_width();
+
+  if (show_home_menu) {
+    render_home_menu();
+    render_status_line();
+    ui->render();
+    ui->hide_cursor();
+    needs_redraw = false;
+    return;
+  }
 
   render_tabs();
   update_pane_layout();
@@ -77,6 +146,7 @@ void Editor::render() {
         render_sidebar();
       }
       render_panes();
+      render_lsp_completion();
       render_integrated_terminal();
     }
 
@@ -117,24 +187,11 @@ void Editor::render() {
       if (!panes.empty()) {
         auto &pane = get_pane();
         auto &buf = get_buffer(pane.buffer_id);
-        int display_y = buf.cursor.y - buf.scroll_offset + pane.y + 1;
-        int display_x = buf.cursor.x - buf.scroll_x + pane.x + 8;
-        int min_y = pane.y + 1;
-        int max_y = pane.y + pane.h - 1;
-        int min_x = pane.x + 1;
-        int max_x = pane.x + pane.w - 2;
-        if (max_y < min_y)
-          max_y = min_y;
-        if (max_x < min_x)
-          max_x = min_x;
-        if (display_y < min_y)
-          display_y = min_y;
-        if (display_y > max_y)
-          display_y = max_y;
-        if (display_x < min_x)
-          display_x = min_x;
-        if (display_x > max_x)
-          display_x = max_x;
+        int display_x = 0;
+        int display_y = 0;
+        compute_code_cursor_screen_pos(pane, buf, show_minimap, minimap_width,
+                                       tab_size,
+                                       display_x, display_y);
         ui->set_cursor(display_x, display_y);
       }
     }
@@ -150,22 +207,65 @@ void Editor::render_panes() {
 }
 
 void Editor::render_pane(const SplitPane &pane) {
-  int w = std::max(1, pane.w);
+  int draw_w = std::max(1, pane.w);
   if (pane.h <= 0)
     return;
 
-  if (show_minimap && w > 20) {
-    w = std::max(1, w - minimap_width);
+  if (show_minimap && draw_w > 20) {
+    draw_w = std::max(1, draw_w - minimap_width);
   }
 
   render_buffer_content(pane, pane.buffer_id);
 
   if (show_minimap && pane.w > 20) {
-    render_minimap(pane.x + w, pane.y + 1, minimap_width, pane.h - 1,
+    render_minimap(pane.x + draw_w, pane.y + 1, minimap_width, pane.h - 1,
                    pane.buffer_id);
   }
 
-  UIRect rect = {pane.x, pane.y, w, pane.h};
-  int border_fg = pane.active ? theme.fg_bracket_match : theme.fg_panel_border;
-  ui->draw_border(rect, border_fg, theme.bg_panel_border);
+  UIRect rect = {pane.x, pane.y, draw_w, pane.h};
+  int border_fg = pane.active ? theme.fg_active_border : theme.fg_panel_border;
+  int border_bg = pane.active ? theme.bg_active_border : theme.bg_panel_border;
+  ui->draw_border(rect, border_fg, border_bg);
+  render_scrollbar(pane, draw_w);
+}
+
+void Editor::render_scrollbar(const SplitPane &pane, int draw_w) {
+  if (draw_w < 3) {
+    return;
+  }
+
+  auto &buf = get_buffer(pane.buffer_id);
+
+  const int track_x = pane.x + draw_w - 1;
+  const int track_y = pane.y + tab_height;
+  const int track_h = std::max(0, pane.h - tab_height - 1);
+  if (track_h <= 0) {
+    return;
+  }
+
+  const int total_lines = std::max(1, (int)buf.lines.size());
+  const int visible_lines = std::max(1, track_h);
+  const int max_scroll = std::max(0, total_lines - visible_lines);
+  const int clamped_scroll = std::clamp(buf.scroll_offset, 0, max_scroll);
+
+  int thumb_h = track_h;
+  if (max_scroll > 0) {
+    thumb_h = std::max(1, (visible_lines * visible_lines) / total_lines);
+    thumb_h = std::min(track_h, thumb_h);
+  }
+
+  int thumb_y = track_y;
+  if (max_scroll > 0 && track_h > thumb_h) {
+    thumb_y = track_y + (clamped_scroll * (track_h - thumb_h)) / max_scroll;
+  }
+
+  for (int i = 0; i < track_h; i++) {
+    ui->draw_text(track_x, track_y + i, "│", theme.fg_panel_border,
+                  theme.bg_default);
+  }
+
+  const int thumb_fg = pane.active ? theme.fg_active_border : theme.fg_line_num;
+  for (int i = 0; i < thumb_h; i++) {
+    ui->draw_text(track_x, thumb_y + i, "█", thumb_fg, theme.bg_default);
+  }
 }

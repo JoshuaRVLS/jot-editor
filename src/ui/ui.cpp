@@ -102,7 +102,15 @@ void UI::render() {
           last_reverse = cell.reverse;
         }
 
-        term->write(cell.ch);
+        // If a cell contains an isolated non-ASCII byte, writing it raw can
+        // corrupt terminal glyph decoding and shift the visual grid.
+        // Render those bytes as '?' to keep one-cell alignment stable.
+        if (cell.ch.size() == 1 &&
+            (unsigned char)cell.ch[0] >= 0x80) {
+          term->write("?");
+        } else {
+          term->write(cell.ch);
+        }
         cursor_x +=
             1; // Assuming single width char for now, but utf8 might differ
 
@@ -226,9 +234,9 @@ void UI::fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg) {
 
 void UI::set_cursor(int x, int y) {
   if (x >= 0 && x < width && y >= 0 && y < height) {
-    if (!cursor_hidden && cursor_x == x && cursor_y == y) {
-      return;
-    }
+    // Always reposition cursor after a frame. Rendering moves terminal cursor
+    // while diff-drawing cells, so cached coordinates may be stale even when
+    // logical cursor position is unchanged.
     term->move_cursor(x, y);
     term->show_cursor();
     cursor_x = x;

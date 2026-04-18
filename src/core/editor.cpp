@@ -4,8 +4,7 @@
 
 Editor::Editor() {
   config.load();
-  
-  
+ 
 
   running = true;
   current_pane = 0;
@@ -44,6 +43,17 @@ Editor::Editor() {
   tab_height = 1;
   tab_size = config.get_int("tab_size", 2);
   auto_indent = config.get_bool("auto_indent", true);
+  auto_save_enabled = config.get_bool("auto_save", false);
+  auto_save_interval_ms =
+      std::clamp(config.get_int("auto_save_interval_ms", 2000), 250, 60000);
+  last_auto_save_ms = 0;
+  show_home_menu = true;
+  home_menu_selected = 0;
+  home_menu_panel_x = 0;
+  home_menu_panel_y = 0;
+  home_menu_panel_w = 0;
+  home_menu_panel_h = 0;
+  home_menu_entries.clear();
   needs_redraw = true;
   mouse_selecting = false;
   mouse_selection_mode = MOUSE_SELECT_CHAR;
@@ -63,6 +73,12 @@ Editor::Editor() {
   context_menu_x = 0;
   context_menu_y = 0;
   context_menu_selected = 0;
+  lsp_completion_visible = false;
+  lsp_completion_manual_request = false;
+  lsp_completion_selected = 0;
+  lsp_completion_anchor = {0, 0};
+  lsp_completion_filepath.clear();
+  lsp_completion_items.clear();
   input_prompt_visible = false;
 
   // Modeless editor behavior: keep an always-insert internal mode.
@@ -75,17 +91,19 @@ Editor::Editor() {
   // Easter egg
   easter_egg_timer = 0;
 
-  // Default theme
-  current_theme_name = "Dark";
-
-  // Restore saved color scheme
-  {
-    std::string saved = config.get("color_scheme", "Dark");
-    apply_theme(saved);
-  }
+  // Default Python-backed theme name.
+  current_theme_name = "jot_nvim";
 
   python_api = new PythonAPI(this);
   python_api->init();
+
+  load_recent_files();
+
+  // Restore saved color scheme now that Python runtime is ready.
+  {
+    std::string saved = config.get("color_scheme", "jot_nvim");
+    apply_theme(saved, false, false);
+  }
 
   terminal.init();
   terminal.set_poll_timeout_ms(std::max(1, 1000 / std::max(render_fps, idle_fps)));
@@ -110,6 +128,7 @@ Editor::Editor() {
 }
 
 Editor::~Editor() {
+  save_recent_files();
   stop_all_lsp_clients();
 
   for (auto &term : integrated_terminals) {
@@ -127,6 +146,20 @@ Editor::~Editor() {
 
 void Editor::set_message(const std::string &msg) {
   message = msg;
+  needs_redraw = true;
+}
+
+void Editor::set_home_menu_visible(bool visible) {
+  show_home_menu = visible;
+  if (!show_home_menu) {
+    home_menu_entries.clear();
+    home_menu_panel_x = 0;
+    home_menu_panel_y = 0;
+    home_menu_panel_w = 0;
+    home_menu_panel_h = 0;
+  } else {
+    home_menu_selected = 0;
+  }
   needs_redraw = true;
 }
 

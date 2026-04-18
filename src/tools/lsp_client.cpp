@@ -441,6 +441,55 @@ std::vector<Diagnostic> diagnostics_from_json(const JsonValue &diagnostics) {
 
   return parsed;
 }
+
+std::vector<LSPCompletionItem> completion_items_from_json(
+    const JsonValue &result) {
+  const JsonValue *items = nullptr;
+  if (result.type == JsonValue::Array) {
+    items = &result;
+  } else if (result.type == JsonValue::Object) {
+    items = json_object_get(result, "items");
+  }
+
+  std::vector<LSPCompletionItem> parsed;
+  if (!items || items->type != JsonValue::Array) {
+    return parsed;
+  }
+
+  parsed.reserve(items->array_value.size());
+  for (const auto &item : items->array_value) {
+    if (item.type != JsonValue::Object) {
+      continue;
+    }
+
+    LSPCompletionItem completion;
+    completion.label = json_string_or_empty(json_object_get(item, "label"));
+    completion.insert_text =
+        json_string_or_empty(json_object_get(item, "insertText"));
+    completion.detail = json_string_or_empty(json_object_get(item, "detail"));
+    completion.kind = json_int_or_default(json_object_get(item, "kind"), 0);
+
+    if (completion.insert_text.empty()) {
+      const JsonValue *text_edit = json_object_get(item, "textEdit");
+      const JsonValue *new_text =
+          text_edit ? json_object_get(*text_edit, "newText") : nullptr;
+      completion.insert_text = json_string_or_empty(new_text);
+    }
+    if (completion.insert_text.empty()) {
+      completion.insert_text = completion.label;
+    }
+    if (completion.label.empty()) {
+      completion.label = completion.insert_text;
+    }
+    if (completion.label.empty()) {
+      continue;
+    }
+
+    parsed.push_back(std::move(completion));
+  }
+
+  return parsed;
+}
 } // namespace
 
 LSPClient::LSPClient(const std::string &language_name,
@@ -567,6 +616,8 @@ bool LSPClient::start() {
   initialized = false;
   next_request_id = 1;
   file_versions.clear();
+  pending_completion_requests.clear();
+  pending_completions.clear();
   stdout_buffer.clear();
   stderr_buffer.clear();
   last_error.clear();
@@ -626,6 +677,8 @@ void LSPClient::stop() {
   running = false;
   initialized = false;
   file_versions.clear();
+  pending_completion_requests.clear();
+  pending_completions.clear();
 }
 
 bool LSPClient::restart() {
@@ -667,22 +720,41 @@ void LSPClient::handle_stdout_data(const std::string &data) {
     }
 
     const JsonValue *method = json_object_get(root, "method");
-    if (!method || method->type != JsonValue::String ||
-        method->string_value != "textDocument/publishDiagnostics") {
+    if (method && method->type == JsonValue::String &&
+        method->string_value == "textDocument/publishDiagnostics") {
+      const JsonValue *params = json_object_get(root, "params");
+      const JsonValue *uri = params ? json_object_get(*params, "uri") : nullptr;
+      const JsonValue *diagnostics =
+          params ? json_object_get(*params, "diagnostics") : nullptr;
+      if (!uri || !diagnostics) {
+        continue;
+      }
+
+      pending_diagnostics.push_back(
+          {from_file_uri(json_string_or_empty(uri)),
+           diagnostics_from_json(*diagnostics)});
       continue;
     }
 
-    const JsonValue *params = json_object_get(root, "params");
-    const JsonValue *uri = params ? json_object_get(*params, "uri") : nullptr;
-    const JsonValue *diagnostics =
-        params ? json_object_get(*params, "diagnostics") : nullptr;
-    if (!uri || !diagnostics) {
+    const JsonValue *id = json_object_get(root, "id");
+    if (!id || id->type != JsonValue::Number) {
       continue;
     }
 
-    pending_diagnostics.push_back(
-        {from_file_uri(json_string_or_empty(uri)),
-         diagnostics_from_json(*diagnostics)});
+    int request_id = (int)id->number_value;
+    auto pending_it = pending_completion_requests.find(request_id);
+    if (pending_it == pending_completion_requests.end()) {
+      continue;
+    }
+
+    const JsonValue *result = json_object_get(root, "result");
+    if (result) {
+      pending_completions.push_back(
+          {pending_it->second, completion_items_from_json(*result)});
+    } else {
+      pending_completions.push_back({pending_it->second, {}});
+    }
+    pending_completion_requests.erase(pending_it);
   }
 }
 
@@ -807,10 +879,56 @@ bool LSPClient::did_save(const std::string &filepath, const std::string &text) {
   return send_message(json.str());
 }
 
+bool LSPClient::request_completion(const std::string &filepath, int line,
+                                   int character, char trigger_character) {
+  if (!running) {
+    return false;
+  }
+
+  std::string abs_path = fs::absolute(filepath).string();
+  int request_id = next_request_id++;
+  pending_completion_requests[request_id] = abs_path;
+
+  std::ostringstream json;
+  json << "{"
+       << "\"jsonrpc\":\"2.0\","
+       << "\"id\":" << request_id << ","
+       << "\"method\":\"textDocument/completion\","
+       << "\"params\":{"
+       << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path))
+       << "\"},"
+       << "\"position\":{\"line\":" << std::max(0, line)
+       << ",\"character\":" << std::max(0, character) << "}";
+
+  if (trigger_character != '\0') {
+    json << ",\"context\":{\"triggerKind\":2,\"triggerCharacter\":\""
+         << json_escape(std::string(1, trigger_character)) << "\"}";
+  } else {
+    json << ",\"context\":{\"triggerKind\":1}";
+  }
+
+  json << "}"
+       << "}";
+
+  if (!send_message(json.str())) {
+    pending_completion_requests.erase(request_id);
+    return false;
+  }
+
+  return true;
+}
+
 std::vector<std::pair<std::string, std::vector<Diagnostic>>>
 LSPClient::consume_published_diagnostics() {
   auto out = std::move(pending_diagnostics);
   pending_diagnostics.clear();
+  return out;
+}
+
+std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>>
+LSPClient::consume_completion_items() {
+  auto out = std::move(pending_completions);
+  pending_completions.clear();
   return out;
 }
 

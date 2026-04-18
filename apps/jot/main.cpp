@@ -1,4 +1,4 @@
-#include "editor.h"
+#include "jot/editor.hpp"
 #include <iostream>
 
 int main(int argc, char *argv[]) {
@@ -10,6 +10,9 @@ int main(int argc, char *argv[]) {
   }
 
   Editor editor;
+  if (argc > 1) {
+    editor.set_home_menu_visible(false);
+  }
   // Set config dir logic here if needed, or Editor handles it?
   // Actually Editor's PythonAPI::load_plugins needs the path.
   // Let's pass it or Editor figures it out.

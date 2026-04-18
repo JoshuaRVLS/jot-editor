@@ -46,12 +46,35 @@ struct Theme {
   int bg_cursor = 7;
   int fg_status = 7;
   int bg_status = 0; // Clean status bar
+  int fg_status_message = 7;
   int fg_command = 7;
   int bg_command = 0;
+  int fg_search_match = 0;
+  int bg_search_match = 3;
   int fg_minimap = 8;
   int bg_minimap = 0;
+  int fg_sidebar = 7;
+  int bg_sidebar = 0;
+  int fg_sidebar_directory = 7;
+  int fg_sidebar_selected = 0;
+  int bg_sidebar_selected = 4;
+  int fg_sidebar_selected_inactive = 0;
+  int bg_sidebar_selected_inactive = 5;
+  int fg_sidebar_border = 8;
+  int fg_tab_active = 7;
+  int bg_tab_active = 4;
+  int fg_tab_inactive = 8;
+  int bg_tab_inactive = 0;
+  int fg_tab_close = 1;
+  int fg_tab_separator = 8;
+  int fg_active_border = 3;
+  int bg_active_border = 0;
   int fg_image_border = 7;
   int bg_image_border = 0;
+  int fg_diagnostic_error = 1;
+  int fg_diagnostic_warning = 3;
+  int fg_diagnostic_info = 6;
+  int fg_diagnostic_hint = 2;
   int fg_bracket1 = 1;
   int fg_bracket2 = 2;
   int fg_bracket3 = 3;
@@ -66,6 +89,18 @@ struct Theme {
   int bg_telescope_selected = 6;
   int fg_telescope_preview = 7;
   int bg_telescope_preview = 0;
+  int fg_terminal = 7;
+  int bg_terminal = 0;
+  int fg_terminal_tab_inactive = 7;
+  int bg_terminal_tab_inactive = 0;
+  int fg_terminal_tab_active = 7;
+  int bg_terminal_tab_active = 0;
+  int fg_terminal_tab_focused = 7;
+  int bg_terminal_tab_focused = 6;
+  int fg_terminal_tab_close = 1;
+  int fg_terminal_tab_plus = 7;
+  int bg_terminal_tab_plus = 0;
+  int fg_terminal_tab_separator = 8;
 };
 
 struct Cursor {
