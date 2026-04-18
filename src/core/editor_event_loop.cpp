@@ -9,6 +9,8 @@ struct MEVENT {
 
 void Editor::run() {
   while (running) {
+    poll_lsp_clients();
+
     for (auto &term : integrated_terminals) {
       if (term && term->poll_output()) {
         needs_redraw = true;

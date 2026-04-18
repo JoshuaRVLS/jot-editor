@@ -4,6 +4,8 @@
 
 Editor::Editor() {
   config.load();
+  
+  
 
   running = true;
   current_pane = 0;
@@ -54,6 +56,8 @@ Editor::Editor() {
   cursor_visible = true;
   render_fps = std::clamp(config.get_int("render_fps", 120), 30, 240);
   idle_fps = std::clamp(config.get_int("idle_fps", 60), 5, 240);
+  lsp_change_debounce_ms =
+      std::clamp(config.get_int("lsp_change_debounce_ms", 120), 25, 1000);
   last_cursor_shape = -1;
   show_context_menu = false;
   context_menu_x = 0;
@@ -106,6 +110,8 @@ Editor::Editor() {
 }
 
 Editor::~Editor() {
+  stop_all_lsp_clients();
+
   for (auto &term : integrated_terminals) {
     if (term) {
       term->close_shell();

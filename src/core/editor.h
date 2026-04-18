@@ -7,12 +7,14 @@
 #include "editor_types.h"
 #include "imageviewer.h"
 #include "integrated_terminal.h"
+#include "lsp_client.h"
 #include "telescope.h"
 #include "terminal.h"
 #include "ui.h"
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 // #include "python_api.h"
 
@@ -34,6 +36,7 @@ class Editor {
 private:
   std::vector<FileBuffer> buffers;
   std::vector<SplitPane> panes;
+  std::vector<float> pane_weights;
   int current_pane;
   int current_buffer;
   PaneLayoutMode pane_layout_mode;
@@ -60,7 +63,7 @@ private:
   std::vector<std::pair<int, int>> search_results; // (line, col)
   int search_result_index;
   bool search_case_sensitive;
-
+  
   // Save Prompt
   bool show_save_prompt;
   std::string save_prompt_input;
@@ -78,6 +81,8 @@ private:
   Config config;
   ImageViewer image_viewer;
   std::vector<std::unique_ptr<IntegratedTerminal>> integrated_terminals;
+  std::vector<std::unique_ptr<LSPClient>> lsp_clients;
+  std::unordered_map<std::string, long long> lsp_pending_changes;
   int current_integrated_terminal;
   Terminal terminal;
   UI *ui;
@@ -107,6 +112,7 @@ private:
   bool cursor_visible;
   int render_fps;
   int idle_fps;
+  int lsp_change_debounce_ms;
   int last_cursor_shape;
 
   bool show_context_menu;
@@ -172,6 +178,17 @@ private:
   void render_popup(); // New
   void render_input_prompt();
   void render_buffer_content(const SplitPane &pane, int buffer_id);
+  void poll_lsp_clients();
+  LSPClient *find_lsp_client(const std::string &language,
+                             const std::string &root_path);
+  LSPClient *ensure_lsp_for_file(const std::string &filepath);
+  void notify_lsp_open(const std::string &filepath);
+  void notify_lsp_change(const std::string &filepath);
+  void notify_lsp_save(const std::string &filepath);
+  void stop_all_lsp_clients();
+  void restart_all_lsp_clients();
+  void show_lsp_status();
+  std::string get_buffer_text(const FileBuffer &buf) const;
   const std::vector<std::pair<int, int>> &
   get_line_syntax_colors(FileBuffer &buf, int line_idx);
   void invalidate_syntax_cache(FileBuffer &buf);
@@ -296,6 +313,7 @@ private:
   void close_pane();
   void next_pane();
   void prev_pane();
+  bool resize_current_pane(int delta);
 
   void toggle_bookmark();
   void next_bookmark();

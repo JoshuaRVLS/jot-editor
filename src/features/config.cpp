@@ -31,6 +31,7 @@ void Config::load_defaults() {
   settings["cursor_style"] = "block";
   settings["render_fps"] = "120";
   settings["idle_fps"] = "60";
+  settings["lsp_change_debounce_ms"] = "120";
   settings["terminal_height"] = "10";
 }
 
