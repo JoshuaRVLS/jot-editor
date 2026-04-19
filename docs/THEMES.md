@@ -22,17 +22,17 @@ jot now ships with 10 popular default themes (stored in `.configs/configs/colors
 Apply any of them with:
 
 ```python
-from jot_api import vim
-vim.cmd.colorscheme("tokyonight")
+from jot_api import jot
+jot.cmd.colorscheme("tokyonight")
 ```
 
 ## Creating a Theme
 
 1. Create `~/.config/jot/configs/colors/my_theme.py`.
-2. Use the Neovim-style `vim.api.nvim_set_hl(...)` facade, or the lower-level `set_theme_color(...)`.
+2. Use the compatibility `jot.api.nvim_set_hl(...)` facade, or the lower-level `set_theme_color(...)`.
 
 ```python
-from jot_api import vim
+from jot_api import jot
 
 theme = {
     "Normal": {"fg": 252, "bg": 234},
@@ -49,15 +49,15 @@ theme = {
 }
 
 for group, spec in theme.items():
-    vim.api.nvim_set_hl(0, group, spec)
+    jot.api.nvim_set_hl(0, group, spec)
 ```
 
 To load a theme from config:
 
 ```python
-from jot_api import vim
+from jot_api import jot
 
-vim.cmd.colorscheme("my_theme")
+jot.cmd.colorscheme("my_theme")
 ```
 
 ## Color Slots
@@ -88,6 +88,12 @@ vim.cmd.colorscheme("my_theme")
 | `diagnostic_warning` | Diagnostic marker/tooltip warning color |
 | `diagnostic_info` | Diagnostic marker/tooltip info color |
 | `diagnostic_hint` | Diagnostic marker/tooltip hint color |
+| `bracket1` | Rainbow bracket level 1 |
+| `bracket2` | Rainbow bracket level 2 |
+| `bracket3` | Rainbow bracket level 3 |
+| `bracket4` | Rainbow bracket level 4 |
+| `bracket5` | Rainbow bracket level 5 |
+| `bracket6` | Rainbow bracket level 6 |
 | `terminal` | Integrated terminal foreground/background |
 | `terminal_tab_inactive` | Inactive terminal tab |
 | `terminal_tab_active` | Active terminal tab |
@@ -112,7 +118,7 @@ vim.cmd.colorscheme("my_theme")
 
 ### Extra Highlight Group Mapping
 
-You can also style these Neovim-style groups in theme files:
+You can also style these compatibility highlight groups in theme files:
 
 - `Search`, `IncSearch`
 - `StatusLineMsg`

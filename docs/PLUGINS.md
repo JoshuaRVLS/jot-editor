@@ -4,6 +4,9 @@ jot supports plugins written in Python and now has a more complete extension
 runtime: plugin packages, user commands with arguments, reload support, and a
 generic event system.
 
+`jot_api` exposes a first-class namespace named `jot`.
+`vim` still exists as a backward-compatibility alias for older configs.
+
 Primary config is loaded from `~/.config/jot/configs/init.py`.
 Plugin files are loaded from `~/.config/jot/configs/plugins/`.
 Plugin directories are also supported. A plugin directory can contain either
@@ -34,27 +37,27 @@ Create a `.py` file in `~/.config/jot/configs/plugins/` or wire it from `init.py
 Single-file plugin:
 
 ```python
-from jot_api import vim
+from jot_api import jot
 
 def my_command(_arg=""):
-    vim.notify("Hello from Plugin!")
+    jot.notify("Hello from Plugin!")
 
-vim.keymap.set("insert", "ctrl+h", my_command)
-vim.api.nvim_create_user_command("HelloPlugin", my_command, {})
+jot.keymap.set("all", "ctrl+h", my_command)
+jot.api.nvim_create_user_command("HelloPlugin", my_command, {})
 ```
 
 Package-style plugin:
 
 ```python
 # ~/.config/jot/configs/plugins/git_tools/plugin.py
-from jot_api import autocmd, create_user_command, current_file, vim
+from jot_api import autocmd, create_user_command, current_file, jot
 
 @autocmd("startup")
 def on_start(_event):
-    vim.notify("git_tools ready")
+    jot.notify("git_tools ready")
 
 def blame_current_file(_arg=""):
-    vim.notify(f"Blame: {current_file()}")
+    jot.notify(f"Blame: {current_file()}")
 
 create_user_command("GitBlameFile", blame_current_file)
 ```
@@ -62,6 +65,7 @@ create_user_command("GitBlameFile", blame_current_file)
 ## API Reference
 
 ### Editor Control
+Legacy compatibility methods (generally not needed in normal modeless usage):
 *   `enter_normal_mode()`
 *   `enter_insert_mode()`
 *   `enter_visual_mode()`
@@ -74,7 +78,7 @@ create_user_command("GitBlameFile", blame_current_file)
 *   `execute_command(":w")` or `command(":w")`
 
 ### State Inspection
-*   `get_mode()` -> str ("normal", "insert", "visual")
+*   `get_mode()` -> str (compatibility value)
 *   `get_cursor_x()` -> int
 *   `get_cursor_y()` -> int
 *   `get_current_file()` -> str
@@ -88,12 +92,12 @@ create_user_command("GitBlameFile", blame_current_file)
     *   `name`: "keyword", "string", "comment", "background", etc.
     *   `fg`: Terminal color code (0-255).
     *   `bg`: Terminal color code (0-255). -1 for transparent/default.
-*   `vim.api.nvim_set_hl(0, group, spec)`: Neovim-style highlight mapping for common groups.
-*   `vim.cmd("colorscheme my_theme")` or `vim.cmd.colorscheme("my_theme")`
-*   `vim.notify(text, level="info")`
-*   `vim.keymap.set(mode, lhs, rhs)`
-*   `vim.api.nvim_create_user_command(name, callback, opts)`
-*   `vim.api.nvim_create_autocmd(event, opts)`
+*   `jot.api.nvim_set_hl(0, group, spec)`: Jot highlight-group mapping via compatibility API.
+*   `jot.cmd("colorscheme my_theme")` or `jot.cmd.colorscheme("my_theme")`
+*   `jot.notify(text, level="info")`
+*   `jot.keymap.set(mode, lhs, rhs)`
+*   `jot.api.nvim_create_user_command(name, callback, opts)`
+*   `jot.api.nvim_create_autocmd(event, opts)`
 
 ## Events
 
@@ -109,11 +113,11 @@ Built-in events:
 Example:
 
 ```python
-from jot_api import autocmd, vim
+from jot_api import autocmd, jot
 
 @autocmd("buffer_save", pattern="*.py")
 def on_python_save(event):
-    vim.notify(f"saved {event['filepath']}")
+    jot.notify(f"saved {event['filepath']}")
 ```
 
 ## Commands
@@ -121,10 +125,10 @@ def on_python_save(event):
 User commands receive a single string argument.
 
 ```python
-from jot_api import create_user_command, vim
+from jot_api import create_user_command, jot
 
 def grep_word(arg=""):
-    vim.notify(f"search for: {arg}")
+    jot.notify(f"search for: {arg}")
 
 create_user_command("GrepWord", grep_word)
 ```
