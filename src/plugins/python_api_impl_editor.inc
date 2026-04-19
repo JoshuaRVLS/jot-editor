@@ -347,6 +347,18 @@ void PythonAPI::py_set_theme_color(const std::string &name, int fg, int bg) {
     set_fg(theme.fg_diagnostic_hint);
   } else if (name == "bracket_match") {
     set_pair(theme.fg_bracket_match, theme.bg_bracket_match);
+  } else if (name == "bracket1" || name == "fg_bracket1") {
+    set_fg(theme.fg_bracket1);
+  } else if (name == "bracket2" || name == "fg_bracket2") {
+    set_fg(theme.fg_bracket2);
+  } else if (name == "bracket3" || name == "fg_bracket3") {
+    set_fg(theme.fg_bracket3);
+  } else if (name == "bracket4" || name == "fg_bracket4") {
+    set_fg(theme.fg_bracket4);
+  } else if (name == "bracket5" || name == "fg_bracket5") {
+    set_fg(theme.fg_bracket5);
+  } else if (name == "bracket6" || name == "fg_bracket6") {
+    set_fg(theme.fg_bracket6);
   } else if (name == "telescope") {
     set_pair(theme.fg_telescope, theme.bg_telescope);
   } else if (name == "telescope_selected") {
