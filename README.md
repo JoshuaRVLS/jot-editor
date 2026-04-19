@@ -21,7 +21,6 @@ The current editing model is:
 - Python for plugins, themes, and optional automation
 
 The installed binary name is `jot`.
-A compatibility alias named `jcode` is also installed.
 
 ## Platform Support
 
@@ -462,7 +461,6 @@ cmake --install . --prefix "$HOME/.local"
 That installs:
 
 - `jot`
-- `jcode` compatibility alias
 - bundled Python runtime files
 - default config templates
 
@@ -485,8 +483,6 @@ Open a folder as a workspace:
 ```bash
 jot path/to/project
 ```
-
-You can use `jcode` the same way.
 
 ## Configuration
 

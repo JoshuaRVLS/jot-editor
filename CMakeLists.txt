@@ -34,12 +34,6 @@ install(TARGETS jot
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-# Keep backwards-compatible CLI name.
-install(PROGRAMS $<TARGET_FILE:jot>
-  DESTINATION ${CMAKE_INSTALL_BINDIR}
-  RENAME jcode
-)
-
 install(DIRECTORY python/
   DESTINATION ${CMAKE_INSTALL_DATADIR}/jot/python
   FILES_MATCHING
