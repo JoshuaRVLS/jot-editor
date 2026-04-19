@@ -2,7 +2,24 @@
 #include "python_api.h"
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
 #include <sstream>
+#include <unordered_map>
+
+namespace {
+std::string ellipsize_middle(const std::string &s, int max_len) {
+  if (max_len <= 0)
+    return "";
+  if ((int)s.size() <= max_len)
+    return s;
+  if (max_len <= 3)
+    return s.substr(0, (size_t)max_len);
+  int keep_left = (max_len - 3) / 2;
+  int keep_right = max_len - 3 - keep_left;
+  return s.substr(0, (size_t)keep_left) + "..." +
+         s.substr(s.size() - (size_t)keep_right);
+}
+} // namespace
 
 void Editor::render_status_line() {
   int y = ui->get_height() - status_height;
@@ -36,6 +53,12 @@ void Editor::render_status_line() {
 
   // Right side — encoding + quick status flags
   std::string enc_str = "  UTF-8";
+  if (has_git_repo()) {
+    enc_str += "  git:" + git_branch;
+    if (git_dirty_count > 0) {
+      enc_str += " *" + std::to_string(git_dirty_count);
+    }
+  }
   if (auto_save_enabled) {
     enc_str += "  AS";
   }
@@ -123,19 +146,25 @@ void Editor::render_search_panel() {
   if (!show_search)
     return;
 
-  int w = 40;
-  int h = 3;
+  int w = 52;
+  int h = 4;
   int x = ui->get_width() - w - 2;
   int y = 1 + tab_height;
+
+  if (x < 0)
+    x = 0;
+  if (x + w > ui->get_width())
+    w = std::max(20, ui->get_width() - x);
 
   UIRect rect = {x, y, w, h};
   ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
   ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
 
-  std::string mode = search_case_sensitive ? "Aa" : "aa";
+  std::string mode = std::string(search_case_sensitive ? "Aa" : "aa") +
+                     (search_whole_word ? ",W" : ",w");
   std::string q = "Find[" + mode + "]: " + search_query;
-  if ((int)q.length() > w - 12) {
-    q = q.substr(0, w - 14) + "..";
+  if ((int)q.length() > w - 4) {
+    q = q.substr(0, std::max(0, w - 7)) + "...";
   }
   ui->draw_text(x + 1, y + 1, q, theme.fg_command, theme.bg_command);
 
@@ -144,7 +173,16 @@ void Editor::render_search_panel() {
     snprintf(buf, sizeof(buf), "%d/%lu", search_result_index + 1,
              search_results.size());
     ui->draw_text(x + w - 10, y + 1, buf, theme.fg_comment, theme.bg_command);
+  } else if (!search_query.empty() && search_results.empty()) {
+    ui->draw_text(x + w - 12, y + 1, "0/0", theme.fg_comment,
+                  theme.bg_command);
   }
+
+  std::string hint = "Enter/Down:Next  Up:Prev  Tab:Case  Ctrl+W:Word  Esc:Close";
+  if ((int)hint.size() > w - 3) {
+    hint = hint.substr(0, std::max(0, w - 6)) + "...";
+  }
+  ui->draw_text(x + 1, y + 2, hint, theme.fg_comment, theme.bg_command);
 }
 
 void Editor::render_context_menu() {
@@ -252,16 +290,81 @@ void Editor::render_tabs() {
   UIRect bar = {x, y, w - x, tab_height};
   ui->fill_rect(bar, " ", theme.fg_status, theme.bg_status);
 
-  // Render open buffers as tabs
-  int tab_x = x;
-  for (int i = 0; i < (int)buffers.size(); i++) {
-    std::string name = get_filename(buffers[i].filepath);
-    if (name.empty())
-      name = "[No Name]";
-    if (buffers[i].modified)
-      name += "+";
+  if (buffers.empty())
+    return;
 
-    std::string disp = " " + name + " ";
+  std::vector<std::string> base_names(buffers.size());
+  std::unordered_map<std::string, int> base_count;
+  for (int i = 0; i < (int)buffers.size(); i++) {
+    std::string base = get_filename(buffers[i].filepath);
+    if (base.empty())
+      base = "[No Name]";
+    base_names[i] = base;
+    base_count[base]++;
+  }
+
+  std::vector<std::string> display_names(buffers.size());
+  std::vector<int> tab_widths(buffers.size(), 0);
+  for (int i = 0; i < (int)buffers.size(); i++) {
+    std::string name = base_names[i];
+    if (base_count[name] > 1 && !buffers[i].filepath.empty()) {
+      std::filesystem::path p(buffers[i].filepath);
+      std::string parent = p.parent_path().filename().string();
+      if (!parent.empty()) {
+        name += " <" + parent + ">";
+      }
+    }
+    name = ellipsize_middle(name, 28);
+    display_names[i] = name;
+    std::string label = " " + name + (buffers[i].modified ? " * " : " ");
+    tab_widths[i] = (int)label.size() + 2; // close + separator
+  }
+
+  int bar_w = w - x;
+  int total_w = 0;
+  for (int tw : tab_widths)
+    total_w += tw;
+
+  bool overflow = total_w > bar_w;
+  int control_w = overflow ? 2 : 0;
+  int tabs_start_x = x + control_w;
+  int tabs_end_x = x + bar_w - control_w;
+  int avail_w = std::max(0, tabs_end_x - tabs_start_x);
+
+  if (!overflow) {
+    tab_scroll_index = 0;
+  } else {
+    tab_scroll_index = std::clamp(tab_scroll_index, 0,
+                                  std::max(0, (int)buffers.size() - 1));
+    if (current_buffer < tab_scroll_index)
+      tab_scroll_index = current_buffer;
+
+    auto contains_current = [&](int start_idx) {
+      int used = 0;
+      for (int i = start_idx; i < (int)buffers.size(); i++) {
+        if (used + tab_widths[i] > avail_w)
+          break;
+        if (i == current_buffer)
+          return true;
+        used += tab_widths[i];
+      }
+      return false;
+    };
+
+    while (tab_scroll_index < current_buffer &&
+           !contains_current(tab_scroll_index)) {
+      tab_scroll_index++;
+    }
+  }
+
+  int tab_x = tabs_start_x;
+  int last_visible_index = -1;
+  for (int i = tab_scroll_index; i < (int)buffers.size(); i++) {
+    if (tab_x + tab_widths[i] > tabs_end_x)
+      break;
+
+    std::string disp = " " + display_names[i] +
+                       (buffers[i].modified ? " * " : " ");
     int bg = theme.bg_tab_inactive;
     int fg = theme.fg_tab_inactive;
 
@@ -270,16 +373,31 @@ void Editor::render_tabs() {
       fg = theme.fg_tab_active;
     }
 
-    ui->draw_text(tab_x, y, disp, fg, bg);
+    ui->draw_text(tab_x, y, disp, fg, bg, i == current_buffer,
+                  buffers[i].is_preview);
     int close_x = tab_x + (int)disp.length();
     int close_fg = buffers.size() > 1 ? theme.fg_tab_close : fg;
     ui->draw_text(close_x, y, "x", close_fg, bg);
-    // Vertical separator
+
     ui->draw_text(close_x + 1, y, "|", theme.fg_tab_separator, theme.bg_status);
 
-    tab_x += (int)disp.length() + 2;
-    if (tab_x >= w)
-      break;
+    tab_x += tab_widths[i];
+    last_visible_index = i;
+  }
+
+  if (overflow) {
+    bool has_left = tab_scroll_index > 0;
+    bool has_right = last_visible_index >= 0 &&
+                     last_visible_index < (int)buffers.size() - 1;
+    ui->draw_text(x, y, has_left ? "<" : " ",
+                  has_left ? theme.fg_tab_active : theme.fg_tab_inactive,
+                  theme.bg_status);
+    ui->draw_text(x + 1, y, "|", theme.fg_tab_separator, theme.bg_status);
+
+    ui->draw_text(x + bar_w - 2, y, "|", theme.fg_tab_separator, theme.bg_status);
+    ui->draw_text(x + bar_w - 1, y, has_right ? ">" : " ",
+                  has_right ? theme.fg_tab_active : theme.fg_tab_inactive,
+                  theme.bg_status);
   }
 }
 

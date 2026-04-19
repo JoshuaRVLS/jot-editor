@@ -10,8 +10,8 @@ UI::UI(Terminal *t)
     grid[y].resize(width);
     last_grid[y].resize(width);
     for (int x = 0; x < width; x++) {
-      grid[y][x] = {" ", 7, 0, false, false};
-      last_grid[y][x] = {"", -1, -1, false, false}; // Force redraw initially
+      grid[y][x] = {" ", 7, 0, false, false, false};
+      last_grid[y][x] = {"", -1, -1, false, false, false}; // Force redraw initially
     }
   }
 }
@@ -28,8 +28,8 @@ void UI::resize(int w, int h) {
     grid[y].resize(width);
     last_grid[y].resize(width);
     for (int x = 0; x < width; x++) {
-      grid[y][x] = {" ", 7, 0, false, false};
-      last_grid[y][x] = {"", -1, -1, false, false};
+      grid[y][x] = {" ", 7, 0, false, false, false};
+      last_grid[y][x] = {"", -1, -1, false, false, false};
     }
   }
   term->clear(); // Clear only on resize
@@ -41,7 +41,7 @@ void UI::invalidate() {
   cursor_hidden = true;
   for (int y = 0; y < height; y++) {
     for (int x = 0; x < width; x++) {
-      last_grid[y][x] = {"", -1, -1, false, false};
+      last_grid[y][x] = {"", -1, -1, false, false, false};
     }
   }
   term->clear();
@@ -50,7 +50,7 @@ void UI::invalidate() {
 void UI::clear() {
   for (auto &row : grid) {
     for (auto &cell : row) {
-      cell = {" ", 7, 0, false, false};
+      cell = {" ", 7, 0, false, false, false};
     }
   }
 }
@@ -65,7 +65,7 @@ UICell UI::get_cell(int x, int y) const {
   if (x >= 0 && x < width && y >= 0 && y < height) {
     return grid[y][x];
   }
-  return {" ", 7, 0, false, false};
+  return {" ", 7, 0, false, false, false};
 }
 
 void UI::render() {
@@ -73,7 +73,7 @@ void UI::render() {
   // term->clear();
 
   int last_fg = -1, last_bg = -1;
-  bool last_bold = false, last_reverse = false;
+  bool last_bold = false, last_italic = false, last_reverse = false;
   int cursor_x = -1, cursor_y = -1;
 
   for (int y = 0; y < height; y++) {
@@ -89,16 +89,20 @@ void UI::render() {
         }
 
         if (cell.fg != last_fg || cell.bg != last_bg ||
-            cell.bold != last_bold || cell.reverse != last_reverse) {
+            cell.bold != last_bold || cell.italic != last_italic ||
+            cell.reverse != last_reverse) {
           term->reset_color();
           if (cell.bold)
             term->set_bold(true);
+          if (cell.italic)
+            term->set_italic(true);
           if (cell.reverse)
             term->set_reverse(true);
           term->set_color(cell.fg, cell.bg);
           last_fg = cell.fg;
           last_bg = cell.bg;
           last_bold = cell.bold;
+          last_italic = cell.italic;
           last_reverse = cell.reverse;
         }
 
@@ -124,7 +128,7 @@ void UI::render() {
 }
 
 void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,
-                   bool bold) {
+                   bool bold, bool italic) {
   int i = 0;
   int cell_offset = 0;
   while (i < (int)text.length() && x + cell_offset < width) {
@@ -147,6 +151,7 @@ void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,
     cell.fg = fg;
     cell.bg = bg;
     cell.bold = bold;
+    cell.italic = italic;
     cell.reverse = false;
     set_cell(x + cell_offset, y, cell);
 
@@ -163,6 +168,7 @@ void UI::draw_rect(const UIRect &rect, int fg, int bg) {
       cell.fg = fg;
       cell.bg = bg;
       cell.bold = false;
+      cell.italic = false;
       cell.reverse = false;
       set_cell(x, y, cell);
     }
@@ -177,6 +183,7 @@ void UI::draw_border(const UIRect &rect, int fg, int bg) {
     cell.fg = fg;
     cell.bg = bg;
     cell.bold = false;
+    cell.italic = false;
     cell.reverse = false;
 
     if (x == rect.x)
@@ -208,6 +215,7 @@ void UI::draw_border(const UIRect &rect, int fg, int bg) {
     cell.fg = fg;
     cell.bg = bg;
     cell.bold = false;
+    cell.italic = false;
     cell.reverse = false;
 
     if (rect.x >= 0 && rect.x < width)
@@ -226,6 +234,7 @@ void UI::fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg) {
       cell.fg = fg;
       cell.bg = bg;
       cell.bold = false;
+      cell.italic = false;
       cell.reverse = false;
       set_cell(x, y, cell);
     }

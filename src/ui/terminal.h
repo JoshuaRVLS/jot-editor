@@ -70,6 +70,7 @@ public:
   void set_color(int fg, int bg);
   void reset_color();
   void set_bold(bool on);
+  void set_italic(bool on);
   void set_reverse(bool on);
 
   void write(const std::string &str);

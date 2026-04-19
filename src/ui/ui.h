@@ -15,11 +15,13 @@ struct UICell {
   int fg;
   int bg;
   bool bold;
+  bool italic;
   bool reverse;
 
   bool operator==(const UICell &other) const {
     return ch == other.ch && fg == other.fg && bg == other.bg &&
-           bold == other.bold && reverse == other.reverse;
+           bold == other.bold && italic == other.italic &&
+           reverse == other.reverse;
   }
   bool operator!=(const UICell &other) const { return !(*this == other); }
 };
@@ -45,7 +47,7 @@ public:
   void render();
 
   void draw_text(int x, int y, const std::string &text, int fg = 7, int bg = 0,
-                 bool bold = false);
+                 bool bold = false, bool italic = false);
   void draw_rect(const UIRect &rect, int fg, int bg);
   void draw_border(const UIRect &rect, int fg, int bg);
   void fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg);

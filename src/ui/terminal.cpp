@@ -500,6 +500,14 @@ void Terminal::set_bold(bool on) {
   }
 }
 
+void Terminal::set_italic(bool on) {
+  if (on) {
+    buffer += "\x1b[3m";
+  } else {
+    buffer += "\x1b[23m";
+  }
+}
+
 void Terminal::set_reverse(bool on) {
   if (on) {
     buffer += "\x1b[7m";
