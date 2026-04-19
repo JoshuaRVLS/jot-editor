@@ -1,6 +1,48 @@
 #include "editor.h"
 #include "python_api.h"
 #include <algorithm>
+#include <filesystem>
+
+namespace {
+int severity_rank(int severity) {
+  switch (severity) {
+  case 1:
+    return 4; // error
+  case 2:
+    return 3; // warning
+  case 3:
+    return 2; // info
+  case 4:
+    return 1; // hint
+  default:
+    return 0;
+  }
+}
+
+int choose_more_severe(int a, int b) {
+  return severity_rank(a) >= severity_rank(b) ? a : b;
+}
+
+int compute_diagnostic_max_severity(const std::vector<Diagnostic> &diagnostics) {
+  int max_severity = 0;
+  for (const auto &d : diagnostics) {
+    max_severity = choose_more_severe(max_severity, d.severity);
+  }
+  return max_severity;
+}
+
+std::string normalize_diagnostic_path(const std::string &path) {
+  if (path.empty()) {
+    return "";
+  }
+  std::error_code ec;
+  std::filesystem::path p = std::filesystem::absolute(path, ec);
+  if (ec) {
+    p = std::filesystem::path(path);
+  }
+  return p.lexically_normal().string();
+}
+} // namespace
 
 Editor::Editor() {
   config.load();
@@ -21,6 +63,7 @@ Editor::Editor() {
   command_palette_theme_mode = false;
   search_result_index = -1;
   search_case_sensitive = false;
+  search_whole_word = false;
   show_save_prompt = false;
   show_quit_prompt = false;
 
@@ -34,6 +77,13 @@ Editor::Editor() {
   show_sidebar = false;
   sidebar_width = 30;
   root_dir = ".";
+  workspace_session_enabled = false;
+  workspace_session_root.clear();
+  git_root.clear();
+  git_branch.clear();
+  git_dirty_count = 0;
+  git_file_status.clear();
+  git_last_refresh_ms = 0;
   file_tree_selected = 0;
   file_tree_scroll = 0;
   sidebar_show_hidden = false;
@@ -42,6 +92,12 @@ Editor::Editor() {
   status_height = 2;
   tab_height = 1;
   tab_size = config.get_int("tab_size", 2);
+  tab_scroll_index = 0;
+  preview_buffer_index = -1;
+  last_sidebar_click_ms = 0;
+  last_sidebar_click_row = -1;
+  last_tab_click_ms = 0;
+  last_tab_clicked_index = -1;
   auto_indent = config.get_bool("auto_indent", true);
   auto_save_enabled = config.get_bool("auto_save", false);
   auto_save_interval_ms =
@@ -128,6 +184,7 @@ Editor::Editor() {
 }
 
 Editor::~Editor() {
+  save_workspace_session();
   save_recent_files();
   stop_all_lsp_clients();
 
@@ -165,6 +222,17 @@ void Editor::set_home_menu_visible(bool visible) {
 
 void Editor::set_diagnostics(const std::string &filepath,
                              const std::vector<Diagnostic> &diagnostics) {
+  const std::string normalized_path = normalize_diagnostic_path(filepath);
+  if (!normalized_path.empty()) {
+    const int max_severity = compute_diagnostic_max_severity(diagnostics);
+    if (max_severity <= 0) {
+      workspace_diagnostic_severity.erase(normalized_path);
+    } else {
+      workspace_diagnostic_severity[normalized_path] = max_severity;
+    }
+    needs_redraw = true;
+  }
+
   for (auto &buf : buffers) {
     bool match = (buf.filepath == filepath);
     if (!match && !buf.filepath.empty() && !filepath.empty()) {
@@ -185,6 +253,13 @@ void Editor::set_diagnostics(const std::string &filepath,
 
 void Editor::add_diagnostic(const std::string &filepath,
                             const Diagnostic &diagnostic) {
+  const std::string normalized_path = normalize_diagnostic_path(filepath);
+  if (!normalized_path.empty()) {
+    int &entry = workspace_diagnostic_severity[normalized_path];
+    entry = choose_more_severe(entry, diagnostic.severity);
+    needs_redraw = true;
+  }
+
   for (auto &buf : buffers) {
     bool match = (buf.filepath == filepath);
     if (!match && !buf.filepath.empty() && !filepath.empty()) {
