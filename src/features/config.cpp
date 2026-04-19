@@ -27,6 +27,8 @@ void Config::load_defaults() {
   settings["auto_indent"] = "true";
   settings["auto_save"] = "false";
   settings["auto_save_interval_ms"] = "2000";
+  settings["prettier_on_save"] = "true";
+  settings["clang_format_on_save"] = "true";
   settings["auto_detect_indent"] = "false";
   settings["show_line_numbers"] = "true";
   settings["word_wrap"] = "false";

@@ -56,6 +56,8 @@ void Editor::run() {
       // even while overlays like command palette/search are open.
       bool toggle_terminal_shortcut =
           (is_ctrl && (ch == '`' || ch == '~' || ch == '\\' || ch == '|')) ||
+          (is_ctrl && (ch == 'x' || ch == 'X')) ||
+          ch == 24 || original_ch == 24 ||
           ch == 28 || original_ch == 28 || ch == 30 || original_ch == 30;
       if (toggle_terminal_shortcut) {
         toggle_integrated_terminal();

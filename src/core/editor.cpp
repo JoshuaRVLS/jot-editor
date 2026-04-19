@@ -24,7 +24,8 @@ int choose_more_severe(int a, int b) {
   return severity_rank(a) >= severity_rank(b) ? a : b;
 }
 
-int compute_diagnostic_max_severity(const std::vector<Diagnostic> &diagnostics) {
+int compute_diagnostic_max_severity(
+    const std::vector<Diagnostic> &diagnostics) {
   int max_severity = 0;
   for (const auto &d : diagnostics) {
     max_severity = choose_more_severe(max_severity, d.severity);
@@ -47,7 +48,6 @@ std::string normalize_diagnostic_path(const std::string &path) {
 
 Editor::Editor() {
   config.load();
- 
 
   running = true;
   pane_root = -1;
@@ -58,7 +58,8 @@ Editor::Editor() {
   minimap_width = 10; // Fixed width for now
   show_integrated_terminal = false;
   current_integrated_terminal = -1;
-  integrated_terminal_height = std::clamp(config.get_int("terminal_height", 10), 5, 20);
+  integrated_terminal_height =
+      std::clamp(config.get_int("terminal_height", 10), 5, 20);
   show_search = false;
   show_command_palette = false;
   command_palette_selected = 0;
@@ -166,7 +167,8 @@ Editor::Editor() {
   }
 
   terminal.init();
-  terminal.set_poll_timeout_ms(std::max(1, 1000 / std::max(render_fps, idle_fps)));
+  terminal.set_poll_timeout_ms(
+      std::max(1, 1000 / std::max(render_fps, idle_fps)));
   ui = new UI(&terminal);
   ui->resize(terminal.get_width(), terminal.get_height());
 

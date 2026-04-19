@@ -249,6 +249,64 @@ install_clangd() {
   return 1
 }
 
+install_prettier() {
+  if command -v prettier >/dev/null 2>&1; then
+    echo "[jot] prettier already installed"
+    return 0
+  fi
+
+  if command -v pacman >/dev/null 2>&1; then
+    attempt_cmd "Installing prettier via pacman" \
+      run_maybe_sudo pacman -Sy --noconfirm prettier && return 0
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    attempt_cmd "Installing prettier via apt-get" \
+      run_maybe_sudo bash -lc "apt-get update && apt-get install -y prettier" && return 0
+  fi
+
+  if command -v dnf >/dev/null 2>&1; then
+    attempt_cmd "Installing prettier via dnf" \
+      run_maybe_sudo dnf install -y prettier && return 0
+  fi
+
+  if command -v yum >/dev/null 2>&1; then
+    attempt_cmd "Installing prettier via yum" \
+      run_maybe_sudo yum install -y prettier && return 0
+  fi
+
+  if command -v zypper >/dev/null 2>&1; then
+    attempt_cmd "Installing prettier via zypper" \
+      run_maybe_sudo zypper --non-interactive install nodejs-prettier && return 0
+  fi
+
+  if command -v npm >/dev/null 2>&1; then
+    if [[ "${USE_SUDO}" -eq 1 ]]; then
+      attempt_cmd "Installing prettier via npm -g (sudo)" \
+        run_maybe_sudo npm install -g prettier && return 0
+    else
+      if attempt_cmd "Installing prettier via npm -g" \
+        npm install -g prettier; then
+        return 0
+      fi
+      local user_prefix="${DEFAULT_HOME}/.local"
+      run_as_default_user mkdir -p "${user_prefix}"
+      if attempt_cmd "Installing prettier via npm (user prefix ${user_prefix})" \
+        run_as_default_user npm install --prefix "${user_prefix}" prettier; then
+        run_as_default_user mkdir -p "${DEFAULT_HOME}/.local/bin"
+        if [[ -x "${user_prefix}/node_modules/.bin/prettier" ]]; then
+          run_as_default_user ln -sf "${user_prefix}/node_modules/.bin/prettier" \
+            "${DEFAULT_HOME}/.local/bin/prettier"
+        fi
+        return 0
+      fi
+    fi
+  fi
+
+  echo "[jot] Warning: unable to install prettier automatically." >&2
+  return 1
+}
+
 install_builtin_lsps() {
   echo "[jot:lsp] Installing built-in LSP servers (python/typescript/cpp)"
   local failures=0
@@ -297,6 +355,9 @@ if [[ "${USE_SUDO}" -eq 1 ]]; then
 else
   cmake --install "${BUILD_DIR}"
 fi
+
+echo "[jot] Installing formatter dependency (prettier)"
+install_prettier || true
 
 if [[ "${INSTALL_LSP}" -eq 1 ]]; then
   install_builtin_lsps

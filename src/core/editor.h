@@ -300,6 +300,8 @@ private:
   bool handle_home_menu_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
   bool handle_home_menu_mouse(int x, int y, bool is_click);
   bool handle_integrated_terminal_mouse(int x, int y);
+  bool handle_integrated_terminal_scroll(int x, int y, bool is_scroll_up,
+                                         bool is_scroll_down);
   void place_integrated_terminal_cursor();
   void handle_mouse(void *event);
 

@@ -52,7 +52,13 @@ void Editor::render_sidebar() {
     return;
 
   int w = std::min(sidebar_width, std::max(0, ui->get_width() - 20));
-  int h = std::max(0, ui->get_height() - status_height - tab_height);
+  int reserved_terminal_h = 0;
+  if (show_integrated_terminal && !integrated_terminals.empty()) {
+    reserved_terminal_h =
+        std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
+  }
+  int h = std::max(0, ui->get_height() - status_height - tab_height -
+                          reserved_terminal_h);
   int x = 0;
   int y = tab_height;
   if (w < 2 || h < 1)

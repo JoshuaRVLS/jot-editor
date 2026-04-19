@@ -25,6 +25,18 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     return;
   }
 
+  // Fallback for terminals where Ctrl+` cannot be emitted reliably.
+  bool alt_backtick = is_alt && (ch == '`' || original_ch == '`' ||
+                                 ch == '\\' || original_ch == '\\' ||
+                                 ch == '|' || original_ch == '|');
+  if (alt_backtick) {
+    if (show_home_menu) {
+      show_home_menu = false;
+    }
+    toggle_integrated_terminal();
+    return;
+  }
+
   if (show_home_menu) {
     if (handle_home_menu_input(ch, is_ctrl, is_shift, is_alt)) {
       return;

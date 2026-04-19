@@ -55,7 +55,8 @@ std::string completion_kind_icon(int kind) {
 } // namespace
 
 void Editor::render_lsp_completion() {
-  if (!lsp_completion_visible || lsp_completion_items.empty() || panes.empty()) {
+  if (!lsp_completion_visible || lsp_completion_items.empty() ||
+      panes.empty()) {
     return;
   }
 
@@ -104,37 +105,67 @@ void Editor::render_lsp_completion() {
   }
 
   int box_w = std::clamp(longest + 6, 20, std::min(visible_w, 72));
-  int box_h = max_items + 2;
+  int box_h = max_items;
 
   int safe_cursor_y = std::clamp(buf.cursor.y, 0, (int)buf.lines.size() - 1);
   const std::string &line = buf.lines[safe_cursor_y];
   int cursor_visual = compute_visual_column(line, buf.cursor.x, tab_size);
   int scroll_visual = compute_visual_column(line, buf.scroll_x, tab_size);
   int cursor_x = pane.x + 1 + line_num_width + (cursor_visual - scroll_visual);
-  int cursor_y =
-      pane.y + tab_height + (buf.cursor.y - buf.scroll_offset);
+  int cursor_y = pane.y + tab_height + (buf.cursor.y - buf.scroll_offset);
 
   int min_x = pane.x + 1 + line_num_width;
   int max_x = pane.x + draw_w - box_w - 1;
   if (max_x < min_x) {
     max_x = min_x;
   }
-  int box_x = std::clamp(cursor_x, min_x, max_x);
 
   int min_y = pane.y + tab_height;
   int max_y = pane.y + visible_h - box_h;
   if (max_y < min_y) {
     max_y = min_y;
   }
-  int box_y = cursor_y + 1;
-  if (box_y > max_y) {
-    box_y = cursor_y - box_h;
+
+  auto clamp_box_x = [&](int x) { return std::clamp(x, min_x, max_x); };
+  auto clamp_box_y = [&](int y) { return std::clamp(y, min_y, max_y); };
+  auto border_hits_cursor = [&](int x, int y) {
+    int left = x - 1;
+    int right = x + box_w;
+    int top = y - 1;
+    int bottom = y + box_h;
+    return cursor_x >= left && cursor_x <= right && cursor_y >= top &&
+           cursor_y <= bottom;
+  };
+
+  // Try multiple placements and pick the first where full bordered popup
+  // doesn't touch the cursor cell.
+  std::vector<std::pair<int, int>> candidates = {
+      {cursor_x + 2, cursor_y + 2},
+      {cursor_x + 2, cursor_y - box_h - 2},
+      {cursor_x - box_w - 2, cursor_y + 2},
+      {cursor_x - box_w - 2, cursor_y - box_h - 2},
+      {cursor_x + 2, cursor_y},
+      {cursor_x - box_w - 2, cursor_y},
+      {cursor_x, cursor_y + 2},
+      {cursor_x, cursor_y - box_h - 2},
+  };
+
+  int box_x = clamp_box_x(cursor_x + 2);
+  int box_y = clamp_box_y(cursor_y + 2);
+  for (const auto &cand : candidates) {
+    int cx = clamp_box_x(cand.first);
+    int cy = clamp_box_y(cand.second);
+    if (!border_hits_cursor(cx, cy)) {
+      box_x = cx;
+      box_y = cy;
+      break;
+    }
   }
-  box_y = std::clamp(box_y, min_y, max_y);
 
   UIRect rect = {box_x, box_y, box_w, box_h};
   ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
-  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+  UIRect border_rect = {box_x - 1, box_y - 1, box_w + 2, box_h + 2};
+  ui->draw_border(border_rect, theme.fg_panel_border, theme.bg_command);
 
   for (int row = 0; row < max_items; row++) {
     int item_idx = start_idx + row;
@@ -147,7 +178,7 @@ void Editor::render_lsp_completion() {
     int fg = selected_row ? theme.fg_selection : theme.fg_command;
     int bg = selected_row ? theme.bg_selection : theme.bg_command;
     std::string icon = completion_kind_icon(item.kind);
-    std::string text = icon + item.label;
+    std::string text = " " + icon + item.label;
 
     if (!item.detail.empty()) {
       std::string detail = item.detail.substr(0, 24);
@@ -157,9 +188,9 @@ void Editor::render_lsp_completion() {
       text = text.substr(0, std::max(0, box_w - 5)) + "...";
     }
 
-    UIRect row_rect = {box_x + 1, box_y + 1 + row, box_w - 2, 1};
+    UIRect row_rect = {box_x, box_y + row, box_w, 1};
     ui->fill_rect(row_rect, " ", fg, bg);
-    ui->draw_text(box_x + 1, box_y + 1 + row, text, fg, bg, selected_row);
+    ui->draw_text(box_x + 1, box_y + row, text, fg, bg, selected_row);
   }
 }
 
@@ -178,11 +209,13 @@ void Editor::render_telescope() {
   }
 
   // Compact quick-open style overlay so it doesn't take over the whole editor.
-  int modal_w = std::min(std::max(1, content_w - 6), std::max(48, content_w * 2 / 3));
+  int modal_w =
+      std::min(std::max(1, content_w - 6), std::max(48, content_w * 2 / 3));
   int modal_h = std::min(h - 6, std::max(10, h / 2));
   // Round to nearest cell so odd widths don't bias left.
   int x = content_x + std::max(0, (content_w - modal_w + 1) / 2);
-  x = std::clamp(x, content_x, std::max(content_x, content_x + content_w - modal_w));
+  x = std::clamp(x, content_x,
+                 std::max(content_x, content_x + content_w - modal_w));
   int top_bound = std::max(0, tab_height + 1);
   int bottom_bound = std::max(top_bound + 1, h - status_height - 1);
   int usable_h = std::max(1, bottom_bound - top_bound);
@@ -271,8 +304,7 @@ void Editor::render_telescope() {
     }
   }
 
-  std::string footer =
-      "Enter open  Backspace parent  Ctrl+U clear  Esc close";
+  std::string footer = "Enter open  Backspace parent  Ctrl+U clear  Esc close";
   if ((int)footer.length() > modal_w - 4) {
     footer = footer.substr(0, modal_w - 7) + "...";
   }

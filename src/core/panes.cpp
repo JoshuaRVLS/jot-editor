@@ -46,7 +46,13 @@ void Editor::update_pane_layout() {
   }
 
   int total_w = std::max(1, ui->get_width());
-  int total_h = std::max(1, ui->get_height() - status_height);
+  int reserved_terminal_h = 0;
+  if (show_integrated_terminal && !integrated_terminals.empty()) {
+    reserved_terminal_h =
+        std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
+  }
+  int total_h =
+      std::max(1, ui->get_height() - status_height - reserved_terminal_h);
   int max_sidebar = std::max(0, total_w - 20);
   int origin_x = show_sidebar ? std::min(sidebar_width, max_sidebar) : 0;
   int available_w = std::max(1, total_w - origin_x);

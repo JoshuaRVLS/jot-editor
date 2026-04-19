@@ -52,6 +52,11 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
     return;
   }
 
+  if ((is_scroll_up || is_scroll_down) &&
+      handle_integrated_terminal_scroll(x, y, is_scroll_up, is_scroll_down)) {
+    return;
+  }
+
   if (show_sidebar) {
     if (x < sidebar_width) {
       if (is_scroll_up) {
@@ -126,6 +131,8 @@ void Editor::handle_mouse(void *event_ptr) {
     return;
 
   bool is_click = (bstate == 1);
+  bool is_click_release = (bstate == 2);
+  bool is_primary_click = is_click || is_click_release;
 
   if (show_home_menu) {
     if (handle_home_menu_mouse(event->x, event->y, is_click)) {
@@ -137,8 +144,15 @@ void Editor::handle_mouse(void *event_ptr) {
   }
 
   if (show_sidebar && is_click) {
+    int reserved_terminal_h = 0;
+    if (show_integrated_terminal && !integrated_terminals.empty()) {
+      reserved_terminal_h = std::clamp(integrated_terminal_height, 5,
+                                       std::max(5, ui->get_height() / 2));
+    }
+    int content_bottom =
+        terminal.get_height() - status_height - reserved_terminal_h;
     if (event->x < sidebar_width && event->y >= tab_height &&
-        event->y < terminal.get_height() - status_height) {
+        event->y < content_bottom) {
       focus_state = FOCUS_SIDEBAR;
       long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now().time_since_epoch())
@@ -155,7 +169,7 @@ void Editor::handle_mouse(void *event_ptr) {
     }
   }
 
-  if (is_click && handle_integrated_terminal_mouse(event->x, event->y)) {
+  if (is_primary_click && handle_integrated_terminal_mouse(event->x, event->y)) {
     return;
   }
 

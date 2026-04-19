@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <set>
 
 namespace fs = std::filesystem;
 
@@ -50,6 +51,99 @@ std::string recent_workspaces_path() {
   fs::path p = fs::path(home) / ".config" / "jot" / "configs" /
                "recent_workspaces.txt";
   return p.string();
+}
+
+std::string shell_quote(const std::string &s) {
+  std::string out = "'";
+  for (char c : s) {
+    if (c == '\'') {
+      out += "'\\''";
+    } else {
+      out += c;
+    }
+  }
+  out += "'";
+  return out;
+}
+
+std::string detect_prettier_runner() {
+  static int mode = -1; // -1 unknown, 0 unavailable, 1 prettier, 2 npx
+  if (mode == -1) {
+    if (std::system("command -v prettier >/dev/null 2>&1") == 0) {
+      mode = 1;
+    } else if (std::system("command -v npx >/dev/null 2>&1") == 0) {
+      mode = 2;
+    } else {
+      mode = 0;
+    }
+  }
+  if (mode == 1) {
+    return "prettier";
+  }
+  if (mode == 2) {
+    return "npx --yes prettier";
+  }
+  return "";
+}
+
+std::string detect_clang_format_runner() {
+  static int mode = -1; // -1 unknown, 0 unavailable, 1 clang-format
+  if (mode == -1) {
+    mode = (std::system("command -v clang-format >/dev/null 2>&1") == 0) ? 1 : 0;
+  }
+  return mode == 1 ? "clang-format" : "";
+}
+
+bool supports_prettier_on_save(const std::string &path) {
+  std::error_code ec;
+  fs::path p(path);
+  const std::string name = p.filename().string();
+  std::string ext = p.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(),
+                 [](unsigned char c) { return (char)std::tolower(c); });
+
+  static const std::set<std::string> exts = {
+      ".js",    ".jsx",  ".cjs",  ".mjs",  ".ts",   ".tsx",  ".json",
+      ".css",   ".scss", ".less", ".html", ".md",   ".mdx",  ".yaml",
+      ".yml",   ".vue",  ".svelte", ".gql", ".graphql"};
+
+  if (exts.find(ext) != exts.end()) {
+    return true;
+  }
+
+  static const std::set<std::string> names = {
+      ".prettierrc", ".prettierrc.json", ".prettierrc.yaml", ".prettierrc.yml",
+      ".prettierrc.js", ".prettierrc.cjs", ".prettierrc.mjs"};
+  return names.find(name) != names.end() && fs::exists(p, ec) && !ec;
+}
+
+bool supports_clang_format_on_save(const std::string &path) {
+  fs::path p(path);
+  std::string ext = p.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(),
+                 [](unsigned char c) { return (char)std::tolower(c); });
+  static const std::set<std::string> exts = {
+      ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".m", ".mm"};
+  return exts.find(ext) != exts.end();
+}
+
+bool read_file_lines(const std::string &path, std::vector<std::string> &out) {
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    return false;
+  }
+  out.clear();
+  std::string line;
+  while (std::getline(file, line)) {
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    out.push_back(line);
+  }
+  if (out.empty()) {
+    out.push_back("");
+  }
+  return true;
 }
 } // namespace
 
@@ -290,6 +384,78 @@ bool Editor::save_buffer_at(int index, bool announce) {
   }
   file.close();
 
+  bool formatted_with_prettier = false;
+  bool formatted_with_clang = false;
+  if (config.get_bool("prettier_on_save", true) &&
+      supports_prettier_on_save(buf.filepath)) {
+    const std::string runner = detect_prettier_runner();
+    if (!runner.empty()) {
+      std::string cmd = runner + " --write " + shell_quote(buf.filepath) +
+                        " >/dev/null 2>&1";
+      if (std::system(cmd.c_str()) == 0) {
+        std::vector<std::string> refreshed_lines;
+        if (read_file_lines(buf.filepath, refreshed_lines)) {
+          buf.lines.swap(refreshed_lines);
+          buf.cursor.y =
+              std::clamp(buf.cursor.y, 0, std::max(0, (int)buf.lines.size() - 1));
+          buf.cursor.x = std::clamp(buf.cursor.x, 0,
+                                    (int)buf.lines[buf.cursor.y].size());
+          buf.preferred_x = buf.cursor.x;
+          buf.scroll_offset =
+              std::clamp(buf.scroll_offset, 0,
+                         std::max(0, (int)buf.lines.size() - 1));
+          buf.scroll_x = std::max(0, buf.scroll_x);
+          if (buf.selection.active) {
+            buf.selection.start.y = std::clamp(
+                buf.selection.start.y, 0, std::max(0, (int)buf.lines.size() - 1));
+            buf.selection.end.y = std::clamp(
+                buf.selection.end.y, 0, std::max(0, (int)buf.lines.size() - 1));
+            buf.selection.start.x = std::clamp(
+                buf.selection.start.x, 0, (int)buf.lines[buf.selection.start.y].size());
+            buf.selection.end.x = std::clamp(
+                buf.selection.end.x, 0, (int)buf.lines[buf.selection.end.y].size());
+          }
+          formatted_with_prettier = true;
+        }
+      }
+    }
+  }
+  if (!formatted_with_prettier &&
+      config.get_bool("clang_format_on_save", true) &&
+      supports_clang_format_on_save(buf.filepath)) {
+    const std::string runner = detect_clang_format_runner();
+    if (!runner.empty()) {
+      std::string cmd = runner + " -i " + shell_quote(buf.filepath) +
+                        " >/dev/null 2>&1";
+      if (std::system(cmd.c_str()) == 0) {
+        std::vector<std::string> refreshed_lines;
+        if (read_file_lines(buf.filepath, refreshed_lines)) {
+          buf.lines.swap(refreshed_lines);
+          buf.cursor.y =
+              std::clamp(buf.cursor.y, 0, std::max(0, (int)buf.lines.size() - 1));
+          buf.cursor.x = std::clamp(buf.cursor.x, 0,
+                                    (int)buf.lines[buf.cursor.y].size());
+          buf.preferred_x = buf.cursor.x;
+          buf.scroll_offset =
+              std::clamp(buf.scroll_offset, 0,
+                         std::max(0, (int)buf.lines.size() - 1));
+          buf.scroll_x = std::max(0, buf.scroll_x);
+          if (buf.selection.active) {
+            buf.selection.start.y = std::clamp(
+                buf.selection.start.y, 0, std::max(0, (int)buf.lines.size() - 1));
+            buf.selection.end.y = std::clamp(
+                buf.selection.end.y, 0, std::max(0, (int)buf.lines.size() - 1));
+            buf.selection.start.x = std::clamp(
+                buf.selection.start.x, 0, (int)buf.lines[buf.selection.start.y].size());
+            buf.selection.end.x = std::clamp(
+                buf.selection.end.x, 0, (int)buf.lines[buf.selection.end.y].size());
+          }
+          formatted_with_clang = true;
+        }
+      }
+    }
+  }
+
   buf.modified = false;
   if (buf.is_preview) {
     buf.is_preview = false;
@@ -300,6 +466,11 @@ bool Editor::save_buffer_at(int index, bool announce) {
   track_recent_file(buf.filepath);
   if (announce) {
     message = "Saved: " + get_filename(buf.filepath);
+    if (formatted_with_prettier) {
+      message += " (formatted: prettier)";
+    } else if (formatted_with_clang) {
+      message += " (formatted: clang-format)";
+    }
     needs_redraw = true;
   }
   if (python_api)

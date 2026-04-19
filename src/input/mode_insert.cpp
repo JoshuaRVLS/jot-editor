@@ -247,7 +247,6 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
     case 1001:
       delete_word_forward();
       return;
-    case 0:
     case ' ':
       request_lsp_completion(true);
       return;

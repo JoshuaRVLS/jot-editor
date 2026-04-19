@@ -28,6 +28,7 @@ void Editor::activate_integrated_terminal(int index, bool focus) {
 }
 
 void Editor::create_integrated_terminal() {
+  show_home_menu = false;
   auto term = std::make_unique<IntegratedTerminal>();
   if (!term->open_shell()) {
     set_message("Failed to open integrated terminal");
@@ -42,6 +43,10 @@ void Editor::create_integrated_terminal() {
   current_integrated_terminal = (int)integrated_terminals.size() - 1;
   show_integrated_terminal = true;
   activate_integrated_terminal(current_integrated_terminal, true);
+  if (auto *active = get_integrated_terminal(current_integrated_terminal)) {
+    // Trigger prompt render early so the panel is never perceived as "dead".
+    active->send_key('\r', false, false, false);
+  }
   set_message("Opened terminal " +
               std::to_string(current_integrated_terminal + 1));
   needs_redraw = true;
@@ -77,6 +82,7 @@ void Editor::close_integrated_terminal(int index) {
 }
 
 void Editor::toggle_integrated_terminal() {
+  show_home_menu = false;
   if (integrated_terminals.empty()) {
     create_integrated_terminal();
     return;
@@ -89,6 +95,19 @@ void Editor::toggle_integrated_terminal() {
   }
   if (!term) {
     create_integrated_terminal();
+    return;
+  }
+
+  if (!term->is_active()) {
+    if (!term->open_shell()) {
+      set_message("Failed to restart integrated terminal shell");
+      needs_redraw = true;
+      return;
+    }
+    show_integrated_terminal = true;
+    activate_integrated_terminal(current_integrated_terminal, true);
+    set_message("Integrated terminal restarted");
+    needs_redraw = true;
     return;
   }
 
@@ -115,8 +134,18 @@ void Editor::toggle_integrated_terminal() {
 void Editor::handle_integrated_terminal_input(int ch, bool is_ctrl,
                                               bool is_shift, bool is_alt) {
   IntegratedTerminal *term = get_integrated_terminal();
-  if (!show_integrated_terminal || !term || !term->is_active()) {
+  if (!show_integrated_terminal || !term) {
     return;
+  }
+
+  if (!term->is_active()) {
+    if (!term->open_shell()) {
+      set_message("Failed to restart integrated terminal shell");
+      needs_redraw = true;
+      return;
+    }
+    set_message("Integrated terminal restarted");
+    needs_redraw = true;
   }
 
   if (is_ctrl && is_shift && (ch == 't' || ch == 'T')) {
@@ -151,7 +180,7 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y) {
     return false;
   }
 
-  if (y == tab_y) {
+  if (y == tab_y || y == panel_y) {
     int tab_x = 1;
     for (int i = 0; i < (int)integrated_terminals.size(); i++) {
       std::string label = " term " + std::to_string(i + 1) + " ";
@@ -190,7 +219,49 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y) {
 
   show_integrated_terminal = true;
   activate_integrated_terminal(current_integrated_terminal, true);
+  IntegratedTerminal *term = get_integrated_terminal();
+  if (term && !term->is_active()) {
+    if (term->open_shell()) {
+      set_message("Integrated terminal restarted");
+    } else {
+      set_message("Failed to restart integrated terminal shell");
+    }
+  }
   needs_redraw = true;
+  return true;
+}
+
+bool Editor::handle_integrated_terminal_scroll(int x, int y, bool is_scroll_up,
+                                               bool is_scroll_down) {
+  if (!show_integrated_terminal || integrated_terminals.empty()) {
+    return false;
+  }
+
+  IntegratedTerminal *term = get_integrated_terminal();
+  if (!term) {
+    return false;
+  }
+
+  int panel_h = std::clamp(integrated_terminal_height, 5,
+                           std::max(5, ui->get_height() / 2));
+  int panel_y = std::max(tab_height, ui->get_height() - status_height - panel_h);
+  int panel_w = ui->get_width();
+
+  if (x < 0 || x >= panel_w || y < panel_y || y >= panel_y + panel_h) {
+    return false;
+  }
+
+  int content_h = std::max(1, panel_h - 3);
+  bool changed = false;
+  if (is_scroll_up) {
+    changed = term->scroll_lines(3, content_h);
+  } else if (is_scroll_down) {
+    changed = term->scroll_lines(-3, content_h);
+  }
+
+  if (changed) {
+    needs_redraw = true;
+  }
   return true;
 }
 
@@ -230,7 +301,7 @@ void Editor::place_integrated_terminal_cursor() {
 
 void Editor::render_integrated_terminal() {
   IntegratedTerminal *term = get_integrated_terminal();
-  if (!show_integrated_terminal || !term || !term->is_active()) {
+  if (!show_integrated_terminal || !term) {
     return;
   }
 
@@ -240,7 +311,13 @@ void Editor::render_integrated_terminal() {
   int panel_w = ui->get_width();
   UIRect panel = {0, panel_y, panel_w, panel_h};
 
-  ui->fill_rect(panel, " ", theme.fg_terminal, theme.bg_terminal);
+  int term_fg = theme.fg_terminal;
+  int term_bg = theme.bg_terminal;
+  if (term_fg == term_bg) {
+    term_fg = (theme.fg_default == term_bg) ? 15 : theme.fg_default;
+  }
+
+  ui->fill_rect(panel, " ", term_fg, term_bg);
   ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal);
 
   int tab_y = panel_y + 1;
@@ -279,6 +356,23 @@ void Editor::render_integrated_terminal() {
 
   int content_h = std::max(1, panel_h - 3);
   auto lines = term->get_recent_lines(content_h);
+  auto styled_lines = term->get_recent_styled_lines(content_h);
+  auto all_blank = [](const std::vector<std::string> &v) {
+    for (const auto &s : v) {
+      if (!s.empty()) {
+        return false;
+      }
+    }
+    return true;
+  };
+  if (term->is_active() && lines.size() == 1 && lines.front().empty()) {
+    lines.front() = "[terminal ready]  (Esc: unfocus, Ctrl+X: toggle)";
+  }
+  if (!term->is_active() && (lines.empty() || all_blank(lines))) {
+    lines.clear();
+    lines.push_back("[terminal inactive: shell failed or exited]");
+    lines.push_back("[try :terminalnew or check $SHELL]");
+  }
   int start_y = panel_y + 2;
   int start = std::max(0, (int)lines.size() - content_h);
   for (int i = 0; i < content_h; i++) {
@@ -287,9 +381,30 @@ void Editor::render_integrated_terminal() {
       break;
     }
     std::string line = lines[idx];
-    if ((int)line.size() > panel_w - 2) {
-      line = line.substr(std::max(0, (int)line.size() - (panel_w - 2)));
+    int max_cols = std::max(1, panel_w - 2);
+    int trim_from = std::max(0, (int)line.size() - max_cols);
+    if ((int)line.size() > max_cols) {
+      line = line.substr(trim_from);
     }
-    ui->draw_text(1, start_y + i, line, theme.fg_terminal, theme.bg_terminal);
+
+    bool drew_styled = false;
+    if (idx >= 0 && idx < (int)styled_lines.size()) {
+      auto &styled = styled_lines[idx];
+      if (!styled.empty()) {
+        int sx = 1;
+        int start_cell = std::max(0, (int)styled.size() - max_cols);
+        for (int j = start_cell; j < (int)styled.size() && sx < 1 + max_cols; j++) {
+          int fg = std::clamp(styled[j].fg, 0, 255);
+          int bg = std::clamp(styled[j].bg, 0, 255);
+          ui->draw_text(sx, start_y + i, styled[j].ch, fg, bg);
+          sx++;
+        }
+        drew_styled = true;
+      }
+    }
+
+    if (!drew_styled) {
+      ui->draw_text(1, start_y + i, line, term_fg, term_bg);
+    }
   }
 }
