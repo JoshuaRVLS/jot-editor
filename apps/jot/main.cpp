@@ -31,8 +31,7 @@ int main(int argc, char *argv[]) {
       if (!ec) {
         std::filesystem::current_path(workspace, ec);
       }
-      editor.load_file_tree(!ec ? workspace.string() : argv[1]);
-      editor.toggle_sidebar(); // Show sidebar by default for dirs
+      editor.open_workspace(!ec ? workspace.string() : argv[1], true);
     } else {
       editor.load_file(argv[1]);
     }
