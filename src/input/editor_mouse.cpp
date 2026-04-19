@@ -3,6 +3,8 @@
 #include <chrono>
 #include <cctype>
 #include <cstdlib>
+#include <filesystem>
+#include <unordered_map>
 
 // Local definition of MEVENT used by handle_mouse()
 struct MEVENT {
@@ -24,6 +26,19 @@ static int compare_cursor_pos(const Cursor &a, const Cursor &b) {
   if (a.x != b.x)
     return (a.x < b.x) ? -1 : 1;
   return 0;
+}
+
+static std::string ellipsize_middle(const std::string &s, int max_len) {
+  if (max_len <= 0)
+    return "";
+  if ((int)s.size() <= max_len)
+    return s;
+  if (max_len <= 3)
+    return s.substr(0, (size_t)max_len);
+  int keep_left = (max_len - 3) / 2;
+  int keep_right = max_len - 3 - keep_left;
+  return s.substr(0, (size_t)keep_left) + "..." +
+         s.substr(s.size() - (size_t)keep_right);
 }
 
 void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
@@ -61,7 +76,7 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
         needs_redraw = true;
       } else if (is_click) {
         focus_state = FOCUS_SIDEBAR;
-        handle_sidebar_mouse(x, y, is_click);
+        handle_sidebar_mouse(x, y, is_click, false);
       }
       return;
     }
@@ -138,7 +153,16 @@ void Editor::handle_mouse(void *event_ptr) {
     if (event->x < sidebar_width && event->y >= tab_height &&
         event->y < terminal.get_height() - status_height) {
       focus_state = FOCUS_SIDEBAR;
-      handle_sidebar_mouse(event->x, event->y, true);
+      long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now().time_since_epoch())
+                             .count();
+      int sidebar_row = event->y - tab_height + file_tree_scroll;
+      bool sidebar_double = (last_sidebar_click_ms > 0) &&
+                            (now_ms - last_sidebar_click_ms <= 350) &&
+                            (last_sidebar_click_row == sidebar_row);
+      last_sidebar_click_ms = now_ms;
+      last_sidebar_click_row = sidebar_row;
+      handle_sidebar_mouse(event->x, event->y, true, sidebar_double);
       needs_redraw = true;
       return;
     }
@@ -200,29 +224,128 @@ void Editor::handle_mouse(void *event_ptr) {
   }
 
   if (is_click && event->y < tab_height) {
-    int tab_x = show_sidebar ? sidebar_width : 0;
-    for (int i = 0; i < (int)buffers.size(); i++) {
-      std::string name = get_filename(buffers[i].filepath);
-      if (name.empty())
-        name = "[No Name]";
-      if (buffers[i].modified)
-        name += "+";
-      std::string disp = " " + name + " ";
-      int close_x = tab_x + (int)disp.length();
-      int tab_w = (int)disp.length() + 2; // close glyph + separator
-      if (event->x >= tab_x && event->x < tab_x + tab_w) {
-        if (event->x == close_x) {
-          close_buffer_at(i);
-        } else {
-          current_buffer = i;
-          get_pane().buffer_id = current_buffer;
-        }
-        needs_redraw = true;
-        return;
+    int bar_x = show_sidebar ? std::min(sidebar_width, std::max(0, ui->get_width() - 20)) : 0;
+    int bar_w = ui->get_width() - bar_x;
+    if (bar_w > 0 && !buffers.empty()) {
+      std::vector<std::string> base_names(buffers.size());
+      std::unordered_map<std::string, int> base_count;
+      for (int i = 0; i < (int)buffers.size(); i++) {
+        std::string base = get_filename(buffers[i].filepath);
+        if (base.empty())
+          base = "[No Name]";
+        base_names[i] = base;
+        base_count[base]++;
       }
-      tab_x += tab_w;
-      if (tab_x >= ui->get_width())
-        break;
+
+      std::vector<int> tab_widths(buffers.size(), 0);
+      for (int i = 0; i < (int)buffers.size(); i++) {
+        std::string name = base_names[i];
+        if (base_count[name] > 1 && !buffers[i].filepath.empty()) {
+          std::filesystem::path p(buffers[i].filepath);
+          std::string parent = p.parent_path().filename().string();
+          if (!parent.empty())
+            name += " <" + parent + ">";
+        }
+        name = ellipsize_middle(name, 28);
+        std::string disp = " " + name + (buffers[i].modified ? " * " : " ");
+        tab_widths[i] = (int)disp.size() + 2;
+      }
+
+      int total_w = 0;
+      for (int tw : tab_widths)
+        total_w += tw;
+      bool overflow = total_w > bar_w;
+      int control_w = overflow ? 2 : 0;
+      int tabs_start_x = bar_x + control_w;
+      int tabs_end_x = bar_x + bar_w - control_w;
+      int avail_w = std::max(0, tabs_end_x - tabs_start_x);
+
+      if (!overflow) {
+        tab_scroll_index = 0;
+      } else {
+        tab_scroll_index = std::clamp(tab_scroll_index, 0,
+                                      std::max(0, (int)buffers.size() - 1));
+        if (current_buffer < tab_scroll_index)
+          tab_scroll_index = current_buffer;
+
+        auto contains_current = [&](int start_idx) {
+          int used = 0;
+          for (int i = start_idx; i < (int)buffers.size(); i++) {
+            if (used + tab_widths[i] > avail_w)
+              break;
+            if (i == current_buffer)
+              return true;
+            used += tab_widths[i];
+          }
+          return false;
+        };
+        while (tab_scroll_index < current_buffer &&
+               !contains_current(tab_scroll_index)) {
+          tab_scroll_index++;
+        }
+      }
+
+      int tab_x = tabs_start_x;
+      int last_visible_index = -1;
+      for (int i = tab_scroll_index; i < (int)buffers.size(); i++) {
+        if (tab_x + tab_widths[i] > tabs_end_x)
+          break;
+        last_visible_index = i;
+
+        std::string name = base_names[i];
+        if (base_count[name] > 1 && !buffers[i].filepath.empty()) {
+          std::filesystem::path p(buffers[i].filepath);
+          std::string parent = p.parent_path().filename().string();
+          if (!parent.empty())
+            name += " <" + parent + ">";
+        }
+        name = ellipsize_middle(name, 28);
+        std::string disp = " " + name + (buffers[i].modified ? " * " : " ");
+        int close_x = tab_x + (int)disp.length();
+
+        if (event->x >= tab_x && event->x < tab_x + tab_widths[i]) {
+          long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 std::chrono::steady_clock::now().time_since_epoch())
+                                 .count();
+          bool tab_double = (last_tab_click_ms > 0) &&
+                            (now_ms - last_tab_click_ms <= 350) &&
+                            (last_tab_clicked_index == i);
+          last_tab_click_ms = now_ms;
+          last_tab_clicked_index = i;
+
+          if (event->x == close_x) {
+            close_buffer_at(i);
+          } else {
+            current_buffer = i;
+            get_pane().buffer_id = current_buffer;
+            if (tab_double && buffers[i].is_preview) {
+              buffers[i].is_preview = false;
+              if (preview_buffer_index == i) {
+                preview_buffer_index = -1;
+              }
+            }
+          }
+          needs_redraw = true;
+          return;
+        }
+        tab_x += tab_widths[i];
+      }
+
+      if (overflow) {
+        bool has_left = tab_scroll_index > 0;
+        bool has_right = last_visible_index >= 0 &&
+                         last_visible_index < (int)buffers.size() - 1;
+        if (event->x == bar_x && has_left) {
+          tab_scroll_index = std::max(0, tab_scroll_index - 1);
+          needs_redraw = true;
+          return;
+        }
+        if (event->x == bar_x + bar_w - 1 && has_right) {
+          tab_scroll_index = std::min((int)buffers.size() - 1, tab_scroll_index + 1);
+          needs_redraw = true;
+          return;
+        }
+      }
     }
   }
 
