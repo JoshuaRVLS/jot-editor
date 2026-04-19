@@ -169,11 +169,25 @@ void Editor::render_telescope() {
   if (w < 4 || h < 3)
     return;
 
-  int modal_w = std::min(w - 4, std::max(56, w * 4 / 5));
-  int modal_h = std::min(h - 2, std::max(12, h * 4 / 5));
-  int x = std::max(0, (w - modal_w) / 2);
-  int y = std::max(0, (h - modal_h) / 2);
-  int list_w = std::max(24, modal_w / 2);
+  int content_x = 0;
+  int content_w = w;
+  if (show_sidebar) {
+    int sidebar_w = std::min(sidebar_width, std::max(0, w - 20));
+    content_x = std::max(0, sidebar_w);
+    content_w = std::max(1, w - content_x);
+  }
+
+  // Compact quick-open style overlay so it doesn't take over the whole editor.
+  int modal_w = std::min(std::max(1, content_w - 6), std::max(48, content_w * 2 / 3));
+  int modal_h = std::min(h - 6, std::max(10, h / 2));
+  // Round to nearest cell so odd widths don't bias left.
+  int x = content_x + std::max(0, (content_w - modal_w + 1) / 2);
+  x = std::clamp(x, content_x, std::max(content_x, content_x + content_w - modal_w));
+  int top_bound = std::max(0, tab_height + 1);
+  int bottom_bound = std::max(top_bound + 1, h - status_height - 1);
+  int usable_h = std::max(1, bottom_bound - top_bound);
+  int y = top_bound + std::max(0, (usable_h - modal_h) / 2);
+  int list_w = std::max(24, modal_w * 2 / 5);
   int preview_w = modal_w - list_w - 1;
   int list_h = modal_h - 5;
 
@@ -257,7 +271,8 @@ void Editor::render_telescope() {
     }
   }
 
-  std::string footer = "Enter open  Left parent  Esc close";
+  std::string footer =
+      "Enter open  Backspace parent  Ctrl+U clear  Esc close";
   if ((int)footer.length() > modal_w - 4) {
     footer = footer.substr(0, modal_w - 7) + "...";
   }

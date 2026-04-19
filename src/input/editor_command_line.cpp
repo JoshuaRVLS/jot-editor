@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <fstream>
 #include <sstream>
 
 namespace {
@@ -65,6 +66,7 @@ const std::vector<std::string> &ex_commands() {
       "split",  "splith",   "vsp",      "splitv",  "bn",     "nextpane",
       "bp",     "prevpane", "theme",    "colorscheme", "colo", "minimap",
       "term",   "terminal", "termnew",  "terminalnew", "search",
+      "find",   "ff",       "mkfile",   "mkdir",   "rename", "rm",
       "format", "trim",     "line",     "goto",        "resizeleft",
       "resizeright", "resizeup", "resizedown", "lspstart", "lspstatus",
       "lspstop", "lsprestart", "gitstatus", "gitdiff", "gitblame",
@@ -93,7 +95,8 @@ bool command_takes_argument(const std::string &cmd) {
          lc == "theme" || lc == "colorscheme" ||
          lc == "colo" || lc == "line" || lc == "goto" ||
          lc == "openrecent" || lc == "autosave" || lc == "help" ||
-         lc == "h" || lc == "gitdiff";
+         lc == "h" || lc == "gitdiff" || lc == "find" || lc == "ff" ||
+         lc == "mkfile" || lc == "mkdir" || lc == "rename" || lc == "rm";
 }
 
 bool parse_line_col(const std::string &s, int &line_out, int &col_out) {
@@ -298,6 +301,26 @@ void Editor::refresh_command_palette() {
     auto paths = complete_path_argument(arg);
     command_palette_results.insert(command_palette_results.end(), paths.begin(),
                                    paths.end());
+  } else if (lcmd == "find" || lcmd == "ff") {
+    auto paths = complete_path_argument(arg);
+    command_palette_results.insert(command_palette_results.end(), paths.begin(),
+                                   paths.end());
+  } else if (lcmd == "mkfile" || lcmd == "mkdir" || lcmd == "rm") {
+    auto paths = complete_path_argument(arg);
+    command_palette_results.insert(command_palette_results.end(), paths.begin(),
+                                   paths.end());
+  } else if (lcmd == "rename") {
+    size_t split = arg.find_first_of(" \t");
+    if (split == std::string::npos) {
+      auto paths = complete_path_argument(arg);
+      command_palette_results.insert(command_palette_results.end(), paths.begin(),
+                                     paths.end());
+    } else {
+      std::string right = trim_copy(arg.substr(split + 1));
+      auto paths = complete_path_argument(right);
+      command_palette_results.insert(command_palette_results.end(), paths.begin(),
+                                     paths.end());
+    }
   } else if (lcmd == "line" || lcmd == "goto") {
     auto &buf = get_buffer();
     int cur_line = std::max(1, buf.cursor.y + 1);
@@ -511,6 +534,55 @@ void Editor::handle_command_palette(int ch) {
       set_message("Jumped to line " + std::to_string(buf.cursor.y + 1) +
                   ", col " + std::to_string(buf.cursor.x + 1));
     };
+    auto resolve_path = [&](const std::string &raw) -> fs::path {
+      std::error_code ec;
+      fs::path p(raw);
+      if (p.is_relative()) {
+        fs::path base = root_dir.empty() ? fs::current_path(ec) : fs::path(root_dir);
+        if (ec) {
+          ec.clear();
+          base = fs::path(".");
+        }
+        p = base / p;
+      }
+      p = fs::absolute(p, ec);
+      if (ec) {
+        return fs::path(raw);
+      }
+      return p.lexically_normal();
+    };
+    auto starts_with_path = [&](const std::string &child, const std::string &parent) {
+      if (child.size() < parent.size()) {
+        return false;
+      }
+      if (child.compare(0, parent.size(), parent) != 0) {
+        return false;
+      }
+      return child.size() == parent.size() ||
+             child[parent.size()] == '/' || child[parent.size()] == '\\';
+    };
+    auto close_buffers_for_path = [&](const std::string &target_abs, bool is_dir) {
+      std::error_code ec;
+      const std::string norm_target = fs::path(target_abs).lexically_normal().string();
+      const std::string dir_prefix =
+          norm_target + std::string(1, fs::path::preferred_separator);
+      for (int i = (int)buffers.size() - 1; i >= 0; --i) {
+        if (buffers[i].filepath.empty()) {
+          continue;
+        }
+        fs::path bp = fs::absolute(buffers[i].filepath, ec);
+        if (ec) {
+          ec.clear();
+          continue;
+        }
+        std::string buf_path = bp.lexically_normal().string();
+        bool match = (!is_dir && buf_path == norm_target) ||
+                     (is_dir && starts_with_path(buf_path, dir_prefix));
+        if (match) {
+          close_buffer_at(i);
+        }
+      }
+    };
 
     int parsed_line = 0, parsed_col = 1;
     bool close_prompt = true;
@@ -561,6 +633,136 @@ void Editor::handle_command_palette(int ch) {
       toggle_integrated_terminal();
     } else if (lcmd == "termnew" || lcmd == "terminalnew") {
       create_integrated_terminal();
+    } else if (lcmd == "find" || lcmd == "ff") {
+      std::string target = trim_copy(arg);
+      if (target.empty()) {
+        target = root_dir.empty() ? "." : root_dir;
+      }
+      telescope.open(target);
+      waiting_for_space_f = false;
+      close_prompt = false;
+      show_command_palette = false;
+      command_palette_query.clear();
+      command_palette_results.clear();
+      reset_completion_state();
+      needs_redraw = true;
+      return;
+    } else if (lcmd == "mkfile") {
+      if (arg.empty()) {
+        set_message("Usage: :mkfile <path>");
+      } else {
+        std::error_code ec;
+        fs::path p = resolve_path(arg);
+        if (fs::exists(p, ec)) {
+          set_message("File already exists: " + p.string());
+        } else {
+          fs::create_directories(p.parent_path(), ec);
+          ec.clear();
+          std::ofstream out(p.string());
+          if (!out.is_open()) {
+            set_message("Failed to create file: " + p.string());
+          } else {
+            out.close();
+            open_file(p.string());
+            if (show_sidebar) {
+              load_file_tree(root_dir);
+            }
+            set_message("Created file: " + p.filename().string());
+          }
+        }
+      }
+    } else if (lcmd == "mkdir") {
+      if (arg.empty()) {
+        set_message("Usage: :mkdir <path>");
+      } else {
+        std::error_code ec;
+        fs::path p = resolve_path(arg);
+        if (fs::exists(p, ec)) {
+          set_message("Path already exists: " + p.string());
+        } else if (fs::create_directories(p, ec)) {
+          if (show_sidebar) {
+            load_file_tree(root_dir);
+          }
+          set_message("Created folder: " + p.filename().string());
+        } else {
+          set_message("Failed to create folder: " + p.string());
+        }
+      }
+    } else if (lcmd == "rename") {
+      std::istringstream riss(arg);
+      std::string from_raw;
+      std::string to_raw;
+      riss >> from_raw >> to_raw;
+      if (from_raw.empty() || to_raw.empty()) {
+        set_message("Usage: :rename <old_path> <new_path>");
+      } else {
+        std::error_code ec;
+        fs::path from = resolve_path(from_raw);
+        fs::path to = resolve_path(to_raw);
+        if (!fs::path(to_raw).has_parent_path()) {
+          to = from.parent_path() / fs::path(to_raw);
+        }
+        to = to.lexically_normal();
+
+        if (!fs::exists(from, ec)) {
+          set_message("Source not found: " + from.string());
+        } else if (fs::exists(to, ec)) {
+          set_message("Destination exists: " + to.string());
+        } else {
+          fs::create_directories(to.parent_path(), ec);
+          ec.clear();
+          fs::rename(from, to, ec);
+          if (ec) {
+            set_message("Rename failed: " + ec.message());
+          } else {
+            const std::string from_s = from.lexically_normal().string();
+            const std::string to_s = to.lexically_normal().string();
+            for (auto &b : buffers) {
+              if (b.filepath.empty()) {
+                continue;
+              }
+              std::error_code bec;
+              fs::path bp = fs::absolute(b.filepath, bec);
+              if (bec) {
+                continue;
+              }
+              if (bp.lexically_normal().string() == from_s) {
+                b.filepath = to_s;
+              }
+            }
+            if (show_sidebar) {
+              load_file_tree(root_dir);
+            }
+            set_message("Renamed to: " + to.filename().string());
+          }
+        }
+      }
+    } else if (lcmd == "rm") {
+      if (arg.empty()) {
+        set_message("Usage: :rm <path>");
+      } else {
+        std::error_code ec;
+        fs::path p = resolve_path(arg);
+        if (!fs::exists(p, ec)) {
+          set_message("Path not found: " + p.string());
+        } else {
+          bool is_dir = fs::is_directory(p, ec);
+          close_buffers_for_path(p.string(), is_dir);
+          if (is_dir) {
+            fs::remove_all(p, ec);
+          } else {
+            fs::remove(p, ec);
+          }
+          if (ec) {
+            set_message("Delete failed: " + ec.message());
+          } else {
+            if (show_sidebar) {
+              load_file_tree(root_dir);
+            }
+            set_message("Deleted: " + p.filename().string());
+          }
+        }
+      }
     } else if (lcmd == "lspstart") {
       auto &buf = get_buffer();
       if (buf.filepath.empty()) {
@@ -769,7 +971,7 @@ void Editor::handle_command_palette(int ch) {
         }
       }
     } else if (lcmd == "help" || lcmd == "h") {
-      set_message("Commands: :w :q :wq :e <file> :line N[:C] :bd :sp :vsp :bn :bp :recent :openrecent [n] :reopen :autosave [on/off/ms] :lspstart :lspstatus :lspstop :lsprestart :gitstatus :gitdiff [file] :gitblame :gitrefresh :theme <name>");
+      set_message("Commands: :w :q :wq :e <file> :find [dir] :mkfile <p> :mkdir <p> :rename <old> <new> :rm <p> :line N[:C] :bd :sp :vsp :bn :bp :recent :openrecent [n] :reopen :autosave [on/off/ms] :lspstart :lspstatus :lspstop :lsprestart :gitstatus :gitdiff [file] :gitblame :gitrefresh :theme <name>");
     } else {
       bool handled_custom = false;
       for (const auto &custom : custom_commands) {

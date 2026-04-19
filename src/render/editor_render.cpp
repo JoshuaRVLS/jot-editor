@@ -128,7 +128,20 @@ void Editor::render() {
   update_pane_layout();
 
   if (telescope.is_active()) {
+    // Keep the editor visible and draw Telescope as an overlay instead of
+    // replacing the whole scene.
+    if (show_sidebar) {
+      render_sidebar();
+    }
+    render_panes();
+    render_lsp_completion();
+    render_integrated_terminal();
     render_telescope();
+    render_status_line();
+    ui->render();
+    ui->hide_cursor();
+    needs_redraw = false;
+    return;
   } else {
     if (image_viewer.is_active()) {
       int img_w = w / 2;

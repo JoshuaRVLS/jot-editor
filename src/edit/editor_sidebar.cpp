@@ -314,9 +314,9 @@ void Editor::render_sidebar() {
   }
 
   // Footer hints
-  std::string footer = " r:refresh g:git .:hidden *:expand z:collapse ";
+  std::string footer = " a:file A:dir r:rename d:delete R:refresh g:git ";
   if ((int)footer.size() > w - 2) {
-    footer = " r . * z ";
+    footer = " a A r d R g ";
   }
   ui->draw_text(x + 1, y + h - 1, footer, theme.fg_comment, theme.bg_sidebar);
 }

@@ -1,3 +1,0 @@
-jot_features 0 0
----
-jot_features

@@ -8,49 +8,97 @@ void Editor::handle_telescope(int ch) {
     telescope.close();
     waiting_for_space_f = false;
     needs_redraw = true;
-  } else if (ch == 1011) {
-    telescope.go_parent();
-    needs_redraw = true;
-  } else if (ch == '\n' || ch == 13) {
-    std::string path = telescope.get_selected_path();
-    if (!path.empty()) {
-      if (fs::is_directory(path)) {
-        telescope.select();
-        needs_redraw = true;
-        return;
-      }
+    return;
+  }
 
-      std::string ext = get_file_extension(path);
-      std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-      if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" ||
-          ext == ".bmp" || ext == ".svg" || ext == ".webp" || ext == ".ico") {
-        image_viewer.open(path);
-      } else {
-        open_file(path);
-      }
-      telescope.close();
-      waiting_for_space_f = false;
-      needs_redraw = true;
+  if (ch == 1011) {
+    // Left arrow: go parent when query is empty, else clear one char.
+    std::string q = telescope.get_query();
+    if (q.empty()) {
+      telescope.go_parent();
+    } else {
+      q.pop_back();
+      telescope.set_query(q);
     }
-  } else if (ch == 1008 || ch == 'k') {
+    needs_redraw = true;
+    return;
+  }
+
+  if (ch == '\n' || ch == 13) {
+    std::string path = telescope.get_selected_path();
+    if (path.empty()) {
+      return;
+    }
+    if (fs::is_directory(path)) {
+      telescope.select();
+      needs_redraw = true;
+      return;
+    }
+
+    std::string ext = get_file_extension(path);
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+    if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" ||
+        ext == ".bmp" || ext == ".svg" || ext == ".webp" || ext == ".ico") {
+      image_viewer.open(path);
+    } else {
+      open_file(path);
+    }
+    telescope.close();
+    waiting_for_space_f = false;
+    needs_redraw = true;
+    return;
+  }
+
+  if (ch == 1008 || ch == 'k' || ch == 16) { // Up or Ctrl+P
     telescope.move_up();
     needs_redraw = true;
-  } else if (ch == 1009 || ch == 'j') {
+    return;
+  }
+  if (ch == 1009 || ch == 'j' || ch == 14) { // Down or Ctrl+N
     telescope.move_down();
     needs_redraw = true;
-  } else if (ch == 127 || ch == 8) {
+    return;
+  }
+  if (ch == 1015) { // Page up
+    for (int i = 0; i < 10; i++) {
+      telescope.move_up();
+    }
+    needs_redraw = true;
+    return;
+  }
+  if (ch == 1016) { // Page down
+    for (int i = 0; i < 10; i++) {
+      telescope.move_down();
+    }
+    needs_redraw = true;
+    return;
+  }
+
+  if (ch == 127 || ch == 8) {
     std::string q = telescope.get_query();
     if (!q.empty()) {
       q.pop_back();
       telescope.set_query(q);
-      needs_redraw = true;
+    } else {
+      telescope.go_parent();
     }
-  } else if (ch >= 32 && ch < 127) {
+    needs_redraw = true;
+    return;
+  }
+
+  if (ch == 21) { // Ctrl+U: clear query
+    telescope.set_query("");
+    needs_redraw = true;
+    return;
+  }
+
+  if (ch >= 32 && ch < 127) {
     std::string q = telescope.get_query();
-    q += ch;
+    q += (char)ch;
     telescope.set_query(q);
     needs_redraw = true;
+    return;
   }
 }
 

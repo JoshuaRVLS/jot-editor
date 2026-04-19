@@ -1,11 +1,13 @@
 #include "editor.h"
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iomanip>
 #include <sstream>
+#include <unordered_set>
 
 namespace {
 void flatten_nodes_mut(std::vector<FileNode> &nodes,
@@ -14,6 +16,37 @@ void flatten_nodes_mut(std::vector<FileNode> &nodes,
     flat.push_back(&node);
     if (node.is_dir && node.expanded) {
       flatten_nodes_mut(node.children, flat);
+    }
+  }
+}
+
+void flatten_nodes_const(const std::vector<FileNode> &nodes,
+                         std::vector<const FileNode *> &flat) {
+  for (const auto &node : nodes) {
+    flat.push_back(&node);
+    if (node.is_dir && node.expanded) {
+      flatten_nodes_const(node.children, flat);
+    }
+  }
+}
+
+std::string normalize_path_for_tree(const std::string &path) {
+  std::error_code ec;
+  fs::path p = fs::absolute(path, ec);
+  if (ec) {
+    p = fs::path(path);
+  }
+  return p.lexically_normal().string();
+}
+
+void collect_expanded_paths(const std::vector<FileNode> &nodes,
+                            std::unordered_set<std::string> &expanded) {
+  for (const auto &node : nodes) {
+    if (node.is_dir && node.expanded) {
+      expanded.insert(normalize_path_for_tree(node.path));
+      if (!node.children.empty()) {
+        collect_expanded_paths(node.children, expanded);
+      }
     }
   }
 }
@@ -187,6 +220,20 @@ void Editor::open_workspace(const std::string &path, bool restore_session) {
 }
 
 void Editor::load_file_tree(const std::string &path) {
+  const std::string old_root = normalize_path_for_tree(root_dir);
+  std::unordered_set<std::string> old_expanded;
+  collect_expanded_paths(file_tree, old_expanded);
+
+  std::string old_selected_path;
+  if (!file_tree.empty()) {
+    std::vector<const FileNode *> old_flat;
+    flatten_nodes_const(file_tree, old_flat);
+    if (file_tree_selected >= 0 && file_tree_selected < (int)old_flat.size()) {
+      old_selected_path = normalize_path_for_tree(old_flat[file_tree_selected]->path);
+    }
+  }
+  const int old_scroll = file_tree_scroll;
+
   file_tree.clear();
   std::error_code ec;
   fs::path p = fs::absolute(path, ec);
@@ -195,9 +242,55 @@ void Editor::load_file_tree(const std::string &path) {
   root_dir = p.lexically_normal().string();
   if (!fs::exists(p) || !fs::is_directory(p))
     return;
-  file_tree_selected = 0;
-  file_tree_scroll = 0;
+
+  const std::string new_root = normalize_path_for_tree(root_dir);
+  const bool same_root = !old_root.empty() && old_root == new_root;
+
   build_tree(root_dir, file_tree, 0);
+
+  if (!same_root) {
+    file_tree_selected = 0;
+    file_tree_scroll = 0;
+    return;
+  }
+
+  std::function<void(std::vector<FileNode> &)> restore_expanded =
+      [&](std::vector<FileNode> &nodes) {
+        for (auto &node : nodes) {
+          if (!node.is_dir) {
+            continue;
+          }
+          const std::string normalized = normalize_path_for_tree(node.path);
+          if (old_expanded.find(normalized) != old_expanded.end()) {
+            node.expanded = true;
+            if (node.children.empty()) {
+              build_tree(node.path, node.children, node.depth + 1);
+            }
+            restore_expanded(node.children);
+          }
+        }
+      };
+  restore_expanded(file_tree);
+
+  std::vector<FileNode *> refreshed_flat;
+  flatten_nodes_mut(file_tree, refreshed_flat);
+  file_tree_selected = 0;
+  if (!old_selected_path.empty()) {
+    for (int i = 0; i < (int)refreshed_flat.size(); i++) {
+      if (normalize_path_for_tree(refreshed_flat[i]->path) == old_selected_path) {
+        file_tree_selected = i;
+        break;
+      }
+    }
+  }
+  int view_h = std::max(1, ui->get_height() - status_height - tab_height - 2);
+  int max_scroll = std::max(0, (int)refreshed_flat.size() - view_h);
+  file_tree_scroll = std::clamp(old_scroll, 0, max_scroll);
+  if (file_tree_selected < file_tree_scroll) {
+    file_tree_scroll = file_tree_selected;
+  } else if (file_tree_selected >= file_tree_scroll + view_h) {
+    file_tree_scroll = std::clamp(file_tree_selected - view_h + 1, 0, max_scroll);
+  }
 }
 
 void Editor::build_tree(const std::string &path, std::vector<FileNode> &nodes,
@@ -413,6 +506,57 @@ bool Editor::restore_workspace_session() {
 }
 
 void Editor::handle_sidebar_input(int ch) {
+  static std::string pending_delete_path;
+  static long long pending_delete_deadline_ms = 0;
+
+  auto now_ms = []() -> long long {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch())
+        .count();
+  };
+  auto normalize_path = [](const std::string &path) {
+    std::error_code ec;
+    fs::path p = fs::absolute(path, ec);
+    if (ec) {
+      p = fs::path(path);
+    }
+    return p.lexically_normal().string();
+  };
+  auto starts_with_path = [](const std::string &child, const std::string &parent) {
+    if (child.size() < parent.size()) {
+      return false;
+    }
+    if (child.compare(0, parent.size(), parent) != 0) {
+      return false;
+    }
+    return child.size() == parent.size() || child[parent.size()] == '/' ||
+           child[parent.size()] == '\\';
+  };
+  auto close_buffers_for_path = [&](const std::string &target_abs, bool is_dir) {
+    const std::string norm_target = normalize_path(target_abs);
+    for (int i = (int)buffers.size() - 1; i >= 0; --i) {
+      if (buffers[i].filepath.empty()) {
+        continue;
+      }
+      std::string buf_path = normalize_path(buffers[i].filepath);
+      bool match =
+          (!is_dir && buf_path == norm_target) ||
+          (is_dir && starts_with_path(buf_path, norm_target));
+      if (match) {
+        close_buffer_at(i);
+      }
+    }
+  };
+  auto to_workspace_relative = [&](const std::string &abs_path) {
+    fs::path rel = fs::path(abs_path).lexically_relative(fs::path(root_dir));
+    std::string rel_s = rel.string();
+    if (!rel_s.empty() && rel_s != "." &&
+        rel_s.find("..") != 0) {
+      return rel_s;
+    }
+    return abs_path;
+  };
+
   std::vector<FileNode *> flat;
   flatten_nodes_mut(file_tree, flat);
 
@@ -553,6 +697,22 @@ void Editor::handle_sidebar_input(int ch) {
   }
 
   if (ch == 'r' || ch == 'R') {
+    if (ch == 'r') {
+      if (!flat.empty() && file_tree_selected >= 0 &&
+          file_tree_selected < (int)flat.size()) {
+        FileNode *node = flat[file_tree_selected];
+        const std::string old_rel = to_workspace_relative(node->path);
+        show_command_palette = true;
+        command_palette_query = "rename " + old_rel + " ";
+        command_palette_results.clear();
+        command_palette_selected = 0;
+        command_palette_theme_mode = false;
+        command_palette_theme_original.clear();
+        needs_redraw = true;
+      }
+      return;
+    }
+
     std::string selected_path;
     if (!flat.empty() && file_tree_selected >= 0 &&
         file_tree_selected < (int)flat.size()) {
@@ -576,6 +736,100 @@ void Editor::handle_sidebar_input(int ch) {
     }
 
     message = "Explorer: refreshed";
+    needs_redraw = true;
+    return;
+  }
+
+  if (ch == 'a') {
+    std::string base = root_dir;
+    if (!flat.empty() && file_tree_selected >= 0 &&
+        file_tree_selected < (int)flat.size()) {
+      FileNode *node = flat[file_tree_selected];
+      if (node->is_dir) {
+        base = node->path;
+      } else {
+        base = fs::path(node->path).parent_path().string();
+      }
+    }
+    std::string rel = to_workspace_relative(base);
+    if (!rel.empty() && rel != "." && rel.back() != '/' && rel.back() != '\\') {
+      rel += "/";
+    } else if (rel == ".") {
+      rel.clear();
+    }
+    show_command_palette = true;
+    command_palette_query = "mkfile " + rel;
+    command_palette_results.clear();
+    command_palette_selected = 0;
+    command_palette_theme_mode = false;
+    command_palette_theme_original.clear();
+    needs_redraw = true;
+    return;
+  }
+
+  if (ch == 'A') {
+    std::string base = root_dir;
+    if (!flat.empty() && file_tree_selected >= 0 &&
+        file_tree_selected < (int)flat.size()) {
+      FileNode *node = flat[file_tree_selected];
+      if (node->is_dir) {
+        base = node->path;
+      } else {
+        base = fs::path(node->path).parent_path().string();
+      }
+    }
+    std::string rel = to_workspace_relative(base);
+    if (!rel.empty() && rel != "." && rel.back() != '/' && rel.back() != '\\') {
+      rel += "/";
+    } else if (rel == ".") {
+      rel.clear();
+    }
+    show_command_palette = true;
+    command_palette_query = "mkdir " + rel;
+    command_palette_results.clear();
+    command_palette_selected = 0;
+    command_palette_theme_mode = false;
+    command_palette_theme_original.clear();
+    needs_redraw = true;
+    return;
+  }
+
+  if (ch == 'd') {
+    if (flat.empty() || file_tree_selected < 0 ||
+        file_tree_selected >= (int)flat.size()) {
+      return;
+    }
+    FileNode *node = flat[file_tree_selected];
+    const std::string node_path = normalize_path(node->path);
+    const std::string node_name = node->name;
+    const long long now = now_ms();
+
+    if (pending_delete_path == node_path && now <= pending_delete_deadline_ms) {
+      std::error_code ec;
+      bool is_dir = fs::is_directory(node_path, ec);
+      close_buffers_for_path(node_path, is_dir);
+      if (is_dir) {
+        fs::remove_all(node_path, ec);
+      } else {
+        fs::remove(node_path, ec);
+      }
+      pending_delete_path.clear();
+      pending_delete_deadline_ms = 0;
+      if (ec) {
+        message = "Delete failed: " + ec.message();
+      } else {
+        load_file_tree(root_dir);
+        file_tree_selected = 0;
+        file_tree_scroll = 0;
+        message = "Deleted: " + node_name;
+      }
+      needs_redraw = true;
+      return;
+    }
+
+    pending_delete_path = node_path;
+    pending_delete_deadline_ms = now + 1400;
+    message = "Press d again to delete: " + node->name;
     needs_redraw = true;
     return;
   }
