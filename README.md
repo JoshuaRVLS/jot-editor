@@ -6,7 +6,7 @@
 
 ## What It Is
 
-`jot` is not trying to be a strict Vim clone.
+`jot` is its own editor, focused on a modern terminal IDE workflow.
 
 The current editing model is:
 
@@ -52,6 +52,14 @@ If the argument is a folder, `jot`:
 - treats it as the workspace root
 - loads the file tree
 - opens the sidebar automatically
+- restores that workspace's previous session (open files/tabs, active file,
+  cursor/scroll positions, preview tab state)
+
+Workspace sessions are stored per-folder in:
+
+```text
+~/.config/jot/workspaces/
+```
 
 ### Startup Home Menu
 
@@ -106,7 +114,7 @@ That means:
 - `Backspace`, `Delete`, `Enter`, `Tab`, arrows, and selection keys work like a modern terminal editor
 - `Esc` clears selection or releases focus from a sub-panel like the terminal/sidebar
 
-There is still some old mode-related code in the source tree, but the user-facing flow is currently editing-first and modeless.
+Any legacy mode internals are implementation details; the user-facing flow is editing-first and modeless.
 
 ### 4. Layout Model
 
@@ -196,7 +204,7 @@ Mouse support is enabled for the sidebar too.
 
 `Ctrl+P` opens the command palette.
 
-It behaves more like a lightweight Vim-style command line than a fuzzy GUI launcher:
+It behaves like a lightweight ex-style command line instead of a fuzzy GUI launcher:
 
 - it accepts ex-style commands such as `:w`, `:q`, `:theme`, `:term`
 - `Tab` completes commands and theme names
@@ -584,16 +592,23 @@ lsp_change_debounce_ms=120
 - `Arrow Down`: next match
 - `Arrow Up`: previous match
 - `Tab`: toggle case-sensitive search
+- `Ctrl+W`: toggle whole-word search
+- `Ctrl+F`: next match while search panel is open
+- open search with selection active: uses selection text as initial query
 - `Esc`: close search
 
 ### Sidebar Explorer
 
 - `Arrow Up` / `k`: move up
 - `Arrow Down` / `j`: move down
+- `Page Up` / `Page Down`: fast scroll through tree
+- `Home` / `End`: jump to first/last node
 - `Arrow Right` / `l` / `Enter`: expand folder or open file
 - `Arrow Left` / `h`: collapse folder or move to parent node
 - `r`: refresh workspace tree
 - `.`: show / hide dotfiles
+- `*`: expand all folders recursively
+- `z`: collapse all folders
 - `Backspace`: open parent folder as workspace root
 - `Esc`: return focus to editor
 
@@ -681,7 +696,7 @@ Build graph highlights:
 
 ## Notes and Limitations
 
-- the user-facing workflow is modeless, even though some legacy mode-related source files still exist
+- the user-facing workflow is modeless; legacy mode-related source files are internal compatibility details
 - the integrated terminal is improving, but it is still lighter than a full terminal emulator
 - native C++ LSP is in active development; diagnostics are the most mature part right now
 - Python is meant for extension and customization, not for owning the editor core
