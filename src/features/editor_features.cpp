@@ -1,4 +1,5 @@
 #include "editor_features.h"
+#include "python_api.h"
 #include <algorithm>
 #include <cctype>
 
@@ -52,6 +53,10 @@ std::string EditorFeatures::get_indent_string(int level, int tab_size) {
 }
 
 bool EditorFeatures::should_auto_indent(const std::string &line) {
+  if (auto *py = PythonAPI::active()) {
+    return py->feature_should_auto_indent(line);
+  }
+
   std::string trimmed = trim_left(line);
   if (trimmed.empty())
     return false;
@@ -90,6 +95,10 @@ bool EditorFeatures::should_auto_indent(const std::string &line) {
 }
 
 bool EditorFeatures::should_dedent(const std::string &line) {
+  if (auto *py = PythonAPI::active()) {
+    return py->feature_should_dedent(line);
+  }
+
   const std::string trimmed = trim_left(line);
 
   if (trimmed.empty())
@@ -114,6 +123,13 @@ bool EditorFeatures::should_dedent(const std::string &line) {
 int EditorFeatures::find_matching_bracket(const std::vector<std::string> &lines,
                                           int line, int col, char open,
                                           char close) {
+  if (auto *py = PythonAPI::active()) {
+    int out = py->feature_find_matching_bracket(lines, line, col, open, close);
+    if (out >= 0) {
+      return out;
+    }
+  }
+
   if (line < 0 || line >= (int)lines.size())
     return -1;
   if (col < 0 || col >= (int)lines[line].length())

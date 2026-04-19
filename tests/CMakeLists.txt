@@ -3,7 +3,7 @@ add_executable(jot_tests
   test_features.cpp
 )
 
-target_link_libraries(jot_tests PRIVATE jot_features)
+target_link_libraries(jot_tests PRIVATE jot_features jot_plugins)
 
 target_include_directories(jot_tests PRIVATE
   ${PROJECT_SOURCE_DIR}/tests
