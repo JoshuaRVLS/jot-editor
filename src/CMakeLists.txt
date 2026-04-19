@@ -40,6 +40,7 @@ add_library(jot_core_obj OBJECT
   core/editor_bookmarks.cpp
   core/editor_event_loop.cpp
   core/editor_file.cpp
+  core/editor_git.cpp
   core/editor_home.cpp
   core/editor_integrated_terminal.cpp
   core/editor_lsp.cpp
