@@ -23,6 +23,7 @@ void Editor::run() {
     }
 
     poll_lsp_clients();
+    refresh_git_status(false);
 
     for (auto &term : integrated_terminals) {
       if (term && term->poll_output()) {
@@ -68,7 +69,7 @@ void Editor::run() {
       if (show_command_palette) {
         handle_command_palette(ch);
       } else if (show_search) {
-        handle_search_panel(ch);
+        handle_search_panel(ch, is_ctrl, is_shift, is_alt);
       } else if (telescope.is_active()) {
         handle_telescope(ch);
       } else {
