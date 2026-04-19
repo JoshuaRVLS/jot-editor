@@ -4,12 +4,18 @@
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
-#include <pty.h>
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+#if defined(__APPLE__)
+#include <util.h>
+#elif defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__) ||     \
+    defined(__OpenBSD__) || defined(__DragonFly__)
+#include <pty.h>
+#endif
 
 IntegratedTerminal::IntegratedTerminal()
     : master_fd(-1), child_pid(-1), active(false), focused(false),
@@ -150,6 +156,9 @@ void IntegratedTerminal::handle_csi_sequence(char final_char) {
 }
 
 bool IntegratedTerminal::open_shell() {
+#if defined(JOT_PLATFORM_WINDOWS)
+  return false;
+#else
   if (active) {
     focused = true;
     return true;
@@ -221,6 +230,7 @@ bool IntegratedTerminal::open_shell() {
     fcntl(master_fd, F_SETFL, flags | O_NONBLOCK);
   }
   return true;
+#endif
 }
 
 void IntegratedTerminal::close_shell() {

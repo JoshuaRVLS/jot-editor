@@ -23,6 +23,23 @@ The current editing model is:
 The installed binary name is `jot`.
 A compatibility alias named `jcode` is also installed.
 
+## Platform Support
+
+Current officially supported platforms:
+
+- Linux (x86_64 / arm64)
+- macOS (Intel / Apple Silicon)
+
+Notes:
+
+- `jot` relies on POSIX terminal APIs (`termios`, `poll`, PTY/forkpty) for the
+  editor UI and integrated terminal.
+- Build system now links platform-specific libraries conditionally:
+  - Linux/non-Apple Unix: links `libutil` for PTY
+  - macOS: uses native system PTY APIs without `libutil` link
+- Windows is not supported yet and is blocked at CMake configure time with a
+  clear message.
+
 ## How `jot` Works
 
 ### 1. Startup Model

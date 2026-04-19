@@ -7,6 +7,16 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+if(APPLE)
+  add_compile_definitions(JOT_PLATFORM_POSIX=1 JOT_PLATFORM_MACOS=1)
+elseif(UNIX)
+  add_compile_definitions(JOT_PLATFORM_POSIX=1)
+elseif(WIN32)
+  message(FATAL_ERROR "Windows is not supported yet. Current support targets Linux and macOS (POSIX terminals).")
+else()
+  message(WARNING "Unknown platform. Build may work, but terminal integrations are only guaranteed on POSIX.")
+endif()
+
 find_package(Python3 COMPONENTS Development REQUIRED)
 
 include(cmake/JotPython.cmake)
