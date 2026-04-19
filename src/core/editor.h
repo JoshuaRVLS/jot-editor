@@ -63,6 +63,7 @@ private:
   std::vector<std::pair<int, int>> search_results; // (line, col)
   int search_result_index;
   bool search_case_sensitive;
+  bool search_whole_word;
   
   // Save Prompt
   bool show_save_prompt;
@@ -92,6 +93,12 @@ private:
   int status_height;
   int tab_height;
   int tab_size;
+  int tab_scroll_index;
+  int preview_buffer_index;
+  long long last_sidebar_click_ms;
+  int last_sidebar_click_row;
+  long long last_tab_click_ms;
+  int last_tab_clicked_index;
   bool auto_indent;
   bool needs_redraw;
   bool mouse_selecting;
@@ -147,6 +154,12 @@ private:
   };
   std::vector<ClosedBufferSnapshot> closed_buffer_history;
   std::vector<std::string> recent_files;
+  std::unordered_map<std::string, int> workspace_diagnostic_severity;
+  std::string git_root;
+  std::string git_branch;
+  int git_dirty_count;
+  std::unordered_map<std::string, std::string> git_file_status;
+  long long git_last_refresh_ms;
   bool auto_save_enabled;
   int auto_save_interval_ms;
   long long last_auto_save_ms;
@@ -176,6 +189,8 @@ private:
   bool show_sidebar;
   int sidebar_width;
   std::string root_dir;
+  bool workspace_session_enabled;
+  std::string workspace_session_root;
   std::vector<FileNode> file_tree;
   int file_tree_selected;
   int file_tree_scroll; // New
@@ -246,7 +261,8 @@ private:
   void handle_visual_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt);
 
   void handle_command_palette(int ch);
-  void handle_search_panel(int ch);
+  void handle_search_panel(int ch, bool is_ctrl = false,
+                           bool is_shift = false, bool is_alt = false);
   void handle_telescope(int ch);
   void handle_save_prompt(int ch);
   void handle_input_prompt(int ch);
@@ -303,11 +319,13 @@ public:
   // Sidebar methods
   void toggle_sidebar();
   void load_file_tree(const std::string &path);
+  void open_workspace(const std::string &path, bool restore_session = true);
   void set_home_menu_visible(bool visible);
 
 private:
   void handle_sidebar_input(int ch);
-  void handle_sidebar_mouse(int x, int y, bool is_click);
+  void handle_sidebar_mouse(int x, int y, bool is_click,
+                            bool is_double_click = false);
   void render_sidebar();
   void build_tree(const std::string &path, std::vector<FileNode> &nodes,
                   int depth);
@@ -333,7 +351,7 @@ private:
   void select_current_line();
   void clear_selection();
 
-  void open_file(const std::string &path);
+  void open_file(const std::string &path, bool preview = false);
   void open_recent_file(const std::string &query = "");
   void reopen_last_closed_buffer();
   void close_buffer_at(int index);
@@ -348,6 +366,13 @@ private:
   void track_recent_file(const std::string &path);
   void load_recent_files();
   void save_recent_files();
+  void save_workspace_session();
+  bool restore_workspace_session();
+  void refresh_git_status(bool force = false);
+  void clear_git_status();
+  bool has_git_repo() const;
+  std::string run_git_capture(const std::string &args) const;
+  std::string to_git_relative_path(const std::string &path) const;
 
   void toggle_minimap();
   void toggle_integrated_terminal();
