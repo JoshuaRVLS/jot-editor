@@ -332,7 +332,7 @@ Python is currently responsible for:
 
 The Python runtime loads:
 
-- bundled runtime support from `python/`
+- bundled runtime support from `src/python/`
 - user init files
 - single-file plugins
 - plugin packages with `plugin.py` or `__init__.py`
@@ -697,7 +697,7 @@ src/tools/      integrated terminal, telescope, image viewer, native LSP client
 src/plugins/    embedded Python bridge for plugins/themes
 src/ui/         raw terminal and UI abstraction layer
 src/CMakeLists.txt
-python/         Python-side runtime helpers and bundled scripts
+src/python/     Python-side runtime helpers and bundled scripts
 docs/           additional project docs
 tests/          unit test scaffolding
 ```

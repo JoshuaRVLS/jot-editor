@@ -29,9 +29,19 @@ public:
 };
 
 class PythonAPI; // Forward declaration
+class EditorHostAPI;
+class HostCoreAPI;
+class HostRenderAPI;
+class HostIOAPI;
+class HostEventsAPI;
 
 class Editor {
   friend class PythonAPI; // Allow PythonAPI to access private members
+  friend class EditorHostAPI;
+  friend class HostCoreAPI;
+  friend class HostRenderAPI;
+  friend class HostIOAPI;
+  friend class HostEventsAPI;
 
 private:
   std::vector<FileBuffer> buffers;
@@ -211,6 +221,7 @@ private:
   int easter_egg_timer;           // frames remaining to show the easter egg
 
   PythonAPI *python_api;
+  std::unique_ptr<EditorHostAPI> host_api;
 
   void render();
   void render_tabs();
@@ -428,6 +439,8 @@ public:
   ~Editor();
   void load_file(const std::string &fname);
   void run();
+  EditorHostAPI &host();
+  const EditorHostAPI &host() const;
 };
 
 #endif

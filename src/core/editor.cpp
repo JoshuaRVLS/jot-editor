@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "editor_host_api.h"
 #include "python_api.h"
 #include <algorithm>
 #include <filesystem>
@@ -152,6 +153,7 @@ Editor::Editor() {
 
   python_api = new PythonAPI(this);
   python_api->init();
+  host_api = std::make_unique<EditorHostAPI>(*this);
 
   load_recent_files();
 
@@ -182,6 +184,10 @@ Editor::Editor() {
   buffers.push_back(fb);
   panes[0].buffer_id = 0;
 }
+
+EditorHostAPI &Editor::host() { return *host_api; }
+
+const EditorHostAPI &Editor::host() const { return *host_api; }
 
 Editor::~Editor() {
   save_workspace_session();

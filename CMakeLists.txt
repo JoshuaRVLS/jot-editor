@@ -34,7 +34,7 @@ install(TARGETS jot
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-install(DIRECTORY python/
+install(DIRECTORY src/python/
   DESTINATION ${CMAKE_INSTALL_DATADIR}/jot/python
   FILES_MATCHING
     PATTERN "*.py"

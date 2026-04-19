@@ -145,6 +145,113 @@ Built-in plugin commands:
 
 *   `:PlugReload`
 *   `:PlugList`
+*   `:PlugHealth`
+*   `:PlugInfo [name-or-path-fragment]`
+*   `:PlugPolicy [off|warn|strict]`
+*   `:PlugAudit [limit] [query]`
+*   `:PlugAuditClear`
+
+## Plugin Lifecycle Hooks
+
+Plugins can register lifecycle callbacks:
+
+```python
+from jot_api import register_plugin_lifecycle, jot
+
+def on_load():
+    jot.notify("plugin loaded")
+
+def on_unload():
+    jot.notify("plugin unloading")
+
+def on_reload():
+    jot.notify("plugin reloading")
+
+register_plugin_lifecycle(
+    on_load=on_load,
+    on_unload=on_unload,
+    on_reload=on_reload,
+)
+```
+
+Plugins can also register metadata (name/version/author/dependencies):
+
+```python
+from jot_api import register_plugin
+
+register_plugin(
+    name="git_tools",
+    version="0.2.0",
+    author="you",
+    description="Extra git commands for jot",
+    depends=["lsp", "project"],
+    min_api="1.1.0",
+    min_python="3.10",
+    capabilities=["commands", "ex_commands", "write"],
+)
+```
+
+You can lazily activate plugin setup on events or commands:
+
+```python
+from jot_api import register_plugin
+
+def setup(reason=""):
+    # Heavy setup goes here (register keymaps/commands/etc.)
+    pass
+
+register_plugin(
+    name="big_feature",
+    depends=["git_tools"],
+    setup=setup,
+    lazy_events=["buffer_open", "startup"],
+    lazy_commands=["bigfeature"],
+    # eager=True forces startup activation even if lazy_* is set
+)
+```
+
+Optional compatibility/safety gates:
+
+* `min_api` / `max_api`: gate by `jot_api` runtime API version.
+* `min_jot` / `max_jot`: gate by host editor version (`JOT_VERSION` env).
+* `min_python` / `max_python`: gate by embedded Python version.
+* `requires_unsafe=True`: activate only when `JOT_ALLOW_UNSAFE_PLUGINS=1`.
+* `capabilities=[...]`: declare privileged actions this plugin needs.
+
+Current capability names:
+* `commands` - call `execute_command(...)`
+* `ex_commands` - call `execute_ex_command(...)`
+* `write` - call `save_file(...)`
+* `workspace` - call `open_workspace(...)`
+* `terminal` - call `toggle_terminal(...)`
+* `sidebar` - call `toggle_sidebar(...)`
+* `quit` - call `request_quit(...)` / `save_and_quit(...)`
+
+Policy mode (`JOT_PLUGIN_POLICY`) defaults to `off` for backward compatibility.
+Modes:
+* `off`: no capability enforcement
+* `warn`: allow but warn when undeclared capability is used
+* `strict`: block undeclared capability usage
+Policy mode is persisted in `~/.config/jot/configs/plugin_policy.json` and restored on startup.
+Environment variable `JOT_PLUGIN_POLICY` overrides the persisted value.
+
+Audit:
+* Capability checks in `warn`/`strict` are recorded in an in-memory audit trail.
+* Use `:PlugAudit` to inspect recent entries.
+* Use `:PlugAudit 50 lsp` to filter by query.
+* Use `:PlugAuditClear` to reset the trail.
+
+You can also inspect runtime plugin health:
+
+```python
+from jot_api import plugin_health, plugin_health_summary, plugin_info
+
+print(plugin_health_summary())
+for item in plugin_health():
+    print(item["name"], item["loaded"], item["last_load_ms"], item["last_error"])
+
+print(plugin_info("git_tools"))
+```
 
 ## Example: Auto-Save Plugin
 

@@ -42,6 +42,7 @@ add_library(jot_core_obj OBJECT
   core/editor_file.cpp
   core/editor_git.cpp
   core/editor_home.cpp
+  core/editor_host_api.cpp
   core/editor_integrated_terminal.cpp
   core/editor_lsp.cpp
   core/editor_panes.cpp
