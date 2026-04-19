@@ -97,7 +97,9 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     }
     // Keep global/editor shortcuts usable while explorer is focused.
     // Ctrl-based keybinds are routed through insert-mode handlers.
-    if (is_ctrl || (ch >= 1 && ch <= 26) || ch == 23 || ch == 12) {
+    bool ctrl_control_byte = (ch >= 1 && ch <= 26 && ch != 9 && ch != 10 &&
+                              ch != 13);
+    if (is_ctrl || ctrl_control_byte || ch == 23 || ch == 12) {
       handle_insert_mode(ch, is_ctrl, is_shift, is_alt);
       return;
     }
@@ -134,7 +136,7 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
   }
 
   if (show_search) {
-    handle_search_panel(ch);
+    handle_search_panel(ch, is_ctrl, is_shift, is_alt);
     return;
   }
 
