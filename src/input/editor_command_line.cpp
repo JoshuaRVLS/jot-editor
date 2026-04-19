@@ -14,6 +14,49 @@ std::string to_lower_copy(std::string s) {
   return s;
 }
 
+std::string shell_quote(const std::string &value) {
+  std::string out = "'";
+  out.reserve(value.size() + 8);
+  for (char c : value) {
+    if (c == '\'') {
+      out += "'\\''";
+    } else {
+      out.push_back(c);
+    }
+  }
+  out.push_back('\'');
+  return out;
+}
+
+std::string first_line_copy(const std::string &text) {
+  size_t end = text.find_first_of("\r\n");
+  if (end == std::string::npos) {
+    return text;
+  }
+  return text.substr(0, end);
+}
+
+std::string limit_lines(const std::string &text, int max_lines) {
+  if (max_lines <= 0) {
+    return "";
+  }
+  std::istringstream iss(text);
+  std::string out;
+  std::string line;
+  int count = 0;
+  while (count < max_lines && std::getline(iss, line)) {
+    out += line;
+    out.push_back('\n');
+    count++;
+  }
+  if (iss.good()) {
+    out += "...";
+  } else if (!out.empty() && out.back() == '\n') {
+    out.pop_back();
+  }
+  return out;
+}
+
 const std::vector<std::string> &ex_commands() {
   static const std::vector<std::string> commands = {
       "q",      "quit",     "q!",       "quit!",   "w",      "write",
@@ -24,7 +67,8 @@ const std::vector<std::string> &ex_commands() {
       "term",   "terminal", "termnew",  "terminalnew", "search",
       "format", "trim",     "line",     "goto",        "resizeleft",
       "resizeright", "resizeup", "resizedown", "lspstart", "lspstatus",
-      "lspstop", "lsprestart", "recent", "openrecent", "reopen",
+      "lspstop", "lsprestart", "gitstatus", "gitdiff", "gitblame",
+      "gitrefresh", "recent", "openrecent", "reopen",
       "reopenlast", "autosave", "help"};
   return commands;
 }
@@ -48,7 +92,8 @@ bool command_takes_argument(const std::string &cmd) {
          lc == "write" || lc == "wq" || lc == "x" || lc == "xit" ||
          lc == "theme" || lc == "colorscheme" ||
          lc == "colo" || lc == "line" || lc == "goto" ||
-         lc == "openrecent" || lc == "autosave" || lc == "help" || lc == "h";
+         lc == "openrecent" || lc == "autosave" || lc == "help" ||
+         lc == "h" || lc == "gitdiff";
 }
 
 bool parse_line_col(const std::string &s, int &line_out, int &col_out) {
@@ -242,6 +287,17 @@ void Editor::refresh_command_palette() {
         command_palette_results.push_back(opt);
       }
     }
+  } else if (lcmd == "gitdiff") {
+    auto &buf = get_buffer();
+    if (!buf.filepath.empty()) {
+      std::string rel = to_git_relative_path(buf.filepath);
+      if (!rel.empty() && (arg.empty() || starts_with_icase(rel, arg))) {
+        command_palette_results.push_back(rel);
+      }
+    }
+    auto paths = complete_path_argument(arg);
+    command_palette_results.insert(command_palette_results.end(), paths.begin(),
+                                   paths.end());
   } else if (lcmd == "line" || lcmd == "goto") {
     auto &buf = get_buffer();
     int cur_line = std::max(1, buf.cursor.y + 1);
@@ -521,6 +577,72 @@ void Editor::handle_command_palette(int ch) {
       stop_all_lsp_clients();
     } else if (lcmd == "lsprestart") {
       restart_all_lsp_clients();
+    } else if (lcmd == "gitrefresh") {
+      refresh_git_status(true);
+      if (has_git_repo()) {
+        set_message("Git refreshed: " + git_branch + " (" +
+                    std::to_string(git_dirty_count) + " changes)");
+      } else {
+        set_message("Git: not a repository");
+      }
+    } else if (lcmd == "gitstatus") {
+      refresh_git_status(true);
+      if (!has_git_repo()) {
+        set_message("Git: not a repository");
+      } else {
+        std::string status = run_git_capture("status --short --branch");
+        if (trim_copy(status).empty()) {
+          set_message("Git status unavailable");
+        } else {
+          show_popup(limit_lines(status, 18), 2, tab_height + 1);
+        }
+      }
+    } else if (lcmd == "gitdiff") {
+      refresh_git_status(true);
+      if (!has_git_repo()) {
+        set_message("Git: not a repository");
+      } else {
+        auto &buf = get_buffer();
+        std::string target = trim_copy(arg);
+        if (target.empty()) {
+          if (buf.filepath.empty()) {
+            set_message("Usage: :gitdiff [file]");
+          } else {
+            target = to_git_relative_path(buf.filepath);
+          }
+        }
+        if (!target.empty()) {
+          std::string diff =
+              run_git_capture("diff -- " + shell_quote(target));
+          if (trim_copy(diff).empty()) {
+            set_message("Git diff: no unstaged changes for " + target);
+          } else {
+            show_popup(limit_lines(diff, 18), 2, tab_height + 1);
+          }
+        }
+      }
+    } else if (lcmd == "gitblame") {
+      refresh_git_status(true);
+      if (!has_git_repo()) {
+        set_message("Git: not a repository");
+      } else {
+        auto &buf = get_buffer();
+        if (buf.filepath.empty()) {
+          set_message("Git blame requires a saved file");
+        } else {
+          int line_no = std::max(1, buf.cursor.y + 1);
+          std::string rel = to_git_relative_path(buf.filepath);
+          std::string blame = run_git_capture("blame -L " +
+                                              std::to_string(line_no) + "," +
+                                              std::to_string(line_no) + " -- " +
+                                              shell_quote(rel));
+          if (trim_copy(blame).empty()) {
+            set_message("Git blame unavailable");
+          } else {
+            set_message(first_line_copy(blame));
+          }
+        }
+      }
     } else if (lcmd == "recent") {
       if (recent_files.empty()) {
         set_message("Recent files: none");
@@ -647,7 +769,7 @@ void Editor::handle_command_palette(int ch) {
         }
       }
     } else if (lcmd == "help" || lcmd == "h") {
-      set_message("Commands: :w :q :wq :e <file> :line N[:C] :bd :sp :vsp :bn :bp :recent :openrecent [n] :reopen :autosave [on/off/ms] :lspstart :lspstatus :lspstop :lsprestart :theme <name>");
+      set_message("Commands: :w :q :wq :e <file> :line N[:C] :bd :sp :vsp :bn :bp :recent :openrecent [n] :reopen :autosave [on/off/ms] :lspstart :lspstatus :lspstop :lsprestart :gitstatus :gitdiff [file] :gitblame :gitrefresh :theme <name>");
     } else {
       bool handled_custom = false;
       for (const auto &custom : custom_commands) {
