@@ -1,8 +1,8 @@
 """
 Jot Editor Python API.
 
-This module keeps the low-level wrapper intact and also exposes a
-Neovim-inspired facade for config and themes.
+This module keeps the low-level wrapper intact and exposes a
+high-level Jot facade for config and themes.
 """
 
 import fnmatch
@@ -462,7 +462,11 @@ class _Vim:
     def notify(message, level="info"):
         show_message(f"[{level}] {message}")
 
-vim = _Vim()
+# Preferred Jot namespace for plugins/themes.
+jot = _Vim()
+
+# Backward-compatibility alias for existing configs/plugins.
+vim = jot
 
 
 def _plugin_reload_command(_arg=""):
