@@ -1,7 +1,7 @@
 #ifndef EDITOR_TYPES_H
 #define EDITOR_TYPES_H
 
-#include "editor_features.h"
+#include "text_features.h"
 #include <cstddef>
 #include <regex>
 #include <set>
@@ -172,6 +172,8 @@ struct SplitPane {
   int x, y, w, h;
   int buffer_id;
   bool active;
+  int tab_scroll_index = 0;
+  std::vector<int> tab_buffer_ids;
 };
 
 enum PaneLayoutMode {

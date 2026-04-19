@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "python_api.h"
+#include <cctype>
 
 void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
                           int original_ch) {
@@ -30,22 +31,95 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     }
   }
 
+  // Global pane keybinds (before mode-specific handlers so they never get
+  // swallowed by insert-mode Ctrl handling).
+  // Resize:
+  // - Ctrl+Shift+H/J/K/L
+  // - Ctrl+Arrow
+  if (is_ctrl &&
+      (((is_shift || std::isupper((unsigned char)ch)) &&
+        (ch == 'h' || ch == 'H' || ch == 'j' || ch == 'J' || ch == 'k' ||
+         ch == 'K' || ch == 'l' || ch == 'L')) ||
+       ch == 1008 || ch == 1009 || ch == 1010 || ch == 1011 ||
+       original_ch == 1008 || original_ch == 1009 || original_ch == 1010 ||
+       original_ch == 1011)) {
+    bool resized = false;
+    if (ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H' ||
+        ch == 1011 || original_ch == 1011) {
+      resized = resize_current_pane_direction('h', 2);
+    } else if (ch == 'j' || ch == 'J' || original_ch == 'j' ||
+               original_ch == 'J' || ch == 1009 || original_ch == 1009) {
+      resized = resize_current_pane_direction('j', 1);
+    } else if (ch == 'k' || ch == 'K' || original_ch == 'k' ||
+               original_ch == 'K' || ch == 1008 || original_ch == 1008) {
+      resized = resize_current_pane_direction('k', 1);
+    } else if (ch == 'l' || ch == 'L' || original_ch == 'l' ||
+               original_ch == 'L' || ch == 1010 || original_ch == 1010) {
+      resized = resize_current_pane_direction('l', 2);
+    }
+
+    if (resized) {
+      set_message("Pane resized");
+      return;
+    }
+    set_message("Resize unavailable in this direction");
+    return;
+  }
+
+  // Split:
+  // - Ctrl+Alt+H/J/K/L
+  if (is_ctrl && is_alt) {
+    if (ch == 'q' || ch == 'Q' || original_ch == 'q' || original_ch == 'Q') {
+      if (panes.size() > 1) {
+        close_pane();
+      } else {
+        bool unsaved = false;
+        for (const auto &b : buffers) {
+          if (b.modified) {
+            unsaved = true;
+            break;
+          }
+        }
+        if (unsaved) {
+          show_quit_prompt = true;
+          needs_redraw = true;
+        } else {
+          running = false;
+        }
+      }
+      return;
+    }
+    if (ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H') {
+      split_pane_left();
+      return;
+    }
+    if (ch == 'j' || ch == 'J' || original_ch == 'j' || original_ch == 'J') {
+      split_pane_down();
+      return;
+    }
+    if (ch == 'k' || ch == 'K' || original_ch == 'k' || original_ch == 'K') {
+      split_pane_up();
+      return;
+    }
+    if (ch == 'l' || ch == 'L' || original_ch == 'l' || original_ch == 'L') {
+      split_pane_right();
+      return;
+    }
+  }
+
   if (is_alt) {
     bool resized = false;
-    if (pane_layout_mode == PANE_LAYOUT_VERTICAL) {
-      if (ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H') {
-        resized = resize_current_pane(-2);
-      } else if (ch == 'l' || ch == 'L' || original_ch == 'l' ||
-                 original_ch == 'L') {
-        resized = resize_current_pane(2);
-      }
-    } else if (pane_layout_mode == PANE_LAYOUT_HORIZONTAL) {
-      if (ch == 'k' || ch == 'K' || original_ch == 'k' || original_ch == 'K') {
-        resized = resize_current_pane(-2);
-      } else if (ch == 'j' || ch == 'J' || original_ch == 'j' ||
-                 original_ch == 'J') {
-        resized = resize_current_pane(2);
-      }
+    if (ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H') {
+      resized = resize_current_pane_direction('h', 2);
+    } else if (ch == 'l' || ch == 'L' || original_ch == 'l' ||
+               original_ch == 'L') {
+      resized = resize_current_pane_direction('l', 2);
+    } else if (ch == 'k' || ch == 'K' || original_ch == 'k' ||
+               original_ch == 'K') {
+      resized = resize_current_pane_direction('k', 2);
+    } else if (ch == 'j' || ch == 'J' || original_ch == 'j' ||
+               original_ch == 'J') {
+      resized = resize_current_pane_direction('j', 2);
     }
 
     if (resized) {

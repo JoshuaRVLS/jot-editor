@@ -1,24 +1,27 @@
 #include "editor.h"
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <unordered_map>
 #include <vector>
 
 namespace {
 enum HomeAction {
   HOME_ACTION_OPEN_RECENT = 1,
-  HOME_ACTION_NEW_FILE = 2,
-  HOME_ACTION_OPEN_RECENT_PROMPT = 3,
-  HOME_ACTION_COMMAND_PALETTE = 4,
-  HOME_ACTION_THEME_CHOOSER = 5,
-  HOME_ACTION_TOGGLE_SIDEBAR = 6,
-  HOME_ACTION_CONTINUE_EDITOR = 7,
-  HOME_ACTION_QUIT = 8
+  HOME_ACTION_OPEN_RECENT_WORKSPACE = 2,
+  HOME_ACTION_NEW_FILE = 3,
+  HOME_ACTION_OPEN_RECENT_PROMPT = 4,
+  HOME_ACTION_COMMAND_PALETTE = 5,
+  HOME_ACTION_THEME_CHOOSER = 6,
+  HOME_ACTION_TOGGLE_SIDEBAR = 7,
+  HOME_ACTION_CONTINUE_EDITOR = 8,
+  HOME_ACTION_QUIT = 9
 };
 
 struct HomeMenuRenderItem {
   int action = 0;
   int recent_index = -1;
+  int recent_workspace_index = -1;
   std::string label;
   std::string secondary;
 };
@@ -136,15 +139,38 @@ void Editor::render_home_menu() {
     items.push_back(std::move(item));
   }
 
-  items.push_back({HOME_ACTION_NEW_FILE, -1, "  New File", ""});
+  if (row_y < row_limit) {
+    row_y++;
+  }
+  if (row_y < row_limit) {
+    ui->draw_text(row_x, row_y, "  Recent Workspaces",
+                  theme.fg_sidebar_directory, theme.bg_command, true);
+    row_y++;
+  }
+
+  int workspace_show = std::min(6, (int)recent_workspaces.size());
+  for (int i = 0; i < workspace_show; i++) {
+    HomeMenuRenderItem item;
+    item.action = HOME_ACTION_OPEN_RECENT_WORKSPACE;
+    item.recent_workspace_index = i;
+    item.label = "  " + std::to_string(i + 1) + ". " +
+                 get_filename(recent_workspaces[i]);
+    item.secondary = recent_workspaces[i];
+    items.push_back(std::move(item));
+  }
+
+  items.push_back({HOME_ACTION_NEW_FILE, -1, -1, "  New File", ""});
   items.push_back(
-      {HOME_ACTION_OPEN_RECENT_PROMPT, -1, "󰱼  Open Recent Prompt", ""});
+      {HOME_ACTION_OPEN_RECENT_PROMPT, -1, -1, "󰱼  Open Recent Prompt", ""});
   items.push_back(
-      {HOME_ACTION_COMMAND_PALETTE, -1, "  Command Palette", ""});
-  items.push_back({HOME_ACTION_THEME_CHOOSER, -1, "󰔎  Theme Chooser", ""});
-  items.push_back({HOME_ACTION_TOGGLE_SIDEBAR, -1, "  Toggle Sidebar", ""});
-  items.push_back({HOME_ACTION_CONTINUE_EDITOR, -1, "󰋖  Continue to Editor", ""});
-  items.push_back({HOME_ACTION_QUIT, -1, "󰩈  Quit JOT", ""});
+      {HOME_ACTION_COMMAND_PALETTE, -1, -1, "  Command Palette", ""});
+  items.push_back(
+      {HOME_ACTION_THEME_CHOOSER, -1, -1, "󰔎  Theme Chooser", ""});
+  items.push_back(
+      {HOME_ACTION_TOGGLE_SIDEBAR, -1, -1, "  Toggle Sidebar", ""});
+  items.push_back(
+      {HOME_ACTION_CONTINUE_EDITOR, -1, -1, "󰋖  Continue to Editor", ""});
+  items.push_back({HOME_ACTION_QUIT, -1, -1, "󰩈  Quit JOT", ""});
 
   if (items.empty()) {
     home_menu_selected = 0;
@@ -182,8 +208,9 @@ void Editor::render_home_menu() {
       }
     }
 
-    home_menu_entries.push_back(
-        {items[i].action, items[i].recent_index, row_x, row_y, row_w});
+    home_menu_entries.push_back({items[i].action, items[i].recent_index,
+                                 items[i].recent_workspace_index, row_x, row_y,
+                                 row_w});
     row_y++;
   }
 
@@ -214,6 +241,24 @@ bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift,
     return true;
   };
 
+  auto open_workspace_by_index = [&](int idx) -> bool {
+    if (idx < 0 || idx >= (int)recent_workspaces.size()) {
+      return false;
+    }
+    std::error_code ec;
+    if (!std::filesystem::exists(recent_workspaces[idx], ec) || ec ||
+        !std::filesystem::is_directory(recent_workspaces[idx], ec)) {
+      recent_workspaces.erase(recent_workspaces.begin() + idx);
+      set_message("Workspace not found");
+      needs_redraw = true;
+      return true;
+    }
+    show_home_menu = false;
+    open_workspace(recent_workspaces[idx], true);
+    needs_redraw = true;
+    return true;
+  };
+
   auto is_startup_pristine = [&]() {
     if (buffers.size() != 1) {
       return false;
@@ -227,6 +272,8 @@ bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift,
     switch (entry.action) {
     case HOME_ACTION_OPEN_RECENT:
       return open_recent_by_index(entry.recent_index);
+    case HOME_ACTION_OPEN_RECENT_WORKSPACE:
+      return open_workspace_by_index(entry.recent_workspace_index);
     case HOME_ACTION_NEW_FILE:
       show_home_menu = false;
       if (!is_startup_pristine()) {
@@ -287,7 +334,7 @@ bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift,
 
   if (ch >= '1' && ch <= '9') {
     int idx = ch - '1';
-    if (open_recent_by_index(idx)) {
+    if (open_recent_by_index(idx) || open_workspace_by_index(idx)) {
       return true;
     }
   }
@@ -320,31 +367,36 @@ bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift,
   }
 
   if (ch == 'n' || ch == 'N') {
-    HomeMenuEntry e = {HOME_ACTION_NEW_FILE, -1, 0, 0, 0};
+    HomeMenuEntry e = {HOME_ACTION_NEW_FILE, -1, -1, 0, 0, 0};
     return execute_entry(e);
   }
   if (ch == 'p' || ch == 'P') {
-    HomeMenuEntry e = {HOME_ACTION_COMMAND_PALETTE, -1, 0, 0, 0};
+    HomeMenuEntry e = {HOME_ACTION_COMMAND_PALETTE, -1, -1, 0, 0, 0};
     return execute_entry(e);
   }
   if (ch == 't' || ch == 'T') {
-    HomeMenuEntry e = {HOME_ACTION_THEME_CHOOSER, -1, 0, 0, 0};
+    HomeMenuEntry e = {HOME_ACTION_THEME_CHOOSER, -1, -1, 0, 0, 0};
     return execute_entry(e);
   }
   if (ch == 's' || ch == 'S') {
-    HomeMenuEntry e = {HOME_ACTION_TOGGLE_SIDEBAR, -1, 0, 0, 0};
+    HomeMenuEntry e = {HOME_ACTION_TOGGLE_SIDEBAR, -1, -1, 0, 0, 0};
     return execute_entry(e);
   }
   if (ch == 'r' || ch == 'R') {
-    HomeMenuEntry e = {HOME_ACTION_OPEN_RECENT_PROMPT, -1, 0, 0, 0};
+    HomeMenuEntry e = {HOME_ACTION_OPEN_RECENT_PROMPT, -1, -1, 0, 0, 0};
     return execute_entry(e);
   }
+  if (ch == 'w' || ch == 'W') {
+    if (open_workspace_by_index(0)) {
+      return true;
+    }
+  }
   if (ch == 'e' || ch == 'E') {
-    HomeMenuEntry e = {HOME_ACTION_CONTINUE_EDITOR, -1, 0, 0, 0};
+    HomeMenuEntry e = {HOME_ACTION_CONTINUE_EDITOR, -1, -1, 0, 0, 0};
     return execute_entry(e);
   }
   if (ch == 'q' || ch == 'Q') {
-    HomeMenuEntry e = {HOME_ACTION_QUIT, -1, 0, 0, 0};
+    HomeMenuEntry e = {HOME_ACTION_QUIT, -1, -1, 0, 0, 0};
     return execute_entry(e);
   }
 

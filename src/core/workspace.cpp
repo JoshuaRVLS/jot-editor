@@ -174,6 +174,7 @@ void Editor::open_workspace(const std::string &path, bool restore_session) {
   }
 
   std::string normalized = p.lexically_normal().string();
+  track_recent_workspace(normalized);
 
   if (workspace_session_enabled && !workspace_session_root.empty() &&
       workspace_session_root != normalized) {
@@ -205,6 +206,9 @@ void Editor::open_workspace(const std::string &path, bool restore_session) {
   preview_buffer_index = -1;
   for (auto &pane : panes) {
     pane.buffer_id = 0;
+    pane.tab_buffer_ids.clear();
+    pane.tab_buffer_ids.push_back(0);
+    pane.tab_scroll_index = 0;
   }
 
   bool restored = false;
@@ -447,6 +451,9 @@ bool Editor::restore_workspace_session() {
     current_buffer = 0;
     for (auto &pane : panes) {
       pane.buffer_id = 0;
+      pane.tab_buffer_ids.clear();
+      pane.tab_buffer_ids.push_back(0);
+      pane.tab_scroll_index = 0;
     }
   }
 
@@ -495,7 +502,12 @@ bool Editor::restore_workspace_session() {
 
   current_buffer = desired_buffer;
   if (!panes.empty()) {
-    get_pane().buffer_id = current_buffer;
+    auto &pane = get_pane();
+    pane.buffer_id = current_buffer;
+    if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
+                  current_buffer) == pane.tab_buffer_ids.end()) {
+      pane.tab_buffer_ids.push_back(current_buffer);
+    }
   }
 
   clamp_cursor(get_pane().buffer_id);

@@ -1,9 +1,23 @@
 #include "bracket.h"
 #include "editor.h"
 #include <cstdio>
+#include <filesystem>
+#include <unordered_map>
 
 namespace {
 constexpr int kLineNumberGutterWidth = 7;
+std::string ellipsize_right(const std::string &s, int max_len) {
+  if (max_len <= 0) {
+    return "";
+  }
+  if ((int)s.size() <= max_len) {
+    return s;
+  }
+  if (max_len <= 3) {
+    return s.substr(0, (size_t)max_len);
+  }
+  return s.substr(0, (size_t)(max_len - 3)) + "...";
+}
 
 int tab_advance(int visual_col, int tab_size) {
   const int ts = std::max(1, tab_size);
@@ -262,6 +276,68 @@ void Editor::render_pane(const SplitPane &pane) {
   int border_fg = pane.active ? theme.fg_active_border : theme.fg_panel_border;
   int border_bg = pane.active ? theme.bg_active_border : theme.bg_panel_border;
   ui->draw_border(rect, border_fg, border_bg);
+
+  // Pane-local file tabs.
+  {
+    int tabs_x = pane.x + 1;
+    int tabs_y = pane.y;
+    int tabs_w = std::max(1, draw_w - 2);
+    UIRect tab_rect = {tabs_x, tabs_y, tabs_w, 1};
+    ui->fill_rect(tab_rect, " ", theme.fg_status, theme.bg_status);
+
+    std::vector<int> tab_ids = pane.tab_buffer_ids;
+    if (tab_ids.empty() && pane.buffer_id >= 0 &&
+        pane.buffer_id < (int)buffers.size()) {
+      tab_ids.push_back(pane.buffer_id);
+    }
+    std::vector<std::string> base_names(buffers.size());
+    std::unordered_map<std::string, int> base_count;
+    for (int i = 0; i < (int)tab_ids.size(); i++) {
+      int buf_id = tab_ids[i];
+      if (buf_id < 0 || buf_id >= (int)buffers.size()) {
+        continue;
+      }
+      std::string base = get_filename(buffers[buf_id].filepath);
+      if (base.empty()) {
+        base = "[No Name]";
+      }
+      base_names[buf_id] = base;
+      base_count[base]++;
+    }
+
+    int tab_x = tabs_x;
+    for (int tab_i = 0; tab_i < (int)tab_ids.size(); tab_i++) {
+      int i = tab_ids[tab_i];
+      if (i < 0 || i >= (int)buffers.size()) {
+        continue;
+      }
+      std::string name = base_names[i];
+      if (base_count[name] > 1 && !buffers[i].filepath.empty()) {
+        std::filesystem::path p(buffers[i].filepath);
+        std::string parent = p.parent_path().filename().string();
+        if (!parent.empty()) {
+          name += " <" + parent + ">";
+        }
+      }
+
+      std::string disp = " " + name + (buffers[i].modified ? " * " : " ");
+      int max_tab_w = std::max(8, tabs_w / 2);
+      disp = ellipsize_right(disp, max_tab_w);
+      int need = (int)disp.size() + 1; // separator
+      if (tab_x + need > tabs_x + tabs_w) {
+        break;
+      }
+
+      bool active_tab = (i == pane.buffer_id);
+      int fg = active_tab ? theme.fg_tab_active : theme.fg_tab_inactive;
+      int bg = active_tab ? theme.bg_tab_active : theme.bg_tab_inactive;
+      ui->draw_text(tab_x, tabs_y, disp, fg, bg, active_tab, buffers[i].is_preview);
+      tab_x += (int)disp.size();
+      ui->draw_text(tab_x, tabs_y, "|", theme.fg_tab_separator, theme.bg_status);
+      tab_x += 1;
+    }
+  }
+
   render_scrollbar(pane, draw_w);
 }
 

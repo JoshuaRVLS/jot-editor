@@ -4,7 +4,7 @@
 #include "autoclose.h"
 #include "bracket.h"
 #include "config.h"
-#include "editor_types.h"
+#include "types.h"
 #include "imageviewer.h"
 #include "integrated_terminal.h"
 #include "lsp_client.h"
@@ -44,9 +44,21 @@ class Editor {
   friend class HostEventsAPI;
 
 private:
+  struct PaneTreeNode {
+    bool leaf = true;
+    int pane_index = -1;
+    int parent = -1;
+    int first = -1;
+    int second = -1;
+    bool vertical = true; // true: left/right, false: up/down
+    float ratio = 0.5f;   // first child ratio
+  };
+
   std::vector<FileBuffer> buffers;
   std::vector<SplitPane> panes;
   std::vector<float> pane_weights;
+  std::vector<PaneTreeNode> pane_tree;
+  int pane_root;
   int current_pane;
   int current_buffer;
   PaneLayoutMode pane_layout_mode;
@@ -164,6 +176,7 @@ private:
   };
   std::vector<ClosedBufferSnapshot> closed_buffer_history;
   std::vector<std::string> recent_files;
+  std::vector<std::string> recent_workspaces;
   std::unordered_map<std::string, int> workspace_diagnostic_severity;
   std::string git_root;
   std::string git_branch;
@@ -177,6 +190,7 @@ private:
   struct HomeMenuEntry {
     int action;
     int recent_index;
+    int recent_workspace_index;
     int x;
     int y;
     int w;
@@ -253,6 +267,9 @@ private:
   void stop_all_lsp_clients();
   void restart_all_lsp_clients();
   void show_lsp_status();
+  void show_lsp_manager();
+  bool install_lsp_server(const std::string &name);
+  bool remove_lsp_server(const std::string &name);
   void request_lsp_completion(bool manual, char trigger_character = '\0');
   void hide_lsp_completion();
   bool apply_selected_lsp_completion();
@@ -272,6 +289,7 @@ private:
   void handle_visual_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt);
 
   void handle_command_palette(int ch);
+  void submit_command_palette();
   void handle_search_panel(int ch, bool is_ctrl = false,
                            bool is_shift = false, bool is_alt = false);
   void handle_telescope(int ch);
@@ -375,8 +393,11 @@ private:
   void set_auto_save(bool enabled, bool persist = true);
   void set_auto_save_interval(int interval_ms, bool persist = true);
   void track_recent_file(const std::string &path);
+  void track_recent_workspace(const std::string &path);
   void load_recent_files();
+  void load_recent_workspaces();
   void save_recent_files();
+  void save_recent_workspaces();
   void save_workspace_session();
   bool restore_workspace_session();
   void refresh_git_status(bool force = false);
@@ -401,10 +422,15 @@ private:
 
   void split_pane_horizontal();
   void split_pane_vertical();
+  void split_pane_left();
+  void split_pane_right();
+  void split_pane_up();
+  void split_pane_down();
   void close_pane();
   void next_pane();
   void prev_pane();
   bool resize_current_pane(int delta);
+  bool resize_current_pane_direction(char dir, int delta);
 
   void toggle_bookmark();
   void next_bookmark();
@@ -431,6 +457,7 @@ private:
 
   int create_pane(int x, int y, int w, int h, int buffer_id);
   void update_pane_layout();
+  void split_pane_direction(int dx, int dy);
   void refresh_command_palette();
   void set_message(const std::string &msg);
 

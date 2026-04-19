@@ -1,4 +1,4 @@
-#include "editor_host_api.h"
+#include "host_api.h"
 #include "editor.h"
 #include "python_api.h"
 
@@ -37,7 +37,12 @@ bool HostCoreAPI::switch_buffer(int index) {
 
   editor.current_buffer = index;
   if (!editor.panes.empty()) {
-    editor.get_pane().buffer_id = index;
+    auto &pane = editor.get_pane();
+    pane.buffer_id = index;
+    if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
+                  index) == pane.tab_buffer_ids.end()) {
+      pane.tab_buffer_ids.push_back(index);
+    }
   }
 
   editor.focus_state = Editor::FOCUS_EDITOR;

@@ -12,6 +12,7 @@ namespace fs = std::filesystem;
 
 namespace {
 constexpr int kMaxRecentFiles = 50;
+constexpr int kMaxRecentWorkspaces = 30;
 constexpr int kMaxClosedBufferHistory = 20;
 
 std::string normalize_existing_path(const std::string &path) {
@@ -38,6 +39,16 @@ std::string recent_files_path() {
   }
   fs::path p = fs::path(home) / ".config" / "jot" / "configs" /
                "recent_files.txt";
+  return p.string();
+}
+
+std::string recent_workspaces_path() {
+  const char *home = std::getenv("HOME");
+  if (!home || !*home) {
+    return "";
+  }
+  fs::path p = fs::path(home) / ".config" / "jot" / "configs" /
+               "recent_workspaces.txt";
   return p.string();
 }
 } // namespace
@@ -140,7 +151,12 @@ void Editor::open_file(const std::string &path, bool preview) {
 
   if (existing_index >= 0 && existing_index < (int)buffers.size()) {
     current_buffer = existing_index;
-    get_pane().buffer_id = existing_index;
+    auto &pane = get_pane();
+    pane.buffer_id = existing_index;
+    if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
+                  existing_index) == pane.tab_buffer_ids.end()) {
+      pane.tab_buffer_ids.push_back(existing_index);
+    }
     if (!preview && buffers[existing_index].is_preview) {
       buffers[existing_index].is_preview = false;
       if (preview_buffer_index == existing_index) {
@@ -192,7 +208,12 @@ void Editor::open_file(const std::string &path, bool preview) {
 
   buffers.push_back(fb);
   current_buffer = buffers.size() - 1;
-  get_pane().buffer_id = current_buffer;
+  auto &pane = get_pane();
+  pane.buffer_id = current_buffer;
+  if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
+                current_buffer) == pane.tab_buffer_ids.end()) {
+    pane.tab_buffer_ids.push_back(current_buffer);
+  }
   if (preview) {
     preview_buffer_index = current_buffer;
   }
@@ -221,7 +242,12 @@ void Editor::create_new_buffer() {
   fb.is_preview = false;
   buffers.push_back(fb);
   current_buffer = buffers.size() - 1;
-  get_pane().buffer_id = current_buffer;
+  auto &pane = get_pane();
+  pane.buffer_id = current_buffer;
+  if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
+                current_buffer) == pane.tab_buffer_ids.end()) {
+    pane.tab_buffer_ids.push_back(current_buffer);
+  }
 }
 
 void Editor::save_file() {
@@ -326,6 +352,9 @@ void Editor::close_buffer_at(int index) {
     preview_buffer_index = -1;
     for (auto &pane : panes) {
       pane.buffer_id = 0;
+      pane.tab_buffer_ids.clear();
+      pane.tab_buffer_ids.push_back(0);
+      pane.tab_scroll_index = 0;
     }
     message = "Closed file";
     needs_redraw = true;
@@ -359,15 +388,44 @@ void Editor::close_buffer_at(int index) {
   }
 
   for (auto &pane : panes) {
+    for (auto &id : pane.tab_buffer_ids) {
+      if (id > removed) {
+        id--;
+      }
+    }
+    pane.tab_buffer_ids.erase(
+        std::remove(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
+                    removed),
+        pane.tab_buffer_ids.end());
+
     if (pane.buffer_id == removed) {
-      pane.buffer_id = current_buffer;
+      if (!pane.tab_buffer_ids.empty()) {
+        pane.buffer_id = pane.tab_buffer_ids.front();
+      } else {
+        pane.buffer_id = std::clamp(current_buffer, 0,
+                                    std::max(0, (int)buffers.size() - 1));
+        pane.tab_buffer_ids.push_back(pane.buffer_id);
+      }
     } else if (pane.buffer_id > removed) {
       pane.buffer_id--;
     }
+
+    if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
+                  pane.buffer_id) == pane.tab_buffer_ids.end()) {
+      pane.tab_buffer_ids.push_back(pane.buffer_id);
+    }
+    pane.tab_scroll_index =
+        std::clamp(pane.tab_scroll_index, 0,
+                   std::max(0, (int)pane.tab_buffer_ids.size() - 1));
   }
 
   if (!panes.empty()) {
-    get_pane().buffer_id = current_buffer;
+    auto &pane = get_pane();
+    pane.buffer_id = current_buffer;
+    if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
+                  current_buffer) == pane.tab_buffer_ids.end()) {
+      pane.tab_buffer_ids.push_back(current_buffer);
+    }
   }
   message = "Closed file";
   needs_redraw = true;
@@ -404,7 +462,12 @@ void Editor::reopen_last_closed_buffer() {
   current_buffer = (int)buffers.size() - 1;
   tab_scroll_index = std::min(tab_scroll_index, current_buffer);
   preview_buffer_index = -1;
-  get_pane().buffer_id = current_buffer;
+  auto &pane = get_pane();
+  pane.buffer_id = current_buffer;
+  if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
+                current_buffer) == pane.tab_buffer_ids.end()) {
+    pane.tab_buffer_ids.push_back(current_buffer);
+  }
   clamp_cursor(current_buffer);
   ensure_cursor_visible();
 
@@ -429,6 +492,27 @@ void Editor::track_recent_file(const std::string &path) {
   recent_files.insert(recent_files.begin(), normalized);
   if ((int)recent_files.size() > kMaxRecentFiles) {
     recent_files.resize(kMaxRecentFiles);
+  }
+}
+
+void Editor::track_recent_workspace(const std::string &path) {
+  const std::string normalized = normalize_existing_path(path);
+  if (normalized.empty()) {
+    return;
+  }
+
+  std::error_code ec;
+  if (!fs::exists(normalized, ec) || ec || !fs::is_directory(normalized, ec)) {
+    return;
+  }
+
+  recent_workspaces.erase(
+      std::remove(recent_workspaces.begin(), recent_workspaces.end(),
+                  normalized),
+      recent_workspaces.end());
+  recent_workspaces.insert(recent_workspaces.begin(), normalized);
+  if ((int)recent_workspaces.size() > kMaxRecentWorkspaces) {
+    recent_workspaces.resize(kMaxRecentWorkspaces);
   }
 }
 
@@ -464,6 +548,38 @@ void Editor::load_recent_files() {
   }
 }
 
+void Editor::load_recent_workspaces() {
+  recent_workspaces.clear();
+  const std::string path = recent_workspaces_path();
+  if (path.empty()) {
+    return;
+  }
+
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    return;
+  }
+
+  std::string line;
+  while (std::getline(file, line)) {
+    if (line.empty()) {
+      continue;
+    }
+    const std::string normalized = normalize_existing_path(line);
+    if (normalized.empty()) {
+      continue;
+    }
+    std::error_code ec;
+    if (!fs::exists(normalized, ec) || ec || !fs::is_directory(normalized, ec)) {
+      continue;
+    }
+    recent_workspaces.push_back(normalized);
+    if ((int)recent_workspaces.size() >= kMaxRecentWorkspaces) {
+      break;
+    }
+  }
+}
+
 void Editor::save_recent_files() {
   const std::string path = recent_files_path();
   if (path.empty()) {
@@ -479,6 +595,25 @@ void Editor::save_recent_files() {
     return;
   }
   for (const auto &entry : recent_files) {
+    file << entry << '\n';
+  }
+}
+
+void Editor::save_recent_workspaces() {
+  const std::string path = recent_workspaces_path();
+  if (path.empty()) {
+    return;
+  }
+
+  std::error_code ec;
+  fs::path output_path(path);
+  fs::create_directories(output_path.parent_path(), ec);
+
+  std::ofstream file(path);
+  if (!file.is_open()) {
+    return;
+  }
+  for (const auto &entry : recent_workspaces) {
     file << entry << '\n';
   }
 }

@@ -16,7 +16,6 @@ from runtime.events import EventsRuntime
 from runtime.palette import PaletteRuntime
 from runtime.plugins import PluginRuntime
 from runtime.theme import ThemeRuntime
-from features import editor_logic as _editor_logic
 
 # Try to import internal module provided by C++ host
 try:
@@ -552,34 +551,6 @@ def _command_palette_execute(line):
     )
 
 
-def _feature_should_auto_close(ch):
-    return _editor_logic.should_auto_close(ch)
-
-
-def _feature_get_closing_bracket(ch):
-    return _editor_logic.get_closing_bracket(ch)
-
-
-def _feature_is_closing_bracket(ch):
-    return _editor_logic.is_closing_bracket(ch)
-
-
-def _feature_should_skip_closing(ch, line, pos):
-    return _editor_logic.should_skip_closing(ch, line, pos)
-
-
-def _feature_should_auto_indent(line):
-    return _editor_logic.should_auto_indent(line)
-
-
-def _feature_should_dedent(line):
-    return _editor_logic.should_dedent(line)
-
-
-def _feature_find_matching_bracket(lines, line, col, open_char, close_char):
-    return _editor_logic.find_matching_bracket(lines, line, col, open_char, close_char)
-
-
 def on_buffer_open(callback):
     if _events_runtime is None:
         return callback
@@ -756,7 +727,7 @@ _register_builtin_plugin_commands()
 def _autoload_optional_runtime_plugins():
     # Built-in optional runtime plugins should load without requiring user config.
     # Failures stay non-fatal so editor startup is resilient.
-    for mod_name in ("lsp_plugin",):
+    for mod_name in ():
         try:
             if mod_name in sys.modules:
                 importlib.reload(sys.modules[mod_name])

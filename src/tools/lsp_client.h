@@ -1,7 +1,7 @@
 #ifndef LSP_CLIENT_H
 #define LSP_CLIENT_H
 
-#include "editor_features.h"
+#include "text_features.h"
 #include <map>
 #include <string>
 #include <utility>

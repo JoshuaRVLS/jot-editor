@@ -1,7 +1,7 @@
 #ifndef PYTHON_API_H
 #define PYTHON_API_H
 
-#include "editor_features.h"
+#include "text_features.h"
 #include <functional>
 #include <map>
 #include <string>
@@ -61,7 +61,6 @@ private:
 public:
   PythonAPI(Editor *ed);
   ~PythonAPI();
-  static PythonAPI *active();
 
   bool init();
   void cleanup();
@@ -95,14 +94,6 @@ public:
   std::vector<std::string>
   command_palette_suggestions(const std::string &query);
   bool command_palette_execute(const std::string &line, bool *handled = nullptr);
-  bool feature_should_auto_close(char c);
-  char feature_get_closing_bracket(char c);
-  bool feature_is_closing_bracket(char c);
-  bool feature_should_skip_closing(char c, const std::string &line, int pos);
-  bool feature_should_auto_indent(const std::string &line);
-  bool feature_should_dedent(const std::string &line);
-  int feature_find_matching_bracket(const std::vector<std::string> &lines,
-                                    int line, int col, char open, char close);
 
   void register_command(const std::string &name,
                         const std::string &callback); // New

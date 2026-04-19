@@ -1,190 +1,12 @@
 #include "editor.h"
+#include "command_utils.h"
 #include "python_api.h"
 #include <algorithm>
 #include <cctype>
-#include <filesystem>
 #include <fstream>
 #include <sstream>
 
-namespace {
-namespace fs = std::filesystem;
-
-std::string to_lower_copy(std::string s) {
-  std::transform(s.begin(), s.end(), s.begin(),
-                 [](unsigned char c) { return std::tolower(c); });
-  return s;
-}
-
-std::string shell_quote(const std::string &value) {
-  std::string out = "'";
-  out.reserve(value.size() + 8);
-  for (char c : value) {
-    if (c == '\'') {
-      out += "'\\''";
-    } else {
-      out.push_back(c);
-    }
-  }
-  out.push_back('\'');
-  return out;
-}
-
-std::string first_line_copy(const std::string &text) {
-  size_t end = text.find_first_of("\r\n");
-  if (end == std::string::npos) {
-    return text;
-  }
-  return text.substr(0, end);
-}
-
-std::string limit_lines(const std::string &text, int max_lines) {
-  if (max_lines <= 0) {
-    return "";
-  }
-  std::istringstream iss(text);
-  std::string out;
-  std::string line;
-  int count = 0;
-  while (count < max_lines && std::getline(iss, line)) {
-    out += line;
-    out.push_back('\n');
-    count++;
-  }
-  if (iss.good()) {
-    out += "...";
-  } else if (!out.empty() && out.back() == '\n') {
-    out.pop_back();
-  }
-  return out;
-}
-
-const std::vector<std::string> &ex_commands() {
-  static const std::vector<std::string> commands = {
-      "q",      "quit",     "q!",       "quit!",   "w",      "write",
-      "wq",     "x",        "xit",      "e",       "edit",   "open",
-      "new",    "enew",     "bd",       "bdelete", "close",  "sp",
-      "split",  "splith",   "vsp",      "splitv",  "bn",     "nextpane",
-      "bp",     "prevpane", "theme",    "colorscheme", "colo", "minimap",
-      "term",   "terminal", "termnew",  "terminalnew", "search",
-      "find",   "ff",       "mkfile",   "mkdir",   "rename", "rm",
-      "format", "trim",     "line",     "goto",        "resizeleft",
-      "resizeright", "resizeup", "resizedown", "lspstart", "lspstatus",
-      "lspstop", "lsprestart", "lspinstall", "lspremove", "lspmanager",
-      "gitstatus", "gitdiff", "gitblame",
-      "gitrefresh", "recent", "openrecent", "reopen",
-      "reopenlast", "autosave", "help"};
-  return commands;
-}
-
-bool starts_with_icase(const std::string &value, const std::string &prefix) {
-  if (prefix.size() > value.size()) {
-    return false;
-  }
-  for (size_t i = 0; i < prefix.size(); i++) {
-    if (std::tolower((unsigned char)value[i]) !=
-        std::tolower((unsigned char)prefix[i])) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool command_takes_argument(const std::string &cmd) {
-  const std::string lc = to_lower_copy(cmd);
-  return lc == "e" || lc == "edit" || lc == "open" || lc == "w" ||
-         lc == "write" || lc == "wq" || lc == "x" || lc == "xit" ||
-         lc == "theme" || lc == "colorscheme" ||
-         lc == "colo" || lc == "line" || lc == "goto" ||
-         lc == "openrecent" || lc == "autosave" || lc == "help" ||
-         lc == "h" || lc == "gitdiff" || lc == "find" || lc == "ff" ||
-         lc == "mkfile" || lc == "mkdir" || lc == "rename" || lc == "rm" ||
-         lc == "lspinstall" || lc == "lspremove";
-}
-
-bool parse_line_col(const std::string &s, int &line_out, int &col_out) {
-  if (s.empty())
-    return false;
-
-  size_t colon = s.find(':');
-  std::string line_part = (colon == std::string::npos) ? s : s.substr(0, colon);
-  std::string col_part =
-      (colon == std::string::npos) ? "" : s.substr(colon + 1);
-
-  if (line_part.empty())
-    return false;
-  for (char c : line_part) {
-    if (!std::isdigit((unsigned char)c))
-      return false;
-  }
-  if (!col_part.empty()) {
-    for (char c : col_part) {
-      if (!std::isdigit((unsigned char)c))
-        return false;
-    }
-  }
-
-  line_out = std::max(1, std::stoi(line_part));
-  col_out = col_part.empty() ? 1 : std::max(1, std::stoi(col_part));
-  return true;
-}
-
-std::string trim_copy(const std::string &s) {
-  const size_t start = s.find_first_not_of(" \t");
-  if (start == std::string::npos)
-    return "";
-  const size_t end = s.find_last_not_of(" \t");
-  return s.substr(start, end - start + 1);
-}
-
-std::vector<std::string> complete_path_argument(const std::string &arg) {
-  std::vector<std::string> out;
-
-  std::string dir_part;
-  std::string name_prefix = arg;
-  size_t slash = arg.find_last_of("/\\");
-  if (slash != std::string::npos) {
-    dir_part = arg.substr(0, slash + 1);
-    name_prefix = arg.substr(slash + 1);
-  }
-
-  std::string list_dir = dir_part.empty() ? "." : dir_part;
-  std::error_code ec;
-  fs::path base(list_dir);
-  if (!fs::exists(base, ec) || !fs::is_directory(base, ec)) {
-    return out;
-  }
-
-  for (const auto &entry : fs::directory_iterator(base, ec)) {
-    if (ec) {
-      break;
-    }
-
-    std::string name = entry.path().filename().string();
-    if (name.empty()) {
-      continue;
-    }
-    if (!name_prefix.empty() && !starts_with_icase(name, name_prefix)) {
-      continue;
-    }
-
-    std::string suggestion = dir_part + name;
-    if (entry.is_directory(ec)) {
-      suggestion += "/";
-    }
-    out.push_back(suggestion);
-  }
-
-  std::sort(out.begin(), out.end(),
-            [](const std::string &a, const std::string &b) {
-              return to_lower_copy(a) < to_lower_copy(b);
-            });
-
-  if (out.size() > 64) {
-    out.resize(64);
-  }
-  return out;
-}
-} // namespace
+using namespace CommandLineUtils;
 
 void Editor::toggle_command_palette() {
   show_command_palette = !show_command_palette;
@@ -398,6 +220,14 @@ void Editor::execute_command(const std::string &cmd) {
     split_pane_horizontal();
   } else if (cmd == "Split Vertical") {
     split_pane_vertical();
+  } else if (cmd == "Split Left") {
+    split_pane_left();
+  } else if (cmd == "Split Right") {
+    split_pane_right();
+  } else if (cmd == "Split Up") {
+    split_pane_up();
+  } else if (cmd == "Split Down") {
+    split_pane_down();
   } else if (cmd == "Close Pane") {
     close_pane();
   } else if (cmd == "Next Pane") {
@@ -540,7 +370,24 @@ void Editor::handle_command_palette(int ch) {
     arg = trim_copy(arg);
     std::string lcmd = to_lower_copy(cmd);
 
-    if (!line.empty() && python_api) {
+    bool skip_python_dispatch = false;
+    if (!line.empty()) {
+      std::string probe_cmd;
+      std::string probe_arg;
+      std::istringstream pss(line);
+      pss >> probe_cmd;
+      std::getline(pss, probe_arg);
+      const std::string probe_lcmd = to_lower_copy(probe_cmd);
+      skip_python_dispatch = (probe_lcmd == "lspstart" ||
+                              probe_lcmd == "lspstatus" ||
+                              probe_lcmd == "lspstop" ||
+                              probe_lcmd == "lsprestart" ||
+                              probe_lcmd == "lspmanager" ||
+                              probe_lcmd == "lspinstall" ||
+                              probe_lcmd == "lspremove");
+    }
+
+    if (!line.empty() && python_api && !skip_python_dispatch) {
       bool handled_by_python = false;
       if (python_api->command_palette_execute(line, &handled_by_python) &&
           handled_by_python) {
@@ -565,37 +412,6 @@ void Editor::handle_command_palette(int ch) {
       ensure_cursor_visible();
       set_message("Jumped to line " + std::to_string(buf.cursor.y + 1) +
                   ", col " + std::to_string(buf.cursor.x + 1));
-    };
-    auto execute_python_palette_command = [&](const std::string &name,
-                                              const std::string &arg_text) {
-      if (!python_api) {
-        return false;
-      }
-
-      std::string line_to_run = name;
-      if (!arg_text.empty()) {
-        line_to_run += " ";
-        line_to_run += arg_text;
-      }
-
-      bool handled = false;
-      if (python_api->command_palette_execute(line_to_run, &handled) && handled) {
-        return true;
-      }
-
-      python_api->execute_code(
-          "import importlib\n"
-          "try:\n"
-          "    import lsp_plugin\n"
-          "    importlib.reload(lsp_plugin)\n"
-          "except Exception:\n"
-          "    pass\n");
-
-      handled = false;
-      if (python_api->command_palette_execute(line_to_run, &handled) && handled) {
-        return true;
-      }
-      return false;
     };
     auto resolve_path = [&](const std::string &raw) -> fs::path {
       std::error_code ec;
@@ -683,9 +499,34 @@ void Editor::handle_command_palette(int ch) {
     } else if (lcmd == "bd" || lcmd == "bdelete" || lcmd == "close") {
       close_buffer();
     } else if (lcmd == "sp" || lcmd == "split" || lcmd == "splith") {
-      split_pane_horizontal();
+      std::string dir = to_lower_copy(trim_copy(arg));
+      if (dir == "left" || dir == "l") {
+        split_pane_left();
+      } else if (dir == "right" || dir == "r" || dir.empty()) {
+        split_pane_right();
+      } else if (dir == "up" || dir == "u" || dir == "top" || dir == "t") {
+        split_pane_up();
+      } else if (dir == "down" || dir == "d" || dir == "bottom" ||
+                 dir == "b") {
+        split_pane_down();
+      } else {
+        set_message("Usage: :split [left|right|up|down]");
+      }
     } else if (lcmd == "vsp" || lcmd == "splitv") {
-      split_pane_vertical();
+      std::string dir = to_lower_copy(trim_copy(arg));
+      if (dir == "left" || dir == "l") {
+        split_pane_left();
+      } else {
+        split_pane_right();
+      }
+    } else if (lcmd == "splitleft" || lcmd == "spleft") {
+      split_pane_left();
+    } else if (lcmd == "splitright" || lcmd == "spright") {
+      split_pane_right();
+    } else if (lcmd == "splitup" || lcmd == "spup") {
+      split_pane_up();
+    } else if (lcmd == "splitdown" || lcmd == "spdown") {
+      split_pane_down();
     } else if (lcmd == "bn" || lcmd == "nextpane") {
       next_pane();
     } else if (lcmd == "bp" || lcmd == "prevpane") {
@@ -843,16 +684,18 @@ void Editor::handle_command_palette(int ch) {
     } else if (lcmd == "lsprestart") {
       restart_all_lsp_clients();
     } else if (lcmd == "lspmanager") {
-      if (!execute_python_palette_command("LspManager", arg)) {
-        set_message("LspManager unavailable. Reinstall runtime with ./install.sh");
-      }
+      show_lsp_manager();
     } else if (lcmd == "lspinstall") {
-      if (!execute_python_palette_command("LspInstall", arg)) {
-        set_message("LspInstall unavailable. Reinstall runtime with ./install.sh");
+      if (arg.empty()) {
+        set_message("Usage: :lspinstall <python|typescript|cpp>");
+      } else {
+        install_lsp_server(arg);
       }
     } else if (lcmd == "lspremove") {
-      if (!execute_python_palette_command("LspRemove", arg)) {
-        set_message("LspRemove unavailable. Reinstall runtime with ./install.sh");
+      if (arg.empty()) {
+        set_message("Usage: :lspremove <python|typescript|cpp>");
+      } else {
+        remove_lsp_server(arg);
       }
     } else if (lcmd == "gitrefresh") {
       refresh_git_status(true);
@@ -992,26 +835,26 @@ void Editor::handle_command_palette(int ch) {
         set_message("Invalid location: " + arg);
       }
     } else if (lcmd == "resizeleft") {
-      if (pane_layout_mode != PANE_LAYOUT_VERTICAL || !resize_current_pane(-2)) {
-        set_message("Resize left unavailable for current layout");
+      if (!resize_current_pane_direction('h', 2)) {
+        set_message("Resize left unavailable");
       } else {
         set_message("Pane resized left");
       }
     } else if (lcmd == "resizeright") {
-      if (pane_layout_mode != PANE_LAYOUT_VERTICAL || !resize_current_pane(2)) {
-        set_message("Resize right unavailable for current layout");
+      if (!resize_current_pane_direction('l', 2)) {
+        set_message("Resize right unavailable");
       } else {
         set_message("Pane resized right");
       }
     } else if (lcmd == "resizeup") {
-      if (pane_layout_mode != PANE_LAYOUT_HORIZONTAL || !resize_current_pane(-2)) {
-        set_message("Resize up unavailable for current layout");
+      if (!resize_current_pane_direction('k', 2)) {
+        set_message("Resize up unavailable");
       } else {
         set_message("Pane resized up");
       }
     } else if (lcmd == "resizedown") {
-      if (pane_layout_mode != PANE_LAYOUT_HORIZONTAL || !resize_current_pane(2)) {
-        set_message("Resize down unavailable for current layout");
+      if (!resize_current_pane_direction('j', 2)) {
+        set_message("Resize down unavailable");
       } else {
         set_message("Pane resized down");
       }
@@ -1046,7 +889,7 @@ void Editor::handle_command_palette(int ch) {
         }
       }
     } else if (lcmd == "help" || lcmd == "h") {
-      set_message("Commands: :w :q :wq :e <file> :find [dir] :mkfile <p> :mkdir <p> :rename <old> <new> :rm <p> :line N[:C] :bd :sp :vsp :bn :bp :recent :openrecent [n] :reopen :autosave [on/off/ms] :lspstart :lspstatus :lspstop :lsprestart :gitstatus :gitdiff [file] :gitblame :gitrefresh :theme <name>");
+      set_message("Commands: :w :q :wq :e <file> :find [dir] :mkfile <p> :mkdir <p> :rename <old> <new> :rm <p> :line N[:C] :bd :sp [left|right|up|down] :vsp [left|right] :splitleft/:splitright/:splitup/:splitdown :bn :bp :recent :openrecent [n] :reopen :autosave [on/off/ms] :lspstart :lspstatus :lspstop :lsprestart :gitstatus :gitdiff [file] :gitblame :gitrefresh :theme <name>");
     } else {
       bool handled_custom = false;
       for (const auto &custom : custom_commands) {

@@ -5,6 +5,9 @@
 
 
 namespace {
+constexpr int kBracketDepthScanLimitLines = 500;
+constexpr int kBracketMatchSearchLimitLines = 5000;
+
 struct ActiveBracketGuide {
   bool active = false;
   int visual_column = 0;
@@ -160,7 +163,9 @@ BracketPairMatch find_pair_at(const std::vector<std::string> &lines, int line,
 
   if (is_open) {
     int depth = 1;
-    for (int y = line; y < (int)lines.size(); y++) {
+    const int max_line = std::min((int)lines.size() - 1,
+                                  line + kBracketMatchSearchLimitLines);
+    for (int y = line; y <= max_line; y++) {
       int start_x = (y == line) ? col + 1 : 0;
       for (int x = start_x; x < (int)lines[y].size(); x++) {
         char ch = lines[y][x];
@@ -181,7 +186,8 @@ BracketPairMatch find_pair_at(const std::vector<std::string> &lines, int line,
     }
   } else {
     int depth = 1;
-    for (int y = line; y >= 0; y--) {
+    const int min_line = std::max(0, line - kBracketMatchSearchLimitLines);
+    for (int y = line; y >= min_line; y--) {
       int start_x = (y == line) ? col - 1 : (int)lines[y].size() - 1;
       for (int x = start_x; x >= 0; x--) {
         char ch = lines[y][x];
@@ -339,7 +345,9 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
   int line_num_width = 7;
   ActiveBracketGuide bracket_guide = build_active_bracket_guide(buf, tab_size);
   int bracket_depth = 0;
-  for (int scan_line = 0;
+  const int scan_start =
+      std::max(0, buf.scroll_offset - kBracketDepthScanLimitLines);
+  for (int scan_line = scan_start;
        scan_line < std::min(buf.scroll_offset, (int)buf.lines.size());
        scan_line++) {
     const std::string &line = buf.lines[scan_line];
@@ -347,6 +355,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
       apply_bracket_depth_delta(c, bracket_depth);
     }
   }
+
+  std::vector<int> visual_cols;
 
   for (int i = 0; i < h; i++) {
     int line_idx = i + buf.scroll_offset;
@@ -375,11 +385,12 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
       }
       ui->draw_text(x + 2, draw_y, num_buf, ln_fg, ln_bg);
 
-      std::string &line = buf.lines[line_idx];
+      const std::string &line = buf.lines[line_idx];
       int scroll_x = buf.scroll_x;
       int current_x = x + 1 + line_num_width;
       int visible_len = w - 2 - line_num_width;
-      std::vector<int> visual_cols(line.size() + 1, 0);
+      visual_cols.resize(line.size() + 1);
+      visual_cols[0] = 0;
       for (int vi = 0; vi < (int)line.size(); vi++) {
         visual_cols[vi + 1] = visual_cols[vi] +
                               (line[vi] == '\t' ? tab_advance(visual_cols[vi], tab_size)

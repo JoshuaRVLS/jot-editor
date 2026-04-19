@@ -1,6 +1,4 @@
 #include "editor.h"
-#include <functional>
-#include <new>
 #include <regex>
 
 void SyntaxHighlighter::set_language(const std::string &ext) {
@@ -9,30 +7,33 @@ void SyntaxHighlighter::set_language(const std::string &ext) {
   file_extension = ext;
   rules.clear();
 
-  if (ext == ".cpp" || ext == ".h" || ext == ".c" || ext == ".hpp") {
+  if (ext == ".cpp" || ext == ".h" || ext == ".c" || ext == ".hpp" ||
+      ext == ".cc" || ext == ".cxx" || ext == ".hh" || ext == ".hxx") {
     // Keywords
     rules.push_back(
         {std::regex("\\b(int|char|void|float|double|bool|long|short|unsigned|"
                     "signed|const|static|struct|class|namespace|public|private|"
-                    "protected|virtual|override|return|if|else|for|while|do|"
-                    "switch|case|break|continue|sizeof|typedef|using|template|"
-                    "typename|auto|nullptr|new|delete|try|catch|throw|enum|"
-                    "union|friend|explicit|operator|this)\\b"),
+                    "protected|virtual|override|final|return|if|else|for|while|"
+                    "do|switch|case|break|continue|sizeof|typedef|using|template|"
+                    "typename|auto|nullptr|new|delete|try|catch|throw|enum|union|"
+                    "friend|explicit|operator|this|constexpr|consteval|constinit|"
+                    "noexcept|concept|requires|co_await|co_return|co_yield)\\b"),
          1}); // Keyword color
 
     // Preprocessor and Includes
-    rules.push_back({std::regex("#include\\s*[<\"][^>\"]+[>\"]"),
+    rules.push_back({std::regex("#\\s*include\\s*[<\"][^>\"]+[>\"]"),
                      6}); // Cyan for entire include
-    rules.push_back(
-        {std::regex("#[a-z]+"), 5}); // Magenta for #define, #ifdef, etc.
+    rules.push_back({std::regex("#\\s*[a-zA-Z_]+"),
+                     5}); // Magenta for #define, #ifdef, etc.
 
-    rules.push_back({std::regex("\"[^\"]*\""), 2});
-    rules.push_back({std::regex("'[^']*'"), 2});
+    rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\""), 2});
+    rules.push_back({std::regex("'([^'\\\\]|\\\\.)*'"), 2});
     rules.push_back({std::regex("//.*"), 3});
+    rules.push_back({std::regex("/\\*.*\\*/"), 3}); // single-line block chunk
     rules.push_back(
-        {std::regex("/\\*([^*]|[\\r\\n]|(\\*+([^*/]|[\\r\\n])))*\\*+/"),
-         3}); // Block comment (simple regex)
-    rules.push_back({std::regex("\\b[0-9]+\\b"), 4});
+        {std::regex("\\b(0x[0-9a-fA-F]+|0b[01]+|\\d+\\.\\d+([eE][+-]?\\d+)?|"
+                    "\\d+[eE][+-]?\\d+|\\d+)\\b"),
+         4});
     rules.push_back(
         {std::regex("\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()"),
          6}); // Function calls: color only the identifier, not the bracket
@@ -48,29 +49,45 @@ void SyntaxHighlighter::set_language(const std::string &ext) {
              "raise|global|nonlocal|True|False|None|and|or|not|in|is|self)\\b"),
          1});
     rules.push_back(
-        {std::regex("\"\"\"[^\"]*\"\"\"|'''[^']*'''|\"[^\"]*\"|'[^']*'"), 2});
+        {std::regex("\"\"\".*\"\"\"|'''.*'''|\"([^\"\\\\]|\\\\.)*\"|'([^'\\\\]|\\\\.)*'"),
+         2});
     rules.push_back({std::regex("#.*"), 3});
-    rules.push_back({std::regex("\\b[0-9]+\\b"), 4});
+    rules.push_back(
+        {std::regex("\\b(0x[0-9a-fA-F]+|\\d+\\.\\d+([eE][+-]?\\d+)?|\\d+)\\b"),
+         4});
     rules.push_back({std::regex("@[a-zA-Z0-9_]+"), 6}); // Decorators
+    rules.push_back(
+        {std::regex("\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()"),
+         6}); // Calls
 
-  } else if (ext == ".js" || ext == ".ts") {
+  } else if (ext == ".js" || ext == ".ts" || ext == ".jsx" ||
+             ext == ".tsx" || ext == ".mjs" || ext == ".cjs") {
     rules.push_back(
         {std::regex("\\b(import|from|export|require)\\b"), 5}); // Imports
 
     rules.push_back(
         {std::regex(
              "\\b(var|let|const|function|return|if|else|for|while|do|switch|"
-             "case|break|continue|class|extends|async|await|"
-             "try|catch|finally|throw|new|typeof|instanceof|this|super|static|"
-             "get|set|yield|void|null|undefined|true|false)\\b"),
+              "case|break|continue|class|extends|async|await|"
+              "try|catch|finally|throw|new|typeof|instanceof|this|super|static|"
+              "get|set|yield|void|null|undefined|true|false|interface|type|"
+              "implements|enum|readonly|keyof|infer|satisfies)\\b"),
          1});
-    rules.push_back({std::regex("`[^`]*`|\"[^\"]*\"|'[^']*'"), 2});
+    rules.push_back(
+        {std::regex("`([^`\\\\]|\\\\.)*`|\"([^\"\\\\]|\\\\.)*\"|'([^'\\\\]|\\\\.)*'"),
+         2});
     rules.push_back({std::regex("//.*"), 3});
-    rules.push_back({std::regex("\\b[0-9]+\\b"), 4});
+    rules.push_back({std::regex("/\\*.*\\*/"), 3});
+    rules.push_back(
+        {std::regex("\\b(0x[0-9a-fA-F]+|\\d+\\.\\d+([eE][+-]?\\d+)?|\\d+)\\b"),
+         4});
+    rules.push_back(
+        {std::regex("\\b[A-Za-z_$][A-Za-z0-9_$]*\\b(?=\\s*\\()"),
+         6}); // Calls
 
   } else if (ext == ".html" || ext == ".xml") {
     rules.push_back({std::regex("<[^>]*>"), 1});
-    rules.push_back({std::regex("\"[^\"]*\"|'[^']*'"), 2});
+    rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\"|'([^'\\\\]|\\\\.)*'"), 2});
     rules.push_back({std::regex("<!--.*?-->"), 3});
 
   } else if (ext == ".rs") {
@@ -82,9 +99,15 @@ void SyntaxHighlighter::set_language(const std::string &ext) {
              "self|super|if|else|match|for|while|loop|return|break|"
              "continue|async|await|move|ref|where|unsafe|as|dyn)\\b"),
          1});
-    rules.push_back({std::regex("\"[^\"]*\""), 2});
+    rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\""), 2});
     rules.push_back({std::regex("//.*"), 3});
-    rules.push_back({std::regex("\\b[0-9]+\\b"), 4});
+    rules.push_back({std::regex("/\\*.*\\*/"), 3});
+    rules.push_back(
+        {std::regex("\\b(0x[0-9a-fA-F]+|\\d+\\.\\d+([eE][+-]?\\d+)?|\\d+)\\b"),
+         4});
+    rules.push_back(
+        {std::regex("\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()"),
+         6}); // Calls
 
   } else if (ext == ".css") {
     rules.push_back(
@@ -98,7 +121,7 @@ void SyntaxHighlighter::set_language(const std::string &ext) {
     rules.push_back({std::regex("/\\*.*?\\*/"), 3});        // Comments
     rules.push_back({std::regex("\\b[0-9]+(px|em|rem|%|vh|vw|s|ms)?\\b"), 4});
 
-  } else if (ext == ".java") {
+  } else if (ext == ".java" || ext == ".kt") {
     rules.push_back({std::regex("\\b(import|package)\\b"), 5});
 
     rules.push_back(
@@ -110,11 +133,15 @@ void SyntaxHighlighter::set_language(const std::string &ext) {
              "try|catch|finally|throw|throws|new|this|super|"
              "synchronized|volatile|transient|native|abstract|default)\\b"),
          1});
-    rules.push_back({std::regex("\"[^\"]*\""), 2});
-    rules.push_back({std::regex("'[^']*'"), 2});
+    rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\""), 2});
+    rules.push_back({std::regex("'([^'\\\\]|\\\\.)*'"), 2});
     rules.push_back({std::regex("//.*"), 3});
-    rules.push_back({std::regex("\\b[0-9]+\\b"), 4});
+    rules.push_back({std::regex("/\\*.*\\*/"), 3});
+    rules.push_back(
+        {std::regex("\\b(0x[0-9a-fA-F]+|\\d+\\.\\d+([eE][+-]?\\d+)?|\\d+)\\b"),
+         4});
     rules.push_back({std::regex("@\\w+"), 6}); // Annotations
+    rules.push_back({std::regex("\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()"), 6});
 
   } else if (ext == ".go") {
     rules.push_back({std::regex("\\b(package|import)\\b"), 5});
@@ -139,11 +166,12 @@ void SyntaxHighlighter::set_language(const std::string &ext) {
     rules.push_back({std::regex("^\\s*\\d+\\. "), 1}); // Ordered lists
     rules.push_back({std::regex("<!--.*?-->"), 3});    // Comments
 
-  } else if (ext == ".json") {
+  } else if (ext == ".json" || ext == ".jsonc") {
     rules.push_back({std::regex("\"[^\"]*\":"), 5}); // Keys
-    rules.push_back({std::regex("\"[^\"]*\""), 2});  // Strings
+    rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\""), 2});  // Strings
     rules.push_back({std::regex("\\b(true|false|null)\\b"), 1});
     rules.push_back({std::regex("\\b-?[0-9]+(\\.[0-9]+)?\\b"), 4});
+    rules.push_back({std::regex("//.*"), 3});
 
   } else if (ext == ".sh" || ext == ".bash" || ext == ".zsh") {
     rules.push_back(
@@ -165,7 +193,7 @@ void SyntaxHighlighter::set_language(const std::string &ext) {
              "then|"
              "begin|super|alias|defined\\?|self|true|false|nil)\\b"),
          1});
-    rules.push_back({std::regex("\"[^\"]*\"|'[^']*'"), 2});
+    rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\"|'([^'\\\\]|\\\\.)*'"), 2});
     rules.push_back({std::regex("#.*"), 3});
     rules.push_back({std::regex(":[a-zA-Z0-9_]+"), 5}); // Symbols
     rules.push_back({std::regex("@[a-zA-Z0-9_]+"), 6}); // Instance vars
@@ -181,31 +209,57 @@ void SyntaxHighlighter::set_language(const std::string &ext) {
              "try|catch|finally|throw|new|extends|implements|interface|trait|"
              "null|true|false)\\b"),
          1});
-    rules.push_back({std::regex("\"[^\"]*\"|'[^']*'"), 2});
+    rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\"|'([^'\\\\]|\\\\.)*'"), 2});
     rules.push_back({std::regex("//.*|/\\*.*?\\*/|#.*"), 3});
     rules.push_back({std::regex("\\$[a-zA-Z0-9_]+"), 5}); // Variables
+  } else if (ext == ".yml" || ext == ".yaml" || ext == ".toml") {
+    rules.push_back({std::regex("^[\\t ]*[a-zA-Z0-9_.-]+\\s*:"), 5});
+    rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\"|'([^'\\\\]|\\\\.)*'"), 2});
+    rules.push_back({std::regex("#.*"), 3});
+    rules.push_back({std::regex("\\b(true|false|null|on|off|yes|no)\\b"), 1});
+    rules.push_back({std::regex("\\b-?[0-9]+(\\.[0-9]+)?\\b"), 4});
   }
 }
 
 std::vector<std::pair<int, int>>
 SyntaxHighlighter::get_colors(const std::string &line) {
   std::vector<std::pair<int, int>> colors(line.length(), {0, 0});
+  std::vector<bool> protected_region(line.length(), false);
 
-  for (const auto &rule : rules) {
-    auto words_begin =
-        std::sregex_iterator(line.begin(), line.end(), rule.pattern);
+  auto apply_rule = [&](const SyntaxRule &rule, bool protect_only,
+                        bool skip_protected) {
+    auto words_begin = std::sregex_iterator(line.begin(), line.end(), rule.pattern);
     auto words_end = std::sregex_iterator();
 
     for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
       std::smatch match = *i;
       size_t start = static_cast<size_t>(match.position());
-      size_t end =
-          static_cast<size_t>(match.position() + match.length());
-      for (size_t pos = start; pos < end && pos < line.length();
-           pos++) {
+      size_t end = static_cast<size_t>(match.position() + match.length());
+      for (size_t pos = start; pos < end && pos < line.length(); pos++) {
+        if (skip_protected && protected_region[pos]) {
+          continue;
+        }
         colors[pos] = {1, rule.color};
+        if (protect_only) {
+          protected_region[pos] = true;
+        }
       }
     }
+  };
+
+  // Pass 1: strings/comments first; protect regions from later token rules.
+  for (const auto &rule : rules) {
+    if (rule.color == 2 || rule.color == 3) {
+      apply_rule(rule, true, false);
+    }
+  }
+
+  // Pass 2: other syntax rules, but don't paint inside protected regions.
+  for (const auto &rule : rules) {
+    if (rule.color == 2 || rule.color == 3) {
+      continue;
+    }
+    apply_rule(rule, false, true);
   }
 
   return colors;

@@ -121,6 +121,14 @@ run_maybe_sudo() {
   fi
 }
 
+run_as_default_user() {
+  if [[ "${EUID}" -eq 0 ]] && [[ -n "${SUDO_USER:-}" ]]; then
+    sudo -u "${SUDO_USER}" "$@"
+  else
+    "$@"
+  fi
+}
+
 attempt_cmd() {
   local desc="$1"
   shift
@@ -138,12 +146,50 @@ install_python_lsp() {
     echo "[jot:lsp] pylsp already installed"
     return 0
   fi
+
+  # Prefer distro package managers first (works cleanly with PEP 668 environments).
+  if command -v pacman >/dev/null 2>&1; then
+    attempt_cmd "Installing python-lsp-server via pacman" \
+      run_maybe_sudo pacman -Sy --noconfirm python-lsp-server && return 0
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    attempt_cmd "Installing python3-pylsp via apt-get" \
+      run_maybe_sudo bash -lc "apt-get update && apt-get install -y python3-pylsp" && return 0
+  fi
+
+  if command -v dnf >/dev/null 2>&1; then
+    attempt_cmd "Installing python3-pylsp via dnf" \
+      run_maybe_sudo dnf install -y python3-pylsp && return 0
+  fi
+
+  if command -v yum >/dev/null 2>&1; then
+    attempt_cmd "Installing python3-pylsp via yum" \
+      run_maybe_sudo yum install -y python3-pylsp && return 0
+  fi
+
+  if command -v zypper >/dev/null 2>&1; then
+    attempt_cmd "Installing python3-python-lsp-server via zypper" \
+      run_maybe_sudo zypper --non-interactive install python3-python-lsp-server && return 0
+  fi
+
+  # Fallback: isolated venv for Jot-managed Python tooling.
   if command -v python3 >/dev/null 2>&1; then
-    if attempt_cmd "Installing python-lsp-server via pip --user" \
-      python3 -m pip install --user -U python-lsp-server; then
+    local venv_dir="${DEFAULT_HOME}/.local/share/jot/venvs/lsp"
+    local user_bin="${DEFAULT_HOME}/.local/bin"
+
+    attempt_cmd "Creating venv for python-lsp-server at ${venv_dir}" \
+      run_as_default_user python3 -m venv "${venv_dir}" || true
+
+    if attempt_cmd "Installing python-lsp-server in Jot venv" \
+      run_as_default_user "${venv_dir}/bin/python" -m pip install -U python-lsp-server; then
+      run_as_default_user mkdir -p "${user_bin}"
+      run_as_default_user ln -sf "${venv_dir}/bin/pylsp" "${user_bin}/pylsp"
+      echo "[jot:lsp] Installed pylsp in venv and linked to ${user_bin}/pylsp"
       return 0
     fi
   fi
+
   echo "[jot:lsp] Warning: unable to install pylsp automatically." >&2
   return 1
 }

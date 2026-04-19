@@ -1,5 +1,5 @@
 #include "editor.h"
-#include "editor_features.h"
+#include "text_features.h"
 #include <algorithm>
 #include <cctype>
 

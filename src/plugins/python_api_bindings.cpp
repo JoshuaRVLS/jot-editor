@@ -2,7 +2,7 @@
 #include <Python.h>
 #include "python_api.h"
 #include "editor.h"
-#include "editor_host_api.h"
+#include "host_api.h"
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -108,8 +108,6 @@ static void append_python_path(const fs::path &path) {
 
 // Global instance pointer for C wrappers
 static PythonAPI *g_python_api = nullptr;
-
-PythonAPI *PythonAPI::active() { return g_python_api; }
 
 // --- C Wrappers for Python ---
 

@@ -1,5 +1,5 @@
 #include "editor.h"
-#include "editor_host_api.h"
+#include "host_api.h"
 #include "python_api.h"
 #include <algorithm>
 #include <filesystem>
@@ -50,6 +50,7 @@ Editor::Editor() {
  
 
   running = true;
+  pane_root = -1;
   current_pane = 0;
   waiting_for_space_f = false;
   pane_layout_mode = PANE_LAYOUT_SINGLE;
@@ -156,6 +157,7 @@ Editor::Editor() {
   host_api = std::make_unique<EditorHostAPI>(*this);
 
   load_recent_files();
+  load_recent_workspaces();
 
   // Restore saved color scheme now that Python runtime is ready.
   {
@@ -170,8 +172,7 @@ Editor::Editor() {
 
   int h = terminal.get_height();
   int w = terminal.get_width();
-  create_pane(0, tab_height, w - minimap_width, h - tab_height - status_height,
-              -1);
+  create_pane(0, 0, w - minimap_width, h - status_height, -1);
 
   FileBuffer fb;
   fb.lines.push_back("");
@@ -192,6 +193,7 @@ const EditorHostAPI &Editor::host() const { return *host_api; }
 Editor::~Editor() {
   save_workspace_session();
   save_recent_files();
+  save_recent_workspaces();
   stop_all_lsp_clients();
 
   for (auto &term : integrated_terminals) {

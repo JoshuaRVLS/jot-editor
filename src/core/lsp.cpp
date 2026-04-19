@@ -9,6 +9,12 @@
 namespace fs = std::filesystem;
 
 namespace {
+std::string to_lower_copy(std::string s) {
+  std::transform(s.begin(), s.end(), s.begin(),
+                 [](unsigned char c) { return (char)std::tolower(c); });
+  return s;
+}
+
 std::string detect_lsp_language(const std::string &filepath) {
   std::string lower = filepath;
   std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
@@ -124,6 +130,51 @@ bool same_path(const std::string &a, const std::string &b) {
   if (fs::exists(a, ec) && fs::exists(b, ec) && fs::equivalent(a, b, ec) &&
       !ec) {
     return true;
+  }
+  return false;
+}
+
+bool command_exists(const std::string &name) {
+  if (name.empty()) {
+    return false;
+  }
+  std::string cmd = "command -v " + name + " >/dev/null 2>&1";
+  return std::system(cmd.c_str()) == 0;
+}
+
+std::string normalize_lsp_server_name(const std::string &raw) {
+  std::string n = to_lower_copy(raw);
+  if (n == "py" || n == "pylsp") {
+    return "python";
+  }
+  if (n == "ts" || n == "js" || n == "javascript") {
+    return "typescript";
+  }
+  if (n == "c" || n == "c++" || n == "clangd") {
+    return "cpp";
+  }
+  if (n == "python" || n == "typescript" || n == "cpp") {
+    return n;
+  }
+  return "";
+}
+
+bool is_lsp_server_installed(const std::string &server) {
+  if (server == "python") {
+    const char *home = std::getenv("HOME");
+    if (home) {
+      fs::path local = fs::path(home) / ".config" / "jot" / "venv" / "bin" / "pylsp";
+      if (fs::exists(local)) {
+        return true;
+      }
+    }
+    return command_exists("pylsp");
+  }
+  if (server == "typescript") {
+    return command_exists("typescript-language-server");
+  }
+  if (server == "cpp") {
+    return command_exists("clangd");
   }
   return false;
 }
@@ -348,6 +399,83 @@ void Editor::show_lsp_status() {
     }
   }
   set_message(status);
+}
+
+void Editor::show_lsp_manager() {
+  std::vector<std::string> lines = {
+      "LSP Manager (C++ builtin)",
+      "",
+      std::string("python      [") +
+          (is_lsp_server_installed("python") ? "installed" : "missing") + "]",
+      std::string("typescript  [") +
+          (is_lsp_server_installed("typescript") ? "installed" : "missing") + "]",
+      std::string("cpp         [") +
+          (is_lsp_server_installed("cpp") ? "installed" : "missing") + "]",
+      "",
+      "Use:",
+      ":lspinstall <python|typescript|cpp>",
+      ":lspremove <python|typescript|cpp>",
+      ":lspstart :lspstatus :lspstop :lsprestart"};
+  show_popup([&lines]() {
+    std::string out;
+    for (size_t i = 0; i < lines.size(); i++) {
+      out += lines[i];
+      if (i + 1 < lines.size()) {
+        out.push_back('\n');
+      }
+    }
+    return out;
+  }(), 2, tab_height + 1);
+}
+
+bool Editor::install_lsp_server(const std::string &name) {
+  const std::string server = normalize_lsp_server_name(name);
+  if (server.empty()) {
+    set_message("Unknown LSP server: " + name + " (use python|typescript|cpp)");
+    return false;
+  }
+
+  int rc = 1;
+  if (server == "python") {
+    rc = std::system("python3 -m pip install --user -U python-lsp-server");
+  } else if (server == "typescript") {
+    rc = std::system("npm install -g typescript typescript-language-server");
+  } else if (server == "cpp") {
+    set_message("Install clangd using your OS package manager");
+    return false;
+  }
+
+  if (rc == 0) {
+    set_message("LSP install OK: " + server);
+    return true;
+  }
+  set_message("LSP install failed: " + server);
+  return false;
+}
+
+bool Editor::remove_lsp_server(const std::string &name) {
+  const std::string server = normalize_lsp_server_name(name);
+  if (server.empty()) {
+    set_message("Unknown LSP server: " + name + " (use python|typescript|cpp)");
+    return false;
+  }
+
+  int rc = 1;
+  if (server == "python") {
+    rc = std::system("python3 -m pip uninstall -y python-lsp-server");
+  } else if (server == "typescript") {
+    rc = std::system("npm uninstall -g typescript typescript-language-server");
+  } else if (server == "cpp") {
+    set_message("Remove clangd using your OS package manager");
+    return false;
+  }
+
+  if (rc == 0) {
+    set_message("LSP remove OK: " + server);
+    return true;
+  }
+  set_message("LSP remove failed: " + server);
+  return false;
 }
 
 void Editor::hide_lsp_completion() {

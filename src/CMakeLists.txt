@@ -37,30 +37,30 @@ endfunction()
 # Module object libraries
 add_library(jot_core_obj OBJECT
   core/editor.cpp
-  core/editor_bookmarks.cpp
-  core/editor_event_loop.cpp
-  core/editor_file.cpp
-  core/editor_git.cpp
-  core/editor_home.cpp
-  core/editor_host_api.cpp
-  core/editor_integrated_terminal.cpp
-  core/editor_lsp.cpp
-  core/editor_panes.cpp
-  core/editor_popup.cpp
-  core/editor_theme.cpp
-  core/editor_undo.cpp
-  core/editor_utils.cpp
-  core/editor_workspace.cpp
+  core/bookmarks.cpp
+  core/event_loop.cpp
+  core/file.cpp
+  core/git.cpp
+  core/home.cpp
+  core/host_api.cpp
+  core/integrated_terminal.cpp
+  core/lsp.cpp
+  core/panes.cpp
+  core/popup.cpp
+  core/theme.cpp
+  core/undo.cpp
+  core/utils.cpp
+  core/workspace.cpp
 )
 jot_configure_object_target(jot_core_obj)
 
 add_library(jot_edit_obj OBJECT
-  edit/editor_clipboard.cpp
-  edit/editor_cursor.cpp
-  edit/editor_edit.cpp
-  edit/editor_lines.cpp
-  edit/editor_search.cpp
-  edit/editor_sidebar.cpp
+  edit/clipboard.cpp
+  edit/cursor.cpp
+  edit/edit.cpp
+  edit/lines.cpp
+  edit/search.cpp
+  edit/sidebar.cpp
 )
 jot_configure_object_target(jot_edit_obj)
 
@@ -68,32 +68,33 @@ add_library(jot_features_obj OBJECT
   features/autoclose.cpp
   features/bracket.cpp
   features/config.cpp
-  features/editor_features.cpp
+  features/text_features.cpp
   features/syntax.cpp
 )
 jot_configure_object_target(jot_features_obj)
 
 add_library(jot_input_obj OBJECT
-  input/editor_command_actions.cpp
-  input/editor_command_line.cpp
-  input/editor_command_navigation.cpp
-  input/editor_mode_dispatch.cpp
-  input/editor_mode_insert.cpp
-  input/editor_mode_normal.cpp
-  input/editor_mode_transitions.cpp
-  input/editor_mode_vim.cpp
-  input/editor_mode_visual.cpp
-  input/editor_mouse.cpp
+  input/command_actions.cpp
+  input/command_palette.cpp
+  input/command_utils.cpp
+  input/command_navigation.cpp
+  input/mode_dispatch.cpp
+  input/mode_insert.cpp
+  input/mode_normal.cpp
+  input/mode_transitions.cpp
+  input/mode_vim.cpp
+  input/mode_visual.cpp
+  input/mouse.cpp
 )
 jot_configure_object_target(jot_input_obj)
 
 add_library(jot_render_obj OBJECT
-  render/editor_render.cpp
-  render/editor_render_buffer.cpp
-  render/editor_render_easter.cpp
-  render/editor_render_minimap.cpp
-  render/editor_render_overlay.cpp
-  render/editor_render_ui.cpp
+  render/render.cpp
+  render/render_buffer.cpp
+  render/render_easter.cpp
+  render/render_minimap.cpp
+  render/render_overlay.cpp
+  render/render_ui.cpp
 )
 jot_configure_object_target(jot_render_obj)
 

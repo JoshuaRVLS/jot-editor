@@ -1,6 +1,5 @@
 
 #include "bracket.h"
-#include "python_api.h"
 #include <stack>
 #include <map>
 
@@ -38,36 +37,6 @@ std::pair<int, int> BracketHighlighter::find_matching_bracket(
     char bracket = lines[line][col];
     if (!is_bracket(bracket)) return {-1, -1};
 
-    char open = '\0';
-    char close = '\0';
-    switch (bracket) {
-        case '(':
-        case ')':
-            open = '(';
-            close = ')';
-            break;
-        case '{':
-        case '}':
-            open = '{';
-            close = '}';
-            break;
-        case '[':
-        case ']':
-            open = '[';
-            close = ']';
-            break;
-        default:
-            break;
-    }
-    if (open != '\0') {
-        if (auto *py = PythonAPI::active()) {
-            int encoded = py->feature_find_matching_bracket(lines, line, col, open, close);
-            if (encoded >= 0) {
-                return {encoded / 10000, encoded % 10000};
-            }
-        }
-    }
-    
     bool is_opening = is_opening_bracket(bracket);
     char target = get_matching_bracket(bracket);
     int direction = is_opening ? 1 : -1;
@@ -213,5 +182,4 @@ std::pair<int, int> BracketHighlighter::find_matching_bracket_near_cursor(
     
     return {-1, -1};
 }
-
 
