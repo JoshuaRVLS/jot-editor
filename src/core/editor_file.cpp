@@ -42,7 +42,7 @@ std::string recent_files_path() {
 }
 } // namespace
 
-void Editor::load_file(const std::string &fname) { open_file(fname); }
+void Editor::load_file(const std::string &fname) { open_file(fname, false); }
 
 int Editor::detect_indent_width(const std::vector<std::string> &lines) const {
   std::map<int, int> delta_score;
@@ -104,27 +104,56 @@ int Editor::detect_indent_width(const std::vector<std::string> &lines) const {
   return tab_size;
 }
 
-void Editor::open_file(const std::string &path) {
+void Editor::open_file(const std::string &path, bool preview) {
   show_home_menu = false;
   hide_lsp_completion();
 
   const std::string normalized = normalize_existing_path(path);
   const std::string path_to_open = normalized.empty() ? path : normalized;
 
-  for (size_t i = 0; i < buffers.size(); i++) {
-    const std::string candidate = normalize_existing_path(buffers[i].filepath);
-    if (!candidate.empty() && candidate == path_to_open) {
-      current_buffer = i;
-      get_pane().buffer_id = i;
-      track_recent_file(path_to_open);
-      return;
+  auto find_open_index = [&]() {
+    for (size_t i = 0; i < buffers.size(); i++) {
+      const std::string candidate = normalize_existing_path(buffers[i].filepath);
+      if (!candidate.empty() && candidate == path_to_open) {
+        return (int)i;
+      }
+      if (buffers[i].filepath == path_to_open || buffers[i].filepath == path) {
+        return (int)i;
+      }
     }
-    if (buffers[i].filepath == path_to_open || buffers[i].filepath == path) {
-      current_buffer = i;
-      get_pane().buffer_id = i;
-      track_recent_file(path_to_open);
-      return;
+    return -1;
+  };
+
+  int existing_index = find_open_index();
+
+  if (preview && preview_buffer_index >= 0 &&
+      preview_buffer_index < (int)buffers.size() &&
+      preview_buffer_index != existing_index) {
+    const bool can_replace_preview =
+        buffers[preview_buffer_index].is_preview &&
+        !buffers[preview_buffer_index].modified;
+    if (can_replace_preview) {
+      close_buffer_at(preview_buffer_index);
+      existing_index = find_open_index();
     }
+  }
+
+  if (existing_index >= 0 && existing_index < (int)buffers.size()) {
+    current_buffer = existing_index;
+    get_pane().buffer_id = existing_index;
+    if (!preview && buffers[existing_index].is_preview) {
+      buffers[existing_index].is_preview = false;
+      if (preview_buffer_index == existing_index) {
+        preview_buffer_index = -1;
+      }
+    }
+    if (preview && buffers[existing_index].is_preview) {
+      preview_buffer_index = existing_index;
+    }
+    track_recent_file(path_to_open);
+    refresh_git_status(true);
+    needs_redraw = true;
+    return;
   }
 
   FileBuffer fb;
@@ -135,6 +164,7 @@ void Editor::open_file(const std::string &path) {
   fb.scroll_offset = 0;
   fb.scroll_x = 0;
   fb.modified = false;
+  fb.is_preview = preview;
 
   std::ifstream file(path_to_open);
   if (file.is_open()) {
@@ -163,12 +193,17 @@ void Editor::open_file(const std::string &path) {
   buffers.push_back(fb);
   current_buffer = buffers.size() - 1;
   get_pane().buffer_id = current_buffer;
+  if (preview) {
+    preview_buffer_index = current_buffer;
+  }
   track_recent_file(path_to_open);
 
   highlighter.set_language(get_file_extension(path_to_open));
   if (python_api)
     python_api->on_buffer_open(path_to_open);
   notify_lsp_open(path_to_open);
+  refresh_git_status(true);
+  needs_redraw = true;
 }
 
 void Editor::create_new_buffer() {
@@ -183,6 +218,7 @@ void Editor::create_new_buffer() {
   fb.scroll_offset = 0;
   fb.scroll_x = 0;
   fb.modified = false;
+  fb.is_preview = false;
   buffers.push_back(fb);
   current_buffer = buffers.size() - 1;
   get_pane().buffer_id = current_buffer;
@@ -229,6 +265,12 @@ bool Editor::save_buffer_at(int index, bool announce) {
   file.close();
 
   buf.modified = false;
+  if (buf.is_preview) {
+    buf.is_preview = false;
+    if (preview_buffer_index == index) {
+      preview_buffer_index = -1;
+    }
+  }
   track_recent_file(buf.filepath);
   if (announce) {
     message = "Saved: " + get_filename(buf.filepath);
@@ -237,6 +279,7 @@ bool Editor::save_buffer_at(int index, bool announce) {
   if (python_api)
     python_api->on_buffer_save(buf.filepath);
   notify_lsp_save(buf.filepath);
+  refresh_git_status(true);
   return true;
 }
 
@@ -273,11 +316,14 @@ void Editor::close_buffer_at(int index) {
     buf.scroll_offset = 0;
     buf.scroll_x = 0;
     buf.modified = false;
+    buf.is_preview = false;
     buf.undo_stack = std::stack<State>();
     buf.redo_stack = std::stack<State>();
     buf.bookmarks.clear();
     buf.diagnostics.clear();
     current_buffer = 0;
+    tab_scroll_index = 0;
+    preview_buffer_index = -1;
     for (auto &pane : panes) {
       pane.buffer_id = 0;
     }
@@ -287,12 +333,29 @@ void Editor::close_buffer_at(int index) {
   }
 
   int removed = index;
+
+  if (preview_buffer_index == removed) {
+    preview_buffer_index = -1;
+  }
   buffers.erase(buffers.begin() + removed);
 
   if (current_buffer > removed) {
     current_buffer--;
   } else if (current_buffer >= (int)buffers.size()) {
     current_buffer = (int)buffers.size() - 1;
+  }
+
+  if (tab_scroll_index > removed) {
+    tab_scroll_index--;
+  }
+  tab_scroll_index = std::clamp(tab_scroll_index, 0,
+                                std::max(0, (int)buffers.size() - 1));
+  if (preview_buffer_index > removed) {
+    preview_buffer_index--;
+  }
+  if (preview_buffer_index < 0 || preview_buffer_index >= (int)buffers.size() ||
+      (preview_buffer_index >= 0 && !buffers[preview_buffer_index].is_preview)) {
+    preview_buffer_index = -1;
   }
 
   for (auto &pane : panes) {
@@ -335,9 +398,12 @@ void Editor::reopen_last_closed_buffer() {
   fb.scroll_offset = std::max(0, snap.scroll_offset);
   fb.scroll_x = std::max(0, snap.scroll_x);
   fb.modified = snap.modified;
+  fb.is_preview = false;
 
   buffers.push_back(std::move(fb));
   current_buffer = (int)buffers.size() - 1;
+  tab_scroll_index = std::min(tab_scroll_index, current_buffer);
+  preview_buffer_index = -1;
   get_pane().buffer_id = current_buffer;
   clamp_cursor(current_buffer);
   ensure_cursor_visible();
