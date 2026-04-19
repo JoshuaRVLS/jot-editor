@@ -3,12 +3,21 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${PROJECT_ROOT}/build"
-INSTALL_PREFIX="${HOME}/.local"
+DEFAULT_HOME="${HOME}"
+if [[ "${EUID}" -eq 0 ]] && [[ -n "${SUDO_USER:-}" ]] && command -v getent >/dev/null 2>&1; then
+  SUDO_HOME="$(getent passwd "${SUDO_USER}" | cut -d: -f6 || true)"
+  if [[ -n "${SUDO_HOME}" ]]; then
+    DEFAULT_HOME="${SUDO_HOME}"
+  fi
+fi
+
+INSTALL_PREFIX="${DEFAULT_HOME}/.local"
 BUILD_TYPE="Release"
 RUN_TESTS=0
 USE_SUDO=0
 INSTALL_LSP=1
 JOBS=""
+PREFIX_EXPLICIT=0
 
 print_help() {
   cat <<'USAGE'
@@ -40,6 +49,7 @@ while [[ $# -gt 0 ]]; do
     --prefix)
       [[ $# -ge 2 ]] || { echo "Missing value for --prefix" >&2; exit 1; }
       INSTALL_PREFIX="$2"
+      PREFIX_EXPLICIT=1
       shift 2
       ;;
     --build-dir)
@@ -83,6 +93,15 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${EUID}" -eq 0 ]] && [[ "${PREFIX_EXPLICIT}" -eq 0 ]]; then
+  if [[ "${INSTALL_PREFIX}" == "/root/.local" ]] && [[ -n "${SUDO_USER:-}" ]]; then
+    echo "[jot] Running as root via sudo, using ${DEFAULT_HOME}/.local for ${SUDO_USER}"
+  elif [[ "${INSTALL_PREFIX}" == "/root/.local" ]]; then
+    echo "[jot] Warning: install prefix is /root/.local"
+    echo "[jot] If this is not intended, run as your normal user or pass --prefix <path>."
+  fi
+fi
 
 if ! command -v cmake >/dev/null 2>&1; then
   echo "Error: cmake not found in PATH" >&2
@@ -241,3 +260,21 @@ fi
 
 echo "[jot] Done"
 echo "Add ${INSTALL_PREFIX}/bin to PATH if needed."
+
+EXPECTED_BIN="${INSTALL_PREFIX}/bin/jot"
+ACTIVE_JOT="$(command -v jot 2>/dev/null || true)"
+
+echo "[jot] Installed binary: ${EXPECTED_BIN}"
+if [[ -n "${ACTIVE_JOT}" ]]; then
+  ACTIVE_REAL="$(realpath "${ACTIVE_JOT}" 2>/dev/null || echo "${ACTIVE_JOT}")"
+  EXPECTED_REAL="$(realpath "${EXPECTED_BIN}" 2>/dev/null || echo "${EXPECTED_BIN}")"
+  echo "[jot] Active jot in PATH: ${ACTIVE_REAL}"
+  if [[ "${ACTIVE_REAL}" != "${EXPECTED_REAL}" ]]; then
+    echo "[jot] WARNING: active 'jot' is not the one just installed." >&2
+    echo "[jot] Use '${EXPECTED_BIN}' directly or fix PATH order." >&2
+    echo "[jot] Tip: run 'hash -r' after updating PATH in current shell." >&2
+  fi
+else
+  echo "[jot] No 'jot' found in PATH yet."
+  echo "[jot] Run '${EXPECTED_BIN}' directly or add '${INSTALL_PREFIX}/bin' to PATH."
+fi

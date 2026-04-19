@@ -81,12 +81,23 @@ void Editor::render() {
 
     // Keep cursor visibility in sync even when no redraw is needed.
     if (show_command_palette || show_search || show_save_prompt ||
-        show_quit_prompt) {
+        show_quit_prompt || input_prompt_visible) {
       if (show_command_palette) {
         int x = std::min(ui->get_width() - 1,
                          std::max(1, (int)command_palette_query.length() + 1));
         int y = ui->get_height() - 1;
         ui->set_cursor(x, y);
+      } else if (input_prompt_visible) {
+        int prompt_w = 40;
+        int prompt_x = ui->get_width() / 2 - prompt_w / 2;
+        int prompt_y = ui->get_height() / 4;
+        int cursor_x =
+            prompt_x + 1 + (int)input_prompt_message.length() +
+            (int)input_prompt_buffer.length();
+        cursor_x = std::clamp(cursor_x, 0, std::max(0, ui->get_width() - 1));
+        int cursor_y =
+            std::clamp(prompt_y + 1, 0, std::max(0, ui->get_height() - 1));
+        ui->set_cursor(cursor_x, cursor_y);
       }
       return;
     }
@@ -166,6 +177,7 @@ void Editor::render() {
     render_status_line();
     render_command_palette();
     render_search_panel();
+    render_input_prompt();
     render_popup();
 
     if (easter_egg_timer > 0) {
@@ -184,12 +196,23 @@ void Editor::render() {
     }
 
     if (show_command_palette || show_search || show_save_prompt ||
-        show_quit_prompt) {
+        show_quit_prompt || input_prompt_visible) {
       if (show_command_palette) {
         int x = std::min(ui->get_width() - 1,
                          std::max(1, (int)command_palette_query.length() + 1));
         int y = ui->get_height() - 1;
         ui->set_cursor(x, y);
+      } else if (input_prompt_visible) {
+        int prompt_w = 40;
+        int prompt_x = ui->get_width() / 2 - prompt_w / 2;
+        int prompt_y = ui->get_height() / 4;
+        int cursor_x =
+            prompt_x + 1 + (int)input_prompt_message.length() +
+            (int)input_prompt_buffer.length();
+        cursor_x = std::clamp(cursor_x, 0, std::max(0, ui->get_width() - 1));
+        int cursor_y =
+            std::clamp(prompt_y + 1, 0, std::max(0, ui->get_height() - 1));
+        ui->set_cursor(cursor_x, cursor_y);
       }
     } else if (show_integrated_terminal && active_terminal &&
                active_terminal->is_focused()) {

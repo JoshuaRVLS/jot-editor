@@ -56,7 +56,9 @@ PythonAPI::PythonAPI(Editor *ed)
     : editor(ed), py_module(nullptr), py_buffer_open_hook(nullptr),
       py_buffer_change_hook(nullptr), py_buffer_save_hook(nullptr),
       py_internal_callback_hook(nullptr), py_event_hook(nullptr),
-      py_reset_runtime_hook(nullptr), python_initialized(false) {
+      py_reset_runtime_hook(nullptr), py_plugin_loaded_hook(nullptr),
+      py_plugin_before_reload_hook(nullptr), py_plugins_ready_hook(nullptr),
+      python_initialized(false) {
   g_python_api = this;
 }
 
@@ -149,6 +151,7 @@ bool PythonAPI::init() {
     }
   }
 
+  notify_python_plugins_ready();
   on_editor_ready();
   return true;
 }
@@ -177,6 +180,18 @@ void PythonAPI::cleanup() {
   if (py_reset_runtime_hook) {
     Py_DECREF(reinterpret_cast<PyObject *>(py_reset_runtime_hook));
     py_reset_runtime_hook = nullptr;
+  }
+  if (py_plugin_loaded_hook) {
+    Py_DECREF(reinterpret_cast<PyObject *>(py_plugin_loaded_hook));
+    py_plugin_loaded_hook = nullptr;
+  }
+  if (py_plugin_before_reload_hook) {
+    Py_DECREF(reinterpret_cast<PyObject *>(py_plugin_before_reload_hook));
+    py_plugin_before_reload_hook = nullptr;
+  }
+  if (py_plugins_ready_hook) {
+    Py_DECREF(reinterpret_cast<PyObject *>(py_plugins_ready_hook));
+    py_plugins_ready_hook = nullptr;
   }
   if (py_module) {
     Py_DECREF(reinterpret_cast<PyObject *>(py_module));
@@ -224,6 +239,9 @@ void PythonAPI::refresh_python_hooks() {
   reset_hook(py_internal_callback_hook);
   reset_hook(py_event_hook);
   reset_hook(py_reset_runtime_hook);
+  reset_hook(py_plugin_loaded_hook);
+  reset_hook(py_plugin_before_reload_hook);
+  reset_hook(py_plugins_ready_hook);
 
   if (!py_module) {
     return;
@@ -250,6 +268,94 @@ void PythonAPI::refresh_python_hooks() {
   py_internal_callback_hook = load_hook("_internal_call_callback");
   py_event_hook = load_hook("_emit_event");
   py_reset_runtime_hook = load_hook("_reset_runtime_state");
+  py_plugin_loaded_hook = load_hook("_plugin_runtime_on_loaded");
+  py_plugin_before_reload_hook = load_hook("_plugin_runtime_before_reload");
+  py_plugins_ready_hook = load_hook("_plugin_runtime_finalize_activation");
+}
+
+void PythonAPI::notify_python_plugin_loaded(const std::string &path, bool ok,
+                                            const std::string &error,
+                                            double load_ms) {
+  if (!python_initialized || !py_plugin_loaded_hook) {
+    return;
+  }
+
+  PyObject *args = PyTuple_New(4);
+  if (!args) {
+    PyErr_Clear();
+    return;
+  }
+  PyObject *py_path = PyUnicode_FromString(path.c_str());
+  PyObject *py_ok = PyBool_FromLong(ok ? 1 : 0);
+  PyObject *py_error = PyUnicode_FromString(error.c_str());
+  PyObject *py_ms = PyFloat_FromDouble(load_ms);
+  if (!py_path || !py_ok || !py_error || !py_ms) {
+    Py_XDECREF(py_path);
+    Py_XDECREF(py_ok);
+    Py_XDECREF(py_error);
+    Py_XDECREF(py_ms);
+    Py_DECREF(args);
+    PyErr_Clear();
+    return;
+  }
+
+  PyTuple_SET_ITEM(args, 0, py_path);
+  PyTuple_SET_ITEM(args, 1, py_ok);
+  PyTuple_SET_ITEM(args, 2, py_error);
+  PyTuple_SET_ITEM(args, 3, py_ms);
+  PyObject *result =
+      PyObject_CallObject(reinterpret_cast<PyObject *>(py_plugin_loaded_hook),
+                          args);
+  Py_DECREF(args);
+  if (!result) {
+    PyErr_Print();
+    PyErr_Clear();
+    return;
+  }
+  Py_DECREF(result);
+}
+
+void PythonAPI::notify_python_before_plugin_reload() {
+  if (!python_initialized || !py_plugin_before_reload_hook) {
+    return;
+  }
+
+  PyObject *args = PyTuple_New(0);
+  if (!args) {
+    PyErr_Clear();
+    return;
+  }
+  PyObject *result = PyObject_CallObject(
+      reinterpret_cast<PyObject *>(py_plugin_before_reload_hook), args);
+  Py_DECREF(args);
+  if (!result) {
+    PyErr_Print();
+    PyErr_Clear();
+    return;
+  }
+  Py_DECREF(result);
+}
+
+void PythonAPI::notify_python_plugins_ready() {
+  if (!python_initialized || !py_plugins_ready_hook) {
+    return;
+  }
+
+  PyObject *args = PyTuple_New(0);
+  if (!args) {
+    PyErr_Clear();
+    return;
+  }
+  PyObject *result =
+      PyObject_CallObject(reinterpret_cast<PyObject *>(py_plugins_ready_hook),
+                          args);
+  Py_DECREF(args);
+  if (!result) {
+    PyErr_Print();
+    PyErr_Clear();
+    return;
+  }
+  Py_DECREF(result);
 }
 
 void PythonAPI::call_python_hook(void *hook, const std::string &arg) {
@@ -396,6 +502,11 @@ void PythonAPI::on_editor_ready() {
   emit_python_event("startup", "{}");
 }
 
+void PythonAPI::emit_event(const std::string &event_name,
+                           const std::string &payload_json) {
+  emit_python_event(event_name, payload_json);
+}
+
 void PythonAPI::load_plugins(const std::string &plugin_dir) {
   if (!fs::exists(plugin_dir) || !fs::is_directory(plugin_dir)) {
     fs::create_directories(plugin_dir);
@@ -410,6 +521,8 @@ void PythonAPI::load_plugins(const std::string &plugin_dir) {
 bool PythonAPI::load_plugin(const std::string &path) {
   if (!python_initialized)
     return false;
+
+  auto start = std::chrono::steady_clock::now();
 
   fs::path plugin_path(path);
   append_python_path(plugin_path.parent_path());
@@ -454,11 +567,19 @@ bool PythonAPI::load_plugin(const std::string &path) {
   if (!result) {
     PyErr_Print();
     PyErr_Clear();
+    auto end = std::chrono::steady_clock::now();
+    const double load_ms =
+        std::chrono::duration<double, std::milli>(end - start).count();
+    notify_python_plugin_loaded(path, false, "python execution failed", load_ms);
     return false;
   }
 
   Py_DECREF(result);
   loaded_plugins.push_back(path);
+  auto end = std::chrono::steady_clock::now();
+  const double load_ms =
+      std::chrono::duration<double, std::milli>(end - start).count();
+  notify_python_plugin_loaded(path, true, "", load_ms);
   return true;
 }
 
@@ -466,6 +587,8 @@ int PythonAPI::reload_user_plugins() {
   if (!python_initialized) {
     return 0;
   }
+
+  notify_python_before_plugin_reload();
 
   registered_keybinds.clear();
   loaded_plugins.clear();
@@ -506,6 +629,7 @@ int PythonAPI::reload_user_plugins() {
     }
   }
 
+  notify_python_plugins_ready();
   on_editor_ready();
   return loaded;
 }
@@ -551,6 +675,18 @@ bool PythonAPI::register_keybind(const std::string &key_str,
     }
   } else if (key_lower == "enter" || key_lower == "return") {
     kb.key = '\n';
+  } else if (key_lower == "up" || key_lower == "arrowup") {
+    kb.key = 1008;
+  } else if (key_lower == "down" || key_lower == "arrowdown") {
+    kb.key = 1009;
+  } else if (key_lower == "left" || key_lower == "arrowleft") {
+    kb.key = 1010;
+  } else if (key_lower == "right" || key_lower == "arrowright") {
+    kb.key = 1011;
+  } else if (key_lower == "pageup" || key_lower == "pgup") {
+    kb.key = 1015;
+  } else if (key_lower == "pagedown" || key_lower == "pgdown") {
+    kb.key = 1016;
   } else if (key_lower == "tab") {
     kb.key = '\t';
   } else if (key_lower == "backspace") {
@@ -600,4 +736,416 @@ bool PythonAPI::execute_python_callback(const std::string &callback, int key,
     return false;
   }
   return handled;
+}
+
+std::vector<std::string>
+PythonAPI::command_palette_suggestions(const std::string &query) {
+  std::vector<std::string> out;
+  if (!python_initialized || !py_module) {
+    return out;
+  }
+
+  PyObject *module = reinterpret_cast<PyObject *>(py_module);
+  PyObject *func = PyObject_GetAttrString(module, "_command_palette_suggestions");
+  if (!func) {
+    PyErr_Clear();
+    return out;
+  }
+  if (!PyCallable_Check(func)) {
+    Py_DECREF(func);
+    return out;
+  }
+
+  PyObject *arg = PyUnicode_FromString(query.c_str());
+  if (!arg) {
+    Py_DECREF(func);
+    PyErr_Clear();
+    return out;
+  }
+
+  PyObject *result = PyObject_CallFunctionObjArgs(func, arg, nullptr);
+  Py_DECREF(arg);
+  Py_DECREF(func);
+  if (!result) {
+    PyErr_Print();
+    PyErr_Clear();
+    return out;
+  }
+
+  auto append_item = [&out](PyObject *item) {
+    if (!item || !PyUnicode_Check(item)) {
+      return;
+    }
+    const char *s = PyUnicode_AsUTF8(item);
+    if (s && *s) {
+      out.emplace_back(s);
+    }
+  };
+
+  if (PyUnicode_Check(result)) {
+    append_item(result);
+  } else if (PyList_Check(result) || PyTuple_Check(result)) {
+    const Py_ssize_t count = PySequence_Size(result);
+    out.reserve((size_t)std::max<Py_ssize_t>(0, count));
+    for (Py_ssize_t i = 0; i < count; i++) {
+      PyObject *item = PySequence_GetItem(result, i);
+      if (!item) {
+        PyErr_Clear();
+        continue;
+      }
+      append_item(item);
+      Py_DECREF(item);
+    }
+  }
+
+  Py_DECREF(result);
+  return out;
+}
+
+bool PythonAPI::command_palette_execute(const std::string &line, bool *handled) {
+  if (handled) {
+    *handled = false;
+  }
+  if (!python_initialized || !py_module) {
+    return false;
+  }
+
+  PyObject *module = reinterpret_cast<PyObject *>(py_module);
+  PyObject *func = PyObject_GetAttrString(module, "_command_palette_execute");
+  if (!func) {
+    PyErr_Clear();
+    return false;
+  }
+  if (!PyCallable_Check(func)) {
+    Py_DECREF(func);
+    return false;
+  }
+
+  PyObject *arg = PyUnicode_FromString(line.c_str());
+  if (!arg) {
+    Py_DECREF(func);
+    PyErr_Clear();
+    return false;
+  }
+
+  PyObject *result = PyObject_CallFunctionObjArgs(func, arg, nullptr);
+  Py_DECREF(arg);
+  Py_DECREF(func);
+  if (!result) {
+    PyErr_Print();
+    PyErr_Clear();
+    return false;
+  }
+
+  const bool was_handled = PyObject_IsTrue(result) == 1;
+  Py_DECREF(result);
+  if (handled) {
+    *handled = was_handled;
+  }
+  return true;
+}
+
+bool PythonAPI::feature_should_auto_close(char c) {
+  if (!python_initialized || !py_module) {
+    return false;
+  }
+
+  PyObject *module = reinterpret_cast<PyObject *>(py_module);
+  PyObject *func = PyObject_GetAttrString(module, "_feature_should_auto_close");
+  if (!func) {
+    PyErr_Clear();
+    return false;
+  }
+  if (!PyCallable_Check(func)) {
+    Py_DECREF(func);
+    return false;
+  }
+
+  char text[2] = {c, '\0'};
+  PyObject *arg = PyUnicode_FromString(text);
+  if (!arg) {
+    Py_DECREF(func);
+    PyErr_Clear();
+    return false;
+  }
+
+  PyObject *result = PyObject_CallFunctionObjArgs(func, arg, nullptr);
+  Py_DECREF(arg);
+  Py_DECREF(func);
+  if (!result) {
+    PyErr_Clear();
+    return false;
+  }
+  bool out = PyObject_IsTrue(result) == 1;
+  Py_DECREF(result);
+  return out;
+}
+
+char PythonAPI::feature_get_closing_bracket(char c) {
+  if (!python_initialized || !py_module) {
+    return '\0';
+  }
+
+  PyObject *module = reinterpret_cast<PyObject *>(py_module);
+  PyObject *func = PyObject_GetAttrString(module, "_feature_get_closing_bracket");
+  if (!func) {
+    PyErr_Clear();
+    return '\0';
+  }
+  if (!PyCallable_Check(func)) {
+    Py_DECREF(func);
+    return '\0';
+  }
+
+  char text[2] = {c, '\0'};
+  PyObject *arg = PyUnicode_FromString(text);
+  if (!arg) {
+    Py_DECREF(func);
+    PyErr_Clear();
+    return '\0';
+  }
+
+  PyObject *result = PyObject_CallFunctionObjArgs(func, arg, nullptr);
+  Py_DECREF(arg);
+  Py_DECREF(func);
+  if (!result) {
+    PyErr_Clear();
+    return '\0';
+  }
+
+  char out = '\0';
+  if (PyUnicode_Check(result)) {
+    const char *s = PyUnicode_AsUTF8(result);
+    if (s && *s) {
+      out = s[0];
+    }
+  }
+  Py_DECREF(result);
+  return out;
+}
+
+bool PythonAPI::feature_is_closing_bracket(char c) {
+  if (!python_initialized || !py_module) {
+    return false;
+  }
+
+  PyObject *module = reinterpret_cast<PyObject *>(py_module);
+  PyObject *func = PyObject_GetAttrString(module, "_feature_is_closing_bracket");
+  if (!func) {
+    PyErr_Clear();
+    return false;
+  }
+  if (!PyCallable_Check(func)) {
+    Py_DECREF(func);
+    return false;
+  }
+
+  char text[2] = {c, '\0'};
+  PyObject *arg = PyUnicode_FromString(text);
+  if (!arg) {
+    Py_DECREF(func);
+    PyErr_Clear();
+    return false;
+  }
+
+  PyObject *result = PyObject_CallFunctionObjArgs(func, arg, nullptr);
+  Py_DECREF(arg);
+  Py_DECREF(func);
+  if (!result) {
+    PyErr_Clear();
+    return false;
+  }
+  bool out = PyObject_IsTrue(result) == 1;
+  Py_DECREF(result);
+  return out;
+}
+
+bool PythonAPI::feature_should_skip_closing(char c, const std::string &line,
+                                            int pos) {
+  if (!python_initialized || !py_module) {
+    return false;
+  }
+
+  PyObject *module = reinterpret_cast<PyObject *>(py_module);
+  PyObject *func =
+      PyObject_GetAttrString(module, "_feature_should_skip_closing");
+  if (!func) {
+    PyErr_Clear();
+    return false;
+  }
+  if (!PyCallable_Check(func)) {
+    Py_DECREF(func);
+    return false;
+  }
+
+  char text[2] = {c, '\0'};
+  PyObject *arg_char = PyUnicode_FromString(text);
+  PyObject *arg_line = PyUnicode_FromString(line.c_str());
+  PyObject *arg_pos = PyLong_FromLong(pos);
+  if (!arg_char || !arg_line || !arg_pos) {
+    Py_XDECREF(arg_char);
+    Py_XDECREF(arg_line);
+    Py_XDECREF(arg_pos);
+    Py_DECREF(func);
+    PyErr_Clear();
+    return false;
+  }
+
+  PyObject *result =
+      PyObject_CallFunctionObjArgs(func, arg_char, arg_line, arg_pos, nullptr);
+  Py_DECREF(arg_char);
+  Py_DECREF(arg_line);
+  Py_DECREF(arg_pos);
+  Py_DECREF(func);
+  if (!result) {
+    PyErr_Clear();
+    return false;
+  }
+  bool out = PyObject_IsTrue(result) == 1;
+  Py_DECREF(result);
+  return out;
+}
+
+bool PythonAPI::feature_should_auto_indent(const std::string &line) {
+  if (!python_initialized || !py_module) {
+    return false;
+  }
+
+  PyObject *module = reinterpret_cast<PyObject *>(py_module);
+  PyObject *func = PyObject_GetAttrString(module, "_feature_should_auto_indent");
+  if (!func) {
+    PyErr_Clear();
+    return false;
+  }
+  if (!PyCallable_Check(func)) {
+    Py_DECREF(func);
+    return false;
+  }
+
+  PyObject *arg = PyUnicode_FromString(line.c_str());
+  if (!arg) {
+    Py_DECREF(func);
+    PyErr_Clear();
+    return false;
+  }
+
+  PyObject *result = PyObject_CallFunctionObjArgs(func, arg, nullptr);
+  Py_DECREF(arg);
+  Py_DECREF(func);
+  if (!result) {
+    PyErr_Clear();
+    return false;
+  }
+  bool out = PyObject_IsTrue(result) == 1;
+  Py_DECREF(result);
+  return out;
+}
+
+bool PythonAPI::feature_should_dedent(const std::string &line) {
+  if (!python_initialized || !py_module) {
+    return false;
+  }
+
+  PyObject *module = reinterpret_cast<PyObject *>(py_module);
+  PyObject *func = PyObject_GetAttrString(module, "_feature_should_dedent");
+  if (!func) {
+    PyErr_Clear();
+    return false;
+  }
+  if (!PyCallable_Check(func)) {
+    Py_DECREF(func);
+    return false;
+  }
+
+  PyObject *arg = PyUnicode_FromString(line.c_str());
+  if (!arg) {
+    Py_DECREF(func);
+    PyErr_Clear();
+    return false;
+  }
+
+  PyObject *result = PyObject_CallFunctionObjArgs(func, arg, nullptr);
+  Py_DECREF(arg);
+  Py_DECREF(func);
+  if (!result) {
+    PyErr_Clear();
+    return false;
+  }
+  bool out = PyObject_IsTrue(result) == 1;
+  Py_DECREF(result);
+  return out;
+}
+
+int PythonAPI::feature_find_matching_bracket(const std::vector<std::string> &lines,
+                                             int line, int col, char open,
+                                             char close) {
+  if (!python_initialized || !py_module) {
+    return -1;
+  }
+
+  PyObject *module = reinterpret_cast<PyObject *>(py_module);
+  PyObject *func =
+      PyObject_GetAttrString(module, "_feature_find_matching_bracket");
+  if (!func) {
+    PyErr_Clear();
+    return -1;
+  }
+  if (!PyCallable_Check(func)) {
+    Py_DECREF(func);
+    return -1;
+  }
+
+  PyObject *py_lines = PyList_New((Py_ssize_t)lines.size());
+  if (!py_lines) {
+    Py_DECREF(func);
+    PyErr_Clear();
+    return -1;
+  }
+  for (Py_ssize_t i = 0; i < (Py_ssize_t)lines.size(); i++) {
+    PyObject *item = PyUnicode_FromString(lines[(size_t)i].c_str());
+    if (!item) {
+      Py_DECREF(py_lines);
+      Py_DECREF(func);
+      PyErr_Clear();
+      return -1;
+    }
+    PyList_SET_ITEM(py_lines, i, item);
+  }
+
+  PyObject *arg_line = PyLong_FromLong(line);
+  PyObject *arg_col = PyLong_FromLong(col);
+  char open_text[2] = {open, '\0'};
+  char close_text[2] = {close, '\0'};
+  PyObject *arg_open = PyUnicode_FromString(open_text);
+  PyObject *arg_close = PyUnicode_FromString(close_text);
+  if (!arg_line || !arg_col || !arg_open || !arg_close) {
+    Py_XDECREF(arg_line);
+    Py_XDECREF(arg_col);
+    Py_XDECREF(arg_open);
+    Py_XDECREF(arg_close);
+    Py_DECREF(py_lines);
+    Py_DECREF(func);
+    PyErr_Clear();
+    return -1;
+  }
+
+  PyObject *result = PyObject_CallFunctionObjArgs(
+      func, py_lines, arg_line, arg_col, arg_open, arg_close, nullptr);
+  Py_DECREF(py_lines);
+  Py_DECREF(arg_line);
+  Py_DECREF(arg_col);
+  Py_DECREF(arg_open);
+  Py_DECREF(arg_close);
+  Py_DECREF(func);
+  if (!result) {
+    PyErr_Clear();
+    return -1;
+  }
+
+  int out = -1;
+  if (PyLong_Check(result)) {
+    out = (int)PyLong_AsLong(result);
+  }
+  Py_DECREF(result);
+  return out;
 }

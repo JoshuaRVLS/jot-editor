@@ -69,7 +69,8 @@ const std::vector<std::string> &ex_commands() {
       "find",   "ff",       "mkfile",   "mkdir",   "rename", "rm",
       "format", "trim",     "line",     "goto",        "resizeleft",
       "resizeright", "resizeup", "resizedown", "lspstart", "lspstatus",
-      "lspstop", "lsprestart", "gitstatus", "gitdiff", "gitblame",
+      "lspstop", "lsprestart", "lspinstall", "lspremove", "lspmanager",
+      "gitstatus", "gitdiff", "gitblame",
       "gitrefresh", "recent", "openrecent", "reopen",
       "reopenlast", "autosave", "help"};
   return commands;
@@ -96,7 +97,8 @@ bool command_takes_argument(const std::string &cmd) {
          lc == "colo" || lc == "line" || lc == "goto" ||
          lc == "openrecent" || lc == "autosave" || lc == "help" ||
          lc == "h" || lc == "gitdiff" || lc == "find" || lc == "ff" ||
-         lc == "mkfile" || lc == "mkdir" || lc == "rename" || lc == "rm";
+         lc == "mkfile" || lc == "mkdir" || lc == "rename" || lc == "rm" ||
+         lc == "lspinstall" || lc == "lspremove";
 }
 
 bool parse_line_col(const std::string &s, int &line_out, int &col_out) {
@@ -212,6 +214,13 @@ void Editor::refresh_command_palette() {
   const std::string seed = command_palette_theme_mode
                                ? command_palette_theme_original
                                : command_palette_query;
+  if (python_api) {
+    auto py_suggestions = python_api->command_palette_suggestions(seed);
+    if (!py_suggestions.empty()) {
+      command_palette_results = std::move(py_suggestions);
+      return;
+    }
+  }
   if (seed.empty()) {
     for (const auto &c : ex_commands()) {
       command_palette_results.push_back(c);
@@ -468,16 +477,26 @@ void Editor::handle_command_palette(int ch) {
         (trimmed.back() != ' ' && arg.empty());
 
     std::string next_body;
+    bool switched_to_argument_completion = false;
     if (completing_command) {
       next_body = chosen;
       if (command_takes_argument(chosen)) {
         next_body += " ";
+        switched_to_argument_completion = true;
       }
     } else {
       next_body = cmd + " " + chosen;
     }
 
     command_palette_query = has_colon ? ":" + next_body : next_body;
+
+    // If we just completed a command that expects an argument, the next Tab
+    // should complete arguments from the new command context, not keep cycling
+    // the old command-prefix candidate list.
+    if (switched_to_argument_completion) {
+      command_palette_theme_original = command_palette_query;
+      command_palette_selected = 0;
+    }
   };
 
   if (ch == 27) {
@@ -521,6 +540,19 @@ void Editor::handle_command_palette(int ch) {
     arg = trim_copy(arg);
     std::string lcmd = to_lower_copy(cmd);
 
+    if (!line.empty() && python_api) {
+      bool handled_by_python = false;
+      if (python_api->command_palette_execute(line, &handled_by_python) &&
+          handled_by_python) {
+        show_command_palette = false;
+        command_palette_query.clear();
+        command_palette_results.clear();
+        reset_completion_state();
+        needs_redraw = true;
+        return;
+      }
+    }
+
     auto goto_line_col = [&](int line_1based, int col_1based) {
       auto &buf = get_buffer();
       if (buf.lines.empty()) {
@@ -533,6 +565,37 @@ void Editor::handle_command_palette(int ch) {
       ensure_cursor_visible();
       set_message("Jumped to line " + std::to_string(buf.cursor.y + 1) +
                   ", col " + std::to_string(buf.cursor.x + 1));
+    };
+    auto execute_python_palette_command = [&](const std::string &name,
+                                              const std::string &arg_text) {
+      if (!python_api) {
+        return false;
+      }
+
+      std::string line_to_run = name;
+      if (!arg_text.empty()) {
+        line_to_run += " ";
+        line_to_run += arg_text;
+      }
+
+      bool handled = false;
+      if (python_api->command_palette_execute(line_to_run, &handled) && handled) {
+        return true;
+      }
+
+      python_api->execute_code(
+          "import importlib\n"
+          "try:\n"
+          "    import lsp_plugin\n"
+          "    importlib.reload(lsp_plugin)\n"
+          "except Exception:\n"
+          "    pass\n");
+
+      handled = false;
+      if (python_api->command_palette_execute(line_to_run, &handled) && handled) {
+        return true;
+      }
+      return false;
     };
     auto resolve_path = [&](const std::string &raw) -> fs::path {
       std::error_code ec;
@@ -779,6 +842,18 @@ void Editor::handle_command_palette(int ch) {
       stop_all_lsp_clients();
     } else if (lcmd == "lsprestart") {
       restart_all_lsp_clients();
+    } else if (lcmd == "lspmanager") {
+      if (!execute_python_palette_command("LspManager", arg)) {
+        set_message("LspManager unavailable. Reinstall runtime with ./install.sh");
+      }
+    } else if (lcmd == "lspinstall") {
+      if (!execute_python_palette_command("LspInstall", arg)) {
+        set_message("LspInstall unavailable. Reinstall runtime with ./install.sh");
+      }
+    } else if (lcmd == "lspremove") {
+      if (!execute_python_palette_command("LspRemove", arg)) {
+        set_message("LspRemove unavailable. Reinstall runtime with ./install.sh");
+      }
     } else if (lcmd == "gitrefresh") {
       refresh_git_status(true);
       if (has_git_repo()) {

@@ -30,10 +30,6 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
     }
   }
 
-  if (is_ctrl && is_shift && (ch == 'f' || ch == 'F')) {
-    select_current_function();
-    return;
-  }
   if (is_ctrl && is_shift && (ch == 'l' || ch == 'L')) {
     select_current_line();
     return;

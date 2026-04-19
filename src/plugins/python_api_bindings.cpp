@@ -2,8 +2,10 @@
 #include <Python.h>
 #include "python_api.h"
 #include "editor.h"
+#include "editor_host_api.h"
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -28,14 +30,45 @@ static fs::path get_executable_path() {
 
 static std::vector<fs::path> get_runtime_python_dirs() {
   std::vector<fs::path> dirs;
-  dirs.emplace_back(fs::current_path() / "python");
+  auto push_unique = [&dirs](const fs::path &p) {
+    if (p.empty()) {
+      return;
+    }
+    for (const auto &existing : dirs) {
+      if (existing == p) {
+        return;
+      }
+    }
+    dirs.push_back(p);
+  };
+
+  const char *env_runtime = getenv("JOT_PYTHON_PATH");
+  if (env_runtime && *env_runtime) {
+    push_unique(fs::path(env_runtime));
+  }
+
+  // Prefer user-local installed runtime first.
+  const char *xdg_data_home = getenv("XDG_DATA_HOME");
+  if (xdg_data_home && *xdg_data_home) {
+    push_unique(fs::path(xdg_data_home) / "jot" / "python");
+  } else {
+    const char *home = getenv("HOME");
+    if (home && *home) {
+      push_unique(fs::path(home) / ".local" / "share" / "jot" / "python");
+    }
+  }
 
   fs::path exe_path = get_executable_path();
   if (!exe_path.empty()) {
     fs::path exe_dir = exe_path.parent_path();
-    dirs.emplace_back(exe_dir / "python");
-    dirs.emplace_back(exe_dir.parent_path() / "share" / "jot" / "python");
+    // Then prefer runtime installed next to binary prefix (e.g. /usr/local/share/jot/python).
+    push_unique(exe_dir.parent_path() / "share" / "jot" / "python");
+    // Dev fallback.
+    push_unique(exe_dir.parent_path() / "src" / "python");
   }
+
+  // Final fallback for running from source tree.
+  push_unique(fs::current_path() / "src" / "python");
   return dirs;
 }
 
@@ -75,6 +108,8 @@ static void append_python_path(const fs::path &path) {
 
 // Global instance pointer for C wrappers
 static PythonAPI *g_python_api = nullptr;
+
+PythonAPI *PythonAPI::active() { return g_python_api; }
 
 // --- C Wrappers for Python ---
 
@@ -350,6 +385,151 @@ static PyObject *py_execute_command(PyObject *self, PyObject *args) {
   Py_RETURN_NONE;
 }
 
+static PyObject *py_execute_ex_command(PyObject *self, PyObject *args) {
+  char *command;
+  if (!PyArg_ParseTuple(args, "s", &command))
+    return nullptr;
+  if (g_python_api)
+    g_python_api->py_execute_ex_command(command);
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_list_buffers(PyObject *self, PyObject *args) {
+  if (!g_python_api)
+    return PyUnicode_FromString("[]");
+  return PyUnicode_FromString(g_python_api->py_list_buffers_json().c_str());
+}
+
+static PyObject *py_list_panes(PyObject *self, PyObject *args) {
+  if (!g_python_api)
+    return PyUnicode_FromString("[]");
+  return PyUnicode_FromString(g_python_api->py_list_panes_json().c_str());
+}
+
+static PyObject *py_get_layout(PyObject *self, PyObject *args) {
+  if (!g_python_api)
+    return PyUnicode_FromString("{}");
+  return PyUnicode_FromString(g_python_api->py_get_layout_json().c_str());
+}
+
+static PyObject *py_switch_buffer(PyObject *self, PyObject *args) {
+  int index = -1;
+  if (!PyArg_ParseTuple(args, "i", &index))
+    return nullptr;
+  if (!g_python_api)
+    Py_RETURN_FALSE;
+  if (g_python_api->py_switch_buffer(index))
+    Py_RETURN_TRUE;
+  Py_RETURN_FALSE;
+}
+
+static PyObject *py_close_buffer(PyObject *self, PyObject *args) {
+  int index = -1;
+  if (!PyArg_ParseTuple(args, "i", &index))
+    return nullptr;
+  if (!g_python_api)
+    Py_RETURN_FALSE;
+  if (g_python_api->py_close_buffer(index))
+    Py_RETURN_TRUE;
+  Py_RETURN_FALSE;
+}
+
+static PyObject *py_new_buffer(PyObject *self, PyObject *args) {
+  if (g_python_api)
+    g_python_api->py_new_buffer();
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_split_pane(PyObject *self, PyObject *args) {
+  char *direction;
+  if (!PyArg_ParseTuple(args, "s", &direction))
+    return nullptr;
+  if (g_python_api)
+    g_python_api->py_split_pane(direction);
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_resize_pane(PyObject *self, PyObject *args) {
+  int delta = 0;
+  if (!PyArg_ParseTuple(args, "i", &delta))
+    return nullptr;
+  if (!g_python_api)
+    Py_RETURN_FALSE;
+  if (g_python_api->py_resize_pane(delta))
+    Py_RETURN_TRUE;
+  Py_RETURN_FALSE;
+}
+
+static PyObject *py_focus_next_pane(PyObject *self, PyObject *args) {
+  if (g_python_api)
+    g_python_api->py_focus_next_pane();
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_focus_prev_pane(PyObject *self, PyObject *args) {
+  if (g_python_api)
+    g_python_api->py_focus_prev_pane();
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_toggle_sidebar(PyObject *self, PyObject *args) {
+  if (g_python_api)
+    g_python_api->py_toggle_sidebar();
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_open_workspace(PyObject *self, PyObject *args) {
+  char *path;
+  if (!PyArg_ParseTuple(args, "s", &path))
+    return nullptr;
+  if (g_python_api)
+    g_python_api->py_open_workspace(path);
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_toggle_terminal(PyObject *self, PyObject *args) {
+  if (g_python_api)
+    g_python_api->py_toggle_terminal();
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_request_redraw(PyObject *self, PyObject *args) {
+  if (g_python_api)
+    g_python_api->py_request_redraw();
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_request_quit(PyObject *self, PyObject *args) {
+  int force = 0;
+  if (!PyArg_ParseTuple(args, "|p", &force))
+    return nullptr;
+  if (g_python_api)
+    g_python_api->py_request_quit(force != 0);
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_save_and_quit(PyObject *self, PyObject *args) {
+  if (g_python_api)
+    g_python_api->py_save_and_quit();
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_toggle_minimap(PyObject *self, PyObject *args) {
+  if (g_python_api)
+    g_python_api->py_toggle_minimap();
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_emit_event(PyObject *self, PyObject *args) {
+  char *event_name;
+  char *payload;
+  if (!PyArg_ParseTuple(args, "ss", &event_name, &payload))
+    return nullptr;
+  if (g_python_api)
+    g_python_api->emit_event(event_name, payload);
+  Py_RETURN_NONE;
+}
+
 static PyObject *py_reload_plugins(PyObject *self, PyObject *args) {
   if (g_python_api)
     return PyLong_FromLong(g_python_api->py_reload_plugins());
@@ -411,6 +591,30 @@ static PyMethodDef JotMethods[] = {
     {"show_input", py_show_input_prompt, METH_VARARGS, "Show input prompt"},
     {"execute_command", py_execute_command, METH_VARARGS,
      "Execute an ex-style command"},
+    {"execute_ex_command", py_execute_ex_command, METH_VARARGS,
+     "Execute built-in ex command line"},
+    {"list_buffers", py_list_buffers, METH_VARARGS, "List buffers as JSON"},
+    {"list_panes", py_list_panes, METH_VARARGS, "List panes as JSON"},
+    {"get_layout", py_get_layout, METH_VARARGS, "Get layout as JSON"},
+    {"switch_buffer", py_switch_buffer, METH_VARARGS, "Switch active buffer"},
+    {"close_buffer", py_close_buffer, METH_VARARGS, "Close buffer by index"},
+    {"new_buffer", py_new_buffer, METH_VARARGS, "Create new buffer"},
+    {"split_pane", py_split_pane, METH_VARARGS, "Split focused pane"},
+    {"resize_pane", py_resize_pane, METH_VARARGS, "Resize focused pane"},
+    {"focus_next_pane", py_focus_next_pane, METH_VARARGS,
+     "Focus next pane"},
+    {"focus_prev_pane", py_focus_prev_pane, METH_VARARGS,
+     "Focus previous pane"},
+    {"toggle_sidebar", py_toggle_sidebar, METH_VARARGS, "Toggle sidebar"},
+    {"open_workspace", py_open_workspace, METH_VARARGS, "Open workspace"},
+    {"toggle_terminal", py_toggle_terminal, METH_VARARGS,
+     "Toggle integrated terminal"},
+    {"request_redraw", py_request_redraw, METH_VARARGS,
+     "Request editor redraw"},
+    {"request_quit", py_request_quit, METH_VARARGS, "Request editor quit"},
+    {"save_and_quit", py_save_and_quit, METH_VARARGS, "Save current file and quit"},
+    {"toggle_minimap", py_toggle_minimap, METH_VARARGS, "Toggle minimap"},
+    {"emit_event", py_emit_event, METH_VARARGS, "Emit custom editor event"},
     {"reload_plugins", py_reload_plugins, METH_VARARGS,
      "Reload user plugins"},
     {"list_plugins", py_list_plugins, METH_VARARGS, "List loaded plugins"},

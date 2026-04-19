@@ -28,12 +28,12 @@ void PythonAPI::py_delete_char(bool forward) {
 
 void PythonAPI::py_save_file() {
   if (editor)
-    editor->save_file();
+    editor->host().io.save_current_file();
 }
 
 void PythonAPI::py_open_file(const std::string &path) {
   if (editor)
-    editor->open_file(path);
+    editor->host().io.open_file(path);
 }
 
 void PythonAPI::py_show_message(const std::string &msg) {
@@ -77,85 +77,42 @@ int PythonAPI::py_get_line_count() {
 std::string PythonAPI::py_get_current_file() {
   if (!editor)
     return "";
-  return editor->get_buffer().filepath;
+  return editor->host().core.current_file();
 }
 
 std::string PythonAPI::py_get_buffer_content() {
   if (!editor)
     return "";
-  return editor->get_buffer_text(editor->get_buffer());
+  return editor->host().core.buffer_content();
 }
 
 void PythonAPI::py_set_buffer_content(const std::string &text) {
   if (!editor)
     return;
-
-  editor->save_state();
-  FileBuffer &buf = editor->get_buffer();
-  buf.lines.clear();
-
-  std::stringstream ss(text);
-  std::string line;
-  while (std::getline(ss, line)) {
-    if (!line.empty() && line.back() == '\r') {
-      line.pop_back();
-    }
-    buf.lines.push_back(line);
-  }
-
-  if (!text.empty() && text.back() == '\n') {
-    buf.lines.push_back("");
-  }
-  if (buf.lines.empty()) {
-    buf.lines.push_back("");
-  }
-
-  buf.cursor = {0, 0};
-  buf.preferred_x = 0;
-  buf.selection = {{0, 0}, {0, 0}, false};
-  buf.scroll_offset = 0;
-  buf.scroll_x = 0;
-  buf.modified = true;
-  editor->invalidate_syntax_cache(buf);
-  editor->ensure_cursor_visible();
-  editor->needs_redraw = true;
-  on_buffer_change(buf.filepath, text);
+  editor->host().core.set_buffer_content(text);
 }
 
 std::string PythonAPI::py_get_selected_text() {
   if (!editor)
     return "";
-
-  FileBuffer &buf = editor->get_buffer();
-  if (!buf.selection.active) {
-    return "";
-  }
-
-  Cursor start = buf.selection.start;
-  Cursor end = buf.selection.end;
-  if (start.y > end.y || (start.y == end.y && start.x > end.x)) {
-    std::swap(start, end);
-  }
-
-  std::string result;
-  for (int y = start.y; y <= end.y && y < (int)buf.lines.size(); y++) {
-    const std::string &line = buf.lines[y];
-    int from = (y == start.y) ? std::max(0, start.x) : 0;
-    int to = (y == end.y) ? std::min((int)line.size(), end.x) : (int)line.size();
-    if (from < to) {
-      result += line.substr((size_t)from, (size_t)(to - from));
-    }
-    if (y != end.y) {
-      result.push_back('\n');
-    }
-  }
-  return result;
+  return editor->host().core.selected_text();
 }
 
 void PythonAPI::py_execute_command(const std::string &command) {
   if (!editor)
     return;
-  editor->command_palette_query = command;
+  editor->host().io.execute_command(command);
+}
+
+void PythonAPI::py_execute_ex_command(const std::string &command_line) {
+  if (!editor)
+    return;
+
+  std::string line = command_line;
+  if (!line.empty() && line[0] == ':') {
+    line.erase(0, 1);
+  }
+  editor->command_palette_query = ":" + line;
   editor->handle_command_palette('\n');
 }
 
@@ -454,4 +411,209 @@ void PythonAPI::py_set_diagnostics(const std::string &filepath,
   if (editor) {
     editor->set_diagnostics(filepath, diagnostics);
   }
+}
+
+namespace {
+std::string py_json_escape(const std::string &in) {
+  std::string out;
+  out.reserve(in.size() + 8);
+  for (char c : in) {
+    switch (c) {
+    case '\\':
+      out += "\\\\\\\\";
+      break;
+    case '\"':
+      out += "\\\\\"";
+      break;
+    case '\n':
+      out += "\\\\n";
+      break;
+    case '\r':
+      out += "\\\\r";
+      break;
+    case '\t':
+      out += "\\\\t";
+      break;
+    default:
+      out.push_back(c);
+      break;
+    }
+  }
+  return out;
+}
+} // namespace
+
+std::string PythonAPI::py_list_buffers_json() {
+  if (!editor) {
+    return "[]";
+  }
+
+  const auto buffers = editor->host().core.list_buffers();
+  std::stringstream ss;
+  ss << "[";
+  for (size_t i = 0; i < buffers.size(); i++) {
+    if (i > 0) {
+      ss << ",";
+    }
+    const auto &b = buffers[i];
+    ss << "{\"index\":" << b.index << ",\"filepath\":\"" << py_json_escape(b.filepath)
+       << "\",\"modified\":" << (b.modified ? "true" : "false")
+       << ",\"active\":" << (b.active ? "true" : "false")
+       << ",\"preview\":" << (b.preview ? "true" : "false") << "}";
+  }
+  ss << "]";
+  return ss.str();
+}
+
+std::string PythonAPI::py_list_panes_json() {
+  if (!editor) {
+    return "[]";
+  }
+
+  const auto panes = editor->host().render.list_panes();
+  std::stringstream ss;
+  ss << "[";
+  for (size_t i = 0; i < panes.size(); i++) {
+    if (i > 0) {
+      ss << ",";
+    }
+    const auto &p = panes[i];
+    ss << "{\"index\":" << p.index << ",\"buffer_id\":" << p.buffer_id
+       << ",\"x\":" << p.x << ",\"y\":" << p.y << ",\"w\":" << p.w
+       << ",\"h\":" << p.h << ",\"focused\":" << (p.focused ? "true" : "false")
+       << "}";
+  }
+  ss << "]";
+  return ss.str();
+}
+
+std::string PythonAPI::py_get_layout_json() {
+  if (!editor) {
+    return "{}";
+  }
+
+  const auto layout = editor->host().render.layout();
+  std::stringstream ss;
+  ss << "{\"width\":" << layout.width << ",\"height\":" << layout.height
+     << ",\"sidebar_visible\":" << (layout.sidebar_visible ? "true" : "false")
+     << ",\"sidebar_width\":" << layout.sidebar_width
+     << ",\"minimap_visible\":" << (layout.minimap_visible ? "true" : "false")
+     << ",\"terminal_visible\":" << (layout.terminal_visible ? "true" : "false")
+     << ",\"terminal_height\":" << layout.terminal_height << "}";
+  return ss.str();
+}
+
+bool PythonAPI::py_switch_buffer(int index) {
+  if (!editor) {
+    return false;
+  }
+  return editor->host().core.switch_buffer(index);
+}
+
+bool PythonAPI::py_close_buffer(int index) {
+  if (!editor) {
+    return false;
+  }
+  return editor->host().core.close_buffer(index);
+}
+
+void PythonAPI::py_new_buffer() {
+  if (editor) {
+    editor->host().core.new_buffer();
+  }
+}
+
+void PythonAPI::py_split_pane(const std::string &direction) {
+  if (!editor) {
+    return;
+  }
+  if (direction == "h" || direction == "horizontal" || direction == "row") {
+    editor->host().render.split_horizontal();
+  } else {
+    editor->host().render.split_vertical();
+  }
+}
+
+bool PythonAPI::py_resize_pane(int delta) {
+  if (!editor) {
+    return false;
+  }
+  return editor->host().render.resize_focused_pane(delta);
+}
+
+void PythonAPI::py_focus_next_pane() {
+  if (editor) {
+    editor->host().render.focus_next_pane();
+  }
+}
+
+void PythonAPI::py_focus_prev_pane() {
+  if (editor) {
+    editor->host().render.focus_prev_pane();
+  }
+}
+
+void PythonAPI::py_toggle_sidebar() {
+  if (editor) {
+    editor->host().io.toggle_sidebar();
+  }
+}
+
+void PythonAPI::py_open_workspace(const std::string &path) {
+  if (editor) {
+    editor->host().io.open_workspace(path);
+  }
+}
+
+void PythonAPI::py_toggle_terminal() {
+  if (editor) {
+    editor->host().io.toggle_terminal();
+  }
+}
+
+void PythonAPI::py_request_redraw() {
+  if (editor) {
+    editor->host().render.request_redraw();
+  }
+}
+
+void PythonAPI::py_request_quit(bool force) {
+  if (!editor) {
+    return;
+  }
+
+  if (force) {
+    editor->running = false;
+    return;
+  }
+
+  bool has_unsaved = false;
+  for (const auto &buf : editor->buffers) {
+    if (buf.modified) {
+      has_unsaved = true;
+      break;
+    }
+  }
+
+  if (has_unsaved) {
+    editor->show_quit_prompt = true;
+    editor->needs_redraw = true;
+  } else {
+    editor->running = false;
+  }
+}
+
+void PythonAPI::py_save_and_quit() {
+  if (!editor) {
+    return;
+  }
+  editor->host().io.save_current_file();
+  editor->running = false;
+}
+
+void PythonAPI::py_toggle_minimap() {
+  if (!editor) {
+    return;
+  }
+  editor->toggle_minimap();
 }
