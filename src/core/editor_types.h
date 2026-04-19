@@ -119,7 +119,11 @@ struct Selection {
 struct State {
   std::vector<std::string> lines;
   Cursor cursor;
+  int preferred_x;
   Selection selection;
+  int scroll_offset;
+  int scroll_x;
+  bool modified;
 };
 
 struct SyntaxLineCache {
@@ -138,6 +142,7 @@ struct FileBuffer {
   int scroll_x;
   std::string filepath;
   bool modified;
+  bool is_preview = false;
   std::stack<State> undo_stack;
   std::stack<State> redo_stack;
   std::set<int> bookmarks;
