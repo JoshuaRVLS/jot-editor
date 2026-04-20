@@ -313,21 +313,29 @@ void Editor::handle_mouse(void *event_ptr) {
             name += " <" + parent + ">";
           }
         }
-        std::string disp = " " + name + (buffers[i].modified ? " * " : " ");
-        int max_tab_w = std::max(8, tabs_w / 2);
-        if ((int)disp.size() > max_tab_w) {
+        std::string label = " " + name + (buffers[i].modified ? " *" : "");
+        int max_tab_w = std::max(6, tabs_w / 2);
+        if ((int)label.size() > max_tab_w) {
           if (max_tab_w <= 3) {
-            disp = disp.substr(0, (size_t)max_tab_w);
+            label = label.substr(0, (size_t)max_tab_w);
           } else {
-            disp = disp.substr(0, (size_t)(max_tab_w - 3)) + "...";
+            label = label.substr(0, (size_t)(max_tab_w - 3)) + "...";
           }
         }
-        int need = (int)disp.size() + 1;
+        int need = (int)label.size() + 2; // close button + separator
         if (tab_x + need > tabs_x + tabs_w) {
           break;
         }
 
-        if (event->x >= tab_x && event->x < tab_x + (int)disp.size()) {
+        int close_x = tab_x + (int)label.size();
+        if (event->x == close_x) {
+          close_buffer_at(i);
+          focus_state = FOCUS_EDITOR;
+          needs_redraw = true;
+          return;
+        }
+
+        if (event->x >= tab_x && event->x < close_x) {
           pane.buffer_id = i;
           current_buffer = i;
           if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),

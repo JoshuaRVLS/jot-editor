@@ -320,10 +320,10 @@ void Editor::render_pane(const SplitPane &pane) {
         }
       }
 
-      std::string disp = " " + name + (buffers[i].modified ? " * " : " ");
-      int max_tab_w = std::max(8, tabs_w / 2);
-      disp = ellipsize_right(disp, max_tab_w);
-      int need = (int)disp.size() + 1; // separator
+      std::string label = " " + name + (buffers[i].modified ? " *" : "");
+      int max_tab_w = std::max(6, tabs_w / 2);
+      label = ellipsize_right(label, max_tab_w);
+      int need = (int)label.size() + 2; // close button + separator
       if (tab_x + need > tabs_x + tabs_w) {
         break;
       }
@@ -331,8 +331,11 @@ void Editor::render_pane(const SplitPane &pane) {
       bool active_tab = (i == pane.buffer_id);
       int fg = active_tab ? theme.fg_tab_active : theme.fg_tab_inactive;
       int bg = active_tab ? theme.bg_tab_active : theme.bg_tab_inactive;
-      ui->draw_text(tab_x, tabs_y, disp, fg, bg, active_tab, buffers[i].is_preview);
-      tab_x += (int)disp.size();
+      ui->draw_text(tab_x, tabs_y, label, fg, bg, active_tab,
+                    buffers[i].is_preview);
+      tab_x += (int)label.size();
+      ui->draw_text(tab_x, tabs_y, "x", theme.fg_tab_close, bg);
+      tab_x += 1;
       ui->draw_text(tab_x, tabs_y, "|", theme.fg_tab_separator, theme.bg_status);
       tab_x += 1;
     }
