@@ -81,7 +81,9 @@ void Editor::render_lsp_completion() {
   const int line_num_width = 7;
   int visible_h = std::max(1, pane.h - tab_height);
   int visible_w = std::max(12, draw_w - 2 - line_num_width);
-  int max_items = std::min(8, (int)lsp_completion_items.size());
+  const int max_items_cfg =
+      std::clamp(config.get_int("lsp_completion_max_items", 8), 3, 20);
+  int max_items = std::min(max_items_cfg, (int)lsp_completion_items.size());
   int selected = std::clamp(lsp_completion_selected, 0,
                             (int)lsp_completion_items.size() - 1);
   int start_idx = std::max(0, selected - max_items + 1);
