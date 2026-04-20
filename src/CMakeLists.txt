@@ -58,9 +58,20 @@ add_library(jot_edit_obj OBJECT
   edit/clipboard.cpp
   edit/cursor.cpp
   edit/edit.cpp
+  edit/feature_datetime.cpp
+  edit/feature_duplicate.cpp
+  edit/feature_join_lines.cpp
+  edit/feature_path_clipboard.cpp
+  edit/feature_reverse_lines.cpp
+  edit/feature_shuffle_lines.cpp
+  edit/feature_sort_desc.cpp
+  edit/feature_stats.cpp
+  edit/feature_trim_blank.cpp
+  edit/feature_unique_lines.cpp
   edit/lines.cpp
   edit/search.cpp
   edit/sidebar.cpp
+  edit/transform.cpp
 )
 jot_configure_object_target(jot_edit_obj)
 

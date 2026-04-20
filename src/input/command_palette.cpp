@@ -828,6 +828,34 @@ void Editor::handle_command_palette(int ch) {
       format_document();
     } else if (lcmd == "trim") {
       trim_trailing_whitespace();
+    } else if (lcmd == "upper") {
+      transform_selection_uppercase();
+    } else if (lcmd == "lower") {
+      transform_selection_lowercase();
+    } else if (lcmd == "sortlines") {
+      sort_selected_lines();
+    } else if (lcmd == "sortdesc") {
+      sort_selected_lines_desc();
+    } else if (lcmd == "reverselines") {
+      reverse_selected_lines();
+    } else if (lcmd == "uniquelines") {
+      unique_selected_lines();
+    } else if (lcmd == "shufflelines") {
+      shuffle_selected_lines();
+    } else if (lcmd == "joinlines") {
+      join_lines_selection_or_current();
+    } else if (lcmd == "dupe") {
+      duplicate_selection_or_line();
+    } else if (lcmd == "trimblank") {
+      trim_blank_lines_in_selection();
+    } else if (lcmd == "copypath") {
+      copy_current_file_path();
+    } else if (lcmd == "copyname") {
+      copy_current_file_name();
+    } else if (lcmd == "datetime") {
+      insert_current_datetime();
+    } else if (lcmd == "stats") {
+      show_buffer_stats();
     } else if (lcmd == "line" || lcmd == "goto") {
       if (arg.empty()) {
         set_message("Usage: :line <line>[:col]");
@@ -893,7 +921,7 @@ void Editor::handle_command_palette(int ch) {
     } else if (lcmd == "help" || lcmd == "h") {
       const std::string topic = to_lower_copy(trim_copy(arg));
       if (topic == "commands" || topic == "cmd" || topic == "ex") {
-        set_message("Commands: :w :q :wq :e <file> :find [dir] :mkfile <p> :mkdir <p> :rename <old> <new> :rm <p> :line N[:C] :bd :sp [left|right|up|down] :vsp [left|right] :splitleft/:splitright/:splitup/:splitdown :bn :bp :recent :openrecent [n] :reopen :autosave [on/off/ms] :lspstart :lspstatus :lspstop :lsprestart :gitstatus :gitdiff [file] :gitblame :gitrefresh :theme <name>");
+        set_message("Commands: :w :q :wq :e <file> :find [dir] :mkfile <p> :mkdir <p> :rename <old> <new> :rm <p> :line N[:C] :bd :sp [left|right|up|down] :vsp [left|right] :splitleft/:splitright/:splitup/:splitdown :bn :bp :recent :openrecent [n] :reopen :autosave [on/off/ms] :format :trim :trimblank :upper :lower :sortlines :sortdesc :reverselines :uniquelines :shufflelines :joinlines :dupe :copypath :copyname :datetime :stats :lspstart :lspstatus :lspstop :lsprestart :gitstatus :gitdiff [file] :gitblame :gitrefresh :theme <name>");
       } else {
         std::vector<std::string> lines = {
             "Jot Keybind Help",
@@ -917,6 +945,9 @@ void Editor::handle_command_palette(int ch) {
             "  Ctrl+K           Delete line",
             "  Ctrl+/           Toggle comment",
             "  Ctrl+Backspace   Delete previous word",
+            "  Ctrl+Shift+U     Uppercase selection/word",
+            "  Ctrl+Shift+N     Lowercase selection/word",
+            "  Ctrl+Shift+O     Sort selected lines",
             "  Shift+Arrows     Expand selection",
             "  Ctrl+Space       LSP completion",
             "",
@@ -941,6 +972,8 @@ void Editor::handle_command_palette(int ch) {
             "  Alt+B              Toggle explorer",
             "  Alt+M              Toggle minimap",
             "  Alt+T              Theme chooser",
+            "  Alt+U / Alt+N      Uppercase / Lowercase",
+            "  Alt+O              Sort selected lines",
             "  Alt+Up / Alt+Down  Move line up/down",
             "  Alt+H / Alt+L      Move word left/right",
             "  Alt+I / Alt+A      Smart line start / line end",
@@ -948,7 +981,10 @@ void Editor::handle_command_palette(int ch) {
             "",
             "Tips",
             "  :help commands     Show ex-command summary",
-            "  :help              Show this keybind help"};
+            "  :help              Show this keybind help",
+            "  Extra commands: :sortdesc :reverselines :uniquelines",
+            "                  :shufflelines :joinlines :dupe :trimblank",
+            "                  :copypath :copyname :datetime :stats"};
 
         std::string out;
         for (size_t i = 0; i < lines.size(); i++) {

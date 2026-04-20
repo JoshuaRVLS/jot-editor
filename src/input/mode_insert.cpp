@@ -94,6 +94,18 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
     reopen_last_closed_buffer();
     return;
   }
+  if (is_ctrl && is_shift && (ch == 'u' || ch == 'U')) {
+    transform_selection_uppercase();
+    return;
+  }
+  if (is_ctrl && is_shift && (ch == 'n' || ch == 'N')) {
+    transform_selection_lowercase();
+    return;
+  }
+  if (is_ctrl && is_shift && (ch == 'o' || ch == 'O')) {
+    sort_selected_lines();
+    return;
+  }
   // Ctrl+Tab / Ctrl+Shift+Tab: cycle pane-local tabs.
   if (is_ctrl && (ch == '\t' || ch == 9)) {
     if (is_shift) {
@@ -386,6 +398,18 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
   if (is_alt && (ch == 't' || ch == 'T')) {
     open_theme_chooser();
     needs_redraw = true;
+    return;
+  }
+  if (is_alt && (ch == 'u' || ch == 'U')) {
+    transform_selection_uppercase();
+    return;
+  }
+  if (is_alt && (ch == 'n' || ch == 'N')) {
+    transform_selection_lowercase();
+    return;
+  }
+  if (is_alt && (ch == 'o' || ch == 'O')) {
+    sort_selected_lines();
     return;
   }
 
