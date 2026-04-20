@@ -71,7 +71,7 @@ const std::vector<std::string> &ex_commands() {
       "lspstop", "lsprestart", "lspinstall", "lspremove", "lspmanager",
       "gitstatus", "gitdiff", "gitblame",
       "gitrefresh", "recent", "openrecent", "reopen",
-      "reopenlast", "autosave", "help"};
+      "reopenlast", "autosave", "help", "h"};
   return commands;
 }
 

@@ -41,7 +41,7 @@ int compute_visual_column(const std::string &line, int logical_col,
 
 void compute_code_cursor_screen_pos(const SplitPane &pane, const FileBuffer &buf,
                                     bool show_minimap, int minimap_width,
-                                    int tab_size,
+                                    int tab_size, int tab_height,
                                     int &display_x, int &display_y) {
   int draw_w = std::max(1, pane.w);
   if (show_minimap && draw_w > 20) {
@@ -50,10 +50,10 @@ void compute_code_cursor_screen_pos(const SplitPane &pane, const FileBuffer &buf
 
   const int code_start_x = pane.x + 1 + kLineNumberGutterWidth;
   const int code_end_x = pane.x + draw_w - 2;
-  const int min_y = pane.y + 1;
+  const int min_y = pane.y + tab_height;
   int max_y = pane.y + pane.h - 1;
 
-  display_y = buf.cursor.y - buf.scroll_offset + pane.y + 1;
+  display_y = buf.cursor.y - buf.scroll_offset + pane.y + tab_height;
 
   int logical_cursor_x = buf.cursor.x;
   int logical_scroll_x = buf.scroll_x;
@@ -130,7 +130,7 @@ void Editor::render() {
       int display_x = 0;
       int display_y = 0;
       compute_code_cursor_screen_pos(pane, buf, show_minimap, minimap_width,
-                                     tab_size,
+                                     tab_size, tab_height,
                                      display_x, display_y);
       ui->set_cursor(display_x, display_y);
     }
@@ -240,7 +240,7 @@ void Editor::render() {
         int display_x = 0;
         int display_y = 0;
         compute_code_cursor_screen_pos(pane, buf, show_minimap, minimap_width,
-                                       tab_size,
+                                       tab_size, tab_height,
                                        display_x, display_y);
         ui->set_cursor(display_x, display_y);
       }

@@ -462,6 +462,7 @@ private:
   void split_pane_direction(int dx, int dy);
   void refresh_command_palette();
   void set_message(const std::string &msg);
+  bool close_active_floating_ui();
 
 public:
   Editor();

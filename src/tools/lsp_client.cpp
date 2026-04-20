@@ -467,13 +467,34 @@ std::vector<LSPCompletionItem> completion_items_from_json(
     completion.insert_text =
         json_string_or_empty(json_object_get(item, "insertText"));
     completion.detail = json_string_or_empty(json_object_get(item, "detail"));
+    completion.filter_text =
+        json_string_or_empty(json_object_get(item, "filterText"));
+    completion.sort_text = json_string_or_empty(json_object_get(item, "sortText"));
     completion.kind = json_int_or_default(json_object_get(item, "kind"), 0);
+    completion.insert_text_format =
+        json_int_or_default(json_object_get(item, "insertTextFormat"), 1);
 
     if (completion.insert_text.empty()) {
       const JsonValue *text_edit = json_object_get(item, "textEdit");
       const JsonValue *new_text =
           text_edit ? json_object_get(*text_edit, "newText") : nullptr;
       completion.insert_text = json_string_or_empty(new_text);
+
+      const JsonValue *range =
+          text_edit ? json_object_get(*text_edit, "range") : nullptr;
+      const JsonValue *start = range ? json_object_get(*range, "start") : nullptr;
+      const JsonValue *end = range ? json_object_get(*range, "end") : nullptr;
+      if (start && end) {
+        completion.has_text_edit_range = true;
+        completion.edit_start_line =
+            json_int_or_default(json_object_get(*start, "line"), 0);
+        completion.edit_start_char =
+            json_int_or_default(json_object_get(*start, "character"), 0);
+        completion.edit_end_line =
+            json_int_or_default(json_object_get(*end, "line"), 0);
+        completion.edit_end_char =
+            json_int_or_default(json_object_get(*end, "character"), 0);
+      }
     }
     if (completion.insert_text.empty()) {
       completion.insert_text = completion.label;

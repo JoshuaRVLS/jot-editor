@@ -52,6 +52,15 @@ void Editor::run() {
 
       int original_ch = ch;
 
+      bool ctrl_q_shortcut =
+          (is_ctrl && (ch == 'q' || ch == 'Q' || original_ch == 'q' ||
+                       original_ch == 'Q')) ||
+          ch == 17 || original_ch == 17;
+      if (ctrl_q_shortcut) {
+        handle_input('q', is_ctrl, is_shift, is_alt, original_ch);
+        continue;
+      }
+
       // Global integrated terminal toggle (Ctrl+`), handled early so it works
       // even while overlays like command palette/search are open.
       bool toggle_terminal_shortcut =

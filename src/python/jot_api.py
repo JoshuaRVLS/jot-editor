@@ -218,8 +218,17 @@ def _require_capability(capability):
 def _invoke_with_optional_arg(func, arg):
     try:
         return func(arg)
-    except TypeError:
-        return func()
+    except TypeError as exc:
+        msg = str(exc)
+        signature_mismatch = (
+            "positional argument" in msg
+            or "required positional" in msg
+            or "takes 0 positional arguments" in msg
+            or "but 1 was given" in msg
+        )
+        if signature_mismatch:
+            return func()
+        raise
 
 
 def register_callback(func):
@@ -590,48 +599,48 @@ def _on_buffer_save(filepath):
 # Editor Class wrapper for backward compatibility
 class Editor:
     @staticmethod
-    def enter_normal_mode(): enter_normal_mode()
+    def enter_normal_mode(): _core_api.enter_normal_mode()
     @staticmethod
-    def enter_insert_mode(): enter_insert_mode()
+    def enter_insert_mode(): _core_api.enter_insert_mode()
     @staticmethod
-    def enter_visual_mode(): enter_visual_mode()
+    def enter_visual_mode(): _core_api.enter_visual_mode()
     @staticmethod
-    def move_cursor(dx, dy): move_cursor(dx, dy)
+    def move_cursor(dx, dy): _core_api.move_cursor(dx, dy)
     @staticmethod
-    def insert_char(c): insert_char(c)
+    def insert_char(c): _core_api.insert_char(c)
     @staticmethod
-    def delete_char(forward=True): delete_char(forward)
+    def delete_char(forward=True): _core_api.delete_char(forward)
     @staticmethod
-    def save_file(): save_file()
+    def save_file(): _core_api.save_file()
     @staticmethod
-    def open_file(path): open_file(path)
+    def open_file(path): _core_api.open_file(path)
     @staticmethod
-    def show_message(msg): show_message(msg)
+    def show_message(msg): _core_api.show_message(msg)
     @staticmethod
-    def get_mode(): return get_mode()
+    def get_mode(): return _core_api.get_mode()
     @staticmethod
-    def get_cursor_x(): return get_cursor_x()
+    def get_cursor_x(): return _core_api.get_cursor_x()
     @staticmethod
-    def get_cursor_y(): return get_cursor_y()
+    def get_cursor_y(): return _core_api.get_cursor_y()
     @staticmethod
-    def get_current_file(): return get_current_file()
+    def get_current_file(): return _core_api.get_current_file()
     @staticmethod
-    def get_buffer_content(): return get_buffer_content()
+    def get_buffer_content(): return _core_api.get_buffer_content()
     @staticmethod
-    def set_buffer_content(text): set_buffer_content(text)
+    def set_buffer_content(text): _core_api.set_buffer_content(text)
     @staticmethod
-    def get_selected_text(): return get_selected_text()
+    def get_selected_text(): return _core_api.get_selected_text()
     @staticmethod
-    def set_theme_color(name, fg, bg): set_theme_color(name, fg, bg)
+    def set_theme_color(name, fg, bg): _core_api.set_theme_color(name, fg, bg)
     @staticmethod
-    def clear_diagnostics(filepath): clear_diagnostics(filepath)
+    def clear_diagnostics(filepath): _core_api.clear_diagnostics(filepath)
     @staticmethod
-    def set_diagnostics(filepath, diagnostics): set_diagnostics(filepath, diagnostics)
+    def set_diagnostics(filepath, diagnostics): _core_api.set_diagnostics(filepath, diagnostics)
     @staticmethod
-    def add_diagnostic(filepath, line, col, end_line, end_col, message, severity): 
-        add_diagnostic(filepath, line, col, end_line, end_col, message, severity)
+    def add_diagnostic(filepath, line, col, end_line, end_col, message, severity):
+        _core_api.add_diagnostic(filepath, line, col, end_line, end_col, message, severity)
     @staticmethod
-    def execute_command(command_line): execute_command(command_line)
+    def execute_command(command_line): _core_api.execute_command(command_line)
 
 def on_keybind(key_str, mode="all"):
     def decorator(func):

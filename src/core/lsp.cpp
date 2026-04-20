@@ -119,6 +119,118 @@ bool is_identifier_char(char c) {
   return std::isalnum(uc) || c == '_';
 }
 
+std::string current_completion_prefix(const FileBuffer &buf) {
+  if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.lines.size()) {
+    return "";
+  }
+  const std::string &line = buf.lines[buf.cursor.y];
+  int cursor = std::clamp(buf.cursor.x, 0, (int)line.size());
+  int start = cursor;
+  while (start > 0 && is_identifier_char(line[start - 1])) {
+    start--;
+  }
+  if (start >= cursor) {
+    return "";
+  }
+  return line.substr((size_t)start, (size_t)(cursor - start));
+}
+
+bool is_subsequence_case_insensitive(const std::string &needle,
+                                     const std::string &haystack) {
+  if (needle.empty()) {
+    return true;
+  }
+  size_t j = 0;
+  for (size_t i = 0; i < haystack.size() && j < needle.size(); i++) {
+    if (std::tolower((unsigned char)haystack[i]) ==
+        std::tolower((unsigned char)needle[j])) {
+      j++;
+    }
+  }
+  return j == needle.size();
+}
+
+int completion_match_score(const std::string &query, const LSPCompletionItem &item) {
+  if (query.empty()) {
+    return 1;
+  }
+
+  const std::string q = to_lower_copy(query);
+  const std::string label = to_lower_copy(item.label);
+  const std::string filter = to_lower_copy(item.filter_text.empty()
+                                               ? item.label
+                                               : item.filter_text);
+  const std::string insert = to_lower_copy(item.insert_text);
+
+  if (label == q || filter == q || insert == q) {
+    return 10000;
+  }
+  if (label.rfind(q, 0) == 0 || filter.rfind(q, 0) == 0 || insert.rfind(q, 0) == 0) {
+    return 7000 - (int)label.size();
+  }
+  if (label.find(q) != std::string::npos || filter.find(q) != std::string::npos ||
+      insert.find(q) != std::string::npos) {
+    return 4000 - (int)label.find(q);
+  }
+  if (is_subsequence_case_insensitive(q, label) ||
+      is_subsequence_case_insensitive(q, filter)) {
+    return 1500;
+  }
+  return 0;
+}
+
+std::string snippet_to_plain_text(const std::string &snippet) {
+  std::string out;
+  out.reserve(snippet.size());
+
+  for (size_t i = 0; i < snippet.size(); i++) {
+    char c = snippet[i];
+    if (c == '\\') {
+      if (i + 1 < snippet.size()) {
+        out.push_back(snippet[i + 1]);
+        i++;
+      }
+      continue;
+    }
+    if (c != '$') {
+      out.push_back(c);
+      continue;
+    }
+
+    if (i + 1 >= snippet.size()) {
+      continue;
+    }
+    if (std::isdigit((unsigned char)snippet[i + 1])) {
+      while (i + 1 < snippet.size() &&
+             std::isdigit((unsigned char)snippet[i + 1])) {
+        i++;
+      }
+      continue;
+    }
+    if (snippet[i + 1] == '{') {
+      size_t j = i + 2;
+      std::string inner;
+      while (j < snippet.size() && snippet[j] != '}') {
+        inner.push_back(snippet[j]);
+        j++;
+      }
+      if (j < snippet.size() && snippet[j] == '}') {
+        i = j;
+      } else {
+        i = snippet.size();
+      }
+
+      size_t colon = inner.find(':');
+      if (colon != std::string::npos && colon + 1 < inner.size()) {
+        out.append(inner.substr(colon + 1));
+      }
+      continue;
+    }
+  }
+
+  return out;
+}
+
 bool same_path(const std::string &a, const std::string &b) {
   if (a == b) {
     return true;
@@ -229,7 +341,41 @@ void Editor::poll_lsp_clients() {
         continue;
       }
 
-      lsp_completion_items = std::move(entry.second);
+      if (!lsp_completion_manual_request &&
+          (buf.cursor.y != lsp_completion_anchor.y ||
+           std::abs(buf.cursor.x - lsp_completion_anchor.x) > 4)) {
+        continue;
+      }
+
+      std::string query = current_completion_prefix(buf);
+      std::vector<std::pair<int, LSPCompletionItem>> ranked;
+      ranked.reserve(entry.second.size());
+      for (auto &item : entry.second) {
+        int score = completion_match_score(query, item);
+        if (query.empty() || score > 0) {
+          ranked.push_back({score, std::move(item)});
+        }
+      }
+
+      std::stable_sort(ranked.begin(), ranked.end(),
+                       [](const auto &a, const auto &b) {
+                         if (a.first != b.first) {
+                           return a.first > b.first;
+                         }
+                         const std::string &as =
+                             a.second.sort_text.empty() ? a.second.label
+                                                        : a.second.sort_text;
+                         const std::string &bs =
+                             b.second.sort_text.empty() ? b.second.label
+                                                        : b.second.sort_text;
+                         return as < bs;
+                       });
+
+      lsp_completion_items.clear();
+      const int max_items = 200;
+      for (int i = 0; i < (int)ranked.size() && i < max_items; i++) {
+        lsp_completion_items.push_back(std::move(ranked[i].second));
+      }
       lsp_completion_filepath = entry.first;
       lsp_completion_selected = 0;
       lsp_completion_visible = !lsp_completion_items.empty();
@@ -560,8 +706,14 @@ bool Editor::apply_selected_lsp_completion() {
   int idx = std::clamp(lsp_completion_selected, 0,
                        (int)lsp_completion_items.size() - 1);
   const auto &item = lsp_completion_items[idx];
-  std::string text =
-      item.insert_text.empty() ? item.label : item.insert_text;
+  std::string text = item.insert_text.empty() ? item.label : item.insert_text;
+  if (item.insert_text_format == 2) {
+    text = snippet_to_plain_text(text);
+  }
+  size_t nl = text.find('\n');
+  if (nl != std::string::npos) {
+    text = text.substr(0, nl);
+  }
   if (text.empty()) {
     hide_lsp_completion();
     return false;
@@ -572,11 +724,22 @@ bool Editor::apply_selected_lsp_completion() {
   std::string &line = buf.lines[buf.cursor.y];
   int cursor = std::clamp(buf.cursor.x, 0, (int)line.size());
   int start = cursor;
-  while (start > 0 && is_identifier_char(line[start - 1])) {
-    start--;
+  int end = cursor;
+
+  if (item.has_text_edit_range && item.edit_start_line == buf.cursor.y &&
+      item.edit_end_line == buf.cursor.y) {
+    start = std::clamp(item.edit_start_char, 0, (int)line.size());
+    end = std::clamp(item.edit_end_char, start, (int)line.size());
+  } else {
+    while (start > 0 && is_identifier_char(line[start - 1])) {
+      start--;
+    }
   }
 
-  if (start < cursor) {
+  if (start < end) {
+    line.erase(start, end - start);
+    cursor = start;
+  } else if (start < cursor) {
     line.erase(start, cursor - start);
     cursor = start;
   }

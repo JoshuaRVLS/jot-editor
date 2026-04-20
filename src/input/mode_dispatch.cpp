@@ -43,6 +43,34 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     }
   }
 
+  const bool ctrl_q =
+      (is_ctrl && (ch == 'q' || ch == 'Q' || original_ch == 'q' ||
+                   original_ch == 'Q')) ||
+      ch == 17 || original_ch == 17;
+  if (ctrl_q) {
+    if (close_active_floating_ui()) {
+      return;
+    }
+    if (panes.size() > 1) {
+      close_pane();
+    } else {
+      bool unsaved = false;
+      for (const auto &b : buffers) {
+        if (b.modified) {
+          unsaved = true;
+          break;
+        }
+      }
+      if (unsaved) {
+        show_quit_prompt = true;
+        needs_redraw = true;
+      } else {
+        running = false;
+      }
+    }
+    return;
+  }
+
   // Global pane keybinds (before mode-specific handlers so they never get
   // swallowed by insert-mode Ctrl handling).
   // Resize:

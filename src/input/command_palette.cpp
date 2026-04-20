@@ -384,7 +384,9 @@ void Editor::handle_command_palette(int ch) {
                               probe_lcmd == "lsprestart" ||
                               probe_lcmd == "lspmanager" ||
                               probe_lcmd == "lspinstall" ||
-                              probe_lcmd == "lspremove");
+                              probe_lcmd == "lspremove" ||
+                              probe_lcmd == "help" ||
+                              probe_lcmd == "h");
     }
 
     if (!line.empty() && python_api && !skip_python_dispatch) {
@@ -889,7 +891,74 @@ void Editor::handle_command_palette(int ch) {
         }
       }
     } else if (lcmd == "help" || lcmd == "h") {
-      set_message("Commands: :w :q :wq :e <file> :find [dir] :mkfile <p> :mkdir <p> :rename <old> <new> :rm <p> :line N[:C] :bd :sp [left|right|up|down] :vsp [left|right] :splitleft/:splitright/:splitup/:splitdown :bn :bp :recent :openrecent [n] :reopen :autosave [on/off/ms] :lspstart :lspstatus :lspstop :lsprestart :gitstatus :gitdiff [file] :gitblame :gitrefresh :theme <name>");
+      const std::string topic = to_lower_copy(trim_copy(arg));
+      if (topic == "commands" || topic == "cmd" || topic == "ex") {
+        set_message("Commands: :w :q :wq :e <file> :find [dir] :mkfile <p> :mkdir <p> :rename <old> <new> :rm <p> :line N[:C] :bd :sp [left|right|up|down] :vsp [left|right] :splitleft/:splitright/:splitup/:splitdown :bn :bp :recent :openrecent [n] :reopen :autosave [on/off/ms] :lspstart :lspstatus :lspstop :lsprestart :gitstatus :gitdiff [file] :gitblame :gitrefresh :theme <name>");
+      } else {
+        std::vector<std::string> lines = {
+            "Jot Keybind Help",
+            "",
+            "General",
+            "  Ctrl+S           Save file",
+            "  Ctrl+Q           Close pane (quit if single pane, with prompt)",
+            "  Ctrl+P           Command palette",
+            "  Ctrl+F           Search panel",
+            "  Ctrl+B           Toggle file explorer",
+            "  Ctrl+E           Telescope file finder",
+            "  Ctrl+T           Theme chooser",
+            "  Ctrl+M           Toggle minimap",
+            "  Ctrl+X / Ctrl+`  Toggle integrated terminal",
+            "",
+            "Editing",
+            "  Ctrl+Z / Ctrl+Y  Undo / Redo",
+            "  Ctrl+A           Select all",
+            "  Ctrl+C/X/V       Copy / Cut / Paste",
+            "  Ctrl+D           Duplicate line",
+            "  Ctrl+K           Delete line",
+            "  Ctrl+/           Toggle comment",
+            "  Ctrl+Backspace   Delete previous word",
+            "  Shift+Arrows     Expand selection",
+            "  Ctrl+Space       LSP completion",
+            "",
+            "Tabs",
+            "  Ctrl+Tab          Next tab in current pane",
+            "  Ctrl+Shift+Tab    Previous tab in current pane",
+            "  Alt+, / Alt+.     Previous / Next tab",
+            "  Alt+1..9 / Alt+0  Go to tab 1..9 / last tab",
+            "",
+            "Pane & Layout",
+            "  Ctrl+Alt+H/J/K/L   Split left/down/up/right",
+            "  Ctrl+Alt+Q         Close current pane",
+            "  Ctrl+Shift+H/J/K/L Resize pane",
+            "  Ctrl+Arrow         Resize pane",
+            "",
+            "Power (Alt)",
+            "  Alt+W              Close file tab",
+            "  Alt+N              New buffer",
+            "  Alt+S              Save",
+            "  Alt+F              Search",
+            "  Alt+P              Command palette",
+            "  Alt+B              Toggle explorer",
+            "  Alt+M              Toggle minimap",
+            "  Alt+T              Theme chooser",
+            "  Alt+Up / Alt+Down  Move line up/down",
+            "  Alt+H / Alt+L      Move word left/right",
+            "  Alt+I / Alt+A      Smart line start / line end",
+            "  Alt+G / Alt+Shift+G File start / file end",
+            "",
+            "Tips",
+            "  :help commands     Show ex-command summary",
+            "  :help              Show this keybind help"};
+
+        std::string out;
+        for (size_t i = 0; i < lines.size(); i++) {
+          out += lines[i];
+          if (i + 1 < lines.size()) {
+            out.push_back('\n');
+          }
+        }
+        show_popup(out, 2, tab_height + 1);
+      }
     } else {
       bool handled_custom = false;
       for (const auto &custom : custom_commands) {

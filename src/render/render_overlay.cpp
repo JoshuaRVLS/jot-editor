@@ -27,29 +27,29 @@ int compute_visual_column(const std::string &line, int logical_col,
 std::string completion_kind_icon(int kind) {
   switch (kind) {
   case 2:
-    return "󰈙 "; // Method
+    return "[M] "; // Method
   case 3:
-    return "󰆧 "; // Function
+    return "[F] "; // Function
   case 4:
-    return "󰏫 "; // Constructor
+    return "[C] "; // Constructor
   case 5:
-    return " "; // Field
+    return "[Fd] "; // Field
   case 6:
-    return " "; // Variable
+    return "[V] "; // Variable
   case 7:
-    return " "; // Class
+    return "[Cl] "; // Class
   case 8:
-    return " "; // Interface
+    return "[I] "; // Interface
   case 9:
-    return " "; // Module
+    return "[Mo] "; // Module
   case 10:
-    return " "; // Property
+    return "[P] "; // Property
   case 12:
-    return " "; // Value
+    return "[Val] "; // Value
   case 14:
-    return " "; // Keyword
+    return "[K] "; // Keyword
   default:
-    return "󰘍 ";
+    return "[?] ";
   }
 }
 } // namespace

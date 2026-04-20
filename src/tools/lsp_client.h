@@ -11,7 +11,15 @@ struct LSPCompletionItem {
   std::string label;
   std::string insert_text;
   std::string detail;
+  std::string filter_text;
+  std::string sort_text;
   int kind = 0;
+  int insert_text_format = 1; // 1=plain text, 2=snippet
+  bool has_text_edit_range = false;
+  int edit_start_line = 0;
+  int edit_start_char = 0;
+  int edit_end_line = 0;
+  int edit_end_char = 0;
 };
 
 class LSPClient {
