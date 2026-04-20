@@ -28,6 +28,38 @@ static int compare_cursor_pos(const Cursor &a, const Cursor &b) {
   return 0;
 }
 
+static int tab_advance(int visual_col, int tab_size) {
+  const int ts = std::max(1, tab_size);
+  const int rem = visual_col % ts;
+  return rem == 0 ? ts : (ts - rem);
+}
+
+static int logical_to_visual_col(const std::string &line, int logical_col,
+                                 int tab_size) {
+  int clamped = std::clamp(logical_col, 0, (int)line.size());
+  int visual = 0;
+  for (int i = 0; i < clamped; i++) {
+    visual += (line[i] == '\t') ? tab_advance(visual, tab_size) : 1;
+  }
+  return visual;
+}
+
+static int visual_to_logical_col(const std::string &line, int visual_col,
+                                 int tab_size) {
+  int target = std::max(0, visual_col);
+  int visual = 0;
+  for (int i = 0; i < (int)line.size(); i++) {
+    int next = visual + ((line[i] == '\t') ? tab_advance(visual, tab_size) : 1);
+    if (target < next) {
+      int left_dist = target - visual;
+      int right_dist = next - target;
+      return (left_dist <= right_dist) ? i : (i + 1);
+    }
+    visual = next;
+  }
+  return (int)line.size();
+}
+
 void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
                                 bool is_scroll_down) {
   if (show_home_menu) {
@@ -101,8 +133,9 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
   auto &buf = get_buffer(pane.buffer_id);
 
   if (is_scroll_up) {
+    int wheel_step = std::max(1, std::min(5, std::max(1, pane.h - tab_height) / 6));
     if (buf.scroll_offset > 0) {
-      buf.scroll_offset -= 3;
+      buf.scroll_offset -= wheel_step;
       if (buf.scroll_offset < 0)
         buf.scroll_offset = 0;
       needs_redraw = true;
@@ -110,8 +143,9 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
     return;
   }
   if (is_scroll_down) {
+    int wheel_step = std::max(1, std::min(5, std::max(1, pane.h - tab_height) / 6));
     if (buf.scroll_offset < (int)buf.lines.size() - pane.h + 1) {
-      buf.scroll_offset += 3;
+      buf.scroll_offset += wheel_step;
       if (buf.scroll_offset > (int)buf.lines.size() - 1)
         buf.scroll_offset = (int)buf.lines.size() - 1;
       needs_redraw = true;
@@ -307,12 +341,22 @@ void Editor::handle_mouse(void *event_ptr) {
   if (inside_pane && is_click)
     focus_state = FOCUS_EDITOR;
 
-  int raw_rel_y = event->y - pane.y - 1;
+  const int line_num_width = 7;
+  const int code_start_x = pane.x + 1 + line_num_width;
+  const int content_top = pane.y + tab_height;
+  const int content_bottom = pane.y + pane.h;
+
+  int raw_rel_y = event->y - content_top;
   int rel_y = raw_rel_y;
-  int rel_x = event->x - pane.x - 8;
-  if (rel_x < 0)
-    rel_x = 0;
-  int visible_rows = std::max(1, pane.h - 2);
+  int rel_visual_x = event->x - code_start_x;
+  if (event->y < content_top)
+    raw_rel_y = -1;
+  if (event->y >= content_bottom)
+    raw_rel_y = content_bottom - content_top;
+  rel_y = raw_rel_y;
+  if (rel_visual_x < 0)
+    rel_visual_x = 0;
+  int visible_rows = std::max(1, pane.h - tab_height);
   int max_scroll_offset =
       std::max(0, (int)buf.lines.size() - visible_rows);
 
@@ -331,18 +375,18 @@ void Editor::handle_mouse(void *event_ptr) {
   rel_y = std::clamp(rel_y, 0, visible_rows - 1);
 
   int click_y = rel_y + buf.scroll_offset;
-  int click_x = rel_x + buf.scroll_x;
   if (click_y < 0)
     click_y = 0;
   if (click_y >= (int)buf.lines.size())
     click_y = buf.lines.size() - 1;
   if (click_y < 0)
     return;
-  if (click_x < 0)
-    click_x = 0;
-  int line_len = buf.lines[click_y].length();
-  if (click_x > line_len)
-    click_x = line_len;
+  const std::string &clicked_line = buf.lines[click_y];
+  int line_len = clicked_line.length();
+  int start_visual = logical_to_visual_col(clicked_line, buf.scroll_x, tab_size);
+  int click_visual = start_visual + rel_visual_x;
+  int click_x = visual_to_logical_col(clicked_line, click_visual, tab_size);
+  click_x = std::clamp(click_x, 0, line_len);
 
   auto set_word_selection = [&](const Cursor &anchor_start,
                                 const Cursor &anchor_end,
@@ -490,6 +534,7 @@ void Editor::handle_mouse(void *event_ptr) {
 
       buf.cursor.x = click_x;
       buf.cursor.y = click_y;
+      buf.preferred_x = buf.cursor.x;
 
       if (mouse_selection_mode == MOUSE_SELECT_WORD) {
         set_word_selection(mouse_start, mouse_anchor_end, {click_x, click_y});
@@ -510,6 +555,7 @@ void Editor::handle_mouse(void *event_ptr) {
     } else {
       buf.cursor.x = click_x;
       buf.cursor.y = click_y;
+      buf.preferred_x = buf.cursor.x;
       needs_redraw = true;
     }
   } else if (bstate == 32) {
@@ -525,6 +571,7 @@ void Editor::handle_mouse(void *event_ptr) {
       } else {
         buf.cursor.x = click_x;
         buf.cursor.y = click_y;
+        buf.preferred_x = buf.cursor.x;
         buf.selection.end = {click_x, click_y};
         buf.selection.active =
             !(buf.selection.start.x == buf.selection.end.x &&
@@ -535,4 +582,6 @@ void Editor::handle_mouse(void *event_ptr) {
   }
 
   clamp_cursor(pane.buffer_id);
+  buf.preferred_x = buf.cursor.x;
+  ensure_cursor_visible();
 }
