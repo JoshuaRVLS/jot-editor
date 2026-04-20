@@ -145,6 +145,31 @@ bool read_file_lines(const std::string &path, std::vector<std::string> &out) {
   }
   return true;
 }
+
+void normalize_buffer_after_external_edit(FileBuffer &buf) {
+  if (buf.lines.empty()) {
+    buf.lines.push_back("");
+  }
+
+  buf.cursor.y = std::clamp(buf.cursor.y, 0, std::max(0, (int)buf.lines.size() - 1));
+  buf.cursor.x = std::clamp(buf.cursor.x, 0, (int)buf.lines[buf.cursor.y].size());
+  buf.preferred_x = buf.cursor.x;
+
+  buf.scroll_offset =
+      std::clamp(buf.scroll_offset, 0, std::max(0, (int)buf.lines.size() - 1));
+  buf.scroll_x = std::max(0, buf.scroll_x);
+
+  if (buf.selection.active) {
+    buf.selection.start.y =
+        std::clamp(buf.selection.start.y, 0, std::max(0, (int)buf.lines.size() - 1));
+    buf.selection.end.y =
+        std::clamp(buf.selection.end.y, 0, std::max(0, (int)buf.lines.size() - 1));
+    buf.selection.start.x =
+        std::clamp(buf.selection.start.x, 0, (int)buf.lines[buf.selection.start.y].size());
+    buf.selection.end.x =
+        std::clamp(buf.selection.end.x, 0, (int)buf.lines[buf.selection.end.y].size());
+  }
+}
 } // namespace
 
 void Editor::load_file(const std::string &fname) { open_file(fname, false); }
@@ -396,25 +421,8 @@ bool Editor::save_buffer_at(int index, bool announce) {
         std::vector<std::string> refreshed_lines;
         if (read_file_lines(buf.filepath, refreshed_lines)) {
           buf.lines.swap(refreshed_lines);
-          buf.cursor.y =
-              std::clamp(buf.cursor.y, 0, std::max(0, (int)buf.lines.size() - 1));
-          buf.cursor.x = std::clamp(buf.cursor.x, 0,
-                                    (int)buf.lines[buf.cursor.y].size());
-          buf.preferred_x = buf.cursor.x;
-          buf.scroll_offset =
-              std::clamp(buf.scroll_offset, 0,
-                         std::max(0, (int)buf.lines.size() - 1));
-          buf.scroll_x = std::max(0, buf.scroll_x);
-          if (buf.selection.active) {
-            buf.selection.start.y = std::clamp(
-                buf.selection.start.y, 0, std::max(0, (int)buf.lines.size() - 1));
-            buf.selection.end.y = std::clamp(
-                buf.selection.end.y, 0, std::max(0, (int)buf.lines.size() - 1));
-            buf.selection.start.x = std::clamp(
-                buf.selection.start.x, 0, (int)buf.lines[buf.selection.start.y].size());
-            buf.selection.end.x = std::clamp(
-                buf.selection.end.x, 0, (int)buf.lines[buf.selection.end.y].size());
-          }
+          normalize_buffer_after_external_edit(buf);
+          invalidate_syntax_cache(buf);
           formatted_with_prettier = true;
         }
       }
@@ -431,25 +439,8 @@ bool Editor::save_buffer_at(int index, bool announce) {
         std::vector<std::string> refreshed_lines;
         if (read_file_lines(buf.filepath, refreshed_lines)) {
           buf.lines.swap(refreshed_lines);
-          buf.cursor.y =
-              std::clamp(buf.cursor.y, 0, std::max(0, (int)buf.lines.size() - 1));
-          buf.cursor.x = std::clamp(buf.cursor.x, 0,
-                                    (int)buf.lines[buf.cursor.y].size());
-          buf.preferred_x = buf.cursor.x;
-          buf.scroll_offset =
-              std::clamp(buf.scroll_offset, 0,
-                         std::max(0, (int)buf.lines.size() - 1));
-          buf.scroll_x = std::max(0, buf.scroll_x);
-          if (buf.selection.active) {
-            buf.selection.start.y = std::clamp(
-                buf.selection.start.y, 0, std::max(0, (int)buf.lines.size() - 1));
-            buf.selection.end.y = std::clamp(
-                buf.selection.end.y, 0, std::max(0, (int)buf.lines.size() - 1));
-            buf.selection.start.x = std::clamp(
-                buf.selection.start.x, 0, (int)buf.lines[buf.selection.start.y].size());
-            buf.selection.end.x = std::clamp(
-                buf.selection.end.x, 0, (int)buf.lines[buf.selection.end.y].size());
-          }
+          normalize_buffer_after_external_edit(buf);
+          invalidate_syntax_cache(buf);
           formatted_with_clang = true;
         }
       }
@@ -700,6 +691,7 @@ void Editor::load_recent_files() {
   }
 
   std::string line;
+  std::set<std::string> seen;
   while (std::getline(file, line)) {
     if (line.empty()) {
       continue;
@@ -712,6 +704,10 @@ void Editor::load_recent_files() {
     if (!fs::exists(normalized, ec) || ec) {
       continue;
     }
+    if (seen.find(normalized) != seen.end()) {
+      continue;
+    }
+    seen.insert(normalized);
     recent_files.push_back(normalized);
     if ((int)recent_files.size() >= kMaxRecentFiles) {
       break;
@@ -732,6 +728,7 @@ void Editor::load_recent_workspaces() {
   }
 
   std::string line;
+  std::set<std::string> seen;
   while (std::getline(file, line)) {
     if (line.empty()) {
       continue;
@@ -744,6 +741,10 @@ void Editor::load_recent_workspaces() {
     if (!fs::exists(normalized, ec) || ec || !fs::is_directory(normalized, ec)) {
       continue;
     }
+    if (seen.find(normalized) != seen.end()) {
+      continue;
+    }
+    seen.insert(normalized);
     recent_workspaces.push_back(normalized);
     if ((int)recent_workspaces.size() >= kMaxRecentWorkspaces) {
       break;
@@ -813,24 +814,39 @@ void Editor::open_recent_file(const std::string &query) {
     return;
   }
 
-  bool numeric = true;
-  for (char c : query) {
+  std::string query_trimmed = query;
+  query_trimmed.erase(query_trimmed.begin(),
+                      std::find_if(query_trimmed.begin(), query_trimmed.end(),
+                                   [](unsigned char ch) { return !std::isspace(ch); }));
+  query_trimmed.erase(
+      std::find_if(query_trimmed.rbegin(), query_trimmed.rend(),
+                   [](unsigned char ch) { return !std::isspace(ch); })
+          .base(),
+      query_trimmed.end());
+
+  bool numeric = !query_trimmed.empty();
+  for (char c : query_trimmed) {
     if (!std::isdigit((unsigned char)c)) {
       numeric = false;
       break;
     }
   }
   if (numeric) {
-    int idx = std::stoi(query);
-    if (idx >= 1 && idx <= (int)recent_files.size()) {
-      open_path(recent_files[idx - 1]);
+    try {
+      long long idx = std::stoll(query_trimmed);
+      if (idx >= 1 && idx <= (long long)recent_files.size()) {
+        open_path(recent_files[(size_t)idx - 1]);
+        return;
+      }
+      set_message("Recent index out of range: " + query_trimmed);
+      return;
+    } catch (...) {
+      set_message("Invalid recent index: " + query_trimmed);
       return;
     }
-    set_message("Recent index out of range: " + query);
-    return;
   }
 
-  std::string needle = query;
+  std::string needle = query_trimmed.empty() ? query : query_trimmed;
   std::transform(needle.begin(), needle.end(), needle.begin(),
                  [](unsigned char c) { return std::tolower(c); });
   for (const auto &path : recent_files) {
