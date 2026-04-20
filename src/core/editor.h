@@ -456,6 +456,14 @@ private:
   void copy_current_file_name();
   void insert_current_datetime();
   void show_buffer_stats();
+  void replace_all_text(const std::string &needle, const std::string &replacement,
+                        bool case_sensitive = true, bool whole_word = false);
+  void replace_all_regex(const std::string &pattern,
+                         const std::string &replacement);
+  bool surround_selection_or_word(const std::string &left,
+                                  const std::string &right);
+  bool unsurround_selection_or_cursor();
+  void increment_number_at_cursor(int delta);
   void toggle_auto_indent_setting();
   void change_tab_size(int delta);
   std::vector<std::string> list_available_themes();

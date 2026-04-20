@@ -68,7 +68,9 @@ const std::vector<std::string> &ex_commands() {
       "find",   "ff",       "mkfile",   "mkdir",   "rename", "rm",
       "format", "trim",     "upper",    "lower",  "sortlines", "sortdesc",
       "reverselines", "uniquelines", "shufflelines", "joinlines", "dupe",
-      "trimblank", "copypath", "copyname", "datetime", "stats",
+      "trimblank", "copypath", "copyname", "datetime", "stats", "replace",
+      "replacei", "replaceword", "replacere", "surround", "unsurround",
+      "incnum", "decnum",
       "line", "goto",        "resizeleft",
       "resizeright", "resizeup", "resizedown", "lspstart", "lspstatus",
       "lspstop", "lsprestart", "lspinstall", "lspremove", "lspmanager",
@@ -100,7 +102,9 @@ bool command_takes_argument(const std::string &cmd) {
          lc == "openrecent" || lc == "autosave" || lc == "help" ||
          lc == "h" || lc == "gitdiff" || lc == "find" || lc == "ff" ||
          lc == "mkfile" || lc == "mkdir" || lc == "rename" || lc == "rm" ||
-         lc == "lspinstall" || lc == "lspremove";
+         lc == "lspinstall" || lc == "lspremove" || lc == "replace" ||
+         lc == "replacei" || lc == "replaceword" || lc == "replacere" ||
+         lc == "surround";
 }
 
 bool parse_line_col(const std::string &s, int &line_out, int &col_out) {

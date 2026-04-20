@@ -1,4 +1,6 @@
 #include "editor.h"
+#include <algorithm>
+#include <cctype>
 
 FileBuffer& Editor::get_buffer(int id) {
     if (id == -1) id = current_buffer;
@@ -27,9 +29,24 @@ SplitPane& Editor::get_pane(int id) {
 }
 
 std::string Editor::get_file_extension(const std::string& path) {
-    size_t dot = path.find_last_of('.');
+    std::string name = get_filename(path);
+    std::string lower_name = name;
+    std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(),
+                   [](unsigned char c) { return (char)std::tolower(c); });
+
+    if (lower_name == "dockerfile") {
+        return ".dockerfile";
+    }
+    if (lower_name == "cmakelists.txt") {
+        return ".cmake";
+    }
+    if (lower_name == "makefile" || lower_name == "gnumakefile") {
+        return ".make";
+    }
+
+    size_t dot = lower_name.find_last_of('.');
     if (dot != std::string::npos) {
-        return path.substr(dot);
+        return lower_name.substr(dot);
     }
     return "";
 }

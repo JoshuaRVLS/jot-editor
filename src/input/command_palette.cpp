@@ -1,5 +1,5 @@
-#include "editor.h"
 #include "command_utils.h"
+#include "editor.h"
 #include "python_api.h"
 #include <algorithm>
 #include <cctype>
@@ -74,9 +74,8 @@ void Editor::refresh_command_palette() {
     return;
   }
 
-  const bool completing_command =
-      (trimmed.find(' ') == std::string::npos) ||
-      (trimmed.back() != ' ' && arg.empty());
+  const bool completing_command = (trimmed.find(' ') == std::string::npos) ||
+                                  (trimmed.back() != ' ' && arg.empty());
 
   if (completing_command) {
     for (const auto &c : ex_commands()) {
@@ -113,9 +112,17 @@ void Editor::refresh_command_palette() {
       }
     }
   } else if (lcmd == "autosave") {
-    const std::vector<std::string> opts = {"on", "off", "toggle", "status",
-                                           "250", "500", "1000", "2000",
+    const std::vector<std::string> opts = {"on",   "off",  "toggle", "status",
+                                           "250",  "500",  "1000",   "2000",
                                            "5000", "10000"};
+    for (const auto &opt : opts) {
+      if (arg.empty() || starts_with_icase(opt, arg)) {
+        command_palette_results.push_back(opt);
+      }
+    }
+  } else if (lcmd == "lspinstall" || lcmd == "lspremove") {
+    const std::vector<std::string> opts = {"python", "typescript", "cpp",
+                                           "rust", "go", "lua", "bash"};
     for (const auto &opt : opts) {
       if (arg.empty() || starts_with_icase(opt, arg)) {
         command_palette_results.push_back(opt);
@@ -144,13 +151,13 @@ void Editor::refresh_command_palette() {
     size_t split = arg.find_first_of(" \t");
     if (split == std::string::npos) {
       auto paths = complete_path_argument(arg);
-      command_palette_results.insert(command_palette_results.end(), paths.begin(),
-                                     paths.end());
+      command_palette_results.insert(command_palette_results.end(),
+                                     paths.begin(), paths.end());
     } else {
       std::string right = trim_copy(arg.substr(split + 1));
       auto paths = complete_path_argument(right);
-      command_palette_results.insert(command_palette_results.end(), paths.begin(),
-                                     paths.end());
+      command_palette_results.insert(command_palette_results.end(),
+                                     paths.begin(), paths.end());
     }
   } else if (lcmd == "line" || lcmd == "goto") {
     auto &buf = get_buffer();
@@ -180,8 +187,7 @@ void Editor::refresh_command_palette() {
       }
     }
   } else if (lcmd == "e" || lcmd == "edit" || lcmd == "open" || lcmd == "w" ||
-             lcmd == "write" || lcmd == "wq" || lcmd == "x" ||
-             lcmd == "xit") {
+             lcmd == "write" || lcmd == "wq" || lcmd == "x" || lcmd == "xit") {
     auto paths = complete_path_argument(arg);
     command_palette_results.insert(command_palette_results.end(), paths.begin(),
                                    paths.end());
@@ -191,9 +197,9 @@ void Editor::refresh_command_palette() {
             [](const std::string &a, const std::string &b) {
               return to_lower_copy(a) < to_lower_copy(b);
             });
-  command_palette_results.erase(
-      std::unique(command_palette_results.begin(), command_palette_results.end()),
-      command_palette_results.end());
+  command_palette_results.erase(std::unique(command_palette_results.begin(),
+                                            command_palette_results.end()),
+                                command_palette_results.end());
 }
 
 void Editor::execute_command(const std::string &cmd) {
@@ -276,6 +282,50 @@ void Editor::execute_command(const std::string &cmd) {
 }
 
 void Editor::handle_command_palette(int ch) {
+  auto parse_quoted_tokens = [](const std::string &text) {
+    std::vector<std::string> tokens;
+    std::string current;
+    bool in_quote = false;
+    char quote_char = '\0';
+    bool escape = false;
+    for (char c : text) {
+      if (escape) {
+        current.push_back(c);
+        escape = false;
+        continue;
+      }
+      if (c == '\\') {
+        escape = true;
+        continue;
+      }
+      if (in_quote) {
+        if (c == quote_char) {
+          in_quote = false;
+        } else {
+          current.push_back(c);
+        }
+        continue;
+      }
+      if (c == '"' || c == '\'') {
+        in_quote = true;
+        quote_char = c;
+        continue;
+      }
+      if (std::isspace((unsigned char)c)) {
+        if (!current.empty()) {
+          tokens.push_back(current);
+          current.clear();
+        }
+        continue;
+      }
+      current.push_back(c);
+    }
+    if (!current.empty()) {
+      tokens.push_back(current);
+    }
+    return tokens;
+  };
+
   auto reset_completion_state = [&]() {
     command_palette_theme_mode = false;
     command_palette_theme_original.clear();
@@ -301,10 +351,10 @@ void Editor::handle_command_palette(int ch) {
     std::getline(iss, arg);
     arg = trim_copy(arg);
 
-    const std::string chosen = command_palette_results[command_palette_selected];
-    const bool completing_command =
-        (trimmed.find(' ') == std::string::npos) ||
-        (trimmed.back() != ' ' && arg.empty());
+    const std::string chosen =
+        command_palette_results[command_palette_selected];
+    const bool completing_command = (trimmed.find(' ') == std::string::npos) ||
+                                    (trimmed.back() != ' ' && arg.empty());
 
     std::string next_body;
     bool switched_to_argument_completion = false;
@@ -378,15 +428,12 @@ void Editor::handle_command_palette(int ch) {
       pss >> probe_cmd;
       std::getline(pss, probe_arg);
       const std::string probe_lcmd = to_lower_copy(probe_cmd);
-      skip_python_dispatch = (probe_lcmd == "lspstart" ||
-                              probe_lcmd == "lspstatus" ||
-                              probe_lcmd == "lspstop" ||
-                              probe_lcmd == "lsprestart" ||
-                              probe_lcmd == "lspmanager" ||
-                              probe_lcmd == "lspinstall" ||
-                              probe_lcmd == "lspremove" ||
-                              probe_lcmd == "help" ||
-                              probe_lcmd == "h");
+      skip_python_dispatch =
+          (probe_lcmd == "lspstart" || probe_lcmd == "lspstatus" ||
+           probe_lcmd == "lspstop" || probe_lcmd == "lsprestart" ||
+           probe_lcmd == "lspmanager" || probe_lcmd == "lspinstall" ||
+           probe_lcmd == "lspremove" || probe_lcmd == "help" ||
+           probe_lcmd == "h");
     }
 
     if (!line.empty() && python_api && !skip_python_dispatch) {
@@ -419,7 +466,8 @@ void Editor::handle_command_palette(int ch) {
       std::error_code ec;
       fs::path p(raw);
       if (p.is_relative()) {
-        fs::path base = root_dir.empty() ? fs::current_path(ec) : fs::path(root_dir);
+        fs::path base =
+            root_dir.empty() ? fs::current_path(ec) : fs::path(root_dir);
         if (ec) {
           ec.clear();
           base = fs::path(".");
@@ -432,19 +480,22 @@ void Editor::handle_command_palette(int ch) {
       }
       return p.lexically_normal();
     };
-    auto starts_with_path = [&](const std::string &child, const std::string &parent) {
+    auto starts_with_path = [&](const std::string &child,
+                                const std::string &parent) {
       if (child.size() < parent.size()) {
         return false;
       }
       if (child.compare(0, parent.size(), parent) != 0) {
         return false;
       }
-      return child.size() == parent.size() ||
-             child[parent.size()] == '/' || child[parent.size()] == '\\';
+      return child.size() == parent.size() || child[parent.size()] == '/' ||
+             child[parent.size()] == '\\';
     };
-    auto close_buffers_for_path = [&](const std::string &target_abs, bool is_dir) {
+    auto close_buffers_for_path = [&](const std::string &target_abs,
+                                      bool is_dir) {
       std::error_code ec;
-      const std::string norm_target = fs::path(target_abs).lexically_normal().string();
+      const std::string norm_target =
+          fs::path(target_abs).lexically_normal().string();
       const std::string dir_prefix =
           norm_target + std::string(1, fs::path::preferred_separator);
       for (int i = (int)buffers.size() - 1; i >= 0; --i) {
@@ -508,8 +559,7 @@ void Editor::handle_command_palette(int ch) {
         split_pane_right();
       } else if (dir == "up" || dir == "u" || dir == "top" || dir == "t") {
         split_pane_up();
-      } else if (dir == "down" || dir == "d" || dir == "bottom" ||
-                 dir == "b") {
+      } else if (dir == "down" || dir == "d" || dir == "bottom" || dir == "b") {
         split_pane_down();
       } else {
         set_message("Usage: :split [left|right|up|down]");
@@ -689,13 +739,13 @@ void Editor::handle_command_palette(int ch) {
       show_lsp_manager();
     } else if (lcmd == "lspinstall") {
       if (arg.empty()) {
-        set_message("Usage: :lspinstall <python|typescript|cpp>");
+        set_message("Usage: :lspinstall <python|typescript|cpp|rust|go|lua|bash>");
       } else {
         install_lsp_server(arg);
       }
     } else if (lcmd == "lspremove") {
       if (arg.empty()) {
-        set_message("Usage: :lspremove <python|typescript|cpp>");
+        set_message("Usage: :lspremove <python|typescript|cpp|rust|go|lua|bash>");
       } else {
         remove_lsp_server(arg);
       }
@@ -734,8 +784,7 @@ void Editor::handle_command_palette(int ch) {
           }
         }
         if (!target.empty()) {
-          std::string diff =
-              run_git_capture("diff -- " + shell_quote(target));
+          std::string diff = run_git_capture("diff -- " + shell_quote(target));
           if (trim_copy(diff).empty()) {
             set_message("Git diff: no unstaged changes for " + target);
           } else {
@@ -754,10 +803,9 @@ void Editor::handle_command_palette(int ch) {
         } else {
           int line_no = std::max(1, buf.cursor.y + 1);
           std::string rel = to_git_relative_path(buf.filepath);
-          std::string blame = run_git_capture("blame -L " +
-                                              std::to_string(line_no) + "," +
-                                              std::to_string(line_no) + " -- " +
-                                              shell_quote(rel));
+          std::string blame = run_git_capture(
+              "blame -L " + std::to_string(line_no) + "," +
+              std::to_string(line_no) + " -- " + shell_quote(rel));
           if (trim_copy(blame).empty()) {
             set_message("Git blame unavailable");
           } else {
@@ -788,9 +836,9 @@ void Editor::handle_command_palette(int ch) {
       reopen_last_closed_buffer();
     } else if (lcmd == "autosave") {
       if (arg.empty() || to_lower_copy(arg) == "status") {
-        set_message("Auto-save: " +
-                    std::string(auto_save_enabled ? "ON" : "OFF") + " (" +
-                    std::to_string(auto_save_interval_ms) + "ms)");
+        set_message(
+            "Auto-save: " + std::string(auto_save_enabled ? "ON" : "OFF") +
+            " (" + std::to_string(auto_save_interval_ms) + "ms)");
       } else {
         std::string mode = to_lower_copy(arg);
         if (mode == "on" || mode == "true" || mode == "1") {
@@ -802,9 +850,9 @@ void Editor::handle_command_palette(int ch) {
           set_message("Auto-save disabled");
         } else if (mode == "toggle") {
           set_auto_save(!auto_save_enabled);
-          set_message("Auto-save: " +
-                      std::string(auto_save_enabled ? "ON" : "OFF") + " (" +
-                      std::to_string(auto_save_interval_ms) + "ms)");
+          set_message(
+              "Auto-save: " + std::string(auto_save_enabled ? "ON" : "OFF") +
+              " (" + std::to_string(auto_save_interval_ms) + "ms)");
         } else {
           bool numeric = true;
           for (char c : mode) {
@@ -856,6 +904,42 @@ void Editor::handle_command_palette(int ch) {
       insert_current_datetime();
     } else if (lcmd == "stats") {
       show_buffer_stats();
+    } else if (lcmd == "replace" || lcmd == "replacei" ||
+               lcmd == "replaceword" || lcmd == "replacere") {
+      auto tokens = parse_quoted_tokens(arg);
+      if (tokens.size() < 2) {
+        set_message("Usage: :" + lcmd + " <from> <to> (quote spaces)");
+      } else if (lcmd == "replace") {
+        replace_all_text(tokens[0], tokens[1], true, false);
+      } else if (lcmd == "replacei") {
+        replace_all_text(tokens[0], tokens[1], false, false);
+      } else if (lcmd == "replaceword") {
+        replace_all_text(tokens[0], tokens[1], true, true);
+      } else {
+        replace_all_regex(tokens[0], tokens[1]);
+      }
+    } else if (lcmd == "surround") {
+      auto tokens = parse_quoted_tokens(arg);
+      if (tokens.empty()) {
+        set_message("Usage: :surround <left> [right]");
+      } else if (tokens.size() == 1) {
+        std::string right = tokens[0];
+        if (tokens[0] == "(")
+          right = ")";
+        else if (tokens[0] == "[")
+          right = "]";
+        else if (tokens[0] == "{")
+          right = "}";
+        surround_selection_or_word(tokens[0], right);
+      } else {
+        surround_selection_or_word(tokens[0], tokens[1]);
+      }
+    } else if (lcmd == "unsurround") {
+      unsurround_selection_or_cursor();
+    } else if (lcmd == "incnum") {
+      increment_number_at_cursor(1);
+    } else if (lcmd == "decnum") {
+      increment_number_at_cursor(-1);
     } else if (lcmd == "line" || lcmd == "goto") {
       if (arg.empty()) {
         set_message("Usage: :line <line>[:col]");
@@ -921,7 +1005,18 @@ void Editor::handle_command_palette(int ch) {
     } else if (lcmd == "help" || lcmd == "h") {
       const std::string topic = to_lower_copy(trim_copy(arg));
       if (topic == "commands" || topic == "cmd" || topic == "ex") {
-        set_message("Commands: :w :q :wq :e <file> :find [dir] :mkfile <p> :mkdir <p> :rename <old> <new> :rm <p> :line N[:C] :bd :sp [left|right|up|down] :vsp [left|right] :splitleft/:splitright/:splitup/:splitdown :bn :bp :recent :openrecent [n] :reopen :autosave [on/off/ms] :format :trim :trimblank :upper :lower :sortlines :sortdesc :reverselines :uniquelines :shufflelines :joinlines :dupe :copypath :copyname :datetime :stats :lspstart :lspstatus :lspstop :lsprestart :gitstatus :gitdiff [file] :gitblame :gitrefresh :theme <name>");
+        set_message(
+            "Commands: :w :q :wq :e <file> :find [dir] :mkfile <p> :mkdir <p> "
+            ":rename <old> <new> :rm <p> :line N[:C] :bd :sp "
+            "[left|right|up|down] :vsp [left|right] "
+            ":splitleft/:splitright/:splitup/:splitdown :bn :bp :recent "
+            ":openrecent [n] :reopen :autosave [on/off/ms] :format :trim "
+            ":trimblank :upper :lower :sortlines :sortdesc :reverselines "
+            ":uniquelines :shufflelines :joinlines :dupe :copypath :copyname "
+            ":datetime :stats :replace :replacei :replaceword :replacere "
+            ":surround :unsurround :incnum :decnum :lspstart :lspstatus "
+            ":lspstop :lsprestart :gitstatus :gitdiff [file] :gitblame "
+            ":gitrefresh :theme <name>");
       } else {
         std::vector<std::string> lines = {
             "Jot Keybind Help",
@@ -984,7 +1079,9 @@ void Editor::handle_command_palette(int ch) {
             "  :help              Show this keybind help",
             "  Extra commands: :sortdesc :reverselines :uniquelines",
             "                  :shufflelines :joinlines :dupe :trimblank",
-            "                  :copypath :copyname :datetime :stats"};
+            "                  :copypath :copyname :datetime :stats",
+            "                  :replace :replacei :replaceword :replacere",
+            "                  :surround :unsurround :incnum :decnum"};
 
         std::string out;
         for (size_t i = 0; i < lines.size(); i++) {
@@ -1003,7 +1100,8 @@ void Editor::handle_command_palette(int ch) {
           if (python_api) {
             python_api->invoke_callback(custom.callback, arg);
           } else {
-            set_message("Python runtime unavailable for command: " + custom.name);
+            set_message("Python runtime unavailable for command: " +
+                        custom.name);
           }
           break;
         }

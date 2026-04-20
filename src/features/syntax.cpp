@@ -212,6 +212,93 @@ void SyntaxHighlighter::set_language(const std::string &ext) {
     rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\"|'([^'\\\\]|\\\\.)*'"), 2});
     rules.push_back({std::regex("//.*|/\\*.*?\\*/|#.*"), 3});
     rules.push_back({std::regex("\\$[a-zA-Z0-9_]+"), 5}); // Variables
+  } else if (ext == ".lua") {
+    rules.push_back(
+        {std::regex(
+             "\\b(local|function|end|if|then|elseif|else|for|while|repeat|"
+             "until|do|return|break|goto|and|or|not|nil|true|false|in)\\b"),
+         1});
+    rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\"|'([^'\\\\]|\\\\.)*'"), 2});
+    rules.push_back({std::regex("--\\[\\[.*\\]\\]|--.*"), 3});
+    rules.push_back({std::regex("\\b(0x[0-9a-fA-F]+|\\d+\\.\\d+|\\d+)\\b"), 4});
+    rules.push_back({std::regex("\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()"), 6});
+  } else if (ext == ".swift") {
+    rules.push_back(
+        {std::regex(
+             "\\b(import|class|struct|enum|protocol|extension|func|let|var|"
+             "if|else|guard|for|while|repeat|switch|case|default|break|"
+             "continue|return|throw|throws|try|catch|defer|where|in|as|is|"
+             "nil|true|false|self|super|init|deinit)\\b"),
+         1});
+    rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\""), 2});
+    rules.push_back({std::regex("//.*|/\\*.*\\*/"), 3});
+    rules.push_back({std::regex("\\b(0x[0-9a-fA-F]+|\\d+\\.\\d+|\\d+)\\b"), 4});
+    rules.push_back({std::regex("@[A-Za-z_][A-Za-z0-9_]*"), 5});
+    rules.push_back({std::regex("\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()"), 6});
+  } else if (ext == ".cs") {
+    rules.push_back({std::regex("\\b(using|namespace)\\b"), 5});
+    rules.push_back(
+        {std::regex(
+             "\\b(public|private|protected|internal|class|struct|interface|"
+             "enum|record|static|readonly|const|void|int|float|double|decimal|"
+             "bool|string|char|byte|short|long|if|else|for|foreach|while|do|"
+             "switch|case|break|continue|return|new|this|base|try|catch|"
+             "finally|throw|async|await|var|null|true|false)\\b"),
+         1});
+    rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\"|'([^'\\\\]|\\\\.)*'"), 2});
+    rules.push_back({std::regex("//.*|/\\*.*\\*/"), 3});
+    rules.push_back({std::regex("\\b(0x[0-9a-fA-F]+|\\d+\\.\\d+|\\d+)\\b"), 4});
+    rules.push_back({std::regex("@\\w+"), 6});
+    rules.push_back({std::regex("\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()"), 6});
+  } else if (ext == ".sql") {
+    rules.push_back(
+        {std::regex(
+             "\\b(select|insert|update|delete|from|where|join|left|right|inner|"
+             "outer|on|group|by|order|having|limit|offset|into|values|create|"
+             "alter|drop|table|view|index|primary|key|foreign|constraint|"
+             "distinct|union|all|as|and|or|not|null|is|in|exists|between|like)\\b",
+             std::regex::icase),
+         1});
+    rules.push_back({std::regex("'([^'\\\\]|\\\\.)*'"), 2});
+    rules.push_back({std::regex("--.*|/\\*.*\\*/"), 3});
+    rules.push_back({std::regex("\\b-?\\d+(\\.\\d+)?\\b"), 4});
+  } else if (ext == ".cmake") {
+    rules.push_back(
+        {std::regex(
+             "\\b(if|else|elseif|endif|foreach|endforeach|while|endwhile|"
+             "function|endfunction|macro|endmacro|set|unset|option|include|"
+             "project|add_executable|add_library|target_link_libraries|"
+             "target_include_directories|message|find_package|install)\\b",
+             std::regex::icase),
+         1});
+    rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\""), 2});
+    rules.push_back({std::regex("#.*"), 3});
+    rules.push_back({std::regex("\\$\\{[A-Za-z0-9_]+\\}"), 5});
+  } else if (ext == ".dockerfile") {
+    rules.push_back(
+        {std::regex(
+             "^(from|run|cmd|entrypoint|env|arg|workdir|copy|add|expose|user|"
+             "volume|label|shell|stopsignal|healthcheck|onbuild)\\b",
+             std::regex::icase),
+         1});
+    rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\"|'([^'\\\\]|\\\\.)*'"), 2});
+    rules.push_back({std::regex("#.*"), 3});
+    rules.push_back({std::regex("\\$\\{?[A-Za-z0-9_]+\\}?"), 5});
+  } else if (ext == ".make" || ext == ".mk") {
+    rules.push_back({std::regex("^[A-Za-z0-9_./-]+\\s*:"), 5}); // Targets
+    rules.push_back(
+        {std::regex(
+             "\\b(ifdef|ifndef|ifeq|ifneq|else|endif|include|define|endef|"
+             "override|export|unexport|vpath)\\b"),
+         1});
+    rules.push_back({std::regex("#.*"), 3});
+    rules.push_back({std::regex("\\$\\([A-Za-z0-9_]+\\)|\\$\\{[A-Za-z0-9_]+\\}"), 6});
+  } else if (ext == ".ini" || ext == ".cfg" || ext == ".conf" ||
+             ext == ".properties") {
+    rules.push_back({std::regex("^\\s*\\[[^\\]]+\\]"), 1}); // Section
+    rules.push_back({std::regex("^[^=:#\\s][^=:#]*[=:]"), 5}); // Keys
+    rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\""), 2});
+    rules.push_back({std::regex("#.*|;.*"), 3});
   } else if (ext == ".yml" || ext == ".yaml" || ext == ".toml") {
     rules.push_back({std::regex("^[\\t ]*[a-zA-Z0-9_.-]+\\s*:"), 5});
     rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\"|'([^'\\\\]|\\\\.)*'"), 2});

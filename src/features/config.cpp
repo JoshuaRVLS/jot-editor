@@ -68,6 +68,7 @@ void Config::load_defaults() {
   settings["idle_fps"] = "60";
   settings["lsp_change_debounce_ms"] = "120";
   settings["lsp_completion_max_items"] = "8";
+  settings["lsp_completion_nerd_icons"] = "true";
   settings["terminal_height"] = "10";
 }
 

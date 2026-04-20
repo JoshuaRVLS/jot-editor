@@ -32,6 +32,16 @@ std::string detect_lsp_language(const std::string &filepath) {
       (lower.substr(lower.size() - 4) == ".cpp" ||
        lower.substr(lower.size() - 4) == ".hpp"))
     return "cpp";
+  if (lower.size() >= 3 && lower.substr(lower.size() - 3) == ".rs")
+    return "rust";
+  if (lower.size() >= 3 && lower.substr(lower.size() - 3) == ".go")
+    return "go";
+  if (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".lua")
+    return "lua";
+  if ((lower.size() >= 3 && lower.substr(lower.size() - 3) == ".sh") ||
+      (lower.size() >= 5 && lower.substr(lower.size() - 5) == ".bash") ||
+      (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".zsh"))
+    return "bash";
   return "";
 }
 
@@ -46,6 +56,18 @@ std::vector<std::string> workspace_markers_for(const std::string &language) {
   if (language == "cpp") {
     return {"compile_commands.json", "compile_flags.txt", "CMakeLists.txt",
             ".clangd", ".git"};
+  }
+  if (language == "rust") {
+    return {"Cargo.toml", "rust-project.json", ".git"};
+  }
+  if (language == "go") {
+    return {"go.mod", "go.work", ".git"};
+  }
+  if (language == "lua") {
+    return {".luarc.json", ".git"};
+  }
+  if (language == "bash") {
+    return {".git"};
   }
   return {".git"};
 }
@@ -91,6 +113,18 @@ std::vector<std::string> command_for_language(const std::string &language) {
   if (language == "cpp") {
     return {"clangd"};
   }
+  if (language == "rust") {
+    return {"rust-analyzer"};
+  }
+  if (language == "go") {
+    return {"gopls"};
+  }
+  if (language == "lua") {
+    return {"lua-language-server"};
+  }
+  if (language == "bash") {
+    return {"bash-language-server", "start"};
+  }
   return {};
 }
 
@@ -104,6 +138,18 @@ std::string language_id_for(const std::string &language, const std::string &file
   }
   if (language == "cpp") {
     return "cpp";
+  }
+  if (language == "rust") {
+    return "rust";
+  }
+  if (language == "go") {
+    return "go";
+  }
+  if (language == "lua") {
+    return "lua";
+  }
+  if (language == "bash") {
+    return "shellscript";
   }
   return language;
 }
@@ -265,7 +311,21 @@ std::string normalize_lsp_server_name(const std::string &raw) {
   if (n == "c" || n == "c++" || n == "clangd") {
     return "cpp";
   }
-  if (n == "python" || n == "typescript" || n == "cpp") {
+  if (n == "rs" || n == "rust" || n == "rust-analyzer") {
+    return "rust";
+  }
+  if (n == "golang" || n == "go" || n == "gopls") {
+    return "go";
+  }
+  if (n == "lua" || n == "lua_ls" || n == "lua-language-server") {
+    return "lua";
+  }
+  if (n == "sh" || n == "shell" || n == "bash" || n == "bashls" ||
+      n == "bash-language-server") {
+    return "bash";
+  }
+  if (n == "python" || n == "typescript" || n == "cpp" || n == "rust" ||
+      n == "go" || n == "lua" || n == "bash") {
     return n;
   }
   return "";
@@ -287,6 +347,18 @@ bool is_lsp_server_installed(const std::string &server) {
   }
   if (server == "cpp") {
     return command_exists("clangd");
+  }
+  if (server == "rust") {
+    return command_exists("rust-analyzer");
+  }
+  if (server == "go") {
+    return command_exists("gopls");
+  }
+  if (server == "lua") {
+    return command_exists("lua-language-server");
+  }
+  if (server == "bash") {
+    return command_exists("bash-language-server");
   }
   return false;
 }
@@ -557,10 +629,18 @@ void Editor::show_lsp_manager() {
           (is_lsp_server_installed("typescript") ? "installed" : "missing") + "]",
       std::string("cpp         [") +
           (is_lsp_server_installed("cpp") ? "installed" : "missing") + "]",
+      std::string("rust        [") +
+          (is_lsp_server_installed("rust") ? "installed" : "missing") + "]",
+      std::string("go          [") +
+          (is_lsp_server_installed("go") ? "installed" : "missing") + "]",
+      std::string("lua         [") +
+          (is_lsp_server_installed("lua") ? "installed" : "missing") + "]",
+      std::string("bash        [") +
+          (is_lsp_server_installed("bash") ? "installed" : "missing") + "]",
       "",
       "Use:",
-      ":lspinstall <python|typescript|cpp>",
-      ":lspremove <python|typescript|cpp>",
+      ":lspinstall <python|typescript|cpp|rust|go|lua|bash>",
+      ":lspremove <python|typescript|cpp|rust|go|lua|bash>",
       ":lspstart :lspstatus :lspstop :lsprestart"};
   show_popup([&lines]() {
     std::string out;
@@ -577,7 +657,8 @@ void Editor::show_lsp_manager() {
 bool Editor::install_lsp_server(const std::string &name) {
   const std::string server = normalize_lsp_server_name(name);
   if (server.empty()) {
-    set_message("Unknown LSP server: " + name + " (use python|typescript|cpp)");
+    set_message("Unknown LSP server: " + name +
+                " (use python|typescript|cpp|rust|go|lua|bash)");
     return false;
   }
 
@@ -589,6 +670,17 @@ bool Editor::install_lsp_server(const std::string &name) {
   } else if (server == "cpp") {
     set_message("Install clangd using your OS package manager");
     return false;
+  } else if (server == "rust") {
+    set_message("Install rust-analyzer using install.sh or your OS package manager");
+    return false;
+  } else if (server == "go") {
+    set_message("Install gopls using install.sh or `go install ...`");
+    return false;
+  } else if (server == "lua") {
+    set_message("Install lua-language-server using install.sh or your OS package manager");
+    return false;
+  } else if (server == "bash") {
+    rc = std::system("npm install -g bash-language-server");
   }
 
   if (rc == 0) {
@@ -602,7 +694,8 @@ bool Editor::install_lsp_server(const std::string &name) {
 bool Editor::remove_lsp_server(const std::string &name) {
   const std::string server = normalize_lsp_server_name(name);
   if (server.empty()) {
-    set_message("Unknown LSP server: " + name + " (use python|typescript|cpp)");
+    set_message("Unknown LSP server: " + name +
+                " (use python|typescript|cpp|rust|go|lua|bash)");
     return false;
   }
 
@@ -614,6 +707,17 @@ bool Editor::remove_lsp_server(const std::string &name) {
   } else if (server == "cpp") {
     set_message("Remove clangd using your OS package manager");
     return false;
+  } else if (server == "rust") {
+    set_message("Remove rust-analyzer using your OS package manager");
+    return false;
+  } else if (server == "go") {
+    set_message("Remove gopls using your Go toolchain or package manager");
+    return false;
+  } else if (server == "lua") {
+    set_message("Remove lua-language-server using your OS package manager");
+    return false;
+  } else if (server == "bash") {
+    rc = std::system("npm uninstall -g bash-language-server");
   }
 
   if (rc == 0) {

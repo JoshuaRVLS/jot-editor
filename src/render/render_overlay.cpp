@@ -24,32 +24,61 @@ int compute_visual_column(const std::string &line, int logical_col,
   return visual;
 }
 
-std::string completion_kind_icon(int kind) {
+std::string completion_kind_icon(int kind, bool use_nerd_icons) {
+  if (!use_nerd_icons) {
+    switch (kind) {
+    case 2:
+      return "[M] "; // Method
+    case 3:
+      return "[F] "; // Function
+    case 4:
+      return "[C] "; // Constructor
+    case 5:
+      return "[Fd] "; // Field
+    case 6:
+      return "[V] "; // Variable
+    case 7:
+      return "[Cl] "; // Class
+    case 8:
+      return "[I] "; // Interface
+    case 9:
+      return "[Mo] "; // Module
+    case 10:
+      return "[P] "; // Property
+    case 12:
+      return "[Val] "; // Value
+    case 14:
+      return "[K] "; // Keyword
+    default:
+      return "[?] ";
+    }
+  }
+
   switch (kind) {
   case 2:
-    return "[M] "; // Method
+    return "󰊕 "; // Method
   case 3:
-    return "[F] "; // Function
+    return "󰊕 "; // Function
   case 4:
-    return "[C] "; // Constructor
+    return " "; // Constructor
   case 5:
-    return "[Fd] "; // Field
+    return "󰇽 "; // Field
   case 6:
-    return "[V] "; // Variable
+    return "󰀫 "; // Variable
   case 7:
-    return "[Cl] "; // Class
+    return "󰠱 "; // Class
   case 8:
-    return "[I] "; // Interface
+    return " "; // Interface
   case 9:
-    return "[Mo] "; // Module
+    return " "; // Module
   case 10:
-    return "[P] "; // Property
+    return "󰜢 "; // Property
   case 12:
-    return "[Val] "; // Value
+    return "󰎠 "; // Value
   case 14:
-    return "[K] "; // Keyword
+    return "󰌋 "; // Keyword
   default:
-    return "[?] ";
+    return "󰘍 ";
   }
 }
 } // namespace
@@ -79,6 +108,8 @@ void Editor::render_lsp_completion() {
   }
 
   const int line_num_width = 7;
+  const bool use_nerd_icons = config.get_bool("lsp_completion_nerd_icons", true);
+  const int icon_display_w = use_nerd_icons ? 2 : 5;
   int visible_h = std::max(1, pane.h - tab_height);
   int visible_w = std::max(12, draw_w - 2 - line_num_width);
   const int max_items_cfg =
@@ -99,7 +130,7 @@ void Editor::render_lsp_completion() {
     if (i < 0 || i >= (int)lsp_completion_items.size()) {
       continue;
     }
-    int len = (int)lsp_completion_items[i].label.size();
+    int len = icon_display_w + (int)lsp_completion_items[i].label.size();
     if (!lsp_completion_items[i].detail.empty()) {
       len += 3 + std::min(24, (int)lsp_completion_items[i].detail.size());
     }
@@ -179,7 +210,7 @@ void Editor::render_lsp_completion() {
     bool selected_row = (item_idx == selected);
     int fg = selected_row ? theme.fg_selection : theme.fg_command;
     int bg = selected_row ? theme.bg_selection : theme.bg_command;
-    std::string icon = completion_kind_icon(item.kind);
+    std::string icon = completion_kind_icon(item.kind, use_nerd_icons);
     std::string text = " " + icon + item.label;
 
     if (!item.detail.empty()) {

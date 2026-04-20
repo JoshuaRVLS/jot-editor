@@ -319,6 +319,7 @@ void UI::set_cursor(int x, int y) {
     // logical cursor position is unchanged.
     term->move_cursor(x, y);
     term->show_cursor();
+    term->flush();
     cursor_x = x;
     cursor_y = y;
     cursor_hidden = false;
@@ -330,5 +331,6 @@ void UI::hide_cursor() {
     return;
   }
   term->hide_cursor();
+  term->flush();
   cursor_hidden = true;
 }

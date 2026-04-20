@@ -209,6 +209,140 @@ install_typescript_lsp() {
   return 1
 }
 
+install_bash_lsp() {
+  if command -v bash-language-server >/dev/null 2>&1; then
+    echo "[jot:lsp] bash-language-server already installed"
+    return 0
+  fi
+  if command -v npm >/dev/null 2>&1; then
+    if attempt_cmd "Installing bash-language-server via npm -g" \
+      run_maybe_sudo npm install -g bash-language-server; then
+      return 0
+    fi
+  fi
+  echo "[jot:lsp] Warning: unable to install bash-language-server automatically." >&2
+  return 1
+}
+
+install_rust_analyzer() {
+  if command -v rust-analyzer >/dev/null 2>&1; then
+    echo "[jot:lsp] rust-analyzer already installed"
+    return 0
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    attempt_cmd "Installing rust-analyzer via apt-get" \
+      run_maybe_sudo bash -lc "apt-get update && apt-get install -y rust-analyzer" && return 0
+  fi
+  if command -v dnf >/dev/null 2>&1; then
+    attempt_cmd "Installing rust-analyzer via dnf" \
+      run_maybe_sudo dnf install -y rust-analyzer && return 0
+  fi
+  if command -v yum >/dev/null 2>&1; then
+    attempt_cmd "Installing rust-analyzer via yum" \
+      run_maybe_sudo yum install -y rust-analyzer && return 0
+  fi
+  if command -v pacman >/dev/null 2>&1; then
+    attempt_cmd "Installing rust-analyzer via pacman" \
+      run_maybe_sudo pacman -Sy --noconfirm rust-analyzer && return 0
+  fi
+  if command -v zypper >/dev/null 2>&1; then
+    attempt_cmd "Installing rust-analyzer via zypper" \
+      run_maybe_sudo zypper --non-interactive install rust-analyzer && return 0
+  fi
+  if command -v brew >/dev/null 2>&1; then
+    attempt_cmd "Installing rust-analyzer via brew" \
+      brew install rust-analyzer && return 0
+  fi
+
+  echo "[jot:lsp] Warning: unable to install rust-analyzer automatically." >&2
+  return 1
+}
+
+install_gopls() {
+  if command -v gopls >/dev/null 2>&1; then
+    echo "[jot:lsp] gopls already installed"
+    return 0
+  fi
+
+  if command -v go >/dev/null 2>&1; then
+    if attempt_cmd "Installing gopls via go install" \
+      run_as_default_user go install golang.org/x/tools/gopls@latest; then
+      local gopath="${GOPATH:-${DEFAULT_HOME}/go}"
+      local gopls_bin="${gopath}/bin/gopls"
+      if [[ -x "${gopls_bin}" ]]; then
+        run_as_default_user mkdir -p "${DEFAULT_HOME}/.local/bin"
+        run_as_default_user ln -sf "${gopls_bin}" "${DEFAULT_HOME}/.local/bin/gopls"
+      fi
+      return 0
+    fi
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    attempt_cmd "Installing gopls via apt-get" \
+      run_maybe_sudo bash -lc "apt-get update && apt-get install -y gopls" && return 0
+  fi
+  if command -v pacman >/dev/null 2>&1; then
+    attempt_cmd "Installing gopls via pacman" \
+      run_maybe_sudo pacman -Sy --noconfirm gopls && return 0
+  fi
+  if command -v brew >/dev/null 2>&1; then
+    attempt_cmd "Installing gopls via brew" \
+      brew install gopls && return 0
+  fi
+
+  echo "[jot:lsp] Warning: unable to install gopls automatically." >&2
+  return 1
+}
+
+install_lua_ls() {
+  if command -v lua-language-server >/dev/null 2>&1; then
+    echo "[jot:lsp] lua-language-server already installed"
+    return 0
+  fi
+  if command -v lua_ls >/dev/null 2>&1; then
+    run_as_default_user mkdir -p "${DEFAULT_HOME}/.local/bin"
+    run_as_default_user ln -sf "$(command -v lua_ls)" "${DEFAULT_HOME}/.local/bin/lua-language-server"
+    echo "[jot:lsp] Linked lua_ls -> ${DEFAULT_HOME}/.local/bin/lua-language-server"
+    return 0
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    attempt_cmd "Installing lua-language-server via apt-get" \
+      run_maybe_sudo bash -lc "apt-get update && apt-get install -y lua-language-server" && return 0
+  fi
+  if command -v dnf >/dev/null 2>&1; then
+    attempt_cmd "Installing lua-language-server via dnf" \
+      run_maybe_sudo dnf install -y lua-language-server && return 0
+  fi
+  if command -v yum >/dev/null 2>&1; then
+    attempt_cmd "Installing lua-language-server via yum" \
+      run_maybe_sudo yum install -y lua-language-server && return 0
+  fi
+  if command -v pacman >/dev/null 2>&1; then
+    attempt_cmd "Installing lua-language-server via pacman" \
+      run_maybe_sudo pacman -Sy --noconfirm lua-language-server && return 0
+  fi
+  if command -v zypper >/dev/null 2>&1; then
+    attempt_cmd "Installing lua-language-server via zypper" \
+      run_maybe_sudo zypper --non-interactive install lua-language-server && return 0
+  fi
+  if command -v brew >/dev/null 2>&1; then
+    attempt_cmd "Installing lua-language-server via brew" \
+      brew install lua-language-server && return 0
+  fi
+
+  if command -v lua_ls >/dev/null 2>&1; then
+    run_as_default_user mkdir -p "${DEFAULT_HOME}/.local/bin"
+    run_as_default_user ln -sf "$(command -v lua_ls)" "${DEFAULT_HOME}/.local/bin/lua-language-server"
+    echo "[jot:lsp] Linked lua_ls -> ${DEFAULT_HOME}/.local/bin/lua-language-server"
+    return 0
+  fi
+
+  echo "[jot:lsp] Warning: unable to install lua-language-server automatically." >&2
+  return 1
+}
+
 install_clangd() {
   if command -v clangd >/dev/null 2>&1; then
     echo "[jot:lsp] clangd already installed"
@@ -308,12 +442,16 @@ install_prettier() {
 }
 
 install_builtin_lsps() {
-  echo "[jot:lsp] Installing built-in LSP servers (python/typescript/cpp)"
+  echo "[jot:lsp] Installing built-in LSP servers (python/typescript/cpp/rust/go/lua/bash)"
   local failures=0
 
   install_python_lsp || failures=$((failures + 1))
   install_typescript_lsp || failures=$((failures + 1))
   install_clangd || failures=$((failures + 1))
+  install_rust_analyzer || failures=$((failures + 1))
+  install_gopls || failures=$((failures + 1))
+  install_lua_ls || failures=$((failures + 1))
+  install_bash_lsp || failures=$((failures + 1))
 
   if [[ "${failures}" -gt 0 ]]; then
     echo "[jot:lsp] Completed with ${failures} warning(s). Some LSP servers may need manual install." >&2

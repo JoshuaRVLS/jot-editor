@@ -61,11 +61,14 @@ add_library(jot_edit_obj OBJECT
   edit/feature_datetime.cpp
   edit/feature_duplicate.cpp
   edit/feature_join_lines.cpp
+  edit/feature_increment.cpp
   edit/feature_path_clipboard.cpp
+  edit/feature_replace.cpp
   edit/feature_reverse_lines.cpp
   edit/feature_shuffle_lines.cpp
   edit/feature_sort_desc.cpp
   edit/feature_stats.cpp
+  edit/feature_surround.cpp
   edit/feature_trim_blank.cpp
   edit/feature_unique_lines.cpp
   edit/lines.cpp
