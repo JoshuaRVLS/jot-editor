@@ -20,6 +20,43 @@ static int classify_char(unsigned char c) {
   return 2;   // punctuation/symbol run
 }
 
+static bool bracket_pair(char c, char &open, char &close, bool &is_open) {
+  switch (c) {
+  case '(':
+    open = '(';
+    close = ')';
+    is_open = true;
+    return true;
+  case ')':
+    open = '(';
+    close = ')';
+    is_open = false;
+    return true;
+  case '[':
+    open = '[';
+    close = ']';
+    is_open = true;
+    return true;
+  case ']':
+    open = '[';
+    close = ']';
+    is_open = false;
+    return true;
+  case '{':
+    open = '{';
+    close = '}';
+    is_open = true;
+    return true;
+  case '}':
+    open = '{';
+    close = '}';
+    is_open = false;
+    return true;
+  default:
+    return false;
+  }
+}
+
 static int compare_cursor_pos(const Cursor &a, const Cursor &b) {
   if (a.y != b.y)
     return (a.y < b.y) ? -1 : 1;
@@ -447,6 +484,106 @@ void Editor::handle_mouse(void *event_ptr) {
           buf.selection.start.y == buf.selection.end.y);
   };
 
+  auto find_word_span_at_or_near = [&](int line_y, int x, int &start,
+                                       int &end) -> bool {
+    if (line_y < 0 || line_y >= (int)buf.lines.size())
+      return false;
+    const std::string &line = buf.lines[line_y];
+    if (line.empty())
+      return false;
+
+    int pivot = std::clamp(x, 0, (int)line.size() - 1);
+
+    auto expand_span = [&](int p, int &s, int &e) -> bool {
+      if (p < 0 || p >= (int)line.size())
+        return false;
+      int cls = classify_char((unsigned char)line[p]);
+      if (cls == 0)
+        return false; // skip whitespace runs for smart word select
+      s = p;
+      e = p + 1;
+      while (s > 0 && classify_char((unsigned char)line[s - 1]) == cls)
+        s--;
+      while (e < (int)line.size() &&
+             classify_char((unsigned char)line[e]) == cls)
+        e++;
+      return true;
+    };
+
+    if (expand_span(pivot, start, end))
+      return true;
+    if (pivot + 1 < (int)line.size() && expand_span(pivot + 1, start, end))
+      return true;
+    if (pivot - 1 >= 0 && expand_span(pivot - 1, start, end))
+      return true;
+
+    for (int d = 2; d < (int)line.size(); d++) {
+      int right = pivot + d;
+      int left = pivot - d;
+      if (right < (int)line.size() && expand_span(right, start, end))
+        return true;
+      if (left >= 0 && expand_span(left, start, end))
+        return true;
+      if (right >= (int)line.size() && left < 0)
+        break;
+    }
+
+    return false;
+  };
+
+  auto find_matching_bracket = [&](int line_y, int x, Cursor &open_pos,
+                                   Cursor &close_pos) -> bool {
+    if (line_y < 0 || line_y >= (int)buf.lines.size())
+      return false;
+    const std::string &line = buf.lines[line_y];
+    if (x < 0 || x >= (int)line.size())
+      return false;
+
+    char open = 0, close = 0;
+    bool is_open = false;
+    if (!bracket_pair(line[x], open, close, is_open))
+      return false;
+
+    if (is_open) {
+      int depth = 1;
+      for (int y = line_y; y < (int)buf.lines.size(); y++) {
+        int start_x = (y == line_y) ? x + 1 : 0;
+        for (int cx = start_x; cx < (int)buf.lines[y].size(); cx++) {
+          char ch = buf.lines[y][cx];
+          if (ch == open) {
+            depth++;
+          } else if (ch == close) {
+            depth--;
+            if (depth == 0) {
+              open_pos = {x, line_y};
+              close_pos = {cx, y};
+              return true;
+            }
+          }
+        }
+      }
+    } else {
+      int depth = 1;
+      for (int y = line_y; y >= 0; y--) {
+        int start_x = (y == line_y) ? x - 1 : (int)buf.lines[y].size() - 1;
+        for (int cx = start_x; cx >= 0; cx--) {
+          char ch = buf.lines[y][cx];
+          if (ch == close) {
+            depth++;
+          } else if (ch == open) {
+            depth--;
+            if (depth == 0) {
+              open_pos = {cx, y};
+              close_pos = {x, line_y};
+              return true;
+            }
+          }
+        }
+      }
+    }
+    return false;
+  };
+
   if (bstate == 1) {
     focus_state = FOCUS_EDITOR;
     idle_frame_count = 0;
@@ -489,18 +626,31 @@ void Editor::handle_mouse(void *event_ptr) {
         buf.selection.active = false;
         buf.cursor.x = 0;
         buf.cursor.y = click_y;
+        buf.preferred_x = buf.cursor.x;
       } else {
         int pivot = std::min(click_x, (int)line.length() - 1);
-        int cls = classify_char((unsigned char)line[pivot]);
-        int start = pivot;
-        int end = pivot + 1;
-        while (start > 0 &&
-               classify_char((unsigned char)line[start - 1]) == cls) {
-          start--;
+        Cursor bracket_open{0, 0};
+        Cursor bracket_close{0, 0};
+        if (find_matching_bracket(click_y, pivot, bracket_open, bracket_close)) {
+          mouse_selecting = false;
+          mouse_selection_mode = MOUSE_SELECT_CHAR;
+          mouse_start = bracket_open;
+          mouse_anchor_end = {bracket_close.x + 1, bracket_close.y};
+          buf.selection.start = mouse_start;
+          buf.selection.end = mouse_anchor_end;
+          buf.selection.active = true;
+          buf.cursor = mouse_anchor_end;
+          buf.preferred_x = buf.cursor.x;
+          ensure_cursor_visible();
+          needs_redraw = true;
+          return;
         }
-        while (end < (int)line.length() &&
-               classify_char((unsigned char)line[end]) == cls) {
-          end++;
+
+        int start = 0;
+        int end = 0;
+        if (!find_word_span_at_or_near(click_y, click_x, start, end)) {
+          start = 0;
+          end = (int)line.length();
         }
         mouse_selecting = true;
         mouse_selection_mode = MOUSE_SELECT_WORD;
@@ -510,6 +660,7 @@ void Editor::handle_mouse(void *event_ptr) {
         buf.selection.end = mouse_anchor_end;
         buf.selection.active = true;
         buf.cursor = mouse_anchor_end;
+        buf.preferred_x = buf.cursor.x;
       }
       needs_redraw = true;
     } else {
