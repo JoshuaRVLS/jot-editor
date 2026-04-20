@@ -322,4 +322,45 @@ void Editor::render_image_viewer() {
 
   image_viewer.render(w - img_w, tab_height, img_w, img_h,
                       theme.fg_image_border, theme.bg_image_border);
+
+  int x = image_viewer.get_view_x();
+  int y = image_viewer.get_view_y();
+  int vw = image_viewer.get_view_w();
+  int vh = image_viewer.get_view_h();
+  if (vw <= 2 || vh <= 2) {
+    return;
+  }
+
+  UIRect panel = {x, y, vw, vh};
+  ui->fill_rect(panel, " ", theme.fg_default, theme.bg_default);
+  ui->draw_border(panel, image_viewer.get_border_fg(), image_viewer.get_border_bg());
+
+  const auto &lines = image_viewer.get_preview_lines();
+  int text_x = x + 1;
+  int text_y = y + 1;
+  int text_w = std::max(1, vw - 2);
+  int text_h = std::max(1, vh - 2);
+
+  int line_y = text_y;
+  for (int i = 0; i < text_h && i < (int)lines.size(); i++) {
+    std::string line = lines[i];
+    if ((int)line.size() > text_w) {
+      line = line.substr(0, text_w);
+    }
+    ui->draw_text(text_x, line_y++, line, theme.fg_default, theme.bg_default);
+  }
+
+  if (image_viewer.has_color_preview_data() && line_y < text_y + text_h) {
+    line_y += 1;
+    const auto &pixels = image_viewer.get_color_preview_bg();
+    int max_rows = std::max(0, text_y + text_h - line_y);
+    int rows = std::min((int)pixels.size(), max_rows);
+    for (int py = 0; py < rows; py++) {
+      int cols = std::min((int)pixels[py].size(), text_w);
+      for (int px = 0; px < cols; px++) {
+        int bg = pixels[py][px];
+        ui->draw_text(text_x + px, line_y + py, " ", theme.fg_default, bg);
+      }
+    }
+  }
 }

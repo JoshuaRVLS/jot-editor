@@ -1,6 +1,59 @@
 #include "ui.h"
 #include <algorithm>
 
+namespace {
+bool is_valid_utf8_sequence(const std::string &s) {
+  if (s.empty())
+    return false;
+  const unsigned char *p = (const unsigned char *)s.data();
+  int n = (int)s.size();
+
+  if (n == 1) {
+    return (p[0] & 0x80) == 0;
+  }
+  if (n == 2) {
+    if ((p[0] & 0xE0) != 0xC0)
+      return false;
+    return (p[1] & 0xC0) == 0x80;
+  }
+  if (n == 3) {
+    if ((p[0] & 0xF0) != 0xE0)
+      return false;
+    return (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80;
+  }
+  if (n == 4) {
+    if ((p[0] & 0xF8) != 0xF0)
+      return false;
+    return (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80 &&
+           (p[3] & 0xC0) == 0x80;
+  }
+  return false;
+}
+
+int utf8_char_len(const std::string &text, int i) {
+  if (i < 0 || i >= (int)text.size())
+    return 0;
+  const unsigned char c = (unsigned char)text[i];
+  if ((c & 0x80) == 0)
+    return 1;
+  if ((c & 0xE0) == 0xC0)
+    return 2;
+  if ((c & 0xF0) == 0xE0)
+    return 3;
+  if ((c & 0xF8) == 0xF0)
+    return 4;
+  return 0;
+}
+
+std::string sanitized_cell_text(const std::string &ch) {
+  if (ch.empty())
+    return " ";
+  if (is_valid_utf8_sequence(ch))
+    return ch;
+  return "?";
+}
+} // namespace
+
 UI::UI(Terminal *t)
     : term(t), width(80), height(24), cursor_x(-1), cursor_y(-1),
       cursor_hidden(true) {
@@ -74,52 +127,66 @@ void UI::render() {
 
   int last_fg = -1, last_bg = -1;
   bool last_bold = false, last_italic = false, last_reverse = false;
-  int cursor_x = -1, cursor_y = -1;
+  int draw_cursor_x = -1, draw_cursor_y = -1;
 
   for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
+    int x = 0;
+    while (x < width) {
       const auto &cell = grid[y][x];
-
-      // Only draw if changed
-      if (cell != last_grid[y][x]) {
-        if (cursor_y != y || cursor_x != x) {
-          term->move_cursor(x, y);
-          cursor_x = x;
-          cursor_y = y;
-        }
-
-        if (cell.fg != last_fg || cell.bg != last_bg ||
-            cell.bold != last_bold || cell.italic != last_italic ||
-            cell.reverse != last_reverse) {
-          term->reset_color();
-          if (cell.bold)
-            term->set_bold(true);
-          if (cell.italic)
-            term->set_italic(true);
-          if (cell.reverse)
-            term->set_reverse(true);
-          term->set_color(cell.fg, cell.bg);
-          last_fg = cell.fg;
-          last_bg = cell.bg;
-          last_bold = cell.bold;
-          last_italic = cell.italic;
-          last_reverse = cell.reverse;
-        }
-
-        // If a cell contains an isolated non-ASCII byte, writing it raw can
-        // corrupt terminal glyph decoding and shift the visual grid.
-        // Render those bytes as '?' to keep one-cell alignment stable.
-        if (cell.ch.size() == 1 &&
-            (unsigned char)cell.ch[0] >= 0x80) {
-          term->write("?");
-        } else {
-          term->write(cell.ch);
-        }
-        cursor_x +=
-            1; // Assuming single width char for now, but utf8 might differ
-
-        last_grid[y][x] = cell;
+      if (cell == last_grid[y][x]) {
+        x++;
+        continue;
       }
+
+      if (draw_cursor_y != y || draw_cursor_x != x) {
+        term->move_cursor(x, y);
+        draw_cursor_x = x;
+        draw_cursor_y = y;
+      }
+
+      if (cell.fg != last_fg || cell.bg != last_bg || cell.bold != last_bold ||
+          cell.italic != last_italic || cell.reverse != last_reverse) {
+        term->reset_color();
+        if (cell.bold)
+          term->set_bold(true);
+        if (cell.italic)
+          term->set_italic(true);
+        if (cell.reverse)
+          term->set_reverse(true);
+        term->set_color(cell.fg, cell.bg);
+        last_fg = cell.fg;
+        last_bg = cell.bg;
+        last_bold = cell.bold;
+        last_italic = cell.italic;
+        last_reverse = cell.reverse;
+      }
+
+      std::string run;
+      int run_start = x;
+      int run_end = x;
+      for (; run_end < width; run_end++) {
+        const auto &rc = grid[y][run_end];
+        if (rc == last_grid[y][run_end])
+          break;
+        if (rc.fg != cell.fg || rc.bg != cell.bg || rc.bold != cell.bold ||
+            rc.italic != cell.italic || rc.reverse != cell.reverse) {
+          break;
+        }
+        run += sanitized_cell_text(rc.ch);
+      }
+
+      if (run.empty()) {
+        run = sanitized_cell_text(cell.ch);
+        run_end = x + 1;
+      }
+
+      term->write(run);
+      draw_cursor_x += (run_end - run_start);
+
+      for (int i = run_start; i < run_end; i++) {
+        last_grid[y][i] = grid[y][i];
+      }
+      x = run_end;
     }
   }
 
@@ -132,22 +199,26 @@ void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,
   int i = 0;
   int cell_offset = 0;
   while (i < (int)text.length() && x + cell_offset < width) {
-    unsigned char c = text[i];
-    int char_len = 1;
-    if ((c & 0x80) == 0)
-      char_len = 1;
-    else if ((c & 0xE0) == 0xC0)
-      char_len = 2;
-    else if ((c & 0xF0) == 0xE0)
-      char_len = 3;
-    else if ((c & 0xF8) == 0xF0)
-      char_len = 4;
-
-    if (i + char_len > (int)text.length())
+    int char_len = utf8_char_len(text, i);
+    if (char_len <= 0) {
+      UICell bad;
+      bad.ch = "?";
+      bad.fg = fg;
+      bad.bg = bg;
+      bad.bold = bold;
+      bad.italic = italic;
+      bad.reverse = false;
+      set_cell(x + cell_offset, y, bad);
+      i += 1;
+      cell_offset++;
+      continue;
+    }
+    if (i + char_len > (int)text.length()) {
       break;
+    }
 
     UICell cell;
-    cell.ch = text.substr(i, char_len);
+    cell.ch = sanitized_cell_text(text.substr(i, char_len));
     cell.fg = fg;
     cell.bg = bg;
     cell.bold = bold;
@@ -251,7 +322,6 @@ void UI::set_cursor(int x, int y) {
     cursor_x = x;
     cursor_y = y;
     cursor_hidden = false;
-    term->flush(); // Ensure it takes effect
   }
 }
 
@@ -261,5 +331,4 @@ void UI::hide_cursor() {
   }
   term->hide_cursor();
   cursor_hidden = true;
-  term->flush();
 }

@@ -33,6 +33,23 @@ std::string normalize_existing_path(const std::string &path) {
   return absolute.string();
 }
 
+std::string sanitize_input_path(const std::string &path) {
+  std::string out = path;
+  out.erase(out.begin(),
+            std::find_if(out.begin(), out.end(),
+                         [](unsigned char c) { return !std::isspace(c); }));
+  out.erase(std::find_if(out.rbegin(), out.rend(),
+                         [](unsigned char c) { return !std::isspace(c); })
+                .base(),
+            out.end());
+  if (out.size() >= 2 &&
+      ((out.front() == '"' && out.back() == '"') ||
+       (out.front() == '\'' && out.back() == '\''))) {
+    out = out.substr(1, out.size() - 2);
+  }
+  return out;
+}
+
 std::string recent_files_path() {
   const char *home = std::getenv("HOME");
   if (!home || !*home) {
@@ -146,6 +163,18 @@ bool read_file_lines(const std::string &path, std::vector<std::string> &out) {
   return true;
 }
 
+bool is_supported_image_path(const std::string &path) {
+  fs::path p(path);
+  std::string ext = p.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(),
+                 [](unsigned char c) { return (char)std::tolower(c); });
+  static const std::set<std::string> exts = {
+      ".jpg",  ".jpeg", ".png",  ".gif",  ".bmp",  ".svg", ".webp",
+      ".ico",  ".tif",  ".tiff", ".avif", ".heic", ".ppm", ".pgm",
+      ".pbm",  ".xpm",  ".jxl"};
+  return exts.find(ext) != exts.end();
+}
+
 void normalize_buffer_after_external_edit(FileBuffer &buf) {
   if (buf.lines.empty()) {
     buf.lines.push_back("");
@@ -238,8 +267,30 @@ void Editor::open_file(const std::string &path, bool preview) {
   show_home_menu = false;
   hide_lsp_completion();
 
-  const std::string normalized = normalize_existing_path(path);
-  const std::string path_to_open = normalized.empty() ? path : normalized;
+  const std::string clean_path = sanitize_input_path(path);
+  if (clean_path.empty()) {
+    set_message("Open failed: empty path");
+    return;
+  }
+
+  const std::string normalized = normalize_existing_path(clean_path);
+  const std::string path_to_open = normalized.empty() ? clean_path : normalized;
+
+  {
+    std::error_code ec;
+    if (is_supported_image_path(path_to_open) && fs::exists(path_to_open, ec) &&
+        !ec && fs::is_regular_file(path_to_open, ec) && !ec) {
+      image_viewer.open(path_to_open);
+      track_recent_file(path_to_open);
+      refresh_git_status(true);
+      needs_redraw = true;
+      return;
+    }
+  }
+
+  if (image_viewer.is_active()) {
+    image_viewer.close();
+  }
 
   auto find_open_index = [&]() {
     for (size_t i = 0; i < buffers.size(); i++) {
@@ -247,7 +298,8 @@ void Editor::open_file(const std::string &path, bool preview) {
       if (!candidate.empty() && candidate == path_to_open) {
         return (int)i;
       }
-      if (buffers[i].filepath == path_to_open || buffers[i].filepath == path) {
+      if (buffers[i].filepath == path_to_open ||
+          buffers[i].filepath == clean_path || buffers[i].filepath == path) {
         return (int)i;
       }
     }

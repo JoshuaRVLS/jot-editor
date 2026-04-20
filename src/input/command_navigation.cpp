@@ -39,7 +39,10 @@ void Editor::handle_telescope(int ch) {
     std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
     if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" ||
-        ext == ".bmp" || ext == ".svg" || ext == ".webp" || ext == ".ico") {
+        ext == ".bmp" || ext == ".svg" || ext == ".webp" || ext == ".ico" ||
+        ext == ".tif" || ext == ".tiff" || ext == ".avif" || ext == ".heic" ||
+        ext == ".ppm" || ext == ".pgm" || ext == ".pbm" || ext == ".xpm" ||
+        ext == ".jxl") {
       image_viewer.open(path);
     } else {
       open_file(path);
