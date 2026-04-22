@@ -114,10 +114,19 @@ jot_configure_object_target(jot_render_obj)
 
 add_library(jot_tools_obj OBJECT
   tools/imageviewer.cpp
-  tools/integrated_terminal.cpp
-  tools/lsp_client.cpp
   tools/telescope.cpp
 )
+if(WIN32)
+  target_sources(jot_tools_obj PRIVATE
+    platform/windows/tools/integrated_terminal.cpp
+    platform/windows/tools/lsp_client.cpp
+  )
+else()
+  target_sources(jot_tools_obj PRIVATE
+    tools/integrated_terminal.cpp
+    tools/lsp_client.cpp
+  )
+endif()
 jot_configure_object_target(jot_tools_obj)
 
 add_library(jot_plugins_obj OBJECT
@@ -126,9 +135,13 @@ add_library(jot_plugins_obj OBJECT
 jot_configure_object_target(jot_plugins_obj)
 
 add_library(jot_ui_obj OBJECT
-  ui/terminal.cpp
   ui/ui.cpp
 )
+if(WIN32)
+  target_sources(jot_ui_obj PRIVATE platform/windows/ui/terminal.cpp)
+else()
+  target_sources(jot_ui_obj PRIVATE ui/terminal.cpp)
+endif()
 jot_configure_object_target(jot_ui_obj)
 
 # Module static libraries (for larger-project style ownership and reuse)
