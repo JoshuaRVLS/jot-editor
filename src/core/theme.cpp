@@ -83,6 +83,10 @@ void Editor::apply_theme(const std::string &name, bool persist, bool announce) {
     config.set("color_scheme", resolved);
   }
 
+  if (ui) {
+    ui->set_default_colors(theme.fg_default, theme.bg_default);
+    ui->invalidate();
+  }
   needs_redraw = true;
   if (announce) {
     set_message("Theme: " + resolved);

@@ -2,7 +2,10 @@
 #define EDITOR_TYPES_H
 
 #include "text_features.h"
+#include "line_provider.h"
 #include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <regex>
 #include <set>
 #include <stack>
@@ -10,6 +13,15 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#ifdef JOT_TREESITTER
+struct TSParser;
+struct TSTree;
+#endif
+
+namespace {
+constexpr std::uintmax_t kFileSizeLazyThreshold = 10ULL * 1024ULL * 1024ULL;
+}
 
 enum PanelType {
   PANEL_EDITOR,
@@ -135,6 +147,8 @@ struct SyntaxLineCache {
 
 struct FileBuffer {
   std::vector<std::string> lines;
+  std::unique_ptr<LineProvider> lazy_provider;
+
   Cursor cursor;
   int preferred_x; // desired column for vertical movement
   Selection selection;
@@ -150,6 +164,58 @@ struct FileBuffer {
   std::string syntax_cache_extension;
   std::size_t syntax_cache_line_count = 0;
   std::unordered_map<int, SyntaxLineCache> syntax_cache;
+
+#ifdef JOT_TREESITTER
+  TSParser *ts_parser = nullptr;
+  TSTree *ts_tree = nullptr;
+  std::string ts_language_id;
+#endif
+
+  // Line accessor methods
+  bool is_lazy() const { return lazy_provider != nullptr; }
+
+  const std::string &line(int n) const {
+    if (lazy_provider)
+      return lazy_provider->get_line(n);
+    if (n < 0 || n >= (int)lines.size()) {
+      static const std::string empty;
+      return empty;
+    }
+    return lines[n];
+  }
+
+  std::string &line_mut(int n) {
+    if (lazy_provider)
+      materialize();
+    if (n < 0 || n >= (int)lines.size()) {
+      if (lines.empty()) lines.push_back("");
+      return lines[0];
+    }
+    return lines[n];
+  }
+
+  size_t line_count() const {
+    if (lazy_provider)
+      return lazy_provider->line_count();
+    return lines.size();
+  }
+
+  bool has_lines() const { return line_count() > 0; }
+
+  char char_at(int line_idx, int col) const {
+    if (lazy_provider)
+      return lazy_provider->get_char(line_idx, col);
+    if (line_idx < 0 || line_idx >= (int)lines.size()) return '\0';
+    if (col < 0 || col >= (int)lines[line_idx].size()) return '\0';
+    return lines[line_idx][col];
+  }
+
+  void scroll_hint(int center_line) {
+    if (lazy_provider)
+      lazy_provider->scroll_hint(center_line);
+  }
+
+  void materialize();
 };
 
 struct Popup {

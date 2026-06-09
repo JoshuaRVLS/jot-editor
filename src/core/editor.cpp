@@ -167,14 +167,22 @@ Editor::Editor() {
   }
 
   terminal.init();
+  // Force a fresh terminal size probe after init. terminal.init() reads the
+  // size once and may stick to a fallback (e.g. 80x24) if ioctl/$COLUMNS
+  // weren't ready when init ran. Re-probing here ensures the first UI frame
+  // uses the real terminal dimensions, not a stale value.
+  terminal.refresh_size();
   terminal.set_poll_timeout_ms(
       std::max(1, 1000 / std::max(render_fps, idle_fps)));
   ui = new UI(&terminal);
   ui->resize(terminal.get_width(), terminal.get_height());
+  ui->set_default_colors(theme.fg_default, theme.bg_default);
 
   int h = terminal.get_height();
   int w = terminal.get_width();
   create_pane(0, 0, w - minimap_width, h - status_height, -1);
+
+  current_buffer = 0;
 
   FileBuffer fb;
   fb.lines.push_back("");
@@ -184,7 +192,7 @@ Editor::Editor() {
   fb.scroll_offset = 0;
   fb.scroll_x = 0;
   fb.modified = false;
-  buffers.push_back(fb);
+  buffers.push_back(std::move(fb));
   panes[0].buffer_id = 0;
 }
 
@@ -285,5 +293,34 @@ void Editor::add_diagnostic(const std::string &filepath,
       needs_redraw = true;
       // Continue search
     }
+  }
+}
+
+void Editor::poll_discord_rpc(long long now_ms) {
+  if (!config.get_bool("discord_rpc", true)) {
+    if (discord_rpc.is_connected()) {
+      discord_rpc.disconnect();
+    }
+    return;
+  }
+
+  discord_rpc.poll(now_ms);
+
+  std::string details;
+  if (!root_dir.empty() && root_dir != ".") {
+    details = fs::path(root_dir).filename().string();
+  }
+
+  std::string state;
+  if (!buffers.empty() && current_buffer >= 0 &&
+      current_buffer < (int)buffers.size() &&
+      !buffers[current_buffer].filepath.empty()) {
+    state = "Editing " + fs::path(buffers[current_buffer].filepath).filename().string();
+  }
+
+  if (details != discord_rpc_last_details || state != discord_rpc_last_state) {
+    discord_rpc_last_details = details;
+    discord_rpc_last_state = state;
+    discord_rpc.update_presence(details, state);
   }
 }

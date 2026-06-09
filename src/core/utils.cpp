@@ -13,7 +13,7 @@ FileBuffer& Editor::get_buffer(int id) {
         fb.scroll_offset = 0;
         fb.scroll_x = 0;
         fb.modified = false;
-        buffers.push_back(fb);
+        buffers.push_back(std::move(fb));
     }
     return buffers[id >= 0 && id < buffers.size() ? id : 0];
 }
@@ -61,19 +61,20 @@ std::string Editor::get_filename(const std::string& path) {
 
 void Editor::select_all() {
     auto& buf = get_buffer();
-    buf.selection.start = {0, 0};
-    buf.selection.end = {(int)buf.lines.back().length(), (int)buf.lines.size() - 1};
+  if (buf.line_count() == 0) return;
+  buf.selection.start = {0, 0};
+  buf.selection.end = {(int)buf.line(buf.line_count() - 1).length(), (int)buf.line_count() - 1};
     buf.selection.active = true;
     buf.cursor = buf.selection.end;
 }
 
 void Editor::select_current_line() {
     auto& buf = get_buffer();
-    if (buf.lines.empty()) {
-        return;
-    }
-    int y = std::max(0, std::min(buf.cursor.y, (int)buf.lines.size() - 1));
-    int line_len = (int)buf.lines[y].length();
+  if (buf.line_count() == 0) {
+    return;
+  }
+  int y = std::max(0, std::min(buf.cursor.y, (int)buf.line_count() - 1));
+  int line_len = (int)buf.line(y).length();
     buf.selection.start = {0, y};
     buf.selection.end = {line_len, y};
     buf.selection.active = true;

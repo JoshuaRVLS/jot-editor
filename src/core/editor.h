@@ -1,16 +1,24 @@
 #ifndef EDITOR_H
 #define EDITOR_H
 
+#include <atomic>
+
 #include "autoclose.h"
 #include "bracket.h"
 #include "config.h"
 #include "types.h"
+#include "discord_rpc.h"
+#include "event_loop.h"
 #include "imageviewer.h"
 #include "integrated_terminal.h"
 #include "lsp_client.h"
+#include "task_queue.h"
 #include "telescope.h"
 #include "terminal.h"
 #include "ui.h"
+#ifdef JOT_TREESITTER
+#include "tree_sitter_manager.h"
+#endif
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -102,15 +110,23 @@ private:
 
   SyntaxHighlighter highlighter;
   Config config;
+  DiscordRPC discord_rpc;
   ImageViewer image_viewer;
   std::vector<std::unique_ptr<IntegratedTerminal>> integrated_terminals;
   std::vector<std::unique_ptr<LSPClient>> lsp_clients;
   std::unordered_map<std::string, long long> lsp_pending_changes;
   int current_integrated_terminal;
   Terminal terminal;
-  UI *ui;
+  UI *ui = nullptr;
   Theme theme;
-  std::string current_theme_name; // tracks active color scheme
+  std::string current_theme_name;
+
+#ifdef JOT_TREESITTER
+  TreeSitterManager ts_manager_;
+#endif // tracks active color scheme
+
+  EventLoop event_loop_;
+  std::unique_ptr<TaskQueue> task_queue_;
 
   int status_height;
   int tab_height;
@@ -181,11 +197,15 @@ private:
   std::string git_root;
   std::string git_branch;
   int git_dirty_count;
+  std::atomic<bool> git_refresh_pending_{false};
   std::unordered_map<std::string, std::string> git_file_status;
   long long git_last_refresh_ms;
   bool auto_save_enabled;
   int auto_save_interval_ms;
   long long last_auto_save_ms;
+
+  std::string discord_rpc_last_details;
+  std::string discord_rpc_last_state;
 
   struct HomeMenuEntry {
     int action;
@@ -258,8 +278,12 @@ private:
   void render_input_prompt();
   void render_buffer_content(const SplitPane &pane, int buffer_id);
   void poll_lsp_clients();
+  void poll_discord_rpc(long long now_ms);
   LSPClient *find_lsp_client(const std::string &language,
                              const std::string &root_path);
+
+  void handle_terminal_event(const Event &ev);
+  void render_frame();
   LSPClient *ensure_lsp_for_file(const std::string &filepath);
   void notify_lsp_open(const std::string &filepath);
   void notify_lsp_change(const std::string &filepath);
@@ -278,6 +302,11 @@ private:
   const std::vector<std::pair<int, int>> &
   get_line_syntax_colors(FileBuffer &buf, int line_idx);
   void invalidate_syntax_cache(FileBuffer &buf);
+
+#ifdef JOT_TREESITTER
+  void reparse_tree(FileBuffer &buf);
+  void init_ts_for_buffer(FileBuffer &buf);
+#endif
 
   void handle_input(int ch, bool is_ctrl = false, bool is_shift = false,
                     bool is_alt = false, int original_ch = 0);
@@ -383,6 +412,8 @@ private:
   void clear_selection();
 
   void open_file(const std::string &path, bool preview = false);
+  void finish_open_file(FileBuffer fb, const std::string &path_to_open,
+                        bool preview);
   void open_recent_file(const std::string &query = "");
   void reopen_last_closed_buffer();
   void close_buffer_at(int index);

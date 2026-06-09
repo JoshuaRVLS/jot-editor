@@ -1,12 +1,19 @@
 #include "editor.h"
 #include <algorithm>
+#ifdef JOT_TREESITTER
+#include <tree_sitter/api.h>
+#endif
 
 namespace {
 constexpr std::size_t kMaxUndoHistory = 500;
 
 State capture_state(const FileBuffer &buf) {
   State s;
-  s.lines = buf.lines;
+  if (buf.is_lazy()) {
+    s.lines = buf.lazy_provider->copy_all_lines();
+  } else {
+    s.lines = buf.lines;
+  }
   s.cursor = buf.cursor;
   s.preferred_x = buf.preferred_x;
   s.selection = buf.selection;
@@ -46,13 +53,25 @@ void trim_stack(std::stack<State> &stack, std::size_t max_items) {
 } // namespace
 
 void Editor::save_state() {
+  search_results.clear();
+  search_result_index = -1;
+
   auto &buf = get_buffer();
+
+#ifdef JOT_TREESITTER
+  if (buf.ts_tree) {
+    ts_tree_delete(buf.ts_tree);
+    buf.ts_tree = nullptr;
+  }
+#endif
   if (buf.is_preview) {
     buf.is_preview = false;
     if (preview_buffer_index == current_buffer) {
       preview_buffer_index = -1;
     }
   }
+
+  buf.materialize();
 
   const State s = capture_state(buf);
   if (!buf.undo_stack.empty() && same_state(buf.undo_stack.top(), s)) {
@@ -77,7 +96,16 @@ void Editor::undo() {
 
   State prev = std::move(buf.undo_stack.top());
   buf.undo_stack.pop();
-  buf.lines = std::move(prev.lines);
+
+  std::vector<std::string> saved_lines = std::move(prev.lines);
+  if (saved_lines.empty())
+    saved_lines.push_back("");
+  if (buf.is_lazy()) {
+    buf.lazy_provider->set_all_lines(saved_lines);
+    buf.lines.clear();
+  } else {
+    buf.lines = std::move(saved_lines);
+  }
   buf.cursor = prev.cursor;
   buf.preferred_x = prev.preferred_x;
   buf.selection = prev.selection;
@@ -102,7 +130,16 @@ void Editor::redo() {
 
   State next = std::move(buf.redo_stack.top());
   buf.redo_stack.pop();
-  buf.lines = std::move(next.lines);
+
+  std::vector<std::string> saved_lines = std::move(next.lines);
+  if (saved_lines.empty())
+    saved_lines.push_back("");
+  if (buf.is_lazy()) {
+    buf.lazy_provider->set_all_lines(saved_lines);
+    buf.lines.clear();
+  } else {
+    buf.lines = std::move(saved_lines);
+  }
   buf.cursor = next.cursor;
   buf.preferred_x = next.preferred_x;
   buf.selection = next.selection;
