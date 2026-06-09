@@ -28,6 +28,7 @@ int remove_one_indent_level(std::string &line, int tab_size) {
 void Editor::duplicate_line() {
   save_state();
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   buf.lines.insert(buf.lines.begin() + buf.cursor.y + 1,
                    buf.lines[buf.cursor.y]);
   buf.cursor.y++;
@@ -40,6 +41,7 @@ void Editor::duplicate_line() {
 void Editor::insert_line_below() {
   save_state();
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   // Compute indent from current line
   std::string indent_str = "";
   if (auto_indent) {
@@ -61,6 +63,7 @@ void Editor::insert_line_below() {
 void Editor::insert_line_above() {
   save_state();
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   std::string indent_str = "";
   if (auto_indent) {
     int indent = EditorFeatures::get_indent_level(buf.lines[buf.cursor.y]);
@@ -77,6 +80,7 @@ void Editor::insert_line_above() {
 
 void Editor::indent_selection() {
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   if (!buf.selection.active)
     return;
 
@@ -106,6 +110,7 @@ void Editor::indent_selection() {
 
 void Editor::outdent_selection() {
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   if (!buf.selection.active)
     return;
 
@@ -147,6 +152,7 @@ void Editor::outdent_selection() {
 void Editor::toggle_comment() {
   save_state();
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   std::string ext = get_file_extension(buf.filepath);
   std::string comment = "//";
   if (ext == ".py")

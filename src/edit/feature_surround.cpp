@@ -24,6 +24,7 @@ bool Editor::surround_selection_or_word(const std::string &left,
   }
 
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   save_state();
 
   if (buf.selection.active) {
@@ -81,6 +82,7 @@ bool Editor::surround_selection_or_word(const std::string &left,
 
 bool Editor::unsurround_selection_or_cursor() {
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   if (buf.lines.empty()) {
     set_message("Nothing to unsurround");
     return false;

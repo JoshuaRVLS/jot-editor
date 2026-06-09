@@ -16,6 +16,7 @@ bool is_blank_line(const std::string &line) {
 
 void Editor::trim_blank_lines_in_selection() {
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   if (buf.lines.empty()) {
     set_message("Nothing to trim");
     return;

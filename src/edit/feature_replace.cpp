@@ -65,6 +65,7 @@ void Editor::replace_all_text(const std::string &needle,
   }
 
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   save_state();
   int total = 0;
   for (auto &line : buf.lines) {
@@ -105,6 +106,7 @@ void Editor::replace_all_regex(const std::string &pattern,
   }
 
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   save_state();
   int changed_lines = 0;
   for (auto &line : buf.lines) {

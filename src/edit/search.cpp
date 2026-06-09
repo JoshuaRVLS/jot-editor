@@ -45,8 +45,8 @@ void Editor::toggle_search() {
     if (start.x > end.x) {
       std::swap(start, end);
     }
-    if (start.y >= 0 && start.y < (int)buf.lines.size()) {
-      const std::string &line = buf.lines[start.y];
+    if (start.y >= 0 && start.y < (int)buf.line_count()) {
+      const std::string &line = buf.line(start.y);
       int from = std::clamp(start.x, 0, (int)line.size());
       int to = std::clamp(end.x, 0, (int)line.size());
       if (to > from) {
@@ -81,8 +81,8 @@ void Editor::perform_search() {
                                                 : to_lower_ascii(search_query);
   const size_t query_len = search_query.size();
 
-  for (size_t i = 0; i < buf.lines.size(); i++) {
-    const std::string &original_line = buf.lines[i];
+  for (size_t i = 0; i < buf.line_count(); i++) {
+    const std::string &original_line = buf.line(i);
     std::string line_cmp =
         search_case_sensitive ? original_line : to_lower_ascii(original_line);
 

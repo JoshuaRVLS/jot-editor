@@ -5,6 +5,7 @@
 
 void Editor::shuffle_selected_lines() {
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   if (!buf.selection.active) {
     set_message("Select lines first: :shufflelines");
     return;

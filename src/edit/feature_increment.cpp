@@ -5,6 +5,7 @@
 
 void Editor::increment_number_at_cursor(int delta) {
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.lines.size()) {
     set_message("No number at cursor");
     return;

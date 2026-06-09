@@ -4,12 +4,13 @@
 
 void Editor::show_buffer_stats() {
   auto &buf = get_buffer();
-  int lines = (int)buf.lines.size();
+  int lines = (int)buf.line_count();
   long long chars = 0;
   long long words = 0;
   bool in_word = false;
 
-  for (const auto &line : buf.lines) {
+  for (int i = 0; i < (int)buf.line_count(); i++) {
+    const std::string &line = buf.line(i);
     chars += (long long)line.size();
     for (char c : line) {
       if (std::isalnum((unsigned char)c) || c == '_') {
@@ -32,11 +33,11 @@ void Editor::show_buffer_stats() {
       std::swap(s, e);
     }
     long long selected_chars = 0;
-    for (int y = s.y; y <= e.y && y < (int)buf.lines.size(); y++) {
+    for (int y = s.y; y <= e.y && y < (int)buf.line_count(); y++) {
       if (y < 0) {
         continue;
       }
-      const std::string &line = buf.lines[y];
+      const std::string &line = buf.line(y);
       int from = (y == s.y) ? std::clamp(s.x, 0, (int)line.size()) : 0;
       int to = (y == e.y) ? std::clamp(e.x, 0, (int)line.size()) : (int)line.size();
       if (to < from) {

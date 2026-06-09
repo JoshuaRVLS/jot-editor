@@ -42,13 +42,14 @@ char apply_case_char(char c, bool upper) {
 
 void Editor::transform_selection_uppercase() {
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   save_state();
 
   bool changed = false;
   if (buf.selection.active) {
     Range r = normalized_selection_range(buf);
     for (int y = r.start_y; y <= r.end_y; y++) {
-      if (y < 0 || y >= (int)buf.lines.size()) {
+      if (y < 0 || y >= (int)buf.line_count()) {
         continue;
       }
       std::string &line = buf.lines[y];
@@ -71,7 +72,7 @@ void Editor::transform_selection_uppercase() {
         }
       }
     }
-  } else if (buf.cursor.y >= 0 && buf.cursor.y < (int)buf.lines.size()) {
+  } else if (buf.cursor.y >= 0 && buf.cursor.y < (int)buf.line_count()) {
     std::string &line = buf.lines[buf.cursor.y];
     if (!line.empty()) {
       int cursor = std::clamp(buf.cursor.x, 0, (int)line.size());
@@ -115,13 +116,14 @@ void Editor::transform_selection_uppercase() {
 
 void Editor::transform_selection_lowercase() {
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   save_state();
 
   bool changed = false;
   if (buf.selection.active) {
     Range r = normalized_selection_range(buf);
     for (int y = r.start_y; y <= r.end_y; y++) {
-      if (y < 0 || y >= (int)buf.lines.size()) {
+      if (y < 0 || y >= (int)buf.line_count()) {
         continue;
       }
       std::string &line = buf.lines[y];
@@ -144,7 +146,7 @@ void Editor::transform_selection_lowercase() {
         }
       }
     }
-  } else if (buf.cursor.y >= 0 && buf.cursor.y < (int)buf.lines.size()) {
+  } else if (buf.cursor.y >= 0 && buf.cursor.y < (int)buf.line_count()) {
     std::string &line = buf.lines[buf.cursor.y];
     if (!line.empty()) {
       int cursor = std::clamp(buf.cursor.x, 0, (int)line.size());
@@ -188,7 +190,7 @@ void Editor::transform_selection_lowercase() {
 
 void Editor::sort_selected_lines() {
   auto &buf = get_buffer();
-  if (buf.lines.empty()) {
+  if (buf.line_count() == 0) {
     set_message("Nothing to sort");
     return;
   }
@@ -203,8 +205,8 @@ void Editor::sort_selected_lines() {
     return;
   }
 
-  start_y = std::clamp(start_y, 0, (int)buf.lines.size() - 1);
-  end_y = std::clamp(end_y, 0, (int)buf.lines.size() - 1);
+  start_y = std::clamp(start_y, 0, (int)buf.line_count() - 1);
+  end_y = std::clamp(end_y, 0, (int)buf.line_count() - 1);
   if (start_y > end_y) {
     std::swap(start_y, end_y);
   }
@@ -214,6 +216,7 @@ void Editor::sort_selected_lines() {
   }
 
   save_state();
+  if (buf.is_lazy()) buf.materialize();
   std::stable_sort(buf.lines.begin() + start_y, buf.lines.begin() + end_y + 1,
                    [](const std::string &a, const std::string &b) {
                      std::string la = a;
@@ -231,7 +234,7 @@ void Editor::sort_selected_lines() {
 
   buf.modified = true;
   buf.cursor.y = start_y;
-  buf.cursor.x = std::clamp(buf.cursor.x, 0, (int)buf.lines[start_y].size());
+  buf.cursor.x = std::clamp(buf.cursor.x, 0, (int)buf.line(start_y).size());
   buf.preferred_x = buf.cursor.x;
   ensure_cursor_visible();
   needs_redraw = true;

@@ -15,6 +15,7 @@ std::string ltrim_copy(const std::string &s) {
 
 void Editor::join_lines_selection_or_current() {
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   if (buf.lines.size() <= 1) {
     set_message("Nothing to join");
     return;

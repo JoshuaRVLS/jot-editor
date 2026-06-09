@@ -5,6 +5,7 @@
 
 void Editor::sort_selected_lines_desc() {
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   if (!buf.selection.active) {
     set_message("Select lines first: :sortdesc");
     return;

@@ -5,7 +5,7 @@
 void Editor::copy() {
   auto &buf = get_buffer();
   if (!buf.selection.active) {
-    clipboard = buf.lines[buf.cursor.y];
+    clipboard = buf.line(buf.cursor.y);
     return;
   }
 
@@ -26,13 +26,13 @@ void Editor::copy() {
 
   for (int i = start_y; i <= end_y; i++) {
     if (i == start_y && i == end_y) {
-      clipboard += buf.lines[i].substr(start_x, end_x - start_x);
+      clipboard += buf.line(i).substr(start_x, end_x - start_x);
     } else if (i == start_y) {
-      clipboard += buf.lines[i].substr(start_x) + "\n";
+      clipboard += buf.line(i).substr(start_x) + "\n";
     } else if (i == end_y) {
-      clipboard += buf.lines[i].substr(0, end_x);
+      clipboard += buf.line(i).substr(0, end_x);
     } else {
-      clipboard += buf.lines[i] + "\n";
+      clipboard += buf.line(i) + "\n";
     }
   }
 }
@@ -47,6 +47,7 @@ void Editor::paste() {
     return;
   save_state();
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   if (buf.selection.active) {
     delete_selection();
   }
@@ -59,7 +60,7 @@ void Editor::paste() {
       buf.lines.insert(buf.lines.begin() + buf.cursor.y, line);
       buf.cursor.y++;
     } else {
-      buf.lines[buf.cursor.y].insert(buf.cursor.x, line);
+      buf.line_mut(buf.cursor.y).insert(buf.cursor.x, line);
       buf.cursor.x += line.length();
     }
     first = false;
@@ -76,6 +77,7 @@ void Editor::paste() {
 void Editor::move_line_up() {
   save_state();
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   int start_y = buf.cursor.y;
   int end_y = buf.cursor.y;
   if (buf.selection.active) {
@@ -108,6 +110,7 @@ void Editor::move_line_up() {
 void Editor::move_line_down() {
   save_state();
   auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   int start_y = buf.cursor.y;
   int end_y = buf.cursor.y;
   if (buf.selection.active) {
@@ -115,14 +118,14 @@ void Editor::move_line_down() {
     end_y = std::max(buf.selection.start.y, buf.selection.end.y);
   }
 
-  if (end_y >= (int)buf.lines.size() - 1)
+  if (end_y >= (int)buf.line_count() - 1)
     return;
 
   // Move the whole selected line block down by one row.
   std::rotate(buf.lines.begin() + start_y, buf.lines.begin() + end_y + 1,
               buf.lines.begin() + end_y + 2);
 
-  buf.cursor.y = std::min((int)buf.lines.size() - 1, buf.cursor.y + 1);
+  buf.cursor.y = std::min((int)buf.line_count() - 1, buf.cursor.y + 1);
   if (buf.selection.active) {
     buf.selection.start.y += 1;
     buf.selection.end.y += 1;
