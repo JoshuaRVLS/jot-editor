@@ -166,6 +166,7 @@ void UI::render() {
       // and try to continue from the previous cursor position.
       if (y > 0) {
         term->clear_to_end();
+        term->try_drain();
       }
       continue;
     }
@@ -265,16 +266,17 @@ void UI::render() {
     // the erase is bounded to the current row.
     term->clear_to_end();
 
-    // Intentionally no mid-frame flush here. Mid-frame flushes block
-    // the event loop while the kernel drains the PTY buffer, freezing
-    // input for hundreds of milliseconds on slow terminals. The
-    // single flush() at the end of the frame is enough; the kernel
-    // PTY buffer accepts the entire frame in one write, and `fflush`
-    // returns as soon as the data is queued in the kernel. The
-    // terminal drains the PTY asynchronously while the event loop
-    // is free to read more stdin input. If a particular terminal
-    // drops bytes from large writes, set JOT_RENDER_CHUNK_BYTES=<n>
-    // to re-enable chunked flushing for diagnosis.
+    // Non-blocking drain: once the buffer has grown past
+    // `render_chunk_bytes_` (default 4096), push as much of the
+    // accumulated output to the kernel as the PTY can accept right
+    // now. Unlike `fflush()`, this never blocks the event loop. The
+    // terminal receives data in chunks as the frame is built, which
+    // is defense against terminals that silently drop bytes from
+    // large writes (e.g. COSMIC terminal at fullscreen sizes). Any
+    // data the kernel cannot accept right now stays in the buffer
+    // and is retried by the next `try_drain()` or the final
+    // blocking `flush()` at frame end.
+    term->try_drain();
   }
 
   term->reset_color();

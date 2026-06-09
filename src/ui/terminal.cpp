@@ -1,4 +1,5 @@
 #include "terminal.h"
+#include <cerrno>
 #include <csignal>
 #include <cstring>
 #include <fcntl.h>
@@ -672,6 +673,65 @@ void Terminal::flush_if_buffer_exceeds() {
   }
   if (buffer.size() >= render_chunk_bytes_) {
     flush();
+  }
+}
+
+void Terminal::try_drain() {
+  if (render_chunk_bytes_ == 0) {
+    return;
+  }
+  if (buffer.size() < render_chunk_bytes_) {
+    return;
+  }
+  if (buffer.empty()) {
+    return;
+  }
+
+  // Write the capture file first (fwrite is buffered and fast; does
+  // not block on the PTY). This keeps the diagnostic capture in
+  // sync with what we actually attempt to write to the terminal.
+  if (render_capture_ && render_capture_raw_) {
+    fwrite(buffer.c_str(), 1, buffer.size(), render_capture_);
+  }
+
+  // Set O_NONBLOCK on stdout so write() returns immediately with
+  // a short count (or EAGAIN) if the kernel PTY buffer is full,
+  // instead of blocking while the terminal drains.
+  int flags = fcntl(STDOUT_FILENO, F_GETFL, 0);
+  if (flags == -1) {
+    return;
+  }
+  if (fcntl(STDOUT_FILENO, F_SETFL, flags | O_NONBLOCK) == -1) {
+    return;
+  }
+
+  size_t total = buffer.size();
+  size_t written = 0;
+  while (written < total) {
+    ssize_t n = ::write(STDOUT_FILENO, buffer.c_str() + written, total - written);
+    if (n > 0) {
+      written += (size_t)n;
+    } else if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      // PTY buffer is full; terminal hasn't drained yet. Keep the
+      // remaining data in the buffer for the next try_drain() or
+      // the final flush() at frame end.
+      break;
+    } else {
+      // Real error (EPIPE, EBADF, etc). Bail and let the final
+      // flush() decide what to do.
+      break;
+    }
+  }
+
+  // Restore the original non-blocking flag state.
+  fcntl(STDOUT_FILENO, F_SETFL, flags);
+
+  if (written > 0) {
+    if (written == total) {
+      buffer.clear();
+    } else {
+      buffer.erase(0, written);
+    }
   }
 }
 
