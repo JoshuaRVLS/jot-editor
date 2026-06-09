@@ -4,6 +4,8 @@
 #include <cctype>
 
 void Editor::handle_telescope(int ch) {
+  auto scan_tq = task_queue_.get();
+
   if (ch == 27) {
     telescope.close();
     waiting_for_space_f = false;
@@ -12,13 +14,14 @@ void Editor::handle_telescope(int ch) {
   }
 
   if (ch == 1011) {
-    // Left arrow: go parent when query is empty, else clear one char.
     std::string q = telescope.get_query();
     if (q.empty()) {
       telescope.go_parent();
+      telescope.update_results();
+      telescope.scan_async(scan_tq);
     } else {
       q.pop_back();
-      telescope.set_query(q);
+      telescope.set_query(q, scan_tq);
     }
     needs_redraw = true;
     return;
@@ -31,6 +34,8 @@ void Editor::handle_telescope(int ch) {
     }
     if (fs::is_directory(path)) {
       telescope.select();
+      telescope.update_results();
+      telescope.scan_async(scan_tq);
       needs_redraw = true;
       return;
     }
@@ -82,7 +87,7 @@ void Editor::handle_telescope(int ch) {
     std::string q = telescope.get_query();
     if (!q.empty()) {
       q.pop_back();
-      telescope.set_query(q);
+      telescope.set_query(q, scan_tq);
     } else {
       telescope.go_parent();
     }
@@ -91,7 +96,7 @@ void Editor::handle_telescope(int ch) {
   }
 
   if (ch == 21) { // Ctrl+U: clear query
-    telescope.set_query("");
+    telescope.set_query("", scan_tq);
     needs_redraw = true;
     return;
   }
@@ -99,7 +104,7 @@ void Editor::handle_telescope(int ch) {
   if (ch >= 32 && ch < 127) {
     std::string q = telescope.get_query();
     q += (char)ch;
-    telescope.set_query(q);
+    telescope.set_query(q, scan_tq);
     needs_redraw = true;
     return;
   }
@@ -109,12 +114,13 @@ void Editor::toggle_minimap() { show_minimap = !show_minimap; }
 
 void Editor::jump_to_matching_bracket() {
   auto &buf = get_buffer();
-  if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.lines.size())
+  if (buf.is_lazy()) buf.materialize();
+  if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.line_count())
     return;
-  if (buf.cursor.x < 0 || buf.cursor.x >= (int)buf.lines[buf.cursor.y].length())
+  if (buf.cursor.x < 0 || buf.cursor.x >= (int)buf.line(buf.cursor.y).length())
     return;
 
-  char ch = buf.lines[buf.cursor.y][buf.cursor.x];
+  char ch = buf.char_at(buf.cursor.y, buf.cursor.x);
   int match = -1;
 
   if (ch == '(')
@@ -148,7 +154,7 @@ void Editor::jump_to_matching_bracket() {
 
 void Editor::select_current_function() {
   auto &buf = get_buffer();
-  if (buf.lines.empty()) {
+  if (buf.line_count() == 0) {
     return;
   }
 
@@ -157,7 +163,7 @@ void Editor::select_current_function() {
   int depth = 0;
 
   for (int y = buf.cursor.y; y >= 0; --y) {
-    const std::string &line = buf.lines[y];
+    const std::string &line = buf.line(y);
     if (line.empty()) {
       continue;
     }
@@ -189,8 +195,9 @@ void Editor::select_current_function() {
     return;
   }
 
+  if (buf.is_lazy()) buf.materialize();
   int match = EditorFeatures::find_matching_bracket(buf.lines, open_line,
-                                                    open_col, '{', '}');
+                                                     open_col, '{', '}');
   if (match < 0) {
     set_message("Function end not found");
     needs_redraw = true;

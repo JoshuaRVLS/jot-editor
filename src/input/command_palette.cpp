@@ -163,7 +163,7 @@ void Editor::refresh_command_palette() {
     auto &buf = get_buffer();
     int cur_line = std::max(1, buf.cursor.y + 1);
     int cur_col = std::max(1, buf.cursor.x + 1);
-    int last_line = std::max(1, (int)buf.lines.size());
+    int last_line = std::max(1, (int)buf.line_count());
     std::vector<std::string> opts = {
         std::to_string(cur_line),
         std::to_string(cur_line) + ":" + std::to_string(cur_col),
@@ -451,11 +451,11 @@ void Editor::handle_command_palette(int ch) {
 
     auto goto_line_col = [&](int line_1based, int col_1based) {
       auto &buf = get_buffer();
-      if (buf.lines.empty()) {
+      if (buf.line_count() == 0) {
         return;
       }
-      buf.cursor.y = std::clamp(line_1based - 1, 0, (int)buf.lines.size() - 1);
-      int line_len = (int)buf.lines[buf.cursor.y].length();
+      buf.cursor.y = std::clamp(line_1based - 1, 0, (int)buf.line_count() - 1);
+      int line_len = (int)buf.line(buf.cursor.y).length();
       buf.cursor.x = std::clamp(col_1based - 1, 0, line_len);
       clear_selection();
       ensure_cursor_visible();

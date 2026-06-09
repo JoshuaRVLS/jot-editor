@@ -120,7 +120,7 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     } else if (first == 'c') {
       if (ch == 'c') {
         save_state();
-        buf.lines[buf.cursor.y] = "";
+        buf.line_mut(buf.cursor.y) = "";
         buf.cursor.x = 0;
         buf.modified = true;
         enter_insert_mode();
@@ -130,9 +130,9 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     } else if (first == 'r') {
       if (ch >= 32 && ch < 127) {
         save_state();
-        int line_len = (int)buf.lines[buf.cursor.y].length();
+        int line_len = (int)buf.line(buf.cursor.y).length();
         if (buf.cursor.x < line_len) {
-          buf.lines[buf.cursor.y][buf.cursor.x] = (char)ch;
+          buf.line_mut(buf.cursor.y)[buf.cursor.x] = (char)ch;
           buf.modified = true;
         }
         needs_redraw = true;
@@ -150,7 +150,7 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     enter_insert_mode();
     return;
   case 'a':
-    if (buf.cursor.x < (int)buf.lines[buf.cursor.y].length())
+    if (buf.cursor.x < (int)buf.line(buf.cursor.y).length())
       buf.cursor.x++;
     enter_insert_mode();
     return;
@@ -240,7 +240,7 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     if (buf.cursor.x > 0) {
       save_state();
       buf.cursor.x--;
-      buf.lines[buf.cursor.y].erase(buf.cursor.x, 1);
+      buf.line_mut(buf.cursor.y).erase(buf.cursor.x, 1);
       buf.modified = true;
       clamp_cursor(get_pane().buffer_id);
       needs_redraw = true;
@@ -252,8 +252,8 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     return;
   case 'D':
     save_state();
-    if (buf.cursor.x < (int)buf.lines[buf.cursor.y].length()) {
-      buf.lines[buf.cursor.y].erase(buf.cursor.x);
+    if (buf.cursor.x < (int)buf.line(buf.cursor.y).length()) {
+      buf.line_mut(buf.cursor.y).erase(buf.cursor.x);
       buf.modified = true;
       clamp_cursor(get_pane().buffer_id);
       needs_redraw = true;
@@ -282,9 +282,10 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     pending_key = 'r';
     return;
   case 'J':
-    if (buf.cursor.y < (int)buf.lines.size() - 1) {
+    if (buf.cursor.y < (int)buf.line_count() - 1) {
       save_state();
-      buf.lines[buf.cursor.y] += " " + buf.lines[buf.cursor.y + 1];
+      if (buf.is_lazy()) buf.materialize();
+      buf.line_mut(buf.cursor.y) += " " + buf.line(buf.cursor.y + 1);
       buf.lines.erase(buf.lines.begin() + buf.cursor.y + 1);
       buf.modified = true;
       needs_redraw = true;
@@ -292,14 +293,14 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     return;
   case '>': {
     save_state();
-    buf.lines[buf.cursor.y].insert(0, "    ");
+    buf.line_mut(buf.cursor.y).insert(0, "    ");
     buf.modified = true;
     needs_redraw = true;
     return;
   }
   case '<': {
     save_state();
-    auto &line = buf.lines[buf.cursor.y];
+    auto &line = buf.line_mut(buf.cursor.y);
     int count = 0;
     while (count < 4 && count < (int)line.size() && line[count] == ' ')
       count++;

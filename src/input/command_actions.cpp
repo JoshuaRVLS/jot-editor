@@ -5,8 +5,8 @@
 void Editor::format_document() {
   auto &buf = get_buffer();
   save_state();
-  for (auto &line : buf.lines) {
-    EditorFeatures::format_line(line, tab_size);
+  for (size_t i = 0; i < buf.line_count(); i++) {
+    EditorFeatures::format_line(buf.line_mut(i), tab_size);
   }
   buf.modified = true;
   needs_redraw = true;
@@ -20,7 +20,8 @@ void Editor::trim_trailing_whitespace() {
   save_state();
 
   int changed = 0;
-  for (auto &line : buf.lines) {
+  for (size_t i = 0; i < buf.line_count(); i++) {
+    auto &line = buf.line_mut(i);
     std::string trimmed = EditorFeatures::trim_right(line);
     if (trimmed != line) {
       line = trimmed;

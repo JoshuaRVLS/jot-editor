@@ -9,7 +9,7 @@ static void update_visual_selection(FileBuffer &buf, const Cursor &visual_start,
     if (sy > ey)
       std::swap(sy, ey);
     buf.selection.start = {0, sy};
-    buf.selection.end = {(int)buf.lines[ey].length(), ey};
+    buf.selection.end = {(int)buf.line(ey).length(), ey};
   } else {
     buf.selection.start = visual_start;
     buf.selection.end = buf.cursor;
@@ -148,8 +148,8 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     Cursor s = buf.selection.start, e = buf.selection.end;
     if (s.y > e.y)
       std::swap(s, e);
-    for (int ly = s.y; ly <= e.y && ly < (int)buf.lines.size(); ly++)
-      buf.lines[ly].insert(0, "    ");
+    for (int ly = s.y; ly <= e.y && ly < (int)buf.line_count(); ly++)
+      buf.line_mut(ly).insert(0, "    ");
     buf.modified = true;
     update_visual_selection(buf, visual_start, visual_line_mode);
     needs_redraw = true;
@@ -160,8 +160,8 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     Cursor s = buf.selection.start, e = buf.selection.end;
     if (s.y > e.y)
       std::swap(s, e);
-    for (int ly = s.y; ly <= e.y && ly < (int)buf.lines.size(); ly++) {
-      auto &line = buf.lines[ly];
+    for (int ly = s.y; ly <= e.y && ly < (int)buf.line_count(); ly++) {
+      auto &line = buf.line_mut(ly);
       int count = 0;
       while (count < 4 && count < (int)line.size() && line[count] == ' ')
         count++;
@@ -178,8 +178,8 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     Cursor s = buf.selection.start, e = buf.selection.end;
     if (s.y > e.y || (s.y == e.y && s.x > e.x))
       std::swap(s, e);
-    for (int ly = s.y; ly <= e.y && ly < (int)buf.lines.size(); ly++) {
-      auto &line = buf.lines[ly];
+    for (int ly = s.y; ly <= e.y && ly < (int)buf.line_count(); ly++) {
+      auto &line = buf.line_mut(ly);
       int x0 = (ly == s.y) ? s.x : 0;
       int x1 = (ly == e.y) ? e.x : (int)line.length();
       for (int xi = x0; xi < x1 && xi < (int)line.size(); xi++) {

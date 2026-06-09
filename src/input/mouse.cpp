@@ -181,10 +181,10 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
   }
   if (is_scroll_down) {
     int wheel_step = std::max(1, std::min(5, std::max(1, pane.h - tab_height) / 6));
-    if (buf.scroll_offset < (int)buf.lines.size() - pane.h + 1) {
+    if (buf.scroll_offset < (int)buf.line_count() - pane.h + 1) {
       buf.scroll_offset += wheel_step;
-      if (buf.scroll_offset > (int)buf.lines.size() - 1)
-        buf.scroll_offset = (int)buf.lines.size() - 1;
+      if (buf.scroll_offset > (int)buf.line_count() - 1)
+        buf.scroll_offset = (int)buf.line_count() - 1;
       needs_redraw = true;
     }
     return;
@@ -357,7 +357,7 @@ void Editor::handle_mouse(void *event_ptr) {
       if (event->y >= pane.y + tab_height && event->y < pane.y + pane.h) {
         int rel_y = event->y - (pane.y + tab_height);
         int h = pane.h - tab_height;
-        int total_lines = buf.lines.size();
+        int total_lines = buf.line_count();
         if (total_lines > 0) {
           float ratio = (float)h / total_lines;
           if (ratio > 1.0f)
@@ -366,8 +366,8 @@ void Editor::handle_mouse(void *event_ptr) {
           buf.scroll_offset = target_line;
           if (buf.scroll_offset < 0)
             buf.scroll_offset = 0;
-          if (buf.scroll_offset > (int)buf.lines.size() - 1)
-            buf.scroll_offset = (int)buf.lines.size() - 1;
+          if (buf.scroll_offset > (int)buf.line_count() - 1)
+            buf.scroll_offset = (int)buf.line_count() - 1;
           needs_redraw = true;
           return;
         }
@@ -403,7 +403,7 @@ void Editor::handle_mouse(void *event_ptr) {
     rel_visual_x = 0;
   int visible_rows = std::max(1, pane.h - tab_height);
   int max_scroll_offset =
-      std::max(0, (int)buf.lines.size() - visible_rows);
+      std::max(0, (int)buf.line_count() - visible_rows);
 
   if (bstate == 32 && mouse_selecting) {
     if (raw_rel_y < 0) {
@@ -422,11 +422,11 @@ void Editor::handle_mouse(void *event_ptr) {
   int click_y = rel_y + buf.scroll_offset;
   if (click_y < 0)
     click_y = 0;
-  if (click_y >= (int)buf.lines.size())
-    click_y = buf.lines.size() - 1;
+  if (click_y >= (int)buf.line_count())
+    click_y = buf.line_count() - 1;
   if (click_y < 0)
     return;
-  const std::string &clicked_line = buf.lines[click_y];
+  const std::string &clicked_line = buf.line(click_y);
   int line_len = clicked_line.length();
   int start_visual = logical_to_visual_col(clicked_line, buf.scroll_x, tab_size);
   int click_visual = start_visual + rel_visual_x;
@@ -438,7 +438,7 @@ void Editor::handle_mouse(void *event_ptr) {
                                 const Cursor &current_pos) {
     Cursor current_start = current_pos;
     Cursor current_end = current_pos;
-    const std::string &line = buf.lines[current_pos.y];
+    const std::string &line = buf.line(current_pos.y);
     if (!line.empty()) {
       int pivot = std::min(current_pos.x, (int)line.length() - 1);
       if (pivot >= 0) {
@@ -476,7 +476,7 @@ void Editor::handle_mouse(void *event_ptr) {
                                 const Cursor &anchor_end,
                                 const Cursor &current_pos) {
     Cursor current_start = {0, current_pos.y};
-    Cursor current_end = {(int)buf.lines[current_pos.y].length(), current_pos.y};
+    Cursor current_end = {(int)buf.line(current_pos.y).length(), current_pos.y};
 
     if (compare_cursor_pos(current_start, anchor_start) < 0) {
       buf.selection.start = current_start;
@@ -494,9 +494,9 @@ void Editor::handle_mouse(void *event_ptr) {
 
   auto find_word_span_at_or_near = [&](int line_y, int x, int &start,
                                        int &end) -> bool {
-    if (line_y < 0 || line_y >= (int)buf.lines.size())
+    if (line_y < 0 || line_y >= (int)buf.line_count())
       return false;
-    const std::string &line = buf.lines[line_y];
+    const std::string &line = buf.line(line_y);
     if (line.empty())
       return false;
 
@@ -541,9 +541,9 @@ void Editor::handle_mouse(void *event_ptr) {
 
   auto find_matching_bracket = [&](int line_y, int x, Cursor &open_pos,
                                    Cursor &close_pos) -> bool {
-    if (line_y < 0 || line_y >= (int)buf.lines.size())
+    if (line_y < 0 || line_y >= (int)buf.line_count())
       return false;
-    const std::string &line = buf.lines[line_y];
+    const std::string &line = buf.line(line_y);
     if (x < 0 || x >= (int)line.size())
       return false;
 
@@ -554,10 +554,10 @@ void Editor::handle_mouse(void *event_ptr) {
 
     if (is_open) {
       int depth = 1;
-      for (int y = line_y; y < (int)buf.lines.size(); y++) {
+      for (int y = line_y; y < (int)buf.line_count(); y++) {
         int start_x = (y == line_y) ? x + 1 : 0;
-        for (int cx = start_x; cx < (int)buf.lines[y].size(); cx++) {
-          char ch = buf.lines[y][cx];
+        for (int cx = start_x; cx < (int)buf.line(y).size(); cx++) {
+          char ch = buf.line(y)[cx];
           if (ch == open) {
             depth++;
           } else if (ch == close) {
@@ -573,9 +573,9 @@ void Editor::handle_mouse(void *event_ptr) {
     } else {
       int depth = 1;
       for (int y = line_y; y >= 0; y--) {
-        int start_x = (y == line_y) ? x - 1 : (int)buf.lines[y].size() - 1;
+        int start_x = (y == line_y) ? x - 1 : (int)buf.line(y).size() - 1;
         for (int cx = start_x; cx >= 0; cx--) {
-          char ch = buf.lines[y][cx];
+          char ch = buf.line(y)[cx];
           if (ch == close) {
             depth++;
           } else if (ch == open) {
@@ -623,7 +623,7 @@ void Editor::handle_mouse(void *event_ptr) {
       set_line_selection(mouse_start, mouse_anchor_end, {click_x, click_y});
       needs_redraw = true;
     } else if (last_left_click_count == 2) {
-      const std::string &line = buf.lines[click_y];
+      const std::string &line = buf.line(click_y);
       if (line.empty()) {
         mouse_selecting = true;
         mouse_selection_mode = MOUSE_SELECT_LINE;
