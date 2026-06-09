@@ -1,6 +1,8 @@
 #ifndef TELESCOPE_H
 #define TELESCOPE_H
 
+#include <atomic>
+#include <functional>
 #include <string>
 #include <vector>
 #include <filesystem>
@@ -14,6 +16,8 @@ struct FileMatch {
     bool is_directory;
 };
 
+class TaskQueue;
+
 class Telescope {
 public:
     Telescope();
@@ -22,8 +26,12 @@ public:
     void close();
     bool is_active() const { return active; }
     
-    void set_query(const std::string& q);
+    void set_query(const std::string& q, TaskQueue *tq = nullptr);
     void update_results();
+
+    void scan_async(TaskQueue *tq);
+    void cancel_scan();
+    void apply_results(std::vector<FileMatch> new_results);
     
     void move_up();
     void move_down();
@@ -37,6 +45,7 @@ public:
     int get_selected_index() const { return selected_index; }
     std::string get_query() const { return query; }
     std::string get_root_dir() const { return root_dir.string(); }
+    int current_scan_id() const { return scan_id_.load(); }
     
     static bool fuzzy_match(const std::string& text, const std::string& pattern);
     static int fuzzy_score(const std::string& text, const std::string& pattern);
@@ -47,6 +56,8 @@ private:
     std::vector<FileMatch> results;
     int selected_index;
     fs::path root_dir;
+
+    std::atomic<int> scan_id_{0};
     
     void scan_directory(const fs::path& dir, int depth = 0);
     std::vector<std::string> load_preview(const std::string& path) const;

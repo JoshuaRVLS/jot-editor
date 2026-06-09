@@ -676,8 +676,14 @@ void LSPClient::stop() {
   if (!running) {
     return;
   }
+  running = false;
 
-  send_message("{\"jsonrpc\":\"2.0\",\"method\":\"exit\",\"params\":{}}");
+  if (stdin_fd >= 0) {
+    std::string msg =
+        "Content-Length: 51\r\n\r\n"
+        "{\"jsonrpc\":\"2.0\",\"method\":\"exit\",\"params\":{}}";
+    write_all_fd(stdin_fd, msg);
+  }
 
   if (child_pid > 0) {
     kill(child_pid, SIGTERM);

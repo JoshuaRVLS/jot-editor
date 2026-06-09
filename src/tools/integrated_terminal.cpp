@@ -31,6 +31,7 @@ void write_all(int fd, const char *data, size_t size) {
   while (sent < size) {
     ssize_t n = write(fd, data + sent, size - sent);
     if (n <= 0) {
+      if (errno == EAGAIN || errno == EINTR) continue;
       break;
     }
     sent += (size_t)n;
