@@ -144,8 +144,8 @@ std::string session_file_for_root(const std::string &root) {
 }
 
 bool is_empty_scratch_buffer(const FileBuffer &buf) {
-  return buf.filepath.empty() && !buf.modified && buf.lines.size() == 1 &&
-         buf.lines[0].empty();
+  return buf.filepath.empty() && !buf.modified && buf.line_count() == 1 &&
+         buf.line(0).empty();
 }
 } // namespace
 
@@ -200,7 +200,7 @@ void Editor::open_workspace(const std::string &path, bool restore_session) {
   fb.scroll_x = 0;
   fb.modified = false;
   fb.is_preview = false;
-  buffers.push_back(fb);
+  buffers.push_back(std::move(fb));
   current_buffer = 0;
   tab_scroll_index = 0;
   preview_buffer_index = -1;
@@ -472,9 +472,9 @@ bool Editor::restore_workspace_session() {
 
     if (current_buffer >= 0 && current_buffer < (int)buffers.size()) {
       FileBuffer &buf = buffers[current_buffer];
-      buf.cursor.y = std::clamp(entry.cy, 0, std::max(0, (int)buf.lines.size() - 1));
+      buf.cursor.y = std::clamp(entry.cy, 0, std::max(0, (int)buf.line_count() - 1));
       buf.cursor.x =
-          std::clamp(entry.cx, 0, (int)buf.lines[buf.cursor.y].size());
+          std::clamp(entry.cx, 0, (int)buf.line(buf.cursor.y).size());
       buf.preferred_x = buf.cursor.x;
       buf.scroll_offset = std::max(0, entry.scroll);
       buf.scroll_x = std::max(0, entry.scroll_x);

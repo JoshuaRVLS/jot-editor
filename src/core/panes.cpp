@@ -9,7 +9,7 @@ int Editor::create_pane(int x, int y, int w, int h, int buffer_id) {
   pane.y = y;
   pane.w = w;
   pane.h = h;
-  pane.buffer_id = buffer_id == -1 ? (int)buffers.size() : buffer_id;
+  pane.buffer_id = buffer_id == -1 ? std::max(0, (int)buffers.size() - 1) : buffer_id;
   pane.active = panes.empty();
   if (pane.buffer_id >= 0) {
     pane.tab_buffer_ids.push_back(pane.buffer_id);
@@ -177,7 +177,7 @@ void Editor::split_pane_direction(int dx, int dy) {
     fb.scroll_x = 0;
     fb.modified = false;
     fb.is_preview = false;
-    buffers.push_back(fb);
+    buffers.push_back(std::move(fb));
     new_buffer = (int)buffers.size() - 1;
   }
 

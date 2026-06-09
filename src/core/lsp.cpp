@@ -166,10 +166,10 @@ bool is_identifier_char(char c) {
 }
 
 std::string current_completion_prefix(const FileBuffer &buf) {
-  if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.lines.size()) {
+  if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.line_count()) {
     return "";
   }
-  const std::string &line = buf.lines[buf.cursor.y];
+  const std::string &line = buf.line(buf.cursor.y);
   int cursor = std::clamp(buf.cursor.x, 0, (int)line.size());
   int start = cursor;
   while (start > 0 && is_identifier_char(line[start - 1])) {
@@ -505,6 +505,9 @@ LSPClient *Editor::ensure_lsp_for_file(const std::string &filepath) {
 }
 
 std::string Editor::get_buffer_text(const FileBuffer &buf) const {
+  if (buf.is_lazy()) {
+    return "";
+  }
   size_t total_size = buf.lines.empty() ? 0 : buf.lines.size() - 1;
   for (const auto &line : buf.lines) {
     total_size += line.size();
@@ -512,11 +515,11 @@ std::string Editor::get_buffer_text(const FileBuffer &buf) const {
 
   std::string text;
   text.reserve(total_size);
-  for (size_t i = 0; i < buf.lines.size(); i++) {
+  for (size_t i = 0; i < buf.line_count(); i++) {
     if (i > 0) {
       text.push_back('\n');
     }
-    text.append(buf.lines[i]);
+    text.append(buf.line(i));
   }
   return text;
 }
@@ -533,6 +536,8 @@ void Editor::notify_lsp_open(const std::string &filepath) {
 
   for (const auto &buf : buffers) {
     if (buf.filepath == filepath) {
+      if (buf.is_lazy())
+        return;
       client->did_open(filepath, language_id_for(client->get_language(), filepath),
                        get_buffer_text(buf));
       break;
@@ -738,6 +743,9 @@ void Editor::hide_lsp_completion() {
 
 void Editor::request_lsp_completion(bool manual, char trigger_character) {
   auto &buf = get_buffer();
+  if (buf.is_lazy()) {
+    return;
+  }
   if (buf.filepath.empty()) {
     if (manual) {
       set_message("Save file first to use LSP completion");
@@ -753,8 +761,8 @@ void Editor::request_lsp_completion(bool manual, char trigger_character) {
     }
 
     int prefix_len = 0;
-    int i = std::min(buf.cursor.x, (int)buf.lines[buf.cursor.y].size());
-    while (i > 0 && is_identifier_char(buf.lines[buf.cursor.y][i - 1])) {
+    int i = std::min(buf.cursor.x, (int)buf.line(buf.cursor.y).size());
+    while (i > 0 && is_identifier_char(buf.line(buf.cursor.y)[i - 1])) {
       prefix_len++;
       i--;
     }
@@ -802,6 +810,9 @@ bool Editor::apply_selected_lsp_completion() {
   }
 
   auto &buf = get_buffer();
+  if (buf.is_lazy()) {
+    buf.materialize();
+  }
   if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.lines.size()) {
     hide_lsp_completion();
     return false;
@@ -825,7 +836,7 @@ bool Editor::apply_selected_lsp_completion() {
 
   save_state();
 
-  std::string &line = buf.lines[buf.cursor.y];
+  std::string &line = buf.line_mut(buf.cursor.y);
   int cursor = std::clamp(buf.cursor.x, 0, (int)line.size());
   int start = cursor;
   int end = cursor;

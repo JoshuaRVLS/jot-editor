@@ -79,6 +79,7 @@ void HostCoreAPI::set_buffer_content(const std::string &text) {
 
   editor.save_state();
   FileBuffer &buf = editor.get_buffer();
+  if (buf.is_lazy()) buf.materialize();
   buf.lines.clear();
 
   size_t start = 0;
@@ -142,8 +143,8 @@ std::string HostCoreAPI::selected_text() const {
   }
 
   std::string out;
-  for (int y = start.y; y <= end.y && y < (int)buf.lines.size(); y++) {
-    const std::string &line = buf.lines[(size_t)y];
+  for (int y = start.y; y <= end.y && y < (int)buf.line_count(); y++) {
+    const std::string &line = buf.line(y);
     int from = (y == start.y) ? std::max(0, start.x) : 0;
     int to =
         (y == end.y) ? std::min((int)line.size(), end.x) : (int)line.size();

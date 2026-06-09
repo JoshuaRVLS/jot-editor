@@ -1,5 +1,9 @@
 #include "editor.h"
+#include "lazy_line_provider.h"
 #include "python_api.h"
+#ifdef JOT_TREESITTER
+#include <tree_sitter/api.h>
+#endif
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -176,27 +180,30 @@ bool is_supported_image_path(const std::string &path) {
 }
 
 void normalize_buffer_after_external_edit(FileBuffer &buf) {
-  if (buf.lines.empty()) {
+  if (buf.is_lazy())
+    return;
+
+  if (buf.line_count() == 0) {
     buf.lines.push_back("");
   }
 
-  buf.cursor.y = std::clamp(buf.cursor.y, 0, std::max(0, (int)buf.lines.size() - 1));
-  buf.cursor.x = std::clamp(buf.cursor.x, 0, (int)buf.lines[buf.cursor.y].size());
+  buf.cursor.y = std::clamp(buf.cursor.y, 0, std::max(0, (int)buf.line_count() - 1));
+  buf.cursor.x = std::clamp(buf.cursor.x, 0, (int)buf.line(buf.cursor.y).size());
   buf.preferred_x = buf.cursor.x;
 
   buf.scroll_offset =
-      std::clamp(buf.scroll_offset, 0, std::max(0, (int)buf.lines.size() - 1));
+      std::clamp(buf.scroll_offset, 0, std::max(0, (int)buf.line_count() - 1));
   buf.scroll_x = std::max(0, buf.scroll_x);
 
   if (buf.selection.active) {
     buf.selection.start.y =
-        std::clamp(buf.selection.start.y, 0, std::max(0, (int)buf.lines.size() - 1));
+        std::clamp(buf.selection.start.y, 0, std::max(0, (int)buf.line_count() - 1));
     buf.selection.end.y =
-        std::clamp(buf.selection.end.y, 0, std::max(0, (int)buf.lines.size() - 1));
+        std::clamp(buf.selection.end.y, 0, std::max(0, (int)buf.line_count() - 1));
     buf.selection.start.x =
-        std::clamp(buf.selection.start.x, 0, (int)buf.lines[buf.selection.start.y].size());
+        std::clamp(buf.selection.start.x, 0, (int)buf.line(buf.selection.start.y).size());
     buf.selection.end.x =
-        std::clamp(buf.selection.end.x, 0, (int)buf.lines[buf.selection.end.y].size());
+        std::clamp(buf.selection.end.x, 0, (int)buf.line(buf.selection.end.y).size());
   }
 }
 } // namespace
@@ -353,22 +360,61 @@ void Editor::open_file(const std::string &path, bool preview) {
   fb.modified = false;
   fb.is_preview = preview;
 
-  std::ifstream file(path_to_open);
-  if (file.is_open()) {
-    std::string line;
-    while (std::getline(file, line)) {
-      if (!line.empty() && line.back() == '\r') {
-        line.pop_back();
-      }
-      fb.lines.push_back(line);
+  {
+    std::error_code ec;
+    std::uintmax_t file_size = fs::file_size(path_to_open, ec);
+    if (!ec && file_size > kFileSizeLazyThreshold) {
+      fb.lazy_provider = LazyLineProvider::open(path_to_open);
+      if (!fb.lazy_provider)
+        set_message("Failed to open large file with lazy loading");
     }
-    file.close();
   }
 
-  if (fb.lines.empty())
-    fb.lines.push_back("");
+  if (!fb.lazy_provider) {
+    if (task_queue_) {
+      auto shared_fb = std::make_shared<FileBuffer>(std::move(fb));
+      task_queue_->submit(
+          [path_to_open, shared_fb]() {
+            std::ifstream file(path_to_open);
+            if (file.is_open()) {
+              std::string line;
+              while (std::getline(file, line)) {
+                if (!line.empty() && line.back() == '\r')
+                  line.pop_back();
+                shared_fb->lines.push_back(line);
+              }
+            }
+            if (shared_fb->lines.empty())
+              shared_fb->lines.push_back("");
+          },
+          [this, path_to_open, preview, shared_fb]() mutable {
+            finish_open_file(std::move(*shared_fb), path_to_open, preview);
+          });
+      return;
+    }
 
-  if (config.get_bool("auto_detect_indent", false)) {
+    std::ifstream file(path_to_open);
+    if (file.is_open()) {
+      std::string line;
+      while (std::getline(file, line)) {
+        if (!line.empty() && line.back() == '\r') {
+          line.pop_back();
+        }
+        fb.lines.push_back(line);
+      }
+      file.close();
+    }
+    if (fb.lines.empty())
+      fb.lines.push_back("");
+  }
+
+  finish_open_file(std::move(fb), path_to_open, preview);
+}
+
+void Editor::finish_open_file(FileBuffer fb, const std::string &path_to_open,
+                              bool preview) {
+
+  if (!fb.is_lazy() && config.get_bool("auto_detect_indent", false)) {
     int detected_tab_size = detect_indent_width(fb.lines);
     if (detected_tab_size != tab_size && detected_tab_size >= 1 &&
         detected_tab_size <= 8) {
@@ -377,7 +423,7 @@ void Editor::open_file(const std::string &path, bool preview) {
     }
   }
 
-  buffers.push_back(fb);
+  buffers.push_back(std::move(fb));
   current_buffer = buffers.size() - 1;
   auto &pane = get_pane();
   pane.buffer_id = current_buffer;
@@ -391,6 +437,11 @@ void Editor::open_file(const std::string &path, bool preview) {
   track_recent_file(path_to_open);
 
   highlighter.set_language(get_file_extension(path_to_open));
+
+#ifdef JOT_TREESITTER
+  init_ts_for_buffer(buffers.back());
+#endif
+
   if (python_api)
     python_api->on_buffer_open(path_to_open);
   notify_lsp_open(path_to_open);
@@ -411,7 +462,7 @@ void Editor::create_new_buffer() {
   fb.scroll_x = 0;
   fb.modified = false;
   fb.is_preview = false;
-  buffers.push_back(fb);
+  buffers.push_back(std::move(fb));
   current_buffer = buffers.size() - 1;
   auto &pane = get_pane();
   pane.buffer_id = current_buffer;
@@ -441,6 +492,18 @@ bool Editor::save_buffer_at(int index, bool announce) {
     return false;
   }
 
+  if (buf.is_lazy() && !buf.modified) {
+    if (announce) {
+      message = "Saved: " + get_filename(buf.filepath);
+      needs_redraw = true;
+    }
+    return true;
+  }
+
+  if (buf.is_lazy()) {
+    buf.materialize();
+  }
+
   std::ofstream file(buf.filepath);
   if (!file.is_open()) {
     if (announce) {
@@ -461,43 +524,90 @@ bool Editor::save_buffer_at(int index, bool announce) {
   }
   file.close();
 
+  auto run_formatter = [this, &buf](const std::string &runner) -> bool {
+    std::string cmd = runner + " --write " + shell_quote(buf.filepath) +
+                      " >/dev/null 2>&1";
+    if (std::system(cmd.c_str()) != 0)
+      return false;
+    std::vector<std::string> refreshed_lines;
+    if (!read_file_lines(buf.filepath, refreshed_lines))
+      return false;
+    buf.lines.swap(refreshed_lines);
+    normalize_buffer_after_external_edit(buf);
+    invalidate_syntax_cache(buf);
+    return true;
+  };
+
+  std::string prettier_runner;
+  bool do_prettier =
+      config.get_bool("prettier_on_save", true) &&
+      supports_prettier_on_save(buf.filepath) &&
+      !(prettier_runner = detect_prettier_runner()).empty();
+
+  std::string clang_runner;
+  bool do_clang =
+      config.get_bool("clang_format_on_save", true) &&
+      supports_clang_format_on_save(buf.filepath) &&
+      !(clang_runner = detect_clang_format_runner()).empty();
+
+  if (task_queue_ && (do_prettier || do_clang)) {
+    std::string runner = do_prettier ? prettier_runner : clang_runner;
+    std::string fmt_name = do_prettier ? "prettier" : "clang-format";
+    std::string filepath = buf.filepath;  // captured by value below
+
+    task_queue_->submit_val<std::vector<std::string>>(
+        [filepath, runner = std::move(runner)]() -> std::vector<std::string> {
+          std::string cmd = runner + " --write " + shell_quote(filepath) +
+                            " >/dev/null 2>&1";
+          std::vector<std::string> result;
+          if (std::system(cmd.c_str()) == 0) {
+            read_file_lines(filepath, result);
+          }
+          return result;
+        },
+        [this, filepath, announce,
+         fmt_name](std::vector<std::string> refreshed) {
+          int found = -1;
+          for (int i = 0; i < (int)buffers.size(); i++) {
+            if (buffers[i].filepath == filepath) { found = i; break; }
+          }
+          if (found < 0) return;
+          auto &b = buffers[found];
+          if (b.filepath.empty())
+            return;
+
+          if (!refreshed.empty()) {
+            b.lines.swap(refreshed);
+          }
+          normalize_buffer_after_external_edit(b);
+          invalidate_syntax_cache(b);
+          b.modified = false;
+          if (b.is_preview) {
+            b.is_preview = false;
+            if (preview_buffer_index == found)
+              preview_buffer_index = -1;
+          }
+          track_recent_file(b.filepath);
+          if (announce) {
+            message = "Saved: " + get_filename(b.filepath) +
+                      " (formatted: " + fmt_name + ")";
+            needs_redraw = true;
+          }
+          if (python_api)
+            python_api->on_buffer_save(b.filepath);
+          notify_lsp_save(b.filepath);
+          refresh_git_status(true);
+        });
+    buf.modified = false;
+    return true;
+  }
+
   bool formatted_with_prettier = false;
   bool formatted_with_clang = false;
-  if (config.get_bool("prettier_on_save", true) &&
-      supports_prettier_on_save(buf.filepath)) {
-    const std::string runner = detect_prettier_runner();
-    if (!runner.empty()) {
-      std::string cmd = runner + " --write " + shell_quote(buf.filepath) +
-                        " >/dev/null 2>&1";
-      if (std::system(cmd.c_str()) == 0) {
-        std::vector<std::string> refreshed_lines;
-        if (read_file_lines(buf.filepath, refreshed_lines)) {
-          buf.lines.swap(refreshed_lines);
-          normalize_buffer_after_external_edit(buf);
-          invalidate_syntax_cache(buf);
-          formatted_with_prettier = true;
-        }
-      }
-    }
-  }
-  if (!formatted_with_prettier &&
-      config.get_bool("clang_format_on_save", true) &&
-      supports_clang_format_on_save(buf.filepath)) {
-    const std::string runner = detect_clang_format_runner();
-    if (!runner.empty()) {
-      std::string cmd = runner + " -i " + shell_quote(buf.filepath) +
-                        " >/dev/null 2>&1";
-      if (std::system(cmd.c_str()) == 0) {
-        std::vector<std::string> refreshed_lines;
-        if (read_file_lines(buf.filepath, refreshed_lines)) {
-          buf.lines.swap(refreshed_lines);
-          normalize_buffer_after_external_edit(buf);
-          invalidate_syntax_cache(buf);
-          formatted_with_clang = true;
-        }
-      }
-    }
-  }
+  if (do_prettier && run_formatter(prettier_runner))
+    formatted_with_prettier = true;
+  if (!formatted_with_prettier && do_clang && run_formatter(clang_runner))
+    formatted_with_clang = true;
 
   buf.modified = false;
   if (buf.is_preview) {
@@ -534,11 +644,21 @@ void Editor::close_buffer_at(int index) {
     return;
 
   const FileBuffer &snapshot_source = buffers[index];
+
+#ifdef JOT_TREESITTER
+  {
+    FileBuffer &mut_buf = buffers[index];
+    if (mut_buf.ts_tree) { ts_tree_delete(mut_buf.ts_tree); mut_buf.ts_tree = nullptr; }
+    if (mut_buf.ts_parser) { ts_parser_delete(mut_buf.ts_parser); mut_buf.ts_parser = nullptr; }
+  }
+#endif
+
   if (closed_buffer_history.size() >= kMaxClosedBufferHistory) {
     closed_buffer_history.erase(closed_buffer_history.begin());
   }
-  if (!snapshot_source.filepath.empty() ||
-      (snapshot_source.modified && !snapshot_source.lines.empty())) {
+  if (!snapshot_source.is_lazy() &&
+      (!snapshot_source.filepath.empty() ||
+       (snapshot_source.modified && !snapshot_source.lines.empty()))) {
     closed_buffer_history.push_back(
         {snapshot_source.filepath, snapshot_source.lines, snapshot_source.cursor,
          snapshot_source.selection, snapshot_source.scroll_offset,
@@ -547,8 +667,10 @@ void Editor::close_buffer_at(int index) {
 
   if (buffers.size() == 1) {
     FileBuffer &buf = buffers[0];
+    if (buf.is_lazy()) buf.materialize();
     buf.filepath.clear();
     buf.lines.clear();
+    buf.lazy_provider.reset();
     buf.lines.push_back("");
     buf.cursor = {0, 0};
     buf.preferred_x = 0;
@@ -561,6 +683,10 @@ void Editor::close_buffer_at(int index) {
     buf.redo_stack = std::stack<State>();
     buf.bookmarks.clear();
     buf.diagnostics.clear();
+#ifdef JOT_TREESITTER
+    if (buf.ts_tree) { ts_tree_delete(buf.ts_tree); buf.ts_tree = nullptr; }
+    if (buf.ts_parser) { ts_parser_delete(buf.ts_parser); buf.ts_parser = nullptr; }
+#endif
     current_buffer = 0;
     tab_scroll_index = 0;
     preview_buffer_index = -1;
@@ -661,7 +787,7 @@ void Editor::reopen_last_closed_buffer() {
   FileBuffer fb;
   fb.filepath = snap.filepath;
   fb.lines = snap.lines;
-  if (fb.lines.empty()) {
+  if (fb.line_count() == 0) {
     fb.lines.push_back("");
   }
   fb.cursor = snap.cursor;
@@ -928,6 +1054,13 @@ void Editor::set_auto_save_interval(int interval_ms, bool persist) {
     config.set("auto_save_interval_ms", std::to_string(auto_save_interval_ms));
     config.save();
   }
+}
+
+void FileBuffer::materialize() {
+  if (!lazy_provider)
+    return;
+  lines = lazy_provider->copy_all_lines();
+  lazy_provider.reset();
 }
 
 void Editor::auto_save_modified_buffers() {

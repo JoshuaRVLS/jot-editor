@@ -82,6 +82,73 @@ std::string parse_branch_name(const std::string &line) {
   }
   return body;
 }
+
+struct GitStatusResult {
+  std::string root;
+  std::string branch;
+  int dirty_count = 0;
+  std::unordered_map<std::string, std::string> file_status;
+  bool success = false;
+};
+
+GitStatusResult run_git_commands(const std::string &repo_hint) {
+  GitStatusResult result;
+
+  const std::string top = trim_right_newlines(capture_command_output(
+      "git -C " + shell_quote(repo_hint) +
+      " rev-parse --show-toplevel 2>/dev/null"));
+  if (top.empty()) {
+    return result;
+  }
+
+  result.root = normalize_path(top);
+  result.success = true;
+
+  result.branch = trim_right_newlines(capture_command_output(
+      "git -C " + shell_quote(result.root) +
+      " symbolic-ref --short HEAD 2>/dev/null"));
+  if (result.branch.empty()) {
+    result.branch = trim_right_newlines(capture_command_output(
+        "git -C " + shell_quote(result.root) +
+        " rev-parse --short HEAD 2>/dev/null"));
+  }
+  if (result.branch.empty()) {
+    result.branch = "(detached)";
+  }
+
+  const std::string status_text =
+      capture_command_output("git -C " + shell_quote(result.root) +
+                             " status --porcelain=v1 --branch 2>/dev/null");
+  std::istringstream iss(status_text);
+  std::string line;
+  while (std::getline(iss, line)) {
+    if (line.empty()) continue;
+    if (line.rfind("## ", 0) == 0) {
+      std::string from_status = parse_branch_name(line);
+      if (!from_status.empty()) result.branch = from_status;
+      continue;
+    }
+    if (line.size() < 3) continue;
+    const std::string xy = line.substr(0, 2);
+    std::string rel_path = line.substr(3);
+    size_t arrow = rel_path.find(" -> ");
+    if (arrow != std::string::npos) {
+      rel_path = rel_path.substr(arrow + 4);
+    }
+    if (!rel_path.empty() && rel_path.front() == '"' &&
+        rel_path.back() == '"' && rel_path.size() >= 2) {
+      rel_path = rel_path.substr(1, rel_path.size() - 2);
+    }
+    std::string abs_path =
+        normalize_path((fs::path(result.root) / fs::path(rel_path)).string());
+    if (!abs_path.empty()) {
+      result.file_status[abs_path] = xy;
+    }
+    if (xy != "  ") result.dirty_count++;
+  }
+
+  return result;
+}
 } // namespace
 
 void Editor::clear_git_status() {
@@ -125,10 +192,14 @@ void Editor::refresh_git_status(bool force) {
   const long long now_ms =
       duration_cast<milliseconds>(steady_clock::now().time_since_epoch())
           .count();
-  if (!force && git_last_refresh_ms > 0 && now_ms - git_last_refresh_ms < 1500) {
+
+  if (!force && git_last_refresh_ms > 0 &&
+      now_ms - git_last_refresh_ms < 1500) {
     return;
   }
-  git_last_refresh_ms = now_ms;
+
+  if (git_refresh_pending_)
+    return;
 
   std::string repo_hint;
   if (workspace_session_enabled && !workspace_session_root.empty()) {
@@ -140,89 +211,68 @@ void Editor::refresh_git_status(bool force) {
   }
 
   if (repo_hint.empty()) {
-    if (!git_root.empty() || !git_file_status.empty() || git_dirty_count != 0 ||
-        !git_branch.empty()) {
+    git_last_refresh_ms = now_ms;
+    if (!git_root.empty() || !git_file_status.empty() ||
+        git_dirty_count != 0 || !git_branch.empty()) {
       clear_git_status();
       needs_redraw = true;
     }
     return;
   }
 
-  const std::string top = trim_right_newlines(capture_command_output(
-      "git -C " + shell_quote(repo_hint) +
-      " rev-parse --show-toplevel 2>/dev/null"));
-  if (top.empty()) {
-    if (!git_root.empty() || !git_file_status.empty() || git_dirty_count != 0 ||
-        !git_branch.empty()) {
-      clear_git_status();
-      needs_redraw = true;
-    }
-    return;
-  }
+  git_last_refresh_ms = now_ms;
+  git_refresh_pending_ = true;
 
-  const std::string new_git_root = normalize_path(top);
-  std::string new_git_branch = trim_right_newlines(capture_command_output(
-      "git -C " + shell_quote(new_git_root) +
-      " symbolic-ref --short HEAD 2>/dev/null"));
-  if (new_git_branch.empty()) {
-    new_git_branch = trim_right_newlines(capture_command_output(
-        "git -C " + shell_quote(new_git_root) +
-        " rev-parse --short HEAD 2>/dev/null"));
-  }
-  if (new_git_branch.empty()) {
-    new_git_branch = "(detached)";
-  }
+  if (task_queue_) {
+    task_queue_->submit_val<GitStatusResult>(
+        [repo_hint = std::move(repo_hint)]() -> GitStatusResult {
+          return run_git_commands(repo_hint);
+        },
+        [this](GitStatusResult result) {
+          git_refresh_pending_ = false;
 
-  std::unordered_map<std::string, std::string> new_status;
-  int new_dirty_count = 0;
-  const std::string status_text =
-      capture_command_output("git -C " + shell_quote(new_git_root) +
-                             " status --porcelain=v1 --branch 2>/dev/null");
-  std::istringstream iss(status_text);
-  std::string line;
-  while (std::getline(iss, line)) {
-    if (line.empty()) {
-      continue;
-    }
-    if (line.rfind("## ", 0) == 0) {
-      std::string from_status = parse_branch_name(line);
-      if (!from_status.empty()) {
-        new_git_branch = from_status;
+          if (!result.success) {
+            if (!git_root.empty() || !git_file_status.empty() ||
+                git_dirty_count != 0 || !git_branch.empty()) {
+              clear_git_status();
+              needs_redraw = true;
+            }
+            return;
+          }
+
+          const bool changed =
+              (result.root != git_root) || (result.branch != git_branch) ||
+              (result.dirty_count != git_dirty_count) ||
+              (result.file_status != git_file_status);
+          git_root = std::move(result.root);
+          git_branch = std::move(result.branch);
+          git_dirty_count = result.dirty_count;
+          git_file_status = std::move(result.file_status);
+          if (changed)
+            needs_redraw = true;
+        });
+  } else {
+    GitStatusResult result = run_git_commands(repo_hint);
+    git_refresh_pending_ = false;
+
+    if (!result.success) {
+      if (!git_root.empty() || !git_file_status.empty() ||
+          git_dirty_count != 0 || !git_branch.empty()) {
+        clear_git_status();
+        needs_redraw = true;
       }
-      continue;
-    }
-    if (line.size() < 3) {
-      continue;
-    }
-    const std::string xy = line.substr(0, 2);
-    std::string rel_path = line.substr(3);
-    size_t arrow = rel_path.find(" -> ");
-    if (arrow != std::string::npos) {
-      rel_path = rel_path.substr(arrow + 4);
-    }
-    if (!rel_path.empty() && rel_path.front() == '"' && rel_path.back() == '"' &&
-        rel_path.size() >= 2) {
-      rel_path = rel_path.substr(1, rel_path.size() - 2);
+      return;
     }
 
-    std::string abs_path =
-        normalize_path((fs::path(new_git_root) / fs::path(rel_path)).string());
-    if (!abs_path.empty()) {
-      new_status[abs_path] = xy;
-    }
-    if (xy != "  ") {
-      new_dirty_count++;
-    }
-  }
-
-  const bool changed = (new_git_root != git_root) || (new_git_branch != git_branch) ||
-                       (new_dirty_count != git_dirty_count) ||
-                       (new_status != git_file_status);
-  git_root = new_git_root;
-  git_branch = new_git_branch;
-  git_dirty_count = new_dirty_count;
-  git_file_status = std::move(new_status);
-  if (changed) {
-    needs_redraw = true;
+    const bool changed =
+        (result.root != git_root) || (result.branch != git_branch) ||
+        (result.dirty_count != git_dirty_count) ||
+        (result.file_status != git_file_status);
+    git_root = std::move(result.root);
+    git_branch = std::move(result.branch);
+    git_dirty_count = result.dirty_count;
+    git_file_status = std::move(result.file_status);
+    if (changed)
+      needs_redraw = true;
   }
 }

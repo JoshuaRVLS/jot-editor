@@ -264,8 +264,8 @@ bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift,
       return false;
     }
     const auto &buf = buffers[0];
-    return buf.filepath.empty() && !buf.modified && buf.lines.size() == 1 &&
-           buf.lines[0].empty();
+    return buf.filepath.empty() && !buf.modified && buf.line_count() == 1 &&
+           buf.line(0).empty();
   };
 
   auto execute_entry = [&](const HomeMenuEntry &entry) -> bool {
