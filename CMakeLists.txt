@@ -1,5 +1,16 @@
 cmake_minimum_required(VERSION 3.14)
-project(jot LANGUAGES CXX)
+project(jot LANGUAGES C CXX)
+
+# Use a clean, portable install RPATH that points to the same prefix's lib dir.
+# Do NOT use CMAKE_INSTALL_RPATH_USE_LINK_PATH: it bakes build-time link
+# search paths (e.g. ~/.local/lib) into the installed binary, which breaks
+# distribution to other systems.
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+if(NOT CMAKE_INSTALL_RPATH)
+  set(CMAKE_INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+endif()
 
 include(GNUInstallDirs)
 
@@ -45,4 +56,15 @@ install(DIRECTORY src/python/
 
 install(DIRECTORY .configs/configs
   DESTINATION ${CMAKE_INSTALL_DATADIR}/jot
+)
+
+# ── Uninstall target ──────────────────────────────────────────────────────────
+# `cmake --build build --target uninstall` removes every file CMake installed.
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
+  IMMEDIATE @ONLY
+)
+add_custom_target(uninstall
+  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake
 )

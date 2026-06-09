@@ -43,10 +43,13 @@ add_library(jot_core_obj OBJECT
   core/git.cpp
   core/home.cpp
   core/host_api.cpp
+  core/in_memory_line_provider.cpp
   core/integrated_terminal.cpp
+  core/lazy_line_provider.cpp
   core/lsp.cpp
   core/panes.cpp
   core/popup.cpp
+  core/task_queue.cpp
   core/theme.cpp
   core/undo.cpp
   core/utils.cpp
@@ -113,6 +116,7 @@ add_library(jot_render_obj OBJECT
 jot_configure_object_target(jot_render_obj)
 
 add_library(jot_tools_obj OBJECT
+  tools/discord_rpc.cpp
   tools/imageviewer.cpp
   tools/telescope.cpp
 )
