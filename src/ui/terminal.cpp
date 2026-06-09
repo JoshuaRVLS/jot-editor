@@ -1,4 +1,5 @@
 #include "terminal.h"
+#include <csignal>
 #include <cstring>
 #include <fcntl.h>
 
@@ -10,6 +11,90 @@
 #include <unistd.h>
 
 static struct termios orig_termios;
+
+static volatile sig_atomic_t g_resize_pending = 0;
+
+static void sigwinch_handler(int) {
+  g_resize_pending = 1;
+}
+
+static bool probe_terminal_size_via_ioctl(int fd, struct winsize &ws) {
+  return ioctl(fd, TIOCGWINSZ, &ws) != -1;
+}
+
+static bool get_terminal_size(int &width, int &height) {
+  struct winsize ws;
+
+  if (probe_terminal_size_via_ioctl(STDOUT_FILENO, ws) ||
+      probe_terminal_size_via_ioctl(STDIN_FILENO, ws) ||
+      probe_terminal_size_via_ioctl(STDERR_FILENO, ws)) {
+    width = std::max(1, (int)ws.ws_col);
+    height = std::max(1, (int)ws.ws_row);
+    return true;
+  }
+
+  {
+    int tty_fd = open("/dev/tty", O_RDONLY);
+    if (tty_fd >= 0) {
+      bool ok = probe_terminal_size_via_ioctl(tty_fd, ws);
+      ::close(tty_fd);
+      if (ok) {
+        width = std::max(1, (int)ws.ws_col);
+        height = std::max(1, (int)ws.ws_row);
+        return true;
+      }
+    }
+  }
+
+  const char *env_cols = getenv("COLUMNS");
+  const char *env_lines = getenv("LINES");
+  if (env_cols) width = std::max(1, atoi(env_cols));
+  if (env_lines) height = std::max(1, atoi(env_lines));
+  if (env_lines || env_cols) return true;
+
+  return false;
+}
+
+static bool cursor_probe_size(int &width, int &height) {
+  // Move cursor to (999, 999) — most terminals clamp to the bottom-right
+  // corner — then ask for the cursor position with DSR (CSI 6 n). The
+  // terminal replies `\x1b[<rows>;<cols>R` which gives us the real
+  // viewport size even when ioctl and $COLUMNS/$LINES are stale.
+  //
+  // Use a short poll() timeout so we don't block forever if the terminal
+  // doesn't reply (e.g. piped stdin, some embedded consoles).
+  ::write(STDOUT_FILENO, "\x1b[999;999H", 10);
+  ::write(STDOUT_FILENO, "\x1b[6n", 4);
+
+  char buf[32] = {};
+  int i = 0;
+  while (i < 31) {
+    struct pollfd pfd;
+    pfd.fd = STDIN_FILENO;
+    pfd.events = POLLIN;
+    pfd.revents = 0;
+    int ready = poll(&pfd, 1, 200); // 200ms total budget
+    if (ready <= 0 || !(pfd.revents & POLLIN)) {
+      break;
+    }
+    if (read(STDIN_FILENO, &buf[i], 1) != 1) break;
+    if (buf[i] == 'R') {
+      i++;
+      break;
+    }
+    i++;
+  }
+
+  int rows = 0, cols = 0;
+  if (sscanf(buf, "\x1b[%d;%d", &rows, &cols) == 2) {
+    if (rows > 0) height = rows;
+    if (cols > 0) width = cols;
+    ::write(STDOUT_FILENO, "\x1b[H", 3);
+    return true;
+  }
+  ::write(STDOUT_FILENO, "\x1b[H", 3);
+  return false;
+}
 
 static bool read_char_with_timeout(char &out, int timeout_ms) {
   struct pollfd pfd;
@@ -63,6 +148,7 @@ void Terminal::setup_terminal() {
 
 void Terminal::restore_terminal() {
   write("\x1b[?25h");
+  write("\x1b[?7h"); // re-enable autowrap so the host shell is left normal
   write("\x1b[?1049l");
   show_cursor();
   reset_color();
@@ -70,22 +156,122 @@ void Terminal::restore_terminal() {
 }
 
 void Terminal::init() {
-  enable_raw_mode();
   setup_terminal();
+  flush();
 
-  struct winsize ws;
-  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != -1) {
-    width = std::max(1, (int)ws.ws_col);
-    height = std::max(1, (int)ws.ws_row);
+  enable_raw_mode();
+
+  // Render capture: if JOT_RENDER_CAPTURE=/path/to/log is set, open a
+  // summary capture file. Frame markers include frame number, bytes, WxH,
+  // and rows rendered. Set JOT_RENDER_CAPTURE_RAW=1 to also dump the raw
+  // terminal bytes to the capture file.
+  {
+    const char *cp = getenv("JOT_RENDER_CAPTURE");
+    if (cp && cp[0] != '\0') {
+      render_capture_ = fopen(cp, "wb");
+      if (render_capture_) {
+        const char *raw = getenv("JOT_RENDER_CAPTURE_RAW");
+        render_capture_raw_ = (raw && raw[0] == '1');
+        fprintf(render_capture_, "--JOT-RENDER-CAPTURE-START (raw=%d)--\n",
+                render_capture_raw_ ? 1 : 0);
+        fflush(render_capture_);
+      }
+    }
   }
 
+  // Force a size probe after entering alternate screen and raw mode. The
+  // ioctl path that ran before raw mode was enabled can return stale
+  // dimensions (e.g. the controlling TTY's notion of size was set when the
+  // foreground process group changed). The cursor probe is the only
+  // reliable way to learn the real rows/cols at this point.
+  refresh_size(/*force_probe=*/true);
+
+  if (width <= 0) width = 80;
+  if (height <= 0) height = 24;
+
+  // Renderer safety margin. JOT_RENDER_MARGIN=<n> overrides the default
+  // of 1 column. Margin 0 is rejected — the original rightmost-column
+  // bug returns at large widths without at least 1 column of safety.
+  {
+    const char *m = getenv("JOT_RENDER_MARGIN");
+    if (m && m[0] != '\0') {
+      int v = atoi(m);
+      if (v >= 1) {
+        render_margin_ = v;
+      }
+    }
+  }
+
+  // Per-row chunked-flush threshold. JOT_RENDER_CHUNK_BYTES=<n> overrides
+  // the default of 4096 bytes. Set to 0 to disable (one big flush per
+  // frame, legacy behaviour).
+  {
+    const char *m = getenv("JOT_RENDER_CHUNK_BYTES");
+    if (m && m[0] != '\0') {
+      int v = atoi(m);
+      if (v >= 0) {
+        render_chunk_bytes_ = (size_t)v;
+      }
+    }
+  }
+
+  struct sigaction sa = {};
+  sa.sa_handler = sigwinch_handler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_RESTART;
+  sigaction(SIGWINCH, &sa, nullptr);
+
   enable_mouse();
+}
+
+bool Terminal::refresh_size(bool force_probe) {
+  int new_width = width;
+  int new_height = height;
+
+  // First source: ioctl and env vars.
+  bool got = get_terminal_size(new_width, new_height);
+
+  // If the caller asked us to force-probe, or the ioctl/env path failed,
+  // try the ANSI cursor-position probe. The probe moves the cursor to
+  // (999, 999), asks for the current position with DSR (CSI 6 n), reads
+  // the terminal's reported rows;cols, then restores the cursor to home.
+  // This is the only way to recover when ioctl is returning stale
+  // dimensions (e.g. after the alternate screen was entered) or when the
+  // controlling TTY / foreground process group changed.
+  if ((force_probe || !got) && isatty(STDIN_FILENO) &&
+      isatty(STDOUT_FILENO)) {
+    int probe_w = new_width;
+    int probe_h = new_height;
+    if (cursor_probe_size(probe_w, probe_h)) {
+      if (probe_w > 0)
+        new_width = probe_w;
+      if (probe_h > 0)
+        new_height = probe_h;
+      got = true;
+    }
+  }
+
+  if (!got) {
+    return false;
+  }
+
+  if (new_width < 1) new_width = 1;
+  if (new_height < 1) new_height = 1;
+  bool changed = (new_width != width) || (new_height != height);
+  width = new_width;
+  height = new_height;
+  return changed;
 }
 
 void Terminal::cleanup() {
   disable_mouse();
   disable_raw_mode();
   restore_terminal();
+  if (render_capture_) {
+    fprintf(render_capture_, "\n--JOT-RENDER-CAPTURE-END--\n");
+    fclose(render_capture_);
+    render_capture_ = nullptr;
+  }
 }
 
 // ... inside read_key
@@ -378,6 +564,7 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
 
 Event Terminal::poll_event() {
   Event ev;
+  ev.type = EVENT_REDRAW;
 
   struct pollfd pfd;
   pfd.fd = STDIN_FILENO;
@@ -385,18 +572,37 @@ Event Terminal::poll_event() {
   pfd.revents = 0;
   poll(&pfd, 1, std::max(0, poll_timeout_ms));
 
-  // Check for terminal resize first (even when no input)
-  struct winsize ws;
-  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != -1) {
-    if (ws.ws_col != width || ws.ws_row != height) {
-      width = std::max(1, (int)ws.ws_col);
-      height = std::max(1, (int)ws.ws_row);
-      ev.type = EVENT_RESIZE;
-      ev.resize.width = width;
-      ev.resize.height = height;
-      return ev;
-    }
+  ev = check_resize_event();
+  if (ev.type != EVENT_REDRAW)
+    return ev;
+
+  if (pfd.revents & POLLIN)
+    return read_event();
+
+  return ev;
+}
+
+Event Terminal::check_resize_event() {
+  Event ev;
+  ev.type = EVENT_REDRAW;
+
+  // Always attempt a live size refresh. SIGWINCH is a fast signal that
+  // tells us a resize is likely pending, but it is not required: the cached
+  // size can be stale (or stuck at the 80x24 constructor fallback) even
+  // when no signal has been delivered. Reset g_resize_pending so a single
+  // signal doesn't keep forcing resizes after we've already absorbed it.
+  g_resize_pending = 0;
+  if (refresh_size()) {
+    ev.type = EVENT_RESIZE;
+    ev.resize.width = width;
+    ev.resize.height = height;
+    return ev;
   }
+  return ev;
+}
+
+Event Terminal::read_event() {
+  Event ev;
 
   int ch = read_key();
   if (ch < 0) {
@@ -414,34 +620,18 @@ Event Terminal::poll_event() {
   }
 
   if (ch == 28) {
-    // Also check on explicit resize character
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != -1) {
-      if (ws.ws_col != width || ws.ws_row != height) {
-        width = std::max(1, (int)ws.ws_col);
-        height = std::max(1, (int)ws.ws_row);
-        ev.type = EVENT_RESIZE;
-        ev.resize.width = width;
-        ev.resize.height = height;
-        return ev;
-      }
-    }
+    ev = check_resize_event();
+    if (ev.type != EVENT_REDRAW)
+      return ev;
   }
 
   ev.type = EVENT_KEY;
 
-  // Decoding bits
   bool mod_shift = (ch & 0x80000) != 0;
   bool mod_alt = (ch & 0x40000) != 0;
   bool mod_ctrl = (ch & 0x20000) != 0;
 
-  int base_key = ch & 0xFFFF; // Mask out high bits
-
-  // Legacy Shift handling (0x8000 for chars, or 2008..2011 ranges)
-  // Assuming 2008..2011 are deprecated by the new logic for arrows,
-  // but let's keep them if encoded differently elsewhere?
-  // My new logic returns 1008 | 0x80000 for Shift+Up.
-  // Old logic returned 2008.
-  // We should unify.
+  int base_key = ch & 0xFFFF;
 
   ev.key.key = base_key;
   ev.key.ctrl = mod_ctrl || (base_key >= 1 && base_key <= 26 &&
@@ -464,9 +654,23 @@ void Terminal::set_poll_timeout_ms(int timeout_ms) {
 }
 
 void Terminal::flush() {
-  fwrite(buffer.c_str(), 1, buffer.length(), stdout);
+  int n = (int)buffer.length();
+  last_flush_bytes_ = n;
+  if (render_capture_ && render_capture_raw_ && n > 0) {
+    fwrite(buffer.c_str(), 1, n, render_capture_);
+  }
+  fwrite(buffer.c_str(), 1, n, stdout);
   fflush(stdout);
   buffer.clear();
+}
+
+void Terminal::flush_if_buffer_exceeds() {
+  if (render_chunk_bytes_ == 0) {
+    return;
+  }
+  if (buffer.size() >= render_chunk_bytes_) {
+    flush();
+  }
 }
 
 void Terminal::clear() {
@@ -542,4 +746,21 @@ void Terminal::restore_cursor() { buffer += "\x1b[u"; }
 
 void Terminal::clear_line() { buffer += "\x1b[2K"; }
 
-void Terminal::clear_to_end() { buffer += "\x1b[0J"; }
+void Terminal::clear_to_end() { buffer += "\x1b[K"; }
+
+void Terminal::disable_autowrap() { buffer += "\x1b[?7l"; }
+
+void Terminal::enable_autowrap() { buffer += "\x1b[?7h"; }
+
+void Terminal::render_capture_marker(const std::string &label,
+                                     int rows_rendered) {
+  if (!render_capture_)
+    return;
+  render_capture_seq_++;
+  int bytes = last_flush_bytes_;
+  fprintf(render_capture_,
+          "\n--MARKER %d: %s bytes=%d w=%d h=%d rows=%d--\n",
+          render_capture_seq_, label.c_str(),
+          bytes, width, height, rows_rendered);
+  fflush(render_capture_);
+}
