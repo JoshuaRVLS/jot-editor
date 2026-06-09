@@ -45,6 +45,9 @@ void Editor::render_status_line() {
   if (auto_save_enabled) {
     enc_str += "  AS";
   }
+  if (discord_rpc.is_connected()) {
+    enc_str += "  RPC";
+  }
   enc_str += "  ";
   int r_len = (int)enc_str.length();
 

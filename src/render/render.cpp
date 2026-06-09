@@ -57,8 +57,8 @@ void compute_code_cursor_screen_pos(const SplitPane &pane, const FileBuffer &buf
 
   int logical_cursor_x = buf.cursor.x;
   int logical_scroll_x = buf.scroll_x;
-  if (buf.cursor.y >= 0 && buf.cursor.y < (int)buf.lines.size()) {
-    const std::string &line = buf.lines[buf.cursor.y];
+  if (buf.cursor.y >= 0 && buf.cursor.y < (int)buf.line_count()) {
+    const std::string &line = buf.line(buf.cursor.y);
     int cursor_visual = compute_visual_column(line, logical_cursor_x, tab_size);
     int scroll_visual = compute_visual_column(line, logical_scroll_x, tab_size);
     display_x = code_start_x + (cursor_visual - scroll_visual);
@@ -90,6 +90,7 @@ void Editor::render() {
   if (!needs_redraw) {
     if (show_home_menu) {
       ui->hide_cursor();
+      ui->flush_cursor();
       return;
     }
 
@@ -113,6 +114,7 @@ void Editor::render() {
             std::clamp(prompt_y + 1, 0, std::max(0, ui->get_height() - 1));
         ui->set_cursor(cursor_x, cursor_y);
       }
+      ui->flush_cursor();
       return;
     }
     if (show_integrated_terminal && active_terminal &&
@@ -122,6 +124,7 @@ void Editor::render() {
     }
     if (show_sidebar && focus_state == FOCUS_SIDEBAR) {
       ui->hide_cursor();
+      ui->flush_cursor();
       return;
     }
     if (!telescope.is_active() && !panes.empty()) {
@@ -133,6 +136,7 @@ void Editor::render() {
                                      tab_size, tab_height,
                                      display_x, display_y);
       ui->set_cursor(display_x, display_y);
+      ui->flush_cursor();
     }
     return;
   }
@@ -143,8 +147,8 @@ void Editor::render() {
   if (show_home_menu) {
     render_home_menu();
     render_status_line();
-    ui->render();
     ui->hide_cursor();
+    ui->render();
     needs_redraw = false;
     return;
   }
@@ -153,8 +157,6 @@ void Editor::render() {
   update_pane_layout();
 
   if (telescope.is_active()) {
-    // Keep the editor visible and draw Telescope as an overlay instead of
-    // replacing the whole scene.
     if (show_sidebar) {
       render_sidebar();
     }
@@ -163,8 +165,8 @@ void Editor::render() {
     render_integrated_terminal();
     render_telescope();
     render_status_line();
-    ui->render();
     ui->hide_cursor();
+    ui->render();
     needs_redraw = false;
     return;
   } else {
@@ -200,15 +202,8 @@ void Editor::render() {
       needs_redraw = true;
     }
 
-    ui->render();
-
-    int target_cursor_shape = 1;
-    if (target_cursor_shape != last_cursor_shape) {
-      printf("\033[5 q");
-      fflush(stdout);
-      last_cursor_shape = target_cursor_shape;
-    }
-
+    // Set cursor state BEFORE ui->render() so the full-row paint emits the
+    // correct cursor at the end of the frame.
     if (show_command_palette || show_search || show_save_prompt ||
         show_quit_prompt || input_prompt_visible) {
       if (show_command_palette) {
@@ -246,6 +241,7 @@ void Editor::render() {
       }
     }
 
+    ui->render();
     needs_redraw = false;
   }
 }
@@ -358,7 +354,7 @@ void Editor::render_scrollbar(const SplitPane &pane, int draw_w) {
     return;
   }
 
-  const int total_lines = std::max(1, (int)buf.lines.size());
+  const int total_lines = std::max(1, (int)buf.line_count());
   const int visible_lines = std::max(1, track_h);
   const int max_scroll = std::max(0, total_lines - visible_lines);
   const int clamped_scroll = std::clamp(buf.scroll_offset, 0, max_scroll);

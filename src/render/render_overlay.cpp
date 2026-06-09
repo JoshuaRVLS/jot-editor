@@ -140,8 +140,8 @@ void Editor::render_lsp_completion() {
   int box_w = std::clamp(longest + 6, 20, std::min(visible_w, 72));
   int box_h = max_items;
 
-  int safe_cursor_y = std::clamp(buf.cursor.y, 0, (int)buf.lines.size() - 1);
-  const std::string &line = buf.lines[safe_cursor_y];
+  int safe_cursor_y = std::clamp(buf.cursor.y, 0, (int)buf.line_count() - 1);
+  const std::string &line = buf.line(safe_cursor_y);
   int cursor_visual = compute_visual_column(line, buf.cursor.x, tab_size);
   int scroll_visual = compute_visual_column(line, buf.scroll_x, tab_size);
   int cursor_x = pane.x + 1 + line_num_width + (cursor_visual - scroll_visual);

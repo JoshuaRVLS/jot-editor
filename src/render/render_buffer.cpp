@@ -147,28 +147,27 @@ bool bracket_chars(char c, char &open, char &close, bool &is_open) {
   }
 }
 
-BracketPairMatch find_pair_at(const std::vector<std::string> &lines, int line,
-                              int col) {
+BracketPairMatch find_pair_at(const FileBuffer &buf, int line, int col) {
   BracketPairMatch result;
-  if (line < 0 || line >= (int)lines.size())
+  if (line < 0 || line >= (int)buf.line_count())
     return result;
-  if (col < 0 || col >= (int)lines[line].size())
+  if (col < 0 || col >= (int)buf.line(line).size())
     return result;
 
   char open = 0, close = 0;
   bool is_open = false;
-  if (!bracket_chars(lines[line][col], open, close, is_open)) {
+  if (!bracket_chars(buf.line(line)[col], open, close, is_open)) {
     return result;
   }
 
   if (is_open) {
     int depth = 1;
-    const int max_line = std::min((int)lines.size() - 1,
+    const int max_line = std::min((int)buf.line_count() - 1,
                                   line + kBracketMatchSearchLimitLines);
     for (int y = line; y <= max_line; y++) {
       int start_x = (y == line) ? col + 1 : 0;
-      for (int x = start_x; x < (int)lines[y].size(); x++) {
-        char ch = lines[y][x];
+      for (int x = start_x; x < (int)buf.line(y).size(); x++) {
+        char ch = buf.line(y)[x];
         if (ch == open) {
           depth++;
         } else if (ch == close) {
@@ -188,9 +187,9 @@ BracketPairMatch find_pair_at(const std::vector<std::string> &lines, int line,
     int depth = 1;
     const int min_line = std::max(0, line - kBracketMatchSearchLimitLines);
     for (int y = line; y >= min_line; y--) {
-      int start_x = (y == line) ? col - 1 : (int)lines[y].size() - 1;
+      int start_x = (y == line) ? col - 1 : (int)buf.line(y).size() - 1;
       for (int x = start_x; x >= 0; x--) {
-        char ch = lines[y][x];
+        char ch = buf.line(y)[x];
         if (ch == close) {
           depth++;
         } else if (ch == open) {
@@ -286,11 +285,11 @@ std::string compact_diagnostic_text(const std::string &text) {
 ActiveBracketGuide build_active_bracket_guide(const FileBuffer &buf,
                                               int tab_size) {
   ActiveBracketGuide guide;
-  if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.lines.size()) {
+  if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.line_count()) {
     return guide;
   }
 
-  const std::string &line = buf.lines[buf.cursor.y];
+  const std::string &line = buf.line(buf.cursor.y);
   int candidates[3] = {buf.cursor.x, buf.cursor.x - 1, buf.cursor.x + 1};
   for (int c : candidates) {
     if (c < 0 || c >= (int)line.size()) {
@@ -300,7 +299,7 @@ ActiveBracketGuide build_active_bracket_guide(const FileBuffer &buf,
       continue;
     }
 
-    BracketPairMatch pair = find_pair_at(buf.lines, buf.cursor.y, c);
+    BracketPairMatch pair = find_pair_at(buf, buf.cursor.y, c);
     if (!pair.found) {
       continue;
     }
@@ -312,8 +311,8 @@ ActiveBracketGuide build_active_bracket_guide(const FileBuffer &buf,
     }
 
     guide.active = true;
-    const std::string &open_line = buf.lines[pair.open_line];
-    const std::string &close_line = buf.lines[pair.close_line];
+    const std::string &open_line = buf.line(pair.open_line);
+    const std::string &close_line = buf.line(pair.close_line);
     int open_visual = compute_visual_column(open_line, pair.open_col, tab_size);
     int close_visual =
         compute_visual_column(close_line, pair.close_col, tab_size);
@@ -348,9 +347,9 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
   const int scan_start =
       std::max(0, buf.scroll_offset - kBracketDepthScanLimitLines);
   for (int scan_line = scan_start;
-       scan_line < std::min(buf.scroll_offset, (int)buf.lines.size());
+       scan_line < std::min(buf.scroll_offset, (int)buf.line_count());
        scan_line++) {
-    const std::string &line = buf.lines[scan_line];
+    const std::string &line = buf.line(scan_line);
     for (char c : line) {
       apply_bracket_depth_delta(c, bracket_depth);
     }
@@ -362,7 +361,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
     int line_idx = i + buf.scroll_offset;
     int draw_y = y + i;
 
-    if (line_idx < (int)buf.lines.size()) {
+    if (line_idx < (int)buf.line_count()) {
       int line_diag_severity = line_diagnostic_severity(buf, line_idx);
       int diag_fg = line_diag_severity > 0
                         ? diagnostic_severity_color(theme, line_diag_severity)
@@ -385,7 +384,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
       }
       ui->draw_text(x + 2, draw_y, num_buf, ln_fg, ln_bg);
 
-      const std::string &line = buf.lines[line_idx];
+      const std::string &line = buf.line(line_idx);
       int scroll_x = buf.scroll_x;
       int current_x = x + 1 + line_num_width;
       int visible_len = w - 2 - line_num_width;
@@ -651,8 +650,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
         anchor_col = std::min(buf.cursor.x, active_diag->end_col);
       }
 
-      int cursor_line = std::clamp(buf.cursor.y, 0, (int)buf.lines.size() - 1);
-      const std::string &anchor_line = buf.lines[cursor_line];
+      int cursor_line = std::clamp(buf.cursor.y, 0, (int)buf.line_count() - 1);
+      const std::string &anchor_line = buf.line(cursor_line);
       int anchor_visual = compute_visual_column(anchor_line, anchor_col, tab_size);
       int scroll_visual =
           compute_visual_column(anchor_line, buf.scroll_x, tab_size);

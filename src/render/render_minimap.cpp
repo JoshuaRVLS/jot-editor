@@ -16,7 +16,7 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
   ui->fill_rect(rect, " ", theme.fg_minimap, theme.bg_minimap);
 
   // Simple compressed view
-  int total_lines = buf.lines.size();
+  int total_lines = buf.line_count();
   if (total_lines == 0)
     return;
 
@@ -38,8 +38,8 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
   // Draw content (blocks)
   for (int i = 0; i < h; i++) {
     int line_idx = (int)(i / ratio);
-    if (line_idx < total_lines) {
-      const std::string &line = buf.lines[line_idx];
+    if (line_idx >= 0 && line_idx < total_lines) {
+      const std::string &line = buf.line(line_idx);
       const auto &colors = get_line_syntax_colors(buf, line_idx);
 
       int draw_x = x;

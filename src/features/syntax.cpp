@@ -1,5 +1,102 @@
 #include "editor.h"
+#include <cstring>
 #include <regex>
+#ifdef JOT_TREESITTER
+#include <tree_sitter/api.h>
+
+namespace {
+
+int map_capture_to_color(const char *name, uint32_t len) {
+  std::string_view sv(name, len);
+
+  auto has_prefix = [&](const char *pfx) {
+    size_t n = strlen(pfx);
+    return sv.size() >= n && sv.compare(0, n, pfx) == 0;
+  };
+
+  if (sv == "keyword" || has_prefix("keyword.")) return 1;
+  if (sv == "string" || has_prefix("string.")) return 2;
+  if (sv == "comment" || has_prefix("comment.")) return 3;
+  if (sv == "number" || has_prefix("number.") ||
+      sv == "float" || sv == "constant.numeric") return 4;
+  if (sv == "type" || has_prefix("type.") ||
+      sv == "attribute" || has_prefix("attribute.")) return 5;
+  if (sv == "function" || has_prefix("function.") ||
+      sv == "method" || has_prefix("method.") ||
+      sv == "constructor") return 6;
+  if (sv == "operator" || sv == "preproc") return 1;
+  if (sv == "constant" || has_prefix("constant.") ||
+      sv == "boolean") return 4;
+  if (sv == "tag" || has_prefix("tag.")) return 1;
+  if (sv == "property" || has_prefix("property.")) return 6;
+  return 0;
+}
+
+std::vector<std::pair<int, int>>
+query_ts_highlights(FileBuffer &buf, int line_idx, TSQuery *query, TSTree *tree) {
+  if (!query || !tree) return {};
+
+  const std::string &line = buf.line(line_idx);
+  std::vector<std::pair<int, int>> colors(line.size(), {0, 0});
+
+  uint32_t line_start_byte = 0;
+  for (int i = 0; i < line_idx; i++)
+    line_start_byte += (uint32_t)buf.line(i).size() + 1;
+
+  TSNode root = ts_tree_root_node(tree);
+  TSQueryCursor *cursor = ts_query_cursor_new();
+
+  ts_query_cursor_set_byte_range(cursor, line_start_byte,
+                                 line_start_byte + (uint32_t)line.size());
+  ts_query_cursor_exec(cursor, query, root);
+
+  TSQueryMatch match;
+  while (ts_query_cursor_next_match(cursor, &match)) {
+    for (uint16_t ci = 0; ci < match.capture_count; ci++) {
+      TSQueryCapture cap = match.captures[ci];
+      uint32_t s = ts_node_start_byte(cap.node);
+      uint32_t e = ts_node_end_byte(cap.node);
+      uint32_t start = (s > line_start_byte) ? (s - line_start_byte) : 0;
+      uint32_t end = (e > line_start_byte) ? (e - line_start_byte) : 0;
+      if (end > (uint32_t)line.size()) end = (uint32_t)line.size();
+
+      uint32_t name_len;
+      const char *name = ts_query_capture_name_for_id(query, cap.index, &name_len);
+      int color_type = map_capture_to_color(name, name_len);
+
+      for (uint32_t col = start; col < end && col < colors.size(); col++) {
+        if (colors[col].first == 0)
+          colors[col] = {1, color_type};
+      }
+    }
+  }
+  ts_query_cursor_delete(cursor);
+  return colors;
+}
+
+} // namespace
+
+void Editor::reparse_tree(FileBuffer &buf) {
+  if (!buf.ts_parser) return;
+  std::string text = get_buffer_text(buf);
+  TSTree *new_tree = ts_parser_parse_string(
+      buf.ts_parser, buf.ts_tree, text.c_str(), (uint32_t)text.size());
+  if (buf.ts_tree) ts_tree_delete(buf.ts_tree);
+  buf.ts_tree = new_tree;
+  buf.syntax_cache.clear();
+}
+
+void Editor::init_ts_for_buffer(FileBuffer &buf) {
+  if (buf.ts_parser) return;
+  std::string ext = get_file_extension(buf.filepath);
+  if (ext.empty()) return;
+  TSParser *parser = ts_manager_.create_parser(ext);
+  if (!parser) return;
+  buf.ts_parser = parser;
+  buf.syntax_cache.clear();
+  reparse_tree(buf);
+}
+#endif // JOT_TREESITTER
 
 void SyntaxHighlighter::set_language(const std::string &ext) {
   if (file_extension == ext)
@@ -356,23 +453,23 @@ const std::vector<std::pair<int, int>> &
 Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx) {
   static const std::vector<std::pair<int, int>> empty_colors;
 
-  if (line_idx < 0 || line_idx >= (int)buf.lines.size()) {
+  if (line_idx < 0 || line_idx >= (int)buf.line_count()) {
     return empty_colors;
   }
 
   const std::string extension = get_file_extension(buf.filepath);
   if (buf.syntax_cache_extension != extension) {
     buf.syntax_cache_extension = extension;
-    buf.syntax_cache_line_count = buf.lines.size();
+    buf.syntax_cache_line_count = buf.line_count();
     buf.syntax_cache.clear();
   }
 
-  if (buf.syntax_cache_line_count != buf.lines.size()) {
-    buf.syntax_cache_line_count = buf.lines.size();
+  if (buf.syntax_cache_line_count != buf.line_count()) {
+    buf.syntax_cache_line_count = buf.line_count();
     buf.syntax_cache.clear();
   }
 
-  const std::string &line = buf.lines[line_idx];
+  const std::string &line = buf.line(line_idx);
   SyntaxLineCache &cache = buf.syntax_cache[line_idx];
   const std::size_t line_hash = std::hash<std::string>{}(line);
 
@@ -380,6 +477,23 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx) {
       cache.line_length == line.length()) {
     return cache.colors;
   }
+
+#ifdef JOT_TREESITTER
+  if (ts_manager_.has_language(extension)) {
+    init_ts_for_buffer(buf);
+    if (buf.ts_tree) {
+      TSQuery *query = ts_manager_.get_highlight_query(extension);
+      if (query) {
+        cache.colors = query_ts_highlights(buf, line_idx, query, buf.ts_tree);
+        ts_query_delete(query);
+        cache.line_hash = line_hash;
+        cache.line_length = line.length();
+        cache.valid = true;
+        return cache.colors;
+      }
+    }
+  }
+#endif
 
   highlighter.set_language(extension);
   cache.colors = highlighter.get_colors(line);

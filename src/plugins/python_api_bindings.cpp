@@ -335,7 +335,7 @@ static PyObject *py_set_diagnostics(PyObject *self, PyObject *args) {
     d.severity = pSeverity ? PyLong_AsLong(pSeverity) : 1;
 
     PyObject *pMsg = PyDict_GetItemString(item, "message");
-    if (pMsg) {
+    if (pMsg && PyUnicode_Check(pMsg)) {
       d.message = PyUnicode_AsUTF8(pMsg);
     }
     diagnostics.push_back(d);
