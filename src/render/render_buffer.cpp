@@ -338,6 +338,13 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
   UIRect pane_rect = {x, y, w, h};
   ui->fill_rect(pane_rect, " ", theme.fg_default, theme.bg_default);
 
+  if (buf.is_lazy()) {
+    int center = buf.scroll_offset + h / 2;
+    if (center >= 0 && center < (int)buf.line_count()) {
+      buf.scroll_hint(center);
+    }
+  }
+
   if (show_minimap && w > 20)
     w = std::max(1, w - minimap_width);
 

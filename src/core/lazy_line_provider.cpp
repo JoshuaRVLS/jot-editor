@@ -380,6 +380,23 @@ void LazyLineProvider::move_lines(int start, int end, int dest) {
   insert_lines(adjusted_dest - 1, moved);
 }
 
+void LazyLineProvider::replace_lines(int start, int count,
+                                     const std::vector<std::string> &new_lines) {
+  if (count < 0) count = 0;
+  if (start < 0) start = 0;
+  int curr_total = (int)total_lines_;
+  if (start > curr_total) start = curr_total;
+  if (start + count > curr_total) {
+    count = curr_total - start;
+  }
+  if (count > 0) {
+    delete_lines(start, start + count - 1);
+  }
+  if (!new_lines.empty()) {
+    insert_lines(start - 1, new_lines);
+  }
+}
+
 void LazyLineProvider::for_each_line(LineVisitor fn) {
   for (size_t i = 0; i < total_lines_; i++) {
     int chunk_id = (int)i / kChunkSize;

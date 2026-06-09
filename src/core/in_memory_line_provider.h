@@ -31,6 +31,9 @@ public:
 
   void move_lines(int start, int end, int dest) override;
 
+  void replace_lines(int start, int count,
+                     const std::vector<std::string> &new_lines) override;
+
   void for_each_line(LineVisitor fn) override;
 
   bool is_lazy() const override { return false; }

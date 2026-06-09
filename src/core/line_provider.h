@@ -33,6 +33,9 @@ public:
 
   virtual void move_lines(int start, int end, int dest) = 0;
 
+  virtual void replace_lines(int start, int count,
+                             const std::vector<std::string> &new_lines) = 0;
+
   using LineVisitor = std::function<void(int, std::string &)>;
   virtual void for_each_line(LineVisitor fn) = 0;
 

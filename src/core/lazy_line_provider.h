@@ -12,7 +12,7 @@
 namespace {
 constexpr int kChunkSize = 512;
 constexpr int kIndexInterval = 1024;
-constexpr int kMaxCachedChunks = 20;
+constexpr int kMaxCachedChunks = 128;
 } // namespace
 
 class LazyLineProvider : public LineProvider {
@@ -41,6 +41,8 @@ public:
   std::vector<std::string> copy_all_lines() const override;
 
   void move_lines(int start, int end, int dest) override;
+  void replace_lines(int start, int count,
+                     const std::vector<std::string> &new_lines) override;
   void for_each_line(LineVisitor fn) override;
 
   bool is_lazy() const override { return true; }

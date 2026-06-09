@@ -21,6 +21,8 @@ struct TSTree;
 
 namespace {
 constexpr std::uintmax_t kFileSizeLazyThreshold = 10ULL * 1024ULL * 1024ULL;
+constexpr int kDeltaWindowHalfSize = 50;
+constexpr int kMaxFullSnapshotLines = 5000;
 }
 
 enum PanelType {
@@ -129,7 +131,11 @@ struct Selection {
 };
 
 struct State {
-  std::vector<std::string> lines;
+  bool full_snapshot = false;
+  int start_line = 0;
+  std::vector<std::string> old_lines;
+  int old_total_lines = 0;
+
   Cursor cursor;
   int preferred_x;
   Selection selection;
@@ -216,6 +222,26 @@ struct FileBuffer {
   }
 
   void materialize();
+
+  void replace_lines(int start, int count,
+                     const std::vector<std::string> &new_lines) {
+    if (lazy_provider) {
+      lazy_provider->replace_lines(start, count, new_lines);
+    } else {
+      if (count < 0) count = 0;
+      if (start < 0) start = 0;
+      if (start > (int)lines.size()) start = (int)lines.size();
+      if (start + count > (int)lines.size()) {
+        count = (int)lines.size() - start;
+      }
+      if (count > 0) {
+        lines.erase(lines.begin() + start, lines.begin() + start + count);
+      }
+      if (!new_lines.empty()) {
+        lines.insert(lines.begin() + start, new_lines.begin(), new_lines.end());
+      }
+    }
+  }
 };
 
 struct Popup {

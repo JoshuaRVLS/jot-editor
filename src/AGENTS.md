@@ -1,0 +1,61 @@
+# src/
+
+## Purpose
+
+C++ engine source for `jot`. Hosts the editor's modular static-library layout, the bundled Python runtime support, and platform-specific shims.
+
+## Ownership
+
+- Owns: all C++ engine code, the embedded Python runtime scripts, and platform shims.
+- Does not own: the executable entrypoint (`apps/jot/`), public C++ API headers (`include/`), tests (`tests/`), or user-facing docs (`docs/`).
+
+## Local Contracts
+
+- Module layout is fixed by `src/CMakeLists.txt`. Each top-level subdirectory is one CMake `OBJECT` library and a matching `STATIC` library of the same name (`jot_core`, `jot_edit`, `jot_features`, `jot_input`, `jot_render`, `jot_tools`, `jot_plugins`, `jot_ui`).
+- `jot_engine` is the aggregated static library consumed by the `jot` executable. Do not add sources directly to `jot_engine`; add them to their module `OBJECT` library and re-aggregate.
+- `jot_configure_object_target` and `jot_expose_module_api` in `src/CMakeLists.txt` define the include and Python flags applied to every module. New modules must use both.
+- Tree-sitter is removed from the CMake build. `features/tree_sitter_manager.cpp` is not compiled. `features/syntax.cpp` uses the regex fallback path exclusively. The tree-sitter source files remain in the repo but are dormant.
+- Platform shims live in `src/platform/<os>/` and are selected by the `if(WIN32)` / `else()` blocks in `src/CMakeLists.txt`. Windows is not yet supported (the root `CMakeLists.txt` blocks it), so `src/platform/windows/` is reserved for future use.
+- Python runtime scripts under `src/python/` are installed as data (`${CMAKE_INSTALL_DATADIR}/jot/python`); do not move them to a `data/` folder and do not exclude `__pycache__`/`.pyc` from cleanup.
+
+### Module responsibilities
+
+- `core/`: editor state, buffers, panes, workspace, event loop, task queue, popup, home menu, theme, git, bookmarks, undo, LSP wiring, integrated-terminal hosting. The structural heart of the editor.
+  **Undo:** `Editor::save_state()` captures a `State` delta (not a full snapshot) so typing on large files (5M+ lines) is O(window) instead of O(file). For buffers with ≤ `kMaxFullSnapshotLines` (5000), the delta stores every line as a full snapshot for simplicity. For larger buffers, the delta stores only `kDeltaWindowHalfSize` (50) lines above and below the cursor, or the full selection range if one is active, plus cursor/selection/scroll/modified state. `save_state()` never calls `materialize()`, so the lazy provider remains valid through edits. Undo/redo apply the delta by computing the difference between the current line count and the captured `old_total_lines` to determine how many lines the edit inserted/deleted, then replacing the affected range with `old_lines` via `FileBuffer::replace_lines()`. `same_state()` compares the captured window and cursor state, never the full file, so consecutive identical undo entries are deduplicated in O(window) instead of O(n). The legacy "save_state copies all lines" pattern would freeze the editor for seconds on a 5M-line file because every keystroke allocated ~418 MB for the snapshot.
+- `ui/`: raw terminal abstraction and a full-row paint renderer. All escape-sequence I/O for the main editor UI flows through here. The `Terminal` class owns the cached `width`/`height`; `Terminal::refresh_size(bool force_probe = false)` re-probes the OS (ioctl → `/dev/tty` → `$COLUMNS`/`$LINES`) and is the canonical way to pick up a size change outside a `SIGWINCH`. When `force_probe` is `true` (or ioctl fails), it also runs an ANSI cursor-position probe (`CSI 999;999H` + `CSI 6 n`) that reads the real rows/cols from the terminal's response. `Terminal::init()` calls `refresh_size(/*force_probe=*/true)` once after entering the alternate screen and raw mode, before the first `UI::resize(...)`. Callers that resize the UI later must also call `ui->resize(...)`, `update_pane_layout()`, `ui->invalidate()`, and set `needs_redraw = true` so the layout, pane heights, and the diff renderer all pick up the new size atomically.
+  **Renderer:** `UI::render()` paints every row from column 0 with explicit colors and pads rows through the safe render width — no diff against `last_grid`. Autowrap is disabled (`CSI ?7 l`) for frame and cursor output, and is restored only during terminal cleanup (`CSI ?7 h`). The renderer must not write the rightmost `render_margin` physical columns of **any** row (default 1 column, configurable via `JOT_RENDER_MARGIN=<n>`): writing the rightmost cell leaves the terminal in a pending-wrap state and at large widths the next cursor move can be misinterpreted as a wrap and scroll the viewport. The last row's margin-1 clamp is extended to every row for this reason. After writing each row the renderer emits `EL 0` (`\x1b[K`, erase to end of line) to clear any leftover content in the right-edge margin columns and any stale characters past the last painted cell. The renderer then calls `Terminal::try_drain()` which does a non-blocking `write()` of the accumulated output to the kernel once the buffer has grown past `render_chunk_bytes_` (default 4096, override with `JOT_RENDER_CHUNK_BYTES`, set 0 to disable). The non-blocking write sets `O_NONBLOCK` on stdout temporarily and pushes as much of the buffer as the kernel PTY can accept right now; any data the kernel cannot accept stays in the buffer and is retried on the next `try_drain()` call or the final blocking `flush()` at frame end. This gives the terminal data in chunks (defense against terminals that silently drop bytes from large writes, e.g. COSMIC terminal at fullscreen sizes) while never blocking the event loop. The cursor is emitted at the end of the frame; `UI::set_cursor()` / `UI::hide_cursor()` only store state and do not write to the terminal, and the cursor is clamped one cell further inside the margin so the cursor itself is never parked on a right-edge cell either. `UI::flush_cursor()` emits just the cursor state for idle frames (the `!needs_redraw` path in `Editor::render()`). This guarantees that every cell the terminal sees is an intentional paint with no stale fragments or scroll-induced corruption.
+  **Scroll safety:** `Terminal::restore_terminal()` re-enables autowrap on exit. `term->clear()` (real `ESC[2J`) is only called from `UI::invalidate()` (resize / first-frame / theme change); it must not be called from any timer or per-frame path.
+- `render/`: drawing of buffer, minimap, overlays, panels, and easter-egg effects. Consumes the grid produced by `ui/`.
+- `edit/`: text editing, cursor movement, selection, clipboard, search, sidebar, and discrete editing features (duplicate, join, sort, shuffle, stats, etc.).
+- `input/`: keyboard and mouse dispatch, command palette, command actions and navigation, mode dispatch (insert/normal/visual/vim/transitions). The user-facing command layer lives here.
+- `features/`: syntax highlighting (regex-based), bracket matching, autoclose, config parsing. Pure text-manipulation helpers and config loaders.
+- `tools/`: integrated terminal (PTY-backed), telescope file finder, image viewer, native LSP client, Discord RPC.
+- `plugins/`: C++ side of the embedded Python bridge. Exposes the host API to `src/python/`.
+- `python/`: Python runtime scripts (`jot_api`, host bindings, commands, events, palette, plugins, theme). Bundled, not user-authored.
+
+## Work Guidance
+
+- Match the existing module's style and file layout. New editing primitives go in `edit/`, new UI panels in `render/`, new dispatch logic in `input/`.
+- When adding a new C++ source file, register it in the correct `OBJECT` library list in `src/CMakeLists.txt`. The build will silently miss it otherwise.
+- All modules depend on `include/`, `src/`, and the sibling module directories via `jot_configure_object_target`. Do not add ad-hoc include paths.
+- The C++17 standard is mandatory. Do not introduce C++20 features.
+- Output to the terminal is mediated by `ui/terminal.cpp` (or `src/platform/windows/ui/terminal.cpp`). Do not `printf`/`std::cout` directly to `stdout` from render code; see `PLANS.md` Fix 2 for the history of this rule.
+- `term->clear()` (the real terminal `ESC[2J` clear) is only allowed inside `UI::invalidate()`. It must not be called from any timer, periodic redraw, or per-frame path; doing so causes the visible background flicker and stale-overlap bug documented in `PLANS.md`.
+- Cursor state is deferred. `UI::set_cursor()` / `UI::hide_cursor()` only store the pending position/visibility; the actual terminal escape sequences are emitted by `UI::render()` (at frame-end) or `UI::flush_cursor()` (for idle frames). Never interleave cursor flushes with a render frame. `UI::clear()` resets the in-memory `grid` only and is safe to call every frame.
+
+## Verification
+
+- Build: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release` then `cmake --build build -j`. Expect all module `OBJECT` and `STATIC` libraries plus `jot_engine` to compile.
+- Run: `./build/jot` opens an empty session; `./build/jot path/to/file` opens a file; `./build/jot path/to/folder` opens a workspace.
+- Render regression checks (see `PLANS.md` for the contracts):
+  - **Small/partial canvas (width and height):** home menu and editor must fill the real terminal size on first paint, not a tiny centered area. Force sizes via `COLUMNS=120 LINES=40 ./build/jot`, `COLUMNS=200 LINES=80 ./build/jot`, etc. Confirm the UI grid uses the full reported width *and* height. A `grep -oP '\[(\d+);1H'` of the captured output should show the highest row reaching the reported `LINES` value.
+  - **Stale grid:** open a large file and confirm all visible text renders on the first frame, and remains visible after several idle seconds.
+  - **Flicker/overlap:** leave jot idle for at least 10 seconds (both home menu and editor) and confirm no background changes, no stale panels or text overlap, and no periodic refresh artifacts. A `grep -c '\[2J'` of the terminal capture over 7+ seconds should return 0 or 1 (the initial alternate-screen clear), not 2+.
+  - **Scroll corruption / stale fragments:** idle in a tall terminal for 10s; no `\n`, `\x1bD`, or `\x1bM` should appear. The byte-level capture must show that every row is painted from column 0 (via `\x1b[y;1H` move-cursor sequences). Rendered rows must be padded to full width minus the render margin — no partial cells from a previous frame can survive.
+  - **Right-edge safety margin:** the renderer leaves the rightmost `render_margin` columns of every row untouched (default 1, override with `JOT_RENDER_MARGIN=<n>`). This was added to fix the fullscreen/large-window corruption where writing the rightmost cell leaves a pending-wrap state. The cursor is clamped one cell further inside. If margin 1 still shows drift on a particular terminal, try `JOT_RENDER_MARGIN=2` and keep the larger value.
+  - **Per-row clear and non-blocking drain:** every painted row is followed by `ESC[K` (erase to end of line) and a `try_drain()` call. Verify in the raw capture that there is exactly one `ESC[K` per row. The `try_drain()` is non-blocking and pushes accumulated output to the kernel as the frame is built; the `bytes=…` in the `FRAME` marker reflects only the last `flush()` at frame end, which is the leftover after the in-frame drains. The `JOT_RENDER_CHUNK_BYTES=<n>` env var controls the drain threshold (default 4096). Typing must remain responsive at 20+ keys/sec with no freeze at any terminal size.
+  - **Large-file typing responsiveness:** open a 5M-line file (or run `python3 -c "for i in range(5_000_000): print(i)" > /tmp/big.log` and open it) and type 100 characters. The keystrokes must complete in ~2s at 20 keys/sec, matching the rate of stdin, with no freeze or visible lag. The undo system must capture only a window of lines around the cursor, not the full 5M-line buffer, on every keystroke.
+
+## Child DOX Index
+
+- `src/python/AGENTS.md` — bundled Python runtime support (`jot_api`, host bindings, commands, events, palette, plugins, theme).

@@ -88,6 +88,22 @@ void InMemoryLineProvider::move_lines(int start, int end, int dest) {
   }
 }
 
+void InMemoryLineProvider::replace_lines(int start, int count,
+                                         const std::vector<std::string> &new_lines) {
+  if (count < 0) count = 0;
+  if (start < 0) start = 0;
+  if (start > (int)lines_.size()) start = (int)lines_.size();
+  if (start + count > (int)lines_.size()) {
+    count = (int)lines_.size() - start;
+  }
+  if (count > 0) {
+    lines_.erase(lines_.begin() + start, lines_.begin() + start + count);
+  }
+  if (!new_lines.empty()) {
+    lines_.insert(lines_.begin() + start, new_lines.begin(), new_lines.end());
+  }
+}
+
 void InMemoryLineProvider::for_each_line(LineVisitor fn) {
   for (int i = 0; i < (int)lines_.size(); i++)
     fn(i, lines_[i]);
