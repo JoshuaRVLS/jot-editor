@@ -56,12 +56,14 @@ private:
   int render_margin_ = 1;
   // Per-row chunked-flush threshold. After each row the renderer calls
   // `flush_if_buffer_exceeds()` which does a real flush() if the
-  // accumulated output buffer has grown past this many bytes. This
-  // keeps the per-write payload small enough that terminals with a
-  // modest PTY receive buffer (e.g. COSMIC terminal at fullscreen
-  // sizes) can process each chunk before the next one arrives. Set to
-  // 0 to disable chunked flushing. Override with JOT_RENDER_CHUNK_BYTES.
-  size_t render_chunk_bytes_ = 4096;
+  // accumulated output buffer has grown past this many bytes. Default
+  // 0 (disabled): mid-frame flushes block the event loop while the
+  // kernel drains the PTY buffer, freezing input for hundreds of
+  // milliseconds. Set JOT_RENDER_CHUNK_BYTES=<n> to enable chunked
+  // flushing for diagnosis (e.g. to confirm a terminal drops bytes
+  // from large writes); values like 2048 or 4096 keep each write
+  // under most terminals' receive buffer.
+  size_t render_chunk_bytes_ = 0;
 
   void enable_raw_mode();
   void disable_raw_mode();
@@ -159,12 +161,18 @@ public:
   int render_margin() const { return render_margin_; }
 
   // Flush the output buffer if its size has crossed the chunk threshold
-  // (JOT_RENDER_CHUNK_BYTES, default 4096). The renderer calls this after
-  // each row of the full-row paint pass so the terminal sees a series of
-  // small writes rather than one very large one. This is defense-in-depth
-  // against terminals that silently drop bytes when the per-write payload
-  // exceeds their PTY receive buffer. With `render_chunk_bytes_ == 0` the
-  // function is a no-op and the renderer falls back to one big flush.
+  // (JOT_RENDER_CHUNK_BYTES, default 0 = disabled). The renderer calls
+  // this after each row of the full-row paint pass so the terminal sees
+  // a series of small writes rather than one very large one. This is
+  // defense-in-depth against terminals that silently drop bytes when the
+  // per-write payload exceeds their PTY receive buffer. With
+  // `render_chunk_bytes_ == 0` the function is a no-op and the renderer
+  // falls back to one big flush at frame end.
+  //
+  // Note: mid-frame flushes can block the event loop while the kernel
+  // drains the PTY buffer, freezing input for hundreds of milliseconds
+  // on slow terminals. Keep this disabled unless you have a specific
+  // terminal that drops bytes from large writes.
   void flush_if_buffer_exceeds();
 };
 

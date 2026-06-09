@@ -203,8 +203,10 @@ void Terminal::init() {
   }
 
   // Per-row chunked-flush threshold. JOT_RENDER_CHUNK_BYTES=<n> overrides
-  // the default of 4096 bytes. Set to 0 to disable (one big flush per
-  // frame, legacy behaviour).
+  // the default of 0 (disabled). Set to e.g. 2048 or 4096 to enable
+  // chunked flushing for diagnosis on terminals that drop bytes from
+  // large writes. Disabled by default because mid-frame flushes block
+  // the event loop while the kernel drains the PTY buffer.
   {
     const char *m = getenv("JOT_RENDER_CHUNK_BYTES");
     if (m && m[0] != '\0') {

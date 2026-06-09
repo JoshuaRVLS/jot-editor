@@ -166,7 +166,6 @@ void UI::render() {
       // and try to continue from the previous cursor position.
       if (y > 0) {
         term->clear_to_end();
-        term->flush_if_buffer_exceeds();
       }
       continue;
     }
@@ -266,12 +265,16 @@ void UI::render() {
     // the erase is bounded to the current row.
     term->clear_to_end();
 
-    // Flush the output buffer if it has grown past the per-row
-    // chunk threshold. This keeps each write payload small enough
-    // that terminals with a modest PTY receive buffer (e.g. COSMIC
-    // terminal at fullscreen sizes) can process each chunk before
-    // the next one arrives. See JOT_RENDER_CHUNK_BYTES.
-    term->flush_if_buffer_exceeds();
+    // Intentionally no mid-frame flush here. Mid-frame flushes block
+    // the event loop while the kernel drains the PTY buffer, freezing
+    // input for hundreds of milliseconds on slow terminals. The
+    // single flush() at the end of the frame is enough; the kernel
+    // PTY buffer accepts the entire frame in one write, and `fflush`
+    // returns as soon as the data is queued in the kernel. The
+    // terminal drains the PTY asynchronously while the event loop
+    // is free to read more stdin input. If a particular terminal
+    // drops bytes from large writes, set JOT_RENDER_CHUNK_BYTES=<n>
+    // to re-enable chunked flushing for diagnosis.
   }
 
   term->reset_color();
