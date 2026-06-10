@@ -6,7 +6,7 @@
 
 void Editor::render_status_line() {
   int y = ui->get_height() - status_height;
-  int w = ui->get_width();
+  int w = ui->get_render_width();
 
   UIRect rect = {0, y, w, status_height};
   ui->fill_rect(rect, " ", theme.fg_status, theme.bg_status);
@@ -67,7 +67,7 @@ void Editor::render_command_palette() {
     return;
 
   int y = ui->get_height() - 1;
-  int w = ui->get_width();
+  int w = ui->get_render_width();
   UIRect rect = {0, y, w, 1};
   ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
 
@@ -203,7 +203,7 @@ void Editor::render_context_menu() {
 
 void Editor::render_save_prompt() {
   int h = ui->get_height();
-  int w = ui->get_width();
+  int w = ui->get_render_width();
 
   std::string prompt = "Save As: type filename, Enter=save, Esc=cancel";
   int x = w / 2 - prompt.length() / 2;
@@ -224,7 +224,7 @@ void Editor::render_save_prompt() {
 
 void Editor::render_quit_prompt() {
   int h = ui->get_height();
-  int w = ui->get_width();
+  int w = ui->get_render_width();
 
   std::string prompt = "Unsaved changes! Quit anyway? (y/n)";
   int x = w / 2 - prompt.length() / 2;

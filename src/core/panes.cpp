@@ -45,7 +45,7 @@ void Editor::update_pane_layout() {
     pane_root = 0;
   }
 
-  int total_w = std::max(1, ui->get_width());
+  int total_w = std::max(1, ui->get_render_width());
   int reserved_terminal_h = 0;
   if (show_integrated_terminal && !integrated_terminals.empty()) {
     reserved_terminal_h =
@@ -126,7 +126,7 @@ void Editor::split_pane_down() { split_pane_direction(0, 1); }
 
 void Editor::split_pane_direction(int dx, int dy) {
   if (panes.empty()) {
-    create_pane(0, 0, ui->get_width(), ui->get_height() - status_height,
+    create_pane(0, 0, ui->get_render_width(), ui->get_height() - status_height,
                 current_buffer);
   }
 

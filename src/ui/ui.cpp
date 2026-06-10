@@ -405,8 +405,21 @@ void UI::draw_rect(const UIRect &rect, int fg, int bg) {
 }
 
 void UI::draw_border(const UIRect &rect, int fg, int bg) {
+  // Defensive clamp: if the caller asked for a right edge that lands
+  // in the right-edge render margin (the column the renderer will
+  // not paint), pull the border one cell inside so the right side
+  // of the border is actually visible. This is defense in depth
+  // for any full-width panel that does its own layout.
+  UIRect clamped = rect;
+  int paint_w = get_render_width();
+  if (clamped.x + clamped.w > paint_w) {
+    clamped.w = paint_w - clamped.x;
+    if (clamped.w < 1)
+      clamped.w = 1;
+  }
+
   // Top and Bottom
-  for (int x = rect.x; x < rect.x + rect.w && x < width; x++) {
+  for (int x = clamped.x; x < clamped.x + clamped.w && x < width; x++) {
     UICell cell;
     cell.ch = "─"; // U+2500
     cell.fg = fg;
@@ -415,30 +428,30 @@ void UI::draw_border(const UIRect &rect, int fg, int bg) {
     cell.italic = false;
     cell.reverse = false;
 
-    if (x == rect.x)
+    if (x == clamped.x)
       cell.ch = "┌"; // U+250C
-    else if (x == rect.x + rect.w - 1)
+    else if (x == clamped.x + clamped.w - 1)
       cell.ch = "┐"; // U+2510 (Top Right)
 
     // Draw top
-    if (rect.y >= 0 && rect.y < height)
-      set_cell(x, rect.y, cell);
+    if (clamped.y >= 0 && clamped.y < height)
+      set_cell(x, clamped.y, cell);
 
     // Prepare bottom corners
-    if (x == rect.x)
+    if (x == clamped.x)
       cell.ch = "└"; // U+2514
-    else if (x == rect.x + rect.w - 1)
+    else if (x == clamped.x + clamped.w - 1)
       cell.ch = "┘"; // U+2518
     else
       cell.ch = "─";
 
     // Draw bottom
-    if (rect.y + rect.h - 1 < height && rect.y + rect.h - 1 >= 0)
-      set_cell(x, rect.y + rect.h - 1, cell);
+    if (clamped.y + clamped.h - 1 < height && clamped.y + clamped.h - 1 >= 0)
+      set_cell(x, clamped.y + clamped.h - 1, cell);
   }
 
   // Left and Right (excluding corners which are already drawn)
-  for (int y = rect.y + 1; y < rect.y + rect.h - 1 && y < height; y++) {
+  for (int y = clamped.y + 1; y < clamped.y + clamped.h - 1 && y < height; y++) {
     UICell cell;
     cell.ch = "│"; // U+2502
     cell.fg = fg;
@@ -447,11 +460,11 @@ void UI::draw_border(const UIRect &rect, int fg, int bg) {
     cell.italic = false;
     cell.reverse = false;
 
-    if (rect.x >= 0 && rect.x < width)
-      set_cell(rect.x, y, cell);
+    if (clamped.x >= 0 && clamped.x < width)
+      set_cell(clamped.x, y, cell);
 
-    if (rect.x + rect.w - 1 < width && rect.x + rect.w - 1 >= 0)
-      set_cell(rect.x + rect.w - 1, y, cell);
+    if (clamped.x + clamped.w - 1 < width && clamped.x + clamped.w - 1 >= 0)
+      set_cell(clamped.x + clamped.w - 1, y, cell);
   }
 }
 

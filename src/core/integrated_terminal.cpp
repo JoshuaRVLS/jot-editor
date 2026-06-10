@@ -173,7 +173,7 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y) {
   int panel_h = std::clamp(integrated_terminal_height, 5,
                            std::max(5, ui->get_height() / 2));
   int panel_y = std::max(tab_height, ui->get_height() - status_height - panel_h);
-  int panel_w = ui->get_width();
+  int panel_w = ui->get_render_width();
   int tab_y = panel_y + 1;
 
   if (x < 0 || x >= panel_w || y < panel_y || y >= panel_y + panel_h) {
@@ -245,7 +245,7 @@ bool Editor::handle_integrated_terminal_scroll(int x, int y, bool is_scroll_up,
   int panel_h = std::clamp(integrated_terminal_height, 5,
                            std::max(5, ui->get_height() / 2));
   int panel_y = std::max(tab_height, ui->get_height() - status_height - panel_h);
-  int panel_w = ui->get_width();
+  int panel_w = ui->get_render_width();
 
   if (x < 0 || x >= panel_w || y < panel_y || y >= panel_y + panel_h) {
     return false;
@@ -275,7 +275,7 @@ void Editor::place_integrated_terminal_cursor() {
   int panel_h = std::clamp(integrated_terminal_height, 5,
                            std::max(5, ui->get_height() / 2));
   int panel_y = std::max(tab_height, ui->get_height() - status_height - panel_h);
-  int panel_w = ui->get_width();
+  int panel_w = ui->get_render_width();
   int content_w = std::max(1, panel_w - 2);
   int content_h = std::max(1, panel_h - 3);
 
@@ -308,7 +308,7 @@ void Editor::render_integrated_terminal() {
   int panel_h = std::clamp(integrated_terminal_height, 5,
                            std::max(5, ui->get_height() / 2));
   int panel_y = std::max(tab_height, ui->get_height() - status_height - panel_h);
-  int panel_w = ui->get_width();
+  int panel_w = ui->get_render_width();
   UIRect panel = {0, panel_y, panel_w, panel_h};
 
   int term_fg = theme.fg_terminal;

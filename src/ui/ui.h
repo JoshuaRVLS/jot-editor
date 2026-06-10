@@ -64,6 +64,24 @@ public:
 
   int get_width() const { return width; }
   int get_height() const { return height; }
+
+  // Paintable width: the physical terminal width minus the right-edge
+  // safety margin. The renderer intentionally leaves the rightmost
+  // `render_margin()` columns untouched (default 1) to avoid the
+  // terminal's pending-wrap state at large widths. Layout code
+  // that places visible UI edges (pane borders, status line,
+  // integrated terminal panel, image viewer) must use this width
+  // instead of `get_width()` so the right border lands inside the
+  // paintable area. The margin is invisible to mouse clicks too:
+  // the cursor clamp in render()/flush_cursor() already parks the
+  // cursor one cell inside, and mouse click handlers ignore
+  // positions beyond the rightmost paintable column.
+  int get_render_width() const {
+    int m = term ? term->render_margin() : 0;
+    if (m < 0) m = 0;
+    int w = width - m;
+    return w < 1 ? 1 : w;
+  }
 };
 
 #endif

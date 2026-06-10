@@ -7,7 +7,7 @@ void Editor::render_easter_egg() {
     return;
 
   int h = ui->get_height();
-  int w = ui->get_width();
+  int w = ui->get_render_width();
 
   // Color cycles every 6 frames → gives a smooth rainbow sweep
   int phase = (easter_egg_timer / 4) % 6;

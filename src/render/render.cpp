@@ -142,7 +142,7 @@ void Editor::render() {
   }
 
   ui->clear();
-  int w = ui->get_width();
+  int w = ui->get_render_width();
 
   if (show_home_menu) {
     render_home_menu();

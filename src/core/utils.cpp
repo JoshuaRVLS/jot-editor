@@ -22,7 +22,7 @@ SplitPane& Editor::get_pane(int id) {
     if (id == -1) id = current_pane;
     if (panes.empty()) {
         int h = ui->get_height();
-        int w = ui->get_width();
+        int w = ui->get_render_width();
         create_pane(0, 0, w, h, -1);
     }
     return panes[id >= 0 && id < panes.size() ? id : 0];

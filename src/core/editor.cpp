@@ -184,7 +184,7 @@ Editor::Editor() {
   ui->set_default_colors(theme.fg_default, theme.bg_default);
 
   int h = terminal.get_height();
-  int w = terminal.get_width();
+  int w = ui->get_render_width();
   create_pane(0, 0, w - minimap_width, h - status_height, -1);
 
   current_buffer = 0;

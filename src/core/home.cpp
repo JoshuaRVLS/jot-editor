@@ -73,7 +73,7 @@ void Editor::render_home_menu() {
     return;
   }
 
-  const int screen_w = ui->get_width();
+  const int screen_w = ui->get_render_width();
   const int screen_h = ui->get_height();
   const int usable_h = std::max(1, screen_h - status_height);
 

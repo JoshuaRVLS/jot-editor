@@ -229,7 +229,7 @@ void Editor::render_lsp_completion() {
 
 void Editor::render_telescope() {
   int h = ui->get_height();
-  int w = ui->get_width();
+  int w = ui->get_render_width();
   if (w < 4 || h < 3)
     return;
 
@@ -346,7 +346,7 @@ void Editor::render_telescope() {
 }
 
 void Editor::render_image_viewer() {
-  int w = ui->get_width();
+  int w = ui->get_render_width();
   int h = ui->get_height();
   if (w < 4 || h <= status_height + tab_height)
     return;
