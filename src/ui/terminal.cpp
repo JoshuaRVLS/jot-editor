@@ -704,11 +704,57 @@ void Terminal::set_poll_timeout_ms(int timeout_ms) {
 void Terminal::flush() {
   int n = (int)buffer.length();
   last_flush_bytes_ = n;
-  if (render_capture_ && render_capture_raw_ && n > 0) {
+  if (n <= 0) {
+    return;
+  }
+
+  // Write the raw capture file first. fwrite is stdio-buffered and
+  // does not touch the PTY, so it cannot interleave with the
+  // terminal output and keeps the capture in sync with what we are
+  // about to emit.
+  if (render_capture_ && render_capture_raw_) {
     fwrite(buffer.c_str(), 1, n, render_capture_);
   }
-  fwrite(buffer.c_str(), 1, n, stdout);
-  fflush(stdout);
+
+  // Single ordered flush path: a blocking write() loop on
+  // STDOUT_FILENO. We previously used fwrite()/fflush(stdout) here
+  // and a non-blocking write() in try_drain() mid-frame. Mixing
+  // stdio with low-level writes caused byte reordering on some
+  // terminals (notably COSMIC at fullscreen sizes) and the
+  // observable symptom was the cursor teleporting away from the
+  // click position while typing. Using one low-level write() loop
+  // for the whole frame keeps the output strictly ordered and
+  // EINTR-safe.
+  const char *p = buffer.c_str();
+  size_t remaining = (size_t)n;
+  while (remaining > 0) {
+    ssize_t w = ::write(STDOUT_FILENO, p, remaining);
+    if (w > 0) {
+      p += w;
+      remaining -= (size_t)w;
+    } else if (w == -1 && errno == EINTR) {
+      // Interrupted by a signal; retry the same bytes.
+      continue;
+    } else if (w == -1 &&
+               (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      // stdout was switched to O_NONBLOCK somewhere; fall back to
+      // a short blocking wait by poll()-ing for writability.
+      struct pollfd pfd;
+      pfd.fd = STDOUT_FILENO;
+      pfd.events = POLLOUT;
+      pfd.revents = 0;
+      if (::poll(&pfd, 1, 1000) <= 0) {
+        // Give up after 1s; drop the rest of the frame to avoid a
+        // permanent hang.
+        break;
+      }
+      continue;
+    } else {
+      // EPIPE, EBADF, etc. Drop the rest of the frame.
+      break;
+    }
+  }
+
   buffer.clear();
 }
 

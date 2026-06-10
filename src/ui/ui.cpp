@@ -166,7 +166,6 @@ void UI::render() {
       // and try to continue from the previous cursor position.
       if (y > 0) {
         term->clear_to_end();
-        term->try_drain();
       }
       continue;
     }
@@ -265,18 +264,6 @@ void UI::render() {
     // disabled, the cursor stays at the end of the written text and
     // the erase is bounded to the current row.
     term->clear_to_end();
-
-    // Non-blocking drain: once the buffer has grown past
-    // `render_chunk_bytes_` (default 4096), push as much of the
-    // accumulated output to the kernel as the PTY can accept right
-    // now. Unlike `fflush()`, this never blocks the event loop. The
-    // terminal receives data in chunks as the frame is built, which
-    // is defense against terminals that silently drop bytes from
-    // large writes (e.g. COSMIC terminal at fullscreen sizes). Any
-    // data the kernel cannot accept right now stays in the buffer
-    // and is retried by the next `try_drain()` or the final
-    // blocking `flush()` at frame end.
-    term->try_drain();
   }
 
   term->reset_color();
@@ -347,7 +334,6 @@ void UI::flush_cursor() {
     term->show_cursor();
   }
   term->write("\033[1 q");
-  term->enable_autowrap();
   term->flush();
 
   if (term->render_capture_enabled()) {

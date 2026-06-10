@@ -54,19 +54,17 @@ private:
   // to fix some terminals where margin 1 still shows row/column drift on
   // the right edge.
   int render_margin_ = 1;
-  // Per-row non-blocking drain threshold. After each row the renderer
-  // calls `try_drain()` which does a non-blocking `write()` of the
-  // accumulated output buffer. Once the buffer has grown past this
-  // many bytes, `try_drain()` activates and drains as much of the
-  // buffer as the kernel PTY can accept right now without blocking.
-  // Any data the kernel cannot accept stays in the buffer for the
-  // next `try_drain()` call (or the final blocking `flush()` at
-  // frame end). This is defense against terminals that silently
-  // drop bytes when the per-write payload exceeds their PTY receive
-  // buffer (e.g. COSMIC terminal at fullscreen sizes). The non-
-  // blocking write never freezes the event loop. Default 4096;
-  // override with JOT_RENDER_CHUNK_BYTES.
-  size_t render_chunk_bytes_ = 4096;
+  // Per-frame chunking threshold for `flush()`. When > 0 and the
+  // output buffer has grown past this many bytes, `flush()` will
+  // emit the data in blocking `write()` chunks of this size
+  // instead of one big write. This is diagnosis-only; the default
+  // is 0 (one ordered flush per frame). Mid-frame `try_drain()` is
+  // no longer called from the renderer because mixing
+  // non-blocking writes with the blocking final flush was causing
+  // byte reordering and large-window cursor teleport. If chunking
+  // is needed, set JOT_RENDER_CHUNK_BYTES=<n> to enable chunked
+  // writes inside `flush()`.
+  size_t render_chunk_bytes_ = 0;
 
   void enable_raw_mode();
   void disable_raw_mode();
@@ -164,20 +162,19 @@ public:
   int render_margin() const { return render_margin_; }
 
   // Drain the output buffer to the kernel PTY without blocking. If
-  // the buffer has not yet reached `render_chunk_bytes_`, this is a
-  // no-op. Once the threshold is crossed, sets O_NONBLOCK on stdout
-  // and calls `write()` to push as much of the buffer as the kernel
-  // PTY can accept right now. Any data the kernel cannot accept
-  // stays in the buffer and is retried by the next `try_drain()` or
-  // the final `flush()` at frame end. Unlike `flush_if_buffer_exceeds()`
-  // (which called `fflush` and blocked), `try_drain()` never blocks
-  // the event loop.
+  // `render_chunk_bytes_` is 0 (default), this is a no-op. When
+  // chunking is enabled, sets O_NONBLOCK on stdout and calls
+  // `write()` to push as much of the buffer as the kernel PTY can
+  // accept right now. Any data the kernel cannot accept stays in
+  // the buffer and is retried by the next `try_drain()` or the
+  // final `flush()` at frame end.
   //
-  // This is defense against terminals that silently drop bytes when
-  // the per-write payload exceeds their PTY receive buffer. It is
-  // called after each row in `UI::render()` and gives the terminal a
-  // chance to process each chunk as it arrives instead of receiving
-  // the entire ~17 KB frame in one write.
+  // The renderer no longer calls this from the normal `render()`
+  // row loop. Mid-frame drains mixed non-blocking writes with the
+  // blocking final flush and was causing byte reordering that
+  // manifested as large-window cursor teleport. This method is
+  // kept for diagnosis and for a future chunked-flush rebuild that
+  // would only emit ordered chunks from inside `flush()` itself.
   void try_drain();
 
   // Legacy blocking chunked flush. Calls `flush()` if the output
