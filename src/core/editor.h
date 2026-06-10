@@ -283,6 +283,12 @@ private:
   void render_input_prompt();
   void render_buffer_content(const SplitPane &pane, int buffer_id);
   void poll_lsp_clients();
+  // True when there is LSP work pending (pending change notifications
+  // or active clients). The event loop uses this to decide whether
+  // to register the 50ms LSP poll timer at all.
+  bool lsp_work_pending() const {
+    return !lsp_pending_changes.empty() || !lsp_clients.empty();
+  }
   void poll_discord_rpc(long long now_ms);
   LSPClient *find_lsp_client(const std::string &language,
                              const std::string &root_path);
@@ -441,6 +447,16 @@ private:
   void refresh_git_status(bool force = false);
   void clear_git_status();
   bool has_git_repo() const;
+  // True when a git background refresh could find anything to do. Used
+  // by the event loop to decide whether to register the git refresh
+  // timer at all (an empty-file session with no repo should not be
+  // running a 1.5s timer that always returns immediately).
+  bool git_status_active() const {
+    return !git_root.empty() || !git_branch.empty() ||
+           git_dirty_count != 0 || !git_file_status.empty() ||
+           (workspace_session_enabled && !workspace_session_root.empty()) ||
+           !root_dir.empty();
+  }
   std::string run_git_capture(const std::string &args) const;
   std::string to_git_relative_path(const std::string &path) const;
 

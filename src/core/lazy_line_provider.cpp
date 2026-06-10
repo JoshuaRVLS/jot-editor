@@ -232,9 +232,17 @@ void LazyLineProvider::insert_line(int after, const std::string &line) {
 void LazyLineProvider::insert_lines(int after,
                                     const std::vector<std::string> &lines) {
   int affected_chunk = after / kChunkSize;
+  if (affected_chunk < 0)
+    affected_chunk = 0;
   int line_in_chunk = after - (affected_chunk * kChunkSize) + 1;
 
   Chunk &chunk = ensure_chunk(affected_chunk);
+  // Clamp the insertion position to the chunk's current size so
+  // vector::insert can never receive an out-of-range iterator.
+  if (line_in_chunk < 0)
+    line_in_chunk = 0;
+  if (line_in_chunk > (int)chunk.lines.size())
+    line_in_chunk = (int)chunk.lines.size();
   chunk.lines.insert(chunk.lines.begin() + line_in_chunk, lines.begin(),
                      lines.end());
   chunk.is_edited = true;
@@ -266,6 +274,12 @@ void LazyLineProvider::delete_line(int n) { delete_lines(n, n); }
 void LazyLineProvider::delete_lines(int start, int end) {
   if (start > end)
     std::swap(start, end);
+  if (start < 0)
+    start = 0;
+  if (end >= (int)total_lines_)
+    end = (int)total_lines_ - 1;
+  if (end < start)
+    return;
 
   int start_chunk = start / kChunkSize;
   int end_chunk = end / kChunkSize;
@@ -273,18 +287,40 @@ void LazyLineProvider::delete_lines(int start, int end) {
 
   if (start_chunk == end_chunk) {
     Chunk &chunk = ensure_chunk(start_chunk);
+    if (start_in_chunk < 0)
+      start_in_chunk = 0;
+    if (start_in_chunk > (int)chunk.lines.size())
+      start_in_chunk = (int)chunk.lines.size();
+    int remove = (end - start + 1);
+    if (start_in_chunk + remove > (int)chunk.lines.size())
+      remove = (int)chunk.lines.size() - start_in_chunk;
+    if (remove <= 0)
+      return;
     chunk.lines.erase(chunk.lines.begin() + start_in_chunk,
-                      chunk.lines.begin() + start_in_chunk + (end - start + 1));
+                      chunk.lines.begin() + start_in_chunk + remove);
     chunk.is_edited = true;
   } else {
     Chunk &first = ensure_chunk(start_chunk);
-    int remove_count = first.lines.size() - start_in_chunk;
-    first.lines.erase(first.lines.begin() + start_in_chunk, first.lines.end());
+    if (start_in_chunk < 0)
+      start_in_chunk = 0;
+    if (start_in_chunk > (int)first.lines.size())
+      start_in_chunk = (int)first.lines.size();
+    int remove_count = (int)first.lines.size() - start_in_chunk;
+    if (remove_count > 0) {
+      first.lines.erase(first.lines.begin() + start_in_chunk,
+                        first.lines.end());
+    }
 
     Chunk &last = ensure_chunk(end_chunk);
     int end_in_chunk = end - end_chunk * kChunkSize + 1;
-    first.lines.insert(first.lines.end(),
-                       last.lines.begin() + end_in_chunk, last.lines.end());
+    if (end_in_chunk < 0)
+      end_in_chunk = 0;
+    if (end_in_chunk > (int)last.lines.size())
+      end_in_chunk = (int)last.lines.size();
+    if (end_in_chunk < (int)last.lines.size()) {
+      first.lines.insert(first.lines.end(),
+                         last.lines.begin() + end_in_chunk, last.lines.end());
+    }
 
     invalidate_chunk(end_chunk);
 

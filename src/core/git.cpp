@@ -231,6 +231,12 @@ void Editor::refresh_git_status(bool force) {
         [this](GitStatusResult result) {
           git_refresh_pending_ = false;
 
+          // Editor may have shut down while the git command was
+          // running on the worker thread. Drop the result rather
+          // than touching freed state.
+          if (!running)
+            return;
+
           if (!result.success) {
             if (!git_root.empty() || !git_file_status.empty() ||
                 git_dirty_count != 0 || !git_branch.empty()) {

@@ -388,6 +388,11 @@ void Editor::open_file(const std::string &path, bool preview) {
               shared_fb->lines.push_back("");
           },
           [this, path_to_open, preview, shared_fb]() mutable {
+            // Editor may have shut down while the file was being
+            // read on the worker thread. Drop the result rather than
+            // touching freed state.
+            if (!running)
+              return;
             finish_open_file(std::move(*shared_fb), path_to_open, preview);
           });
       return;
@@ -567,6 +572,11 @@ bool Editor::save_buffer_at(int index, bool announce) {
         },
         [this, filepath, announce,
          fmt_name](std::vector<std::string> refreshed) {
+          // Editor may have shut down while the formatter was
+          // running on the worker thread. Drop the result rather
+          // than touching freed state.
+          if (!running)
+            return;
           int found = -1;
           for (int i = 0; i < (int)buffers.size(); i++) {
             if (buffers[i].filepath == filepath) { found = i; break; }

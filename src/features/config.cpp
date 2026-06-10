@@ -70,7 +70,7 @@ void Config::load_defaults() {
   settings["lsp_completion_max_items"] = "8";
   settings["lsp_completion_nerd_icons"] = "true";
   settings["terminal_height"] = "10";
-  settings["discord_rpc"] = "true";
+  settings["discord_rpc"] = "false";
 }
 
 void Config::parse_line(const std::string &line) {

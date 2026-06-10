@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cerrno>
+#include <cstdlib>
 #include <cstring>
 #include <sys/epoll.h>
 #include <unistd.h>
@@ -381,7 +382,20 @@ void Editor::run() {
   int render_ms = std::max(1, 1000 / std::max(1, render_fps));
   event_loop_.set_timer(render_ms, true, [this] { render_frame(); });
 
-  if (auto_save_enabled && auto_save_interval_ms > 0) {
+  // JOT_SAFE_MODE disables every non-essential background timer so
+  // we can isolate native crashes from periodic work. The editor
+  // stays usable for input, rendering, and undo; only git status,
+  // LSP polling, integrated terminal polling, Discord RPC, and
+  // auto-save are skipped. Read once on the main thread at start
+  // and capture by value into each timer.
+  static int safe_mode_cached = -1;
+  if (safe_mode_cached < 0) {
+    const char *env = std::getenv("JOT_SAFE_MODE");
+    safe_mode_cached = (env && env[0] && env[0] != '0') ? 1 : 0;
+  }
+  const bool safe_mode = safe_mode_cached == 1;
+
+  if (!safe_mode && auto_save_enabled && auto_save_interval_ms > 0) {
     event_loop_.set_timer(auto_save_interval_ms, true, [this] {
       last_auto_save_ms =
           std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -391,21 +405,29 @@ void Editor::run() {
     });
   }
 
-  event_loop_.set_timer(1500, true, [this] { refresh_git_status(false); });
-  event_loop_.set_timer(50, true, [this] { poll_lsp_clients(); });
-  event_loop_.set_timer(100, true, [this] {
-    for (auto &term : integrated_terminals) {
-      if (term && term->poll_output())
-        needs_redraw = true;
-    }
-  });
-  event_loop_.set_timer(1000, true, [this] {
-    long long now_ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch())
-            .count();
-    poll_discord_rpc(now_ms);
-  });
+  if (!safe_mode && git_status_active()) {
+    event_loop_.set_timer(1500, true, [this] { refresh_git_status(false); });
+  }
+  if (!safe_mode && lsp_work_pending()) {
+    event_loop_.set_timer(50, true, [this] { poll_lsp_clients(); });
+  }
+  if (!safe_mode) {
+    event_loop_.set_timer(100, true, [this] {
+      for (auto &term : integrated_terminals) {
+        if (term && term->poll_output())
+          needs_redraw = true;
+      }
+    });
+  }
+  if (!safe_mode && config.get_bool("discord_rpc", false)) {
+    event_loop_.set_timer(1000, true, [this] {
+      long long now_ms =
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::steady_clock::now().time_since_epoch())
+              .count();
+      poll_discord_rpc(now_ms);
+    });
+  }
 
   event_loop_.set_timer(50, true, [this] {
     if (!running)
