@@ -46,13 +46,18 @@ private:
   int render_capture_seq_ = 0;
   bool render_capture_raw_ = false;
   int last_flush_bytes_ = 0;
-  // Per-frame safety margin (default 1): the renderer will not write the
-  // rightmost `render_margin_` physical columns of any row, and the cursor
-  // is clamped one cell inside that margin, so we never trigger the
-  // terminal's pending-wrap state at large widths. Override with the
-  // `JOT_RENDER_MARGIN=<n>` env var. JOT_RENDER_MARGIN=2 has been observed
-  // to fix some terminals where margin 1 still shows row/column drift on
-  // the right edge.
+  // Per-frame safety margin: the renderer will not write the
+  // rightmost `render_margin_` physical columns of any row, and the
+  // cursor is clamped one cell inside that margin, so we never
+  // trigger the terminal's pending-wrap state at large widths.
+  // The margin is fixed at one cell. JOT_RENDER_MARGIN values
+  // greater than 1 are clamped to 1; larger values would only
+  // produce a visibly oversized blank strip on the right edge of
+  // the UI without any safety benefit. UI::get_render_width() is
+  // defined as `width - render_margin_()` and is the width every
+  // full-width panel (pane layout, status line, integrated
+  // terminal, image viewer, home menu) must use so its right
+  // border lands on the last paintable column.
   int render_margin_ = 1;
   // Per-frame chunking threshold for `flush()`. When > 0 and the
   // output buffer has grown past this many bytes, `flush()` will

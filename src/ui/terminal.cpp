@@ -114,6 +114,41 @@ static bool read_char_with_timeout(char &out, int timeout_ms) {
   return read(STDIN_FILENO, &out, 1) == 1;
 }
 
+static int xterm_modifier_flags(int mod) {
+  int flags = 0;
+  if (mod == 2)
+    flags |= 0x80000; // Shift
+  else if (mod == 3)
+    flags |= 0x40000; // Alt
+  else if (mod == 4)
+    flags |= 0x80000 | 0x40000;
+  else if (mod == 5)
+    flags |= 0x20000; // Ctrl
+  else if (mod == 6)
+    flags |= 0x80000 | 0x20000;
+  else if (mod == 7)
+    flags |= 0x40000 | 0x20000;
+  else if (mod == 8)
+    flags |= 0x80000 | 0x40000 | 0x20000;
+  return flags;
+}
+
+static int csi_final_key_code(char final) {
+  if (final == 'A')
+    return 1008;
+  if (final == 'B')
+    return 1009;
+  if (final == 'C')
+    return 1010;
+  if (final == 'D')
+    return 1011;
+  if (final == 'H')
+    return 1012;
+  if (final == 'F')
+    return 1013;
+  return 0;
+}
+
 Terminal::Terminal() : width(80), height(24), poll_timeout_ms(8), raw_mode(false) {}
 
 Terminal::~Terminal() { cleanup(); }
@@ -193,15 +228,20 @@ void Terminal::init() {
   if (width <= 0) width = 80;
   if (height <= 0) height = 24;
 
-  // Renderer safety margin. JOT_RENDER_MARGIN=<n> overrides the default
-  // of 1 column. Margin 0 is rejected — the original rightmost-column
-  // bug returns at large widths without at least 1 column of safety.
+  // Renderer safety margin. The right-edge safety behavior is a
+  // fixed one-cell margin: the renderer never writes the physical
+  // rightmost column at large widths to avoid the terminal's
+  // pending-wrap state. JOT_RENDER_MARGIN=<n> is clamped to 1 — any
+  // larger value used to produce a visibly oversized blank strip
+  // on the right edge of the UI. 0 is also rejected because the
+  // rightmost-column bug returns at large widths without at least
+  // one column of safety.
   {
     const char *m = getenv("JOT_RENDER_MARGIN");
     if (m && m[0] != '\0') {
       int v = atoi(m);
       if (v >= 1) {
-        render_margin_ = v;
+        render_margin_ = 1;
       }
     }
   }
@@ -297,9 +337,16 @@ int Terminal::read_key() {
     if (!read_char_with_timeout(seq[0], 5))
       return '\x1b';
 
+    int prefix_flags = 0;
+    if (seq[0] == '\x1b') {
+      prefix_flags |= 0x40000;
+      if (!read_char_with_timeout(seq[0], 5))
+        return '\x1b' | prefix_flags;
+    }
+
     // Treat ESC + regular character as Alt+key. This is the most common way
-    // terminals encode Alt-modified letters and is much safer than trying to
-    // force Ctrl+Alt+Arrow support through terminal escape parsing.
+    // terminals encode Alt-modified letters. Some terminals encode Alt+Arrow
+    // as ESC plus a normal arrow CSI sequence, so keep parsing those below.
     if (seq[0] != '[' && seq[0] != 'O') {
       return ((unsigned char)seq[0]) | 0x40000;
     }
@@ -346,21 +393,7 @@ int Terminal::read_key() {
                   key = params[2];
                 }
 
-                int flags = 0;
-                if (mod == 2)
-                  flags |= 0x80000; // Shift
-                else if (mod == 3)
-                  flags |= 0x40000; // Alt
-                else if (mod == 4)
-                  flags |= 0x80000 | 0x40000;
-                else if (mod == 5)
-                  flags |= 0x20000; // Ctrl
-                else if (mod == 6)
-                  flags |= 0x80000 | 0x20000; // Ctrl+Shift
-                else if (mod == 7)
-                  flags |= 0x40000 | 0x20000;
-                else if (mod == 8)
-                  flags |= 0x80000 | 0x40000 | 0x20000;
+                int flags = prefix_flags | xterm_modifier_flags(mod);
 
                 // Map special keys
                 int mapped_key = 0;
@@ -394,30 +427,7 @@ int Terminal::read_key() {
               if (params.size() >= 2) {
                 int key = params[0];
                 int mod = params[1];
-                int flags = 0;
-                // Kitty mods: 1=None, 2=Shift, 3=Alt, 4=Ctrl+Shift?
-                // Wait, Kitty uses 1-based bitmask?
-                // 1=Shift, 2=Alt, 4=Ctrl?
-                // Actually usually standard masks:
-                // 1: Shift=1, Alt=2, Ctrl=4, Super=8 -> +1 offset?
-                // Standard xterm: 2=Shift, 3=Alt, 5=Ctrl
-
-                // Assuming standard XTerm modifiers for now as 'u' often
-                // follows that
-                if (mod == 2)
-                  flags |= 0x80000;
-                else if (mod == 3)
-                  flags |= 0x40000;
-                else if (mod == 4)
-                  flags |= 0x80000 | 0x40000;
-                else if (mod == 5)
-                  flags |= 0x20000;
-                else if (mod == 6)
-                  flags |= 0x80000 | 0x20000;
-                else if (mod == 7)
-                  flags |= 0x40000 | 0x20000;
-                else if (mod == 8)
-                  flags |= 0x80000 | 0x40000 | 0x20000;
+                int flags = prefix_flags | xterm_modifier_flags(mod);
 
                 return key | flags;
               }
@@ -429,36 +439,8 @@ int Terminal::read_key() {
               if (params.size() == 2 && params[0] == 1)
                 mod = params[1];
 
-              int flags = 0;
-              if (mod == 2)
-                flags |= 0x80000;
-              else if (mod == 3)
-                flags |= 0x40000;
-              else if (mod == 4)
-                flags |= 0x80000 | 0x40000;
-              else if (mod == 5)
-                flags |= 0x20000;
-              else if (mod == 6)
-                flags |= 0x80000 | 0x20000;
-              else if (mod == 7)
-                flags |= 0x40000 | 0x20000;
-              else if (mod == 8)
-                flags |= 0x80000 | 0x40000 | 0x20000;
-              // ...
-
-              int code = 0;
-              if (next == 'A')
-                code = 1008;
-              if (next == 'B')
-                code = 1009;
-              if (next == 'C')
-                code = 1010;
-              if (next == 'D')
-                code = 1011;
-              if (next == 'F')
-                code = 1013;
-              if (next == 'H')
-                code = 1012;
+              int flags = prefix_flags | xterm_modifier_flags(mod);
+              int code = csi_final_key_code(next);
 
               return code | flags;
             }
@@ -486,17 +468,17 @@ int Terminal::read_key() {
         // Handle [A, [B directly (no numbers)
         switch (seq[1]) {
         case 'A':
-          return 1008;
+          return 1008 | prefix_flags;
         case 'B':
-          return 1009;
+          return 1009 | prefix_flags;
         case 'C':
-          return 1010;
+          return 1010 | prefix_flags;
         case 'D':
-          return 1011;
+          return 1011 | prefix_flags;
         case 'H':
-          return 1012;
+          return 1012 | prefix_flags;
         case 'F':
-          return 1013;
+          return 1013 | prefix_flags;
         case 'M': {
           for (int i = 0; i < 3; i++) {
             char dummy;
@@ -512,11 +494,11 @@ int Terminal::read_key() {
     } else if (seq[0] == 'O') {
       switch (seq[1]) {
       case 'H':
-        return 1012;
+        return 1012 | prefix_flags;
       case 'F':
-        return 1013;
+        return 1013 | prefix_flags;
       case 'M':
-        return 13; // Keypad Enter on some terminals
+        return 13 | prefix_flags; // Keypad Enter on some terminals
       }
     }
     return '\x1b';
