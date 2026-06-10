@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "column_utils.h"
 #include <cctype>
 
 void Editor::move_cursor(int dx, int dy, bool extend_selection) {
@@ -56,16 +57,15 @@ void Editor::clamp_cursor(int buffer_id) {
   buf.cursor.x = std::max(0, std::min(line_len, buf.cursor.x));
 }
 
-void Editor::ensure_cursor_visible() {
+void Editor::ensure_cursor_visible(bool adjust_horizontal) {
   if (panes.empty())
     return;
   auto &pane = get_pane();
   auto &buf = get_buffer(pane.buffer_id);
 
-  int viewport_h = pane.h - tab_height;
-
-  if (viewport_h <= 0)
-    return;
+  int viewport_h = pane.h - tab_height - 1;
+  if (viewport_h < 1)
+    viewport_h = 1;
 
   if (buf.cursor.y < buf.scroll_offset) {
     buf.scroll_offset = buf.cursor.y;
@@ -73,17 +73,46 @@ void Editor::ensure_cursor_visible() {
     buf.scroll_offset = buf.cursor.y - viewport_h + 1;
   }
 
-  // Horizontal scrolling
-  int viewport_w = pane.w - 9; // Border + diagnostics gutter + line numbers
-  if (show_minimap)
-    viewport_w -= minimap_width;
+  if (adjust_horizontal) {
+    int draw_w = std::max(1, pane.w);
+    if (show_minimap && draw_w > 20)
+      draw_w = std::max(1, draw_w - minimap_width);
+    int viewport_w = draw_w - 9;
+    if (viewport_w < 1)
+      viewport_w = 1;
 
-  if (buf.cursor.x < buf.scroll_x) {
-    buf.scroll_x = buf.cursor.x;
-  } else if (buf.cursor.x >= buf.scroll_x + viewport_w) {
-    buf.scroll_x = buf.cursor.x - viewport_w + 1;
+    if (buf.cursor.y >= 0 && buf.cursor.y < (int)buf.line_count()) {
+      const std::string &line = buf.line(buf.cursor.y);
+      int cursor_visual =
+          compute_visual_column(line, buf.cursor.x, tab_size);
+      int scroll_visual =
+          compute_visual_column(line, buf.scroll_x, tab_size);
+      if (cursor_visual < scroll_visual) {
+        buf.scroll_x = buf.cursor.x;
+      } else if (cursor_visual >= scroll_visual + viewport_w) {
+        int cur = buf.scroll_x;
+        int cur_visual = scroll_visual;
+        while (cur < (int)line.size()) {
+          int next_visual =
+              cur_visual + ((line[cur] == '\t')
+                                ? tab_advance(cur_visual, tab_size)
+                                : 1);
+          if (next_visual > cursor_visual - viewport_w + 1)
+            break;
+          cur_visual = next_visual;
+          cur++;
+        }
+        buf.scroll_x = cur;
+      }
+    } else {
+      if (buf.cursor.x < buf.scroll_x) {
+        buf.scroll_x = buf.cursor.x;
+      } else if (buf.cursor.x >= buf.scroll_x + viewport_w) {
+        buf.scroll_x = buf.cursor.x - viewport_w + 1;
+      }
+    }
   }
-  // ensure clear
+
   if (buf.scroll_x < 0)
     buf.scroll_x = 0;
   if (buf.scroll_offset < 0)

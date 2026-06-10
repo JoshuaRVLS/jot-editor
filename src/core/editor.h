@@ -406,7 +406,7 @@ private:
   void move_to_line_end(bool extend_selection = false);
   void move_to_file_start(bool extend_selection = false);
   void move_to_file_end(bool extend_selection = false);
-  void ensure_cursor_visible(); // New method
+  void ensure_cursor_visible(bool adjust_horizontal = true); // New method
   void select_all();
   void select_current_line();
   void clear_selection();

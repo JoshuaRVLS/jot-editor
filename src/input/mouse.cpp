@@ -389,7 +389,7 @@ void Editor::handle_mouse(void *event_ptr) {
   const int line_num_width = 7;
   const int code_start_x = pane.x + 1 + line_num_width;
   const int content_top = pane.y + tab_height;
-  const int content_bottom = pane.y + pane.h;
+  const int content_bottom = pane.y + pane.h - 1;
 
   int raw_rel_y = event->y - content_top;
   int rel_y = raw_rel_y;
@@ -401,7 +401,7 @@ void Editor::handle_mouse(void *event_ptr) {
   rel_y = raw_rel_y;
   if (rel_visual_x < 0)
     rel_visual_x = 0;
-  int visible_rows = std::max(1, pane.h - tab_height);
+  int visible_rows = std::max(1, pane.h - tab_height - 1);
   int max_scroll_offset =
       std::max(0, (int)buf.line_count() - visible_rows);
 
@@ -742,5 +742,5 @@ void Editor::handle_mouse(void *event_ptr) {
 
   clamp_cursor(pane.buffer_id);
   buf.preferred_x = buf.cursor.x;
-  ensure_cursor_visible();
+  ensure_cursor_visible(bstate != 32);
 }
