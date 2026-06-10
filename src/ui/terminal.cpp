@@ -531,17 +531,35 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
 
   const char *seq = mouse_event_buffer.c_str();
 
+  char terminator = '\0';
+  if (!mouse_event_buffer.empty()) {
+    terminator = mouse_event_buffer.back();
+  }
+  if (terminator != 'M' && terminator != 'm') {
+    event.x = -1;
+    event.y = -1;
+    event.button = 0;
+    event.pressed = false;
+    event.released = false;
+    return;
+  }
+
   int button, x, y;
   if (sscanf(seq, "%d;%d;%d", &button, &x, &y) == 3) {
+    if (x <= 0 || y <= 0) {
+      event.x = -1;
+      event.y = -1;
+      event.button = button;
+      event.pressed = false;
+      event.released = false;
+      return;
+    }
     event.button = button;
     event.x = x - 1;
     event.y = y - 1;
 
-    // int button_code = button & 0x03;
     bool is_motion = (button & 0x20) != 0;
     bool is_wheel = (button >= 64 && button <= 67);
-
-    char terminator = mouse_event_buffer.back();
     bool is_release = (terminator == 'm');
 
     if (is_wheel) {
@@ -558,8 +576,9 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
       event.released = true;
     }
   } else {
-    event.x = 0;
-    event.y = 0;
+    event.x = -1;
+    event.y = -1;
+    event.button = 0;
     event.pressed = false;
     event.released = false;
   }

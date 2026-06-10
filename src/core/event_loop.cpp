@@ -302,7 +302,11 @@ void Editor::handle_terminal_event(const Event &ev) {
       bool is_motion = (ev.mouse.button & 0x20) != 0;
 
       if (is_motion) {
-        bstate = 32;
+        if (button_code == 0) {
+          bstate = 32;
+        } else {
+          bstate = 0;
+        }
       } else if (ev.mouse.pressed) {
         if (button_code == 0)
           bstate = 1;

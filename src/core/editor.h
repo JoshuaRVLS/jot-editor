@@ -148,6 +148,11 @@ private:
   MouseSelectionMode mouse_selection_mode;
   Cursor mouse_start;
   Cursor mouse_anchor_end;
+  int mouse_press_screen_x;
+  int mouse_press_screen_y;
+  int mouse_press_buf_x;
+  int mouse_press_buf_y;
+  bool mouse_drag_started;
   long long last_left_click_ms;
   Cursor last_left_click_pos;
   int last_left_click_count;

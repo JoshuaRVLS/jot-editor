@@ -2,9 +2,42 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <cstdarg>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <unordered_map>
+
+namespace {
+bool mouse_debug_enabled() {
+  static int cached = -1;
+  if (cached < 0) {
+    cached = std::getenv("JOT_MOUSE_DEBUG") != nullptr ? 1 : 0;
+  }
+  return cached == 1;
+}
+
+void mouse_debug_log(const char *fmt, ...) {
+  if (!mouse_debug_enabled())
+    return;
+  const char *path = std::getenv("JOT_MOUSE_DEBUG");
+  if (!path || !*path)
+    path = "/tmp/jot-mouse.log";
+  FILE *f = std::fopen(path, "a");
+  if (!f)
+    return;
+  std::va_list ap;
+  va_start(ap, fmt);
+  std::fprintf(f, "[mouse] ");
+  std::vfprintf(f, fmt, ap);
+  std::fputc('\n', f);
+  std::fclose(f);
+  va_end(ap);
+}
+
+constexpr int kMouseDragThreshold = 1;
+} // namespace
 
 // Local definition of MEVENT used by handle_mouse()
 struct MEVENT {
@@ -615,6 +648,12 @@ void Editor::handle_mouse(void *event_ptr) {
     last_left_click_ms = now_ms;
     last_left_click_pos = {click_x, click_y};
 
+    mouse_press_screen_x = event->x;
+    mouse_press_screen_y = event->y;
+    mouse_press_buf_x = click_x;
+    mouse_press_buf_y = click_y;
+    mouse_drag_started = false;
+
     if (last_left_click_count >= 3) {
       mouse_selecting = true;
       mouse_selection_mode = MOUSE_SELECT_LINE;
@@ -622,6 +661,7 @@ void Editor::handle_mouse(void *event_ptr) {
       mouse_anchor_end = {line_len, click_y};
       set_line_selection(mouse_start, mouse_anchor_end, {click_x, click_y});
       needs_redraw = true;
+      mouse_debug_log("press count=3 buf=(%d,%d) mode=LINE", click_x, click_y);
     } else if (last_left_click_count == 2) {
       const std::string &line = buf.line(click_y);
       if (line.empty()) {
@@ -651,6 +691,7 @@ void Editor::handle_mouse(void *event_ptr) {
           buf.preferred_x = buf.cursor.x;
           ensure_cursor_visible();
           needs_redraw = true;
+          mouse_debug_log("press count=2 bracket buf=(%d,%d)", click_x, click_y);
           return;
         }
 
@@ -671,6 +712,7 @@ void Editor::handle_mouse(void *event_ptr) {
         buf.preferred_x = buf.cursor.x;
       }
       needs_redraw = true;
+      mouse_debug_log("press count=2 word buf=(%d,%d) mode=WORD", click_x, click_y);
     } else {
       mouse_selecting = true;
       mouse_selection_mode = MOUSE_SELECT_CHAR;
@@ -678,44 +720,62 @@ void Editor::handle_mouse(void *event_ptr) {
       mouse_anchor_end = mouse_start;
       buf.cursor.x = click_x;
       buf.cursor.y = click_y;
+      buf.preferred_x = buf.cursor.x;
       buf.selection.start = mouse_start;
       buf.selection.end = {click_x, click_y};
       buf.selection.active = false;
       needs_redraw = true;
+      mouse_debug_log("press count=1 buf=(%d,%d) mode=CHAR", click_x, click_y);
     }
   } else if (bstate == 2) {
     idle_frame_count = 0;
     cursor_visible = true;
     cursor_blink_frame = 0;
     hide_lsp_completion();
+
     if (mouse_selecting) {
-      const bool had_drag_range = !(buf.selection.start == buf.selection.end);
+      if (mouse_drag_started) {
+        buf.cursor.x = click_x;
+        buf.cursor.y = click_y;
+        buf.preferred_x = buf.cursor.x;
 
-      buf.cursor.x = click_x;
-      buf.cursor.y = click_y;
-      buf.preferred_x = buf.cursor.x;
-
-      if (mouse_selection_mode == MOUSE_SELECT_WORD) {
-        set_word_selection(mouse_start, mouse_anchor_end, {click_x, click_y});
-      } else if (mouse_selection_mode == MOUSE_SELECT_LINE) {
-        set_line_selection(mouse_start, mouse_anchor_end, {click_x, click_y});
-      } else if (inside_pane || !had_drag_range) {
-        buf.selection.end = {click_x, click_y};
-        buf.selection.active =
-            !(buf.selection.start.x == buf.selection.end.x &&
-              buf.selection.start.y == buf.selection.end.y);
-        if (!buf.selection.active) {
-          buf.selection.start = buf.cursor;
-          buf.selection.end = buf.cursor;
+        if (mouse_selection_mode == MOUSE_SELECT_WORD) {
+          set_word_selection(mouse_start, mouse_anchor_end, {click_x, click_y});
+        } else if (mouse_selection_mode == MOUSE_SELECT_LINE) {
+          set_line_selection(mouse_start, mouse_anchor_end, {click_x, click_y});
+        } else {
+          buf.selection.end = {click_x, click_y};
+          buf.selection.active =
+              !(buf.selection.start.x == buf.selection.end.x &&
+                buf.selection.start.y == buf.selection.end.y);
         }
+        mouse_debug_log("release with-drag buf=(%d,%d) mode=%d",
+                        click_x, click_y, (int)mouse_selection_mode);
+      } else {
+        buf.cursor.x = mouse_press_buf_x;
+        buf.cursor.y = mouse_press_buf_y;
+        buf.preferred_x = buf.cursor.x;
+        if (mouse_selection_mode == MOUSE_SELECT_CHAR) {
+          buf.selection.start = mouse_start;
+          buf.selection.end = mouse_start;
+          buf.selection.active = false;
+        } else if (mouse_selection_mode == MOUSE_SELECT_WORD ||
+                   mouse_selection_mode == MOUSE_SELECT_LINE) {
+          buf.selection.start = mouse_start;
+          buf.selection.end = mouse_anchor_end;
+          buf.selection.active =
+              !(buf.selection.start.x == buf.selection.end.x &&
+                buf.selection.start.y == buf.selection.end.y);
+        }
+        mouse_debug_log("release no-drag restoring press buf=(%d,%d)",
+                        buf.cursor.x, buf.cursor.y);
       }
       mouse_selecting = false;
+      mouse_drag_started = false;
       needs_redraw = true;
     } else {
-      buf.cursor.x = click_x;
-      buf.cursor.y = click_y;
-      buf.preferred_x = buf.cursor.x;
-      needs_redraw = true;
+      mouse_debug_log("release stray (mouse_selecting=false) buf=(%d,%d)",
+                      click_x, click_y);
     }
   } else if (bstate == 32) {
     idle_frame_count = 0;
@@ -723,6 +783,19 @@ void Editor::handle_mouse(void *event_ptr) {
     cursor_blink_frame = 0;
     hide_lsp_completion();
     if (mouse_selecting) {
+      int dx = event->x - mouse_press_screen_x;
+      int dy = event->y - mouse_press_screen_y;
+      if (!mouse_drag_started) {
+        if (std::abs(dx) > kMouseDragThreshold ||
+            std::abs(dy) > kMouseDragThreshold) {
+          mouse_drag_started = true;
+        } else {
+          mouse_debug_log("motion under-threshold (dx=%d dy=%d) ignored",
+                          dx, dy);
+          return;
+        }
+      }
+
       if (mouse_selection_mode == MOUSE_SELECT_WORD) {
         set_word_selection(mouse_start, mouse_anchor_end, {click_x, click_y});
       } else if (mouse_selection_mode == MOUSE_SELECT_LINE) {
@@ -737,6 +810,8 @@ void Editor::handle_mouse(void *event_ptr) {
               buf.selection.start.y == buf.selection.end.y);
       }
       needs_redraw = true;
+      mouse_debug_log("motion drag buf=(%d,%d) drag_started=1",
+                      click_x, click_y);
     }
   }
 

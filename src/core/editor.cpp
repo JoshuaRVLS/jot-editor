@@ -117,6 +117,11 @@ Editor::Editor() {
   mouse_selecting = false;
   mouse_selection_mode = MOUSE_SELECT_CHAR;
   mouse_anchor_end = {0, 0};
+  mouse_press_screen_x = -1;
+  mouse_press_screen_y = -1;
+  mouse_press_buf_x = -1;
+  mouse_press_buf_y = -1;
+  mouse_drag_started = false;
   last_left_click_ms = 0;
   last_left_click_pos = {-1, -1};
   last_left_click_count = 0;
