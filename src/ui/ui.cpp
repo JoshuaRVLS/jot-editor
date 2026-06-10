@@ -299,7 +299,7 @@ void UI::render() {
     term->show_cursor();
   }
 
-  term->write("\033[5 q");
+  term->write("\033[1 q");
   term->flush();
 
   if (capture_on) {
@@ -346,7 +346,7 @@ void UI::flush_cursor() {
     term->move_cursor(cx, cy);
     term->show_cursor();
   }
-  term->write("\033[5 q");
+  term->write("\033[1 q");
   term->enable_autowrap();
   term->flush();
 
