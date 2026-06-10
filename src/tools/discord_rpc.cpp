@@ -105,7 +105,7 @@ DiscordRPC::DiscordRPC()
       last_presence_update_ms_(0), last_connect_attempt_ms_(0),
       heartbeat_interval_ms_(30000), nonce_counter_(0) {}
 
-DiscordRPC::~DiscordRPC() { disconnect(); }
+DiscordRPC::~DiscordRPC() { close_socket(); }
 
 bool DiscordRPC::find_and_connect_socket() {
   for (int i = 0; i <= 9; i++) {
@@ -140,15 +140,27 @@ bool DiscordRPC::find_and_connect_socket() {
   return false;
 }
 
-void DiscordRPC::disconnect() {
+void DiscordRPC::close_socket() {
+  // Non-recursive teardown. Closes the local socket fd and resets
+  // in-memory state. NEVER calls write_all(), send_frame(), or
+  // disconnect() (which would re-enter this path and SIGSEGV from
+  // stack overflow). Sending a CLOSE frame is optional in the
+  // Discord IPC protocol; closing the local fd is sufficient.
   if (sockfd_ >= 0) {
-    send_frame(2, ""); // CLOSE
     close(sockfd_);
     sockfd_ = -1;
   }
   state_ = DISCONNECTED;
   read_buf_.clear();
   write_buf_.clear();
+}
+
+void DiscordRPC::disconnect() {
+  // Public disconnect path. Closes the local socket without trying
+  // to send a CLOSE frame (sending on a half-broken socket is what
+  // caused the recursive disconnect -> write_all -> disconnect
+  // SIGSEGV).
+  close_socket();
 }
 
 void DiscordRPC::send_handshake() {
@@ -193,7 +205,9 @@ void DiscordRPC::poll(long long now_ms) {
       }
     }
     if (now_ms - last_connect_attempt_ms_ > kHandshakeTimeoutMs) {
-      disconnect();
+      // Handshake timed out. close_socket() is non-recursive and
+      // safe to call from the poll() loop.
+      close_socket();
     }
     break;
   }
@@ -217,6 +231,9 @@ void DiscordRPC::poll(long long now_ms) {
 }
 
 bool DiscordRPC::write_all(const uint8_t *data, size_t len) {
+  if (sockfd_ < 0) {
+    return false;
+  }
   size_t sent = 0;
   while (sent < len) {
     ssize_t n = write(sockfd_, data + sent, len - sent);
@@ -228,7 +245,11 @@ bool DiscordRPC::write_all(const uint8_t *data, size_t len) {
         usleep(1000);
         continue;
       }
-      disconnect();
+      // Unrecoverable write error. Close the socket directly so we
+      // do NOT recurse back through send_frame / write_all / disconnect
+      // (the bug that caused the SIGSEGV). The next poll() will
+      // reconnect if Discord is available again.
+      close_socket();
       return false;
     }
     sent += static_cast<size_t>(n);
@@ -270,7 +291,10 @@ bool DiscordRPC::read_frame(int &opcode, std::string &json) {
   ssize_t n = read(sockfd_, buf, sizeof(buf));
   if (n <= 0) {
     if (n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK)) {
-      disconnect();
+      // n == 0 means EOF / peer closed. Any other non-recoverable
+      // error means the socket is gone. Use close_socket() so we
+      // do not recurse through send_frame / write_all.
+      close_socket();
     }
     return false;
   }
@@ -334,7 +358,8 @@ void DiscordRPC::handle_frame(int opcode, const std::string &json) {
     break;
   }
   case 2: // CLOSE
-    disconnect();
+    // Peer asked us to close. close_socket() is non-recursive.
+    close_socket();
     break;
   case 4: // PONG
     break;

@@ -35,6 +35,11 @@ private:
 
   bool find_and_connect_socket();
   void send_handshake();
+  // close_socket() closes the local socket file descriptor and
+  // resets in-memory state. It MUST NOT send any frame or call
+  // write_all() / send_frame() / disconnect() (which would
+  // re-enter the close path and SIGSEGV from stack overflow).
+  void close_socket();
   bool write_all(const uint8_t *data, size_t len);
   bool send_frame(int opcode, const std::string &json);
   bool read_frame(int &opcode, std::string &json);
