@@ -1,6 +1,9 @@
 #include "terminal.h"
+#include <cctype>
 #include <cerrno>
 #include <csignal>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 
@@ -494,8 +497,14 @@ int Terminal::read_key() {
           return 1012;
         case 'F':
           return 1013;
-        case 'M':
-          return 1014; // Mouse X10
+        case 'M': {
+          for (int i = 0; i < 3; i++) {
+            char dummy;
+            if (read(STDIN_FILENO, &dummy, 1) != 1)
+              break;
+          }
+          return -2;
+        }
         case 'Z':
           return 1017; // Shift+Tab
         }
@@ -522,8 +531,9 @@ int Terminal::read_key() {
 
 void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
   if (mouse_event_buffer.empty()) {
-    event.x = 0;
-    event.y = 0;
+    event.x = -1;
+    event.y = -1;
+    event.button = 0;
     event.pressed = false;
     event.released = false;
     return;
@@ -628,15 +638,26 @@ Event Terminal::read_event() {
 
   int ch = read_key();
   if (ch < 0) {
-    ev.type = EVENT_REDRAW;
     return ev;
   }
 
   if (ch == 1014) {
-    ev.type = EVENT_MOUSE;
     parse_mouse_event(ch, ev.mouse);
+    if (const char *p = std::getenv("JOT_MOUSE_DEBUG"); p && *p) {
+      FILE *f = std::fopen(p, "a");
+      if (f) {
+        std::fprintf(f, "[proto] SGR buffer='%s' parsed=(%d,%d) btn=%d "
+                          "pressed=%d released=%d\n",
+                     mouse_event_buffer.c_str(), ev.mouse.x, ev.mouse.y,
+                     ev.mouse.button, ev.mouse.pressed ? 1 : 0,
+                     ev.mouse.released ? 1 : 0);
+        std::fclose(f);
+      }
+    }
     if (ev.mouse.x < 0 || ev.mouse.y < 0) {
       ev.type = EVENT_REDRAW;
+    } else {
+      ev.type = EVENT_MOUSE;
     }
     return ev;
   }
@@ -806,17 +827,15 @@ void Terminal::write(const std::string &str) { buffer += str; }
 void Terminal::write_char(char c) { buffer += c; }
 
 void Terminal::enable_mouse() {
-  buffer += "\x1b[?1000h";
   buffer += "\x1b[?1002h";
-  buffer += "\x1b[?1015h";
   buffer += "\x1b[?1006h";
   flush();
 }
 
 void Terminal::disable_mouse() {
   buffer += "\x1b[?1006l";
-  buffer += "\x1b[?1015l";
   buffer += "\x1b[?1002l";
+  buffer += "\x1b[?1015l";
   buffer += "\x1b[?1000l";
   flush();
 }
