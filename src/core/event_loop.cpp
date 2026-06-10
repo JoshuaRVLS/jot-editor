@@ -365,11 +365,15 @@ void Editor::run() {
   fcntl(stdin_fd, F_SETFL, stdin_flags | O_NONBLOCK);
 
   event_loop_.watch_fd(stdin_fd, true, false, [this] {
+    constexpr int kMaxDrainPerWake = 256;
+    int drained = 0;
     for (;;) {
       Event ev = terminal.read_event();
       if (ev.type == EVENT_REDRAW)
         break;
       handle_terminal_event(ev);
+      if (++drained >= kMaxDrainPerWake)
+        break;
     }
     render_frame();
   });

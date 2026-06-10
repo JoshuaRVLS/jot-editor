@@ -500,7 +500,7 @@ int Terminal::read_key() {
         case 'M': {
           for (int i = 0; i < 3; i++) {
             char dummy;
-            if (read(STDIN_FILENO, &dummy, 1) != 1)
+            if (!read_char_with_timeout(dummy, 5))
               break;
           }
           return -2;
@@ -595,7 +595,7 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
 }
 
 Event Terminal::poll_event() {
-  Event ev;
+  Event ev{};
   ev.type = EVENT_REDRAW;
 
   struct pollfd pfd;
@@ -604,12 +604,15 @@ Event Terminal::poll_event() {
   pfd.revents = 0;
   poll(&pfd, 1, std::max(0, poll_timeout_ms));
 
-  ev = check_resize_event();
-  if (ev.type != EVENT_REDRAW)
-    return ev;
+  if (pfd.revents & POLLIN) {
+    Event input = read_event();
+    if (input.type != EVENT_REDRAW)
+      return input;
+  }
 
-  if (pfd.revents & POLLIN)
-    return read_event();
+  Event rsz = check_resize_event();
+  if (rsz.type != EVENT_REDRAW)
+    return rsz;
 
   return ev;
 }
@@ -634,10 +637,12 @@ Event Terminal::check_resize_event() {
 }
 
 Event Terminal::read_event() {
-  Event ev;
+  Event ev{};
+  ev.type = EVENT_REDRAW;
 
   int ch = read_key();
   if (ch < 0) {
+    ev.type = EVENT_REDRAW;
     return ev;
   }
 
