@@ -58,6 +58,7 @@ Editor::Editor() {
   minimap_width = 10; // Fixed width for now
   show_integrated_terminal = false;
   current_integrated_terminal = -1;
+  last_terminal_task_name.clear();
   integrated_terminal_height =
       std::clamp(config.get_int("terminal_height", 10), 5, 20);
   show_search = false;
@@ -102,6 +103,7 @@ Editor::Editor() {
   last_tab_click_ms = 0;
   last_tab_clicked_index = -1;
   auto_indent = config.get_bool("auto_indent", true);
+  smart_paste_indent = config.get_bool("smart_paste_indent", true);
   auto_save_enabled = config.get_bool("auto_save", false);
   auto_save_interval_ms =
       std::clamp(config.get_int("auto_save_interval_ms", 2000), 250, 60000);
@@ -122,6 +124,11 @@ Editor::Editor() {
   mouse_press_buf_x = -1;
   mouse_press_buf_y = -1;
   mouse_drag_started = false;
+  pane_resize_dragging = false;
+  pane_resize_node = -1;
+  pane_resize_vertical = false;
+  pane_resize_start_pos = 0;
+  pane_resize_start_ratio = 0.5f;
   last_left_click_ms = 0;
   last_left_click_pos = {-1, -1};
   last_left_click_count = 0;
@@ -134,16 +141,24 @@ Editor::Editor() {
       std::clamp(config.get_int("lsp_change_debounce_ms", 120), 25, 1000);
   last_cursor_shape = -1;
   show_context_menu = false;
+  context_menu_surface = CONTEXT_MENU_NONE;
+  context_menu_items.clear();
   context_menu_x = 0;
   context_menu_y = 0;
+  context_menu_w = 0;
+  context_menu_h = 0;
   context_menu_selected = 0;
+  context_menu_target_buffer = -1;
+  context_menu_target_pane = -1;
+  context_menu_target_terminal = -1;
+  context_menu_target_path.clear();
+  context_menu_target_is_dir = false;
   lsp_completion_visible = false;
   lsp_completion_manual_request = false;
   lsp_completion_selected = 0;
   lsp_completion_anchor = {0, 0};
   lsp_completion_filepath.clear();
   lsp_completion_items.clear();
-  input_prompt_visible = false;
 
   // Modeless editor behavior: keep an always-insert internal mode.
   mode = MODE_INSERT;
@@ -253,6 +268,7 @@ void Editor::set_diagnostics(const std::string &filepath,
     } else {
       workspace_diagnostic_severity[normalized_path] = max_severity;
     }
+    invalidate_sidebar_diagnostics_cache();
     needs_redraw = true;
   }
 
@@ -268,6 +284,7 @@ void Editor::set_diagnostics(const std::string &filepath,
 
     if (match) {
       buf.diagnostics = diagnostics;
+      invalidate_sidebar_diagnostics_cache();
       needs_redraw = true;
       // Continue to check other buffers in case of duplicates
     }
@@ -280,6 +297,7 @@ void Editor::add_diagnostic(const std::string &filepath,
   if (!normalized_path.empty()) {
     int &entry = workspace_diagnostic_severity[normalized_path];
     entry = choose_more_severe(entry, diagnostic.severity);
+    invalidate_sidebar_diagnostics_cache();
     needs_redraw = true;
   }
 
@@ -295,6 +313,7 @@ void Editor::add_diagnostic(const std::string &filepath,
 
     if (match) {
       buf.diagnostics.push_back(diagnostic);
+      invalidate_sidebar_diagnostics_cache();
       needs_redraw = true;
       // Continue search
     }

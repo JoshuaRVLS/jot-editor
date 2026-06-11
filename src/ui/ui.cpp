@@ -149,13 +149,12 @@ void UI::render() {
   term->disable_autowrap();
 
   // Per-frame right-edge safety margin. The renderer must never write the
-  // rightmost `margin` physical columns of any row (margin is at least 1).
+  // rightmost physical column of any row.
   // On many terminals, writing the rightmost cell of a row leaves the
   // cursor in a "pending wrap" state; at large widths the next cursor
   // move can be misinterpreted as a wrap, scroll the viewport, and show
-  // stale or overlapping text from a previous frame. The last row already
-  // has margin 1; we extend that to every row and make the amount
-  // configurable via JOT_RENDER_MARGIN=<n>.
+  // stale or overlapping text from a previous frame. The one-cell margin
+  // is fixed so full-width borders do not leave an oversized right gap.
   const int margin = term->render_margin();
   const int row_width = std::max(0, width - margin);
   for (int y = 0; y < height; y++) {

@@ -156,6 +156,7 @@ void Editor::clear_git_status() {
   git_branch.clear();
   git_dirty_count = 0;
   git_file_status.clear();
+  invalidate_sidebar_git_cache();
 }
 
 bool Editor::has_git_repo() const { return !git_root.empty(); }
@@ -254,8 +255,10 @@ void Editor::refresh_git_status(bool force) {
           git_branch = std::move(result.branch);
           git_dirty_count = result.dirty_count;
           git_file_status = std::move(result.file_status);
-          if (changed)
+          if (changed) {
+            invalidate_sidebar_git_cache();
             needs_redraw = true;
+          }
         });
   } else {
     GitStatusResult result = run_git_commands(repo_hint);
@@ -278,7 +281,9 @@ void Editor::refresh_git_status(bool force) {
     git_branch = std::move(result.branch);
     git_dirty_count = result.dirty_count;
     git_file_status = std::move(result.file_status);
-    if (changed)
+    if (changed) {
+      invalidate_sidebar_git_cache();
       needs_redraw = true;
+    }
   }
 }

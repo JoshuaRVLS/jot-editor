@@ -17,13 +17,14 @@ std::string trim_cr(std::string s) {
 } // namespace
 
 IntegratedTerminal::IntegratedTerminal()
-    : master_fd(-1), child_pid(-1), active(false), focused(false), current_column(0),
+    : master_fd(-1), child_pid(-1), active(false), focused(false), label(""), current_column(0),
       scroll_offset(0), current_fg(7), current_bg(0), utf8_expected_bytes(0),
       escape_state(ESC_NONE), osc_escape_pending(false) {}
 
 IntegratedTerminal::~IntegratedTerminal() { close_shell(); }
 
-bool IntegratedTerminal::open_shell() {
+bool IntegratedTerminal::open_shell(const std::string &cwd) {
+  (void)cwd;
   active = true;
   lines.clear();
   styled_lines.clear();
@@ -109,6 +110,16 @@ bool IntegratedTerminal::send_key(int ch, bool is_ctrl, bool, bool) {
   return false;
 }
 
+bool IntegratedTerminal::send_text(const std::string &text) {
+  if (!active) {
+    return false;
+  }
+  for (char c : text) {
+    send_key(c == '\n' ? '\r' : c, false, false, false);
+  }
+  return true;
+}
+
 bool IntegratedTerminal::scroll_lines(int delta, int visible_rows) {
   int max_offset = std::max(0, (int)lines.size() - std::max(1, visible_rows));
   int next = std::clamp(scroll_offset + delta, 0, max_offset);
@@ -124,7 +135,6 @@ void IntegratedTerminal::reset_scroll() { scroll_offset = 0; }
 std::vector<std::string> IntegratedTerminal::get_recent_lines(int max_lines) const {
   std::vector<std::string> out;
   int limit = std::max(1, max_lines);
-
   std::vector<std::string> all(lines.begin(), lines.end());
   all.push_back(current_line);
 
@@ -185,6 +195,23 @@ IntegratedTerminal::get_recent_styled_lines(int max_lines) const {
     out.push_back({});
   }
 
+  return out;
+}
+
+std::vector<IntegratedTerminal::OutputRow>
+IntegratedTerminal::get_recent_output_rows(int max_lines) const {
+  std::vector<OutputRow> out;
+  auto lines_snapshot = get_recent_lines(max_lines);
+  auto styled_snapshot = get_recent_styled_lines(max_lines);
+  out.reserve(lines_snapshot.size());
+  for (size_t i = 0; i < lines_snapshot.size(); i++) {
+    OutputRow row;
+    row.text = lines_snapshot[i];
+    if (i < styled_snapshot.size()) {
+      row.cells = std::move(styled_snapshot[i]);
+    }
+    out.push_back(std::move(row));
+  }
   return out;
 }
 

@@ -2,6 +2,22 @@
 #include <algorithm>
 #include <cctype>
 #include <functional>
+#include <limits>
+
+namespace {
+int pane_center_x(const SplitPane &pane) { return pane.x + pane.w / 2; }
+
+int pane_center_y(const SplitPane &pane) { return pane.y + pane.h / 2; }
+
+int overlap_amount(int a_start, int a_len, int b_start, int b_len) {
+  int a_end = a_start + a_len;
+  int b_end = b_start + b_len;
+  return std::max(0, std::min(a_end, b_end) - std::max(a_start, b_start));
+}
+
+constexpr int kMinPaneWidth = 12;
+constexpr int kMinPaneHeight = 3;
+} // namespace
 
 int Editor::create_pane(int x, int y, int w, int h, int buffer_id) {
   SplitPane pane;
@@ -157,17 +173,8 @@ void Editor::split_pane_direction(int dx, int dy) {
   }
 
   const int old_pane = pane_tree[leaf_node].pane_index;
-  const int old_buffer = panes[old_pane].buffer_id;
-  int new_buffer = old_buffer;
-  if ((int)buffers.size() > 1) {
-    int next = (old_buffer + 1) % (int)buffers.size();
-    if (next == old_buffer) {
-      next = 0;
-    }
-    new_buffer = next;
-  } else {
-    // If there is only one buffer, create a fresh untitled buffer so the new
-    // pane feels independent by default.
+  int new_buffer = panes[old_pane].buffer_id;
+  if (new_buffer < 0 || new_buffer >= (int)buffers.size()) {
     FileBuffer fb;
     fb.lines.push_back("");
     fb.cursor = {0, 0};
@@ -188,9 +195,13 @@ void Editor::split_pane_direction(int dx, int dy) {
   new_pane.h = 1;
   new_pane.buffer_id = new_buffer;
   new_pane.active = false;
-  new_pane.tab_buffer_ids.clear();
-  new_pane.tab_buffer_ids.push_back(new_buffer);
-  new_pane.tab_scroll_index = 0;
+  new_pane.tab_buffer_ids = panes[old_pane].tab_buffer_ids;
+  if (std::find(new_pane.tab_buffer_ids.begin(),
+                new_pane.tab_buffer_ids.end(),
+                new_buffer) == new_pane.tab_buffer_ids.end()) {
+    new_pane.tab_buffer_ids.push_back(new_buffer);
+  }
+  new_pane.tab_scroll_index = panes[old_pane].tab_scroll_index;
   panes.push_back(new_pane);
   int new_pane_index = (int)panes.size() - 1;
 
@@ -303,6 +314,7 @@ void Editor::close_pane() {
 
   int sibling = (pane_tree[parent].first == leaf) ? pane_tree[parent].second
                                                    : pane_tree[parent].first;
+  int preferred_next = first_pane_in_node(sibling);
   int grand = pane_tree[parent].parent;
 
   if (grand >= 0 && grand < (int)pane_tree.size()) {
@@ -334,7 +346,13 @@ void Editor::close_pane() {
     }
   }
 
-  int next = first_pane_in_node(pane_root);
+  int next = preferred_next;
+  if (next > removed) {
+    next--;
+  }
+  if (next < 0 || next >= (int)panes.size()) {
+    next = first_pane_in_node(pane_root);
+  }
   if (next < 0 && !panes.empty()) {
     next = 0;
   }
@@ -353,7 +371,8 @@ void Editor::close_pane() {
 }
 
 bool Editor::resize_current_pane(int delta) {
-  if (panes.size() < 2 || current_pane < 0 || current_pane >= (int)panes.size()) {
+  if (panes.size() < 2 || current_pane < 0 ||
+      current_pane >= (int)panes.size()) {
     return false;
   }
 
@@ -366,210 +385,213 @@ bool Editor::resize_current_pane(int delta) {
     if (node.leaf) {
       return node.pane_index == pane_index ? node_index : -1;
     }
-    int left = find_leaf(node.first, pane_index);
-    if (left >= 0) {
-      return left;
-    }
-    return find_leaf(node.second, pane_index);
+    int first = find_leaf(node.first, pane_index);
+    return first >= 0 ? first : find_leaf(node.second, pane_index);
   };
 
   int leaf = find_leaf(pane_root, current_pane);
   if (leaf < 0) {
     return false;
   }
-
   int parent = pane_tree[leaf].parent;
   if (parent < 0 || parent >= (int)pane_tree.size()) {
     return false;
   }
+  return adjust_pane_split_ratio(parent, delta);
+}
 
-  std::function<bool(int, int)> contains_leaf = [&](int node_index,
-                                                     int target_leaf) -> bool {
-    if (node_index < 0 || node_index >= (int)pane_tree.size()) {
-      return false;
-    }
-    if (node_index == target_leaf) {
-      return true;
-    }
-    const PaneTreeNode &node = pane_tree[node_index];
-    if (node.leaf) {
-      return false;
-    }
-    return contains_leaf(node.first, target_leaf) ||
-           contains_leaf(node.second, target_leaf);
-  };
-
-  int first_pane = -1;
-  int second_pane = -1;
-  {
-    std::function<int(int)> first_pane_in_node = [&](int node_index) -> int {
-      if (node_index < 0 || node_index >= (int)pane_tree.size()) {
-        return -1;
-      }
-      const PaneTreeNode &node = pane_tree[node_index];
-      if (node.leaf) {
-        return (node.pane_index >= 0 && node.pane_index < (int)panes.size())
-                   ? node.pane_index
-                   : -1;
-      }
-      int first = first_pane_in_node(node.first);
-      if (first >= 0) {
-        return first;
-      }
-      return first_pane_in_node(node.second);
-    };
-
-    first_pane = first_pane_in_node(pane_tree[parent].first);
-    second_pane = first_pane_in_node(pane_tree[parent].second);
+bool Editor::resize_current_pane_direction(char dir, int delta) {
+  if (panes.size() < 2 || current_pane < 0 ||
+      current_pane >= (int)panes.size()) {
+    return false;
   }
 
+  char d = (char)std::tolower((unsigned char)dir);
+  if (d != 'h' && d != 'j' && d != 'k' && d != 'l') {
+    return false;
+  }
+
+  const SplitPane &pane = panes[(size_t)current_pane];
+  int x = (d == 'h') ? pane.x : (d == 'l') ? pane.x + pane.w - 1
+                                           : pane.x + pane.w / 2;
+  int y = (d == 'k') ? pane.y : (d == 'j') ? pane.y + pane.h - 1
+                                           : pane.y + pane.h / 2;
+  int node = pane_split_at_position(x, y);
+  if (node < 0) {
+    return false;
+  }
+
+  int signed_delta = std::max(1, std::abs(delta));
+  if (d == 'h' || d == 'k') {
+    signed_delta = -signed_delta;
+  }
+  return adjust_pane_split_ratio(node, signed_delta);
+}
+
+int Editor::pane_split_at_position(int x, int y) const {
+  if (pane_root < 0 || pane_root >= (int)pane_tree.size()) {
+    return -1;
+  }
+
+  int best = -1;
+  int best_score = std::numeric_limits<int>::max();
+
+  std::function<void(int, int, int, int, int)> visit =
+      [&](int node_index, int nx, int ny, int nw, int nh) {
+        if (node_index < 0 || node_index >= (int)pane_tree.size() || nw <= 1 ||
+            nh <= 1) {
+          return;
+        }
+        const PaneTreeNode &node = pane_tree[node_index];
+        if (node.leaf) {
+          return;
+        }
+
+        float ratio = std::clamp(node.ratio, 0.1f, 0.9f);
+        if (node.vertical) {
+          int first_w = std::max(1, (int)(nw * ratio));
+          if (nw >= 2) {
+            first_w = std::min(first_w, nw - 1);
+          }
+          int border_x = nx + first_w;
+          if ((x == border_x || x == border_x - 1) && y >= ny &&
+              y < ny + nh) {
+            int score = nh;
+            if (score < best_score) {
+              best_score = score;
+              best = node_index;
+            }
+          }
+          int second_w = std::max(1, nw - first_w);
+          visit(node.first, nx, ny, first_w, nh);
+          visit(node.second, nx + first_w, ny, second_w, nh);
+        } else {
+          int first_h = std::max(1, (int)(nh * ratio));
+          if (nh >= 2) {
+            first_h = std::min(first_h, nh - 1);
+          }
+          int border_y = ny + first_h;
+          if ((y == border_y || y == border_y - 1) && x >= nx &&
+              x < nx + nw) {
+            int score = nw;
+            if (score < best_score) {
+              best_score = score;
+              best = node_index;
+            }
+          }
+          int second_h = std::max(1, nh - first_h);
+          visit(node.first, nx, ny, nw, first_h);
+          visit(node.second, nx, ny + first_h, nw, second_h);
+        }
+      };
+
+  int total_w = std::max(1, ui->get_render_width());
+  int reserved_terminal_h = 0;
+  if (show_integrated_terminal && !integrated_terminals.empty()) {
+    reserved_terminal_h =
+        std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
+  }
+  int total_h =
+      std::max(1, ui->get_height() - status_height - reserved_terminal_h);
+  int max_sidebar = std::max(0, total_w - 20);
+  int origin_x = show_sidebar ? std::min(sidebar_width, max_sidebar) : 0;
+  int available_w = std::max(1, total_w - origin_x);
+  visit(pane_root, origin_x, 0, available_w, total_h);
+  return best;
+}
+
+bool Editor::adjust_pane_split_ratio(int node_index, int delta,
+                                     bool clamp_only) {
+  if (node_index < 0 || node_index >= (int)pane_tree.size() ||
+      pane_tree[node_index].leaf) {
+    return false;
+  }
+
+  PaneTreeNode &node = pane_tree[node_index];
+  int first_pane = -1;
+  int second_pane = -1;
+  std::function<int(int)> first_pane_in_node = [&](int child) -> int {
+    if (child < 0 || child >= (int)pane_tree.size()) {
+      return -1;
+    }
+    const PaneTreeNode &n = pane_tree[child];
+    if (n.leaf) {
+      return (n.pane_index >= 0 && n.pane_index < (int)panes.size())
+                 ? n.pane_index
+                 : -1;
+    }
+    int first = first_pane_in_node(n.first);
+    return first >= 0 ? first : first_pane_in_node(n.second);
+  };
+
+  first_pane = first_pane_in_node(node.first);
+  second_pane = first_pane_in_node(node.second);
   if (first_pane < 0 || second_pane < 0) {
     return false;
   }
 
-  const bool vertical = pane_tree[parent].vertical;
-  int total_dim = vertical ? (panes[first_pane].w + panes[second_pane].w)
-                           : (panes[first_pane].h + panes[second_pane].h);
-  if (total_dim <= 1) {
+  int total_dim = node.vertical ? (panes[first_pane].w + panes[second_pane].w)
+                                : (panes[first_pane].h + panes[second_pane].h);
+  const int min_dim = node.vertical ? kMinPaneWidth : kMinPaneHeight;
+  if (total_dim < min_dim * 2) {
     return false;
   }
 
-  const int min_dim = vertical ? 12 : 3;
-  int delta_px = delta;
-  bool in_first = contains_leaf(pane_tree[parent].first, leaf);
-  if (!in_first) {
-    delta_px = -delta_px;
-  }
-
-  int first_dim = std::clamp((int)(pane_tree[parent].ratio * total_dim), 1,
-                             std::max(1, total_dim - 1));
-  int second_dim = total_dim - first_dim;
-  int next_first = first_dim + delta_px;
-  int next_second = second_dim - delta_px;
-  if (next_first < min_dim || next_second < min_dim) {
+  int first_dim = std::clamp((int)(node.ratio * total_dim), min_dim,
+                             total_dim - min_dim);
+  int next_first =
+      std::clamp(first_dim + delta, min_dim, total_dim - min_dim);
+  if (!clamp_only && next_first == first_dim) {
     return false;
   }
 
-  pane_tree[parent].ratio = (float)next_first / (float)std::max(1, total_dim);
-  pane_layout_mode = vertical ? PANE_LAYOUT_VERTICAL : PANE_LAYOUT_HORIZONTAL;
+  node.ratio = (float)next_first / (float)std::max(1, total_dim);
+  pane_layout_mode = node.vertical ? PANE_LAYOUT_VERTICAL : PANE_LAYOUT_HORIZONTAL;
   update_pane_layout();
   needs_redraw = true;
   return true;
 }
 
-bool Editor::resize_current_pane_direction(char dir, int delta) {
-  if (panes.size() < 2) {
+bool Editor::begin_pane_resize_drag(int x, int y) {
+  int node = pane_split_at_position(x, y);
+  if (node < 0 || node >= (int)pane_tree.size()) {
     return false;
   }
-
-  char d = (char)std::tolower((unsigned char)dir);
-  bool want_vertical = (d == 'l' || d == 'r');
-  int signed_delta = std::abs(delta);
-  if (d == 'l' || d == 'k') {
-    signed_delta = -signed_delta;
-  }
-
-  std::function<int(int, int)> find_leaf = [&](int node_index,
-                                                int pane_index) -> int {
-    if (node_index < 0 || node_index >= (int)pane_tree.size()) {
-      return -1;
-    }
-    const PaneTreeNode &node = pane_tree[node_index];
-    if (node.leaf) {
-      return node.pane_index == pane_index ? node_index : -1;
-    }
-    int left = find_leaf(node.first, pane_index);
-    if (left >= 0) {
-      return left;
-    }
-    return find_leaf(node.second, pane_index);
-  };
-
-  int leaf = find_leaf(pane_root, current_pane);
-  if (leaf < 0) {
-    return false;
-  }
-
-  int ancestor = pane_tree[leaf].parent;
-  while (ancestor >= 0) {
-    if (ancestor < (int)pane_tree.size() &&
-        pane_tree[ancestor].vertical == want_vertical) {
-      break;
-    }
-    ancestor = (ancestor < (int)pane_tree.size()) ? pane_tree[ancestor].parent : -1;
-  }
-
-  if (ancestor < 0 || ancestor >= (int)pane_tree.size()) {
-    return false;
-  }
-
-  std::function<bool(int, int)> contains_leaf = [&](int node_index,
-                                                     int target_leaf) -> bool {
-    if (node_index < 0 || node_index >= (int)pane_tree.size()) {
-      return false;
-    }
-    if (node_index == target_leaf) {
-      return true;
-    }
-    const PaneTreeNode &node = pane_tree[node_index];
-    if (node.leaf) {
-      return false;
-    }
-    return contains_leaf(node.first, target_leaf) ||
-           contains_leaf(node.second, target_leaf);
-  };
-
-  std::function<int(int)> first_pane_in_node = [&](int node_index) -> int {
-    if (node_index < 0 || node_index >= (int)pane_tree.size()) {
-      return -1;
-    }
-    const PaneTreeNode &node = pane_tree[node_index];
-    if (node.leaf) {
-      return (node.pane_index >= 0 && node.pane_index < (int)panes.size())
-                 ? node.pane_index
-                 : -1;
-    }
-    int first = first_pane_in_node(node.first);
-    if (first >= 0) {
-      return first;
-    }
-    return first_pane_in_node(node.second);
-  };
-
-  int first_pane = first_pane_in_node(pane_tree[ancestor].first);
-  int second_pane = first_pane_in_node(pane_tree[ancestor].second);
-  if (first_pane < 0 || second_pane < 0) {
-    return false;
-  }
-
-  int total_dim = want_vertical ? (panes[first_pane].w + panes[second_pane].w)
-                                : (panes[first_pane].h + panes[second_pane].h);
-  if (total_dim <= 1) {
-    return false;
-  }
-
-  const int min_dim = want_vertical ? 12 : 3;
-  int delta_px = signed_delta;
-  bool in_first = contains_leaf(pane_tree[ancestor].first, leaf);
-  if (!in_first) {
-    delta_px = -delta_px;
-  }
-
-  int first_dim = std::clamp((int)(pane_tree[ancestor].ratio * total_dim), 1,
-                             std::max(1, total_dim - 1));
-  int second_dim = total_dim - first_dim;
-  int next_first = first_dim + delta_px;
-  int next_second = second_dim - delta_px;
-  if (next_first < min_dim || next_second < min_dim) {
-    return false;
-  }
-
-  pane_tree[ancestor].ratio =
-      (float)next_first / (float)std::max(1, total_dim);
-  pane_layout_mode = want_vertical ? PANE_LAYOUT_VERTICAL : PANE_LAYOUT_HORIZONTAL;
-  update_pane_layout();
+  pane_resize_dragging = true;
+  pane_resize_node = node;
+  pane_resize_vertical = pane_tree[node].vertical;
+  pane_resize_start_pos = pane_resize_vertical ? x : y;
+  pane_resize_start_ratio = pane_tree[node].ratio;
+  mouse_selecting = false;
+  mouse_drag_started = false;
+  focus_state = FOCUS_EDITOR;
+  set_message("Resizing pane");
   needs_redraw = true;
   return true;
+}
+
+bool Editor::update_pane_resize_drag(int x, int y) {
+  if (!pane_resize_dragging || pane_resize_node < 0 ||
+      pane_resize_node >= (int)pane_tree.size()) {
+    return false;
+  }
+  int pos = pane_resize_vertical ? x : y;
+  int delta = pos - pane_resize_start_pos;
+  pane_tree[pane_resize_node].ratio = pane_resize_start_ratio;
+  return adjust_pane_split_ratio(pane_resize_node, delta, true);
+}
+
+void Editor::end_pane_resize_drag() {
+  if (!pane_resize_dragging) {
+    return;
+  }
+  pane_resize_dragging = false;
+  pane_resize_node = -1;
+  pane_resize_vertical = false;
+  pane_resize_start_pos = 0;
+  pane_resize_start_ratio = 0.5f;
+  set_message("Pane resized");
+  needs_redraw = true;
 }
 
 void Editor::next_pane() {
@@ -592,4 +614,83 @@ void Editor::prev_pane() {
     message = "Switched pane";
     needs_redraw = true;
   }
+}
+
+bool Editor::focus_pane_direction(char dir) {
+  if (panes.size() < 2 || current_pane < 0 ||
+      current_pane >= (int)panes.size()) {
+    return false;
+  }
+
+  char d = (char)std::tolower((unsigned char)dir);
+  const SplitPane &current = panes[(size_t)current_pane];
+  int current_cx = pane_center_x(current);
+  int current_cy = pane_center_y(current);
+  int best = -1;
+  int best_score = std::numeric_limits<int>::max();
+
+  for (int i = 0; i < (int)panes.size(); i++) {
+    if (i == current_pane) {
+      continue;
+    }
+    const SplitPane &candidate = panes[(size_t)i];
+    int candidate_cx = pane_center_x(candidate);
+    int candidate_cy = pane_center_y(candidate);
+    int primary = 0;
+    int overlap = 0;
+    int secondary = 0;
+
+    if (d == 'h' || d == 'l') {
+      if (d == 'h') {
+        if (candidate_cx >= current_cx) {
+          continue;
+        }
+        primary = current.x - (candidate.x + candidate.w);
+      } else {
+        if (candidate_cx <= current_cx) {
+          continue;
+        }
+        primary = candidate.x - (current.x + current.w);
+      }
+      primary = std::max(0, primary);
+      overlap = overlap_amount(current.y, current.h, candidate.y, candidate.h);
+      secondary = std::abs(candidate_cy - current_cy);
+    } else if (d == 'k' || d == 'j') {
+      if (d == 'k') {
+        if (candidate_cy >= current_cy) {
+          continue;
+        }
+        primary = current.y - (candidate.y + candidate.h);
+      } else {
+        if (candidate_cy <= current_cy) {
+          continue;
+        }
+        primary = candidate.y - (current.y + current.h);
+      }
+      primary = std::max(0, primary);
+      overlap = overlap_amount(current.x, current.w, candidate.x, candidate.w);
+      secondary = std::abs(candidate_cx - current_cx);
+    } else {
+      return false;
+    }
+
+    int score = primary * 1000 + secondary - overlap * 10;
+    if (score < best_score) {
+      best_score = score;
+      best = i;
+    }
+  }
+
+  if (best < 0) {
+    return false;
+  }
+
+  panes[current_pane].active = false;
+  current_pane = best;
+  panes[current_pane].active = true;
+  current_buffer = panes[current_pane].buffer_id;
+  focus_state = FOCUS_EDITOR;
+  message = "Focused pane";
+  needs_redraw = true;
+  return true;
 }

@@ -37,6 +37,7 @@ private:
   std::map<std::string, int> file_versions;
   std::string stdout_buffer;
   std::string stderr_buffer;
+  std::string outbound_buffer;
   std::string last_error;
   std::vector<std::pair<std::string, std::vector<Diagnostic>>>
       pending_diagnostics;
@@ -45,6 +46,7 @@ private:
       pending_completions;
 
   bool send_message(const std::string &json);
+  bool flush_pending_writes();
   std::string json_escape(const std::string &value) const;
   void append_log_line(const std::string &prefix, const std::string &line);
   void handle_stdout_data(const std::string &data);

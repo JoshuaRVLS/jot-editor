@@ -56,6 +56,7 @@ void Config::load_defaults() {
   settings["show_minimap"] = "true";
   settings["tab_size"] = "2";
   settings["auto_indent"] = "true";
+  settings["smart_paste_indent"] = "true";
   settings["auto_save"] = "false";
   settings["auto_save_interval_ms"] = "2000";
   settings["prettier_on_save"] = "true";

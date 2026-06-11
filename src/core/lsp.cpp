@@ -5,10 +5,15 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <memory>
 
 namespace fs = std::filesystem;
 
 namespace {
+struct LspCommandResult {
+  int rc = 1;
+};
+
 std::string to_lower_copy(std::string s) {
   std::transform(s.begin(), s.end(), s.begin(),
                  [](unsigned char c) { return (char)std::tolower(c); });
@@ -578,6 +583,7 @@ void Editor::stop_all_lsp_clients() {
       buf.diagnostics.clear();
     }
   }
+  invalidate_sidebar_diagnostics_cache();
   for (auto &client : lsp_clients) {
     if (client && client->is_running()) {
       client->stop();
@@ -595,6 +601,7 @@ void Editor::restart_all_lsp_clients() {
       buf.diagnostics.clear();
     }
   }
+  invalidate_sidebar_diagnostics_cache();
   int restarted = 0;
   for (auto &client : lsp_clients) {
     if (client && client->restart()) {
@@ -667,11 +674,11 @@ bool Editor::install_lsp_server(const std::string &name) {
     return false;
   }
 
-  int rc = 1;
+  std::string command;
   if (server == "python") {
-    rc = std::system("python3 -m pip install --user -U python-lsp-server");
+    command = "python3 -m pip install --user -U python-lsp-server";
   } else if (server == "typescript") {
-    rc = std::system("npm install -g typescript typescript-language-server");
+    command = "npm install -g typescript typescript-language-server";
   } else if (server == "cpp") {
     set_message("Install clangd using your OS package manager");
     return false;
@@ -685,15 +692,35 @@ bool Editor::install_lsp_server(const std::string &name) {
     set_message("Install lua-language-server using install.sh or your OS package manager");
     return false;
   } else if (server == "bash") {
-    rc = std::system("npm install -g bash-language-server");
+    command = "npm install -g bash-language-server";
   }
 
-  if (rc == 0) {
-    set_message("LSP install OK: " + server);
-    return true;
+  if (command.empty()) {
+    set_message("LSP install failed: " + server);
+    return false;
   }
-  set_message("LSP install failed: " + server);
-  return false;
+
+  if (!task_queue_) {
+    int rc = std::system(command.c_str());
+    set_message(rc == 0 ? "LSP install OK: " + server
+                        : "LSP install failed: " + server);
+    return rc == 0;
+  }
+
+  set_message("LSP install started: " + server);
+  needs_redraw = true;
+  auto result = std::shared_ptr<LspCommandResult>(new LspCommandResult());
+  task_queue_->submit(
+      [command = std::move(command), result]() {
+        result->rc = std::system(command.c_str());
+      },
+      [this, server, result]() {
+        if (!running)
+          return;
+        set_message(result->rc == 0 ? "LSP install OK: " + server
+                                    : "LSP install failed: " + server);
+      });
+  return true;
 }
 
 bool Editor::remove_lsp_server(const std::string &name) {
@@ -704,11 +731,11 @@ bool Editor::remove_lsp_server(const std::string &name) {
     return false;
   }
 
-  int rc = 1;
+  std::string command;
   if (server == "python") {
-    rc = std::system("python3 -m pip uninstall -y python-lsp-server");
+    command = "python3 -m pip uninstall -y python-lsp-server";
   } else if (server == "typescript") {
-    rc = std::system("npm uninstall -g typescript typescript-language-server");
+    command = "npm uninstall -g typescript typescript-language-server";
   } else if (server == "cpp") {
     set_message("Remove clangd using your OS package manager");
     return false;
@@ -722,15 +749,35 @@ bool Editor::remove_lsp_server(const std::string &name) {
     set_message("Remove lua-language-server using your OS package manager");
     return false;
   } else if (server == "bash") {
-    rc = std::system("npm uninstall -g bash-language-server");
+    command = "npm uninstall -g bash-language-server";
   }
 
-  if (rc == 0) {
-    set_message("LSP remove OK: " + server);
-    return true;
+  if (command.empty()) {
+    set_message("LSP remove failed: " + server);
+    return false;
   }
-  set_message("LSP remove failed: " + server);
-  return false;
+
+  if (!task_queue_) {
+    int rc = std::system(command.c_str());
+    set_message(rc == 0 ? "LSP remove OK: " + server
+                        : "LSP remove failed: " + server);
+    return rc == 0;
+  }
+
+  set_message("LSP remove started: " + server);
+  needs_redraw = true;
+  auto result = std::shared_ptr<LspCommandResult>(new LspCommandResult());
+  task_queue_->submit(
+      [command = std::move(command), result]() {
+        result->rc = std::system(command.c_str());
+      },
+      [this, server, result]() {
+        if (!running)
+          return;
+        set_message(result->rc == 0 ? "LSP remove OK: " + server
+                                    : "LSP remove failed: " + server);
+      });
+  return true;
 }
 
 void Editor::hide_lsp_completion() {

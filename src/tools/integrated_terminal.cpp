@@ -19,13 +19,17 @@
 
 IntegratedTerminal::IntegratedTerminal()
     : master_fd(-1), child_pid(-1), active(false), focused(false),
-      current_column(0), scroll_offset(0), current_fg(7), current_bg(0),
+      label(""), current_column(0), scroll_offset(0), current_fg(7), current_bg(0),
       utf8_expected_bytes(0), escape_state(ESC_NONE),
       osc_escape_pending(false) {}
 
 IntegratedTerminal::~IntegratedTerminal() { close_shell(); }
 
 namespace {
+constexpr int kMaxScrollbackLines = 2000;
+constexpr int kPollReadLimit = 16;
+constexpr size_t kPollByteLimit = 64 * 1024;
+
 void write_all(int fd, const char *data, size_t size) {
   size_t sent = 0;
   while (sent < size) {
@@ -86,9 +90,12 @@ void IntegratedTerminal::push_line(const std::string &line) {
   sync_current_line();
   lines.push_back(line);
   styled_lines.push_back(current_styled_line);
-  while ((int)lines.size() > 2000) {
-    lines.pop_front();
-    styled_lines.pop_front();
+  size_t overflow = lines.size() > kMaxScrollbackLines
+                        ? lines.size() - kMaxScrollbackLines
+                        : 0;
+  if (overflow > 0) {
+    lines.erase(lines.begin(), lines.begin() + (long)overflow);
+    styled_lines.erase(styled_lines.begin(), styled_lines.begin() + (long)overflow);
   }
 }
 
@@ -266,8 +273,9 @@ void IntegratedTerminal::handle_csi_sequence(char final_char) {
   }
 }
 
-bool IntegratedTerminal::open_shell() {
+bool IntegratedTerminal::open_shell(const std::string &cwd) {
 #if defined(JOT_PLATFORM_WINDOWS)
+  (void)cwd;
   return false;
 #else
   if (active) {
@@ -291,6 +299,10 @@ bool IntegratedTerminal::open_shell() {
   if (pid == 0) {
     const char *shell = getenv("SHELL");
     setenv("TERM", "xterm-256color", 1);
+    if (!cwd.empty()) {
+      int rc = chdir(cwd.c_str());
+      (void)rc;
+    }
     if (shell && *shell) {
       execlp(shell, shell, "-i", nullptr);
     }
@@ -359,14 +371,18 @@ bool IntegratedTerminal::poll_output() {
 
   bool changed = false;
   char buf[4096];
+  int reads = 0;
+  size_t bytes_read = 0;
 
-  while (true) {
+  while (reads < kPollReadLimit && bytes_read < kPollByteLimit) {
     ssize_t n = read(master_fd, buf, sizeof(buf));
     if (n <= 0) {
       break;
     }
 
     changed = true;
+    reads++;
+    bytes_read += (size_t)n;
     for (ssize_t i = 0; i < n; i++) {
       unsigned char c = static_cast<unsigned char>(buf[i]);
 
@@ -376,6 +392,9 @@ bool IntegratedTerminal::poll_output() {
           csi_buffer.clear();
         } else if (c == ']') {
           escape_state = ESC_OSC;
+          osc_escape_pending = false;
+        } else if (c == 'P' || c == '^' || c == '_') {
+          escape_state = ESC_STRING;
           osc_escape_pending = false;
         } else if (c >= 0x20 && c <= 0x2f) {
           escape_state = ESC_OTHER;
@@ -412,6 +431,21 @@ bool IntegratedTerminal::poll_output() {
         if (c == '\a') {
           escape_state = ESC_NONE;
           continue;
+        }
+
+        if (c == 27) {
+          osc_escape_pending = true;
+        }
+        continue;
+      }
+
+      if (escape_state == ESC_STRING) {
+        if (osc_escape_pending) {
+          osc_escape_pending = false;
+          if (c == '\\') {
+            escape_state = ESC_NONE;
+            continue;
+          }
         }
 
         if (c == 27) {
@@ -632,6 +666,15 @@ bool IntegratedTerminal::send_key(int ch, bool is_ctrl, bool is_shift,
   return false;
 }
 
+bool IntegratedTerminal::send_text(const std::string &text) {
+  if (!active || master_fd < 0) {
+    return false;
+  }
+  reset_scroll();
+  write_all(master_fd, text.data(), text.size());
+  return true;
+}
+
 bool IntegratedTerminal::scroll_lines(int delta, int visible_rows) {
   int total = (int)lines.size() + 1;
   int view = std::max(1, visible_rows);
@@ -664,6 +707,45 @@ std::vector<std::string> IntegratedTerminal::get_recent_lines(
     } else {
       out.push_back(current_line);
     }
+  }
+  return out;
+}
+
+std::vector<IntegratedTerminal::OutputRow>
+IntegratedTerminal::get_recent_output_rows(int max_lines) const {
+  std::vector<OutputRow> out;
+  if (max_lines <= 0) {
+    return out;
+  }
+
+  int total = (int)lines.size() + 1;
+  int take = std::min(max_lines, total);
+  int max_offset = std::max(0, total - take);
+  int offset = std::clamp(scroll_offset, 0, max_offset);
+  int end_exclusive = std::clamp(total - offset, 0, total);
+  int start = std::max(0, end_exclusive - take);
+
+  out.reserve((size_t)std::max(0, end_exclusive - start));
+  for (int idx = start; idx < end_exclusive; idx++) {
+    OutputRow row;
+    const std::vector<TerminalCell> *source_cells = nullptr;
+    if (idx < (int)lines.size()) {
+      row.text = lines[idx];
+      if (idx < (int)styled_lines.size()) {
+        source_cells = &styled_lines[idx];
+      }
+    } else {
+      row.text = current_line;
+      source_cells = &current_styled_line;
+    }
+
+    if (source_cells) {
+      row.cells.reserve(source_cells->size());
+      for (const auto &c : *source_cells) {
+        row.cells.push_back({c.ch, c.fg, c.bg});
+      }
+    }
+    out.push_back(std::move(row));
   }
   return out;
 }

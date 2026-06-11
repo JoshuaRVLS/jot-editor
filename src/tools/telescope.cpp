@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <fstream>
+#include <sstream>
 #include <unordered_set>
 
 namespace {
@@ -45,6 +46,44 @@ bool file_looks_binary(const std::string &path) {
   }
   return false;
 }
+
+std::string display_relative_path(const fs::path &path, const fs::path &root) {
+  std::error_code ec;
+  std::string rel = fs::relative(path, root, ec).string();
+  if (ec || rel.empty()) {
+    ec.clear();
+    rel = path.string();
+  }
+  return rel;
+}
+
+std::string parent_display_path(const std::string &relative_path) {
+  fs::path parent = fs::path(relative_path).parent_path();
+  std::string out = parent.string();
+  return out.empty() ? "." : out;
+}
+
+std::string format_size(std::uintmax_t bytes) {
+  const char *units[] = {"B", "KB", "MB", "GB"};
+  double value = (double)bytes;
+  int unit = 0;
+  while (value >= 1024.0 && unit < 3) {
+    value /= 1024.0;
+    unit++;
+  }
+
+  std::ostringstream out;
+  if (unit == 0) {
+    out << bytes << " " << units[unit];
+  } else if (value >= 10.0) {
+    out << (int)(value + 0.5) << " " << units[unit];
+  } else {
+    out.setf(std::ios::fixed);
+    out.precision(1);
+    out << value << " " << units[unit];
+  }
+  return out.str();
+}
 } // namespace
 
 Telescope::Telescope() {
@@ -69,6 +108,7 @@ void Telescope::open(const std::string &root) {
   query.clear();
   selected_index = 0;
   results.clear();
+  invalidate_preview_cache();
   update_results();
 }
 
@@ -77,10 +117,12 @@ void Telescope::close() {
   query.clear();
   results.clear();
   selected_index = 0;
+  invalidate_preview_cache();
 }
 
 void Telescope::set_query(const std::string &q, TaskQueue *tq) {
   query = q;
+  invalidate_preview_cache();
   if (tq) {
     cancel_scan();
     scan_async(tq);
@@ -93,18 +135,15 @@ void Telescope::update_results() {
   results.clear();
   scan_directory(root_dir, 0);
 
-  std::error_code ec;
   const std::string query_lc = lower_copy(query);
   std::vector<FileMatch> filtered;
   filtered.reserve(results.size());
 
   for (auto match : results) {
     fs::path p(match.path);
-    std::string rel = fs::relative(p, root_dir, ec).string();
-    if (ec || rel.empty()) {
-      rel = p.string();
-      ec.clear();
-    }
+    std::string rel = display_relative_path(p, root_dir);
+    match.relative_path = rel;
+    match.parent_path = parent_display_path(rel);
     if (!query_lc.empty() &&
         !fuzzy_match(match.name, query_lc) && !fuzzy_match(rel, query_lc)) {
       continue;
@@ -157,6 +196,7 @@ void Telescope::update_results() {
   if (selected_index < 0) {
     selected_index = 0;
   }
+  invalidate_preview_cache();
 }
 
 void Telescope::scan_directory(const fs::path &dir, int depth) {
@@ -209,6 +249,8 @@ void Telescope::scan_directory(const fs::path &dir, int depth) {
     FileMatch match;
     match.path = entry.path().string();
     match.name = name;
+    match.relative_path = display_relative_path(entry.path(), root_dir);
+    match.parent_path = parent_display_path(match.relative_path);
     match.is_directory = is_dir;
     match.score = 0;
     results.push_back(std::move(match));
@@ -227,13 +269,17 @@ void Telescope::scan_directory(const fs::path &dir, int depth) {
 }
 
 void Telescope::move_up() {
-  if (selected_index > 0)
+  if (selected_index > 0) {
     selected_index--;
+    invalidate_preview_cache();
+  }
 }
 
 void Telescope::move_down() {
-  if (selected_index < (int)results.size() - 1)
+  if (selected_index < (int)results.size() - 1) {
     selected_index++;
+    invalidate_preview_cache();
+  }
 }
 
 void Telescope::select() {
@@ -242,6 +288,7 @@ void Telescope::select() {
       root_dir = fs::path(results[selected_index].path);
       query.clear();
       selected_index = 0;
+      invalidate_preview_cache();
       update_results();
     }
   }
@@ -252,6 +299,7 @@ void Telescope::go_parent() {
     root_dir = root_dir.parent_path();
     query.clear();
     selected_index = 0;
+    invalidate_preview_cache();
     update_results();
   }
 }
@@ -263,40 +311,103 @@ std::string Telescope::get_selected_path() const {
   return "";
 }
 
-std::vector<std::string> Telescope::get_preview_lines() const {
+std::string Telescope::get_selected_relative_path() const {
+  if (selected_index >= 0 && selected_index < (int)results.size()) {
+    return results[selected_index].relative_path.empty()
+               ? results[selected_index].name
+               : results[selected_index].relative_path;
+  }
+  return "";
+}
+
+TelescopePreview Telescope::get_selected_preview() const {
   if (selected_index < 0 || selected_index >= (int)results.size()) {
     return {};
   }
-  std::string path = get_selected_path();
-  if (path.empty() || results[selected_index].is_directory) {
-    return {};
+  const auto &match = results[selected_index];
+  if (preview_cache_valid && preview_cache_path == match.path) {
+    return preview_cache;
   }
-  return load_preview(path);
+  preview_cache = load_preview(match);
+  preview_cache_path = match.path;
+  preview_cache_valid = true;
+  return preview_cache;
 }
 
-std::vector<std::string> Telescope::load_preview(const std::string &path) const {
-  std::vector<std::string> lines;
+std::vector<std::string> Telescope::get_preview_lines() const {
+  return get_selected_preview().lines;
+}
+
+void Telescope::invalidate_preview_cache() {
+  preview_cache_valid = false;
+  preview_cache_path.clear();
+  preview_cache = TelescopePreview();
+}
+
+TelescopePreview Telescope::load_preview(const FileMatch &match) const {
+  TelescopePreview preview;
+  preview.title = match.relative_path.empty() ? match.name : match.relative_path;
+  preview.is_directory = match.is_directory;
+  const std::string &path = match.path;
+
+  if (match.is_directory) {
+    preview.detail = "Directory";
+    std::error_code ec;
+    int child_count = 0;
+    for (auto it = fs::directory_iterator(path, ec);
+         !ec && it != fs::end(it) && child_count < 999; it.increment(ec)) {
+      std::string name = it->path().filename().string();
+      if (!should_skip_name(name)) {
+        child_count++;
+      }
+    }
+    if (!ec) {
+      preview.detail += " - " + std::to_string(child_count) + " items";
+    }
+    preview.lines.push_back("Press Enter to browse this directory.");
+    return preview;
+  }
+
   std::error_code ec;
   if (!fs::exists(path, ec) || !fs::is_regular_file(path, ec)) {
-    lines.push_back("[Not a regular file]");
-    return lines;
+    preview.skipped = true;
+    preview.detail = "Not a regular file";
+    preview.lines.push_back("Preview unavailable.");
+    return preview;
   }
 
   std::uintmax_t sz = fs::file_size(path, ec);
+  if (!ec) {
+    preview.size_bytes = sz;
+    preview.detail = format_size(sz);
+  }
   if (!ec && sz > kMaxPreviewFileBytes) {
-    lines.push_back("[Preview skipped: file too large]");
-    return lines;
+    preview.skipped = true;
+    preview.detail += " - preview skipped";
+    preview.lines.push_back("File is too large to preview.");
+    return preview;
   }
 
   if (file_looks_binary(path)) {
-    lines.push_back("[Preview skipped: binary file]");
-    return lines;
+    preview.is_binary = true;
+    preview.skipped = true;
+    if (!preview.detail.empty()) {
+      preview.detail += " - ";
+    }
+    preview.detail += "binary";
+    preview.lines.push_back("Binary file preview is not available.");
+    return preview;
   }
 
   std::ifstream file(path);
   if (!file.is_open()) {
-    lines.push_back("[Unable to open file]");
-    return lines;
+    preview.skipped = true;
+    if (!preview.detail.empty()) {
+      preview.detail += " - ";
+    }
+    preview.detail += "unreadable";
+    preview.lines.push_back("Unable to open file.");
+    return preview;
   }
 
   std::string line;
@@ -305,10 +416,13 @@ std::vector<std::string> Telescope::load_preview(const std::string &path) const 
     if ((int)line.length() > kMaxPreviewLineLength) {
       line = line.substr(0, kMaxPreviewLineLength) + "...";
     }
-    lines.push_back(line);
+    preview.lines.push_back(line);
     count++;
   }
-  return lines;
+  if (preview.lines.empty()) {
+    preview.lines.push_back("[Empty file]");
+  }
+  return preview;
 }
 
 bool Telescope::fuzzy_match(const std::string &text, const std::string &pattern) {
@@ -379,6 +493,7 @@ void Telescope::apply_results(std::vector<FileMatch> new_results) {
     selected_index = std::max(0, (int)results.size() - 1);
   if (selected_index < 0)
     selected_index = 0;
+  invalidate_preview_cache();
 }
 
 void Telescope::scan_async(TaskQueue *tq) {
@@ -399,7 +514,7 @@ void Telescope::scan_async(TaskQueue *tq) {
         std::vector<FileMatch> raw;
 
         std::function<void(const fs::path &, int)> scan_dir;
-        scan_dir = [&raw, &scan_dir, kMaxDepth, kMaxResults,
+        scan_dir = [&raw, &scan_dir, kMaxDepth, kMaxResults, &scan_root,
                     &scan_query](const fs::path &dir, int depth) {
           if (depth > kMaxDepth)
             return;
@@ -431,6 +546,8 @@ void Telescope::scan_async(TaskQueue *tq) {
             FileMatch match;
             match.path = it->path().string();
             match.name = std::move(name);
+            match.relative_path = display_relative_path(it->path(), scan_root);
+            match.parent_path = parent_display_path(match.relative_path);
             match.is_directory = is_dir;
             match.score = 0;
             raw.push_back(std::move(match));
@@ -442,18 +559,17 @@ void Telescope::scan_async(TaskQueue *tq) {
 
         scan_dir(scan_root, 0);
 
-        std::error_code ec;
         const std::string query_lc = lower_copy(scan_query);
         std::vector<FileMatch> filtered;
         filtered.reserve(raw.size());
 
         for (auto &match : raw) {
           fs::path p(match.path);
-          std::string rel = fs::relative(p, scan_root, ec).string();
-          if (ec || rel.empty()) {
-            rel = p.string();
-            ec.clear();
-          }
+          std::string rel = match.relative_path.empty()
+                                ? display_relative_path(p, scan_root)
+                                : match.relative_path;
+          match.relative_path = rel;
+          match.parent_path = parent_display_path(rel);
           if (!query_lc.empty() && !fuzzy_match(match.name, query_lc) &&
               !fuzzy_match(rel, query_lc))
             continue;

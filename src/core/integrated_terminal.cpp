@@ -28,10 +28,16 @@ void Editor::activate_integrated_terminal(int index, bool focus) {
 }
 
 void Editor::create_integrated_terminal() {
+  create_integrated_terminal("");
+}
+
+void Editor::create_integrated_terminal(const std::string &label,
+                                        const std::string &cwd) {
   show_home_menu = false;
   auto term = std::make_unique<IntegratedTerminal>();
-  if (!term->open_shell()) {
-    set_message("Failed to open integrated terminal");
+  term->set_label(label);
+  if (!term->open_shell(cwd)) {
+    set_message("Failed to open integrated terminal: check $SHELL or PTY support");
     return;
   }
 
@@ -44,11 +50,14 @@ void Editor::create_integrated_terminal() {
   show_integrated_terminal = true;
   activate_integrated_terminal(current_integrated_terminal, true);
   if (auto *active = get_integrated_terminal(current_integrated_terminal)) {
-    // Trigger prompt render early so the panel is never perceived as "dead".
-    active->send_key('\r', false, false, false);
+    active->poll_output();
   }
-  set_message("Opened terminal " +
-              std::to_string(current_integrated_terminal + 1));
+  if (label.empty()) {
+    set_message("Opened terminal " +
+                std::to_string(current_integrated_terminal + 1));
+  } else {
+    set_message("Opened " + label);
+  }
   needs_redraw = true;
 }
 
@@ -100,12 +109,13 @@ void Editor::toggle_integrated_terminal() {
 
   if (!term->is_active()) {
     if (!term->open_shell()) {
-      set_message("Failed to restart integrated terminal shell");
+      set_message("Failed to restart terminal: check $SHELL or PTY support");
       needs_redraw = true;
       return;
     }
     show_integrated_terminal = true;
     activate_integrated_terminal(current_integrated_terminal, true);
+    term->poll_output();
     set_message("Integrated terminal restarted");
     needs_redraw = true;
     return;
@@ -114,6 +124,7 @@ void Editor::toggle_integrated_terminal() {
   if (!show_integrated_terminal) {
     show_integrated_terminal = true;
     activate_integrated_terminal(current_integrated_terminal, true);
+    term->poll_output();
     set_message("Integrated terminal opened");
     needs_redraw = true;
     return;
@@ -126,6 +137,7 @@ void Editor::toggle_integrated_terminal() {
   } else {
     show_integrated_terminal = true;
     activate_integrated_terminal(current_integrated_terminal, true);
+    term->poll_output();
     set_message("Integrated terminal focused");
   }
   needs_redraw = true;
@@ -140,7 +152,7 @@ void Editor::handle_integrated_terminal_input(int ch, bool is_ctrl,
 
   if (!term->is_active()) {
     if (!term->open_shell()) {
-      set_message("Failed to restart integrated terminal shell");
+      set_message("Failed to restart terminal: check $SHELL or PTY support");
       needs_redraw = true;
       return;
     }
@@ -155,7 +167,7 @@ void Editor::handle_integrated_terminal_input(int ch, bool is_ctrl,
 
   if (ch == 27) {
     activate_integrated_terminal(current_integrated_terminal, false);
-    set_message("Terminal focus off (Ctrl+` to reopen)");
+    set_message("Terminal focus off");
     needs_redraw = true;
     return;
   }
@@ -183,7 +195,10 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y) {
   if (y == tab_y || y == panel_y) {
     int tab_x = 1;
     for (int i = 0; i < (int)integrated_terminals.size(); i++) {
-      std::string label = " term " + std::to_string(i + 1) + " ";
+      std::string base_label = integrated_terminals[i]->get_label().empty()
+                                   ? "term " + std::to_string(i + 1)
+                                   : integrated_terminals[i]->get_label();
+      std::string label = " " + base_label + " ";
       int close_x = tab_x + (int)label.size();
       int tab_w = (int)label.size() + 2;
 
@@ -193,6 +208,7 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y) {
         } else {
           show_integrated_terminal = true;
           activate_integrated_terminal(i, true);
+          integrated_terminals[i]->poll_output();
           set_message("Focused terminal " + std::to_string(i + 1));
           needs_redraw = true;
         }
@@ -224,8 +240,11 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y) {
     if (term->open_shell()) {
       set_message("Integrated terminal restarted");
     } else {
-      set_message("Failed to restart integrated terminal shell");
+      set_message("Failed to restart terminal: check $SHELL or PTY support");
     }
+  }
+  if (term) {
+    term->poll_output();
   }
   needs_redraw = true;
   return true;
@@ -323,7 +342,10 @@ void Editor::render_integrated_terminal() {
   int tab_y = panel_y + 1;
   int tab_x = 1;
   for (int i = 0; i < (int)integrated_terminals.size(); i++) {
-    std::string label = " term " + std::to_string(i + 1) + " ";
+    std::string base_label = integrated_terminals[i]->get_label().empty()
+                                 ? "term " + std::to_string(i + 1)
+                                 : integrated_terminals[i]->get_label();
+    std::string label = " " + base_label + " ";
     bool active = (i == current_integrated_terminal);
     bool focused = active && integrated_terminals[i]->is_focused();
     int fg = focused
@@ -355,32 +377,28 @@ void Editor::render_integrated_terminal() {
   }
 
   int content_h = std::max(1, panel_h - 3);
-  auto lines = term->get_recent_lines(content_h);
-  auto styled_lines = term->get_recent_styled_lines(content_h);
-  auto all_blank = [](const std::vector<std::string> &v) {
-    for (const auto &s : v) {
-      if (!s.empty()) {
+  auto rows = term->get_recent_output_rows(content_h);
+  auto all_blank = [](const std::vector<IntegratedTerminal::OutputRow> &v) {
+    for (const auto &row : v) {
+      if (!row.text.empty() || !row.cells.empty()) {
         return false;
       }
     }
     return true;
   };
-  if (term->is_active() && lines.size() == 1 && lines.front().empty()) {
-    lines.front() = "[terminal ready]  (Esc: unfocus, Ctrl+X: toggle)";
-  }
-  if (!term->is_active() && (lines.empty() || all_blank(lines))) {
-    lines.clear();
-    lines.push_back("[terminal inactive: shell failed or exited]");
-    lines.push_back("[try :terminalnew or check $SHELL]");
+  if (!term->is_active() && (rows.empty() || all_blank(rows))) {
+    rows.clear();
+    rows.push_back({"[terminal inactive: shell failed or exited]", {}});
+    rows.push_back({"[try :terminalnew or check $SHELL]", {}});
   }
   int start_y = panel_y + 2;
-  int start = std::max(0, (int)lines.size() - content_h);
+  int start = std::max(0, (int)rows.size() - content_h);
   for (int i = 0; i < content_h; i++) {
     int idx = start + i;
-    if (idx >= (int)lines.size()) {
+    if (idx >= (int)rows.size()) {
       break;
     }
-    std::string line = lines[idx];
+    std::string line = rows[idx].text;
     int max_cols = std::max(1, panel_w - 2);
     int trim_from = std::max(0, (int)line.size() - max_cols);
     if ((int)line.size() > max_cols) {
@@ -388,8 +406,8 @@ void Editor::render_integrated_terminal() {
     }
 
     bool drew_styled = false;
-    if (idx >= 0 && idx < (int)styled_lines.size()) {
-      auto &styled = styled_lines[idx];
+    if (idx >= 0 && idx < (int)rows.size()) {
+      auto &styled = rows[idx].cells;
       if (!styled.empty()) {
         int sx = 1;
         int start_cell = std::max(0, (int)styled.size() - max_cols);

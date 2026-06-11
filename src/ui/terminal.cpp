@@ -228,23 +228,9 @@ void Terminal::init() {
   if (width <= 0) width = 80;
   if (height <= 0) height = 24;
 
-  // Renderer safety margin. The right-edge safety behavior is a
-  // fixed one-cell margin: the renderer never writes the physical
-  // rightmost column at large widths to avoid the terminal's
-  // pending-wrap state. JOT_RENDER_MARGIN=<n> is clamped to 1 — any
-  // larger value used to produce a visibly oversized blank strip
-  // on the right edge of the UI. 0 is also rejected because the
-  // rightmost-column bug returns at large widths without at least
-  // one column of safety.
-  {
-    const char *m = getenv("JOT_RENDER_MARGIN");
-    if (m && m[0] != '\0') {
-      int v = atoi(m);
-      if (v >= 1) {
-        render_margin_ = 1;
-      }
-    }
-  }
+  // Renderer safety margin is fixed at one cell. Larger margins create a
+  // visible right-edge gap; zero brings back the rightmost-column wrap bug.
+  render_margin_ = 1;
 
   // Per-row chunked-flush threshold. JOT_RENDER_CHUNK_BYTES=<n> overrides
   // the default of 0 (disabled). Set to e.g. 2048 or 4096 to enable

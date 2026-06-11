@@ -50,11 +50,10 @@ private:
   // rightmost `render_margin_` physical columns of any row, and the
   // cursor is clamped one cell inside that margin, so we never
   // trigger the terminal's pending-wrap state at large widths.
-  // The margin is fixed at one cell. JOT_RENDER_MARGIN values
-  // greater than 1 are clamped to 1; larger values would only
+  // The margin is fixed at one cell; larger values would only
   // produce a visibly oversized blank strip on the right edge of
   // the UI without any safety benefit. UI::get_render_width() is
-  // defined as `width - render_margin_()` and is the width every
+  // defined as `width - render_margin()` and is the width every
   // full-width panel (pane layout, status line, integrated
   // terminal, image viewer, home menu) must use so its right
   // border lands on the last paintable column.
@@ -160,11 +159,10 @@ public:
   void render_capture_marker(const std::string &label, int rows_rendered);
 
   // Number of physical columns on the right edge of every row that the
-  // renderer must leave untouched. The renderer caps each painted row at
-  // `width - render_margin()` cells and clamps the cursor x to one cell
-  // further inside (so the cursor itself is never parked on the right
-  // margin either). Default 1; override with `JOT_RENDER_MARGIN=<n>`.
-  int render_margin() const { return render_margin_; }
+  // renderer must leave untouched. This is fixed at exactly one cell so
+  // full-width borders sit on the last paintable column without creating
+  // a wider visual gap.
+  int render_margin() const { return 1; }
 
   // Drain the output buffer to the kernel PTY without blocking. If
   // `render_chunk_bytes_` is 0 (default), this is a no-op. When

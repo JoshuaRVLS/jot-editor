@@ -33,24 +33,6 @@ bool set_non_blocking(int fd) {
   return fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0;
 }
 
-bool write_all_fd(int fd, const std::string &data) {
-  size_t sent = 0;
-  while (sent < data.size()) {
-    ssize_t written = write(fd, data.data() + sent, data.size() - sent);
-    if (written < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      return false;
-    }
-    if (written == 0) {
-      return false;
-    }
-    sent += (size_t)written;
-  }
-  return true;
-}
-
 std::string get_lsp_log_path(const std::string &language) {
   const char *home = getenv("HOME");
   fs::path base = home ? fs::path(home) / ".config" / "jot" / "logs"
@@ -566,15 +548,39 @@ bool LSPClient::send_message(const std::string &json) {
 
   std::ostringstream payload;
   payload << "Content-Length: " << json.size() << "\r\n\r\n" << json;
-  const std::string message = payload.str();
+  outbound_buffer += payload.str();
 
-  if (!write_all_fd(stdin_fd, message)) {
-    last_error = strerror(errno);
-    append_log_line("SEND-ERR ", last_error);
+  append_log_line("SEND ", json);
+  return flush_pending_writes();
+}
+
+bool LSPClient::flush_pending_writes() {
+  if (!running || stdin_fd < 0) {
     return false;
   }
 
-  append_log_line("SEND ", json);
+  while (!outbound_buffer.empty()) {
+    ssize_t written =
+        write(stdin_fd, outbound_buffer.data(), outbound_buffer.size());
+    if (written > 0) {
+      outbound_buffer.erase(0, (size_t)written);
+      continue;
+    }
+
+    if (written < 0 && errno == EINTR) {
+      continue;
+    }
+    if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      return true;
+    }
+
+    last_error = written < 0 ? strerror(errno) : "LSP stdin closed";
+    append_log_line("SEND-ERR ", last_error);
+    running = false;
+    initialized = false;
+    return false;
+  }
+
   return true;
 }
 
@@ -641,8 +647,10 @@ bool LSPClient::start() {
   pending_completions.clear();
   stdout_buffer.clear();
   stderr_buffer.clear();
+  outbound_buffer.clear();
   last_error.clear();
 
+  set_non_blocking(stdin_fd);
   set_non_blocking(stdout_fd);
   set_non_blocking(stderr_fd);
 
@@ -673,17 +681,17 @@ bool LSPClient::start() {
 }
 
 void LSPClient::stop() {
-  if (!running) {
+  if (!running && stdin_fd < 0 && stdout_fd < 0 && stderr_fd < 0 &&
+      child_pid <= 0) {
     return;
   }
-  running = false;
 
-  if (stdin_fd >= 0) {
-    std::string msg =
-        "Content-Length: 51\r\n\r\n"
-        "{\"jsonrpc\":\"2.0\",\"method\":\"exit\",\"params\":{}}";
-    write_all_fd(stdin_fd, msg);
+  if (running && stdin_fd >= 0) {
+    send_message("{\"jsonrpc\":\"2.0\",\"method\":\"exit\",\"params\":{}}");
+    flush_pending_writes();
   }
+  running = false;
+  initialized = false;
 
   if (child_pid > 0) {
     kill(child_pid, SIGTERM);
@@ -706,6 +714,7 @@ void LSPClient::stop() {
   file_versions.clear();
   pending_completion_requests.clear();
   pending_completions.clear();
+  outbound_buffer.clear();
 }
 
 bool LSPClient::restart() {
@@ -796,6 +805,13 @@ bool LSPClient::poll() {
   }
 
   bool changed = false;
+  if (!outbound_buffer.empty()) {
+    changed = true;
+    if (!flush_pending_writes()) {
+      return true;
+    }
+  }
+
   char buf[4096];
   while (stdout_fd >= 0) {
     ssize_t n = read(stdout_fd, buf, sizeof(buf));

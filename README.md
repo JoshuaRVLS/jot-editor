@@ -1,6 +1,6 @@
 # jot
 
-`jot` is a terminal code editor written in C++. It aims for a modern, modeless workflow: type directly, use the mouse if you want, keep multiple files open, split panes, browse a workspace tree, open a built-in terminal, and extend the editor with Python.
+`jot` is a terminal code editor written in C++. It aims for a modern, modeless workflow: type directly, use the mouse if you want, keep multiple files open, split panes, browse a workspace tree, open a built-in terminal, and customize themes with Python.
 
 ![jot screenshot](screenshot.png)
 
@@ -18,7 +18,7 @@ The current editing model is:
 - sidebar for workspace browsing
 - integrated terminal for shell work
 - native C++ LSP support for diagnostics
-- Python for plugins, themes, and optional automation
+- Python-backed theme loading
 
 The installed binary name is `jot`.
 
@@ -50,7 +50,7 @@ When you launch `jot`, it creates one editor session with:
 - one workspace root, defaulting to the current directory
 - one visible pane
 - one shared UI/state loop
-- Python runtime initialized for plugins and themes
+- Python runtime initialized for themes
 - no terminal panel until you open it
 - no LSP client until you open a supported file
 
@@ -106,7 +106,7 @@ At runtime, the editor is built around a few main state objects:
 - `file_tree`: the current workspace sidebar tree
 - `integrated_terminals`: terminal tabs in the bottom panel
 - `lsp_clients`: native language-server processes owned by the C++ core
-- `python_api`: embedded Python bridge for plugins/themes
+- `python_api`: embedded Python bridge for themes
 
 A buffer stores things like:
 
@@ -166,6 +166,7 @@ Important behavior:
 - opening the sidebar moves focus to the sidebar
 - pressing `Esc` in the sidebar returns focus to the editor
 - opening/focusing the integrated terminal routes keyboard input to the shell
+- pressing the terminal toggle again while the terminal is focused hides it
 - pressing `Esc` in the terminal releases terminal focus back to the editor
 
 ### 6. Buffers, Tabs, and Files
@@ -220,11 +221,11 @@ Mouse support is enabled for the sidebar too.
 
 `Ctrl+P` opens the command palette.
 
-It behaves like a lightweight ex-style command line instead of a fuzzy GUI launcher:
+It behaves like a fuzzy ex-style command line:
 
 - it accepts ex-style commands such as `:w`, `:q`, `:theme`, `:term`
-- `Tab` completes commands and theme names
-- plugin commands are included in completion
+- suggestions update live while typing and are ranked by fuzzy match
+- `Tab` accepts the selected command or argument completion
 - some editor actions also prefill the palette, like `Ctrl+G` for `line`
 
 Built-in command groups include:
@@ -272,12 +273,22 @@ What it does:
 
 How it behaves:
 
-- `Ctrl+\`` toggles the terminal panel
+- `Ctrl+\`` / `Ctrl+X` opens or focuses the terminal panel; pressing it again
+  while the terminal is focused hides the panel
 - if no terminal exists yet, opening the panel creates one
 - terminal tabs live at the top of the terminal panel
 - clicking `+` creates a new terminal tab
 - clicking a terminal tab switches focus
 - `Esc` releases terminal focus and returns to the editor
+
+Terminal tasks:
+
+- local tasks live in `<workspace>/.jot/tasks.json`
+- global fallback tasks live in `~/.config/jot/configs/tasks.json`
+- local tasks override global tasks with the same name
+- schema: `{ "tasks": { "build": "cmake --build build -j" } }`
+- `:task` lists tasks, `:task <name>` runs or reuses a task tab
+- `:tasknew <name>` creates a fresh task tab, `:taskrerun` reruns the last task
 
 Important limitation:
 
@@ -285,7 +296,7 @@ Important limitation:
 
 ### 11. LSP Architecture
 
-LSP is now owned by the C++ core, not by Python plugins.
+LSP is owned by the C++ core.
 
 Current native LSP flow:
 
@@ -318,47 +329,32 @@ Useful LSP commands:
 
 This part is still evolving. The architecture is in place, but it is not yet full VS Code parity for completion, hover, rename, code actions, and symbol UI.
 
-### 12. Python Runtime: Plugins, Themes, Automation
+### 12. Python Runtime: Themes
 
-Python is embedded for extension work, not for owning the core editor.
+Python is embedded only for colorscheme discovery and application. The editor no longer loads Python plugins, user init files, event hooks, keybindings, command callbacks, or palette suggestions.
 
 Python is currently responsible for:
 
-- plugins
 - themes
-- optional user automation
-- editor event hooks
-- custom commands / keybinds
 
 The Python runtime loads:
 
 - bundled runtime support from `src/python/`
-- user init files
-- single-file plugins
-- plugin packages with `plugin.py` or `__init__.py`
+- theme files from the configured theme directories
 
-Primary user config/plugin paths:
+Primary user theme path:
 
 ```text
-~/.config/jot/configs/init.py
-~/.config/jot/configs/plugins/
 ~/.config/jot/configs/colors/
 ```
 
-Legacy paths are still supported:
+Legacy theme path:
 
 ```text
-~/.config/jot/plugins/
 ~/.config/jot/themes/
-~/.config/jot/*.py
 ```
 
-Useful plugin commands:
-
-- `:PlugReload`
-- `:PlugList`
-
-See [docs/PLUGINS.md](/home/joshuarvl/Documents/jcode/docs/PLUGINS.md) for the plugin API and [docs/THEMES.md](/home/joshuarvl/Documents/jcode/docs/THEMES.md) for themes.
+See [docs/THEMES.md](docs/THEMES.md) for theme authoring.
 
 ## Current Feature Set
 
@@ -406,7 +402,6 @@ See [docs/PLUGINS.md](/home/joshuarvl/Documents/jcode/docs/PLUGINS.md) for the p
 
 ### Extensibility
 
-- Python plugins
 - Python themes
 - native C++ LSP client foundation
 - diagnostics overlay from LSP
@@ -497,13 +492,9 @@ Current layout:
 ```text
 ~/.config/jot/
   configs/
-    init.py
     settings.conf
     colors/
       my_theme.py
-    plugins/
-      my_plugin.py
-  plugins/     # legacy path
   themes/      # legacy path
 ```
 
@@ -523,6 +514,7 @@ Built-in defaults include:
 - `show_minimap=true`
 - `tab_size=2`
 - `auto_indent=true`
+- `smart_paste_indent=true`
 - `auto_save=false`
 - `auto_save_interval_ms=2000`
 - `auto_detect_indent=false`
@@ -539,6 +531,7 @@ Example `settings.conf`:
 ```ini
 tab_size=2
 auto_indent=true
+smart_paste_indent=true
 auto_save=false
 auto_save_interval_ms=2000
 auto_detect_indent=true
@@ -561,7 +554,7 @@ lsp_change_debounce_ms=120
 - `Ctrl+A`: select all
 - `Ctrl+C`: copy
 - `Ctrl+X`: cut
-- `Ctrl+V`: paste
+- `Ctrl+V`: paste, with multi-line indentation rebased to the cursor context
 - `Ctrl+N`: new buffer
 - `Ctrl+D`: duplicate current line
 - `Ctrl+K`: delete current line
@@ -619,6 +612,11 @@ lsp_change_debounce_ms=120
 - `Arrow Right` / `l` / `Enter`: expand folder or open file
 - `Arrow Left` / `h`: collapse folder or move to parent node
 - `r`: refresh workspace tree
+- `a`: create file in selected folder
+- `A`: create folder in selected folder
+- `i`: generate missing C++ implementations for selected header/source
+- `C`: create a matching C++ header/source pair
+- `d`, then `d` again: delete selected file or folder
 - `.`: show / hide dotfiles
 - `*`: expand all folders recursively
 - `z`: collapse all folders
@@ -627,7 +625,7 @@ lsp_change_debounce_ms=120
 
 ### Integrated Terminal
 
-- `Ctrl+\``: show, hide, or focus the terminal panel
+- `Ctrl+\`` / `Ctrl+X`: show, hide, or focus the terminal panel
 - `Ctrl+Shift+T`: create a new terminal tab while terminal focus is active
 - `Esc`: release terminal focus
 - mouse click terminal tab: focus terminal tab
@@ -643,6 +641,7 @@ lsp_change_debounce_ms=120
 - triple click: select full line
 - click file tab: switch buffer
 - click file tab `x`: close buffer
+- drag split border: resize panes
 - click minimap: reposition viewport
 - click sidebar items: expand folders or open files
 - click terminal tabs: switch terminal instances
@@ -665,6 +664,15 @@ Open the command palette with `Ctrl+P` and use ex-style commands such as:
 - `:minimap`
 - `:term`, `:terminal`
 - `:termnew`, `:terminalnew`
+- `:task [name]`
+- `:tasknew <name>`
+- `:taskrerun`
+- `:mkfile <path>`
+- `:mkdir <path>`
+- `:rename <old_path> <new_path>`
+- `:rm <path>`
+- `:cpppair <path>`
+- `:cppimpl [header-or-source]`
 - `:search`
 - `:format`
 - `:trim`
@@ -680,8 +688,6 @@ Open the command palette with `Ctrl+P` and use ex-style commands such as:
 - `:lspstart`, `:lspstatus`, `:lspstop`, `:lsprestart`
 - `:help`
 
-Plugin commands registered from Python also appear in command completion.
-
 ## Project Layout
 
 ```text
@@ -694,7 +700,8 @@ src/input/      keyboard, mouse, command palette, dispatch logic
 src/render/     editor drawing, minimap, overlays, UI panels
 src/features/   syntax, config, bracket helpers, editing features
 src/tools/      integrated terminal, telescope, image viewer, native LSP client
-src/plugins/    embedded Python bridge for plugins/themes
+src/python_bridge/
+                embedded Python bridge for themes
 src/ui/         raw terminal and UI abstraction layer
 src/CMakeLists.txt
 src/python/     Python-side runtime helpers and bundled scripts
@@ -705,14 +712,14 @@ tests/          unit test scaffolding
 Build graph highlights:
 
 - `jot_engine`: aggregated static engine target for the app
-- `jot_core`, `jot_edit`, `jot_features`, `jot_input`, `jot_render`, `jot_tools`, `jot_plugins`, `jot_ui`: module static libraries for ownership boundaries and reuse
+- `jot_core`, `jot_edit`, `jot_features`, `jot_input`, `jot_render`, `jot_tools`, `jot_python_bridge`, `jot_ui`: module static libraries for ownership boundaries and reuse
 
 ## Notes and Limitations
 
 - the user-facing workflow is modeless; legacy mode-related source files are internal compatibility details
 - the integrated terminal is improving, but it is still lighter than a full terminal emulator
 - native C++ LSP is in active development; diagnostics are the most mature part right now
-- Python is meant for extension and customization, not for owning the editor core
+- Python is reserved for themes; editor behavior is owned by the C++ core
 
 ## License
 

@@ -65,10 +65,10 @@ public:
   int get_width() const { return width; }
   int get_height() const { return height; }
 
-  // Paintable width: the physical terminal width minus the right-edge
-  // safety margin. The renderer intentionally leaves the rightmost
-  // `render_margin()` columns untouched (default 1) to avoid the
-  // terminal's pending-wrap state at large widths. Layout code
+  // Paintable width: the physical terminal width minus the fixed one-cell
+  // right-edge safety margin. The renderer intentionally leaves the
+  // rightmost physical column untouched to avoid the terminal's
+  // pending-wrap state at large widths. Layout code
   // that places visible UI edges (pane borders, status line,
   // integrated terminal panel, image viewer) must use this width
   // instead of `get_width()` so the right border lands inside the

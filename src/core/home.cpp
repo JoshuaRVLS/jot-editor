@@ -290,6 +290,7 @@ bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift,
       command_palette_selected = 0;
       command_palette_theme_mode = false;
       command_palette_theme_original.clear();
+      refresh_command_palette();
       needs_redraw = true;
       return true;
     case HOME_ACTION_COMMAND_PALETTE:

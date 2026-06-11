@@ -16,12 +16,9 @@ endforeach()
 
 # Best-effort cleanup of directories we created and that are now empty.
 set(_empty_dirs
-  "@CMAKE_INSTALL_PREFIX@/share/jot/python/commands"
-  "@CMAKE_INSTALL_PREFIX@/share/jot/python/host"
   "@CMAKE_INSTALL_PREFIX@/share/jot/python/runtime"
   "@CMAKE_INSTALL_PREFIX@/share/jot/python"
   "@CMAKE_INSTALL_PREFIX@/share/jot/configs/colors"
-  "@CMAKE_INSTALL_PREFIX@/share/jot/configs/plugins"
   "@CMAKE_INSTALL_PREFIX@/share/jot/configs"
   "@CMAKE_INSTALL_PREFIX@/share/jot"
 )

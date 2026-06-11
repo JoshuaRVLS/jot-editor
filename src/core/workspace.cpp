@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "cpp_assist.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -191,6 +192,7 @@ void Editor::open_workspace(const std::string &path, bool restore_session) {
   // Reset editor buffers when entering a workspace so sessions do not mix.
   buffers.clear();
   workspace_diagnostic_severity.clear();
+  invalidate_sidebar_diagnostics_cache();
   FileBuffer fb;
   fb.lines.push_back("");
   fb.cursor = {0, 0};
@@ -244,13 +246,16 @@ void Editor::load_file_tree(const std::string &path) {
   if (ec)
     p = fs::path(path);
   root_dir = p.lexically_normal().string();
-  if (!fs::exists(p) || !fs::is_directory(p))
+  if (!fs::exists(p) || !fs::is_directory(p)) {
+    invalidate_sidebar_tree_cache();
     return;
+  }
 
   const std::string new_root = normalize_path_for_tree(root_dir);
   const bool same_root = !old_root.empty() && old_root == new_root;
 
   build_tree(root_dir, file_tree, 0);
+  invalidate_sidebar_tree_cache();
 
   if (!same_root) {
     file_tree_selected = 0;
@@ -275,6 +280,7 @@ void Editor::load_file_tree(const std::string &path) {
         }
       };
   restore_expanded(file_tree);
+  invalidate_sidebar_tree_cache();
 
   std::vector<FileNode *> refreshed_flat;
   flatten_nodes_mut(file_tree, refreshed_flat);
@@ -651,6 +657,7 @@ void Editor::handle_sidebar_input(int ch) {
           }
         };
     expand_all(file_tree);
+    invalidate_sidebar_tree_cache();
     message = "Explorer: expanded all";
     needs_redraw = true;
     return;
@@ -658,6 +665,7 @@ void Editor::handle_sidebar_input(int ch) {
 
   if (ch == 'z') {
     collapse_all_nodes(file_tree);
+    invalidate_sidebar_tree_cache();
     file_tree_selected = 0;
     file_tree_scroll = 0;
     message = "Explorer: collapsed all";
@@ -673,8 +681,10 @@ void Editor::handle_sidebar_input(int ch) {
         if (!node->expanded) {
           node->expanded = true;
           build_tree(node->path, node->children, node->depth + 1);
+          invalidate_sidebar_tree_cache();
         } else if (ch == '\n' || ch == 13) {
           node->expanded = false;
+          invalidate_sidebar_tree_cache();
         }
         needs_redraw = true;
       } else {
@@ -692,6 +702,7 @@ void Editor::handle_sidebar_input(int ch) {
       FileNode *node = flat[file_tree_selected];
       if (node->is_dir && node->expanded) {
         node->expanded = false;
+        invalidate_sidebar_tree_cache();
         needs_redraw = true;
       } else if (node->depth > 0) {
         int target_depth = node->depth - 1;
@@ -720,6 +731,7 @@ void Editor::handle_sidebar_input(int ch) {
         command_palette_selected = 0;
         command_palette_theme_mode = false;
         command_palette_theme_original.clear();
+        refresh_command_palette();
         needs_redraw = true;
       }
       return;
@@ -775,6 +787,7 @@ void Editor::handle_sidebar_input(int ch) {
     command_palette_selected = 0;
     command_palette_theme_mode = false;
     command_palette_theme_original.clear();
+    refresh_command_palette();
     needs_redraw = true;
     return;
   }
@@ -802,6 +815,64 @@ void Editor::handle_sidebar_input(int ch) {
     command_palette_selected = 0;
     command_palette_theme_mode = false;
     command_palette_theme_original.clear();
+    refresh_command_palette();
+    needs_redraw = true;
+    return;
+  }
+
+  if (ch == 'i') {
+    if (flat.empty() || file_tree_selected < 0 ||
+        file_tree_selected >= (int)flat.size()) {
+      return;
+    }
+    FileNode *node = flat[file_tree_selected];
+    if (node->is_dir) {
+      message = "Select a C++ header or source file";
+      needs_redraw = true;
+      return;
+    }
+    fs::path selected(node->path);
+    if (!CppAssist::is_header_path(selected) &&
+        !CppAssist::is_source_path(selected)) {
+      message = "Select a C++ header or source file";
+      needs_redraw = true;
+      return;
+    }
+    execute_command("cppimpl " + to_workspace_relative(node->path));
+    return;
+  }
+
+  if (ch == 'C') {
+    std::string target = root_dir;
+    if (!flat.empty() && file_tree_selected >= 0 &&
+        file_tree_selected < (int)flat.size()) {
+      FileNode *node = flat[file_tree_selected];
+      if (node->is_dir) {
+        target = node->path;
+      } else {
+        fs::path selected(node->path);
+        if (CppAssist::is_header_path(selected) ||
+            CppAssist::is_source_path(selected)) {
+          target = selected.replace_extension("").string();
+        } else {
+          target = selected.parent_path().string();
+        }
+      }
+    }
+    std::string rel = to_workspace_relative(target);
+    if (!rel.empty() && rel != "." && rel.back() != '/' && rel.back() != '\\' &&
+        (target == root_dir || fs::is_directory(target))) {
+      rel += "/";
+    } else if (rel == ".") {
+      rel.clear();
+    }
+    show_command_palette = true;
+    command_palette_query = "cpppair " + rel;
+    command_palette_results.clear();
+    command_palette_selected = 0;
+    command_palette_theme_mode = false;
+    command_palette_theme_original.clear();
+    refresh_command_palette();
     needs_redraw = true;
     return;
   }
@@ -921,6 +992,7 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click,
       if (node->expanded && node->children.empty()) {
         build_tree(node->path, node->children, node->depth + 1);
       }
+      invalidate_sidebar_tree_cache();
     } else {
       open_file(node->path, !is_double_click);
       if (is_double_click) {

@@ -646,6 +646,10 @@ bool Editor::save_buffer_at(int index, bool announce) {
 void Editor::save_file_as() {
   show_command_palette = true;
   command_palette_query = "w ";
+  command_palette_selected = 0;
+  command_palette_theme_mode = false;
+  command_palette_theme_original.clear();
+  refresh_command_palette();
   needs_redraw = true;
 }
 
@@ -654,6 +658,7 @@ void Editor::close_buffer_at(int index) {
     return;
 
   const FileBuffer &snapshot_source = buffers[index];
+  invalidate_sidebar_diagnostics_cache();
 
 #ifdef JOT_TREESITTER
   {
@@ -693,6 +698,7 @@ void Editor::close_buffer_at(int index) {
     buf.redo_stack = std::stack<State>();
     buf.bookmarks.clear();
     buf.diagnostics.clear();
+    invalidate_sidebar_diagnostics_cache();
 #ifdef JOT_TREESITTER
     if (buf.ts_tree) { ts_tree_delete(buf.ts_tree); buf.ts_tree = nullptr; }
     if (buf.ts_parser) { ts_parser_delete(buf.ts_parser); buf.ts_parser = nullptr; }

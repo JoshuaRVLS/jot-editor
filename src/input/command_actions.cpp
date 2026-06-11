@@ -1,6 +1,5 @@
 #include "editor.h"
 #include "text_features.h"
-#include "python_api.h"
 
 void Editor::format_document() {
   auto &buf = get_buffer();
@@ -67,47 +66,4 @@ void Editor::change_tab_size(int delta) {
   config.save();
   message = "Tab size set to " + std::to_string(tab_size);
   needs_redraw = true;
-}
-
-void Editor::register_command(const std::string &name,
-                              const std::string &callback) {
-  for (auto &command : custom_commands) {
-    if (command.name == name) {
-      command.callback = callback;
-      return;
-    }
-  }
-  custom_commands.push_back({name, callback});
-}
-
-void Editor::show_input_prompt(const std::string &message,
-                               const std::string &callback) {
-  input_prompt_visible = true;
-  input_prompt_message = message;
-  input_prompt_callback = callback;
-  input_prompt_buffer = "";
-  needs_redraw = true;
-}
-
-void Editor::hide_input_prompt() {
-  input_prompt_visible = false;
-  needs_redraw = true;
-}
-
-void Editor::handle_input_prompt(int ch) {
-  if (ch == 27) {
-    hide_input_prompt();
-  } else if (ch == '\n' || ch == 13) {
-    hide_input_prompt();
-    if (python_api) {
-      python_api->invoke_callback(input_prompt_callback, input_prompt_buffer);
-    }
-  } else if (ch == 127 || ch == 8) {
-    if (!input_prompt_buffer.empty())
-      input_prompt_buffer.pop_back();
-    needs_redraw = true;
-  } else if (ch >= 32 && ch < 127) {
-    input_prompt_buffer += (char)ch;
-    needs_redraw = true;
-  }
 }

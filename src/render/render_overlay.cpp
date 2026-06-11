@@ -81,6 +81,39 @@ std::string completion_kind_icon(int kind, bool use_nerd_icons) {
     return "󰘍 ";
   }
 }
+
+std::string clip_text(const std::string &text, int max_w) {
+  if (max_w <= 0) {
+    return "";
+  }
+  if ((int)text.size() <= max_w) {
+    return text;
+  }
+  if (max_w <= 2) {
+    return text.substr(0, max_w);
+  }
+  return text.substr(0, max_w - 2) + "..";
+}
+
+std::string clip_path_left(const std::string &text, int max_w) {
+  if (max_w <= 0) {
+    return "";
+  }
+  if ((int)text.size() <= max_w) {
+    return text;
+  }
+  if (max_w <= 3) {
+    return text.substr(0, max_w);
+  }
+  return ".." + text.substr(text.size() - (max_w - 2));
+}
+
+std::string telescope_icon(bool directory, bool use_nerd_icons) {
+  if (!use_nerd_icons) {
+    return directory ? "[D] " : "[F] ";
+  }
+  return directory ? " " : "󰈔 ";
+}
 } // namespace
 
 void Editor::render_lsp_completion() {
@@ -230,7 +263,7 @@ void Editor::render_lsp_completion() {
 void Editor::render_telescope() {
   int h = ui->get_height();
   int w = ui->get_render_width();
-  if (w < 4 || h < 3)
+  if (w < 4 || h < 5)
     return;
 
   int content_x = 0;
@@ -241,46 +274,84 @@ void Editor::render_telescope() {
     content_w = std::max(1, w - content_x);
   }
 
-  // Compact quick-open style overlay so it doesn't take over the whole editor.
-  int modal_w =
-      std::min(std::max(1, content_w - 6), std::max(48, content_w * 2 / 3));
-  int modal_h = std::min(h - 6, std::max(10, h / 2));
-  // Round to nearest cell so odd widths don't bias left.
-  int x = content_x + std::max(0, (content_w - modal_w + 1) / 2);
-  x = std::clamp(x, content_x,
-                 std::max(content_x, content_x + content_w - modal_w));
   int top_bound = std::max(0, tab_height + 1);
   int bottom_bound = std::max(top_bound + 1, h - status_height - 1);
   int usable_h = std::max(1, bottom_bound - top_bound);
+  int modal_w = std::min(std::max(1, content_w - 4),
+                         std::max(58, content_w * 5 / 6));
+  modal_w = std::clamp(modal_w, std::min(content_w, 34), content_w);
+  int modal_h = std::min(std::max(12, usable_h - 2),
+                         std::max(12, usable_h * 3 / 4));
+  modal_h = std::clamp(modal_h, std::min(usable_h, 8), usable_h);
+  int x = content_x + std::max(0, (content_w - modal_w + 1) / 2);
+  x = std::clamp(x, content_x,
+                 std::max(content_x, content_x + content_w - modal_w));
   int y = top_bound + std::max(0, (usable_h - modal_h) / 2);
-  int list_w = std::max(24, modal_w * 2 / 5);
-  int preview_w = modal_w - list_w - 1;
-  int list_h = modal_h - 5;
+  int inner_x = x + 1;
+  int inner_y = y + 1;
+  int inner_w = std::max(1, modal_w - 2);
+  int inner_h = std::max(1, modal_h - 2);
+  int header_h = std::min(4, inner_h);
+  int footer_h = inner_h >= 8 ? 1 : 0;
+  int body_y = inner_y + header_h;
+  int body_h = std::max(1, inner_h - header_h - footer_h);
+  bool show_preview = modal_w >= 62 && body_h >= 4;
+  int list_w = show_preview ? std::max(26, inner_w * 45 / 100) : inner_w;
+  int preview_w = show_preview ? std::max(1, inner_w - list_w - 1) : 0;
+  const bool use_nerd_icons = config.get_bool("lsp_completion_nerd_icons", true);
 
   UIRect rect = {x, y, modal_w, modal_h};
   ui->fill_rect(rect, " ", theme.fg_telescope, theme.bg_telescope);
   ui->draw_border(rect, theme.fg_panel_border, theme.bg_telescope);
 
-  std::string title = " Find Files ";
-  std::string root = telescope.get_root_dir();
-  if ((int)root.length() > modal_w - 18) {
-    root = "..." + root.substr(root.length() - (modal_w - 21));
-  }
-  ui->draw_text(x + 2, y, title, theme.fg_telescope, theme.bg_telescope, true);
-  ui->draw_text(x + 2, y + 1, root, theme.fg_comment, theme.bg_telescope);
-
-  std::string query = " > " + telescope.get_query();
-  if ((int)query.length() > modal_w - 4) {
-    query = query.substr(0, modal_w - 7) + "...";
-  }
-  ui->draw_text(x + 2, y + 2, query, theme.fg_telescope, theme.bg_telescope);
-  ui->draw_text(x + list_w + 1, y + 1, " Preview ", theme.fg_telescope,
-                theme.bg_telescope, true);
-  ui->draw_text(x + list_w, y + 1, "|", theme.fg_panel_border,
-                theme.bg_telescope);
-
   const auto &results = telescope.get_results();
   int selected = telescope.get_selected_index();
+  int result_count = telescope.get_result_count();
+
+  std::string title = " Find Files";
+  std::string count = std::to_string(result_count) + " match";
+  if (result_count != 1) {
+    count += "es";
+  }
+  if (!results.empty()) {
+    count += "  " + std::to_string(std::clamp(selected + 1, 1, result_count)) +
+             "/" + std::to_string(result_count);
+  }
+  std::string root = telescope.get_root_dir();
+  if ((int)root.length() > inner_w - 2) {
+    root = clip_path_left(root, inner_w - 2);
+  }
+  ui->draw_text(inner_x + 1, y, title, theme.fg_telescope, theme.bg_telescope,
+                true);
+  ui->draw_text(std::max(inner_x + 1, x + modal_w - (int)count.size() - 2), y,
+                count, theme.fg_comment, theme.bg_telescope);
+  ui->draw_text(inner_x + 1, inner_y, clip_text(root, inner_w - 2),
+                theme.fg_comment, theme.bg_telescope);
+
+  std::string query = "  > " + telescope.get_query();
+  if (telescope.get_query().empty()) {
+    query += "type to filter files";
+  }
+  UIRect query_rect = {inner_x + 1, inner_y + 2, std::max(1, inner_w - 2), 1};
+  if (inner_h >= 3) {
+    ui->fill_rect(query_rect, " ", theme.fg_telescope, theme.bg_command);
+    ui->draw_text(inner_x + 1, inner_y + 2, clip_text(query, inner_w - 2),
+                  theme.fg_telescope, theme.bg_command, true);
+  }
+
+  if (show_preview) {
+    for (int row = body_y; row < body_y + body_h; row++) {
+      ui->draw_text(inner_x + list_w, row, "│", theme.fg_panel_border,
+                    theme.bg_telescope);
+    }
+    ui->draw_text(inner_x + list_w + 2, body_y, "Preview",
+                  theme.fg_telescope, theme.bg_telescope, true);
+  }
+
+  int list_x = inner_x + 1;
+  int list_inner_w = show_preview ? std::max(1, list_w - 2) : std::max(1, inner_w - 2);
+  int list_y = body_y;
+  int list_h = body_h;
   int start_idx = std::max(0, selected - (list_h / 2));
   int end_idx = std::min((int)results.size(), start_idx + list_h);
   if (end_idx - start_idx < list_h) {
@@ -288,61 +359,84 @@ void Editor::render_telescope() {
   }
 
   if (results.empty()) {
-    ui->draw_text(x + 2, y + 4, "No files match the current query.",
+    std::string empty = telescope.get_query().empty()
+                            ? "No files found in this workspace."
+                            : "No files match the current query.";
+    ui->draw_text(list_x, list_y + std::max(0, list_h / 2), empty,
                   theme.fg_comment, theme.bg_telescope);
   }
 
   for (int i = start_idx; i < end_idx; i++) {
-    int row_y = y + 4 + (i - start_idx);
+    int row_y = list_y + (i - start_idx);
     int fg = theme.fg_telescope, bg = theme.bg_telescope;
 
     if (i == selected) {
       fg = theme.fg_telescope_selected;
       bg = theme.bg_telescope_selected;
+      UIRect row_rect = {list_x - 1, row_y, list_inner_w + 1, 1};
+      ui->fill_rect(row_rect, " ", fg, bg);
     }
 
-    std::string icon = results[i].is_directory ? "[D] " : "[F] ";
+    std::string icon = telescope_icon(results[i].is_directory, use_nerd_icons);
     std::string name = results[i].name;
-    if ((int)name.length() > list_w - 10) {
-      name = name.substr(0, list_w - 13) + "...";
+    std::string parent =
+        results[i].parent_path == "." ? "" : "  " + results[i].parent_path;
+    int parent_w = std::min((int)parent.size(), std::max(0, list_inner_w / 2));
+    int name_w = std::max(1, list_inner_w - (int)icon.size() - parent_w);
+    std::string row = icon + clip_text(name, name_w);
+    if (parent_w > 0) {
+      row += clip_path_left(parent, parent_w);
     }
-
-    ui->draw_text(x + 2, row_y, icon + name, fg, bg);
+    ui->draw_text(list_x, row_y, clip_text(row, list_inner_w), fg, bg,
+                  i == selected);
   }
 
-  if (!results.empty() && selected >= 0 && selected < (int)results.size()) {
-    auto preview_lines = telescope.get_preview_lines();
-    int preview_x = x + list_w + 2;
-    int preview_h = modal_h - 4;
-
-    std::string path = telescope.get_selected_path();
-    if (!path.empty()) {
-      std::string path_display = path;
-      if ((int)path_display.length() > preview_w - 2) {
-        path_display =
-            "..." + path_display.substr(path_display.length() - preview_w + 5);
+  if (show_preview) {
+    int preview_x = inner_x + list_w + 2;
+    int preview_inner_w = std::max(1, preview_w - 3);
+    if (!results.empty() && selected >= 0 && selected < (int)results.size()) {
+      auto preview = telescope.get_selected_preview();
+      std::string title_line = clip_path_left(preview.title, preview_inner_w);
+      ui->draw_text(preview_x, body_y + 1, title_line,
+                    theme.fg_telescope_preview, theme.bg_telescope_preview,
+                    true);
+      if (!preview.detail.empty() && body_h > 2) {
+        ui->draw_text(preview_x, body_y + 2,
+                      clip_text(preview.detail, preview_inner_w),
+                      theme.fg_comment, theme.bg_telescope_preview);
       }
-      ui->draw_text(preview_x, y + 2, path_display, theme.fg_telescope_preview,
-                    theme.bg_telescope_preview);
 
-      for (size_t i = 0;
-           i < preview_lines.size() && i < (size_t)(preview_h - 2); i++) {
-        std::string line = preview_lines[i];
-        if ((int)line.length() > preview_w - 2) {
-          line = line.substr(0, preview_w - 5) + "...";
+      int line_start_y = body_y + 4;
+      int preview_lines_h = std::max(0, body_y + body_h - line_start_y);
+      for (int i = 0; i < preview_lines_h && i < (int)preview.lines.size();
+           i++) {
+        std::string line = preview.lines[i];
+        if (preview.is_directory || preview.skipped) {
+          ui->draw_text(preview_x, line_start_y + i,
+                        clip_text(line, preview_inner_w), theme.fg_comment,
+                        theme.bg_telescope_preview);
+        } else {
+          char line_no[16];
+          std::snprintf(line_no, sizeof(line_no), "%3d ", i + 1);
+          int text_w = std::max(1, preview_inner_w - 4);
+          ui->draw_text(preview_x, line_start_y + i, line_no,
+                        theme.fg_comment, theme.bg_telescope_preview);
+          ui->draw_text(preview_x + 4, line_start_y + i,
+                        clip_text(line, text_w), theme.fg_telescope_preview,
+                        theme.bg_telescope_preview);
         }
-        ui->draw_text(preview_x, y + 4 + (int)i, line,
-                      theme.fg_telescope_preview, theme.bg_telescope_preview);
       }
+    } else {
+      ui->draw_text(preview_x, body_y + 2, "Select a file to preview.",
+                    theme.fg_comment, theme.bg_telescope);
     }
   }
 
-  std::string footer = "Enter open  Backspace parent  Ctrl+U clear  Esc close";
-  if ((int)footer.length() > modal_w - 4) {
-    footer = footer.substr(0, modal_w - 7) + "...";
+  if (footer_h > 0) {
+    std::string footer = "Enter open  Backspace parent  Ctrl+U clear  Esc close";
+    ui->draw_text(inner_x + 1, y + modal_h - 2, clip_text(footer, inner_w - 2),
+                  theme.fg_comment, theme.bg_telescope);
   }
-  ui->draw_text(x + 2, y + modal_h - 2, footer, theme.fg_comment,
-                theme.bg_telescope);
 }
 
 void Editor::render_image_viewer() {

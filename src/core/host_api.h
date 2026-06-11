@@ -84,17 +84,6 @@ private:
   Editor &editor;
 };
 
-class HostEventsAPI {
-public:
-  explicit HostEventsAPI(Editor &editor) : editor(editor) {}
-
-  void emit(const std::string &event_name,
-            const std::string &payload_json = "{}");
-
-private:
-  Editor &editor;
-};
-
 class EditorHostAPI {
 public:
   explicit EditorHostAPI(Editor &editor);
@@ -102,7 +91,6 @@ public:
   HostCoreAPI core;
   HostRenderAPI render;
   HostIOAPI io;
-  HostEventsAPI events;
 };
 
 #endif

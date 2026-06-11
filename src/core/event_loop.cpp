@@ -270,7 +270,9 @@ void Editor::handle_terminal_event(const Event &ev) {
       ch = ch + 96;
     }
 
-    if (show_command_palette) {
+    if (show_context_menu) {
+      handle_context_menu_input(ch);
+    } else if (show_command_palette) {
       handle_command_palette(ch);
     } else if (show_search) {
       handle_search_panel(ch, is_ctrl, is_shift, is_alt);
@@ -311,8 +313,10 @@ void Editor::handle_terminal_event(const Event &ev) {
       } else if (ev.mouse.pressed) {
         if (button_code == 0)
           bstate = 1;
-        else if (button_code == 1 || button_code == 2)
+        else if (button_code == 2)
           bstate = 3;
+        else if (button_code == 1)
+          bstate = 4;
         else
           bstate = 1;
       } else if (ev.mouse.released) {
@@ -408,13 +412,13 @@ void Editor::run() {
   if (!safe_mode && git_status_active()) {
     event_loop_.set_timer(1500, true, [this] { refresh_git_status(false); });
   }
-  if (!safe_mode && lsp_work_pending()) {
+  if (!safe_mode) {
     event_loop_.set_timer(50, true, [this] { poll_lsp_clients(); });
   }
   if (!safe_mode) {
     event_loop_.set_timer(100, true, [this] {
       for (auto &term : integrated_terminals) {
-        if (term && term->poll_output())
+        if (term && term->poll_output() && show_integrated_terminal)
           needs_redraw = true;
       }
     });
@@ -438,4 +442,3 @@ void Editor::run() {
 
   fcntl(stdin_fd, F_SETFL, stdin_flags);
 }
-

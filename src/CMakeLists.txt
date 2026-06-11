@@ -10,7 +10,7 @@ function(jot_configure_object_target target_name)
     ${PROJECT_SOURCE_DIR}/src/edit
     ${PROJECT_SOURCE_DIR}/src/features
     ${PROJECT_SOURCE_DIR}/src/ui
-    ${PROJECT_SOURCE_DIR}/src/plugins
+    ${PROJECT_SOURCE_DIR}/src/python_bridge
     ${PROJECT_SOURCE_DIR}/src/tools
   )
 
@@ -29,7 +29,7 @@ function(jot_expose_module_api target_name)
     ${PROJECT_SOURCE_DIR}/src/edit
     ${PROJECT_SOURCE_DIR}/src/features
     ${PROJECT_SOURCE_DIR}/src/ui
-    ${PROJECT_SOURCE_DIR}/src/plugins
+    ${PROJECT_SOURCE_DIR}/src/python_bridge
     ${PROJECT_SOURCE_DIR}/src/tools
   )
 endfunction()
@@ -50,6 +50,7 @@ add_library(jot_core_obj OBJECT
   core/panes.cpp
   core/popup.cpp
   core/task_queue.cpp
+  core/tasks.cpp
   core/theme.cpp
   core/undo.cpp
   core/utils.cpp
@@ -85,6 +86,7 @@ add_library(jot_features_obj OBJECT
   features/autoclose.cpp
   features/bracket.cpp
   features/config.cpp
+  features/cpp_assist.cpp
   features/text_features.cpp
   features/syntax.cpp
 )
@@ -133,10 +135,10 @@ else()
 endif()
 jot_configure_object_target(jot_tools_obj)
 
-add_library(jot_plugins_obj OBJECT
-  plugins/python_api_bindings.cpp
+add_library(jot_python_bridge_obj OBJECT
+  python_bridge/python_api_bindings.cpp
 )
-jot_configure_object_target(jot_plugins_obj)
+jot_configure_object_target(jot_python_bridge_obj)
 
 add_library(jot_ui_obj OBJECT
   ui/ui.cpp
@@ -155,7 +157,7 @@ add_library(jot_features STATIC $<TARGET_OBJECTS:jot_features_obj>)
 add_library(jot_input STATIC $<TARGET_OBJECTS:jot_input_obj>)
 add_library(jot_render STATIC $<TARGET_OBJECTS:jot_render_obj>)
 add_library(jot_tools STATIC $<TARGET_OBJECTS:jot_tools_obj>)
-add_library(jot_plugins STATIC $<TARGET_OBJECTS:jot_plugins_obj>)
+add_library(jot_python_bridge STATIC $<TARGET_OBJECTS:jot_python_bridge_obj>)
 add_library(jot_ui STATIC $<TARGET_OBJECTS:jot_ui_obj>)
 
 jot_expose_module_api(jot_core)
@@ -164,7 +166,7 @@ jot_expose_module_api(jot_features)
 jot_expose_module_api(jot_input)
 jot_expose_module_api(jot_render)
 jot_expose_module_api(jot_tools)
-jot_expose_module_api(jot_plugins)
+jot_expose_module_api(jot_python_bridge)
 jot_expose_module_api(jot_ui)
 
 # Aggregated engine library consumed by the app target.
@@ -176,7 +178,7 @@ add_library(jot_engine STATIC
   $<TARGET_OBJECTS:jot_input_obj>
   $<TARGET_OBJECTS:jot_render_obj>
   $<TARGET_OBJECTS:jot_tools_obj>
-  $<TARGET_OBJECTS:jot_plugins_obj>
+  $<TARGET_OBJECTS:jot_python_bridge_obj>
   $<TARGET_OBJECTS:jot_ui_obj>
 )
 

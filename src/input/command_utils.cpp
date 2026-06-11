@@ -63,9 +63,12 @@ const std::vector<std::string> &ex_commands() {
       "new",    "enew",     "bd",       "bdelete", "close",  "sp",
       "split",  "splith",   "vsp",      "splitv", "splitleft", "splitright",
       "splitup", "splitdown", "spleft", "spright", "spup", "spdown",
-      "bn",     "nextpane", "bp",       "prevpane", "theme", "colorscheme", "colo", "minimap",
-      "term",   "terminal", "termnew",  "terminalnew", "search",
+      "bn",     "nextpane", "bp",       "prevpane", "focusleft", "focusright",
+      "focusup", "focusdown", "wincmd", "theme", "colorscheme", "colo", "minimap",
+      "term",   "terminal", "termnew",  "terminalnew", "task", "tasknew",
+      "taskrerun", "search",
       "find",   "ff",       "mkfile",   "mkdir",   "rename", "rm",
+      "cppimpl", "cpppair",
       "format", "trim",     "upper",    "lower",  "sortlines", "sortdesc",
       "reverselines", "uniquelines", "shufflelines", "joinlines", "dupe",
       "trimblank", "copypath", "copyname", "datetime", "stats", "replace",
@@ -99,9 +102,11 @@ bool command_takes_argument(const std::string &cmd) {
          lc == "write" || lc == "wq" || lc == "x" || lc == "xit" ||
          lc == "theme" || lc == "colorscheme" ||
          lc == "colo" || lc == "line" || lc == "goto" ||
+         lc == "wincmd" || lc == "task" || lc == "tasknew" ||
          lc == "openrecent" || lc == "autosave" || lc == "help" ||
          lc == "h" || lc == "gitdiff" || lc == "find" || lc == "ff" ||
          lc == "mkfile" || lc == "mkdir" || lc == "rename" || lc == "rm" ||
+         lc == "cppimpl" || lc == "cpppair" ||
          lc == "lspinstall" || lc == "lspremove" || lc == "replace" ||
          lc == "replacei" || lc == "replaceword" || lc == "replacere" ||
          lc == "surround";

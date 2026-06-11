@@ -1,5 +1,4 @@
 #include "editor.h"
-#include "python_api.h"
 #include <cctype>
 
 void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
@@ -43,6 +42,11 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     }
   }
 
+  if (show_context_menu) {
+    handle_context_menu_input(ch);
+    return;
+  }
+
   const bool ctrl_q =
       (is_ctrl && (ch == 'q' || ch == 'Q' || original_ch == 'q' ||
                    original_ch == 'Q')) ||
@@ -73,6 +77,29 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
 
   // Global pane keybinds (before mode-specific handlers so they never get
   // swallowed by insert-mode Ctrl handling).
+  // Focus:
+  // - Ctrl+Alt+Arrow
+  if (is_ctrl && is_alt &&
+      (ch == 1008 || ch == 1009 || ch == 1010 || ch == 1011 ||
+       original_ch == 1008 || original_ch == 1009 || original_ch == 1010 ||
+       original_ch == 1011)) {
+    bool focused = false;
+    if (ch == 1011 || original_ch == 1011) {
+      focused = focus_pane_direction('h');
+    } else if (ch == 1009 || original_ch == 1009) {
+      focused = focus_pane_direction('j');
+    } else if (ch == 1008 || original_ch == 1008) {
+      focused = focus_pane_direction('k');
+    } else if (ch == 1010 || original_ch == 1010) {
+      focused = focus_pane_direction('l');
+    }
+
+    if (!focused) {
+      set_message("No pane in that direction");
+    }
+    return;
+  }
+
   // Resize:
   // - Ctrl+Shift+H/J/K/L
   // - Ctrl+Arrow
@@ -175,7 +202,7 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     return;
   }
 
-  // Reserve Ctrl+S for save so plugin keybinds cannot swallow it.
+  // Reserve Ctrl+S for save.
   if ((is_ctrl && (ch == 's' || ch == 'S')) || ch == 19 || original_ch == 19) {
     save_file();
     needs_redraw = true;
@@ -186,15 +213,6 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
   if (show_save_prompt) {
     handle_save_prompt(ch);
     return;
-  }
-
-  if (python_api) {
-    std::string mode_str = "all";
-    if (python_api->handle_keybind(original_ch, is_ctrl, is_shift, is_alt,
-                                   mode_str)) {
-      needs_redraw = true;
-      return;
-    }
   }
 
   // Global sidebar toggle should work regardless of current focus.
@@ -256,11 +274,6 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
 
   if (show_command_palette) {
     handle_command_palette(ch);
-    return;
-  }
-
-  if (input_prompt_visible) {
-    handle_input_prompt(ch);
     return;
   }
 

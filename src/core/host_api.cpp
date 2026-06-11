@@ -5,7 +5,7 @@
 #include <algorithm>
 
 EditorHostAPI::EditorHostAPI(Editor &editor)
-    : core(editor), render(editor), io(editor), events(editor) {}
+    : core(editor), render(editor), io(editor) {}
 
 std::string HostCoreAPI::current_file() const {
   if (editor.buffers.empty()) {
@@ -218,12 +218,4 @@ void HostIOAPI::toggle_terminal() { editor.toggle_integrated_terminal(); }
 
 void HostIOAPI::execute_command(const std::string &command) {
   editor.execute_command(command);
-}
-
-void HostEventsAPI::emit(const std::string &event_name,
-                         const std::string &payload_json) {
-  if (!editor.python_api) {
-    return;
-  }
-  editor.python_api->emit_event(event_name, payload_json);
 }

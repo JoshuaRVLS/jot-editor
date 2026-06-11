@@ -98,6 +98,16 @@ static int compare_cursor_pos(const Cursor &a, const Cursor &b) {
   return 0;
 }
 
+static bool cursor_in_selection(const Selection &selection, const Cursor &pos) {
+  if (!selection.active)
+    return false;
+  Cursor start = selection.start;
+  Cursor end = selection.end;
+  if (compare_cursor_pos(end, start) < 0)
+    std::swap(start, end);
+  return compare_cursor_pos(start, pos) <= 0 && compare_cursor_pos(pos, end) <= 0;
+}
+
 static int tab_advance(int visual_col, int tab_size) {
   const int ts = std::max(1, tab_size);
   const int rem = visual_col % ts;
@@ -128,6 +138,16 @@ static int visual_to_logical_col(const std::string &line, int visual_col,
     visual = next;
   }
   return (int)line.size();
+}
+
+static void flatten_nodes_for_mouse(std::vector<FileNode> &nodes,
+                                    std::vector<FileNode *> &flat) {
+  for (auto &node : nodes) {
+    flat.push_back(&node);
+    if (node.is_dir && node.expanded) {
+      flatten_nodes_for_mouse(node.children, flat);
+    }
+  }
 }
 
 void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
@@ -224,6 +244,179 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
   }
 }
 
+bool Editor::open_context_menu_for_mouse(int x, int y) {
+  if (show_home_menu || panes.empty()) {
+    return false;
+  }
+
+  context_menu_target_buffer = -1;
+  context_menu_target_pane = -1;
+  context_menu_target_terminal = -1;
+  context_menu_target_path.clear();
+  context_menu_target_is_dir = false;
+
+  if (show_integrated_terminal && !integrated_terminals.empty()) {
+    int panel_h = std::clamp(integrated_terminal_height, 5,
+                             std::max(5, ui->get_height() / 2));
+    int panel_y =
+        std::max(tab_height, ui->get_height() - status_height - panel_h);
+    int panel_w = ui->get_render_width();
+    int tab_y = panel_y + 1;
+    if (x >= 0 && x < panel_w && y >= panel_y && y < panel_y + panel_h) {
+      int target_terminal = current_integrated_terminal;
+      bool on_tab = (y == tab_y || y == panel_y);
+      if (on_tab) {
+        int tab_x = 1;
+        for (int i = 0; i < (int)integrated_terminals.size(); i++) {
+          std::string base_label = integrated_terminals[i]->get_label().empty()
+                                       ? "term " + std::to_string(i + 1)
+                                       : integrated_terminals[i]->get_label();
+          std::string label = " " + base_label + " ";
+          int tab_w = (int)label.size() + 2;
+          if (x >= tab_x && x < tab_x + tab_w) {
+            target_terminal = i;
+            break;
+          }
+          tab_x += tab_w;
+          if (tab_x >= panel_w - 4)
+            break;
+        }
+      }
+      context_menu_target_terminal = target_terminal;
+      std::vector<ContextMenuItem> items = {
+          {"Focus Terminal", CONTEXT_ACTION_TERMINAL_FOCUS, target_terminal >= 0},
+          {"New Terminal", CONTEXT_ACTION_TERMINAL_NEW, true},
+          {"Reset Scroll", CONTEXT_ACTION_TERMINAL_RESET_SCROLL,
+           target_terminal >= 0},
+      };
+      if (on_tab) {
+        items.push_back({"Close Terminal", CONTEXT_ACTION_TERMINAL_CLOSE,
+                         target_terminal >= 0});
+      }
+      open_context_menu(x, y, CONTEXT_MENU_TERMINAL, items);
+      return true;
+    }
+  }
+
+  if (show_sidebar) {
+    int reserved_terminal_h = 0;
+    if (show_integrated_terminal && !integrated_terminals.empty()) {
+      reserved_terminal_h = std::clamp(integrated_terminal_height, 5,
+                                       std::max(5, ui->get_height() / 2));
+    }
+    int content_bottom =
+        terminal.get_height() - status_height - reserved_terminal_h;
+    if (x < sidebar_width && y >= tab_height && y < content_bottom) {
+      focus_state = FOCUS_SIDEBAR;
+      std::vector<FileNode *> flat;
+      flatten_nodes_for_mouse(file_tree, flat);
+      int sidebar_row = y - tab_height - 1;
+      int row = sidebar_row + file_tree_scroll;
+      FileNode *node = nullptr;
+      if (sidebar_row >= 0 && row >= 0 && row < (int)flat.size()) {
+        node = flat[row];
+        file_tree_selected = row;
+        context_menu_target_path = node->path;
+        context_menu_target_is_dir = node->is_dir;
+      } else {
+        context_menu_target_path = root_dir;
+        context_menu_target_is_dir = true;
+      }
+      bool has_target = !context_menu_target_path.empty();
+      std::string open_label =
+          node && node->is_dir ? (node->expanded ? "Collapse" : "Expand") : "Open";
+      std::vector<ContextMenuItem> items = {
+          {open_label, CONTEXT_ACTION_SIDEBAR_OPEN, node != nullptr},
+          {"New File", CONTEXT_ACTION_SIDEBAR_NEW_FILE, has_target},
+          {"New Folder", CONTEXT_ACTION_SIDEBAR_NEW_FOLDER, has_target},
+          {"Rename", CONTEXT_ACTION_SIDEBAR_RENAME, node != nullptr},
+          {"Refresh", CONTEXT_ACTION_SIDEBAR_REFRESH, true},
+          {"Copy Path", CONTEXT_ACTION_SIDEBAR_COPY_PATH, has_target},
+      };
+      open_context_menu(x, y, CONTEXT_MENU_SIDEBAR, items);
+      return true;
+    }
+  }
+
+  int pane_index = -1;
+  for (int i = 0; i < (int)panes.size(); i++) {
+    const auto &candidate = panes[i];
+    if (x >= candidate.x && x < candidate.x + candidate.w &&
+        y >= candidate.y && y < candidate.y + candidate.h) {
+      pane_index = i;
+      break;
+    }
+  }
+  if (pane_index < 0) {
+    return false;
+  }
+
+  if (pane_index != current_pane) {
+    panes[current_pane].active = false;
+    current_pane = pane_index;
+    panes[current_pane].active = true;
+    current_buffer = panes[current_pane].buffer_id;
+  }
+  auto &pane = get_pane(current_pane);
+  auto &buf = get_buffer(pane.buffer_id);
+  context_menu_target_pane = current_pane;
+
+  if (y == pane.y && !buffers.empty()) {
+    int draw_w = std::max(1, pane.w);
+    if (show_minimap && draw_w > 20) {
+      draw_w = std::max(1, draw_w - minimap_width);
+    }
+    FileTabLayout tabs = build_file_tab_layout(pane, draw_w);
+    for (const auto &tab : tabs.segments) {
+      if (x >= tab.x && x < tab.end_x) {
+        context_menu_target_buffer = tab.buffer_id;
+        std::vector<ContextMenuItem> items = {
+            {"Save", CONTEXT_ACTION_SAVE_BUFFER, tab.buffer_id >= 0},
+            {"Close Buffer", CONTEXT_ACTION_CLOSE_BUFFER, tab.buffer_id >= 0},
+        };
+        open_context_menu(x, y, CONTEXT_MENU_TAB, items);
+        return true;
+      }
+    }
+  }
+
+  const int line_num_width = 7;
+  const int code_start_x = pane.x + 1 + line_num_width;
+  const int content_top = pane.y + tab_height;
+  const int visible_rows = std::max(1, pane.h - tab_height - 1);
+  if (y >= content_top && y < content_top + visible_rows) {
+    int rel_y = std::clamp(y - content_top, 0, visible_rows - 1);
+    int click_y = rel_y + buf.scroll_offset;
+    if (click_y >= 0 && click_y < (int)buf.line_count()) {
+      const std::string &clicked_line = buf.line(click_y);
+      int rel_visual_x = std::max(0, x - code_start_x);
+      int start_visual =
+          logical_to_visual_col(clicked_line, buf.scroll_x, tab_size);
+      int click_visual = start_visual + rel_visual_x;
+      int click_x = visual_to_logical_col(clicked_line, click_visual, tab_size);
+      click_x = std::clamp(click_x, 0, (int)clicked_line.length());
+      Cursor clicked = {click_x, click_y};
+      if (!cursor_in_selection(buf.selection, clicked)) {
+        buf.cursor = clicked;
+        buf.preferred_x = buf.cursor.x;
+        buf.selection = {clicked, clicked, false};
+        ensure_cursor_visible();
+      }
+      context_menu_target_buffer = pane.buffer_id;
+      std::vector<ContextMenuItem> items = {
+          {"Copy", CONTEXT_ACTION_COPY, true},
+          {"Cut", CONTEXT_ACTION_CUT, true},
+          {"Paste", CONTEXT_ACTION_PASTE, !clipboard.empty()},
+      };
+      focus_state = FOCUS_EDITOR;
+      open_context_menu(x, y, CONTEXT_MENU_EDITOR, items);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void Editor::handle_mouse(void *event_ptr) {
   MEVENT *event = (MEVENT *)event_ptr;
   if (panes.empty())
@@ -231,12 +424,46 @@ void Editor::handle_mouse(void *event_ptr) {
 
   int bstate = event->bstate;
 
-  if (bstate == 3)
+  if (bstate == 4)
     return;
 
   bool is_click = (bstate == 1);
   bool is_click_release = (bstate == 2);
+  bool is_right_click = (bstate == 3);
   bool is_primary_click = is_click || is_click_release;
+
+  if (show_context_menu && is_click) {
+    if (handle_context_menu_mouse(event->x, event->y, true)) {
+      return;
+    }
+  }
+
+  if (is_right_click) {
+    if (mouse_selecting) {
+      mouse_selecting = false;
+      mouse_drag_started = false;
+    }
+    if (!open_context_menu_for_mouse(event->x, event->y)) {
+      close_context_menu();
+    }
+    return;
+  }
+
+  if (pane_resize_dragging) {
+    if (bstate == 32) {
+      update_pane_resize_drag(event->x, event->y);
+      return;
+    }
+    if (is_click_release) {
+      end_pane_resize_drag();
+      return;
+    }
+    return;
+  }
+
+  if (is_click && begin_pane_resize_drag(event->x, event->y)) {
+    return;
+  }
 
   if (show_home_menu) {
     if (handle_home_menu_mouse(event->x, event->y, is_click)) {
@@ -312,74 +539,26 @@ void Editor::handle_mouse(void *event_ptr) {
     int tabs_x = pane.x + 1;
     int tabs_w = std::max(1, draw_w - 2);
     if (event->x >= tabs_x && event->x < tabs_x + tabs_w) {
-      std::vector<int> tab_ids = pane.tab_buffer_ids;
-      if (tab_ids.empty() && pane.buffer_id >= 0 &&
-          pane.buffer_id < (int)buffers.size()) {
-        tab_ids.push_back(pane.buffer_id);
-      }
-
-      std::vector<std::string> base_names(buffers.size());
-      std::unordered_map<std::string, int> base_count;
-      for (int tab_i = 0; tab_i < (int)tab_ids.size(); tab_i++) {
-        int i = tab_ids[tab_i];
-        if (i < 0 || i >= (int)buffers.size()) {
-          continue;
-        }
-        std::string base = get_filename(buffers[i].filepath);
-        if (base.empty())
-          base = "[No Name]";
-        base_names[i] = base;
-        base_count[base]++;
-      }
-
-      int tab_x = tabs_x;
-      for (int tab_i = 0; tab_i < (int)tab_ids.size(); tab_i++) {
-        int i = tab_ids[tab_i];
-        if (i < 0 || i >= (int)buffers.size()) {
-          continue;
-        }
-        std::string name = base_names[i];
-        if (base_count[name] > 1 && !buffers[i].filepath.empty()) {
-          std::filesystem::path p(buffers[i].filepath);
-          std::string parent = p.parent_path().filename().string();
-          if (!parent.empty()) {
-            name += " <" + parent + ">";
-          }
-        }
-        std::string label = " " + name + (buffers[i].modified ? " *" : "");
-        int max_tab_w = std::max(6, tabs_w / 2);
-        if ((int)label.size() > max_tab_w) {
-          if (max_tab_w <= 3) {
-            label = label.substr(0, (size_t)max_tab_w);
-          } else {
-            label = label.substr(0, (size_t)(max_tab_w - 3)) + "...";
-          }
-        }
-        int need = (int)label.size() + 2; // close button + separator
-        if (tab_x + need > tabs_x + tabs_w) {
-          break;
-        }
-
-        int close_x = tab_x + (int)label.size();
-        if (event->x == close_x) {
-          close_buffer_at(i);
+      FileTabLayout tabs = build_file_tab_layout(pane, draw_w);
+      for (const auto &tab : tabs.segments) {
+        if (event->x == tab.close_x) {
+          close_buffer_at(tab.buffer_id);
           focus_state = FOCUS_EDITOR;
           needs_redraw = true;
           return;
         }
 
-        if (event->x >= tab_x && event->x < close_x) {
-          pane.buffer_id = i;
-          current_buffer = i;
+        if (event->x >= tab.x && event->x < tab.close_x) {
+          pane.buffer_id = tab.buffer_id;
+          current_buffer = tab.buffer_id;
           if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
-                        i) == pane.tab_buffer_ids.end()) {
-            pane.tab_buffer_ids.push_back(i);
+                        tab.buffer_id) == pane.tab_buffer_ids.end()) {
+            pane.tab_buffer_ids.push_back(tab.buffer_id);
           }
           focus_state = FOCUS_EDITOR;
           needs_redraw = true;
           return;
         }
-        tab_x += need;
       }
     }
   }

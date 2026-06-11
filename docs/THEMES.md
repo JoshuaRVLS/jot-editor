@@ -1,5 +1,9 @@
 # jot Theme Guide
 
+Python support in `jot` is limited to colorscheme discovery and application.
+Theme files can set highlight groups, but they cannot register editor commands,
+keybindings, events, or palette entries.
+
 The primary theme location is `~/.config/jot/configs/colors/`.
 
 Legacy themes in `~/.config/jot/themes/` still load.
@@ -69,6 +73,12 @@ jot.cmd.colorscheme("my_theme")
 | `cursor` | Cursor color (usually swap fg/bg) |
 | `status` | Status bar |
 | `status_message` | Status message text on line 2 |
+| `status_logo` | Status bar logo segment |
+| `status_file` | Status bar file segment |
+| `status_info` | Status bar informational segments |
+| `status_warning` | Status bar warning/diagnostic segment |
+| `status_error` | Status bar error/diagnostic segment |
+| `status_muted` | Status bar secondary segments |
 | `command` | Command palette / input areas |
 | `panel_border` | Borders of split panes and popups |
 | `selection` | Highlighted text selection |
@@ -122,6 +132,8 @@ You can also style these compatibility highlight groups in theme files:
 
 - `Search`, `IncSearch`
 - `StatusLineMsg`
+- `StatusLineLogo`, `StatusLineFile`, `StatusLineInfo`
+- `StatusLineWarn`, `StatusLineWarning`, `StatusLineError`, `StatusLineMuted`
 - `WinActiveBorder`
 - `TabLine`, `TabLineSel`, `TabLineFill`
 - `TabClose`

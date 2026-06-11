@@ -24,6 +24,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+
 // #include "python_api.h"
 
 class SyntaxHighlighter {
@@ -41,7 +42,6 @@ class EditorHostAPI;
 class HostCoreAPI;
 class HostRenderAPI;
 class HostIOAPI;
-class HostEventsAPI;
 
 class Editor {
   friend class PythonAPI; // Allow PythonAPI to access private members
@@ -49,7 +49,6 @@ class Editor {
   friend class HostCoreAPI;
   friend class HostRenderAPI;
   friend class HostIOAPI;
-  friend class HostEventsAPI;
 
 private:
   struct PaneTreeNode {
@@ -76,9 +75,17 @@ private:
   std::string clipboard;
 
   // Command palette
+  struct CommandPaletteSuggestion {
+    std::string insert_text;
+    std::string label;
+    std::string category;
+    std::string detail;
+    int score = 0;
+  };
+
   bool show_command_palette;
   std::string command_palette_query;
-  std::vector<std::string> command_palette_results;
+  std::vector<CommandPaletteSuggestion> command_palette_results;
   int command_palette_selected;
   bool command_palette_theme_mode;
   std::string command_palette_theme_original;
@@ -116,6 +123,15 @@ private:
   std::vector<std::unique_ptr<LSPClient>> lsp_clients;
   std::unordered_map<std::string, long long> lsp_pending_changes;
   int current_integrated_terminal;
+  struct TerminalTask {
+    std::string name;
+    std::string command;
+    std::string source_path;
+    std::string source_kind;
+    std::string cwd;
+  };
+  std::vector<TerminalTask> terminal_tasks;
+  std::string last_terminal_task_name;
   Terminal terminal;
   UI *ui = nullptr;
   Theme theme;
@@ -153,6 +169,11 @@ private:
   int mouse_press_buf_x;
   int mouse_press_buf_y;
   bool mouse_drag_started;
+  bool pane_resize_dragging;
+  int pane_resize_node;
+  bool pane_resize_vertical;
+  int pane_resize_start_pos;
+  float pane_resize_start_ratio;
   long long last_left_click_ms;
   Cursor last_left_click_pos;
   int last_left_click_count;
@@ -164,11 +185,51 @@ private:
   int idle_fps;
   int lsp_change_debounce_ms;
   int last_cursor_shape;
+  bool smart_paste_indent;
 
   bool show_context_menu;
+  enum ContextMenuSurface {
+    CONTEXT_MENU_NONE,
+    CONTEXT_MENU_EDITOR,
+    CONTEXT_MENU_TAB,
+    CONTEXT_MENU_SIDEBAR,
+    CONTEXT_MENU_TERMINAL
+  };
+  enum ContextMenuAction {
+    CONTEXT_ACTION_NONE,
+    CONTEXT_ACTION_COPY,
+    CONTEXT_ACTION_CUT,
+    CONTEXT_ACTION_PASTE,
+    CONTEXT_ACTION_SAVE_BUFFER,
+    CONTEXT_ACTION_CLOSE_BUFFER,
+    CONTEXT_ACTION_SIDEBAR_OPEN,
+    CONTEXT_ACTION_SIDEBAR_NEW_FILE,
+    CONTEXT_ACTION_SIDEBAR_NEW_FOLDER,
+    CONTEXT_ACTION_SIDEBAR_RENAME,
+    CONTEXT_ACTION_SIDEBAR_REFRESH,
+    CONTEXT_ACTION_SIDEBAR_COPY_PATH,
+    CONTEXT_ACTION_TERMINAL_FOCUS,
+    CONTEXT_ACTION_TERMINAL_NEW,
+    CONTEXT_ACTION_TERMINAL_CLOSE,
+    CONTEXT_ACTION_TERMINAL_RESET_SCROLL
+  };
+  struct ContextMenuItem {
+    std::string label;
+    ContextMenuAction action = CONTEXT_ACTION_NONE;
+    bool enabled = true;
+  };
+  ContextMenuSurface context_menu_surface;
+  std::vector<ContextMenuItem> context_menu_items;
   int context_menu_x;
   int context_menu_y;
+  int context_menu_w;
+  int context_menu_h;
   int context_menu_selected;
+  int context_menu_target_buffer;
+  int context_menu_target_pane;
+  int context_menu_target_terminal;
+  std::string context_menu_target_path;
+  bool context_menu_target_is_dir;
 
   bool lsp_completion_visible;
   bool lsp_completion_manual_request;
@@ -178,13 +239,6 @@ private:
   std::vector<LSPCompletionItem> lsp_completion_items;
 
   Popup popup; // New
-
-  // Custom Commands
-  struct CustomCommand {
-    std::string name;
-    std::string callback;
-  };
-  std::vector<CustomCommand> custom_commands;
 
   struct ClosedBufferSnapshot {
     std::string filepath;
@@ -228,12 +282,6 @@ private:
   int home_menu_panel_h;
   std::vector<HomeMenuEntry> home_menu_entries;
 
-  // Input Prompt
-  bool input_prompt_visible;
-  std::string input_prompt_message;
-  std::string input_prompt_buffer;
-  std::string input_prompt_callback;
-
   // Sidebar
   bool show_sidebar;
   int sidebar_width;
@@ -244,6 +292,52 @@ private:
   int file_tree_selected;
   int file_tree_scroll; // New
   bool sidebar_show_hidden;
+
+  struct SidebarRenderRow {
+    std::string path;
+    std::string normalized_path;
+    std::string name;
+    std::string label;
+    std::string footer_label;
+    bool is_dir = false;
+    bool expanded = false;
+    int depth = 0;
+    int diagnostic_severity = 0;
+    std::string git_status;
+  };
+
+  struct SidebarRenderCache {
+    std::vector<SidebarRenderRow> rows;
+    std::unordered_map<std::string, int> path_to_row;
+    std::string root_label;
+    std::string normalized_root;
+    bool tree_dirty = true;
+    bool diagnostics_dirty = true;
+    bool git_dirty = true;
+  };
+  SidebarRenderCache sidebar_render_cache_;
+
+  struct FileTabSegment {
+    int buffer_id = -1;
+    int x = 0;
+    int label_x = 0;
+    int close_x = 0;
+    int end_x = 0;
+    std::string label;
+    bool active = false;
+    bool modified = false;
+    bool preview = false;
+  };
+
+  struct FileTabLayout {
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    std::vector<FileTabSegment> segments;
+    std::string overflow_label;
+    int overflow_x = 0;
+    int hidden_count = 0;
+  };
 
   enum EditorFocus { FOCUS_EDITOR, FOCUS_SIDEBAR };
   EditorFocus focus_state;
@@ -265,8 +359,10 @@ private:
   void render();
   void render_tabs();
   void render_panes();
+  void render_pane_resize_guides();
   void render_easter_egg();
   void render_pane(const SplitPane &pane);
+  FileTabLayout build_file_tab_layout(const SplitPane &pane, int draw_w);
   void render_scrollbar(const SplitPane &pane, int draw_w);
   void render_telescope();
   void render_minimap(int x, int y, int w, int h, int buffer_id);
@@ -280,7 +376,6 @@ private:
   void render_quit_prompt();
   void render_popup(); // New
   void render_home_menu();
-  void render_input_prompt();
   void render_buffer_content(const SplitPane &pane, int buffer_id);
   void poll_lsp_clients();
   // True when there is LSP work pending (pending change notifications
@@ -334,7 +429,6 @@ private:
                            bool is_shift = false, bool is_alt = false);
   void handle_telescope(int ch);
   void handle_save_prompt(int ch);
-  void handle_input_prompt(int ch);
   void handle_integrated_terminal_input(int ch, bool is_ctrl, bool is_shift,
                                         bool is_alt);
   bool handle_home_menu_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
@@ -376,15 +470,17 @@ private:
   // API methods
   void show_popup(const std::string &text, int x, int y);
   void hide_popup();
-  void register_command(const std::string &name, const std::string &callback);
-  void show_input_prompt(const std::string &message,
-                         const std::string &callback);
-  void hide_input_prompt();
+  void open_context_menu(int x, int y, ContextMenuSurface surface,
+                         const std::vector<ContextMenuItem> &items);
+  void close_context_menu();
+  bool handle_context_menu_input(int ch);
+  bool handle_context_menu_mouse(int x, int y, bool is_click);
+  bool open_context_menu_for_mouse(int x, int y);
+  void execute_context_menu_item(int index);
   void set_diagnostics(const std::string &filepath,
                        const std::vector<Diagnostic> &diagnostics);
   void add_diagnostic(const std::string &filepath,
                       const Diagnostic &diagnostic);
-  void run_python_script(const std::string &script);
 
 public:
   // Sidebar methods
@@ -400,6 +496,13 @@ private:
   void render_sidebar();
   void build_tree(const std::string &path, std::vector<FileNode> &nodes,
                   int depth);
+  void invalidate_sidebar_tree_cache();
+  void invalidate_sidebar_diagnostics_cache();
+  void invalidate_sidebar_git_cache();
+  void ensure_sidebar_render_cache();
+  void rebuild_sidebar_tree_cache();
+  void rebuild_sidebar_diagnostics_cache();
+  void rebuild_sidebar_git_cache();
 
   void copy();
   void cut();
@@ -463,8 +566,15 @@ private:
   void toggle_minimap();
   void toggle_integrated_terminal();
   void create_integrated_terminal();
+  void create_integrated_terminal(const std::string &label,
+                                  const std::string &cwd = "");
   void close_integrated_terminal(int index);
   void activate_integrated_terminal(int index, bool focus = true);
+  void load_terminal_tasks();
+  std::vector<std::string> list_terminal_task_names();
+  void show_terminal_tasks();
+  bool run_terminal_task(const std::string &name, bool force_new = false);
+  bool rerun_last_terminal_task();
   void toggle_search();
   void toggle_command_palette();
   void open_theme_chooser();
@@ -483,8 +593,18 @@ private:
   void close_pane();
   void next_pane();
   void prev_pane();
+  bool focus_pane_direction(char dir);
   bool resize_current_pane(int delta);
   bool resize_current_pane_direction(char dir, int delta);
+  int pane_split_at_position(int x, int y) const;
+  bool begin_pane_resize_drag(int x, int y);
+  bool update_pane_resize_drag(int x, int y);
+  void end_pane_resize_drag();
+  bool is_pane_resize_dragging() const { return pane_resize_dragging; }
+  bool pane_split_is_resizing(int node_index) const {
+    return pane_resize_dragging && pane_resize_node == node_index;
+  }
+  bool adjust_pane_split_ratio(int node_index, int delta, bool clamp_only = false);
 
   void toggle_bookmark();
   void next_bookmark();
