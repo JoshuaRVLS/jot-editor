@@ -14,6 +14,7 @@ C++ engine source for `jot`. Hosts the editor's modular static-library layout, t
 - Module layout is fixed by `src/CMakeLists.txt`. Each top-level subdirectory is one CMake `OBJECT` library and a matching `STATIC` library of the same name (`jot_core`, `jot_edit`, `jot_features`, `jot_input`, `jot_render`, `jot_tools`, `jot_python_bridge`, `jot_ui`).
 - `jot_engine` is the aggregated static library consumed by the `jot` executable. Do not add sources directly to `jot_engine`; add them to their module `OBJECT` library and re-aggregate.
 - `jot_configure_object_target` and `jot_expose_module_api` in `src/CMakeLists.txt` define the include and Python flags applied to every module. New modules must use both.
+- `src/CMakeLists.txt` requires pkg-config package `vterm`; `jot_tools` owns the libvterm include flags and `jot_tools`/`jot_engine` propagate the libvterm link flags.
 - Tree-sitter is removed from the CMake build. `features/tree_sitter_manager.cpp` is not compiled. `features/syntax.cpp` uses the regex fallback path exclusively. The tree-sitter source files remain in the repo but are dormant.
 - Platform shims live in `src/platform/<os>/` and are selected by the `if(WIN32)` / `else()` blocks in `src/CMakeLists.txt`. Windows is not yet supported (the root `CMakeLists.txt` blocks it), so `src/platform/windows/` is reserved for future use.
 - Python runtime scripts under `src/python/` are installed as data (`${CMAKE_INSTALL_DATADIR}/jot/python`); do not move them to a `data/` folder and do not exclude `__pycache__`/`.pyc` from cleanup.
@@ -30,7 +31,7 @@ C++ engine source for `jot`. Hosts the editor's modular static-library layout, t
 - `edit/`: text editing, cursor movement, selection, clipboard, search, sidebar, and discrete editing features (duplicate, join, sort, shuffle, stats, etc.).
 - `input/`: keyboard and mouse dispatch, command palette, command actions and navigation, mode dispatch (insert/normal/visual/vim/transitions). The user-facing command layer lives here.
 - `features/`: syntax highlighting (regex-based), bracket matching, autoclose, config parsing, and conservative C++ header/source assist helpers. Pure text-manipulation helpers and config loaders.
-- `tools/`: integrated terminal (PTY-backed), telescope file finder, image viewer, native LSP client, Discord RPC.
+- `tools/`: integrated terminal (PTY-backed with libvterm emulation), telescope file finder, image viewer, native LSP client, Discord RPC.
 - `python_bridge/`: C++ side of the embedded Python bridge. Exposes only the theme-facing API to `src/python/`.
 - `python/`: Python runtime scripts (`jot_api`, theme loader). Bundled, not user-authored.
 

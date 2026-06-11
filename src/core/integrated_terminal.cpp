@@ -297,23 +297,12 @@ void Editor::place_integrated_terminal_cursor() {
   int panel_w = ui->get_render_width();
   int content_w = std::max(1, panel_w - 2);
   int content_h = std::max(1, panel_h - 3);
+  term->resize(content_h, content_w);
 
-  auto lines = term->get_recent_lines(content_h);
-  int cursor_line_index = std::max(0, (int)lines.size() - 1);
-  int cursor_y = panel_y + 2 + std::min(cursor_line_index, content_h - 1);
-
-  const std::string &line = term->get_current_line();
-  size_t display_start = 0;
-  if ((int)line.size() > content_w) {
-    display_start = line.size() - (size_t)content_w;
-  }
-
-  size_t cursor_column = term->get_cursor_column();
-  if (cursor_column < display_start) {
-    cursor_column = display_start;
-  }
-  int cursor_x = 1 + (int)std::min((size_t)(content_w - 1),
-                                   cursor_column - display_start);
+  int cursor_y =
+      panel_y + 2 + std::clamp(term->get_cursor_row(), 0, content_h - 1);
+  int cursor_x =
+      1 + (int)std::min((size_t)(content_w - 1), term->get_cursor_column());
 
   ui->set_cursor(cursor_x, cursor_y);
 }
@@ -377,6 +366,8 @@ void Editor::render_integrated_terminal() {
   }
 
   int content_h = std::max(1, panel_h - 3);
+  int content_w = std::max(1, panel_w - 2);
+  term->resize(content_h, content_w);
   auto rows = term->get_recent_output_rows(content_h);
   auto all_blank = [](const std::vector<IntegratedTerminal::OutputRow> &v) {
     for (const auto &row : v) {

@@ -431,12 +431,13 @@ Built-in syntax rules exist for common file types including:
 - CMake 3.14+
 - C++17 compiler
 - Python 3 development headers and `python3-config`
+- libvterm development headers (`vterm` pkg-config package)
 - a Unix-like environment with `termios`
 
 Notes:
 
 - the UI uses raw terminal handling, not `ncurses`
-- the integrated terminal uses PTY support and links `util`
+- the integrated terminal uses PTY support, links `util`, and uses `libvterm`
 
 ### Build Commands
 

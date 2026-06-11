@@ -19,6 +19,9 @@ function(jot_configure_object_target target_name)
   endif()
 endfunction()
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(VTERM REQUIRED vterm)
+
 function(jot_expose_module_api target_name)
   target_include_directories(${target_name} PUBLIC
     ${PROJECT_SOURCE_DIR}/include
@@ -134,6 +137,8 @@ else()
   )
 endif()
 jot_configure_object_target(jot_tools_obj)
+target_include_directories(jot_tools_obj SYSTEM PRIVATE ${VTERM_INCLUDE_DIRS})
+target_compile_options(jot_tools_obj PRIVATE ${VTERM_CFLAGS_OTHER})
 
 add_library(jot_python_bridge_obj OBJECT
   python_bridge/python_api_bindings.cpp
@@ -183,3 +188,7 @@ add_library(jot_engine STATIC
 )
 
 jot_expose_module_api(jot_engine)
+target_link_libraries(jot_tools PUBLIC ${VTERM_LIBRARIES})
+target_link_directories(jot_tools PUBLIC ${VTERM_LIBRARY_DIRS})
+target_link_libraries(jot_engine PUBLIC ${VTERM_LIBRARIES})
+target_link_directories(jot_engine PUBLIC ${VTERM_LIBRARY_DIRS})
