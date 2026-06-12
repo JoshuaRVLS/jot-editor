@@ -11,10 +11,14 @@ struct LSPCompletionItem {
   std::string label;
   std::string insert_text;
   std::string detail;
+  std::string documentation;
   std::string filter_text;
   std::string sort_text;
+  std::vector<std::string> commit_characters;
   int kind = 0;
   int insert_text_format = 1; // 1=plain text, 2=snippet
+  bool deprecated = false;
+  bool preselect = false;
   bool has_text_edit_range = false;
   int edit_start_line = 0;
   int edit_start_char = 0;
@@ -22,8 +26,36 @@ struct LSPCompletionItem {
   int edit_end_char = 0;
 };
 
+struct LSPLocation {
+  std::string filepath;
+  int line = 0;
+  int character = 0;
+  int end_line = 0;
+  int end_character = 0;
+};
+
+struct LSPHoverResult {
+  std::string origin_filepath;
+  int origin_line = 0;
+  int origin_character = 0;
+  std::string contents;
+};
+
+struct LSPDefinitionResult {
+  std::string origin_filepath;
+  int origin_line = 0;
+  int origin_character = 0;
+  std::vector<LSPLocation> locations;
+};
+
 class LSPClient {
 private:
+  struct PendingPositionRequest {
+    std::string filepath;
+    int line = 0;
+    int character = 0;
+  };
+
   std::string language;
   std::string root_path;
   std::vector<std::string> command;
@@ -42,8 +74,12 @@ private:
   std::vector<std::pair<std::string, std::vector<Diagnostic>>>
       pending_diagnostics;
   std::map<int, std::string> pending_completion_requests;
+  std::map<int, PendingPositionRequest> pending_hover_requests;
+  std::map<int, PendingPositionRequest> pending_definition_requests;
   std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>>
       pending_completions;
+  std::vector<LSPHoverResult> pending_hovers;
+  std::vector<LSPDefinitionResult> pending_definitions;
 
   bool send_message(const std::string &json);
   bool flush_pending_writes();
@@ -68,10 +104,15 @@ public:
   bool did_save(const std::string &filepath, const std::string &text);
   bool request_completion(const std::string &filepath, int line, int character,
                           char trigger_character = '\0');
+  bool request_hover(const std::string &filepath, int line, int character);
+  bool request_definition(const std::string &filepath, int line,
+                          int character);
   std::vector<std::pair<std::string, std::vector<Diagnostic>>>
   consume_published_diagnostics();
   std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>>
   consume_completion_items();
+  std::vector<LSPHoverResult> consume_hover_results();
+  std::vector<LSPDefinitionResult> consume_definition_results();
 
   bool is_running() const { return running; }
   bool is_initialized() const { return initialized; }
