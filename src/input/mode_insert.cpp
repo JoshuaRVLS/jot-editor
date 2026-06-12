@@ -3,46 +3,6 @@
 
 void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
                                 bool is_alt) {
-  auto switch_to_local_tab = [&](int target_index) -> bool {
-    auto &pane = get_pane();
-    if (pane.tab_buffer_ids.empty()) {
-      return false;
-    }
-    target_index = std::clamp(target_index, 0,
-                              (int)pane.tab_buffer_ids.size() - 1);
-    int buffer_id = pane.tab_buffer_ids[target_index];
-    if (buffer_id < 0 || buffer_id >= (int)buffers.size()) {
-      return false;
-    }
-    pane.buffer_id = buffer_id;
-    current_buffer = buffer_id;
-    focus_state = FOCUS_EDITOR;
-    clamp_cursor(buffer_id);
-    ensure_cursor_visible();
-    needs_redraw = true;
-    return true;
-  };
-
-  auto cycle_local_tab = [&](int delta) -> bool {
-    auto &pane = get_pane();
-    if (pane.tab_buffer_ids.size() <= 1) {
-      return false;
-    }
-    int current_idx = 0;
-    for (int i = 0; i < (int)pane.tab_buffer_ids.size(); i++) {
-      if (pane.tab_buffer_ids[i] == pane.buffer_id) {
-        current_idx = i;
-        break;
-      }
-    }
-    int n = (int)pane.tab_buffer_ids.size();
-    int next_idx = (current_idx + delta) % n;
-    if (next_idx < 0) {
-      next_idx += n;
-    }
-    return switch_to_local_tab(next_idx);
-  };
-
   if (lsp_completion_visible) {
     if (ch == 1008) {
       lsp_completion_selected =
@@ -467,10 +427,15 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
   }
 
   if (ch == 127 || ch == 8) {
-    hide_lsp_completion();
+    bool had_completion = lsp_completion_visible;
     delete_char(false);
     needs_redraw = true;
-    request_lsp_completion(false, '_');
+    if (had_completion && refresh_lsp_completion_filter()) {
+      request_lsp_completion(false, '_');
+    } else {
+      hide_lsp_completion();
+      request_lsp_completion(false, '_');
+    }
     return;
   }
   if (ch == 1001) {
@@ -514,12 +479,16 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
     auto &buf = get_buffer();
     if (buf.selection.active)
       delete_selection();
+    bool had_completion = lsp_completion_visible;
     insert_char((char)ch);
     char typed = (char)ch;
     bool trigger_completion =
         std::isalnum((unsigned char)typed) || typed == '_' || typed == '.' ||
         typed == ':' || typed == '>';
     if (trigger_completion) {
+      if (had_completion) {
+        refresh_lsp_completion_filter();
+      }
       request_lsp_completion(false, typed);
     } else {
       hide_lsp_completion();
