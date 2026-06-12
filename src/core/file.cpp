@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "folding.h"
 #include "lazy_line_provider.h"
 #include "python_api.h"
 #ifdef JOT_TREESITTER
@@ -12,6 +13,7 @@
 #include <fstream>
 #include <map>
 #include <set>
+#include <unordered_map>
 
 namespace fs = std::filesystem;
 
@@ -72,6 +74,134 @@ std::string recent_workspaces_path() {
   fs::path p = fs::path(home) / ".config" / "jot" / "configs" /
                "recent_workspaces.txt";
   return p.string();
+}
+
+std::string file_fold_states_path() {
+  const char *home = std::getenv("HOME");
+  if (!home || !*home) {
+    return "";
+  }
+  fs::path p = fs::path(home) / ".config" / "jot" / "configs" /
+               "fold_states.txt";
+  return p.string();
+}
+
+std::string escape_state_field(const std::string &input) {
+  std::string out;
+  out.reserve(input.size());
+  for (char c : input) {
+    if (c == '\\') {
+      out += "\\\\";
+    } else if (c == '\t') {
+      out += "\\t";
+    } else if (c == '\n') {
+      out += "\\n";
+    } else {
+      out.push_back(c);
+    }
+  }
+  return out;
+}
+
+std::string unescape_state_field(const std::string &input) {
+  std::string out;
+  out.reserve(input.size());
+  for (size_t i = 0; i < input.size(); i++) {
+    if (input[i] == '\\' && i + 1 < input.size()) {
+      char n = input[i + 1];
+      if (n == 't') {
+        out.push_back('\t');
+        i++;
+        continue;
+      }
+      if (n == 'n') {
+        out.push_back('\n');
+        i++;
+        continue;
+      }
+      if (n == '\\') {
+        out.push_back('\\');
+        i++;
+        continue;
+      }
+    }
+    out.push_back(input[i]);
+  }
+  return out;
+}
+
+std::vector<std::string> split_state_tab(const std::string &line) {
+  std::vector<std::string> parts;
+  size_t start = 0;
+  while (start <= line.size()) {
+    size_t pos = line.find('\t', start);
+    if (pos == std::string::npos) {
+      parts.push_back(line.substr(start));
+      break;
+    }
+    parts.push_back(line.substr(start, pos - start));
+    start = pos + 1;
+  }
+  return parts;
+}
+
+std::unordered_map<std::string, std::string> load_file_fold_state_map() {
+  std::unordered_map<std::string, std::string> states;
+  const std::string path = file_fold_states_path();
+  if (path.empty()) {
+    return states;
+  }
+
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    return states;
+  }
+
+  std::string line;
+  while (std::getline(file, line)) {
+    if (line.empty()) {
+      continue;
+    }
+    std::vector<std::string> parts = split_state_tab(line);
+    if (parts.size() < 2) {
+      continue;
+    }
+    const std::string key =
+        normalize_existing_path(unescape_state_field(parts[0]));
+    const std::string payload = unescape_state_field(parts[1]);
+    if (!key.empty()) {
+      states[key] = payload;
+    }
+  }
+  return states;
+}
+
+void write_file_fold_state_map(
+    const std::unordered_map<std::string, std::string> &states) {
+  const std::string path = file_fold_states_path();
+  if (path.empty()) {
+    return;
+  }
+
+  std::error_code ec;
+  fs::path output_path(path);
+  fs::create_directories(output_path.parent_path(), ec);
+  if (ec) {
+    return;
+  }
+
+  std::ofstream file(path, std::ios::trunc);
+  if (!file.is_open()) {
+    return;
+  }
+
+  for (const auto &[key, payload] : states) {
+    if (key.empty() || payload.empty()) {
+      continue;
+    }
+    file << escape_state_field(key) << '\t'
+         << escape_state_field(payload) << '\n';
+  }
 }
 
 std::string shell_quote(const std::string &s) {
@@ -188,7 +318,8 @@ void normalize_buffer_after_external_edit(FileBuffer &buf) {
   }
 
   buf.cursor.y = std::clamp(buf.cursor.y, 0, std::max(0, (int)buf.line_count() - 1));
-  buf.cursor.x = std::clamp(buf.cursor.x, 0, (int)buf.line(buf.cursor.y).size());
+  buf.cursor.x =
+      std::clamp(buf.cursor.x, 0, (int)buf.line(buf.cursor.y).size());
   buf.preferred_x = buf.cursor.x;
 
   buf.scroll_offset =
@@ -331,10 +462,24 @@ void Editor::open_file(const std::string &path, bool preview) {
     current_buffer = existing_index;
     auto &pane = get_pane();
     pane.buffer_id = existing_index;
+    pane.tab_buffer_ids.erase(
+        std::remove_if(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
+                       [this](int id) {
+                         return id >= 0 && id < (int)buffers.size() &&
+                                buffers[id].is_placeholder &&
+                                !buffers[id].modified &&
+                                buffers[id].filepath.empty();
+                       }),
+        pane.tab_buffer_ids.end());
     if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
                   existing_index) == pane.tab_buffer_ids.end()) {
       pane.tab_buffer_ids.push_back(existing_index);
     }
+    int draw_w = std::max(1, pane.w);
+    if (show_minimap && draw_w > 20) {
+      draw_w = std::max(1, draw_w - minimap_width);
+    }
+    reveal_local_tab(pane, find_local_tab_index(pane, existing_index), draw_w);
     if (!preview && buffers[existing_index].is_preview) {
       buffers[existing_index].is_preview = false;
       if (preview_buffer_index == existing_index) {
@@ -359,6 +504,7 @@ void Editor::open_file(const std::string &path, bool preview) {
   fb.scroll_x = 0;
   fb.modified = false;
   fb.is_preview = preview;
+  fb.is_placeholder = false;
 
   {
     std::error_code ec;
@@ -432,10 +578,24 @@ void Editor::finish_open_file(FileBuffer fb, const std::string &path_to_open,
   current_buffer = buffers.size() - 1;
   auto &pane = get_pane();
   pane.buffer_id = current_buffer;
+  pane.tab_buffer_ids.erase(
+      std::remove_if(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
+                     [this](int id) {
+                       return id >= 0 && id < (int)buffers.size() &&
+                              buffers[id].is_placeholder &&
+                              !buffers[id].modified &&
+                              buffers[id].filepath.empty();
+                     }),
+      pane.tab_buffer_ids.end());
   if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
                 current_buffer) == pane.tab_buffer_ids.end()) {
     pane.tab_buffer_ids.push_back(current_buffer);
   }
+  int draw_w = std::max(1, pane.w);
+  if (show_minimap && draw_w > 20) {
+    draw_w = std::max(1, draw_w - minimap_width);
+  }
+  reveal_local_tab(pane, find_local_tab_index(pane, current_buffer), draw_w);
   if (preview) {
     preview_buffer_index = current_buffer;
   }
@@ -447,10 +607,14 @@ void Editor::finish_open_file(FileBuffer fb, const std::string &path_to_open,
   init_ts_for_buffer(buffers.back());
 #endif
 
+  restore_file_fold_state(buffers.back());
+
   if (python_api)
     python_api->on_buffer_open(path_to_open);
   notify_lsp_open(path_to_open);
   refresh_git_status(true);
+  apply_pending_lsp_definition_jump();
+  apply_pending_lsp_back_jump();
   needs_redraw = true;
 }
 
@@ -467,14 +631,29 @@ void Editor::create_new_buffer() {
   fb.scroll_x = 0;
   fb.modified = false;
   fb.is_preview = false;
+  fb.is_placeholder = false;
   buffers.push_back(std::move(fb));
   current_buffer = buffers.size() - 1;
   auto &pane = get_pane();
   pane.buffer_id = current_buffer;
+  pane.tab_buffer_ids.erase(
+      std::remove_if(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
+                     [this](int id) {
+                       return id >= 0 && id < (int)buffers.size() &&
+                              buffers[id].is_placeholder &&
+                              !buffers[id].modified &&
+                              buffers[id].filepath.empty();
+                     }),
+      pane.tab_buffer_ids.end());
   if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
                 current_buffer) == pane.tab_buffer_ids.end()) {
     pane.tab_buffer_ids.push_back(current_buffer);
   }
+  int draw_w = std::max(1, pane.w);
+  if (show_minimap && draw_w > 20) {
+    draw_w = std::max(1, draw_w - minimap_width);
+  }
+  reveal_local_tab(pane, find_local_tab_index(pane, current_buffer), draw_w);
 }
 
 void Editor::save_file() {
@@ -539,6 +718,7 @@ bool Editor::save_buffer_at(int index, bool announce) {
       return false;
     buf.lines.swap(refreshed_lines);
     normalize_buffer_after_external_edit(buf);
+    buf.fold_ranges.clear();
     invalidate_syntax_cache(buf);
     return true;
   };
@@ -590,8 +770,10 @@ bool Editor::save_buffer_at(int index, bool announce) {
             b.lines.swap(refreshed);
           }
           normalize_buffer_after_external_edit(b);
+          b.fold_ranges.clear();
           invalidate_syntax_cache(b);
           b.modified = false;
+          b.is_placeholder = false;
           if (b.is_preview) {
             b.is_preview = false;
             if (preview_buffer_index == found)
@@ -609,6 +791,7 @@ bool Editor::save_buffer_at(int index, bool announce) {
           refresh_git_status(true);
         });
     buf.modified = false;
+    buf.is_placeholder = false;
     return true;
   }
 
@@ -620,6 +803,7 @@ bool Editor::save_buffer_at(int index, bool announce) {
     formatted_with_clang = true;
 
   buf.modified = false;
+  buf.is_placeholder = false;
   if (buf.is_preview) {
     buf.is_preview = false;
     if (preview_buffer_index == index) {
@@ -657,6 +841,10 @@ void Editor::close_buffer_at(int index) {
   if (index < 0 || index >= (int)buffers.size())
     return;
 
+  if (!buffers[index].filepath.empty()) {
+    save_file_fold_state(buffers[index]);
+  }
+
   const FileBuffer &snapshot_source = buffers[index];
   invalidate_sidebar_diagnostics_cache();
 
@@ -677,7 +865,8 @@ void Editor::close_buffer_at(int index) {
     closed_buffer_history.push_back(
         {snapshot_source.filepath, snapshot_source.lines, snapshot_source.cursor,
          snapshot_source.selection, snapshot_source.scroll_offset,
-         snapshot_source.scroll_x, snapshot_source.modified});
+         snapshot_source.scroll_x, snapshot_source.modified,
+         snapshot_source.fold_ranges});
   }
 
   if (buffers.size() == 1) {
@@ -694,10 +883,12 @@ void Editor::close_buffer_at(int index) {
     buf.scroll_x = 0;
     buf.modified = false;
     buf.is_preview = false;
+    buf.is_placeholder = true;
     buf.undo_stack = std::stack<State>();
     buf.redo_stack = std::stack<State>();
     buf.bookmarks.clear();
     buf.diagnostics.clear();
+    buf.fold_ranges.clear();
     invalidate_sidebar_diagnostics_cache();
 #ifdef JOT_TREESITTER
     if (buf.ts_tree) { ts_tree_delete(buf.ts_tree); buf.ts_tree = nullptr; }
@@ -770,9 +961,12 @@ void Editor::close_buffer_at(int index) {
                   pane.buffer_id) == pane.tab_buffer_ids.end()) {
       pane.tab_buffer_ids.push_back(pane.buffer_id);
     }
-    pane.tab_scroll_index =
-        std::clamp(pane.tab_scroll_index, 0,
-                   std::max(0, (int)pane.tab_buffer_ids.size() - 1));
+    clamp_tab_scroll(pane);
+    int draw_w = std::max(1, pane.w);
+    if (show_minimap && draw_w > 20) {
+      draw_w = std::max(1, draw_w - minimap_width);
+    }
+    reveal_local_tab(pane, find_local_tab_index(pane, pane.buffer_id), draw_w);
   }
 
   if (!panes.empty()) {
@@ -782,6 +976,12 @@ void Editor::close_buffer_at(int index) {
                   current_buffer) == pane.tab_buffer_ids.end()) {
       pane.tab_buffer_ids.push_back(current_buffer);
     }
+    clamp_tab_scroll(pane);
+    int draw_w = std::max(1, pane.w);
+    if (show_minimap && draw_w > 20) {
+      draw_w = std::max(1, draw_w - minimap_width);
+    }
+    reveal_local_tab(pane, find_local_tab_index(pane, current_buffer), draw_w);
   }
   message = "Closed file";
   needs_redraw = true;
@@ -812,7 +1012,9 @@ void Editor::reopen_last_closed_buffer() {
   fb.scroll_offset = std::max(0, snap.scroll_offset);
   fb.scroll_x = std::max(0, snap.scroll_x);
   fb.modified = snap.modified;
+  fb.fold_ranges = snap.collapsed_folds;
   fb.is_preview = false;
+  fb.is_placeholder = false;
 
   buffers.push_back(std::move(fb));
   current_buffer = (int)buffers.size() - 1;
@@ -824,6 +1026,11 @@ void Editor::reopen_last_closed_buffer() {
                 current_buffer) == pane.tab_buffer_ids.end()) {
     pane.tab_buffer_ids.push_back(current_buffer);
   }
+  int draw_w = std::max(1, pane.w);
+  if (show_minimap && draw_w > 20) {
+    draw_w = std::max(1, draw_w - minimap_width);
+  }
+  reveal_local_tab(pane, find_local_tab_index(pane, current_buffer), draw_w);
   clamp_cursor(current_buffer);
   ensure_cursor_visible();
 
@@ -982,6 +1189,85 @@ void Editor::save_recent_workspaces() {
   for (const auto &entry : recent_workspaces) {
     file << entry << '\n';
   }
+}
+
+void Editor::save_file_fold_state(FileBuffer &buf) {
+  if (buf.filepath.empty() || buf.is_lazy()) {
+    return;
+  }
+
+  Folding::refresh_ranges(buf.fold_ranges, buf.lines,
+                          get_file_extension(buf.filepath));
+  const std::string normalized = normalize_existing_path(buf.filepath);
+  if (normalized.empty()) {
+    return;
+  }
+
+  auto states = load_file_fold_state_map();
+  const std::string payload = Folding::encode_collapsed_ranges(buf.fold_ranges);
+  if (payload.empty()) {
+    states.erase(normalized);
+  } else {
+    states[normalized] = payload;
+  }
+  write_file_fold_state_map(states);
+}
+
+void Editor::save_file_fold_states() {
+  auto states = load_file_fold_state_map();
+  bool changed = false;
+
+  for (auto &buf : buffers) {
+    if (buf.filepath.empty() || buf.is_lazy()) {
+      continue;
+    }
+    Folding::refresh_ranges(buf.fold_ranges, buf.lines,
+                            get_file_extension(buf.filepath));
+    const std::string normalized = normalize_existing_path(buf.filepath);
+    if (normalized.empty()) {
+      continue;
+    }
+    const std::string payload =
+        Folding::encode_collapsed_ranges(buf.fold_ranges);
+    if (payload.empty()) {
+      changed = states.erase(normalized) > 0 || changed;
+    } else if (states[normalized] != payload) {
+      states[normalized] = payload;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    write_file_fold_state_map(states);
+  }
+}
+
+void Editor::restore_file_fold_state(FileBuffer &buf) {
+  if (buf.filepath.empty() || buf.is_lazy()) {
+    return;
+  }
+
+  const std::string normalized = normalize_existing_path(buf.filepath);
+  if (normalized.empty()) {
+    return;
+  }
+
+  auto states = load_file_fold_state_map();
+  auto it = states.find(normalized);
+  if (it == states.end() || it->second.empty()) {
+    return;
+  }
+
+  Folding::refresh_ranges(buf.fold_ranges, buf.lines,
+                          get_file_extension(buf.filepath));
+  Folding::apply_collapsed_ranges(
+      buf.fold_ranges, Folding::decode_collapsed_ranges(it->second));
+  while (buf.cursor.y > 0 &&
+         Folding::is_line_hidden(buf.fold_ranges, buf.cursor.y)) {
+    buf.cursor.y--;
+  }
+  buf.cursor.x = std::clamp(buf.cursor.x, 0, (int)buf.line(buf.cursor.y).size());
+  buf.preferred_x = buf.cursor.x;
 }
 
 void Editor::open_recent_file(const std::string &query) {
