@@ -17,6 +17,7 @@ The current editing model is:
 - panes for layout
 - sidebar for workspace browsing
 - integrated terminal for shell work
+- native GDB/LLDB debugger panel
 - native C++ LSP support for diagnostics
 - Python-backed theme loading
 
@@ -43,10 +44,11 @@ Notes:
 
 ### 1. Startup Model
 
-When you launch `jot`, it creates one editor session with:
+When you launch `jot`, it creates or resumes one editor session with:
 
-- one empty buffer if no file is given
-- interactive home menu (when launched with no CLI argument)
+- the most recent workspace session when launched with no CLI argument
+- the interactive home menu if no previous workspace session exists
+- one empty buffer when continuing to the editor without a file
 - one workspace root, defaulting to the current directory
 - one visible pane
 - one shared UI/state loop
@@ -79,7 +81,9 @@ Workspace sessions are stored per-folder in:
 
 ### Startup Home Menu
 
-When you run `jot` with no argument, startup opens a full-screen home menu:
+When you run `jot` with no argument, startup resumes the most recent valid
+workspace session. If no workspace session is available, it opens a full-screen
+home menu:
 
 - colorful JOT ASCII banner
 - recent files list
@@ -97,6 +101,11 @@ Home menu controls:
 - `r`: open recent prompt
 - `Esc`: hide home menu
 
+Session commands:
+
+- `:home`: show the home menu
+- `:resume`: resume the most recent workspace session
+
 ### 2. Editor State
 
 At runtime, the editor is built around a few main state objects:
@@ -105,6 +114,7 @@ At runtime, the editor is built around a few main state objects:
 - `panes`: the current split layout and which buffer each pane shows
 - `file_tree`: the current workspace sidebar tree
 - `integrated_terminals`: terminal tabs in the bottom panel
+- `debugger_sessions`: GDB/LLDB DAP sessions in the debugger panel
 - `lsp_clients`: native language-server processes owned by the C++ core
 - `python_api`: embedded Python bridge for themes
 
@@ -141,6 +151,7 @@ The screen is made from a few stacked regions:
 - optional sidebar on the left
 - optional minimap on the right
 - optional integrated terminal panel at the bottom
+- optional debugger panel at the bottom
 - status/message area at the bottom
 
 Pane layout supports:
@@ -399,6 +410,8 @@ See [docs/THEMES.md](docs/THEMES.md) for theme authoring.
 - multiple terminal tabs
 - native shell launching
 - mouse terminal-tab support
+- GDB/LLDB debugger panel with sessions, threads, stack, variables, memory, and
+  disassembly views
 
 ### Extensibility
 
@@ -408,7 +421,9 @@ See [docs/THEMES.md](docs/THEMES.md) for theme authoring.
 
 ## Supported Syntax Highlighting
 
-Built-in syntax rules exist for common file types including:
+Syntax highlighting uses Tree-sitter parser queries when the runtime and a
+language grammar are available, and falls back to built-in regex rules
+otherwise. Built-in fallback rules exist for common file types including:
 
 - C / C++: `.c`, `.cpp`, `.h`, `.hpp`
 - Python: `.py`
@@ -449,6 +464,19 @@ make -j"$(nproc)"
 ```
 
 ### Install
+
+For a user-local install:
+
+```bash
+./install.sh
+```
+
+By default this attempts to install Tree-sitter runtime/grammar packages, then
+configures, builds, and installs to `$HOME/.local` without installing optional
+formatter or LSP tooling. Use `./install.sh --help` for prefix, build-type,
+test, `--skip-treesitter`, and optional tooling flags.
+
+Manual CMake install:
 
 ```bash
 cmake --install . --prefix "$HOME/.local"
@@ -526,6 +554,7 @@ Built-in defaults include:
 - `idle_fps=60`
 - `lsp_change_debounce_ms=120`
 - `terminal_height=10`
+- `debugger_height=12`
 
 Example `settings.conf`:
 
@@ -539,6 +568,7 @@ auto_detect_indent=true
 render_fps=120
 idle_fps=60
 terminal_height=12
+debugger_height=12
 minimap_width=18
 explorer_width=30
 lsp_change_debounce_ms=120
@@ -598,8 +628,12 @@ lsp_change_debounce_ms=120
 - `Enter`: next match
 - `Arrow Down`: next match
 - `Arrow Up`: previous match
-- `Tab`: toggle case-sensitive search
+- `Tab`: toggle case-sensitive search, or switch fields when replace is open
+- `Ctrl+H`: show/hide replace field
+- `Ctrl+R`: replace current match
+- `Ctrl+Shift+R`: replace all matches
 - `Ctrl+W`: toggle whole-word search
+- `Ctrl+E`: toggle regex search
 - `Ctrl+F`: next match while search panel is open
 - open search with selection active: uses selection text as initial query
 - `Esc`: close search
@@ -632,6 +666,17 @@ lsp_change_debounce_ms=120
 - mouse click terminal tab: focus terminal tab
 - mouse click `+`: create terminal tab
 - mouse click terminal tab close button: close terminal tab
+
+### Debugger
+
+- click the editor gutter marker column to toggle a source breakpoint
+- `:debug <program> [args...]`: launch with GDB
+- `:debuglldb <program> [args...]`: launch with LLDB
+- `:debugconfig [name]`: launch a configured session
+- `:debugcontinue`, `:debugpause`, `:debugnext`, `:debugstep`, `:debugout`:
+  control the active session
+- `:debugmemory <expr|addr>` and `:debugdisasm [expr|addr]`: inspect memory
+  and disassembly when the adapter supports it
 
 ### Mouse
 
@@ -668,6 +713,15 @@ Open the command palette with `Ctrl+P` and use ex-style commands such as:
 - `:task [name]`
 - `:tasknew <name>`
 - `:taskrerun`
+- `:debug <program> [args...]`
+- `:debuggdb <program> [args...]`
+- `:debuglldb <program> [args...]`
+- `:debugconfig [name]`
+- `:debugattach <pid>`
+- `:debugpanel`
+- `:debugstop`, `:debugrestart`, `:debugcontinue`, `:debugpause`
+- `:debugstep`, `:debugnext`, `:debugout`
+- `:debugthreads`, `:debugmemory <expr|addr>`, `:debugdisasm [expr|addr]`
 - `:mkfile <path>`
 - `:mkdir <path>`
 - `:rename <old_path> <new_path>`
@@ -695,12 +749,12 @@ Open the command palette with `Ctrl+P` and use ex-style commands such as:
 apps/jot/      CLI entrypoint (`main.cpp`) and executable target
 cmake/         reusable CMake modules (toolchain/config helpers)
 include/jot/   public header surface for external consumers
-src/core/       editor state, panes, buffers, workspace, terminal and LSP wiring
+src/core/       editor state, panes, buffers, workspace, terminal, debugger, and LSP wiring
 src/edit/       text editing, cursor movement, selection, clipboard, search
 src/input/      keyboard, mouse, command palette, dispatch logic
 src/render/     editor drawing, minimap, overlays, UI panels
 src/features/   syntax, config, bracket helpers, editing features
-src/tools/      integrated terminal, telescope, image viewer, native LSP client
+src/tools/      integrated terminal, debugger DAP client, telescope, image viewer, native LSP client
 src/python_bridge/
                 embedded Python bridge for themes
 src/ui/         raw terminal and UI abstraction layer
