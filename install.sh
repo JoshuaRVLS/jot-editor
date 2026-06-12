@@ -15,7 +15,9 @@ INSTALL_PREFIX="${DEFAULT_HOME}/.local"
 BUILD_TYPE="Release"
 RUN_TESTS=0
 USE_SUDO=0
-INSTALL_LSP=1
+INSTALL_LSP=0
+INSTALL_TOOLS=0
+INSTALL_TREESITTER=1
 JOBS=""
 PREFIX_EXPLICIT=0
 
@@ -31,7 +33,11 @@ Options:
   --debug               Build with Debug configuration
   --release             Build with Release configuration (default)
   --run-tests           Run CTest after building
-  --skip-lsp            Skip auto-install of built-in LSP servers
+  --with-tools          Install optional formatter tooling (prettier)
+  --with-lsp            Install optional built-in LSP servers
+  --with-treesitter     Install Tree-sitter runtime/grammar packages (default)
+  --skip-treesitter     Skip Tree-sitter dependency install attempt
+  --skip-lsp            Deprecated alias; LSP installs are skipped by default
   --sudo                Run install step with sudo
   -j, --jobs <N>        Parallel build jobs (default: auto)
   -h, --help            Show this help message
@@ -39,7 +45,8 @@ Options:
 Examples:
   ./install.sh
   ./install.sh --prefix /usr/local --sudo
-  ./install.sh --skip-lsp
+  ./install.sh --skip-treesitter
+  ./install.sh --with-tools --with-lsp
   ./install.sh --build-dir ./build_release --release -j 8
 USAGE
 }
@@ -67,6 +74,22 @@ while [[ $# -gt 0 ]]; do
       ;;
     --run-tests)
       RUN_TESTS=1
+      shift
+      ;;
+    --with-tools)
+      INSTALL_TOOLS=1
+      shift
+      ;;
+    --with-lsp)
+      INSTALL_LSP=1
+      shift
+      ;;
+    --with-treesitter)
+      INSTALL_TREESITTER=1
+      shift
+      ;;
+    --skip-treesitter)
+      INSTALL_TREESITTER=0
       shift
       ;;
     --skip-lsp)
@@ -441,6 +464,45 @@ install_prettier() {
   return 1
 }
 
+install_treesitter_deps() {
+  echo "[jot:treesitter] Installing Tree-sitter runtime and grammar packages"
+  local failures=0
+
+  if command -v pacman >/dev/null 2>&1; then
+    attempt_cmd "Installing Tree-sitter packages via pacman" \
+      run_maybe_sudo pacman -Sy --noconfirm \
+        tree-sitter tree-sitter-c tree-sitter-cpp tree-sitter-python \
+        tree-sitter-javascript tree-sitter-typescript tree-sitter-rust \
+        tree-sitter-go tree-sitter-json tree-sitter-html tree-sitter-css \
+        tree-sitter-bash tree-sitter-lua tree-sitter-markdown \
+        tree-sitter-toml tree-sitter-yaml || failures=$((failures + 1))
+  elif command -v apt-get >/dev/null 2>&1; then
+    attempt_cmd "Installing Tree-sitter runtime via apt-get" \
+      run_maybe_sudo bash -lc "apt-get update && apt-get install -y libtree-sitter-dev" || failures=$((failures + 1))
+  elif command -v dnf >/dev/null 2>&1; then
+    attempt_cmd "Installing Tree-sitter runtime via dnf" \
+      run_maybe_sudo dnf install -y tree-sitter-devel || failures=$((failures + 1))
+  elif command -v yum >/dev/null 2>&1; then
+    attempt_cmd "Installing Tree-sitter runtime via yum" \
+      run_maybe_sudo yum install -y tree-sitter-devel || failures=$((failures + 1))
+  elif command -v zypper >/dev/null 2>&1; then
+    attempt_cmd "Installing Tree-sitter runtime via zypper" \
+      run_maybe_sudo zypper --non-interactive install tree-sitter-devel || failures=$((failures + 1))
+  elif command -v brew >/dev/null 2>&1; then
+    attempt_cmd "Installing Tree-sitter runtime via brew" \
+      brew install tree-sitter || failures=$((failures + 1))
+  else
+    echo "[jot:treesitter] Warning: no supported package manager found." >&2
+    failures=$((failures + 1))
+  fi
+
+  if [[ "${failures}" -gt 0 ]]; then
+    echo "[jot:treesitter] Completed with warning(s). Missing grammars fall back to regex highlighting." >&2
+  else
+    echo "[jot:treesitter] Tree-sitter dependency install completed."
+  fi
+}
+
 install_builtin_lsps() {
   echo "[jot:lsp] Installing built-in LSP servers (python/typescript/cpp/rust/go/lua/bash)"
   local failures=0
@@ -461,6 +523,12 @@ install_builtin_lsps() {
 }
 
 mkdir -p "${BUILD_DIR}"
+
+if [[ "${INSTALL_TREESITTER}" -eq 1 ]]; then
+  install_treesitter_deps || true
+else
+  echo "[jot:treesitter] Skipped Tree-sitter dependency install (--with-treesitter to enable)"
+fi
 
 CMAKE_ARGS=(
   -S "${PROJECT_ROOT}"
@@ -494,13 +562,17 @@ else
   cmake --install "${BUILD_DIR}"
 fi
 
-echo "[jot] Installing formatter dependency (prettier)"
-install_prettier || true
+if [[ "${INSTALL_TOOLS}" -eq 1 ]]; then
+  echo "[jot] Installing formatter dependency (prettier)"
+  install_prettier || true
+else
+  echo "[jot] Skipped optional formatter tooling (--with-tools to enable)"
+fi
 
 if [[ "${INSTALL_LSP}" -eq 1 ]]; then
   install_builtin_lsps
 else
-  echo "[jot:lsp] Skipped (--skip-lsp)"
+  echo "[jot:lsp] Skipped optional LSP server install (--with-lsp to enable)"
 fi
 
 echo "[jot] Done"
