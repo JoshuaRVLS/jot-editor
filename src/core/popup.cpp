@@ -1,5 +1,6 @@
 #include "editor.h"
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <sstream>
 
@@ -42,6 +43,53 @@ FileNode *find_file_node_by_path(std::vector<FileNode> &nodes,
   }
   return nullptr;
 }
+
+std::string shell_quote(const std::string &value) {
+  std::string out = "'";
+  out.reserve(value.size() + 8);
+  for (char c : value) {
+    if (c == '\'') {
+      out += "'\\''";
+    } else {
+      out.push_back(c);
+    }
+  }
+  out.push_back('\'');
+  return out;
+}
+
+std::string trim_copy(const std::string &s) {
+  size_t a = 0;
+  while (a < s.size() && std::isspace((unsigned char)s[a])) {
+    ++a;
+  }
+  size_t b = s.size();
+  while (b > a && std::isspace((unsigned char)s[b - 1])) {
+    --b;
+  }
+  return s.substr(a, b - a);
+}
+
+std::string limit_lines(const std::string &text, int max_lines) {
+  if (max_lines <= 0) {
+    return "";
+  }
+  std::istringstream iss(text);
+  std::string out;
+  std::string line;
+  int count = 0;
+  while (count < max_lines && std::getline(iss, line)) {
+    if (count > 0) {
+      out += '\n';
+    }
+    out += line;
+    count++;
+  }
+  if (std::getline(iss, line)) {
+    out += "\n...";
+  }
+  return out;
+}
 } // namespace
 
 void Editor::show_popup(const std::string &text, int x, int y) {
@@ -71,6 +119,7 @@ void Editor::hide_popup() {
 
 void Editor::open_context_menu(int x, int y, ContextMenuSurface surface,
                                const std::vector<ContextMenuItem> &items) {
+  cancel_lsp_mouse_hover();
   context_menu_surface = surface;
   context_menu_items = items;
   context_menu_selected = 0;
@@ -100,11 +149,21 @@ void Editor::open_context_menu(int x, int y, ContextMenuSurface surface,
   context_menu_x = std::clamp(x, 0, max_x);
   context_menu_y = std::clamp(y, 0, max_y);
   show_context_menu = !context_menu_items.empty();
+  if (show_context_menu) {
+    terminal.enable_mouse_hover();
+  }
   hide_lsp_completion();
   needs_redraw = true;
 }
 
 void Editor::close_context_menu() {
+  if (show_context_menu) {
+    if (lsp_mouse_hover_enabled) {
+      terminal.enable_mouse_hover();
+    } else {
+      terminal.disable_mouse_hover();
+    }
+  }
   show_context_menu = false;
   context_menu_surface = CONTEXT_MENU_NONE;
   context_menu_items.clear();
@@ -114,6 +173,7 @@ void Editor::close_context_menu() {
   context_menu_target_buffer = -1;
   context_menu_target_pane = -1;
   context_menu_target_terminal = -1;
+  context_menu_target_line = -1;
   context_menu_target_path.clear();
   context_menu_target_is_dir = false;
   needs_redraw = true;
@@ -173,7 +233,8 @@ bool Editor::handle_context_menu_mouse(int x, int y, bool is_click) {
   }
 
   int row = y - context_menu_y - 1;
-  if (row >= 0 && row < (int)context_menu_items.size()) {
+  if (row >= 0 && row < (int)context_menu_items.size() &&
+      context_menu_items[row].enabled) {
     context_menu_selected = row;
     needs_redraw = true;
     if (is_click) {
@@ -192,6 +253,7 @@ void Editor::execute_context_menu_item(int index) {
   ContextMenuAction action = context_menu_items[index].action;
   int target_buffer = context_menu_target_buffer;
   int target_terminal = context_menu_target_terminal;
+  int target_line = context_menu_target_line;
   std::string target_path = context_menu_target_path;
   bool target_is_dir = context_menu_target_is_dir;
   close_context_menu();
@@ -310,6 +372,55 @@ void Editor::execute_context_menu_item(int index) {
       set_message("Copied path");
     }
     break;
+  case CONTEXT_ACTION_GIT_STAGE:
+    refresh_git_status(true);
+    if (target_path.empty() || !has_git_repo()) {
+      set_message("Git: not a repository");
+    } else if (git_stage_path(target_path)) {
+      set_message("Git staged: " + to_git_relative_path(target_path));
+    } else {
+      set_message("Git stage failed");
+    }
+    break;
+  case CONTEXT_ACTION_GIT_UNSTAGE:
+    refresh_git_status(true);
+    if (target_path.empty() || !has_git_repo()) {
+      set_message("Git: not a repository");
+    } else if (git_unstage_path(target_path)) {
+      set_message("Git unstaged: " + to_git_relative_path(target_path));
+    } else {
+      set_message("Git unstage failed");
+    }
+    break;
+  case CONTEXT_ACTION_GIT_DIFF:
+    refresh_git_status(true);
+    if (target_path.empty() || !has_git_repo()) {
+      set_message("Git: not a repository");
+    } else {
+      std::string rel = to_git_relative_path(target_path);
+      std::string diff = run_git_capture("diff -- " + shell_quote(rel));
+      if (trim_copy(diff).empty()) {
+        set_message("Git diff: no unstaged changes for " + rel);
+      } else {
+        show_popup(limit_lines(diff, 18), 2, tab_height + 1);
+      }
+    }
+    break;
+  case CONTEXT_ACTION_GIT_DIFF_STAGED:
+    refresh_git_status(true);
+    if (target_path.empty() || !has_git_repo()) {
+      set_message("Git: not a repository");
+    } else {
+      std::string rel = to_git_relative_path(target_path);
+      std::string diff =
+          run_git_capture("diff --staged -- " + shell_quote(rel));
+      if (trim_copy(diff).empty()) {
+        set_message("Git diff: no staged changes for " + rel);
+      } else {
+        show_popup(limit_lines(diff, 18), 2, tab_height + 1);
+      }
+    }
+    break;
   case CONTEXT_ACTION_TERMINAL_FOCUS:
     if (target_terminal >= 0 &&
         target_terminal < (int)integrated_terminals.size()) {
@@ -331,6 +442,11 @@ void Editor::execute_context_menu_item(int index) {
     if (auto *term = get_integrated_terminal(target_terminal)) {
       term->reset_scroll();
       needs_redraw = true;
+    }
+    break;
+  case CONTEXT_ACTION_TOGGLE_FOLD:
+    if (target_buffer >= 0 && target_buffer < (int)buffers.size()) {
+      toggle_fold_at_line(buffers[target_buffer], target_line);
     }
     break;
   case CONTEXT_ACTION_NONE:
