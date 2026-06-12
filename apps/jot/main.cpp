@@ -5,6 +5,8 @@ int main(int argc, char *argv[]) {
   Editor editor;
   if (argc > 1) {
     editor.set_home_menu_visible(false);
+  } else {
+    editor.resume_last_workspace_session();
   }
 
   if (argc > 1) {
