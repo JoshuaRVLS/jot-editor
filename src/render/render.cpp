@@ -1,12 +1,13 @@
 #include "bracket.h"
 #include "editor.h"
+#include "folding.h"
 #include <cstdio>
 #include <filesystem>
 #include <functional>
 #include <unordered_map>
 
 namespace {
-constexpr int kLineNumberGutterWidth = 7;
+constexpr int kLineNumberGutterWidth = 8;
 std::string ellipsize_right(const std::string &s, int max_len) {
   if (max_len <= 0) {
     return "";
@@ -62,7 +63,19 @@ void compute_code_cursor_screen_pos(const SplitPane &pane, const FileBuffer &buf
   const int min_y = pane.y + tab_height;
   int max_y = pane.y + pane.h - 1;
 
-  display_y = buf.cursor.y - buf.scroll_offset + pane.y + tab_height;
+  int visible_row = 0;
+  bool found_row = false;
+  const int viewport_h = std::max(1, pane.h - tab_height - 1);
+  for (int row = 0; row < viewport_h; row++) {
+    int line = Folding::buffer_line_for_visible_offset(
+        buf.fold_ranges, buf.scroll_offset, row, (int)buf.line_count());
+    if (line == buf.cursor.y && !Folding::is_line_hidden(buf.fold_ranges, line)) {
+      visible_row = row;
+      found_row = true;
+      break;
+    }
+  }
+  display_y = (found_row ? visible_row : 0) + pane.y + tab_height;
 
   int logical_cursor_x = buf.cursor.x;
   int logical_scroll_x = buf.scroll_x;
@@ -104,7 +117,7 @@ void Editor::render() {
     }
 
     // Keep cursor visibility in sync even when no redraw is needed.
-    if (show_context_menu) {
+    if (show_menu_bar_dropdown || show_context_menu) {
       ui->hide_cursor();
       ui->flush_cursor();
       return;
@@ -124,6 +137,11 @@ void Editor::render() {
     if (show_integrated_terminal && active_terminal &&
         active_terminal->is_focused()) {
       place_integrated_terminal_cursor();
+      return;
+    }
+    if (show_right_panel) {
+      ui->hide_cursor();
+      ui->flush_cursor();
       return;
     }
     if (show_sidebar && focus_state == FOCUS_SIDEBAR) {
@@ -150,6 +168,8 @@ void Editor::render() {
 
   if (show_home_menu) {
     render_home_menu();
+    render_menu_bar();
+    render_menu_dropdown();
     render_status_line();
     ui->hide_cursor();
     ui->render();
@@ -157,6 +177,7 @@ void Editor::render() {
     return;
   }
 
+  render_menu_bar();
   render_tabs();
   update_pane_layout();
 
@@ -165,8 +186,10 @@ void Editor::render() {
       render_sidebar();
     }
     render_panes();
+    render_collapsed_sidebar_handle();
     render_lsp_completion();
     render_integrated_terminal();
+    render_debugger_panel();
     render_telescope();
     render_status_line();
     ui->hide_cursor();
@@ -190,8 +213,10 @@ void Editor::render() {
         render_sidebar();
       }
       render_panes();
+      render_collapsed_sidebar_handle();
       render_lsp_completion();
       render_integrated_terminal();
+      render_debugger_panel();
     }
 
     render_status_line();
@@ -199,6 +224,7 @@ void Editor::render() {
     render_search_panel();
     render_popup();
     render_context_menu();
+    render_menu_dropdown();
 
     if (easter_egg_timer > 0) {
       render_easter_egg();
@@ -208,7 +234,7 @@ void Editor::render() {
 
     // Set cursor state BEFORE ui->render() so the full-row paint emits the
     // correct cursor at the end of the frame.
-    if (show_context_menu) {
+    if (show_menu_bar_dropdown || show_context_menu) {
       ui->hide_cursor();
     } else if (show_command_palette || show_search || show_save_prompt ||
         show_quit_prompt) {
@@ -260,11 +286,13 @@ void Editor::render_pane_resize_guides() {
     reserved_terminal_h =
         std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
   }
+  int menu_h = 1;
   int total_h =
-      std::max(1, ui->get_height() - status_height - reserved_terminal_h);
-  int max_sidebar = std::max(0, total_w - 20);
-  int origin_x = show_sidebar ? std::min(sidebar_width, max_sidebar) : 0;
-  int available_w = std::max(1, total_w - origin_x);
+      std::max(1, ui->get_height() - status_height - reserved_terminal_h -
+                      menu_h);
+  int origin_x = show_sidebar ? effective_sidebar_width() : 0;
+  int right_w = effective_right_panel_width();
+  int available_w = std::max(1, total_w - origin_x - right_w);
 
   std::function<void(int, int, int, int, int)> draw_node =
       [&](int node_index, int x, int y, int w, int h) {
@@ -311,7 +339,7 @@ void Editor::render_pane_resize_guides() {
         }
       };
 
-  draw_node(pane_root, origin_x, 0, available_w, total_h);
+  draw_node(pane_root, origin_x, menu_h, available_w, total_h);
 }
 
 Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane,
@@ -333,6 +361,10 @@ Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane,
     if (id < 0 || id >= (int)buffers.size()) {
       continue;
     }
+    if (buffers[id].is_placeholder && !buffers[id].modified &&
+        buffers[id].filepath.empty()) {
+      continue;
+    }
     std::string base = file_tab_base_name(buffers[id]);
     base_names[id] = base;
     base_count[base]++;
@@ -340,15 +372,37 @@ Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane,
 
   int hidden_total = 0;
   for (int id : tab_ids) {
-    if (id >= 0 && id < (int)buffers.size()) {
+    if (id >= 0 && id < (int)buffers.size() &&
+        !(buffers[id].is_placeholder && !buffers[id].modified &&
+          buffers[id].filepath.empty())) {
       hidden_total++;
     }
   }
 
-  int tab_x = layout.x;
+  const int valid_start =
+      std::clamp(pane.tab_scroll_index, 0, std::max(0, hidden_total - 1));
+  layout.hidden_before = valid_start;
+  const bool reserve_left = valid_start > 0;
+  layout.scroll_left_label =
+      reserve_left ? ("‹" + std::to_string(valid_start)) : "";
+  layout.scroll_left_x = reserve_left ? layout.x : -1;
+  layout.scroll_left_end_x =
+      reserve_left ? layout.x + (int)layout.scroll_left_label.size() : -1;
+
+  int tab_x = reserve_left ? layout.scroll_left_end_x : layout.x;
+  int valid_index = 0;
+  int last_visible_index = valid_start - 1;
   for (int tab_i = 0; tab_i < (int)tab_ids.size(); tab_i++) {
     int id = tab_ids[tab_i];
     if (id < 0 || id >= (int)buffers.size()) {
+      continue;
+    }
+    if (buffers[id].is_placeholder && !buffers[id].modified &&
+        buffers[id].filepath.empty()) {
+      continue;
+    }
+    if (valid_index < valid_start) {
+      valid_index++;
       continue;
     }
 
@@ -361,51 +415,163 @@ Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane,
       }
     }
 
-    const int remaining_valid = hidden_total - (int)layout.segments.size();
-    std::string overflow = remaining_valid > 1
-                               ? ("… +" + std::to_string(remaining_valid - 1))
-                               : "";
-    const int overflow_reserve = overflow.empty() ? 0 : (int)overflow.size() + 1;
+    const int remaining_valid = hidden_total - valid_index;
+    const int overflow_reserve =
+        remaining_valid > 1
+            ? (int)("›+" + std::to_string(remaining_valid - 1)).size()
+            : 0;
     const int hard_end = layout.x + layout.w - overflow_reserve;
     int available = hard_end - tab_x;
     if (available < 7) {
-      layout.hidden_count = remaining_valid;
+      layout.hidden_after = remaining_valid;
       break;
     }
 
     std::string marker = buffers[id].modified ? " ●" : "";
     std::string label_text = name + marker;
-    int max_label_w = std::max(5, std::min(24, available - 2));
+    int max_label_w = std::max(5, std::min(24, available - 3));
     int max_name_w = std::max(1, max_label_w - 3);
-    std::string text = " " + ellipsize_right(label_text, max_name_w) + "  ";
+    std::string text = " " + ellipsize_right(label_text, max_name_w) + " ";
 
-    int need = (int)text.size() + 2; // close control + separator
+    int need = (int)text.size() + 3; // leading edge + close control + trailing edge
     if (tab_x + need > hard_end) {
-      layout.hidden_count = remaining_valid;
+      layout.hidden_after = remaining_valid;
       break;
     }
 
     FileTabSegment segment;
     segment.buffer_id = id;
+    segment.tab_index = valid_index;
     segment.x = tab_x;
-    segment.label_x = tab_x;
+    segment.label_x = tab_x + 1;
     segment.label = text;
-    segment.close_x = tab_x + (int)text.size();
+    segment.close_x = segment.label_x + (int)text.size();
     segment.end_x = segment.close_x + 2;
     segment.active = (id == pane.buffer_id);
     segment.modified = buffers[id].modified;
     segment.preview = buffers[id].is_preview;
     layout.segments.push_back(std::move(segment));
     tab_x += need;
+    last_visible_index = valid_index;
+    valid_index++;
   }
 
-  if (layout.hidden_count > 0) {
-    layout.overflow_label = "… +" + std::to_string(layout.hidden_count);
-    layout.overflow_x =
-        std::max(layout.x, layout.x + layout.w - (int)layout.overflow_label.size());
+  if (last_visible_index >= valid_start) {
+    layout.hidden_after = std::max(0, hidden_total - last_visible_index - 1);
+  }
+  layout.hidden_count = layout.hidden_after;
+
+  if (layout.hidden_after > 0) {
+    layout.overflow_label = "›+" + std::to_string(layout.hidden_after);
+    layout.overflow_x = std::max(
+        layout.x, layout.x + layout.w - (int)layout.overflow_label.size());
+    layout.scroll_right_x = layout.overflow_x;
+    layout.scroll_right_end_x =
+        layout.overflow_x + (int)layout.overflow_label.size();
   }
 
   return layout;
+}
+
+int Editor::find_local_tab_index(const SplitPane &pane, int buffer_id) const {
+  for (int i = 0; i < (int)pane.tab_buffer_ids.size(); i++) {
+    if (pane.tab_buffer_ids[i] == buffer_id) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+void Editor::clamp_tab_scroll(SplitPane &pane) {
+  pane.tab_scroll_index =
+      std::clamp(pane.tab_scroll_index, 0,
+                 std::max(0, (int)pane.tab_buffer_ids.size() - 1));
+}
+
+void Editor::reveal_local_tab(SplitPane &pane, int target_index, int draw_w) {
+  if (pane.tab_buffer_ids.empty()) {
+    pane.tab_scroll_index = 0;
+    return;
+  }
+  target_index =
+      std::clamp(target_index, 0, (int)pane.tab_buffer_ids.size() - 1);
+  clamp_tab_scroll(pane);
+  if (target_index < pane.tab_scroll_index) {
+    pane.tab_scroll_index = target_index;
+    return;
+  }
+
+  FileTabLayout layout = build_file_tab_layout(pane, draw_w);
+  for (const auto &segment : layout.segments) {
+    if (segment.tab_index == target_index) {
+      return;
+    }
+  }
+  pane.tab_scroll_index = target_index;
+}
+
+bool Editor::scroll_local_tabs(SplitPane &pane, int delta) {
+  if (pane.tab_buffer_ids.size() <= 1 || delta == 0) {
+    return false;
+  }
+  int old_scroll = pane.tab_scroll_index;
+  pane.tab_scroll_index =
+      std::clamp(pane.tab_scroll_index + delta, 0,
+                 std::max(0, (int)pane.tab_buffer_ids.size() - 1));
+  if (pane.tab_scroll_index > 0) {
+    int draw_w = std::max(1, pane.w);
+    if (show_minimap && draw_w > 20) {
+      draw_w = std::max(1, draw_w - minimap_width);
+    }
+    while (pane.tab_scroll_index > 0 &&
+           build_file_tab_layout(pane, draw_w).segments.empty()) {
+      pane.tab_scroll_index--;
+    }
+  }
+  return pane.tab_scroll_index != old_scroll;
+}
+
+bool Editor::switch_to_local_tab(int target_index) {
+  auto &pane = get_pane();
+  if (pane.tab_buffer_ids.empty()) {
+    return false;
+  }
+  target_index =
+      std::clamp(target_index, 0, (int)pane.tab_buffer_ids.size() - 1);
+  int buffer_id = pane.tab_buffer_ids[target_index];
+  if (buffer_id < 0 || buffer_id >= (int)buffers.size()) {
+    return false;
+  }
+  pane.buffer_id = buffer_id;
+  current_buffer = buffer_id;
+  focus_state = FOCUS_EDITOR;
+  clamp_cursor(buffer_id);
+  ensure_cursor_visible();
+
+  int draw_w = std::max(1, pane.w);
+  if (show_minimap && draw_w > 20) {
+    draw_w = std::max(1, draw_w - minimap_width);
+  }
+  reveal_local_tab(pane, target_index, draw_w);
+  needs_redraw = true;
+  return true;
+}
+
+bool Editor::cycle_local_tab(int delta) {
+  auto &pane = get_pane();
+  if (pane.tab_buffer_ids.size() <= 1) {
+    return false;
+  }
+  int current_idx = find_local_tab_index(pane, pane.buffer_id);
+  if (current_idx < 0) {
+    current_idx = 0;
+  }
+  int n = (int)pane.tab_buffer_ids.size();
+  int next_idx = (current_idx + delta) % n;
+  if (next_idx < 0) {
+    next_idx += n;
+  }
+  return switch_to_local_tab(next_idx);
 }
 
 void Editor::render_pane(const SplitPane &pane) {
@@ -432,17 +598,21 @@ void Editor::render_pane(const SplitPane &pane) {
   // Pane-local file tabs.
   {
     FileTabLayout tabs = build_file_tab_layout(pane, draw_w);
-    UIRect tab_rect = {tabs.x, tabs.y, tabs.w, 1};
-    ui->fill_rect(tab_rect, " ", theme.fg_status, theme.bg_status);
+
+    if (!tabs.scroll_left_label.empty() && tabs.scroll_left_x >= 0) {
+      ui->draw_text(tabs.scroll_left_x, tabs.y, tabs.scroll_left_label,
+                    theme.fg_comment, theme.bg_status);
+    }
 
     for (const auto &tab : tabs.segments) {
       int fg = tab.active ? theme.fg_tab_active : theme.fg_tab_inactive;
       int bg = tab.active ? theme.bg_tab_active : theme.bg_tab_inactive;
+      ui->draw_text(tab.x, tabs.y, "│", theme.fg_tab_separator, bg);
       ui->draw_text(tab.label_x, tabs.y, tab.label, fg, bg, tab.active,
                     tab.preview);
       ui->draw_text(tab.close_x, tabs.y, "×", theme.fg_tab_close, bg);
       ui->draw_text(tab.close_x + 1, tabs.y, "│", theme.fg_tab_separator,
-                    theme.bg_status);
+                    bg);
     }
 
     if (!tabs.overflow_label.empty()) {
@@ -473,20 +643,22 @@ void Editor::render_scrollbar(const SplitPane &pane, int draw_w) {
   const int max_scroll = std::max(0, total_lines - visible_lines);
   const int clamped_scroll = std::clamp(buf.scroll_offset, 0, max_scroll);
 
-  int thumb_h = track_h;
-  if (max_scroll > 0) {
-    thumb_h = std::max(1, (visible_lines * visible_lines) / total_lines);
-    thumb_h = std::min(track_h, thumb_h);
+  for (int i = 0; i < track_h; i++) {
+    ui->draw_text(track_x, track_y + i, "│",
+                  pane.active ? theme.fg_panel_border : theme.fg_line_num,
+                  theme.bg_default);
   }
+
+  if (max_scroll <= 0) {
+    return;
+  }
+
+  int thumb_h = std::max(1, (visible_lines * visible_lines) / total_lines);
+  thumb_h = std::min(track_h, thumb_h);
 
   int thumb_y = track_y;
-  if (max_scroll > 0 && track_h > thumb_h) {
+  if (track_h > thumb_h) {
     thumb_y = track_y + (clamped_scroll * (track_h - thumb_h)) / max_scroll;
-  }
-
-  for (int i = 0; i < track_h; i++) {
-    ui->draw_text(track_x, track_y + i, "│", theme.fg_panel_border,
-                  theme.bg_default);
   }
 
   const int thumb_fg = pane.active ? theme.fg_active_border : theme.fg_line_num;
