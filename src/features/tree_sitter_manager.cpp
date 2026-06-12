@@ -2,23 +2,98 @@
 #include <filesystem>
 
 #ifdef JOT_TREESITTER
+#ifdef JOT_TS_HAS_C
 #include <tree_sitter/tree-sitter-c.h>
+#endif
+#ifdef JOT_TS_HAS_CPP
+#include <tree_sitter/tree-sitter-cpp.h>
+#endif
+#ifdef JOT_TS_HAS_PYTHON
+#include <tree_sitter/tree-sitter-python.h>
+#endif
+#ifdef JOT_TS_HAS_JAVASCRIPT
+#include <tree_sitter/tree-sitter-javascript.h>
+#endif
+#ifdef JOT_TS_HAS_TYPESCRIPT
+#include <tree_sitter/tree-sitter-typescript.h>
+#endif
+#ifdef JOT_TS_HAS_RUST
+#include <tree_sitter/tree-sitter-rust.h>
+#endif
+#ifdef JOT_TS_HAS_GO
+#include <tree_sitter/tree-sitter-go.h>
+#endif
+#ifdef JOT_TS_HAS_JSON
+#include <tree_sitter/tree-sitter-json.h>
+#endif
+#ifdef JOT_TS_HAS_HTML
+#include <tree_sitter/tree-sitter-html.h>
+#endif
+#ifdef JOT_TS_HAS_CSS
+#include <tree_sitter/tree-sitter-css.h>
+#endif
+#ifdef JOT_TS_HAS_BASH
+#include <tree_sitter/tree-sitter-bash.h>
+#endif
+#ifdef JOT_TS_HAS_LUA
 #include <tree_sitter/tree-sitter-lua.h>
+#endif
+#ifdef JOT_TS_HAS_MARKDOWN
 #include <tree_sitter/tree-sitter-markdown.h>
+#endif
+#ifdef JOT_TS_HAS_TOML
+#include <tree_sitter/tree-sitter-toml.h>
+#endif
+#ifdef JOT_TS_HAS_YAML
+#include <tree_sitter/tree-sitter-yaml.h>
+#endif
 
 extern "C" {
+#ifndef JOT_TS_HAS_C
+__attribute__((weak)) const TSLanguage *tree_sitter_c() { return nullptr; }
+#endif
+#ifndef JOT_TS_HAS_CPP
 __attribute__((weak)) const TSLanguage *tree_sitter_cpp() { return nullptr; }
+#endif
+#ifndef JOT_TS_HAS_PYTHON
 __attribute__((weak)) const TSLanguage *tree_sitter_python() { return nullptr; }
+#endif
+#ifndef JOT_TS_HAS_JAVASCRIPT
 __attribute__((weak)) const TSLanguage *tree_sitter_javascript() { return nullptr; }
+#endif
+#ifndef JOT_TS_HAS_TYPESCRIPT
 __attribute__((weak)) const TSLanguage *tree_sitter_typescript() { return nullptr; }
+#endif
+#ifndef JOT_TS_HAS_RUST
 __attribute__((weak)) const TSLanguage *tree_sitter_rust() { return nullptr; }
+#endif
+#ifndef JOT_TS_HAS_GO
 __attribute__((weak)) const TSLanguage *tree_sitter_go() { return nullptr; }
+#endif
+#ifndef JOT_TS_HAS_JSON
 __attribute__((weak)) const TSLanguage *tree_sitter_json() { return nullptr; }
+#endif
+#ifndef JOT_TS_HAS_HTML
 __attribute__((weak)) const TSLanguage *tree_sitter_html() { return nullptr; }
+#endif
+#ifndef JOT_TS_HAS_CSS
 __attribute__((weak)) const TSLanguage *tree_sitter_css() { return nullptr; }
+#endif
+#ifndef JOT_TS_HAS_BASH
 __attribute__((weak)) const TSLanguage *tree_sitter_bash() { return nullptr; }
+#endif
+#ifndef JOT_TS_HAS_LUA
+__attribute__((weak)) const TSLanguage *tree_sitter_lua() { return nullptr; }
+#endif
+#ifndef JOT_TS_HAS_MARKDOWN
+__attribute__((weak)) const TSLanguage *tree_sitter_markdown() { return nullptr; }
+#endif
+#ifndef JOT_TS_HAS_TOML
 __attribute__((weak)) const TSLanguage *tree_sitter_toml() { return nullptr; }
+#endif
+#ifndef JOT_TS_HAS_YAML
 __attribute__((weak)) const TSLanguage *tree_sitter_yaml() { return nullptr; }
+#endif
 }
 #endif
 
@@ -50,11 +125,14 @@ const char *builtin_query_c() { return R"TREEQUERY(
 (system_lib_string) @string
 (comment) @comment
 (number_literal) @number
+(primitive_type) @type
 (type_identifier) @type
 (type_descriptor) @type
+(field_identifier) @property
 (call_expression function: (identifier) @function)
 (call_expression function: (field_expression field: (field_identifier) @function))
 (function_declarator declarator: (identifier) @function)
+(function_definition declarator: (function_declarator declarator: (identifier) @function))
 (preproc_include) @keyword
 (preproc_def) @keyword
 (preproc_if) @keyword
@@ -97,11 +175,30 @@ const char *builtin_query_cpp() { return R"TREEQUERY(
 (string_literal) @string
 (comment) @comment
 (number_literal) @number
+(primitive_type) @type
 (type_identifier) @type
 (template_type) @type
+(namespace_identifier) @type
+(qualified_identifier scope: (namespace_identifier) @type)
+(qualified_identifier name: (identifier) @type)
+(qualified_identifier name: (type_identifier) @type)
+(field_identifier) @property
 (call_expression function: (identifier) @function)
 (call_expression function: (field_expression field: (field_identifier) @function))
+(call_expression function: (qualified_identifier name: (identifier) @function))
+(call_expression function: (qualified_identifier name: (field_identifier) @function))
+(call_expression function: (qualified_identifier name: (operator_name) @function))
 (function_declarator declarator: (identifier) @function)
+(function_declarator declarator: (qualified_identifier name: (identifier) @function))
+(function_declarator declarator: (field_identifier) @function)
+(function_definition declarator: (function_declarator declarator: (identifier) @function))
+(function_definition declarator: (function_declarator declarator: (qualified_identifier name: (identifier) @function)))
+(preproc_include) @keyword
+(preproc_def) @keyword
+(preproc_if) @keyword
+(preproc_elif) @keyword
+(preproc_else) @keyword
+(preproc_endif) @keyword
 )TREEQUERY"; }
 
 const char *builtin_query_python() { return R"TREEQUERY(
@@ -434,7 +531,15 @@ QueryProvider query_for_lang(const std::string &lang) {
 } // namespace
 
 TreeSitterManager::TreeSitterManager() { register_languages(); }
-TreeSitterManager::~TreeSitterManager() = default;
+TreeSitterManager::~TreeSitterManager() {
+#ifdef JOT_TREESITTER
+  for (auto &entry : query_cache_) {
+    if (entry.second) {
+      ts_query_delete(entry.second);
+    }
+  }
+#endif
+}
 
 void TreeSitterManager::register_languages() {
   ext_to_lang_ = {
@@ -483,6 +588,12 @@ bool TreeSitterManager::has_language(const std::string &extension) const {
   return get_language(extension) != nullptr;
 }
 
+std::string
+TreeSitterManager::language_id_for_extension(const std::string &extension) const {
+  const TSLanguageEntry *entry = get_language(extension);
+  return entry ? entry->language_id : "";
+}
+
 #ifdef JOT_TREESITTER
 TSParser *TreeSitterManager::create_parser(const std::string &extension) const {
   auto ext_it = ext_to_lang_.find(extension);
@@ -490,25 +601,31 @@ TSParser *TreeSitterManager::create_parser(const std::string &extension) const {
 
   const TSLanguage *lang = nullptr;
   const std::string &lid = ext_it->second;
-  if (lid == "c") lang = tree_sitter_c();
-  else if (lid == "cpp") lang = tree_sitter_cpp();
-  else if (lid == "python") lang = tree_sitter_python();
-  else if (lid == "javascript") lang = tree_sitter_javascript();
-  else if (lid == "typescript") {
-    lang = tree_sitter_typescript();
-    if (!lang) lang = tree_sitter_javascript();
+  auto cached = parser_languages_.find(lid);
+  if (cached != parser_languages_.end()) {
+    lang = cached->second;
+  } else {
+    if (lid == "c") lang = tree_sitter_c();
+    else if (lid == "cpp") lang = tree_sitter_cpp();
+    else if (lid == "python") lang = tree_sitter_python();
+    else if (lid == "javascript") lang = tree_sitter_javascript();
+    else if (lid == "typescript") {
+      lang = tree_sitter_typescript();
+      if (!lang) lang = tree_sitter_javascript();
+    }
+    else if (lid == "rust") lang = tree_sitter_rust();
+    else if (lid == "go") lang = tree_sitter_go();
+    else if (lid == "json") lang = tree_sitter_json();
+    else if (lid == "html") lang = tree_sitter_html();
+    else if (lid == "css") lang = tree_sitter_css();
+    else if (lid == "bash") lang = tree_sitter_bash();
+    else if (lid == "lua") lang = tree_sitter_lua();
+    else if (lid == "markdown") lang = tree_sitter_markdown();
+    else if (lid == "toml") lang = tree_sitter_toml();
+    else if (lid == "yaml") lang = tree_sitter_yaml();
+    else return nullptr;
+    parser_languages_[lid] = lang;
   }
-  else if (lid == "rust") lang = tree_sitter_rust();
-  else if (lid == "go") lang = tree_sitter_go();
-  else if (lid == "json") lang = tree_sitter_json();
-  else if (lid == "html") lang = tree_sitter_html();
-  else if (lid == "css") lang = tree_sitter_css();
-  else if (lid == "bash") lang = tree_sitter_bash();
-  else if (lid == "lua") lang = tree_sitter_lua();
-  else if (lid == "markdown") lang = tree_sitter_markdown();
-  else if (lid == "toml") lang = tree_sitter_toml();
-  else if (lid == "yaml") lang = tree_sitter_yaml();
-  else return nullptr;
 
   if (!lang) return nullptr;
 
@@ -517,21 +634,24 @@ TSParser *TreeSitterManager::create_parser(const std::string &extension) const {
   return parser;
 }
 
-TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension) const {
+TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension) {
   auto ext_it = ext_to_lang_.find(extension);
   if (ext_it == ext_to_lang_.end()) return nullptr;
+  auto cached = query_cache_.find(ext_it->second);
+  if (cached != query_cache_.end()) return cached->second;
 
-  const TSLanguage *lang = nullptr;
   TSParser *parser = create_parser(extension);
   if (!parser) return nullptr;
-  lang = ts_parser_language(parser);
+  const TSLanguage *lang = ts_parser_language(parser);
   ts_parser_delete(parser);
+  if (!lang) return nullptr;
 
   std::string source = load_query_source(ext_it->second);
   uint32_t error_offset;
   TSQueryError error_type;
   TSQuery *query = ts_query_new(lang, source.c_str(), (uint32_t)source.size(),
                                 &error_offset, &error_type);
+  query_cache_[ext_it->second] = query;
   return query;
 }
 #endif
