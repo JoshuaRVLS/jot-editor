@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "column_utils.h"
+#include "folding.h"
 #include <cctype>
 
 void Editor::move_cursor(int dx, int dy, bool extend_selection) {
@@ -17,8 +18,8 @@ void Editor::move_cursor(int dx, int dy, bool extend_selection) {
   int max_y = buf.line_count() > 0 ? (int)buf.line_count() - 1 : 0;
 
   if (dy != 0 && dx == 0) {
-    int target_y =
-        std::max(0, std::min(max_y, buf.cursor.y + dy));
+    int target_y = Folding::advance_visible_lines(buf.fold_ranges, buf.cursor.y,
+                                                  dy, (int)buf.line_count());
     int desired_x = std::max(buf.cursor.x, std::max(0, buf.preferred_x));
     buf.cursor.y = target_y;
     int line_len = (int)buf.line(buf.cursor.y).length();
@@ -53,6 +54,9 @@ void Editor::clamp_cursor(int buffer_id) {
     buf.cursor.y = buf.line_count() - 1;
   if (buf.cursor.y < 0)
     buf.cursor.y = 0;
+  while (buf.cursor.y > 0 && Folding::is_line_hidden(buf.fold_ranges, buf.cursor.y)) {
+    buf.cursor.y--;
+  }
   int line_len = buf.line(buf.cursor.y).length();
   buf.cursor.x = std::max(0, std::min(line_len, buf.cursor.x));
 }
@@ -67,10 +71,24 @@ void Editor::ensure_cursor_visible(bool adjust_horizontal) {
   if (viewport_h < 1)
     viewport_h = 1;
 
+  buf.scroll_offset = Folding::clamp_scroll_offset(
+      buf.fold_ranges, buf.scroll_offset, viewport_h, (int)buf.line_count());
+
   if (buf.cursor.y < buf.scroll_offset) {
     buf.scroll_offset = buf.cursor.y;
-  } else if (buf.cursor.y >= buf.scroll_offset + viewport_h) {
-    buf.scroll_offset = buf.cursor.y - viewport_h + 1;
+  } else {
+    int last_visible =
+        Folding::buffer_line_for_visible_offset(buf.fold_ranges,
+                                                buf.scroll_offset,
+                                                viewport_h - 1,
+                                                (int)buf.line_count());
+    if (buf.cursor.y > last_visible) {
+      buf.scroll_offset = buf.cursor.y;
+      for (int i = 1; i < viewport_h; i++) {
+        buf.scroll_offset =
+            Folding::previous_visible_line(buf.fold_ranges, buf.scroll_offset);
+      }
+    }
   }
 
   if (adjust_horizontal) {
