@@ -14,6 +14,9 @@ typedef struct TSTree TSTree;
 typedef struct TSQuery TSQuery;
 #endif
 
+int tree_sitter_capture_color_for_name(const std::string &name);
+int tree_sitter_capture_priority_for_name(const std::string &name);
+
 struct TSLanguageEntry {
   std::string language_id;
   std::string highlight_query_source;
@@ -30,10 +33,11 @@ public:
   const TSLanguageEntry *get_language(const std::string &extension) const;
 
   bool has_language(const std::string &extension) const;
+  std::string language_id_for_extension(const std::string &extension) const;
 
 #ifdef JOT_TREESITTER
   TSParser *create_parser(const std::string &extension) const;
-  TSQuery *get_highlight_query(const std::string &extension) const;
+  TSQuery *get_highlight_query(const std::string &extension);
 #endif
 
 private:
@@ -43,6 +47,10 @@ private:
 
   std::unordered_map<std::string, std::string> ext_to_lang_;
   std::unordered_map<std::string, TSLanguageEntry> languages_;
+#ifdef JOT_TREESITTER
+  mutable std::unordered_map<std::string, const TSLanguage *> parser_languages_;
+  std::unordered_map<std::string, TSQuery *> query_cache_;
+#endif
 };
 
 #endif
