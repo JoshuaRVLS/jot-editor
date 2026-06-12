@@ -6,6 +6,8 @@
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <sstream>
+#include <utility>
 
 namespace fs = std::filesystem;
 
@@ -165,14 +167,16 @@ long long now_ms() {
       .count();
 }
 
+constexpr int kLspMouseHoverDelayMs = 450;
+
 bool is_identifier_char(char c) {
   unsigned char uc = (unsigned char)c;
   return std::isalnum(uc) || c == '_';
 }
 
-std::string current_completion_prefix(const FileBuffer &buf) {
+Cursor current_completion_start(const FileBuffer &buf) {
   if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.line_count()) {
-    return "";
+    return {0, 0};
   }
   const std::string &line = buf.line(buf.cursor.y);
   int cursor = std::clamp(buf.cursor.x, 0, (int)line.size());
@@ -180,10 +184,18 @@ std::string current_completion_prefix(const FileBuffer &buf) {
   while (start > 0 && is_identifier_char(line[start - 1])) {
     start--;
   }
-  if (start >= cursor) {
+  return {start, buf.cursor.y};
+}
+
+std::string completion_prefix_from(const FileBuffer &buf, const Cursor &start) {
+  if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.line_count() ||
+      start.y != buf.cursor.y) {
     return "";
   }
-  return line.substr((size_t)start, (size_t)(cursor - start));
+  const std::string &line = buf.line(buf.cursor.y);
+  int cursor = std::clamp(buf.cursor.x, 0, (int)line.size());
+  int prefix_start = std::clamp(start.x, 0, cursor);
+  return line.substr((size_t)prefix_start, (size_t)(cursor - prefix_start));
 }
 
 bool is_subsequence_case_insensitive(const std::string &needle,
@@ -202,9 +214,7 @@ bool is_subsequence_case_insensitive(const std::string &needle,
 }
 
 int completion_match_score(const std::string &query, const LSPCompletionItem &item) {
-  if (query.empty()) {
-    return 1;
-  }
+  int score = query.empty() ? 50 : 0;
 
   const std::string q = to_lower_copy(query);
   const std::string label = to_lower_copy(item.label);
@@ -213,21 +223,49 @@ int completion_match_score(const std::string &query, const LSPCompletionItem &it
                                                : item.filter_text);
   const std::string insert = to_lower_copy(item.insert_text);
 
-  if (label == q || filter == q || insert == q) {
-    return 10000;
+  if (!query.empty()) {
+    if (label == q || filter == q || insert == q) {
+      score = 10000;
+    } else if (label.rfind(q, 0) == 0 || filter.rfind(q, 0) == 0 ||
+               insert.rfind(q, 0) == 0) {
+      score = 7000 - (int)label.size();
+    } else {
+      size_t label_pos = label.find(q);
+      size_t filter_pos = filter.find(q);
+      size_t insert_pos = insert.find(q);
+      size_t best_pos = std::min(label_pos, std::min(filter_pos, insert_pos));
+      if (best_pos != std::string::npos) {
+        score = 4000 - (int)best_pos;
+      } else if (is_subsequence_case_insensitive(q, label) ||
+                 is_subsequence_case_insensitive(q, filter)) {
+        score = 1500;
+      }
+    }
   }
-  if (label.rfind(q, 0) == 0 || filter.rfind(q, 0) == 0 || insert.rfind(q, 0) == 0) {
-    return 7000 - (int)label.size();
+  if (score <= 0) {
+    return 0;
   }
-  if (label.find(q) != std::string::npos || filter.find(q) != std::string::npos ||
-      insert.find(q) != std::string::npos) {
-    return 4000 - (int)label.find(q);
+  if (item.preselect) {
+    score += 250;
   }
-  if (is_subsequence_case_insensitive(q, label) ||
-      is_subsequence_case_insensitive(q, filter)) {
-    return 1500;
+  if (item.deprecated) {
+    score -= 200;
   }
-  return 0;
+  switch (item.kind) {
+  case 2:
+  case 3:
+  case 5:
+  case 6:
+  case 10:
+    score += 40;
+    break;
+  case 14:
+    score -= 20;
+    break;
+  default:
+    break;
+  }
+  return score;
 }
 
 std::string snippet_to_plain_text(const std::string &snippet) {
@@ -295,6 +333,61 @@ bool same_path(const std::string &a, const std::string &b) {
     return true;
   }
   return false;
+}
+
+std::string compact_lsp_popup_text(const std::string &text, int max_lines,
+                                   int max_cols) {
+  std::string out;
+  std::string line;
+  std::istringstream stream(text);
+  int lines = 0;
+  while (lines < max_lines && std::getline(stream, line)) {
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    if ((int)line.size() > max_cols) {
+      line = line.substr(0, (size_t)std::max(0, max_cols - 1)) + "...";
+    }
+    if (!out.empty()) {
+      out.push_back('\n');
+    }
+    out += line;
+    lines++;
+  }
+  if (std::getline(stream, line)) {
+    out += "\n...";
+  }
+  return out;
+}
+
+std::pair<int, int> lsp_popup_size(const std::string &text) {
+  int max_w = 0;
+  int lines = 0;
+  std::istringstream stream(text);
+  std::string line;
+  while (std::getline(stream, line)) {
+    max_w = std::max(max_w, (int)line.length());
+    lines++;
+  }
+  return {max_w + 2, std::max(1, lines) + 2};
+}
+
+std::pair<int, int> place_lsp_popup(int anchor_x, int anchor_y, int popup_w,
+                                    int popup_h, int render_w, int screen_h,
+                                    int status_h) {
+  constexpr int top_chrome_h = 1;
+  int usable_w = std::max(1, render_w);
+  int bottom_exclusive =
+      std::max(top_chrome_h + 1, screen_h - std::max(0, status_h));
+
+  int x = std::clamp(anchor_x, 0, std::max(0, usable_w - popup_w));
+  int y = anchor_y + 1;
+  if (y + popup_h > bottom_exclusive) {
+    y = anchor_y - popup_h - 1;
+  }
+  y = std::clamp(y, top_chrome_h,
+                 std::max(top_chrome_h, bottom_exclusive - popup_h));
+  return {x, y};
 }
 
 bool command_exists(const std::string &name) {
@@ -424,43 +517,24 @@ void Editor::poll_lsp_clients() {
         continue;
       }
 
-      std::string query = current_completion_prefix(buf);
-      std::vector<std::pair<int, LSPCompletionItem>> ranked;
-      ranked.reserve(entry.second.size());
-      for (auto &item : entry.second) {
-        int score = completion_match_score(query, item);
-        if (query.empty() || score > 0) {
-          ranked.push_back({score, std::move(item)});
-        }
-      }
-
-      std::stable_sort(ranked.begin(), ranked.end(),
-                       [](const auto &a, const auto &b) {
-                         if (a.first != b.first) {
-                           return a.first > b.first;
-                         }
-                         const std::string &as =
-                             a.second.sort_text.empty() ? a.second.label
-                                                        : a.second.sort_text;
-                         const std::string &bs =
-                             b.second.sort_text.empty() ? b.second.label
-                                                        : b.second.sort_text;
-                         return as < bs;
-                       });
-
-      lsp_completion_items.clear();
-      const int max_items = 200;
-      for (int i = 0; i < (int)ranked.size() && i < max_items; i++) {
-        lsp_completion_items.push_back(std::move(ranked[i].second));
-      }
+      lsp_completion_all_items = std::move(entry.second);
       lsp_completion_filepath = entry.first;
-      lsp_completion_selected = 0;
-      lsp_completion_visible = !lsp_completion_items.empty();
-      if (lsp_completion_manual_request && lsp_completion_items.empty()) {
+      bool visible = refresh_lsp_completion_filter();
+      if (lsp_completion_manual_request && !visible) {
         set_message("No suggestions");
       }
       lsp_completion_manual_request = false;
       needs_redraw = true;
+    }
+
+    auto hovers = client->consume_hover_results();
+    for (const auto &hover : hovers) {
+      handle_lsp_hover_result(hover);
+    }
+
+    auto definitions = client->consume_definition_results();
+    for (const auto &definition : definitions) {
+      handle_lsp_definition_result(definition);
     }
   }
 }
@@ -784,8 +858,82 @@ void Editor::hide_lsp_completion() {
   lsp_completion_visible = false;
   lsp_completion_manual_request = false;
   lsp_completion_selected = 0;
+  lsp_completion_replace_start = {0, 0};
   lsp_completion_items.clear();
+  lsp_completion_all_items.clear();
   lsp_completion_filepath.clear();
+  lsp_completion_prefix.clear();
+}
+
+bool Editor::refresh_lsp_completion_filter() {
+  if (lsp_completion_all_items.empty() || buffers.empty() || panes.empty()) {
+    lsp_completion_visible = false;
+    lsp_completion_items.clear();
+    return false;
+  }
+
+  auto &buf = get_buffer();
+  if (!lsp_completion_filepath.empty() &&
+      !same_path(lsp_completion_filepath, buf.filepath)) {
+    hide_lsp_completion();
+    return false;
+  }
+  if (buf.cursor.y != lsp_completion_replace_start.y ||
+      buf.cursor.x < lsp_completion_replace_start.x) {
+    hide_lsp_completion();
+    return false;
+  }
+
+  std::string query = completion_prefix_from(buf, lsp_completion_replace_start);
+  std::string selected_label;
+  if (lsp_completion_selected >= 0 &&
+      lsp_completion_selected < (int)lsp_completion_items.size()) {
+    selected_label = lsp_completion_items[lsp_completion_selected].label;
+  }
+
+  std::vector<std::pair<int, LSPCompletionItem>> ranked;
+  ranked.reserve(lsp_completion_all_items.size());
+  for (const auto &item : lsp_completion_all_items) {
+    int score = completion_match_score(query, item);
+    if (query.empty() || score > 0) {
+      ranked.push_back({score, item});
+    }
+  }
+
+  std::stable_sort(ranked.begin(), ranked.end(),
+                   [](const auto &a, const auto &b) {
+                     if (a.first != b.first) {
+                       return a.first > b.first;
+                     }
+                     const std::string &as =
+                         a.second.sort_text.empty() ? a.second.label
+                                                    : a.second.sort_text;
+                     const std::string &bs =
+                         b.second.sort_text.empty() ? b.second.label
+                                                    : b.second.sort_text;
+                     return as < bs;
+                   });
+
+  lsp_completion_items.clear();
+  const int max_items = 200;
+  for (int i = 0; i < (int)ranked.size() && i < max_items; i++) {
+    lsp_completion_items.push_back(std::move(ranked[i].second));
+  }
+
+  lsp_completion_prefix = query;
+  lsp_completion_selected = 0;
+  for (int i = 0; i < (int)lsp_completion_items.size(); i++) {
+    if (!selected_label.empty() && lsp_completion_items[i].label == selected_label) {
+      lsp_completion_selected = i;
+      break;
+    }
+    if (selected_label.empty() && lsp_completion_items[i].preselect) {
+      lsp_completion_selected = i;
+      break;
+    }
+  }
+  lsp_completion_visible = !lsp_completion_items.empty();
+  return lsp_completion_visible;
 }
 
 void Editor::request_lsp_completion(bool manual, char trigger_character) {
@@ -820,6 +968,7 @@ void Editor::request_lsp_completion(bool manual, char trigger_character) {
     }
   }
 
+  Cursor replace_start = current_completion_start(buf);
   LSPClient *client = ensure_lsp_for_file(buf.filepath);
   if (!client) {
     if (manual) {
@@ -847,8 +996,334 @@ void Editor::request_lsp_completion(bool manual, char trigger_character) {
   }
 
   lsp_completion_anchor = buf.cursor;
+  lsp_completion_replace_start = replace_start;
   lsp_completion_filepath = buf.filepath;
+  lsp_completion_prefix = completion_prefix_from(buf, replace_start);
   lsp_completion_manual_request = manual;
+}
+
+void Editor::request_lsp_hover() {
+  auto &buf = get_buffer();
+  if (buf.is_lazy()) {
+    return;
+  }
+  if (buf.filepath.empty()) {
+    set_message("Save file first to use LSP");
+    return;
+  }
+
+  LSPClient *client = ensure_lsp_for_file(buf.filepath);
+  if (!client) {
+    set_message("No LSP server for this file");
+    return;
+  }
+
+  lsp_pending_changes.erase(buf.filepath);
+  client->did_change(buf.filepath, get_buffer_text(buf));
+  if (!client->request_hover(buf.filepath, buf.cursor.y, buf.cursor.x)) {
+    set_message("LSP hover request failed");
+    return;
+  }
+  set_message("LSP hover requested");
+}
+
+void Editor::request_lsp_hover_at(int pane_index, int buffer_id,
+                                  const Cursor &pos, int token_start,
+                                  int token_end, int screen_x, int screen_y) {
+  if (buffer_id < 0 || buffer_id >= (int)buffers.size()) {
+    cancel_lsp_mouse_hover();
+    return;
+  }
+  const auto &buf = buffers[buffer_id];
+  if (buf.is_lazy() || buf.filepath.empty()) {
+    cancel_lsp_mouse_hover();
+    return;
+  }
+  if (pos.y < 0 || pos.y >= (int)buf.line_count() || token_start < 0 ||
+      token_end <= token_start) {
+    cancel_lsp_mouse_hover();
+    return;
+  }
+
+  if (lsp_mouse_hover_pending && lsp_mouse_hover_buffer == buffer_id &&
+      lsp_mouse_hover_line == pos.y &&
+      lsp_mouse_hover_token_start == token_start &&
+      lsp_mouse_hover_token_end == token_end) {
+    lsp_mouse_hover_screen_x = screen_x;
+    lsp_mouse_hover_screen_y = screen_y;
+    return;
+  }
+  if (lsp_mouse_hover_visible && lsp_mouse_hover_buffer == buffer_id &&
+      lsp_mouse_hover_line == pos.y &&
+      lsp_mouse_hover_token_start == token_start &&
+      lsp_mouse_hover_token_end == token_end) {
+    return;
+  }
+
+  if (lsp_mouse_hover_visible) {
+    hide_popup();
+  }
+  lsp_mouse_hover_visible = false;
+  lsp_mouse_hover_pending = true;
+  lsp_mouse_hover_deadline_ms = now_ms() + kLspMouseHoverDelayMs;
+  lsp_mouse_hover_pane = pane_index;
+  lsp_mouse_hover_buffer = buffer_id;
+  lsp_mouse_hover_line = pos.y;
+  lsp_mouse_hover_col = pos.x;
+  lsp_mouse_hover_token_start = token_start;
+  lsp_mouse_hover_token_end = token_end;
+  lsp_mouse_hover_screen_x = screen_x;
+  lsp_mouse_hover_screen_y = screen_y;
+  lsp_mouse_hover_filepath = buf.filepath;
+}
+
+void Editor::cancel_lsp_mouse_hover(bool hide_popup_now) {
+  lsp_mouse_hover_pending = false;
+  lsp_mouse_hover_deadline_ms = 0;
+  lsp_mouse_hover_pane = -1;
+  lsp_mouse_hover_buffer = -1;
+  lsp_mouse_hover_line = -1;
+  lsp_mouse_hover_col = -1;
+  lsp_mouse_hover_token_start = -1;
+  lsp_mouse_hover_token_end = -1;
+  lsp_mouse_hover_screen_x = -1;
+  lsp_mouse_hover_screen_y = -1;
+  lsp_mouse_hover_filepath.clear();
+  if (hide_popup_now && lsp_mouse_hover_visible) {
+    hide_popup();
+    lsp_mouse_hover_visible = false;
+  }
+}
+
+void Editor::maybe_fire_lsp_mouse_hover() {
+  if (!lsp_mouse_hover_pending || now_ms() < lsp_mouse_hover_deadline_ms) {
+    return;
+  }
+  if (show_context_menu || show_command_palette || show_search ||
+      telescope.is_active() || mouse_selecting || mouse_drag_started) {
+    return;
+  }
+  if (lsp_mouse_hover_buffer < 0 ||
+      lsp_mouse_hover_buffer >= (int)buffers.size()) {
+    cancel_lsp_mouse_hover();
+    return;
+  }
+
+  auto &buf = buffers[lsp_mouse_hover_buffer];
+  if (buf.is_lazy() || !same_path(buf.filepath, lsp_mouse_hover_filepath)) {
+    cancel_lsp_mouse_hover();
+    return;
+  }
+
+  LSPClient *client = ensure_lsp_for_file(buf.filepath);
+  if (!client) {
+    cancel_lsp_mouse_hover(false);
+    return;
+  }
+
+  lsp_pending_changes.erase(buf.filepath);
+  client->did_change(buf.filepath, get_buffer_text(buf));
+  if (!client->request_hover(buf.filepath, lsp_mouse_hover_line,
+                             lsp_mouse_hover_col)) {
+    cancel_lsp_mouse_hover(false);
+    return;
+  }
+  lsp_mouse_hover_pending = false;
+}
+
+void Editor::request_lsp_definition() {
+  auto &buf = get_buffer();
+  if (buf.is_lazy()) {
+    return;
+  }
+  if (buf.filepath.empty()) {
+    set_message("Save file first to use LSP");
+    return;
+  }
+
+  LSPClient *client = ensure_lsp_for_file(buf.filepath);
+  if (!client) {
+    set_message("No LSP server for this file");
+    return;
+  }
+
+  lsp_pending_changes.erase(buf.filepath);
+  client->did_change(buf.filepath, get_buffer_text(buf));
+  if (!client->request_definition(buf.filepath, buf.cursor.y, buf.cursor.x)) {
+    set_message("LSP definition request failed");
+    return;
+  }
+  set_message("LSP definition requested");
+}
+
+void Editor::handle_lsp_hover_result(const LSPHoverResult &hover) {
+  if (buffers.empty() || current_buffer < 0 ||
+      current_buffer >= (int)buffers.size()) {
+    return;
+  }
+  if (lsp_mouse_hover_buffer >= 0 &&
+      same_path(hover.origin_filepath, lsp_mouse_hover_filepath) &&
+      hover.origin_line == lsp_mouse_hover_line &&
+      hover.origin_character == lsp_mouse_hover_col) {
+    if (hover.contents.empty()) {
+      lsp_mouse_hover_visible = false;
+      return;
+    }
+    std::string text = compact_lsp_popup_text(hover.contents, 14, 96);
+    int popup_x = lsp_mouse_hover_screen_x + 2;
+    int popup_y = lsp_mouse_hover_screen_y;
+    if (ui) {
+      auto [popup_w, popup_h] = lsp_popup_size(text);
+      auto [placed_x, placed_y] =
+          place_lsp_popup(popup_x, popup_y, popup_w, popup_h,
+                          ui->get_render_width(), ui->get_height(),
+                          status_height);
+      popup_x = placed_x;
+      popup_y = placed_y;
+    } else {
+      popup_y += 1;
+    }
+    show_popup(text, popup_x, popup_y);
+    lsp_mouse_hover_visible = true;
+    return;
+  }
+
+  auto &buf = get_buffer();
+  if (!same_path(buf.filepath, hover.origin_filepath) ||
+      buf.cursor.y != hover.origin_line ||
+      buf.cursor.x != hover.origin_character) {
+    return;
+  }
+  if (hover.contents.empty()) {
+    set_message("No hover information");
+    return;
+  }
+
+  const SplitPane &pane = get_pane();
+  constexpr int line_num_width = 8;
+  int row = hover.origin_line - buf.scroll_offset;
+  int max_row = std::max(0, pane.h - tab_height - 1);
+  int anchor_y = pane.y + tab_height + std::clamp(row, 0, max_row);
+  int popup_x = pane.x + 1 + line_num_width +
+                std::max(0, hover.origin_character - buf.scroll_x) + 2;
+  std::string text = compact_lsp_popup_text(hover.contents, 14, 96);
+  if (ui) {
+    auto [popup_w, popup_h] = lsp_popup_size(text);
+    auto [placed_x, placed_y] =
+        place_lsp_popup(popup_x, anchor_y, popup_w, popup_h,
+                        ui->get_render_width(), ui->get_height(),
+                        status_height);
+    popup_x = placed_x;
+    anchor_y = placed_y;
+  } else {
+    anchor_y += 1;
+  }
+  show_popup(text, popup_x, anchor_y);
+}
+
+void Editor::handle_lsp_definition_result(
+    const LSPDefinitionResult &definition) {
+  if (buffers.empty() || current_buffer < 0 ||
+      current_buffer >= (int)buffers.size()) {
+    return;
+  }
+  auto &buf = get_buffer();
+  if (!same_path(buf.filepath, definition.origin_filepath) ||
+      buf.cursor.y != definition.origin_line ||
+      buf.cursor.x != definition.origin_character) {
+    return;
+  }
+  if (definition.locations.empty()) {
+    set_message("No definition found");
+    return;
+  }
+
+  LSPJumpLocation origin;
+  origin.filepath = buf.filepath;
+  origin.cursor = buf.cursor;
+  origin.scroll_offset = buf.scroll_offset;
+  origin.scroll_x = buf.scroll_x;
+  origin.preview = buf.is_preview;
+  lsp_jump_stack.push_back(origin);
+  if (lsp_jump_stack.size() > 50) {
+    lsp_jump_stack.erase(lsp_jump_stack.begin());
+  }
+
+  lsp_definition_pending_location = definition.locations.front();
+  lsp_definition_jump_pending = true;
+  const bool same_file =
+      same_path(buf.filepath, lsp_definition_pending_location.filepath);
+  open_file(lsp_definition_pending_location.filepath, !same_file);
+  apply_pending_lsp_definition_jump();
+}
+
+bool Editor::apply_pending_lsp_definition_jump() {
+  if (!lsp_definition_jump_pending || buffers.empty() || current_buffer < 0 ||
+      current_buffer >= (int)buffers.size()) {
+    return false;
+  }
+
+  auto &buf = get_buffer();
+  if (!same_path(buf.filepath, lsp_definition_pending_location.filepath)) {
+    return false;
+  }
+
+  buf.cursor.y =
+      std::clamp(lsp_definition_pending_location.line, 0,
+                 std::max(0, (int)buf.line_count() - 1));
+  buf.cursor.x =
+      std::clamp(lsp_definition_pending_location.character, 0,
+                 (int)buf.line(buf.cursor.y).size());
+  buf.preferred_x = buf.cursor.x;
+  clear_selection();
+  ensure_cursor_visible();
+  lsp_definition_jump_pending = false;
+  set_message("Definition: " + get_filename(buf.filepath) + ":" +
+              std::to_string(buf.cursor.y + 1));
+  needs_redraw = true;
+  return true;
+}
+
+bool Editor::apply_pending_lsp_back_jump() {
+  if (!lsp_back_jump_pending || buffers.empty() || current_buffer < 0 ||
+      current_buffer >= (int)buffers.size()) {
+    return false;
+  }
+
+  auto &buf = get_buffer();
+  if (!same_path(buf.filepath, lsp_back_pending_location.filepath)) {
+    return false;
+  }
+
+  buf.cursor.y =
+      std::clamp(lsp_back_pending_location.cursor.y, 0,
+                 std::max(0, (int)buf.line_count() - 1));
+  buf.cursor.x =
+      std::clamp(lsp_back_pending_location.cursor.x, 0,
+                 (int)buf.line(buf.cursor.y).size());
+  buf.preferred_x = buf.cursor.x;
+  buf.scroll_offset = std::max(0, lsp_back_pending_location.scroll_offset);
+  buf.scroll_x = std::max(0, lsp_back_pending_location.scroll_x);
+  clear_selection();
+  ensure_cursor_visible();
+  lsp_back_jump_pending = false;
+  set_message("Returned: " + get_filename(buf.filepath) + ":" +
+              std::to_string(buf.cursor.y + 1));
+  needs_redraw = true;
+  return true;
+}
+
+void Editor::return_from_lsp_definition() {
+  if (lsp_jump_stack.empty()) {
+    set_message("No LSP jump to return to");
+    return;
+  }
+
+  lsp_back_pending_location = lsp_jump_stack.back();
+  lsp_jump_stack.pop_back();
+  lsp_back_jump_pending = true;
+  open_file(lsp_back_pending_location.filepath, lsp_back_pending_location.preview);
+  apply_pending_lsp_back_jump();
 }
 
 bool Editor::apply_selected_lsp_completion() {
@@ -892,6 +1367,8 @@ bool Editor::apply_selected_lsp_completion() {
       item.edit_end_line == buf.cursor.y) {
     start = std::clamp(item.edit_start_char, 0, (int)line.size());
     end = std::clamp(item.edit_end_char, start, (int)line.size());
+  } else if (lsp_completion_replace_start.y == buf.cursor.y) {
+    start = std::clamp(lsp_completion_replace_start.x, 0, cursor);
   } else {
     while (start > 0 && is_identifier_char(line[start - 1])) {
       start--;
