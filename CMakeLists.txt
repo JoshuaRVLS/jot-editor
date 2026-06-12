@@ -22,6 +22,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # for diagnosing native crashes. Set JOT_ASAN_OPTIONS and JOT_UBSAN_OPTIONS
 # to control runtime behavior. Off by default.
 option(JOT_SANITIZE "Build with AddressSanitizer + UBSan" OFF)
+option(JOT_TREESITTER "Enable Tree-sitter parser-based syntax highlighting when dependencies are available" ON)
 if(JOT_SANITIZE)
   add_compile_options(-fsanitize=address,undefined
                       -fno-omit-frame-pointer
