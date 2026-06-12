@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "cpp_assist.h"
+#include "folding.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -202,6 +203,7 @@ void Editor::open_workspace(const std::string &path, bool restore_session) {
   fb.scroll_x = 0;
   fb.modified = false;
   fb.is_preview = false;
+  fb.is_placeholder = true;
   buffers.push_back(std::move(fb));
   current_buffer = 0;
   tab_scroll_index = 0;
@@ -223,6 +225,26 @@ void Editor::open_workspace(const std::string &path, bool restore_session) {
   }
   refresh_git_status(true);
   needs_redraw = true;
+}
+
+bool Editor::resume_last_workspace_session() {
+  while (!recent_workspaces.empty()) {
+    const std::string candidate = recent_workspaces.front();
+    std::error_code ec;
+    if (fs::exists(candidate, ec) && !ec && fs::is_directory(candidate, ec)) {
+      open_workspace(candidate, true);
+      show_home_menu = false;
+      set_message("Resumed: " + get_filename(candidate));
+      needs_redraw = true;
+      return true;
+    }
+    recent_workspaces.erase(recent_workspaces.begin());
+  }
+
+  show_home_menu = true;
+  set_message("No recent workspace session");
+  needs_redraw = true;
+  return false;
 }
 
 void Editor::load_file_tree(const std::string &path) {
@@ -346,9 +368,9 @@ void Editor::save_workspace_session() {
     return;
   }
 
-  std::vector<const FileBuffer *> persisted;
+  std::vector<FileBuffer *> persisted;
   persisted.reserve(buffers.size());
-  for (const auto &buf : buffers) {
+  for (auto &buf : buffers) {
     if (!buf.filepath.empty()) {
       persisted.push_back(&buf);
     }
@@ -368,6 +390,8 @@ void Editor::save_workspace_session() {
   out << "version\t1\n";
   out << "root\t" << escape_field(workspace_session_root) << "\n";
   out << "show_sidebar\t" << (show_sidebar ? 1 : 0) << "\n";
+  out << "sidebar_width\t" << effective_sidebar_width() << "\n";
+  out << "right_panel_width\t" << right_panel_width << "\n";
   out << "sidebar_show_hidden\t" << (sidebar_show_hidden ? 1 : 0) << "\n";
 
   std::string current_file;
@@ -376,10 +400,17 @@ void Editor::save_workspace_session() {
   }
   out << "current_file\t" << escape_field(current_file) << "\n";
 
-  for (const FileBuffer *buf : persisted) {
+  for (FileBuffer *buf : persisted) {
+    if (!buf->is_lazy()) {
+      Folding::refresh_ranges(buf->fold_ranges, buf->lines,
+                              get_file_extension(buf->filepath));
+    }
+    std::string fold_payload =
+        Folding::encode_collapsed_ranges(buf->fold_ranges);
     out << "file\t" << escape_field(buf->filepath) << "\t" << buf->cursor.y
         << "\t" << buf->cursor.x << "\t" << buf->scroll_offset << "\t"
-        << buf->scroll_x << "\t" << (buf->is_preview ? 1 : 0) << "\n";
+        << buf->scroll_x << "\t" << (buf->is_preview ? 1 : 0) << "\t"
+        << escape_field(fold_payload) << "\n";
   }
 }
 
@@ -405,12 +436,21 @@ bool Editor::restore_workspace_session() {
     int scroll;
     int scroll_x;
     bool preview;
+    bool has_collapsed_folds = false;
+    std::vector<FoldRange> collapsed_folds;
   };
 
   bool restored_show_sidebar = true;
   bool restored_hidden = sidebar_show_hidden;
+  int restored_sidebar_width = sidebar_width;
+  int restored_right_panel_width = right_panel_width;
   std::string target_current_file;
   std::vector<Entry> entries;
+  auto clamp_restored_right_panel_width = [&]() {
+    int max_w = max_right_panel_width();
+    int min_w = std::min(min_right_panel_width(), max_w);
+    return std::clamp(restored_right_panel_width, min_w, max_w);
+  };
 
   std::string line;
   while (std::getline(in, line)) {
@@ -424,6 +464,16 @@ bool Editor::restore_workspace_session() {
     const std::string key = parts[0];
     if (key == "show_sidebar" && parts.size() >= 2) {
       restored_show_sidebar = (parts[1] == "1");
+    } else if (key == "sidebar_width" && parts.size() >= 2) {
+      try {
+        restored_sidebar_width = std::stoi(parts[1]);
+      } catch (...) {
+      }
+    } else if (key == "right_panel_width" && parts.size() >= 2) {
+      try {
+        restored_right_panel_width = std::stoi(parts[1]);
+      } catch (...) {
+      }
     } else if (key == "sidebar_show_hidden" && parts.size() >= 2) {
       restored_hidden = (parts[1] == "1");
     } else if (key == "current_file" && parts.size() >= 2) {
@@ -437,6 +487,11 @@ bool Editor::restore_workspace_session() {
         e.scroll = std::stoi(parts[4]);
         e.scroll_x = std::stoi(parts[5]);
         e.preview = (parts[6] == "1");
+        if (parts.size() >= 8) {
+          e.has_collapsed_folds = true;
+          e.collapsed_folds =
+              Folding::decode_collapsed_ranges(unescape_field(parts[7]));
+        }
         entries.push_back(e);
       } catch (...) {
       }
@@ -445,10 +500,20 @@ bool Editor::restore_workspace_session() {
 
   if (entries.empty()) {
     show_sidebar = restored_show_sidebar;
+    sidebar_width =
+        std::clamp(restored_sidebar_width, min_sidebar_width(),
+                   max_sidebar_width());
+    right_panel_width =
+        clamp_restored_right_panel_width();
     sidebar_show_hidden = restored_hidden;
     return false;
   }
 
+  sidebar_width =
+      std::clamp(restored_sidebar_width, min_sidebar_width(),
+                 max_sidebar_width());
+  right_panel_width =
+      clamp_restored_right_panel_width();
   sidebar_show_hidden = restored_hidden;
   load_file_tree(workspace_session_root);
 
@@ -485,6 +550,20 @@ bool Editor::restore_workspace_session() {
       buf.scroll_offset = std::max(0, entry.scroll);
       buf.scroll_x = std::max(0, entry.scroll_x);
       buf.is_preview = entry.preview;
+      if (!buf.is_lazy()) {
+        Folding::refresh_ranges(buf.fold_ranges, buf.lines,
+                                get_file_extension(buf.filepath));
+      }
+      if (entry.has_collapsed_folds) {
+        Folding::apply_collapsed_ranges(buf.fold_ranges, entry.collapsed_folds);
+      }
+      while (buf.cursor.y > 0 &&
+             Folding::is_line_hidden(buf.fold_ranges, buf.cursor.y)) {
+        buf.cursor.y--;
+      }
+      buf.cursor.x =
+          std::clamp(buf.cursor.x, 0, (int)buf.line(buf.cursor.y).size());
+      buf.preferred_x = buf.cursor.x;
       if (buf.is_preview) {
         preview_buffer_index = current_buffer;
       }
@@ -514,11 +593,17 @@ bool Editor::restore_workspace_session() {
                   current_buffer) == pane.tab_buffer_ids.end()) {
       pane.tab_buffer_ids.push_back(current_buffer);
     }
+    int draw_w = std::max(1, pane.w);
+    if (show_minimap && draw_w > 20) {
+      draw_w = std::max(1, draw_w - minimap_width);
+    }
+    reveal_local_tab(pane, find_local_tab_index(pane, current_buffer), draw_w);
   }
 
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
   show_sidebar = restored_show_sidebar;
+  sidebar_width = effective_sidebar_width();
   set_message("Workspace restored: " + root_dir);
   return true;
 }
@@ -920,8 +1005,10 @@ void Editor::handle_sidebar_input(int ch) {
   if (ch == 'g' || ch == 'G') {
     refresh_git_status(true);
     if (has_git_repo()) {
-      message = "Git: " + git_branch + " (" + std::to_string(git_dirty_count) +
-                " changes)";
+      message = "Git: " + git_branch + " (+" +
+                std::to_string(git_staged_count) + " ~" +
+                std::to_string(git_unstaged_count) + " ?" +
+                std::to_string(git_untracked_count) + ")";
     } else {
       message = "Git: not a repository";
     }
