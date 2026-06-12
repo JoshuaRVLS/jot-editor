@@ -395,8 +395,7 @@ void Editor::render_sidebar() {
 
   ensure_sidebar_render_cache();
 
-  int render_w = ui->get_render_width();
-  int w = std::min(sidebar_width, std::max(0, render_w - 20));
+  int w = effective_sidebar_width();
   int reserved_terminal_h = 0;
   if (show_integrated_terminal && !integrated_terminals.empty()) {
     reserved_terminal_h =
@@ -539,14 +538,53 @@ void Editor::render_sidebar() {
       file_tree_selected < (int)rows.size()) {
     footer = " " + rows[(size_t)file_tree_selected].footer_label;
   } else if (has_git_repo()) {
-    footer = " " + git_branch + " " + std::to_string(git_dirty_count);
+    footer = " " + git_branch;
+    if (git_staged_count > 0) {
+      footer += " +" + std::to_string(git_staged_count);
+    }
+    if (git_unstaged_count > 0) {
+      footer += " ~" + std::to_string(git_unstaged_count);
+    }
+    if (git_untracked_count > 0) {
+      footer += " ?" + std::to_string(git_untracked_count);
+    }
+    if (git_conflict_count > 0) {
+      footer += " !" + std::to_string(git_conflict_count);
+    }
   } else {
     footer = std::to_string(rows.size()) + " items";
   }
   ui->draw_text(x + 1, y + h - 1, truncate_cells(footer, w - 2),
                 theme.fg_comment, theme.bg_sidebar);
 
+  int border_fg =
+      sidebar_resize_dragging ? theme.fg_active_border : theme.fg_sidebar_border;
   for (int i = y; i < y + h; i++) {
-    ui->draw_text(w - 1, i, "│", theme.fg_sidebar_border, theme.bg_sidebar);
+    ui->draw_text(w - 1, i, "│", border_fg, theme.bg_sidebar,
+                  sidebar_resize_dragging);
   }
+}
+
+void Editor::render_collapsed_sidebar_handle() {
+  if (!collapsed_sidebar_handle_hit_test(0, tab_height)) {
+    return;
+  }
+
+  int reserved_terminal_h = 0;
+  if (show_integrated_terminal && !integrated_terminals.empty()) {
+    reserved_terminal_h =
+        std::clamp(integrated_terminal_height, 5,
+                   std::max(5, ui->get_height() / 2));
+  }
+  int top = tab_height;
+  int bottom = ui->get_height() - status_height - reserved_terminal_h;
+  int h = std::max(0, bottom - top);
+  if (h <= 0) {
+    return;
+  }
+
+  int mid = top + h / 2;
+  int fg = sidebar_resize_dragging ? theme.fg_active_border
+                                   : theme.fg_sidebar_border;
+  ui->draw_text(0, mid, "›", fg, theme.bg_default, true);
 }
