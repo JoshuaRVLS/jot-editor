@@ -449,12 +449,44 @@ std::vector<LSPCompletionItem> completion_items_from_json(
     completion.insert_text =
         json_string_or_empty(json_object_get(item, "insertText"));
     completion.detail = json_string_or_empty(json_object_get(item, "detail"));
+    const JsonValue *documentation = json_object_get(item, "documentation");
+    if (documentation && documentation->type == JsonValue::String) {
+      completion.documentation = documentation->string_value;
+    } else if (documentation && documentation->type == JsonValue::Object) {
+      completion.documentation =
+          json_string_or_empty(json_object_get(*documentation, "value"));
+    }
     completion.filter_text =
         json_string_or_empty(json_object_get(item, "filterText"));
     completion.sort_text = json_string_or_empty(json_object_get(item, "sortText"));
+    const JsonValue *commit_chars = json_object_get(item, "commitCharacters");
+    if (commit_chars && commit_chars->type == JsonValue::Array) {
+      for (const auto &commit_char : commit_chars->array_value) {
+        if (commit_char.type == JsonValue::String &&
+            !commit_char.string_value.empty()) {
+          completion.commit_characters.push_back(commit_char.string_value);
+        }
+      }
+    }
     completion.kind = json_int_or_default(json_object_get(item, "kind"), 0);
     completion.insert_text_format =
         json_int_or_default(json_object_get(item, "insertTextFormat"), 1);
+    const JsonValue *deprecated = json_object_get(item, "deprecated");
+    if (deprecated && deprecated->type == JsonValue::Bool) {
+      completion.deprecated = deprecated->bool_value;
+    }
+    const JsonValue *tags = json_object_get(item, "tags");
+    if (tags && tags->type == JsonValue::Array) {
+      for (const auto &tag : tags->array_value) {
+        if (tag.type == JsonValue::Number && tag.number_value == 1) {
+          completion.deprecated = true;
+        }
+      }
+    }
+    const JsonValue *preselect = json_object_get(item, "preselect");
+    if (preselect && preselect->type == JsonValue::Bool) {
+      completion.preselect = preselect->bool_value;
+    }
 
     if (completion.insert_text.empty()) {
       const JsonValue *text_edit = json_object_get(item, "textEdit");
@@ -492,6 +524,124 @@ std::vector<LSPCompletionItem> completion_items_from_json(
   }
 
   return parsed;
+}
+
+std::string trim_copy(std::string value) {
+  value.erase(value.begin(),
+              std::find_if(value.begin(), value.end(), [](unsigned char ch) {
+                return !std::isspace(ch);
+              }));
+  value.erase(std::find_if(value.rbegin(), value.rend(),
+                           [](unsigned char ch) {
+                             return !std::isspace(ch);
+                           })
+                  .base(),
+              value.end());
+  return value;
+}
+
+std::string normalize_hover_text(std::string text) {
+  text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+  return trim_copy(text);
+}
+
+std::string hover_content_from_json(const JsonValue &contents) {
+  if (contents.type == JsonValue::String) {
+    return normalize_hover_text(contents.string_value);
+  }
+  if (contents.type == JsonValue::Object) {
+    const JsonValue *value = json_object_get(contents, "value");
+    if (value && value->type == JsonValue::String) {
+      return normalize_hover_text(value->string_value);
+    }
+  }
+  if (contents.type == JsonValue::Array) {
+    std::string joined;
+    for (const auto &item : contents.array_value) {
+      std::string part = hover_content_from_json(item);
+      if (part.empty()) {
+        continue;
+      }
+      if (!joined.empty()) {
+        joined += "\n\n";
+      }
+      joined += part;
+    }
+    return normalize_hover_text(joined);
+  }
+  return "";
+}
+
+std::string hover_text_from_result(const JsonValue &result) {
+  if (result.type != JsonValue::Object) {
+    return "";
+  }
+  const JsonValue *contents = json_object_get(result, "contents");
+  if (!contents) {
+    return "";
+  }
+  return hover_content_from_json(*contents);
+}
+
+bool location_from_json(const JsonValue &item, LSPLocation &out) {
+  if (item.type != JsonValue::Object) {
+    return false;
+  }
+
+  const JsonValue *uri = json_object_get(item, "uri");
+  const JsonValue *range = json_object_get(item, "range");
+  if (!uri || !range) {
+    uri = json_object_get(item, "targetUri");
+    range = json_object_get(item, "targetSelectionRange");
+    if (!range) {
+      range = json_object_get(item, "targetRange");
+    }
+  }
+  if (!uri || uri->type != JsonValue::String || !range ||
+      range->type != JsonValue::Object) {
+    return false;
+  }
+
+  const JsonValue *start = json_object_get(*range, "start");
+  const JsonValue *end = json_object_get(*range, "end");
+  if (!start || start->type != JsonValue::Object) {
+    return false;
+  }
+
+  out.filepath = from_file_uri(uri->string_value);
+  out.line = json_int_or_default(json_object_get(*start, "line"), 0);
+  out.character =
+      json_int_or_default(json_object_get(*start, "character"), 0);
+  out.end_line = end && end->type == JsonValue::Object
+                     ? json_int_or_default(json_object_get(*end, "line"),
+                                           out.line)
+                     : out.line;
+  out.end_character =
+      end && end->type == JsonValue::Object
+          ? json_int_or_default(json_object_get(*end, "character"),
+                                out.character)
+          : out.character;
+  return !out.filepath.empty();
+}
+
+std::vector<LSPLocation> definition_locations_from_result(
+    const JsonValue &result) {
+  std::vector<LSPLocation> locations;
+  if (result.type == JsonValue::Array) {
+    for (const auto &item : result.array_value) {
+      LSPLocation loc;
+      if (location_from_json(item, loc)) {
+        locations.push_back(std::move(loc));
+      }
+    }
+    return locations;
+  }
+
+  LSPLocation loc;
+  if (location_from_json(result, loc)) {
+    locations.push_back(std::move(loc));
+  }
+  return locations;
 }
 } // namespace
 
@@ -626,7 +776,9 @@ bool LSPClient::start() {
     }
     argv.push_back(nullptr);
 
-    chdir(root_path.c_str());
+    if (chdir(root_path.c_str()) != 0) {
+      _exit(127);
+    }
     execvp(argv[0], argv.data());
     _exit(127);
   }
@@ -644,7 +796,11 @@ bool LSPClient::start() {
   next_request_id = 1;
   file_versions.clear();
   pending_completion_requests.clear();
+  pending_hover_requests.clear();
+  pending_definition_requests.clear();
   pending_completions.clear();
+  pending_hovers.clear();
+  pending_definitions.clear();
   stdout_buffer.clear();
   stderr_buffer.clear();
   outbound_buffer.clear();
@@ -663,7 +819,28 @@ bool LSPClient::start() {
        << "\"processId\":" << getpid() << ","
        << "\"rootUri\":\"" << json_escape(to_file_uri(root_path)) << "\","
        << "\"rootPath\":\"" << json_escape(root_path) << "\","
-       << "\"capabilities\":{},"
+       << "\"capabilities\":{"
+       << "\"textDocument\":{"
+       << "\"completion\":{"
+       << "\"dynamicRegistration\":false,"
+       << "\"contextSupport\":true,"
+       << "\"completionItem\":{"
+       << "\"snippetSupport\":true,"
+       << "\"deprecatedSupport\":true,"
+       << "\"preselectSupport\":true,"
+       << "\"commitCharactersSupport\":true,"
+       << "\"documentationFormat\":[\"markdown\",\"plaintext\"],"
+       << "\"tagSupport\":{\"valueSet\":[1]},"
+       << "\"insertReplaceSupport\":false,"
+       << "\"resolveSupport\":{\"properties\":[\"documentation\",\"detail\"]}"
+       << "}"
+       << "},"
+       << "\"hover\":{\"dynamicRegistration\":false,"
+       << "\"contentFormat\":[\"markdown\",\"plaintext\"]},"
+       << "\"definition\":{\"dynamicRegistration\":false,"
+       << "\"linkSupport\":true}"
+       << "}"
+       << "},"
        << "\"workspaceFolders\":[{\"uri\":\""
        << json_escape(to_file_uri(root_path)) << "\",\"name\":\""
        << json_escape(fs::path(root_path).filename().string()) << "\"}]"
@@ -713,7 +890,11 @@ void LSPClient::stop() {
   initialized = false;
   file_versions.clear();
   pending_completion_requests.clear();
+  pending_hover_requests.clear();
+  pending_definition_requests.clear();
   pending_completions.clear();
+  pending_hovers.clear();
+  pending_definitions.clear();
   outbound_buffer.clear();
 }
 
@@ -778,19 +959,47 @@ void LSPClient::handle_stdout_data(const std::string &data) {
     }
 
     int request_id = (int)id->number_value;
-    auto pending_it = pending_completion_requests.find(request_id);
-    if (pending_it == pending_completion_requests.end()) {
+    const JsonValue *result = json_object_get(root, "result");
+
+    auto completion_it = pending_completion_requests.find(request_id);
+    if (completion_it != pending_completion_requests.end()) {
+      if (result) {
+        pending_completions.push_back(
+            {completion_it->second, completion_items_from_json(*result)});
+      } else {
+        pending_completions.push_back({completion_it->second, {}});
+      }
+      pending_completion_requests.erase(completion_it);
       continue;
     }
 
-    const JsonValue *result = json_object_get(root, "result");
-    if (result) {
-      pending_completions.push_back(
-          {pending_it->second, completion_items_from_json(*result)});
-    } else {
-      pending_completions.push_back({pending_it->second, {}});
+    auto hover_it = pending_hover_requests.find(request_id);
+    if (hover_it != pending_hover_requests.end()) {
+      LSPHoverResult hover;
+      hover.origin_filepath = hover_it->second.filepath;
+      hover.origin_line = hover_it->second.line;
+      hover.origin_character = hover_it->second.character;
+      if (result) {
+        hover.contents = hover_text_from_result(*result);
+      }
+      pending_hovers.push_back(std::move(hover));
+      pending_hover_requests.erase(hover_it);
+      continue;
     }
-    pending_completion_requests.erase(pending_it);
+
+    auto definition_it = pending_definition_requests.find(request_id);
+    if (definition_it != pending_definition_requests.end()) {
+      LSPDefinitionResult definition;
+      definition.origin_filepath = definition_it->second.filepath;
+      definition.origin_line = definition_it->second.line;
+      definition.origin_character = definition_it->second.character;
+      if (result) {
+        definition.locations = definition_locations_from_result(*result);
+      }
+      pending_definitions.push_back(std::move(definition));
+      pending_definition_requests.erase(definition_it);
+      continue;
+    }
   }
 }
 
@@ -961,6 +1170,68 @@ bool LSPClient::request_completion(const std::string &filepath, int line,
   return true;
 }
 
+bool LSPClient::request_hover(const std::string &filepath, int line,
+                              int character) {
+  if (!running) {
+    return false;
+  }
+
+  std::string abs_path = fs::absolute(filepath).string();
+  int request_id = next_request_id++;
+  pending_hover_requests[request_id] =
+      PendingPositionRequest{abs_path, std::max(0, line), std::max(0, character)};
+
+  std::ostringstream json;
+  json << "{"
+       << "\"jsonrpc\":\"2.0\","
+       << "\"id\":" << request_id << ","
+       << "\"method\":\"textDocument/hover\","
+       << "\"params\":{"
+       << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path))
+       << "\"},"
+       << "\"position\":{\"line\":" << std::max(0, line)
+       << ",\"character\":" << std::max(0, character) << "}"
+       << "}"
+       << "}";
+
+  if (!send_message(json.str())) {
+    pending_hover_requests.erase(request_id);
+    return false;
+  }
+  return true;
+}
+
+bool LSPClient::request_definition(const std::string &filepath, int line,
+                                   int character) {
+  if (!running) {
+    return false;
+  }
+
+  std::string abs_path = fs::absolute(filepath).string();
+  int request_id = next_request_id++;
+  pending_definition_requests[request_id] =
+      PendingPositionRequest{abs_path, std::max(0, line), std::max(0, character)};
+
+  std::ostringstream json;
+  json << "{"
+       << "\"jsonrpc\":\"2.0\","
+       << "\"id\":" << request_id << ","
+       << "\"method\":\"textDocument/definition\","
+       << "\"params\":{"
+       << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path))
+       << "\"},"
+       << "\"position\":{\"line\":" << std::max(0, line)
+       << ",\"character\":" << std::max(0, character) << "}"
+       << "}"
+       << "}";
+
+  if (!send_message(json.str())) {
+    pending_definition_requests.erase(request_id);
+    return false;
+  }
+  return true;
+}
+
 std::vector<std::pair<std::string, std::vector<Diagnostic>>>
 LSPClient::consume_published_diagnostics() {
   auto out = std::move(pending_diagnostics);
@@ -972,6 +1243,18 @@ std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>>
 LSPClient::consume_completion_items() {
   auto out = std::move(pending_completions);
   pending_completions.clear();
+  return out;
+}
+
+std::vector<LSPHoverResult> LSPClient::consume_hover_results() {
+  auto out = std::move(pending_hovers);
+  pending_hovers.clear();
+  return out;
+}
+
+std::vector<LSPDefinitionResult> LSPClient::consume_definition_results() {
+  auto out = std::move(pending_definitions);
+  pending_definitions.clear();
   return out;
 }
 
