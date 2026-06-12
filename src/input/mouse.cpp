@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "folding.h"
 #include <algorithm>
 #include <chrono>
 #include <cctype>
@@ -37,20 +38,236 @@ void mouse_debug_log(const char *fmt, ...) {
 }
 
 constexpr int kMouseDragThreshold = 1;
+
+struct ScrollbarGeometry {
+  bool visible = false;
+  int x = 0;
+  int y = 0;
+  int h = 0;
+  int thumb_y = 0;
+  int thumb_h = 0;
+  int max_scroll = 0;
+};
+
+ScrollbarGeometry scrollbar_geometry_for(const SplitPane &pane,
+                                         const FileBuffer &buf,
+                                         int tab_height,
+                                         bool show_minimap,
+                                         int minimap_width) {
+  ScrollbarGeometry g;
+  int draw_w = std::max(1, pane.w);
+  if (show_minimap && draw_w > 20) {
+    draw_w = std::max(1, draw_w - minimap_width);
+  }
+  if (draw_w < 3) {
+    return g;
+  }
+
+  g.x = pane.x + draw_w - 1;
+  g.y = pane.y + tab_height;
+  g.h = std::max(0, pane.h - tab_height - 1);
+  if (g.h <= 0) {
+    return g;
+  }
+
+  const int total_lines =
+      Folding::visible_line_count(buf.fold_ranges, (int)buf.line_count());
+  const int visible_lines = std::max(1, g.h);
+  g.max_scroll = std::max(0, total_lines - visible_lines);
+  if (g.max_scroll <= 0) {
+    return g;
+  }
+
+  g.thumb_h = std::max(1, (visible_lines * visible_lines) / total_lines);
+  g.thumb_h = std::min(g.h, g.thumb_h);
+  g.thumb_y = g.y;
+  if (g.h > g.thumb_h) {
+    int visible_scroll = 0;
+    for (int line = 0; line < (int)buf.line_count() &&
+                       line < buf.scroll_offset;
+         line++) {
+      if (!Folding::is_line_hidden(buf.fold_ranges, line)) {
+        visible_scroll++;
+      }
+    }
+    visible_scroll = std::clamp(visible_scroll, 0, g.max_scroll);
+    g.thumb_y = g.y + (visible_scroll * (g.h - g.thumb_h)) / g.max_scroll;
+  }
+  g.visible = true;
+  return g;
+}
+
+int scrollbar_scroll_for_y(const ScrollbarGeometry &g, int y) {
+  if (!g.visible || g.max_scroll <= 0) {
+    return 0;
+  }
+  const int travel = std::max(1, g.h - g.thumb_h);
+  const int rel = std::clamp(y - g.y - g.thumb_h / 2, 0, travel);
+  return std::clamp((rel * g.max_scroll + travel / 2) / travel, 0,
+                    g.max_scroll);
+}
+
+int buffer_line_for_visible_index(const FileBuffer &buf, int visible_index) {
+  int target = std::max(0, visible_index);
+  for (int line = 0; line < (int)buf.line_count(); line++) {
+    if (Folding::is_line_hidden(buf.fold_ranges, line)) {
+      continue;
+    }
+    if (target == 0) {
+      return line;
+    }
+    target--;
+  }
+  return std::max(0, (int)buf.line_count() - 1);
+}
 } // namespace
 
 // Local definition of MEVENT used by handle_mouse()
 struct MEVENT {
   int x, y;
   int bstate;
+  bool ctrl = false;
+  bool shift = false;
+  bool alt = false;
 };
 
-static int classify_char(unsigned char c) {
-  if (std::isspace(c))
-    return 0; // whitespace run
-  if (std::isalnum(c) || c == '_')
-    return 1; // word run
-  return 2;   // punctuation/symbol run
+static bool is_word_char(unsigned char c) {
+  return std::isalnum(c) || c == '_';
+}
+
+static bool is_operator_char(unsigned char c) {
+  switch (c) {
+  case '=':
+  case '!':
+  case '<':
+  case '>':
+  case '+':
+  case '-':
+  case '*':
+  case '/':
+  case '%':
+  case '&':
+  case '|':
+  case '^':
+  case '~':
+  case '?':
+  case ':':
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool is_pathish_run_char(unsigned char c) {
+  return !std::isspace(c) && c != '"' && c != '\'' && c != '`' && c != '<' &&
+         c != '>' && c != '(' && c != ')' && c != '[' && c != ']' &&
+         c != '{' && c != '}';
+}
+
+static bool is_identifier_chain_char(const std::string &line, int i) {
+  if (i < 0 || i >= (int)line.size())
+    return false;
+  unsigned char c = (unsigned char)line[i];
+  if (is_word_char(c))
+    return true;
+  if (c == '.' || c == '-') {
+    return i > 0 && i + 1 < (int)line.size() &&
+           is_word_char((unsigned char)line[i - 1]) &&
+           is_word_char((unsigned char)line[i + 1]);
+  }
+  if (c == ':') {
+    bool left_scope =
+        i > 0 && line[i - 1] == ':' && i + 1 < (int)line.size() &&
+        is_word_char((unsigned char)line[i + 1]);
+    bool right_scope =
+        i + 1 < (int)line.size() && line[i + 1] == ':' && i > 0 &&
+        is_word_char((unsigned char)line[i - 1]);
+    return left_scope || right_scope;
+  }
+  return false;
+}
+
+static bool find_smart_token_span(const std::string &line, int x, int &start,
+                                  int &end) {
+  if (line.empty())
+    return false;
+
+  int pivot = std::clamp(x, 0, (int)line.size() - 1);
+  if (std::isspace((unsigned char)line[pivot])) {
+    start = pivot;
+    end = pivot + 1;
+    while (start > 0 && std::isspace((unsigned char)line[start - 1]))
+      start--;
+    while (end < (int)line.size() &&
+           std::isspace((unsigned char)line[end]))
+      end++;
+    return true;
+  }
+
+  int run_start = pivot;
+  int run_end = pivot + 1;
+  while (run_start > 0 &&
+         is_pathish_run_char((unsigned char)line[run_start - 1]))
+    run_start--;
+  while (run_end < (int)line.size() &&
+         is_pathish_run_char((unsigned char)line[run_end]))
+    run_end++;
+
+  bool path_like = false;
+  for (int i = run_start; i < run_end; i++) {
+    if (line[i] == '/' || line[i] == '\\') {
+      path_like = true;
+      break;
+    }
+  }
+  if (!path_like && run_start < run_end && line[run_start] == '~')
+    path_like = true;
+  if (!path_like) {
+    for (int i = run_start; i + 2 < run_end; i++) {
+      if (line[i] == ':' && line[i + 1] == '/' && line[i + 2] == '/') {
+        path_like = true;
+        break;
+      }
+    }
+  }
+  if (path_like) {
+    start = run_start;
+    end = run_end;
+    while (end > start && (line[end - 1] == ',' || line[end - 1] == ';'))
+      end--;
+    return start < end;
+  }
+
+  if (is_identifier_chain_char(line, pivot) ||
+      (pivot > 0 && is_identifier_chain_char(line, pivot - 1))) {
+    int p = is_identifier_chain_char(line, pivot) ? pivot : pivot - 1;
+    start = p;
+    end = p + 1;
+    while (start > 0 && is_identifier_chain_char(line, start - 1))
+      start--;
+    while (end < (int)line.size() && is_identifier_chain_char(line, end))
+      end++;
+    while (start < end && !is_word_char((unsigned char)line[start]))
+      start++;
+    while (end > start && !is_word_char((unsigned char)line[end - 1]))
+      end--;
+    return start < end;
+  }
+
+  if (is_operator_char((unsigned char)line[pivot])) {
+    start = pivot;
+    end = pivot + 1;
+    while (start > 0 && is_operator_char((unsigned char)line[start - 1]))
+      start--;
+    while (end < (int)line.size() &&
+           is_operator_char((unsigned char)line[end]))
+      end++;
+    return true;
+  }
+
+  start = pivot;
+  end = pivot + 1;
+  return true;
 }
 
 static bool bracket_pair(char c, char &open, char &close, bool &is_open) {
@@ -152,6 +369,14 @@ static void flatten_nodes_for_mouse(std::vector<FileNode> &nodes,
 
 void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
                                 bool is_scroll_down) {
+  if (is_click || is_scroll_up || is_scroll_down) {
+    clear_debugger_breakpoint_hover();
+  }
+
+  if (is_click && handle_menu_bar_mouse(x, y, true, false)) {
+    return;
+  }
+
   if (show_home_menu) {
     if (is_click) {
       handle_home_menu_mouse(x, y, true);
@@ -174,13 +399,54 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
     return;
   }
 
+  if (is_click && begin_right_panel_resize_drag(x, y)) {
+    return;
+  }
+
+  if (handle_debugger_mouse(x, y, is_click)) {
+    return;
+  }
+
   if ((is_scroll_up || is_scroll_down) &&
       handle_integrated_terminal_scroll(x, y, is_scroll_up, is_scroll_down)) {
     return;
   }
 
+  if ((is_scroll_up || is_scroll_down) && !panes.empty()) {
+    int pane_index = -1;
+    for (int i = 0; i < (int)panes.size(); i++) {
+      const auto &candidate = panes[i];
+      if (x >= candidate.x && x < candidate.x + candidate.w &&
+          y == candidate.y) {
+        pane_index = i;
+        break;
+      }
+    }
+    if (pane_index >= 0) {
+      if (pane_index != current_pane) {
+        panes[current_pane].active = false;
+        current_pane = pane_index;
+        panes[current_pane].active = true;
+        current_buffer = panes[current_pane].buffer_id;
+      }
+      auto &pane = get_pane(current_pane);
+      int draw_w = std::max(1, pane.w);
+      if (show_minimap && draw_w > 20) {
+        draw_w = std::max(1, draw_w - minimap_width);
+      }
+      FileTabLayout tabs = build_file_tab_layout(pane, draw_w);
+      if (x >= tabs.x && x < tabs.x + tabs.w) {
+        if (scroll_local_tabs(pane, is_scroll_up ? -1 : 1)) {
+          needs_redraw = true;
+        }
+        return;
+      }
+    }
+  }
+
   if (show_sidebar) {
-    if (x < sidebar_width) {
+    int sidebar_w = effective_sidebar_width();
+    if (x < sidebar_w) {
       if (is_scroll_up) {
         if (file_tree_scroll > 0)
           file_tree_scroll--;
@@ -221,23 +487,42 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
 
   auto &pane = get_pane(current_pane);
   auto &buf = get_buffer(pane.buffer_id);
+  refresh_folds(buf);
+  refresh_folds(buf);
+  int visible_rows = std::max(1, pane.h - tab_height - 1);
+  int max_scroll_offset =
+      std::max(0, Folding::visible_line_count(buf.fold_ranges,
+                                              (int)buf.line_count()) -
+                      visible_rows);
 
   if (is_scroll_up) {
-    int wheel_step = std::max(1, std::min(5, std::max(1, pane.h - tab_height) / 6));
-    if (buf.scroll_offset > 0) {
-      buf.scroll_offset -= wheel_step;
-      if (buf.scroll_offset < 0)
-        buf.scroll_offset = 0;
+    int wheel_step = std::max(1, std::min(5, visible_rows / 6));
+    for (int i = 0; i < wheel_step && buf.scroll_offset > 0; i++) {
+      int prev = Folding::previous_visible_line(buf.fold_ranges,
+                                                buf.scroll_offset);
+      if (prev == buf.scroll_offset) {
+        break;
+      }
+      buf.scroll_offset = prev;
       needs_redraw = true;
     }
     return;
   }
   if (is_scroll_down) {
-    int wheel_step = std::max(1, std::min(5, std::max(1, pane.h - tab_height) / 6));
-    if (buf.scroll_offset < (int)buf.line_count() - pane.h + 1) {
-      buf.scroll_offset += wheel_step;
-      if (buf.scroll_offset > (int)buf.line_count() - 1)
-        buf.scroll_offset = (int)buf.line_count() - 1;
+    int wheel_step = std::max(1, std::min(5, visible_rows / 6));
+    int current_visible = 0;
+    for (int line = 0; line < (int)buf.line_count() &&
+                       line < buf.scroll_offset;
+         line++) {
+      if (!Folding::is_line_hidden(buf.fold_ranges, line)) {
+        current_visible++;
+      }
+    }
+    int target_visible = std::min(max_scroll_offset,
+                                  current_visible + wheel_step);
+    int next = buffer_line_for_visible_index(buf, target_visible);
+    if (next != buf.scroll_offset) {
+      buf.scroll_offset = next;
       needs_redraw = true;
     }
     return;
@@ -252,6 +537,7 @@ bool Editor::open_context_menu_for_mouse(int x, int y) {
   context_menu_target_buffer = -1;
   context_menu_target_pane = -1;
   context_menu_target_terminal = -1;
+  context_menu_target_line = -1;
   context_menu_target_path.clear();
   context_menu_target_is_dir = false;
 
@@ -306,7 +592,8 @@ bool Editor::open_context_menu_for_mouse(int x, int y) {
     }
     int content_bottom =
         terminal.get_height() - status_height - reserved_terminal_h;
-    if (x < sidebar_width && y >= tab_height && y < content_bottom) {
+    int sidebar_w = effective_sidebar_width();
+    if (x < sidebar_w && y >= tab_height && y < content_bottom) {
       focus_state = FOCUS_SIDEBAR;
       std::vector<FileNode *> flat;
       flatten_nodes_for_mouse(file_tree, flat);
@@ -325,11 +612,16 @@ bool Editor::open_context_menu_for_mouse(int x, int y) {
       bool has_target = !context_menu_target_path.empty();
       std::string open_label =
           node && node->is_dir ? (node->expanded ? "Collapse" : "Expand") : "Open";
+      bool git_target = has_target && has_git_repo();
       std::vector<ContextMenuItem> items = {
           {open_label, CONTEXT_ACTION_SIDEBAR_OPEN, node != nullptr},
           {"New File", CONTEXT_ACTION_SIDEBAR_NEW_FILE, has_target},
           {"New Folder", CONTEXT_ACTION_SIDEBAR_NEW_FOLDER, has_target},
           {"Rename", CONTEXT_ACTION_SIDEBAR_RENAME, node != nullptr},
+          {"Git Stage", CONTEXT_ACTION_GIT_STAGE, git_target},
+          {"Git Unstage", CONTEXT_ACTION_GIT_UNSTAGE, git_target},
+          {"Git Diff", CONTEXT_ACTION_GIT_DIFF, git_target},
+          {"Git Diff Staged", CONTEXT_ACTION_GIT_DIFF_STAGED, git_target},
           {"Refresh", CONTEXT_ACTION_SIDEBAR_REFRESH, true},
           {"Copy Path", CONTEXT_ACTION_SIDEBAR_COPY_PATH, has_target},
       };
@@ -380,13 +672,14 @@ bool Editor::open_context_menu_for_mouse(int x, int y) {
     }
   }
 
-  const int line_num_width = 7;
+  const int line_num_width = 8;
   const int code_start_x = pane.x + 1 + line_num_width;
   const int content_top = pane.y + tab_height;
   const int visible_rows = std::max(1, pane.h - tab_height - 1);
   if (y >= content_top && y < content_top + visible_rows) {
     int rel_y = std::clamp(y - content_top, 0, visible_rows - 1);
-    int click_y = rel_y + buf.scroll_offset;
+    refresh_folds(buf);
+    int click_y = buffer_line_for_visible_row(buf, buf.scroll_offset, rel_y);
     if (click_y >= 0 && click_y < (int)buf.line_count()) {
       const std::string &clicked_line = buf.line(click_y);
       int rel_visual_x = std::max(0, x - code_start_x);
@@ -403,11 +696,15 @@ bool Editor::open_context_menu_for_mouse(int x, int y) {
         ensure_cursor_visible();
       }
       context_menu_target_buffer = pane.buffer_id;
+      context_menu_target_line = click_y;
       std::vector<ContextMenuItem> items = {
           {"Copy", CONTEXT_ACTION_COPY, true},
           {"Cut", CONTEXT_ACTION_CUT, true},
           {"Paste", CONTEXT_ACTION_PASTE, !clipboard.empty()},
       };
+      if (Folding::fold_at_or_before_line(buf.fold_ranges, click_y) >= 0) {
+        items.push_back({"Toggle Fold", CONTEXT_ACTION_TOGGLE_FOLD, true});
+      }
       focus_state = FOCUS_EDITOR;
       open_context_menu(x, y, CONTEXT_MENU_EDITOR, items);
       return true;
@@ -415,6 +712,93 @@ bool Editor::open_context_menu_for_mouse(int x, int y) {
   }
 
   return false;
+}
+
+bool Editor::handle_menu_bar_mouse(int x, int y, bool is_click,
+                                   bool is_motion) {
+  if (!ui) {
+    return false;
+  }
+
+  auto hit_menu_label = [&](int mx) -> int {
+    for (const auto &segment : menu_bar_segments) {
+      if (mx >= segment.x && mx < segment.end_x) {
+        return segment.menu_index;
+      }
+    }
+    return -1;
+  };
+
+  if (y == 0) {
+    int hit = hit_menu_label(x);
+    if (hit >= 0) {
+      if (is_click) {
+        if (show_menu_bar_dropdown && menu_bar_active == hit) {
+          close_menu_bar();
+        } else {
+          open_menu_bar(hit);
+        }
+      } else if (is_motion && show_menu_bar_dropdown &&
+                 menu_bar_active != hit) {
+        open_menu_bar(hit);
+      }
+      return true;
+    }
+    if (is_click && show_menu_bar_dropdown) {
+      close_menu_bar();
+      return true;
+    }
+    return y == 0;
+  }
+
+  if (!show_menu_bar_dropdown) {
+    return false;
+  }
+
+  std::vector<MenuBarMenu> menus = build_menu_bar_model();
+  if (menu_bar_active < 0 || menu_bar_active >= (int)menus.size()) {
+    close_menu_bar();
+    return true;
+  }
+
+  const auto &menu = menus[menu_bar_active];
+  int label_x = 0;
+  for (const auto &segment : menu_bar_segments) {
+    if (segment.menu_index == menu_bar_active) {
+      label_x = segment.x;
+      break;
+    }
+  }
+  int max_label = 0;
+  for (const auto &item : menu.items) {
+    max_label = std::max(max_label, (int)item.label.size());
+  }
+  int menu_w = std::max(18, max_label + 4);
+  int menu_h = std::min((int)menu.items.size() + 2,
+                        std::max(1, ui->get_height() - 1 - status_height));
+  int menu_x =
+      std::clamp(label_x, 0, std::max(0, ui->get_render_width() - menu_w));
+  int menu_y = 1;
+
+  bool inside = x >= menu_x && x < menu_x + menu_w && y >= menu_y &&
+                y < menu_y + menu_h;
+  if (!inside) {
+    if (is_click) {
+      close_menu_bar();
+      return true;
+    }
+    return false;
+  }
+
+  int row = y - menu_y - 1;
+  if (row >= 0 && row < (int)menu.items.size() && menu.items[row].enabled) {
+    menu_bar_selected = row;
+    needs_redraw = true;
+    if (is_click) {
+      execute_menu_bar_item(menu_bar_active, row);
+    }
+  }
+  return true;
 }
 
 void Editor::handle_mouse(void *event_ptr) {
@@ -430,15 +814,52 @@ void Editor::handle_mouse(void *event_ptr) {
   bool is_click = (bstate == 1);
   bool is_click_release = (bstate == 2);
   bool is_right_click = (bstate == 3);
+  bool is_motion = (bstate == 32);
   bool is_primary_click = is_click || is_click_release;
 
-  if (show_context_menu && is_click) {
-    if (handle_context_menu_mouse(event->x, event->y, true)) {
+  if (is_click || is_click_release || is_right_click || is_motion) {
+    if (!is_motion || mouse_selecting || mouse_drag_started) {
+      cancel_lsp_mouse_hover();
+    }
+    if (!is_motion || mouse_selecting || mouse_drag_started) {
+      clear_debugger_breakpoint_hover();
+    }
+  }
+
+  if ((is_click || is_motion || is_right_click) &&
+      handle_menu_bar_mouse(event->x, event->y, is_click, is_motion)) {
+    if (is_motion) {
+      clear_debugger_breakpoint_hover();
+    }
+    return;
+  }
+
+  if (show_context_menu && (is_click || is_motion)) {
+    if (handle_context_menu_mouse(event->x, event->y, is_click)) {
+      if (is_motion) {
+        clear_debugger_breakpoint_hover();
+      }
+      return;
+    }
+    if (is_motion) {
+      clear_debugger_breakpoint_hover();
       return;
     }
   }
 
   if (is_right_click) {
+    if (right_panel_resize_dragging) {
+      end_right_panel_resize_drag();
+      return;
+    }
+    if (sidebar_resize_dragging) {
+      end_sidebar_resize_drag();
+      return;
+    }
+    if (scrollbar_dragging) {
+      scrollbar_dragging = false;
+      scrollbar_drag_pane = -1;
+    }
     if (mouse_selecting) {
       mouse_selecting = false;
       mouse_drag_started = false;
@@ -458,6 +879,87 @@ void Editor::handle_mouse(void *event_ptr) {
       end_pane_resize_drag();
       return;
     }
+    return;
+  }
+
+  if (right_panel_resize_dragging) {
+    if (is_motion || is_click) {
+      update_right_panel_resize_drag(event->x);
+      return;
+    }
+    if (is_click_release) {
+      end_right_panel_resize_drag();
+      return;
+    }
+    return;
+  }
+
+  if (sidebar_resize_dragging) {
+    if (is_motion || is_click) {
+      update_sidebar_resize_drag(event->x);
+      return;
+    }
+    if (is_click_release) {
+      end_sidebar_resize_drag();
+      return;
+    }
+    return;
+  }
+
+  if (scrollbar_dragging) {
+    if (is_click_release) {
+      scrollbar_dragging = false;
+      scrollbar_drag_pane = -1;
+      needs_redraw = true;
+      return;
+    }
+    if (is_motion || is_click) {
+      if (scrollbar_drag_pane >= 0 &&
+          scrollbar_drag_pane < (int)panes.size()) {
+        auto &drag_pane = panes[scrollbar_drag_pane];
+        auto &drag_buf = get_buffer(drag_pane.buffer_id);
+        const int travel =
+            std::max(1, scrollbar_drag_track_h - scrollbar_drag_thumb_h);
+        const int delta_y = event->y - scrollbar_drag_start_y;
+        const int scaled = delta_y * scrollbar_drag_max_scroll;
+        const int scroll_delta =
+            scaled >= 0 ? (scaled + travel / 2) / travel
+                        : (scaled - travel / 2) / travel;
+        int start_visible = 0;
+        for (int line = 0; line < (int)drag_buf.line_count() &&
+                           line < scrollbar_drag_start_scroll;
+             line++) {
+          if (!Folding::is_line_hidden(drag_buf.fold_ranges, line)) {
+            start_visible++;
+          }
+        }
+        int visible_target =
+            std::clamp(start_visible + scroll_delta, 0,
+                       scrollbar_drag_max_scroll);
+        drag_buf.scroll_offset =
+            buffer_line_for_visible_index(drag_buf, visible_target);
+        current_pane = scrollbar_drag_pane;
+        current_buffer = drag_pane.buffer_id;
+        for (int i = 0; i < (int)panes.size(); i++) {
+          panes[i].active = (i == current_pane);
+        }
+        focus_state = FOCUS_EDITOR;
+        needs_redraw = true;
+      }
+      return;
+    }
+  }
+
+  if (is_click && begin_sidebar_resize_drag(event->x, event->y)) {
+    return;
+  }
+
+  if (is_click && begin_right_panel_resize_drag(event->x, event->y)) {
+    return;
+  }
+
+  if ((is_click || is_click_release || is_motion) &&
+      handle_debugger_mouse(event->x, event->y, is_click)) {
     return;
   }
 
@@ -482,7 +984,8 @@ void Editor::handle_mouse(void *event_ptr) {
     }
     int content_bottom =
         terminal.get_height() - status_height - reserved_terminal_h;
-    if (event->x < sidebar_width && event->y >= tab_height &&
+    int sidebar_w = effective_sidebar_width();
+    if (event->x < sidebar_w && event->y >= tab_height &&
         event->y < content_bottom) {
       focus_state = FOCUS_SIDEBAR;
       long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -530,6 +1033,37 @@ void Editor::handle_mouse(void *event_ptr) {
 
   auto &pane = get_pane(current_pane);
   auto &buf = get_buffer(pane.buffer_id);
+  refresh_folds(buf);
+
+  if (is_click) {
+    ScrollbarGeometry scrollbar =
+        scrollbar_geometry_for(pane, buf, tab_height, show_minimap,
+                               minimap_width);
+    if (scrollbar.visible && event->x == scrollbar.x &&
+        event->y >= scrollbar.y && event->y < scrollbar.y + scrollbar.h) {
+      if (event->y < scrollbar.thumb_y ||
+          event->y >= scrollbar.thumb_y + scrollbar.thumb_h) {
+        buf.scroll_offset = buffer_line_for_visible_index(
+            buf, scrollbar_scroll_for_y(scrollbar, event->y));
+        scrollbar =
+            scrollbar_geometry_for(pane, buf, tab_height, show_minimap,
+                                   minimap_width);
+      }
+      scrollbar_dragging = true;
+      scrollbar_drag_pane = current_pane;
+      scrollbar_drag_start_y = event->y;
+      scrollbar_drag_start_scroll = buf.scroll_offset;
+      scrollbar_drag_track_y = scrollbar.y;
+      scrollbar_drag_track_h = scrollbar.h;
+      scrollbar_drag_thumb_h = scrollbar.thumb_h;
+      scrollbar_drag_max_scroll = scrollbar.max_scroll;
+      focus_state = FOCUS_EDITOR;
+      mouse_selecting = false;
+      mouse_drag_started = false;
+      needs_redraw = true;
+      return;
+    }
+  }
 
   if (is_click && event->y == pane.y && !buffers.empty()) {
     int draw_w = std::max(1, pane.w);
@@ -540,6 +1074,23 @@ void Editor::handle_mouse(void *event_ptr) {
     int tabs_w = std::max(1, draw_w - 2);
     if (event->x >= tabs_x && event->x < tabs_x + tabs_w) {
       FileTabLayout tabs = build_file_tab_layout(pane, draw_w);
+      int page = std::max(1, (int)tabs.segments.size());
+      if (tabs.scroll_left_x >= 0 && event->x >= tabs.scroll_left_x &&
+          event->x < tabs.scroll_left_end_x) {
+        if (scroll_local_tabs(pane, -page)) {
+          needs_redraw = true;
+        }
+        focus_state = FOCUS_EDITOR;
+        return;
+      }
+      if (tabs.scroll_right_x >= 0 && event->x >= tabs.scroll_right_x &&
+          event->x < tabs.scroll_right_end_x) {
+        if (scroll_local_tabs(pane, page)) {
+          needs_redraw = true;
+        }
+        focus_state = FOCUS_EDITOR;
+        return;
+      }
       for (const auto &tab : tabs.segments) {
         if (event->x == tab.close_x) {
           close_buffer_at(tab.buffer_id);
@@ -549,12 +1100,7 @@ void Editor::handle_mouse(void *event_ptr) {
         }
 
         if (event->x >= tab.x && event->x < tab.close_x) {
-          pane.buffer_id = tab.buffer_id;
-          current_buffer = tab.buffer_id;
-          if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(),
-                        tab.buffer_id) == pane.tab_buffer_ids.end()) {
-            pane.tab_buffer_ids.push_back(tab.buffer_id);
-          }
+          switch_to_local_tab(tab.tab_index);
           focus_state = FOCUS_EDITOR;
           needs_redraw = true;
           return;
@@ -566,20 +1112,21 @@ void Editor::handle_mouse(void *event_ptr) {
   if (show_minimap && is_click) {
     if (event->x >= pane.x + pane.w - minimap_width &&
         event->x < pane.x + pane.w) {
-      if (event->y >= pane.y + tab_height && event->y < pane.y + pane.h) {
+      int h = std::max(1, pane.h - tab_height - 1);
+      if (event->y >= pane.y + tab_height &&
+          event->y < pane.y + tab_height + h) {
         int rel_y = event->y - (pane.y + tab_height);
-        int h = pane.h - tab_height;
-        int total_lines = buf.line_count();
+        refresh_folds(buf);
+        int total_lines =
+            Folding::visible_line_count(buf.fold_ranges, (int)buf.line_count());
         if (total_lines > 0) {
           float ratio = (float)h / total_lines;
           if (ratio > 1.0f)
             ratio = 1.0f;
-          int target_line = (int)(rel_y / ratio);
-          buf.scroll_offset = target_line;
-          if (buf.scroll_offset < 0)
-            buf.scroll_offset = 0;
-          if (buf.scroll_offset > (int)buf.line_count() - 1)
-            buf.scroll_offset = (int)buf.line_count() - 1;
+          int target_visible = (int)(rel_y / ratio);
+          int max_scroll_offset = std::max(0, total_lines - h);
+          target_visible = std::clamp(target_visible, 0, max_scroll_offset);
+          buf.scroll_offset = buffer_line_for_visible_index(buf, target_visible);
           needs_redraw = true;
           return;
         }
@@ -592,13 +1139,17 @@ void Editor::handle_mouse(void *event_ptr) {
   bool inside_pane = (event->x >= pane.x && event->x < pane.x + pane.w &&
                       event->y >= pane.y && event->y < pane.y + pane.h);
 
-  if (!inside_pane && !mouse_selecting)
+  if (!inside_pane && !mouse_selecting) {
+    if (is_motion) {
+      clear_debugger_breakpoint_hover();
+    }
     return;
+  }
 
   if (inside_pane && is_click)
     focus_state = FOCUS_EDITOR;
 
-  const int line_num_width = 7;
+  const int line_num_width = 8;
   const int code_start_x = pane.x + 1 + line_num_width;
   const int content_top = pane.y + tab_height;
   const int content_bottom = pane.y + pane.h - 1;
@@ -615,29 +1166,60 @@ void Editor::handle_mouse(void *event_ptr) {
     rel_visual_x = 0;
   int visible_rows = std::max(1, pane.h - tab_height - 1);
   int max_scroll_offset =
-      std::max(0, (int)buf.line_count() - visible_rows);
+      std::max(0, Folding::visible_line_count(buf.fold_ranges,
+                                              (int)buf.line_count()) -
+                      visible_rows);
 
   if (bstate == 32 && mouse_selecting) {
     if (raw_rel_y < 0) {
       int scroll_by = std::min(buf.scroll_offset, std::max(1, -raw_rel_y));
       buf.scroll_offset -= scroll_by;
     } else if (raw_rel_y >= visible_rows) {
-      int remaining = max_scroll_offset - buf.scroll_offset;
+      int current_visible = 0;
+      for (int line = 0; line < (int)buf.line_count() &&
+                         line < buf.scroll_offset;
+           line++) {
+        if (!Folding::is_line_hidden(buf.fold_ranges, line)) {
+          current_visible++;
+        }
+      }
       int scroll_by =
-          std::min(remaining, std::max(1, raw_rel_y - visible_rows + 1));
-      buf.scroll_offset += scroll_by;
+          std::min(max_scroll_offset - current_visible,
+                   std::max(1, raw_rel_y - visible_rows + 1));
+      buf.scroll_offset =
+          buffer_line_for_visible_index(buf, current_visible + scroll_by);
     }
   }
 
   rel_y = std::clamp(rel_y, 0, visible_rows - 1);
 
-  int click_y = rel_y + buf.scroll_offset;
+  int click_y = buffer_line_for_visible_row(buf, buf.scroll_offset, rel_y);
   if (click_y < 0)
     click_y = 0;
   if (click_y >= (int)buf.line_count())
     click_y = buf.line_count() - 1;
   if (click_y < 0)
     return;
+  if (is_motion && !mouse_selecting && !mouse_drag_started && inside_pane &&
+      event->y >= content_top && event->y < content_bottom &&
+      event->x == pane.x + 1 && !buf.filepath.empty()) {
+    update_debugger_breakpoint_hover(current_pane, pane.buffer_id, click_y);
+    cancel_lsp_mouse_hover();
+    return;
+  } else if (is_motion) {
+    clear_debugger_breakpoint_hover();
+  }
+  if (is_click && event->x == pane.x + 1 && !buf.filepath.empty() &&
+      toggle_debugger_breakpoint(buf.filepath, click_y)) {
+    clear_debugger_breakpoint_hover();
+    focus_state = FOCUS_EDITOR;
+    return;
+  }
+  if (is_click && event->x == pane.x + 2 &&
+      toggle_fold_at_line(buf, click_y)) {
+    focus_state = FOCUS_EDITOR;
+    return;
+  }
   const std::string &clicked_line = buf.line(click_y);
   int line_len = clicked_line.length();
   int start_visual = logical_to_visual_col(clicked_line, buf.scroll_x, tab_size);
@@ -652,19 +1234,9 @@ void Editor::handle_mouse(void *event_ptr) {
     Cursor current_end = current_pos;
     const std::string &line = buf.line(current_pos.y);
     if (!line.empty()) {
-      int pivot = std::min(current_pos.x, (int)line.length() - 1);
-      if (pivot >= 0) {
-        int cls = classify_char((unsigned char)line[pivot]);
-        int start = pivot;
-        int end = pivot + 1;
-        while (start > 0 &&
-               classify_char((unsigned char)line[start - 1]) == cls) {
-          start--;
-        }
-        while (end < (int)line.length() &&
-               classify_char((unsigned char)line[end]) == cls) {
-          end++;
-        }
+      int start = 0;
+      int end = 0;
+      if (find_smart_token_span(line, current_pos.x, start, end)) {
         current_start = {start, current_pos.y};
         current_end = {end, current_pos.y};
       }
@@ -680,8 +1252,7 @@ void Editor::handle_mouse(void *event_ptr) {
       buf.cursor = current_end;
     }
     buf.selection.active =
-        !(buf.selection.start.x == buf.selection.end.x &&
-          buf.selection.start.y == buf.selection.end.y);
+        true;
   };
 
   auto set_line_selection = [&](const Cursor &anchor_start,
@@ -713,41 +1284,45 @@ void Editor::handle_mouse(void *event_ptr) {
       return false;
 
     int pivot = std::clamp(x, 0, (int)line.size() - 1);
-
-    auto expand_span = [&](int p, int &s, int &e) -> bool {
-      if (p < 0 || p >= (int)line.size())
-        return false;
-      int cls = classify_char((unsigned char)line[p]);
-      if (cls == 0)
-        return false; // skip whitespace runs for smart word select
-      s = p;
-      e = p + 1;
-      while (s > 0 && classify_char((unsigned char)line[s - 1]) == cls)
-        s--;
-      while (e < (int)line.size() &&
-             classify_char((unsigned char)line[e]) == cls)
-        e++;
+    if (find_smart_token_span(line, pivot, start, end))
       return true;
-    };
-
-    if (expand_span(pivot, start, end))
+    if (pivot + 1 < (int)line.size() &&
+        find_smart_token_span(line, pivot + 1, start, end))
       return true;
-    if (pivot + 1 < (int)line.size() && expand_span(pivot + 1, start, end))
-      return true;
-    if (pivot - 1 >= 0 && expand_span(pivot - 1, start, end))
+    if (pivot - 1 >= 0 && find_smart_token_span(line, pivot - 1, start, end))
       return true;
 
     for (int d = 2; d < (int)line.size(); d++) {
       int right = pivot + d;
       int left = pivot - d;
-      if (right < (int)line.size() && expand_span(right, start, end))
+      if (right < (int)line.size() &&
+          find_smart_token_span(line, right, start, end))
         return true;
-      if (left >= 0 && expand_span(left, start, end))
+      if (left >= 0 && find_smart_token_span(line, left, start, end))
         return true;
       if (right >= (int)line.size() && left < 0)
         break;
     }
 
+    return false;
+  };
+
+  auto word_span_at_exact = [&](int line_y, int x, int &start,
+                                int &end) -> bool {
+    if (line_y < 0 || line_y >= (int)buf.line_count())
+      return false;
+    const std::string &line = buf.line(line_y);
+    if (line.empty())
+      return false;
+    int pivot = std::clamp(x, 0, std::max(0, (int)line.size() - 1));
+    if (!find_smart_token_span(line, pivot, start, end))
+      return false;
+    if (x < start || x >= end)
+      return false;
+    for (int i = start; i < end && i < (int)line.size(); i++) {
+      if (is_word_char((unsigned char)line[i]))
+        return true;
+    }
     return false;
   };
 
@@ -804,6 +1379,42 @@ void Editor::handle_mouse(void *event_ptr) {
     return false;
   };
 
+  int hover_token_start = -1;
+  int hover_token_end = -1;
+  if (is_motion && !mouse_selecting && !mouse_drag_started && inside_pane &&
+      event->y >= content_top && event->y < content_bottom &&
+      event->x >= code_start_x &&
+      word_span_at_exact(click_y, click_x, hover_token_start,
+                         hover_token_end)) {
+    request_lsp_hover_at(current_pane, pane.buffer_id, {click_x, click_y},
+                         hover_token_start, hover_token_end, event->x,
+                         event->y);
+    return;
+  } else if (is_motion && !mouse_selecting && !mouse_drag_started) {
+    cancel_lsp_mouse_hover();
+    return;
+  }
+
+  if (is_click && event->ctrl && inside_pane && event->y >= content_top &&
+      event->y < content_bottom && event->x >= code_start_x) {
+    int token_start = -1;
+    int token_end = -1;
+    if (word_span_at_exact(click_y, click_x, token_start, token_end)) {
+      focus_state = FOCUS_EDITOR;
+      buf.cursor.x = std::clamp(click_x, token_start, token_end);
+      buf.cursor.y = click_y;
+      buf.preferred_x = buf.cursor.x;
+      buf.selection.start = buf.cursor;
+      buf.selection.end = buf.cursor;
+      buf.selection.active = false;
+      mouse_selecting = false;
+      mouse_drag_started = false;
+      request_lsp_definition();
+      needs_redraw = true;
+      return;
+    }
+  }
+
   if (bstate == 1) {
     focus_state = FOCUS_EDITOR;
     idle_frame_count = 0;
@@ -850,7 +1461,7 @@ void Editor::handle_mouse(void *event_ptr) {
         mouse_anchor_end = {0, click_y};
         buf.selection.start = mouse_start;
         buf.selection.end = mouse_anchor_end;
-        buf.selection.active = false;
+        buf.selection.active = true;
         buf.cursor.x = 0;
         buf.cursor.y = click_y;
         buf.preferred_x = buf.cursor.x;
@@ -943,6 +1554,7 @@ void Editor::handle_mouse(void *event_ptr) {
           buf.selection.start = mouse_start;
           buf.selection.end = mouse_anchor_end;
           buf.selection.active =
+              mouse_selection_mode == MOUSE_SELECT_LINE ||
               !(buf.selection.start.x == buf.selection.end.x &&
                 buf.selection.start.y == buf.selection.end.y);
         }
