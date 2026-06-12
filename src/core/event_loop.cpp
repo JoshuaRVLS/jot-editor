@@ -241,6 +241,7 @@ void Editor::handle_terminal_event(const Event &ev) {
   }
 
   if (ev.type == EVENT_KEY) {
+    cancel_lsp_mouse_hover();
     int ch = ev.key.key;
     bool is_ctrl = ev.key.ctrl;
     bool is_shift = ev.key.shift;
@@ -270,7 +271,9 @@ void Editor::handle_terminal_event(const Event &ev) {
       ch = ch + 96;
     }
 
-    if (show_context_menu) {
+    if (show_menu_bar_dropdown) {
+      handle_menu_bar_input(ch);
+    } else if (show_context_menu) {
       handle_context_menu_input(ch);
     } else if (show_command_palette) {
       handle_command_palette(ch);
@@ -296,16 +299,22 @@ void Editor::handle_terminal_event(const Event &ev) {
       struct {
         int x, y;
         int bstate;
+        bool ctrl;
+        bool shift;
+        bool alt;
       } mevent;
       mevent.x = ev.mouse.x;
       mevent.y = ev.mouse.y;
+      mevent.ctrl = ev.mouse.ctrl;
+      mevent.shift = ev.mouse.shift;
+      mevent.alt = ev.mouse.alt;
       int bstate = 0;
 
       int button_code = ev.mouse.button & 0x03;
       bool is_motion = (ev.mouse.button & 0x20) != 0;
 
       if (is_motion) {
-        if (button_code == 0) {
+        if (show_context_menu || button_code == 0 || button_code == 3) {
           bstate = 32;
         } else {
           bstate = 0;
@@ -361,6 +370,8 @@ void Editor::run() {
     ui->resize(terminal.get_width(), terminal.get_height());
     update_pane_layout();
   }
+  terminal.enable_mouse_hover();
+  lsp_mouse_hover_enabled = true;
 
   needs_redraw = true;
 
@@ -385,6 +396,7 @@ void Editor::run() {
 
   int render_ms = std::max(1, 1000 / std::max(1, render_fps));
   event_loop_.set_timer(render_ms, true, [this] { render_frame(); });
+  event_loop_.set_timer(50, true, [this] { maybe_fire_lsp_mouse_hover(); });
 
   // JOT_SAFE_MODE disables every non-essential background timer so
   // we can isolate native crashes from periodic work. The editor
@@ -414,6 +426,9 @@ void Editor::run() {
   }
   if (!safe_mode) {
     event_loop_.set_timer(50, true, [this] { poll_lsp_clients(); });
+  }
+  if (!safe_mode) {
+    event_loop_.set_timer(50, true, [this] { poll_debugger_sessions(); });
   }
   if (!safe_mode) {
     event_loop_.set_timer(100, true, [this] {
