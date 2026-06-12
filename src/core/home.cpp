@@ -13,9 +13,10 @@ enum HomeAction {
   HOME_ACTION_OPEN_RECENT_PROMPT = 4,
   HOME_ACTION_COMMAND_PALETTE = 5,
   HOME_ACTION_THEME_CHOOSER = 6,
-  HOME_ACTION_TOGGLE_SIDEBAR = 7,
-  HOME_ACTION_CONTINUE_EDITOR = 8,
-  HOME_ACTION_QUIT = 9
+  HOME_ACTION_OPEN_PATH_PROMPT = 7,
+  HOME_ACTION_RESUME = 8,
+  HOME_ACTION_CONTINUE_EDITOR = 9,
+  HOME_ACTION_QUIT = 10
 };
 
 struct HomeMenuRenderItem {
@@ -66,6 +67,32 @@ std::string shorten_tail(const std::string &text, int max_len) {
   }
   return "..." + text.substr(text.size() - (size_t)(max_len - 3));
 }
+
+std::string ellipsize_right(const std::string &text, int max_len) {
+  if (max_len <= 0) {
+    return "";
+  }
+  if ((int)text.size() <= max_len) {
+    return text;
+  }
+  if (max_len <= 3) {
+    return text.substr(0, (size_t)max_len);
+  }
+  return text.substr(0, (size_t)(max_len - 3)) + "...";
+}
+
+std::string workspace_icon() { return " "; }
+
+std::string display_parent(const std::string &path) {
+  std::error_code ec;
+  std::filesystem::path p(path);
+  std::filesystem::path parent = p.parent_path();
+  if (parent.empty()) {
+    return path;
+  }
+  std::filesystem::path normalized = std::filesystem::weakly_canonical(parent, ec);
+  return ec ? parent.string() : normalized.string();
+}
 } // namespace
 
 void Editor::render_home_menu() {
@@ -80,147 +107,166 @@ void Editor::render_home_menu() {
   UIRect full = {0, 0, screen_w, usable_h};
   ui->fill_rect(full, " ", theme.fg_default, theme.bg_default);
 
-  const int panel_w = std::max(48, std::min(screen_w - 4, 96));
-  const int panel_h = std::max(18, std::min(usable_h - 2, 28));
-  const int panel_x = std::max(1, (screen_w - panel_w) / 2);
-  const int panel_y = std::max(0, (usable_h - panel_h) / 2);
+  const int content_w = std::max(1, std::min(screen_w - 4, 118));
+  const int content_x = std::max(1, (screen_w - content_w) / 2);
+  const int content_y = std::max(0, std::min(2, usable_h - 1));
+  const int content_h = std::max(1, usable_h - content_y);
 
-  home_menu_panel_x = panel_x;
-  home_menu_panel_y = panel_y;
-  home_menu_panel_w = panel_w;
-  home_menu_panel_h = panel_h;
+  home_menu_panel_x = content_x;
+  home_menu_panel_y = content_y;
+  home_menu_panel_w = content_w;
+  home_menu_panel_h = content_h;
 
-  UIRect panel = {panel_x, panel_y, panel_w, panel_h};
-  ui->fill_rect(panel, " ", theme.fg_command, theme.bg_command);
-  ui->draw_border(panel, theme.fg_panel_border, theme.bg_command);
+  ui->draw_text(content_x, content_y, "JOT", theme.fg_keyword,
+                theme.bg_default, true);
+  ui->draw_text(content_x + 5, content_y, "Developer workspace",
+                theme.fg_comment, theme.bg_default);
 
-  std::vector<std::string> banner = {
-      "      ██╗ ██████╗ ████████╗",
-      "      ██║██╔═══██╗╚══██╔══╝",
-      "      ██║██║   ██║   ██║   ",
-      " ██   ██║██║   ██║   ██║   ",
-      " ╚█████╔╝╚██████╔╝   ██║   ",
-      "  ╚════╝  ╚═════╝    ╚═╝   "};
-
-  std::vector<int> banner_colors = {theme.fg_keyword, theme.fg_function,
-                                    theme.fg_type,    theme.fg_string,
-                                    theme.fg_number,  theme.fg_keyword};
-
-  int banner_y = panel_y + 1;
-  for (int i = 0; i < (int)banner.size(); i++) {
-    int bx = panel_x + std::max(1, (panel_w - (int)banner[i].size()) / 2);
-    ui->draw_text(bx, banner_y + i, banner[i], banner_colors[i % banner_colors.size()],
-                  theme.bg_command, true);
+  std::string context = "No recent workspace yet";
+  if (!recent_workspaces.empty()) {
+    context = "Last folder  " + get_filename(recent_workspaces.front());
+  } else if (!recent_files.empty()) {
+    context = "Last file  " + get_filename(recent_files.front());
   }
+  ui->draw_text(content_x, content_y + 1,
+                ellipsize_right(context, std::max(0, content_w - 2)),
+                theme.fg_default, theme.bg_default);
 
-  std::string title = "󰚩  JOT Home";
-  int title_x = panel_x + std::max(1, (panel_w - (int)title.size()) / 2);
-  ui->draw_text(title_x, banner_y + (int)banner.size(), title, theme.fg_status,
-                theme.bg_command, true);
-
-  int row_x = panel_x + 2;
-  int row_w = panel_w - 4;
-  int row_y = banner_y + (int)banner.size() + 2;
-  int row_limit = panel_y + panel_h - 2;
-
-  ui->draw_text(row_x, row_y, "󰈔  Recent Files", theme.fg_sidebar_directory,
-                theme.bg_command, true);
-  row_y++;
-
-  std::vector<HomeMenuRenderItem> items;
-  int recent_show = std::min(8, (int)recent_files.size());
-  for (int i = 0; i < recent_show; i++) {
-    HomeMenuRenderItem item;
-    item.action = HOME_ACTION_OPEN_RECENT;
-    item.recent_index = i;
-    item.label = icon_for_path(recent_files[i]) + " " + std::to_string(i + 1) +
-                 ". " + get_filename(recent_files[i]);
-    item.secondary = recent_files[i];
-    items.push_back(std::move(item));
-  }
-
-  if (row_y < row_limit) {
-    row_y++;
-  }
-  if (row_y < row_limit) {
-    ui->draw_text(row_x, row_y, "  Recent Workspaces",
-                  theme.fg_sidebar_directory, theme.bg_command, true);
-    row_y++;
-  }
-
-  int workspace_show = std::min(6, (int)recent_workspaces.size());
-  for (int i = 0; i < workspace_show; i++) {
-    HomeMenuRenderItem item;
-    item.action = HOME_ACTION_OPEN_RECENT_WORKSPACE;
-    item.recent_workspace_index = i;
-    item.label = "  " + std::to_string(i + 1) + ". " +
-                 get_filename(recent_workspaces[i]);
-    item.secondary = recent_workspaces[i];
-    items.push_back(std::move(item));
-  }
-
-  items.push_back({HOME_ACTION_NEW_FILE, -1, -1, "  New File", ""});
-  items.push_back(
-      {HOME_ACTION_OPEN_RECENT_PROMPT, -1, -1, "󰱼  Open Recent Prompt", ""});
-  items.push_back(
-      {HOME_ACTION_COMMAND_PALETTE, -1, -1, "  Command Palette", ""});
-  items.push_back(
-      {HOME_ACTION_THEME_CHOOSER, -1, -1, "󰔎  Theme Chooser", ""});
-  items.push_back(
-      {HOME_ACTION_TOGGLE_SIDEBAR, -1, -1, "  Toggle Sidebar", ""});
-  items.push_back(
-      {HOME_ACTION_CONTINUE_EDITOR, -1, -1, "󰋖  Continue to Editor", ""});
-  items.push_back({HOME_ACTION_QUIT, -1, -1, "󰩈  Quit JOT", ""});
-
-  if (items.empty()) {
-    home_menu_selected = 0;
-  } else {
-    home_menu_selected = std::clamp(home_menu_selected, 0, (int)items.size() - 1);
-  }
+  const bool two_column = screen_w >= 88 && content_w >= 78;
+  const int gap = two_column ? 4 : 0;
+  const int action_w = two_column ? std::max(24, std::min(34, content_w / 3))
+                                  : content_w;
+  const int recent_w = two_column ? std::max(1, content_w - action_w - gap)
+                                  : content_w;
+  const int action_x = content_x;
+  const int recent_x = two_column ? content_x + action_w + gap : content_x;
+  const int section_y = content_y + 4;
+  const int row_limit = usable_h - 1;
 
   home_menu_entries.clear();
 
-  if (recent_show == 0) {
-    ui->draw_text(row_x + 1, row_y, "󰞋  No recent files yet", theme.fg_comment,
-                  theme.bg_command);
-    row_y++;
-  }
-
-  for (int i = 0; i < (int)items.size() && row_y < row_limit; i++) {
-    bool selected = (i == home_menu_selected);
-    int fg = selected ? theme.fg_selection : theme.fg_default;
-    int bg = selected ? theme.bg_selection : theme.bg_command;
-
-    UIRect row_rect = {row_x, row_y, row_w, 1};
-    ui->fill_rect(row_rect, " ", fg, bg);
-    std::string label = items[i].label;
-    if ((int)label.size() > row_w - 2) {
-      label = label.substr(0, std::max(0, row_w - 5)) + "...";
+  std::vector<HomeMenuRenderItem> items;
+  if (!recent_workspaces.empty() || !recent_files.empty()) {
+    HomeMenuRenderItem resume;
+    resume.action = HOME_ACTION_RESUME;
+    if (!recent_workspaces.empty()) {
+      resume.recent_workspace_index = 0;
+      resume.label = workspace_icon() + std::string("Resume ") +
+                     get_filename(recent_workspaces.front());
+      resume.secondary = recent_workspaces.front();
+    } else {
+      resume.recent_index = 0;
+      resume.label = icon_for_path(recent_files.front()) + " Resume " +
+                     get_filename(recent_files.front());
+      resume.secondary = recent_files.front();
     }
-    ui->draw_text(row_x + 1, row_y, label, fg, bg, selected);
+    items.push_back(std::move(resume));
+  }
+  items.push_back(
+      {HOME_ACTION_OPEN_PATH_PROMPT, -1, -1, "  Open Folder / File", "open "});
+  items.push_back(
+      {HOME_ACTION_OPEN_RECENT_PROMPT, -1, -1, "󰱼  Open Recent", "openrecent "});
+  items.push_back({HOME_ACTION_NEW_FILE, -1, -1, "  New File", ""});
+  items.push_back(
+      {HOME_ACTION_COMMAND_PALETTE, -1, -1, "  Command Palette", ""});
+  items.push_back({HOME_ACTION_THEME_CHOOSER, -1, -1, "󰔎  Theme", ""});
+  items.push_back(
+      {HOME_ACTION_CONTINUE_EDITOR, -1, -1, "󰋖  Continue Editing", ""});
 
-    if (!items[i].secondary.empty() && row_w > 24) {
-      std::string secondary = shorten_tail(items[i].secondary, row_w / 2);
-      int sx = row_x + row_w - (int)secondary.size() - 1;
-      if (sx > row_x + (int)label.size() + 2) {
+  auto draw_section_title = [&](int x, int y, const std::string &title,
+                                int width) {
+    if (y >= row_limit || width <= 0) {
+      return;
+    }
+    ui->draw_text(x, y, ellipsize_right(title, width),
+                  theme.fg_sidebar_directory, theme.bg_default, true);
+  };
+
+  auto draw_home_item = [&](const HomeMenuRenderItem &item, int x, int y,
+                            int width) -> bool {
+    if (y >= row_limit || width <= 0) {
+      return false;
+    }
+    const int entry_index = (int)home_menu_entries.size();
+    bool selected = (entry_index == home_menu_selected);
+    int fg = selected ? theme.fg_selection : theme.fg_default;
+    int bg = selected ? theme.bg_selection : theme.bg_default;
+
+    UIRect row_rect = {x, y, width, 1};
+    ui->fill_rect(row_rect, " ", fg, bg);
+    std::string label = ellipsize_right(item.label, std::max(0, width - 2));
+    ui->draw_text(x + 1, y, label, fg, bg, selected);
+
+    if (!item.secondary.empty() && width > 34) {
+      std::string secondary = shorten_tail(item.secondary, width / 2);
+      int sx = x + width - (int)secondary.size() - 1;
+      if (sx > x + (int)label.size() + 2) {
         int path_fg = selected ? theme.fg_selection : theme.fg_comment;
-        ui->draw_text(sx, row_y, secondary, path_fg, bg);
+        ui->draw_text(sx, y, secondary, path_fg, bg);
       }
     }
 
-    home_menu_entries.push_back({items[i].action, items[i].recent_index,
-                                 items[i].recent_workspace_index, row_x, row_y,
-                                 row_w});
-    row_y++;
+    home_menu_entries.push_back({item.action, item.recent_index,
+                                 item.recent_workspace_index, x, y, width});
+    return true;
+  };
+
+  int action_y = section_y;
+  draw_section_title(action_x, action_y, "Start", action_w);
+  action_y += 2;
+  for (const auto &item : items) {
+    if (draw_home_item(item, action_x, action_y, action_w)) {
+      action_y++;
+    }
   }
 
-  std::string hint =
-      "↑/↓ navigate  •  Enter open  •  1-9 quick recent  •  Esc hide home";
-  if ((int)hint.size() > panel_w - 4) {
-    hint = "Enter open  •  1-9 quick recent  •  Esc hide";
+  auto draw_recent_list = [&](int x, int &y, int width,
+                              const std::string &title, bool workspaces) {
+    draw_section_title(x, y, title, width);
+    y++;
+    const int max_show = workspaces ? std::min(7, (int)recent_workspaces.size())
+                                    : std::min(9, (int)recent_files.size());
+    if (max_show == 0) {
+      if (y < row_limit) {
+        ui->draw_text(x + 1, y, workspaces ? "No recent folders"
+                                           : "No recent files",
+                      theme.fg_comment, theme.bg_default);
+        y++;
+      }
+      return;
+    }
+    for (int i = 0; i < max_show && y < row_limit; i++) {
+      HomeMenuRenderItem recent;
+      if (workspaces) {
+        recent.action = HOME_ACTION_OPEN_RECENT_WORKSPACE;
+        recent.recent_workspace_index = i;
+        recent.label = workspace_icon() + get_filename(recent_workspaces[i]);
+        recent.secondary = display_parent(recent_workspaces[i]);
+      } else {
+        recent.action = HOME_ACTION_OPEN_RECENT;
+        recent.recent_index = i;
+        recent.label = icon_for_path(recent_files[i]) + get_filename(recent_files[i]);
+        recent.secondary = display_parent(recent_files[i]);
+      }
+      if (draw_home_item(recent, x, y, width)) {
+        y++;
+      }
+    }
+  };
+
+  int recent_y = two_column ? section_y : action_y + 1;
+  draw_recent_list(recent_x, recent_y, recent_w, "Recent Folders", true);
+  if (recent_y < row_limit) {
+    recent_y++;
   }
-  ui->draw_text(panel_x + 2, panel_y + panel_h - 2, hint, theme.fg_comment,
-                theme.bg_command);
+  draw_recent_list(recent_x, recent_y, recent_w, "Recent Files", false);
+
+  if (home_menu_entries.empty()) {
+    home_menu_selected = 0;
+  } else {
+    home_menu_selected =
+        std::clamp(home_menu_selected, 0, (int)home_menu_entries.size() - 1);
+  }
 }
 
 bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift,
@@ -270,6 +316,11 @@ bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift,
 
   auto execute_entry = [&](const HomeMenuEntry &entry) -> bool {
     switch (entry.action) {
+    case HOME_ACTION_RESUME:
+      if (entry.recent_workspace_index >= 0) {
+        return open_workspace_by_index(entry.recent_workspace_index);
+      }
+      return open_recent_by_index(entry.recent_index);
     case HOME_ACTION_OPEN_RECENT:
       return open_recent_by_index(entry.recent_index);
     case HOME_ACTION_OPEN_RECENT_WORKSPACE:
@@ -293,6 +344,17 @@ bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift,
       refresh_command_palette();
       needs_redraw = true;
       return true;
+    case HOME_ACTION_OPEN_PATH_PROMPT:
+      show_home_menu = false;
+      show_command_palette = true;
+      command_palette_query = "open ";
+      command_palette_results.clear();
+      command_palette_selected = 0;
+      command_palette_theme_mode = false;
+      command_palette_theme_original.clear();
+      refresh_command_palette();
+      needs_redraw = true;
+      return true;
     case HOME_ACTION_COMMAND_PALETTE:
       show_home_menu = false;
       toggle_command_palette();
@@ -301,11 +363,6 @@ bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift,
     case HOME_ACTION_THEME_CHOOSER:
       show_home_menu = false;
       open_theme_chooser();
-      needs_redraw = true;
-      return true;
-    case HOME_ACTION_TOGGLE_SIDEBAR:
-      show_home_menu = false;
-      toggle_sidebar();
       needs_redraw = true;
       return true;
     case HOME_ACTION_CONTINUE_EDITOR:
@@ -380,7 +437,7 @@ bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift,
     return execute_entry(e);
   }
   if (ch == 's' || ch == 'S') {
-    HomeMenuEntry e = {HOME_ACTION_TOGGLE_SIDEBAR, -1, -1, 0, 0, 0};
+    HomeMenuEntry e = {HOME_ACTION_OPEN_PATH_PROMPT, -1, -1, 0, 0, 0};
     return execute_entry(e);
   }
   if (ch == 'r' || ch == 'R') {
