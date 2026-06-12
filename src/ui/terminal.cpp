@@ -149,6 +149,16 @@ static int csi_final_key_code(char final) {
   return 0;
 }
 
+static void append_mouse_reset(std::string &buffer) {
+  buffer += "\x1b[?1003l"; // any-motion mouse tracking
+  buffer += "\x1b[?1002l"; // button-event mouse tracking
+  buffer += "\x1b[?1000l"; // basic mouse tracking
+  buffer += "\x1b[?1006l"; // SGR mouse protocol
+  buffer += "\x1b[?1015l"; // urxvt mouse protocol
+  buffer += "\x1b[?1004l"; // focus events
+  buffer += "\x1b[?2004l"; // bracketed paste
+}
+
 Terminal::Terminal() : width(80), height(24), poll_timeout_ms(8), raw_mode(false) {}
 
 Terminal::~Terminal() { cleanup(); }
@@ -186,9 +196,11 @@ void Terminal::setup_terminal() {
 }
 
 void Terminal::restore_terminal() {
+  append_mouse_reset(buffer);
   write("\x1b[?25h");
   write("\x1b[?7h"); // re-enable autowrap so the host shell is left normal
   write("\x1b[?1049l");
+  append_mouse_reset(buffer);
   show_cursor();
   reset_color();
   flush();
@@ -504,6 +516,9 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
     event.button = 0;
     event.pressed = false;
     event.released = false;
+    event.ctrl = false;
+    event.shift = false;
+    event.alt = false;
     return;
   }
 
@@ -519,6 +534,9 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
     event.button = 0;
     event.pressed = false;
     event.released = false;
+    event.ctrl = false;
+    event.shift = false;
+    event.alt = false;
     return;
   }
 
@@ -530,11 +548,17 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
       event.button = button;
       event.pressed = false;
       event.released = false;
+      event.ctrl = (button & 16) != 0;
+      event.shift = (button & 4) != 0;
+      event.alt = (button & 8) != 0;
       return;
     }
     event.button = button;
     event.x = x - 1;
     event.y = y - 1;
+    event.ctrl = (button & 16) != 0;
+    event.shift = (button & 4) != 0;
+    event.alt = (button & 8) != 0;
 
     bool is_motion = (button & 0x20) != 0;
     bool is_wheel = (button >= 64 && button <= 67);
@@ -559,6 +583,9 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
     event.button = 0;
     event.pressed = false;
     event.released = false;
+    event.ctrl = false;
+    event.shift = false;
+    event.alt = false;
   }
 }
 
@@ -852,10 +879,19 @@ void Terminal::enable_mouse() {
 }
 
 void Terminal::disable_mouse() {
-  buffer += "\x1b[?1006l";
-  buffer += "\x1b[?1002l";
-  buffer += "\x1b[?1015l";
-  buffer += "\x1b[?1000l";
+  append_mouse_reset(buffer);
+  flush();
+}
+
+void Terminal::enable_mouse_hover() {
+  buffer += "\x1b[?1003h";
+  flush();
+}
+
+void Terminal::disable_mouse_hover() {
+  buffer += "\x1b[?1003l";
+  buffer += "\x1b[?1002h";
+  buffer += "\x1b[?1006h";
   flush();
 }
 
