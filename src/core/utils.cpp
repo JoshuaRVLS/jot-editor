@@ -13,6 +13,7 @@ FileBuffer& Editor::get_buffer(int id) {
         fb.scroll_offset = 0;
         fb.scroll_x = 0;
         fb.modified = false;
+        fb.is_placeholder = true;
         buffers.push_back(std::move(fb));
     }
     return buffers[id >= 0 && id < buffers.size() ? id : 0];
