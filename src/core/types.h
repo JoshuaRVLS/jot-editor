@@ -35,6 +35,13 @@ enum PanelType {
 
 enum EditorMode { MODE_NORMAL, MODE_INSERT, MODE_VISUAL };
 
+enum SyntaxEngine {
+  SYNTAX_ENGINE_UNKNOWN,
+  SYNTAX_ENGINE_NONE,
+  SYNTAX_ENGINE_REGEX,
+  SYNTAX_ENGINE_TREESITTER
+};
+
 struct Theme {
   int fg_default = 7;
   int bg_default = 0;
@@ -154,6 +161,7 @@ struct State {
   int scroll_offset;
   int scroll_x;
   bool modified;
+  bool is_placeholder;
 };
 
 struct SyntaxLineCache {
@@ -161,6 +169,12 @@ struct SyntaxLineCache {
   std::size_t line_hash = 0;
   std::size_t line_length = 0;
   std::vector<std::pair<int, int>> colors;
+};
+
+struct FoldRange {
+  int start_line = 0;
+  int end_line = 0;
+  bool collapsed = false;
 };
 
 struct FileBuffer {
@@ -175,13 +189,17 @@ struct FileBuffer {
   std::string filepath;
   bool modified;
   bool is_preview = false;
+  bool is_placeholder = false;
   std::stack<State> undo_stack;
   std::stack<State> redo_stack;
   std::set<int> bookmarks;
   std::vector<Diagnostic> diagnostics;
+  std::vector<FoldRange> fold_ranges;
   std::string syntax_cache_extension;
   std::size_t syntax_cache_line_count = 0;
   std::unordered_map<int, SyntaxLineCache> syntax_cache;
+  SyntaxEngine syntax_engine = SYNTAX_ENGINE_UNKNOWN;
+  std::string syntax_language_label;
 
 #ifdef JOT_TREESITTER
   TSParser *ts_parser = nullptr;
