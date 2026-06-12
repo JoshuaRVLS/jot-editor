@@ -43,6 +43,12 @@ bool HostCoreAPI::switch_buffer(int index) {
                   index) == pane.tab_buffer_ids.end()) {
       pane.tab_buffer_ids.push_back(index);
     }
+    int draw_w = std::max(1, pane.w);
+    if (editor.show_minimap && draw_w > 20) {
+      draw_w = std::max(1, draw_w - editor.minimap_width);
+    }
+    editor.reveal_local_tab(pane, editor.find_local_tab_index(pane, index),
+                            draw_w);
   }
 
   editor.focus_state = Editor::FOCUS_EDITOR;
@@ -163,7 +169,7 @@ HostLayoutInfo HostRenderAPI::layout() const {
   info.width = editor.terminal.get_width();
   info.height = editor.terminal.get_height();
   info.sidebar_visible = editor.show_sidebar;
-  info.sidebar_width = editor.sidebar_width;
+  info.sidebar_width = editor.effective_sidebar_width();
   info.minimap_visible = editor.show_minimap;
   info.terminal_visible = editor.show_integrated_terminal;
   info.terminal_height = editor.integrated_terminal_height;
