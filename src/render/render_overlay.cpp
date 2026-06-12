@@ -1,5 +1,7 @@
 #include "bracket.h"
 #include "editor.h"
+#include "folding.h"
+#include <cctype>
 #include <cstdio>
 #include <sstream>
 
@@ -82,6 +84,57 @@ std::string completion_kind_icon(int kind, bool use_nerd_icons) {
   }
 }
 
+std::string completion_kind_name(int kind) {
+  switch (kind) {
+  case 2:
+    return "method";
+  case 3:
+    return "function";
+  case 4:
+    return "ctor";
+  case 5:
+    return "field";
+  case 6:
+    return "variable";
+  case 7:
+    return "class";
+  case 8:
+    return "interface";
+  case 9:
+    return "module";
+  case 10:
+    return "property";
+  case 12:
+    return "value";
+  case 14:
+    return "keyword";
+  default:
+    return "symbol";
+  }
+}
+
+std::string one_line_text(const std::string &text) {
+  std::string out;
+  out.reserve(text.size());
+  bool last_space = false;
+  for (char c : text) {
+    unsigned char uc = (unsigned char)c;
+    if (c == '\n' || c == '\r' || c == '\t' || std::isspace(uc)) {
+      if (!last_space && !out.empty()) {
+        out.push_back(' ');
+        last_space = true;
+      }
+      continue;
+    }
+    out.push_back(c);
+    last_space = false;
+  }
+  while (!out.empty() && out.back() == ' ') {
+    out.pop_back();
+  }
+  return out;
+}
+
 std::string clip_text(const std::string &text, int max_w) {
   if (max_w <= 0) {
     return "";
@@ -129,9 +182,13 @@ void Editor::render_lsp_completion() {
     hide_lsp_completion();
     return;
   }
-  if (buf.cursor.x != lsp_completion_anchor.x ||
-      buf.cursor.y != lsp_completion_anchor.y) {
+  if (buf.cursor.y != lsp_completion_replace_start.y ||
+      buf.cursor.x < lsp_completion_replace_start.x) {
     hide_lsp_completion();
+    return;
+  }
+  refresh_lsp_completion_filter();
+  if (!lsp_completion_visible || lsp_completion_items.empty()) {
     return;
   }
 
@@ -140,10 +197,9 @@ void Editor::render_lsp_completion() {
     draw_w = std::max(1, draw_w - minimap_width);
   }
 
-  const int line_num_width = 7;
+  const int line_num_width = 8;
   const bool use_nerd_icons = config.get_bool("lsp_completion_nerd_icons", true);
-  const int icon_display_w = use_nerd_icons ? 2 : 5;
-  int visible_h = std::max(1, pane.h - tab_height);
+  int visible_h = std::max(1, pane.h - tab_height - 1);
   int visible_w = std::max(12, draw_w - 2 - line_num_width);
   const int max_items_cfg =
       std::clamp(config.get_int("lsp_completion_max_items", 8), 3, 20);
@@ -158,27 +214,44 @@ void Editor::render_lsp_completion() {
     start_idx = std::max(0, (int)lsp_completion_items.size() - max_items);
   }
 
-  int longest = 12;
+  int longest_label = 12;
+  int longest_meta = 8;
   for (int i = start_idx; i < start_idx + max_items; i++) {
     if (i < 0 || i >= (int)lsp_completion_items.size()) {
       continue;
     }
-    int len = icon_display_w + (int)lsp_completion_items[i].label.size();
+    longest_label = std::max(longest_label,
+                             (int)lsp_completion_items[i].label.size() + 4);
+    std::string meta = completion_kind_name(lsp_completion_items[i].kind);
     if (!lsp_completion_items[i].detail.empty()) {
-      len += 3 + std::min(24, (int)lsp_completion_items[i].detail.size());
+      meta += " " + one_line_text(lsp_completion_items[i].detail);
+    } else if (!lsp_completion_items[i].documentation.empty()) {
+      meta += " " + one_line_text(lsp_completion_items[i].documentation);
     }
-    longest = std::max(longest, len);
+    longest_meta = std::max(longest_meta, std::min(32, (int)meta.size()));
   }
 
-  int box_w = std::clamp(longest + 6, 20, std::min(visible_w, 72));
-  int box_h = max_items;
+  int box_w = std::clamp(longest_label + longest_meta + 8, 28,
+                         std::min(visible_w, 82));
+  int footer_h = 1;
+  int box_h = max_items + footer_h;
 
   int safe_cursor_y = std::clamp(buf.cursor.y, 0, (int)buf.line_count() - 1);
   const std::string &line = buf.line(safe_cursor_y);
   int cursor_visual = compute_visual_column(line, buf.cursor.x, tab_size);
   int scroll_visual = compute_visual_column(line, buf.scroll_x, tab_size);
   int cursor_x = pane.x + 1 + line_num_width + (cursor_visual - scroll_visual);
-  int cursor_y = pane.y + tab_height + (buf.cursor.y - buf.scroll_offset);
+  int cursor_row = 0;
+  const int viewport_h = std::max(1, pane.h - tab_height - 1);
+  for (int row = 0; row < viewport_h; row++) {
+    int line = Folding::buffer_line_for_visible_offset(
+        buf.fold_ranges, buf.scroll_offset, row, (int)buf.line_count());
+    if (line == buf.cursor.y && !Folding::is_line_hidden(buf.fold_ranges, line)) {
+      cursor_row = row;
+      break;
+    }
+  }
+  int cursor_y = pane.y + tab_height + cursor_row;
 
   int min_x = pane.x + 1 + line_num_width;
   int max_x = pane.x + draw_w - box_w - 1;
@@ -233,6 +306,10 @@ void Editor::render_lsp_completion() {
   UIRect border_rect = {box_x - 1, box_y - 1, box_w + 2, box_h + 2};
   ui->draw_border(border_rect, theme.fg_panel_border, theme.bg_command);
 
+  int label_w = std::clamp(longest_label, 12, std::max(12, box_w * 55 / 100));
+  int meta_x = box_x + 2 + label_w + 1;
+  int meta_w = std::max(0, box_w - (meta_x - box_x) - 1);
+
   for (int row = 0; row < max_items; row++) {
     int item_idx = start_idx + row;
     if (item_idx < 0 || item_idx >= (int)lsp_completion_items.size()) {
@@ -244,20 +321,43 @@ void Editor::render_lsp_completion() {
     int fg = selected_row ? theme.fg_selection : theme.fg_command;
     int bg = selected_row ? theme.bg_selection : theme.bg_command;
     std::string icon = completion_kind_icon(item.kind, use_nerd_icons);
-    std::string text = " " + icon + item.label;
-
-    if (!item.detail.empty()) {
-      std::string detail = item.detail.substr(0, 24);
-      text += "  " + detail;
+    std::string label = clip_text(icon + item.label, label_w);
+    std::string meta = completion_kind_name(item.kind);
+    if (item.deprecated) {
+      meta += " deprecated";
     }
-    if ((int)text.size() > box_w - 2) {
-      text = text.substr(0, std::max(0, box_w - 5)) + "...";
+    std::string detail =
+        !item.detail.empty() ? one_line_text(item.detail)
+                             : one_line_text(item.documentation);
+    if (!detail.empty()) {
+      meta += "  " + detail;
     }
+    meta = clip_text(meta, meta_w);
 
     UIRect row_rect = {box_x, box_y + row, box_w, 1};
     ui->fill_rect(row_rect, " ", fg, bg);
-    ui->draw_text(box_x + 1, box_y + row, text, fg, bg, selected_row);
+    ui->draw_text(box_x + 1, box_y + row, label, fg, bg, selected_row);
+    if (meta_w > 0) {
+      ui->draw_text(meta_x, box_y + row, meta,
+                    selected_row ? theme.fg_selection : theme.fg_comment, bg,
+                    selected_row);
+    }
   }
+
+  UIRect footer_rect = {box_x, box_y + max_items, box_w, 1};
+  ui->fill_rect(footer_rect, " ", theme.fg_comment, theme.bg_command);
+  std::string footer = std::to_string(std::clamp(selected + 1, 1,
+                                                (int)lsp_completion_items.size())) +
+                       "/" + std::to_string(lsp_completion_items.size());
+  if (!lsp_completion_prefix.empty()) {
+    footer += "  " + lsp_completion_prefix;
+  }
+  if ((int)lsp_completion_all_items.size() > (int)lsp_completion_items.size()) {
+    footer += "  filtered";
+  }
+  ui->draw_text(box_x + 1, box_y + max_items,
+                clip_text(footer, std::max(0, box_w - 2)), theme.fg_comment,
+                theme.bg_command);
 }
 
 void Editor::render_telescope() {
@@ -269,7 +369,7 @@ void Editor::render_telescope() {
   int content_x = 0;
   int content_w = w;
   if (show_sidebar) {
-    int sidebar_w = std::min(sidebar_width, std::max(0, w - 20));
+    int sidebar_w = effective_sidebar_width();
     content_x = std::max(0, sidebar_w);
     content_w = std::max(1, w - content_x);
   }
