@@ -1,36 +1,59 @@
 #include "editor.h"
+#include "tree_sitter_manager.h"
 #include <cstring>
 #include <regex>
-#ifdef JOT_TREESITTER
-#include <tree_sitter/api.h>
 
 namespace {
 
-int map_capture_to_color(const char *name, uint32_t len) {
-  std::string_view sv(name, len);
+struct CaptureStyle {
+  int color = 0;
+  int priority = 0;
+};
 
+CaptureStyle capture_style_for_name(std::string_view sv) {
   auto has_prefix = [&](const char *pfx) {
     size_t n = strlen(pfx);
     return sv.size() >= n && sv.compare(0, n, pfx) == 0;
   };
 
-  if (sv == "keyword" || has_prefix("keyword.")) return 1;
-  if (sv == "string" || has_prefix("string.")) return 2;
-  if (sv == "comment" || has_prefix("comment.")) return 3;
-  if (sv == "number" || has_prefix("number.") ||
-      sv == "float" || sv == "constant.numeric") return 4;
-  if (sv == "type" || has_prefix("type.") ||
-      sv == "attribute" || has_prefix("attribute.")) return 5;
+  if (sv == "comment" || has_prefix("comment.")) return {3, 100};
+  if (sv == "string" || has_prefix("string.")) return {2, 95};
   if (sv == "function" || has_prefix("function.") ||
-      sv == "method" || has_prefix("method.") ||
-      sv == "constructor") return 6;
-  if (sv == "operator" || sv == "preproc") return 1;
-  if (sv == "constant" || has_prefix("constant.") ||
-      sv == "boolean") return 4;
-  if (sv == "tag" || has_prefix("tag.")) return 1;
-  if (sv == "property" || has_prefix("property.")) return 6;
-  return 0;
+      sv == "method" || has_prefix("method.") || sv == "constructor") {
+    return {6, 80};
+  }
+  if (sv == "type" || has_prefix("type.") ||
+      sv == "attribute" || has_prefix("attribute.")) {
+    return {5, 70};
+  }
+  if (sv == "keyword" || has_prefix("keyword.") || sv == "operator" ||
+      sv == "preproc") {
+    return {1, 60};
+  }
+  if (sv == "number" || has_prefix("number.") || sv == "float" ||
+      sv == "constant.numeric" || sv == "constant" ||
+      has_prefix("constant.") || sv == "boolean") {
+    return {4, 55};
+  }
+  if (sv == "property" || has_prefix("property.")) return {6, 45};
+  if (sv == "tag" || has_prefix("tag.")) return {1, 40};
+  return {};
 }
+
+} // namespace
+
+int tree_sitter_capture_color_for_name(const std::string &name) {
+  return capture_style_for_name(name).color;
+}
+
+int tree_sitter_capture_priority_for_name(const std::string &name) {
+  return capture_style_for_name(name).priority;
+}
+
+#ifdef JOT_TREESITTER
+#include <tree_sitter/api.h>
+
+namespace {
 
 std::vector<std::pair<int, int>>
 query_ts_highlights(FileBuffer &buf, int line_idx, TSQuery *query, TSTree *tree) {
@@ -38,6 +61,7 @@ query_ts_highlights(FileBuffer &buf, int line_idx, TSQuery *query, TSTree *tree)
 
   const std::string &line = buf.line(line_idx);
   std::vector<std::pair<int, int>> colors(line.size(), {0, 0});
+  std::vector<int> priorities(line.size(), 0);
 
   uint32_t line_start_byte = 0;
   for (int i = 0; i < line_idx; i++)
@@ -62,11 +86,16 @@ query_ts_highlights(FileBuffer &buf, int line_idx, TSQuery *query, TSTree *tree)
 
       uint32_t name_len;
       const char *name = ts_query_capture_name_for_id(query, cap.index, &name_len);
-      int color_type = map_capture_to_color(name, name_len);
+      CaptureStyle style = capture_style_for_name(std::string_view(name, name_len));
+      if (style.color == 0) {
+        continue;
+      }
 
       for (uint32_t col = start; col < end && col < colors.size(); col++) {
-        if (colors[col].first == 0)
-          colors[col] = {1, color_type};
+        if (style.priority >= priorities[col]) {
+          priorities[col] = style.priority;
+          colors[col] = {1, style.color};
+        }
       }
     }
   }
@@ -87,12 +116,42 @@ void Editor::reparse_tree(FileBuffer &buf) {
 }
 
 void Editor::init_ts_for_buffer(FileBuffer &buf) {
-  if (buf.ts_parser) return;
   std::string ext = get_file_extension(buf.filepath);
-  if (ext.empty()) return;
+  std::string language_id = ts_manager_.language_id_for_extension(ext);
+  if (language_id.empty()) {
+    if (buf.ts_tree) {
+      ts_tree_delete(buf.ts_tree);
+      buf.ts_tree = nullptr;
+    }
+    if (buf.ts_parser) {
+      ts_parser_delete(buf.ts_parser);
+      buf.ts_parser = nullptr;
+    }
+    buf.ts_language_id.clear();
+    return;
+  }
+
+  if (buf.ts_parser && buf.ts_language_id == language_id) {
+    if (!buf.ts_tree) {
+      reparse_tree(buf);
+    }
+    return;
+  }
+
+  if (buf.ts_tree) {
+    ts_tree_delete(buf.ts_tree);
+    buf.ts_tree = nullptr;
+  }
+  if (buf.ts_parser) {
+    ts_parser_delete(buf.ts_parser);
+    buf.ts_parser = nullptr;
+  }
+  buf.ts_language_id.clear();
+
   TSParser *parser = ts_manager_.create_parser(ext);
   if (!parser) return;
   buf.ts_parser = parser;
+  buf.ts_language_id = language_id;
   buf.syntax_cache.clear();
   reparse_tree(buf);
 }
@@ -462,12 +521,20 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx) {
     buf.syntax_cache_extension = extension;
     buf.syntax_cache_line_count = buf.line_count();
     buf.syntax_cache.clear();
+    buf.syntax_engine = SYNTAX_ENGINE_UNKNOWN;
+    buf.syntax_language_label.clear();
   }
 
   if (buf.syntax_cache_line_count != buf.line_count()) {
     buf.syntax_cache_line_count = buf.line_count();
     buf.syntax_cache.clear();
   }
+
+#ifdef JOT_TREESITTER
+  if (ts_manager_.has_language(extension)) {
+    init_ts_for_buffer(buf);
+  }
+#endif
 
   const std::string &line = buf.line(line_idx);
   SyntaxLineCache &cache = buf.syntax_cache[line_idx];
@@ -479,24 +546,30 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx) {
   }
 
 #ifdef JOT_TREESITTER
-  if (ts_manager_.has_language(extension)) {
-    init_ts_for_buffer(buf);
-    if (buf.ts_tree) {
-      TSQuery *query = ts_manager_.get_highlight_query(extension);
-      if (query) {
-        cache.colors = query_ts_highlights(buf, line_idx, query, buf.ts_tree);
-        ts_query_delete(query);
-        cache.line_hash = line_hash;
-        cache.line_length = line.length();
-        cache.valid = true;
-        return cache.colors;
-      }
+  if (ts_manager_.has_language(extension) && buf.ts_tree) {
+    TSQuery *query = ts_manager_.get_highlight_query(extension);
+    if (query) {
+      cache.colors = query_ts_highlights(buf, line_idx, query, buf.ts_tree);
+      cache.line_hash = line_hash;
+      cache.line_length = line.length();
+      cache.valid = true;
+      buf.syntax_engine = SYNTAX_ENGINE_TREESITTER;
+      buf.syntax_language_label =
+          ts_manager_.language_id_for_extension(extension);
+      return cache.colors;
     }
   }
 #endif
 
   highlighter.set_language(extension);
   cache.colors = highlighter.get_colors(line);
+  if (highlighter.has_rules()) {
+    buf.syntax_engine = SYNTAX_ENGINE_REGEX;
+    buf.syntax_language_label = extension.empty() ? "plain" : extension;
+  } else {
+    buf.syntax_engine = SYNTAX_ENGINE_NONE;
+    buf.syntax_language_label.clear();
+  }
   cache.line_hash = line_hash;
   cache.line_length = line.length();
   cache.valid = true;
@@ -507,4 +580,6 @@ void Editor::invalidate_syntax_cache(FileBuffer &buf) {
   buf.syntax_cache_extension.clear();
   buf.syntax_cache_line_count = 0;
   buf.syntax_cache.clear();
+  buf.syntax_engine = SYNTAX_ENGINE_UNKNOWN;
+  buf.syntax_language_label.clear();
 }
