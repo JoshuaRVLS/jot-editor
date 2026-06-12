@@ -40,6 +40,7 @@ void Editor::insert_char(char c) {
         buf.cursor = buf.selection.end;
         buf.preferred_x = buf.cursor.x;
         buf.modified = true;
+        buf.is_placeholder = false;
         ensure_cursor_visible();
         needs_redraw = true;
         if (python_api)
@@ -101,6 +102,7 @@ void Editor::insert_char(char c) {
   }
 
   buf.modified = true;
+  buf.is_placeholder = false;
   needs_redraw = true;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
@@ -117,6 +119,7 @@ void Editor::insert_string(const std::string &str) {
   buf.line_mut(buf.cursor.y).insert(buf.cursor.x, str);
   buf.cursor.x += str.length();
   buf.modified = true;
+  buf.is_placeholder = false;
   if (python_api)
     python_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
