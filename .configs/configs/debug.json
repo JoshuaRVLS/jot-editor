@@ -1,0 +1,11 @@
+{
+  "sessions": {
+    "app": {
+      "adapter": "gdb",
+      "program": "./build/jot",
+      "args": [],
+      "cwd": ".",
+      "env": {}
+    }
+  }
+}
