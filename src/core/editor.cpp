@@ -61,13 +61,31 @@ Editor::Editor() {
   last_terminal_task_name.clear();
   integrated_terminal_height =
       std::clamp(config.get_int("terminal_height", 10), 5, 20);
+  show_debugger_panel = false;
+  debugger_panel_height =
+      std::clamp(config.get_int("debugger_height", 12), 6, 24);
+  show_right_panel = false;
+  right_panel_width = std::clamp(config.get_int("right_panel_width", 42), 28, 80);
+  active_right_panel_tab = RIGHT_PANEL_DEBUG;
+  current_debugger_session = -1;
+  debugger_breakpoint_hover_visible = false;
+  debugger_breakpoint_hover_pane = -1;
+  debugger_breakpoint_hover_buffer = -1;
+  debugger_breakpoint_hover_line = -1;
   show_search = false;
   show_command_palette = false;
   command_palette_selected = 0;
   command_palette_theme_mode = false;
+  show_menu_bar_dropdown = false;
+  menu_bar_active = -1;
+  menu_bar_selected = 0;
+  menu_bar_segments.clear();
   search_result_index = -1;
   search_case_sensitive = false;
   search_whole_word = false;
+  search_regex = false;
+  search_replace_visible = false;
+  search_focus_replace = false;
   show_save_prompt = false;
   show_quit_prompt = false;
 
@@ -86,6 +104,12 @@ Editor::Editor() {
   git_root.clear();
   git_branch.clear();
   git_dirty_count = 0;
+  git_staged_count = 0;
+  git_unstaged_count = 0;
+  git_untracked_count = 0;
+  git_deleted_count = 0;
+  git_renamed_count = 0;
+  git_conflict_count = 0;
   git_file_status.clear();
   git_last_refresh_ms = 0;
   file_tree_selected = 0;
@@ -124,11 +148,39 @@ Editor::Editor() {
   mouse_press_buf_x = -1;
   mouse_press_buf_y = -1;
   mouse_drag_started = false;
+  lsp_mouse_hover_enabled = false;
+  lsp_mouse_hover_pending = false;
+  lsp_mouse_hover_visible = false;
+  lsp_mouse_hover_deadline_ms = 0;
+  lsp_mouse_hover_pane = -1;
+  lsp_mouse_hover_buffer = -1;
+  lsp_mouse_hover_line = -1;
+  lsp_mouse_hover_col = -1;
+  lsp_mouse_hover_token_start = -1;
+  lsp_mouse_hover_token_end = -1;
+  lsp_mouse_hover_screen_x = -1;
+  lsp_mouse_hover_screen_y = -1;
+  lsp_mouse_hover_filepath.clear();
   pane_resize_dragging = false;
   pane_resize_node = -1;
   pane_resize_vertical = false;
   pane_resize_start_pos = 0;
   pane_resize_start_ratio = 0.5f;
+  sidebar_resize_dragging = false;
+  sidebar_resize_opening = false;
+  sidebar_resize_start_x = 0;
+  sidebar_resize_start_width = sidebar_width;
+  right_panel_resize_dragging = false;
+  right_panel_resize_start_x = 0;
+  right_panel_resize_start_width = right_panel_width;
+  scrollbar_dragging = false;
+  scrollbar_drag_pane = -1;
+  scrollbar_drag_start_y = 0;
+  scrollbar_drag_start_scroll = 0;
+  scrollbar_drag_track_y = 0;
+  scrollbar_drag_track_h = 0;
+  scrollbar_drag_thumb_h = 0;
+  scrollbar_drag_max_scroll = 0;
   last_left_click_ms = 0;
   last_left_click_pos = {-1, -1};
   last_left_click_count = 0;
@@ -151,14 +203,23 @@ Editor::Editor() {
   context_menu_target_buffer = -1;
   context_menu_target_pane = -1;
   context_menu_target_terminal = -1;
+  context_menu_target_line = -1;
   context_menu_target_path.clear();
   context_menu_target_is_dir = false;
   lsp_completion_visible = false;
   lsp_completion_manual_request = false;
   lsp_completion_selected = 0;
   lsp_completion_anchor = {0, 0};
+  lsp_completion_replace_start = {0, 0};
   lsp_completion_filepath.clear();
+  lsp_completion_prefix.clear();
+  lsp_completion_all_items.clear();
   lsp_completion_items.clear();
+  lsp_jump_stack.clear();
+  lsp_definition_jump_pending = false;
+  lsp_definition_pending_location = {};
+  lsp_back_jump_pending = false;
+  lsp_back_pending_location = {};
 
   // Modeless editor behavior: keep an always-insert internal mode.
   mode = MODE_INSERT;
@@ -212,6 +273,7 @@ Editor::Editor() {
   fb.scroll_offset = 0;
   fb.scroll_x = 0;
   fb.modified = false;
+  fb.is_placeholder = true;
   buffers.push_back(std::move(fb));
   panes[0].buffer_id = 0;
 }
@@ -222,6 +284,7 @@ const EditorHostAPI &Editor::host() const { return *host_api; }
 
 Editor::~Editor() {
   save_workspace_session();
+  save_file_fold_states();
   save_recent_files();
   save_recent_workspaces();
   stop_all_lsp_clients();
