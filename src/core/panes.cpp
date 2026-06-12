@@ -19,6 +19,77 @@ constexpr int kMinPaneWidth = 12;
 constexpr int kMinPaneHeight = 3;
 } // namespace
 
+int Editor::max_sidebar_width() const {
+  if (!ui) {
+    return sidebar_width;
+  }
+  return std::max(min_sidebar_width(), ui->get_render_width() - 20);
+}
+
+int Editor::effective_sidebar_width() const {
+  return std::clamp(sidebar_width, min_sidebar_width(), max_sidebar_width());
+}
+
+int Editor::effective_right_panel_width() const {
+  if (!ui || !show_right_panel) {
+    return 0;
+  }
+  int max_w = max_right_panel_width();
+  if (max_w < min_right_panel_width()) {
+    return std::max(0, max_w);
+  }
+  return std::clamp(right_panel_width, min_right_panel_width(), max_w);
+}
+
+int Editor::max_right_panel_width() const {
+  if (!ui) {
+    return std::max(min_right_panel_width(), right_panel_width);
+  }
+  int total_w = std::max(1, ui->get_render_width());
+  int left_w = show_sidebar ? effective_sidebar_width() : 0;
+  return std::max(0, total_w - left_w - kMinPaneWidth);
+}
+
+bool Editor::collapsed_sidebar_handle_hit_test(int x, int y) const {
+  if (show_sidebar || show_home_menu || !ui || panes.empty()) {
+    return false;
+  }
+  if (x != 0) {
+    return false;
+  }
+  int reserved_terminal_h = 0;
+  if (show_integrated_terminal && !integrated_terminals.empty()) {
+    reserved_terminal_h =
+        std::clamp(integrated_terminal_height, 5,
+                   std::max(5, ui->get_height() / 2));
+  }
+  int top = tab_height;
+  int bottom = ui->get_height() - status_height - reserved_terminal_h;
+  return y >= top && y < bottom;
+}
+
+bool Editor::sidebar_resize_hit_test(int x, int y) const {
+  if (collapsed_sidebar_handle_hit_test(x, y)) {
+    return true;
+  }
+  if (!show_sidebar || !ui) {
+    return false;
+  }
+  int w = effective_sidebar_width();
+  if (w < 2 || x != w - 1) {
+    return false;
+  }
+  int reserved_terminal_h = 0;
+  if (show_integrated_terminal && !integrated_terminals.empty()) {
+    reserved_terminal_h =
+        std::clamp(integrated_terminal_height, 5,
+                   std::max(5, ui->get_height() / 2));
+  }
+  int top = tab_height;
+  int bottom = ui->get_height() - status_height - reserved_terminal_h;
+  return y >= top && y < bottom;
+}
+
 int Editor::create_pane(int x, int y, int w, int h, int buffer_id) {
   SplitPane pane;
   pane.x = x;
@@ -67,12 +138,14 @@ void Editor::update_pane_layout() {
     reserved_terminal_h =
         std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
   }
+  int menu_h = 1;
   int total_h =
-      std::max(1, ui->get_height() - status_height - reserved_terminal_h);
-  int max_sidebar = std::max(0, total_w - 20);
-  int origin_x = show_sidebar ? std::min(sidebar_width, max_sidebar) : 0;
-  int available_w = std::max(1, total_w - origin_x);
-  int origin_y = 0;
+      std::max(1, ui->get_height() - status_height - reserved_terminal_h -
+                      menu_h);
+  int origin_x = show_sidebar ? effective_sidebar_width() : 0;
+  int right_w = effective_right_panel_width();
+  int available_w = std::max(1, total_w - origin_x - right_w);
+  int origin_y = menu_h;
 
   std::function<void(int, int, int, int, int)> layout_node =
       [&](int node_index, int x, int y, int w, int h) {
@@ -184,6 +257,7 @@ void Editor::split_pane_direction(int dx, int dy) {
     fb.scroll_x = 0;
     fb.modified = false;
     fb.is_preview = false;
+    fb.is_placeholder = true;
     buffers.push_back(std::move(fb));
     new_buffer = (int)buffers.size() - 1;
   }
@@ -491,13 +565,150 @@ int Editor::pane_split_at_position(int x, int y) const {
     reserved_terminal_h =
         std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
   }
+  int menu_h = 1;
   int total_h =
-      std::max(1, ui->get_height() - status_height - reserved_terminal_h);
-  int max_sidebar = std::max(0, total_w - 20);
-  int origin_x = show_sidebar ? std::min(sidebar_width, max_sidebar) : 0;
-  int available_w = std::max(1, total_w - origin_x);
-  visit(pane_root, origin_x, 0, available_w, total_h);
+      std::max(1, ui->get_height() - status_height - reserved_terminal_h -
+                      menu_h);
+  int origin_x = show_sidebar ? effective_sidebar_width() : 0;
+  int right_w = effective_right_panel_width();
+  int available_w = std::max(1, total_w - origin_x - right_w);
+  visit(pane_root, origin_x, menu_h, available_w, total_h);
   return best;
+}
+
+bool Editor::begin_sidebar_resize_drag(int x, int y) {
+  if (!sidebar_resize_hit_test(x, y)) {
+    return false;
+  }
+  bool opening_from_collapsed = collapsed_sidebar_handle_hit_test(x, y);
+  sidebar_resize_dragging = true;
+  sidebar_resize_opening = opening_from_collapsed;
+  sidebar_resize_start_x = x;
+  int open_width = effective_sidebar_width();
+  sidebar_resize_start_width =
+      opening_from_collapsed ? open_width : effective_sidebar_width();
+  if (opening_from_collapsed) {
+    if (file_tree.empty()) {
+      load_file_tree(root_dir);
+    }
+    show_sidebar = true;
+    sidebar_width = open_width;
+    update_pane_layout();
+  }
+  mouse_selecting = false;
+  mouse_drag_started = false;
+  focus_state = FOCUS_SIDEBAR;
+  set_message("Resizing file tree");
+  needs_redraw = true;
+  return true;
+}
+
+bool Editor::update_sidebar_resize_drag(int x) {
+  if (!sidebar_resize_dragging) {
+    return false;
+  }
+  int requested_width = sidebar_resize_start_width + (x - sidebar_resize_start_x);
+  if (!sidebar_resize_opening && requested_width <= sidebar_close_threshold()) {
+    sidebar_resize_dragging = false;
+    sidebar_resize_opening = false;
+    sidebar_resize_start_x = 0;
+    sidebar_resize_start_width = min_sidebar_width();
+    sidebar_width = min_sidebar_width();
+    show_sidebar = false;
+    if (focus_state == FOCUS_SIDEBAR) {
+      focus_state = FOCUS_EDITOR;
+    }
+    update_pane_layout();
+    set_message("File tree closed");
+    needs_redraw = true;
+    return true;
+  }
+
+  int next_width =
+      std::clamp(requested_width, min_sidebar_width(), max_sidebar_width());
+  if (sidebar_width == next_width) {
+    return false;
+  }
+  sidebar_resize_opening = false;
+  sidebar_width = next_width;
+  update_pane_layout();
+  needs_redraw = true;
+  return true;
+}
+
+void Editor::end_sidebar_resize_drag() {
+  if (!sidebar_resize_dragging) {
+    return;
+  }
+  sidebar_resize_dragging = false;
+  sidebar_resize_opening = false;
+  sidebar_resize_start_x = 0;
+  sidebar_resize_start_width = effective_sidebar_width();
+  sidebar_width = effective_sidebar_width();
+  set_message("File tree resized");
+  needs_redraw = true;
+}
+
+bool Editor::right_panel_resize_hit_test(int x, int y) const {
+  if (!show_right_panel || !ui) {
+    return false;
+  }
+  int w = effective_right_panel_width();
+  if (w < min_right_panel_width()) {
+    return false;
+  }
+  int handle_x = ui->get_render_width() - w;
+  if (x != handle_x) {
+    return false;
+  }
+  int top = 1;
+  int bottom = ui->get_height() - status_height;
+  return y >= top && y < bottom;
+}
+
+bool Editor::begin_right_panel_resize_drag(int x, int y) {
+  if (!right_panel_resize_hit_test(x, y)) {
+    return false;
+  }
+  right_panel_resize_dragging = true;
+  right_panel_resize_start_x = x;
+  right_panel_resize_start_width = effective_right_panel_width();
+  mouse_selecting = false;
+  mouse_drag_started = false;
+  focus_state = FOCUS_EDITOR;
+  set_message("Resizing right panel");
+  needs_redraw = true;
+  return true;
+}
+
+bool Editor::update_right_panel_resize_drag(int x) {
+  if (!right_panel_resize_dragging) {
+    return false;
+  }
+  int requested_width =
+      right_panel_resize_start_width + (right_panel_resize_start_x - x);
+  int max_w = max_right_panel_width();
+  int min_w = std::min(min_right_panel_width(), max_w);
+  int next_width = std::clamp(requested_width, min_w, max_w);
+  if (right_panel_width == next_width) {
+    return false;
+  }
+  right_panel_width = next_width;
+  update_pane_layout();
+  needs_redraw = true;
+  return true;
+}
+
+void Editor::end_right_panel_resize_drag() {
+  if (!right_panel_resize_dragging) {
+    return;
+  }
+  right_panel_resize_dragging = false;
+  right_panel_resize_start_x = 0;
+  right_panel_resize_start_width = effective_right_panel_width();
+  right_panel_width = effective_right_panel_width();
+  set_message("Right panel resized");
+  needs_redraw = true;
 }
 
 bool Editor::adjust_pane_split_ratio(int node_index, int delta,
