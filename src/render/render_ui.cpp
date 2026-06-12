@@ -163,9 +163,20 @@ void Editor::render_status_line() {
     return;
   }
 
+  const bool draw_border_rails = w >= 4;
+  const int content_x = draw_border_rails ? 1 : 0;
+  const int content_w = draw_border_rails ? std::max(0, w - 2) : w;
+  if (draw_border_rails) {
+    for (int row = 0; row < status_height; row++) {
+      ui->draw_text(0, y + row, "│", theme.fg_panel_border, theme.bg_status);
+      ui->draw_text(w - 1, y + row, "│", theme.fg_panel_border,
+                    theme.bg_status);
+    }
+  }
+
   std::vector<StatusSegment> left_segments;
   std::vector<StatusSegment> right_segments;
-  if (w >= 28) {
+  if (content_w >= 28) {
     left_segments.push_back({" 󰚩 JOT ", theme.fg_status_logo,
                              theme.bg_status_logo, true, true, 10});
   }
@@ -175,15 +186,6 @@ void Editor::render_status_line() {
       current_buffer < (int)buffers.size()) {
     active_buf = &buffers[current_buffer];
   }
-
-  std::string mode_label = "NORMAL";
-  if (mode == MODE_INSERT) {
-    mode_label = "INSERT";
-  } else if (mode == MODE_VISUAL) {
-    mode_label = visual_line_mode ? "V-LINE" : "VISUAL";
-  }
-  left_segments.push_back({" " + mode_label + " ", theme.fg_status_info,
-                           theme.bg_status_info, true, true, 20});
 
   std::string file_label = "Home";
   std::string file_icon = "󰋜";
@@ -268,8 +270,17 @@ void Editor::render_status_line() {
 
   if (has_git_repo()) {
     std::string git = "  " + status_truncate_cells(git_branch, 18);
-    if (git_dirty_count > 0) {
-      git += " +" + std::to_string(git_dirty_count);
+    if (git_staged_count > 0) {
+      git += " +" + std::to_string(git_staged_count);
+    }
+    if (git_unstaged_count > 0) {
+      git += " ~" + std::to_string(git_unstaged_count);
+    }
+    if (git_untracked_count > 0) {
+      git += " ?" + std::to_string(git_untracked_count);
+    }
+    if (git_conflict_count > 0) {
+      git += " !" + std::to_string(git_conflict_count);
     }
     git += " ";
     right_segments.push_back(
@@ -305,6 +316,38 @@ void Editor::render_status_line() {
       lsp_text = "  LSP off ";
     }
     right_segments.push_back({lsp_text, lsp_fg, lsp_bg, false, true, 60});
+  }
+
+  if (!show_home_menu && active_buf) {
+    SyntaxEngine engine = active_buf->syntax_engine;
+    if (engine == SYNTAX_ENGINE_UNKNOWN && !active_buf->filepath.empty() &&
+        active_buf->line_count() > 0) {
+      int line_idx = std::clamp(active_buf->cursor.y, 0,
+                                (int)active_buf->line_count() - 1);
+      get_line_syntax_colors(*active_buf, line_idx);
+      engine = active_buf->syntax_engine;
+    }
+
+    std::string syntax_text;
+    int syntax_fg = theme.fg_status_muted;
+    int syntax_bg = theme.bg_status_muted;
+    if (engine == SYNTAX_ENGINE_TREESITTER) {
+      std::string label = active_buf->syntax_language_label.empty()
+                              ? "tree-sitter"
+                              : active_buf->syntax_language_label;
+      syntax_text = " TS " + status_truncate_cells(label, 12) + " ";
+      syntax_fg = theme.fg_status_info;
+      syntax_bg = theme.bg_status_info;
+    } else if (engine == SYNTAX_ENGINE_REGEX) {
+      std::string label = active_buf->syntax_language_label.empty()
+                              ? "regex"
+                              : active_buf->syntax_language_label;
+      syntax_text = " Regex " + status_truncate_cells(label, 8) + " ";
+    } else {
+      syntax_text = " Syntax off ";
+    }
+    right_segments.push_back(
+        {syntax_text, syntax_fg, syntax_bg, false, true, 55});
   }
 
   if (!integrated_terminals.empty()) {
@@ -346,10 +389,11 @@ void Editor::render_status_line() {
   right_segments.push_back({" UTF-8 ", theme.fg_status_muted,
                             theme.bg_status_muted, false, true, 10});
 
-  const int min_gap = w >= 40 ? 2 : 1;
-  status_drop_optional_to_fit(right_segments, std::max(0, w / 2));
+  const int min_gap = content_w >= 40 ? 2 : 1;
+  status_drop_optional_to_fit(right_segments, std::max(0, content_w / 2));
   int right_w = status_layout_width(right_segments);
-  int left_budget = std::max(0, w - right_w - (right_w > 0 ? min_gap : 0));
+  int left_budget =
+      std::max(0, content_w - right_w - (right_w > 0 ? min_gap : 0));
   status_drop_optional_to_fit(left_segments, left_budget);
 
   if (status_layout_width(left_segments) > left_budget &&
@@ -393,16 +437,17 @@ void Editor::render_status_line() {
   }
 
   right_w = status_layout_width(right_segments);
-  int right_x = std::max(0, w - right_w);
+  int right_x = content_x + std::max(0, content_w - right_w);
   int left_w = std::max(0, right_x - (right_w > 0 ? min_gap : 0));
-  status_draw_segmented_at(ui, 0, y, left_w, left_segments);
+  status_draw_segmented_at(ui, content_x, y, left_w - content_x,
+                           left_segments);
   if (right_w > 0) {
     status_draw_segmented_at(ui, right_x, y, right_w, right_segments);
   }
 
   // Message / context row.
   if (!message.empty()) {
-    status_draw_clipped(ui, 0, y + 1, w, "  › " + message,
+    status_draw_clipped(ui, content_x, y + 1, content_w, "  › " + message,
                         theme.fg_status_message, theme.bg_status, true);
   } else {
     std::string context = "  " + status_workspace_label(root_dir);
@@ -411,8 +456,8 @@ void Editor::render_status_line() {
     } else if (show_home_menu) {
       context += "  ·  Home";
     }
-    status_draw_clipped(ui, 0, y + 1, w,
-                        status_truncate_cells(context, std::max(0, w)),
+    status_draw_clipped(ui, content_x, y + 1, content_w,
+                        status_truncate_cells(context, std::max(0, content_w)),
                         theme.fg_status_muted, theme.bg_status);
   }
 }
@@ -496,8 +541,8 @@ void Editor::render_search_panel() {
   if (!show_search)
     return;
 
-  int w = 52;
-  int h = 4;
+  int w = std::min(72, std::max(42, ui->get_render_width() / 2));
+  int h = search_replace_visible ? 5 : 4;
   int x = ui->get_width() - w - 2;
   int y = 1 + tab_height;
 
@@ -510,29 +555,57 @@ void Editor::render_search_panel() {
   ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
   ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
 
-  std::string mode = std::string(search_case_sensitive ? "Aa" : "aa") +
-                     (search_whole_word ? ",W" : ",w");
-  std::string q = "Find[" + mode + "]: " + search_query;
-  if ((int)q.length() > w - 4) {
-    q = q.substr(0, std::max(0, w - 7)) + "...";
+  std::string count = "0/0";
+  if (search_result_index >= 0 && !search_results.empty()) {
+    count = std::to_string(search_result_index + 1) + "/" +
+            std::to_string(search_results.size());
+  } else if (!search_query.empty()) {
+    count = "0/0";
   }
-  ui->draw_text(x + 1, y + 1, q, theme.fg_command, theme.bg_command);
 
-  if (search_result_index >= 0) {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%d/%lu", search_result_index + 1,
-             search_results.size());
-    ui->draw_text(x + w - 10, y + 1, buf, theme.fg_comment, theme.bg_command);
-  } else if (!search_query.empty() && search_results.empty()) {
-    ui->draw_text(x + w - 12, y + 1, "0/0", theme.fg_comment,
+  std::string chips;
+  chips += search_case_sensitive ? " Aa " : " aa ";
+  chips += search_whole_word ? " W " : " w ";
+  if (search_regex) {
+    chips += " .* ";
+  }
+  chips += " " + count + " ";
+  ui->draw_text(x + 1, y, " Find", theme.fg_command, theme.bg_command, true);
+  ui->draw_text(std::max(x + 1, x + w - (int)chips.size() - 1), y, chips,
+                theme.fg_comment, theme.bg_command);
+
+  auto clip = [](const std::string &text, int max_w) {
+    if ((int)text.size() <= max_w)
+      return text;
+    if (max_w <= 2)
+      return text.substr(0, std::max(0, max_w));
+    return text.substr(0, std::max(0, max_w - 2)) + "..";
+  };
+
+  int label_w = 9;
+  int input_w = std::max(1, w - label_w - 3);
+  int find_fg = search_focus_replace ? theme.fg_command : theme.fg_selection;
+  int find_bg = search_focus_replace ? theme.bg_command : theme.bg_selection;
+  ui->draw_text(x + 1, y + 1, "Find", theme.fg_comment, theme.bg_command);
+  ui->draw_text(x + label_w, y + 1, clip(search_query, input_w), find_fg,
+                find_bg, !search_focus_replace);
+
+  if (search_replace_visible) {
+    int replace_fg = search_focus_replace ? theme.fg_selection : theme.fg_command;
+    int replace_bg = search_focus_replace ? theme.bg_selection : theme.bg_command;
+    ui->draw_text(x + 1, y + 2, "Replace", theme.fg_comment,
                   theme.bg_command);
+    ui->draw_text(x + label_w, y + 2, clip(search_replace_text, input_w),
+                  replace_fg, replace_bg, search_focus_replace);
   }
 
-  std::string hint = "Enter/Down:Next  Up:Prev  Tab:Case  Ctrl+W:Word  Esc:Close";
-  if ((int)hint.size() > w - 3) {
-    hint = hint.substr(0, std::max(0, w - 6)) + "...";
+  std::string footer = search_replace_visible
+                           ? "Enter next  Up prev  Tab field  ^R one  ^R+Shift all"
+                           : "Enter next  Up prev  Tab case  ^H replace  ^E regex";
+  if ((int)footer.size() > w - 3) {
+    footer = footer.substr(0, std::max(0, w - 6)) + "...";
   }
-  ui->draw_text(x + 1, y + 2, hint, theme.fg_comment, theme.bg_command);
+  ui->draw_text(x + 1, y + h - 2, footer, theme.fg_comment, theme.bg_command);
 }
 
 void Editor::render_context_menu() {
@@ -568,6 +641,146 @@ void Editor::render_context_menu() {
     }
     ui->draw_text(x + 2, y + 1 + (int)i, label, fg, bg,
                   item.enabled && (int)i == context_menu_selected);
+  }
+}
+
+std::vector<Editor::MenuBarMenu> Editor::build_menu_bar_model() const {
+  return {
+      {"File",
+       {{"New File", MENU_ACTION_NEW_FILE},
+        {"Open File...", MENU_ACTION_OPEN_FINDER},
+        {"Save", MENU_ACTION_SAVE},
+        {"Save As...", MENU_ACTION_SAVE_AS},
+        {"Close File", MENU_ACTION_CLOSE_FILE},
+        {"Quit", MENU_ACTION_QUIT}}},
+      {"Edit",
+       {{"Undo", MENU_ACTION_UNDO},
+        {"Redo", MENU_ACTION_REDO},
+        {"Cut", MENU_ACTION_CUT},
+        {"Copy", MENU_ACTION_COPY},
+        {"Paste", MENU_ACTION_PASTE},
+        {"Find", MENU_ACTION_COMMAND, "Toggle Search"},
+        {"Format Document", MENU_ACTION_COMMAND, "Format Document"},
+        {"Trim Trailing Whitespace", MENU_ACTION_COMMAND,
+         "Trim Trailing Whitespace"}}},
+      {"Selection",
+       {{"Select All", MENU_ACTION_SELECT_ALL},
+        {"Select Line", MENU_ACTION_SELECT_LINE},
+        {"Duplicate Line", MENU_ACTION_DUPLICATE_LINE},
+        {"Move Line Up", MENU_ACTION_MOVE_LINE_UP},
+        {"Move Line Down", MENU_ACTION_MOVE_LINE_DOWN},
+        {"Toggle Comment", MENU_ACTION_TOGGLE_COMMENT}}},
+      {"View",
+       {{"Command Palette", MENU_ACTION_COMMAND_PALETTE},
+        {"Explorer", MENU_ACTION_TOGGLE_SIDEBAR},
+        {"Toggle Minimap", MENU_ACTION_TOGGLE_MINIMAP},
+        {"Color Theme", MENU_ACTION_THEME},
+        {"Home", MENU_ACTION_HOME}}},
+      {"Go",
+       {{"Go to Line...", MENU_ACTION_COMMAND, ":line "},
+        {"Go to Definition", MENU_ACTION_LSP_DEFINITION},
+        {"Back", MENU_ACTION_LSP_BACK}}},
+      {"Debug",
+       {{"Start Debugging", MENU_ACTION_COMMAND, ":debug "},
+        {"Continue", MENU_ACTION_DEBUG_CONTINUE},
+        {"Pause", MENU_ACTION_DEBUG_PAUSE},
+        {"Step Over", MENU_ACTION_DEBUG_STEP_OVER},
+        {"Step Into", MENU_ACTION_DEBUG_STEP_IN},
+        {"Step Out", MENU_ACTION_DEBUG_STEP_OUT},
+        {"Stop", MENU_ACTION_DEBUG_STOP},
+        {"Debug Panel", MENU_ACTION_TOGGLE_DEBUG_PANEL}}},
+      {"Terminal",
+       {{"Toggle Terminal", MENU_ACTION_TOGGLE_TERMINAL},
+        {"New Terminal", MENU_ACTION_NEW_TERMINAL},
+        {"Run Task...", MENU_ACTION_TASKS},
+        {"Rerun Last Task", MENU_ACTION_RERUN_TASK}}},
+      {"Help",
+       {{"Help", MENU_ACTION_HELP},
+        {"LSP Status", MENU_ACTION_COMMAND, ":lspstatus"},
+        {"Tree-sitter Status", MENU_ACTION_COMMAND, ":tsstatus"},
+        {"Git Status", MENU_ACTION_COMMAND, ":gitstatus"}}},
+  };
+}
+
+void Editor::render_menu_bar() {
+  int w = ui ? ui->get_render_width() : 0;
+  if (w <= 0) {
+    return;
+  }
+
+  UIRect row = {0, 0, w, 1};
+  ui->fill_rect(row, " ", theme.fg_status, theme.bg_status);
+  menu_bar_segments.clear();
+
+  std::vector<MenuBarMenu> menus = build_menu_bar_model();
+  int x = 0;
+  for (int i = 0; i < (int)menus.size(); i++) {
+    std::string label = " " + menus[i].label + " ";
+    int label_w = (int)label.size();
+    if (x + label_w > w) {
+      break;
+    }
+    bool active = show_menu_bar_dropdown && i == menu_bar_active;
+    int fg = active ? theme.fg_selection : theme.fg_status;
+    int bg = active ? theme.bg_selection : theme.bg_status;
+    ui->draw_text(x, 0, label, fg, bg, active);
+    menu_bar_segments.push_back({i, x, x + label_w});
+    x += label_w;
+  }
+}
+
+void Editor::render_menu_dropdown() {
+  if (!show_menu_bar_dropdown || !ui) {
+    return;
+  }
+
+  std::vector<MenuBarMenu> menus = build_menu_bar_model();
+  if (menu_bar_active < 0 || menu_bar_active >= (int)menus.size()) {
+    return;
+  }
+
+  const auto &menu = menus[menu_bar_active];
+  if (menu.items.empty()) {
+    return;
+  }
+
+  int label_x = 0;
+  for (const auto &segment : menu_bar_segments) {
+    if (segment.menu_index == menu_bar_active) {
+      label_x = segment.x;
+      break;
+    }
+  }
+
+  int max_label = 0;
+  for (const auto &item : menu.items) {
+    max_label = std::max(max_label, (int)item.label.size());
+  }
+
+  int w = std::max(18, max_label + 4);
+  int h = (int)menu.items.size() + 2;
+  int x = std::clamp(label_x, 0, std::max(0, ui->get_render_width() - w));
+  int y = 1;
+  int max_h = std::max(1, ui->get_height() - y - status_height);
+  h = std::min(h, max_h);
+
+  UIRect rect = {x, y, w, h};
+  ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
+  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+
+  int rows = std::max(0, h - 2);
+  for (int i = 0; i < rows && i < (int)menu.items.size(); i++) {
+    const auto &item = menu.items[i];
+    bool selected = i == menu_bar_selected;
+    int fg = item.enabled ? theme.fg_command : theme.fg_comment;
+    int bg = selected && item.enabled ? theme.bg_selection : theme.bg_command;
+    UIRect row_rect = {x + 1, y + 1 + i, std::max(1, w - 2), 1};
+    ui->fill_rect(row_rect, " ", fg, bg);
+    std::string label = item.label;
+    if ((int)label.size() > w - 3) {
+      label = label.substr(0, std::max(0, w - 5)) + "..";
+    }
+    ui->draw_text(x + 2, y + 1 + i, label, fg, bg, selected && item.enabled);
   }
 }
 
