@@ -20,6 +20,9 @@ struct MouseEvent {
   int button;
   bool pressed;
   bool released;
+  bool ctrl;
+  bool shift;
+  bool alt;
 };
 
 struct ResizeEvent {
@@ -128,6 +131,8 @@ public:
 
   void enable_mouse();
   void disable_mouse();
+  void enable_mouse_hover();
+  void disable_mouse_hover();
 
   void save_cursor();
   void restore_cursor();
