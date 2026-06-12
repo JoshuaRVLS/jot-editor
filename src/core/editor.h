@@ -8,6 +8,7 @@
 #include "config.h"
 #include "types.h"
 #include "discord_rpc.h"
+#include "debugger_client.h"
 #include "event_loop.h"
 #include "imageviewer.h"
 #include "integrated_terminal.h"
@@ -22,6 +23,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
@@ -34,6 +36,7 @@ private:
 
 public:
   void set_language(const std::string &ext);
+  bool has_rules() const { return !rules.empty(); }
   std::vector<std::pair<int, int>> get_colors(const std::string &line);
 };
 
@@ -95,12 +98,26 @@ private:
   bool waiting_for_space_f;
 
   // Search panel
+  struct SearchMatch {
+    int line = 0;
+    int col = 0;
+    int len = 0;
+
+    bool operator<(const SearchMatch &other) const {
+      return std::tie(line, col, len) <
+             std::tie(other.line, other.col, other.len);
+    }
+  };
   bool show_search;
   std::string search_query;
-  std::vector<std::pair<int, int>> search_results; // (line, col)
+  std::string search_replace_text;
+  std::vector<SearchMatch> search_results;
   int search_result_index;
   bool search_case_sensitive;
   bool search_whole_word;
+  bool search_regex;
+  bool search_replace_visible;
+  bool search_focus_replace;
   
   // Save Prompt
   bool show_save_prompt;
@@ -109,17 +126,116 @@ private:
   // Quit Prompt
   bool show_quit_prompt;
 
+  // Top application menu bar
+  enum MenuBarAction {
+    MENU_ACTION_NONE,
+    MENU_ACTION_COMMAND,
+    MENU_ACTION_NEW_FILE,
+    MENU_ACTION_OPEN_FINDER,
+    MENU_ACTION_SAVE,
+    MENU_ACTION_SAVE_AS,
+    MENU_ACTION_CLOSE_FILE,
+    MENU_ACTION_QUIT,
+    MENU_ACTION_UNDO,
+    MENU_ACTION_REDO,
+    MENU_ACTION_CUT,
+    MENU_ACTION_COPY,
+    MENU_ACTION_PASTE,
+    MENU_ACTION_SELECT_ALL,
+    MENU_ACTION_SELECT_LINE,
+    MENU_ACTION_DUPLICATE_LINE,
+    MENU_ACTION_MOVE_LINE_UP,
+    MENU_ACTION_MOVE_LINE_DOWN,
+    MENU_ACTION_TOGGLE_COMMENT,
+    MENU_ACTION_COMMAND_PALETTE,
+    MENU_ACTION_TOGGLE_SIDEBAR,
+    MENU_ACTION_TOGGLE_MINIMAP,
+    MENU_ACTION_THEME,
+    MENU_ACTION_HOME,
+    MENU_ACTION_TOGGLE_TERMINAL,
+    MENU_ACTION_NEW_TERMINAL,
+    MENU_ACTION_TASKS,
+    MENU_ACTION_RERUN_TASK,
+    MENU_ACTION_TOGGLE_DEBUG_PANEL,
+    MENU_ACTION_DEBUG_STOP,
+    MENU_ACTION_DEBUG_CONTINUE,
+    MENU_ACTION_DEBUG_PAUSE,
+    MENU_ACTION_DEBUG_STEP_IN,
+    MENU_ACTION_DEBUG_STEP_OVER,
+    MENU_ACTION_DEBUG_STEP_OUT,
+    MENU_ACTION_LSP_DEFINITION,
+    MENU_ACTION_LSP_BACK,
+    MENU_ACTION_HELP
+  };
+
+  struct MenuBarItem {
+    std::string label;
+    MenuBarAction action = MENU_ACTION_NONE;
+    std::string command;
+    bool enabled = true;
+  };
+
+  struct MenuBarMenu {
+    std::string label;
+    std::vector<MenuBarItem> items;
+  };
+
+  struct MenuBarSegment {
+    int menu_index = -1;
+    int x = 0;
+    int end_x = 0;
+  };
+
+  bool show_menu_bar_dropdown;
+  int menu_bar_active;
+  int menu_bar_selected;
+  std::vector<MenuBarSegment> menu_bar_segments;
+
   // Minimap
   bool show_minimap;
   int minimap_width;
   bool show_integrated_terminal;
   int integrated_terminal_height;
+  bool show_debugger_panel;
+  int debugger_panel_height;
+  enum RightPanelTab {
+    RIGHT_PANEL_DEBUG
+  };
+  bool show_right_panel;
+  int right_panel_width;
+  RightPanelTab active_right_panel_tab;
 
   SyntaxHighlighter highlighter;
   Config config;
   DiscordRPC discord_rpc;
   ImageViewer image_viewer;
   std::vector<std::unique_ptr<IntegratedTerminal>> integrated_terminals;
+  std::vector<std::unique_ptr<DebuggerClient>> debugger_sessions;
+  int current_debugger_session;
+  struct DebuggerSessionState {
+    std::string name;
+    std::string adapter;
+    std::string program;
+    bool running = false;
+    bool stopped = false;
+    int active_thread_id = 0;
+    int active_frame_id = 0;
+    bool supports_read_memory = false;
+    bool supports_disassemble = false;
+    std::vector<DebuggerThread> threads;
+    std::vector<DebuggerVariable> variables;
+    std::vector<DebuggerMemoryRow> memory_rows;
+    std::vector<DebuggerInstruction> instructions;
+    std::string output;
+    std::string last_error;
+  };
+  std::vector<DebuggerSessionState> debugger_session_state;
+  std::map<std::string, std::vector<DebuggerBreakpoint>> debugger_breakpoints;
+  std::vector<DebuggerSessionConfig> debugger_configs;
+  bool debugger_breakpoint_hover_visible;
+  int debugger_breakpoint_hover_pane;
+  int debugger_breakpoint_hover_buffer;
+  int debugger_breakpoint_hover_line;
   std::vector<std::unique_ptr<LSPClient>> lsp_clients;
   std::unordered_map<std::string, long long> lsp_pending_changes;
   int current_integrated_terminal;
@@ -169,11 +285,39 @@ private:
   int mouse_press_buf_x;
   int mouse_press_buf_y;
   bool mouse_drag_started;
+  bool lsp_mouse_hover_enabled;
+  bool lsp_mouse_hover_pending;
+  bool lsp_mouse_hover_visible;
+  long long lsp_mouse_hover_deadline_ms;
+  int lsp_mouse_hover_pane;
+  int lsp_mouse_hover_buffer;
+  int lsp_mouse_hover_line;
+  int lsp_mouse_hover_col;
+  int lsp_mouse_hover_token_start;
+  int lsp_mouse_hover_token_end;
+  int lsp_mouse_hover_screen_x;
+  int lsp_mouse_hover_screen_y;
+  std::string lsp_mouse_hover_filepath;
   bool pane_resize_dragging;
   int pane_resize_node;
   bool pane_resize_vertical;
   int pane_resize_start_pos;
   float pane_resize_start_ratio;
+  bool sidebar_resize_dragging;
+  bool sidebar_resize_opening;
+  int sidebar_resize_start_x;
+  int sidebar_resize_start_width;
+  bool right_panel_resize_dragging;
+  int right_panel_resize_start_x;
+  int right_panel_resize_start_width;
+  bool scrollbar_dragging;
+  int scrollbar_drag_pane;
+  int scrollbar_drag_start_y;
+  int scrollbar_drag_start_scroll;
+  int scrollbar_drag_track_y;
+  int scrollbar_drag_track_h;
+  int scrollbar_drag_thumb_h;
+  int scrollbar_drag_max_scroll;
   long long last_left_click_ms;
   Cursor last_left_click_pos;
   int last_left_click_count;
@@ -208,11 +352,16 @@ private:
     CONTEXT_ACTION_SIDEBAR_RENAME,
     CONTEXT_ACTION_SIDEBAR_REFRESH,
     CONTEXT_ACTION_SIDEBAR_COPY_PATH,
-    CONTEXT_ACTION_TERMINAL_FOCUS,
-    CONTEXT_ACTION_TERMINAL_NEW,
-    CONTEXT_ACTION_TERMINAL_CLOSE,
-    CONTEXT_ACTION_TERMINAL_RESET_SCROLL
-  };
+    CONTEXT_ACTION_GIT_STAGE,
+    CONTEXT_ACTION_GIT_UNSTAGE,
+    CONTEXT_ACTION_GIT_DIFF,
+    CONTEXT_ACTION_GIT_DIFF_STAGED,
+  CONTEXT_ACTION_TERMINAL_FOCUS,
+  CONTEXT_ACTION_TERMINAL_NEW,
+  CONTEXT_ACTION_TERMINAL_CLOSE,
+  CONTEXT_ACTION_TERMINAL_RESET_SCROLL,
+  CONTEXT_ACTION_TOGGLE_FOLD
+};
   struct ContextMenuItem {
     std::string label;
     ContextMenuAction action = CONTEXT_ACTION_NONE;
@@ -228,6 +377,7 @@ private:
   int context_menu_target_buffer;
   int context_menu_target_pane;
   int context_menu_target_terminal;
+  int context_menu_target_line;
   std::string context_menu_target_path;
   bool context_menu_target_is_dir;
 
@@ -235,8 +385,23 @@ private:
   bool lsp_completion_manual_request;
   int lsp_completion_selected;
   Cursor lsp_completion_anchor;
+  Cursor lsp_completion_replace_start;
   std::string lsp_completion_filepath;
+  std::string lsp_completion_prefix;
+  std::vector<LSPCompletionItem> lsp_completion_all_items;
   std::vector<LSPCompletionItem> lsp_completion_items;
+  struct LSPJumpLocation {
+    std::string filepath;
+    Cursor cursor;
+    int scroll_offset = 0;
+    int scroll_x = 0;
+    bool preview = false;
+  };
+  std::vector<LSPJumpLocation> lsp_jump_stack;
+  bool lsp_definition_jump_pending;
+  LSPLocation lsp_definition_pending_location;
+  bool lsp_back_jump_pending;
+  LSPJumpLocation lsp_back_pending_location;
 
   Popup popup; // New
 
@@ -248,6 +413,7 @@ private:
     int scroll_offset;
     int scroll_x;
     bool modified;
+    std::vector<FoldRange> collapsed_folds;
   };
   std::vector<ClosedBufferSnapshot> closed_buffer_history;
   std::vector<std::string> recent_files;
@@ -256,6 +422,12 @@ private:
   std::string git_root;
   std::string git_branch;
   int git_dirty_count;
+  int git_staged_count;
+  int git_unstaged_count;
+  int git_untracked_count;
+  int git_deleted_count;
+  int git_renamed_count;
+  int git_conflict_count;
   std::atomic<bool> git_refresh_pending_{false};
   std::unordered_map<std::string, std::string> git_file_status;
   long long git_last_refresh_ms;
@@ -319,6 +491,7 @@ private:
 
   struct FileTabSegment {
     int buffer_id = -1;
+    int tab_index = -1;
     int x = 0;
     int label_x = 0;
     int close_x = 0;
@@ -334,8 +507,15 @@ private:
     int y = 0;
     int w = 0;
     std::vector<FileTabSegment> segments;
+    std::string scroll_left_label;
     std::string overflow_label;
     int overflow_x = 0;
+    int scroll_left_x = -1;
+    int scroll_left_end_x = -1;
+    int scroll_right_x = -1;
+    int scroll_right_end_x = -1;
+    int hidden_before = 0;
+    int hidden_after = 0;
     int hidden_count = 0;
   };
 
@@ -363,11 +543,21 @@ private:
   void render_easter_egg();
   void render_pane(const SplitPane &pane);
   FileTabLayout build_file_tab_layout(const SplitPane &pane, int draw_w);
+  int find_local_tab_index(const SplitPane &pane, int buffer_id) const;
+  void clamp_tab_scroll(SplitPane &pane);
+  void reveal_local_tab(SplitPane &pane, int target_index, int draw_w);
+  bool scroll_local_tabs(SplitPane &pane, int delta);
+  bool switch_to_local_tab(int target_index);
+  bool cycle_local_tab(int delta);
   void render_scrollbar(const SplitPane &pane, int draw_w);
   void render_telescope();
   void render_minimap(int x, int y, int w, int h, int buffer_id);
   void render_image_viewer();
   void render_integrated_terminal();
+  void render_debugger_panel();
+  int effective_right_panel_width() const;
+  void render_menu_bar();
+  void render_menu_dropdown();
   void render_status_line();
   void render_command_palette();
   void render_search_panel();
@@ -378,6 +568,7 @@ private:
   void render_home_menu();
   void render_buffer_content(const SplitPane &pane, int buffer_id);
   void poll_lsp_clients();
+  void poll_debugger_sessions();
   // True when there is LSP work pending (pending change notifications
   // or active clients). The event loop uses this to decide whether
   // to register the 50ms LSP poll timer at all.
@@ -400,8 +591,23 @@ private:
   void show_lsp_manager();
   bool install_lsp_server(const std::string &name);
   bool remove_lsp_server(const std::string &name);
+  bool install_tree_sitter_language(const std::string &language);
+  void show_tree_sitter_status();
   void request_lsp_completion(bool manual, char trigger_character = '\0');
+  void request_lsp_hover();
+  void request_lsp_hover_at(int pane_index, int buffer_id, const Cursor &pos,
+                            int token_start, int token_end, int screen_x,
+                            int screen_y);
+  void cancel_lsp_mouse_hover(bool hide_popup = true);
+  void maybe_fire_lsp_mouse_hover();
+  void request_lsp_definition();
+  void handle_lsp_hover_result(const LSPHoverResult &hover);
+  void handle_lsp_definition_result(const LSPDefinitionResult &definition);
+  bool apply_pending_lsp_definition_jump();
+  bool apply_pending_lsp_back_jump();
+  void return_from_lsp_definition();
   void hide_lsp_completion();
+  bool refresh_lsp_completion_filter();
   bool apply_selected_lsp_completion();
   void render_lsp_completion();
   std::string get_buffer_text(const FileBuffer &buf) const;
@@ -424,6 +630,8 @@ private:
   void handle_visual_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt);
 
   void handle_command_palette(int ch);
+  bool execute_ex_command(const std::string &line);
+  void show_command_help(const std::string &topic);
   void submit_command_palette();
   void handle_search_panel(int ch, bool is_ctrl = false,
                            bool is_shift = false, bool is_alt = false);
@@ -433,9 +641,12 @@ private:
                                         bool is_alt);
   bool handle_home_menu_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
   bool handle_home_menu_mouse(int x, int y, bool is_click);
+  bool handle_menu_bar_input(int ch);
+  bool handle_menu_bar_mouse(int x, int y, bool is_click, bool is_motion);
   bool handle_integrated_terminal_mouse(int x, int y);
   bool handle_integrated_terminal_scroll(int x, int y, bool is_scroll_up,
                                          bool is_scroll_down);
+  bool handle_debugger_mouse(int x, int y, bool activate = true);
   void place_integrated_terminal_cursor();
   void handle_mouse(void *event);
 
@@ -477,6 +688,10 @@ private:
   bool handle_context_menu_mouse(int x, int y, bool is_click);
   bool open_context_menu_for_mouse(int x, int y);
   void execute_context_menu_item(int index);
+  std::vector<MenuBarMenu> build_menu_bar_model() const;
+  void close_menu_bar();
+  void open_menu_bar(int index);
+  void execute_menu_bar_item(int menu_index, int item_index);
   void set_diagnostics(const std::string &filepath,
                        const std::vector<Diagnostic> &diagnostics);
   void add_diagnostic(const std::string &filepath,
@@ -487,6 +702,7 @@ public:
   void toggle_sidebar();
   void load_file_tree(const std::string &path);
   void open_workspace(const std::string &path, bool restore_session = true);
+  bool resume_last_workspace_session();
   void set_home_menu_visible(bool visible);
 
 private:
@@ -494,6 +710,22 @@ private:
   void handle_sidebar_mouse(int x, int y, bool is_click,
                             bool is_double_click = false);
   void render_sidebar();
+  void render_collapsed_sidebar_handle();
+  int min_sidebar_width() const { return 18; }
+  int sidebar_close_threshold() const { return 12; }
+  int max_sidebar_width() const;
+  int effective_sidebar_width() const;
+  bool collapsed_sidebar_handle_hit_test(int x, int y) const;
+  bool sidebar_resize_hit_test(int x, int y) const;
+  bool begin_sidebar_resize_drag(int x, int y);
+  bool update_sidebar_resize_drag(int x);
+  void end_sidebar_resize_drag();
+  int min_right_panel_width() const { return 28; }
+  int max_right_panel_width() const;
+  bool right_panel_resize_hit_test(int x, int y) const;
+  bool begin_right_panel_resize_drag(int x, int y);
+  bool update_right_panel_resize_drag(int x);
+  void end_right_panel_resize_drag();
   void build_tree(const std::string &path, std::vector<FileNode> &nodes,
                   int depth);
   void invalidate_sidebar_tree_cache();
@@ -545,6 +777,9 @@ private:
   void load_recent_workspaces();
   void save_recent_files();
   void save_recent_workspaces();
+  void save_file_fold_state(FileBuffer &buf);
+  void save_file_fold_states();
+  void restore_file_fold_state(FileBuffer &buf);
   void save_workspace_session();
   bool restore_workspace_session();
   void refresh_git_status(bool force = false);
@@ -556,12 +791,20 @@ private:
   // running a 1.5s timer that always returns immediately).
   bool git_status_active() const {
     return !git_root.empty() || !git_branch.empty() ||
-           git_dirty_count != 0 || !git_file_status.empty() ||
+           git_dirty_count != 0 || git_staged_count != 0 ||
+           git_unstaged_count != 0 || git_untracked_count != 0 ||
+           git_deleted_count != 0 || git_renamed_count != 0 ||
+           git_conflict_count != 0 || !git_file_status.empty() ||
            (workspace_session_enabled && !workspace_session_root.empty()) ||
            !root_dir.empty();
   }
   std::string run_git_capture(const std::string &args) const;
   std::string to_git_relative_path(const std::string &path) const;
+  bool git_stage_path(const std::string &path);
+  bool git_unstage_path(const std::string &path);
+  bool git_stage_all();
+  bool git_unstage_all();
+  bool git_commit_message(const std::string &message);
 
   void toggle_minimap();
   void toggle_integrated_terminal();
@@ -575,6 +818,32 @@ private:
   void show_terminal_tasks();
   bool run_terminal_task(const std::string &name, bool force_new = false);
   bool rerun_last_terminal_task();
+  void toggle_debugger_panel();
+  bool start_debugger_session(DebuggerSessionConfig config);
+  bool start_debugger_command(const std::string &adapter,
+                              const std::string &command_line);
+  bool attach_debugger_command(const std::string &adapter,
+                               const std::string &pid_text);
+  void stop_debugger_session();
+  void restart_debugger_session();
+  void continue_debugger_session();
+  void pause_debugger_session();
+  void step_debugger_in();
+  void step_debugger_next();
+  void step_debugger_out();
+  void show_debugger_threads();
+  void request_debugger_memory(const std::string &expression, int bytes = 128);
+  void request_debugger_disassembly(const std::string &expression = "");
+  bool toggle_debugger_breakpoint(const std::string &filepath, int line);
+  bool has_debugger_breakpoint(const std::string &filepath, int line) const;
+  void update_debugger_breakpoint_hover(int pane_index, int buffer_id,
+                                        int line);
+  void clear_debugger_breakpoint_hover();
+  bool is_debugger_breakpoint_hover(int buffer_id, int line) const;
+  void load_debugger_configs();
+  std::vector<std::string> list_debugger_config_names();
+  bool run_debugger_config(const std::string &name);
+  DebuggerClient *get_debugger_session(int index = -1);
   void toggle_search();
   void toggle_command_palette();
   void open_theme_chooser();
@@ -583,6 +852,18 @@ private:
   void find_next();
   void find_prev();
   void perform_search();
+  bool replace_current_search_match();
+  bool replace_all_search_matches();
+  void refresh_folds(FileBuffer &buf);
+  bool toggle_fold_at_line(FileBuffer &buf, int line);
+  bool fold_at_cursor();
+  bool unfold_at_cursor();
+  bool toggle_fold_at_cursor();
+  void fold_all();
+  void unfold_all();
+  bool is_line_hidden_by_fold(const FileBuffer &buf, int line) const;
+  int buffer_line_for_visible_row(const FileBuffer &buf, int first_line,
+                                  int row) const;
 
   void split_pane_horizontal();
   void split_pane_vertical();
