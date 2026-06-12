@@ -1,6 +1,8 @@
 #include "editor.h"
+#include "python_api.h"
 #include <algorithm>
 #include <cctype>
+#include <regex>
 
 namespace {
 std::string to_lower_ascii(std::string text) {
@@ -26,9 +28,21 @@ bool is_whole_word_match(const std::string &line, size_t pos, size_t len) {
   return !prev_word && !next_word;
 }
 
-std::string search_flags(bool case_sensitive, bool whole_word) {
-  return std::string(case_sensitive ? "Aa" : "aa") +
-         (whole_word ? ",W" : ",w");
+std::string search_flags(bool case_sensitive, bool whole_word, bool regex) {
+  std::string flags = case_sensitive ? "Aa" : "aa";
+  flags += whole_word ? ",W" : ",w";
+  if (regex) {
+    flags += ",.*";
+  }
+  return flags;
+}
+
+std::regex make_search_regex(const std::string &pattern, bool case_sensitive) {
+  auto flags = std::regex::ECMAScript;
+  if (!case_sensitive) {
+    flags |= std::regex::icase;
+  }
+  return std::regex(pattern, flags);
 }
 } // namespace
 
@@ -38,6 +52,7 @@ void Editor::toggle_search() {
     return;
   }
 
+  search_focus_replace = false;
   auto &buf = get_buffer();
   if (buf.selection.active && buf.selection.start.y == buf.selection.end.y) {
     Cursor start = buf.selection.start;
@@ -61,6 +76,7 @@ void Editor::toggle_search() {
     search_results.clear();
     search_result_index = -1;
   }
+  needs_redraw = true;
 }
 
 void Editor::perform_search() {
@@ -73,51 +89,85 @@ void Editor::perform_search() {
 
   if (search_query.empty()) {
     set_message("Search cleared [" +
-                search_flags(search_case_sensitive, search_whole_word) + "]");
+                search_flags(search_case_sensitive, search_whole_word,
+                             search_regex) +
+                "]");
+    needs_redraw = true;
     return;
   }
 
-  std::string query_cmp = search_case_sensitive ? search_query
-                                                : to_lower_ascii(search_query);
-  const size_t query_len = search_query.size();
+  if (search_regex) {
+    std::regex re;
+    try {
+      re = make_search_regex(search_query, search_case_sensitive);
+    } catch (const std::regex_error &e) {
+      set_message(std::string("Regex error: ") + e.what());
+      needs_redraw = true;
+      return;
+    }
 
-  for (size_t i = 0; i < buf.line_count(); i++) {
-    const std::string &original_line = buf.line(i);
-    std::string line_cmp =
-        search_case_sensitive ? original_line : to_lower_ascii(original_line);
-
-    size_t pos = 0;
-    while ((pos = line_cmp.find(query_cmp, pos)) != std::string::npos) {
-      if (search_whole_word &&
-          !is_whole_word_match(original_line, pos, query_len)) {
-        pos++;
-        continue;
+    for (size_t line_idx = 0; line_idx < buf.line_count(); line_idx++) {
+      const std::string &line = buf.line(line_idx);
+      auto begin = std::sregex_iterator(line.begin(), line.end(), re);
+      auto end = std::sregex_iterator();
+      for (auto it = begin; it != end; ++it) {
+        int pos = (int)it->position();
+        int len = std::max(1, (int)it->length());
+        if (search_whole_word &&
+            !is_whole_word_match(line, (size_t)pos, (size_t)len)) {
+          continue;
+        }
+        search_results.push_back({(int)line_idx, pos, len});
       }
-      search_results.push_back({(int)i, (int)pos});
-      pos++;
+    }
+  } else {
+    std::string query_cmp = search_case_sensitive ? search_query
+                                                  : to_lower_ascii(search_query);
+    const size_t query_len = search_query.size();
+
+    for (size_t i = 0; i < buf.line_count(); i++) {
+      const std::string &original_line = buf.line(i);
+      std::string line_cmp =
+          search_case_sensitive ? original_line : to_lower_ascii(original_line);
+
+      size_t pos = 0;
+      while ((pos = line_cmp.find(query_cmp, pos)) != std::string::npos) {
+        if (search_whole_word &&
+            !is_whole_word_match(original_line, pos, query_len)) {
+          pos++;
+          continue;
+        }
+        search_results.push_back({(int)i, (int)pos, (int)query_len});
+        pos += std::max<size_t>(1, query_len);
+      }
     }
   }
 
   if (search_results.empty()) {
     set_message("No matches [" +
-                search_flags(search_case_sensitive, search_whole_word) + "]");
+                search_flags(search_case_sensitive, search_whole_word,
+                             search_regex) +
+                "]");
     needs_redraw = true;
     return;
   }
 
+  SearchMatch cursor_match{cursor_y, cursor_x, 0};
   auto it = std::lower_bound(search_results.begin(), search_results.end(),
-                             std::make_pair(cursor_y, cursor_x));
+                             cursor_match);
   search_result_index =
       (it == search_results.end()) ? 0 : (int)(it - search_results.begin());
 
-  buf.cursor.y = search_results[search_result_index].first;
-  buf.cursor.x = search_results[search_result_index].second;
+  buf.cursor.y = search_results[search_result_index].line;
+  buf.cursor.x = search_results[search_result_index].col;
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
 
   set_message(std::to_string(search_results.size()) + " match(es) [" +
-              search_flags(search_case_sensitive, search_whole_word) +
-              "]  Tab:case Ctrl+W:word");
+              search_flags(search_case_sensitive, search_whole_word,
+                           search_regex) +
+              "]");
+  needs_redraw = true;
 }
 
 void Editor::find_next() {
@@ -135,8 +185,8 @@ void Editor::find_next() {
   }
 
   auto &buf = get_buffer();
-  buf.cursor.y = search_results[search_result_index].first;
-  buf.cursor.x = search_results[search_result_index].second;
+  buf.cursor.y = search_results[search_result_index].line;
+  buf.cursor.x = search_results[search_result_index].col;
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
 
@@ -161,8 +211,8 @@ void Editor::find_prev() {
   }
 
   auto &buf = get_buffer();
-  buf.cursor.y = search_results[search_result_index].first;
-  buf.cursor.x = search_results[search_result_index].second;
+  buf.cursor.y = search_results[search_result_index].line;
+  buf.cursor.x = search_results[search_result_index].col;
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
 
@@ -172,9 +222,128 @@ void Editor::find_prev() {
               (wrapped ? " (wrapped)" : ""));
 }
 
+bool Editor::replace_current_search_match() {
+  if (search_query.empty() || search_results.empty() ||
+      search_result_index < 0 ||
+      search_result_index >= (int)search_results.size()) {
+    perform_search();
+    return false;
+  }
+
+  auto &buf = get_buffer();
+  if (buf.is_lazy()) {
+    buf.materialize();
+  }
+
+  SearchMatch match = search_results[search_result_index];
+  if (match.line < 0 || match.line >= (int)buf.lines.size()) {
+    return false;
+  }
+
+  std::string replacement = search_replace_text;
+  if (search_regex) {
+    try {
+      std::regex re = make_search_regex(search_query, search_case_sensitive);
+      const std::string &matched =
+          buf.lines[match.line].substr((size_t)match.col, (size_t)match.len);
+      replacement = std::regex_replace(matched, re, search_replace_text);
+    } catch (const std::regex_error &e) {
+      set_message(std::string("Regex error: ") + e.what());
+      return false;
+    }
+  }
+
+  save_state();
+  std::string &line = buf.lines[match.line];
+  match.col = std::clamp(match.col, 0, (int)line.size());
+  match.len = std::clamp(match.len, 0, (int)line.size() - match.col);
+  line.replace((size_t)match.col, (size_t)match.len, replacement);
+  buf.cursor = {match.col + (int)replacement.size(), match.line};
+  buf.preferred_x = buf.cursor.x;
+  buf.modified = true;
+  buf.selection.active = false;
+
+  if (python_api) {
+    python_api->on_buffer_change(buf.filepath, "");
+  }
+  if (!buf.filepath.empty()) {
+    notify_lsp_change(buf.filepath);
+  }
+
+  perform_search();
+  find_next();
+  needs_redraw = true;
+  return true;
+}
+
+bool Editor::replace_all_search_matches() {
+  if (search_query.empty()) {
+    return false;
+  }
+  perform_search();
+  if (search_results.empty()) {
+    return false;
+  }
+
+  auto &buf = get_buffer();
+  if (buf.is_lazy()) {
+    buf.materialize();
+  }
+
+  std::regex re;
+  if (search_regex) {
+    try {
+      re = make_search_regex(search_query, search_case_sensitive);
+    } catch (const std::regex_error &e) {
+      set_message(std::string("Regex error: ") + e.what());
+      return false;
+    }
+  }
+
+  save_state();
+  int total = 0;
+  for (int i = (int)search_results.size() - 1; i >= 0; i--) {
+    SearchMatch match = search_results[i];
+    if (match.line < 0 || match.line >= (int)buf.lines.size()) {
+      continue;
+    }
+    std::string &line = buf.lines[match.line];
+    match.col = std::clamp(match.col, 0, (int)line.size());
+    match.len = std::clamp(match.len, 0, (int)line.size() - match.col);
+    std::string replacement = search_replace_text;
+    if (search_regex) {
+      const std::string matched =
+          line.substr((size_t)match.col, (size_t)match.len);
+      replacement = std::regex_replace(matched, re, search_replace_text);
+    }
+    line.replace((size_t)match.col, (size_t)match.len, replacement);
+    total++;
+  }
+
+  if (total <= 0) {
+    set_message("No matches found");
+    return false;
+  }
+
+  buf.modified = true;
+  buf.selection.active = false;
+  clamp_cursor(get_pane().buffer_id);
+  ensure_cursor_visible();
+  if (python_api) {
+    python_api->on_buffer_change(buf.filepath, "");
+  }
+  if (!buf.filepath.empty()) {
+    notify_lsp_change(buf.filepath);
+  }
+  perform_search();
+  set_message("Replaced " + std::to_string(total) + " occurrence(s)");
+  needs_redraw = true;
+  return true;
+}
+
 void Editor::handle_search_panel(int ch, bool is_ctrl, bool is_shift,
                                  bool /*is_alt*/) {
-  if (ch == 27) { // Escape
+  if (ch == 27) {
     show_search = false;
     needs_redraw = true;
     set_message("");
@@ -187,6 +356,23 @@ void Editor::handle_search_panel(int ch, bool is_ctrl, bool is_shift,
     return;
   }
 
+  if (is_ctrl && (ch == 'h' || ch == 'H')) {
+    search_replace_visible = !search_replace_visible;
+    search_focus_replace = search_replace_visible;
+    needs_redraw = true;
+    return;
+  }
+
+  if (is_ctrl && (ch == 'r' || ch == 'R')) {
+    if (is_shift) {
+      replace_all_search_matches();
+    } else {
+      replace_current_search_match();
+    }
+    needs_redraw = true;
+    return;
+  }
+
   if (is_ctrl && (ch == 'w' || ch == 'W')) {
     search_whole_word = !search_whole_word;
     perform_search();
@@ -194,17 +380,30 @@ void Editor::handle_search_panel(int ch, bool is_ctrl, bool is_shift,
     return;
   }
 
-  if (is_ctrl && (ch == 'l' || ch == 'L')) {
-    search_query.clear();
-    search_results.clear();
-    search_result_index = -1;
-    set_message("Search cleared [" +
-                search_flags(search_case_sensitive, search_whole_word) + "]");
+  if (is_ctrl && (ch == 'e' || ch == 'E')) {
+    search_regex = !search_regex;
+    perform_search();
     needs_redraw = true;
     return;
   }
 
-  if (ch == '\n' || ch == 13 || ch == 1009) { // Enter or Down -> Next
+  if (is_ctrl && (ch == 'l' || ch == 'L')) {
+    if (search_focus_replace) {
+      search_replace_text.clear();
+    } else {
+      search_query.clear();
+      search_results.clear();
+      search_result_index = -1;
+    }
+    set_message("Search cleared [" +
+                search_flags(search_case_sensitive, search_whole_word,
+                             search_regex) +
+                "]");
+    needs_redraw = true;
+    return;
+  }
+
+  if (ch == '\n' || ch == 13 || ch == 1009) {
     if (is_shift && (ch == '\n' || ch == 13)) {
       find_prev();
     } else {
@@ -214,33 +413,45 @@ void Editor::handle_search_panel(int ch, bool is_ctrl, bool is_shift,
     return;
   }
 
-  if (ch == 1008) { // Up -> Prev
+  if (ch == 1008) {
     find_prev();
     needs_redraw = true;
     return;
   }
 
-  if (ch == 127 || ch == 8) { // Backspace
-    if (!search_query.empty()) {
-      search_query.pop_back();
-      perform_search();
+  if (ch == 127 || ch == 8) {
+    std::string &target =
+        search_focus_replace ? search_replace_text : search_query;
+    if (!target.empty()) {
+      target.pop_back();
+      if (!search_focus_replace) {
+        perform_search();
+      }
       needs_redraw = true;
     }
     return;
   }
 
-  if (ch == '\t' || ch == 9) { // Toggle case sensitivity
-    search_case_sensitive = !search_case_sensitive;
-    perform_search();
+  if (ch == '\t' || ch == 9) {
+    if (search_replace_visible) {
+      search_focus_replace = !search_focus_replace;
+    } else {
+      search_case_sensitive = !search_case_sensitive;
+      perform_search();
+    }
     needs_redraw = true;
     return;
   }
 
   if (ch < 32 || ch > 126) {
-    return; // Ignore non-printable
+    return;
   }
 
-  search_query += (char)ch;
-  perform_search();
+  std::string &target =
+      search_focus_replace ? search_replace_text : search_query;
+  target += (char)ch;
+  if (!search_focus_replace) {
+    perform_search();
+  }
   needs_redraw = true;
 }
