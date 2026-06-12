@@ -6,6 +6,7 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
   idle_frame_count = 0;
   cursor_visible = true;
   cursor_blink_frame = 0;
+  clear_debugger_breakpoint_hover();
 
   // Terminals encode Ctrl+` inconsistently. Accept common variants:
   // - explicit Ctrl modifier + '`'/'~' (and fallback Ctrl+\ for layouts where
@@ -40,6 +41,11 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     if (handle_home_menu_input(ch, is_ctrl, is_shift, is_alt)) {
       return;
     }
+  }
+
+  if (show_menu_bar_dropdown) {
+    handle_menu_bar_input(ch);
+    return;
   }
 
   if (show_context_menu) {
