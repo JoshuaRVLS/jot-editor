@@ -50,6 +50,7 @@ State capture_state(const FileBuffer &buf) {
   s.scroll_offset = buf.scroll_offset;
   s.scroll_x = buf.scroll_x;
   s.modified = buf.modified;
+  s.is_placeholder = buf.is_placeholder;
   return s;
 }
 
@@ -59,7 +60,7 @@ bool same_state(const FileBuffer &buf, const State &a, const State &b) {
       !(a.selection.end == b.selection.end) ||
       a.selection.active != b.selection.active ||
       a.scroll_offset != b.scroll_offset || a.scroll_x != b.scroll_x ||
-      a.modified != b.modified) {
+      a.modified != b.modified || a.is_placeholder != b.is_placeholder) {
     return false;
   }
   if (a.full_snapshot != b.full_snapshot) {
@@ -140,6 +141,7 @@ void apply_state(FileBuffer &buf, const State &prev) {
   buf.scroll_offset = std::max(0, prev.scroll_offset);
   buf.scroll_x = std::max(0, prev.scroll_x);
   buf.modified = prev.modified;
+  buf.is_placeholder = prev.is_placeholder;
 }
 } // namespace
 
