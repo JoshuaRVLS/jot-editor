@@ -71,6 +71,7 @@ void Config::load_defaults() {
   settings["lsp_completion_max_items"] = "8";
   settings["lsp_completion_nerd_icons"] = "true";
   settings["terminal_height"] = "10";
+  settings["debugger_height"] = "12";
   settings["discord_rpc"] = "false";
 }
 
