@@ -73,6 +73,9 @@ void Config::load_defaults() {
   settings["terminal_height"] = "10";
   settings["debugger_height"] = "12";
   settings["discord_rpc"] = "false";
+  settings["treesitter_library_paths"] = "";
+  settings["treesitter_query_paths"] = "";
+  settings["treesitter_language_overrides"] = "";
 }
 
 void Config::parse_line(const std::string &line) {
