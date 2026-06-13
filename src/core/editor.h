@@ -257,6 +257,18 @@ private:
   TreeSitterManager ts_manager_;
 #endif // tracks active color scheme
 
+  struct TreeSitterInstallJob {
+    std::string language;
+    int terminal_index = -1;
+    bool running = true;
+    bool succeeded = false;
+    bool failed = false;
+    std::string progress;
+  };
+  bool show_tree_sitter_status_modal;
+  int tree_sitter_status_scroll;
+  std::vector<TreeSitterInstallJob> tree_sitter_install_jobs;
+
   EventLoop event_loop_;
   std::unique_ptr<TaskQueue> task_queue_;
 
@@ -562,6 +574,7 @@ private:
   void render_command_palette();
   void render_search_panel();
   void render_context_menu();
+  void render_tree_sitter_status_modal();
   void render_save_prompt();
   void render_quit_prompt();
   void render_popup(); // New
@@ -593,6 +606,9 @@ private:
   bool remove_lsp_server(const std::string &name);
   bool install_tree_sitter_language(const std::string &language);
   void show_tree_sitter_status();
+  void reload_tree_sitter();
+  void poll_tree_sitter_installs();
+  bool handle_tree_sitter_status_input(int ch);
   void request_lsp_completion(bool manual, char trigger_character = '\0');
   void request_lsp_hover();
   void request_lsp_hover_at(int pane_index, int buffer_id, const Cursor &pos,
@@ -618,6 +634,7 @@ private:
 #ifdef JOT_TREESITTER
   void reparse_tree(FileBuffer &buf);
   void init_ts_for_buffer(FileBuffer &buf);
+  std::string tree_sitter_extension_for_buffer(const FileBuffer &buf);
 #endif
 
   void handle_input(int ch, bool is_ctrl = false, bool is_shift = false,
