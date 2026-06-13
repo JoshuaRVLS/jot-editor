@@ -48,6 +48,12 @@ std::string normalize_diagnostic_path(const std::string &path) {
 
 Editor::Editor() {
   config.load();
+#ifdef JOT_TREESITTER
+  ts_manager_.set_runtime_options(
+      config.get_list("treesitter_library_paths"),
+      config.get_list("treesitter_query_paths"),
+      config.get_list("treesitter_language_overrides"));
+#endif
 
   running = true;
   pane_root = -1;
@@ -67,6 +73,9 @@ Editor::Editor() {
   show_right_panel = false;
   right_panel_width = std::clamp(config.get_int("right_panel_width", 42), 28, 80);
   active_right_panel_tab = RIGHT_PANEL_DEBUG;
+  show_tree_sitter_status_modal = false;
+  tree_sitter_status_scroll = 0;
+  tree_sitter_install_jobs.clear();
   current_debugger_session = -1;
   debugger_breakpoint_hover_visible = false;
   debugger_breakpoint_hover_pane = -1;
