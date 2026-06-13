@@ -587,6 +587,8 @@ bool Editor::execute_ex_command(const std::string &input_line) {
     }
   } else if (lcmd == "tsstatus") {
     show_tree_sitter_status();
+  } else if (lcmd == "tsreload" || lcmd == "treesitterreload") {
+    reload_tree_sitter();
   } else if (lcmd == "gitrefresh") {
     refresh_git_status(true);
     if (has_git_repo()) {
