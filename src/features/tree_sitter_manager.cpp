@@ -1,103 +1,50 @@
 #include "tree_sitter_manager.h"
+#include "tree_sitter_catalog.h"
+#include "config.h"
+#include <algorithm>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 
 #ifdef JOT_TREESITTER
-#ifdef JOT_TS_HAS_C
-#include <tree_sitter/tree-sitter-c.h>
-#endif
-#ifdef JOT_TS_HAS_CPP
-#include <tree_sitter/tree-sitter-cpp.h>
-#endif
-#ifdef JOT_TS_HAS_PYTHON
-#include <tree_sitter/tree-sitter-python.h>
-#endif
-#ifdef JOT_TS_HAS_JAVASCRIPT
-#include <tree_sitter/tree-sitter-javascript.h>
-#endif
-#ifdef JOT_TS_HAS_TYPESCRIPT
-#include <tree_sitter/tree-sitter-typescript.h>
-#endif
-#ifdef JOT_TS_HAS_RUST
-#include <tree_sitter/tree-sitter-rust.h>
-#endif
-#ifdef JOT_TS_HAS_GO
-#include <tree_sitter/tree-sitter-go.h>
-#endif
-#ifdef JOT_TS_HAS_JSON
-#include <tree_sitter/tree-sitter-json.h>
-#endif
-#ifdef JOT_TS_HAS_HTML
-#include <tree_sitter/tree-sitter-html.h>
-#endif
-#ifdef JOT_TS_HAS_CSS
-#include <tree_sitter/tree-sitter-css.h>
-#endif
-#ifdef JOT_TS_HAS_BASH
-#include <tree_sitter/tree-sitter-bash.h>
-#endif
-#ifdef JOT_TS_HAS_LUA
-#include <tree_sitter/tree-sitter-lua.h>
-#endif
-#ifdef JOT_TS_HAS_MARKDOWN
-#include <tree_sitter/tree-sitter-markdown.h>
-#endif
-#ifdef JOT_TS_HAS_TOML
-#include <tree_sitter/tree-sitter-toml.h>
-#endif
-#ifdef JOT_TS_HAS_YAML
-#include <tree_sitter/tree-sitter-yaml.h>
-#endif
-
-extern "C" {
-#ifndef JOT_TS_HAS_C
-__attribute__((weak)) const TSLanguage *tree_sitter_c() { return nullptr; }
-#endif
-#ifndef JOT_TS_HAS_CPP
-__attribute__((weak)) const TSLanguage *tree_sitter_cpp() { return nullptr; }
-#endif
-#ifndef JOT_TS_HAS_PYTHON
-__attribute__((weak)) const TSLanguage *tree_sitter_python() { return nullptr; }
-#endif
-#ifndef JOT_TS_HAS_JAVASCRIPT
-__attribute__((weak)) const TSLanguage *tree_sitter_javascript() { return nullptr; }
-#endif
-#ifndef JOT_TS_HAS_TYPESCRIPT
-__attribute__((weak)) const TSLanguage *tree_sitter_typescript() { return nullptr; }
-#endif
-#ifndef JOT_TS_HAS_RUST
-__attribute__((weak)) const TSLanguage *tree_sitter_rust() { return nullptr; }
-#endif
-#ifndef JOT_TS_HAS_GO
-__attribute__((weak)) const TSLanguage *tree_sitter_go() { return nullptr; }
-#endif
-#ifndef JOT_TS_HAS_JSON
-__attribute__((weak)) const TSLanguage *tree_sitter_json() { return nullptr; }
-#endif
-#ifndef JOT_TS_HAS_HTML
-__attribute__((weak)) const TSLanguage *tree_sitter_html() { return nullptr; }
-#endif
-#ifndef JOT_TS_HAS_CSS
-__attribute__((weak)) const TSLanguage *tree_sitter_css() { return nullptr; }
-#endif
-#ifndef JOT_TS_HAS_BASH
-__attribute__((weak)) const TSLanguage *tree_sitter_bash() { return nullptr; }
-#endif
-#ifndef JOT_TS_HAS_LUA
-__attribute__((weak)) const TSLanguage *tree_sitter_lua() { return nullptr; }
-#endif
-#ifndef JOT_TS_HAS_MARKDOWN
-__attribute__((weak)) const TSLanguage *tree_sitter_markdown() { return nullptr; }
-#endif
-#ifndef JOT_TS_HAS_TOML
-__attribute__((weak)) const TSLanguage *tree_sitter_toml() { return nullptr; }
-#endif
-#ifndef JOT_TS_HAS_YAML
-__attribute__((weak)) const TSLanguage *tree_sitter_yaml() { return nullptr; }
-#endif
-}
+#include <dlfcn.h>
 #endif
 
 namespace {
+namespace fs = std::filesystem;
+
+std::string trim_copy(const std::string &s) {
+  size_t start = s.find_first_not_of(" \t\r\n");
+  if (start == std::string::npos) return "";
+  size_t end = s.find_last_not_of(" \t\r\n");
+  return s.substr(start, end - start + 1);
+}
+
+std::vector<std::string> split_list(const std::string &text, char delimiter = ':') {
+  std::vector<std::string> out;
+  std::stringstream ss(text);
+  std::string item;
+  while (std::getline(ss, item, delimiter)) {
+    item = trim_copy(item);
+    if (!item.empty()) out.push_back(item);
+  }
+  return out;
+}
+
+std::string read_file(const fs::path &path) {
+  std::ifstream file(path);
+  if (!file.is_open()) return "";
+  std::stringstream ss;
+  ss << file.rdbuf();
+  return ss.str();
+}
+
+fs::path home_path(const std::string &suffix) {
+  const char *home = getenv("HOME");
+  if (!home) return fs::path();
+  return fs::path(home) / suffix;
+}
 
 const char *builtin_query_c() { return R"TREEQUERY(
 "break" @keyword
@@ -200,6 +147,39 @@ const char *builtin_query_cpp() { return R"TREEQUERY(
 (preproc_else) @keyword
 (preproc_endif) @keyword
 )TREEQUERY"; }
+
+#ifdef JOT_TREESITTER
+const char *minimal_query_cpp() { return R"TREEQUERY(
+"break" @keyword
+"case" @keyword
+"class" @keyword
+"const" @keyword
+"continue" @keyword
+"do" @keyword
+"else" @keyword
+"enum" @keyword
+"for" @keyword
+"if" @keyword
+"namespace" @keyword
+"return" @keyword
+"struct" @keyword
+"switch" @keyword
+"template" @keyword
+"typename" @keyword
+"using" @keyword
+"while" @keyword
+(raw_string_literal) @string
+(string_literal) @string
+(comment) @comment
+(number_literal) @number
+(primitive_type) @type
+(type_identifier) @type
+(field_identifier) @property
+(call_expression function: (identifier) @function)
+(function_declarator declarator: (identifier) @function)
+(preproc_include) @keyword
+)TREEQUERY"; }
+#endif
 
 const char *builtin_query_python() { return R"TREEQUERY(
 "and" @keyword
@@ -514,7 +494,8 @@ QueryProvider query_for_lang(const std::string &lang) {
   if (lang == "c") return builtin_query_c;
   if (lang == "cpp") return builtin_query_cpp;
   if (lang == "python") return builtin_query_python;
-  if (lang == "javascript" || lang == "typescript") return builtin_query_javascript;
+  if (lang == "javascript" || lang == "typescript" || lang == "tsx")
+    return builtin_query_javascript;
   if (lang == "rust") return builtin_query_rust;
   if (lang == "go") return builtin_query_go;
   if (lang == "json") return builtin_query_json;
@@ -538,42 +519,85 @@ TreeSitterManager::~TreeSitterManager() {
       ts_query_delete(entry.second);
     }
   }
+  for (auto &entry : library_handles_) {
+    if (entry.second) {
+      dlclose(entry.second);
+    }
+  }
 #endif
 }
 
 void TreeSitterManager::register_languages() {
-  ext_to_lang_ = {
-    {".c",    "c"},       {".h",    "c"},
-    {".cpp",  "cpp"},     {".hpp",  "cpp"},   {".cc",   "cpp"},
-    {".cxx",  "cpp"},     {".hh",   "cpp"},   {".hxx",  "cpp"},
-    {".py",   "python"},
-    {".js",   "javascript"}, {".jsx", "javascript"}, {".mjs", "javascript"},
-    {".ts",   "typescript"}, {".tsx", "typescript"},
-    {".rs",   "rust"},
-    {".go",   "go"},
-    {".json", "json"},
-    {".html", "html"},
-    {".css",  "css"},
-    {".sh",   "bash"},    {".bash", "bash"},
-    {".lua",  "lua"},
-    {".md",   "markdown"},
-    {".toml", "toml"},
-    {".yml",  "yaml"},    {".yaml", "yaml"},
-  };
-
-  for (const auto &[ext, lang] : ext_to_lang_) {
-    if (languages_.find(lang) != languages_.end()) continue;
+  ext_to_lang_.clear();
+  languages_.clear();
+  for (const auto &catalog_entry : TreeSitterCatalog::entries()) {
     TSLanguageEntry entry;
-    entry.language_id = lang;
-    entry.highlight_query_source = query_for_lang(lang)();
-    languages_[lang] = std::move(entry);
+    entry.language_id = catalog_entry.name;
+    entry.highlight_query_source = query_for_lang(catalog_entry.name)();
+    languages_[catalog_entry.name] = std::move(entry);
+    for (const auto &ext : catalog_entry.extensions) {
+      ext_to_lang_[ext] = catalog_entry.name;
+    }
   }
+
+  std::vector<std::string> default_library_paths;
+  const char *env_paths = getenv("JOT_TREESITTER_PATH");
+  if (env_paths && *env_paths) {
+    default_library_paths = split_list(env_paths, ':');
+  }
+  for (const auto &path : {
+           home_path(".local/lib/jot/tree-sitter"),
+           home_path(".local/lib"),
+           fs::path("/usr/local/lib"),
+           fs::path("/usr/lib"),
+           fs::path("/opt/homebrew/lib"),
+       }) {
+    if (!path.empty()) {
+      default_library_paths.push_back(path.string());
+    }
+  }
+  runtime_library_paths_ = default_library_paths;
+
+  std::vector<std::string> default_query_paths;
+  const char *env_query_paths = getenv("JOT_TREESITTER_QUERY_PATH");
+  if (env_query_paths && *env_query_paths) {
+    default_query_paths = split_list(env_query_paths, ':');
+  }
+  for (const auto &path : {
+           home_path(".config/jot/treesitter/queries"),
+           home_path(".local/share/jot/treesitter/queries"),
+       }) {
+    if (!path.empty()) {
+      default_query_paths.push_back(path.string());
+    }
+  }
+  runtime_query_paths_ = default_query_paths;
 }
 
-std::string TreeSitterManager::load_query_source(const std::string &language_name) const {
+TreeSitterManager::QuerySource
+TreeSitterManager::load_query_source(const std::string &language_name) const {
+  for (const auto &root : runtime_query_paths_) {
+    fs::path base(root);
+    for (const auto &candidate : {
+             base / language_name / "highlights.scm",
+             base / (language_name + ".scm"),
+         }) {
+      std::string source = read_file(candidate);
+      if (!source.empty()) {
+        QuerySource query;
+        query.source = source;
+        query.path = candidate.string();
+        query.runtime = true;
+        return query;
+      }
+    }
+  }
   auto it = languages_.find(language_name);
-  if (it != languages_.end()) return it->second.highlight_query_source;
-  return builtin_query_fallback();
+  QuerySource query;
+  query.source = it != languages_.end() ? it->second.highlight_query_source
+                                        : builtin_query_fallback();
+  query.runtime = false;
+  return query;
 }
 
 const TSLanguageEntry *TreeSitterManager::get_language(const std::string &extension) const {
@@ -588,70 +612,415 @@ bool TreeSitterManager::has_language(const std::string &extension) const {
   return get_language(extension) != nullptr;
 }
 
+bool TreeSitterManager::has_language_override(
+    const std::string &extension) const {
+  return language_override_extensions_.find(extension) !=
+         language_override_extensions_.end();
+}
+
 std::string
 TreeSitterManager::language_id_for_extension(const std::string &extension) const {
   const TSLanguageEntry *entry = get_language(extension);
   return entry ? entry->language_id : "";
 }
 
+TreeSitterRuntimeStatus
+TreeSitterManager::runtime_status_for_extension(
+    const std::string &extension) const {
+  TreeSitterRuntimeStatus status;
+  status.language_id = language_id_for_extension(extension);
+  status.has_language = !status.language_id.empty();
+  if (!status.has_language) {
+    status.parser_message = "unsupported extension";
+    return status;
+  }
 #ifdef JOT_TREESITTER
-TSParser *TreeSitterManager::create_parser(const std::string &extension) const {
-  auto ext_it = ext_to_lang_.find(extension);
-  if (ext_it == ext_to_lang_.end()) return nullptr;
+  auto parser_it = parser_languages_.find(status.language_id);
+  status.parser_loaded =
+      parser_it != parser_languages_.end() && parser_it->second != nullptr;
+  auto parser_diag_it = parser_diagnostics_.find(status.language_id);
+  status.parser_message = parser_diag_it == parser_diagnostics_.end()
+                              ? (status.parser_loaded ? "parser loaded"
+                                                      : "parser not attempted")
+                              : parser_diag_it->second;
 
+  auto query_it = query_cache_.find(status.language_id);
+  status.query_loaded =
+      query_it != query_cache_.end() && query_it->second != nullptr;
+  auto runtime_it = runtime_query_used_.find(status.language_id);
+  status.used_runtime_query =
+      runtime_it != runtime_query_used_.end() && runtime_it->second;
+  auto builtin_it = builtin_query_used_.find(status.language_id);
+  status.used_builtin_query =
+      builtin_it != builtin_query_used_.end() && builtin_it->second;
+  auto query_diag_it = query_diagnostics_.find(status.language_id);
+  status.query_message = query_diag_it == query_diagnostics_.end()
+                             ? (status.query_loaded ? "query loaded"
+                                                    : "query not attempted")
+                             : query_diag_it->second;
+#else
+  status.parser_message = "Tree-sitter runtime not available";
+  status.query_message = "Tree-sitter runtime not available";
+#endif
+  return status;
+}
+
+TreeSitterRuntimeStatus
+TreeSitterManager::runtime_status_for_language(
+    const std::string &language_id) const {
+  TreeSitterRuntimeStatus status;
+  status.language_id = TreeSitterCatalog::normalize_language_name(language_id);
+  status.has_language = !status.language_id.empty() &&
+                        languages_.find(status.language_id) != languages_.end();
+  if (!status.has_language) {
+    status.parser_message = "unsupported language";
+    return status;
+  }
+#ifdef JOT_TREESITTER
+  status.parser_loaded = load_language(status.language_id) != nullptr;
+  auto parser_diag_it = parser_diagnostics_.find(status.language_id);
+  status.parser_message = parser_diag_it == parser_diagnostics_.end()
+                              ? (status.parser_loaded ? "parser loaded"
+                                                      : "parser not attempted")
+                              : parser_diag_it->second;
+
+  auto query_it = query_cache_.find(status.language_id);
+  status.query_loaded =
+      query_it != query_cache_.end() && query_it->second != nullptr;
+  auto runtime_it = runtime_query_used_.find(status.language_id);
+  status.used_runtime_query =
+      runtime_it != runtime_query_used_.end() && runtime_it->second;
+  auto builtin_it = builtin_query_used_.find(status.language_id);
+  status.used_builtin_query =
+      builtin_it != builtin_query_used_.end() && builtin_it->second;
+  auto query_diag_it = query_diagnostics_.find(status.language_id);
+  status.query_message = query_diag_it == query_diagnostics_.end()
+                             ? (status.query_loaded ? "query loaded"
+                                                    : "query not attempted")
+                             : query_diag_it->second;
+#else
+  status.parser_message = "Tree-sitter runtime not available";
+  status.query_message = "Tree-sitter runtime not available";
+#endif
+  return status;
+}
+
+void TreeSitterManager::set_runtime_options(
+    const std::vector<std::string> &library_paths,
+    const std::vector<std::string> &query_paths,
+    const std::vector<std::string> &language_overrides) {
+  if (!library_paths.empty()) {
+    runtime_library_paths_.insert(runtime_library_paths_.begin(),
+                                  library_paths.begin(), library_paths.end());
+  }
+  if (!query_paths.empty()) {
+    runtime_query_paths_.insert(runtime_query_paths_.begin(), query_paths.begin(),
+                                query_paths.end());
+  }
+  for (const auto &raw : language_overrides) {
+    size_t sep = raw.find(':');
+    if (sep == std::string::npos) {
+      sep = raw.find('=');
+    }
+    if (sep == std::string::npos) {
+      continue;
+    }
+    std::string ext = trim_copy(raw.substr(0, sep));
+    std::string lang =
+        TreeSitterCatalog::normalize_language_name(trim_copy(raw.substr(sep + 1)));
+    if (ext.empty() || lang.empty()) {
+      continue;
+    }
+    if (ext.front() != '.') {
+      ext = "." + ext;
+    }
+    if (languages_.find(lang) == languages_.end()) {
+      TSLanguageEntry entry;
+      entry.language_id = lang;
+      entry.highlight_query_source = query_for_lang(lang)();
+      languages_[lang] = std::move(entry);
+    }
+    ext_to_lang_[ext] = lang;
+    language_override_extensions_.insert(ext);
+  }
+}
+
+void TreeSitterManager::reload() {
+#ifdef JOT_TREESITTER
+  for (auto &entry : query_cache_) {
+    if (entry.second) {
+      ts_query_delete(entry.second);
+    }
+  }
+  query_cache_.clear();
+  parser_languages_.clear();
+  for (auto &entry : library_handles_) {
+    if (entry.second) {
+      dlclose(entry.second);
+    }
+  }
+  library_handles_.clear();
+  parser_diagnostics_.clear();
+  query_diagnostics_.clear();
+  runtime_query_used_.clear();
+  builtin_query_used_.clear();
+#endif
+}
+
+#ifdef JOT_TREESITTER
+namespace {
+using TreeSitterLanguageFn = const TSLanguage *(*)();
+
+std::vector<fs::path> library_candidates(
+    const std::string &language_name,
+    const std::vector<std::string> &runtime_paths) {
+  std::vector<std::string> library_names;
+  if (const auto *entry = TreeSitterCatalog::find_language(language_name)) {
+    library_names = entry->library_names;
+  } else {
+    library_names =
+        TreeSitterCatalog::entry_for_github_url("https://github.com/x/tree-sitter-" +
+                                                language_name)
+            .library_names;
+  }
+
+  std::vector<fs::path> candidates;
+  for (const auto &name : library_names) {
+    candidates.emplace_back(name);
+  }
+  for (const auto &root : runtime_paths) {
+    for (const auto &name : library_names) {
+      candidates.emplace_back(fs::path(root) / name);
+    }
+  }
+  return candidates;
+}
+
+std::string symbol_for_language(const std::string &language_name) {
+  if (const auto *entry = TreeSitterCatalog::find_language(language_name)) {
+    return entry->symbol;
+  }
+  std::string symbol = "tree_sitter_" + language_name;
+  std::replace(symbol.begin(), symbol.end(), '-', '_');
+  return symbol;
+}
+
+struct LanguageLookupResult {
+  const TSLanguage *language = nullptr;
+  std::string message;
+};
+
+LanguageLookupResult language_from_handle(void *handle, const std::string &symbol) {
+  LanguageLookupResult result;
+  if (!handle) {
+    result.message = "invalid library handle";
+    return result;
+  }
+  auto fn = reinterpret_cast<TreeSitterLanguageFn>(dlsym(handle, symbol.c_str()));
+  if (!fn) {
+    result.message = "missing symbol " + symbol;
+    return result;
+  }
+  const TSLanguage *lang = fn();
+  if (!lang) {
+    result.message = "symbol " + symbol + " returned null";
+    return result;
+  }
+  const uint32_t abi = ts_language_abi_version(lang);
+  if (abi < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION ||
+      abi > TREE_SITTER_LANGUAGE_VERSION) {
+    result.message = "ABI " + std::to_string(abi) + " incompatible with " +
+                     std::to_string(TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION) +
+                     "-" + std::to_string(TREE_SITTER_LANGUAGE_VERSION);
+    return result;
+  }
+  result.language = lang;
+  result.message = "parser loaded";
+  return result;
+}
+} // namespace
+
+const TSLanguage *TreeSitterManager::load_language(
+    const std::string &language_id) const {
+  const std::string lid = TreeSitterCatalog::normalize_language_name(language_id);
   const TSLanguage *lang = nullptr;
-  const std::string &lid = ext_it->second;
   auto cached = parser_languages_.find(lid);
   if (cached != parser_languages_.end()) {
     lang = cached->second;
   } else {
-    if (lid == "c") lang = tree_sitter_c();
-    else if (lid == "cpp") lang = tree_sitter_cpp();
-    else if (lid == "python") lang = tree_sitter_python();
-    else if (lid == "javascript") lang = tree_sitter_javascript();
-    else if (lid == "typescript") {
-      lang = tree_sitter_typescript();
-      if (!lang) lang = tree_sitter_javascript();
+    const std::string symbol = symbol_for_language(lid);
+    auto handle_it = library_handles_.find(lid);
+    if (handle_it != library_handles_.end()) {
+      LanguageLookupResult lookup =
+          language_from_handle(handle_it->second, symbol);
+      lang = lookup.language;
+      parser_diagnostics_[lid] = lookup.message;
     }
-    else if (lid == "rust") lang = tree_sitter_rust();
-    else if (lid == "go") lang = tree_sitter_go();
-    else if (lid == "json") lang = tree_sitter_json();
-    else if (lid == "html") lang = tree_sitter_html();
-    else if (lid == "css") lang = tree_sitter_css();
-    else if (lid == "bash") lang = tree_sitter_bash();
-    else if (lid == "lua") lang = tree_sitter_lua();
-    else if (lid == "markdown") lang = tree_sitter_markdown();
-    else if (lid == "toml") lang = tree_sitter_toml();
-    else if (lid == "yaml") lang = tree_sitter_yaml();
-    else return nullptr;
-    parser_languages_[lid] = lang;
+    std::vector<fs::path> candidates =
+        library_candidates(lid, runtime_library_paths_);
+    std::string last_error;
+    for (const auto &candidate : candidates) {
+      if (lang) {
+        break;
+      }
+      void *handle = dlopen(candidate.string().c_str(), RTLD_NOW | RTLD_LOCAL);
+      if (!handle) {
+        const char *error = dlerror();
+        last_error = candidate.string() + ": " + (error ? error : "dlopen failed");
+        continue;
+      }
+      LanguageLookupResult lookup = language_from_handle(handle, symbol);
+      if (!lookup.language) {
+        last_error = candidate.string() + ": " + lookup.message;
+        dlclose(handle);
+        continue;
+      }
+      lang = lookup.language;
+      library_handles_[lid] = handle;
+      break;
+    }
+    if (lang) {
+      parser_languages_[lid] = lang;
+      parser_diagnostics_[lid] = "parser loaded";
+    } else {
+      parser_languages_[lid] = nullptr;
+      parser_diagnostics_[lid] =
+          last_error.empty()
+              ? "no parser library candidates for " + lid
+              : "parser not loaded; tried " +
+                    std::to_string(candidates.size()) +
+                    " candidate(s); last error: " + last_error;
+    }
   }
 
+  return lang;
+}
+
+TSParser *TreeSitterManager::create_parser(const std::string &extension) const {
+  auto ext_it = ext_to_lang_.find(extension);
+  if (ext_it == ext_to_lang_.end()) return nullptr;
+
+  const std::string &lid = ext_it->second;
+  const TSLanguage *lang = load_language(lid);
   if (!lang) return nullptr;
 
   TSParser *parser = ts_parser_new();
-  ts_parser_set_language(parser, lang);
+  if (!parser || !ts_parser_set_language(parser, lang)) {
+    if (parser) {
+      ts_parser_delete(parser);
+    }
+    parser_diagnostics_[lid] = "ts_parser_set_language failed";
+    return nullptr;
+  }
   return parser;
 }
 
 TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension) {
   auto ext_it = ext_to_lang_.find(extension);
   if (ext_it == ext_to_lang_.end()) return nullptr;
-  auto cached = query_cache_.find(ext_it->second);
+  const std::string &language_id = ext_it->second;
+  auto cached = query_cache_.find(language_id);
   if (cached != query_cache_.end()) return cached->second;
 
   TSParser *parser = create_parser(extension);
-  if (!parser) return nullptr;
+  if (!parser) {
+    query_diagnostics_[language_id] = "parser unavailable";
+    return nullptr;
+  }
   const TSLanguage *lang = ts_parser_language(parser);
   ts_parser_delete(parser);
-  if (!lang) return nullptr;
+  if (!lang) {
+    query_diagnostics_[language_id] = "parser has no language";
+    return nullptr;
+  }
 
-  std::string source = load_query_source(ext_it->second);
-  uint32_t error_offset;
-  TSQueryError error_type;
-  TSQuery *query = ts_query_new(lang, source.c_str(), (uint32_t)source.size(),
-                                &error_offset, &error_type);
-  query_cache_[ext_it->second] = query;
-  return query;
+  auto compile_query = [&](const std::string &source, uint32_t &error_offset,
+                           TSQueryError &error_type) {
+    return ts_query_new(lang, source.c_str(), (uint32_t)source.size(),
+                        &error_offset, &error_type);
+  };
+
+  QuerySource source = load_query_source(language_id);
+  uint32_t error_offset = 0;
+  TSQueryError error_type = TSQueryErrorNone;
+  TSQuery *query = compile_query(source.source, error_offset, error_type);
+  runtime_query_used_[language_id] = source.runtime && query != nullptr;
+  builtin_query_used_[language_id] = !source.runtime && query != nullptr;
+  if (query) {
+    query_cache_[language_id] = query;
+    query_diagnostics_[language_id] =
+        source.runtime ? ("runtime query loaded: " + source.path)
+                       : "built-in query loaded";
+    return query;
+  }
+
+  std::string runtime_error;
+  if (source.runtime) {
+    runtime_error = "runtime query failed: " + source.path +
+                    " error " + std::to_string((int)error_type) +
+                    " at offset " + std::to_string(error_offset);
+    const auto entry_it = languages_.find(language_id);
+    const std::string fallback_source =
+        entry_it != languages_.end() ? entry_it->second.highlight_query_source
+                                     : builtin_query_fallback();
+    error_offset = 0;
+    error_type = TSQueryErrorNone;
+    query = compile_query(fallback_source, error_offset, error_type);
+    if (query) {
+      query_cache_[language_id] = query;
+      runtime_query_used_[language_id] = false;
+      builtin_query_used_[language_id] = true;
+      query_diagnostics_[language_id] =
+          "built-in query loaded; " + runtime_error;
+      return query;
+    }
+  }
+
+  std::string builtin_error;
+  if (!query && source.runtime) {
+    builtin_error = "built-in query failed: error " +
+                    std::to_string((int)error_type) + " at offset " +
+                    std::to_string(error_offset);
+  }
+
+  if (!query && language_id == "cpp") {
+    error_offset = 0;
+    error_type = TSQueryErrorNone;
+    query = compile_query(minimal_query_cpp(), error_offset, error_type);
+    if (query) {
+      query_cache_[language_id] = query;
+      runtime_query_used_[language_id] = false;
+      builtin_query_used_[language_id] = true;
+      std::string message = "minimal built-in query loaded";
+      if (!runtime_error.empty()) {
+        message += "; " + runtime_error;
+      }
+      if (!builtin_error.empty()) {
+        message += "; " + builtin_error;
+      }
+      query_diagnostics_[language_id] = message;
+      return query;
+    }
+  }
+
+  const std::string final_query_error =
+      "query failed: error " + std::to_string((int)error_type) +
+      " at offset " + std::to_string(error_offset);
+  runtime_query_used_[language_id] = false;
+  builtin_query_used_[language_id] = false;
+  std::string message;
+  if (!runtime_error.empty()) {
+    message = runtime_error;
+    if (!builtin_error.empty()) {
+      message += "; " + builtin_error;
+    }
+    if (language_id == "cpp") {
+      message += "; minimal built-in " + final_query_error;
+    }
+  } else {
+    message = final_query_error;
+  }
+  query_diagnostics_[language_id] = message;
+  return nullptr;
 }
 #endif
