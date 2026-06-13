@@ -37,6 +37,26 @@ TEST(TestFoldingVisibleLineMapping) {
   ASSERT_EQ(Folding::visible_line_count(ranges, 6), 2);
 }
 
+TEST(TestFoldingVisibleLineMappingPastEndReturnsSentinel) {
+  std::vector<FoldRange> ranges;
+  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 0, 0, 3), 0);
+  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 0, 2, 3), 2);
+  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 0, 3, 3), -1);
+}
+
+TEST(TestFoldingVisibleLineMappingPastFoldedEndReturnsSentinel) {
+  std::vector<FoldRange> ranges = {{0, 4, true}, {1, 3, true}};
+  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 0, 0, 6), 0);
+  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 0, 1, 6), 5);
+  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 0, 2, 6), -1);
+}
+
+TEST(TestFoldingVisibleLineMappingHiddenStartFindsNextVisibleLine) {
+  std::vector<FoldRange> ranges = {{0, 2, true}};
+  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 1, 0, 4), 3);
+  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 1, 1, 4), -1);
+}
+
 TEST(TestFoldingEncodeDecodeCollapsedRanges) {
   std::vector<FoldRange> ranges = {{0, 4, true}, {6, 8, false}, {10, 12, true}};
   std::string encoded = Folding::encode_collapsed_ranges(ranges);
