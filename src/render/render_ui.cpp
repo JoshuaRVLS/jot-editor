@@ -1,74 +1,17 @@
 #include "editor.h"
 #include "python_api.h"
+#include "tree_sitter_catalog.h"
+#include "ui_components.h"
+#include "ui_text.h"
 #include <algorithm>
 #include <cstdlib>
 #include <cstdio>
 #include <filesystem>
+#include <set>
 #include <sstream>
 #include <vector>
 
 namespace {
-int status_utf8_cell_len(const std::string &text, size_t i) {
-  if (i >= text.size())
-    return 0;
-  const unsigned char c = (unsigned char)text[i];
-  if ((c & 0x80) == 0)
-    return 1;
-  if ((c & 0xE0) == 0xC0)
-    return 2;
-  if ((c & 0xF0) == 0xE0)
-    return 3;
-  if ((c & 0xF8) == 0xF0)
-    return 4;
-  return 0;
-}
-
-int status_cell_count(const std::string &text) {
-  int cells = 0;
-  size_t i = 0;
-  while (i < text.size()) {
-    int len = status_utf8_cell_len(text, i);
-    if (len <= 0 || i + (size_t)len > text.size()) {
-      i++;
-    } else {
-      i += (size_t)len;
-    }
-    cells++;
-  }
-  return cells;
-}
-
-std::string status_take_cells(const std::string &text, int max_cells) {
-  if (max_cells <= 0)
-    return "";
-
-  std::string out;
-  int cells = 0;
-  size_t i = 0;
-  while (i < text.size() && cells < max_cells) {
-    int len = status_utf8_cell_len(text, i);
-    if (len <= 0 || i + (size_t)len > text.size()) {
-      out += "?";
-      i++;
-    } else {
-      out.append(text, i, (size_t)len);
-      i += (size_t)len;
-    }
-    cells++;
-  }
-  return out;
-}
-
-std::string status_truncate_cells(const std::string &text, int max_cells) {
-  if (max_cells <= 0)
-    return "";
-  if (status_cell_count(text) <= max_cells)
-    return text;
-  if (max_cells <= 2)
-    return status_take_cells(text, max_cells);
-  return status_take_cells(text, max_cells - 2) + "..";
-}
-
 std::string status_path_basename(const std::string &path,
                                  const std::string &fallback) {
   if (path.empty())
@@ -96,12 +39,19 @@ struct StatusSegment {
   int priority = 0;
 };
 
+struct TreeSitterStatusRenderRow {
+  std::string section;
+  std::string language;
+  std::string detail;
+  int color = 7;
+};
+
 int status_layout_width(const std::vector<StatusSegment> &segments) {
   if (segments.empty())
     return 0;
   int width = 0;
   for (const auto &segment : segments) {
-    width += status_cell_count(segment.text);
+    width += ui_cell_count(segment.text);
   }
   width += std::max(0, (int)segments.size() - 1);
   return width;
@@ -114,9 +64,9 @@ int status_draw_segmented_at(UI *ui, int x, int y, int w,
   for (size_t i = 0; i < segments.size() && pos < end; i++) {
     const auto &segment = segments[i];
     const int remaining = end - pos;
-    std::string text = status_take_cells(segment.text, remaining);
+    std::string text = ui_take_cells(segment.text, remaining);
     ui->draw_text(pos, y, text, segment.fg, segment.bg, segment.bold);
-    pos += status_cell_count(text);
+    pos += ui_cell_count(text);
 
     if (pos < end && i + 1 < segments.size()) {
       ui->draw_text(pos, y, "", segment.bg, segments[i + 1].bg, true);
@@ -148,9 +98,160 @@ void status_draw_clipped(UI *ui, int x, int y, int w,
                          bool bold = false) {
   if (w <= 0)
     return;
-  ui->draw_text(x, y, status_take_cells(text, w), fg, bg, bold);
+  ui->draw_text(x, y, ui_take_cells(text, w), fg, bg, bold);
+}
+
+std::string ts_display_name(const std::string &language) {
+  std::string out = language;
+  std::replace(out.begin(), out.end(), '_', '-');
+  return out;
+}
+
+void ts_add_section(std::vector<TreeSitterStatusRenderRow> &rows,
+                    const std::string &title, int count) {
+  rows.push_back({title, "", std::to_string(count), 8});
 }
 } // namespace
+
+void Editor::render_tree_sitter_status_modal() {
+  if (!show_tree_sitter_status_modal) {
+    return;
+  }
+
+  std::set<std::string> active;
+  std::set<std::string> installing;
+  for (auto &buf : buffers) {
+    if (buf.syntax_engine == SYNTAX_ENGINE_UNKNOWN && !buf.filepath.empty() &&
+        buf.line_count() > 0) {
+      int line_idx = std::clamp(buf.cursor.y, 0, (int)buf.line_count() - 1);
+      get_line_syntax_colors(buf, line_idx);
+    }
+    if (buf.syntax_engine == SYNTAX_ENGINE_TREESITTER) {
+#ifdef JOT_TREESITTER
+      if (!buf.ts_language_id.empty()) {
+        active.insert(buf.ts_language_id);
+      } else
+#endif
+      if (!buf.syntax_language_label.empty()) {
+        active.insert(TreeSitterCatalog::normalize_language_name(
+            buf.syntax_language_label));
+      }
+    }
+  }
+
+  std::vector<TreeSitterStatusRenderRow> installing_rows;
+  for (const auto &job : tree_sitter_install_jobs) {
+    if (job.running) {
+      installing.insert(job.language);
+      installing_rows.push_back({"", ts_display_name(job.language),
+                                 job.progress.empty() ? "running"
+                                                      : job.progress,
+                                 theme.fg_status_warning});
+    } else if (job.failed) {
+      installing_rows.push_back({"", ts_display_name(job.language),
+                                 job.progress.empty() ? "failed"
+                                                      : job.progress,
+                                 theme.fg_status_error});
+    }
+  }
+
+  std::vector<TreeSitterStatusRenderRow> active_rows;
+  std::vector<TreeSitterStatusRenderRow> installed_rows;
+  std::vector<TreeSitterStatusRenderRow> uninstalled_rows;
+
+  for (const auto &lang : TreeSitterCatalog::language_names()) {
+    if (active.find(lang) != active.end()) {
+      active_rows.push_back({"", ts_display_name(lang),
+                             "active in open buffer", theme.fg_status_info});
+      continue;
+    }
+    if (installing.find(lang) != installing.end()) {
+      continue;
+    }
+#ifdef JOT_TREESITTER
+    TreeSitterRuntimeStatus status = ts_manager_.runtime_status_for_language(lang);
+    if (status.parser_loaded) {
+      std::string detail = status.query_loaded ? status.query_message
+                                               : status.parser_message;
+      installed_rows.push_back({"", ts_display_name(lang),
+                                detail.empty() ? "parser loaded" : detail,
+                                theme.fg_command});
+    } else {
+      uninstalled_rows.push_back(
+          {"", ts_display_name(lang),
+           status.parser_message.empty() ? "not installed"
+                                         : status.parser_message,
+           theme.fg_comment});
+    }
+#else
+    uninstalled_rows.push_back({"", ts_display_name(lang),
+                                "Tree-sitter runtime not available",
+                                theme.fg_comment});
+#endif
+  }
+
+  std::vector<TreeSitterStatusRenderRow> rows;
+  ts_add_section(rows, "Active", (int)active_rows.size());
+  rows.insert(rows.end(), active_rows.begin(), active_rows.end());
+  ts_add_section(rows, "Installing", (int)installing_rows.size());
+  rows.insert(rows.end(), installing_rows.begin(), installing_rows.end());
+  ts_add_section(rows, "Installed", (int)installed_rows.size());
+  rows.insert(rows.end(), installed_rows.begin(), installed_rows.end());
+  ts_add_section(rows, "Uninstalled", (int)uninstalled_rows.size());
+  rows.insert(rows.end(), uninstalled_rows.begin(), uninstalled_rows.end());
+
+  int screen_w = ui->get_render_width();
+  int screen_h = ui->get_height();
+  int w = std::min(std::max(48, screen_w - 8), 92);
+  int h = std::min(std::max(12, screen_h - 6), 28);
+  if (screen_w < 54) {
+    w = std::max(20, screen_w - 2);
+  }
+  if (screen_h < 16) {
+    h = std::max(8, screen_h - 2);
+  }
+  int x = std::max(0, (screen_w - w) / 2);
+  int y = std::max(1, (screen_h - h) / 2);
+  UIRect rect = {x, y, w, h};
+  ui_draw_panel(*ui, rect, {theme.fg_command, theme.bg_command,
+                            theme.fg_panel_border, theme.bg_command});
+  ui_draw_panel_title(*ui, rect, " Tree-sitter", theme.fg_command,
+                      theme.bg_command);
+
+  int list_h = std::max(0, h - 4);
+  int max_scroll = std::max(0, (int)rows.size() - list_h);
+  tree_sitter_status_scroll =
+      std::clamp(tree_sitter_status_scroll, 0, max_scroll);
+
+  int lang_w = std::max(12, std::min(24, w / 3));
+  for (int i = 0; i < list_h; i++) {
+    int idx = tree_sitter_status_scroll + i;
+    if (idx < 0 || idx >= (int)rows.size()) {
+      break;
+    }
+    const auto &row = rows[idx];
+    int row_y = y + 2 + i;
+    if (!row.section.empty()) {
+      std::string title = row.section + " (" + row.detail + ")";
+      ui->draw_text(x + 1, row_y, ui_truncate_cells(title, w - 2),
+                    theme.fg_comment, theme.bg_command, true);
+      continue;
+    }
+    std::string lang = ui_truncate_cells(row.language, lang_w);
+    std::string detail = ui_truncate_cells(row.detail, w - lang_w - 5);
+    ui->draw_text(x + 2, row_y, lang, row.color, theme.bg_command, true);
+    ui->draw_text(x + 2 + lang_w, row_y, detail, theme.fg_comment,
+                  theme.bg_command);
+  }
+
+  std::string footer = "Esc close  Up/Down scroll";
+  if (max_scroll > 0) {
+    footer += "  " + std::to_string(tree_sitter_status_scroll + 1) + "/" +
+              std::to_string(max_scroll + 1);
+  }
+  ui_draw_footer(*ui, rect, ui_truncate_cells(footer, w - 2),
+                 theme.fg_comment, theme.bg_command);
+}
 
 void Editor::render_status_line() {
   int y = ui->get_height() - status_height;
@@ -269,7 +370,7 @@ void Editor::render_status_line() {
   }
 
   if (has_git_repo()) {
-    std::string git = "  " + status_truncate_cells(git_branch, 18);
+    std::string git = "  " + ui_truncate_cells(git_branch, 18);
     if (git_staged_count > 0) {
       git += " +" + std::to_string(git_staged_count);
     }
@@ -303,9 +404,9 @@ void Editor::render_status_line() {
     int lsp_bg = theme.bg_status_muted;
     if (running_clients > 0) {
       lsp_text = "  " +
-                 status_truncate_cells(first_running.empty() ? "LSP"
-                                                             : first_running,
-                                       18);
+                 ui_truncate_cells(first_running.empty() ? "LSP"
+                                                         : first_running,
+                                   18);
       if (running_clients > 1) {
         lsp_text += " x" + std::to_string(running_clients);
       }
@@ -335,14 +436,14 @@ void Editor::render_status_line() {
       std::string label = active_buf->syntax_language_label.empty()
                               ? "tree-sitter"
                               : active_buf->syntax_language_label;
-      syntax_text = " TS " + status_truncate_cells(label, 12) + " ";
+      syntax_text = " TS " + ui_truncate_cells(label, 12) + " ";
       syntax_fg = theme.fg_status_info;
       syntax_bg = theme.bg_status_info;
     } else if (engine == SYNTAX_ENGINE_REGEX) {
       std::string label = active_buf->syntax_language_label.empty()
                               ? "regex"
                               : active_buf->syntax_language_label;
-      syntax_text = " Regex " + status_truncate_cells(label, 8) + " ";
+      syntax_text = " Regex " + ui_truncate_cells(label, 8) + " ";
     } else {
       syntax_text = " Syntax off ";
     }
@@ -358,7 +459,7 @@ void Editor::render_status_line() {
     } else if ((int)integrated_terminals.size() > 1) {
       term_label = std::to_string(integrated_terminals.size()) + " terms";
     }
-    std::string term_text = "  " + status_truncate_cells(term_label, 16);
+    std::string term_text = "  " + ui_truncate_cells(term_label, 16);
     if (term && term->is_focused()) {
       term_text += " ●";
     }
@@ -375,7 +476,7 @@ void Editor::render_status_line() {
 
   if (!current_theme_name.empty()) {
     right_segments.push_back({"  " +
-                                  status_truncate_cells(current_theme_name, 14) +
+                                  ui_truncate_cells(current_theme_name, 14) +
                                   " ",
                               theme.fg_status_muted, theme.bg_status_muted,
                               false, true, 30});
@@ -419,19 +520,19 @@ void Editor::render_status_line() {
       }
     }
     StatusSegment &file_segment = left_segments[file_index];
-    int target = std::max(4, status_cell_count(file_segment.text) - excess);
-    file_segment.text = status_truncate_cells(file_segment.text, target);
+    int target = std::max(4, ui_cell_count(file_segment.text) - excess);
+    file_segment.text = ui_truncate_cells(file_segment.text, target);
   }
 
   while (status_layout_width(left_segments) > left_budget &&
          !left_segments.empty()) {
     StatusSegment &last = left_segments.back();
-    int target = status_cell_count(last.text) -
+    int target = ui_cell_count(last.text) -
                  (status_layout_width(left_segments) - left_budget);
     if (target <= 0) {
       left_segments.pop_back();
     } else {
-      last.text = status_take_cells(last.text, target);
+      last.text = ui_take_cells(last.text, target);
       break;
     }
   }
@@ -457,7 +558,7 @@ void Editor::render_status_line() {
       context += "  ·  Home";
     }
     status_draw_clipped(ui, content_x, y + 1, content_w,
-                        status_truncate_cells(context, std::max(0, content_w)),
+                        ui_truncate_cells(context, std::max(0, content_w)),
                         theme.fg_status_muted, theme.bg_status);
   }
 }
@@ -512,13 +613,9 @@ void Editor::render_command_palette() {
       int label_w = std::max(8, w - cat_w - detail_w - 4);
 
       std::string label = suggestion.label;
-      if ((int)label.size() > label_w) {
-        label = label.substr(0, std::max(0, label_w - 3)) + "...";
-      }
+      label = ui_truncate_cells(label, label_w);
       std::string detail = suggestion.detail;
-      if ((int)detail.size() > detail_w) {
-        detail = detail.substr(0, std::max(0, detail_w - 3)) + "...";
-      }
+      detail = ui_truncate_cells(detail, detail_w);
 
       ui->draw_text(0, row_y, prefix + label, fg, bg, is_selected);
       if (w > 32) {
@@ -552,8 +649,8 @@ void Editor::render_search_panel() {
     w = std::max(20, ui->get_width() - x);
 
   UIRect rect = {x, y, w, h};
-  ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
-  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+  ui_draw_panel(*ui, rect, {theme.fg_command, theme.bg_command,
+                           theme.fg_panel_border, theme.bg_command});
 
   std::string count = "0/0";
   if (search_result_index >= 0 && !search_results.empty()) {
@@ -570,24 +667,16 @@ void Editor::render_search_panel() {
     chips += " .* ";
   }
   chips += " " + count + " ";
-  ui->draw_text(x + 1, y, " Find", theme.fg_command, theme.bg_command, true);
+  ui_draw_panel_title(*ui, rect, " Find", theme.fg_command, theme.bg_command);
   ui->draw_text(std::max(x + 1, x + w - (int)chips.size() - 1), y, chips,
                 theme.fg_comment, theme.bg_command);
-
-  auto clip = [](const std::string &text, int max_w) {
-    if ((int)text.size() <= max_w)
-      return text;
-    if (max_w <= 2)
-      return text.substr(0, std::max(0, max_w));
-    return text.substr(0, std::max(0, max_w - 2)) + "..";
-  };
 
   int label_w = 9;
   int input_w = std::max(1, w - label_w - 3);
   int find_fg = search_focus_replace ? theme.fg_command : theme.fg_selection;
   int find_bg = search_focus_replace ? theme.bg_command : theme.bg_selection;
   ui->draw_text(x + 1, y + 1, "Find", theme.fg_comment, theme.bg_command);
-  ui->draw_text(x + label_w, y + 1, clip(search_query, input_w), find_fg,
+  ui->draw_text(x + label_w, y + 1, ui_truncate_cells(search_query, input_w), find_fg,
                 find_bg, !search_focus_replace);
 
   if (search_replace_visible) {
@@ -595,17 +684,16 @@ void Editor::render_search_panel() {
     int replace_bg = search_focus_replace ? theme.bg_selection : theme.bg_command;
     ui->draw_text(x + 1, y + 2, "Replace", theme.fg_comment,
                   theme.bg_command);
-    ui->draw_text(x + label_w, y + 2, clip(search_replace_text, input_w),
+    ui->draw_text(x + label_w, y + 2,
+                  ui_truncate_cells(search_replace_text, input_w),
                   replace_fg, replace_bg, search_focus_replace);
   }
 
   std::string footer = search_replace_visible
                            ? "Enter next  Up prev  Tab field  ^R one  ^R+Shift all"
                            : "Enter next  Up prev  Tab case  ^H replace  ^E regex";
-  if ((int)footer.size() > w - 3) {
-    footer = footer.substr(0, std::max(0, w - 6)) + "...";
-  }
-  ui->draw_text(x + 1, y + h - 2, footer, theme.fg_comment, theme.bg_command);
+  ui->draw_text(x + 1, y + h - 2, ui_truncate_cells(footer, w - 3),
+                theme.fg_comment, theme.bg_command);
 }
 
 void Editor::render_context_menu() {
@@ -623,25 +711,21 @@ void Editor::render_context_menu() {
     y = std::max(0, ui->get_height() - h);
 
   UIRect rect = {x, y, w, h};
-  ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
-  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+  ui_draw_panel(*ui, rect, {theme.fg_command, theme.bg_command,
+                           theme.fg_panel_border, theme.bg_command});
 
+  std::vector<UISelectableRow> rows;
+  rows.reserve(context_menu_items.size());
   for (size_t i = 0; i < context_menu_items.size(); i++) {
-    const auto &item = context_menu_items[i];
-    int fg = item.enabled ? theme.fg_command : theme.fg_comment;
-    int bg = theme.bg_command;
-    if ((int)i == context_menu_selected) {
-      bg = item.enabled ? theme.bg_selection : theme.bg_command;
-    }
-    UIRect row_rect = {x + 1, y + 1 + (int)i, std::max(1, w - 2), 1};
-    ui->fill_rect(row_rect, " ", fg, bg);
-    std::string label = item.label;
-    if ((int)label.size() > w - 3) {
-      label = label.substr(0, std::max(0, w - 5)) + "..";
-    }
-    ui->draw_text(x + 2, y + 1 + (int)i, label, fg, bg,
-                  item.enabled && (int)i == context_menu_selected);
+    rows.push_back({context_menu_items[i].label,
+                    (int)i == context_menu_selected,
+                    context_menu_items[i].enabled});
   }
+  ui_draw_selectable_rows(*ui, x + 1, y + 1, std::max(1, w - 2),
+                          std::max(0, h - 2), rows,
+                          {theme.fg_command, theme.bg_command,
+                           theme.fg_selection, theme.bg_selection,
+                           theme.fg_comment, theme.bg_command});
 }
 
 std::vector<Editor::MenuBarMenu> Editor::build_menu_bar_model() const {
@@ -765,23 +849,20 @@ void Editor::render_menu_dropdown() {
   h = std::min(h, max_h);
 
   UIRect rect = {x, y, w, h};
-  ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
-  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+  ui_draw_panel(*ui, rect, {theme.fg_command, theme.bg_command,
+                           theme.fg_panel_border, theme.bg_command});
 
-  int rows = std::max(0, h - 2);
-  for (int i = 0; i < rows && i < (int)menu.items.size(); i++) {
-    const auto &item = menu.items[i];
-    bool selected = i == menu_bar_selected;
-    int fg = item.enabled ? theme.fg_command : theme.fg_comment;
-    int bg = selected && item.enabled ? theme.bg_selection : theme.bg_command;
-    UIRect row_rect = {x + 1, y + 1 + i, std::max(1, w - 2), 1};
-    ui->fill_rect(row_rect, " ", fg, bg);
-    std::string label = item.label;
-    if ((int)label.size() > w - 3) {
-      label = label.substr(0, std::max(0, w - 5)) + "..";
-    }
-    ui->draw_text(x + 2, y + 1 + i, label, fg, bg, selected && item.enabled);
+  std::vector<UISelectableRow> rows;
+  rows.reserve(menu.items.size());
+  for (int i = 0; i < (int)menu.items.size(); i++) {
+    rows.push_back({menu.items[(size_t)i].label, i == menu_bar_selected,
+                    menu.items[(size_t)i].enabled});
   }
+  ui_draw_selectable_rows(*ui, x + 1, y + 1, std::max(1, w - 2),
+                          std::max(0, h - 2), rows,
+                          {theme.fg_command, theme.bg_command,
+                           theme.fg_selection, theme.bg_selection,
+                           theme.fg_comment, theme.bg_command});
 }
 
 void Editor::render_save_prompt() {
@@ -793,8 +874,8 @@ void Editor::render_save_prompt() {
   int y = h / 2;
 
   UIRect rect = {x - 2, y - 1, (int)prompt.length() + 4, 3};
-  ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
-  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+  ui_draw_panel(*ui, rect, {theme.fg_command, theme.bg_command,
+                           theme.fg_panel_border, theme.bg_command});
 
   ui->draw_text(x, y, prompt, theme.fg_command, theme.bg_command);
 
@@ -814,8 +895,8 @@ void Editor::render_quit_prompt() {
   int y = h / 2;
 
   UIRect rect = {x - 2, y - 1, (int)prompt.length() + 4, 3};
-  ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
-  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+  ui_draw_panel(*ui, rect, {theme.fg_command, theme.bg_command,
+                           theme.fg_panel_border, theme.bg_command});
 
   ui->draw_text(x, y, prompt, theme.fg_command, theme.bg_command);
 }
@@ -825,8 +906,8 @@ void Editor::render_popup() {
     return;
 
   UIRect rect = {popup.x, popup.y, popup.w, popup.h};
-  ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
-  ui->draw_border(rect, theme.fg_panel_border, theme.bg_command);
+  ui_draw_panel(*ui, rect, {theme.fg_command, theme.bg_command,
+                           theme.fg_panel_border, theme.bg_command});
 
   // Split text by newlines
   std::vector<std::string> lines;
@@ -839,7 +920,8 @@ void Editor::render_popup() {
   for (int i = 0; i < (int)lines.size(); i++) {
     if (i >= popup.h - 2)
       break;
-    ui->draw_text(popup.x + 1, popup.y + 1 + i, lines[i], theme.fg_command,
+    ui->draw_text(popup.x + 1, popup.y + 1 + i,
+                  ui_truncate_cells(lines[i], popup.w - 2), theme.fg_command,
                   theme.bg_command);
   }
 }
