@@ -15,6 +15,8 @@ namespace TreeSitterInstall {
 const std::vector<std::string> &supported_languages();
 bool is_supported_language(const std::string &language);
 TreeSitterInstallCommand command_for_language(const std::string &language);
+TreeSitterInstallCommand command_for_language(const std::string &language,
+                                             const std::string &prefix);
 } // namespace TreeSitterInstall
 
 #endif
