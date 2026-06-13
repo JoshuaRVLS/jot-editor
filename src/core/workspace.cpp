@@ -11,6 +11,8 @@
 #include <sstream>
 #include <unordered_set>
 
+namespace fs = std::filesystem;
+
 namespace {
 void flatten_nodes_mut(std::vector<FileNode> &nodes,
                        std::vector<FileNode *> &flat) {
@@ -149,6 +151,10 @@ bool is_empty_scratch_buffer(const FileBuffer &buf) {
   return buf.filepath.empty() && !buf.modified && buf.line_count() == 1 &&
          buf.line(0).empty();
 }
+
+long long file_time_key(fs::file_time_type time) {
+  return time.time_since_epoch().count();
+}
 } // namespace
 
 void Editor::toggle_sidebar() {
@@ -270,6 +276,7 @@ void Editor::load_file_tree(const std::string &path) {
   root_dir = p.lexically_normal().string();
   if (!fs::exists(p) || !fs::is_directory(p)) {
     invalidate_sidebar_tree_cache();
+    refresh_file_tree_watch_baseline();
     return;
   }
 
@@ -282,6 +289,7 @@ void Editor::load_file_tree(const std::string &path) {
   if (!same_root) {
     file_tree_selected = 0;
     file_tree_scroll = 0;
+    refresh_file_tree_watch_baseline();
     return;
   }
 
@@ -323,6 +331,7 @@ void Editor::load_file_tree(const std::string &path) {
   } else if (file_tree_selected >= file_tree_scroll + view_h) {
     file_tree_scroll = std::clamp(file_tree_selected - view_h + 1, 0, max_scroll);
   }
+  refresh_file_tree_watch_baseline();
 }
 
 void Editor::build_tree(const std::string &path, std::vector<FileNode> &nodes,
@@ -356,6 +365,107 @@ void Editor::build_tree(const std::string &path, std::vector<FileNode> &nodes,
     }
   } catch (...) {
   }
+}
+
+void Editor::refresh_tree_children(FileNode &node) {
+  if (!node.is_dir) {
+    return;
+  }
+  node.children.clear();
+  build_tree(node.path, node.children, node.depth + 1);
+}
+
+std::string Editor::build_file_tree_signature() const {
+  if (root_dir.empty()) {
+    return "";
+  }
+
+  std::error_code ec;
+  fs::path root = fs::absolute(root_dir, ec);
+  if (ec) {
+    root = fs::path(root_dir);
+  }
+  root = root.lexically_normal();
+  if (!fs::exists(root, ec) || ec || !fs::is_directory(root, ec)) {
+    return "";
+  }
+
+  std::ostringstream sig;
+  sig << root.string() << '\n';
+  sig << "hidden=" << (sidebar_show_hidden ? 1 : 0) << '\n';
+
+  auto append_path = [&](const fs::path &path, bool expanded) {
+    std::error_code stat_ec;
+    const bool is_dir = fs::is_directory(path, stat_ec);
+    const bool exists = !stat_ec && fs::exists(path, stat_ec);
+    uintmax_t size = 0;
+    if (exists && !is_dir) {
+      size = fs::file_size(path, stat_ec);
+      if (stat_ec) {
+        size = 0;
+      }
+    }
+    long long mtime = 0;
+    if (exists) {
+      mtime = file_time_key(fs::last_write_time(path, stat_ec));
+      if (stat_ec) {
+        mtime = 0;
+      }
+    }
+
+    fs::path rel = path.lexically_relative(root);
+    sig << rel.string() << '\t' << (is_dir ? 'd' : 'f') << '\t'
+        << (expanded ? '1' : '0') << '\t' << mtime << '\t' << size << '\n';
+  };
+
+  std::function<void(const std::vector<FileNode> &)> append_nodes =
+      [&](const std::vector<FileNode> &nodes) {
+        for (const auto &node : nodes) {
+          fs::path path = fs::path(node.path).lexically_normal();
+          append_path(path, node.is_dir && node.expanded);
+          if (node.is_dir && node.expanded) {
+            append_nodes(node.children);
+          }
+        }
+      };
+
+  append_path(root, true);
+  append_nodes(file_tree);
+
+  return sig.str();
+}
+
+void Editor::refresh_file_tree_watch_baseline() {
+  file_tree_watch_signature_ = build_file_tree_signature();
+  file_tree_watch_ready_ = !file_tree_watch_signature_.empty();
+}
+
+void Editor::poll_file_tree_changes() {
+  if (root_dir.empty() || file_tree.empty()) {
+    file_tree_watch_signature_.clear();
+    file_tree_watch_ready_ = false;
+    return;
+  }
+
+  const std::string signature = build_file_tree_signature();
+  if (signature.empty()) {
+    file_tree_watch_signature_.clear();
+    file_tree_watch_ready_ = false;
+    return;
+  }
+
+  if (!file_tree_watch_ready_) {
+    file_tree_watch_signature_ = signature;
+    file_tree_watch_ready_ = true;
+    return;
+  }
+
+  if (signature == file_tree_watch_signature_) {
+    return;
+  }
+
+  load_file_tree(root_dir);
+  needs_redraw = true;
 }
 
 void Editor::save_workspace_session() {
@@ -734,9 +844,7 @@ void Editor::handle_sidebar_input(int ch) {
           for (auto &node : nodes) {
             if (node.is_dir) {
               node.expanded = true;
-              if (node.children.empty()) {
-                build_tree(node.path, node.children, node.depth + 1);
-              }
+              refresh_tree_children(node);
               expand_all(node.children);
             }
           }
@@ -765,7 +873,7 @@ void Editor::handle_sidebar_input(int ch) {
       if (node->is_dir) {
         if (!node->expanded) {
           node->expanded = true;
-          build_tree(node->path, node->children, node->depth + 1);
+          refresh_tree_children(*node);
           invalidate_sidebar_tree_cache();
         } else if (ch == '\n' || ch == 13) {
           node->expanded = false;
@@ -1076,8 +1184,8 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click,
 
     if (node->is_dir) {
       node->expanded = !node->expanded;
-      if (node->expanded && node->children.empty()) {
-        build_tree(node->path, node->children, node->depth + 1);
+      if (node->expanded) {
+        refresh_tree_children(*node);
       }
       invalidate_sidebar_tree_cache();
     } else {

@@ -469,16 +469,21 @@ bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift,
 }
 
 bool Editor::handle_home_menu_mouse(int x, int y, bool is_click) {
-  if (!show_home_menu || !is_click) {
+  if (!show_home_menu) {
     return false;
   }
 
   for (int i = 0; i < (int)home_menu_entries.size(); i++) {
     const auto &entry = home_menu_entries[i];
     if (y == entry.y && x >= entry.x && x < entry.x + entry.w) {
-      home_menu_selected = i;
-      needs_redraw = true;
-      return handle_home_menu_input('\n', false, false, false);
+      if (home_menu_selected != i) {
+        home_menu_selected = i;
+        needs_redraw = true;
+      }
+      if (is_click) {
+        return handle_home_menu_input('\n', false, false, false);
+      }
+      return true;
     }
   }
 
@@ -487,6 +492,10 @@ bool Editor::handle_home_menu_mouse(int x, int y, bool is_click) {
                       y >= home_menu_panel_y &&
                       y < home_menu_panel_y + home_menu_panel_h;
   if (inside_panel) {
+    return true;
+  }
+
+  if (!is_click) {
     return true;
   }
 

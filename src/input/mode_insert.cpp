@@ -64,6 +64,9 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
   }
   if (is_ctrl && is_shift && (ch == 'f' || ch == 'F')) {
     hide_lsp_completion();
+    if (open_scoped_replace_from_selection()) {
+      return;
+    }
     show_project_search();
     return;
   }

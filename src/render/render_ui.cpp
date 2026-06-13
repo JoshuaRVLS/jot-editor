@@ -754,8 +754,14 @@ void Editor::render_search_panel() {
   if (search_regex) {
     chips += " .* ";
   }
+  if (search_scoped_to_selection) {
+    chips += " Sel ";
+  }
   chips += " " + count + " ";
-  ui_draw_panel_title(*ui, rect, " Find", theme.fg_command, theme.bg_command);
+  ui_draw_panel_title(*ui, rect,
+                      search_scoped_to_selection ? " Find in Selection"
+                                                 : " Find",
+                      theme.fg_command, theme.bg_command);
   ui->draw_text(std::max(x + 1, x + w - (int)chips.size() - 1), y, chips,
                 theme.fg_comment, theme.bg_command);
 
@@ -778,7 +784,9 @@ void Editor::render_search_panel() {
   }
 
   std::string footer = search_replace_visible
-                           ? "Enter next  Up prev  Tab field  ^R one  ^R+Shift all"
+                           ? (search_scoped_to_selection
+                                  ? "Enter next  Up prev  Tab field  ^R one  ^R+Shift all in sel"
+                                  : "Enter next  Up prev  Tab field  ^R one  ^R+Shift all")
                            : "Enter next  Up prev  Tab case  ^H replace  ^E regex";
   ui->draw_text(x + 1, y + h - 2, ui_truncate_cells(footer, w - 3),
                 theme.fg_comment, theme.bg_command);

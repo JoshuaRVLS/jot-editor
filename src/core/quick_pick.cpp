@@ -263,6 +263,7 @@ bool Editor::handle_quick_pick_input(int ch) {
 }
 
 void Editor::show_project_search(const std::string &query) {
+  clear_search_scope();
   std::vector<QuickPickItem> items;
   if (!query.empty()) {
     const std::string root = root_dir.empty() ? "." : root_dir;

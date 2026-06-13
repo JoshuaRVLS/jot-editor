@@ -143,6 +143,9 @@ private:
   bool search_regex;
   bool search_replace_visible;
   bool search_focus_replace;
+  bool search_scoped_to_selection;
+  Cursor search_scope_start;
+  Cursor search_scope_end;
   
   // Save Prompt
   bool show_save_prompt;
@@ -501,6 +504,8 @@ private:
   int file_tree_selected;
   int file_tree_scroll; // New
   bool sidebar_show_hidden;
+  std::string file_tree_watch_signature_;
+  bool file_tree_watch_ready_;
 
   struct SidebarRenderRow {
     std::string path;
@@ -788,6 +793,10 @@ private:
   void end_right_panel_resize_drag();
   void build_tree(const std::string &path, std::vector<FileNode> &nodes,
                   int depth);
+  void refresh_tree_children(FileNode &node);
+  std::string build_file_tree_signature() const;
+  void refresh_file_tree_watch_baseline();
+  void poll_file_tree_changes();
   void invalidate_sidebar_tree_cache();
   void invalidate_sidebar_diagnostics_cache();
   void invalidate_sidebar_git_cache();
@@ -905,6 +914,7 @@ private:
   bool run_debugger_config(const std::string &name);
   DebuggerClient *get_debugger_session(int index = -1);
   void toggle_search();
+  bool open_scoped_replace_from_selection();
   void toggle_command_palette();
   void open_theme_chooser();
   void execute_command(const std::string &cmd);
@@ -912,6 +922,7 @@ private:
   void find_next();
   void find_prev();
   void perform_search();
+  void clear_search_scope();
   bool replace_current_search_match();
   bool replace_all_search_matches();
   void refresh_folds(FileBuffer &buf);

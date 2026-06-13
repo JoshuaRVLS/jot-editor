@@ -289,8 +289,8 @@ void Editor::execute_context_menu_item(int index) {
       if (target_is_dir) {
         if (FileNode *node = find_file_node_by_path(file_tree, target_path)) {
           node->expanded = !node->expanded;
-          if (node->expanded && node->children.empty()) {
-            build_tree(node->path, node->children, node->depth + 1);
+          if (node->expanded) {
+            refresh_tree_children(*node);
           }
           invalidate_sidebar_tree_cache();
           needs_redraw = true;
@@ -490,6 +490,7 @@ bool Editor::close_active_floating_ui() {
 
   if (show_search) {
     show_search = false;
+    clear_search_scope();
     needs_redraw = true;
     return true;
   }

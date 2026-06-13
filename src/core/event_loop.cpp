@@ -427,6 +427,9 @@ void Editor::run() {
     event_loop_.set_timer(1500, true, [this] { refresh_git_status(false); });
   }
   if (!safe_mode) {
+    event_loop_.set_timer(1000, true, [this] { poll_file_tree_changes(); });
+  }
+  if (!safe_mode) {
     event_loop_.set_timer(50, true, [this] { poll_lsp_clients(); });
   }
   if (!safe_mode) {

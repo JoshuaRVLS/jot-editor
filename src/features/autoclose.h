@@ -12,5 +12,4 @@ public:
     static bool should_skip_closing(char c, const std::string& line, int pos);
 };
 
-#endif
-
+#endif 

@@ -102,6 +102,9 @@ Editor::Editor() {
   search_regex = false;
   search_replace_visible = false;
   search_focus_replace = false;
+  search_scoped_to_selection = false;
+  search_scope_start = {0, 0};
+  search_scope_end = {0, 0};
   show_save_prompt = false;
   show_quit_prompt = false;
 
@@ -131,6 +134,8 @@ Editor::Editor() {
   file_tree_selected = 0;
   file_tree_scroll = 0;
   sidebar_show_hidden = false;
+  file_tree_watch_signature_.clear();
+  file_tree_watch_ready_ = false;
   focus_state = FOCUS_EDITOR;
 
   status_height = 2;

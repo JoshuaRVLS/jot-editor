@@ -149,6 +149,8 @@ Workspace sessions are stored under:
 - Buffer-local search panel with next/previous match navigation.
 - Search options for case sensitivity, whole-word matching, and regex mode.
 - Replace panel with replace current and replace all actions.
+- Selection-scoped replace from `Ctrl+Shift+F`, with replacements limited to
+  the highlighted code.
 - Go to line or line:column.
 - Bookmarks.
 - Telescope file finder.
@@ -367,7 +369,8 @@ See [docs/THEMES.md](docs/THEMES.md) for theme authoring.
 - `Ctrl+P` or `Alt+P`: command palette
 - `Ctrl+R`: recent-file prompt
 - `Ctrl+Shift+T`: reopen last closed tab
-- `Ctrl+Shift+F`: project-wide search
+- `Ctrl+Shift+F`: replace inside selected text, or project-wide search when no
+  text is selected
 - `Ctrl+Shift+M`: diagnostics picker
 - `Ctrl+Shift+O`: document symbols
 - `Ctrl+M` or `Alt+M`: toggle minimap

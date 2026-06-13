@@ -1,6 +1,9 @@
 #include "test_framework.h"
 #include "types.h"
+#include "tree_sitter_catalog.h"
+#include "tree_sitter_language_spec.h"
 #include "tree_sitter_manager.h"
+#include <set>
 #include <string>
 
 TEST(TestTreeSitterLanguageRegistration) {
@@ -143,6 +146,24 @@ TEST(TestTreeSitterBuiltInQueriesExposeRichCaptures) {
   ASSERT_TRUE(json != nullptr);
   ASSERT_TRUE(json->highlight_query_source.find("@property") !=
               std::string::npos);
+}
+
+TEST(TestTreeSitterLanguageDescriptorsCoverCatalog) {
+  std::set<std::string> descriptor_names;
+  for (const auto &spec : TreeSitterLanguageSpecs::all()) {
+    ASSERT_TRUE(!spec.name.empty());
+    ASSERT_EQ(spec.name, TreeSitterCatalog::normalize_language_name(spec.name));
+    ASSERT_TRUE(descriptor_names.insert(spec.name).second);
+  }
+
+  for (const auto &entry : TreeSitterCatalog::entries()) {
+    const auto *spec = TreeSitterLanguageSpecs::find(entry.name);
+    ASSERT_TRUE(spec != nullptr);
+    ASSERT_EQ(spec->name, entry.name);
+    ASSERT_EQ(spec->url, entry.url);
+    ASSERT_EQ(spec->source_subdir, entry.source_subdir);
+    ASSERT_EQ(spec->extensions.size(), entry.extensions.size());
+  }
 }
 
 TEST(TestThemeSyntaxPaletteFallsBackToReadableThemeColors) {

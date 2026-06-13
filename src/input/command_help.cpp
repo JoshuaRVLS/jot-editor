@@ -43,7 +43,7 @@ void Editor::show_command_help(const std::string &topic_text) {
       "  Ctrl+F           Search panel",
       "  Ctrl+B           Toggle file explorer",
       "  Ctrl+E           Telescope file finder",
-      "  Ctrl+Shift+F     Search across workspace",
+      "  Ctrl+Shift+F     Replace in selection, or search workspace",
       "  Ctrl+Shift+M     Diagnostics picker",
       "  Ctrl+Shift+O     Document symbols",
       "  Ctrl+T           Theme chooser",

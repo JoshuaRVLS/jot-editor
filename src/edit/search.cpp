@@ -44,14 +44,45 @@ std::regex make_search_regex(const std::string &pattern, bool case_sensitive) {
   }
   return std::regex(pattern, flags);
 }
+
+bool normalize_non_empty_selection(const FileBuffer &buf, Cursor &start,
+                                   Cursor &end) {
+  if (!buf.selection.active) {
+    return false;
+  }
+  start = buf.selection.start;
+  end = buf.selection.end;
+  if (start.y > end.y || (start.y == end.y && start.x > end.x)) {
+    std::swap(start, end);
+  }
+  if (start.y == end.y && start.x == end.x) {
+    return false;
+  }
+  if (buf.line_count() == 0) {
+    return false;
+  }
+  start.y = std::clamp(start.y, 0, (int)buf.line_count() - 1);
+  end.y = std::clamp(end.y, 0, (int)buf.line_count() - 1);
+  start.x = std::clamp(start.x, 0, (int)buf.line(start.y).size());
+  end.x = std::clamp(end.x, 0, (int)buf.line(end.y).size());
+  return start.y != end.y || start.x < end.x;
+}
 } // namespace
+
+void Editor::clear_search_scope() {
+  search_scoped_to_selection = false;
+  search_scope_start = {0, 0};
+  search_scope_end = {0, 0};
+}
 
 void Editor::toggle_search() {
   show_search = !show_search;
   if (!show_search) {
+    clear_search_scope();
     return;
   }
 
+  clear_search_scope();
   search_focus_replace = false;
   auto &buf = get_buffer();
   if (buf.selection.active && buf.selection.start.y == buf.selection.end.y) {
@@ -79,10 +110,63 @@ void Editor::toggle_search() {
   needs_redraw = true;
 }
 
+bool Editor::open_scoped_replace_from_selection() {
+  auto &buf = get_buffer();
+  Cursor start;
+  Cursor end;
+  if (!normalize_non_empty_selection(buf, start, end)) {
+    return false;
+  }
+
+  search_scoped_to_selection = true;
+  search_scope_start = start;
+  search_scope_end = end;
+  show_search = true;
+  search_replace_visible = true;
+  search_focus_replace = false;
+  search_results.clear();
+  search_result_index = -1;
+
+  if (start.y == end.y) {
+    const std::string &line = buf.line(start.y);
+    if (end.x > start.x) {
+      search_query = line.substr((size_t)start.x,
+                                 (size_t)(end.x - start.x));
+    }
+  } else {
+    search_query.clear();
+  }
+
+  if (!search_query.empty()) {
+    perform_search();
+  } else {
+    set_message("Find/replace in selection");
+  }
+  needs_redraw = true;
+  return true;
+}
+
 void Editor::perform_search() {
   auto &buf = get_buffer();
   const int cursor_y = buf.cursor.y;
   const int cursor_x = buf.cursor.x;
+
+  auto match_in_scope = [&](int line_idx, int col, int len) {
+    if (!search_scoped_to_selection) {
+      return true;
+    }
+    if (line_idx < search_scope_start.y || line_idx > search_scope_end.y) {
+      return false;
+    }
+    const int end_col = col + len;
+    if (line_idx == search_scope_start.y && col < search_scope_start.x) {
+      return false;
+    }
+    if (line_idx == search_scope_end.y && end_col > search_scope_end.x) {
+      return false;
+    }
+    return true;
+  };
 
   search_results.clear();
   search_result_index = -1;
@@ -117,6 +201,9 @@ void Editor::perform_search() {
             !is_whole_word_match(line, (size_t)pos, (size_t)len)) {
           continue;
         }
+        if (!match_in_scope((int)line_idx, pos, len)) {
+          continue;
+        }
         search_results.push_back({(int)line_idx, pos, len});
       }
     }
@@ -137,6 +224,10 @@ void Editor::perform_search() {
           pos++;
           continue;
         }
+        if (!match_in_scope((int)i, (int)pos, (int)query_len)) {
+          pos += std::max<size_t>(1, query_len);
+          continue;
+        }
         search_results.push_back({(int)i, (int)pos, (int)query_len});
         pos += std::max<size_t>(1, query_len);
       }
@@ -147,6 +238,7 @@ void Editor::perform_search() {
     set_message("No matches [" +
                 search_flags(search_case_sensitive, search_whole_word,
                              search_regex) +
+                (search_scoped_to_selection ? ",Sel" : "") +
                 "]");
     needs_redraw = true;
     return;
@@ -166,6 +258,7 @@ void Editor::perform_search() {
   set_message(std::to_string(search_results.size()) + " match(es) [" +
               search_flags(search_case_sensitive, search_whole_word,
                            search_regex) +
+              (search_scoped_to_selection ? ",Sel" : "") +
               "]");
   needs_redraw = true;
 }
@@ -262,6 +355,11 @@ bool Editor::replace_current_search_match() {
   buf.preferred_x = buf.cursor.x;
   buf.modified = true;
   buf.selection.active = false;
+  if (search_scoped_to_selection && match.line == search_scope_end.y) {
+    search_scope_end.x += (int)replacement.size() - match.len;
+    search_scope_end.x =
+        std::clamp(search_scope_end.x, 0, (int)line.size());
+  }
 
   if (python_api) {
     python_api->on_buffer_change(buf.filepath, "");
@@ -327,6 +425,7 @@ bool Editor::replace_all_search_matches() {
 
   buf.modified = true;
   buf.selection.active = false;
+  clear_search_scope();
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
   if (python_api) {
@@ -345,6 +444,7 @@ void Editor::handle_search_panel(int ch, bool is_ctrl, bool is_shift,
                                  bool /*is_alt*/) {
   if (ch == 27) {
     show_search = false;
+    clear_search_scope();
     needs_redraw = true;
     set_message("");
     return;
