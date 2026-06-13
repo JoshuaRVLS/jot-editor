@@ -21,7 +21,7 @@ void Editor::show_command_help(const std::string &topic_text) {
         ":datetime :stats :replace :replacei :replaceword :replacere "
         ":surround :unsurround :fold :unfold :togglefold :foldall "
         ":unfoldall :incnum :decnum :lspstart :lspstatus "
-        ":lspstop :lsprestart :tsinstall <language> :tsstatus "
+        ":lspstop :lsprestart :tsinstall <language> :tsstatus :tsreload "
         ":task [name] :tasknew <name> :taskrerun "
         ":debug <program> :debugconfig [name] :debugstop "
         ":debugcontinue :debugnext :debugstep :debugout "
