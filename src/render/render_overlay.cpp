@@ -246,7 +246,8 @@ void Editor::render_lsp_completion() {
   for (int row = 0; row < viewport_h; row++) {
     int line = Folding::buffer_line_for_visible_offset(
         buf.fold_ranges, buf.scroll_offset, row, (int)buf.line_count());
-    if (line == buf.cursor.y && !Folding::is_line_hidden(buf.fold_ranges, line)) {
+    if (line >= 0 && line == buf.cursor.y &&
+        !Folding::is_line_hidden(buf.fold_ranges, line)) {
       cursor_row = row;
       break;
     }
