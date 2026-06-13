@@ -118,6 +118,17 @@ bool Editor::is_line_hidden_by_fold(const FileBuffer &buf, int line) const {
 
 int Editor::buffer_line_for_visible_row(const FileBuffer &buf, int first_line,
                                         int row) const {
-  return Folding::buffer_line_for_visible_offset(
+  int line = Folding::buffer_line_for_visible_offset(
       buf.fold_ranges, first_line, row, (int)buf.line_count());
+  if (line >= 0) {
+    return line;
+  }
+  for (int fallback_row = row - 1; fallback_row >= 0; fallback_row--) {
+    line = Folding::buffer_line_for_visible_offset(
+        buf.fold_ranges, first_line, fallback_row, (int)buf.line_count());
+    if (line >= 0) {
+      return line;
+    }
+  }
+  return -1;
 }
