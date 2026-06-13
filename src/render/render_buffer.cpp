@@ -288,7 +288,8 @@ int visible_row_for_line(const std::vector<FoldRange> &ranges, int first_line,
   for (int row = 0; row < viewport_h; row++) {
     int line = Folding::buffer_line_for_visible_offset(ranges, first_line, row,
                                                        line_count);
-    if (line == target_line && !Folding::is_line_hidden(ranges, line)) {
+    if (line >= 0 && line == target_line &&
+        !Folding::is_line_hidden(ranges, line)) {
       return row;
     }
   }
@@ -403,7 +404,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
         buf.fold_ranges, buf.scroll_offset, i, (int)buf.line_count());
     int draw_y = y + i;
 
-    if (line_idx < (int)buf.line_count() &&
+    if (line_idx >= 0 && line_idx < (int)buf.line_count() &&
         !Folding::is_line_hidden(buf.fold_ranges, line_idx)) {
       int line_diag_severity = line_diagnostic_severity(buf, line_idx);
       int diag_fg = line_diag_severity > 0
