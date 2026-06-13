@@ -25,64 +25,7 @@ if(JOT_TREESITTER)
   pkg_check_modules(TREE_SITTER tree-sitter)
   if(TREE_SITTER_FOUND)
     set(JOT_TREESITTER_ENABLED TRUE)
-    message(STATUS "Tree-sitter runtime found; parser highlighting enabled for installed grammars")
-    set(JOT_TS_GRAMMAR_PACKAGES
-      c:tree-sitter-c
-      cpp:tree-sitter-cpp
-      python:tree-sitter-python
-      javascript:tree-sitter-javascript
-      typescript:tree-sitter-typescript
-      rust:tree-sitter-rust
-      go:tree-sitter-go
-      json:tree-sitter-json
-      html:tree-sitter-html
-      css:tree-sitter-css
-      bash:tree-sitter-bash
-      lua:tree-sitter-lua
-      markdown:tree-sitter-markdown
-      toml:tree-sitter-toml
-      yaml:tree-sitter-yaml
-    )
-    foreach(grammar_spec IN LISTS JOT_TS_GRAMMAR_PACKAGES)
-      string(REPLACE ":" ";" grammar_parts "${grammar_spec}")
-      list(GET grammar_parts 0 grammar_name)
-      list(GET grammar_parts 1 grammar_pkg)
-      string(TOUPPER "${grammar_name}" grammar_upper)
-      string(REPLACE "-" "_" grammar_upper "${grammar_upper}")
-      set(grammar_var "TREE_SITTER_${grammar_upper}")
-      set(grammar_found FALSE)
-      pkg_check_modules(${grammar_var} ${grammar_pkg})
-      if(${grammar_var}_FOUND)
-        list(APPEND JOT_TS_GRAMMAR_DEFINES "JOT_TS_HAS_${grammar_upper}=1")
-        list(APPEND JOT_TS_GRAMMAR_LIBRARIES ${${grammar_var}_LIBRARIES})
-        list(APPEND JOT_TS_GRAMMAR_LIBRARY_DIRS ${${grammar_var}_LIBRARY_DIRS})
-        list(APPEND JOT_TS_GRAMMAR_INCLUDE_DIRS ${${grammar_var}_INCLUDE_DIRS})
-        list(APPEND JOT_TS_GRAMMAR_CFLAGS ${${grammar_var}_CFLAGS_OTHER})
-        set(grammar_found TRUE)
-        message(STATUS "Tree-sitter grammar found by pkg-config: ${grammar_name}")
-      else()
-        string(REPLACE "-" "_" grammar_lib_alt "${grammar_pkg}")
-        string(REPLACE "-" "_" grammar_header_alt "${grammar_pkg}")
-        find_library(JOT_TS_${grammar_upper}_LIBRARY
-          NAMES ${grammar_pkg} ${grammar_lib_alt}
-        )
-        find_path(JOT_TS_${grammar_upper}_INCLUDE_DIR
-          NAMES
-            tree_sitter/${grammar_pkg}.h
-            tree_sitter/${grammar_header_alt}.h
-        )
-        if(JOT_TS_${grammar_upper}_LIBRARY AND JOT_TS_${grammar_upper}_INCLUDE_DIR)
-          list(APPEND JOT_TS_GRAMMAR_DEFINES "JOT_TS_HAS_${grammar_upper}=1")
-          list(APPEND JOT_TS_GRAMMAR_LIBRARIES ${JOT_TS_${grammar_upper}_LIBRARY})
-          list(APPEND JOT_TS_GRAMMAR_INCLUDE_DIRS ${JOT_TS_${grammar_upper}_INCLUDE_DIR})
-          set(grammar_found TRUE)
-          message(STATUS "Tree-sitter grammar found directly: ${grammar_name}")
-        endif()
-      endif()
-      if(NOT grammar_found)
-        message(STATUS "Tree-sitter grammar missing: ${grammar_name}; regex fallback will be used")
-      endif()
-    endforeach()
+    message(STATUS "Tree-sitter runtime found; parser grammars will be loaded at runtime")
   else()
     set(JOT_TREESITTER_ENABLED FALSE)
     message(STATUS "Tree-sitter runtime not found; regex syntax highlighting fallback only")
@@ -163,21 +106,19 @@ add_library(jot_features_obj OBJECT
   features/folding.cpp
   features/text_features.cpp
   features/syntax.cpp
+  features/tree_sitter_catalog.cpp
   features/tree_sitter_install.cpp
   features/tree_sitter_manager.cpp
 )
 if(JOT_TREESITTER_ENABLED)
   target_compile_definitions(jot_features_obj PRIVATE
     JOT_TREESITTER=1
-    ${JOT_TS_GRAMMAR_DEFINES}
   )
   target_include_directories(jot_features_obj SYSTEM PRIVATE
     ${TREE_SITTER_INCLUDE_DIRS}
-    ${JOT_TS_GRAMMAR_INCLUDE_DIRS}
   )
   target_compile_options(jot_features_obj PRIVATE
     ${TREE_SITTER_CFLAGS_OTHER}
-    ${JOT_TS_GRAMMAR_CFLAGS}
   )
 endif()
 jot_configure_object_target(jot_features_obj)
@@ -241,7 +182,9 @@ add_library(jot_python_bridge_obj OBJECT
 jot_configure_object_target(jot_python_bridge_obj)
 
 add_library(jot_ui_obj OBJECT
+  ui/ui_components.cpp
   ui/ui.cpp
+  ui/ui_text.cpp
 )
 if(WIN32)
   target_sources(jot_ui_obj PRIVATE platform/windows/ui/terminal.cpp)
@@ -292,19 +235,17 @@ if(JOT_TREESITTER_ENABLED)
   endforeach()
   target_link_libraries(jot_features PUBLIC
     ${TREE_SITTER_LIBRARIES}
-    ${JOT_TS_GRAMMAR_LIBRARIES}
+    ${CMAKE_DL_LIBS}
   )
   target_link_directories(jot_features PUBLIC
     ${TREE_SITTER_LIBRARY_DIRS}
-    ${JOT_TS_GRAMMAR_LIBRARY_DIRS}
   )
   target_link_libraries(jot_engine PUBLIC
     ${TREE_SITTER_LIBRARIES}
-    ${JOT_TS_GRAMMAR_LIBRARIES}
+    ${CMAKE_DL_LIBS}
   )
   target_link_directories(jot_engine PUBLIC
     ${TREE_SITTER_LIBRARY_DIRS}
-    ${JOT_TS_GRAMMAR_LIBRARY_DIRS}
   )
 endif()
 target_link_libraries(jot_tools PUBLIC ${VTERM_LIBRARIES})
