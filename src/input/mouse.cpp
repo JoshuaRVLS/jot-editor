@@ -399,6 +399,41 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
     return;
   }
 
+  if (show_tree_sitter_status_modal) {
+    if (is_scroll_up) {
+      tree_sitter_status_scroll = std::max(0, tree_sitter_status_scroll - 3);
+      needs_redraw = true;
+      return;
+    }
+    if (is_scroll_down) {
+      tree_sitter_status_scroll += 3;
+      needs_redraw = true;
+      return;
+    }
+    if (is_click) {
+      int screen_w = ui->get_render_width();
+      int screen_h = ui->get_height();
+      int modal_w = std::min(std::max(48, screen_w - 8), 92);
+      int modal_h = std::min(std::max(12, screen_h - 6), 28);
+      if (screen_w < 54) {
+        modal_w = std::max(20, screen_w - 2);
+      }
+      if (screen_h < 16) {
+        modal_h = std::max(8, screen_h - 2);
+      }
+      int modal_x = std::max(0, (screen_w - modal_w) / 2);
+      int modal_y = std::max(1, (screen_h - modal_h) / 2);
+      bool inside = x >= modal_x && x < modal_x + modal_w &&
+                    y >= modal_y && y < modal_y + modal_h;
+      if (!inside) {
+        show_tree_sitter_status_modal = false;
+      }
+      needs_redraw = true;
+      return;
+    }
+    return;
+  }
+
   if (is_click && begin_right_panel_resize_drag(x, y)) {
     return;
   }
@@ -845,6 +880,31 @@ void Editor::handle_mouse(void *event_ptr) {
       clear_debugger_breakpoint_hover();
       return;
     }
+  }
+
+  if (show_tree_sitter_status_modal &&
+      (is_click || is_click_release || is_right_click || is_motion)) {
+    if (is_click || is_right_click) {
+      int screen_w = ui->get_render_width();
+      int screen_h = ui->get_height();
+      int modal_w = std::min(std::max(48, screen_w - 8), 92);
+      int modal_h = std::min(std::max(12, screen_h - 6), 28);
+      if (screen_w < 54) {
+        modal_w = std::max(20, screen_w - 2);
+      }
+      if (screen_h < 16) {
+        modal_h = std::max(8, screen_h - 2);
+      }
+      int modal_x = std::max(0, (screen_w - modal_w) / 2);
+      int modal_y = std::max(1, (screen_h - modal_h) / 2);
+      bool inside = event->x >= modal_x && event->x < modal_x + modal_w &&
+                    event->y >= modal_y && event->y < modal_y + modal_h;
+      if (!inside || is_right_click) {
+        show_tree_sitter_status_modal = false;
+      }
+      needs_redraw = true;
+    }
+    return;
   }
 
   if (is_right_click) {
