@@ -1,58 +1,6 @@
 #include "ui.h"
+#include "ui_text.h"
 #include <algorithm>
-
-namespace {
-bool is_valid_utf8_sequence(const std::string &s) {
-  if (s.empty())
-    return false;
-  const unsigned char *p = (const unsigned char *)s.data();
-  int n = (int)s.size();
-
-  if (n == 1) {
-    return (p[0] & 0x80) == 0;
-  }
-  if (n == 2) {
-    if ((p[0] & 0xE0) != 0xC0)
-      return false;
-    return (p[1] & 0xC0) == 0x80;
-  }
-  if (n == 3) {
-    if ((p[0] & 0xF0) != 0xE0)
-      return false;
-    return (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80;
-  }
-  if (n == 4) {
-    if ((p[0] & 0xF8) != 0xF0)
-      return false;
-    return (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80 &&
-           (p[3] & 0xC0) == 0x80;
-  }
-  return false;
-}
-
-int utf8_char_len(const std::string &text, int i) {
-  if (i < 0 || i >= (int)text.size())
-    return 0;
-  const unsigned char c = (unsigned char)text[i];
-  if ((c & 0x80) == 0)
-    return 1;
-  if ((c & 0xE0) == 0xC0)
-    return 2;
-  if ((c & 0xF0) == 0xE0)
-    return 3;
-  if ((c & 0xF8) == 0xF0)
-    return 4;
-  return 0;
-}
-
-std::string sanitized_cell_text(const std::string &ch) {
-  if (ch.empty())
-    return " ";
-  if (is_valid_utf8_sequence(ch))
-    return ch;
-  return "?";
-}
-} // namespace
 
 UI::UI(Terminal *t)
     : term(t), width(80), height(24), cursor_x(-1), cursor_y(-1),
@@ -179,7 +127,7 @@ void UI::render() {
         if (cell.italic)  term->set_italic(true);
         if (cell.reverse) term->set_reverse(true);
         term->set_color(cell.fg, cell.bg);
-        term->write(sanitized_cell_text(cell.ch));
+        term->write(ui_sanitized_cell_text(cell.ch));
       }
     } else {
       int run_fg = -1;
@@ -241,7 +189,7 @@ void UI::render() {
                grid[y][x].bold == run_bold &&
                grid[y][x].italic == run_italic &&
                grid[y][x].reverse == run_reverse) {
-          body += sanitized_cell_text(grid[y][x].ch);
+          body += ui_sanitized_cell_text(grid[y][x].ch);
           x++;
         }
 
@@ -356,7 +304,7 @@ void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,
   int i = 0;
   int cell_offset = 0;
   while (i < (int)text.length() && x + cell_offset < width) {
-    int char_len = utf8_char_len(text, i);
+    int char_len = ui_utf8_char_len(text, i);
     if (char_len <= 0) {
       UICell bad;
       bad.ch = "?";
@@ -375,7 +323,7 @@ void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,
     }
 
     UICell cell;
-    cell.ch = sanitized_cell_text(text.substr(i, char_len));
+    cell.ch = ui_sanitized_cell_text(text.substr(i, char_len));
     cell.fg = fg;
     cell.bg = bg;
     cell.bold = bold;
