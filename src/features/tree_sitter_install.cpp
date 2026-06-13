@@ -1,16 +1,11 @@
 #include "tree_sitter_install.h"
+#include "tree_sitter_catalog.h"
 
 #include <algorithm>
 #include <cctype>
 #include <sstream>
 
 namespace {
-std::string lower_copy(std::string value) {
-  std::transform(value.begin(), value.end(), value.begin(),
-                 [](unsigned char c) { return (char)std::tolower(c); });
-  return value;
-}
-
 std::string shell_quote(const std::string &s) {
   std::string out = "'";
   for (char c : s) {
@@ -24,64 +19,119 @@ std::string shell_quote(const std::string &s) {
   return out;
 }
 
-std::string package_for_language(const std::string &language) {
-  if (language == "cpp") {
-    return "tree-sitter-cpp";
+std::string shell_var_quote(const std::string &s) {
+  return shell_quote(s);
+}
+
+std::string library_stem(const TreeSitterCatalogEntry &entry) {
+  std::string name = entry.library_names.empty()
+                         ? ("libtree-sitter-" + entry.name + ".so")
+                         : entry.library_names.front();
+  if (name.size() > 3 && name.substr(name.size() - 3) == ".so") {
+    name.erase(name.size() - 3);
+  } else if (name.size() > 6 && name.substr(name.size() - 6) == ".dylib") {
+    name.erase(name.size() - 6);
   }
-  return "tree-sitter-" + language;
+  return name;
+}
+
+std::string source_build_command(const TreeSitterCatalogEntry &entry,
+                                 const std::string &prefix) {
+  const std::string lib_stem = library_stem(entry);
+  std::ostringstream cmd;
+  cmd << "set -e; ";
+  cmd << "trap 'rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"[jot:treesitter] "
+         "failed "
+      << entry.name << " exit=$rc\"; fi' EXIT; ";
+  cmd << "echo '[jot:treesitter] start " << entry.name << "'; ";
+  if (prefix.empty()) {
+    cmd << "prefix=\"${JOT_TREESITTER_PREFIX:-$HOME/.local}\"; ";
+  } else {
+    cmd << "prefix=" << shell_var_quote(prefix) << "; ";
+  }
+  cmd << "libdir=\"$prefix/lib/jot/tree-sitter\"; ";
+  cmd << "querydir=\"$prefix/share/jot/treesitter/queries/"
+      << entry.name << "\"; ";
+  cmd << "case \"$(uname)\" in Darwin) libext=dylib; linkflag=-dynamiclib ;; "
+         "*) libext=so; linkflag=-shared ;; esac; ";
+  cmd << "libfile=\"" << lib_stem << ".$libext\"; ";
+  cmd << "work=\"${TMPDIR:-/tmp}/jot-tree-sitter-" << entry.name << "\"; ";
+  cmd << "rm -rf \"$work\"; ";
+  cmd << "mkdir -p \"$libdir\" \"$querydir\"; ";
+  cmd << "echo '[jot:treesitter] clone " << entry.name << "'; ";
+  cmd << "git clone --depth 1 " << shell_quote(entry.url) << " \"$work\"; ";
+  cmd << "src=\"$work";
+  if (!entry.source_subdir.empty()) {
+    cmd << "/" << entry.source_subdir;
+  }
+  cmd << "/src\"; ";
+  cmd << "objdir=\"$work/.jot-build\"; ";
+  cmd << "mkdir -p \"$objdir\"; ";
+  cmd << "cc=${CC:-cc}; cxx=${CXX:-c++}; ";
+  cmd << "echo '[jot:treesitter] build " << entry.name << "'; ";
+  cmd << "set --; ";
+  cmd << "if [ -f \"$src/parser.c\" ]; then "
+         "$cc -fPIC -I\"$src\" -c \"$src/parser.c\" -o \"$objdir/parser.o\"; "
+         "set -- \"$@\" \"$objdir/parser.o\"; "
+         "fi; ";
+  cmd << "if [ -f \"$src/scanner.c\" ]; then "
+         "$cc -fPIC -I\"$src\" -c \"$src/scanner.c\" -o \"$objdir/scanner_c.o\"; "
+         "set -- \"$@\" \"$objdir/scanner_c.o\"; "
+         "fi; ";
+  cmd << "if [ -f \"$src/scanner.cc\" ]; then "
+         "$cxx -fPIC -I\"$src\" -c \"$src/scanner.cc\" -o \"$objdir/scanner_cc.o\"; "
+         "set -- \"$@\" \"$objdir/scanner_cc.o\"; "
+         "fi; ";
+  cmd << "if [ \"$#\" -eq 0 ]; then "
+         "echo '[jot:treesitter] No generated parser sources found.'; exit 1; "
+         "fi; ";
+  cmd << "echo '[jot:treesitter] link " << entry.name << "'; ";
+  cmd << "$cxx \"$linkflag\" \"$@\" -o \"$libdir/$libfile\"; ";
+  cmd << "echo '[jot:treesitter] query " << entry.name << "'; ";
+  cmd << "if [ -f \"$work/queries/highlights.scm\" ]; then "
+         "cp \"$work/queries/highlights.scm\" \"$querydir/highlights.scm\"; "
+         "fi; ";
+  cmd << "echo '[jot:treesitter] success " << entry.name << "'; ";
+  cmd << "trap - EXIT";
+  return cmd.str();
 }
 } // namespace
 
 namespace TreeSitterInstall {
 const std::vector<std::string> &supported_languages() {
-  static const std::vector<std::string> languages = {
-      "c",    "cpp",  "python", "javascript", "typescript",
-      "rust", "go",   "json",   "html",       "css",
-      "bash", "lua",  "markdown", "toml",     "yaml"};
+  static const std::vector<std::string> languages =
+      TreeSitterCatalog::language_names();
   return languages;
 }
 
 bool is_supported_language(const std::string &language) {
-  std::string normalized = lower_copy(language);
-  const auto &languages = supported_languages();
-  return std::find(languages.begin(), languages.end(), normalized) !=
-         languages.end();
+  std::string normalized = TreeSitterCatalog::normalize_language_name(language);
+  return TreeSitterCatalog::find_language(normalized) != nullptr ||
+         TreeSitterCatalog::is_github_url(language);
 }
 
 TreeSitterInstallCommand command_for_language(const std::string &language) {
+  return command_for_language(language, "");
+}
+
+TreeSitterInstallCommand command_for_language(const std::string &language,
+                                             const std::string &prefix) {
   TreeSitterInstallCommand result;
-  result.language = lower_copy(language);
-  if (!is_supported_language(result.language)) {
+  result.language = TreeSitterCatalog::normalize_language_name(language);
+  TreeSitterCatalogEntry url_entry;
+  const TreeSitterCatalogEntry *entry = TreeSitterCatalog::find_language(result.language);
+  if (!entry && TreeSitterCatalog::is_github_url(language)) {
+    url_entry = TreeSitterCatalog::entry_for_github_url(language);
+    entry = &url_entry;
+    result.language = entry->name;
+  }
+  if (!entry) {
     result.message = "Unsupported Tree-sitter language: " + language;
     return result;
   }
 
-  const std::string pkg = package_for_language(result.language);
-  const std::string quoted_pkg = shell_quote(pkg);
-  std::ostringstream cmd;
-  cmd << "set -e; ";
-  cmd << "echo '[jot:treesitter] Installing " << pkg << "'; ";
-  cmd << "if command -v pacman >/dev/null 2>&1; then ";
-  cmd << "sudo pacman -Sy --noconfirm " << quoted_pkg << "; ";
-  cmd << "elif command -v apt-get >/dev/null 2>&1; then ";
-  cmd << "sudo apt-get update && sudo apt-get install -y libtree-sitter-dev; ";
-  cmd << "elif command -v dnf >/dev/null 2>&1; then ";
-  cmd << "sudo dnf install -y tree-sitter-devel; ";
-  cmd << "elif command -v yum >/dev/null 2>&1; then ";
-  cmd << "sudo yum install -y tree-sitter-devel; ";
-  cmd << "elif command -v zypper >/dev/null 2>&1; then ";
-  cmd << "sudo zypper --non-interactive install tree-sitter-devel; ";
-  cmd << "elif command -v brew >/dev/null 2>&1; then ";
-  cmd << "brew install tree-sitter; ";
-  cmd << "else ";
-  cmd << "echo '[jot:treesitter] No supported package manager found.'; ";
-  cmd << "exit 1; ";
-  cmd << "fi; ";
-  cmd << "echo '[jot:treesitter] Install finished. Rebuild and restart jot to "
-         "enable newly installed grammars.'";
-
   result.supported = true;
-  result.command = cmd.str();
+  result.command = source_build_command(*entry, prefix);
   result.message =
       "Installing Tree-sitter " + result.language + " in terminal";
   return result;
