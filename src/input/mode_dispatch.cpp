@@ -53,6 +53,11 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     return;
   }
 
+  if (show_tree_sitter_status_modal) {
+    handle_tree_sitter_status_input(ch);
+    return;
+  }
+
   const bool ctrl_q =
       (is_ctrl && (ch == 'q' || ch == 'Q' || original_ch == 'q' ||
                    original_ch == 'Q')) ||
