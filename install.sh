@@ -35,7 +35,7 @@ Options:
   --run-tests           Run CTest after building
   --with-tools          Install optional formatter tooling (prettier)
   --with-lsp            Install optional built-in LSP servers
-  --with-treesitter     Install Tree-sitter runtime/grammar packages (default)
+  --with-treesitter     Install Tree-sitter runtime package (default)
   --skip-treesitter     Skip Tree-sitter dependency install attempt
   --skip-lsp            Deprecated alias; LSP installs are skipped by default
   --sudo                Run install step with sudo
@@ -162,6 +162,22 @@ attempt_cmd() {
   fi
   echo "[jot:lsp] Failed: ${desc}" >&2
   return 1
+}
+
+ensure_prefix_pkg_config_path() {
+  local prefix="$1"
+  local pkg_paths=(
+    "${prefix}/lib/pkgconfig"
+    "${prefix}/share/pkgconfig"
+  )
+  for path in "${pkg_paths[@]}"; do
+    if [[ -d "${path}" ]]; then
+      case ":${PKG_CONFIG_PATH:-}:" in
+        *:"${path}":*) ;;
+        *) export PKG_CONFIG_PATH="${path}:${PKG_CONFIG_PATH:-}" ;;
+      esac
+    fi
+  done
 }
 
 install_python_lsp() {
@@ -465,17 +481,13 @@ install_prettier() {
 }
 
 install_treesitter_deps() {
-  echo "[jot:treesitter] Installing Tree-sitter runtime and grammar packages"
+  echo "[jot:treesitter] Installing Tree-sitter runtime package"
   local failures=0
+  ensure_prefix_pkg_config_path "${INSTALL_PREFIX}"
 
   if command -v pacman >/dev/null 2>&1; then
-    attempt_cmd "Installing Tree-sitter packages via pacman" \
-      run_maybe_sudo pacman -Sy --noconfirm \
-        tree-sitter tree-sitter-c tree-sitter-cpp tree-sitter-python \
-        tree-sitter-javascript tree-sitter-typescript tree-sitter-rust \
-        tree-sitter-go tree-sitter-json tree-sitter-html tree-sitter-css \
-        tree-sitter-bash tree-sitter-lua tree-sitter-markdown \
-        tree-sitter-toml tree-sitter-yaml || failures=$((failures + 1))
+    attempt_cmd "Installing Tree-sitter runtime via pacman" \
+      run_maybe_sudo pacman -Sy --noconfirm tree-sitter || failures=$((failures + 1))
   elif command -v apt-get >/dev/null 2>&1; then
     attempt_cmd "Installing Tree-sitter runtime via apt-get" \
       run_maybe_sudo bash -lc "apt-get update && apt-get install -y libtree-sitter-dev" || failures=$((failures + 1))
@@ -497,9 +509,9 @@ install_treesitter_deps() {
   fi
 
   if [[ "${failures}" -gt 0 ]]; then
-    echo "[jot:treesitter] Completed with warning(s). Missing grammars fall back to regex highlighting." >&2
+    echo "[jot:treesitter] Completed with warning(s). Tree-sitter may fall back to regex highlighting." >&2
   else
-    echo "[jot:treesitter] Tree-sitter dependency install completed."
+    echo "[jot:treesitter] Tree-sitter runtime install completed."
   fi
 }
 
@@ -529,6 +541,8 @@ if [[ "${INSTALL_TREESITTER}" -eq 1 ]]; then
 else
   echo "[jot:treesitter] Skipped Tree-sitter dependency install (--with-treesitter to enable)"
 fi
+
+ensure_prefix_pkg_config_path "${INSTALL_PREFIX}"
 
 CMAKE_ARGS=(
   -S "${PROJECT_ROOT}"
