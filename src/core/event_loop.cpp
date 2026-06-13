@@ -275,6 +275,8 @@ void Editor::handle_terminal_event(const Event &ev) {
       handle_menu_bar_input(ch);
     } else if (show_context_menu) {
       handle_context_menu_input(ch);
+    } else if (show_tree_sitter_status_modal) {
+      handle_tree_sitter_status_input(ch);
     } else if (show_command_palette) {
       handle_command_palette(ch);
     } else if (show_search) {
@@ -436,6 +438,7 @@ void Editor::run() {
         if (term && term->poll_output() && show_integrated_terminal)
           needs_redraw = true;
       }
+      poll_tree_sitter_installs();
     });
   }
   if (!safe_mode && config.get_bool("discord_rpc", false)) {
