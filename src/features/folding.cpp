@@ -342,14 +342,26 @@ int visible_line_count(const std::vector<FoldRange> &ranges, int line_count) {
 int buffer_line_for_visible_offset(const std::vector<FoldRange> &ranges,
                                    int first_line, int offset,
                                    int line_count) {
+  if (line_count <= 0) {
+    return -1;
+  }
   int current = std::clamp(first_line, 0, std::max(0, line_count - 1));
   while (current < line_count && is_line_hidden(ranges, current)) {
     current++;
   }
-  for (int i = 0; i < offset && current < line_count - 1; i++) {
-    current = next_visible_line(ranges, current, line_count);
+  if (current >= line_count) {
+    return -1;
   }
-  return std::clamp(current, 0, std::max(0, line_count - 1));
+  for (int i = 0; i < offset; i++) {
+    if (current >= line_count - 1) {
+      return -1;
+    }
+    current = next_visible_line(ranges, current, line_count);
+    if (current >= line_count || is_line_hidden(ranges, current)) {
+      return -1;
+    }
+  }
+  return current;
 }
 
 int clamp_scroll_offset(const std::vector<FoldRange> &ranges, int scroll,
