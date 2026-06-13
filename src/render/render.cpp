@@ -69,7 +69,8 @@ void compute_code_cursor_screen_pos(const SplitPane &pane, const FileBuffer &buf
   for (int row = 0; row < viewport_h; row++) {
     int line = Folding::buffer_line_for_visible_offset(
         buf.fold_ranges, buf.scroll_offset, row, (int)buf.line_count());
-    if (line == buf.cursor.y && !Folding::is_line_hidden(buf.fold_ranges, line)) {
+    if (line >= 0 && line == buf.cursor.y &&
+        !Folding::is_line_hidden(buf.fold_ranges, line)) {
       visible_row = row;
       found_row = true;
       break;
@@ -117,7 +118,8 @@ void Editor::render() {
     }
 
     // Keep cursor visibility in sync even when no redraw is needed.
-    if (show_menu_bar_dropdown || show_context_menu) {
+    if (show_menu_bar_dropdown || show_context_menu ||
+        show_tree_sitter_status_modal) {
       ui->hide_cursor();
       ui->flush_cursor();
       return;
@@ -223,6 +225,7 @@ void Editor::render() {
     render_command_palette();
     render_search_panel();
     render_popup();
+    render_tree_sitter_status_modal();
     render_context_menu();
     render_menu_dropdown();
 
@@ -234,7 +237,8 @@ void Editor::render() {
 
     // Set cursor state BEFORE ui->render() so the full-row paint emits the
     // correct cursor at the end of the frame.
-    if (show_menu_bar_dropdown || show_context_menu) {
+    if (show_menu_bar_dropdown || show_context_menu ||
+        show_tree_sitter_status_modal) {
       ui->hide_cursor();
     } else if (show_command_palette || show_search || show_save_prompt ||
         show_quit_prompt) {
