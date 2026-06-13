@@ -27,7 +27,7 @@ std::vector<std::string> Editor::list_available_themes() {
   }
 
   if (themes.empty()) {
-    themes.push_back("jot_nvim");
+    themes.push_back("dark");
     return themes;
   }
 

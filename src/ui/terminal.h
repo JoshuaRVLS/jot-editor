@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <vector>
 
+struct TermKey;
+
 enum EventType { EVENT_KEY, EVENT_MOUSE, EVENT_RESIZE, EVENT_REDRAW };
 
 struct KeyEvent {
@@ -43,6 +45,7 @@ private:
   int width, height;
   int poll_timeout_ms;
   bool raw_mode;
+  TermKey *termkey_;
   std::string buffer;
   std::string mouse_event_buffer;
   FILE *render_capture_ = nullptr;
@@ -78,6 +81,7 @@ private:
   void setup_terminal();
   void restore_terminal();
   int read_key();
+  int read_termkey_result();
   void parse_mouse_event(int ch, MouseEvent &event);
 
 public:

@@ -253,7 +253,7 @@ Editor::Editor() {
   easter_egg_timer = 0;
 
   // Default Python-backed theme name.
-  current_theme_name = "jot_nvim";
+  current_theme_name = "dark";
 
   python_api = new PythonAPI(this);
   python_api->init();
@@ -264,7 +264,7 @@ Editor::Editor() {
 
   // Restore saved color scheme now that Python runtime is ready.
   {
-    std::string saved = config.get("color_scheme", "jot_nvim");
+    std::string saved = config.get("color_scheme", "dark");
     apply_theme(saved, false, false);
   }
 

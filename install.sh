@@ -131,6 +131,11 @@ if ! command -v cmake >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v pkg-config >/dev/null 2>&1; then
+  echo "Error: pkg-config not found in PATH" >&2
+  exit 1
+fi
+
 if [[ "${USE_SUDO}" -eq 1 ]] && ! command -v sudo >/dev/null 2>&1; then
   echo "Error: --sudo requested but sudo is not available" >&2
   exit 1
@@ -515,6 +520,59 @@ install_treesitter_deps() {
   fi
 }
 
+install_required_native_deps() {
+  if pkg-config --exists vterm termkey; then
+    return 0
+  fi
+
+  echo "[jot:deps] Installing required native packages (libvterm, libtermkey)"
+  ensure_prefix_pkg_config_path "${INSTALL_PREFIX}"
+
+  if command -v pacman >/dev/null 2>&1; then
+    attempt_cmd "Installing libvterm via pacman" \
+      run_maybe_sudo pacman -Sy --noconfirm libvterm || true
+    attempt_cmd "Installing libtermkey via pacman" \
+      run_maybe_sudo pacman -Sy --noconfirm libtermkey || true
+    if pkg-config --exists vterm termkey; then
+      return 0
+    fi
+    if [[ "${USE_SUDO}" -eq 0 ]]; then
+      if command -v paru >/dev/null 2>&1; then
+        attempt_cmd "Installing libtermkey via paru" \
+          paru -S --needed --noconfirm libtermkey || true
+        if pkg-config --exists vterm termkey; then
+          return 0
+        fi
+      elif command -v yay >/dev/null 2>&1; then
+        attempt_cmd "Installing libtermkey via yay" \
+          yay -S --needed --noconfirm libtermkey || true
+        if pkg-config --exists vterm termkey; then
+          return 0
+        fi
+      fi
+    fi
+  elif command -v apt-get >/dev/null 2>&1; then
+    attempt_cmd "Installing required native packages via apt-get" \
+      run_maybe_sudo bash -lc "apt-get update && apt-get install -y libvterm-dev libtermkey-dev" && return 0
+  elif command -v dnf >/dev/null 2>&1; then
+    attempt_cmd "Installing required native packages via dnf" \
+      run_maybe_sudo dnf install -y libvterm-devel libtermkey-devel && return 0
+  elif command -v yum >/dev/null 2>&1; then
+    attempt_cmd "Installing required native packages via yum" \
+      run_maybe_sudo yum install -y libvterm-devel libtermkey-devel && return 0
+  elif command -v zypper >/dev/null 2>&1; then
+    attempt_cmd "Installing required native packages via zypper" \
+      run_maybe_sudo zypper --non-interactive install libvterm-devel libtermkey-devel && return 0
+  elif command -v brew >/dev/null 2>&1; then
+    attempt_cmd "Installing required native packages via brew" \
+      brew install libvterm libtermkey && return 0
+  fi
+
+  echo "[jot:deps] Error: install libvterm and libtermkey development packages, then rerun install.sh." >&2
+  echo "[jot:deps] Arch note: libtermkey may be available from AUR as 'libtermkey'." >&2
+  return 1
+}
+
 install_builtin_lsps() {
   echo "[jot:lsp] Installing built-in LSP servers (python/typescript/cpp/rust/go/lua/bash)"
   local failures=0
@@ -535,6 +593,8 @@ install_builtin_lsps() {
 }
 
 mkdir -p "${BUILD_DIR}"
+
+install_required_native_deps
 
 if [[ "${INSTALL_TREESITTER}" -eq 1 ]]; then
   install_treesitter_deps || true

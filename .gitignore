@@ -38,3 +38,10 @@ compile_commands.json
 AGENTS.md
 PLANS.md
 .codex
+build_no_ts/cmake_uninstall.cmake
+build_no_ts/CTestTestfile.cmake
+build_no_ts/DartConfiguration.tcl
+build_no_ts/apps/jot/jot
+build_no_ts/Testing/Temporary/CTestCostData.txt
+build_no_ts/tests/CTestTestfile.cmake
+build_no_ts/tests/jot_tests

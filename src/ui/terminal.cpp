@@ -12,6 +12,7 @@
 #include <poll.h>
 #include <sys/ioctl.h>
 #include <termios.h>
+#include <termkey.h>
 #include <unistd.h>
 
 static struct termios orig_termios;
@@ -114,39 +115,120 @@ static bool read_char_with_timeout(char &out, int timeout_ms) {
   return read(STDIN_FILENO, &out, 1) == 1;
 }
 
-static int xterm_modifier_flags(int mod) {
+static int termkey_modifier_flags(int mod) {
   int flags = 0;
-  if (mod == 2)
+  if (mod & TERMKEY_KEYMOD_SHIFT)
     flags |= 0x80000; // Shift
-  else if (mod == 3)
+  if (mod & TERMKEY_KEYMOD_ALT)
     flags |= 0x40000; // Alt
-  else if (mod == 4)
-    flags |= 0x80000 | 0x40000;
-  else if (mod == 5)
+  if (mod & TERMKEY_KEYMOD_CTRL)
     flags |= 0x20000; // Ctrl
-  else if (mod == 6)
-    flags |= 0x80000 | 0x20000;
-  else if (mod == 7)
-    flags |= 0x40000 | 0x20000;
-  else if (mod == 8)
-    flags |= 0x80000 | 0x40000 | 0x20000;
   return flags;
 }
 
-static int csi_final_key_code(char final) {
-  if (final == 'A')
+static int translate_termkey_keysym(TermKeySym sym) {
+  switch (sym) {
+  case TERMKEY_SYM_BACKSPACE:
+    return 127;
+  case TERMKEY_SYM_TAB:
+    return '\t';
+  case TERMKEY_SYM_ENTER:
+  case TERMKEY_SYM_KPENTER:
+    return 13;
+  case TERMKEY_SYM_ESCAPE:
+    return 27;
+  case TERMKEY_SYM_SPACE:
+    return ' ';
+  case TERMKEY_SYM_DEL:
+    return 127;
+  case TERMKEY_SYM_DELETE:
+    return 1001;
+  case TERMKEY_SYM_UP:
     return 1008;
-  if (final == 'B')
+  case TERMKEY_SYM_DOWN:
     return 1009;
-  if (final == 'C')
+  case TERMKEY_SYM_RIGHT:
     return 1010;
-  if (final == 'D')
+  case TERMKEY_SYM_LEFT:
     return 1011;
-  if (final == 'H')
+  case TERMKEY_SYM_HOME:
+  case TERMKEY_SYM_BEGIN:
     return 1012;
-  if (final == 'F')
+  case TERMKEY_SYM_END:
     return 1013;
-  return 0;
+  case TERMKEY_SYM_PAGEUP:
+    return 1015;
+  case TERMKEY_SYM_PAGEDOWN:
+    return 1016;
+  case TERMKEY_SYM_KP0:
+    return '0';
+  case TERMKEY_SYM_KP1:
+    return '1';
+  case TERMKEY_SYM_KP2:
+    return '2';
+  case TERMKEY_SYM_KP3:
+    return '3';
+  case TERMKEY_SYM_KP4:
+    return '4';
+  case TERMKEY_SYM_KP5:
+    return '5';
+  case TERMKEY_SYM_KP6:
+    return '6';
+  case TERMKEY_SYM_KP7:
+    return '7';
+  case TERMKEY_SYM_KP8:
+    return '8';
+  case TERMKEY_SYM_KP9:
+    return '9';
+  case TERMKEY_SYM_KPPLUS:
+    return '+';
+  case TERMKEY_SYM_KPMINUS:
+    return '-';
+  case TERMKEY_SYM_KPMULT:
+    return '*';
+  case TERMKEY_SYM_KPDIV:
+    return '/';
+  case TERMKEY_SYM_KPCOMMA:
+    return ',';
+  case TERMKEY_SYM_KPPERIOD:
+    return '.';
+  case TERMKEY_SYM_KPEQUALS:
+    return '=';
+  default:
+    return 0;
+  }
+}
+
+static int translate_termkey_key(const TermKeyKey &key) {
+  int flags = termkey_modifier_flags(key.modifiers);
+
+  switch (key.type) {
+  case TERMKEY_TYPE_UNICODE: {
+    int codepoint = static_cast<int>(key.code.codepoint);
+    if (codepoint <= 0) {
+      return -1;
+    }
+    if (codepoint >= 'A' && codepoint <= 'Z') {
+      codepoint |= 0x8000;
+    }
+    return codepoint | flags;
+  }
+  case TERMKEY_TYPE_KEYSYM: {
+    int mapped = translate_termkey_keysym(key.code.sym);
+    if (mapped == '\t' && (key.modifiers & TERMKEY_KEYMOD_SHIFT)) {
+      mapped = 1017;
+      flags &= ~0x80000;
+    }
+    return mapped ? (mapped | flags) : -1;
+  }
+  case TERMKEY_TYPE_FUNCTION:
+    if (key.code.number > 0) {
+      return (1000 + key.code.number) | flags;
+    }
+    return -1;
+  default:
+    return -1;
+  }
 }
 
 static void append_mouse_reset(std::string &buffer) {
@@ -159,7 +241,9 @@ static void append_mouse_reset(std::string &buffer) {
   buffer += "\x1b[?2004l"; // bracketed paste
 }
 
-Terminal::Terminal() : width(80), height(24), poll_timeout_ms(8), raw_mode(false) {}
+Terminal::Terminal()
+    : width(80), height(24), poll_timeout_ms(8), raw_mode(false),
+      termkey_(nullptr) {}
 
 Terminal::~Terminal() { cleanup(); }
 
@@ -237,6 +321,22 @@ void Terminal::init() {
   // reliable way to learn the real rows/cols at this point.
   refresh_size(/*force_probe=*/true);
 
+  TERMKEY_CHECK_VERSION;
+  const char *term = getenv("TERM");
+  if (!term || term[0] == '\0') {
+    term = "xterm-256color";
+  }
+  termkey_ = termkey_new_abstract(
+      term, TERMKEY_FLAG_UTF8 | TERMKEY_FLAG_CTRLC | TERMKEY_FLAG_CONVERTKP);
+  if (!termkey_) {
+    termkey_ = termkey_new_abstract(
+        "xterm-256color",
+        TERMKEY_FLAG_UTF8 | TERMKEY_FLAG_CTRLC | TERMKEY_FLAG_CONVERTKP);
+  }
+  if (termkey_) {
+    termkey_set_waittime(termkey_, 10);
+  }
+
   if (width <= 0) width = 80;
   if (height <= 0) height = 24;
 
@@ -308,6 +408,10 @@ bool Terminal::refresh_size(bool force_probe) {
 }
 
 void Terminal::cleanup() {
+  if (termkey_) {
+    termkey_destroy(termkey_);
+    termkey_ = nullptr;
+  }
   disable_mouse();
   disable_raw_mode();
   restore_terminal();
@@ -318,195 +422,96 @@ void Terminal::cleanup() {
   }
 }
 
-// ... inside read_key
+int Terminal::read_termkey_result() {
+  if (!termkey_) {
+    return -1;
+  }
+
+  TermKeyKey key;
+  while (true) {
+    TermKeyResult result = termkey_getkey(termkey_, &key);
+    if (result == TERMKEY_RES_KEY) {
+      return translate_termkey_key(key);
+    }
+    if (result == TERMKEY_RES_AGAIN) {
+      char next;
+      if (read_char_with_timeout(next, termkey_get_waittime(termkey_))) {
+        termkey_push_bytes(termkey_, &next, 1);
+        continue;
+      }
+      result = termkey_getkey_force(termkey_, &key);
+      if (result == TERMKEY_RES_KEY) {
+        return translate_termkey_key(key);
+      }
+      return -1;
+    }
+    return -1;
+  }
+}
+
 int Terminal::read_key() {
   char c;
   if (read(STDIN_FILENO, &c, 1) != 1)
     return -1;
 
-  // Debug logging
-  // std::ofstream log("key_debug.log", std::ios::app);
-  // if (log.is_open())
-  //   log << "Read char: " << (int)c << " (" << (c >= 32 ? c : '.') << ")"
-  //       << std::endl;
+  std::string bytes;
+  bytes.push_back(c);
 
   if (c == '\x1b') {
-    char seq[3];
-    if (!read_char_with_timeout(seq[0], 5))
-      return '\x1b';
-
-    int prefix_flags = 0;
-    if (seq[0] == '\x1b') {
-      prefix_flags |= 0x40000;
-      if (!read_char_with_timeout(seq[0], 5))
-        return '\x1b' | prefix_flags;
-    }
-
-    // Treat ESC + regular character as Alt+key. This is the most common way
-    // terminals encode Alt-modified letters. Some terminals encode Alt+Arrow
-    // as ESC plus a normal arrow CSI sequence, so keep parsing those below.
-    if (seq[0] != '[' && seq[0] != 'O') {
-      return ((unsigned char)seq[0]) | 0x40000;
-    }
-
-    if (!read_char_with_timeout(seq[1], 5))
-      return '\x1b';
-
-    // if (log.is_open())
-    //   log << "Seq header: " << seq[0] << seq[1] << std::endl;
-
-    if (seq[0] == '[') {
-      // Parse params: [param1;param2;...terminator
-      std::vector<int> params;
-      std::string current_param;
-      if (seq[1] >= '0' && seq[1] <= '9') {
-        current_param += seq[1];
-        char next;
-        while (read_char_with_timeout(next, 5)) {
-          // log << "Param char: " << (int)next << std::endl;
-          if (next >= '0' && next <= '9') {
-            current_param += next;
-          } else if (next == ';') {
-            if (!current_param.empty())
-              params.push_back(std::stoi(current_param));
-            current_param.clear();
-          } else {
-            // Terminator found
-            if (!current_param.empty())
-              params.push_back(std::stoi(current_param));
-
-            // Logic based on terminator
-            if (next == '~') {
-              if (params.size() >= 1) {
-                int key = params[0];
-                int mod = (params.size() >= 2) ? params[1] : 1;
-
-                // if (log.is_open())
-                //   log << "Sequence parsed: key=" << key << " mod=" << mod
-                //       << std::endl;
-
-                // Handle modifyOtherKeys: 27;mod;key~
-                if (key == 27 && params.size() >= 3) {
-                  mod = params[1];
-                  key = params[2];
-                }
-
-                int flags = prefix_flags | xterm_modifier_flags(mod);
-
-                // Map special keys
-                int mapped_key = 0;
-                switch (key) {
-                case 3:
-                  mapped_key = 1001;
-                  break; // Delete (3~), possibly with modifiers
-                case 15:
-                  mapped_key = 1005;
-                  break; // F5
-                case 17:
-                  mapped_key = 1006;
-                  break; // F6
-                case 18:
-                  mapped_key = 1007;
-                  break; // F7
-                case 19:
-                  mapped_key = 1008;
-                  break; // F8? No, F8 is 19 usually
-                         // Add arrow mappings if they come as numbers
-                         // But usually they are 1;modA or similar?
-                  // Standard 1;5A is parsed differently (see below logic if we
-                  // preserve it) Actually, generic keys: 13 -> Enter
-                }
-
-                if (mapped_key)
-                  return mapped_key | flags;
-                return key | flags;
+    char second;
+    if (read_char_with_timeout(second, 5)) {
+      bytes.push_back(second);
+      if (second == '\x1b') {
+        if (!read_char_with_timeout(second, 5)) {
+          if (!termkey_) {
+            return -1;
+          }
+          termkey_push_bytes(termkey_, bytes.data(), bytes.size());
+          return read_termkey_result();
+        }
+        bytes.push_back(second);
+      }
+      if (second == '[') {
+        char third;
+        if (read_char_with_timeout(third, 5)) {
+          bytes.push_back(third);
+          if (third == '<') {
+            mouse_event_buffer.clear();
+            char mouse_seq[32] = {0};
+            int mouse_pos = 0;
+            while (mouse_pos < 31) {
+              if (!read_char_with_timeout(mouse_seq[mouse_pos], 5))
+                return '\x1b';
+              if (mouse_seq[mouse_pos] == 'M' || mouse_seq[mouse_pos] == 'm') {
+                mouse_seq[mouse_pos + 1] = '\0';
+                break;
               }
-            } else if (next == 'u') { // Kitty protocol: key;modu
-              if (params.size() >= 2) {
-                int key = params[0];
-                int mod = params[1];
-                int flags = prefix_flags | xterm_modifier_flags(mod);
-
-                return key | flags;
-              }
-            } else if (next == 'A' || next == 'B' || next == 'C' ||
-                       next == 'D' || next == 'F' || next == 'H') {
-              // 1;5A style
-              int mod = params.empty() ? 1 : params[0];
-              // If format is [1;5A, params[0] is 1, params[1] is 5
-              if (params.size() == 2 && params[0] == 1)
-                mod = params[1];
-
-              int flags = prefix_flags | xterm_modifier_flags(mod);
-              int code = csi_final_key_code(next);
-
-              return code | flags;
+              mouse_pos++;
             }
-
-            return '\x1b';
+            mouse_event_buffer = std::string(mouse_seq);
+            return 1014;
           }
-        }
-      } else if (seq[1] == '<') {
-        // Mouse
-        mouse_event_buffer.clear();
-        char mouse_seq[32] = {0};
-        int mouse_pos = 0;
-        while (mouse_pos < 31) {
-          if (!read_char_with_timeout(mouse_seq[mouse_pos], 5))
-            return '\x1b';
-          if (mouse_seq[mouse_pos] == 'M' || mouse_seq[mouse_pos] == 'm') {
-            mouse_seq[mouse_pos + 1] = '\0';
-            break;
-          }
-          mouse_pos++;
-        }
-        mouse_event_buffer = std::string(mouse_seq);
-        return 1014;
-      } else {
-        // Handle [A, [B directly (no numbers)
-        switch (seq[1]) {
-        case 'A':
-          return 1008 | prefix_flags;
-        case 'B':
-          return 1009 | prefix_flags;
-        case 'C':
-          return 1010 | prefix_flags;
-        case 'D':
-          return 1011 | prefix_flags;
-        case 'H':
-          return 1012 | prefix_flags;
-        case 'F':
-          return 1013 | prefix_flags;
-        case 'M': {
-          for (int i = 0; i < 3; i++) {
-            char dummy;
-            if (!read_char_with_timeout(dummy, 5))
+          while (third < 0x40 || third > 0x7e) {
+            if (!read_char_with_timeout(third, 5)) {
               break;
+            }
+            bytes.push_back(third);
           }
-          return -2;
         }
-        case 'Z':
-          return 1017; // Shift+Tab
+      } else if (second == 'O') {
+        char third;
+        if (read_char_with_timeout(third, 5)) {
+          bytes.push_back(third);
         }
-      }
-    } else if (seq[0] == 'O') {
-      switch (seq[1]) {
-      case 'H':
-        return 1012 | prefix_flags;
-      case 'F':
-        return 1013 | prefix_flags;
-      case 'M':
-        return 13 | prefix_flags; // Keypad Enter on some terminals
       }
     }
-    return '\x1b';
   }
 
-  if (c >= 'A' && c <= 'Z') {
-    return c | 0x8000;
+  if (!termkey_) {
+    return -1;
   }
-
-  return c;
+  termkey_push_bytes(termkey_, bytes.data(), bytes.size());
+  return read_termkey_result();
 }
 
 void Terminal::parse_mouse_event(int ch, MouseEvent &event) {

@@ -10,24 +10,16 @@ Legacy themes in `~/.config/jot/themes/` still load.
 
 ## Bundled Themes
 
-jot now ships with 10 popular default themes (stored in `.configs/configs/colors/`):
+jot ships with two bundled themes (stored in `.configs/configs/colors/`):
 
-- `dracula`
-- `gruvbox_dark`
-- `nord`
-- `solarized_dark`
-- `monokai`
-- `onedark`
-- `tokyonight`
-- `catppuccin_mocha`
-- `kanagawa_dragon`
-- `ayu_mirage`
+- `dark` (default)
+- `light`
 
 Apply any of them with:
 
 ```python
 from jot_api import jot
-jot.cmd.colorscheme("tokyonight")
+jot.cmd.colorscheme("light")
 ```
 
 ## Creating a Theme

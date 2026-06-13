@@ -618,11 +618,14 @@ lsp_change_debounce_ms=120
 - C++17 compiler
 - Python 3 development headers and `python3-config`
 - libvterm development headers (`vterm` pkg-config package)
+- libtermkey development headers (`termkey` pkg-config package)
 - Unix-like environment with POSIX terminal APIs
 
 Notes:
 
 - The UI uses raw terminal handling, not ncurses.
+- Editor keyboard input is decoded with libtermkey for reliable modifier and
+  advanced shortcut handling.
 - The integrated terminal uses PTY support and libvterm.
 - Tree-sitter runtime support is optional at build time but recommended.
 
