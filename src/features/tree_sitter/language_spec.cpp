@@ -1,5 +1,5 @@
-#include "tree_sitter_language_spec.h"
-#include "tree_sitter_catalog.h"
+#include "tree_sitter/language_spec.h"
+#include "tree_sitter/catalog.h"
 
 #include <algorithm>
 

@@ -142,6 +142,9 @@ public:
   bool is_running() const { return running; }
   bool is_initialized() const { return initialized; }
   bool is_launched() const { return launched; }
+  int get_stdin_fd() const { return stdin_fd; }
+  int get_stdout_fd() const { return stdout_fd; }
+  int get_stderr_fd() const { return stderr_fd; }
   bool supports_read_memory() const { return supports_read_memory_; }
   bool supports_disassemble() const { return supports_disassemble_; }
   const std::string &get_last_error() const { return last_error; }

@@ -2,7 +2,7 @@
 #include <Python.h>
 
 #include "editor.h"
-#include "python_api.h"
+#include "python_bridge/api.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -13,7 +13,7 @@
 
 namespace fs = std::filesystem;
 
-// Note: python_api_impl.cpp is included at the bottom of this file so the
+// Note: api_impl.cpp is included at the bottom of this file so the
 // implementation can access the static helpers and g_python_api.
 
 static fs::path get_executable_path() {
@@ -135,4 +135,4 @@ static struct PyModuleDef jot_module = {
 
 static PyObject *PyInit_jot_api(void) { return PyModule_Create(&jot_module); }
 
-#include "python_api_impl.cpp"
+#include "api_impl.cpp"

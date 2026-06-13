@@ -1,5 +1,5 @@
 #include "editor.h"
-#include "python_api.h"
+#include "python_bridge/api.h"
 #include <algorithm>
 
 void Editor::reverse_selected_lines() {

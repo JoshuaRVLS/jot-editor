@@ -502,11 +502,18 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
     if (buf.selection.active)
       delete_selection();
     bool had_completion = lsp_completion_visible;
-    insert_char((char)ch);
+    bool inserted_html_closing_tag = insert_char((char)ch);
     char typed = (char)ch;
+
+    if (inserted_html_closing_tag) {
+      hide_lsp_completion();
+      needs_redraw = true;
+      return;
+    }
+
     bool trigger_completion =
         std::isalnum((unsigned char)typed) || typed == '_' || typed == '.' ||
-        typed == ':' || typed == '>';
+        typed == ':' || typed == '>' || typed == '<' || typed == '/';
     if (trigger_completion) {
       if (had_completion) {
         refresh_lsp_completion_filter();

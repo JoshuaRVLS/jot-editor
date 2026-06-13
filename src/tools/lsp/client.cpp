@@ -1,4 +1,4 @@
-#include "lsp_client.h"
+#include "tools/lsp/client.h"
 #include <algorithm>
 #include <cctype>
 #include <cerrno>

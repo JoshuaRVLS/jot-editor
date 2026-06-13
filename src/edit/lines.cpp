@@ -1,6 +1,6 @@
 #include "editor.h"
 #include "text_features.h"
-#include "python_api.h"
+#include "python_bridge/api.h"
 #include <algorithm>
 
 namespace {

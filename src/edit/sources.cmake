@@ -1,0 +1,22 @@
+set(JOT_EDIT_SOURCES
+  edit/clipboard.cpp
+  edit/cursor.cpp
+  edit/datetime.cpp
+  edit/duplicate.cpp
+  edit/edit.cpp
+  edit/increment.cpp
+  edit/join_lines.cpp
+  edit/lines.cpp
+  edit/path_clipboard.cpp
+  edit/replace.cpp
+  edit/reverse_lines.cpp
+  edit/search.cpp
+  edit/shuffle_lines.cpp
+  edit/sidebar.cpp
+  edit/sort_desc.cpp
+  edit/stats.cpp
+  edit/surround.cpp
+  edit/transform.cpp
+  edit/trim_blank.cpp
+  edit/unique_lines.cpp
+)

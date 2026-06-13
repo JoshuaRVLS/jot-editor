@@ -1,5 +1,5 @@
 #include "ui.h"
-#include "ui_text.h"
+#include "ui/text.h"
 #include <algorithm>
 
 UI::UI(Terminal *t)

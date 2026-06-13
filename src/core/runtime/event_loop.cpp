@@ -1,110 +1,160 @@
 #include "event_loop.h"
-#include <algorithm>
-#include <chrono>
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
-#include <sys/epoll.h>
-#include <unistd.h>
 #include <fcntl.h>
+#include <stdexcept>
+#include <utility>
+#include <unistd.h>
 
 #include "editor.h"
-
-namespace {
-
-int make_nonblocking(int fd) {
-  int flags = fcntl(fd, F_GETFL, 0);
-  if (flags == -1)
-    return -1;
-  return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-}
-
-} // namespace
 
 EventLoop::EventLoop() { main_thread_id_ = std::this_thread::get_id(); }
 
 EventLoop::~EventLoop() {
   stop();
-  if (epoll_fd_ >= 0)
-    ::close(epoll_fd_);
-  if (wakeup_read_fd_ >= 0)
-    ::close(wakeup_read_fd_);
-  if (wakeup_write_fd_ >= 0)
-    ::close(wakeup_write_fd_);
-}
-
-int64_t EventLoop::now_ms() const {
-  return std::chrono::duration_cast<std::chrono::milliseconds>(
-             std::chrono::steady_clock::now().time_since_epoch())
-      .count();
+  close_all_handles();
+  if (loop_initialized_) {
+    uv_run(&loop_, UV_RUN_DEFAULT);
+    uv_loop_close(&loop_);
+    loop_initialized_ = false;
+  }
 }
 
 void EventLoop::prepare() {
-  create_epoll();
-  create_wakeup_pipe();
-}
-
-void EventLoop::create_epoll() {
-  if (epoll_fd_ >= 0)
+  if (loop_initialized_)
     return;
-  epoll_fd_ = epoll_create1(EPOLL_CLOEXEC);
-  if (epoll_fd_ < 0)
-    throw std::runtime_error("epoll_create1 failed: " +
-                             std::string(strerror(errno)));
-}
-
-void EventLoop::create_wakeup_pipe() {
-  if (wakeup_read_fd_ >= 0)
-    return;
-  int fds[2];
-  if (pipe(fds) < 0)
-    throw std::runtime_error("pipe failed: " + std::string(strerror(errno)));
-
-  wakeup_read_fd_ = fds[0];
-  wakeup_write_fd_ = fds[1];
-
-  make_nonblocking(wakeup_read_fd_);
-  make_nonblocking(wakeup_write_fd_);
-
-  epoll_event ev;
-  ev.events = EPOLLIN | EPOLLET;
-  ev.data.fd = wakeup_read_fd_;
-  epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, wakeup_read_fd_, &ev);
+  int rc = uv_loop_init(&loop_);
+  if (rc != 0) {
+    throw std::runtime_error("uv_loop_init failed: " +
+                             std::string(uv_strerror(rc)));
+  }
+  loop_initialized_ = true;
+  async_.data = this;
+  rc = uv_async_init(&loop_, &async_, [](uv_async_t *handle) {
+    auto *loop = static_cast<EventLoop *>(handle->data);
+    if (loop) {
+      loop->drain_posts();
+    }
+  });
+  if (rc != 0) {
+    throw std::runtime_error("uv_async_init failed: " +
+                             std::string(uv_strerror(rc)));
+  }
+  async_initialized_ = true;
 }
 
 void EventLoop::watch_fd(int fd, bool read, bool write,
                          std::function<void()> on_ready) {
+  if (fd < 0 || (!read && !write) || !on_ready) {
+    return;
+  }
   assert_main_thread();
+  prepare();
 
-  struct epoll_event ev;
-  ev.events = 0;
+  unwatch_fd(fd);
+
+  auto watcher = std::make_unique<FdWatcherHandle>();
+  watcher->owner = this;
+  watcher->fd = fd;
+  watcher->on_read = read ? on_ready : nullptr;
+  watcher->on_write = write ? on_ready : nullptr;
+  watcher->poll.data = watcher.get();
+
+  int rc = uv_poll_init(&loop_, &watcher->poll, fd);
+  if (rc != 0) {
+    throw std::runtime_error("uv_poll_init failed: " +
+                             std::string(uv_strerror(rc)));
+  }
+
+  int events = 0;
   if (read)
-    ev.events |= EPOLLIN;
+    events |= UV_READABLE;
   if (write)
-    ev.events |= EPOLLOUT;
-  ev.data.fd = fd;
+    events |= UV_WRITABLE;
+  rc = uv_poll_start(&watcher->poll, events, [](uv_poll_t *handle, int status,
+                                                int events) {
+    auto *watcher = static_cast<FdWatcherHandle *>(handle->data);
+    if (!watcher) {
+      return;
+    }
+    if (status < 0) {
+      if (watcher->on_error) {
+        watcher->on_error();
+      }
+      return;
+    }
+    if ((events & UV_READABLE) && watcher->on_read) {
+      watcher->on_read();
+    }
+    if ((events & UV_WRITABLE) && watcher->on_write) {
+      watcher->on_write();
+    }
+  });
+  if (rc != 0) {
+    throw std::runtime_error("uv_poll_start failed: " +
+                             std::string(uv_strerror(rc)));
+  }
 
-  if (watchers_.find(fd) != watchers_.end())
-    epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev);
-  else
-    epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev);
-
-  watchers_[fd] = {fd, read ? on_ready : nullptr,
-                   write ? on_ready : nullptr, nullptr};
+  watchers_[fd] = std::move(watcher);
 }
 
 void EventLoop::unwatch_fd(int fd) {
   assert_main_thread();
-  epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
-  watchers_.erase(fd);
+  auto it = watchers_.find(fd);
+  if (it == watchers_.end()) {
+    return;
+  }
+  uv_poll_stop(&it->second->poll);
+  FdWatcherHandle *watcher = it->second.release();
+  uv_close(reinterpret_cast<uv_handle_t *>(&watcher->poll),
+           EventLoop::close_delete_watcher);
+  watchers_.erase(it);
+}
+
+bool EventLoop::is_watching_fd(int fd) const {
+  return watchers_.find(fd) != watchers_.end();
 }
 
 EventLoop::TimerId EventLoop::set_timer(int interval_ms, bool repeat,
                                         TimerCallback cb) {
   assert_main_thread();
+  prepare();
   TimerId id = next_timer_id_++;
-  int64_t fire_at = now_ms() + interval_ms;
-  timers_.push_back({id, interval_ms, repeat, std::move(cb), fire_at});
+
+  auto timer = std::make_unique<TimerHandle>();
+  timer->owner = this;
+  timer->id = id;
+  timer->repeat = repeat;
+  timer->callback = std::move(cb);
+  timer->timer.data = timer.get();
+
+  int rc = uv_timer_init(&loop_, &timer->timer);
+  if (rc != 0) {
+    throw std::runtime_error("uv_timer_init failed: " +
+                             std::string(uv_strerror(rc)));
+  }
+  uint64_t timeout = static_cast<uint64_t>(std::max(0, interval_ms));
+  uint64_t repeat_ms = repeat ? timeout : 0;
+  rc = uv_timer_start(&timer->timer, [](uv_timer_t *handle) {
+    auto *timer = static_cast<TimerHandle *>(handle->data);
+    if (!timer || !timer->owner) {
+      return;
+    }
+    EventLoop *owner = timer->owner;
+    TimerId id = timer->id;
+    bool repeat = timer->repeat;
+    timer->callback();
+    if (!repeat) {
+      owner->cancel_timer(id);
+    }
+  }, timeout, repeat_ms);
+  if (rc != 0) {
+    throw std::runtime_error("uv_timer_start failed: " +
+                             std::string(uv_strerror(rc)));
+  }
+
+  timers_[id] = std::move(timer);
   return id;
 }
 
@@ -114,25 +164,91 @@ EventLoop::TimerId EventLoop::set_timeout(int delay_ms, TimerCallback cb) {
 
 void EventLoop::cancel_timer(TimerId id) {
   assert_main_thread();
-  timers_.erase(std::remove_if(timers_.begin(), timers_.end(),
-                                [id](const TimerEntry &t) { return t.id == id; }),
-                timers_.end());
+  auto it = timers_.find(id);
+  if (it == timers_.end()) {
+    return;
+  }
+  uv_timer_stop(&it->second->timer);
+  TimerHandle *timer = it->second.release();
+  uv_close(reinterpret_cast<uv_handle_t *>(&timer->timer),
+           EventLoop::close_delete_timer);
+  timers_.erase(it);
+}
+
+bool EventLoop::watch_path(const std::string &path, FsEventCallback cb,
+                           bool recursive) {
+  if (path.empty() || !cb) {
+    return false;
+  }
+  assert_main_thread();
+  prepare();
+
+  unwatch_path(path);
+
+  auto watcher = std::make_unique<FsEventHandle>();
+  watcher->owner = this;
+  watcher->path = path;
+  watcher->callback = std::move(cb);
+  watcher->event.data = watcher.get();
+
+  int rc = uv_fs_event_init(&loop_, &watcher->event);
+  if (rc != 0) {
+    return false;
+  }
+
+  unsigned int flags = recursive ? UV_FS_EVENT_RECURSIVE : 0;
+  rc = uv_fs_event_start(
+      &watcher->event,
+      [](uv_fs_event_t *handle, const char *filename, int events, int status) {
+        (void)events;
+        auto *watcher = static_cast<FsEventHandle *>(handle->data);
+        if (!watcher || !watcher->callback || status < 0) {
+          return;
+        }
+        std::string changed = watcher->path;
+        if (filename && filename[0]) {
+          changed += "/";
+          changed += filename;
+        }
+        watcher->callback(changed);
+      },
+      path.c_str(), flags);
+  if (rc != 0) {
+    uv_close(reinterpret_cast<uv_handle_t *>(&watcher->event),
+             EventLoop::close_delete_fs_event);
+    watcher.release();
+    return false;
+  }
+
+  fs_events_[path] = std::move(watcher);
+  return true;
+}
+
+void EventLoop::unwatch_path(const std::string &path) {
+  assert_main_thread();
+  auto it = fs_events_.find(path);
+  if (it == fs_events_.end()) {
+    return;
+  }
+  uv_fs_event_stop(&it->second->event);
+  FsEventHandle *watcher = it->second.release();
+  uv_close(reinterpret_cast<uv_handle_t *>(&watcher->event),
+           EventLoop::close_delete_fs_event);
+  fs_events_.erase(it);
 }
 
 void EventLoop::post(PostCallback cb) {
+  prepare();
   {
     std::lock_guard<std::mutex> lock(pending_mutex_);
     pending_posts_.push_back(std::move(cb));
   }
-  char byte = 1;
-  ::write(wakeup_write_fd_, &byte, 1);
+  if (async_initialized_) {
+    uv_async_send(&async_);
+  }
 }
 
-void EventLoop::handle_wakeup() {
-  char buf[16];
-  while (::read(wakeup_read_fd_, buf, sizeof(buf)) > 0) {
-  }
-
+void EventLoop::drain_posts() {
   std::vector<PostCallback> posts;
   {
     std::lock_guard<std::mutex> lock(pending_mutex_);
@@ -153,77 +269,71 @@ void EventLoop::assert_main_thread() const {
 
 void EventLoop::run() {
   assert_main_thread();
-  create_epoll();
-  create_wakeup_pipe();
-
+  prepare();
   running_ = true;
-
-  constexpr int kMaxEvents = 64;
-  struct epoll_event events[kMaxEvents];
-
-  while (running_) {
-    int64_t now = now_ms();
-    int timeout_ms = 16;
-
-    for (const auto &timer : timers_) {
-      int64_t delta = timer.next_fire_ms - now;
-      if (delta < 0)
-        delta = 0;
-      if (delta < timeout_ms)
-        timeout_ms = static_cast<int>(delta);
-    }
-
-    int nfds = epoll_wait(epoll_fd_, events, kMaxEvents, timeout_ms);
-
-    now = now_ms();
-
-    for (int i = 0; i < nfds; i++) {
-      int fd = events[i].data.fd;
-
-      if (fd == wakeup_read_fd_) {
-        handle_wakeup();
-        continue;
-      }
-
-      auto it = watchers_.find(fd);
-      if (it == watchers_.end())
-        continue;
-
-      uint32_t revents = events[i].events;
-      if ((revents & (EPOLLIN | EPOLLHUP)) && it->second.on_read)
-        it->second.on_read();
-      if ((revents & EPOLLOUT) && it->second.on_write)
-        it->second.on_write();
-      if ((revents & EPOLLERR) && it->second.on_error)
-        it->second.on_error();
-    }
-
-    std::vector<TimerEntry> current_timers;
-    current_timers.swap(timers_);
-    std::vector<TimerEntry> surviving;
-    for (auto &timer : current_timers) {
-      if (now >= timer.next_fire_ms) {
-        timer.callback();
-        if (timer.repeat) {
-          timer.next_fire_ms = now + timer.interval_ms;
-          surviving.push_back(std::move(timer));
-        }
-      } else {
-        surviving.push_back(std::move(timer));
-      }
-    }
-    for (auto &t : timers_)
-      surviving.push_back(std::move(t));
-    timers_.swap(surviving);
-
-    handle_wakeup();
-  }
-
-  watchers_.clear();
-  timers_.clear();
+  uv_run(&loop_, UV_RUN_DEFAULT);
+  drain_posts();
 }
 
-void EventLoop::stop() { running_ = false; }
+void EventLoop::stop() {
+  running_ = false;
+  if (loop_initialized_) {
+    uv_stop(&loop_);
+  }
+}
+
+void EventLoop::close_all_handles() {
+  for (auto &entry : watchers_) {
+    uv_poll_stop(&entry.second->poll);
+    if (!uv_is_closing(reinterpret_cast<uv_handle_t *>(&entry.second->poll))) {
+      FdWatcherHandle *watcher = entry.second.release();
+      uv_close(reinterpret_cast<uv_handle_t *>(&watcher->poll),
+               EventLoop::close_delete_watcher);
+    }
+  }
+  watchers_.clear();
+
+  for (auto &entry : timers_) {
+    uv_timer_stop(&entry.second->timer);
+    if (!uv_is_closing(reinterpret_cast<uv_handle_t *>(&entry.second->timer))) {
+      TimerHandle *timer = entry.second.release();
+      uv_close(reinterpret_cast<uv_handle_t *>(&timer->timer),
+               EventLoop::close_delete_timer);
+    }
+  }
+  timers_.clear();
+
+  for (auto &entry : fs_events_) {
+    uv_fs_event_stop(&entry.second->event);
+    if (!uv_is_closing(reinterpret_cast<uv_handle_t *>(&entry.second->event))) {
+      FsEventHandle *watcher = entry.second.release();
+      uv_close(reinterpret_cast<uv_handle_t *>(&watcher->event),
+               EventLoop::close_delete_fs_event);
+    }
+  }
+  fs_events_.clear();
+
+  if (async_initialized_ &&
+      !uv_is_closing(reinterpret_cast<uv_handle_t *>(&async_))) {
+    uv_close(reinterpret_cast<uv_handle_t *>(&async_), nullptr);
+  }
+  async_initialized_ = false;
+}
+
+void EventLoop::close_delete_watcher(uv_handle_t *handle) {
+  auto *watcher = static_cast<FdWatcherHandle *>(handle->data);
+  delete watcher;
+}
+
+void EventLoop::close_delete_timer(uv_handle_t *handle) {
+  auto *timer = static_cast<TimerHandle *>(handle->data);
+  delete timer;
+}
+
+void EventLoop::close_delete_fs_event(uv_handle_t *handle) {
+  auto *watcher = static_cast<FsEventHandle *>(handle->data);
+  delete watcher;
+}
 
 // ── Editor event loop integration ────────────────────────────────────────────
 
@@ -430,16 +540,19 @@ void Editor::run() {
     event_loop_.set_timer(1000, true, [this] { poll_file_tree_changes(); });
   }
   if (!safe_mode) {
-    event_loop_.set_timer(50, true, [this] { poll_lsp_clients(); });
+    event_loop_.set_timer(250, true, [this] { poll_lsp_clients(); });
   }
   if (!safe_mode) {
-    event_loop_.set_timer(50, true, [this] { poll_debugger_sessions(); });
+    event_loop_.set_timer(500, true, [this] { poll_debugger_sessions(); });
   }
   if (!safe_mode) {
-    event_loop_.set_timer(100, true, [this] {
+    event_loop_.set_timer(1000, true, [this] {
       for (auto &term : integrated_terminals) {
+        int fd = term ? term->get_master_fd() : -1;
         if (term && term->poll_output() && show_integrated_terminal)
           needs_redraw = true;
+        if (term && fd >= 0 && term->get_master_fd() != fd)
+          event_loop_.unwatch_fd(fd);
       }
       poll_tree_sitter_installs();
     });

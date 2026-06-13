@@ -521,11 +521,11 @@ install_treesitter_deps() {
 }
 
 install_required_native_deps() {
-  if pkg-config --exists vterm termkey; then
+  if pkg-config --exists vterm termkey libuv; then
     return 0
   fi
 
-  echo "[jot:deps] Installing required native packages (libvterm, libtermkey)"
+  echo "[jot:deps] Installing required native packages (libvterm, libtermkey, libuv)"
   ensure_prefix_pkg_config_path "${INSTALL_PREFIX}"
 
   if command -v pacman >/dev/null 2>&1; then
@@ -533,42 +533,44 @@ install_required_native_deps() {
       run_maybe_sudo pacman -Sy --noconfirm libvterm || true
     attempt_cmd "Installing libtermkey via pacman" \
       run_maybe_sudo pacman -Sy --noconfirm libtermkey || true
-    if pkg-config --exists vterm termkey; then
+    attempt_cmd "Installing libuv via pacman" \
+      run_maybe_sudo pacman -Sy --noconfirm libuv || true
+    if pkg-config --exists vterm termkey libuv; then
       return 0
     fi
     if [[ "${USE_SUDO}" -eq 0 ]]; then
       if command -v paru >/dev/null 2>&1; then
         attempt_cmd "Installing libtermkey via paru" \
           paru -S --needed --noconfirm libtermkey || true
-        if pkg-config --exists vterm termkey; then
+        if pkg-config --exists vterm termkey libuv; then
           return 0
         fi
       elif command -v yay >/dev/null 2>&1; then
         attempt_cmd "Installing libtermkey via yay" \
           yay -S --needed --noconfirm libtermkey || true
-        if pkg-config --exists vterm termkey; then
+        if pkg-config --exists vterm termkey libuv; then
           return 0
         fi
       fi
     fi
   elif command -v apt-get >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via apt-get" \
-      run_maybe_sudo bash -lc "apt-get update && apt-get install -y libvterm-dev libtermkey-dev" && return 0
+      run_maybe_sudo bash -lc "apt-get update && apt-get install -y libvterm-dev libtermkey-dev libuv1-dev" && return 0
   elif command -v dnf >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via dnf" \
-      run_maybe_sudo dnf install -y libvterm-devel libtermkey-devel && return 0
+      run_maybe_sudo dnf install -y libvterm-devel libtermkey-devel libuv-devel && return 0
   elif command -v yum >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via yum" \
-      run_maybe_sudo yum install -y libvterm-devel libtermkey-devel && return 0
+      run_maybe_sudo yum install -y libvterm-devel libtermkey-devel libuv-devel && return 0
   elif command -v zypper >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via zypper" \
-      run_maybe_sudo zypper --non-interactive install libvterm-devel libtermkey-devel && return 0
+      run_maybe_sudo zypper --non-interactive install libvterm-devel libtermkey-devel libuv-devel && return 0
   elif command -v brew >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via brew" \
-      brew install libvterm libtermkey && return 0
+      brew install libvterm libtermkey libuv && return 0
   fi
 
-  echo "[jot:deps] Error: install libvterm and libtermkey development packages, then rerun install.sh." >&2
+  echo "[jot:deps] Error: install libvterm, libtermkey, and libuv development packages, then rerun install.sh." >&2
   echo "[jot:deps] Arch note: libtermkey may be available from AUR as 'libtermkey'." >&2
   return 1
 }

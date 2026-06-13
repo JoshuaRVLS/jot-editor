@@ -285,6 +285,7 @@ void Editor::load_file_tree(const std::string &path) {
 
   build_tree(root_dir, file_tree, 0);
   invalidate_sidebar_tree_cache();
+  arm_file_tree_watch();
 
   if (!same_root) {
     file_tree_selected = 0;
@@ -466,6 +467,29 @@ void Editor::poll_file_tree_changes() {
 
   load_file_tree(root_dir);
   needs_redraw = true;
+}
+
+void Editor::arm_file_tree_watch() {
+  if (root_dir.empty()) {
+    if (!file_tree_event_watch_root_.empty()) {
+      event_loop_.unwatch_path(file_tree_event_watch_root_);
+      file_tree_event_watch_root_.clear();
+    }
+    return;
+  }
+  if (!file_tree_event_watch_root_.empty() &&
+      file_tree_event_watch_root_ != root_dir) {
+    event_loop_.unwatch_path(file_tree_event_watch_root_);
+    file_tree_event_watch_root_.clear();
+  }
+  if (file_tree_event_watch_root_ == root_dir) {
+    return;
+  }
+  if (event_loop_.watch_path(root_dir, [this](const std::string &) {
+    poll_file_tree_changes();
+  })) {
+    file_tree_event_watch_root_ = root_dir;
+  }
 }
 
 void Editor::save_workspace_session() {

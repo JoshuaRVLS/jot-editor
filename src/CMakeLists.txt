@@ -22,6 +22,7 @@ endfunction()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(VTERM REQUIRED vterm)
 pkg_check_modules(TERMKEY REQUIRED termkey)
+pkg_check_modules(LIBUV REQUIRED libuv)
 if(JOT_TREESITTER)
   pkg_check_modules(TREE_SITTER tree-sitter)
   if(TREE_SITTER_FOUND)
@@ -48,139 +49,26 @@ function(jot_expose_module_api target_name)
   )
 endfunction()
 
-set(JOT_TREE_SITTER_LANGUAGE_SOURCES
-  features/tree_sitter/languages/asm.cpp
-  features/tree_sitter/languages/bash.cpp
-  features/tree_sitter/languages/bibtex.cpp
-  features/tree_sitter/languages/c.cpp
-  features/tree_sitter/languages/c_sharp.cpp
-  features/tree_sitter/languages/cmake.cpp
-  features/tree_sitter/languages/cpp.cpp
-  features/tree_sitter/languages/css.cpp
-  features/tree_sitter/languages/csv.cpp
-  features/tree_sitter/languages/dart.cpp
-  features/tree_sitter/languages/diff.cpp
-  features/tree_sitter/languages/dockerfile.cpp
-  features/tree_sitter/languages/elixir.cpp
-  features/tree_sitter/languages/erlang.cpp
-  features/tree_sitter/languages/fish.cpp
-  features/tree_sitter/languages/fortran.cpp
-  features/tree_sitter/languages/gdscript.cpp
-  features/tree_sitter/languages/git_config.cpp
-  features/tree_sitter/languages/gitcommit.cpp
-  features/tree_sitter/languages/glsl.cpp
-  features/tree_sitter/languages/go.cpp
-  features/tree_sitter/languages/graphql.cpp
-  features/tree_sitter/languages/haskell.cpp
-  features/tree_sitter/languages/hcl.cpp
-  features/tree_sitter/languages/html.cpp
-  features/tree_sitter/languages/ini.cpp
-  features/tree_sitter/languages/java.cpp
-  features/tree_sitter/languages/javascript.cpp
-  features/tree_sitter/languages/json.cpp
-  features/tree_sitter/languages/kotlin.cpp
-  features/tree_sitter/languages/latex.cpp
-  features/tree_sitter/languages/lua.cpp
-  features/tree_sitter/languages/make.cpp
-  features/tree_sitter/languages/markdown.cpp
-  features/tree_sitter/languages/nix.cpp
-  features/tree_sitter/languages/ocaml.cpp
-  features/tree_sitter/languages/perl.cpp
-  features/tree_sitter/languages/php.cpp
-  features/tree_sitter/languages/proto.cpp
-  features/tree_sitter/languages/python.cpp
-  features/tree_sitter/languages/query.cpp
-  features/tree_sitter/languages/r.cpp
-  features/tree_sitter/languages/regex.cpp
-  features/tree_sitter/languages/ruby.cpp
-  features/tree_sitter/languages/rust.cpp
-  features/tree_sitter/languages/scala.cpp
-  features/tree_sitter/languages/sql.cpp
-  features/tree_sitter/languages/svelte.cpp
-  features/tree_sitter/languages/swift.cpp
-  features/tree_sitter/languages/systemverilog.cpp
-  features/tree_sitter/languages/toml.cpp
-  features/tree_sitter/languages/tsx.cpp
-  features/tree_sitter/languages/typescript.cpp
-  features/tree_sitter/languages/verilog.cpp
-  features/tree_sitter/languages/vim.cpp
-  features/tree_sitter/languages/vimdoc.cpp
-  features/tree_sitter/languages/vue.cpp
-  features/tree_sitter/languages/wgsl.cpp
-  features/tree_sitter/languages/xml.cpp
-  features/tree_sitter/languages/yaml.cpp
-  features/tree_sitter/languages/zig.cpp
-  features/tree_sitter/languages/zsh.cpp
-)
+include(features/tree_sitter/languages/sources.cmake)
+include(core/sources.cmake)
+include(edit/sources.cmake)
+include(features/sources.cmake)
+include(input/sources.cmake)
+include(render/sources.cmake)
+include(tools/sources.cmake)
+include(python_bridge/sources.cmake)
+include(ui/sources.cmake)
 
 # Module object libraries
-add_library(jot_core_obj OBJECT
-  core/debugger.cpp
-  core/editor.cpp
-  core/bookmarks.cpp
-  core/event_loop.cpp
-  core/file.cpp
-  core/folding.cpp
-  core/git.cpp
-  core/home.cpp
-  core/host_api.cpp
-  core/in_memory_line_provider.cpp
-  core/integrated_terminal.cpp
-  core/lazy_line_provider.cpp
-  core/lsp.cpp
-  core/panes.cpp
-  core/popup.cpp
-  core/quick_pick.cpp
-  core/task_queue.cpp
-  core/tasks.cpp
-  core/tree_sitter_commands.cpp
-  core/theme.cpp
-  core/undo.cpp
-  core/utils.cpp
-  core/workspace.cpp
-)
+add_library(jot_core_obj OBJECT ${JOT_CORE_SOURCES})
 jot_configure_object_target(jot_core_obj)
+target_include_directories(jot_core_obj SYSTEM PRIVATE ${LIBUV_INCLUDE_DIRS})
+target_compile_options(jot_core_obj PRIVATE ${LIBUV_CFLAGS_OTHER})
 
-add_library(jot_edit_obj OBJECT
-  edit/clipboard.cpp
-  edit/cursor.cpp
-  edit/edit.cpp
-  edit/feature_datetime.cpp
-  edit/feature_duplicate.cpp
-  edit/feature_join_lines.cpp
-  edit/feature_increment.cpp
-  edit/feature_path_clipboard.cpp
-  edit/feature_replace.cpp
-  edit/feature_reverse_lines.cpp
-  edit/feature_shuffle_lines.cpp
-  edit/feature_sort_desc.cpp
-  edit/feature_stats.cpp
-  edit/feature_surround.cpp
-  edit/feature_trim_blank.cpp
-  edit/feature_unique_lines.cpp
-  edit/lines.cpp
-  edit/search.cpp
-  edit/sidebar.cpp
-  edit/transform.cpp
-)
+add_library(jot_edit_obj OBJECT ${JOT_EDIT_SOURCES})
 jot_configure_object_target(jot_edit_obj)
 
-add_library(jot_features_obj OBJECT
-  features/autoclose.cpp
-  features/bracket.cpp
-  features/config.cpp
-  features/cpp_assist.cpp
-  features/folding.cpp
-  features/text_features.cpp
-  features/syntax.cpp
-  features/tree_sitter_catalog.cpp
-  features/tree_sitter_install.cpp
-  features/tree_sitter_language_spec.cpp
-  features/tree_sitter_manager.cpp
-  features/tree_sitter_queries.cpp
-  features/tree_sitter_runtime.cpp
-  ${JOT_TREE_SITTER_LANGUAGE_SOURCES}
-)
+add_library(jot_features_obj OBJECT ${JOT_FEATURES_SOURCES})
 if(JOT_TREESITTER_ENABLED)
   target_compile_definitions(jot_features_obj PRIVATE
     JOT_TREESITTER=1
@@ -194,75 +82,30 @@ if(JOT_TREESITTER_ENABLED)
 endif()
 jot_configure_object_target(jot_features_obj)
 
-add_library(jot_input_obj OBJECT
-  input/command_actions.cpp
-  input/command_execute.cpp
-  input/command_help.cpp
-  input/command_palette.cpp
-  input/command_palette_input.cpp
-  input/command_palette_suggestions.cpp
-  input/command_utils.cpp
-  input/ex_commands.cpp
-  input/menu_bar.cpp
-  input/command_navigation.cpp
-  input/mode_dispatch.cpp
-  input/mode_insert.cpp
-  input/mode_normal.cpp
-  input/mode_transitions.cpp
-  input/mode_vim.cpp
-  input/mode_visual.cpp
-  input/mouse.cpp
-)
+add_library(jot_input_obj OBJECT ${JOT_INPUT_SOURCES})
 jot_configure_object_target(jot_input_obj)
 
-add_library(jot_render_obj OBJECT
-  render/render.cpp
-  render/render_buffer.cpp
-  render/render_debugger.cpp
-  render/render_easter.cpp
-  render/render_minimap.cpp
-  render/render_overlay.cpp
-  render/render_ui.cpp
-)
+add_library(jot_render_obj OBJECT ${JOT_RENDER_SOURCES})
 jot_configure_object_target(jot_render_obj)
 
-add_library(jot_tools_obj OBJECT
-  tools/discord_rpc.cpp
-  tools/debugger_client.cpp
-  tools/imageviewer.cpp
-  tools/symbol_index.cpp
-  tools/telescope.cpp
-  tools/workspace_search.cpp
-)
+add_library(jot_tools_obj OBJECT ${JOT_TOOLS_SOURCES})
 if(WIN32)
-  target_sources(jot_tools_obj PRIVATE
-    platform/windows/tools/integrated_terminal.cpp
-    platform/windows/tools/lsp_client.cpp
-  )
+  target_sources(jot_tools_obj PRIVATE ${JOT_TOOLS_WINDOWS_SOURCES})
 else()
-  target_sources(jot_tools_obj PRIVATE
-    tools/integrated_terminal.cpp
-    tools/lsp_client.cpp
-  )
+  target_sources(jot_tools_obj PRIVATE ${JOT_TOOLS_POSIX_SOURCES})
 endif()
 jot_configure_object_target(jot_tools_obj)
 target_include_directories(jot_tools_obj SYSTEM PRIVATE ${VTERM_INCLUDE_DIRS})
 target_compile_options(jot_tools_obj PRIVATE ${VTERM_CFLAGS_OTHER})
 
-add_library(jot_python_bridge_obj OBJECT
-  python_bridge/python_api_bindings.cpp
-)
+add_library(jot_python_bridge_obj OBJECT ${JOT_PYTHON_BRIDGE_SOURCES})
 jot_configure_object_target(jot_python_bridge_obj)
 
-add_library(jot_ui_obj OBJECT
-  ui/ui_components.cpp
-  ui/ui.cpp
-  ui/ui_text.cpp
-)
+add_library(jot_ui_obj OBJECT ${JOT_UI_SOURCES})
 if(WIN32)
-  target_sources(jot_ui_obj PRIVATE platform/windows/ui/terminal.cpp)
+  target_sources(jot_ui_obj PRIVATE ${JOT_UI_WINDOWS_SOURCES})
 else()
-  target_sources(jot_ui_obj PRIVATE ui/terminal.cpp)
+  target_sources(jot_ui_obj PRIVATE ${JOT_UI_POSIX_SOURCES})
   target_include_directories(jot_ui_obj SYSTEM PRIVATE ${TERMKEY_INCLUDE_DIRS})
   target_compile_options(jot_ui_obj PRIVATE ${TERMKEY_CFLAGS_OTHER})
 endif()
@@ -331,3 +174,7 @@ target_link_libraries(jot_ui PUBLIC ${TERMKEY_LIBRARIES})
 target_link_directories(jot_ui PUBLIC ${TERMKEY_LIBRARY_DIRS})
 target_link_libraries(jot_engine PUBLIC ${TERMKEY_LIBRARIES})
 target_link_directories(jot_engine PUBLIC ${TERMKEY_LIBRARY_DIRS})
+target_link_libraries(jot_core PUBLIC ${LIBUV_LIBRARIES})
+target_link_directories(jot_core PUBLIC ${LIBUV_LIBRARY_DIRS})
+target_link_libraries(jot_engine PUBLIC ${LIBUV_LIBRARIES})
+target_link_directories(jot_engine PUBLIC ${LIBUV_LIBRARY_DIRS})

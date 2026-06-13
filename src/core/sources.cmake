@@ -1,0 +1,25 @@
+set(JOT_CORE_SOURCES
+  core/app/bookmarks.cpp
+  core/app/editor.cpp
+  core/app/file.cpp
+  core/app/folding.cpp
+  core/app/panes.cpp
+  core/app/undo.cpp
+  core/app/utils.cpp
+  core/integrations/debugger.cpp
+  core/integrations/integrated_terminal.cpp
+  core/integrations/lsp.cpp
+  core/integrations/tree_sitter_commands.cpp
+  core/runtime/event_loop.cpp
+  core/runtime/in_memory_line_provider.cpp
+  core/runtime/lazy_line_provider.cpp
+  core/runtime/task_queue.cpp
+  core/surfaces/home.cpp
+  core/surfaces/host_api.cpp
+  core/surfaces/popup.cpp
+  core/surfaces/quick_pick.cpp
+  core/surfaces/theme.cpp
+  core/workspace/git.cpp
+  core/workspace/tasks.cpp
+  core/workspace/workspace.cpp
+)

@@ -1,4 +1,4 @@
-#include "debugger_client.h"
+#include "tools/debugger/client.h"
 
 #include <algorithm>
 #include <cerrno>

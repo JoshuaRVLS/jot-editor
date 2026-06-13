@@ -136,6 +136,9 @@ public:
 
   bool is_running() const { return running; }
   bool is_initialized() const { return initialized; }
+  int get_stdin_fd() const { return stdin_fd; }
+  int get_stdout_fd() const { return stdout_fd; }
+  int get_stderr_fd() const { return stderr_fd; }
   const std::string &get_language() const { return language; }
   const std::string &get_root_path() const { return root_path; }
   const std::string &get_last_error() const { return last_error; }

@@ -1,8 +1,8 @@
 #include "editor.h"
-#include "python_api.h"
-#include "tree_sitter_catalog.h"
-#include "ui_components.h"
-#include "ui_text.h"
+#include "python_bridge/api.h"
+#include "tree_sitter/catalog.h"
+#include "ui/components.h"
+#include "ui/text.h"
 #include <algorithm>
 #include <cstdlib>
 #include <cstdio>

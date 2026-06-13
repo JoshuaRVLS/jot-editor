@@ -1,10 +1,12 @@
 #include "autoclose.h"
 #include "editor.h"
 #include "text_features.h"
-#include "python_api.h"
+#include "python_bridge/api.h"
 #include <cctype>
+#include "html.h"
+#include "html.h"
 
-void Editor::insert_char(char c) {
+bool Editor::insert_char(char c) {
   save_state();
   auto &buf = get_buffer();
 
@@ -47,7 +49,7 @@ void Editor::insert_char(char c) {
           python_api->on_buffer_change(buf.filepath, "");
         if (!buf.filepath.empty())
           notify_lsp_change(buf.filepath);
-        return;
+        return false;
       }
     }
   }
@@ -55,6 +57,8 @@ void Editor::insert_char(char c) {
   if (buf.selection.active) {
     delete_selection();
   }
+
+  bool inserted_html_closing_tag = false;
 
   if (c == '\t') {
     std::string spaces(tab_size, ' ');
@@ -67,11 +71,22 @@ void Editor::insert_char(char c) {
                                        buf.cursor.x)) {
       buf.cursor.x++;
       needs_redraw = true;
-      return;
+      return false;
     }
 
     buf.line_mut(buf.cursor.y).insert(buf.cursor.x, 1, c);
     buf.cursor.x++;
+
+
+    if (c == '>' && HtmlFeatures::is_html_extension(buf.filepath)) {
+      std::string closing;
+      std::string &line = buf.line_mut(buf.cursor.y);
+      if (HtmlFeatures::should_insert_closing_tag(line, buf.cursor.x, closing)) {
+        line.insert(buf.cursor.x, closing);
+        inserted_html_closing_tag = true;
+
+      }
+    }
 
     if (auto_indent && (c == '}' || c == ']' || c == ')')) {
       if (EditorFeatures::should_dedent(buf.line_mut(buf.cursor.y))) {
@@ -92,7 +107,7 @@ void Editor::insert_char(char c) {
         }
       }
     }
-
+    
     if (AutoClose::should_auto_close(c)) {
       char closing = AutoClose::get_closing_bracket(c);
       if (closing != '\0') {
@@ -108,6 +123,9 @@ void Editor::insert_char(char c) {
     python_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
+
+  return inserted_html_closing_tag;
+
 }
 
 void Editor::insert_string(const std::string &str) {
@@ -365,10 +383,23 @@ void Editor::new_line() {
   bool preserve_remaining_as_is = false;
   if (auto_indent && buf.cursor.y >= 0) {
     int indent = EditorFeatures::get_indent_level(buf.line_mut(buf.cursor.y));
-    if (EditorFeatures::should_auto_indent(buf.line_mut(buf.cursor.y))) {
-      indent += tab_size;
+
+    std::string html_tag;
+    if (HtmlFeatures::is_html_extension(buf.filepath) &&
+        HtmlFeatures::is_between_matching_tags(buf.line_mut(buf.cursor.y), remaining, html_tag)) {
+          int closing_indent = indent;
+          int inner_indent = indent + tab_size;
+
+          new_line_str = EditorFeatures::get_indent_string(inner_indent, tab_size);
+          closing_line_str = EditorFeatures::get_indent_string(closing_indent, tab_size) + remaining;
+          split_closing_bracket_line = true; 
+        } else if (EditorFeatures::should_auto_indent(buf.line_mut(buf.cursor.y))) {
+          indent += tab_size;
+        }
+
+    if (!split_closing_bracket_line) {
+      new_line_str = EditorFeatures::get_indent_string(indent, tab_size);
     }
-    new_line_str = EditorFeatures::get_indent_string(indent, tab_size);
 
     if (EditorFeatures::should_dedent(remaining)) {
       size_t content_start = remaining.find_first_not_of(" \t");

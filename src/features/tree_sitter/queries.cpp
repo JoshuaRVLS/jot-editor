@@ -1,5 +1,5 @@
-#include "tree_sitter_manager.h"
-#include "tree_sitter_language_spec.h"
+#include "tree_sitter/manager.h"
+#include "tree_sitter/language_spec.h"
 
 #include <filesystem>
 #include <fstream>

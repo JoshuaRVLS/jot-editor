@@ -1,4 +1,4 @@
-#include "command_utils.h"
+#include "commands/utils.h"
 #include "cpp_assist.h"
 #include "editor.h"
 
@@ -583,13 +583,13 @@ bool Editor::execute_ex_command(const std::string &input_line) {
     return false;
   } else if (lcmd == "lspinstall") {
     if (arg.empty()) {
-      set_message("Usage: :lspinstall <python|typescript|cpp|rust|go|lua|bash>");
+      set_message("Usage: :lspinstall <python|typescript|cpp|rust|go|lua|bash|html>");
     } else {
       install_lsp_server(arg);
     }
   } else if (lcmd == "lspremove") {
     if (arg.empty()) {
-      set_message("Usage: :lspremove <python|typescript|cpp|rust|go|lua|bash>");
+      set_message("Usage: :lspremove <python|typescript|cpp|rust|go|lua|bash|html>");
     } else {
       remove_lsp_server(arg);
     }

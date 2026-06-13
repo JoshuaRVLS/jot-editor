@@ -1,5 +1,6 @@
 #include "editor.h"
-#include "python_api.h"
+#include "lsp/client.h"
+#include "python_bridge/api.h"
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -49,6 +50,9 @@ std::string detect_lsp_language(const std::string &filepath) {
       (lower.size() >= 5 && lower.substr(lower.size() - 5) == ".bash") ||
       (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".zsh"))
     return "bash";
+  if ((lower.size() >= 5 && lower.substr(lower.size() - 5) == ".html") ||
+      (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".html"))
+    return "html";
   return "";
 }
 
@@ -75,6 +79,9 @@ std::vector<std::string> workspace_markers_for(const std::string &language) {
   }
   if (language == "bash") {
     return {".git"};
+  }
+  if (language == "html") {
+    return {"package.json", ".git"};
   }
   return {".git"};
 }
@@ -132,6 +139,9 @@ std::vector<std::string> command_for_language(const std::string &language) {
   if (language == "bash") {
     return {"bash-language-server", "start"};
   }
+  if (language == "html") {
+    return {"vscode-html-language-server", "--stdio"};
+  }
   return {};
 }
 
@@ -157,6 +167,9 @@ std::string language_id_for(const std::string &language, const std::string &file
   }
   if (language == "bash") {
     return "shellscript";
+  }
+  if (language == "html") {
+    return "html";
   }
   return language;
 }
@@ -426,6 +439,9 @@ std::string normalize_lsp_server_name(const std::string &raw) {
       n == "go" || n == "lua" || n == "bash") {
     return n;
   }
+  if (n  == "html" || n == "html" || n == "vscode-html-language-server") {
+    return "html";
+  }
   return "";
 }
 
@@ -458,7 +474,54 @@ bool is_lsp_server_installed(const std::string &server) {
   if (server == "bash") {
     return command_exists("bash-language-server");
   }
+  if (server == "html") {
+    return command_exists("vscode-html-language-server");
+  }
   return false;
+}
+
+bool is_html_filepath(const std::string &filepath) {
+  std::string lower = filepath;
+  std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+  return (lower.size() >= 5 && lower.substr(lower.size() - 5) == ".html") ||
+         (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".htm");
+}
+
+void append_html_builtin_completions(std::vector<LSPCompletionItem> &items) {
+  auto add = [&](const std::string &label, const std::string &insert, const std::string &detail, int kind = 10) {
+    LSPCompletionItem item;
+    item.label = label;
+    item.insert_text = insert;
+    item.filter_text = label;
+    item.detail = detail;
+    item.kind = kind;
+    item.insert_text_format = 1;
+    items.push_back(std::move(item));
+  };
+  add("html", "<html>|</html>", "HTML tag");
+  add("head", "<head>|</head>", "HTML tag");
+  add("body", "<body>|</body>", "HTML tag");
+  add("title", "<title>|</title>", "HTML tag");
+  add("main", "<main>|</main>", "HTML tag");
+  add("section", "<section>|</section>", "HTML tag");
+  add("article", "<article>|</article>", "HTML tag");
+  add("header", "<header>|</header>", "HTML tag");
+  add("footer", "<footer>|</footer>", "HTML tag");
+  add("nav", "<nav>|</nav>", "HTML tag");
+  add("div", "<div>|</div>", "HTML tag");
+  add("span", "<span>|</span>", "HTML tag");
+  add("p", "<p>|</p>", "HTML tag");
+  add("a", "<a href=\"\">|</a>", "HTML anchor");
+  add("img", "<img src=\"\" alt=\"\">", "HTML void tag");
+  add("input", "<input type=\"text\">", "HTML void tag");
+  add("button", "<button>|</button>", "HTML tag");
+  add("ul", "<ul>|</ul>", "HTML tag");
+  add("ol", "<ol>|</ol>", "HTML tag");
+  add("li", "<li>|</li>", "HTML tag");
+  add("form", "<form>|</form>", "HTML tag");
+  add("label", "<label>|</label>", "HTML tag");
+  add("script", "<script>|</script>", "HTML tag");
+  add("style", "<style>|</style>", "HTML tag");
 }
 } // namespace
 
@@ -518,6 +581,11 @@ void Editor::poll_lsp_clients() {
       }
 
       lsp_completion_all_items = std::move(entry.second);
+
+      if (is_html_filepath(entry.first)) {
+        append_html_builtin_completions(lsp_completion_all_items);
+      }
+
       lsp_completion_filepath = entry.first;
       bool visible = refresh_lsp_completion_filter();
       if (lsp_completion_manual_request && !visible) {
@@ -541,6 +609,50 @@ void Editor::poll_lsp_clients() {
     for (const auto &symbols : document_symbols) {
       handle_document_symbols_result(symbols);
     }
+  }
+}
+
+void Editor::watch_lsp_client_fds(LSPClient *client) {
+  if (!client) {
+    return;
+  }
+
+  auto watch_read = [this](int fd) {
+    if (fd < 0 || event_loop_.is_watching_fd(fd)) {
+      return;
+    }
+    event_loop_.watch_fd(fd, true, false, [this, fd] {
+      bool found = false;
+      for (auto &client : lsp_clients) {
+        if (!client) {
+          continue;
+        }
+        if (client->get_stdout_fd() == fd || client->get_stderr_fd() == fd) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        event_loop_.unwatch_fd(fd);
+        return;
+      }
+      poll_lsp_clients();
+    });
+  };
+
+  watch_read(client->get_stdout_fd());
+  watch_read(client->get_stderr_fd());
+}
+
+void Editor::unwatch_lsp_client_fds(LSPClient *client) {
+  if (!client) {
+    return;
+  }
+  if (client->get_stdout_fd() >= 0) {
+    event_loop_.unwatch_fd(client->get_stdout_fd());
+  }
+  if (client->get_stderr_fd() >= 0) {
+    event_loop_.unwatch_fd(client->get_stderr_fd());
   }
 }
 
@@ -568,7 +680,9 @@ LSPClient *Editor::ensure_lsp_for_file(const std::string &filepath) {
   std::string root = find_workspace_root(filepath, language);
   if (LSPClient *existing = find_lsp_client(language, root)) {
     if (!existing->is_running()) {
+      unwatch_lsp_client_fds(existing);
       existing->restart();
+      watch_lsp_client_fds(existing);
     }
     return existing;
   }
@@ -585,6 +699,7 @@ LSPClient *Editor::ensure_lsp_for_file(const std::string &filepath) {
   }
 
   lsp_clients.push_back(std::move(client));
+  watch_lsp_client_fds(lsp_clients.back().get());
   return lsp_clients.back().get();
 }
 
@@ -664,6 +779,9 @@ void Editor::stop_all_lsp_clients() {
   }
   invalidate_sidebar_diagnostics_cache();
   for (auto &client : lsp_clients) {
+    if (client) {
+      unwatch_lsp_client_fds(client.get());
+    }
     if (client && client->is_running()) {
       client->stop();
       stopped++;
@@ -683,7 +801,12 @@ void Editor::restart_all_lsp_clients() {
   invalidate_sidebar_diagnostics_cache();
   int restarted = 0;
   for (auto &client : lsp_clients) {
-    if (client && client->restart()) {
+    if (!client) {
+      continue;
+    }
+    unwatch_lsp_client_fds(client.get());
+    if (client->restart()) {
+      watch_lsp_client_fds(client.get());
       restarted++;
     }
   }
@@ -730,8 +853,8 @@ void Editor::show_lsp_manager() {
           (is_lsp_server_installed("bash") ? "installed" : "missing") + "]",
       "",
       "Use:",
-      ":lspinstall <python|typescript|cpp|rust|go|lua|bash>",
-      ":lspremove <python|typescript|cpp|rust|go|lua|bash>",
+      ":lspinstall <python|typescript|cpp|rust|go|lua|bash|html>",
+      ":lspremove <python|typescript|cpp|rust|go|lua|bash|html>",
       ":lspstart :lspstatus :lspstop :lsprestart"};
   show_popup([&lines]() {
     std::string out;
@@ -749,7 +872,7 @@ bool Editor::install_lsp_server(const std::string &name) {
   const std::string server = normalize_lsp_server_name(name);
   if (server.empty()) {
     set_message("Unknown LSP server: " + name +
-                " (use python|typescript|cpp|rust|go|lua|bash)");
+                " (use python|typescript|cpp|rust|go|lua|bash|html)");
     return false;
   }
 
@@ -772,6 +895,8 @@ bool Editor::install_lsp_server(const std::string &name) {
     return false;
   } else if (server == "bash") {
     command = "npm install -g bash-language-server";
+  } else if (server == "html") {
+    command = "npm install -g vscode-langservers-extracted";
   }
 
   if (command.empty()) {
@@ -806,7 +931,7 @@ bool Editor::remove_lsp_server(const std::string &name) {
   const std::string server = normalize_lsp_server_name(name);
   if (server.empty()) {
     set_message("Unknown LSP server: " + name +
-                " (use python|typescript|cpp|rust|go|lua|bash)");
+                " (use python|typescript|cpp|rust|go|lua|bash|html)");
     return false;
   }
 
@@ -829,6 +954,8 @@ bool Editor::remove_lsp_server(const std::string &name) {
     return false;
   } else if (server == "bash") {
     command = "npm uninstall -g bash-language-server";
+  } else if (server == "html") {
+    command = "npm uninstall -g vscode-langservers-extracted";
   }
 
   if (command.empty()) {
@@ -956,7 +1083,8 @@ void Editor::request_lsp_completion(bool manual, char trigger_character) {
   if (!manual) {
     if (!(std::isalnum((unsigned char)trigger_character) ||
           trigger_character == '_' || trigger_character == '.' ||
-          trigger_character == ':' || trigger_character == '>')) {
+          trigger_character == ':' || trigger_character == '>' ||
+          trigger_character == '<' || trigger_character == '/')) {
       return;
     }
 
@@ -966,14 +1094,33 @@ void Editor::request_lsp_completion(bool manual, char trigger_character) {
       prefix_len++;
       i--;
     }
+    bool html_file = is_html_filepath(buf.filepath);
     bool punctuation_trigger = trigger_character == '.' || trigger_character == ':' ||
-                               trigger_character == '>';
-    if (!punctuation_trigger && prefix_len < 2) {
+                               trigger_character == '>' || trigger_character == '<' ||
+                               trigger_character == '/';
+    int min_prefix = html_file ? 1 : 2;
+    if (!punctuation_trigger && prefix_len < min_prefix) {
       return;
     }
   }
 
   Cursor replace_start = current_completion_start(buf);
+  bool has_builtin_html = false;
+
+  if (is_html_filepath(buf.filepath)) {
+    lsp_completion_all_items.clear();
+    append_html_builtin_completions(lsp_completion_all_items);
+    lsp_completion_anchor = buf.cursor;
+    lsp_completion_replace_start = replace_start;
+    lsp_completion_filepath = buf.filepath;
+    lsp_completion_prefix = completion_prefix_from(buf, replace_start);
+    lsp_completion_manual_request = manual;
+    has_builtin_html = refresh_lsp_completion_filter();
+    if (has_builtin_html) {
+      needs_redraw = true;
+    }
+  }
+
   LSPClient *client = ensure_lsp_for_file(buf.filepath);
   if (!client) {
     if (manual) {
@@ -988,7 +1135,8 @@ void Editor::request_lsp_completion(bool manual, char trigger_character) {
 
   char trigger = '\0';
   if (trigger_character == '.' || trigger_character == ':' ||
-      trigger_character == '>') {
+      trigger_character == '>' || trigger_character == '<' ||
+      trigger_character == '/') {
     trigger = trigger_character;
   }
 
@@ -1000,11 +1148,13 @@ void Editor::request_lsp_completion(bool manual, char trigger_character) {
     return;
   }
 
-  lsp_completion_anchor = buf.cursor;
-  lsp_completion_replace_start = replace_start;
-  lsp_completion_filepath = buf.filepath;
-  lsp_completion_prefix = completion_prefix_from(buf, replace_start);
-  lsp_completion_manual_request = manual;
+  if (!has_builtin_html) {
+    lsp_completion_anchor = buf.cursor;
+    lsp_completion_replace_start = replace_start;
+    lsp_completion_filepath = buf.filepath;
+    lsp_completion_prefix = completion_prefix_from(buf, replace_start);
+    lsp_completion_manual_request = manual;
+  }
 }
 
 void Editor::request_lsp_hover() {
@@ -1349,6 +1499,14 @@ bool Editor::apply_selected_lsp_completion() {
                        (int)lsp_completion_items.size() - 1);
   const auto &item = lsp_completion_items[idx];
   std::string text = item.insert_text.empty() ? item.label : item.insert_text;
+
+  int cursor_marker = -1;
+  size_t marker_pos = text.find('|');
+  if (marker_pos != std::string::npos) {
+    cursor_marker = (int)marker_pos;
+    text.erase(marker_pos, 1);
+  }
+
   if (item.insert_text_format == 2) {
     text = snippet_to_plain_text(text);
   }
@@ -1388,7 +1546,7 @@ bool Editor::apply_selected_lsp_completion() {
     cursor = start;
   }
   line.insert(cursor, text);
-  buf.cursor.x = cursor + (int)text.size();
+  buf.cursor.x = cursor + (cursor_marker >= 0 ? cursor_marker : (int)text.size());
   buf.preferred_x = buf.cursor.x;
   buf.modified = true;
   buf.selection.active = false;

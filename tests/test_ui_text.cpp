@@ -1,5 +1,5 @@
 #include "test_framework.h"
-#include "ui_text.h"
+#include "ui/text.h"
 
 TEST(UITextCountsAsciiAndUtf8Cells) {
   ASSERT_EQ(ui_cell_count("abc"), 3);

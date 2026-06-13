@@ -1,6 +1,6 @@
-#include "ui_components.h"
+#include "ui/components.h"
 
-#include "ui_text.h"
+#include "ui/text.h"
 
 #include <algorithm>
 

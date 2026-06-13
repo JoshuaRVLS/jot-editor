@@ -1,5 +1,5 @@
 #include "editor.h"
-#include "command_utils.h"
+#include "commands/utils.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -207,6 +207,7 @@ bool Editor::start_debugger_session(DebuggerSessionConfig config) {
   state.running = true;
 
   debugger_sessions.push_back(std::move(client));
+  watch_debugger_client_fds(debugger_sessions.back().get());
   debugger_session_state.push_back(std::move(state));
   current_debugger_session = (int)debugger_sessions.size() - 1;
   show_debugger_panel = true;
@@ -222,6 +223,50 @@ bool Editor::start_debugger_session(DebuggerSessionConfig config) {
   update_pane_layout();
   needs_redraw = true;
   return true;
+}
+
+void Editor::watch_debugger_client_fds(DebuggerClient *client) {
+  if (!client) {
+    return;
+  }
+
+  auto watch_read = [this](int fd) {
+    if (fd < 0 || event_loop_.is_watching_fd(fd)) {
+      return;
+    }
+    event_loop_.watch_fd(fd, true, false, [this, fd] {
+      bool found = false;
+      for (auto &client : debugger_sessions) {
+        if (!client) {
+          continue;
+        }
+        if (client->get_stdout_fd() == fd || client->get_stderr_fd() == fd) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        event_loop_.unwatch_fd(fd);
+        return;
+      }
+      poll_debugger_sessions();
+    });
+  };
+
+  watch_read(client->get_stdout_fd());
+  watch_read(client->get_stderr_fd());
+}
+
+void Editor::unwatch_debugger_client_fds(DebuggerClient *client) {
+  if (!client) {
+    return;
+  }
+  if (client->get_stdout_fd() >= 0) {
+    event_loop_.unwatch_fd(client->get_stdout_fd());
+  }
+  if (client->get_stderr_fd() >= 0) {
+    event_loop_.unwatch_fd(client->get_stderr_fd());
+  }
 }
 
 bool Editor::start_debugger_command(const std::string &adapter,
@@ -282,6 +327,7 @@ void Editor::stop_debugger_session() {
     return;
   }
   client->disconnect(true);
+  unwatch_debugger_client_fds(client);
   client->stop();
   if (current_debugger_session >= 0 &&
       current_debugger_session < (int)debugger_session_state.size()) {
@@ -300,6 +346,7 @@ void Editor::restart_debugger_session() {
   }
   DebuggerSessionConfig config =
       debugger_sessions[current_debugger_session]->get_config();
+  unwatch_debugger_client_fds(debugger_sessions[current_debugger_session].get());
   debugger_sessions[current_debugger_session]->stop();
   debugger_sessions.erase(debugger_sessions.begin() + current_debugger_session);
   debugger_session_state.erase(debugger_session_state.begin() +

@@ -1,4 +1,4 @@
-#include "lsp_client.h"
+#include "tools/lsp/client.h"
 
 LSPClient::LSPClient(const std::string &language_name,
                      const std::string &workspace_root,

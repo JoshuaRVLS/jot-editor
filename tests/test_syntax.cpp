@@ -1,8 +1,8 @@
 #include "test_framework.h"
 #include "types.h"
-#include "tree_sitter_catalog.h"
-#include "tree_sitter_language_spec.h"
-#include "tree_sitter_manager.h"
+#include "tree_sitter/catalog.h"
+#include "tree_sitter/language_spec.h"
+#include "tree_sitter/manager.h"
 #include <set>
 #include <string>
 

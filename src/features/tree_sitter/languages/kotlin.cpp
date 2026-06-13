@@ -1,4 +1,4 @@
-#include "tree_sitter_language_spec.h"
+#include "tree_sitter/language_spec.h"
 
 namespace {
 const char *highlight_query_source() { return ""; }

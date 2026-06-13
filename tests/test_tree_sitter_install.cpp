@@ -1,5 +1,5 @@
 #include "test_framework.h"
-#include "tree_sitter_install.h"
+#include "tree_sitter/install.h"
 
 #include <string>
 

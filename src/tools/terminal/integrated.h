@@ -60,6 +60,7 @@ public:
   void reset_scroll();
 
   bool is_active() const { return active; }
+  int get_master_fd() const { return master_fd; }
   bool is_focused() const { return focused; }
   void set_focused(bool value) { focused = value; }
   const std::string &get_label() const { return label; }

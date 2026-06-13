@@ -1,5 +1,5 @@
-#include "tree_sitter_manager.h"
-#include "tree_sitter_catalog.h"
+#include "tree_sitter/manager.h"
+#include "tree_sitter/catalog.h"
 
 #include <algorithm>
 #include <filesystem>

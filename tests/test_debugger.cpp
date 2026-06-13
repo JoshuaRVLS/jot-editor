@@ -1,4 +1,4 @@
-#include "debugger_client.h"
+#include "tools/debugger/client.h"
 #include "test_framework.h"
 
 TEST(TestDebuggerJsonParse) {

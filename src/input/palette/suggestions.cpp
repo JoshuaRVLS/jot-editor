@@ -1,7 +1,7 @@
-#include "command_utils.h"
+#include "commands/utils.h"
 #include "cpp_assist.h"
 #include "editor.h"
-#include "tree_sitter_install.h"
+#include "tree_sitter/install.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -368,7 +368,7 @@ void Editor::refresh_command_palette() {
       }
     } else if (lcmd == "lspinstall" || lcmd == "lspremove") {
       const std::vector<std::string> opts = {"python", "typescript", "cpp",
-                                             "rust", "go", "lua", "bash"};
+                                             "rust", "go", "lua", "bash", "html"};
       for (const auto &opt : opts) {
         add_arg(opt, "LSP", "Language server", 110);
       }

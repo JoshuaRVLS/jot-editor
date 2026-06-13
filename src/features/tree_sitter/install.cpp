@@ -1,5 +1,5 @@
-#include "tree_sitter_install.h"
-#include "tree_sitter_catalog.h"
+#include "tree_sitter/install.h"
+#include "tree_sitter/catalog.h"
 
 #include <algorithm>
 #include <cctype>

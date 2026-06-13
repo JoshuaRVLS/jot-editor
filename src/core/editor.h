@@ -8,17 +8,17 @@
 #include "config.h"
 #include "types.h"
 #include "discord_rpc.h"
-#include "debugger_client.h"
+#include "tools/debugger/client.h"
 #include "event_loop.h"
 #include "imageviewer.h"
-#include "integrated_terminal.h"
-#include "lsp_client.h"
+#include "tools/terminal/integrated.h"
+#include "tools/lsp/client.h"
 #include "task_queue.h"
 #include "telescope.h"
 #include "terminal.h"
 #include "ui.h"
 #ifdef JOT_TREESITTER
-#include "tree_sitter_manager.h"
+#include "tree_sitter/manager.h"
 #endif
 #include <filesystem>
 #include <memory>
@@ -27,7 +27,7 @@
 #include <unordered_map>
 #include <vector>
 
-// #include "python_api.h"
+// #include "python_bridge/api.h"
 
 class SyntaxHighlighter {
 private:
@@ -506,6 +506,7 @@ private:
   bool sidebar_show_hidden;
   std::string file_tree_watch_signature_;
   bool file_tree_watch_ready_;
+  std::string file_tree_event_watch_root_;
 
   struct SidebarRenderRow {
     std::string path;
@@ -613,9 +614,16 @@ private:
   void render_buffer_content(const SplitPane &pane, int buffer_id);
   void poll_lsp_clients();
   void poll_debugger_sessions();
+  void watch_lsp_client_fds(LSPClient *client);
+  void unwatch_lsp_client_fds(LSPClient *client);
+  void watch_debugger_client_fds(DebuggerClient *client);
+  void unwatch_debugger_client_fds(DebuggerClient *client);
+  void watch_integrated_terminal_fd(IntegratedTerminal *term);
+  void unwatch_integrated_terminal_fd(IntegratedTerminal *term);
+  void arm_file_tree_watch();
   // True when there is LSP work pending (pending change notifications
   // or active clients). The event loop uses this to decide whether
-  // to register the 50ms LSP poll timer at all.
+  // background LSP polling has anything useful to do.
   bool lsp_work_pending() const {
     return !lsp_pending_changes.empty() || !lsp_clients.empty();
   }
@@ -725,7 +733,7 @@ private:
   void vim_paste();
 
   void move_cursor(int dx, int dy, bool extend_selection = false);
-  void insert_char(char c);
+  bool insert_char(char c);
   void insert_string(const std::string &str);
   void delete_char(bool forward = true);
   void delete_word_backward();

@@ -1,5 +1,5 @@
 #include "editor.h"
-#include "tree_sitter_manager.h"
+#include "tree_sitter/manager.h"
 #include <algorithm>
 #include <cstring>
 #include <filesystem>

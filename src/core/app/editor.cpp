@@ -1,6 +1,6 @@
 #include "editor.h"
 #include "host_api.h"
-#include "python_api.h"
+#include "python_bridge/api.h"
 #include <algorithm>
 #include <filesystem>
 
@@ -312,6 +312,7 @@ Editor::~Editor() {
 
   for (auto &term : integrated_terminals) {
     if (term) {
+      unwatch_integrated_terminal_fd(term.get());
       term->close_shell();
     }
   }

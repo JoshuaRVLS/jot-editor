@@ -1,5 +1,5 @@
 #include "editor.h"
-#include "python_api.h"
+#include "python_bridge/api.h"
 #include "text_features.h"
 #include <algorithm>
 #include <sstream>

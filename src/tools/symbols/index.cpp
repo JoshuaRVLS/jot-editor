@@ -1,4 +1,4 @@
-#include "symbol_index.h"
+#include "tools/symbols/index.h"
 
 #include <algorithm>
 #include <cctype>

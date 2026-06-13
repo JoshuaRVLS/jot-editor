@@ -499,8 +499,8 @@ Open the command palette with `Ctrl+P` and run ex-style commands.
 
 - `:lspstart`, `:lspstatus`, `:lspstop`, `:lsprestart`
 - `:lspmanager`
-- `:lspinstall <python|typescript|cpp|rust|go|lua|bash>`
-- `:lspremove <python|typescript|cpp|rust|go|lua|bash>`
+- `:lspinstall <python|typescript|cpp|rust|go|lua|bash|html>`
+- `:lspremove <python|typescript|cpp|rust|go|lua|bash|html>`
 - `:hover`, `:lsphover`
 - `:definition`, `:lspdefinition`, `:lspdef`, `:gd`
 - `:lspback`
@@ -619,6 +619,7 @@ lsp_change_debounce_ms=120
 - Python 3 development headers and `python3-config`
 - libvterm development headers (`vterm` pkg-config package)
 - libtermkey development headers (`termkey` pkg-config package)
+- libuv development headers (`libuv` pkg-config package)
 - Unix-like environment with POSIX terminal APIs
 
 Notes:
@@ -627,6 +628,8 @@ Notes:
 - Editor keyboard input is decoded with libtermkey for reliable modifier and
   advanced shortcut handling.
 - The integrated terminal uses PTY support and libvterm.
+- Async editor I/O, timers, child process pipes, and file-tree notifications use
+  libuv.
 - Tree-sitter runtime support is optional at build time but recommended.
 
 ## Project Layout

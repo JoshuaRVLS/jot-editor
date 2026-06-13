@@ -1,6 +1,6 @@
 #include "editor.h"
-#include "symbol_index.h"
-#include "workspace_search.h"
+#include "tools/symbols/index.h"
+#include "tools/workspace/search.h"
 
 #include <algorithm>
 #include <cctype>

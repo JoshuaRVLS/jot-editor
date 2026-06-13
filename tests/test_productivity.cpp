@@ -1,6 +1,6 @@
-#include "symbol_index.h"
+#include "tools/symbols/index.h"
 #include "test_framework.h"
-#include "workspace_search.h"
+#include "tools/workspace/search.h"
 
 #include <vector>
 

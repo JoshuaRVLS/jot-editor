@@ -47,6 +47,7 @@ void Editor::create_integrated_terminal(const std::string &label,
 
   integrated_terminals.push_back(std::move(term));
   current_integrated_terminal = (int)integrated_terminals.size() - 1;
+  watch_integrated_terminal_fd(get_integrated_terminal(current_integrated_terminal));
   show_integrated_terminal = true;
   activate_integrated_terminal(current_integrated_terminal, true);
   if (auto *active = get_integrated_terminal(current_integrated_terminal)) {
@@ -66,6 +67,7 @@ void Editor::close_integrated_terminal(int index) {
     return;
   }
 
+  unwatch_integrated_terminal_fd(integrated_terminals[index].get());
   integrated_terminals[index]->close_shell();
   integrated_terminals.erase(integrated_terminals.begin() + index);
 
@@ -113,6 +115,7 @@ void Editor::toggle_integrated_terminal() {
       needs_redraw = true;
       return;
     }
+    watch_integrated_terminal_fd(term);
     show_integrated_terminal = true;
     activate_integrated_terminal(current_integrated_terminal, true);
     term->poll_output();
@@ -156,6 +159,7 @@ void Editor::handle_integrated_terminal_input(int ch, bool is_ctrl,
       needs_redraw = true;
       return;
     }
+    watch_integrated_terminal_fd(term);
     set_message("Integrated terminal restarted");
     needs_redraw = true;
   }
@@ -238,6 +242,7 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y) {
   IntegratedTerminal *term = get_integrated_terminal();
   if (term && !term->is_active()) {
     if (term->open_shell()) {
+      watch_integrated_terminal_fd(term);
       set_message("Integrated terminal restarted");
     } else {
       set_message("Failed to restart terminal: check $SHELL or PTY support");
@@ -248,6 +253,41 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y) {
   }
   needs_redraw = true;
   return true;
+}
+
+void Editor::watch_integrated_terminal_fd(IntegratedTerminal *term) {
+  if (!term || term->get_master_fd() < 0 ||
+      event_loop_.is_watching_fd(term->get_master_fd())) {
+    return;
+  }
+
+  int fd = term->get_master_fd();
+  event_loop_.watch_fd(fd, true, false, [this, fd] {
+    IntegratedTerminal *matched = nullptr;
+    for (auto &term : integrated_terminals) {
+      if (term && term->get_master_fd() == fd) {
+        matched = term.get();
+        break;
+      }
+    }
+    if (!matched) {
+      event_loop_.unwatch_fd(fd);
+      return;
+    }
+    if (matched->poll_output() && show_integrated_terminal) {
+      needs_redraw = true;
+    }
+    if (matched->get_master_fd() != fd) {
+      event_loop_.unwatch_fd(fd);
+    }
+  });
+}
+
+void Editor::unwatch_integrated_terminal_fd(IntegratedTerminal *term) {
+  if (!term || term->get_master_fd() < 0) {
+    return;
+  }
+  event_loop_.unwatch_fd(term->get_master_fd());
 }
 
 bool Editor::handle_integrated_terminal_scroll(int x, int y, bool is_scroll_up,

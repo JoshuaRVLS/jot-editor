@@ -1,4 +1,4 @@
-#include "integrated_terminal.h"
+#include "tools/terminal/integrated.h"
 
 #include <algorithm>
 #include <cerrno>
