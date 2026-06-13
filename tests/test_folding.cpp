@@ -57,6 +57,23 @@ TEST(TestFoldingVisibleLineMappingHiddenStartFindsNextVisibleLine) {
   ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 1, 1, 4), -1);
 }
 
+TEST(TestFoldingVisibleRowForLine) {
+  std::vector<FoldRange> ranges = {{2, 4, true}};
+  ASSERT_EQ(Folding::visible_row_for_line(ranges, 0, 0, 6, 8), 0);
+  ASSERT_EQ(Folding::visible_row_for_line(ranges, 0, 2, 6, 8), 2);
+  ASSERT_EQ(Folding::visible_row_for_line(ranges, 0, 5, 6, 8), 3);
+  ASSERT_EQ(Folding::visible_row_for_line(ranges, 0, 3, 6, 8), -1);
+}
+
+TEST(TestFoldingBufferLineForVisibleIndexSkipsHiddenLines) {
+  std::vector<FoldRange> ranges = {{1, 3, true}, {6, 7, true}};
+  ASSERT_EQ(Folding::buffer_line_for_visible_index(ranges, 0, 9), 0);
+  ASSERT_EQ(Folding::buffer_line_for_visible_index(ranges, 1, 9), 1);
+  ASSERT_EQ(Folding::buffer_line_for_visible_index(ranges, 2, 9), 4);
+  ASSERT_EQ(Folding::buffer_line_for_visible_index(ranges, 4, 9), 6);
+  ASSERT_EQ(Folding::buffer_line_for_visible_index(ranges, 5, 9), 8);
+}
+
 TEST(TestFoldingEncodeDecodeCollapsedRanges) {
   std::vector<FoldRange> ranges = {{0, 4, true}, {6, 8, false}, {10, 12, true}};
   std::string encoded = Folding::encode_collapsed_ranges(ranges);

@@ -48,6 +48,22 @@ struct LSPDefinitionResult {
   std::vector<LSPLocation> locations;
 };
 
+struct LSPSymbol {
+  std::string name;
+  std::string kind;
+  std::string detail;
+  std::string filepath;
+  int line = 0;
+  int character = 0;
+  int end_line = 0;
+  int end_character = 0;
+};
+
+struct LSPDocumentSymbolResult {
+  std::string filepath;
+  std::vector<LSPSymbol> symbols;
+};
+
 class LSPClient {
 private:
   struct PendingPositionRequest {
@@ -76,10 +92,12 @@ private:
   std::map<int, std::string> pending_completion_requests;
   std::map<int, PendingPositionRequest> pending_hover_requests;
   std::map<int, PendingPositionRequest> pending_definition_requests;
+  std::map<int, std::string> pending_document_symbol_requests;
   std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>>
       pending_completions;
   std::vector<LSPHoverResult> pending_hovers;
   std::vector<LSPDefinitionResult> pending_definitions;
+  std::vector<LSPDocumentSymbolResult> pending_document_symbols;
 
   bool send_message(const std::string &json);
   bool flush_pending_writes();
@@ -107,12 +125,14 @@ public:
   bool request_hover(const std::string &filepath, int line, int character);
   bool request_definition(const std::string &filepath, int line,
                           int character);
+  bool request_document_symbols(const std::string &filepath);
   std::vector<std::pair<std::string, std::vector<Diagnostic>>>
   consume_published_diagnostics();
   std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>>
   consume_completion_items();
   std::vector<LSPHoverResult> consume_hover_results();
   std::vector<LSPDefinitionResult> consume_definition_results();
+  std::vector<LSPDocumentSymbolResult> consume_document_symbol_results();
 
   bool is_running() const { return running; }
   bool is_initialized() const { return initialized; }

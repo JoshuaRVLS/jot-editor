@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "folding.h"
+#include "tree_sitter_manager.h"
 #include <algorithm>
 #include <cstdio>
 #include <sstream>
@@ -42,6 +43,15 @@ int compute_visual_column(const std::string &line, int logical_col,
     }
   }
   return visual;
+}
+
+int leading_indent_visual_column(const std::string &line, int tab_size) {
+  int indent_end = 0;
+  while (indent_end < (int)line.size() &&
+         (line[indent_end] == ' ' || line[indent_end] == '\t')) {
+    indent_end++;
+  }
+  return compute_visual_column(line, indent_end, tab_size);
 }
 
 int diagnostic_severity_color(const Theme &theme, int severity) {
@@ -326,11 +336,7 @@ ActiveBracketGuide build_active_bracket_guide(const FileBuffer &buf,
 
     guide.active = true;
     const std::string &open_line = buf.line(pair.open_line);
-    const std::string &close_line = buf.line(pair.close_line);
-    int open_visual = compute_visual_column(open_line, pair.open_col, tab_size);
-    int close_visual =
-        compute_visual_column(close_line, pair.close_col, tab_size);
-    guide.visual_column = std::min(open_visual, close_visual);
+    guide.visual_column = leading_indent_visual_column(open_line, tab_size);
     guide.start_line = top;
     guide.end_line = bottom;
     return guide;
@@ -474,6 +480,10 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
              (line[leading_ws_end] == ' ' || line[leading_ws_end] == '\t')) {
         leading_ws_end++;
       }
+      auto active_guide_on_row = [&]() {
+        return bracket_guide.active && line_idx > bracket_guide.start_line &&
+               line_idx < bracket_guide.end_line;
+      };
 
       auto is_in_selection = [&](int char_idx) {
         if (!buf.selection.active)
@@ -631,10 +641,19 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
               for (int fill = 0; fill < char_w && vis_idx + fill < visible_len;
                    fill++) {
                 int cell_visual = char_visual + fill;
+                const bool active_guide =
+                    active_guide_on_row() &&
+                    cell_visual == bracket_guide.visual_column;
+                int cell_guide_fg = (active_guide && !in_sel)
+                                         ? theme.fg_bracket_match
+                                         : guide_fg;
                 std::string guide =
-                    (tab_size > 0 && cell_visual % tab_size == 0) ? "│" : " ";
+                    (active_guide ||
+                     (tab_size > 0 && cell_visual % tab_size == 0))
+                        ? "│"
+                        : " ";
                 ui->draw_text(current_x + vis_idx + fill, draw_y, guide,
-                              guide_fg, bg);
+                              cell_guide_fg, bg);
               }
               continue;
             }
@@ -684,23 +703,86 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
 
               if (last_token == 1) {
                 switch (last_type) {
-                case 1:
+                case TS_TOKEN_KEYWORD:
                   color = theme.fg_keyword;
                   break;
-                case 2:
+                case TS_TOKEN_STRING:
                   color = theme.fg_string;
                   break;
-                case 3:
+                case TS_TOKEN_COMMENT:
                   color = theme.fg_comment;
                   break;
-                case 4:
+                case TS_TOKEN_NUMBER:
                   color = theme.fg_number;
                   break;
-                case 5:
+                case TS_TOKEN_TYPE:
                   color = theme.fg_type;
                   break;
-                case 6:
+                case TS_TOKEN_FUNCTION:
                   color = theme.fg_function;
+                  break;
+                case TS_TOKEN_VARIABLE:
+                  color = theme.fg_variable;
+                  break;
+                case TS_TOKEN_CONSTANT:
+                  color = theme.fg_constant;
+                  break;
+                case TS_TOKEN_BUILTIN:
+                  color = theme.fg_builtin;
+                  break;
+                case TS_TOKEN_OPERATOR:
+                  color = theme.fg_operator;
+                  break;
+                case TS_TOKEN_PUNCTUATION:
+                  color = theme.fg_punctuation;
+                  break;
+                case TS_TOKEN_TAG:
+                  color = theme.fg_tag;
+                  break;
+                case TS_TOKEN_ATTRIBUTE:
+                  color = theme.fg_attribute;
+                  break;
+                case TS_TOKEN_NAMESPACE:
+                  color = theme.fg_namespace;
+                  break;
+                case TS_TOKEN_MODULE:
+                  color = theme.fg_module;
+                  break;
+                case TS_TOKEN_PARAMETER:
+                  color = theme.fg_parameter;
+                  break;
+                case TS_TOKEN_FIELD:
+                  color = theme.fg_field;
+                  break;
+                case TS_TOKEN_KEYWORD_CONTROL:
+                  color = theme.fg_keyword_control;
+                  break;
+                case TS_TOKEN_KEYWORD_STORAGE:
+                  color = theme.fg_keyword_storage;
+                  break;
+                case TS_TOKEN_KEYWORD_PREPROC:
+                  color = theme.fg_keyword_preproc;
+                  break;
+                case TS_TOKEN_FUNCTION_METHOD:
+                  color = theme.fg_function_method;
+                  break;
+                case TS_TOKEN_FUNCTION_CONSTRUCTOR:
+                  color = theme.fg_function_constructor;
+                  break;
+                case TS_TOKEN_TYPE_BUILTIN:
+                  color = theme.fg_type_builtin;
+                  break;
+                case TS_TOKEN_CONSTANT_MACRO:
+                  color = theme.fg_constant_macro;
+                  break;
+                case TS_TOKEN_STRING_ESCAPE:
+                  color = theme.fg_string_escape;
+                  break;
+                case TS_TOKEN_PUNCTUATION_BRACKET:
+                  color = theme.fg_punctuation_bracket;
+                  break;
+                case TS_TOKEN_PUNCTUATION_DELIMITER:
+                  color = theme.fg_punctuation_delimiter;
                   break;
                 default:
                   color = theme.fg_default;
@@ -756,8 +838,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
         }
       }
 
-      if (bracket_guide.active && line_idx > bracket_guide.start_line &&
-          line_idx < bracket_guide.end_line) {
+      if (active_guide_on_row() && leading_ws_end == (int)line.size()) {
         int guide_vis_idx = bracket_guide.visual_column - start_visual;
         if (guide_vis_idx >= 0 && guide_vis_idx < visible_len) {
           ui->draw_text(current_x + guide_vis_idx, draw_y, "│",

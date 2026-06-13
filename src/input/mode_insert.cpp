@@ -62,8 +62,19 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
     transform_selection_lowercase();
     return;
   }
+  if (is_ctrl && is_shift && (ch == 'f' || ch == 'F')) {
+    hide_lsp_completion();
+    show_project_search();
+    return;
+  }
+  if (is_ctrl && is_shift && (ch == 'm' || ch == 'M')) {
+    hide_lsp_completion();
+    show_diagnostics_picker();
+    return;
+  }
   if (is_ctrl && is_shift && (ch == 'o' || ch == 'O')) {
-    sort_selected_lines();
+    hide_lsp_completion();
+    show_symbol_picker();
     return;
   }
   // Ctrl+Tab / Ctrl+Shift+Tab: cycle pane-local tabs.
@@ -341,6 +352,14 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
   if (is_alt && (ch == 'f' || ch == 'F')) {
     toggle_search();
     needs_redraw = true;
+    return;
+  }
+  if (is_alt && ch == 'e') {
+    goto_next_diagnostic(1);
+    return;
+  }
+  if (is_alt && ch == 'E') {
+    goto_next_diagnostic(-1);
     return;
   }
   if (is_alt && (ch == 'p' || ch == 'P')) {

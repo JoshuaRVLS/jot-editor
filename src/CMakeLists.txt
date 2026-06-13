@@ -64,6 +64,7 @@ add_library(jot_core_obj OBJECT
   core/lsp.cpp
   core/panes.cpp
   core/popup.cpp
+  core/quick_pick.cpp
   core/task_queue.cpp
   core/tasks.cpp
   core/tree_sitter_commands.cpp
@@ -159,7 +160,9 @@ add_library(jot_tools_obj OBJECT
   tools/discord_rpc.cpp
   tools/debugger_client.cpp
   tools/imageviewer.cpp
+  tools/symbol_index.cpp
   tools/telescope.cpp
+  tools/workspace_search.cpp
 )
 if(WIN32)
   target_sources(jot_tools_obj PRIVATE

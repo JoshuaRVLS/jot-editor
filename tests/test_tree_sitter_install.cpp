@@ -42,6 +42,9 @@ TEST(TestTreeSitterInstallCommandMapping) {
               std::string::npos);
   ASSERT_TRUE(cpp.command.find("[jot:treesitter] failed cpp exit=$rc") !=
               std::string::npos);
+  ASSERT_TRUE(cpp.command.find("find \"$work/queries\"") !=
+              std::string::npos);
+  ASSERT_TRUE(cpp.command.find("-name '*.scm'") != std::string::npos);
 
   auto typescript = TreeSitterInstall::command_for_language("typescript");
   ASSERT_TRUE(typescript.supported);

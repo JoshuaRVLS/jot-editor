@@ -328,6 +328,10 @@ bool Editor::execute_ex_command(const std::string &input_line) {
     command_palette_selected = 0;
     needs_redraw = true;
     return false;
+  } else if (lcmd == "grep" || lcmd == "projectsearch" ||
+             lcmd == "searchall") {
+    show_project_search(arg);
+    return false;
   } else if (lcmd == "mkfile") {
     if (arg.empty()) {
       set_message("Usage: :mkfile <path>");
@@ -567,6 +571,16 @@ bool Editor::execute_ex_command(const std::string &input_line) {
     request_lsp_definition();
   } else if (lcmd == "lspback") {
     return_from_lsp_definition();
+  } else if (lcmd == "diagnostics" || lcmd == "problems") {
+    show_diagnostics_picker();
+    return false;
+  } else if (lcmd == "diagnext" || lcmd == "diagnosticnext") {
+    goto_next_diagnostic(1);
+  } else if (lcmd == "diagprev") {
+    goto_next_diagnostic(-1);
+  } else if (lcmd == "symbols" || lcmd == "outline") {
+    show_symbol_picker();
+    return false;
   } else if (lcmd == "lspinstall") {
     if (arg.empty()) {
       set_message("Usage: :lspinstall <python|typescript|cpp|rust|go|lua|bash>");

@@ -536,6 +536,11 @@ void Editor::poll_lsp_clients() {
     for (const auto &definition : definitions) {
       handle_lsp_definition_result(definition);
     }
+
+    auto document_symbols = client->consume_document_symbol_results();
+    for (const auto &symbols : document_symbols) {
+      handle_document_symbols_result(symbols);
+    }
   }
 }
 

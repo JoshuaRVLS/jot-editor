@@ -93,6 +93,31 @@ private:
   bool command_palette_theme_mode;
   std::string command_palette_theme_original;
 
+  enum QuickPickKind {
+    QUICK_PICK_NONE,
+    QUICK_PICK_PROJECT_SEARCH,
+    QUICK_PICK_DIAGNOSTICS,
+    QUICK_PICK_SYMBOLS
+  };
+
+  struct QuickPickItem {
+    std::string label;
+    std::string detail;
+    std::string preview;
+    std::string filepath;
+    int line = 0;
+    int col = 0;
+    int severity = 0;
+  };
+
+  QuickPickKind quick_pick_kind;
+  bool show_quick_pick;
+  std::string quick_pick_title;
+  std::string quick_pick_query;
+  std::vector<QuickPickItem> quick_pick_all_items;
+  std::vector<QuickPickItem> quick_pick_items;
+  int quick_pick_selected;
+
   // Telescope finder
   Telescope telescope;
   bool waiting_for_space_f;
@@ -572,6 +597,7 @@ private:
   void render_menu_dropdown();
   void render_status_line();
   void render_command_palette();
+  void render_quick_pick();
   void render_search_panel();
   void render_context_menu();
   void render_tree_sitter_status_modal();
@@ -609,6 +635,23 @@ private:
   void reload_tree_sitter();
   void poll_tree_sitter_installs();
   bool handle_tree_sitter_status_input(int ch);
+  bool handle_quick_pick_input(int ch);
+  void open_quick_pick(QuickPickKind kind, const std::string &title,
+                       std::vector<QuickPickItem> items,
+                       const std::string &query = "");
+  void close_quick_pick();
+  void refresh_quick_pick();
+  int quick_pick_match_score(const std::string &query,
+                             const QuickPickItem &item) const;
+  void accept_quick_pick();
+  void show_project_search(const std::string &query = "");
+  void show_diagnostics_picker();
+  bool goto_next_diagnostic(int direction);
+  std::vector<QuickPickItem> diagnostic_quick_pick_items() const;
+  void show_symbol_picker();
+  void request_document_symbols();
+  void handle_document_symbols_result(const LSPDocumentSymbolResult &result);
+  std::vector<QuickPickItem> fallback_symbol_items();
   void request_lsp_completion(bool manual, char trigger_character = '\0');
   void request_lsp_hover();
   void request_lsp_hover_at(int pane_index, int buffer_id, const Cursor &pos,

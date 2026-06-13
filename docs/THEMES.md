@@ -119,11 +119,32 @@ jot.cmd.colorscheme("my_theme")
 | Slot Name | Description |
 |-----------|-------------|
 | `keyword` | `if`, `else`, `return`, `class`, etc. |
+| `keyword_control` | Control-flow keywords such as `if`, `for`, `return` |
+| `keyword_storage` | Storage/modifier keywords such as `static`, `const`, `virtual` |
+| `keyword_preproc` | Preprocessor/directive keywords such as `#include`, `#define` |
 | `string` | `"String literals"` |
+| `string_escape` | Escape sequences inside strings |
 | `comment` | `// Comments` or `# Comments` |
 | `number` | `123`, `3.14` |
 | `function` | Function names, calls |
+| `function_method` | Method/member function names and calls |
+| `function_constructor` | Constructor names |
 | `type` | Types (`int`, `bool`, ClassNames) |
+| `type_builtin` | Built-in/primitive types |
+| `variable` | Variables and identifiers |
+| `parameter` | Function parameters |
+| `field` | Struct/class fields and properties |
+| `constant` | Constants and enum-like values |
+| `constant_macro` | Preprocessor macro constants |
+| `builtin` | Built-in functions/constants |
+| `operator` | Operators |
+| `punctuation` | General punctuation |
+| `punctuation_bracket` | Brackets and braces |
+| `punctuation_delimiter` | Delimiters such as commas, semicolons, and scope separators |
+| `namespace` | Namespaces |
+| `module` | Modules/imported names |
+| `attribute` | Attributes and annotations |
+| `tag` | Markup tags |
 | `bracket_match` | Matched bracket highlight |
 
 ### Extra Highlight Group Mapping
@@ -141,6 +162,10 @@ You can also style these compatibility highlight groups in theme files:
 - `Sidebar`, `SidebarDir`, `SidebarSel`, `SidebarSelNC`, `SidebarBorder`
 - `Terminal`, `TerminalTab`, `TerminalTabActive`, `TerminalTabFocused`
 - `TerminalTabClose`, `TerminalTabPlus`, `TerminalTabSeparator`
+- Tree-sitter captures such as `@keyword.control`, `@keyword.storage`,
+  `@keyword.directive`, `@function.method`, `@function.constructor`,
+  `@type.builtin`, `@constant.macro`, `@string.escape`,
+  `@punctuation.bracket`, and `@punctuation.delimiter`
 
 ## Terminal Colors
 

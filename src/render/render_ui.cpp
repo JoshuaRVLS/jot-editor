@@ -634,6 +634,94 @@ void Editor::render_command_palette() {
   }
 }
 
+void Editor::render_quick_pick() {
+  if (!show_quick_pick) {
+    return;
+  }
+
+  int screen_w = ui->get_render_width();
+  int screen_h = ui->get_height();
+  int w = std::min(std::max(56, screen_w - 10), 112);
+  int h = std::min(std::max(12, screen_h - 8), 26);
+  if (screen_w < 62) {
+    w = std::max(22, screen_w - 2);
+  }
+  if (screen_h < 16) {
+    h = std::max(8, screen_h - 2);
+  }
+  int x = std::max(0, (screen_w - w) / 2);
+  int y = std::max(1, (screen_h - h) / 3);
+
+  UIRect rect = {x, y, w, h};
+  ui_draw_panel(*ui, rect, {theme.fg_command, theme.bg_command,
+                            theme.fg_panel_border, theme.bg_command});
+  std::string title = quick_pick_title.empty() ? " Quick Pick"
+                                               : " " + quick_pick_title;
+  ui_draw_panel_title(*ui, rect, ui_truncate_cells(title, w - 2),
+                      theme.fg_command, theme.bg_command);
+
+  std::string count = std::to_string(quick_pick_items.size()) + "/" +
+                      std::to_string(quick_pick_all_items.size());
+  ui->draw_text(std::max(x + 1, x + w - (int)count.size() - 1), y, count,
+                theme.fg_comment, theme.bg_command);
+
+  int input_y = y + 1;
+  std::string query = "> " + quick_pick_query;
+  ui->draw_text(x + 1, input_y, ui_truncate_cells(query, w - 2),
+                theme.fg_selection, theme.bg_selection, true);
+
+  int list_y = y + 3;
+  int list_h = std::max(0, h - 5);
+  int selected =
+      std::clamp(quick_pick_selected, 0,
+                 std::max(0, (int)quick_pick_items.size() - 1));
+  int start_idx = std::max(0, selected - list_h + 1);
+  if (start_idx + list_h > (int)quick_pick_items.size()) {
+    start_idx = std::max(0, (int)quick_pick_items.size() - list_h);
+  }
+
+  if (quick_pick_items.empty()) {
+    std::string empty = quick_pick_query.empty()
+                            ? "Type to filter or search"
+                            : "No matches";
+    ui->draw_text(x + 2, list_y, ui_truncate_cells(empty, w - 4),
+                  theme.fg_comment, theme.bg_command);
+  }
+
+  for (int row = 0; row < list_h; row++) {
+    int idx = start_idx + row;
+    if (idx < 0 || idx >= (int)quick_pick_items.size()) {
+      break;
+    }
+    const auto &item = quick_pick_items[(size_t)idx];
+    bool is_selected = idx == selected;
+    int fg = is_selected ? theme.fg_selection : theme.fg_command;
+    int bg = is_selected ? theme.bg_selection : theme.bg_command;
+    int row_y = list_y + row;
+    ui->fill_rect({x + 1, row_y, std::max(1, w - 2), 1}, " ", fg, bg);
+
+    int detail_w = w >= 72 ? std::max(16, w / 3) : 0;
+    int label_w = std::max(8, w - detail_w - 5);
+    std::string prefix = is_selected ? "> " : "  ";
+    ui->draw_text(x + 1, row_y,
+                  prefix + ui_truncate_cells(item.label, label_w), fg, bg,
+                  is_selected);
+    if (detail_w > 0 && !item.detail.empty()) {
+      ui->draw_text(x + w - detail_w - 1, row_y,
+                    ui_truncate_cells(item.detail, detail_w),
+                    theme.fg_comment, bg);
+    }
+  }
+
+  std::string footer = "Enter open  Esc close  Up/Down move";
+  if (selected >= 0 && selected < (int)quick_pick_items.size() &&
+      !quick_pick_items[(size_t)selected].preview.empty()) {
+    footer = quick_pick_items[(size_t)selected].preview;
+  }
+  ui_draw_footer(*ui, rect, ui_truncate_cells(footer, w - 2),
+                 theme.fg_comment, theme.bg_command);
+}
+
 void Editor::render_search_panel() {
   if (!show_search)
     return;

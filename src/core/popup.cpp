@@ -472,6 +472,11 @@ bool Editor::close_active_floating_ui() {
     return true;
   }
 
+  if (show_quick_pick) {
+    close_quick_pick();
+    return true;
+  }
+
   if (show_command_palette) {
     show_command_palette = false;
     command_palette_query.clear();

@@ -82,6 +82,13 @@ Editor::Editor() {
   debugger_breakpoint_hover_buffer = -1;
   debugger_breakpoint_hover_line = -1;
   show_search = false;
+  quick_pick_kind = QUICK_PICK_NONE;
+  show_quick_pick = false;
+  quick_pick_title.clear();
+  quick_pick_query.clear();
+  quick_pick_all_items.clear();
+  quick_pick_items.clear();
+  quick_pick_selected = 0;
   show_command_palette = false;
   command_palette_selected = 0;
   command_palette_theme_mode = false;

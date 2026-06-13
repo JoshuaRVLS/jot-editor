@@ -47,105 +47,149 @@ fs::path home_path(const std::string &suffix) {
 }
 
 const char *builtin_query_c() { return R"TREEQUERY(
-"break" @keyword
-"case" @keyword
-"const" @keyword
-"continue" @keyword
-"default" @keyword
+"break" @keyword.control
+"case" @keyword.control
+"const" @keyword.storage
+"continue" @keyword.control
+"default" @keyword.control
 "do" @keyword
 "else" @keyword
 "enum" @keyword
 "extern" @keyword
-"for" @keyword
-"goto" @keyword
-"if" @keyword
-"return" @keyword
+"for" @keyword.control
+"goto" @keyword.control
+"if" @keyword.control
+"return" @keyword.control
 "sizeof" @keyword
 "static" @keyword
 "struct" @keyword
-"switch" @keyword
+"switch" @keyword.control
 "typedef" @keyword
 "union" @keyword
 "volatile" @keyword
-"while" @keyword
+"while" @keyword.control
+(escape_sequence) @string.escape
 (string_literal) @string
 (system_lib_string) @string
 (comment) @comment
 (number_literal) @number
-(primitive_type) @type
+(primitive_type) @type.builtin
 (type_identifier) @type
 (type_descriptor) @type
 (field_identifier) @property
+(identifier) @variable
 (call_expression function: (identifier) @function)
-(call_expression function: (field_expression field: (field_identifier) @function))
+(call_expression function: (field_expression field: (field_identifier) @function.method))
 (function_declarator declarator: (identifier) @function)
 (function_definition declarator: (function_declarator declarator: (identifier) @function))
-(preproc_include) @keyword
-(preproc_def) @keyword
-(preproc_if) @keyword
-(preproc_elif) @keyword
-(preproc_else) @keyword
-(preproc_endif) @keyword
+"#include" @keyword.directive
+"#define" @keyword.directive
+(preproc_include) @keyword.directive
+(preproc_def) @keyword.directive
+(preproc_if) @keyword.directive
+(preproc_elif) @keyword.directive
+(preproc_else) @keyword.directive
+(preproc_endif) @keyword.directive
+(preproc_arg) @constant.macro
+"(" @punctuation.bracket
+")" @punctuation.bracket
+"[" @punctuation.bracket
+"]" @punctuation.bracket
+"{" @punctuation.bracket
+"}" @punctuation.bracket
+"," @punctuation.delimiter
+";" @punctuation.delimiter
+"." @punctuation.delimiter
+"->" @operator
+"=" @operator
+"+" @operator
+"-" @operator
+"*" @operator
+"/" @operator
 )TREEQUERY"; }
 
 const char *builtin_query_cpp() { return R"TREEQUERY(
-"break" @keyword
-"case" @keyword
+"break" @keyword.control
+"case" @keyword.control
 "class" @keyword
-"const" @keyword
-"constexpr" @keyword
-"continue" @keyword
-"default" @keyword
+"const" @keyword.storage
+"constexpr" @keyword.storage
+"continue" @keyword.control
+"default" @keyword.control
 "do" @keyword
 "else" @keyword
 "enum" @keyword
 "extern" @keyword
-"for" @keyword
-"goto" @keyword
-"if" @keyword
+"for" @keyword.control
+"goto" @keyword.control
+"if" @keyword.control
 "namespace" @keyword
 "new" @keyword
-"return" @keyword
+"return" @keyword.control
 "sizeof" @keyword
-"static" @keyword
+"static" @keyword.storage
 "struct" @keyword
-"switch" @keyword
+"switch" @keyword.control
 "template" @keyword
 "typedef" @keyword
 "typename" @keyword
 "union" @keyword
 "using" @keyword
-"virtual" @keyword
-"volatile" @keyword
-"while" @keyword
+"virtual" @keyword.storage
+"volatile" @keyword.storage
+"while" @keyword.control
+(escape_sequence) @string.escape
 (raw_string_literal) @string
 (string_literal) @string
+(system_lib_string) @string
 (comment) @comment
 (number_literal) @number
-(primitive_type) @type
+(primitive_type) @type.builtin
 (type_identifier) @type
 (template_type) @type
-(namespace_identifier) @type
-(qualified_identifier scope: (namespace_identifier) @type)
-(qualified_identifier name: (identifier) @type)
+(namespace_identifier) @namespace
+(qualified_identifier scope: (namespace_identifier) @namespace)
 (qualified_identifier name: (type_identifier) @type)
 (field_identifier) @property
+(identifier) @variable
 (call_expression function: (identifier) @function)
-(call_expression function: (field_expression field: (field_identifier) @function))
+(call_expression function: (field_expression field: (field_identifier) @function.method))
 (call_expression function: (qualified_identifier name: (identifier) @function))
-(call_expression function: (qualified_identifier name: (field_identifier) @function))
+(call_expression function: (qualified_identifier name: (field_identifier) @function.method))
 (call_expression function: (qualified_identifier name: (operator_name) @function))
 (function_declarator declarator: (identifier) @function)
 (function_declarator declarator: (qualified_identifier name: (identifier) @function))
-(function_declarator declarator: (field_identifier) @function)
+(function_declarator declarator: (field_identifier) @function.method)
 (function_definition declarator: (function_declarator declarator: (identifier) @function))
 (function_definition declarator: (function_declarator declarator: (qualified_identifier name: (identifier) @function)))
-(preproc_include) @keyword
-(preproc_def) @keyword
-(preproc_if) @keyword
-(preproc_elif) @keyword
-(preproc_else) @keyword
-(preproc_endif) @keyword
+"#include" @keyword.directive
+"#define" @keyword.directive
+(preproc_include) @keyword.directive
+(preproc_def) @keyword.directive
+(preproc_if) @keyword.directive
+(preproc_elif) @keyword.directive
+(preproc_else) @keyword.directive
+(preproc_endif) @keyword.directive
+(preproc_arg) @constant.macro
+(operator_name) @operator
+"(" @punctuation.bracket
+")" @punctuation.bracket
+"[" @punctuation.bracket
+"]" @punctuation.bracket
+"{" @punctuation.bracket
+"}" @punctuation.bracket
+"<" @punctuation.bracket
+">" @punctuation.bracket
+"," @punctuation.delimiter
+";" @punctuation.delimiter
+"." @punctuation.delimiter
+"::" @punctuation.delimiter
+"->" @operator
+"=" @operator
+"+" @operator
+"-" @operator
+"*" @operator
+"/" @operator
 )TREEQUERY"; }
 
 #ifdef JOT_TREESITTER
@@ -170,6 +214,7 @@ const char *minimal_query_cpp() { return R"TREEQUERY(
 "while" @keyword
 (raw_string_literal) @string
 (string_literal) @string
+(system_lib_string) @string
 (comment) @comment
 (number_literal) @number
 (primitive_type) @type
@@ -226,6 +271,8 @@ const char *builtin_query_python() { return R"TREEQUERY(
 (function_definition name: (identifier) @function)
 (class_definition name: (identifier) @type)
 (attribute attribute: (identifier) @type)
+(identifier) @variable
+(parameters (identifier) @variable.parameter)
 )TREEQUERY"; }
 
 const char *builtin_query_javascript() { return R"TREEQUERY(
@@ -270,6 +317,8 @@ const char *builtin_query_javascript() { return R"TREEQUERY(
 (call_expression function: (identifier) @function)
 (function_declaration name: (identifier) @function)
 (class_declaration name: (identifier) @type)
+(identifier) @variable
+(formal_parameters (identifier) @variable.parameter)
 )TREEQUERY"; }
 
 const char *builtin_query_rust() { return R"TREEQUERY(
@@ -318,6 +367,7 @@ const char *builtin_query_rust() { return R"TREEQUERY(
 (function_item name: (identifier) @function)
 (struct_item name: (type_identifier) @type)
 (enum_item name: (type_identifier) @type)
+(identifier) @variable
 )TREEQUERY"; }
 
 const char *builtin_query_go() { return R"TREEQUERY(
@@ -354,6 +404,7 @@ const char *builtin_query_go() { return R"TREEQUERY(
 (call_expression function: (identifier) @function)
 (function_declaration name: (identifier) @function)
 (type_declaration (type_spec name: (type_identifier) @type))
+(identifier) @variable
 )TREEQUERY"; }
 
 const char *builtin_query_json() { return R"TREEQUERY(
@@ -362,6 +413,7 @@ const char *builtin_query_json() { return R"TREEQUERY(
 "true" @keyword
 "false" @keyword
 "null" @keyword
+(pair key: (string) @property)
 )TREEQUERY"; }
 
 const char *builtin_query_html() { return R"TREEQUERY(
@@ -410,6 +462,7 @@ const char *builtin_query_bash() { return R"TREEQUERY(
 (string) @string
 (raw_string) @string
 (comment) @comment
+(variable_name) @variable
 )TREEQUERY"; }
 
 const char *builtin_query_lua() { return R"TREEQUERY(
@@ -440,6 +493,7 @@ const char *builtin_query_lua() { return R"TREEQUERY(
 (number) @number
 (function_call name: (identifier) @function)
 (function_declaration name: (identifier) @function)
+(identifier) @variable
 )TREEQUERY"; }
 
 const char *builtin_query_markdown() { return R"TREEQUERY(
@@ -452,6 +506,7 @@ const char *builtin_query_markdown() { return R"TREEQUERY(
 (strong_emphasis) @property
 (link_text) @property
 (link_destination) @string
+(fenced_code_block) @string
 )TREEQUERY"; }
 
 const char *builtin_query_toml() { return R"TREEQUERY(
@@ -479,14 +534,7 @@ const char *builtin_query_yaml() { return R"TREEQUERY(
 (comment) @comment
 )TREEQUERY"; }
 
-const char *builtin_query_fallback() { return R"TREEQUERY(
-(keyword) @keyword
-(string) @string
-(comment) @comment
-(number) @number
-(type) @type
-(function) @function
-)TREEQUERY"; }
+const char *builtin_query_fallback() { return ""; }
 
 using QueryProvider = const char *(*)();
 
@@ -940,6 +988,12 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension) {
                         &error_offset, &error_type);
   };
 
+  auto compile_empty_query = [&]() {
+    uint32_t empty_error_offset = 0;
+    TSQueryError empty_error_type = TSQueryErrorNone;
+    return compile_query("", empty_error_offset, empty_error_type);
+  };
+
   QuerySource source = load_query_source(language_id);
   uint32_t error_offset = 0;
   TSQueryError error_type = TSQueryErrorNone;
@@ -1001,6 +1055,24 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension) {
       query_diagnostics_[language_id] = message;
       return query;
     }
+  }
+
+  query = compile_empty_query();
+  if (query) {
+    query_cache_[language_id] = query;
+    runtime_query_used_[language_id] = false;
+    builtin_query_used_[language_id] = true;
+    std::string message = "empty built-in query loaded";
+    if (!runtime_error.empty()) {
+      message += "; " + runtime_error;
+    }
+    if (!builtin_error.empty()) {
+      message += "; " + builtin_error;
+    } else if (source.runtime) {
+      message += "; built-in query failed";
+    }
+    query_diagnostics_[language_id] = message;
+    return query;
   }
 
   const std::string final_query_error =

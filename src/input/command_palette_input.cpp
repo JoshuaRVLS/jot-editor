@@ -131,7 +131,6 @@ void Editor::handle_command_palette(int ch) {
     if (!command_palette_theme_mode) {
       command_palette_theme_mode = true;
       command_palette_theme_original = command_palette_query;
-      command_palette_selected = 0;
     }
 
     refresh_command_palette();

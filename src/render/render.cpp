@@ -118,7 +118,7 @@ void Editor::render() {
     }
 
     // Keep cursor visibility in sync even when no redraw is needed.
-    if (show_menu_bar_dropdown || show_context_menu ||
+    if (show_menu_bar_dropdown || show_context_menu || show_quick_pick ||
         show_tree_sitter_status_modal) {
       ui->hide_cursor();
       ui->flush_cursor();
@@ -223,6 +223,7 @@ void Editor::render() {
 
     render_status_line();
     render_command_palette();
+    render_quick_pick();
     render_search_panel();
     render_popup();
     render_tree_sitter_status_modal();
@@ -237,7 +238,7 @@ void Editor::render() {
 
     // Set cursor state BEFORE ui->render() so the full-row paint emits the
     // correct cursor at the end of the frame.
-    if (show_menu_bar_dropdown || show_context_menu ||
+    if (show_menu_bar_dropdown || show_context_menu || show_quick_pick ||
         show_tree_sitter_status_modal) {
       ui->hide_cursor();
     } else if (show_command_palette || show_search || show_save_prompt ||

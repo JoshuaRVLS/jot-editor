@@ -1,4 +1,5 @@
 #include "test_framework.h"
+#include "types.h"
 #include "tree_sitter_manager.h"
 #include <string>
 
@@ -57,9 +58,20 @@ TEST(TestCppQueryCoversScopedAndPrimitiveTokens) {
 
   ASSERT_TRUE(entry != nullptr);
   std::string query = entry->highlight_query_source;
-  ASSERT_TRUE(query.find("(primitive_type) @type") != std::string::npos);
-  ASSERT_TRUE(query.find("(namespace_identifier) @type") != std::string::npos);
-  ASSERT_TRUE(query.find("qualified_identifier") != std::string::npos);
+  ASSERT_TRUE(query.find("(primitive_type) @type.builtin") !=
+              std::string::npos);
+  ASSERT_TRUE(query.find("@keyword.control") != std::string::npos);
+  ASSERT_TRUE(query.find("@keyword.storage") != std::string::npos);
+  ASSERT_TRUE(query.find("@keyword.directive") != std::string::npos);
+  ASSERT_TRUE(query.find("@function.method") != std::string::npos);
+  ASSERT_TRUE(query.find("@constant.macro") != std::string::npos);
+  ASSERT_TRUE(query.find("@string.escape") != std::string::npos);
+  ASSERT_TRUE(query.find("@punctuation.bracket") != std::string::npos);
+  ASSERT_TRUE(query.find("@punctuation.delimiter") != std::string::npos);
+  ASSERT_TRUE(query.find("(namespace_identifier) @namespace") !=
+              std::string::npos);
+  ASSERT_TRUE(query.find("qualified_identifier scope: (namespace_identifier) "
+                         "@namespace") != std::string::npos);
   ASSERT_TRUE(query.find("(call_expression function: (qualified_identifier") !=
               std::string::npos);
 }
@@ -71,6 +83,37 @@ TEST(TestTreeSitterCaptureMappingPriority) {
   ASSERT_EQ(tree_sitter_capture_color_for_name("number"), 4);
   ASSERT_EQ(tree_sitter_capture_color_for_name("type"), 5);
   ASSERT_EQ(tree_sitter_capture_color_for_name("function"), 6);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("variable"), TS_TOKEN_VARIABLE);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("variable.parameter"),
+            TS_TOKEN_PARAMETER);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("function.builtin"),
+            TS_TOKEN_BUILTIN);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("function.method"),
+            TS_TOKEN_FUNCTION_METHOD);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("function.constructor"),
+            TS_TOKEN_FUNCTION_CONSTRUCTOR);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("constant.builtin"),
+            TS_TOKEN_BUILTIN);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("constant.macro"),
+            TS_TOKEN_CONSTANT_MACRO);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("keyword.control"),
+            TS_TOKEN_KEYWORD_CONTROL);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("keyword.storage"),
+            TS_TOKEN_KEYWORD_STORAGE);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("keyword.directive"),
+            TS_TOKEN_KEYWORD_PREPROC);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("operator"), TS_TOKEN_OPERATOR);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("punctuation.bracket"),
+            TS_TOKEN_PUNCTUATION_BRACKET);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("punctuation.delimiter"),
+            TS_TOKEN_PUNCTUATION_DELIMITER);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("string.escape"),
+            TS_TOKEN_STRING_ESCAPE);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("tag.attribute"),
+            TS_TOKEN_ATTRIBUTE);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("type.builtin"),
+            TS_TOKEN_TYPE_BUILTIN);
+  ASSERT_EQ(tree_sitter_capture_token_for_name("property"), TS_TOKEN_FIELD);
   ASSERT_EQ(tree_sitter_capture_color_for_name("unknown.capture"), 0);
 
   ASSERT_TRUE(tree_sitter_capture_priority_for_name("comment") >
@@ -79,6 +122,92 @@ TEST(TestTreeSitterCaptureMappingPriority) {
               tree_sitter_capture_priority_for_name("function"));
   ASSERT_TRUE(tree_sitter_capture_priority_for_name("function") >
               tree_sitter_capture_priority_for_name("type"));
+}
+
+TEST(TestTreeSitterBuiltInQueriesExposeRichCaptures) {
+  TreeSitterManager manager;
+
+  const TSLanguageEntry *cpp = manager.get_language(".cpp");
+  ASSERT_TRUE(cpp != nullptr);
+  ASSERT_TRUE(cpp->highlight_query_source.find("@variable") !=
+              std::string::npos);
+  ASSERT_TRUE(cpp->highlight_query_source.find("@property") !=
+              std::string::npos);
+
+  const TSLanguageEntry *python = manager.get_language(".py");
+  ASSERT_TRUE(python != nullptr);
+  ASSERT_TRUE(python->highlight_query_source.find("@variable.parameter") !=
+              std::string::npos);
+
+  const TSLanguageEntry *json = manager.get_language(".json");
+  ASSERT_TRUE(json != nullptr);
+  ASSERT_TRUE(json->highlight_query_source.find("@property") !=
+              std::string::npos);
+}
+
+TEST(TestThemeSyntaxPaletteFallsBackToReadableThemeColors) {
+  Theme theme;
+  theme.fg_default = 252;
+  theme.bg_default = 234;
+  theme.fg_keyword = 81;
+  theme.bg_keyword = 234;
+  theme.fg_number = 179;
+  theme.bg_number = 234;
+  theme.fg_type = 110;
+  theme.bg_type = 234;
+
+  theme.normalize_syntax_palette();
+
+  ASSERT_EQ(theme.fg_variable, 252);
+  ASSERT_EQ(theme.bg_variable, 234);
+  ASSERT_EQ(theme.fg_parameter, 252);
+  ASSERT_EQ(theme.fg_field, 252);
+  ASSERT_EQ(theme.fg_punctuation, 252);
+  ASSERT_EQ(theme.fg_operator, 81);
+  ASSERT_EQ(theme.fg_tag, 81);
+  ASSERT_EQ(theme.fg_constant, 179);
+  ASSERT_EQ(theme.fg_builtin, 110);
+  ASSERT_EQ(theme.fg_attribute, 110);
+  ASSERT_EQ(theme.fg_namespace, 252);
+  ASSERT_EQ(theme.fg_module, 252);
+  ASSERT_EQ(theme.fg_keyword_control, 81);
+  ASSERT_EQ(theme.fg_keyword_storage, 110);
+  ASSERT_EQ(theme.fg_keyword_preproc, 179);
+  ASSERT_EQ(theme.fg_function_method, theme.fg_function);
+  ASSERT_EQ(theme.fg_function_constructor, 110);
+  ASSERT_EQ(theme.fg_type_builtin, 110);
+  ASSERT_EQ(theme.fg_constant_macro, 179);
+  ASSERT_EQ(theme.fg_string_escape, 110);
+  ASSERT_EQ(theme.fg_punctuation_bracket, 252);
+  ASSERT_EQ(theme.fg_punctuation_delimiter, 252);
+}
+
+TEST(TestThemeSyntaxPaletteKeepsExplicitSyntaxSlots) {
+  Theme theme;
+  theme.fg_default = 252;
+  theme.bg_default = 234;
+  theme.fg_type = 110;
+  theme.bg_type = 234;
+
+  theme.fg_field = 203;
+  theme.bg_field = 235;
+  theme.mark_syntax_slot_explicit(SyntaxThemeSlot::Field);
+  theme.fg_operator = 214;
+  theme.mark_syntax_slot_explicit(SyntaxThemeSlot::Operator);
+  theme.fg_keyword_control = 197;
+  theme.mark_syntax_slot_explicit(SyntaxThemeSlot::KeywordControl);
+  theme.fg_string_escape = 170;
+  theme.mark_syntax_slot_explicit(SyntaxThemeSlot::StringEscape);
+
+  theme.normalize_syntax_palette();
+
+  ASSERT_EQ(theme.fg_field, 203);
+  ASSERT_EQ(theme.bg_field, 235);
+  ASSERT_EQ(theme.fg_operator, 214);
+  ASSERT_EQ(theme.fg_keyword_control, 197);
+  ASSERT_EQ(theme.fg_string_escape, 170);
+  ASSERT_EQ(theme.fg_variable, 252);
+  ASSERT_EQ(theme.fg_builtin, 110);
 }
 
 #ifdef JOT_TREESITTER

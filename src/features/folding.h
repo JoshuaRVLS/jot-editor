@@ -28,6 +28,10 @@ int previous_visible_line(const std::vector<FoldRange> &ranges, int line);
 int advance_visible_lines(const std::vector<FoldRange> &ranges, int line,
                           int delta, int line_count);
 int visible_line_count(const std::vector<FoldRange> &ranges, int line_count);
+int buffer_line_for_visible_index(const std::vector<FoldRange> &ranges,
+                                  int visible_index, int line_count);
+int visible_row_for_line(const std::vector<FoldRange> &ranges, int first_line,
+                         int target_line, int visible_rows, int line_count);
 int buffer_line_for_visible_offset(const std::vector<FoldRange> &ranges,
                                    int first_line, int offset,
                                    int line_count);

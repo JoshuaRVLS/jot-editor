@@ -57,6 +57,14 @@ bool LSPClient::request_completion(const std::string &, int, int, char) {
   return false;
 }
 
+bool LSPClient::request_hover(const std::string &, int, int) { return false; }
+
+bool LSPClient::request_definition(const std::string &, int, int) {
+  return false;
+}
+
+bool LSPClient::request_document_symbols(const std::string &) { return false; }
+
 std::vector<std::pair<std::string, std::vector<Diagnostic>>>
 LSPClient::consume_published_diagnostics() {
   std::vector<std::pair<std::string, std::vector<Diagnostic>>> out;
@@ -68,6 +76,25 @@ std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>>
 LSPClient::consume_completion_items() {
   std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>> out;
   out.swap(pending_completions);
+  return out;
+}
+
+std::vector<LSPHoverResult> LSPClient::consume_hover_results() {
+  std::vector<LSPHoverResult> out;
+  out.swap(pending_hovers);
+  return out;
+}
+
+std::vector<LSPDefinitionResult> LSPClient::consume_definition_results() {
+  std::vector<LSPDefinitionResult> out;
+  out.swap(pending_definitions);
+  return out;
+}
+
+std::vector<LSPDocumentSymbolResult>
+LSPClient::consume_document_symbol_results() {
+  std::vector<LSPDocumentSymbolResult> out;
+  out.swap(pending_document_symbols);
   return out;
 }
 

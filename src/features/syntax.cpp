@@ -8,7 +8,7 @@
 namespace {
 
 struct CaptureStyle {
-  int color = 0;
+  int token = TS_TOKEN_NONE;
   int priority = 0;
 };
 
@@ -18,27 +18,99 @@ CaptureStyle capture_style_for_name(std::string_view sv) {
     return sv.size() >= n && sv.compare(0, n, pfx) == 0;
   };
 
-  if (sv == "comment" || has_prefix("comment.")) return {3, 100};
-  if (sv == "string" || has_prefix("string.")) return {2, 95};
+  if (sv == "comment" || has_prefix("comment.")) return {TS_TOKEN_COMMENT, 120};
+  if (sv == "string.escape" || sv == "escape") {
+    return {TS_TOKEN_STRING_ESCAPE, 118};
+  }
+  if (sv == "string" || has_prefix("string.") || sv == "character" ||
+      has_prefix("character.")) {
+    return {TS_TOKEN_STRING, 115};
+  }
+  if (sv == "punctuation.bracket") {
+    return {TS_TOKEN_PUNCTUATION_BRACKET, 108};
+  }
+  if (sv == "punctuation.delimiter") {
+    return {TS_TOKEN_PUNCTUATION_DELIMITER, 107};
+  }
+  if (sv == "punctuation" || has_prefix("punctuation.")) {
+    return {TS_TOKEN_PUNCTUATION, 105};
+  }
   if (sv == "function" || has_prefix("function.") ||
       sv == "method" || has_prefix("method.") || sv == "constructor") {
-    return {6, 80};
+    if (sv == "function.builtin" || sv == "method.builtin") {
+      return {TS_TOKEN_BUILTIN, 98};
+    }
+    if (sv == "function.method" || sv == "method" ||
+        has_prefix("method.")) {
+      return {TS_TOKEN_FUNCTION_METHOD, 97};
+    }
+    if (sv == "function.constructor" || sv == "constructor") {
+      return {TS_TOKEN_FUNCTION_CONSTRUCTOR, 96};
+    }
+    return {TS_TOKEN_FUNCTION, 95};
   }
-  if (sv == "type" || has_prefix("type.") ||
-      sv == "attribute" || has_prefix("attribute.")) {
-    return {5, 70};
+  if (sv == "variable.parameter" || sv == "parameter" ||
+      has_prefix("parameter.")) {
+    return {TS_TOKEN_PARAMETER, 90};
   }
-  if (sv == "keyword" || has_prefix("keyword.") || sv == "operator" ||
-      sv == "preproc") {
-    return {1, 60};
+  if (sv == "variable.member" || sv == "property" ||
+      has_prefix("property.") || sv == "field" || has_prefix("field.")) {
+    return {TS_TOKEN_FIELD, 88};
+  }
+  if (sv == "attribute" || has_prefix("attribute.") ||
+      sv == "tag.attribute") {
+    return {TS_TOKEN_ATTRIBUTE, 85};
+  }
+  if (sv == "tag" || has_prefix("tag.")) {
+    return {TS_TOKEN_TAG, 86};
+  }
+  if (sv == "type" || has_prefix("type.")) {
+    if (sv == "type.builtin") {
+      return {TS_TOKEN_TYPE_BUILTIN, 84};
+    }
+    return {TS_TOKEN_TYPE, 82};
+  }
+  if (sv == "namespace" || has_prefix("namespace.")) {
+    return {TS_TOKEN_NAMESPACE, 80};
+  }
+  if (sv == "module" || has_prefix("module.")) {
+    return {TS_TOKEN_MODULE, 78};
+  }
+  if (sv == "keyword.control" || has_prefix("keyword.control.")) {
+    return {TS_TOKEN_KEYWORD_CONTROL, 79};
+  }
+  if (sv == "keyword.storage" || has_prefix("keyword.storage.") ||
+      sv == "keyword.modifier" || has_prefix("keyword.modifier.")) {
+    return {TS_TOKEN_KEYWORD_STORAGE, 78};
+  }
+  if (sv == "keyword.directive" || has_prefix("keyword.directive.") ||
+      sv == "keyword.import" || sv == "preproc" || has_prefix("preproc.")) {
+    return {TS_TOKEN_KEYWORD_PREPROC, 77};
+  }
+  if (sv == "keyword" || has_prefix("keyword.") || sv == "operator") {
+    if (sv == "operator") {
+      return {TS_TOKEN_OPERATOR, 76};
+    }
+    return {TS_TOKEN_KEYWORD, 74};
   }
   if (sv == "number" || has_prefix("number.") || sv == "float" ||
-      sv == "constant.numeric" || sv == "constant" ||
-      has_prefix("constant.") || sv == "boolean") {
-    return {4, 55};
+      sv == "constant.numeric") {
+    return {TS_TOKEN_NUMBER, 72};
   }
-  if (sv == "property" || has_prefix("property.")) return {6, 45};
-  if (sv == "tag" || has_prefix("tag.")) return {1, 40};
+  if (sv == "constant.builtin" || sv == "boolean" || sv == "none" ||
+      sv == "null") {
+    return {TS_TOKEN_BUILTIN, 70};
+  }
+  if (sv == "constant.macro" || sv == "constant.predefined" ||
+      sv == "constant.define") {
+    return {TS_TOKEN_CONSTANT_MACRO, 69};
+  }
+  if (sv == "constant" || has_prefix("constant.")) {
+    return {TS_TOKEN_CONSTANT, 68};
+  }
+  if (sv == "variable" || has_prefix("variable.") || sv == "identifier") {
+    return {TS_TOKEN_VARIABLE, 45};
+  }
   return {};
 }
 
@@ -95,7 +167,11 @@ bool has_cpp_sibling_source(const std::string &path) {
 } // namespace
 
 int tree_sitter_capture_color_for_name(const std::string &name) {
-  return capture_style_for_name(name).color;
+  return capture_style_for_name(name).token;
+}
+
+int tree_sitter_capture_token_for_name(const std::string &name) {
+  return capture_style_for_name(name).token;
 }
 
 int tree_sitter_capture_priority_for_name(const std::string &name) {
@@ -139,14 +215,14 @@ query_ts_highlights(FileBuffer &buf, int line_idx, TSQuery *query, TSTree *tree)
       uint32_t name_len;
       const char *name = ts_query_capture_name_for_id(query, cap.index, &name_len);
       CaptureStyle style = capture_style_for_name(std::string_view(name, name_len));
-      if (style.color == 0) {
+      if (style.token == TS_TOKEN_NONE) {
         continue;
       }
 
       for (uint32_t col = start; col < end && col < colors.size(); col++) {
         if (style.priority >= priorities[col]) {
           priorities[col] = style.priority;
-          colors[col] = {1, style.color};
+          colors[col] = {1, style.token};
         }
       }
     }

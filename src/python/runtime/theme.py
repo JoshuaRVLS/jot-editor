@@ -1,6 +1,5 @@
 """Theme/colorscheme runtime helpers for jot_api."""
 
-
 class ThemeRuntime:
     def __init__(
         self,

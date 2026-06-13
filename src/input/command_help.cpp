@@ -15,6 +15,7 @@ void Editor::show_command_help(const std::string &topic_text) {
         "[left|right|up|down] :vsp [left|right] "
         ":splitleft/:splitright/:splitup/:splitdown :bn :bp :home "
         ":resume :recent :openrecent [n] :reopen :autosave [on/off/ms] "
+        ":grep <text> :diagnostics :diagnext :diagprev :symbols :outline "
         ":format :trim "
         ":trimblank :upper :lower :sortlines :sortdesc :reverselines "
         ":uniquelines :shufflelines :joinlines :dupe :copypath :copyname "
@@ -42,6 +43,9 @@ void Editor::show_command_help(const std::string &topic_text) {
       "  Ctrl+F           Search panel",
       "  Ctrl+B           Toggle file explorer",
       "  Ctrl+E           Telescope file finder",
+      "  Ctrl+Shift+F     Search across workspace",
+      "  Ctrl+Shift+M     Diagnostics picker",
+      "  Ctrl+Shift+O     Document symbols",
       "  Ctrl+T           Theme chooser",
       "  Ctrl+M           Toggle minimap",
       "  Ctrl+X / Ctrl+`  Open/focus/minimize terminal",
@@ -57,7 +61,6 @@ void Editor::show_command_help(const std::string &topic_text) {
       "  Ctrl+Backspace   Delete previous word",
       "  Ctrl+Shift+U     Uppercase selection/word",
       "  Ctrl+Shift+N     Lowercase selection/word",
-      "  Ctrl+Shift+O     Sort selected lines",
       "  Shift+Arrows     Expand selection",
       "  Ctrl+Space       LSP completion",
       "",
@@ -79,6 +82,7 @@ void Editor::show_command_help(const std::string &topic_text) {
       "  Alt+N              New buffer",
       "  Alt+S              Save",
       "  Alt+F              Search",
+      "  Alt+E / Alt+Shift+E Next / Previous diagnostic",
       "  Alt+P              Command palette",
       "  Alt+B              Toggle explorer",
       "  Alt+M              Toggle minimap",

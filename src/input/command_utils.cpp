@@ -72,7 +72,8 @@ const std::vector<std::string> &ex_commands() {
       "debugpanel", "debugstop", "debugrestart", "debugcontinue",
       "debugpause", "debugstep", "debugnext", "debugout", "debugthreads",
       "debugmemory", "debugdisasm",
-      "find",   "ff",       "mkfile",   "mkdir",   "rename", "rm",
+      "find",   "ff", "grep", "projectsearch", "searchall",
+      "mkfile",   "mkdir",   "rename", "rm",
       "cppimpl", "cpppair",
       "format", "trim",     "upper",    "lower",  "sortlines", "sortdesc",
       "reverselines", "uniquelines", "shufflelines", "joinlines", "dupe",
@@ -84,6 +85,8 @@ const std::vector<std::string> &ex_commands() {
       "line", "goto",        "resizeleft",
       "resizeright", "resizeup", "resizedown", "lspstart", "lspstatus",
       "lspstop", "lsprestart", "lspinstall", "lspremove", "lspmanager",
+      "diagnostics", "problems", "diagnext", "diagnosticnext", "diagprev",
+      "symbols", "outline",
       "tsinstall", "treesitterinstall", "tsstatus", "tsreload",
       "treesitterreload",
       "gitstatus", "gitdiff", "gitdiffstaged", "gitstage", "gitunstage",
@@ -116,7 +119,8 @@ bool command_takes_argument(const std::string &cmd) {
          lc == "openrecent" || lc == "autosave" || lc == "help" ||
          lc == "h" || lc == "gitdiff" || lc == "gitdiffstaged" ||
          lc == "gitstage" || lc == "gitunstage" || lc == "gitcommit" ||
-         lc == "find" || lc == "ff" ||
+         lc == "find" || lc == "ff" || lc == "grep" ||
+         lc == "projectsearch" || lc == "searchall" ||
          lc == "debug" || lc == "debuggdb" || lc == "debuglldb" ||
          lc == "debugconfig" || lc == "debugattach" ||
          lc == "debugmemory" || lc == "debugdisasm" ||

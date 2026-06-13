@@ -339,6 +339,47 @@ int visible_line_count(const std::vector<FoldRange> &ranges, int line_count) {
   return std::max(1, visible);
 }
 
+int buffer_line_for_visible_index(const std::vector<FoldRange> &ranges,
+                                  int visible_index, int line_count) {
+  int target = std::max(0, visible_index);
+  for (int line = 0; line < line_count; line++) {
+    if (is_line_hidden(ranges, line)) {
+      continue;
+    }
+    if (target == 0) {
+      return line;
+    }
+    target--;
+  }
+  return std::max(0, line_count - 1);
+}
+
+int visible_row_for_line(const std::vector<FoldRange> &ranges, int first_line,
+                         int target_line, int visible_rows, int line_count) {
+  if (line_count <= 0 || visible_rows <= 0 || target_line < 0 ||
+      target_line >= line_count || is_line_hidden(ranges, target_line)) {
+    return -1;
+  }
+  int current = std::clamp(first_line, 0, std::max(0, line_count - 1));
+  while (current < line_count && is_line_hidden(ranges, current)) {
+    current++;
+  }
+  if (current >= line_count) {
+    return -1;
+  }
+  for (int row = 0; row < visible_rows && current < line_count; row++) {
+    if (current == target_line) {
+      return row;
+    }
+    int next = next_visible_line(ranges, current, line_count);
+    if (next == current) {
+      break;
+    }
+    current = next;
+  }
+  return -1;
+}
+
 int buffer_line_for_visible_offset(const std::vector<FoldRange> &ranges,
                                    int first_line, int offset,
                                    int line_count) {

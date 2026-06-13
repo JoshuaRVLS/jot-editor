@@ -643,6 +643,168 @@ std::vector<LSPLocation> definition_locations_from_result(
   }
   return locations;
 }
+
+std::string symbol_kind_name(int kind) {
+  switch (kind) {
+  case 2:
+    return "module";
+  case 3:
+    return "namespace";
+  case 4:
+    return "package";
+  case 5:
+    return "class";
+  case 6:
+    return "method";
+  case 7:
+    return "property";
+  case 8:
+    return "field";
+  case 9:
+    return "constructor";
+  case 10:
+    return "enum";
+  case 11:
+    return "interface";
+  case 12:
+    return "function";
+  case 13:
+    return "variable";
+  case 14:
+    return "constant";
+  case 23:
+    return "struct";
+  case 26:
+    return "type";
+  default:
+    return "symbol";
+  }
+}
+
+bool parse_range_start(const JsonValue *range, int &line, int &character,
+                       int &end_line, int &end_character) {
+  if (!range || range->type != JsonValue::Object) {
+    return false;
+  }
+  const JsonValue *start = json_object_get(*range, "start");
+  const JsonValue *end = json_object_get(*range, "end");
+  if (!start || start->type != JsonValue::Object) {
+    return false;
+  }
+  line = json_int_or_default(json_object_get(*start, "line"), 0);
+  character = json_int_or_default(json_object_get(*start, "character"), 0);
+  end_line = end && end->type == JsonValue::Object
+                 ? json_int_or_default(json_object_get(*end, "line"), line)
+                 : line;
+  end_character =
+      end && end->type == JsonValue::Object
+          ? json_int_or_default(json_object_get(*end, "character"), character)
+          : character;
+  return true;
+}
+
+void append_document_symbol(const JsonValue &item, const std::string &filepath,
+                            std::vector<LSPSymbol> &out) {
+  if (item.type != JsonValue::Object) {
+    return;
+  }
+  std::string name = json_string_or_empty(json_object_get(item, "name"));
+  if (name.empty()) {
+    return;
+  }
+
+  int line = 0;
+  int character = 0;
+  int end_line = 0;
+  int end_character = 0;
+  const JsonValue *range = json_object_get(item, "selectionRange");
+  if (!parse_range_start(range, line, character, end_line, end_character)) {
+    range = json_object_get(item, "range");
+    if (!parse_range_start(range, line, character, end_line, end_character)) {
+      return;
+    }
+  }
+
+  int kind = json_int_or_default(json_object_get(item, "kind"), 0);
+  LSPSymbol symbol;
+  symbol.name = std::move(name);
+  symbol.kind = symbol_kind_name(kind);
+  symbol.detail = json_string_or_empty(json_object_get(item, "detail"));
+  symbol.filepath = filepath;
+  symbol.line = line;
+  symbol.character = character;
+  symbol.end_line = end_line;
+  symbol.end_character = end_character;
+  out.push_back(std::move(symbol));
+
+  const JsonValue *children = json_object_get(item, "children");
+  if (children && children->type == JsonValue::Array) {
+    for (const auto &child : children->array_value) {
+      append_document_symbol(child, filepath, out);
+    }
+  }
+}
+
+void append_symbol_information(const JsonValue &item,
+                               const std::string &fallback_filepath,
+                               std::vector<LSPSymbol> &out) {
+  if (item.type != JsonValue::Object) {
+    return;
+  }
+  std::string name = json_string_or_empty(json_object_get(item, "name"));
+  if (name.empty()) {
+    return;
+  }
+  const JsonValue *location = json_object_get(item, "location");
+  if (!location || location->type != JsonValue::Object) {
+    return;
+  }
+  const JsonValue *uri = json_object_get(*location, "uri");
+  const JsonValue *range = json_object_get(*location, "range");
+  int line = 0;
+  int character = 0;
+  int end_line = 0;
+  int end_character = 0;
+  if (!parse_range_start(range, line, character, end_line, end_character)) {
+    return;
+  }
+
+  int kind = json_int_or_default(json_object_get(item, "kind"), 0);
+  LSPSymbol symbol;
+  symbol.name = std::move(name);
+  symbol.kind = symbol_kind_name(kind);
+  symbol.detail =
+      json_string_or_empty(json_object_get(item, "containerName"));
+  symbol.filepath =
+      uri && uri->type == JsonValue::String ? from_file_uri(uri->string_value)
+                                            : fallback_filepath;
+  symbol.line = line;
+  symbol.character = character;
+  symbol.end_line = end_line;
+  symbol.end_character = end_character;
+  if (!symbol.filepath.empty()) {
+    out.push_back(std::move(symbol));
+  }
+}
+
+std::vector<LSPSymbol> document_symbols_from_result(
+    const JsonValue &result, const std::string &filepath) {
+  std::vector<LSPSymbol> symbols;
+  if (result.type != JsonValue::Array) {
+    return symbols;
+  }
+  for (const auto &item : result.array_value) {
+    if (item.type != JsonValue::Object) {
+      continue;
+    }
+    if (json_object_get(item, "location")) {
+      append_symbol_information(item, filepath, symbols);
+    } else {
+      append_document_symbol(item, filepath, symbols);
+    }
+  }
+  return symbols;
+}
 } // namespace
 
 LSPClient::LSPClient(const std::string &language_name,
@@ -798,9 +960,11 @@ bool LSPClient::start() {
   pending_completion_requests.clear();
   pending_hover_requests.clear();
   pending_definition_requests.clear();
+  pending_document_symbol_requests.clear();
   pending_completions.clear();
   pending_hovers.clear();
   pending_definitions.clear();
+  pending_document_symbols.clear();
   stdout_buffer.clear();
   stderr_buffer.clear();
   outbound_buffer.clear();
@@ -838,7 +1002,11 @@ bool LSPClient::start() {
        << "\"hover\":{\"dynamicRegistration\":false,"
        << "\"contentFormat\":[\"markdown\",\"plaintext\"]},"
        << "\"definition\":{\"dynamicRegistration\":false,"
-       << "\"linkSupport\":true}"
+       << "\"linkSupport\":true},"
+       << "\"documentSymbol\":{\"dynamicRegistration\":false,"
+       << "\"hierarchicalDocumentSymbolSupport\":true,"
+       << "\"symbolKind\":{\"valueSet\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,"
+          "16,17,18,19,20,21,22,23,24,25,26]}}"
        << "}"
        << "},"
        << "\"workspaceFolders\":[{\"uri\":\""
@@ -892,9 +1060,11 @@ void LSPClient::stop() {
   pending_completion_requests.clear();
   pending_hover_requests.clear();
   pending_definition_requests.clear();
+  pending_document_symbol_requests.clear();
   pending_completions.clear();
   pending_hovers.clear();
   pending_definitions.clear();
+  pending_document_symbols.clear();
   outbound_buffer.clear();
 }
 
@@ -998,6 +1168,18 @@ void LSPClient::handle_stdout_data(const std::string &data) {
       }
       pending_definitions.push_back(std::move(definition));
       pending_definition_requests.erase(definition_it);
+      continue;
+    }
+
+    auto symbol_it = pending_document_symbol_requests.find(request_id);
+    if (symbol_it != pending_document_symbol_requests.end()) {
+      LSPDocumentSymbolResult symbols;
+      symbols.filepath = symbol_it->second;
+      if (result) {
+        symbols.symbols = document_symbols_from_result(*result, symbols.filepath);
+      }
+      pending_document_symbols.push_back(std::move(symbols));
+      pending_document_symbol_requests.erase(symbol_it);
       continue;
     }
   }
@@ -1232,6 +1414,33 @@ bool LSPClient::request_definition(const std::string &filepath, int line,
   return true;
 }
 
+bool LSPClient::request_document_symbols(const std::string &filepath) {
+  if (!running) {
+    return false;
+  }
+
+  std::string abs_path = fs::absolute(filepath).string();
+  int request_id = next_request_id++;
+  pending_document_symbol_requests[request_id] = abs_path;
+
+  std::ostringstream json;
+  json << "{"
+       << "\"jsonrpc\":\"2.0\","
+       << "\"id\":" << request_id << ","
+       << "\"method\":\"textDocument/documentSymbol\","
+       << "\"params\":{"
+       << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path))
+       << "\"}"
+       << "}"
+       << "}";
+
+  if (!send_message(json.str())) {
+    pending_document_symbol_requests.erase(request_id);
+    return false;
+  }
+  return true;
+}
+
 std::vector<std::pair<std::string, std::vector<Diagnostic>>>
 LSPClient::consume_published_diagnostics() {
   auto out = std::move(pending_diagnostics);
@@ -1255,6 +1464,13 @@ std::vector<LSPHoverResult> LSPClient::consume_hover_results() {
 std::vector<LSPDefinitionResult> LSPClient::consume_definition_results() {
   auto out = std::move(pending_definitions);
   pending_definitions.clear();
+  return out;
+}
+
+std::vector<LSPDocumentSymbolResult>
+LSPClient::consume_document_symbol_results() {
+  auto out = std::move(pending_document_symbols);
+  pending_document_symbols.clear();
   return out;
 }
 

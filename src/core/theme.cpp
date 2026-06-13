@@ -77,6 +77,7 @@ void Editor::apply_theme(const std::string &name, bool persist, bool announce) {
     set_message("Unknown theme: " + requested);
     return;
   }
+  theme.normalize_syntax_palette();
 
   current_theme_name = resolved;
   if (persist) {

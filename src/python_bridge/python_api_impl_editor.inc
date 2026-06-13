@@ -109,6 +109,14 @@ void PythonAPI::py_set_theme_color(const std::string &name, int fg, int bg) {
     if (bg != -1)
       slot_bg = bg;
   };
+  auto mark_syntax_pair = [&](SyntaxThemeSlot slot) {
+    if (fg != -1 || bg != -1)
+      theme.mark_syntax_slot_explicit(slot);
+  };
+  auto mark_syntax_fg = [&](SyntaxThemeSlot slot) {
+    if (fg != -1)
+      theme.mark_syntax_slot_explicit(slot);
+  };
 
   if (name == "default" || name == "normal") {
     set_pair(theme.fg_default, theme.bg_default);
@@ -124,6 +132,77 @@ void PythonAPI::py_set_theme_color(const std::string &name, int fg, int bg) {
     set_pair(theme.fg_function, theme.bg_function);
   } else if (name == "type") {
     set_pair(theme.fg_type, theme.bg_type);
+  } else if (name == "variable") {
+    mark_syntax_pair(SyntaxThemeSlot::Variable);
+    set_pair(theme.fg_variable, theme.bg_variable);
+  } else if (name == "constant") {
+    mark_syntax_pair(SyntaxThemeSlot::Constant);
+    set_pair(theme.fg_constant, theme.bg_constant);
+  } else if (name == "builtin") {
+    mark_syntax_pair(SyntaxThemeSlot::Builtin);
+    set_pair(theme.fg_builtin, theme.bg_builtin);
+  } else if (name == "operator") {
+    mark_syntax_pair(SyntaxThemeSlot::Operator);
+    set_pair(theme.fg_operator, theme.bg_operator);
+  } else if (name == "punctuation") {
+    mark_syntax_pair(SyntaxThemeSlot::Punctuation);
+    set_pair(theme.fg_punctuation, theme.bg_punctuation);
+  } else if (name == "tag") {
+    mark_syntax_pair(SyntaxThemeSlot::Tag);
+    set_pair(theme.fg_tag, theme.bg_tag);
+  } else if (name == "attribute") {
+    mark_syntax_pair(SyntaxThemeSlot::Attribute);
+    set_pair(theme.fg_attribute, theme.bg_attribute);
+  } else if (name == "namespace") {
+    mark_syntax_pair(SyntaxThemeSlot::Namespace);
+    set_pair(theme.fg_namespace, theme.bg_namespace);
+  } else if (name == "module") {
+    mark_syntax_pair(SyntaxThemeSlot::Module);
+    set_pair(theme.fg_module, theme.bg_module);
+  } else if (name == "parameter") {
+    mark_syntax_pair(SyntaxThemeSlot::Parameter);
+    set_pair(theme.fg_parameter, theme.bg_parameter);
+  } else if (name == "field" || name == "property") {
+    mark_syntax_pair(SyntaxThemeSlot::Field);
+    set_pair(theme.fg_field, theme.bg_field);
+  } else if (name == "keyword_control" || name == "keyword.control") {
+    mark_syntax_pair(SyntaxThemeSlot::KeywordControl);
+    set_pair(theme.fg_keyword_control, theme.bg_keyword_control);
+  } else if (name == "keyword_storage" || name == "keyword.storage" ||
+             name == "keyword_modifier" || name == "keyword.modifier") {
+    mark_syntax_pair(SyntaxThemeSlot::KeywordStorage);
+    set_pair(theme.fg_keyword_storage, theme.bg_keyword_storage);
+  } else if (name == "keyword_preproc" || name == "keyword_preprocessor" ||
+             name == "keyword.directive" || name == "keyword.import") {
+    mark_syntax_pair(SyntaxThemeSlot::KeywordPreproc);
+    set_pair(theme.fg_keyword_preproc, theme.bg_keyword_preproc);
+  } else if (name == "function_method" || name == "method" ||
+             name == "function.method") {
+    mark_syntax_pair(SyntaxThemeSlot::FunctionMethod);
+    set_pair(theme.fg_function_method, theme.bg_function_method);
+  } else if (name == "function_constructor" || name == "constructor" ||
+             name == "function.constructor") {
+    mark_syntax_pair(SyntaxThemeSlot::FunctionConstructor);
+    set_pair(theme.fg_function_constructor, theme.bg_function_constructor);
+  } else if (name == "type_builtin" || name == "type.builtin") {
+    mark_syntax_pair(SyntaxThemeSlot::TypeBuiltin);
+    set_pair(theme.fg_type_builtin, theme.bg_type_builtin);
+  } else if (name == "constant_macro" || name == "constant.macro" ||
+             name == "constant_predefined") {
+    mark_syntax_pair(SyntaxThemeSlot::ConstantMacro);
+    set_pair(theme.fg_constant_macro, theme.bg_constant_macro);
+  } else if (name == "string_escape" || name == "string.escape") {
+    mark_syntax_pair(SyntaxThemeSlot::StringEscape);
+    set_pair(theme.fg_string_escape, theme.bg_string_escape);
+  } else if (name == "punctuation_bracket" ||
+             name == "punctuation.bracket") {
+    mark_syntax_pair(SyntaxThemeSlot::PunctuationBracket);
+    set_pair(theme.fg_punctuation_bracket, theme.bg_punctuation_bracket);
+  } else if (name == "punctuation_delimiter" ||
+             name == "punctuation.delimiter") {
+    mark_syntax_pair(SyntaxThemeSlot::PunctuationDelimiter);
+    set_pair(theme.fg_punctuation_delimiter,
+             theme.bg_punctuation_delimiter);
   } else if (name == "panel_border" || name == "border") {
     set_pair(theme.fg_panel_border, theme.bg_panel_border);
   } else if (name == "selection" || name == "visual" || name == "bg_selection" ||
@@ -265,5 +344,71 @@ void PythonAPI::py_set_theme_color(const std::string &name, int fg, int bg) {
     set_fg(theme.fg_type);
   } else if (name == "fg_number") {
     set_fg(theme.fg_number);
+  } else if (name == "fg_variable") {
+    mark_syntax_fg(SyntaxThemeSlot::Variable);
+    set_fg(theme.fg_variable);
+  } else if (name == "fg_constant") {
+    mark_syntax_fg(SyntaxThemeSlot::Constant);
+    set_fg(theme.fg_constant);
+  } else if (name == "fg_builtin") {
+    mark_syntax_fg(SyntaxThemeSlot::Builtin);
+    set_fg(theme.fg_builtin);
+  } else if (name == "fg_operator") {
+    mark_syntax_fg(SyntaxThemeSlot::Operator);
+    set_fg(theme.fg_operator);
+  } else if (name == "fg_punctuation") {
+    mark_syntax_fg(SyntaxThemeSlot::Punctuation);
+    set_fg(theme.fg_punctuation);
+  } else if (name == "fg_tag") {
+    mark_syntax_fg(SyntaxThemeSlot::Tag);
+    set_fg(theme.fg_tag);
+  } else if (name == "fg_attribute") {
+    mark_syntax_fg(SyntaxThemeSlot::Attribute);
+    set_fg(theme.fg_attribute);
+  } else if (name == "fg_namespace") {
+    mark_syntax_fg(SyntaxThemeSlot::Namespace);
+    set_fg(theme.fg_namespace);
+  } else if (name == "fg_module") {
+    mark_syntax_fg(SyntaxThemeSlot::Module);
+    set_fg(theme.fg_module);
+  } else if (name == "fg_parameter") {
+    mark_syntax_fg(SyntaxThemeSlot::Parameter);
+    set_fg(theme.fg_parameter);
+  } else if (name == "fg_field" || name == "fg_property") {
+    mark_syntax_fg(SyntaxThemeSlot::Field);
+    set_fg(theme.fg_field);
+  } else if (name == "fg_keyword_control") {
+    mark_syntax_fg(SyntaxThemeSlot::KeywordControl);
+    set_fg(theme.fg_keyword_control);
+  } else if (name == "fg_keyword_storage" ||
+             name == "fg_keyword_modifier") {
+    mark_syntax_fg(SyntaxThemeSlot::KeywordStorage);
+    set_fg(theme.fg_keyword_storage);
+  } else if (name == "fg_keyword_preproc" ||
+             name == "fg_keyword_preprocessor") {
+    mark_syntax_fg(SyntaxThemeSlot::KeywordPreproc);
+    set_fg(theme.fg_keyword_preproc);
+  } else if (name == "fg_function_method" || name == "fg_method") {
+    mark_syntax_fg(SyntaxThemeSlot::FunctionMethod);
+    set_fg(theme.fg_function_method);
+  } else if (name == "fg_function_constructor" ||
+             name == "fg_constructor") {
+    mark_syntax_fg(SyntaxThemeSlot::FunctionConstructor);
+    set_fg(theme.fg_function_constructor);
+  } else if (name == "fg_type_builtin") {
+    mark_syntax_fg(SyntaxThemeSlot::TypeBuiltin);
+    set_fg(theme.fg_type_builtin);
+  } else if (name == "fg_constant_macro") {
+    mark_syntax_fg(SyntaxThemeSlot::ConstantMacro);
+    set_fg(theme.fg_constant_macro);
+  } else if (name == "fg_string_escape") {
+    mark_syntax_fg(SyntaxThemeSlot::StringEscape);
+    set_fg(theme.fg_string_escape);
+  } else if (name == "fg_punctuation_bracket") {
+    mark_syntax_fg(SyntaxThemeSlot::PunctuationBracket);
+    set_fg(theme.fg_punctuation_bracket);
+  } else if (name == "fg_punctuation_delimiter") {
+    mark_syntax_fg(SyntaxThemeSlot::PunctuationDelimiter);
+    set_fg(theme.fg_punctuation_delimiter);
   }
 }

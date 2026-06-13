@@ -88,8 +88,12 @@ std::string source_build_command(const TreeSitterCatalogEntry &entry,
   cmd << "echo '[jot:treesitter] link " << entry.name << "'; ";
   cmd << "$cxx \"$linkflag\" \"$@\" -o \"$libdir/$libfile\"; ";
   cmd << "echo '[jot:treesitter] query " << entry.name << "'; ";
-  cmd << "if [ -f \"$work/queries/highlights.scm\" ]; then "
-         "cp \"$work/queries/highlights.scm\" \"$querydir/highlights.scm\"; "
+  cmd << "if [ -d \"$work/queries\" ]; then "
+         "find \"$work/queries\" -maxdepth 1 -type f -name '*.scm' "
+         "-exec cp {} \"$querydir/\" \\;; "
+         "fi; ";
+  cmd << "if [ -f \"$work/highlights.scm\" ]; then "
+         "cp \"$work/highlights.scm\" \"$querydir/highlights.scm\"; "
          "fi; ";
   cmd << "echo '[jot:treesitter] success " << entry.name << "'; ";
   cmd << "trap - EXIT";
