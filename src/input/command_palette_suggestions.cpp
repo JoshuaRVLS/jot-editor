@@ -138,6 +138,8 @@ const std::vector<CommandMeta> &command_palette_metadata() {
       {"tsinstall", "Tree-sitter", "Install Tree-sitter grammar", 68},
       {"treesitterinstall", "Tree-sitter", "Install Tree-sitter grammar", 64},
       {"tsstatus", "Tree-sitter", "Show syntax engine status", 66},
+      {"tsreload", "Tree-sitter", "Reload parser libraries", 64},
+      {"treesitterreload", "Tree-sitter", "Reload parser libraries", 60},
       {"gitstatus", "Git", "Show git status", 75},
       {"gitdiff", "Git", "Show git diff for file", 75},
       {"gitdiffstaged", "Git", "Show staged git diff for file", 74},
