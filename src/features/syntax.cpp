@@ -59,7 +59,7 @@ CaptureStyle capture_style_for_name(std::string_view sv) {
   }
   if (sv == "attribute" || has_prefix("attribute.") ||
       sv == "tag.attribute") {
-    return {TS_TOKEN_ATTRIBUTE, 85};
+    return {TS_TOKEN_ATTRIBUTE, 91};
   }
   if (sv == "tag" || has_prefix("tag.")) {
     return {TS_TOKEN_TAG, 86};

@@ -253,6 +253,21 @@ install_typescript_lsp() {
   return 1
 }
 
+install_html_lsp() {
+  if command -v vscode-html-language-server >/dev/null 2>&1; then
+    echo "[jot:lsp] vscode-html-language-server already installed"
+    return 0
+  fi
+  if command -v npm >/dev/null 2>&1; then
+    if attempt_cmd "Installing vscode HTML language server via npm -g" \
+      run_maybe_sudo npm install -g vscode-langservers-extracted; then
+      return 0
+    fi
+  fi
+  echo "[jot:lsp] Warning: unable to install vscode-html-language-server automatically." >&2
+  return 1
+}
+
 install_bash_lsp() {
   if command -v bash-language-server >/dev/null 2>&1; then
     echo "[jot:lsp] bash-language-server already installed"
@@ -576,11 +591,12 @@ install_required_native_deps() {
 }
 
 install_builtin_lsps() {
-  echo "[jot:lsp] Installing built-in LSP servers (python/typescript/cpp/rust/go/lua/bash)"
+  echo "[jot:lsp] Installing built-in LSP servers (python/typescript/js/jsx/tsx/html/cpp/rust/go/lua/bash)"
   local failures=0
 
   install_python_lsp || failures=$((failures + 1))
   install_typescript_lsp || failures=$((failures + 1))
+  install_html_lsp || failures=$((failures + 1))
   install_clangd || failures=$((failures + 1))
   install_rust_analyzer || failures=$((failures + 1))
   install_gopls || failures=$((failures + 1))

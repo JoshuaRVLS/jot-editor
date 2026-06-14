@@ -367,8 +367,9 @@ void Editor::refresh_command_palette() {
         add_arg(path, "Program", "Debug executable path", 110);
       }
     } else if (lcmd == "lspinstall" || lcmd == "lspremove") {
-      const std::vector<std::string> opts = {"python", "typescript", "cpp",
-                                             "rust", "go", "lua", "bash", "html"};
+      const std::vector<std::string> opts = {
+          "python", "typescript", "javascript", "jsx", "tsx", "cpp",
+          "rust",   "go",         "lua",        "bash", "html"};
       for (const auto &opt : opts) {
         add_arg(opt, "LSP", "Language server", 110);
       }

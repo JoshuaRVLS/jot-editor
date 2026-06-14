@@ -6,6 +6,7 @@
 TEST(TestTreeSitterInstallLanguageValidation) {
   ASSERT_TRUE(TreeSitterInstall::is_supported_language("cpp"));
   ASSERT_TRUE(TreeSitterInstall::is_supported_language("CPP"));
+  ASSERT_TRUE(TreeSitterInstall::is_supported_language("jsx"));
   ASSERT_TRUE(TreeSitterInstall::is_supported_language(
       "https://github.com/tree-sitter/tree-sitter-zig"));
   ASSERT_TRUE(TreeSitterInstall::is_supported_language(
@@ -45,6 +46,18 @@ TEST(TestTreeSitterInstallCommandMapping) {
   ASSERT_TRUE(cpp.command.find("find \"$work/queries\"") !=
               std::string::npos);
   ASSERT_TRUE(cpp.command.find("-name '*.scm'") != std::string::npos);
+
+  auto javascript = TreeSitterInstall::command_for_language("javascript");
+  ASSERT_TRUE(javascript.supported);
+  ASSERT_EQ(javascript.language, "javascript");
+  ASSERT_TRUE(javascript.command.find("github.com/tree-sitter/tree-sitter-javascript") !=
+              std::string::npos);
+
+  auto jsx = TreeSitterInstall::command_for_language("jsx");
+  ASSERT_TRUE(jsx.supported);
+  ASSERT_EQ(jsx.language, "javascript");
+  ASSERT_TRUE(jsx.command.find("github.com/tree-sitter/tree-sitter-javascript") !=
+              std::string::npos);
 
   auto typescript = TreeSitterInstall::command_for_language("typescript");
   ASSERT_TRUE(typescript.supported);

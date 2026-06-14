@@ -52,12 +52,24 @@ std::string to_file_uri(const std::string &path) {
   return uri;
 }
 
+bool ends_with(const std::string &s, const std::string &suffix) {
+  return s.size() >= suffix.size() &&
+         s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
 std::string language_id_for(const std::string &language,
                             const std::string &filepath) {
   if (language == "typescript") {
     std::string lower = filepath;
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-    if (lower.size() >= 3 && lower.substr(lower.size() - 3) == ".js") {
+    if (ends_with(lower, ".jsx")) {
+      return "javascriptreact";
+    }
+    if (ends_with(lower, ".tsx")) {
+      return "typescriptreact";
+    }
+    if (ends_with(lower, ".js") || ends_with(lower, ".mjs") ||
+        ends_with(lower, ".cjs")) {
       return "javascript";
     }
     return "typescript";

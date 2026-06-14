@@ -35,6 +35,14 @@ std::string library_stem(const TreeSitterCatalogEntry &entry) {
   return name;
 }
 
+std::string normalize_install_language(const std::string &language) {
+  std::string normalized = TreeSitterCatalog::normalize_language_name(language);
+  if (normalized == "jsx") {
+    return "javascript";
+  }
+  return normalized;
+}
+
 std::string source_build_command(const TreeSitterCatalogEntry &entry,
                                  const std::string &prefix) {
   const std::string lib_stem = library_stem(entry);
@@ -103,13 +111,19 @@ std::string source_build_command(const TreeSitterCatalogEntry &entry,
 
 namespace TreeSitterInstall {
 const std::vector<std::string> &supported_languages() {
-  static const std::vector<std::string> languages =
-      TreeSitterCatalog::language_names();
+  static const std::vector<std::string> languages = [] {
+    std::vector<std::string> out = TreeSitterCatalog::language_names();
+    if (std::find(out.begin(), out.end(), "jsx") == out.end()) {
+      auto js = std::find(out.begin(), out.end(), "javascript");
+      out.insert(js == out.end() ? out.end() : js + 1, "jsx");
+    }
+    return out;
+  }();
   return languages;
 }
 
 bool is_supported_language(const std::string &language) {
-  std::string normalized = TreeSitterCatalog::normalize_language_name(language);
+  std::string normalized = normalize_install_language(language);
   return TreeSitterCatalog::find_language(normalized) != nullptr ||
          TreeSitterCatalog::is_github_url(language);
 }
@@ -121,7 +135,7 @@ TreeSitterInstallCommand command_for_language(const std::string &language) {
 TreeSitterInstallCommand command_for_language(const std::string &language,
                                              const std::string &prefix) {
   TreeSitterInstallCommand result;
-  result.language = TreeSitterCatalog::normalize_language_name(language);
+  result.language = normalize_install_language(language);
   TreeSitterCatalogEntry url_entry;
   const TreeSitterCatalogEntry *entry = TreeSitterCatalog::find_language(result.language);
   if (!entry && TreeSitterCatalog::is_github_url(language)) {

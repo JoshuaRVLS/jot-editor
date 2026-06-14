@@ -23,15 +23,21 @@ std::string to_lower_copy(std::string s) {
   return s;
 }
 
+bool ends_with(const std::string &s, const std::string &suffix) {
+  return s.size() >= suffix.size() &&
+         s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
 std::string detect_lsp_language(const std::string &filepath) {
   std::string lower = filepath;
   std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 
   if (lower.size() >= 3 && lower.substr(lower.size() - 3) == ".py")
     return "python";
-  if (lower.size() >= 3 &&
-      (lower.substr(lower.size() - 3) == ".ts" ||
-       lower.substr(lower.size() - 3) == ".js"))
+  if (ends_with(lower, ".ts") || ends_with(lower, ".tsx") ||
+      ends_with(lower, ".mts") || ends_with(lower, ".cts") ||
+      ends_with(lower, ".js") || ends_with(lower, ".jsx") ||
+      ends_with(lower, ".mjs") || ends_with(lower, ".cjs"))
     return "typescript";
   if (lower.size() >= 2 &&
       (lower.substr(lower.size() - 2) == ".c" || lower.substr(lower.size() - 2) == ".h"))
@@ -50,8 +56,7 @@ std::string detect_lsp_language(const std::string &filepath) {
       (lower.size() >= 5 && lower.substr(lower.size() - 5) == ".bash") ||
       (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".zsh"))
     return "bash";
-  if ((lower.size() >= 5 && lower.substr(lower.size() - 5) == ".html") ||
-      (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".html"))
+  if (ends_with(lower, ".html") || ends_with(lower, ".htm"))
     return "html";
   return "";
 }
@@ -149,7 +154,12 @@ std::string language_id_for(const std::string &language, const std::string &file
   if (language == "typescript") {
     std::string lower = filepath;
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-    if (lower.size() >= 3 && lower.substr(lower.size() - 3) == ".js")
+    if (ends_with(lower, ".jsx"))
+      return "javascriptreact";
+    if (ends_with(lower, ".tsx"))
+      return "typescriptreact";
+    if (ends_with(lower, ".js") || ends_with(lower, ".mjs") ||
+        ends_with(lower, ".cjs"))
       return "javascript";
     return "typescript";
   }
@@ -281,8 +291,14 @@ int completion_match_score(const std::string &query, const LSPCompletionItem &it
   return score;
 }
 
-std::string snippet_to_plain_text(const std::string &snippet) {
-  std::string out;
+struct SnippetExpansion {
+  std::string text;
+  int cursor_offset = -1;
+};
+
+SnippetExpansion expand_lsp_snippet(const std::string &snippet) {
+  SnippetExpansion expansion;
+  std::string &out = expansion.text;
   out.reserve(snippet.size());
 
   for (size_t i = 0; i < snippet.size(); i++) {
@@ -300,12 +316,18 @@ std::string snippet_to_plain_text(const std::string &snippet) {
     }
 
     if (i + 1 >= snippet.size()) {
+      out.push_back(c);
       continue;
     }
     if (std::isdigit((unsigned char)snippet[i + 1])) {
+      size_t start = i + 1;
       while (i + 1 < snippet.size() &&
              std::isdigit((unsigned char)snippet[i + 1])) {
         i++;
+      }
+      int tabstop = std::atoi(snippet.substr(start, i - start + 1).c_str());
+      if (tabstop == 0 || expansion.cursor_offset < 0) {
+        expansion.cursor_offset = (int)out.size();
       }
       continue;
     }
@@ -322,15 +344,40 @@ std::string snippet_to_plain_text(const std::string &snippet) {
         i = snippet.size();
       }
 
-      size_t colon = inner.find(':');
-      if (colon != std::string::npos && colon + 1 < inner.size()) {
-        out.append(inner.substr(colon + 1));
+      size_t pos = 0;
+      while (pos < inner.size() &&
+             std::isdigit((unsigned char)inner[pos])) {
+        pos++;
       }
+      int tabstop = pos > 0 ? std::atoi(inner.substr(0, pos).c_str()) : -1;
+      std::string value;
+      if (pos < inner.size() && inner[pos] == ':') {
+        value = inner.substr(pos + 1);
+      } else if (pos < inner.size() && inner[pos] == '|') {
+        size_t end = inner.find('|', pos + 1);
+        std::string choices =
+            end == std::string::npos ? inner.substr(pos + 1)
+                                     : inner.substr(pos + 1, end - pos - 1);
+        size_t comma = choices.find(',');
+        value = choices.substr(0, comma);
+      } else if (pos == 0) {
+        size_t colon = inner.find(':');
+        value = colon == std::string::npos ? "" : inner.substr(colon + 1);
+      }
+
+      if (tabstop == 0 || (tabstop > 0 && expansion.cursor_offset < 0)) {
+        expansion.cursor_offset = (int)out.size();
+      }
+      out.append(value);
       continue;
     }
+    out.push_back(c);
   }
 
-  return out;
+  if (expansion.cursor_offset < 0) {
+    expansion.cursor_offset = (int)out.size();
+  }
+  return expansion;
 }
 
 bool same_path(const std::string &a, const std::string &b) {
@@ -416,7 +463,8 @@ std::string normalize_lsp_server_name(const std::string &raw) {
   if (n == "py" || n == "pylsp") {
     return "python";
   }
-  if (n == "ts" || n == "js" || n == "javascript") {
+  if (n == "ts" || n == "js" || n == "javascript" || n == "jsx" ||
+      n == "tsx" || n == "typescript-language-server") {
     return "typescript";
   }
   if (n == "c" || n == "c++" || n == "clangd") {
@@ -439,7 +487,7 @@ std::string normalize_lsp_server_name(const std::string &raw) {
       n == "go" || n == "lua" || n == "bash") {
     return n;
   }
-  if (n  == "html" || n == "html" || n == "vscode-html-language-server") {
+  if (n == "html" || n == "htm" || n == "vscode-html-language-server") {
     return "html";
   }
   return "";
@@ -485,6 +533,15 @@ bool is_html_filepath(const std::string &filepath) {
   std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
   return (lower.size() >= 5 && lower.substr(lower.size() - 5) == ".html") ||
          (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".htm");
+}
+
+bool is_script_lsp_filepath(const std::string &filepath) {
+  std::string lower = filepath;
+  std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+  return ends_with(lower, ".js") || ends_with(lower, ".jsx") ||
+         ends_with(lower, ".mjs") || ends_with(lower, ".cjs") ||
+         ends_with(lower, ".ts") || ends_with(lower, ".tsx") ||
+         ends_with(lower, ".mts") || ends_with(lower, ".cts");
 }
 
 void append_html_builtin_completions(std::vector<LSPCompletionItem> &items) {
@@ -840,7 +897,8 @@ void Editor::show_lsp_manager() {
       std::string("python      [") +
           (is_lsp_server_installed("python") ? "installed" : "missing") + "]",
       std::string("typescript  [") +
-          (is_lsp_server_installed("typescript") ? "installed" : "missing") + "]",
+          (is_lsp_server_installed("typescript") ? "installed" : "missing") +
+          "] js/jsx/ts/tsx",
       std::string("cpp         [") +
           (is_lsp_server_installed("cpp") ? "installed" : "missing") + "]",
       std::string("rust        [") +
@@ -853,8 +911,8 @@ void Editor::show_lsp_manager() {
           (is_lsp_server_installed("bash") ? "installed" : "missing") + "]",
       "",
       "Use:",
-      ":lspinstall <python|typescript|cpp|rust|go|lua|bash|html>",
-      ":lspremove <python|typescript|cpp|rust|go|lua|bash|html>",
+      ":lspinstall <python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>",
+      ":lspremove <python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>",
       ":lspstart :lspstatus :lspstop :lsprestart"};
   show_popup([&lines]() {
     std::string out;
@@ -872,7 +930,7 @@ bool Editor::install_lsp_server(const std::string &name) {
   const std::string server = normalize_lsp_server_name(name);
   if (server.empty()) {
     set_message("Unknown LSP server: " + name +
-                " (use python|typescript|cpp|rust|go|lua|bash|html)");
+                " (use python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html)");
     return false;
   }
 
@@ -931,7 +989,7 @@ bool Editor::remove_lsp_server(const std::string &name) {
   const std::string server = normalize_lsp_server_name(name);
   if (server.empty()) {
     set_message("Unknown LSP server: " + name +
-                " (use python|typescript|cpp|rust|go|lua|bash|html)");
+                " (use python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html)");
     return false;
   }
 
@@ -1095,10 +1153,11 @@ void Editor::request_lsp_completion(bool manual, char trigger_character) {
       i--;
     }
     bool html_file = is_html_filepath(buf.filepath);
+    bool script_file = is_script_lsp_filepath(buf.filepath);
     bool punctuation_trigger = trigger_character == '.' || trigger_character == ':' ||
                                trigger_character == '>' || trigger_character == '<' ||
                                trigger_character == '/';
-    int min_prefix = html_file ? 1 : 2;
+    int min_prefix = (html_file || script_file) ? 1 : 2;
     if (!punctuation_trigger && prefix_len < min_prefix) {
       return;
     }
@@ -1500,19 +1559,17 @@ bool Editor::apply_selected_lsp_completion() {
   const auto &item = lsp_completion_items[idx];
   std::string text = item.insert_text.empty() ? item.label : item.insert_text;
 
-  int cursor_marker = -1;
+  int cursor_offset = -1;
   size_t marker_pos = text.find('|');
   if (marker_pos != std::string::npos) {
-    cursor_marker = (int)marker_pos;
+    cursor_offset = (int)marker_pos;
     text.erase(marker_pos, 1);
   }
 
   if (item.insert_text_format == 2) {
-    text = snippet_to_plain_text(text);
-  }
-  size_t nl = text.find('\n');
-  if (nl != std::string::npos) {
-    text = text.substr(0, nl);
+    SnippetExpansion expansion = expand_lsp_snippet(text);
+    text = std::move(expansion.text);
+    cursor_offset = expansion.cursor_offset;
   }
   if (text.empty()) {
     hide_lsp_completion();
@@ -1545,8 +1602,45 @@ bool Editor::apply_selected_lsp_completion() {
     line.erase(start, cursor - start);
     cursor = start;
   }
-  line.insert(cursor, text);
-  buf.cursor.x = cursor + (cursor_marker >= 0 ? cursor_marker : (int)text.size());
+  std::string tail = line.substr(cursor);
+  line.erase(cursor);
+
+  size_t segment_start = 0;
+  std::vector<std::string> inserted_lines;
+  while (true) {
+    size_t nl = text.find('\n', segment_start);
+    if (nl == std::string::npos) {
+      inserted_lines.push_back(text.substr(segment_start));
+      break;
+    }
+    inserted_lines.push_back(text.substr(segment_start, nl - segment_start));
+    segment_start = nl + 1;
+  }
+  if (inserted_lines.empty()) {
+    inserted_lines.push_back("");
+  }
+
+  line.insert(cursor, inserted_lines.front());
+  int insert_line = buf.cursor.y;
+  for (size_t i = 1; i < inserted_lines.size(); i++) {
+    buf.lines.insert(buf.lines.begin() + insert_line + (int)i,
+                     inserted_lines[i]);
+  }
+  buf.line_mut(insert_line + (int)inserted_lines.size() - 1) += tail;
+
+  int target_offset = cursor_offset >= 0 ? cursor_offset : (int)text.size();
+  int target_line_delta = 0;
+  int target_col = cursor;
+  for (int i = 0; i < target_offset && i < (int)text.size(); i++) {
+    if (text[i] == '\n') {
+      target_line_delta++;
+      target_col = 0;
+    } else {
+      target_col++;
+    }
+  }
+  buf.cursor.y = insert_line + target_line_delta;
+  buf.cursor.x = target_col;
   buf.preferred_x = buf.cursor.x;
   buf.modified = true;
   buf.selection.active = false;

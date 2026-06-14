@@ -1,4 +1,5 @@
 #include "jot/editor_features.hpp"
+#include "html.h"
 #include "test_framework.h"
 
 TEST(TestIndentLevel) {
@@ -42,4 +43,38 @@ TEST(TestMatchingBracket) {
   match = EditorFeatures::find_matching_bracket(doc, 2, 0, '{', '}');
   expected = 0 * 10000 + 7;
   ASSERT_EQ(match, expected);
+}
+
+TEST(TestMarkupExtensions) {
+  ASSERT_TRUE(HtmlFeatures::is_html_extension("index.html"));
+  ASSERT_TRUE(HtmlFeatures::is_html_extension("index.htm"));
+  ASSERT_TRUE(HtmlFeatures::is_jsx_extension("view.jsx"));
+  ASSERT_TRUE(HtmlFeatures::is_jsx_extension("view.tsx"));
+  ASSERT_TRUE(HtmlFeatures::is_markup_tag_extension("view.tsx"));
+  ASSERT_TRUE(!HtmlFeatures::is_markup_tag_extension("view.ts"));
+}
+
+TEST(TestMarkupAutoCloseTag) {
+  std::string closing;
+  ASSERT_TRUE(HtmlFeatures::should_insert_closing_tag("<div>", 5, closing));
+  ASSERT_EQ(closing, "</div>");
+  ASSERT_TRUE(HtmlFeatures::should_insert_closing_tag("return <Component>", 18,
+                                                      closing));
+  ASSERT_EQ(closing, "</Component>");
+  ASSERT_TRUE(!HtmlFeatures::should_insert_closing_tag("<img>", 5, closing));
+  ASSERT_TRUE(!HtmlFeatures::should_insert_closing_tag("</div>", 6, closing));
+  ASSERT_TRUE(!HtmlFeatures::should_insert_closing_tag("foo<T>", 6, closing));
+  ASSERT_TRUE(!HtmlFeatures::should_insert_closing_tag("a < b>", 5, closing));
+}
+
+TEST(TestMarkupBetweenTags) {
+  std::string tag;
+  ASSERT_TRUE(
+      HtmlFeatures::is_between_matching_tags("<div>", "</div>", tag));
+  ASSERT_EQ(tag, "div");
+  ASSERT_TRUE(HtmlFeatures::is_between_matching_tags(
+      "return <Component>", "</Component>", tag));
+  ASSERT_EQ(tag, "Component");
+  ASSERT_TRUE(!HtmlFeatures::is_between_matching_tags("<img>", "", tag));
+  ASSERT_TRUE(!HtmlFeatures::is_between_matching_tags("foo<T>", "</T>", tag));
 }

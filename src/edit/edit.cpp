@@ -1,10 +1,9 @@
 #include "autoclose.h"
 #include "editor.h"
+#include "html.h"
 #include "text_features.h"
 #include "python_bridge/api.h"
 #include <cctype>
-#include "html.h"
-#include "html.h"
 
 bool Editor::insert_char(char c) {
   save_state();
@@ -78,7 +77,7 @@ bool Editor::insert_char(char c) {
     buf.cursor.x++;
 
 
-    if (c == '>' && HtmlFeatures::is_html_extension(buf.filepath)) {
+    if (c == '>' && HtmlFeatures::is_markup_tag_extension(buf.filepath)) {
       std::string closing;
       std::string &line = buf.line_mut(buf.cursor.y);
       if (HtmlFeatures::should_insert_closing_tag(line, buf.cursor.x, closing)) {
@@ -385,7 +384,7 @@ void Editor::new_line() {
     int indent = EditorFeatures::get_indent_level(buf.line_mut(buf.cursor.y));
 
     std::string html_tag;
-    if (HtmlFeatures::is_html_extension(buf.filepath) &&
+    if (HtmlFeatures::is_markup_tag_extension(buf.filepath) &&
         HtmlFeatures::is_between_matching_tags(buf.line_mut(buf.cursor.y), remaining, html_tag)) {
           int closing_indent = indent;
           int inner_indent = indent + tab_size;

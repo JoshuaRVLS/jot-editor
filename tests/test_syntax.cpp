@@ -15,7 +15,13 @@ TEST(TestTreeSitterLanguageRegistration) {
   ASSERT_TRUE(manager.has_language(".md"));
   ASSERT_TRUE(manager.has_language(".rb"));
   ASSERT_TRUE(manager.has_language(".vue"));
+  ASSERT_EQ(manager.language_id_for_extension(".js"), "javascript");
+  ASSERT_EQ(manager.language_id_for_extension(".jsx"), "javascript");
+  ASSERT_EQ(manager.language_id_for_extension(".mjs"), "javascript");
+  ASSERT_EQ(manager.language_id_for_extension(".cjs"), "javascript");
   ASSERT_EQ(manager.language_id_for_extension(".ts"), "typescript");
+  ASSERT_EQ(manager.language_id_for_extension(".mts"), "typescript");
+  ASSERT_EQ(manager.language_id_for_extension(".cts"), "typescript");
   ASSERT_EQ(manager.language_id_for_extension(".tsx"), "tsx");
   ASSERT_TRUE(!manager.has_language(".unknown"));
 }
@@ -125,6 +131,8 @@ TEST(TestTreeSitterCaptureMappingPriority) {
               tree_sitter_capture_priority_for_name("function"));
   ASSERT_TRUE(tree_sitter_capture_priority_for_name("function") >
               tree_sitter_capture_priority_for_name("type"));
+  ASSERT_TRUE(tree_sitter_capture_priority_for_name("tag.attribute") >
+              tree_sitter_capture_priority_for_name("property"));
 }
 
 TEST(TestTreeSitterBuiltInQueriesExposeRichCaptures) {
@@ -145,6 +153,39 @@ TEST(TestTreeSitterBuiltInQueriesExposeRichCaptures) {
   const TSLanguageEntry *json = manager.get_language(".json");
   ASSERT_TRUE(json != nullptr);
   ASSERT_TRUE(json->highlight_query_source.find("@property") !=
+              std::string::npos);
+
+  const TSLanguageEntry *javascript = manager.get_language(".jsx");
+  ASSERT_TRUE(javascript != nullptr);
+  ASSERT_EQ(javascript->language_id, "javascript");
+  ASSERT_TRUE(javascript->highlight_query_source.find("@tag") !=
+              std::string::npos);
+  ASSERT_TRUE(javascript->highlight_query_source.find("@tag.attribute") !=
+              std::string::npos);
+  ASSERT_TRUE(javascript->highlight_query_source.find(
+                  "(jsx_attribute (jsx_namespace_name) @tag.attribute)") !=
+              std::string::npos);
+  ASSERT_TRUE(javascript->highlight_query_source.find("@function.method") !=
+              std::string::npos);
+
+  const TSLanguageEntry *typescript = manager.get_language(".ts");
+  ASSERT_TRUE(typescript != nullptr);
+  ASSERT_TRUE(typescript->highlight_query_source.find("@type.builtin") !=
+              std::string::npos);
+  ASSERT_TRUE(typescript->highlight_query_source.find("@variable.parameter") !=
+              std::string::npos);
+
+  const TSLanguageEntry *tsx = manager.get_language(".tsx");
+  ASSERT_TRUE(tsx != nullptr);
+  ASSERT_EQ(tsx->language_id, "tsx");
+  ASSERT_TRUE(tsx->highlight_query_source.find("@tag") !=
+              std::string::npos);
+  ASSERT_TRUE(tsx->highlight_query_source.find("@tag.attribute") !=
+              std::string::npos);
+  ASSERT_TRUE(tsx->highlight_query_source.find(
+                  "(jsx_attribute (jsx_namespace_name) @tag.attribute)") !=
+              std::string::npos);
+  ASSERT_TRUE(tsx->highlight_query_source.find("@type.builtin") !=
               std::string::npos);
 }
 
@@ -270,6 +311,22 @@ TEST(TestTreeSitterCppQueryAvailableWhenParserInstalled) {
     ASSERT_TRUE(status.query_loaded);
   } else {
     ASSERT_TRUE(query == nullptr);
+  }
+}
+
+TEST(TestTreeSitterJsTsQueriesAvailableWhenParsersInstalled) {
+  TreeSitterManager manager;
+
+  for (const auto *ext : {".jsx", ".ts", ".tsx"}) {
+    TSQuery *query = manager.get_highlight_query(ext);
+    TreeSitterRuntimeStatus status =
+        manager.runtime_status_for_extension(ext);
+    if (status.parser_loaded) {
+      ASSERT_TRUE(query != nullptr);
+      ASSERT_TRUE(status.query_loaded);
+    } else {
+      ASSERT_TRUE(query == nullptr);
+    }
   }
 }
 

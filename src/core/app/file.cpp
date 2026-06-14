@@ -254,8 +254,9 @@ bool supports_prettier_on_save(const std::string &path) {
                  [](unsigned char c) { return (char)std::tolower(c); });
 
   static const std::set<std::string> exts = {
-      ".js",    ".jsx",  ".cjs",  ".mjs",  ".ts",   ".tsx",  ".json",
-      ".css",   ".scss", ".less", ".html", ".md",   ".mdx",  ".yaml",
+      ".js",    ".jsx",  ".cjs",  ".mjs",  ".ts",   ".tsx",  ".mts",
+      ".cts",   ".json", ".css",  ".scss", ".less", ".html", ".md",
+      ".mdx",   ".yaml",
       ".yml",   ".vue",  ".svelte", ".gql", ".graphql"};
 
   if (exts.find(ext) != exts.end()) {

@@ -180,7 +180,8 @@ Built-in fallback syntax rules cover common file types including:
 
 - C / C++: `.c`, `.cpp`, `.h`, `.hpp`
 - Python: `.py`
-- JavaScript / TypeScript: `.js`, `.ts`
+- JavaScript / JSX / TypeScript / TSX: `.js`, `.jsx`, `.mjs`, `.cjs`,
+  `.ts`, `.tsx`, `.mts`, `.cts`
 - HTML / XML: `.html`, `.xml`
 - Rust: `.rs`
 - CSS: `.css`
@@ -210,11 +211,13 @@ Built-in fallback syntax rules cover common file types including:
 Default language server commands:
 
 - Python: `pylsp`
-- JavaScript / TypeScript: `typescript-language-server --stdio`
+- JavaScript / JSX / TypeScript / TSX:
+  `typescript-language-server --stdio`
+- HTML: `vscode-html-language-server --stdio`
 - C / C++: `clangd`
 
 The LSP manager/install/remove helpers expose language entries for Python,
-TypeScript, C++, Rust, Go, Lua, and Bash.
+JavaScript/JSX/TypeScript/TSX, HTML, C++, Rust, Go, Lua, and Bash.
 
 ### Integrated Terminal And Tasks
 
@@ -499,8 +502,8 @@ Open the command palette with `Ctrl+P` and run ex-style commands.
 
 - `:lspstart`, `:lspstatus`, `:lspstop`, `:lsprestart`
 - `:lspmanager`
-- `:lspinstall <python|typescript|cpp|rust|go|lua|bash|html>`
-- `:lspremove <python|typescript|cpp|rust|go|lua|bash|html>`
+- `:lspinstall <python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>`
+- `:lspremove <python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>`
 - `:hover`, `:lsphover`
 - `:definition`, `:lspdefinition`, `:lspdef`, `:gd`
 - `:lspback`
@@ -508,6 +511,8 @@ Open the command palette with `Ctrl+P` and run ex-style commands.
 ### Tree-sitter
 
 - `:tsinstall <language>`, `:treesitterinstall <language>`
+- JavaScript / JSX: `:tsinstall javascript` or `:tsinstall jsx`
+- TypeScript / TSX: `:tsinstall typescript` and `:tsinstall tsx`
 - `:tsstatus`
 - `:tsreload`, `:treesitterreload`
 
