@@ -1,3 +1,13 @@
+// Python.h must be first so its macros precede C++ standard headers.
+#include <Python.h>
+
+#include "editor.h"
+#include "python_bridge/api.h"
+
+#include <algorithm>
+#include <string>
+#include <vector>
+
 // C++ implementations of the theme-facing Python API methods.
 void PythonAPI::py_show_message(const std::string &msg) {
   if (editor)

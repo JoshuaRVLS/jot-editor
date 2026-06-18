@@ -1,8 +1,4 @@
-"""Theme-only Python API for jot.
-
-The embedded interpreter is reserved for colorscheme discovery and application.
-It does not load user extension code or register editor commands/keybindings.
-"""
+"""Python API for jot themes and trusted local plugins."""
 
 import os
 import sys
@@ -18,6 +14,15 @@ except ImportError:
             return None
 
         def set_theme_color(self, *_args):
+            return None
+
+        def register_command(self, *_args):
+            return None
+
+        def get_current_buffer(self):
+            return ""
+
+        def set_current_buffer(self, *_args):
             return None
 
     core = MockCore()
@@ -163,6 +168,27 @@ def colors_path(*parts):
 
 def show_message(message):
     core.show_message(str(message))
+
+
+_plugin_callbacks = {}
+
+
+def command(name, detail="Plugin command"):
+    def decorator(fn):
+        callback = f"{fn.__module__}.{fn.__name__}"
+        _plugin_callbacks[callback] = fn
+        core.register_command(str(name), callback, str(detail))
+        return fn
+
+    return decorator
+
+
+def get_current_buffer():
+    return core.get_current_buffer()
+
+
+def set_current_buffer(text):
+    core.set_current_buffer(str(text))
 
 
 def set_theme_color(name, fg, bg):

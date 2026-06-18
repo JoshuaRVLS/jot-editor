@@ -1,6 +1,7 @@
 #include "commands/utils.h"
 #include "cpp_assist.h"
 #include "editor.h"
+#include "python_bridge/api.h"
 #include "tree_sitter/install.h"
 #include <algorithm>
 #include <cctype>
@@ -316,6 +317,17 @@ void Editor::refresh_command_palette() {
         add_result(c, c, meta ? meta->category : "Command",
                    meta ? meta->detail : "Run command",
                    score + (meta ? meta->priority : 40));
+      }
+    }
+    if (python_api) {
+      for (const auto &command : python_api->commands()) {
+        int score = fuzzy_score(command.name, needle);
+        if (needle.empty() || score >= 0) {
+          add_result(command.name, command.name, "Plugin",
+                     command.detail.empty() ? "Run plugin command"
+                                            : command.detail,
+                     score + 75);
+        }
       }
     }
   } else {

@@ -1,6 +1,7 @@
 #include "commands/utils.h"
 #include "cpp_assist.h"
 #include "editor.h"
+#include "python_bridge/api.h"
 
 #include <algorithm>
 #include <cctype>
@@ -169,6 +170,8 @@ bool Editor::execute_ex_command(const std::string &input_line) {
     // Nothing to execute, just close.
   } else if (parse_line_col(lcmd, parsed_line, parsed_col)) {
     goto_line_col(parsed_line, parsed_col);
+  } else if (python_api && python_api->run_plugin_command(lcmd, arg)) {
+    needs_redraw = true;
   } else if (lcmd == "q" || lcmd == "quit") {
     if (has_unsaved_buffers()) {
       show_quit_prompt = true;
@@ -327,8 +330,7 @@ bool Editor::execute_ex_command(const std::string &input_line) {
     command_palette_selected = 0;
     needs_redraw = true;
     return false;
-  } else if (lcmd == "grep" || lcmd == "projectsearch" ||
-             lcmd == "searchall") {
+  } else if (lcmd == "grep" || lcmd == "projectsearch" || lcmd == "searchall") {
     show_project_search(arg);
     return false;
   } else if (lcmd == "mkfile") {
@@ -375,7 +377,8 @@ bool Editor::execute_ex_command(const std::string &input_line) {
         source = first;
         source.replace_extension(".cpp");
       }
-      if (!CppAssist::is_header_path(header) || !CppAssist::is_source_path(source)) {
+      if (!CppAssist::is_header_path(header) ||
+          !CppAssist::is_source_path(source)) {
         set_message("cpppair expects a C++ header or source path");
       } else {
         bool created_any = false;
@@ -400,12 +403,14 @@ bool Editor::execute_ex_command(const std::string &input_line) {
           load_file_tree(root_dir);
         }
         open_file(header.string());
-        set_message(created_any ? "Created C++ pair" : "C++ pair already exists");
+        set_message(created_any ? "Created C++ pair"
+                                : "C++ pair already exists");
       }
     }
   } else if (lcmd == "cppimpl") {
     std::error_code ec;
-    fs::path target = arg.empty() ? fs::path(get_buffer().filepath) : resolve_path(arg);
+    fs::path target =
+        arg.empty() ? fs::path(get_buffer().filepath) : resolve_path(arg);
     if (target.empty()) {
       set_message("Usage: :cppimpl [header-or-source]");
     } else {
@@ -415,7 +420,8 @@ bool Editor::execute_ex_command(const std::string &input_line) {
       fs::path source = CppAssist::is_source_path(target)
                             ? target
                             : CppAssist::counterpart_path_for(header);
-      if (!CppAssist::is_header_path(header) || !CppAssist::is_source_path(source)) {
+      if (!CppAssist::is_header_path(header) ||
+          !CppAssist::is_source_path(source)) {
         set_message("cppimpl expects a C++ header or source file");
       } else if (!fs::exists(header, ec)) {
         set_message("Header not found: " + header.string());
@@ -582,13 +588,17 @@ bool Editor::execute_ex_command(const std::string &input_line) {
     return false;
   } else if (lcmd == "lspinstall") {
     if (arg.empty()) {
-      set_message("Usage: :lspinstall <python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>");
+      set_message(
+          "Usage: :lspinstall "
+          "<python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>");
     } else {
       install_lsp_server(arg);
     }
   } else if (lcmd == "lspremove") {
     if (arg.empty()) {
-      set_message("Usage: :lspremove <python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>");
+      set_message(
+          "Usage: :lspremove "
+          "<python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>");
     } else {
       remove_lsp_server(arg);
     }
@@ -773,8 +783,8 @@ bool Editor::execute_ex_command(const std::string &input_line) {
   } else if (lcmd == "autosave") {
     if (arg.empty() || to_lower_copy(arg) == "status") {
       set_message(
-          "Auto-save: " + std::string(auto_save_enabled ? "ON" : "OFF") +
-          " (" + std::to_string(auto_save_interval_ms) + "ms)");
+          "Auto-save: " + std::string(auto_save_enabled ? "ON" : "OFF") + " (" +
+          std::to_string(auto_save_interval_ms) + "ms)");
     } else {
       std::string mode = to_lower_copy(arg);
       if (mode == "on" || mode == "true" || mode == "1") {
@@ -840,8 +850,8 @@ bool Editor::execute_ex_command(const std::string &input_line) {
     insert_current_datetime();
   } else if (lcmd == "stats") {
     show_buffer_stats();
-  } else if (lcmd == "replace" || lcmd == "replacei" ||
-             lcmd == "replaceword" || lcmd == "replacere") {
+  } else if (lcmd == "replace" || lcmd == "replacei" || lcmd == "replaceword" ||
+             lcmd == "replacere") {
     auto tokens = parse_quoted_tokens(arg);
     if (tokens.size() < 2) {
       set_message("Usage: :" + lcmd + " <from> <to> (quote spaces)");
@@ -918,9 +928,9 @@ bool Editor::execute_ex_command(const std::string &input_line) {
     } else {
       set_message("Pane resized down");
     }
-    } else if (lcmd == "theme" || lcmd == "colorscheme" || lcmd == "colo") {
-      const auto themes = list_available_themes();
-      if (arg.empty()) {
+  } else if (lcmd == "theme" || lcmd == "colorscheme" || lcmd == "colo") {
+    const auto themes = list_available_themes();
+    if (arg.empty()) {
       if (themes.empty()) {
         set_message("No themes found");
       } else {
@@ -946,12 +956,12 @@ bool Editor::execute_ex_command(const std::string &input_line) {
         set_message("Unknown theme: " + arg);
       } else {
         apply_theme(resolved);
-        }
       }
-    } else if (lcmd == "help" || lcmd == "h") {
-      show_command_help(arg);
-    } else {
-      set_message("Unknown command: " + line);
     }
+  } else if (lcmd == "help" || lcmd == "h") {
+    show_command_help(arg);
+  } else {
+    set_message("Unknown command: " + line);
+  }
   return true;
 }

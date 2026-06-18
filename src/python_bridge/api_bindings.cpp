@@ -1,104 +1,14 @@
 // Python.h must be first so its macros precede C++ standard headers.
 #include <Python.h>
 
-#include "editor.h"
 #include "python_bridge/api.h"
+#include "python_bridge/api_internal.h"
 
-#include <algorithm>
-#include <filesystem>
-#include <iostream>
-#include <string>
-#include <unistd.h>
-#include <vector>
-
-namespace fs = std::filesystem;
-
-// Note: api_impl.cpp is included at the bottom of this file so the
-// implementation can access the static helpers and g_python_api.
-
-static fs::path get_executable_path() {
-  std::vector<char> buffer(4096, '\0');
-  ssize_t len = readlink("/proc/self/exe", buffer.data(), buffer.size() - 1);
-  if (len <= 0) {
-    return {};
-  }
-  buffer[static_cast<size_t>(len)] = '\0';
-  return fs::path(buffer.data());
-}
-
-static std::vector<fs::path> get_runtime_python_dirs() {
-  std::vector<fs::path> dirs;
-  auto push_unique = [&dirs](const fs::path &p) {
-    if (p.empty()) {
-      return;
-    }
-    for (const auto &existing : dirs) {
-      if (existing == p) {
-        return;
-      }
-    }
-    dirs.push_back(p);
-  };
-
-  const char *env_runtime = getenv("JOT_PYTHON_PATH");
-  if (env_runtime && *env_runtime) {
-    push_unique(fs::path(env_runtime));
-  }
-
-  const char *xdg_data_home = getenv("XDG_DATA_HOME");
-  if (xdg_data_home && *xdg_data_home) {
-    push_unique(fs::path(xdg_data_home) / "jot" / "python");
-  } else {
-    const char *home = getenv("HOME");
-    if (home && *home) {
-      push_unique(fs::path(home) / ".local" / "share" / "jot" / "python");
-    }
-  }
-
-  fs::path exe_path = get_executable_path();
-  if (!exe_path.empty()) {
-    fs::path exe_dir = exe_path.parent_path();
-    push_unique(exe_dir.parent_path() / "share" / "jot" / "python");
-    push_unique(exe_dir.parent_path() / "src" / "python");
-  }
-
-  push_unique(fs::current_path() / "src" / "python");
-  return dirs;
-}
-
-static fs::path get_user_config_root() {
-  const char *home = getenv("HOME");
-  if (!home) {
-    return {};
-  }
-  return fs::path(home) / ".config" / "jot";
-}
-
-static void append_python_path(const fs::path &path) {
-  if (!fs::exists(path) || !fs::is_directory(path)) {
-    return;
-  }
-
-  std::string escaped = path.string();
-  size_t pos = 0;
-  while ((pos = escaped.find('\\', pos)) != std::string::npos) {
-    escaped.replace(pos, 1, "\\\\");
-    pos += 2;
-  }
-  pos = 0;
-  while ((pos = escaped.find('\'', pos)) != std::string::npos) {
-    escaped.replace(pos, 1, "\\'");
-    pos += 2;
-  }
-  PyRun_SimpleString(
-      ("import sys\n"
-       "p = '" +
-       escaped +
-       "'\n"
-       "if p not in sys.path:\n"
-       "    sys.path.append(p)\n")
-          .c_str());
-}
+#include <methodobject.h>
+#include <modsupport.h>
+#include <object.h>
+#include <pytypedefs.h>
+#include <unicodeobject.h>
 
 static PythonAPI *g_python_api = nullptr;
 
@@ -123,10 +33,42 @@ static PyObject *py_set_theme_color(PyObject *self, PyObject *args) {
   Py_RETURN_NONE;
 }
 
+static PyObject *py_register_command(PyObject *, PyObject *args) {
+  char *name;
+  char *callback;
+  char *detail;
+  if (!PyArg_ParseTuple(args, "sss", &name, &callback, &detail))
+    return nullptr;
+  if (g_python_api)
+    g_python_api->py_register_command(name, callback, detail);
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_get_current_buffer(PyObject *, PyObject *) {
+  if (!g_python_api)
+    return PyUnicode_FromString("");
+  return PyUnicode_FromString(g_python_api->py_get_current_buffer().c_str());
+}
+
+static PyObject *py_set_current_buffer(PyObject *, PyObject *args) {
+  char *text;
+  if (!PyArg_ParseTuple(args, "s", &text))
+    return nullptr;
+  if (g_python_api)
+    g_python_api->py_set_current_buffer(text);
+  Py_RETURN_NONE;
+}
+
 static PyMethodDef JotMethods[] = {
     {"show_message", py_show_message, METH_VARARGS, "Show a status message"},
     {"set_theme_color", py_set_theme_color, METH_VARARGS,
      "Set a theme color slot"},
+    {"register_command", py_register_command, METH_VARARGS,
+     "Register plugin command"},
+    {"get_current_buffer", py_get_current_buffer, METH_NOARGS,
+     "Read current buffer"},
+    {"set_current_buffer", py_set_current_buffer, METH_VARARGS,
+     "Replace current buffer"},
     {NULL, NULL, 0, NULL}};
 
 static struct PyModuleDef jot_module = {
@@ -135,4 +77,10 @@ static struct PyModuleDef jot_module = {
 
 static PyObject *PyInit_jot_api(void) { return PyModule_Create(&jot_module); }
 
-#include "api_impl.cpp"
+namespace PythonBridgeInternal {
+bool register_internal_module() {
+  return PyImport_AppendInittab("_jot_internal", PyInit_jot_api) != -1;
+}
+
+void set_active_api(PythonAPI *api) { g_python_api = api; }
+} // namespace PythonBridgeInternal
