@@ -168,6 +168,38 @@ run_as_default_user() {
   fi
 }
 
+is_valid_jot_binary() {
+  local binary="$1"
+  if [[ ! -s "${binary}" ]]; then
+    return 1
+  fi
+  if command -v file >/dev/null 2>&1; then
+    local kind
+    kind="$(file -b "${binary}" 2>/dev/null || true)"
+    case "${kind}" in
+      *ELF*"executable"*|*ELF*"shared object"*|*Mach-O*"executable"*) return 0 ;;
+      *) return 1 ;;
+    esac
+  fi
+  return 0
+}
+
+ensure_valid_built_jot() {
+  local binary="${BUILD_DIR}/apps/jot/jot"
+  if is_valid_jot_binary "${binary}"; then
+    return 0
+  fi
+
+  echo "[jot] Detected invalid build artifact at ${binary}; rebuilding jot"
+  rm -f "${binary}"
+  cmake --build "${BUILD_DIR}" --target jot --parallel "${JOBS}"
+
+  if ! is_valid_jot_binary "${binary}"; then
+    echo "[jot] Error: build did not produce a valid jot executable at ${binary}" >&2
+    return 1
+  fi
+}
+
 attempt_cmd() {
   local desc="$1"
   shift
@@ -647,6 +679,7 @@ cmake "${CMAKE_ARGS[@]}"
 
 echo "[jot] Building"
 cmake "${BUILD_ARGS[@]}"
+ensure_valid_built_jot
 
 if [[ "${RUN_TESTS}" -eq 1 ]]; then
   echo "[jot] Running tests"

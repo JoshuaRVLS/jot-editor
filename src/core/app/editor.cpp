@@ -46,7 +46,7 @@ std::string normalize_diagnostic_path(const std::string &path) {
 }
 } // namespace
 
-Editor::Editor() {
+void Editor::load_runtime_config() {
   config.load();
   image_viewer.configure_backend(config.get("image_viewer_backend", "auto"));
 #ifdef JOT_TREESITTER
@@ -55,7 +55,9 @@ Editor::Editor() {
       config.get_list("treesitter_query_paths"),
       config.get_list("treesitter_language_overrides"));
 #endif
+}
 
+void Editor::initialize_state_defaults() {
   running = true;
   keyboard_press_count = 0;
   pane_root = -1;
@@ -255,7 +257,9 @@ Editor::Editor() {
 
   // Default Python-backed theme name.
   current_theme_name = "dark";
+}
 
+void Editor::initialize_python_runtime() {
   python_api = new PythonAPI(this);
   host_api = std::make_unique<EditorHostAPI>(*this);
   python_api->init();
@@ -268,7 +272,9 @@ Editor::Editor() {
     std::string saved = config.get("color_scheme", "dark");
     apply_theme(saved, false, false);
   }
+}
 
+void Editor::initialize_terminal_ui() {
   terminal.init();
   // Force a fresh terminal size probe after init. terminal.init() reads the
   // size once and may stick to a fallback (e.g. 80x24) if ioctl/$COLUMNS
@@ -284,7 +290,9 @@ Editor::Editor() {
   int h = terminal.get_height();
   int w = ui->get_render_width();
   create_pane(0, 0, w - minimap_width, h - status_height, -1);
+}
 
+void Editor::initialize_placeholder_buffer() {
   current_buffer = 0;
 
   FileBuffer fb;
@@ -298,6 +306,14 @@ Editor::Editor() {
   fb.is_placeholder = true;
   buffers.push_back(std::move(fb));
   panes[0].buffer_id = 0;
+}
+
+Editor::Editor() {
+  load_runtime_config();
+  initialize_state_defaults();
+  initialize_python_runtime();
+  initialize_terminal_ui();
+  initialize_placeholder_buffer();
 }
 
 EditorHostAPI &Editor::host() { return *host_api; }

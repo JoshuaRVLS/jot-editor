@@ -72,6 +72,17 @@ if(JOT_BUILD_BENCHMARKS)
   add_subdirectory(benchmarks)
 endif()
 
+install(CODE [[
+  set(jot_binary "$<TARGET_FILE:jot>")
+  if(NOT EXISTS "${jot_binary}")
+    message(FATAL_ERROR "jot executable is missing: ${jot_binary}. Run cmake --build first.")
+  endif()
+  file(SIZE "${jot_binary}" jot_binary_size)
+  if(jot_binary_size EQUAL 0)
+    message(FATAL_ERROR "jot executable is empty: ${jot_binary}. Delete it and rebuild target 'jot' before installing.")
+  endif()
+]])
+
 install(TARGETS jot
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
