@@ -26,21 +26,27 @@ jobs:
           sudo apt-get install -y \
             build-essential \
             cmake \
+            ninja-build \
+            ccache \
             pkg-config \
             libpython3-dev \
             libvterm-dev \
+            libtermkey-dev \
+            libuv1-dev \
+            libutf8proc-dev \
             libtree-sitter-dev
 
       - name: Configure
         run: |
           cmake -S "${GITHUB_WORKSPACE}" \
                 -B "${GITHUB_WORKSPACE}/build" \
+                -G Ninja \
                 -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
                 -DCMAKE_INSTALL_PREFIX="${GITHUB_WORKSPACE}/dist/${ARTIFACT_NAME}" \
                 -DJOT_TREESITTER=ON
 
       - name: Build
-        run: cmake --build "${GITHUB_WORKSPACE}/build" --parallel
+        run: cmake --build "${GITHUB_WORKSPACE}/build" --parallel 2
 
       - name: Test
         run: ctest --test-dir "${GITHUB_WORKSPACE}/build" --output-on-failure

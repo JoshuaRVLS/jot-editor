@@ -18,7 +18,7 @@ void Editor::enter_insert_mode() {
   has_pending_key = false;
   pending_key = 0;
   leader_key_pending = false;
-  clear_selection();
+  clear_selection(); 
   needs_redraw = true;
 }
 
