@@ -9,6 +9,7 @@ set(JOT_CORE_SOURCES
   core/integrations/debugger.cpp
   core/integrations/integrated_terminal.cpp
   core/integrations/lsp.cpp
+  core/integrations/syntax.cpp
   core/integrations/tree_sitter_commands.cpp
   core/runtime/event_loop.cpp
   core/runtime/in_memory_line_provider.cpp

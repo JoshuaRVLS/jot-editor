@@ -4,6 +4,7 @@ set(JOT_TOOLS_SOURCES
   tools/imageviewer.cpp
   tools/symbols/index.cpp
   tools/telescope.cpp
+  tools/telescope_async.cpp
   tools/workspace/search.cpp
 )
 
