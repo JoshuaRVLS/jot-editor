@@ -1,3 +1,4 @@
+#include "column_utils.h"
 #include "editor.h"
 #include "folding.h"
 #include "tree_sitter/manager.h"
@@ -25,26 +26,6 @@ struct BracketPairMatch {
   int close_line = -1;
   int close_col = -1;
 };
-
-int tab_advance(int visual_col, int tab_size) {
-  const int ts = std::max(1, tab_size);
-  const int rem = visual_col % ts;
-  return rem == 0 ? ts : (ts - rem);
-}
-
-int compute_visual_column(const std::string &line, int logical_col,
-                          int tab_size) {
-  int clamped = std::clamp(logical_col, 0, (int)line.size());
-  int visual = 0;
-  for (int i = 0; i < clamped; i++) {
-    if (line[i] == '\t') {
-      visual += tab_advance(visual, tab_size);
-    } else {
-      visual += 1;
-    }
-  }
-  return visual;
-}
 
 int leading_indent_visual_column(const std::string &line, int tab_size) {
   int indent_end = 0;
@@ -457,7 +438,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
       }
 
       const std::string &line = buf.line(line_idx);
-      int scroll_x = buf.scroll_x;
+      int scroll_x = ui_clamp_to_utf8_boundary(line, buf.scroll_x);
       int current_x = x + 1 + line_num_width;
       int visible_len = w - 2 - line_num_width;
       if (folded_header) {
@@ -471,14 +452,9 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
           visible_len = std::max(0, suffix_x - current_x - 1);
         }
       }
-      visual_cols.resize(line.size() + 1);
-      visual_cols[0] = 0;
-      for (int vi = 0; vi < (int)line.size(); vi++) {
-        visual_cols[vi + 1] = visual_cols[vi] +
-                              (line[vi] == '\t' ? tab_advance(visual_cols[vi], tab_size)
-                                                : 1);
-      }
-      int clamped_scroll_x = std::clamp(scroll_x, 0, (int)line.size());
+      visual_cols = build_visual_columns(line, tab_size);
+      int clamped_scroll_x = ui_clamp_to_utf8_boundary(
+          line, std::clamp(scroll_x, 0, (int)line.size()));
       int start_visual = visual_cols[clamped_scroll_x];
       int leading_ws_end = 0;
       while (leading_ws_end < (int)line.length() &&
@@ -576,12 +552,19 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
           if (len <= 0)
             return;
 
-          int ch_start = start_idx;
+          const int chunk_end =
+              ui_clamp_to_utf8_boundary(line, std::min((int)line.size(),
+                                                       start_idx + len));
+          int char_idx =
+              ui_clamp_to_utf8_boundary(line, std::clamp(start_idx, 0,
+                                                         (int)line.size()));
 
-          for (int k = 0; k < len; k++) {
-            int char_idx = ch_start + k;
+          while (char_idx < chunk_end) {
             if (char_idx < 0 || char_idx >= (int)line.size())
-              continue;
+              break;
+            int next_idx = ui_next_grapheme_boundary(line, char_idx);
+            if (next_idx <= char_idx)
+              next_idx = char_idx + 1;
 
             char c = line[char_idx];
             const bool tokenized =
@@ -597,13 +580,15 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
               bracket_color = rainbow_bracket_color(theme, line_bracket_depth);
             }
 
-            if (char_idx < scroll_x)
+            if (char_idx < scroll_x) {
+              char_idx = next_idx;
               continue;
+            }
             int vis_idx = visual_cols[char_idx] - start_visual;
             if (vis_idx >= visible_len)
               break;
             int char_w =
-                std::max(1, visual_cols[char_idx + 1] - visual_cols[char_idx]);
+                std::max(1, visual_cols[next_idx] - visual_cols[char_idx]);
 
             int fg = color;
             int bg = theme.bg_default;
@@ -662,6 +647,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
                 ui->draw_text(current_x + vis_idx + fill, draw_y, guide,
                               cell_guide_fg, bg);
               }
+              char_idx = next_idx;
               continue;
             }
 
@@ -679,9 +665,10 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
                 ui->draw_text(current_x + vis_idx + fill, draw_y, " ", fg, bg);
               }
             } else {
-              ui->draw_text(current_x + vis_idx, draw_y, std::string(1, c), fg,
-                            bg);
+              ui->draw_text(current_x + vis_idx, draw_y,
+                            line.substr(char_idx, next_idx - char_idx), fg, bg);
             }
+            char_idx = next_idx;
           }
         };
 
@@ -692,7 +679,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
           int last_type = -1;
           int last_token = 0;
 
-          for (int i = 0; i <= (int)line.length(); i++) {
+          for (int i = 0; i <= (int)line.length();) {
             int current_type = -1;
             int current_token = 0;
 
@@ -803,6 +790,10 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
 
             last_token = current_token;
             last_type = current_type;
+            if (i >= (int)line.length())
+              break;
+            int next_i = ui_next_grapheme_boundary(line, i);
+            i = next_i > i ? next_i : i + 1;
           }
         }
         bracket_depth = line_bracket_depth;

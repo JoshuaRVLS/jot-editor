@@ -3,6 +3,12 @@
 #include <algorithm>
 
 namespace {
+int rendered_cell_width(const std::string &text) {
+  if (text.empty())
+    return 1;
+  return std::max(1, ui_cell_count(text));
+}
+
 void append_sanitized_cell_text(std::string &out, const std::string &text) {
   if (text.empty()) {
     out.push_back(' '); 
@@ -25,6 +31,27 @@ void write_sanitized_cell_text(Terminal *term, const std::string &text) {
     return;
   }
   term->write(ui_is_valid_utf8_sequence(text) ? text : "?");
+}
+
+void append_cell_for_remaining_width(std::string &out, const std::string &text,
+                                     int remaining) {
+  int width = rendered_cell_width(text);
+  if (width > remaining) {
+    out.append((size_t)remaining, ' ');
+    return;
+  }
+  append_sanitized_cell_text(out, text);
+}
+
+void write_cell_for_remaining_width(Terminal *term, const std::string &text,
+                                    int remaining) {
+  int width = rendered_cell_width(text);
+  if (width > remaining) {
+    for (int i = 0; i < remaining; i++)
+      term->write_char(' ');
+    return;
+  }
+  write_sanitized_cell_text(term, text);
 }
 }
 
@@ -135,14 +162,15 @@ void UI::render() {
     term->move_cursor(0, y);
 
     if (capture_raw) {
-      for (int x = 0; x < row_width; x++) {
+      for (int x = 0; x < row_width; ) {
         const auto &cell = grid[y][x];
         term->reset_color();
         if (cell.bold)   term->set_bold(true);
         if (cell.italic)  term->set_italic(true);
         if (cell.reverse) term->set_reverse(true);
         term->set_color(cell.fg, cell.bg);
-        write_sanitized_cell_text(term, cell.ch);
+        write_cell_for_remaining_width(term, cell.ch, row_width - x);
+        x += std::min(rendered_cell_width(cell.ch), row_width - x);
       }
     } else {
       int run_fg = -1;
@@ -208,8 +236,10 @@ void UI::render() {
                grid[y][x].bold == run_bold &&
                grid[y][x].italic == run_italic &&
                grid[y][x].reverse == run_reverse) {
-          append_sanitized_cell_text(body, grid[y][x].ch);
-          x++;
+          int cell_w = std::min(rendered_cell_width(grid[y][x].ch),
+                                row_width - x);
+          append_cell_for_remaining_width(body, grid[y][x].ch, row_width - x);
+          x += cell_w;
         }
 
         term->write(body);
@@ -331,8 +361,8 @@ void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,
   int i = 0;
   int cell_offset = 0;
   while (i < (int)text.length() && x + cell_offset < width) {
-    int char_len = ui_utf8_char_len(text, i);
-    if (char_len <= 0) {
+    int cluster_end = ui_next_grapheme_boundary(text, i);
+    if (cluster_end <= i) {
       UICell bad;
       bad.ch = "?";
       bad.fg = fg;
@@ -345,12 +375,12 @@ void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,
       cell_offset++;
       continue;
     }
-    if (i + char_len > (int)text.length()) {
+    if (cluster_end > (int)text.length()) {
       break;
     }
 
     UICell cell;
-    cell.ch = ui_sanitized_cell_text(text.substr(i, char_len));
+    cell.ch = ui_sanitized_cell_text(text.substr(i, cluster_end - i));
     cell.fg = fg;
     cell.bg = bg;
     cell.bold = bold;
@@ -358,8 +388,16 @@ void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,
     cell.reverse = false;
     set_cell(x + cell_offset, y, cell);
 
-    i += char_len;
-    cell_offset++;
+    int cell_width = rendered_cell_width(cell.ch);
+    for (int fill = 1; fill < cell_width && x + cell_offset + fill < width;
+         fill++) {
+      UICell continuation = cell;
+      continuation.ch = "";
+      set_cell(x + cell_offset + fill, y, continuation);
+    }
+
+    i = cluster_end;
+    cell_offset += cell_width;
   }
 }
 

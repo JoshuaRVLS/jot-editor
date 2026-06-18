@@ -1,7 +1,26 @@
 #include "editor.h"
 #include "column_utils.h"
 #include "folding.h"
+#include "ui/text.h"
 #include <cctype>
+
+namespace {
+bool ascii_space_at(const std::string &line, int pos) {
+  if (pos < 0 || pos >= (int)line.size())
+    return false;
+  unsigned char c = static_cast<unsigned char>(line[pos]);
+  return c < 0x80 && std::isspace(c);
+}
+
+bool word_grapheme_at(const std::string &line, int pos) {
+  if (pos < 0 || pos >= (int)line.size())
+    return false;
+  unsigned char c = static_cast<unsigned char>(line[pos]);
+  if (c >= 0x80)
+    return true;
+  return std::isalnum(c) || c == '_';
+}
+} // namespace
 
 void Editor::move_cursor(int dx, int dy, bool extend_selection) {
   auto &buf = get_buffer();
@@ -23,11 +42,22 @@ void Editor::move_cursor(int dx, int dy, bool extend_selection) {
     int desired_x = std::max(buf.cursor.x, std::max(0, buf.preferred_x));
     buf.cursor.y = target_y;
     int line_len = (int)buf.line(buf.cursor.y).length();
-    buf.cursor.x = std::min(desired_x, line_len);
+    buf.cursor.x =
+        ui_clamp_to_utf8_boundary(buf.line(buf.cursor.y),
+                                  std::min(desired_x, line_len));
   } else {
     buf.cursor.y =
         std::max(0, std::min(max_y, buf.cursor.y + dy));
-    buf.cursor.x = std::max(0, buf.cursor.x + dx);
+    const std::string &line = buf.line(buf.cursor.y);
+    if (dx > 0 && dy == 0) {
+      for (int i = 0; i < dx; i++)
+        buf.cursor.x = ui_next_grapheme_boundary(line, buf.cursor.x);
+    } else if (dx < 0 && dy == 0) {
+      for (int i = 0; i < -dx; i++)
+        buf.cursor.x = ui_prev_grapheme_boundary(line, buf.cursor.x);
+    } else {
+      buf.cursor.x = ui_clamp_to_utf8_boundary(line, buf.cursor.x + dx);
+    }
     // Horizontal movement (or mixed dx/dy) sets new preferred column.
     buf.preferred_x = buf.cursor.x;
   }
@@ -58,7 +88,8 @@ void Editor::clamp_cursor(int buffer_id) {
     buf.cursor.y--;
   }
   int line_len = buf.line(buf.cursor.y).length();
-  buf.cursor.x = std::max(0, std::min(line_len, buf.cursor.x));
+  buf.cursor.x = ui_clamp_to_utf8_boundary(
+      buf.line(buf.cursor.y), std::max(0, std::min(line_len, buf.cursor.x)));
 }
 
 void Editor::ensure_cursor_visible(bool adjust_horizontal) {
@@ -111,14 +142,17 @@ void Editor::ensure_cursor_visible(bool adjust_horizontal) {
         int cur = buf.scroll_x;
         int cur_visual = scroll_visual;
         while (cur < (int)line.size()) {
-          int next_visual =
-              cur_visual + ((line[cur] == '\t')
-                                ? tab_advance(cur_visual, tab_size)
-                                : 1);
+          int next = ui_next_grapheme_boundary(line, cur);
+          if (next <= cur)
+            next = cur + 1;
+          int cell_width = (line[cur] == '\t')
+                               ? tab_advance(cur_visual, tab_size)
+                               : std::max(1, ui_cell_count(line.substr(cur, next - cur)));
+          int next_visual = cur_visual + cell_width;
           if (next_visual > cursor_visual - viewport_w + 1)
             break;
           cur_visual = next_visual;
-          cur++;
+          cur = next;
         }
         buf.scroll_x = cur;
       }
@@ -140,13 +174,13 @@ void Editor::ensure_cursor_visible(bool adjust_horizontal) {
 void Editor::move_word_forward(bool extend_selection) {
   auto &buf = get_buffer();
   Cursor anchor = buf.cursor;
-  int len = buf.line(buf.cursor.y).length();
-  while (buf.cursor.x < len &&
-         !std::isalnum(buf.line(buf.cursor.y)[buf.cursor.x]))
-    buf.cursor.x++;
-  while (buf.cursor.x < len &&
-         std::isalnum(buf.line(buf.cursor.y)[buf.cursor.x]))
-    buf.cursor.x++;
+  const std::string &line = buf.line(buf.cursor.y);
+  int len = line.length();
+  buf.cursor.x = ui_clamp_to_utf8_boundary(line, buf.cursor.x);
+  while (buf.cursor.x < len && !word_grapheme_at(line, buf.cursor.x))
+    buf.cursor.x = ui_next_grapheme_boundary(line, buf.cursor.x);
+  while (buf.cursor.x < len && word_grapheme_at(line, buf.cursor.x))
+    buf.cursor.x = ui_next_grapheme_boundary(line, buf.cursor.x);
   clamp_cursor(get_pane().buffer_id);
   buf.preferred_x = buf.cursor.x;
   ensure_cursor_visible();
@@ -162,21 +196,19 @@ void Editor::move_word_forward(bool extend_selection) {
 void Editor::move_word_backward(bool extend_selection) {
   auto &buf = get_buffer();
   Cursor anchor = buf.cursor;
-  buf.cursor.x--;
-  if (buf.cursor.x < 0) {
-    if (buf.cursor.y > 0) {
-      buf.cursor.y--;
-      buf.cursor.x = buf.line(buf.cursor.y).length();
-    } else {
-      buf.cursor.x = 0;
-    }
-  } else {
-    while (buf.cursor.x > 0 &&
-           !std::isalnum(buf.line(buf.cursor.y)[buf.cursor.x]))
-      buf.cursor.x--;
-    while (buf.cursor.x > 0 &&
-           std::isalnum(buf.line(buf.cursor.y)[buf.cursor.x - 1]))
-      buf.cursor.x--;
+  const std::string &line = buf.line(buf.cursor.y);
+  buf.cursor.x = ui_clamp_to_utf8_boundary(line, buf.cursor.x);
+  while (buf.cursor.x > 0) {
+    int prev = ui_prev_grapheme_boundary(line, buf.cursor.x);
+    if (word_grapheme_at(line, prev))
+      break;
+    buf.cursor.x = prev;
+  }
+  while (buf.cursor.x > 0) {
+    int prev = ui_prev_grapheme_boundary(line, buf.cursor.x);
+    if (!word_grapheme_at(line, prev) || ascii_space_at(line, prev))
+      break;
+    buf.cursor.x = prev;
   }
   clamp_cursor(get_pane().buffer_id);
   buf.preferred_x = buf.cursor.x;

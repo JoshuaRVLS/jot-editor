@@ -152,6 +152,18 @@ if [[ "${USE_SUDO}" -eq 1 ]] && ! command -v sudo >/dev/null 2>&1; then
   exit 1
 fi
 
+ninja_command() {
+  if command -v ninja >/dev/null 2>&1; then
+    command -v ninja
+    return 0
+  fi
+  if command -v ninja-build >/dev/null 2>&1; then
+    command -v ninja-build
+    return 0
+  fi
+  return 1
+}
+
 run_maybe_sudo() {
   if [[ "${USE_SUDO}" -eq 1 ]]; then
     sudo "$@"
@@ -579,11 +591,51 @@ install_treesitter_deps() {
 }
 
 install_required_native_deps() {
-  if pkg-config --exists vterm termkey libuv; then
+  native_deps_available() {
+    pkg-config --exists vterm termkey libuv &&
+      (pkg-config --exists libutf8proc || pkg-config --exists utf8proc)
+  }
+
+  build_tools_available() {
+    ninja_command >/dev/null
+  }
+
+  install_build_tools() {
+    if build_tools_available && command -v ccache >/dev/null 2>&1; then
+      return 0
+    fi
+
+    echo "[jot:deps] Installing build acceleration tools (ninja, ccache)"
+    if command -v pacman >/dev/null 2>&1; then
+      attempt_cmd "Installing ninja and ccache via pacman" \
+        run_maybe_sudo pacman -Sy --noconfirm ninja ccache || true
+    elif command -v apt-get >/dev/null 2>&1; then
+      attempt_cmd "Installing ninja-build and ccache via apt-get" \
+        run_maybe_sudo bash -lc "apt-get update && apt-get install -y ninja-build ccache" || true
+    elif command -v dnf >/dev/null 2>&1; then
+      attempt_cmd "Installing ninja-build and ccache via dnf" \
+        run_maybe_sudo dnf install -y ninja-build ccache || true
+    elif command -v yum >/dev/null 2>&1; then
+      attempt_cmd "Installing ninja-build and ccache via yum" \
+        run_maybe_sudo yum install -y ninja-build ccache || true
+    elif command -v zypper >/dev/null 2>&1; then
+      attempt_cmd "Installing ninja and ccache via zypper" \
+        run_maybe_sudo zypper --non-interactive install ninja ccache || true
+    elif command -v brew >/dev/null 2>&1; then
+      attempt_cmd "Installing ninja and ccache via brew" \
+        brew install ninja ccache || true
+    else
+      echo "[jot:deps] Warning: no supported package manager found for ninja/ccache." >&2
+    fi
+  }
+
+  install_build_tools
+
+  if native_deps_available; then
     return 0
   fi
 
-  echo "[jot:deps] Installing required native packages (libvterm, libtermkey, libuv)"
+  echo "[jot:deps] Installing required native packages (libvterm, libtermkey, libuv, utf8proc)"
   ensure_prefix_pkg_config_path "${INSTALL_PREFIX}"
 
   if command -v pacman >/dev/null 2>&1; then
@@ -593,42 +645,44 @@ install_required_native_deps() {
       run_maybe_sudo pacman -Sy --noconfirm libtermkey || true
     attempt_cmd "Installing libuv via pacman" \
       run_maybe_sudo pacman -Sy --noconfirm libuv || true
-    if pkg-config --exists vterm termkey libuv; then
+    attempt_cmd "Installing utf8proc via pacman" \
+      run_maybe_sudo pacman -Sy --noconfirm utf8proc || true
+    if native_deps_available; then
       return 0
     fi
     if [[ "${USE_SUDO}" -eq 0 ]]; then
       if command -v paru >/dev/null 2>&1; then
         attempt_cmd "Installing libtermkey via paru" \
           paru -S --needed --noconfirm libtermkey || true
-        if pkg-config --exists vterm termkey libuv; then
+        if native_deps_available; then
           return 0
         fi
       elif command -v yay >/dev/null 2>&1; then
         attempt_cmd "Installing libtermkey via yay" \
           yay -S --needed --noconfirm libtermkey || true
-        if pkg-config --exists vterm termkey libuv; then
+        if native_deps_available; then
           return 0
         fi
       fi
     fi
   elif command -v apt-get >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via apt-get" \
-      run_maybe_sudo bash -lc "apt-get update && apt-get install -y libvterm-dev libtermkey-dev libuv1-dev" && return 0
+      run_maybe_sudo bash -lc "apt-get update && apt-get install -y libvterm-dev libtermkey-dev libuv1-dev libutf8proc-dev" && return 0
   elif command -v dnf >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via dnf" \
-      run_maybe_sudo dnf install -y libvterm-devel libtermkey-devel libuv-devel && return 0
+      run_maybe_sudo dnf install -y libvterm-devel libtermkey-devel libuv-devel utf8proc-devel && return 0
   elif command -v yum >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via yum" \
-      run_maybe_sudo yum install -y libvterm-devel libtermkey-devel libuv-devel && return 0
+      run_maybe_sudo yum install -y libvterm-devel libtermkey-devel libuv-devel utf8proc-devel && return 0
   elif command -v zypper >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via zypper" \
-      run_maybe_sudo zypper --non-interactive install libvterm-devel libtermkey-devel libuv-devel && return 0
+      run_maybe_sudo zypper --non-interactive install libvterm-devel libtermkey-devel libuv-devel utf8proc-devel && return 0
   elif command -v brew >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via brew" \
-      brew install libvterm libtermkey libuv && return 0
+      brew install libvterm libtermkey libuv utf8proc && return 0
   fi
 
-  echo "[jot:deps] Error: install libvterm, libtermkey, and libuv development packages, then rerun install.sh." >&2
+  echo "[jot:deps] Error: install libvterm, libtermkey, libuv, and utf8proc development packages, then rerun install.sh." >&2
   echo "[jot:deps] Arch note: libtermkey may be available from AUR as 'libtermkey'." >&2
   return 1
 }
@@ -657,6 +711,15 @@ mkdir -p "${BUILD_DIR}"
 
 install_required_native_deps
 
+NINJA_BIN="$(ninja_command || true)"
+if [[ -z "${NINJA_BIN}" ]]; then
+  echo "[jot:deps] Error: Ninja is required for install builds. Install ninja or ninja-build, then rerun install.sh." >&2
+  exit 1
+fi
+if ! command -v ccache >/dev/null 2>&1; then
+  echo "[jot:deps] Warning: ccache not found; rebuilds will be slower." >&2
+fi
+
 if [[ "${INSTALL_TREESITTER}" -eq 1 ]]; then
   install_treesitter_deps || true
 else
@@ -668,6 +731,7 @@ ensure_prefix_pkg_config_path "${INSTALL_PREFIX}"
 CMAKE_ARGS=(
   -S "${PROJECT_ROOT}"
   -B "${BUILD_DIR}"
+  -G Ninja
   -DCMAKE_BUILD_TYPE="${BUILD_TYPE}"
   -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}"
 )

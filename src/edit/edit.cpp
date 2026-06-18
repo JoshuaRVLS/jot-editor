@@ -3,6 +3,7 @@
 #include "html.h"
 #include "text_features.h"
 #include "python_bridge/api.h"
+#include "ui/text.h"
 #include <algorithm>
 #include <cctype>
 
@@ -15,12 +16,35 @@ int tab_advance(int visual_col, int tab_size) {
 
 int compute_visual_column(const std::string &line, int logical_col,
                           int tab_size) {
-  int clamped = std::clamp(logical_col, 0, (int)line.size());
+  int clamped =
+      ui_clamp_to_utf8_boundary(line, std::clamp(logical_col, 0, (int)line.size()));
   int visual = 0;
-  for (int i = 0; i < clamped; i++) {
-    visual += (line[i] == '\t') ? tab_advance(visual, tab_size) : 1;
+  for (int i = 0; i < clamped;) {
+    int next = ui_next_grapheme_boundary(line, i);
+    if (next <= i)
+      next = i + 1;
+    visual += (line[i] == '\t')
+                  ? tab_advance(visual, tab_size)
+                  : std::max(1, ui_cell_count(line.substr(i, next - i)));
+    i = next;
   }
   return visual;
+}
+
+bool ascii_space_at(const std::string &line, int pos) {
+  if (pos < 0 || pos >= (int)line.size())
+    return false;
+  unsigned char c = static_cast<unsigned char>(line[pos]);
+  return c < 0x80 && std::isspace(c);
+}
+
+bool word_grapheme_at(const std::string &line, int pos) {
+  if (pos < 0 || pos >= (int)line.size())
+    return false;
+  unsigned char c = static_cast<unsigned char>(line[pos]);
+  if (c >= 0x80)
+    return true;
+  return std::isalnum(c) || c == '_';
 }
 
 bool has_python_extension(const std::string &path) {
@@ -188,8 +212,9 @@ void Editor::insert_string(const std::string &str) {
   if (buf.selection.active) {
     delete_selection();
   }
-  buf.line_mut(buf.cursor.y).insert(buf.cursor.x, str);
-  buf.cursor.x += str.length();
+  std::string text = ui_normalize_nfc(str);
+  buf.line_mut(buf.cursor.y).insert(buf.cursor.x, text);
+  buf.cursor.x += text.length();
   buf.modified = true;
   buf.is_placeholder = false;
   if (python_api)
@@ -210,7 +235,9 @@ void Editor::delete_char(bool forward) {
 
   if (forward) {
     if (buf.cursor.x < (int)buf.line_mut(buf.cursor.y).length()) {
-      buf.line_mut(buf.cursor.y).erase(buf.cursor.x, 1);
+      auto &line = buf.line_mut(buf.cursor.y);
+      const int end = ui_next_grapheme_boundary(line, buf.cursor.x);
+      line.erase(buf.cursor.x, end - buf.cursor.x);
       buf.modified = true;
     } else if (buf.cursor.y < (int)buf.line_count() - 1) {
       buf.line_mut(buf.cursor.y) += buf.line_mut(buf.cursor.y + 1);
@@ -221,22 +248,26 @@ void Editor::delete_char(bool forward) {
     if (buf.cursor.x > 0) {
       auto &line = buf.line_mut(buf.cursor.y);
       if (buf.cursor.x < (int)line.length()) {
-        char left = line[buf.cursor.x - 1];
+        const int left_start = ui_prev_grapheme_boundary(line, buf.cursor.x);
+        char left = line[left_start];
         char right = line[buf.cursor.x];
         char expected = AutoClose::get_closing_bracket(left);
         if (expected != '\0' && right == expected) {
           line.erase(buf.cursor.x, 1);
-          buf.cursor.x--;
-          line.erase(buf.cursor.x, 1);
+          buf.cursor.x = left_start;
+          line.erase(left_start, ui_next_grapheme_boundary(line, left_start) -
+                                     left_start);
           buf.modified = true;
         } else {
-          buf.cursor.x--;
-          line.erase(buf.cursor.x, 1);
+          buf.cursor.x = left_start;
+          line.erase(left_start, ui_next_grapheme_boundary(line, left_start) -
+                                     left_start);
           buf.modified = true;
         }
       } else {
-        buf.cursor.x--;
-        line.erase(buf.cursor.x, 1);
+        const int start = ui_prev_grapheme_boundary(line, buf.cursor.x);
+        line.erase(start, buf.cursor.x - start);
+        buf.cursor.x = start;
         buf.modified = true;
       }
     } else if (buf.cursor.y > 0) {
@@ -277,19 +308,22 @@ void Editor::delete_word_backward() {
     buf.modified = true;
   } else {
     auto &line = buf.line_mut(buf.cursor.y);
-    int start = buf.cursor.x;
+    int start = ui_clamp_to_utf8_boundary(line, buf.cursor.x);
 
-    while (start > 0 &&
-           std::isspace(static_cast<unsigned char>(line[start - 1]))) {
-      start--;
+    while (start > 0) {
+      int prev = ui_prev_grapheme_boundary(line, start);
+      if (!ascii_space_at(line, prev))
+        break;
+      start = prev;
     }
-    while (start > 0 &&
-           (std::isalnum(static_cast<unsigned char>(line[start - 1])) ||
-            line[start - 1] == '_')) {
-      start--;
+    while (start > 0) {
+      int prev = ui_prev_grapheme_boundary(line, start);
+      if (!word_grapheme_at(line, prev))
+        break;
+      start = prev;
     }
     if (start == buf.cursor.x) {
-      start = std::max(0, buf.cursor.x - 1);
+      start = ui_prev_grapheme_boundary(line, buf.cursor.x);
     }
 
     line.erase(start, buf.cursor.x - start);
@@ -329,17 +363,14 @@ void Editor::delete_word_forward() {
   } else {
     int end = buf.cursor.x;
 
-    while (end < (int)line.length() &&
-           std::isspace(static_cast<unsigned char>(line[end]))) {
-      end++;
+    while (end < (int)line.length() && ascii_space_at(line, end)) {
+      end = ui_next_grapheme_boundary(line, end);
     }
-    while (end < (int)line.length() &&
-           (std::isalnum(static_cast<unsigned char>(line[end])) ||
-            line[end] == '_')) {
-      end++;
+    while (end < (int)line.length() && word_grapheme_at(line, end)) {
+      end = ui_next_grapheme_boundary(line, end);
     }
     if (end == buf.cursor.x) {
-      end = std::min((int)line.length(), buf.cursor.x + 1);
+      end = ui_next_grapheme_boundary(line, buf.cursor.x);
     }
 
     line.erase(buf.cursor.x, end - buf.cursor.x);
@@ -377,10 +408,14 @@ void Editor::delete_selection() {
                          : buf.selection.start.x);
 
   if (start_y == end_y) {
+    start_x = ui_clamp_to_utf8_boundary(buf.line(start_y), start_x);
+    end_x = ui_clamp_to_utf8_boundary(buf.line(start_y), end_x);
     buf.line_mut(start_y).erase(start_x, end_x - start_x);
     buf.cursor.y = start_y;
     buf.cursor.x = start_x;
   } else {
+    start_x = ui_clamp_to_utf8_boundary(buf.line(start_y), start_x);
+    end_x = ui_clamp_to_utf8_boundary(buf.line(end_y), end_x);
     buf.line_mut(start_y) =
         buf.line_mut(start_y).substr(0, start_x) + buf.line_mut(end_y).substr(end_x);
     buf.lines.erase(buf.lines.begin() + start_y + 1,
@@ -428,6 +463,7 @@ void Editor::new_line() {
   auto &buf = get_buffer();
   if (buf.is_lazy()) buf.materialize();
   std::string current_line = buf.line_mut(buf.cursor.y);
+  buf.cursor.x = ui_clamp_to_utf8_boundary(current_line, buf.cursor.x);
   std::string remaining = current_line.substr(buf.cursor.x);
   buf.line_mut(buf.cursor.y) = current_line.substr(0, buf.cursor.x);
 

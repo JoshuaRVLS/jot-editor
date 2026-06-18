@@ -1,4 +1,5 @@
 #include "bracket.h"
+#include "column_utils.h"
 #include "editor.h"
 #include "folding.h"
 #include <cctype>
@@ -7,26 +8,6 @@
 #include <sstream>
 
 namespace {
-int tab_advance(int visual_col, int tab_size) {
-  const int ts = std::max(1, tab_size);
-  const int rem = visual_col % ts;
-  return rem == 0 ? ts : (ts - rem);
-}
-
-int compute_visual_column(const std::string &line, int logical_col,
-                          int tab_size) {
-  int clamped = std::clamp(logical_col, 0, (int)line.size());
-  int visual = 0;
-  for (int i = 0; i < clamped; i++) {
-    if (line[i] == '\t') {
-      visual += tab_advance(visual, tab_size);
-    } else {
-      visual += 1;
-    }
-  }
-  return visual;
-}
-
 std::string completion_kind_icon(int kind, bool use_nerd_icons) {
   if (!use_nerd_icons) {
     switch (kind) {
