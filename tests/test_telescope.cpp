@@ -39,3 +39,45 @@ TEST(TestTelescopeApplyResultsSelectionAndDisplay) {
   ASSERT_EQ(telescope.get_result_count(), 0);
   ASSERT_EQ(telescope.get_selected_index(), 0);
 }
+
+TEST(TestTelescopeSelectionAndListScrollClamp) {
+  Telescope telescope;
+  std::vector<FileMatch> matches;
+  for (int i = 0; i < 8; i++) {
+    std::string name = "file" + std::to_string(i) + ".txt";
+    matches.push_back({"/repo/" + name, name, name, ".", 100 - i, false});
+  }
+
+  telescope.apply_results(matches);
+  telescope.ensure_selected_visible(3);
+  ASSERT_EQ(telescope.get_list_scroll_offset(), 0);
+
+  telescope.select_index(5);
+  telescope.ensure_selected_visible(3);
+  ASSERT_EQ(telescope.get_selected_index(), 5);
+  ASSERT_EQ(telescope.get_list_scroll_offset(), 3);
+
+  telescope.move_by(99);
+  telescope.ensure_selected_visible(3);
+  ASSERT_EQ(telescope.get_selected_index(), 7);
+  ASSERT_EQ(telescope.get_list_scroll_offset(), 5);
+
+  telescope.move_by(-99);
+  telescope.ensure_selected_visible(3);
+  ASSERT_EQ(telescope.get_selected_index(), 0);
+  ASSERT_EQ(telescope.get_list_scroll_offset(), 0);
+}
+
+TEST(TestTelescopePreviewScrollClamp) {
+  Telescope telescope;
+  std::vector<FileMatch> matches;
+  matches.push_back({"/repo/missing.txt", "missing.txt", "missing.txt", ".",
+                     100, false});
+  telescope.apply_results(matches);
+
+  telescope.scroll_preview(10, 1);
+  ASSERT_EQ(telescope.get_preview_scroll_offset(), 0);
+
+  telescope.select_index(0);
+  ASSERT_EQ(telescope.get_preview_scroll_offset(), 0);
+}

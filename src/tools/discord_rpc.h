@@ -23,6 +23,7 @@ public:
 private:
   int sockfd_;
   State state_;
+  long long started_at_;
   long long last_heartbeat_ms_;
   long long last_presence_update_ms_;
   long long last_connect_attempt_ms_;

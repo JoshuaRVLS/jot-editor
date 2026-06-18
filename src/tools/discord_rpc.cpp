@@ -103,6 +103,7 @@ void install_sigpipe_handler() {
 DiscordRPC::DiscordRPC()
     : sockfd_(-1), state_(DISCONNECTED), last_heartbeat_ms_(0),
       last_presence_update_ms_(0), last_connect_attempt_ms_(0),
+      started_at_(time(nullptr)),
       heartbeat_interval_ms_(30000), nonce_counter_(0) {}
 
 DiscordRPC::~DiscordRPC() { close_socket(); }
@@ -386,7 +387,7 @@ void DiscordRPC::send_presence(const std::string &details,
        << "\"large_image\":\"jot\""
        << ",\"large_text\":\"jot editor\""
        << "}"
-       << ",\"timestamps\":{\"start\":" << time(nullptr) << "}"
+       << ",\"timestamps\":{\"start\":" << started_at_ << "}"
        << "}}}";
 
   if (send_frame(1, json.str())) { // FRAME

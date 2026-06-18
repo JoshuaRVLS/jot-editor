@@ -89,7 +89,7 @@ const std::vector<std::string> &ex_commands() {
       "symbols", "outline",
       "tsinstall", "treesitterinstall", "tsstatus", "tsreload",
       "treesitterreload",
-      "gitstatus", "gitdiff", "gitdiffstaged", "gitstage", "gitunstage",
+      "gitstatus", "gitdiff", "gitdiffclose", "gitdiffrefresh", "gitdiffstaged", "gitstage", "gitunstage",
       "gitstageall", "gitunstageall", "gitcommit", "gitlog", "gitblame",
       "gitrefresh", "recent", "openrecent", "reopen",
       "reopenlast", "autosave", "help", "h"};

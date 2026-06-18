@@ -3,15 +3,12 @@ set(JOT_INPUT_SOURCES
   input/commands/execute.cpp
   input/commands/help.cpp
   input/commands/navigation.cpp
+  input/commands/save_prompt.cpp
   input/commands/utils.cpp
   input/commands/ex.cpp
   input/menu_bar.cpp
   input/modes/dispatch.cpp
-  input/modes/insert.cpp
-  input/modes/normal.cpp
-  input/modes/transitions.cpp
-  input/modes/vim.cpp
-  input/modes/visual.cpp
+  input/modes/modeless.cpp
   input/mouse.cpp
   input/palette/input.cpp
   input/palette/palette.cpp

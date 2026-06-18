@@ -15,6 +15,14 @@ public:
     std::string ch;
     int fg;
     int bg;
+    bool fg_default = false;
+    bool bg_default = false;
+    bool reverse = false;
+  };
+
+  struct ResolvedCellColors {
+    int fg;
+    int bg;
   };
 
   struct OutputRow {
@@ -49,6 +57,17 @@ private:
 public:
   IntegratedTerminal();
   ~IntegratedTerminal();
+
+  static ResolvedCellColors resolve_cell_colors(const StyledCell &cell,
+                                                int default_fg,
+                                                int default_bg) {
+    ResolvedCellColors colors{cell.fg_default ? default_fg : cell.fg,
+                              cell.bg_default ? default_bg : cell.bg};
+    if (cell.reverse) {
+      std::swap(colors.fg, colors.bg);
+    }
+    return colors;
+  }
 
   bool open_shell(const std::string &cwd = "");
   void close_shell();

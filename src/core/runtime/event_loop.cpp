@@ -1,4 +1,5 @@
 #include "event_loop.h"
+#include <chrono>
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
@@ -335,10 +336,17 @@ void EventLoop::close_delete_fs_event(uv_handle_t *handle) {
   delete watcher;
 }
 
-// ── Editor event loop integration ────────────────────────────────────────────
+// Editor Event Loop 
 
 void Editor::handle_terminal_event(const Event &ev) {
   if (ev.type == EVENT_REDRAW) {
+    return;
+  }
+  
+  if (ev.type == EVENT_PASTE) {
+    cancel_lsp_mouse_hover();
+    clipboard = ev.paste.text ? ev.paste.text : "";
+    paste();
     return;
   }
 
@@ -351,6 +359,7 @@ void Editor::handle_terminal_event(const Event &ev) {
   }
 
   if (ev.type == EVENT_KEY) {
+    keyboard_press_count++;
     cancel_lsp_mouse_hover();
     int ch = ev.key.key;
     bool is_ctrl = ev.key.ctrl;
@@ -369,8 +378,6 @@ void Editor::handle_terminal_event(const Event &ev) {
 
     bool toggle_terminal_shortcut =
         (is_ctrl && (ch == '`' || ch == '~' || ch == '\\' || ch == '|')) ||
-        (is_ctrl && (ch == 'x' || ch == 'X')) ||
-        ch == 24 || original_ch == 24 ||
         ch == 28 || original_ch == 28 || ch == 30 || original_ch == 30;
     if (toggle_terminal_shortcut) {
       toggle_integrated_terminal();
@@ -402,6 +409,32 @@ void Editor::handle_terminal_event(const Event &ev) {
   if (ev.type == EVENT_MOUSE) {
     int button = ev.mouse.button;
     bool is_wheel = (button >= 64 && button <= 67);
+
+    if (telescope.is_active()) {
+      bool is_click = ev.mouse.pressed && ((button & 0x03) == 0);
+      static long long last_telescope_click_ms = 0;
+      static int last_telescope_click_x = -1;
+      static int last_telescope_click_y = -1;
+      long long now_ms =
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::steady_clock::now().time_since_epoch())
+              .count();
+      bool is_double_click =
+          is_click && last_telescope_click_ms > 0 &&
+          now_ms - last_telescope_click_ms <= 350 &&
+          last_telescope_click_x == ev.mouse.x &&
+          last_telescope_click_y == ev.mouse.y;
+      if (is_click) {
+        last_telescope_click_ms = now_ms;
+        last_telescope_click_x = ev.mouse.x;
+        last_telescope_click_y = ev.mouse.y;
+      }
+      if (handle_telescope_mouse(ev.mouse.x, ev.mouse.y, is_click,
+                                 is_double_click, button == 64,
+                                 button == 65)) {
+        return;
+      }
+    }
 
     if (is_wheel && !telescope.is_active() && !show_command_palette &&
         !show_search) {

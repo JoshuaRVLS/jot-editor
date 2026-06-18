@@ -525,6 +525,9 @@ void Editor::save_workspace_session() {
   out << "root\t" << escape_field(workspace_session_root) << "\n";
   out << "show_sidebar\t" << (show_sidebar ? 1 : 0) << "\n";
   out << "sidebar_width\t" << effective_sidebar_width() << "\n";
+  out << "sidebar_view\t"
+      << (active_sidebar_view == SIDEBAR_VIEW_GIT ? "git" : "explorer")
+      << "\n";
   out << "right_panel_width\t" << right_panel_width << "\n";
   out << "sidebar_show_hidden\t" << (sidebar_show_hidden ? 1 : 0) << "\n";
 
@@ -575,6 +578,7 @@ bool Editor::restore_workspace_session() {
   };
 
   bool restored_show_sidebar = true;
+  SidebarView restored_sidebar_view = SIDEBAR_VIEW_EXPLORER;
   bool restored_hidden = sidebar_show_hidden;
   int restored_sidebar_width = sidebar_width;
   int restored_right_panel_width = right_panel_width;
@@ -603,6 +607,9 @@ bool Editor::restore_workspace_session() {
         restored_sidebar_width = std::stoi(parts[1]);
       } catch (...) {
       }
+    } else if (key == "sidebar_view" && parts.size() >= 2) {
+      restored_sidebar_view =
+          parts[1] == "git" ? SIDEBAR_VIEW_GIT : SIDEBAR_VIEW_EXPLORER;
     } else if (key == "right_panel_width" && parts.size() >= 2) {
       try {
         restored_right_panel_width = std::stoi(parts[1]);
@@ -634,6 +641,7 @@ bool Editor::restore_workspace_session() {
 
   if (entries.empty()) {
     show_sidebar = restored_show_sidebar;
+    active_sidebar_view = restored_sidebar_view;
     sidebar_width =
         std::clamp(restored_sidebar_width, min_sidebar_width(),
                    max_sidebar_width());
@@ -646,6 +654,7 @@ bool Editor::restore_workspace_session() {
   sidebar_width =
       std::clamp(restored_sidebar_width, min_sidebar_width(),
                  max_sidebar_width());
+  active_sidebar_view = restored_sidebar_view;
   right_panel_width =
       clamp_restored_right_panel_width();
   sidebar_show_hidden = restored_hidden;
@@ -737,6 +746,7 @@ bool Editor::restore_workspace_session() {
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
   show_sidebar = restored_show_sidebar;
+  active_sidebar_view = restored_sidebar_view;
   sidebar_width = effective_sidebar_width();
   set_message("Workspace restored: " + root_dir);
   return true;
@@ -793,6 +803,214 @@ void Editor::handle_sidebar_input(int ch) {
     }
     return abs_path;
   };
+  auto shell_quote_local = [](const std::string &value) {
+    std::string out = "'";
+    out.reserve(value.size() + 8);
+    for (char c : value) {
+      if (c == '\'') {
+        out += "'\\''";
+      } else {
+        out.push_back(c);
+      }
+    }
+    out.push_back('\'');
+    return out;
+  };
+  auto limit_lines_local = [](const std::string &text, int max_lines) {
+    if (max_lines <= 0) {
+      return std::string();
+    }
+    std::istringstream iss(text);
+    std::string out;
+    std::string line;
+    int count = 0;
+    while (count < max_lines && std::getline(iss, line)) {
+      if (count > 0) {
+        out += '\n';
+      }
+      out += line;
+      count++;
+    }
+    if (std::getline(iss, line)) {
+      out += "\n...";
+    }
+    return out;
+  };
+
+  if (ch == '\t') {
+    active_sidebar_view = active_sidebar_view == SIDEBAR_VIEW_EXPLORER
+                              ? SIDEBAR_VIEW_GIT
+                              : SIDEBAR_VIEW_EXPLORER;
+    if (active_sidebar_view == SIDEBAR_VIEW_GIT) {
+      refresh_git_status(true);
+    }
+    needs_redraw = true;
+    return;
+  }
+
+  if (active_sidebar_view == SIDEBAR_VIEW_GIT) {
+    std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
+    int reserved_terminal_h = 0;
+    if (show_integrated_terminal && !integrated_terminals.empty()) {
+      reserved_terminal_h =
+          std::clamp(integrated_terminal_height, 5,
+                     std::max(5, ui->get_height() / 2));
+    }
+    const int view_h = std::max(1, ui->get_height() - status_height -
+                                       tab_height - reserved_terminal_h - 2);
+    auto clamp_scroll = [&]() {
+      int max_scroll = std::max(0, (int)git_rows.size() - view_h);
+      git_sidebar_scroll = std::clamp(git_sidebar_scroll, 0, max_scroll);
+    };
+    auto ensure_selected_visible = [&]() {
+      if (git_sidebar_selected < git_sidebar_scroll) {
+        git_sidebar_scroll = git_sidebar_selected;
+      } else if (git_sidebar_selected >= git_sidebar_scroll + view_h) {
+        git_sidebar_scroll = git_sidebar_selected - view_h + 1;
+      }
+      clamp_scroll();
+    };
+
+    if (!git_rows.empty()) {
+      git_sidebar_selected =
+          std::clamp(git_sidebar_selected, 0, (int)git_rows.size() - 1);
+    } else {
+      git_sidebar_selected = 0;
+    }
+    clamp_scroll();
+
+    auto selected_path = [&]() -> std::string {
+      if (git_rows.empty() || git_sidebar_selected < 0 ||
+          git_sidebar_selected >= (int)git_rows.size()) {
+        return "";
+      }
+      return git_rows[(size_t)git_sidebar_selected].path;
+    };
+    auto selected_rel = [&]() -> std::string {
+      if (git_rows.empty() || git_sidebar_selected < 0 ||
+          git_sidebar_selected >= (int)git_rows.size()) {
+        return "";
+      }
+      return git_rows[(size_t)git_sidebar_selected].relative_path;
+    };
+
+    if (ch == 1008 || ch == 'k') {
+      if (git_sidebar_selected > 0) {
+        git_sidebar_selected--;
+        ensure_selected_visible();
+        needs_redraw = true;
+      }
+      return;
+    }
+    if (ch == 1009 || ch == 'j') {
+      if (git_sidebar_selected < (int)git_rows.size() - 1) {
+        git_sidebar_selected++;
+        ensure_selected_visible();
+        needs_redraw = true;
+      }
+      return;
+    }
+    if (ch == 1015) {
+      git_sidebar_selected = std::max(0, git_sidebar_selected - view_h);
+      ensure_selected_visible();
+      needs_redraw = true;
+      return;
+    }
+    if (ch == 1016) {
+      git_sidebar_selected = std::min(std::max(0, (int)git_rows.size() - 1),
+                                      git_sidebar_selected + view_h);
+      ensure_selected_visible();
+      needs_redraw = true;
+      return;
+    }
+    if (ch == 1012) {
+      git_sidebar_selected = 0;
+      ensure_selected_visible();
+      needs_redraw = true;
+      return;
+    }
+    if (ch == 1013) {
+      git_sidebar_selected = std::max(0, (int)git_rows.size() - 1);
+      ensure_selected_visible();
+      needs_redraw = true;
+      return;
+    }
+    if (ch == '\n' || ch == 13 || ch == 'l' || ch == 1010) {
+      std::string path = selected_path();
+      if (!path.empty()) {
+        open_file(path, false);
+        focus_state = FOCUS_EDITOR;
+        needs_redraw = true;
+      }
+      return;
+    }
+    if (ch == 'r' || ch == 'R') {
+      refresh_git_status(true);
+      message = has_git_repo() ? "Git: refreshed" : "Git: not a repository";
+      needs_redraw = true;
+      return;
+    }
+    if (ch == 'a') {
+      refresh_git_status(true);
+      if (!has_git_repo()) {
+        message = "Git: not a repository";
+      } else if (git_stage_all()) {
+        message = "Git staged all changes";
+      } else {
+        message = "Git stage all failed";
+      }
+      needs_redraw = true;
+      return;
+    }
+    if (ch == 's') {
+      std::string path = selected_path();
+      refresh_git_status(true);
+      if (path.empty() || !has_git_repo()) {
+        message = "Git: select a changed file";
+      } else if (git_stage_path(path)) {
+        message = "Git staged: " + selected_rel();
+      } else {
+        message = "Git stage failed";
+      }
+      needs_redraw = true;
+      return;
+    }
+    if (ch == 'u') {
+      std::string path = selected_path();
+      refresh_git_status(true);
+      if (path.empty() || !has_git_repo()) {
+        message = "Git: select a changed file";
+      } else if (git_unstage_path(path)) {
+        message = "Git unstaged: " + selected_rel();
+      } else {
+        message = "Git unstage failed";
+      }
+      needs_redraw = true;
+      return;
+    }
+    if (ch == 'd' || ch == 'D') {
+      std::string path = selected_path();
+      refresh_git_status(true);
+      if (path.empty() || !has_git_repo()) {
+        message = "Git: select a changed file";
+      } else {
+        std::string rel = to_git_relative_path(path);
+        std::string diff =
+            run_git_capture(std::string(ch == 'D' ? "diff --staged -- "
+                                                   : "diff -- ") +
+                            shell_quote_local(rel));
+        if (diff.empty()) {
+          message = ch == 'D' ? "Git diff: no staged changes for " + rel
+                              : "Git diff: no unstaged changes for " + rel;
+        } else {
+          show_popup(limit_lines_local(diff, 18), 2, tab_height + 1);
+        }
+      }
+      needs_redraw = true;
+      return;
+    }
+    return;
+  }
 
   std::vector<FileNode *> flat;
   flatten_nodes_mut(file_tree, flat);
@@ -1192,7 +1410,37 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click,
   if (!is_click)
     return;
 
-  (void)x;
+  int rel_y = y - tab_height;
+  if (rel_y < 0)
+    return;
+  if (x < sidebar_activity_rail_width()) {
+    if (rel_y == 1) {
+      active_sidebar_view = SIDEBAR_VIEW_EXPLORER;
+      needs_redraw = true;
+    } else if (rel_y == 3) {
+      active_sidebar_view = SIDEBAR_VIEW_GIT;
+      refresh_git_status(true);
+      needs_redraw = true;
+    }
+    return;
+  }
+
+  if (active_sidebar_view == SIDEBAR_VIEW_GIT) {
+    std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
+    int sidebar_row = y - tab_height - 1;
+    if (sidebar_row < 0)
+      return;
+    int row = sidebar_row + git_sidebar_scroll;
+    if (row >= 0 && row < (int)git_rows.size()) {
+      git_sidebar_selected = row;
+      open_file(git_rows[(size_t)row].path, !is_double_click);
+      if (is_double_click) {
+        focus_state = FOCUS_EDITOR;
+      }
+      needs_redraw = true;
+    }
+    return;
+  }
 
   std::vector<FileNode *> flat;
   flatten_nodes_mut(file_tree, flat);

@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "ui/text.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -90,6 +91,15 @@ std::string limit_lines(const std::string &text, int max_lines) {
   }
   return out;
 }
+
+bool popup_markdown_fence(const std::string &line) {
+  size_t start = 0;
+  while (start < line.size() &&
+         (line[start] == ' ' || line[start] == '\t')) {
+    start++;
+  }
+  return line.compare(start, 3, "```") == 0;
+}
 } // namespace
 
 void Editor::show_popup(const std::string &text, int x, int y) {
@@ -102,8 +112,11 @@ void Editor::show_popup(const std::string &text, int x, int y) {
   std::stringstream ss(text);
   std::string line;
   while (std::getline(ss, line)) {
-    if ((int)line.length() > max_w)
-      max_w = line.length();
+    if (popup_markdown_fence(line)) {
+      continue;
+    }
+    if (ui_cell_count(line) > max_w)
+      max_w = ui_cell_count(line);
     h++;
   }
   popup.w = max_w + 2;
@@ -421,6 +434,20 @@ void Editor::execute_context_menu_item(int index) {
       }
     }
     break;
+  case CONTEXT_ACTION_GIT_STAGE_ALL:
+    refresh_git_status(true);
+    if (!has_git_repo()) {
+      set_message("Git: not a repository");
+    } else if (git_stage_all()) {
+      set_message("Git staged all changes");
+    } else {
+      set_message("Git stage all failed");
+    }
+    break;
+  case CONTEXT_ACTION_GIT_REFRESH:
+    refresh_git_status(true);
+    set_message(has_git_repo() ? "Git: refreshed" : "Git: not a repository");
+    break;
   case CONTEXT_ACTION_TERMINAL_FOCUS:
     if (target_terminal >= 0 &&
         target_terminal < (int)integrated_terminals.size()) {
@@ -510,7 +537,6 @@ bool Editor::close_active_floating_ui() {
 
   if (telescope.is_active()) {
     telescope.close();
-    waiting_for_space_f = false;
     needs_redraw = true;
     return true;
   }

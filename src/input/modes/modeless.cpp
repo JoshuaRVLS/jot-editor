@@ -1,8 +1,8 @@
 #include "editor.h"
 #include <cctype>
 
-void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
-                                bool is_alt) {
+void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift,
+                                   bool is_alt) {
   if (lsp_completion_visible) {
     if (ch == 1008) {
       lsp_completion_selected =
@@ -25,9 +25,20 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
     }
     if (ch == 27) {
       hide_lsp_completion();
-      enter_normal_mode();
       return;
     }
+  }
+
+  const bool modified_enter =
+      (is_ctrl || is_alt) && (ch == '\n' || ch == 13);
+  if (modified_enter) {
+    hide_lsp_completion();
+    if (is_shift) {
+      insert_line_above();
+    } else {
+      insert_line_below();
+    }
+    return;
   }
 
   if (is_ctrl && is_shift && (ch == 'l' || ch == 'L')) {
@@ -144,7 +155,19 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
     case 'c':
     case 'C':
       hide_lsp_completion();
-      enter_normal_mode();
+      copy();
+      set_message("Copied");
+      return;
+    case 'x':
+    case 'X':
+      hide_lsp_completion();
+      cut();
+      set_message("Cut");
+      return;
+    case 'v':
+    case 'V':
+      hide_lsp_completion();
+      paste();
       return;
     case 'b':
     case 'B':
@@ -153,7 +176,6 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
     case 'e':
     case 'E':
       telescope.open(root_dir.empty() ? "." : root_dir);
-      leader_key_pending = false;
       needs_redraw = true;
       return;
     case 'f':
@@ -241,7 +263,11 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
 
   if (ch == 27) {
     hide_lsp_completion();
-    enter_normal_mode();
+    auto &buf = get_buffer();
+    if (buf.selection.active) {
+      clear_selection();
+      needs_redraw = true;
+    }
     return;
   }
 
@@ -300,31 +326,31 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
     close_buffer();
     return;
   }
-  if (is_alt && ch == 'g') { // vim-ish: gg
+  if (is_alt && ch == 'g') {
     move_to_file_start(false);
     return;
   }
-  if (is_alt && ch == 'G') { // vim-ish: G
+  if (is_alt && ch == 'G') {
     move_to_file_end(false);
     return;
   }
-  if (is_alt && (ch == 'i' || ch == 'I')) { // vim-ish: ^
+  if (is_alt && (ch == 'i' || ch == 'I')) {
     move_to_line_smart_start(false);
     return;
   }
-  if (is_alt && (ch == 'a' || ch == 'A')) { // vim-ish: $
+  if (is_alt && (ch == 'a' || ch == 'A')) {
     move_to_line_end(false);
     return;
   }
-  if (is_alt && (ch == 'h' || ch == 'H')) { // vim-ish: b
+  if (is_alt && (ch == 'h' || ch == 'H')) {
     move_word_backward(false);
     return;
   }
-  if (is_alt && (ch == 'l' || ch == 'L')) { // vim-ish: w
+  if (is_alt && (ch == 'l' || ch == 'L')) {
     move_word_forward(false);
     return;
   }
-  if (is_alt && ch == 'd') { // vim-ish: dd
+  if (is_alt && ch == 'd') {
     delete_line();
     return;
   }
@@ -374,11 +400,11 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
     needs_redraw = true;
     return;
   }
-  if (is_alt && (ch == 'u' || ch == 'U')) {
+  if (is_alt && ch == 'u') {
     transform_selection_uppercase();
     return;
   }
-  if (is_alt && (ch == 'n' || ch == 'N')) {
+  if (is_alt && ch == 'U') {
     transform_selection_lowercase();
     return;
   }
@@ -479,10 +505,7 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
   // Shift+Tab (terminal escape \e[Z mapped in terminal.cpp)
   if (ch == 1017) {
     hide_lsp_completion();
-    auto &buf = get_buffer();
-    if (buf.selection.active) {
-      outdent_selection();
-    }
+    outdent_selection();
     needs_redraw = true;
     return;
   }

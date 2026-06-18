@@ -75,6 +75,15 @@ void Editor::clear_search_scope() {
   search_scope_end = {0, 0};
 }
 
+void Editor::open_search() {
+  if (show_search) {
+    search_focus_replace = false;
+    needs_redraw = true;
+    return;
+  }
+  toggle_search();
+}
+
 void Editor::toggle_search() {
   show_search = !show_search;
   if (!show_search) {

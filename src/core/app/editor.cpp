@@ -48,6 +48,7 @@ std::string normalize_diagnostic_path(const std::string &path) {
 
 Editor::Editor() {
   config.load();
+  image_viewer.configure_backend(config.get("image_viewer_backend", "auto"));
 #ifdef JOT_TREESITTER
   ts_manager_.set_runtime_options(
       config.get_list("treesitter_library_paths"),
@@ -56,9 +57,9 @@ Editor::Editor() {
 #endif
 
   running = true;
+  keyboard_press_count = 0;
   pane_root = -1;
   current_pane = 0;
-  waiting_for_space_f = false;
   pane_layout_mode = PANE_LAYOUT_SINGLE;
   show_minimap = false;
   minimap_width = 10; // Fixed width for now
@@ -116,6 +117,7 @@ Editor::Editor() {
   popup.text = "";
 
   show_sidebar = false;
+  active_sidebar_view = SIDEBAR_VIEW_EXPLORER;
   sidebar_width = 30;
   root_dir = ".";
   workspace_session_enabled = false;
@@ -133,6 +135,8 @@ Editor::Editor() {
   git_last_refresh_ms = 0;
   file_tree_selected = 0;
   file_tree_scroll = 0;
+  git_sidebar_selected = 0;
+  git_sidebar_scroll = 0;
   sidebar_show_hidden = false;
   file_tree_watch_signature_.clear();
   file_tree_watch_ready_ = false;
@@ -141,6 +145,8 @@ Editor::Editor() {
   status_height = 2;
   tab_height = 1;
   tab_size = config.get_int("tab_size", 2);
+  show_indent_guides = config.get_bool("show_indent_guides", false);
+  relative_line_numbers = config.get_bool("relative_line_numbers", false);
   tab_scroll_index = 0;
   preview_buffer_index = -1;
   last_sidebar_click_ms = 0;
@@ -241,13 +247,6 @@ Editor::Editor() {
   lsp_definition_pending_location = {};
   lsp_back_jump_pending = false;
   lsp_back_pending_location = {};
-
-  // Modeless editor behavior: keep an always-insert internal mode.
-  mode = MODE_INSERT;
-  visual_start = {0, 0};
-  visual_line_mode = false;
-  has_pending_key = false;
-  pending_key = 0;
 
   // Easter egg
   easter_egg_timer = 0;
@@ -409,22 +408,42 @@ void Editor::poll_discord_rpc(long long now_ms) {
   if (!config.get_bool("discord_rpc", true)) {
     if (discord_rpc.is_connected()) {
       discord_rpc.disconnect();
-    }
+    } 
     return;
   }
 
   discord_rpc.poll(now_ms);
 
-  std::string details;
+  std::string project = "No Workspace";
   if (!root_dir.empty() && root_dir != ".") {
-    details = fs::path(root_dir).filename().string();
+    project = fs::path(root_dir).filename().string();
   }
-
-  std::string state;
-  if (!buffers.empty() && current_buffer >= 0 &&
-      current_buffer < (int)buffers.size() &&
-      !buffers[current_buffer].filepath.empty()) {
-    state = "Editing " + fs::path(buffers[current_buffer].filepath).filename().string();
+  
+  std::string details = "Working on " + project;
+  
+  if (has_git_repo() && !git_branch.empty()) {
+    details += " . " + git_branch;
+    if (git_dirty_count > 0) {
+      details += " (" + std::to_string(git_dirty_count) + " changes)";
+    }
+  }
+  
+  std::string state = "Browsing workspace";
+  
+  if (!buffers.empty() && current_buffer >= 0 && !buffers[current_buffer].filepath.empty()) {
+    
+    const std::string path = buffers[current_buffer].filepath;
+    const std::string filename = fs::path(path).filename().string();
+    std::string ext = get_file_extension(path);
+    if (!ext.empty() && ext[0] == '.') {
+      ext.erase(0, 1);
+    }
+    
+    if (!ext.empty()) {
+      state = "Editing " + filename + " . " + ext;
+    } else {
+      state = "Editing " + filename;
+    }
   }
 
   if (details != discord_rpc_last_details || state != discord_rpc_last_state) {

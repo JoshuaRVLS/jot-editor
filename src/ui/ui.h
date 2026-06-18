@@ -26,19 +26,23 @@ struct UICell {
   bool operator!=(const UICell &other) const { return !(*this == other); }
 };
 
+enum class UICursorShape {
+  Block,
+  Bar,
+};
+
 class UI {
 private:
   Terminal *term;
   std::vector<std::vector<UICell>> grid;
-  std::vector<std::vector<UICell>> last_grid;
   int width, height;
   int cursor_x, cursor_y;
+  UICursorShape cursor_shape;
   bool cursor_hidden;
   int default_fg = 7;
   int default_bg = 0;
 
   void set_cell(int x, int y, const UICell &cell);
-  UICell get_cell(int x, int y) const;
 
 public:
   UI(Terminal *t);
@@ -47,6 +51,7 @@ public:
 
   void clear();
   void render();
+  void emit_raw_after_frame(const std::string &bytes);
 
   void set_default_colors(int fg, int bg);
 
@@ -58,7 +63,7 @@ public:
 
   // Store cursor position/visibility, no terminal writes. render() emits
   // the cursor at frame-end; flush_cursor() emits it for idle frames.
-  void set_cursor(int x, int y);
+  void set_cursor(int x, int y, UICursorShape shape = UICursorShape::Block);
   void hide_cursor();
   void flush_cursor();
 

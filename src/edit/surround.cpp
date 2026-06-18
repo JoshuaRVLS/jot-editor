@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "python_bridge/api.h"
+#include "quote_text_object.h"
 #include <algorithm>
 #include <cctype>
 
@@ -142,5 +143,46 @@ bool Editor::unsurround_selection_or_cursor() {
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);
   }
+  return true;
+}
+
+bool Editor::change_inside_quote(char quote) {
+  auto &buf = get_buffer();
+  if (buf.is_lazy()) buf.materialize();
+  if (buf.lines.empty()) {
+    set_message("No quote pair found");
+    return false;
+  }
+
+  int y = std::clamp(buf.cursor.y, 0, (int)buf.lines.size() - 1);
+  std::string &line = buf.lines[y];
+  QuoteTextObject::Range range =
+      QuoteTextObject::find_inner_range(line, buf.cursor.x, quote);
+  if (!range.found) {
+    set_message("No quote pair found");
+    return false;
+  }
+
+  save_state();
+  if (range.inner_end > range.inner_start) {
+    line.erase((size_t)range.inner_start,
+               (size_t)(range.inner_end - range.inner_start));
+    buf.modified = true;
+    buf.is_placeholder = false;
+    if (python_api) {
+      python_api->on_buffer_change(buf.filepath, "");
+    }
+    if (!buf.filepath.empty()) {
+      notify_lsp_change(buf.filepath);
+    }
+  }
+
+  buf.selection.active = false;
+  buf.cursor.y = y;
+  buf.cursor.x = range.inner_start;
+  buf.preferred_x = buf.cursor.x;
+  clamp_cursor(get_pane().buffer_id);
+  ensure_cursor_visible();
+  needs_redraw = true;
   return true;
 }

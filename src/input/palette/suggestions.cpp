@@ -164,6 +164,8 @@ const std::vector<CommandMeta> &command_palette_metadata() {
       {"autosave", "Settings", "Configure auto-save", 70},
       {"help", "Help", "Show help or command list", 80},
       {"h", "Help", "Show help or command list", 70},
+      {"gitdiffclose", "Git", "Close git diff panel", 68},
+      {"gitdiffrefresh", "Git", "Refresh Open Git Diff", 68}
   };
   return meta;
 }

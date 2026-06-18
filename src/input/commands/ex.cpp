@@ -319,7 +319,6 @@ bool Editor::execute_ex_command(const std::string &input_line) {
       target = root_dir.empty() ? "." : root_dir;
     }
     telescope.open(target);
-    waiting_for_space_f = false;
     show_command_palette = false;
     command_palette_query.clear();
     command_palette_results.clear();
@@ -700,51 +699,17 @@ bool Editor::execute_ex_command(const std::string &input_line) {
       }
     }
   } else if (lcmd == "gitdiff") {
-    refresh_git_status(true);
-    if (!has_git_repo()) {
-      set_message("Git: not a repository");
-    } else {
-      auto &buf = get_buffer();
-      std::string target = trim_copy(arg);
-      if (target.empty()) {
-        if (buf.filepath.empty()) {
-          set_message("Usage: :gitdiff [file]");
-        } else {
-          target = to_git_relative_path(buf.filepath);
-        }
-      }
-      if (!target.empty()) {
-        std::string diff = run_git_capture("diff -- " + shell_quote(target));
-        if (trim_copy(diff).empty()) {
-          set_message("Git diff: no unstaged changes for " + target);
-        } else {
-          show_popup(limit_lines(diff, 18), 2, tab_height + 1);
-        }
-      }
-    }
+    open_git_diff_panel(trim_copy(arg), false);
   } else if (lcmd == "gitdiffstaged") {
-    refresh_git_status(true);
-    if (!has_git_repo()) {
-      set_message("Git: not a repository");
+    open_git_diff_panel(trim_copy(arg), true);
+  } else if (lcmd == "gitdiffclose") {
+    close_git_diff_panel();
+    set_message("Git Diff closed");
+  } else if (lcmd == "gitdiffrefresh") {
+    if (git_diff_panel.visible) {
+      open_git_diff_panel(git_diff_panel.path, git_diff_panel.staged);
     } else {
-      auto &buf = get_buffer();
-      std::string target = trim_copy(arg);
-      if (target.empty()) {
-        if (buf.filepath.empty()) {
-          set_message("Usage: :gitdiffstaged [file]");
-        } else {
-          target = to_git_relative_path(buf.filepath);
-        }
-      }
-      if (!target.empty()) {
-        std::string diff =
-            run_git_capture("diff --staged -- " + shell_quote(target));
-        if (trim_copy(diff).empty()) {
-          set_message("Git diff: no staged changes for " + target);
-        } else {
-          show_popup(limit_lines(diff, 18), 2, tab_height + 1);
-        }
-      }
+      set_message("Git diff: no open diff");
     }
   } else if (lcmd == "gitlog") {
     refresh_git_status(true);

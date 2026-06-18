@@ -6,10 +6,17 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <unistd.h>
 
 namespace fs = std::filesystem;
 
 namespace {
+std::string lower_copy(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return (char)std::tolower(c); });
+  return value;
+}
+
 std::string shell_quote(const std::string &s) {
   std::string out = "'";
   for (char c : s) {
@@ -25,6 +32,16 @@ std::string shell_quote(const std::string &s) {
 bool command_exists(const char *cmd) {
   std::string check = std::string("command -v ") + cmd + " >/dev/null 2>&1";
   return std::system(check.c_str()) == 0;
+}
+
+bool env_present(const char *name) {
+  const char *value = std::getenv(name);
+  return value && value[0] != '\0';
+}
+
+std::string getenv_string(const char *name) {
+  const char *value = std::getenv(name);
+  return value ? std::string(value) : std::string();
 }
 
 int grayscale_to_char_index(int gray) {
@@ -164,6 +181,192 @@ ImageViewer::ImageViewer() {
   border_fg = 7;
   border_bg = 0;
   has_color_preview = false;
+  configured_backend = Backend::Auto;
+  active_backend = Backend::Cell;
+  graphics_dirty = false;
+  graphics_visible = false;
+  graphics_x = graphics_y = graphics_w = graphics_h = 0;
+  status_text.clear();
+  graphics_file.clear();
+  remove_graphics_file = false;
+}
+
+ImageViewer::Backend ImageViewer::parse_backend(const std::string &name) {
+  std::string n = lower_copy(name);
+  if (n == "kitty")
+    return Backend::Kitty;
+  if (n == "sixel")
+    return Backend::Sixel;
+  if (n == "cell" || n == "cells" || n == "ascii" || n == "ansi")
+    return Backend::Cell;
+  if (n == "off" || n == "none" || n == "disabled")
+    return Backend::Off;
+  return Backend::Auto;
+}
+
+std::string ImageViewer::backend_name(Backend backend) {
+  switch (backend) {
+  case Backend::Auto:
+    return "auto";
+  case Backend::Kitty:
+    return "kitty";
+  case Backend::Sixel:
+    return "sixel";
+  case Backend::Cell:
+    return "cell";
+  case Backend::Off:
+    return "off";
+  }
+  return "cell";
+}
+
+bool ImageViewer::terminal_supports_kitty() {
+  if (env_present("KITTY_WINDOW_ID"))
+    return true;
+  std::string term = lower_copy(getenv_string("TERM"));
+  return term.find("kitty") != std::string::npos;
+}
+
+bool ImageViewer::terminal_may_support_sixel() {
+  std::string term = lower_copy(getenv_string("TERM"));
+  std::string program = lower_copy(getenv_string("TERM_PROGRAM"));
+  if (term.find("sixel") != std::string::npos)
+    return true;
+  if (program.find("wezterm") != std::string::npos)
+    return true;
+  if (env_present("KONSOLE_VERSION"))
+    return true;
+  if (term.find("mlterm") != std::string::npos)
+    return true;
+  if (term.find("xterm") != std::string::npos)
+    return true;
+  return false;
+}
+
+bool ImageViewer::helper_available(const std::string &cmd) {
+  if (cmd.empty())
+    return false;
+  return command_exists(cmd.c_str());
+}
+
+std::string ImageViewer::base64_encode(const std::string &input) {
+  static const char alphabet[] =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  std::string out;
+  out.reserve(((input.size() + 2) / 3) * 4);
+  for (size_t i = 0; i < input.size(); i += 3) {
+    unsigned int b0 = (unsigned char)input[i];
+    unsigned int b1 = (i + 1 < input.size()) ? (unsigned char)input[i + 1] : 0;
+    unsigned int b2 = (i + 2 < input.size()) ? (unsigned char)input[i + 2] : 0;
+    out.push_back(alphabet[(b0 >> 2) & 0x3F]);
+    out.push_back(alphabet[((b0 & 0x03) << 4) | ((b1 >> 4) & 0x0F)]);
+    out.push_back(i + 1 < input.size()
+                      ? alphabet[((b1 & 0x0F) << 2) | ((b2 >> 6) & 0x03)]
+                      : '=');
+    out.push_back(i + 2 < input.size() ? alphabet[b2 & 0x3F] : '=');
+  }
+  return out;
+}
+
+std::string ImageViewer::build_kitty_file_command(const std::string &path,
+                                                  int x, int y, int w, int h) {
+  if (path.empty() || w <= 0 || h <= 0)
+    return "";
+  std::ostringstream out;
+  out << "\x1b[" << y + 1 << ";" << x + 1 << "H";
+  out << "\x1b_Ga=T,f=100,t=f,q=2,c=" << std::max(1, w)
+      << ",r=" << std::max(1, h) << ";"
+      << base64_encode(path) << "\x1b\\";
+  return out.str();
+}
+
+std::string ImageViewer::build_kitty_delete_command() {
+  return "\x1b_Ga=d,d=A,q=2;\x1b\\";
+}
+
+std::string ImageViewer::build_sixel_command(const std::string &path, int w,
+                                             int h) {
+  if (path.empty() || w <= 0 || h <= 0)
+    return "";
+  int px_w = std::max(1, w * 8);
+  int px_h = std::max(1, h * 16);
+  return "img2sixel -w " + std::to_string(px_w) + " -h " +
+         std::to_string(px_h) + " " + shell_quote(path) + " 2>/dev/null";
+}
+
+void ImageViewer::configure_backend(const std::string &backend) {
+  Backend parsed = parse_backend(backend);
+  if (parsed == configured_backend)
+    return;
+  configured_backend = parsed;
+  active_backend = resolve_backend();
+  graphics_dirty = true;
+}
+
+ImageViewer::Backend ImageViewer::resolve_backend() const {
+  Backend requested = configured_backend;
+  if (requested == Backend::Off)
+    return Backend::Off;
+  if (requested == Backend::Cell)
+    return Backend::Cell;
+  if (requested == Backend::Kitty)
+    return terminal_supports_kitty() ? Backend::Kitty : Backend::Cell;
+  if (requested == Backend::Sixel) {
+    return terminal_may_support_sixel() && helper_available("img2sixel")
+               ? Backend::Sixel
+               : Backend::Cell;
+  }
+  if (terminal_supports_kitty())
+    return Backend::Kitty;
+  if (terminal_may_support_sixel() && helper_available("img2sixel"))
+    return Backend::Sixel;
+  return Backend::Cell;
+}
+
+void ImageViewer::clear_graphics_file() {
+  if (remove_graphics_file && !graphics_file.empty()) {
+    std::error_code ec;
+    fs::remove(graphics_file, ec);
+  }
+  graphics_file.clear();
+  remove_graphics_file = false;
+}
+
+std::string ImageViewer::prepare_kitty_graphics_file() {
+  clear_graphics_file();
+  if (current_image.empty())
+    return "";
+
+  std::string ext = fs::path(current_image).extension().string();
+  ext = lower_copy(ext);
+  if (ext == ".png") {
+    graphics_file = current_image;
+    remove_graphics_file = false;
+    return graphics_file;
+  }
+
+  if (!helper_available("magick") && !helper_available("convert")) {
+    return "";
+  }
+
+  fs::path tmp = fs::temp_directory_path() /
+                 ("jot-image-viewer-" + std::to_string((long long)getpid()) +
+                  ".png");
+  std::string cmd;
+  if (helper_available("magick")) {
+    cmd = "magick " + shell_quote(current_image) +
+          " -auto-orient " + shell_quote(tmp.string()) + " 2>/dev/null";
+  } else {
+    cmd = "convert " + shell_quote(current_image) +
+          " -auto-orient " + shell_quote(tmp.string()) + " 2>/dev/null";
+  }
+  if (std::system(cmd.c_str()) != 0 || !fs::exists(tmp)) {
+    return "";
+  }
+
+  graphics_file = tmp.string();
+  remove_graphics_file = true;
+  return graphics_file;
 }
 
 bool ImageViewer::is_image_file(const std::string &path) {
@@ -392,15 +595,24 @@ void ImageViewer::open(const std::string &path) {
 
   current_image = path;
   is_open = true;
+  clear_graphics_file();
+  active_backend = resolve_backend();
+  status_text = get_image_info(path);
   generate_ascii_preview(path);
+  graphics_dirty = true;
 }
 
 void ImageViewer::close() {
+  if (graphics_visible) {
+    graphics_dirty = true;
+  } else {
+    clear_graphics_file();
+  }
   is_open = false;
-  current_image.clear();
   ascii_preview.clear();
   color_preview_bg.clear();
   has_color_preview = false;
+  status_text.clear();
 }
 
 void ImageViewer::render(int x, int y, int w, int h, int border_fg,
@@ -414,4 +626,83 @@ void ImageViewer::render(int x, int y, int w, int h, int border_fg,
   view_h = h;
   this->border_fg = border_fg;
   this->border_bg = border_bg;
+
+  int next_x = x + 1;
+  int next_y = y + 2;
+  int next_w = std::max(1, w - 2);
+  int next_h = std::max(1, h - 3);
+  if (graphics_x != next_x || graphics_y != next_y || graphics_w != next_w ||
+      graphics_h != next_h) {
+    graphics_dirty = true;
+    graphics_x = next_x;
+    graphics_y = next_y;
+    graphics_w = next_w;
+    graphics_h = next_h;
+  }
+  active_backend = resolve_backend();
+}
+
+std::string ImageViewer::take_graphics_output() {
+  if (!graphics_dirty && !(is_open && uses_real_graphics() && !graphics_visible)) {
+    return "";
+  }
+
+  std::string out;
+  const bool delete_existing =
+      graphics_visible &&
+      (!is_open || graphics_dirty || !uses_real_graphics());
+  if (delete_existing) {
+    if (terminal_supports_kitty()) {
+      out += build_kitty_delete_command();
+    }
+    graphics_visible = false;
+  }
+
+  graphics_dirty = false;
+  if (!is_open || current_image.empty()) {
+    current_image.clear();
+    clear_graphics_file();
+    return out;
+  }
+
+  active_backend = resolve_backend();
+  if (active_backend == Backend::Off) {
+    status_text = "Image viewer disabled";
+    return out;
+  }
+  if (active_backend == Backend::Kitty) {
+    std::string file = prepare_kitty_graphics_file();
+    if (file.empty()) {
+      active_backend = Backend::Cell;
+      status_text = "Image conversion unavailable; using cell preview";
+      return out;
+    }
+    out += build_kitty_file_command(file, graphics_x, graphics_y,
+                                    graphics_w, graphics_h);
+    graphics_visible = true;
+    status_text = "Real image: kitty";
+    return out;
+  }
+  if (active_backend == Backend::Sixel) {
+    std::string cmd = build_sixel_command(current_image, graphics_w, graphics_h);
+    FILE *pipe = popen(cmd.c_str(), "r");
+    if (pipe) {
+      char buffer[4096];
+      while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        out += buffer;
+      }
+      int rc = pclose(pipe);
+      if (rc == 0 && !out.empty()) {
+        graphics_visible = true;
+        status_text = "Real image: sixel";
+        return out;
+      }
+    }
+    active_backend = Backend::Cell;
+    status_text = "Sixel unavailable; using cell preview";
+    return out;
+  }
+
+  status_text = get_image_info(current_image);
+  return out;
 }

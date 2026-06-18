@@ -41,7 +41,7 @@ void Editor::move_cursor(int dx, int dy, bool extend_selection) {
     buf.selection.end = buf.cursor;
   }
   needs_redraw = true;
-}
+} 
 
 void Editor::clamp_cursor(int buffer_id) {
   auto &buf = get_buffer(buffer_id);

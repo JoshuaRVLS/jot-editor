@@ -91,8 +91,7 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     return;
   }
 
-  // Global pane keybinds (before mode-specific handlers so they never get
-  // swallowed by insert-mode Ctrl handling).
+  // Global pane keybinds (before modeless editing shortcuts).
   // Focus:
   // - Ctrl+Alt+Arrow
   if (is_ctrl && is_alt &&
@@ -191,22 +190,45 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
   }
 
   if (is_alt) {
-    bool resized = false;
-    if (ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H') {
-      resized = resize_current_pane_direction('h', 2);
-    } else if (ch == 'l' || ch == 'L' || original_ch == 'l' ||
-               original_ch == 'L') {
-      resized = resize_current_pane_direction('l', 2);
-    } else if (ch == 'k' || ch == 'K' || original_ch == 'k' ||
-               original_ch == 'K') {
-      resized = resize_current_pane_direction('k', 2);
-    } else if (ch == 'j' || ch == 'J' || original_ch == 'j' ||
-               original_ch == 'J') {
-      resized = resize_current_pane_direction('j', 2);
+    const bool alt_h =
+        ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H';
+    const bool alt_j =
+        ch == 'j' || ch == 'J' || original_ch == 'j' || original_ch == 'J';
+    const bool alt_k =
+        ch == 'k' || ch == 'K' || original_ch == 'k' || original_ch == 'K';
+    const bool alt_l =
+        ch == 'l' || ch == 'L' || original_ch == 'l' || original_ch == 'L';
+    const bool alt_direction = alt_h || alt_j || alt_k || alt_l;
+
+    if (focus_state == FOCUS_SIDEBAR && alt_l) {
+      focus_state = FOCUS_EDITOR;
+      set_message("Focused editor");
+      needs_redraw = true;
+      return;
     }
 
-    if (resized) {
-      set_message("Pane resized");
+    bool focused = false;
+    if (alt_h) {
+      focused = focus_pane_direction('h');
+    } else if (alt_l) {
+      focused = focus_pane_direction('l');
+    } else if (alt_k) {
+      focused = focus_pane_direction('k');
+    } else if (alt_j) {
+      focused = focus_pane_direction('j');
+    }
+
+    if (focused) {
+      return;
+    }
+    if (focus_state == FOCUS_EDITOR && alt_h && show_sidebar) {
+      focus_state = FOCUS_SIDEBAR;
+      set_message("Focused explorer");
+      needs_redraw = true;
+      return;
+    }
+    if (alt_direction) {
+      set_message("No pane in that direction");
       return;
     }
   }
@@ -244,24 +266,14 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
       return;
     }
     // Keep global/editor shortcuts usable while explorer is focused.
-    // Ctrl-based keybinds are routed through insert-mode handlers.
+    // Ctrl-based keybinds are routed through modeless editor handlers.
     bool ctrl_control_byte = (ch >= 1 && ch <= 26 && ch != 9 && ch != 10 &&
                               ch != 13);
     if (is_ctrl || ctrl_control_byte || ch == 23 || ch == 12) {
-      handle_insert_mode(ch, is_ctrl, is_shift, is_alt);
+      handle_modeless_input(ch, is_ctrl, is_shift, is_alt);
       return;
     }
     handle_sidebar_input(ch);
-    return;
-  }
-
-  if (ch == 23) {
-    if (show_sidebar && focus_state == FOCUS_SIDEBAR) {
-      focus_state = FOCUS_EDITOR;
-    } else {
-      close_pane();
-    }
-    needs_redraw = true;
     return;
   }
 
@@ -292,6 +304,30 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     handle_command_palette(ch);
     return;
   }
+  
+  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT_DIFF && !is_ctrl && !is_alt) {
+    if (ch == 'q' || ch == 'Q' || ch == 27) {
+      close_git_diff_panel();
+      set_message("git diff closed");
+      return;
+    }
+    
+    if (ch == 'j' || ch == 'J' || ch == 1009 || ch == 14) {
+      scroll_git_diff_panel(1);
+      return;
+    }
+    
+    if (ch == 'k' || ch == 'K' || ch == 1008 || ch == 16) {
+      scroll_git_diff_panel(-1);
+      return;
+    }
+    
+    if (ch == 'r' || ch == 'R') {
+      open_git_diff_panel(git_diff_panel.path, git_diff_panel.staged);
+      return;
+    }
+    return;
+  }
 
   if (image_viewer.is_active()) {
     if (ch == 'q' || ch == 27) {
@@ -301,6 +337,6 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     return;
   }
 
-  // Modeless editor flow: always handle keys as direct editing commands.
-  handle_insert_mode(ch, is_ctrl, is_shift, is_alt);
+  handle_modeless_input(ch, is_ctrl, is_shift, is_alt);
+  return;
 }

@@ -132,12 +132,12 @@ int color_to_index(const VTermScreen *screen, VTermColor color, int fallback) {
 
 IntegratedTerminal::StyledCell styled_from_vterm_cell(
     const VTermScreen *screen, const VTermScreenCell &cell) {
+  bool fg_default = VTERM_COLOR_IS_DEFAULT_FG(&cell.fg);
+  bool bg_default = VTERM_COLOR_IS_DEFAULT_BG(&cell.bg);
   int fg = color_to_index(screen, cell.fg, 7);
   int bg = color_to_index(screen, cell.bg, 0);
-  if (cell.attrs.reverse) {
-    std::swap(fg, bg);
-  }
-  return {cell_text(cell), fg, bg};
+  return {cell_text(cell), fg, bg, fg_default, bg_default,
+          cell.attrs.reverse != 0};
 }
 
 std::string row_text(const std::vector<IntegratedTerminal::StyledCell> &cells) {
@@ -218,10 +218,10 @@ void IntegratedTerminal::ensure_vterm(int new_rows, int new_cols) {
         screen_sb_popline, screen_sb_clear};
     vterm_screen_set_callbacks(screen, &callbacks, this);
 
-    VTermColor fg;
-    VTermColor bg;
-    vterm_color_indexed(&fg, 7);
-    vterm_color_indexed(&bg, 0);
+    VTermColor fg {};
+    VTermColor bg {};
+    fg.type = VTERM_COLOR_DEFAULT_FG;
+    bg.type = VTERM_COLOR_DEFAULT_BG;
     vterm_screen_set_default_colors(screen, &fg, &bg);
     vterm_screen_reset(screen, 1);
   } else if (rows != new_rows || cols != new_cols) {

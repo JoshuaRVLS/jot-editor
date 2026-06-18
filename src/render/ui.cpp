@@ -1,9 +1,11 @@
 #include "editor.h"
 #include "python_bridge/api.h"
 #include "tree_sitter/catalog.h"
+#include "tree_sitter/manager.h"
 #include "ui/components.h"
 #include "ui/text.h"
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstdio>
 #include <filesystem>
@@ -45,6 +47,203 @@ struct TreeSitterStatusRenderRow {
   std::string detail;
   int color = 7;
 };
+
+std::string trim_hover_fence_language(std::string lang) {
+  size_t start = 0;
+  while (start < lang.size() &&
+         std::isspace((unsigned char)lang[start])) {
+    start++;
+  }
+  size_t end = start;
+  while (end < lang.size() &&
+         !std::isspace((unsigned char)lang[end])) {
+    end++;
+  }
+  lang = lang.substr(start, end - start);
+  std::transform(lang.begin(), lang.end(), lang.begin(),
+                 [](unsigned char c) { return (char)std::tolower(c); });
+  return lang;
+}
+
+bool hover_markdown_fence_language(const std::string &line,
+                                   std::string *language) {
+  size_t start = 0;
+  while (start < line.size() &&
+         (line[start] == ' ' || line[start] == '\t')) {
+    start++;
+  }
+  if (line.compare(start, 3, "```") != 0) {
+    return false;
+  }
+  if (language) {
+    *language = trim_hover_fence_language(line.substr(start + 3));
+  }
+  return true;
+}
+
+std::string hover_language_extension(const std::string &lang) {
+  if (lang == "c++" || lang == "cpp" || lang == "cc" || lang == "cxx") {
+    return ".cpp";
+  }
+  if (lang == "c") {
+    return ".c";
+  }
+  if (lang == "python" || lang == "py") {
+    return ".py";
+  }
+  if (lang == "javascript" || lang == "js") {
+    return ".js";
+  }
+  if (lang == "jsx") {
+    return ".jsx";
+  }
+  if (lang == "typescript" || lang == "ts") {
+    return ".ts";
+  }
+  if (lang == "tsx") {
+    return ".tsx";
+  }
+  if (lang == "rust" || lang == "rs") {
+    return ".rs";
+  }
+  if (lang == "go" || lang == "golang") {
+    return ".go";
+  }
+  if (lang == "bash" || lang == "sh" || lang == "shell" ||
+      lang == "zsh") {
+    return ".sh";
+  }
+  if (lang == "json") {
+    return ".json";
+  }
+  if (lang == "html") {
+    return ".html";
+  }
+  if (lang == "css") {
+    return ".css";
+  }
+  if (lang == "xml") {
+    return ".xml";
+  }
+  if (lang == "yaml" || lang == "yml") {
+    return ".yaml";
+  }
+  if (lang == "toml") {
+    return ".toml";
+  }
+  if (lang == "markdown" || lang == "md") {
+    return ".md";
+  }
+  if (lang == "cmake") {
+    return ".cmake";
+  }
+  if (lang == "make" || lang == "makefile") {
+    return ".make";
+  }
+  if (lang == "dockerfile") {
+    return ".dockerfile";
+  }
+  return "";
+}
+
+int hover_syntax_color(const Theme &theme, int token) {
+  switch (token) {
+  case TS_TOKEN_KEYWORD:
+    return theme.fg_keyword;
+  case TS_TOKEN_STRING:
+    return theme.fg_string;
+  case TS_TOKEN_COMMENT:
+    return theme.fg_comment;
+  case TS_TOKEN_NUMBER:
+    return theme.fg_number;
+  case TS_TOKEN_TYPE:
+    return theme.fg_type;
+  case TS_TOKEN_FUNCTION:
+    return theme.fg_function;
+  case TS_TOKEN_VARIABLE:
+    return theme.fg_variable;
+  case TS_TOKEN_CONSTANT:
+    return theme.fg_constant;
+  case TS_TOKEN_BUILTIN:
+    return theme.fg_builtin;
+  case TS_TOKEN_OPERATOR:
+    return theme.fg_operator;
+  case TS_TOKEN_PUNCTUATION:
+    return theme.fg_punctuation;
+  case TS_TOKEN_TAG:
+    return theme.fg_tag;
+  case TS_TOKEN_ATTRIBUTE:
+    return theme.fg_attribute;
+  case TS_TOKEN_NAMESPACE:
+    return theme.fg_namespace;
+  case TS_TOKEN_MODULE:
+    return theme.fg_module;
+  case TS_TOKEN_PARAMETER:
+    return theme.fg_parameter;
+  case TS_TOKEN_FIELD:
+    return theme.fg_field;
+  case TS_TOKEN_KEYWORD_CONTROL:
+    return theme.fg_keyword_control;
+  case TS_TOKEN_KEYWORD_STORAGE:
+    return theme.fg_keyword_storage;
+  case TS_TOKEN_KEYWORD_PREPROC:
+    return theme.fg_keyword_preproc;
+  case TS_TOKEN_FUNCTION_METHOD:
+    return theme.fg_function_method;
+  case TS_TOKEN_FUNCTION_CONSTRUCTOR:
+    return theme.fg_function_constructor;
+  case TS_TOKEN_TYPE_BUILTIN:
+    return theme.fg_type_builtin;
+  case TS_TOKEN_CONSTANT_MACRO:
+    return theme.fg_constant_macro;
+  case TS_TOKEN_STRING_ESCAPE:
+    return theme.fg_string_escape;
+  case TS_TOKEN_PUNCTUATION_BRACKET:
+    return theme.fg_punctuation_bracket;
+  case TS_TOKEN_PUNCTUATION_DELIMITER:
+    return theme.fg_punctuation_delimiter;
+  default:
+    return theme.fg_command;
+  }
+}
+
+void draw_hover_code_line(UI *ui, int x, int y, int w, const std::string &line,
+                          const std::string &extension, const Theme &theme) {
+  if (w <= 0) {
+    return;
+  }
+  std::string clipped = ui_truncate_cells(line, w);
+  if (extension.empty()) {
+    ui->draw_text(x, y, clipped, theme.fg_command, theme.bg_command);
+    return;
+  }
+
+  SyntaxHighlighter highlighter;
+  highlighter.set_language(extension);
+  auto colors = highlighter.get_colors(clipped);
+  int chunk_start = 0;
+  int chunk_token = 0;
+
+  for (int i = 0; i <= (int)clipped.size(); i++) {
+    int token = 0;
+    if (i < (int)colors.size() && colors[i].first == 1) {
+      token = colors[i].second;
+    }
+    if (i == 0) {
+      chunk_token = token;
+    }
+    if (i == (int)clipped.size() || token != chunk_token) {
+      if (i > chunk_start) {
+        ui->draw_text(x + chunk_start, y,
+                      clipped.substr(chunk_start, i - chunk_start),
+                      hover_syntax_color(theme, chunk_token),
+                      theme.bg_command);
+      }
+      chunk_start = i;
+      chunk_token = token;
+    }
+  }
+}
 
 int status_layout_width(const std::vector<StatusSegment> &segments) {
   if (segments.empty())
@@ -264,23 +463,18 @@ void Editor::render_status_line() {
     return;
   }
 
-  const bool draw_border_rails = w >= 4;
-  const int content_x = draw_border_rails ? 1 : 0;
-  const int content_w = draw_border_rails ? std::max(0, w - 2) : w;
-  if (draw_border_rails) {
-    for (int row = 0; row < status_height; row++) {
-      ui->draw_text(0, y + row, "│", theme.fg_panel_border, theme.bg_status);
-      ui->draw_text(w - 1, y + row, "│", theme.fg_panel_border,
-                    theme.bg_status);
-    }
-  }
+  const int content_x = 0;
+  const int content_w = w;
 
   std::vector<StatusSegment> left_segments;
   std::vector<StatusSegment> right_segments;
-  if (content_w >= 28) {
-    left_segments.push_back({" 󰚩 JOT ", theme.fg_status_logo,
+  if (content_w >= 34) {
+    left_segments.push_back({" 󰚩 jot ", theme.fg_status_logo,
                              theme.bg_status_logo, true, true, 10});
   }
+
+  left_segments.push_back({" NORMAL ", theme.fg_status_info,
+                           theme.bg_status_info, true, false, 100});
 
   FileBuffer *active_buf = nullptr;
   if (!buffers.empty() && current_buffer >= 0 &&
@@ -297,14 +491,14 @@ void Editor::render_status_line() {
     file_icon = active_buf->filepath.empty() ? "󰈔" : "󰈙";
   }
   left_segments.push_back({" " + file_icon + " " + file_label +
-                               (modified ? " ●" : "") + " ",
+                               (modified ? " +" : "") + " ",
                            theme.fg_status_file, theme.bg_status_file, true,
                            false, 100});
 
   std::string cursor_label = " Ready ";
   if (!show_home_menu && active_buf) {
-    cursor_label = " Ln " + std::to_string(active_buf->cursor.y + 1) +
-                   ", Col " + std::to_string(active_buf->cursor.x + 1) + " ";
+    cursor_label = " " + std::to_string(active_buf->cursor.y + 1) + ":" +
+                   std::to_string(active_buf->cursor.x + 1) + " ";
   }
   left_segments.push_back({cursor_label, theme.fg_status, theme.bg_status, true,
                            false, 100});
@@ -436,16 +630,16 @@ void Editor::render_status_line() {
       std::string label = active_buf->syntax_language_label.empty()
                               ? "tree-sitter"
                               : active_buf->syntax_language_label;
-      syntax_text = " TS " + ui_truncate_cells(label, 12) + " ";
+      syntax_text = " 󰜫 " + ui_truncate_cells(label, 12) + " ";
       syntax_fg = theme.fg_status_info;
       syntax_bg = theme.bg_status_info;
     } else if (engine == SYNTAX_ENGINE_REGEX) {
       std::string label = active_buf->syntax_language_label.empty()
                               ? "regex"
                               : active_buf->syntax_language_label;
-      syntax_text = " Regex " + ui_truncate_cells(label, 8) + " ";
+      syntax_text = " 󰈞 " + ui_truncate_cells(label, 8) + " ";
     } else {
-      syntax_text = " Syntax off ";
+      syntax_text = " 󰅙 syntax ";
     }
     right_segments.push_back(
         {syntax_text, syntax_fg, syntax_bg, false, true, 55});
@@ -486,6 +680,10 @@ void Editor::render_status_line() {
     right_segments.push_back({" 󰙯 RPC ", theme.fg_status_muted,
                               theme.bg_status_muted, false, true, 20});
   }
+  
+  right_segments.push_back({" 󰌌 " + std::to_string(keyboard_press_count) + " ",
+                            theme.fg_status_info, theme.bg_status_info, false,
+                            true, 18});
 
   right_segments.push_back({" UTF-8 ", theme.fg_status_muted,
                             theme.bg_status_muted, false, true, 10});
@@ -501,7 +699,7 @@ void Editor::render_status_line() {
       left_segments.size() > 2) {
     auto logo = std::find_if(left_segments.begin(), left_segments.end(),
                              [](const StatusSegment &segment) {
-                               return segment.text.find("JOT") !=
+                               return segment.text.find("jot") !=
                                       std::string::npos;
                              });
     if (logo != left_segments.end()) {
@@ -548,12 +746,12 @@ void Editor::render_status_line() {
 
   // Message / context row.
   if (!message.empty()) {
-    status_draw_clipped(ui, content_x, y + 1, content_w, "  › " + message,
+    status_draw_clipped(ui, content_x, y + 1, content_w, "  " + message,
                         theme.fg_status_message, theme.bg_status, true);
   } else {
     std::string context = "  " + status_workspace_label(root_dir);
     if (active_buf && !active_buf->filepath.empty()) {
-      context += "  ·  " + active_buf->filepath;
+      context += "  " + active_buf->filepath;
     } else if (show_home_menu) {
       context += "  ·  Home";
     }
@@ -1013,12 +1211,29 @@ void Editor::render_popup() {
     lines.push_back(line);
   }
 
+  bool in_code_block = false;
+  std::string code_extension;
+  int draw_row = 0;
   for (int i = 0; i < (int)lines.size(); i++) {
-    if (i >= popup.h - 2)
+    std::string fence_language;
+    if (hover_markdown_fence_language(lines[i], &fence_language)) {
+      in_code_block = !in_code_block;
+      code_extension =
+          in_code_block ? hover_language_extension(fence_language) : "";
+      continue;
+    }
+
+    if (draw_row >= popup.h - 2)
       break;
-    ui->draw_text(popup.x + 1, popup.y + 1 + i,
-                  ui_truncate_cells(lines[i], popup.w - 2), theme.fg_command,
-                  theme.bg_command);
+    if (in_code_block) {
+      draw_hover_code_line(ui, popup.x + 1, popup.y + 1 + draw_row,
+                           popup.w - 2, lines[i], code_extension, theme);
+    } else {
+      ui->draw_text(popup.x + 1, popup.y + 1 + draw_row,
+                    ui_truncate_cells(lines[i], popup.w - 2),
+                    theme.fg_command, theme.bg_command);
+    }
+    draw_row++;
   }
 }
 

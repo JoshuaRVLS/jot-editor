@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "python_bridge/api.h"
 #include <algorithm>
 #include <cstddef>
 #ifdef JOT_TREESITTER
@@ -143,6 +144,17 @@ void apply_state(FileBuffer &buf, const State &prev) {
   buf.modified = prev.modified;
   buf.is_placeholder = prev.is_placeholder;
 }
+
+void discard_tree_sitter_tree(FileBuffer &buf) {
+#ifdef JOT_TREESITTER
+  if (buf.ts_tree) {
+    ts_tree_delete(buf.ts_tree);
+    buf.ts_tree = nullptr;
+  }
+#else
+  (void)buf;
+#endif
+}
 } // namespace
 
 void Editor::save_state() {
@@ -192,6 +204,13 @@ void Editor::undo() {
   apply_state(buf, prev);
 
   invalidate_syntax_cache(buf);
+  discard_tree_sitter_tree(buf);
+  if (python_api) {
+    python_api->on_buffer_change(buf.filepath, "");
+  }
+  if (!buf.filepath.empty()) {
+    notify_lsp_change(buf.filepath);
+  }
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
   needs_redraw = true;
@@ -213,6 +232,13 @@ void Editor::redo() {
   apply_state(buf, next);
 
   invalidate_syntax_cache(buf);
+  discard_tree_sitter_tree(buf);
+  if (python_api) {
+    python_api->on_buffer_change(buf.filepath, "");
+  }
+  if (!buf.filepath.empty()) {
+    notify_lsp_change(buf.filepath);
+  }
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
   needs_redraw = true;

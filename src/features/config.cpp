@@ -55,6 +55,7 @@ void Config::load_defaults() {
   settings["show_explorer"] = "true";
   settings["show_minimap"] = "true";
   settings["tab_size"] = "2";
+  settings["show_indent_guides"] = "false";
   settings["auto_indent"] = "true";
   settings["smart_paste_indent"] = "true";
   settings["auto_save"] = "false";
@@ -63,6 +64,7 @@ void Config::load_defaults() {
   settings["clang_format_on_save"] = "true";
   settings["auto_detect_indent"] = "false";
   settings["show_line_numbers"] = "true";
+  settings["relative_line_numbers"] = "false";
   settings["word_wrap"] = "false";
   settings["cursor_style"] = "block";
   settings["render_fps"] = "120";
@@ -73,6 +75,7 @@ void Config::load_defaults() {
   settings["terminal_height"] = "10";
   settings["debugger_height"] = "12";
   settings["discord_rpc"] = "false";
+  settings["image_viewer_backend"] = "auto";
   settings["treesitter_library_paths"] = "";
   settings["treesitter_query_paths"] = "";
   settings["treesitter_language_overrides"] = "";

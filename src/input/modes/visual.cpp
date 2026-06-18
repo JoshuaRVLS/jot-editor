@@ -1,5 +1,10 @@
 #include "editor.h"
+#include <algorithm>
 #include <cctype>
+
+namespace {
+constexpr int kMaxVisualMotionCount = 100000;
+}
 
 static void update_visual_selection(FileBuffer &buf, const Cursor &visual_start,
                                     bool line_mode) {
@@ -21,7 +26,10 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
                                 bool /*is_alt*/) {
   auto &buf = get_buffer();
 
+  auto clear_visual_count = [&] { visual_motion_count = 0; };
+
   if (is_ctrl) {
+    clear_visual_count();
     switch (ch) {
     case 'q':
     case 'Q': {
@@ -55,14 +63,17 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
   }
 
   if (ch == 'v' && !visual_line_mode) {
+    clear_visual_count();
     enter_normal_mode();
     return;
   }
   if (ch == 'V' && visual_line_mode) {
+    clear_visual_count();
     enter_normal_mode();
     return;
   }
   if (ch == 'v' && visual_line_mode) {
+    clear_visual_count();
     visual_line_mode = false;
     visual_start = buf.cursor;
     update_visual_selection(buf, visual_start, false);
@@ -70,32 +81,63 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     return;
   }
   if (ch == 'V' && !visual_line_mode) {
+    clear_visual_count();
     visual_line_mode = true;
     update_visual_selection(buf, visual_start, true);
     needs_redraw = true;
     return;
   }
 
+  if (ch >= '0' && ch <= '9' && (visual_motion_count > 0 || ch != '0')) {
+    int digit = ch - '0';
+    visual_motion_count =
+        std::min(kMaxVisualMotionCount, visual_motion_count * 10 + digit);
+    return;
+  }
+
+  auto take_count = [&] {
+    int count = visual_motion_count > 0 ? visual_motion_count : 1;
+    clear_visual_count();
+    return count;
+  };
+
   auto move_and_update = [&](auto move_fn) {
+    clear_visual_count();
     move_fn();
     update_visual_selection(buf, visual_start, visual_line_mode);
     needs_redraw = true;
   };
 
   switch (ch) {
-  case 'h':
+  case 'h': {
+    int count = take_count();
+    move_and_update([&] { move_cursor(-count, 0); });
+    return;
+  }
   case 1011:
     move_and_update([&] { move_cursor(-1, 0); });
     return;
-  case 'l':
+  case 'l': {
+    int count = take_count();
+    move_and_update([&] { move_cursor(count, 0); });
+    return;
+  }
   case 1010:
     move_and_update([&] { move_cursor(1, 0); });
     return;
-  case 'k':
+  case 'k': {
+    int count = take_count();
+    move_and_update([&] { move_cursor(0, -count); });
+    return;
+  }
   case 1008:
     move_and_update([&] { move_cursor(0, -1); });
     return;
-  case 'j':
+  case 'j': {
+    int count = take_count();
+    move_and_update([&] { move_cursor(0, count); });
+    return;
+  }
   case 1009:
     move_and_update([&] { move_cursor(0, 1); });
     return;
@@ -123,6 +165,7 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     return;
 
   case 'y':
+    clear_visual_count();
     update_visual_selection(buf, visual_start, visual_line_mode);
     vim_yank();
     enter_normal_mode();
@@ -130,6 +173,7 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
 
   case 'd':
   case 'x':
+    clear_visual_count();
     update_visual_selection(buf, visual_start, visual_line_mode);
     save_state();
     delete_selection();
@@ -137,6 +181,7 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     return;
 
   case 'c':
+    clear_visual_count();
     update_visual_selection(buf, visual_start, visual_line_mode);
     save_state();
     delete_selection();
@@ -144,6 +189,7 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     return;
 
   case '>': {
+    clear_visual_count();
     save_state();
     Cursor s = buf.selection.start, e = buf.selection.end;
     if (s.y > e.y)
@@ -156,6 +202,7 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     return;
   }
   case '<': {
+    clear_visual_count();
     save_state();
     Cursor s = buf.selection.start, e = buf.selection.end;
     if (s.y > e.y)
@@ -174,6 +221,7 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     return;
   }
   case '~': {
+    clear_visual_count();
     save_state();
     Cursor s = buf.selection.start, e = buf.selection.end;
     if (s.y > e.y || (s.y == e.y && s.x > e.x))
@@ -195,4 +243,6 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     return;
   }
   }
+
+  clear_visual_count();
 }

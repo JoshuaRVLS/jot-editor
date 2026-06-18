@@ -239,6 +239,94 @@ std::string Editor::run_git_capture(const std::string &args) const {
   return trim_right_newlines(capture_command_output(command));
 }
 
+bool Editor::open_git_diff_panel(const std::string &path, bool staged) {
+  refresh_git_status(true);
+  
+  if (!has_git_repo()) {
+    set_message("Git: Not a repo");
+    return false;
+  }
+  
+  std::string target = path;
+  if (target.empty() && !buffers.empty()) {
+    const auto &buf = get_buffer();
+    if (!buf.filepath.empty()) {
+      target = to_git_relative_path(buf.filepath);
+    }
+  }
+    
+  if (target.empty()) {
+    set_message(staged ? "Usage: :gitdiffstaged [file]" : "Usage :gitdiff [file]");
+    return false;
+  }
+  
+  fs::path input(target);
+  std::string rel = input.is_absolute() ? to_git_relative_path(target) : input.generic_string();
+  
+  if (rel.empty() || rel[0] == '/' || starts_with_prefix(rel, "../")) {
+    set_message("Git diff: path outside repo");
+    return false;
+  }
+  
+  std::string args = staged ? "diff --staged -- " : "diff -- ";
+  std::string diff = run_git_capture(args + shell_quote(rel));
+  
+  if (trim_right_newlines(diff).empty()) {
+    set_message(staged ? "Git diff: no staged changes for " + rel : "Git Diff: No unstaged changes for " + rel);
+    return false;
+  }
+  
+  git_diff_panel.visible = true;
+  git_diff_panel.staged = staged;
+  git_diff_panel.path = rel;
+  git_diff_panel.lines.clear();
+  git_diff_panel.scroll = 0;
+  
+  std::istringstream stream(diff);
+  std::string line;
+  
+  while (std::getline(stream, line)) {
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    git_diff_panel.lines.push_back(line);
+  }
+  
+  show_right_panel = true;
+  active_right_panel_tab = RIGHT_PANEL_GIT_DIFF;
+  show_debugger_panel = false;
+  needs_redraw = true;
+  
+  set_message("Git diff opened: " + rel);
+  return true;
+}
+
+void Editor::close_git_diff_panel() {
+  git_diff_panel = GitDiffPanel();
+  if (active_right_panel_tab == RIGHT_PANEL_GIT_DIFF) {
+    show_right_panel = false;
+    active_right_panel_tab = RIGHT_PANEL_DEBUG;
+  }
+  
+  needs_redraw = true;
+}
+
+void Editor::scroll_git_diff_panel(int delta) {
+  if (!git_diff_panel.visible) {
+    return;
+  }
+  
+  int panel_h = ui ? std::max(1, ui->get_height() - status_height - 1) : 1;
+  int body_h = std::max(1, panel_h - 4);
+  int max_scroll = std::max(0, (int)git_diff_panel.lines.size() - body_h);
+  int next = std::clamp(git_diff_panel.scroll + delta, 0, max_scroll);
+  
+  if (next != git_diff_panel.scroll) {
+    git_diff_panel.scroll = next;
+    needs_redraw = true;
+  }
+}
+
 std::string Editor::to_git_relative_path(const std::string &path) const {
   if (git_root.empty() || path.empty()) {
     return "";

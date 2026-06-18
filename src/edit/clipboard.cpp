@@ -4,6 +4,38 @@
 #include <algorithm>
 #include <sstream>
 #include <vector>
+#include <array>
+#include <cstdio>
+#include <cstdlib>
+
+bool command_exists(const char *cmd) {
+  std::string check = "command -v ";
+  check += cmd;
+  check += " >/dev/null 2>&1";
+  return std::system(check.c_str()) == 0;
+}
+
+bool write_xclip_clipboard(const std::string &text) {
+  if (!command_exists("xclip")) return false;
+   FILE *pipe = popen("xclip -selection clipboard -in", "w");
+   if (!pipe) return false;
+   fwrite(text.data(), 1, text.size(), pipe);
+   return pclose(pipe) == 0;
+}
+
+bool read_xclip_clipboard(std::string &out) {
+  if(!command_exists("xclip")) return false;
+  FILE *pipe = popen("xclip -selection clipboard -out 2>/dev/null", "r");
+  if (!pipe) return false;
+  std::array<char, 4096> buffer{};
+  out.clear();
+  
+  while (size_t n = fread(buffer.data(), 1, buffer.size(), pipe)) {
+    out.append(buffer.data(), n);
+  }
+  
+  return pclose(pipe) == 0 && !out.empty();
+}
 
 namespace {
 bool has_newline(const std::string &text) {
@@ -192,16 +224,23 @@ void Editor::copy() {
       clipboard += buf.line(i) + "\n";
     }
   }
+  write_xclip_clipboard(clipboard);
 }
 
 void Editor::cut() {
+  auto &buf = get_buffer();
+  if (!buf.selection.active) {
+    delete_line();
+    return;
+  }
   copy();
   delete_selection();
 }
 
 void Editor::paste() {
-  if (clipboard.empty())
-    return;
+  std::string source_clipboard = clipboard;
+  read_xclip_clipboard(source_clipboard);
+  if (source_clipboard.empty()) return;
   save_state();
   auto &buf = get_buffer();
   if (buf.is_lazy()) buf.materialize();
@@ -210,10 +249,9 @@ void Editor::paste() {
   }
 
   const std::string paste_text =
-      (auto_indent && smart_paste_indent)
-          ? smart_indent_paste_text(clipboard, buf.line(buf.cursor.y),
-                                    buf.cursor.x, tab_size)
-          : clipboard;
+      (auto_indent && smart_paste_indent) 
+          ? smart_indent_paste_text(source_clipboard, buf.line(buf.cursor.y), buf.cursor.x, tab_size)
+          : source_clipboard;
 
   std::vector<std::string> paste_lines = split_paste_lines(paste_text);
   if (paste_lines.size() == 1) {
@@ -248,6 +286,7 @@ void Editor::paste() {
     python_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
+  
 }
 
 void Editor::move_line_up() {

@@ -89,6 +89,8 @@ std::string format_size(std::uintmax_t bytes) {
 Telescope::Telescope() {
   active = false;
   selected_index = 0;
+  list_scroll_offset = 0;
+  preview_scroll_offset = 0;
   root_dir = fs::current_path();
 }
 
@@ -107,6 +109,8 @@ void Telescope::open(const std::string &root) {
   }
   query.clear();
   selected_index = 0;
+  list_scroll_offset = 0;
+  preview_scroll_offset = 0;
   results.clear();
   invalidate_preview_cache();
   update_results();
@@ -117,11 +121,16 @@ void Telescope::close() {
   query.clear();
   results.clear();
   selected_index = 0;
+  list_scroll_offset = 0;
+  preview_scroll_offset = 0;
   invalidate_preview_cache();
 }
 
 void Telescope::set_query(const std::string &q, TaskQueue *tq) {
   query = q;
+  selected_index = 0;
+  list_scroll_offset = 0;
+  preview_scroll_offset = 0;
   invalidate_preview_cache();
   if (tq) {
     cancel_scan();
@@ -196,6 +205,8 @@ void Telescope::update_results() {
   if (selected_index < 0) {
     selected_index = 0;
   }
+  ensure_selected_visible(std::max(1, (int)results.size()));
+  preview_scroll_offset = 0;
   invalidate_preview_cache();
 }
 
@@ -269,17 +280,55 @@ void Telescope::scan_directory(const fs::path &dir, int depth) {
 }
 
 void Telescope::move_up() {
-  if (selected_index > 0) {
-    selected_index--;
+  move_by(-1);
+}
+
+void Telescope::move_down() {
+  move_by(1);
+}
+
+void Telescope::move_by(int delta) {
+  if (results.empty() || delta == 0) {
+    return;
+  }
+  int next = std::clamp(selected_index + delta, 0, (int)results.size() - 1);
+  if (next != selected_index) {
+    selected_index = next;
+    preview_scroll_offset = 0;
     invalidate_preview_cache();
   }
 }
 
-void Telescope::move_down() {
-  if (selected_index < (int)results.size() - 1) {
-    selected_index++;
+void Telescope::select_index(int index) {
+  if (results.empty()) {
+    selected_index = 0;
+    list_scroll_offset = 0;
+    preview_scroll_offset = 0;
+    invalidate_preview_cache();
+    return;
+  }
+  int next = std::clamp(index, 0, (int)results.size() - 1);
+  if (next != selected_index) {
+    selected_index = next;
+    preview_scroll_offset = 0;
     invalidate_preview_cache();
   }
+}
+
+void Telescope::ensure_selected_visible(int visible_rows) {
+  visible_rows = std::max(1, visible_rows);
+  int max_scroll = std::max(0, (int)results.size() - visible_rows);
+  list_scroll_offset = std::clamp(list_scroll_offset, 0, max_scroll);
+  if (results.empty()) {
+    list_scroll_offset = 0;
+    return;
+  }
+  if (selected_index < list_scroll_offset) {
+    list_scroll_offset = selected_index;
+  } else if (selected_index >= list_scroll_offset + visible_rows) {
+    list_scroll_offset = selected_index - visible_rows + 1;
+  }
+  list_scroll_offset = std::clamp(list_scroll_offset, 0, max_scroll);
 }
 
 void Telescope::select() {
@@ -288,6 +337,8 @@ void Telescope::select() {
       root_dir = fs::path(results[selected_index].path);
       query.clear();
       selected_index = 0;
+      list_scroll_offset = 0;
+      preview_scroll_offset = 0;
       invalidate_preview_cache();
       update_results();
     }
@@ -299,9 +350,21 @@ void Telescope::go_parent() {
     root_dir = root_dir.parent_path();
     query.clear();
     selected_index = 0;
+    list_scroll_offset = 0;
+    preview_scroll_offset = 0;
     invalidate_preview_cache();
     update_results();
   }
+}
+
+void Telescope::scroll_preview(int delta, int visible_rows) {
+  if (delta == 0) {
+    return;
+  }
+  TelescopePreview preview = get_selected_preview();
+  int max_scroll = std::max(0, (int)preview.lines.size() - std::max(1, visible_rows));
+  preview_scroll_offset =
+      std::clamp(preview_scroll_offset + delta, 0, max_scroll);
 }
 
 std::string Telescope::get_selected_path() const {
@@ -493,6 +556,8 @@ void Telescope::apply_results(std::vector<FileMatch> new_results) {
     selected_index = std::max(0, (int)results.size() - 1);
   if (selected_index < 0)
     selected_index = 0;
+  ensure_selected_visible(std::max(1, (int)results.size()));
+  preview_scroll_offset = 0;
   invalidate_preview_cache();
 }
 

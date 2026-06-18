@@ -1,6 +1,7 @@
 #include "editor.h"
 #include "lsp/client.h"
 #include "python_bridge/api.h"
+#include "ui/text.h"
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -420,13 +421,25 @@ std::string compact_lsp_popup_text(const std::string &text, int max_lines,
   return out;
 }
 
+bool lsp_popup_markdown_fence(const std::string &line) {
+  size_t start = 0;
+  while (start < line.size() &&
+         (line[start] == ' ' || line[start] == '\t')) {
+    start++;
+  }
+  return line.compare(start, 3, "```") == 0;
+}
+
 std::pair<int, int> lsp_popup_size(const std::string &text) {
   int max_w = 0;
   int lines = 0;
   std::istringstream stream(text);
   std::string line;
   while (std::getline(stream, line)) {
-    max_w = std::max(max_w, (int)line.length());
+    if (lsp_popup_markdown_fence(line)) {
+      continue;
+    }
+    max_w = std::max(max_w, ui_cell_count(line));
     lines++;
   }
   return {max_w + 2, std::max(1, lines) + 2};

@@ -101,6 +101,7 @@ static bool cursor_probe_size(int &width, int &height) {
   return false;
 }
 
+
 static bool read_char_with_timeout(char &out, int timeout_ms) {
   struct pollfd pfd;
   pfd.fd = STDIN_FILENO;
@@ -113,6 +114,30 @@ static bool read_char_with_timeout(char &out, int timeout_ms) {
   }
 
   return read(STDIN_FILENO, &out, 1) == 1;
+}
+
+static bool read_paste_until_end(std::string &out) {
+  out.clear();
+  while (true) {
+    char c = 0;
+    if (!read_char_with_timeout(c, 1000)) return false;
+      if (c == '\x1b') {
+        char a = 0, b = 0, c2 = 0, d = 0;
+        if (read_char_with_timeout(a, 20) && a == '[' &&
+            read_char_with_timeout(b, 20) && b == '2' &&
+            read_char_with_timeout(c2, 20) && c2 == '0' &&
+            read_char_with_timeout(d, 20) && d == '1'            
+        ) {
+          char tilde = 0;
+          if (read_char_with_timeout(tilde, 20) && tilde == '~') return true;
+          out.push_back('\x1b'); out.push_back(a); out.push_back(b); out.push_back(c2); out.push_back(d); out.push_back(tilde);
+        } else {
+          out.push_back('\x1b'); out.push_back(a); out.push_back(b); out.push_back(c2); out.push_back(d);
+        }
+      } else {
+        out.push_back(c);
+      }
+  }
 }
 
 static int termkey_modifier_flags(int mod) {
@@ -277,11 +302,13 @@ void Terminal::setup_terminal() {
   write("\x1b[?25l");
   write("\x1b[2J");
   write("\x1b[H");
+  write("\x1b[?2004h");
 }
 
 void Terminal::restore_terminal() {
   append_mouse_reset(buffer);
   write("\x1b[?25h");
+  write("\x1b[1 q"); // restore block cursor for the host shell
   write("\x1b[?7h"); // re-enable autowrap so the host shell is left normal
   write("\x1b[?1049l");
   append_mouse_reset(buffer);
@@ -491,6 +518,17 @@ int Terminal::read_key() {
             mouse_event_buffer = std::string(mouse_seq);
             return 1014;
           }
+          
+          if (third == '2') {
+            char a = 0, b = 0, tilde = 0;
+            if (read_char_with_timeout(a, 5) && a == '0' &&
+                read_char_with_timeout(b, 5) && b == '0' &&
+                read_char_with_timeout(tilde, 5) && tilde == '~'
+            ) {
+              if (read_paste_until_end(paste_event_buffer)) return 1020;
+            }
+          }
+          
           while (third < 0x40 || third > 0x7e) {
             if (!read_char_with_timeout(third, 5)) {
               break;
@@ -643,6 +681,12 @@ Event Terminal::read_event() {
   int ch = read_key();
   if (ch < 0) {
     ev.type = EVENT_REDRAW;
+    return ev;
+  }
+  
+  if (ch == 1020) {
+    ev.type = EVENT_PASTE;
+    ev.paste.text = paste_event_buffer.c_str();
     return ev;
   }
 
@@ -880,6 +924,7 @@ void Terminal::write_char(char c) { buffer += c; }
 void Terminal::enable_mouse() {
   buffer += "\x1b[?1002h";
   buffer += "\x1b[?1006h";
+  buffer += "\x1b[?2004h";
   flush();
 }
 

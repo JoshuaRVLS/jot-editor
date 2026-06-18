@@ -49,6 +49,86 @@ struct ScrollbarGeometry {
   int max_scroll = 0;
 };
 
+struct TelescopeMouseLayout {
+  bool valid = false;
+  bool show_preview = false;
+  int x = 0;
+  int y = 0;
+  int w = 0;
+  int h = 0;
+  int inner_x = 0;
+  int inner_y = 0;
+  int inner_w = 0;
+  int inner_h = 0;
+  int body_y = 0;
+  int body_h = 0;
+  int list_x = 0;
+  int list_y = 0;
+  int list_w = 0;
+  int list_h = 0;
+  int preview_x = 0;
+  int preview_y = 0;
+  int preview_w = 0;
+  int preview_h = 0;
+};
+
+TelescopeMouseLayout telescope_mouse_layout_for(UI *ui, int tab_height,
+                                                int status_height,
+                                                bool show_sidebar,
+                                                int sidebar_w) {
+  TelescopeMouseLayout layout;
+  int h = ui->get_height();
+  int w = ui->get_render_width();
+  if (w < 4 || h < 5) {
+    return layout;
+  }
+  int content_x = show_sidebar ? std::max(0, sidebar_w) : 0;
+  int content_w = std::max(1, w - content_x);
+  int top_bound = std::max(0, tab_height + 1);
+  int bottom_bound = std::max(top_bound + 1, h - status_height - 1);
+  int usable_h = std::max(1, bottom_bound - top_bound);
+
+  layout.w = std::clamp(content_w - 2, std::min(content_w, 42), content_w);
+  if (content_w >= 72) {
+    layout.w = std::min(content_w - 2, std::max(72, content_w * 9 / 10));
+  }
+  layout.h = std::clamp(usable_h - 1, std::min(usable_h, 10), usable_h);
+  if (usable_h >= 18) {
+    layout.h = std::min(usable_h - 1, std::max(16, usable_h * 5 / 6));
+  }
+
+  layout.x = content_x + std::max(0, (content_w - layout.w + 1) / 2);
+  layout.x = std::clamp(layout.x, content_x,
+                        std::max(content_x, content_x + content_w - layout.w));
+  layout.y = top_bound + std::max(0, (usable_h - layout.h) / 2);
+  layout.inner_x = layout.x + 1;
+  layout.inner_y = layout.y + 1;
+  layout.inner_w = std::max(1, layout.w - 2);
+  layout.inner_h = std::max(1, layout.h - 2);
+  int footer_y = layout.y + layout.h - 2;
+  layout.body_y = layout.inner_y + 4;
+  layout.body_h = std::max(1, footer_y - layout.body_y);
+  layout.show_preview = layout.inner_w >= 64 && layout.body_h >= 4;
+  int list_panel_w =
+      layout.show_preview ? std::max(26, layout.inner_w * 42 / 100)
+                          : layout.inner_w;
+  layout.list_x = layout.inner_x + 1;
+  layout.list_y = layout.body_y;
+  layout.list_w =
+      layout.show_preview ? std::max(1, list_panel_w - 2)
+                          : std::max(1, layout.inner_w - 2);
+  layout.list_h = layout.body_h;
+  if (layout.show_preview) {
+    layout.preview_x = layout.inner_x + list_panel_w + 2;
+    layout.preview_y = layout.body_y;
+    layout.preview_w =
+        std::max(1, layout.inner_x + layout.inner_w - layout.preview_x - 1);
+    layout.preview_h = layout.body_h;
+  }
+  layout.valid = true;
+  return layout;
+}
+
 ScrollbarGeometry scrollbar_geometry_for(const SplitPane &pane,
                                          const FileBuffer &buf,
                                          int tab_height,
@@ -437,6 +517,24 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
   if (is_click && begin_right_panel_resize_drag(x, y)) {
     return;
   }
+  
+  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT_DIFF && ui) {
+    int panel_w = effective_sidebar_width();
+    int panel_x = std::max(0, ui->get_render_width() - panel_w);
+    int panel_y = 1;
+    int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
+    bool inside = x >= panel_x && x < panel_x + panel_w && y >= panel_y && y < panel_y + panel_h;
+    if (inside) {
+      if (is_scroll_up) {
+        scroll_git_diff_panel(-3);
+      } else if (is_scroll_down) {
+        scroll_git_diff_panel(3);
+      } else if (is_click) {
+        needs_redraw = true;
+      }
+      return;
+    }
+  }
 
   if (handle_debugger_mouse(x, y, is_click)) {
     return;
@@ -483,11 +581,30 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
     int sidebar_w = effective_sidebar_width();
     if (x < sidebar_w) {
       if (is_scroll_up) {
-        if (file_tree_scroll > 0)
+        if (active_sidebar_view == SIDEBAR_VIEW_GIT) {
+          if (git_sidebar_scroll > 0)
+            git_sidebar_scroll--;
+        } else if (file_tree_scroll > 0) {
           file_tree_scroll--;
+        }
         needs_redraw = true;
       } else if (is_scroll_down) {
-        file_tree_scroll++;
+        if (active_sidebar_view == SIDEBAR_VIEW_GIT) {
+          git_sidebar_scroll++;
+          int reserved_terminal_h = 0;
+          if (show_integrated_terminal && !integrated_terminals.empty()) {
+            reserved_terminal_h =
+                std::clamp(integrated_terminal_height, 5,
+                           std::max(5, ui->get_height() / 2));
+          }
+          int view_h = std::max(1, ui->get_height() - status_height -
+                                       tab_height - reserved_terminal_h - 2);
+          int max_scroll = std::max(
+              0, (int)build_git_sidebar_rows().size() - view_h);
+          git_sidebar_scroll = std::clamp(git_sidebar_scroll, 0, max_scroll);
+        } else {
+          file_tree_scroll++;
+        }
         needs_redraw = true;
       } else if (is_click) {
         focus_state = FOCUS_SIDEBAR;
@@ -564,6 +681,69 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
   }
 }
 
+bool Editor::handle_telescope_mouse(int x, int y, bool is_click,
+                                    bool is_double_click, bool is_scroll_up,
+                                    bool is_scroll_down) {
+  if (!telescope.is_active()) {
+    return false;
+  }
+
+  TelescopeMouseLayout layout = telescope_mouse_layout_for(
+      ui, tab_height, status_height, show_sidebar,
+      show_sidebar ? effective_sidebar_width() : 0);
+  if (!layout.valid) {
+    return false;
+  }
+
+  bool inside = x >= layout.x && x < layout.x + layout.w && y >= layout.y &&
+                y < layout.y + layout.h;
+  if (!inside) {
+    return true;
+  }
+
+  bool in_list = x >= layout.list_x - 1 &&
+                 x < layout.list_x + layout.list_w + 1 &&
+                 y >= layout.list_y && y < layout.list_y + layout.list_h;
+  bool in_preview = layout.show_preview && x >= layout.preview_x &&
+                    x < layout.preview_x + layout.preview_w &&
+                    y >= layout.preview_y &&
+                    y < layout.preview_y + layout.preview_h;
+
+  if (is_scroll_up || is_scroll_down) {
+    int delta = is_scroll_down ? 3 : -3;
+    if (in_preview) {
+      int line_start_y = layout.preview_y + 4;
+      int preview_lines_h =
+          std::max(1, layout.preview_y + layout.preview_h - line_start_y);
+      telescope.scroll_preview(delta, preview_lines_h);
+    } else if (in_list || inside) {
+      telescope.move_by(delta);
+      telescope.ensure_selected_visible(layout.list_h);
+    }
+    needs_redraw = true;
+    return true;
+  }
+
+  if (is_click && in_list) {
+    int target = telescope.get_list_scroll_offset() + (y - layout.list_y);
+    if (target >= 0 && target < telescope.get_result_count()) {
+      telescope.select_index(target);
+      telescope.ensure_selected_visible(layout.list_h);
+
+      if (is_double_click) {
+        accept_telescope_selection();
+      }
+      needs_redraw = true;
+    }
+    return true;
+  }
+
+  if (is_click) {
+    needs_redraw = true;
+  }
+  return true;
+}
+
 bool Editor::open_context_menu_for_mouse(int x, int y) {
   if (show_home_menu || panes.empty()) {
     return false;
@@ -630,37 +810,62 @@ bool Editor::open_context_menu_for_mouse(int x, int y) {
     int sidebar_w = effective_sidebar_width();
     if (x < sidebar_w && y >= tab_height && y < content_bottom) {
       focus_state = FOCUS_SIDEBAR;
-      std::vector<FileNode *> flat;
-      flatten_nodes_for_mouse(file_tree, flat);
-      int sidebar_row = y - tab_height - 1;
-      int row = sidebar_row + file_tree_scroll;
-      FileNode *node = nullptr;
-      if (sidebar_row >= 0 && row >= 0 && row < (int)flat.size()) {
-        node = flat[row];
-        file_tree_selected = row;
-        context_menu_target_path = node->path;
-        context_menu_target_is_dir = node->is_dir;
+      if (active_sidebar_view == SIDEBAR_VIEW_GIT) {
+        std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
+        int sidebar_row = y - tab_height - 1;
+        int row = sidebar_row + git_sidebar_scroll;
+        if (sidebar_row >= 0 && row >= 0 && row < (int)git_rows.size()) {
+          git_sidebar_selected = row;
+          context_menu_target_path = git_rows[(size_t)row].path;
+          context_menu_target_is_dir = false;
+        }
+        bool has_target = !context_menu_target_path.empty();
+        bool has_repo = has_git_repo();
+        std::vector<ContextMenuItem> items = {
+            {"Open", CONTEXT_ACTION_SIDEBAR_OPEN, has_target},
+            {"Git Stage", CONTEXT_ACTION_GIT_STAGE, has_target && has_repo},
+            {"Git Unstage", CONTEXT_ACTION_GIT_UNSTAGE, has_target && has_repo},
+            {"Git Diff", CONTEXT_ACTION_GIT_DIFF, has_target && has_repo},
+            {"Git Diff Staged", CONTEXT_ACTION_GIT_DIFF_STAGED,
+             has_target && has_repo},
+            {"Git Stage All", CONTEXT_ACTION_GIT_STAGE_ALL, has_repo},
+            {"Refresh", CONTEXT_ACTION_GIT_REFRESH, true},
+            {"Copy Path", CONTEXT_ACTION_SIDEBAR_COPY_PATH, has_target},
+        };
+        open_context_menu(x, y, CONTEXT_MENU_SIDEBAR, items);
       } else {
-        context_menu_target_path = root_dir;
-        context_menu_target_is_dir = true;
+        std::vector<FileNode *> flat;
+        flatten_nodes_for_mouse(file_tree, flat);
+        int sidebar_row = y - tab_height - 1;
+        int row = sidebar_row + file_tree_scroll;
+        FileNode *node = nullptr;
+        if (sidebar_row >= 0 && row >= 0 && row < (int)flat.size()) {
+          node = flat[row];
+          file_tree_selected = row;
+          context_menu_target_path = node->path;
+          context_menu_target_is_dir = node->is_dir;
+        } else {
+          context_menu_target_path = root_dir;
+          context_menu_target_is_dir = true;
+        }
+        bool has_target = !context_menu_target_path.empty();
+        std::string open_label =
+            node && node->is_dir ? (node->expanded ? "Collapse" : "Expand") : "Open";
+        bool git_target = has_target && has_git_repo();
+        std::vector<ContextMenuItem> items = {
+            {open_label, CONTEXT_ACTION_SIDEBAR_OPEN, node != nullptr},
+            {"New File", CONTEXT_ACTION_SIDEBAR_NEW_FILE, has_target},
+            {"New Folder", CONTEXT_ACTION_SIDEBAR_NEW_FOLDER, has_target},
+            {"Rename", CONTEXT_ACTION_SIDEBAR_RENAME, node != nullptr},
+            {"Git Stage", CONTEXT_ACTION_GIT_STAGE, git_target},
+            {"Git Unstage", CONTEXT_ACTION_GIT_UNSTAGE, git_target},
+            {"Git Diff", CONTEXT_ACTION_GIT_DIFF, git_target},
+            {"Git Diff Staged", CONTEXT_ACTION_GIT_DIFF_STAGED, git_target},
+            {"Refresh", CONTEXT_ACTION_SIDEBAR_REFRESH, true},
+            {"Copy Path", CONTEXT_ACTION_SIDEBAR_COPY_PATH, has_target},
+        };
+        open_context_menu(x, y, CONTEXT_MENU_SIDEBAR, items);
       }
-      bool has_target = !context_menu_target_path.empty();
-      std::string open_label =
-          node && node->is_dir ? (node->expanded ? "Collapse" : "Expand") : "Open";
-      bool git_target = has_target && has_git_repo();
-      std::vector<ContextMenuItem> items = {
-          {open_label, CONTEXT_ACTION_SIDEBAR_OPEN, node != nullptr},
-          {"New File", CONTEXT_ACTION_SIDEBAR_NEW_FILE, has_target},
-          {"New Folder", CONTEXT_ACTION_SIDEBAR_NEW_FOLDER, has_target},
-          {"Rename", CONTEXT_ACTION_SIDEBAR_RENAME, node != nullptr},
-          {"Git Stage", CONTEXT_ACTION_GIT_STAGE, git_target},
-          {"Git Unstage", CONTEXT_ACTION_GIT_UNSTAGE, git_target},
-          {"Git Diff", CONTEXT_ACTION_GIT_DIFF, git_target},
-          {"Git Diff Staged", CONTEXT_ACTION_GIT_DIFF_STAGED, git_target},
-          {"Refresh", CONTEXT_ACTION_SIDEBAR_REFRESH, true},
-          {"Copy Path", CONTEXT_ACTION_SIDEBAR_COPY_PATH, has_target},
-      };
-      open_context_menu(x, y, CONTEXT_MENU_SIDEBAR, items);
       return true;
     }
   }
@@ -843,16 +1048,15 @@ void Editor::handle_mouse(void *event_ptr) {
 
   int bstate = event->bstate;
 
-  if (bstate == 4)
-    return;
-
   bool is_click = (bstate == 1);
   bool is_click_release = (bstate == 2);
   bool is_right_click = (bstate == 3);
+  bool is_middle_click = (bstate == 4);
   bool is_motion = (bstate == 32);
   bool is_primary_click = is_click || is_click_release;
 
-  if (is_click || is_click_release || is_right_click || is_motion) {
+  if (is_click || is_click_release || is_right_click || is_middle_click ||
+      is_motion) {
     if (!is_motion || mouse_selecting || mouse_drag_started) {
       cancel_lsp_mouse_hover();
     }
@@ -883,8 +1087,9 @@ void Editor::handle_mouse(void *event_ptr) {
   }
 
   if (show_tree_sitter_status_modal &&
-      (is_click || is_click_release || is_right_click || is_motion)) {
-    if (is_click || is_right_click) {
+      (is_click || is_click_release || is_right_click || is_middle_click ||
+       is_motion)) {
+    if (is_click || is_right_click || is_middle_click) {
       int screen_w = ui->get_render_width();
       int screen_h = ui->get_height();
       int modal_w = std::min(std::max(48, screen_w - 8), 92);
@@ -899,7 +1104,7 @@ void Editor::handle_mouse(void *event_ptr) {
       int modal_y = std::max(1, (screen_h - modal_h) / 2);
       bool inside = event->x >= modal_x && event->x < modal_x + modal_w &&
                     event->y >= modal_y && event->y < modal_y + modal_h;
-      if (!inside || is_right_click) {
+      if (!inside || is_right_click || is_middle_click) {
         show_tree_sitter_status_modal = false;
       }
       needs_redraw = true;
@@ -1051,7 +1256,10 @@ void Editor::handle_mouse(void *event_ptr) {
       long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now().time_since_epoch())
                              .count();
-      int sidebar_row = event->y - tab_height + file_tree_scroll;
+      int sidebar_scroll = active_sidebar_view == SIDEBAR_VIEW_GIT
+                               ? git_sidebar_scroll
+                               : file_tree_scroll;
+      int sidebar_row = event->y - tab_height - 1 + sidebar_scroll;
       bool sidebar_double = (last_sidebar_click_ms > 0) &&
                             (now_ms - last_sidebar_click_ms <= 350) &&
                             (last_sidebar_click_row == sidebar_row);
@@ -1084,7 +1292,7 @@ void Editor::handle_mouse(void *event_ptr) {
     }
   }
 
-  if (is_click && target_pane != current_pane) {
+  if ((is_click || is_middle_click) && target_pane != current_pane) {
     panes[current_pane].active = false;
     current_pane = target_pane;
     panes[current_pane].active = true;
@@ -1125,7 +1333,7 @@ void Editor::handle_mouse(void *event_ptr) {
     }
   }
 
-  if (is_click && event->y == pane.y && !buffers.empty()) {
+  if ((is_click || is_middle_click) && event->y == pane.y && !buffers.empty()) {
     int draw_w = std::max(1, pane.w);
     if (show_minimap && draw_w > 20) {
       draw_w = std::max(1, draw_w - minimap_width);
@@ -1152,14 +1360,21 @@ void Editor::handle_mouse(void *event_ptr) {
         return;
       }
       for (const auto &tab : tabs.segments) {
-        if (event->x == tab.close_x) {
+        if (is_middle_click && event->x >= tab.x && event->x < tab.end_x) {
           close_buffer_at(tab.buffer_id);
           focus_state = FOCUS_EDITOR;
           needs_redraw = true;
           return;
         }
 
-        if (event->x >= tab.x && event->x < tab.close_x) {
+        if (is_click && event->x == tab.close_x) {
+          close_buffer_at(tab.buffer_id);
+          focus_state = FOCUS_EDITOR;
+          needs_redraw = true;
+          return;
+        }
+
+        if (is_click && event->x >= tab.x && event->x < tab.close_x) {
           switch_to_local_tab(tab.tab_index);
           focus_state = FOCUS_EDITOR;
           needs_redraw = true;

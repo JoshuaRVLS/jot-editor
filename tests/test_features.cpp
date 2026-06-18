@@ -1,5 +1,6 @@
 #include "jot/editor_features.hpp"
 #include "html.h"
+#include "quote_text_object.h"
 #include "test_framework.h"
 
 TEST(TestIndentLevel) {
@@ -77,4 +78,50 @@ TEST(TestMarkupBetweenTags) {
   ASSERT_EQ(tag, "Component");
   ASSERT_TRUE(!HtmlFeatures::is_between_matching_tags("<img>", "", tag));
   ASSERT_TRUE(!HtmlFeatures::is_between_matching_tags("foo<T>", "</T>", tag));
+}
+
+TEST(TestQuoteTextObjectFindsContainingPair) {
+  auto range = QuoteTextObject::find_inner_range("auto s = \"hello\";", 11, '"');
+  ASSERT_TRUE(range.found);
+  ASSERT_EQ(range.open, 9);
+  ASSERT_EQ(range.close, 15);
+  ASSERT_EQ(range.inner_start, 10);
+  ASSERT_EQ(range.inner_end, 15);
+}
+
+TEST(TestQuoteTextObjectSupportsSingleAndBacktickQuotes) {
+  auto single = QuoteTextObject::find_inner_range("name = 'jot'", 9, '\'');
+  ASSERT_TRUE(single.found);
+  ASSERT_EQ(single.inner_start, 8);
+  ASSERT_EQ(single.inner_end, 11);
+
+  auto tick = QuoteTextObject::find_inner_range("const q = `abc`;", 12, '`');
+  ASSERT_TRUE(tick.found);
+  ASSERT_EQ(tick.inner_start, 11);
+  ASSERT_EQ(tick.inner_end, 14);
+}
+
+TEST(TestQuoteTextObjectIgnoresEscapedQuotes) {
+  auto range =
+      QuoteTextObject::find_inner_range("s = \"a \\\"quoted\\\" value\";", 8, '"');
+  ASSERT_TRUE(range.found);
+  ASSERT_EQ(range.open, 4);
+  ASSERT_EQ(range.close, 23);
+  ASSERT_EQ(range.inner_start, 5);
+  ASSERT_EQ(range.inner_end, 23);
+}
+
+TEST(TestQuoteTextObjectChoosesNearestPairOutsideCursor) {
+  auto range =
+      QuoteTextObject::find_inner_range("\"left\" + \"right\"", 8, '"');
+  ASSERT_TRUE(range.found);
+  ASSERT_EQ(range.open, 9);
+  ASSERT_EQ(range.close, 15);
+}
+
+TEST(TestQuoteTextObjectRejectsMissingPair) {
+  auto range = QuoteTextObject::find_inner_range("s = \"unterminated", 6, '"');
+  ASSERT_TRUE(!range.found);
+  range = QuoteTextObject::find_inner_range("s = \"ok\"", 5, ')');
+  ASSERT_TRUE(!range.found);
 }

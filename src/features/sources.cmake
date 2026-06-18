@@ -13,5 +13,6 @@ set(JOT_FEATURES_SOURCES
   features/tree_sitter/queries.cpp
   features/tree_sitter/runtime.cpp
   features/html.cpp
+  features/quote_text_object.cpp
   ${JOT_TREE_SITTER_LANGUAGE_SOURCES}
 )

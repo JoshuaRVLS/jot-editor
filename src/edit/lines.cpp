@@ -4,12 +4,11 @@
 #include <algorithm>
 
 namespace {
-int remove_one_indent_level(std::string &line, int tab_size) {
+int count_one_indent_level(const std::string &line, int tab_size) {
   if (line.empty())
     return 0;
 
   if (line[0] == '\t') {
-    line.erase(0, 1);
     return 1;
   }
 
@@ -18,6 +17,11 @@ int remove_one_indent_level(std::string &line, int tab_size) {
          line[removed] == ' ') {
     removed++;
   }
+  return removed;
+}
+
+int remove_one_indent_level(std::string &line, int tab_size) {
+  int removed = count_one_indent_level(line, tab_size);
   if (removed > 0) {
     line.erase(0, removed);
   }
@@ -111,8 +115,28 @@ void Editor::indent_selection() {
 void Editor::outdent_selection() {
   auto &buf = get_buffer();
   if (buf.is_lazy()) buf.materialize();
-  if (!buf.selection.active)
+
+  if (!buf.selection.active) {
+    int y = std::clamp(buf.cursor.y, 0, (int)buf.line_count() - 1);
+    int removed = count_one_indent_level(buf.lines[y], tab_size);
+    if (removed <= 0) {
+      return;
+    }
+
+    save_state();
+    buf.lines[y].erase(0, removed);
+    buf.cursor.x = std::max(0, buf.cursor.x - removed);
+
+    clamp_cursor(get_pane().buffer_id);
+    ensure_cursor_visible();
+    buf.modified = true;
+    needs_redraw = true;
+    if (python_api)
+      python_api->on_buffer_change(buf.filepath, "");
+    if (!buf.filepath.empty())
+      notify_lsp_change(buf.filepath);
     return;
+  }
 
   save_state();
 

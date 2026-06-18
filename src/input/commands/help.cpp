@@ -29,7 +29,10 @@ void Editor::show_command_help(const std::string &topic_text) {
         ":gitstatus :gitdiff [file] :gitdiffstaged [file] "
         ":gitstage [file] :gitunstage [file] :gitstageall "
         ":gitunstageall :gitcommit <message> :gitlog :gitblame "
-        ":gitrefresh :theme <name>");
+        ":gitrefresh :theme <name>"
+        ":gitdiffclose"
+        ":gitdiffrefresh"
+        );
     return;
   }
 
@@ -48,8 +51,18 @@ void Editor::show_command_help(const std::string &topic_text) {
       "  Ctrl+Shift+O     Document symbols",
       "  Ctrl+T           Theme chooser",
       "  Ctrl+M           Toggle minimap",
-      "  Ctrl+X / Ctrl+`  Open/focus/minimize terminal",
+      "  Ctrl+`           Open/focus/minimize terminal",
       "  :task [name]     Run local/global terminal task",
+      "",
+      "Modeless Editing",
+      "  Type text         Insert at cursor",
+      "  Esc               Clear selection or close active popup",
+      "  Arrow keys        Move cursor",
+      "  Shift+Arrows      Expand selection",
+      "  Tab               Indent to next tab stop",
+      "  Shift+Tab         Outdent line or selection",
+      "  Ctrl+Enter        Insert line below",
+      "  Ctrl+Shift+Enter  Insert line above",
       "",
       "Editing",
       "  Ctrl+Z / Ctrl+Y  Undo / Redo",
@@ -61,7 +74,6 @@ void Editor::show_command_help(const std::string &topic_text) {
       "  Ctrl+Backspace   Delete previous word",
       "  Ctrl+Shift+U     Uppercase selection/word",
       "  Ctrl+Shift+N     Lowercase selection/word",
-      "  Shift+Arrows     Expand selection",
       "  Ctrl+Space       LSP completion",
       "",
       "Tabs",
@@ -69,8 +81,10 @@ void Editor::show_command_help(const std::string &topic_text) {
       "  Ctrl+Shift+Tab    Previous tab in current pane",
       "  Alt+, / Alt+.     Previous / Next tab",
       "  Alt+1..9 / Alt+0  Go to tab 1..9 / last tab",
+      "  Middle-click tab  Close clicked tab",
       "",
       "Pane & Layout",
+      "  Alt+H/J/K/L        Focus pane/explorer",
       "  Ctrl+Alt+H/J/K/L   Split left/down/up/right",
       "  Ctrl+Alt+Arrows    Focus pane",
       "  Ctrl+Alt+Q         Close current pane",
@@ -87,10 +101,9 @@ void Editor::show_command_help(const std::string &topic_text) {
       "  Alt+B              Toggle explorer",
       "  Alt+M              Toggle minimap",
       "  Alt+T              Theme chooser",
-      "  Alt+U / Alt+N      Uppercase / Lowercase",
+      "  Alt+U / Alt+Shift+U  Uppercase / Lowercase",
       "  Alt+O              Sort selected lines",
       "  Alt+Up / Alt+Down  Move line up/down",
-      "  Alt+H / Alt+L      Move word left/right",
       "  Alt+I / Alt+A      Smart line start / line end",
       "  Alt+G / Alt+Shift+G File start / file end",
       "",

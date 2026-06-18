@@ -33,8 +33,6 @@ enum PanelType {
   PANEL_TELESCOPE
 };
 
-enum EditorMode { MODE_NORMAL, MODE_INSERT, MODE_VISUAL };
-
 enum SyntaxEngine {
   SYNTAX_ENGINE_UNKNOWN,
   SYNTAX_ENGINE_NONE,

@@ -3,6 +3,7 @@
 #include "tree_sitter/manager.h"
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <sstream>
 
 
@@ -431,7 +432,11 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
       }
 
       char num_buf[16];
-      snprintf(num_buf, sizeof(num_buf), "%4d ", line_idx + 1);
+      int display_line_number = line_idx + 1;
+      if (relative_line_numbers && line_idx != buf.cursor.y) {
+        display_line_number = std::abs(line_idx - buf.cursor.y);
+      }
+      snprintf(num_buf, sizeof(num_buf), "%4d ", display_line_number);
       int ln_bg = theme.bg_line_num;
       int ln_fg = theme.fg_line_num;
       if (line_idx == buf.cursor.y) {
@@ -644,14 +649,16 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
                 const bool active_guide =
                     active_guide_on_row() &&
                     cell_visual == bracket_guide.visual_column;
-                int cell_guide_fg = (active_guide && !in_sel)
-                                         ? theme.fg_bracket_match
-                                         : guide_fg;
-                std::string guide =
+                int cell_guide_fg =
+                    (show_indent_guides && active_guide && !in_sel)
+                        ? theme.fg_bracket_match
+                        : guide_fg;
+                std::string guide = " ";
+                if (show_indent_guides &&
                     (active_guide ||
-                     (tab_size > 0 && cell_visual % tab_size == 0))
-                        ? "│"
-                        : " ";
+                     (tab_size > 0 && cell_visual % tab_size == 0))) {
+                  guide = "│";
+                }
                 ui->draw_text(current_x + vis_idx + fill, draw_y, guide,
                               cell_guide_fg, bg);
               }
@@ -838,7 +845,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
         }
       }
 
-      if (active_guide_on_row() && leading_ws_end == (int)line.size()) {
+      if (show_indent_guides && active_guide_on_row() &&
+          leading_ws_end == (int)line.size()) {
         int guide_vis_idx = bracket_guide.visual_column - start_visual;
         if (guide_vis_idx >= 0 && guide_vis_idx < visible_len) {
           ui->draw_text(current_x + guide_vis_idx, draw_y, "│",

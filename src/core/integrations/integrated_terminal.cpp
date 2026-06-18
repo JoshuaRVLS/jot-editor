@@ -443,8 +443,10 @@ void Editor::render_integrated_terminal() {
         int sx = 1;
         int start_cell = std::max(0, (int)styled.size() - max_cols);
         for (int j = start_cell; j < (int)styled.size() && sx < 1 + max_cols; j++) {
-          int fg = std::clamp(styled[j].fg, 0, 255);
-          int bg = std::clamp(styled[j].bg, 0, 255);
+          auto colors =
+              IntegratedTerminal::resolve_cell_colors(styled[j], term_fg, term_bg);
+          int fg = std::clamp(colors.fg, 0, 255);
+          int bg = std::clamp(colors.bg, 0, 255);
           ui->draw_text(sx, start_y + i, styled[j].ch, fg, bg);
           sx++;
         }

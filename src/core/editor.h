@@ -120,7 +120,6 @@ private:
 
   // Telescope finder
   Telescope telescope;
-  bool waiting_for_space_f;
 
   // Search panel
   struct SearchMatch {
@@ -227,11 +226,22 @@ private:
   bool show_debugger_panel;
   int debugger_panel_height;
   enum RightPanelTab {
-    RIGHT_PANEL_DEBUG
+    RIGHT_PANEL_DEBUG,
+    RIGHT_PANEL_GIT_DIFF
   };
+  
+  struct GitDiffPanel {
+    bool visible = false;
+    bool staged = false;
+    std::string path;
+    std::vector<std::string> lines;
+    int scroll = 0;
+  };
+  
   bool show_right_panel;
   int right_panel_width;
   RightPanelTab active_right_panel_tab;
+  GitDiffPanel git_diff_panel;
 
   SyntaxHighlighter highlighter;
   Config config;
@@ -303,6 +313,8 @@ private:
   int status_height;
   int tab_height;
   int tab_size;
+  bool show_indent_guides;
+  bool relative_line_numbers;
   int tab_scroll_index;
   int preview_buffer_index;
   long long last_sidebar_click_ms;
@@ -370,6 +382,7 @@ private:
   int lsp_change_debounce_ms;
   int last_cursor_shape;
   bool smart_paste_indent;
+  long long keyboard_press_count;
 
   bool show_context_menu;
   enum ContextMenuSurface {
@@ -396,6 +409,8 @@ private:
     CONTEXT_ACTION_GIT_UNSTAGE,
     CONTEXT_ACTION_GIT_DIFF,
     CONTEXT_ACTION_GIT_DIFF_STAGED,
+    CONTEXT_ACTION_GIT_STAGE_ALL,
+    CONTEXT_ACTION_GIT_REFRESH,
   CONTEXT_ACTION_TERMINAL_FOCUS,
   CONTEXT_ACTION_TERMINAL_NEW,
   CONTEXT_ACTION_TERMINAL_CLOSE,
@@ -495,7 +510,12 @@ private:
   std::vector<HomeMenuEntry> home_menu_entries;
 
   // Sidebar
+  enum SidebarView {
+    SIDEBAR_VIEW_EXPLORER,
+    SIDEBAR_VIEW_GIT
+  };
   bool show_sidebar;
+  SidebarView active_sidebar_view;
   int sidebar_width;
   std::string root_dir;
   bool workspace_session_enabled;
@@ -503,6 +523,8 @@ private:
   std::vector<FileNode> file_tree;
   int file_tree_selected;
   int file_tree_scroll; // New
+  int git_sidebar_selected;
+  int git_sidebar_scroll;
   bool sidebar_show_hidden;
   std::string file_tree_watch_signature_;
   bool file_tree_watch_ready_;
@@ -531,6 +553,12 @@ private:
     bool git_dirty = true;
   };
   SidebarRenderCache sidebar_render_cache_;
+
+  struct GitSidebarRow {
+    std::string path;
+    std::string relative_path;
+    std::string status;
+  };
 
   struct FileTabSegment {
     int buffer_id = -1;
@@ -565,15 +593,8 @@ private:
   enum EditorFocus { FOCUS_EDITOR, FOCUS_SIDEBAR };
   EditorFocus focus_state;
 
-  // Vim-like modal editing
-  EditorMode mode;
-  Cursor visual_start;      // anchor position when entering Visual mode
-  bool visual_line_mode;    // true = V (line visual), false = v (char visual)
-  char pending_key;         // first char of a two-key sequence (g, d, y, c…)
-  bool has_pending_key;
-
   // Easter egg — Konami code
-  std::vector<int> recent_keys;   // ring buffer of last 8 normal-mode keys
+  std::vector<int> recent_keys;   // ring buffer of recent navigation keys
   int easter_egg_timer;           // frames remaining to show the easter egg
 
   PythonAPI *python_api;
@@ -598,6 +619,7 @@ private:
   void render_image_viewer();
   void render_integrated_terminal();
   void render_debugger_panel();
+  void render_git_diff_panel();
   int effective_right_panel_width() const;
   void render_menu_bar();
   void render_menu_dropdown();
@@ -681,6 +703,7 @@ private:
   void hide_lsp_completion();
   bool refresh_lsp_completion_filter();
   bool apply_selected_lsp_completion();
+  void accept_telescope_selection();
   void render_lsp_completion();
   std::string get_buffer_text(const FileBuffer &buf) const;
   const std::vector<std::pair<int, int>> &
@@ -698,9 +721,7 @@ private:
   void handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
                           bool is_scroll_down);
 
-  void handle_normal_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt);
-  void handle_insert_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt);
-  void handle_visual_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt);
+  void handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
 
   void handle_command_palette(int ch);
   bool execute_ex_command(const std::string &line);
@@ -712,6 +733,9 @@ private:
   void handle_save_prompt(int ch);
   void handle_integrated_terminal_input(int ch, bool is_ctrl, bool is_shift,
                                         bool is_alt);
+  bool handle_telescope_mouse(int x, int y, bool is_click,
+                              bool is_double_click, bool is_scroll_up,
+                              bool is_scroll_down);
   bool handle_home_menu_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
   bool handle_home_menu_mouse(int x, int y, bool is_click);
   bool handle_menu_bar_input(int ch);
@@ -722,15 +746,6 @@ private:
   bool handle_debugger_mouse(int x, int y, bool activate = true);
   void place_integrated_terminal_cursor();
   void handle_mouse(void *event);
-
-  void enter_normal_mode();
-  void enter_insert_mode();
-  void enter_visual_mode(bool line_mode = false);
-
-  void vim_delete_line();
-  void vim_delete_char();
-  void vim_yank();
-  void vim_paste();
 
   void move_cursor(int dx, int dy, bool extend_selection = false);
   bool insert_char(char c);
@@ -784,7 +799,8 @@ private:
                             bool is_double_click = false);
   void render_sidebar();
   void render_collapsed_sidebar_handle();
-  int min_sidebar_width() const { return 18; }
+  int sidebar_activity_rail_width() const { return 4; }
+  int min_sidebar_width() const { return sidebar_activity_rail_width() + 18; }
   int sidebar_close_threshold() const { return 12; }
   int max_sidebar_width() const;
   int effective_sidebar_width() const;
@@ -812,6 +828,7 @@ private:
   void rebuild_sidebar_tree_cache();
   void rebuild_sidebar_diagnostics_cache();
   void rebuild_sidebar_git_cache();
+  std::vector<GitSidebarRow> build_git_sidebar_rows() const;
 
   void copy();
   void cut();
@@ -877,6 +894,9 @@ private:
   }
   std::string run_git_capture(const std::string &args) const;
   std::string to_git_relative_path(const std::string &path) const;
+  bool open_git_diff_panel(const std::string& path, bool staged);
+  void close_git_diff_panel();
+  void scroll_git_diff_panel(int delta);
   bool git_stage_path(const std::string &path);
   bool git_unstage_path(const std::string &path);
   bool git_stage_all();
@@ -922,6 +942,7 @@ private:
   bool run_debugger_config(const std::string &name);
   DebuggerClient *get_debugger_session(int index = -1);
   void toggle_search();
+  void open_search();
   bool open_scoped_replace_from_selection();
   void toggle_command_palette();
   void open_theme_chooser();
@@ -995,6 +1016,7 @@ private:
   bool surround_selection_or_word(const std::string &left,
                                   const std::string &right);
   bool unsurround_selection_or_cursor();
+  bool change_inside_quote(char quote);
   void increment_number_at_cursor(int delta);
   void toggle_auto_indent_setting();
   void change_tab_size(int delta);
@@ -1005,7 +1027,6 @@ private:
 
   FileBuffer &get_buffer(int id = -1);
   SplitPane &get_pane(int id = -1);
-  // EditorMode get_mode() const { return mode; }
   std::string get_file_extension(const std::string &path);
   std::string get_filename(const std::string &path);
   Theme &get_theme() { return theme; }

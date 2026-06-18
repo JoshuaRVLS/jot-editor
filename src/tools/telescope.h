@@ -48,8 +48,12 @@ public:
     
     void move_up();
     void move_down();
+    void move_by(int delta);
+    void select_index(int index);
+    void ensure_selected_visible(int visible_rows);
     void select();
     void go_parent();
+    void scroll_preview(int delta, int visible_rows);
     
     std::string get_selected_path() const;
     std::string get_selected_relative_path() const;
@@ -59,6 +63,8 @@ public:
     const std::vector<FileMatch>& get_results() const { return results; }
     int get_result_count() const { return (int)results.size(); }
     int get_selected_index() const { return selected_index; }
+    int get_list_scroll_offset() const { return list_scroll_offset; }
+    int get_preview_scroll_offset() const { return preview_scroll_offset; }
     std::string get_query() const { return query; }
     std::string get_root_dir() const { return root_dir.string(); }
     int current_scan_id() const { return scan_id_.load(); }
@@ -71,6 +77,8 @@ private:
     std::string query;
     std::vector<FileMatch> results;
     int selected_index;
+    int list_scroll_offset = 0;
+    int preview_scroll_offset = 0;
     fs::path root_dir;
 
     std::atomic<int> scan_id_{0};

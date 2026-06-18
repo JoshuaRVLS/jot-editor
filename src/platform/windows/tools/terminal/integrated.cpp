@@ -167,6 +167,8 @@ IntegratedTerminal::get_recent_styled_lines(int max_lines) const {
       c.ch = cell.ch;
       c.fg = cell.fg;
       c.bg = cell.bg;
+      c.fg_default = cell.fg == current_fg;
+      c.bg_default = cell.bg == current_bg;
       converted.push_back(c);
     }
     all.push_back(std::move(converted));
@@ -179,6 +181,8 @@ IntegratedTerminal::get_recent_styled_lines(int max_lines) const {
     c.ch = cell.ch;
     c.fg = cell.fg;
     c.bg = cell.bg;
+    c.fg_default = cell.fg == current_fg;
+    c.bg_default = cell.bg == current_bg;
     current.push_back(c);
   }
   all.push_back(std::move(current));

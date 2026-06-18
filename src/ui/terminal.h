@@ -8,7 +8,7 @@
 
 struct TermKey;
 
-enum EventType { EVENT_KEY, EVENT_MOUSE, EVENT_RESIZE, EVENT_REDRAW };
+enum EventType { EVENT_KEY, EVENT_MOUSE, EVENT_RESIZE, EVENT_REDRAW, EVENT_PASTE };
 
 struct KeyEvent {
   int key;
@@ -31,12 +31,17 @@ struct ResizeEvent {
   int width, height;
 };
 
+struct PasteEvent {
+  const char *text;
+};
+
 struct Event {
   EventType type;
   union {
     KeyEvent key;
     MouseEvent mouse;
     ResizeEvent resize;
+    PasteEvent paste;
   };
 };
 
@@ -48,6 +53,7 @@ private:
   TermKey *termkey_;
   std::string buffer;
   std::string mouse_event_buffer;
+  std::string paste_event_buffer;
   FILE *render_capture_ = nullptr;
   int render_capture_seq_ = 0;
   bool render_capture_raw_ = false;
@@ -165,7 +171,7 @@ public:
   bool render_capture_enabled() const { return render_capture_ != nullptr; }
   bool render_capture_raw() const { return render_capture_raw_; }
   int render_capture_bytes_since_last_flush() const { return last_flush_bytes_; }
-  void render_capture_marker(const std::string &label, int rows_rendered);
+  void render_capture_marker(const std::string &label, int rows_rendered); 
 
   // Number of physical columns on the right edge of every row that the
   // renderer must leave untouched. This is fixed at exactly one cell so

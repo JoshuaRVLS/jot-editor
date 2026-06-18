@@ -2,17 +2,40 @@
 #include "ui/text.h"
 #include <algorithm>
 
+namespace {
+void append_sanitized_cell_text(std::string &out, const std::string &text) {
+  if (text.empty()) {
+    out.push_back(' '); 
+    return;
+  }
+  if (text.size()==1&&((unsigned char)text[0] & 0x80) == 0) {
+    out.push_back(text[0]);
+    return;
+  }
+  out += ui_is_valid_utf8_sequence(text) ? text : "?";
+}
+
+void write_sanitized_cell_text(Terminal *term, const std::string &text) {
+  if (text.empty()) {
+    term->write_char(' ');
+    return;
+  }
+  if (text.size()==1&&((unsigned char)text[0] & 0x80) == 0) {
+    term->write_char(text[0]);
+    return;
+  }
+  term->write(ui_is_valid_utf8_sequence(text) ? text : "?");
+}
+}
+
 UI::UI(Terminal *t)
     : term(t), width(80), height(24), cursor_x(-1), cursor_y(-1),
-      cursor_hidden(true) {
+      cursor_shape(UICursorShape::Block), cursor_hidden(true) {
   grid.resize(height);
-  last_grid.resize(height);
   for (int y = 0; y < height; y++) {
     grid[y].resize(width);
-    last_grid[y].resize(width);
     for (int x = 0; x < width; x++) {
       grid[y][x] = {" ", default_fg, default_bg, false, false, false};
-      last_grid[y][x] = {"", -1, -1, false, false, false}; // Force redraw initially
     }
   }
 }
@@ -25,15 +48,13 @@ void UI::resize(int w, int h) {
   height = new_h;
   cursor_x = -1;
   cursor_y = -1;
+  cursor_shape = UICursorShape::Block;
   cursor_hidden = true;
   grid.resize(height);
-  last_grid.resize(height);
   for (int y = 0; y < height; y++) {
     grid[y].resize(width);
-    last_grid[y].resize(width);
     for (int x = 0; x < width; x++) {
       grid[y][x] = {" ", default_fg, default_bg, false, false, false};
-      last_grid[y][x] = {"", -1, -1, false, false, false};
     }
   }
   // Only invalidate (which calls term->clear()) when the dimensions actually
@@ -52,6 +73,7 @@ void UI::resize(int w, int h) {
 void UI::invalidate() {
   cursor_x = -1;
   cursor_y = -1;
+  cursor_shape = UICursorShape::Block;
   cursor_hidden = true;
   term->clear();
 }
@@ -73,13 +95,6 @@ void UI::set_cell(int x, int y, const UICell &cell) {
   if (x >= 0 && x < width && y >= 0 && y < height) {
     grid[y][x] = cell;
   }
-}
-
-UICell UI::get_cell(int x, int y) const {
-  if (x >= 0 && x < width && y >= 0 && y < height) {
-    return grid[y][x];
-  }
-  return {" ", 7, 0, false, false, false};
 }
 
 void UI::render() {
@@ -127,7 +142,7 @@ void UI::render() {
         if (cell.italic)  term->set_italic(true);
         if (cell.reverse) term->set_reverse(true);
         term->set_color(cell.fg, cell.bg);
-        term->write(ui_sanitized_cell_text(cell.ch));
+        write_sanitized_cell_text(term, cell.ch);
       }
     } else {
       int run_fg = -1;
@@ -136,6 +151,9 @@ void UI::render() {
       bool run_italic = false;
       bool run_reverse = false;
       int written = 0;
+      
+      std::string body;
+      body.reserve((size_t)row_width);
 
       for (int x = 0; x < row_width; ) {
         const auto &cell = grid[y][x];
@@ -181,7 +199,8 @@ void UI::render() {
           run_reverse = cell.reverse;
         }
 
-        std::string body;
+        body.clear();
+
         int run_start = x;
         while (x < row_width &&
                grid[y][x].fg == run_fg &&
@@ -189,7 +208,7 @@ void UI::render() {
                grid[y][x].bold == run_bold &&
                grid[y][x].italic == run_italic &&
                grid[y][x].reverse == run_reverse) {
-          body += ui_sanitized_cell_text(grid[y][x].ch);
+          append_sanitized_cell_text(body, grid[y][x].ch);
           x++;
         }
 
@@ -233,7 +252,7 @@ void UI::render() {
     term->show_cursor();
   }
 
-  term->write("\033[1 q");
+  term->write(cursor_shape == UICursorShape::Bar ? "\033[5 q" : "\033[1 q");
   term->flush();
 
   if (capture_on) {
@@ -246,10 +265,11 @@ void UI::render() {
 // Store cursor state without emitting terminal writes. render() (or
 // flush_cursor() when render() is not called) is responsible for
 // materialising the cursor on the terminal.
-void UI::set_cursor(int x, int y) {
+void UI::set_cursor(int x, int y, UICursorShape shape) {
   if (x >= 0 && x < width && y >= 0 && y < height) {
     cursor_x = x;
     cursor_y = y;
+    cursor_shape = shape;
     cursor_hidden = false;
   }
 }
@@ -280,12 +300,19 @@ void UI::flush_cursor() {
     term->move_cursor(cx, cy);
     term->show_cursor();
   }
-  term->write("\033[1 q");
+  term->write(cursor_shape == UICursorShape::Bar ? "\033[5 q" : "\033[1 q");
   term->flush();
 
   if (term->render_capture_enabled()) {
     term->render_capture_marker("CURSOR-ONLY", 0);
   }
+}
+
+void UI::emit_raw_after_frame(const std::string &bytes) {
+  if (bytes.empty())
+    return;
+  term->write(bytes);
+  term->flush();
 }
 
 void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,

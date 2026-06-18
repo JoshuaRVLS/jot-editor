@@ -3,7 +3,26 @@
 #include "html.h"
 #include "text_features.h"
 #include "python_bridge/api.h"
+#include <algorithm>
 #include <cctype>
+
+namespace {
+int tab_advance(int visual_col, int tab_size) {
+  const int ts = std::max(1, tab_size);
+  const int rem = visual_col % ts;
+  return rem == 0 ? ts : (ts - rem);
+}
+
+int compute_visual_column(const std::string &line, int logical_col,
+                          int tab_size) {
+  int clamped = std::clamp(logical_col, 0, (int)line.size());
+  int visual = 0;
+  for (int i = 0; i < clamped; i++) {
+    visual += (line[i] == '\t') ? tab_advance(visual, tab_size) : 1;
+  }
+  return visual;
+}
+} // namespace
 
 bool Editor::insert_char(char c) {
   save_state();
@@ -60,9 +79,12 @@ bool Editor::insert_char(char c) {
   bool inserted_html_closing_tag = false;
 
   if (c == '\t') {
-    std::string spaces(tab_size, ' ');
+    const std::string &line = buf.line(buf.cursor.y);
+    int visual_col = compute_visual_column(line, buf.cursor.x, tab_size);
+    int spaces_to_insert = tab_advance(visual_col, tab_size);
+    std::string spaces(spaces_to_insert, ' ');
     buf.line_mut(buf.cursor.y).insert(buf.cursor.x, spaces);
-    buf.cursor.x += tab_size;
+    buf.cursor.x += spaces_to_insert;
   } else {
     // Check if we should skip closing bracket
     if (AutoClose::is_closing_bracket(c) &&
@@ -83,7 +105,6 @@ bool Editor::insert_char(char c) {
       if (HtmlFeatures::should_insert_closing_tag(line, buf.cursor.x, closing)) {
         line.insert(buf.cursor.x, closing);
         inserted_html_closing_tag = true;
-
       }
     }
 

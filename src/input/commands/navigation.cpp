@@ -3,12 +3,41 @@
 #include <algorithm>
 #include <cctype>
 
+void Editor::accept_telescope_selection() {
+  std::string path = telescope.get_selected_path();
+  if (path.empty()) {
+    return;
+  }
+  if (fs::is_directory(path)) {
+    auto scan_tq = task_queue_.get();
+    telescope.select();
+    telescope.update_results();
+    telescope.scan_async(scan_tq);
+    needs_redraw = true;
+    return;
+  }
+
+  std::string ext = get_file_extension(path);
+  std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+  if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" ||
+      ext == ".bmp" || ext == ".svg" || ext == ".webp" || ext == ".ico" ||
+      ext == ".tif" || ext == ".tiff" || ext == ".avif" || ext == ".heic" ||
+      ext == ".ppm" || ext == ".pgm" || ext == ".pbm" || ext == ".xpm" ||
+      ext == ".jxl") {
+    image_viewer.open(path);
+  } else {
+    open_file(path);
+  }
+  telescope.close();
+  needs_redraw = true;
+}
+
 void Editor::handle_telescope(int ch) {
   auto scan_tq = task_queue_.get();
 
   if (ch == 27) {
     telescope.close();
-    waiting_for_space_f = false;
     needs_redraw = true;
     return;
   }
@@ -28,33 +57,7 @@ void Editor::handle_telescope(int ch) {
   }
 
   if (ch == '\n' || ch == 13) {
-    std::string path = telescope.get_selected_path();
-    if (path.empty()) {
-      return;
-    }
-    if (fs::is_directory(path)) {
-      telescope.select();
-      telescope.update_results();
-      telescope.scan_async(scan_tq);
-      needs_redraw = true;
-      return;
-    }
-
-    std::string ext = get_file_extension(path);
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-    if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" ||
-        ext == ".bmp" || ext == ".svg" || ext == ".webp" || ext == ".ico" ||
-        ext == ".tif" || ext == ".tiff" || ext == ".avif" || ext == ".heic" ||
-        ext == ".ppm" || ext == ".pgm" || ext == ".pbm" || ext == ".xpm" ||
-        ext == ".jxl") {
-      image_viewer.open(path);
-    } else {
-      open_file(path);
-    }
-    telescope.close();
-    waiting_for_space_f = false;
-    needs_redraw = true;
+    accept_telescope_selection();
     return;
   }
 

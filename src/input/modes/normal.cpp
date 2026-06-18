@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "quote_text_object.h"
 
 void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
                                 bool /*is_alt*/) {
@@ -87,6 +88,156 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     return;
   }
 
+  if (leader_key_pending) {
+    leader_key_pending = false;
+
+    auto save_all = [&] {
+      int saved = 0;
+      for (int i = 0; i < (int)buffers.size(); i++) {
+        if (!buffers[i].filepath.empty() && buffers[i].modified &&
+            save_buffer_at(i, false)) {
+          saved++;
+        }
+      }
+      if (saved > 0) {
+        set_message("Saved " + std::to_string(saved) + " file(s)");
+      } else {
+        set_message("No modified saved files");
+      }
+      needs_redraw = true;
+    };
+
+    auto close_or_quit = [&] {
+      if (panes.size() > 1) {
+        close_pane();
+        return;
+      }
+      bool unsaved = false;
+      for (const auto &b : buffers) {
+        if (b.modified) {
+          unsaved = true;
+          break;
+        }
+      }
+      if (unsaved) {
+        show_quit_prompt = true;
+        needs_redraw = true;
+      } else {
+        running = false;
+      }
+    };
+
+    switch (ch) {
+    case 'f':
+    case 'F':
+      telescope.open(root_dir.empty() ? "." : root_dir);
+      needs_redraw = true;
+      return;
+    case 'p':
+    case 'P':
+      toggle_command_palette();
+      needs_redraw = true;
+      return;
+    case '/':
+      toggle_search();
+      needs_redraw = true;
+      return;
+    case 's':
+      save_file();
+      needs_redraw = true;
+      return;
+    case 'S':
+      save_all();
+      return;
+    case 'q':
+    case 'Q':
+      close_or_quit();
+      return;
+    case 'n':
+    case 'N':
+      create_new_buffer();
+      needs_redraw = true;
+      return;
+    case 'w':
+    case 'W':
+      close_buffer();
+      needs_redraw = true;
+      return;
+    case 'r':
+    case 'R':
+      show_command_palette = true;
+      command_palette_query = "openrecent ";
+      command_palette_results.clear();
+      command_palette_selected = 0;
+      command_palette_theme_mode = false;
+      command_palette_theme_original.clear();
+      refresh_command_palette();
+      needs_redraw = true;
+      return;
+    case 'b':
+    case 'B':
+      toggle_sidebar();
+      return;
+    case 'm':
+    case 'M':
+      toggle_minimap();
+      needs_redraw = true;
+      return;
+    case 't':
+    case 'T':
+      open_theme_chooser();
+      needs_redraw = true;
+      return;
+    case 'x':
+    case 'X':
+      toggle_integrated_terminal();
+      return;
+    case 'd':
+    case 'D':
+      delete_line();
+      return;
+    case 'y':
+    case 'Y':
+      vim_yank();
+      needs_redraw = true;
+      return;
+    case 'c':
+    case 'C':
+      save_state();
+      buf.line_mut(buf.cursor.y) = "";
+      buf.cursor.x = 0;
+      buf.modified = true;
+      enter_insert_mode();
+      return;
+    case '#':
+      toggle_comment();
+      return;
+    case '=':
+      format_document();
+      return;
+    case 'v':
+      enter_visual_mode(false);
+      return;
+    case 'V':
+      enter_visual_mode(true);
+      return;
+    case 27:
+      needs_redraw = true;
+      return;
+    default:
+      set_message("Unknown leader: Space+" + std::string(1, (char)ch));
+      needs_redraw = true;
+      return;
+    }
+  }
+
+  if (ch == ' ') {
+    leader_key_pending = true;
+    set_message("Leader");
+    needs_redraw = true;
+    return;
+  }
+
   if (has_pending_key) {
     char first = pending_key;
     has_pending_key = false;
@@ -125,6 +276,17 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
         buf.cursor.x = 0;
         buf.modified = true;
         enter_insert_mode();
+        return;
+      }
+      if (ch == 'i') {
+        has_pending_key = true;
+        pending_key = 'I';
+        return;
+      }
+      return;
+    } else if (first == 'I') {
+      if (QuoteTextObject::is_supported_quote((char)ch)) {
+        change_inside_quote((char)ch);
         return;
       }
       return;
@@ -171,7 +333,7 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     enter_visual_mode(false);
     return;
   case 'V':
-    select_current_line();
+    enter_visual_mode(true);
     return;
 
   case 'h':

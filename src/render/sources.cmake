@@ -6,4 +6,5 @@ set(JOT_RENDER_SOURCES
   render/minimap.cpp
   render/overlay.cpp
   render/ui.cpp
+  render/git_diff.cpp
 )
