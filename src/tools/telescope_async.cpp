@@ -32,6 +32,20 @@ std::string parent_display_path(const std::string &relative_path) {
 }
 } // namespace
 
+void Telescope::set_query(const std::string &q, TaskQueue *tq) {
+  query = q;
+  selected_index = 0;
+  list_scroll_offset = 0;
+  preview_scroll_offset = 0;
+  invalidate_preview_cache();
+  if (tq) {
+    cancel_scan();
+    scan_async(tq);
+  } else {
+    update_results();
+  }
+}
+
 void Telescope::scan_async(TaskQueue *tq) {
   if (!tq || !active) {
     return;

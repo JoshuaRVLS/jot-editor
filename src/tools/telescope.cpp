@@ -125,20 +125,6 @@ void Telescope::close() {
   invalidate_preview_cache();
 }
 
-void Telescope::set_query(const std::string &q, TaskQueue *tq) {
-  query = q;
-  selected_index = 0;
-  list_scroll_offset = 0;
-  preview_scroll_offset = 0;
-  invalidate_preview_cache();
-  if (tq) {
-    cancel_scan();
-    scan_async(tq);
-  } else {
-    update_results();
-  }
-}
-
 void Telescope::update_results() {
   results.clear();
   scan_directory(root_dir, 0);
