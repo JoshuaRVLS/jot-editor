@@ -52,6 +52,14 @@ struct LanguageLookupResult {
   std::string message;
 };
 
+uint32_t language_abi_version(const TSLanguage *language) {
+#if defined(TREE_SITTER_LANGUAGE_VERSION) && TREE_SITTER_LANGUAGE_VERSION >= 15
+  return ts_language_abi_version(language);
+#else
+  return ts_language_version(language);
+#endif
+}
+
 LanguageLookupResult language_from_handle(void *handle, const std::string &symbol) {
   LanguageLookupResult result;
   if (!handle) {
@@ -68,7 +76,7 @@ LanguageLookupResult language_from_handle(void *handle, const std::string &symbo
     result.message = "symbol " + symbol + " returned null";
     return result;
   }
-  const uint32_t abi = ts_language_abi_version(lang);
+  const uint32_t abi = language_abi_version(lang);
   if (abi < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION ||
       abi > TREE_SITTER_LANGUAGE_VERSION) {
     result.message = "ABI " + std::to_string(abi) + " incompatible with " +
