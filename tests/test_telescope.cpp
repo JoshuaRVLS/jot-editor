@@ -1,25 +1,25 @@
 #include "telescope.h"
-#include "test_framework.h"
+#include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 
-TEST(TestTelescopeFuzzyMatch) {
-  ASSERT_TRUE(Telescope::fuzzy_match("src/tools/telescope.cpp", "tsp"));
-  ASSERT_TRUE(Telescope::fuzzy_match("RenderOverlay", "ro"));
-  ASSERT_TRUE(!Telescope::fuzzy_match("README.md", "xyz"));
+TEST_CASE("Telescope Fuzzy Match", "[jot]") {
+  REQUIRE(Telescope::fuzzy_match("src/tools/telescope.cpp", "tsp"));
+  REQUIRE(Telescope::fuzzy_match("RenderOverlay", "ro"));
+  REQUIRE_FALSE(Telescope::fuzzy_match("README.md", "xyz"));
 }
 
-TEST(TestTelescopeFuzzyScoreRanking) {
+TEST_CASE("Telescope Fuzzy Score Ranking", "[jot]") {
   int exact = Telescope::fuzzy_score("telescope.cpp", "telescope.cpp");
   int substring = Telescope::fuzzy_score("telescope_preview.cpp", "preview");
   int scattered = Telescope::fuzzy_score("src/tools/telescope.cpp", "tsp");
 
-  ASSERT_TRUE(exact > substring);
-  ASSERT_TRUE(substring > scattered);
-  ASSERT_TRUE(Telescope::fuzzy_score("README.md", "xyz") == 0);
+  REQUIRE(exact > substring);
+  REQUIRE(substring > scattered);
+  REQUIRE(Telescope::fuzzy_score("README.md", "xyz") == 0);
 }
 
-TEST(TestTelescopeApplyResultsSelectionAndDisplay) {
+TEST_CASE("Telescope Apply Results Selection And Display", "[jot]") {
   Telescope telescope;
   std::vector<FileMatch> matches;
   matches.push_back({"/repo/src/tools/telescope.cpp", "telescope.cpp",
@@ -28,19 +28,19 @@ TEST(TestTelescopeApplyResultsSelectionAndDisplay) {
                      true});
 
   telescope.apply_results(matches);
-  ASSERT_EQ(telescope.get_result_count(), 2);
-  ASSERT_EQ(telescope.get_selected_path(), "/repo/src/tools/telescope.cpp");
-  ASSERT_EQ(telescope.get_selected_relative_path(), "src/tools/telescope.cpp");
+  REQUIRE(telescope.get_result_count() == 2);
+  REQUIRE(telescope.get_selected_path() == "/repo/src/tools/telescope.cpp");
+  REQUIRE(telescope.get_selected_relative_path() == "src/tools/telescope.cpp");
 
   telescope.move_down();
-  ASSERT_EQ(telescope.get_selected_path(), "/repo/src/render");
+  REQUIRE(telescope.get_selected_path() == "/repo/src/render");
 
   telescope.apply_results({});
-  ASSERT_EQ(telescope.get_result_count(), 0);
-  ASSERT_EQ(telescope.get_selected_index(), 0);
+  REQUIRE(telescope.get_result_count() == 0);
+  REQUIRE(telescope.get_selected_index() == 0);
 }
 
-TEST(TestTelescopeSelectionAndListScrollClamp) {
+TEST_CASE("Telescope Selection And List Scroll Clamp", "[jot]") {
   Telescope telescope;
   std::vector<FileMatch> matches;
   for (int i = 0; i < 8; i++) {
@@ -50,25 +50,25 @@ TEST(TestTelescopeSelectionAndListScrollClamp) {
 
   telescope.apply_results(matches);
   telescope.ensure_selected_visible(3);
-  ASSERT_EQ(telescope.get_list_scroll_offset(), 0);
+  REQUIRE(telescope.get_list_scroll_offset() == 0);
 
   telescope.select_index(5);
   telescope.ensure_selected_visible(3);
-  ASSERT_EQ(telescope.get_selected_index(), 5);
-  ASSERT_EQ(telescope.get_list_scroll_offset(), 3);
+  REQUIRE(telescope.get_selected_index() == 5);
+  REQUIRE(telescope.get_list_scroll_offset() == 3);
 
   telescope.move_by(99);
   telescope.ensure_selected_visible(3);
-  ASSERT_EQ(telescope.get_selected_index(), 7);
-  ASSERT_EQ(telescope.get_list_scroll_offset(), 5);
+  REQUIRE(telescope.get_selected_index() == 7);
+  REQUIRE(telescope.get_list_scroll_offset() == 5);
 
   telescope.move_by(-99);
   telescope.ensure_selected_visible(3);
-  ASSERT_EQ(telescope.get_selected_index(), 0);
-  ASSERT_EQ(telescope.get_list_scroll_offset(), 0);
+  REQUIRE(telescope.get_selected_index() == 0);
+  REQUIRE(telescope.get_list_scroll_offset() == 0);
 }
 
-TEST(TestTelescopePreviewScrollClamp) {
+TEST_CASE("Telescope Preview Scroll Clamp", "[jot]") {
   Telescope telescope;
   std::vector<FileMatch> matches;
   matches.push_back({"/repo/missing.txt", "missing.txt", "missing.txt", ".",
@@ -76,8 +76,8 @@ TEST(TestTelescopePreviewScrollClamp) {
   telescope.apply_results(matches);
 
   telescope.scroll_preview(10, 1);
-  ASSERT_EQ(telescope.get_preview_scroll_offset(), 0);
+  REQUIRE(telescope.get_preview_scroll_offset() == 0);
 
   telescope.select_index(0);
-  ASSERT_EQ(telescope.get_preview_scroll_offset(), 0);
+  REQUIRE(telescope.get_preview_scroll_offset() == 0);
 }

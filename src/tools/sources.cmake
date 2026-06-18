@@ -11,8 +11,3 @@ set(JOT_TOOLS_POSIX_SOURCES
   tools/lsp/client.cpp
   tools/terminal/integrated.cpp
 )
-
-set(JOT_TOOLS_WINDOWS_SOURCES
-  platform/windows/tools/lsp/client.cpp
-  platform/windows/tools/terminal/integrated.cpp
-)

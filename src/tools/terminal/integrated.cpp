@@ -299,10 +299,6 @@ void IntegratedTerminal::refresh_current_line() {
 }
 
 bool IntegratedTerminal::open_shell(const std::string &cwd) {
-#if defined(JOT_PLATFORM_WINDOWS)
-  (void)cwd;
-  return false;
-#else
   if (active) {
     focused = true;
     return true;
@@ -351,7 +347,6 @@ bool IntegratedTerminal::open_shell(const std::string &cwd) {
     fcntl(master_fd, F_SETFL, flags | O_NONBLOCK);
   }
   return true;
-#endif
 }
 
 void IntegratedTerminal::close_shell() {

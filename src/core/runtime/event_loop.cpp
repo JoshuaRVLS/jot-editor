@@ -1,14 +1,156 @@
 #include "event_loop.h"
+#include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cerrno>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <stdexcept>
+#include <string>
 #include <utility>
+#include <vector>
 #include <unistd.h>
 
 #include "editor.h"
+#include "python_bridge/api.h"
+
+namespace {
+std::string plugin_key_name(int ch, bool is_ctrl, bool is_shift, bool is_alt,
+                            int original_ch) {
+  int key = original_ch ? original_ch : ch;
+  if (is_ctrl && key >= 1 && key <= 26) {
+    key += 96;
+  }
+  if ((key & 0x8000) != 0) {
+    key &= 0x7FFF;
+    is_shift = true;
+  }
+
+  std::string base;
+  switch (key) {
+  case 13:
+  case '\n':
+    base = "Enter";
+    break;
+  case 27:
+    base = "Esc";
+    break;
+  case '\t':
+    base = "Tab";
+    break;
+  case 127:
+  case 8:
+    base = "Backspace";
+    break;
+  case 1001:
+    base = "Delete";
+    break;
+  case 1008:
+    base = "Up";
+    break;
+  case 1009:
+    base = "Down";
+    break;
+  case 1010:
+    base = "Right";
+    break;
+  case 1011:
+    base = "Left";
+    break;
+  case 1012:
+    base = "Home";
+    break;
+  case 1013:
+    base = "End";
+    break;
+  default:
+    if (key >= 32 && key < 127) {
+      base = std::string(1, (char)std::toupper((unsigned char)key));
+    } else {
+      base = std::to_string(key);
+    }
+    break;
+  }
+
+  std::string out;
+  if (is_ctrl) {
+    out += "Ctrl+";
+  }
+  if (is_alt) {
+    out += "Alt+";
+  }
+  if (is_shift) {
+    out += "Shift+";
+  }
+  out += base;
+  return out;
+}
+
+std::vector<std::string> plugin_key_candidates(int ch, bool is_ctrl,
+                                               bool is_shift, bool is_alt,
+                                               int original_ch) {
+  std::vector<std::string> candidates;
+  auto push_unique = [&candidates](std::string key) {
+    if (!key.empty() &&
+        std::find(candidates.begin(), candidates.end(), key) ==
+            candidates.end()) {
+      candidates.push_back(std::move(key));
+    }
+  };
+
+  push_unique(plugin_key_name(ch, is_ctrl, is_shift, is_alt, original_ch));
+
+  int key = original_ch ? original_ch : ch;
+  if ((key & 0x8000) != 0) {
+    key &= 0x7FFF;
+  }
+
+  int letter = 0;
+  if (key >= 1 && key <= 26) {
+    letter = 'A' + key - 1;
+  } else if (key >= 'a' && key <= 'z') {
+    letter = std::toupper((unsigned char)key);
+  } else if (key >= 'A' && key <= 'Z') {
+    letter = key;
+  }
+
+  const char *shift_fallback = std::getenv("JOT_KEYMAP_CTRL_SHIFT_FALLBACK");
+  const bool use_shift_fallback =
+      shift_fallback && shift_fallback[0] && shift_fallback[0] != '0';
+  if (use_shift_fallback && is_ctrl && !is_alt && !is_shift && letter) {
+    std::string shifted = "Ctrl+Shift+";
+    shifted.push_back((char)letter);
+    push_unique(std::move(shifted));
+  }
+
+  return candidates;
+}
+
+void log_keymap_debug(int ch, bool is_ctrl, bool is_shift, bool is_alt,
+                      int original_ch,
+                      const std::vector<std::string> &candidates) {
+  const char *path = std::getenv("JOT_KEYMAP_DEBUG");
+  if (!path || !*path) {
+    return;
+  }
+
+  FILE *file = std::fopen(path, "a");
+  if (!file) {
+    return;
+  }
+
+  std::fprintf(file, "ch=%d original=%d ctrl=%d shift=%d alt=%d candidates=",
+               ch, original_ch, is_ctrl ? 1 : 0, is_shift ? 1 : 0,
+               is_alt ? 1 : 0);
+  for (size_t i = 0; i < candidates.size(); ++i) {
+    std::fprintf(file, "%s%s", i == 0 ? "" : ",", candidates[i].c_str());
+  }
+  std::fprintf(file, "\n");
+  std::fclose(file);
+}
+} // namespace
 
 EventLoop::EventLoop() { main_thread_id_ = std::this_thread::get_id(); }
 
@@ -374,6 +516,19 @@ void Editor::handle_terminal_event(const Event &ev) {
     if (ctrl_q_shortcut) {
       handle_input('q', is_ctrl, is_shift, is_alt, original_ch);
       return;
+    }
+
+    if (python_api) {
+      auto candidates =
+          plugin_key_candidates(ch, is_ctrl, is_shift, is_alt, original_ch);
+      log_keymap_debug(ch, is_ctrl, is_shift, is_alt, original_ch, candidates);
+      for (const auto &candidate : candidates) {
+        if (!python_api->run_plugin_keymap(candidate)) {
+          continue;
+        }
+        needs_redraw = true;
+        return;
+      }
     }
 
     bool toggle_terminal_shortcut =

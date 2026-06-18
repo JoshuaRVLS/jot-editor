@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.16)
 project(jot LANGUAGES C CXX)
 
 # Use a clean, portable install RPATH that points to the same prefix's lib dir.
@@ -43,7 +43,7 @@ if(APPLE)
 elseif(UNIX)
   add_compile_definitions(JOT_PLATFORM_POSIX=1)
 elseif(WIN32)
-  add_compile_definitions(JOT_PLATFORM_WINDOWS=1)
+  message(FATAL_ERROR "Windows is not supported. Use Linux, macOS, or WSL.")
 else()
   message(WARNING "Unknown platform. Build may work, but terminal integrations are only guaranteed on POSIX.")
 endif()
@@ -58,6 +58,14 @@ add_subdirectory(apps/jot)
 
 include(CTest)
 if(BUILD_TESTING)
+  include(FetchContent)
+  FetchContent_Declare(
+    Catch2
+    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+    GIT_TAG v3.8.1
+  )
+  FetchContent_MakeAvailable(Catch2)
+  list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
   add_subdirectory(tests)
 endif()
 if(JOT_BUILD_BENCHMARKS)

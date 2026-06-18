@@ -74,6 +74,8 @@ Editor::Editor() {
   show_right_panel = false;
   right_panel_width = std::clamp(config.get_int("right_panel_width", 42), 28, 80);
   active_right_panel_tab = RIGHT_PANEL_DEBUG;
+  active_plugin_panel.clear();
+  plugin_quick_pick_select_callback.clear();
   show_tree_sitter_status_modal = false;
   tree_sitter_status_scroll = 0;
   tree_sitter_install_jobs.clear();
@@ -255,8 +257,8 @@ Editor::Editor() {
   current_theme_name = "dark";
 
   python_api = new PythonAPI(this);
-  python_api->init();
   host_api = std::make_unique<EditorHostAPI>(*this);
+  python_api->init();
 
   load_recent_files();
   load_recent_workspaces();

@@ -53,7 +53,8 @@ For a user-local install:
 ```
 
 By default, the installer configures, builds, and installs to `$HOME/.local`.
-It also attempts Tree-sitter runtime setup unless `--skip-treesitter` is passed.
+It also runs CTest and attempts Tree-sitter runtime setup unless
+`--skip-tests` or `--skip-treesitter` is passed.
 Use `./install.sh --help` for prefix, build type, test, Tree-sitter, formatter,
 and LSP tooling options.
 
@@ -633,7 +634,7 @@ lsp_change_debounce_ms=120
 
 ## Build Requirements
 
-- CMake 3.14+
+- CMake 3.16+
 - C++17 compiler
 - Python 3 development headers and `python3-config`
 - libvterm development headers (`vterm` pkg-config package)

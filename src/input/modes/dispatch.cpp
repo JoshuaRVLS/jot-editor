@@ -329,6 +329,18 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     return;
   }
 
+  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_PLUGIN &&
+      !is_ctrl && !is_alt) {
+    if (ch == 'q' || ch == 'Q' || ch == 27) {
+      show_right_panel = false;
+      active_right_panel_tab = RIGHT_PANEL_DEBUG;
+      active_plugin_panel.clear();
+      set_message("Plugin panel closed");
+      needs_redraw = true;
+      return;
+    }
+  }
+
   if (image_viewer.is_active()) {
     if (ch == 'q' || ch == 27) {
       image_viewer.close();

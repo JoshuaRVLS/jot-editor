@@ -13,7 +13,7 @@ fi
 
 INSTALL_PREFIX="${DEFAULT_HOME}/.local"
 BUILD_TYPE="Release"
-RUN_TESTS=0
+RUN_TESTS=1
 USE_SUDO=0
 INSTALL_LSP=0
 INSTALL_TOOLS=0
@@ -32,7 +32,8 @@ Options:
   --build-dir <path>    Build directory (default: ./build)
   --debug               Build with Debug configuration
   --release             Build with Release configuration (default)
-  --run-tests           Run CTest after building
+  --run-tests           Run CTest after building (default)
+  --skip-tests          Skip CTest after building
   --with-tools          Install optional formatter tooling (prettier)
   --with-lsp            Install optional built-in LSP servers
   --with-treesitter     Install Tree-sitter runtime package (default)
@@ -45,6 +46,7 @@ Options:
 Examples:
   ./install.sh
   ./install.sh --prefix /usr/local --sudo
+  ./install.sh --skip-tests
   ./install.sh --skip-treesitter
   ./install.sh --with-tools --with-lsp
   ./install.sh --build-dir ./build_release --release -j 4
@@ -74,6 +76,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --run-tests)
       RUN_TESTS=1
+      shift
+      ;;
+    --skip-tests)
+      RUN_TESTS=0
       shift
       ;;
     --with-tools)

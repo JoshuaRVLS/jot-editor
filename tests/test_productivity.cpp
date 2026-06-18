@@ -1,36 +1,36 @@
 #include "tools/symbols/index.h"
-#include "test_framework.h"
+#include <catch2/catch_test_macros.hpp>
 #include "tools/workspace/search.h"
 
 #include <vector>
 
-TEST(TestWorkspaceSearchSkipsHeavyFolders) {
-  ASSERT_TRUE(WorkspaceSearch::should_skip_path_component(".git"));
-  ASSERT_TRUE(WorkspaceSearch::should_skip_path_component("node_modules"));
-  ASSERT_TRUE(WorkspaceSearch::should_skip_path_component("build"));
-  ASSERT_TRUE(!WorkspaceSearch::should_skip_path_component("src"));
+TEST_CASE("Workspace Search Skips Heavy Folders", "[jot]") {
+  REQUIRE(WorkspaceSearch::should_skip_path_component(".git"));
+  REQUIRE(WorkspaceSearch::should_skip_path_component("node_modules"));
+  REQUIRE(WorkspaceSearch::should_skip_path_component("build"));
+  REQUIRE_FALSE(WorkspaceSearch::should_skip_path_component("src"));
 }
 
-TEST(TestWorkspaceSearchDetectsBinaryText) {
-  ASSERT_TRUE(WorkspaceSearch::text_looks_binary(std::string("abc\0def", 7)));
-  ASSERT_TRUE(!WorkspaceSearch::text_looks_binary("plain text"));
+TEST_CASE("Workspace Search Detects Binary Text", "[jot]") {
+  REQUIRE(WorkspaceSearch::text_looks_binary(std::string("abc\0def", 7)));
+  REQUIRE_FALSE(WorkspaceSearch::text_looks_binary("plain text"));
 }
 
-TEST(TestSymbolIndexPythonSymbols) {
+TEST_CASE("Symbol Index Python Symbols", "[jot]") {
   std::vector<std::string> lines = {
       "class Editor:",
       "    def render(self):",
       "        pass",
   };
   auto symbols = SymbolIndex::extract_document_symbols(lines, "app.py");
-  ASSERT_EQ((int)symbols.size(), 2);
-  ASSERT_EQ(symbols[0].name, "Editor");
-  ASSERT_EQ(symbols[0].kind, "class");
-  ASSERT_EQ(symbols[1].name, "render");
-  ASSERT_EQ(symbols[1].kind, "function");
+  REQUIRE((int)symbols.size() == 2);
+  REQUIRE(symbols[0].name == "Editor");
+  REQUIRE(symbols[0].kind == "class");
+  REQUIRE(symbols[1].name == "render");
+  REQUIRE(symbols[1].kind == "function");
 }
 
-TEST(TestSymbolIndexCppFunction) {
+TEST_CASE("Symbol Index C++ Function", "[jot]") {
   std::vector<std::string> lines = {
       "struct Buffer {",
       "};",
@@ -39,7 +39,7 @@ TEST(TestSymbolIndexCppFunction) {
       "}",
   };
   auto symbols = SymbolIndex::extract_document_symbols(lines, "render.cpp");
-  ASSERT_TRUE((int)symbols.size() >= 2);
-  ASSERT_EQ(symbols[0].name, "Buffer");
-  ASSERT_EQ(symbols[1].name, "render_buffer");
+  REQUIRE((int)symbols.size() >= 2);
+  REQUIRE(symbols[0].name == "Buffer");
+  REQUIRE(symbols[1].name == "render_buffer");
 }

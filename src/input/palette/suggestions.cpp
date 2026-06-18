@@ -165,6 +165,9 @@ const std::vector<CommandMeta> &command_palette_metadata() {
       {"autosave", "Settings", "Configure auto-save", 70},
       {"help", "Help", "Show help or command list", 80},
       {"h", "Help", "Show help or command list", 70},
+      {"plugins", "Plugin", "Show loaded plugins and APIs", 80},
+      {"reloadplugins", "Plugin", "Reload init.py and plugins", 78},
+      {"pluginpanel", "Plugin", "Show a plugin panel", 75},
       {"gitdiffclose", "Git", "Close git diff panel", 68},
       {"gitdiffrefresh", "Git", "Refresh Open Git Diff", 68}
   };
@@ -450,6 +453,11 @@ void Editor::refresh_command_palette() {
       }
       for (const auto &c : ex_commands()) {
         add_arg(c, "Command", "Command help", 80);
+      }
+    } else if (lcmd == "pluginpanel" && python_api) {
+      for (const auto &panel : python_api->panels()) {
+        add_arg(panel.name, "Plugin Panel",
+                panel.title.empty() ? "Show plugin panel" : panel.title, 120);
       }
     } else if (lcmd == "e" || lcmd == "edit" || lcmd == "open" ||
                lcmd == "w" || lcmd == "write" || lcmd == "wq" ||

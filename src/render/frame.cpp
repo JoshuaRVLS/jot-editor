@@ -195,6 +195,7 @@ void Editor::render() {
     render_integrated_terminal();
     render_debugger_panel();
     render_git_diff_panel();
+    render_plugin_panel();
     render_telescope();
     render_status_line();
     ui->hide_cursor();
@@ -220,9 +221,10 @@ void Editor::render() {
       render_panes();
       render_collapsed_sidebar_handle();
       render_lsp_completion();
-      render_integrated_terminal();
-      render_debugger_panel();
-      render_git_diff_panel();
+    render_integrated_terminal();
+    render_debugger_panel();
+    render_git_diff_panel();
+    render_plugin_panel();
     }
 
     render_status_line();

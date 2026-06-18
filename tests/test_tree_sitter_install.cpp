@@ -1,92 +1,92 @@
-#include "test_framework.h"
+#include <catch2/catch_test_macros.hpp>
 #include "tree_sitter/install.h"
 
 #include <string>
 
-TEST(TestTreeSitterInstallLanguageValidation) {
-  ASSERT_TRUE(TreeSitterInstall::is_supported_language("cpp"));
-  ASSERT_TRUE(TreeSitterInstall::is_supported_language("CPP"));
-  ASSERT_TRUE(TreeSitterInstall::is_supported_language("jsx"));
-  ASSERT_TRUE(TreeSitterInstall::is_supported_language(
+TEST_CASE("Tree Sitter Install Language Validation", "[jot]") {
+  REQUIRE(TreeSitterInstall::is_supported_language("cpp"));
+  REQUIRE(TreeSitterInstall::is_supported_language("CPP"));
+  REQUIRE(TreeSitterInstall::is_supported_language("jsx"));
+  REQUIRE(TreeSitterInstall::is_supported_language(
       "https://github.com/tree-sitter/tree-sitter-zig"));
-  ASSERT_TRUE(TreeSitterInstall::is_supported_language(
+  REQUIRE(TreeSitterInstall::is_supported_language(
       "github.com/tree-sitter-grammars/tree-sitter-zig"));
-  ASSERT_TRUE(!TreeSitterInstall::is_supported_language("unknown"));
+  REQUIRE_FALSE(TreeSitterInstall::is_supported_language("unknown"));
 }
 
-TEST(TestTreeSitterInstallCommandMapping) {
+TEST_CASE("Tree Sitter Install Command Mapping", "[jot]") {
   auto cpp = TreeSitterInstall::command_for_language("cpp");
-  ASSERT_TRUE(cpp.supported);
-  ASSERT_EQ(cpp.language, "cpp");
-  ASSERT_TRUE(cpp.command.find("github.com/tree-sitter/tree-sitter-cpp") !=
+  REQUIRE(cpp.supported);
+  REQUIRE(cpp.language == "cpp");
+  REQUIRE(cpp.command.find("github.com/tree-sitter/tree-sitter-cpp") !=
               std::string::npos);
-  ASSERT_TRUE(cpp.command.find("lib/jot/tree-sitter") != std::string::npos);
-  ASSERT_TRUE(cpp.command.find("objdir=\"$work/.jot-build\"") !=
+  REQUIRE(cpp.command.find("lib/jot/tree-sitter") != std::string::npos);
+  REQUIRE(cpp.command.find("objdir=\"$work/.jot-build\"") !=
               std::string::npos);
-  ASSERT_TRUE(cpp.command.find("set -- \"$@\" \"$objdir/parser.o\"") !=
+  REQUIRE(cpp.command.find("set -- \"$@\" \"$objdir/parser.o\"") !=
               std::string::npos);
-  ASSERT_TRUE(cpp.command.find("$cxx \"$linkflag\" \"$@\"") !=
+  REQUIRE(cpp.command.find("$cxx \"$linkflag\" \"$@\"") !=
               std::string::npos);
-  ASSERT_TRUE(cpp.command.find("linkflag=-dynamiclib") != std::string::npos);
-  ASSERT_TRUE(cpp.command.find("linkflag=-shared") != std::string::npos);
-  ASSERT_TRUE(cpp.command.find("[jot:treesitter] start cpp") !=
+  REQUIRE(cpp.command.find("linkflag=-dynamiclib") != std::string::npos);
+  REQUIRE(cpp.command.find("linkflag=-shared") != std::string::npos);
+  REQUIRE(cpp.command.find("[jot:treesitter] start cpp") !=
               std::string::npos);
-  ASSERT_TRUE(cpp.command.find("[jot:treesitter] clone cpp") !=
+  REQUIRE(cpp.command.find("[jot:treesitter] clone cpp") !=
               std::string::npos);
-  ASSERT_TRUE(cpp.command.find("[jot:treesitter] build cpp") !=
+  REQUIRE(cpp.command.find("[jot:treesitter] build cpp") !=
               std::string::npos);
-  ASSERT_TRUE(cpp.command.find("[jot:treesitter] link cpp") !=
+  REQUIRE(cpp.command.find("[jot:treesitter] link cpp") !=
               std::string::npos);
-  ASSERT_TRUE(cpp.command.find("[jot:treesitter] query cpp") !=
+  REQUIRE(cpp.command.find("[jot:treesitter] query cpp") !=
               std::string::npos);
-  ASSERT_TRUE(cpp.command.find("[jot:treesitter] success cpp") !=
+  REQUIRE(cpp.command.find("[jot:treesitter] success cpp") !=
               std::string::npos);
-  ASSERT_TRUE(cpp.command.find("[jot:treesitter] failed cpp exit=$rc") !=
+  REQUIRE(cpp.command.find("[jot:treesitter] failed cpp exit=$rc") !=
               std::string::npos);
-  ASSERT_TRUE(cpp.command.find("find \"$work/queries\"") !=
+  REQUIRE(cpp.command.find("find \"$work/queries\"") !=
               std::string::npos);
-  ASSERT_TRUE(cpp.command.find("-name '*.scm'") != std::string::npos);
+  REQUIRE(cpp.command.find("-name '*.scm'") != std::string::npos);
 
   auto javascript = TreeSitterInstall::command_for_language("javascript");
-  ASSERT_TRUE(javascript.supported);
-  ASSERT_EQ(javascript.language, "javascript");
-  ASSERT_TRUE(javascript.command.find("github.com/tree-sitter/tree-sitter-javascript") !=
+  REQUIRE(javascript.supported);
+  REQUIRE(javascript.language == "javascript");
+  REQUIRE(javascript.command.find("github.com/tree-sitter/tree-sitter-javascript") !=
               std::string::npos);
 
   auto jsx = TreeSitterInstall::command_for_language("jsx");
-  ASSERT_TRUE(jsx.supported);
-  ASSERT_EQ(jsx.language, "javascript");
-  ASSERT_TRUE(jsx.command.find("github.com/tree-sitter/tree-sitter-javascript") !=
+  REQUIRE(jsx.supported);
+  REQUIRE(jsx.language == "javascript");
+  REQUIRE(jsx.command.find("github.com/tree-sitter/tree-sitter-javascript") !=
               std::string::npos);
 
   auto typescript = TreeSitterInstall::command_for_language("typescript");
-  ASSERT_TRUE(typescript.supported);
-  ASSERT_TRUE(typescript.command.find("github.com/tree-sitter/tree-sitter-typescript") !=
+  REQUIRE(typescript.supported);
+  REQUIRE(typescript.command.find("github.com/tree-sitter/tree-sitter-typescript") !=
               std::string::npos);
-  ASSERT_TRUE(typescript.command.find("typescript/src") != std::string::npos);
+  REQUIRE(typescript.command.find("typescript/src") != std::string::npos);
 
   auto tsx = TreeSitterInstall::command_for_language("tsx");
-  ASSERT_TRUE(tsx.supported);
-  ASSERT_EQ(tsx.language, "tsx");
-  ASSERT_TRUE(tsx.command.find("github.com/tree-sitter/tree-sitter-typescript") !=
+  REQUIRE(tsx.supported);
+  REQUIRE(tsx.language == "tsx");
+  REQUIRE(tsx.command.find("github.com/tree-sitter/tree-sitter-typescript") !=
               std::string::npos);
-  ASSERT_TRUE(tsx.command.find("tsx/src") != std::string::npos);
+  REQUIRE(tsx.command.find("tsx/src") != std::string::npos);
 
   auto zig = TreeSitterInstall::command_for_language(
       "https://github.com/tree-sitter-grammars/tree-sitter-zig");
-  ASSERT_TRUE(zig.supported);
-  ASSERT_EQ(zig.language, "zig");
-  ASSERT_TRUE(zig.command.find("tree-sitter-zig") != std::string::npos);
+  REQUIRE(zig.supported);
+  REQUIRE(zig.language == "zig");
+  REQUIRE(zig.command.find("tree-sitter-zig") != std::string::npos);
 
   auto zig_short = TreeSitterInstall::command_for_language(
       "github.com/tree-sitter-grammars/tree-sitter-zig");
-  ASSERT_TRUE(zig_short.supported);
-  ASSERT_TRUE(zig_short.command.find(
+  REQUIRE(zig_short.supported);
+  REQUIRE(zig_short.command.find(
                   "https://github.com/tree-sitter-grammars/tree-sitter-zig") !=
               std::string::npos);
 
   auto bad = TreeSitterInstall::command_for_language("unknown");
-  ASSERT_TRUE(!bad.supported);
-  ASSERT_TRUE(bad.message.find("Unsupported Tree-sitter language") !=
+  REQUIRE_FALSE(bad.supported);
+  REQUIRE(bad.message.find("Unsupported Tree-sitter language") !=
               std::string::npos);
 }

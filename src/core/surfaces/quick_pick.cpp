@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "python_bridge/api.h"
 #include "tools/symbols/index.h"
 #include "tools/workspace/search.h"
 
@@ -129,6 +130,7 @@ void Editor::close_quick_pick() {
   quick_pick_all_items.clear();
   quick_pick_items.clear();
   quick_pick_selected = 0;
+  plugin_quick_pick_select_callback.clear();
   needs_redraw = true;
 }
 
@@ -172,6 +174,16 @@ void Editor::accept_quick_pick() {
   QuickPickItem item =
       quick_pick_items[(size_t)std::clamp(quick_pick_selected, 0,
                                           (int)quick_pick_items.size() - 1)];
+  if (quick_pick_kind == QUICK_PICK_PLUGIN) {
+    std::string callback = plugin_quick_pick_select_callback;
+    std::string value = item.label;
+    close_quick_pick();
+    if (python_api && !callback.empty()) {
+      python_api->run_plugin_callback(callback, value);
+    }
+    needs_redraw = true;
+    return;
+  }
   if (item.filepath.empty()) {
     return;
   }

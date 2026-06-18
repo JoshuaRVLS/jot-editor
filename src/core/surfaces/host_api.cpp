@@ -3,6 +3,7 @@
 #include "python_bridge/api.h"
 
 #include <algorithm>
+#include <sstream>
 
 EditorHostAPI::EditorHostAPI(Editor &editor)
     : core(editor), render(editor), io(editor) {}
@@ -164,6 +165,55 @@ std::string HostCoreAPI::selected_text() const {
   return out;
 }
 
+void HostCoreAPI::replace_selection(const std::string &text) {
+  if (editor.buffers.empty()) {
+    return;
+  }
+
+  FileBuffer &buf = editor.get_buffer();
+  if (!buf.selection.active) {
+    insert_text(text);
+    return;
+  }
+
+  editor.save_state();
+  editor.delete_selection();
+  editor.insert_string(text);
+}
+
+void HostCoreAPI::insert_text(const std::string &text) {
+  if (editor.buffers.empty()) {
+    return;
+  }
+  editor.save_state();
+  editor.insert_string(text);
+}
+
+std::pair<int, int> HostCoreAPI::cursor() const {
+  if (editor.buffers.empty()) {
+    return {0, 0};
+  }
+  const FileBuffer &buf = editor.get_buffer();
+  return {buf.cursor.y, buf.cursor.x};
+}
+
+void HostCoreAPI::set_cursor(int line, int col) {
+  if (editor.buffers.empty()) {
+    return;
+  }
+  FileBuffer &buf = editor.get_buffer();
+  if (buf.line_count() == 0) {
+    buf.cursor = {0, 0};
+    return;
+  }
+  buf.cursor.y = std::clamp(line, 0, (int)buf.line_count() - 1);
+  buf.cursor.x = std::clamp(col, 0, (int)buf.line(buf.cursor.y).size());
+  buf.preferred_x = buf.cursor.x;
+  editor.clear_selection();
+  editor.ensure_cursor_visible();
+  editor.needs_redraw = true;
+}
+
 HostLayoutInfo HostRenderAPI::layout() const {
   HostLayoutInfo info{};
   info.width = editor.terminal.get_width();
@@ -224,4 +274,56 @@ void HostIOAPI::toggle_terminal() { editor.toggle_integrated_terminal(); }
 
 void HostIOAPI::execute_command(const std::string &command) {
   editor.execute_command(command);
+}
+
+void HostIOAPI::run_job(const std::string &command, const std::string &cwd,
+                        const std::string &label) {
+  if (command.empty()) {
+    editor.set_message("Plugin job requires a command");
+    return;
+  }
+  std::string job_label = label.empty() ? "plugin" : label;
+  editor.create_integrated_terminal("plugin:" + job_label,
+                                    cwd.empty() ? editor.root_dir : cwd);
+  IntegratedTerminal *term = editor.get_integrated_terminal();
+  if (!term) {
+    return;
+  }
+  term->send_text(command);
+  term->send_text("\n");
+}
+
+void HostIOAPI::show_plugin_picker(const std::string &title,
+                                   const std::string &items_callback,
+                                   const std::string &select_callback) {
+  if (!editor.python_api) {
+    return;
+  }
+  std::vector<Editor::QuickPickItem> items;
+  for (const auto &line : editor.python_api->plugin_picker_items(items_callback)) {
+    Editor::QuickPickItem item;
+    item.label = line;
+    item.detail = "Plugin";
+    item.preview = line;
+    item.filepath.clear();
+    item.line = 0;
+    item.col = 0;
+    items.push_back(std::move(item));
+  }
+  editor.plugin_quick_pick_select_callback = select_callback;
+  editor.open_quick_pick(Editor::QUICK_PICK_PLUGIN,
+                         title.empty() ? "Plugin Picker" : title,
+                         std::move(items));
+}
+
+void HostIOAPI::show_plugin_panel(const std::string &name) {
+  if (name.empty()) {
+    return;
+  }
+  editor.active_plugin_panel = name;
+  editor.show_right_panel = true;
+  editor.active_right_panel_tab = Editor::RIGHT_PANEL_PLUGIN;
+  editor.show_home_menu = false;
+  editor.update_pane_layout();
+  editor.needs_redraw = true;
 }

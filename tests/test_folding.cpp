@@ -1,7 +1,7 @@
 #include "folding.h"
-#include "test_framework.h"
+#include <catch2/catch_test_macros.hpp>
 
-TEST(TestFoldingDetectsCppBlock) {
+TEST_CASE("Folding Detects C++ Block", "[jot]") {
   std::vector<std::string> lines = {
       "int main() {",
       "  if (ok) {",
@@ -10,12 +10,12 @@ TEST(TestFoldingDetectsCppBlock) {
       "}",
   };
   auto ranges = Folding::detect_ranges(lines, ".cpp");
-  ASSERT_TRUE(!ranges.empty());
-  ASSERT_EQ(ranges[0].start_line, 0);
-  ASSERT_EQ(ranges[0].end_line, 4);
+  REQUIRE_FALSE(ranges.empty());
+  REQUIRE(ranges[0].start_line == 0);
+  REQUIRE(ranges[0].end_line == 4);
 }
 
-TEST(TestFoldingDetectsPythonIndentBlock) {
+TEST_CASE("Folding Detects Python Indent Block", "[jot]") {
   std::vector<std::string> lines = {
       "def f():",
       "    x = 1",
@@ -23,82 +23,82 @@ TEST(TestFoldingDetectsPythonIndentBlock) {
       "print(f())",
   };
   auto ranges = Folding::detect_ranges(lines, ".py");
-  ASSERT_EQ((int)ranges.size(), 1);
-  ASSERT_EQ(ranges[0].start_line, 0);
-  ASSERT_EQ(ranges[0].end_line, 2);
+  REQUIRE((int)ranges.size() == 1);
+  REQUIRE(ranges[0].start_line == 0);
+  REQUIRE(ranges[0].end_line == 2);
 }
 
-TEST(TestFoldingVisibleLineMapping) {
+TEST_CASE("Folding Visible Line Mapping", "[jot]") {
   std::vector<FoldRange> ranges = {{0, 4, true}, {1, 3, true}};
-  ASSERT_TRUE(!Folding::is_line_hidden(ranges, 0));
-  ASSERT_TRUE(Folding::is_line_hidden(ranges, 2));
-  ASSERT_EQ(Folding::next_visible_line(ranges, 0, 6), 5);
-  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 0, 1, 6), 5);
-  ASSERT_EQ(Folding::visible_line_count(ranges, 6), 2);
+  REQUIRE_FALSE(Folding::is_line_hidden(ranges, 0));
+  REQUIRE(Folding::is_line_hidden(ranges, 2));
+  REQUIRE(Folding::next_visible_line(ranges, 0, 6) == 5);
+  REQUIRE(Folding::buffer_line_for_visible_offset(ranges, 0, 1, 6) == 5);
+  REQUIRE(Folding::visible_line_count(ranges, 6) == 2);
 }
 
-TEST(TestFoldingVisibleLineMappingPastEndReturnsSentinel) {
+TEST_CASE("Folding Visible Line Mapping Past End Returns Sentinel", "[jot]") {
   std::vector<FoldRange> ranges;
-  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 0, 0, 3), 0);
-  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 0, 2, 3), 2);
-  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 0, 3, 3), -1);
+  REQUIRE(Folding::buffer_line_for_visible_offset(ranges, 0, 0, 3) == 0);
+  REQUIRE(Folding::buffer_line_for_visible_offset(ranges, 0, 2, 3) == 2);
+  REQUIRE(Folding::buffer_line_for_visible_offset(ranges, 0, 3, 3) == -1);
 }
 
-TEST(TestFoldingVisibleLineMappingPastFoldedEndReturnsSentinel) {
+TEST_CASE("Folding Visible Line Mapping Past Folded End Returns Sentinel", "[jot]") {
   std::vector<FoldRange> ranges = {{0, 4, true}, {1, 3, true}};
-  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 0, 0, 6), 0);
-  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 0, 1, 6), 5);
-  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 0, 2, 6), -1);
+  REQUIRE(Folding::buffer_line_for_visible_offset(ranges, 0, 0, 6) == 0);
+  REQUIRE(Folding::buffer_line_for_visible_offset(ranges, 0, 1, 6) == 5);
+  REQUIRE(Folding::buffer_line_for_visible_offset(ranges, 0, 2, 6) == -1);
 }
 
-TEST(TestFoldingVisibleLineMappingHiddenStartFindsNextVisibleLine) {
+TEST_CASE("Folding Visible Line Mapping Hidden Start Finds Next Visible Line", "[jot]") {
   std::vector<FoldRange> ranges = {{0, 2, true}};
-  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 1, 0, 4), 3);
-  ASSERT_EQ(Folding::buffer_line_for_visible_offset(ranges, 1, 1, 4), -1);
+  REQUIRE(Folding::buffer_line_for_visible_offset(ranges, 1, 0, 4) == 3);
+  REQUIRE(Folding::buffer_line_for_visible_offset(ranges, 1, 1, 4) == -1);
 }
 
-TEST(TestFoldingVisibleRowForLine) {
+TEST_CASE("Folding Visible Row For Line", "[jot]") {
   std::vector<FoldRange> ranges = {{2, 4, true}};
-  ASSERT_EQ(Folding::visible_row_for_line(ranges, 0, 0, 6, 8), 0);
-  ASSERT_EQ(Folding::visible_row_for_line(ranges, 0, 2, 6, 8), 2);
-  ASSERT_EQ(Folding::visible_row_for_line(ranges, 0, 5, 6, 8), 3);
-  ASSERT_EQ(Folding::visible_row_for_line(ranges, 0, 3, 6, 8), -1);
+  REQUIRE(Folding::visible_row_for_line(ranges, 0, 0, 6, 8) == 0);
+  REQUIRE(Folding::visible_row_for_line(ranges, 0, 2, 6, 8) == 2);
+  REQUIRE(Folding::visible_row_for_line(ranges, 0, 5, 6, 8) == 3);
+  REQUIRE(Folding::visible_row_for_line(ranges, 0, 3, 6, 8) == -1);
 }
 
-TEST(TestFoldingBufferLineForVisibleIndexSkipsHiddenLines) {
+TEST_CASE("Folding Buffer Line For Visible Index Skips Hidden Lines", "[jot]") {
   std::vector<FoldRange> ranges = {{1, 3, true}, {6, 7, true}};
-  ASSERT_EQ(Folding::buffer_line_for_visible_index(ranges, 0, 9), 0);
-  ASSERT_EQ(Folding::buffer_line_for_visible_index(ranges, 1, 9), 1);
-  ASSERT_EQ(Folding::buffer_line_for_visible_index(ranges, 2, 9), 4);
-  ASSERT_EQ(Folding::buffer_line_for_visible_index(ranges, 4, 9), 6);
-  ASSERT_EQ(Folding::buffer_line_for_visible_index(ranges, 5, 9), 8);
+  REQUIRE(Folding::buffer_line_for_visible_index(ranges, 0, 9) == 0);
+  REQUIRE(Folding::buffer_line_for_visible_index(ranges, 1, 9) == 1);
+  REQUIRE(Folding::buffer_line_for_visible_index(ranges, 2, 9) == 4);
+  REQUIRE(Folding::buffer_line_for_visible_index(ranges, 4, 9) == 6);
+  REQUIRE(Folding::buffer_line_for_visible_index(ranges, 5, 9) == 8);
 }
 
-TEST(TestFoldingEncodeDecodeCollapsedRanges) {
+TEST_CASE("Folding Encode Decode Collapsed Ranges", "[jot]") {
   std::vector<FoldRange> ranges = {{0, 4, true}, {6, 8, false}, {10, 12, true}};
   std::string encoded = Folding::encode_collapsed_ranges(ranges);
-  ASSERT_EQ(encoded, "0-4,10-12");
+  REQUIRE(encoded == "0-4,10-12");
 
   auto decoded = Folding::decode_collapsed_ranges(encoded);
-  ASSERT_EQ((int)decoded.size(), 2);
-  ASSERT_EQ(decoded[0].start_line, 0);
-  ASSERT_EQ(decoded[0].end_line, 4);
-  ASSERT_TRUE(decoded[0].collapsed);
-  ASSERT_EQ(decoded[1].start_line, 10);
-  ASSERT_EQ(decoded[1].end_line, 12);
+  REQUIRE((int)decoded.size() == 2);
+  REQUIRE(decoded[0].start_line == 0);
+  REQUIRE(decoded[0].end_line == 4);
+  REQUIRE(decoded[0].collapsed);
+  REQUIRE(decoded[1].start_line == 10);
+  REQUIRE(decoded[1].end_line == 12);
 }
 
-TEST(TestFoldingDecodeIgnoresMalformedRanges) {
+TEST_CASE("Folding Decode Ignores Malformed Ranges", "[jot]") {
   auto decoded = Folding::decode_collapsed_ranges("bad,4-x,7-6,2-5");
-  ASSERT_EQ((int)decoded.size(), 1);
-  ASSERT_EQ(decoded[0].start_line, 2);
-  ASSERT_EQ(decoded[0].end_line, 5);
+  REQUIRE((int)decoded.size() == 1);
+  REQUIRE(decoded[0].start_line == 2);
+  REQUIRE(decoded[0].end_line == 5);
 }
 
-TEST(TestFoldingApplyCollapsedRangesRequiresExactMatch) {
+TEST_CASE("Folding Apply Collapsed Ranges Requires Exact Match", "[jot]") {
   std::vector<FoldRange> ranges = {{0, 4, false}, {5, 9, false}};
   std::vector<FoldRange> collapsed = {{0, 4, true}, {7, 9, true}};
   Folding::apply_collapsed_ranges(ranges, collapsed);
-  ASSERT_TRUE(ranges[0].collapsed);
-  ASSERT_TRUE(!ranges[1].collapsed);
+  REQUIRE(ranges[0].collapsed);
+  REQUIRE_FALSE(ranges[1].collapsed);
 }

@@ -1,6 +1,7 @@
 #include "commands/utils.h"
 #include "cpp_assist.h"
 #include "editor.h"
+#include "host_api.h"
 #include "python_bridge/api.h"
 
 #include <algorithm>
@@ -170,8 +171,70 @@ bool Editor::execute_ex_command(const std::string &input_line) {
     // Nothing to execute, just close.
   } else if (parse_line_col(lcmd, parsed_line, parsed_col)) {
     goto_line_col(parsed_line, parsed_col);
-  } else if (python_api && python_api->run_plugin_command(lcmd, arg)) {
-    needs_redraw = true;
+  } else if (lcmd == "reloadplugins") {
+    if (python_api) {
+      python_api->reload_plugins();
+      refresh_command_palette();
+      needs_redraw = true;
+    } else {
+      set_message("Python plugins unavailable");
+    }
+  } else if (lcmd == "plugins") {
+    if (!python_api) {
+      set_message("Python plugins unavailable");
+    } else {
+      std::stringstream out;
+      out << "Plugins\n";
+      for (const auto &status : python_api->load_status()) {
+        out << (status.loaded ? "[ok] " : "[err] ") << status.name;
+        if (!status.error.empty()) {
+          out << " - " << status.error;
+        }
+        out << "\n";
+      }
+      out << "\nCommands: " << python_api->commands().size() << "\n";
+      for (const auto &command : python_api->commands()) {
+        out << "  :" << command.name;
+        if (!command.detail.empty()) {
+          out << " - " << command.detail;
+        }
+        out << "\n";
+      }
+      out << "\nKeymaps: " << python_api->keymaps().size() << "\n";
+      for (const auto &keymap : python_api->keymaps()) {
+        out << "  " << keymap.key;
+        if (!keymap.detail.empty()) {
+          out << " - " << keymap.detail;
+        } else if (!keymap.command.empty()) {
+          out << " - " << keymap.command;
+        }
+        out << "\n";
+      }
+      out << "\nPanels: " << python_api->panels().size() << "\n";
+      for (const auto &panel : python_api->panels()) {
+        out << "  " << panel.name;
+        if (!panel.title.empty()) {
+          out << " - " << panel.title;
+        }
+        out << "\n";
+      }
+      show_popup(limit_lines(out.str(), 24), 2, tab_height + 1);
+    }
+  } else if (lcmd == "pluginpanel") {
+    if (!python_api) {
+      set_message("Python plugins unavailable");
+    } else if (arg.empty()) {
+      std::string names;
+      for (const auto &panel : python_api->panels()) {
+        if (!names.empty()) {
+          names += ", ";
+        }
+        names += panel.name;
+      }
+      set_message(names.empty() ? "No plugin panels" : "Plugin panels: " + names);
+    } else {
+      host_api->io.show_plugin_panel(arg);
+    }
   } else if (lcmd == "q" || lcmd == "quit") {
     if (has_unsaved_buffers()) {
       show_quit_prompt = true;
@@ -960,6 +1023,8 @@ bool Editor::execute_ex_command(const std::string &input_line) {
     }
   } else if (lcmd == "help" || lcmd == "h") {
     show_command_help(arg);
+  } else if (python_api && python_api->run_plugin_command(lcmd, arg)) {
+    needs_redraw = true;
   } else {
     set_message("Unknown command: " + line);
   }

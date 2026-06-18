@@ -19,10 +19,55 @@ except ImportError:
         def register_command(self, *_args):
             return None
 
+        def register_keymap(self, *_args):
+            return None
+
+        def register_autocmd(self, *_args):
+            return None
+
+        def register_panel(self, *_args):
+            return None
+
         def get_current_buffer(self):
             return ""
 
         def set_current_buffer(self, *_args):
+            return None
+
+        def get_selection(self):
+            return ""
+
+        def replace_selection(self, *_args):
+            return None
+
+        def insert_text(self, *_args):
+            return None
+
+        def get_cursor(self):
+            return "0:0"
+
+        def set_cursor(self, *_args):
+            return None
+
+        def current_file(self):
+            return ""
+
+        def open_file(self, *_args):
+            return None
+
+        def save_current_file(self):
+            return None
+
+        def execute_command(self, *_args):
+            return None
+
+        def run_job(self, *_args):
+            return None
+
+        def show_picker(self, *_args):
+            return None
+
+        def show_panel(self, *_args):
             return None
 
     core = MockCore()
@@ -171,15 +216,53 @@ def show_message(message):
 
 
 _plugin_callbacks = {}
+_plugin_callback_counter = 0
 
 
-def command(name, detail="Plugin command"):
+def _callback_name(fn):
+    global _plugin_callback_counter
+    _plugin_callback_counter += 1
+    callback = f"{fn.__module__}.{fn.__name__}.{_plugin_callback_counter}"
+    _plugin_callbacks[callback] = fn
+    return callback
+
+
+def _reset_plugin_state():
+    global _plugin_callback_counter
+    _plugin_callbacks.clear()
+    _plugin_callback_counter = 0
+
+
+def command(name, callback=None, detail="Plugin command"):
     def decorator(fn):
-        callback = f"{fn.__module__}.{fn.__name__}"
-        _plugin_callbacks[callback] = fn
-        core.register_command(str(name), callback, str(detail))
+        cb = _callback_name(fn)
+        core.register_command(str(name), cb, str(detail))
         return fn
 
+    if callable(callback):
+        return decorator(callback)
+    if callback is not None:
+        detail = callback
+    return decorator
+
+
+def autocmd(event, callback=None):
+    def decorator(fn):
+        def wrapped(payload=""):
+            parts = str(payload or "").split("\n", 2)
+            data = {
+                "event": str(event),
+                "file": parts[1] if len(parts) > 1 else "",
+                "buffer": int(parts[2]) if len(parts) > 2 and parts[2].lstrip("-").isdigit() else -1,
+            }
+            return fn(data)
+
+        cb = _callback_name(wrapped)
+        core.register_autocmd(str(event), cb)
+        return fn
+
+    if callable(callback):
+        return decorator(callback)
     return decorator
 
 
@@ -189,6 +272,40 @@ def get_current_buffer():
 
 def set_current_buffer(text):
     core.set_current_buffer(str(text))
+
+
+def get_selection():
+    return core.get_selection()
+
+
+def replace_selection(text):
+    core.replace_selection(str(text))
+
+
+def insert_text(text):
+    core.insert_text(str(text))
+
+
+def get_cursor():
+    raw = core.get_cursor()
+    line, col = str(raw).split(":", 1)
+    return int(line), int(col)
+
+
+def set_cursor(line, col):
+    core.set_cursor(int(line), int(col))
+
+
+def current_file():
+    return core.current_file()
+
+
+def open_file(path):
+    core.open_file(str(path))
+
+
+def save_current_file():
+    core.save_current_file()
 
 
 def set_theme_color(name, fg, bg):
@@ -217,7 +334,7 @@ def apply_colorscheme(name):
     return _theme_runtime.apply_colorscheme(name, sys.modules[__name__])
 
 
-def command(command_line):
+def _run_command_line(command_line):
     command_line = str(command_line or "").strip()
     if command_line.startswith(":"):
         command_line = command_line[1:].strip()
@@ -236,11 +353,109 @@ class _Api:
 
 class _Cmd:
     def __call__(self, command_line):
-        return command(command_line)
+        return _run_command_line(command_line)
 
     @staticmethod
     def colorscheme(name):
         return apply_colorscheme(name)
+
+
+class _Keymap:
+    @staticmethod
+    def set(keys, action, desc="", mode="global"):
+        command_line = ""
+        callback = ""
+        if callable(action):
+            callback = _callback_name(action)
+        else:
+            command_line = str(action)
+        core.register_keymap(str(keys), callback, command_line, str(desc),
+                             str(mode))
+
+
+class _Autocmd:
+    def __call__(self, event, callback=None):
+        return autocmd(event, callback)
+
+    @staticmethod
+    def set(event, callback):
+        def wrapped(payload=""):
+            parts = str(payload or "").split("\n", 2)
+            data = {
+                "event": str(event),
+                "file": parts[1] if len(parts) > 1 else "",
+                "buffer": int(parts[2]) if len(parts) > 2 and parts[2].lstrip("-").isdigit() else -1,
+            }
+            return callback(data)
+
+        cb = _callback_name(wrapped)
+        core.register_autocmd(str(event), cb)
+
+
+class _Buffer:
+    @staticmethod
+    def get_text():
+        return get_current_buffer()
+
+    @staticmethod
+    def set_text(text):
+        set_current_buffer(text)
+
+    @staticmethod
+    def get_selection():
+        return get_selection()
+
+    @staticmethod
+    def replace_selection(text):
+        replace_selection(text)
+
+    @staticmethod
+    def insert_text(text):
+        insert_text(text)
+
+    @staticmethod
+    def cursor():
+        return get_cursor()
+
+    @staticmethod
+    def set_cursor(line, col):
+        set_cursor(line, col)
+
+    @staticmethod
+    def current_file():
+        return current_file()
+
+
+class _UI:
+    @staticmethod
+    def show_picker(title, items, on_select):
+        if callable(items):
+            items_callback = _callback_name(items)
+        else:
+            values = [str(item) for item in items]
+
+            def _items(_arg=""):
+                return values
+
+            items_callback = _callback_name(_items)
+        select_callback = _callback_name(on_select)
+        core.show_picker(str(title), items_callback, select_callback)
+
+    @staticmethod
+    def register_panel(name, provider, title=""):
+        callback = _callback_name(provider)
+        core.register_panel(str(name), callback, str(title or name))
+
+    @staticmethod
+    def show_panel(name):
+        core.show_panel(str(name))
+
+
+class _Job:
+    @staticmethod
+    def run(command_line, cwd=None, label=None):
+        core.run_job(str(command_line), "" if cwd is None else str(cwd),
+                     "" if label is None else str(label))
 
 
 class _Jot:
@@ -248,10 +463,30 @@ class _Jot:
         self.g = {}
         self.api = _Api()
         self.cmd = _Cmd()
+        self.keymap = _Keymap()
+        self.autocmd = _Autocmd()
+        self.buffer = _Buffer()
+        self.ui = _UI()
+        self.job = _Job()
+
+    command = staticmethod(command)
+    on = staticmethod(autocmd)
 
     @staticmethod
     def notify(message, level="info"):
         show_message(f"[{level}] {message}")
+
+    @staticmethod
+    def execute(command_line):
+        core.execute_command(str(command_line))
+
+    @staticmethod
+    def open_file(path):
+        open_file(path)
+
+    @staticmethod
+    def save():
+        save_current_file()
 
 
 jot = _Jot()

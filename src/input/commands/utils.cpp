@@ -92,7 +92,8 @@ const std::vector<std::string> &ex_commands() {
       "gitstatus", "gitdiff", "gitdiffclose", "gitdiffrefresh", "gitdiffstaged", "gitstage", "gitunstage",
       "gitstageall", "gitunstageall", "gitcommit", "gitlog", "gitblame",
       "gitrefresh", "recent", "openrecent", "reopen",
-      "reopenlast", "autosave", "help", "h"};
+      "reopenlast", "autosave", "plugins", "reloadplugins", "pluginpanel",
+      "help", "h"};
   return commands;
 }
 

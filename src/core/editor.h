@@ -97,7 +97,8 @@ private:
     QUICK_PICK_NONE,
     QUICK_PICK_PROJECT_SEARCH,
     QUICK_PICK_DIAGNOSTICS,
-    QUICK_PICK_SYMBOLS
+    QUICK_PICK_SYMBOLS,
+    QUICK_PICK_PLUGIN
   };
 
   struct QuickPickItem {
@@ -227,7 +228,8 @@ private:
   int debugger_panel_height;
   enum RightPanelTab {
     RIGHT_PANEL_DEBUG,
-    RIGHT_PANEL_GIT_DIFF
+    RIGHT_PANEL_GIT_DIFF,
+    RIGHT_PANEL_PLUGIN
   };
   
   struct GitDiffPanel {
@@ -242,6 +244,8 @@ private:
   int right_panel_width;
   RightPanelTab active_right_panel_tab;
   GitDiffPanel git_diff_panel;
+  std::string active_plugin_panel;
+  std::string plugin_quick_pick_select_callback;
 
   SyntaxHighlighter highlighter;
   Config config;
@@ -620,6 +624,7 @@ private:
   void render_integrated_terminal();
   void render_debugger_panel();
   void render_git_diff_panel();
+  void render_plugin_panel();
   int effective_right_panel_width() const;
   void render_menu_bar();
   void render_menu_dropdown();

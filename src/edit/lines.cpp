@@ -2,6 +2,7 @@
 #include "text_features.h"
 #include "python_bridge/api.h"
 #include <algorithm>
+#include <cctype>
 
 namespace {
 int count_one_indent_level(const std::string &line, int tab_size) {
@@ -27,6 +28,25 @@ int remove_one_indent_level(std::string &line, int tab_size) {
   }
   return removed;
 }
+
+bool has_python_extension(const std::string &path) {
+  if (path.size() < 3)
+    return false;
+  const size_t dot = path.find_last_of('.');
+  if (dot == std::string::npos)
+    return false;
+  std::string ext = path.substr(dot);
+  std::transform(ext.begin(), ext.end(), ext.begin(),
+                 [](unsigned char c) { return (char)std::tolower(c); });
+  return ext == ".py";
+}
+
+bool should_indent_after_line(const FileBuffer &buf, const std::string &line) {
+  if (has_python_extension(buf.filepath)) {
+    return EditorFeatures::should_python_auto_indent(line);
+  }
+  return EditorFeatures::should_auto_indent(line);
+}
 } // namespace
 
 void Editor::duplicate_line() {
@@ -50,7 +70,7 @@ void Editor::insert_line_below() {
   std::string indent_str = "";
   if (auto_indent) {
     int indent = EditorFeatures::get_indent_level(buf.lines[buf.cursor.y]);
-    if (EditorFeatures::should_auto_indent(buf.lines[buf.cursor.y]))
+    if (should_indent_after_line(buf, buf.lines[buf.cursor.y]))
       indent += tab_size;
     indent_str = EditorFeatures::get_indent_string(indent, tab_size);
   }

@@ -46,6 +46,10 @@ public:
   std::string buffer_content() const;
   void set_buffer_content(const std::string &text);
   std::string selected_text() const;
+  void replace_selection(const std::string &text);
+  void insert_text(const std::string &text);
+  std::pair<int, int> cursor() const;
+  void set_cursor(int line, int col);
 
 private:
   Editor &editor;
@@ -79,6 +83,12 @@ public:
   void toggle_sidebar();
   void toggle_terminal();
   void execute_command(const std::string &command);
+  void run_job(const std::string &command, const std::string &cwd,
+               const std::string &label);
+  void show_plugin_picker(const std::string &title,
+                          const std::string &items_callback,
+                          const std::string &select_callback);
+  void show_plugin_panel(const std::string &name);
 
 private:
   Editor &editor;

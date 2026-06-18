@@ -22,6 +22,48 @@ int compute_visual_column(const std::string &line, int logical_col,
   }
   return visual;
 }
+
+bool has_python_extension(const std::string &path) {
+  if (path.size() < 3)
+    return false;
+  const size_t dot = path.find_last_of('.');
+  if (dot == std::string::npos)
+    return false;
+  std::string ext = path.substr(dot);
+  std::transform(ext.begin(), ext.end(), ext.begin(),
+                 [](unsigned char c) { return (char)std::tolower(c); });
+  return ext == ".py";
+}
+
+bool is_python_buffer(const FileBuffer &buf) {
+  return has_python_extension(buf.filepath);
+}
+
+bool should_indent_after_line(const FileBuffer &buf, const std::string &line) {
+  if (is_python_buffer(buf)) {
+    return EditorFeatures::should_python_auto_indent(line);
+  }
+  return EditorFeatures::should_auto_indent(line);
+}
+
+void dedent_current_line_one_level(FileBuffer &buf, int tab_size) {
+  std::string &line = buf.line_mut(buf.cursor.y);
+  const int current_indent = EditorFeatures::get_indent_level(line);
+  if (current_indent < tab_size)
+    return;
+
+  const size_t start = line.find_first_not_of(" \t");
+  if (start == std::string::npos)
+    return;
+
+  const int new_indent = current_indent - tab_size;
+  const std::string new_indent_str =
+      EditorFeatures::get_indent_string(new_indent, tab_size);
+  const std::string trimmed = line.substr(start);
+  line = new_indent_str + trimmed;
+  buf.cursor.x =
+      std::max(0, buf.cursor.x - (int)start + (int)new_indent_str.size());
+}
 } // namespace
 
 bool Editor::insert_char(char c) {
@@ -110,21 +152,13 @@ bool Editor::insert_char(char c) {
 
     if (auto_indent && (c == '}' || c == ']' || c == ')')) {
       if (EditorFeatures::should_dedent(buf.line_mut(buf.cursor.y))) {
-        int current_indent =
-            EditorFeatures::get_indent_level(buf.line_mut(buf.cursor.y));
-        if (current_indent >= tab_size) {
-          // Simply reduce by one tab stop
-          int new_indent = current_indent - tab_size;
-          std::string trimmed = buf.line_mut(buf.cursor.y);
-          size_t start = trimmed.find_first_not_of(" \t");
-          if (start != std::string::npos) {
-            trimmed.erase(0, start);
-            buf.line_mut(buf.cursor.y) =
-                EditorFeatures::get_indent_string(new_indent, tab_size) +
-                trimmed;
-            buf.cursor.x = std::max(0, buf.cursor.x - tab_size);
-          }
-        }
+        dedent_current_line_one_level(buf, tab_size);
+      }
+    }
+
+    if (auto_indent && c == ':' && is_python_buffer(buf)) {
+      if (EditorFeatures::should_python_dedent(buf.line_mut(buf.cursor.y))) {
+        dedent_current_line_one_level(buf, tab_size);
       }
     }
     
@@ -413,7 +447,7 @@ void Editor::new_line() {
           new_line_str = EditorFeatures::get_indent_string(inner_indent, tab_size);
           closing_line_str = EditorFeatures::get_indent_string(closing_indent, tab_size) + remaining;
           split_closing_bracket_line = true; 
-        } else if (EditorFeatures::should_auto_indent(buf.line_mut(buf.cursor.y))) {
+        } else if (should_indent_after_line(buf, buf.line_mut(buf.cursor.y))) {
           indent += tab_size;
         }
 

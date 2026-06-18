@@ -26,6 +26,37 @@ bool starts_with_keyword(const std::string &line, const std::string &keyword) {
   const unsigned char next = static_cast<unsigned char>(line[keyword.size()]);
   return !std::isalnum(next) && next != '_';
 }
+
+std::string strip_python_comment(const std::string &line) {
+  bool in_single = false;
+  bool in_double = false;
+  bool escaped = false;
+
+  for (size_t i = 0; i < line.size(); i++) {
+    const char c = line[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (c == '\\' && (in_single || in_double)) {
+      escaped = true;
+      continue;
+    }
+    if (c == '\'' && !in_double) {
+      in_single = !in_single;
+      continue;
+    }
+    if (c == '"' && !in_single) {
+      in_double = !in_double;
+      continue;
+    }
+    if (c == '#' && !in_single && !in_double) {
+      return trim_right_ws(line.substr(0, i));
+    }
+  }
+
+  return trim_right_ws(line);
+}
 } // namespace
 
 int EditorFeatures::get_indent_level(const std::string &line) {
@@ -111,6 +142,46 @@ bool EditorFeatures::should_dedent(const std::string &line) {
   return false;
 }
 
+bool EditorFeatures::should_python_auto_indent(const std::string &line) {
+  std::string trimmed = trim_left(strip_python_comment(line));
+  if (trimmed.empty() || trimmed.back() != ':')
+    return false;
+
+  trimmed.pop_back();
+  trimmed = trim_right_ws(trimmed);
+  if (trimmed.empty())
+    return false;
+
+  static const std::vector<std::string> keywords = {
+      "def",   "class",   "if",    "elif",   "else", "for",
+      "while", "try",     "except", "finally", "with", "match",
+      "case",  "async def", "async with", "async for"};
+
+  for (const auto &kw : keywords) {
+    if (starts_with_keyword(trimmed, kw))
+      return true;
+  }
+
+  return false;
+}
+
+bool EditorFeatures::should_python_dedent(const std::string &line) {
+  std::string trimmed = trim_left(strip_python_comment(line));
+  if (trimmed.empty() || trimmed.back() != ':')
+    return false;
+
+  trimmed.pop_back();
+  trimmed = trim_right_ws(trimmed);
+  if (trimmed.empty())
+    return false;
+
+  return starts_with_keyword(trimmed, "elif") ||
+         starts_with_keyword(trimmed, "else") ||
+         starts_with_keyword(trimmed, "except") ||
+         starts_with_keyword(trimmed, "finally") ||
+         starts_with_keyword(trimmed, "case");
+}
+
 int EditorFeatures::find_matching_bracket(const std::vector<std::string> &lines,
                                           int line, int col, char open,
                                           char close) {
@@ -122,19 +193,27 @@ int EditorFeatures::find_matching_bracket(const std::vector<std::string> &lines,
   if (lines[line][col] != open && lines[line][col] != close)
     return -1;
 
-  // char target = lines[line][col] == open ? close : open; // Unused
-  int dir = lines[line][col] == open ? 1 : -1;
+  const bool forward = lines[line][col] == open;
+  const int dir = forward ? 1 : -1;
   int depth = 1;
 
   int cur_line = line;
-  int cur_col = col;
+  int cur_col = col + dir;
 
   while (cur_line >= 0 && cur_line < (int)lines.size()) {
     while (cur_col >= 0 && cur_col < (int)lines[cur_line].length()) {
-      if (lines[cur_line][cur_col] == open)
-        depth += dir;
-      if (lines[cur_line][cur_col] == close)
-        depth -= dir;
+      const char ch = lines[cur_line][cur_col];
+      if (forward) {
+        if (ch == open)
+          depth++;
+        else if (ch == close)
+          depth--;
+      } else {
+        if (ch == close)
+          depth++;
+        else if (ch == open)
+          depth--;
+      }
 
       if (depth == 0) {
         return cur_line * 10000 + cur_col;
@@ -165,7 +244,7 @@ void EditorFeatures::format_line(std::string &line, int tab_size) {
 }
 
 std::string EditorFeatures::trim_right(const std::string &s) {
-  size_t end = s.find_last_not_of(" \t\r\n");
+  size_t end = s.find_last_not_of(" \t");
   return (end == std::string::npos) ? "" : s.substr(0, end + 1);
 }
 

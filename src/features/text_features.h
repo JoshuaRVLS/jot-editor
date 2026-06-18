@@ -19,6 +19,8 @@ public:
   static std::string get_indent_string(int level, int tab_size);
   static bool should_auto_indent(const std::string &line);
   static bool should_dedent(const std::string &line);
+  static bool should_python_auto_indent(const std::string &line);
+  static bool should_python_dedent(const std::string &line);
   static int find_matching_bracket(const std::vector<std::string> &lines,
                                    int line, int col, char open, char close);
   static void format_line(std::string &line, int tab_size);

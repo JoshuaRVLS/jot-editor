@@ -519,7 +519,7 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
   }
   
   if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT_DIFF && ui) {
-    int panel_w = effective_sidebar_width();
+    int panel_w = effective_right_panel_width();
     int panel_x = std::max(0, ui->get_render_width() - panel_w);
     int panel_y = 1;
     int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
@@ -532,6 +532,19 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
       } else if (is_click) {
         needs_redraw = true;
       }
+      return;
+    }
+  }
+
+  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_PLUGIN && ui) {
+    int panel_w = effective_right_panel_width();
+    int panel_x = std::max(0, ui->get_render_width() - panel_w);
+    int panel_y = 1;
+    int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
+    bool inside = x >= panel_x && x < panel_x + panel_w && y >= panel_y &&
+                  y < panel_y + panel_h;
+    if (inside) {
+      needs_redraw = true;
       return;
     }
   }
