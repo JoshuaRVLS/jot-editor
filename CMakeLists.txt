@@ -23,6 +23,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # to control runtime behavior. Off by default.
 option(JOT_SANITIZE "Build with AddressSanitizer + UBSan" OFF)
 option(JOT_TREESITTER "Enable Tree-sitter parser-based syntax highlighting when dependencies are available" ON)
+option(JOT_BUILD_BENCHMARKS "Build the opt-in jot benchmark suite" OFF)
 if(JOT_SANITIZE)
   add_compile_options(-fsanitize=address,undefined
                       -fno-omit-frame-pointer
@@ -51,6 +52,9 @@ add_subdirectory(apps/jot)
 include(CTest)
 if(BUILD_TESTING)
   add_subdirectory(tests)
+endif()
+if(JOT_BUILD_BENCHMARKS)
+  add_subdirectory(benchmarks)
 endif()
 
 install(TARGETS jot

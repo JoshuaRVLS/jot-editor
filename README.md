@@ -1,10 +1,10 @@
 # jot
 
 `jot` is a modern terminal code editor written in C++17. It is built around a
-modeless editing workflow: type directly, select with the keyboard or mouse,
-keep multiple files open, split panes, browse a workspace tree, search across a
-project, run terminal tasks, debug programs, and use native LSP features without
-leaving the terminal.
+modeless editing workflow with direct typing, standard editor shortcuts, mouse
+selection, and terminal-native power commands. Keep multiple files open, split
+panes, browse a workspace tree, search across a project, run terminal tasks,
+debug programs, and use native LSP features without leaving the terminal.
 
 ![jot editor screenshot](assets/screenshot.png)
 
@@ -153,7 +153,8 @@ Workspace sessions are stored under:
   the highlighted code.
 - Go to line or line:column.
 - Bookmarks.
-- Telescope file finder.
+- Telescope file finder with mouse selection/scrolling and syntax-highlighted
+  previews.
 - Project-wide text search picker.
 - Diagnostics picker and next/previous diagnostic navigation.
 - Document symbol/outline picker using LSP symbols when available and a regex
@@ -244,6 +245,14 @@ Local tasks override global tasks with the same name. `:task` lists tasks,
 `:task <name>` runs or reuses a task tab, `:tasknew <name>` starts a fresh task
 tab, and `:taskrerun` reruns the last task.
 
+### Image Viewer
+
+- Opens common image files in a right-side viewer.
+- Uses real terminal graphics when available: Kitty graphics first, Sixel
+  through `img2sixel` second, then the 256-color cell preview fallback.
+- Configure with `image_viewer_backend = auto`; supported values are `auto`,
+  `kitty`, `sixel`, `cell`, and `off`.
+
 ### Debugger
 
 - Native Debug Adapter Protocol client integration.
@@ -327,9 +336,8 @@ See [docs/THEMES.md](docs/THEMES.md) for theme authoring.
 
 ### Core Editing
 
-- `Ctrl+Q`: close pane or quit, prompting when unsaved buffers exist
-- `Ctrl+S`: save current file
-- `Ctrl+Shift+S`: save all modified saved files
+- Modeless text entry: typing inserts at the cursor immediately.
+- `Esc`: clear selection or release/close the active floating surface.
 - `Ctrl+Z` / `Ctrl+Y`: undo / redo
 - `Ctrl+A`: select all
 - `Ctrl+C` / `Ctrl+X` / `Ctrl+V`: copy / cut / paste
@@ -338,6 +346,9 @@ See [docs/THEMES.md](docs/THEMES.md) for theme authoring.
 - `Ctrl+/`: toggle comment
 - `Ctrl+Backspace`: delete previous word
 - `Ctrl+Delete`: delete next word
+- `Ctrl+Enter`: insert a new line below without splitting the current line
+- `Ctrl+Shift+Enter`: insert a new line above without splitting the current line
+- `Alt+Enter` / `Alt+Shift+Enter`: terminal fallback for line below / above
 - `Ctrl+Space`: request LSP completion
 - `Ctrl+Shift+L`: select current line
 - `Ctrl+Shift+U`: uppercase selection or word
@@ -351,11 +362,10 @@ See [docs/THEMES.md](docs/THEMES.md) for theme authoring.
 - `Page Up` / `Page Down`: move by 10 lines
 - `Alt+I` / `Alt+A`: smart line start / line end
 - `Alt+G` / `Alt+Shift+G`: file start / file end
-- `Alt+H` / `Alt+L`: move by word
+- `Alt+H` / `Alt+L`: previous / next word
 - `Alt+Up` / `Alt+Down`: move current line or selection up/down
 - `Tab`: indent selection or insert indentation
 - `Shift+Tab`: outdent selection
-- `Esc`: clear selection or release/close the active floating surface
 
 ### Buffers, Tabs, Panes, And Tools
 
@@ -366,10 +376,10 @@ See [docs/THEMES.md](docs/THEMES.md) for theme authoring.
 - `Alt+N`: new buffer
 - `Alt+S`: save
 - `Ctrl+B` or `Alt+B`: toggle sidebar
-- `Ctrl+E`: Telescope file finder
 - `Ctrl+F` or `Alt+F`: search panel
 - `Ctrl+G`: go-to-line prompt
 - `Ctrl+P` or `Alt+P`: command palette
+- `Ctrl+E`: Telescope file finder
 - `Ctrl+R`: recent-file prompt
 - `Ctrl+Shift+T`: reopen last closed tab
 - `Ctrl+Shift+F`: replace inside selected text, or project-wide search when no
@@ -378,16 +388,16 @@ See [docs/THEMES.md](docs/THEMES.md) for theme authoring.
 - `Ctrl+Shift+O`: document symbols
 - `Ctrl+M` or `Alt+M`: toggle minimap
 - `Ctrl+T` or `Alt+T`: theme chooser
-- `Ctrl+\`` / `Ctrl+X`: open, focus, or hide terminal panel
+- `Ctrl+\``: open, focus, or hide terminal panel
 
 ### Pane Layout
 
+- `Alt+H/J/K/L`: focus pane or explorer left/down/up/right
 - `Ctrl+Alt+H/J/K/L`: split left/down/up/right
 - `Ctrl+Alt+Arrow`: focus pane in that direction
 - `Ctrl+Alt+Q`: close current pane
 - `Ctrl+Shift+H/J/K/L`: resize pane
 - `Ctrl+Arrow`: resize pane
-- `Alt+H/J/K/L`: resize pane
 
 ### Search Panel
 
@@ -429,7 +439,7 @@ See [docs/THEMES.md](docs/THEMES.md) for theme authoring.
 
 ### Integrated Terminal
 
-- `Ctrl+\`` / `Ctrl+X`: show, hide, or focus terminal panel
+- `Ctrl+\``: show, hide, or focus terminal panel
 - `Ctrl+Shift+T`: create a new terminal tab while terminal focus is active
 - `Esc`: release terminal focus
 - Mouse click terminal tab: focus tab
@@ -585,12 +595,14 @@ Built-in defaults include:
 - `show_explorer=true`
 - `show_minimap=true`
 - `tab_size=2`
+- `show_indent_guides=false`
 - `auto_indent=true`
 - `smart_paste_indent=true`
 - `auto_save=false`
 - `auto_save_interval_ms=2000`
 - `auto_detect_indent=false`
 - `show_line_numbers=true`
+- `relative_line_numbers=true`
 - `word_wrap=false`
 - `cursor_style=block`
 - `render_fps=120`
@@ -603,11 +615,13 @@ Example `settings.conf`:
 
 ```ini
 tab_size=2
+show_indent_guides=false
 auto_indent=true
 smart_paste_indent=true
 auto_save=false
 auto_save_interval_ms=2000
 auto_detect_indent=true
+relative_line_numbers=true
 render_fps=120
 idle_fps=60
 terminal_height=12
@@ -637,10 +651,27 @@ Notes:
   libuv.
 - Tree-sitter runtime support is optional at build time but recommended.
 
+## Benchmarks
+
+The benchmark suite is opt-in and separate from CTest so normal builds stay
+fast and deterministic. It exercises non-interactive helper paths such as line
+providers, folding, UI text measurement, symbol extraction, and workspace
+search.
+
+```bash
+cmake -S . -B build -DJOT_BUILD_BENCHMARKS=ON
+cmake --build build --target jot_benchmarks -j
+./build/benchmarks/jot_benchmarks
+```
+
+Benchmark output reports per-case iteration counts plus min/average/max runtime
+in milliseconds. Use the same build type and machine when comparing runs.
+
 ## Project Layout
 
 ```text
 apps/jot/        CLI entrypoint and executable target
+benchmarks/      opt-in non-interactive performance benchmark suite
 cmake/           reusable CMake modules
 include/jot/     public C++ API headers
 src/core/        editor state, buffers, panes, workspace, LSP, debugger, terminal
@@ -666,8 +697,9 @@ Build graph highlights:
 
 ## Notes And Limitations
 
-- The user-facing workflow is modeless; legacy mode-related source files are
-  internal compatibility details.
+- The user-facing workflow is modeless. Typing edits text directly, selection is
+  handled by mouse or Shift+Arrow extension, and common editing commands use
+  standard Ctrl/Alt shortcuts.
 - The integrated terminal is useful for normal shell/task workflows, but it is
   not intended to be a complete replacement for a mature standalone terminal
   emulator.

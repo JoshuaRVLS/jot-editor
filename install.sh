@@ -18,7 +18,7 @@ USE_SUDO=0
 INSTALL_LSP=0
 INSTALL_TOOLS=0
 INSTALL_TREESITTER=1
-JOBS=""
+JOBS="2"
 PREFIX_EXPLICIT=0
 
 print_help() {
@@ -39,7 +39,7 @@ Options:
   --skip-treesitter     Skip Tree-sitter dependency install attempt
   --skip-lsp            Deprecated alias; LSP installs are skipped by default
   --sudo                Run install step with sudo
-  -j, --jobs <N>        Parallel build jobs (default: auto)
+  -j, --jobs <N>        Parallel build jobs (default: 2)
   -h, --help            Show this help message
 
 Examples:
@@ -47,7 +47,7 @@ Examples:
   ./install.sh --prefix /usr/local --sudo
   ./install.sh --skip-treesitter
   ./install.sh --with-tools --with-lsp
-  ./install.sh --build-dir ./build_release --release -j 8
+  ./install.sh --build-dir ./build_release --release -j 4
 USAGE
 }
 
@@ -116,6 +116,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if ! [[ "${JOBS}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "Error: --jobs must be a positive number" >&2
+  exit 1
+fi
 
 if [[ "${EUID}" -eq 0 ]] && [[ "${PREFIX_EXPLICIT}" -eq 0 ]]; then
   if [[ "${INSTALL_PREFIX}" == "/root/.local" ]] && [[ -n "${SUDO_USER:-}" ]]; then
@@ -629,12 +634,7 @@ CMAKE_ARGS=(
   -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}"
 )
 
-BUILD_ARGS=(--build "${BUILD_DIR}")
-if [[ -n "${JOBS}" ]]; then
-  BUILD_ARGS+=(--parallel "${JOBS}")
-else
-  BUILD_ARGS+=(--parallel)
-fi
+BUILD_ARGS=(--build "${BUILD_DIR}" --parallel "${JOBS}")
 
 echo "[jot] Configuring (${BUILD_TYPE})"
 cmake "${CMAKE_ARGS[@]}"
