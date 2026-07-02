@@ -24,7 +24,8 @@ std::string path_relative_to_root(const std::string &path,
     root = fs::path(root_dir.empty() ? "." : root_dir).lexically_normal();
   }
   fs::path rel = fs::relative(abs, root, ec);
-  if (!ec && !rel.empty() && rel.native().find("..") != 0) {
+  std::string rel_text = rel.generic_string();
+  if (!ec && !rel_text.empty() && rel_text.find("..") != 0) {
     return rel.string();
   }
   return abs.string();

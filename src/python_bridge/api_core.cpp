@@ -1,5 +1,5 @@
-// Python.h must be first so its macros precede C++ standard headers.
-#include <Python.h>
+// Python headers must be first so their macros precede C++ standard headers.
+#include "python_bridge/python_headers.h"
 
 #include "editor.h"
 #include "host_api.h"
@@ -13,13 +13,39 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <unistd.h>
 #include <vector>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace fs = std::filesystem;
 
 namespace {
 fs::path get_executable_path() {
+#ifdef _WIN32
+  std::vector<char> buffer(MAX_PATH, '\0');
+  DWORD len = GetModuleFileNameA(nullptr, buffer.data(), (DWORD)buffer.size());
+  if (len == 0) {
+    return {};
+  }
+  while (len == buffer.size()) {
+    buffer.resize(buffer.size() * 2, '\0');
+    len = GetModuleFileNameA(nullptr, buffer.data(), (DWORD)buffer.size());
+    if (len == 0) {
+      return {};
+    }
+  }
+  return fs::path(std::string(buffer.data(), len));
+#else
   std::vector<char> buffer(4096, '\0');
   ssize_t len = readlink("/proc/self/exe", buffer.data(), buffer.size() - 1);
   if (len <= 0) {
@@ -27,6 +53,7 @@ fs::path get_executable_path() {
   }
   buffer[static_cast<size_t>(len)] = '\0';
   return fs::path(buffer.data());
+#endif
 }
 
 std::vector<fs::path> get_runtime_python_dirs() {
@@ -52,10 +79,17 @@ std::vector<fs::path> get_runtime_python_dirs() {
   if (xdg_data_home && *xdg_data_home) {
     push_unique(fs::path(xdg_data_home) / "jot" / "python");
   } else {
+#ifdef _WIN32
+    const char *local_app_data = getenv("LOCALAPPDATA");
+    if (local_app_data && *local_app_data) {
+      push_unique(fs::path(local_app_data) / "jot" / "python");
+    }
+#else
     const char *home = getenv("HOME");
     if (home && *home) {
       push_unique(fs::path(home) / ".local" / "share" / "jot" / "python");
     }
+#endif
   }
 
   fs::path exe_path = get_executable_path();
@@ -75,6 +109,13 @@ fs::path get_user_config_root() {
     return fs::path(jot_config);
   }
   const char *home = getenv("HOME");
+#ifdef _WIN32
+  const char *app_data = getenv("APPDATA");
+  if (app_data && *app_data) {
+    return fs::path(app_data) / "jot";
+  }
+  home = getenv("USERPROFILE");
+#endif
   if (!home) {
     return {};
   }

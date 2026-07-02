@@ -117,14 +117,24 @@ std::string find_workspace_root(const std::string &filepath,
 }
 
 std::vector<std::string> command_for_language(const std::string &language) {
-  const char *home = getenv("HOME");
   if (language == "python") {
+#ifdef _WIN32
+    const char *app_data = getenv("APPDATA");
+    if (app_data) {
+      fs::path venv = fs::path(app_data) / "jot" / "venv" / "Scripts" / "pylsp.exe";
+      if (fs::exists(venv)) {
+        return {venv.string()};
+      }
+    }
+#else
+    const char *home = getenv("HOME");
     if (home) {
       fs::path venv = fs::path(home) / ".config" / "jot" / "venv" / "bin" / "pylsp";
       if (fs::exists(venv)) {
         return {venv.string()};
       }
     }
+#endif
     return {"pylsp"};
   }
   if (language == "typescript") {
@@ -467,7 +477,11 @@ bool command_exists(const std::string &name) {
   if (name.empty()) {
     return false;
   }
+#ifdef _WIN32
+  std::string cmd = "where " + name + " >NUL 2>NUL";
+#else
   std::string cmd = "command -v " + name + " >/dev/null 2>&1";
+#endif
   return std::system(cmd.c_str()) == 0;
 }
 
@@ -508,6 +522,15 @@ std::string normalize_lsp_server_name(const std::string &raw) {
 
 bool is_lsp_server_installed(const std::string &server) {
   if (server == "python") {
+#ifdef _WIN32
+    const char *app_data = std::getenv("APPDATA");
+    if (app_data) {
+      fs::path local = fs::path(app_data) / "jot" / "venv" / "Scripts" / "pylsp.exe";
+      if (fs::exists(local)) {
+        return true;
+      }
+    }
+#else
     const char *home = std::getenv("HOME");
     if (home) {
       fs::path local = fs::path(home) / ".config" / "jot" / "venv" / "bin" / "pylsp";
@@ -515,6 +538,7 @@ bool is_lsp_server_installed(const std::string &server) {
         return true;
       }
     }
+#endif
     return command_exists("pylsp");
   }
   if (server == "typescript") {
@@ -686,6 +710,10 @@ void Editor::watch_lsp_client_fds(LSPClient *client) {
   if (!client) {
     return;
   }
+#ifdef _WIN32
+  (void)client;
+  return;
+#else
 
   auto watch_read = [this](int fd) {
     if (fd < 0 || event_loop_.is_watching_fd(fd)) {
@@ -712,18 +740,24 @@ void Editor::watch_lsp_client_fds(LSPClient *client) {
 
   watch_read(client->get_stdout_fd());
   watch_read(client->get_stderr_fd());
+#endif
 }
 
 void Editor::unwatch_lsp_client_fds(LSPClient *client) {
   if (!client) {
     return;
   }
+#ifdef _WIN32
+  (void)client;
+  return;
+#else
   if (client->get_stdout_fd() >= 0) {
     event_loop_.unwatch_fd(client->get_stdout_fd());
   }
   if (client->get_stderr_fd() >= 0) {
     event_loop_.unwatch_fd(client->get_stderr_fd());
   }
+#endif
 }
 
 LSPClient *Editor::find_lsp_client(const std::string &language,

@@ -16,6 +16,10 @@ TEST_CASE("Tree Sitter Install Language Validation", "[jot]") {
 
 TEST_CASE("Tree Sitter Install Command Mapping", "[jot]") {
   auto cpp = TreeSitterInstall::command_for_language("cpp");
+#ifdef _WIN32
+  REQUIRE_FALSE(cpp.supported);
+  REQUIRE(cpp.message.find("not implemented on Windows") != std::string::npos);
+#else
   REQUIRE(cpp.supported);
   REQUIRE(cpp.language == "cpp");
   REQUIRE(cpp.command.find("github.com/tree-sitter/tree-sitter-cpp") !=
@@ -89,4 +93,5 @@ TEST_CASE("Tree Sitter Install Command Mapping", "[jot]") {
   REQUIRE_FALSE(bad.supported);
   REQUIRE(bad.message.find("Unsupported Tree-sitter language") !=
               std::string::npos);
+#endif
 }

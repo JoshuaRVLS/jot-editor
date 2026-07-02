@@ -2,16 +2,34 @@
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
-#include <csignal>
+#include <cstdint>
 #include <cstdlib>
-#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string.h>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <fcntl.h>
+#include <io.h>
+using ssize_t = intptr_t;
+#define read _read
+#define write _write
+#define close _close
+#else
+#include <csignal>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -26,17 +44,122 @@ struct JsonValue {
 };
 
 bool set_non_blocking(int fd) {
+#ifdef _WIN32
+  (void)fd;
+  return true;
+#else
   int flags = fcntl(fd, F_GETFL, 0);
   if (flags < 0) {
     return false;
   }
   return fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0;
+#endif
 }
 
+#ifdef _WIN32
+std::string windows_error_message(DWORD code) {
+  char *text = nullptr;
+  DWORD len = FormatMessageA(
+      FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+          FORMAT_MESSAGE_IGNORE_INSERTS,
+      nullptr, code, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+      reinterpret_cast<LPSTR>(&text), 0, nullptr);
+  std::string message = len && text ? std::string(text, len)
+                                    : "Windows error " + std::to_string(code);
+  if (text) {
+    LocalFree(text);
+  }
+  while (!message.empty() &&
+         (message.back() == '\r' || message.back() == '\n' ||
+          message.back() == ' ')) {
+    message.pop_back();
+  }
+  return message;
+}
+
+std::string quote_windows_arg(const std::string &arg) {
+  if (arg.empty()) {
+    return "\"\"";
+  }
+  bool needs_quotes = false;
+  for (char c : arg) {
+    if (std::isspace((unsigned char)c) || c == '"') {
+      needs_quotes = true;
+      break;
+    }
+  }
+  if (!needs_quotes) {
+    return arg;
+  }
+  std::string out = "\"";
+  int backslashes = 0;
+  for (char c : arg) {
+    if (c == '\\') {
+      backslashes++;
+      continue;
+    }
+    if (c == '"') {
+      out.append((size_t)(backslashes * 2 + 1), '\\');
+      out.push_back(c);
+      backslashes = 0;
+      continue;
+    }
+    out.append((size_t)backslashes, '\\');
+    backslashes = 0;
+    out.push_back(c);
+  }
+  out.append((size_t)(backslashes * 2), '\\');
+  out.push_back('"');
+  return out;
+}
+
+std::string windows_command_line(const std::vector<std::string> &argv) {
+  std::string out;
+  for (size_t i = 0; i < argv.size(); i++) {
+    if (i > 0) {
+      out.push_back(' ');
+    }
+    out += quote_windows_arg(argv[i]);
+  }
+  return out;
+}
+
+bool fd_has_data(int fd) {
+  intptr_t os_handle = _get_osfhandle(fd);
+  if (os_handle == -1) {
+    return false;
+  }
+  DWORD available = 0;
+  if (!PeekNamedPipe(reinterpret_cast<HANDLE>(os_handle), nullptr, 0, nullptr,
+                     &available, nullptr)) {
+    return false;
+  }
+  return available > 0;
+}
+
+unsigned long current_process_id() { return GetCurrentProcessId(); }
+#else
+bool fd_has_data(int) { return true; }
+long current_process_id() { return getpid(); }
+#endif
+
 std::string get_lsp_log_path(const std::string &language) {
+  const char *override_home = getenv("JOT_CONFIG_HOME");
+  if (override_home && *override_home) {
+    fs::path base = fs::path(override_home) / "logs";
+    std::error_code ec;
+    fs::create_directories(base, ec);
+    return (base / ("lsp_" + language + ".log")).string();
+  }
+#ifdef _WIN32
+  const char *app_data = getenv("APPDATA");
+  fs::path base = app_data && *app_data ? fs::path(app_data) / "jot" / "logs"
+                                       : fs::temp_directory_path() / "jot-logs";
+#else
   const char *home = getenv("HOME");
   fs::path base = home ? fs::path(home) / ".config" / "jot" / "logs"
                        : fs::temp_directory_path() / "jot-logs";
+#endif
   std::error_code ec;
   fs::create_directories(base, ec);
   return (base / ("lsp_" + language + ".log")).string();
@@ -48,8 +171,13 @@ std::string to_file_uri(const std::string &path) {
   if (ec) {
     resolved = fs::path(path);
   }
-  std::string uri = "file://" + resolved.lexically_normal().string();
-  return uri;
+  std::string normalized = resolved.lexically_normal().generic_string();
+#ifdef _WIN32
+  if (normalized.size() >= 2 && normalized[1] == ':') {
+    return "file:///" + normalized;
+  }
+#endif
+  return "file://" + normalized;
 }
 
 bool ends_with(const std::string &s, const std::string &suffix) {
@@ -372,6 +500,12 @@ std::string from_file_uri(const std::string &uri) {
     }
     decoded.push_back(path[i]);
   }
+#ifdef _WIN32
+  if (decoded.size() >= 3 && decoded[0] == '/' && decoded[2] == ':') {
+    decoded.erase(decoded.begin());
+  }
+  std::replace(decoded.begin(), decoded.end(), '/', '\\');
+#endif
   return decoded;
 }
 
@@ -917,6 +1051,84 @@ bool LSPClient::start() {
     return false;
   }
 
+#ifdef _WIN32
+  SECURITY_ATTRIBUTES sa{};
+  sa.nLength = sizeof(sa);
+  sa.bInheritHandle = TRUE;
+
+  HANDLE stdin_read = nullptr;
+  HANDLE stdin_write = nullptr;
+  HANDLE stdout_read = nullptr;
+  HANDLE stdout_write = nullptr;
+  HANDLE stderr_read = nullptr;
+  HANDLE stderr_write = nullptr;
+
+  auto close_handle = [](HANDLE &handle) {
+    if (handle) {
+      CloseHandle(handle);
+      handle = nullptr;
+    }
+  };
+
+  if (!CreatePipe(&stdin_read, &stdin_write, &sa, 0) ||
+      !CreatePipe(&stdout_read, &stdout_write, &sa, 0) ||
+      !CreatePipe(&stderr_read, &stderr_write, &sa, 0)) {
+    last_error = windows_error_message(GetLastError());
+    close_handle(stdin_read);
+    close_handle(stdin_write);
+    close_handle(stdout_read);
+    close_handle(stdout_write);
+    close_handle(stderr_read);
+    close_handle(stderr_write);
+    return false;
+  }
+
+  SetHandleInformation(stdin_write, HANDLE_FLAG_INHERIT, 0);
+  SetHandleInformation(stdout_read, HANDLE_FLAG_INHERIT, 0);
+  SetHandleInformation(stderr_read, HANDLE_FLAG_INHERIT, 0);
+
+  STARTUPINFOA startup{};
+  startup.cb = sizeof(startup);
+  startup.dwFlags = STARTF_USESTDHANDLES;
+  startup.hStdInput = stdin_read;
+  startup.hStdOutput = stdout_write;
+  startup.hStdError = stderr_write;
+
+  PROCESS_INFORMATION process{};
+  std::string command_line = windows_command_line(command);
+  std::string cwd = root_path.empty() ? std::string() : root_path;
+  BOOL created = CreateProcessA(
+      nullptr, command_line.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
+      nullptr, cwd.empty() ? nullptr : cwd.c_str(), &startup, &process);
+
+  close_handle(stdin_read);
+  close_handle(stdout_write);
+  close_handle(stderr_write);
+
+  if (!created) {
+    last_error = windows_error_message(GetLastError());
+    close_handle(stdin_write);
+    close_handle(stdout_read);
+    close_handle(stderr_read);
+    return false;
+  }
+
+  CloseHandle(process.hThread);
+  child_process_handle = process.hProcess;
+  child_pid = (int)process.dwProcessId;
+
+  stdin_fd = _open_osfhandle(reinterpret_cast<intptr_t>(stdin_write),
+                             _O_WRONLY | _O_BINARY);
+  stdout_fd = _open_osfhandle(reinterpret_cast<intptr_t>(stdout_read),
+                              _O_RDONLY | _O_BINARY);
+  stderr_fd = _open_osfhandle(reinterpret_cast<intptr_t>(stderr_read),
+                              _O_RDONLY | _O_BINARY);
+  if (stdin_fd < 0 || stdout_fd < 0 || stderr_fd < 0) {
+    last_error = "failed to convert process pipes to file descriptors";
+    stop();
+    return false;
+  }
+#else
   int stdin_pipe[2] = {-1, -1};
   int stdout_pipe[2] = {-1, -1};
   int stderr_pipe[2] = {-1, -1};
@@ -965,6 +1177,7 @@ bool LSPClient::start() {
   stdout_fd = stdout_pipe[0];
   stderr_fd = stderr_pipe[0];
   child_pid = pid;
+#endif
   running = true;
   initialized = false;
   next_request_id = 1;
@@ -992,7 +1205,7 @@ bool LSPClient::start() {
        << "\"id\":" << next_request_id++ << ","
        << "\"method\":\"initialize\","
        << "\"params\":{"
-       << "\"processId\":" << getpid() << ","
+       << "\"processId\":" << current_process_id() << ","
        << "\"rootUri\":\"" << json_escape(to_file_uri(root_path)) << "\","
        << "\"rootPath\":\"" << json_escape(root_path) << "\","
        << "\"capabilities\":{"
@@ -1051,8 +1264,16 @@ void LSPClient::stop() {
   initialized = false;
 
   if (child_pid > 0) {
+#ifdef _WIN32
+    if (child_process_handle) {
+      TerminateProcess(reinterpret_cast<HANDLE>(child_process_handle), 1);
+      CloseHandle(reinterpret_cast<HANDLE>(child_process_handle));
+      child_process_handle = nullptr;
+    }
+#else
     kill(child_pid, SIGTERM);
     waitpid(child_pid, nullptr, WNOHANG);
+#endif
   }
 
   if (stdin_fd >= 0)
@@ -1066,6 +1287,9 @@ void LSPClient::stop() {
   stdout_fd = -1;
   stderr_fd = -1;
   child_pid = -1;
+#ifdef _WIN32
+  child_process_handle = nullptr;
+#endif
   running = false;
   initialized = false;
   file_versions.clear();
@@ -1217,6 +1441,9 @@ bool LSPClient::poll() {
 
   char buf[4096];
   while (stdout_fd >= 0) {
+    if (!fd_has_data(stdout_fd)) {
+      break;
+    }
     ssize_t n = read(stdout_fd, buf, sizeof(buf));
     if (n <= 0) {
       break;
@@ -1225,6 +1452,9 @@ bool LSPClient::poll() {
     changed = true;
   }
   while (stderr_fd >= 0) {
+    if (!fd_has_data(stderr_fd)) {
+      break;
+    }
     ssize_t n = read(stderr_fd, buf, sizeof(buf));
     if (n <= 0) {
       break;
@@ -1235,6 +1465,21 @@ bool LSPClient::poll() {
 
   int status = 0;
   if (child_pid > 0) {
+#ifdef _WIN32
+    HANDLE process = reinterpret_cast<HANDLE>(child_process_handle);
+    if (process && WaitForSingleObject(process, 0) == WAIT_OBJECT_0) {
+      DWORD exit_code = 0;
+      GetExitCodeProcess(process, &exit_code);
+      running = false;
+      initialized = false;
+      last_error = "process exited with status " + std::to_string(exit_code);
+      append_log_line("INFO ", last_error);
+      CloseHandle(process);
+      child_process_handle = nullptr;
+      child_pid = -1;
+      changed = true;
+    }
+#else
     pid_t result = waitpid(child_pid, &status, WNOHANG);
     if (result == child_pid) {
       running = false;
@@ -1247,6 +1492,7 @@ bool LSPClient::poll() {
       append_log_line("INFO ", last_error);
       changed = true;
     }
+#endif
   }
 
   return changed;

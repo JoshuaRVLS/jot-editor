@@ -9,7 +9,17 @@
 #include <sstream>
 
 #ifdef JOT_TREESITTER
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 #endif
 
 namespace {
@@ -22,7 +32,15 @@ std::string trim_copy(const std::string &s) {
   return s.substr(start, end - start + 1);
 }
 
-std::vector<std::string> split_list(const std::string &text, char delimiter = ':') {
+char path_list_separator() {
+#ifdef _WIN32
+  return ';';
+#else
+  return ':';
+#endif
+}
+
+std::vector<std::string> split_list(const std::string &text, char delimiter = path_list_separator()) {
   std::vector<std::string> out;
   std::stringstream ss(text);
   std::string item;
@@ -34,10 +52,27 @@ std::vector<std::string> split_list(const std::string &text, char delimiter = ':
 }
 
 fs::path home_path(const std::string &suffix) {
+#ifdef _WIN32
+  const char *app_data = getenv("APPDATA");
+  if (app_data && *app_data) return fs::path(app_data) / "jot" / suffix;
+  const char *home = getenv("USERPROFILE");
+#else
   const char *home = getenv("HOME");
+#endif
   if (!home) return fs::path();
   return fs::path(home) / suffix;
 }
+
+#ifdef JOT_TREESITTER
+void close_library_handle(void *handle) {
+  if (!handle) return;
+#ifdef _WIN32
+  FreeLibrary(reinterpret_cast<HMODULE>(handle));
+#else
+  dlclose(handle);
+#endif
+}
+#endif
 }
 
 TreeSitterManager::TreeSitterManager() { register_languages(); }
@@ -50,7 +85,7 @@ TreeSitterManager::~TreeSitterManager() {
   }
   for (auto &entry : library_handles_) {
     if (entry.second) {
-      dlclose(entry.second);
+      close_library_handle(entry.second);
     }
   }
 #endif
@@ -73,15 +108,19 @@ void TreeSitterManager::register_languages() {
   std::vector<std::string> default_library_paths;
   const char *env_paths = getenv("JOT_TREESITTER_PATH");
   if (env_paths && *env_paths) {
-    default_library_paths = split_list(env_paths, ':');
+    default_library_paths = split_list(env_paths);
   }
   for (const auto &path : {
+#ifdef _WIN32
+           home_path("tree-sitter"),
+#else
            home_path(".local/lib/jot/tree-sitter"),
            home_path(".local/lib"),
            fs::path("/usr/local/lib"),
            fs::path("/usr/lib"),
            fs::path("/opt/homebrew/lib"),
-       }) {
+#endif
+        }) {
     if (!path.empty()) {
       default_library_paths.push_back(path.string());
     }
@@ -91,12 +130,16 @@ void TreeSitterManager::register_languages() {
   std::vector<std::string> default_query_paths;
   const char *env_query_paths = getenv("JOT_TREESITTER_QUERY_PATH");
   if (env_query_paths && *env_query_paths) {
-    default_query_paths = split_list(env_query_paths, ':');
+    default_query_paths = split_list(env_query_paths);
   }
   for (const auto &path : {
+#ifdef _WIN32
+           home_path("treesitter/queries"),
+#else
            home_path(".config/jot/treesitter/queries"),
            home_path(".local/share/jot/treesitter/queries"),
-       }) {
+#endif
+        }) {
     if (!path.empty()) {
       default_query_paths.push_back(path.string());
     }
@@ -261,7 +304,7 @@ void TreeSitterManager::reload() {
   parser_languages_.clear();
   for (auto &entry : library_handles_) {
     if (entry.second) {
-      dlclose(entry.second);
+      close_library_handle(entry.second);
     }
   }
   library_handles_.clear();

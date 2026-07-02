@@ -9,6 +9,29 @@
 
 namespace fs = std::filesystem;
 namespace {
+fs::path config_root_path() {
+  const char *override_home = getenv("JOT_CONFIG_HOME");
+  if (override_home && *override_home) {
+    return fs::path(override_home);
+  }
+#ifdef _WIN32
+  const char *app_data = getenv("APPDATA");
+  if (app_data && *app_data) {
+    return fs::path(app_data) / "jot";
+  }
+  const char *profile = getenv("USERPROFILE");
+  if (profile && *profile) {
+    return fs::path(profile) / ".config" / "jot";
+  }
+#else
+  const char *home = getenv("HOME");
+  if (home && *home) {
+    return fs::path(home) / ".config" / "jot";
+  }
+#endif
+  return {};
+}
+
 std::string trim_copy(const std::string &s) {
   size_t start = s.find_first_not_of(" \t");
   if (start == std::string::npos) {
@@ -40,11 +63,10 @@ std::string strip_inline_comment(const std::string &line) {
 } // namespace
 
 Config::Config() {
-  const char *home = getenv("HOME");
-  if (home) {
-    std::string config_root = std::string(home) + "/.config/jot";
-    fs::create_directories(config_root + "/configs");
-    config_path = config_root + "/configs/settings.conf";
+  fs::path config_root = config_root_path();
+  if (!config_root.empty()) {
+    fs::create_directories(config_root / "configs");
+    config_path = (config_root / "configs" / "settings.conf").string();
   }
   load_defaults();
 }
@@ -112,10 +134,9 @@ void Config::load() {
 
   std::ifstream file(config_path);
   if (!file.is_open()) {
-    const char *home = getenv("HOME");
-    if (home) {
-      std::string legacy_path = std::string(home) + "/.config/jot/config";
-      file.open(legacy_path);
+    fs::path root = config_root_path();
+    if (!root.empty()) {
+      file.open(root / "config");
     }
   }
   if (!file.is_open()) {

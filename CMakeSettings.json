@@ -1,0 +1,26 @@
+{
+  "configurations": [
+    {
+      "name": "windows-msvc-vs2026-x64-debug",
+      "generator": "Visual Studio 18 2026",
+      "configurationType": "Debug",
+      "buildRoot": "${projectDir}\\build\\vs2026-x64",
+      "installRoot": "${projectDir}\\install\\vs2026-x64",
+      "cmakeCommandArgs": "-A x64 -T host=x64 -DJOT_TREESITTER=OFF",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": ["msvc_x64_x64"]
+    },
+    {
+      "name": "windows-msvc-vs2026-x64-release",
+      "generator": "Visual Studio 18 2026",
+      "configurationType": "Release",
+      "buildRoot": "${projectDir}\\build\\vs2026-x64",
+      "installRoot": "${projectDir}\\install\\vs2026-x64",
+      "cmakeCommandArgs": "-A x64 -T host=x64 -DJOT_TREESITTER=OFF",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": ["msvc_x64_x64"]
+    }
+  ]
+}

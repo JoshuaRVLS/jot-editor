@@ -214,7 +214,19 @@ std::map<std::string, std::string> parse_tasks_object(const std::string &text) {
 }
 
 std::string config_home_path() {
+  const char *override_home = std::getenv("JOT_CONFIG_HOME");
+  if (override_home && *override_home) {
+    return (fs::path(override_home) / "configs" / "tasks.json").string();
+  }
+#ifdef _WIN32
+  const char *app_data = std::getenv("APPDATA");
+  if (app_data && *app_data) {
+    return (fs::path(app_data) / "jot" / "configs" / "tasks.json").string();
+  }
+  const char *home = std::getenv("USERPROFILE");
+#else
   const char *home = std::getenv("HOME");
+#endif
   if (!home || !*home) {
     return "";
   }

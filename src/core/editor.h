@@ -315,6 +315,8 @@ private:
 
   void handle_command_palette(int ch);
   bool execute_ex_command(const std::string &line);
+  bool execute_ex_command_tail(const std::string &lcmd, const std::string &arg,
+                               const std::string &line);
   void show_command_help(const std::string &topic);
   void submit_command_palette();
   void handle_search_panel(int ch, bool is_ctrl = false,

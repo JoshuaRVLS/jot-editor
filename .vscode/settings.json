@@ -1,0 +1,6 @@
+{
+  "cmake.useCMakePresets": "always",
+  "cmake.configurePreset": "windows-msvc-vs2026",
+  "cmake.buildPreset": "windows-msvc-vs2026-debug",
+  "cmake.buildDirectory": "${workspaceFolder}/build/vs2026-x64"
+}

@@ -7,23 +7,97 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <utility>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 bool command_exists(const char *cmd) {
+#ifdef _WIN32
+  (void)cmd;
+  return false;
+#else
   std::string check = "command -v ";
   check += cmd;
   check += " >/dev/null 2>&1";
   return std::system(check.c_str()) == 0;
+#endif
 }
 
 bool write_xclip_clipboard(const std::string &text) {
+#ifdef _WIN32
+  if (!OpenClipboard(nullptr)) return false;
+  EmptyClipboard();
+
+  int wide_len = MultiByteToWideChar(CP_UTF8, 0, text.data(),
+                                     (int)text.size(), nullptr, 0);
+  if (wide_len <= 0) {
+    CloseClipboard();
+    return false;
+  }
+  HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, (wide_len + 1) * sizeof(wchar_t));
+  if (!mem) {
+    CloseClipboard();
+    return false;
+  }
+  wchar_t *wide = static_cast<wchar_t *>(GlobalLock(mem));
+  MultiByteToWideChar(CP_UTF8, 0, text.data(), (int)text.size(), wide,
+                      wide_len);
+  wide[wide_len] = L'\0';
+  GlobalUnlock(mem);
+  bool ok = SetClipboardData(CF_UNICODETEXT, mem) != nullptr;
+  if (!ok) {
+    GlobalFree(mem);
+  }
+  CloseClipboard();
+  return ok;
+#else
   if (!command_exists("xclip")) return false;
    FILE *pipe = popen("xclip -selection clipboard -in", "w");
    if (!pipe) return false;
    fwrite(text.data(), 1, text.size(), pipe);
    return pclose(pipe) == 0;
+#endif
 }
 
 bool read_xclip_clipboard(std::string &out) {
+#ifdef _WIN32
+  if (!OpenClipboard(nullptr)) return false;
+  HANDLE handle = GetClipboardData(CF_UNICODETEXT);
+  if (!handle) {
+    CloseClipboard();
+    return false;
+  }
+  const wchar_t *wide = static_cast<const wchar_t *>(GlobalLock(handle));
+  if (!wide) {
+    CloseClipboard();
+    return false;
+  }
+  int len = WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr,
+                                nullptr);
+  if (len <= 1) {
+    GlobalUnlock(handle);
+    CloseClipboard();
+    return false;
+  }
+  std::string result((size_t)len, '\0');
+  WideCharToMultiByte(CP_UTF8, 0, wide, -1, result.data(), len, nullptr,
+                      nullptr);
+  if (!result.empty() && result.back() == '\0') {
+    result.pop_back();
+  }
+  GlobalUnlock(handle);
+  CloseClipboard();
+  out = std::move(result);
+  return !out.empty();
+#else
   if(!command_exists("xclip")) return false;
   FILE *pipe = popen("xclip -selection clipboard -out 2>/dev/null", "r");
   if (!pipe) return false;
@@ -35,6 +109,7 @@ bool read_xclip_clipboard(std::string &out) {
   }
   
   return pclose(pipe) == 0 && !out.empty();
+#endif
 }
 
 namespace {

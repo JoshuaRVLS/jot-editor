@@ -8,7 +8,9 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#ifndef _WIN32
 #include <dirent.h>
+#endif
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -56,33 +58,50 @@ std::string sanitize_input_path(const std::string &path) {
   return out;
 }
 
-std::string recent_files_path() {
+fs::path config_root_path() {
+  const char *override_home = std::getenv("JOT_CONFIG_HOME");
+  if (override_home && *override_home) {
+    return fs::path(override_home);
+  }
+#ifdef _WIN32
+  const char *app_data = std::getenv("APPDATA");
+  if (app_data && *app_data) {
+    return fs::path(app_data) / "jot";
+  }
+  const char *home = std::getenv("USERPROFILE");
+#else
   const char *home = std::getenv("HOME");
+#endif
   if (!home || !*home) {
+    return {};
+  }
+  return fs::path(home) / ".config" / "jot";
+}
+
+std::string recent_files_path() {
+  fs::path root = config_root_path();
+  if (root.empty()) {
     return "";
   }
-  fs::path p = fs::path(home) / ".config" / "jot" / "configs" /
-               "recent_files.txt";
+  fs::path p = root / "configs" / "recent_files.txt";
   return p.string();
 }
 
 std::string recent_workspaces_path() {
-  const char *home = std::getenv("HOME");
-  if (!home || !*home) {
+  fs::path root = config_root_path();
+  if (root.empty()) {
     return "";
   }
-  fs::path p = fs::path(home) / ".config" / "jot" / "configs" /
-               "recent_workspaces.txt";
+  fs::path p = root / "configs" / "recent_workspaces.txt";
   return p.string();
 }
 
 std::string file_fold_states_path() {
-  const char *home = std::getenv("HOME");
-  if (!home || !*home) {
+  fs::path root = config_root_path();
+  if (root.empty()) {
     return "";
   }
-  fs::path p = fs::path(home) / ".config" / "jot" / "configs" /
-               "fold_states.txt";
+  fs::path p = root / "configs" / "fold_states.txt";
   return p.string();
 }
 
@@ -205,6 +224,18 @@ void write_file_fold_state_map(
 }
 
 std::string shell_quote(const std::string &s) {
+#ifdef _WIN32
+  std::string out = "\"";
+  for (char c : s) {
+    if (c == '"') {
+      out += "\"\"";
+    } else {
+      out += c;
+    }
+  }
+  out += "\"";
+  return out;
+#else
   std::string out = "'";
   for (char c : s) {
     if (c == '\'') {
@@ -215,14 +246,31 @@ std::string shell_quote(const std::string &s) {
   }
   out += "'";
   return out;
+#endif
+}
+
+std::string command_silence_redirect() {
+#ifdef _WIN32
+  return " >NUL 2>NUL";
+#else
+  return " >/dev/null 2>&1";
+#endif
+}
+
+bool command_exists(const std::string &name) {
+#ifdef _WIN32
+  return std::system(("where " + name + command_silence_redirect()).c_str()) == 0;
+#else
+  return std::system(("command -v " + name + command_silence_redirect()).c_str()) == 0;
+#endif
 }
 
 std::string detect_prettier_runner() {
   static int mode = -1; // -1 unknown, 0 unavailable, 1 prettier, 2 npx
   if (mode == -1) {
-    if (std::system("command -v prettier >/dev/null 2>&1") == 0) {
+    if (command_exists("prettier")) {
       mode = 1;
-    } else if (std::system("command -v npx >/dev/null 2>&1") == 0) {
+    } else if (command_exists("npx")) {
       mode = 2;
     } else {
       mode = 0;
@@ -240,7 +288,7 @@ std::string detect_prettier_runner() {
 std::string detect_clang_format_runner() {
   static int mode = -1; // -1 unknown, 0 unavailable, 1 clang-format
   if (mode == -1) {
-    mode = (std::system("command -v clang-format >/dev/null 2>&1") == 0) ? 1 : 0;
+    mode = command_exists("clang-format") ? 1 : 0;
   }
   return mode == 1 ? "clang-format" : "";
 }
@@ -711,7 +759,7 @@ bool Editor::save_buffer_at(int index, bool announce) {
 
   auto run_formatter = [this, &buf](const std::string &runner) -> bool {
     std::string cmd = runner + " --write " + shell_quote(buf.filepath) +
-                      " >/dev/null 2>&1";
+                      command_silence_redirect();
     if (std::system(cmd.c_str()) != 0)
       return false;
     std::vector<std::string> refreshed_lines;
@@ -744,7 +792,7 @@ bool Editor::save_buffer_at(int index, bool announce) {
     task_queue_->submit_val<std::vector<std::string>>(
         [filepath, runner = std::move(runner)]() -> std::vector<std::string> {
           std::string cmd = runner + " --write " + shell_quote(filepath) +
-                            " >/dev/null 2>&1";
+                            command_silence_redirect();
           std::vector<std::string> result;
           if (std::system(cmd.c_str()) == 0) {
             read_file_lines(filepath, result);

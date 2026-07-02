@@ -1,15 +1,20 @@
 add_executable(jot main.cpp)
 
 target_link_libraries(jot PRIVATE jot_engine ${PYTHON_LDFLAGS_LIST})
+if(WIN32 AND TARGET Python3::Python)
+  target_link_libraries(jot PRIVATE Python3::Python)
+endif()
 
 # Use a clean, portable install RPATH so the installed jot binary can find
 # runtime libraries in ${CMAKE_INSTALL_LIBDIR} relative to the binary.
 # Do NOT use INSTALL_RPATH_USE_LINK_PATH: that would bake build-time link
 # search paths (e.g. ~/.local/lib) into the installed binary.
-set_target_properties(jot PROPERTIES
-  INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}"
-  INSTALL_RPATH_USE_LINK_PATH FALSE
-)
+if(NOT WIN32)
+  set_target_properties(jot PROPERTIES
+    INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}"
+    INSTALL_RPATH_USE_LINK_PATH FALSE
+  )
+endif()
 
 # Old GCC libstdc++ may require explicit filesystem linkage.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND

@@ -79,6 +79,9 @@ private:
   int stdout_fd;
   int stderr_fd;
   int child_pid;
+#ifdef _WIN32
+  void *child_process_handle = nullptr;
+#endif
   bool running;
   bool initialized;
   int next_request_id;

@@ -31,14 +31,20 @@ std::vector<std::string> default_library_names(const std::string &name) {
   std::vector<std::string> names = {
       "libtree-sitter-" + hyphen + ".so",
       "libtree-sitter-" + hyphen + ".dylib",
+      "tree-sitter-" + hyphen + ".dll",
+      "libtree-sitter-" + hyphen + ".dll",
       "libtree_sitter_" + underscore + ".so",
       "libtree_sitter_" + underscore + ".dylib",
+      "tree_sitter_" + underscore + ".dll",
+      "libtree_sitter_" + underscore + ".dll",
       "tree-sitter-" + hyphen + ".so",
       "tree-sitter-" + hyphen + ".dylib",
   };
   if (hyphen != name) {
     names.push_back("libtree-sitter-" + name + ".so");
     names.push_back("libtree-sitter-" + name + ".dylib");
+    names.push_back("tree-sitter-" + name + ".dll");
+    names.push_back("libtree-sitter-" + name + ".dll");
   }
   return names;
 }

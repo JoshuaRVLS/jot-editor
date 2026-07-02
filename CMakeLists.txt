@@ -1,29 +1,33 @@
 cmake_minimum_required(VERSION 3.16)
 project(jot LANGUAGES C CXX)
 
+include(GNUInstallDirs)
+
 # Use a clean, portable install RPATH that points to the same prefix's lib dir.
 # Do NOT use CMAKE_INSTALL_RPATH_USE_LINK_PATH: it bakes build-time link
 # search paths (e.g. ~/.local/lib) into the installed binary, which breaks
-# distribution to other systems.
-set(CMAKE_SKIP_BUILD_RPATH FALSE)
-set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
-if(NOT CMAKE_INSTALL_RPATH)
-  set(CMAKE_INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+# distribution to other systems. Windows does not use ELF/Mach-O RPATHs.
+if(NOT WIN32)
+  set(CMAKE_SKIP_BUILD_RPATH FALSE)
+  set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+  if(NOT CMAKE_INSTALL_RPATH)
+    set(CMAKE_INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+  endif()
 endif()
-
-include(GNUInstallDirs)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_custom_target(clangd_compile_commands ALL
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${CMAKE_BINARY_DIR}/compile_commands.json"
-    "${CMAKE_SOURCE_DIR}/compile_commands.json"
-  COMMENT "Updating compile_commands.json for clangd"
-)
+if(CMAKE_EXPORT_COMPILE_COMMANDS AND NOT CMAKE_GENERATOR MATCHES "Visual Studio")
+  add_custom_target(clangd_compile_commands ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${CMAKE_BINARY_DIR}/compile_commands.json"
+      "${CMAKE_SOURCE_DIR}/compile_commands.json"
+    COMMENT "Updating compile_commands.json for clangd"
+  )
+endif()
 
 # JOT_SANITIZE=ON: build with AddressSanitizer + UndefinedBehaviorSanitizer
 # for diagnosing native crashes. Set JOT_ASAN_OPTIONS and JOT_UBSAN_OPTIONS
@@ -32,6 +36,7 @@ option(JOT_SANITIZE "Build with AddressSanitizer + UBSan" OFF)
 option(JOT_TREESITTER "Enable Tree-sitter parser-based syntax highlighting when dependencies are available" ON)
 option(JOT_BUILD_BENCHMARKS "Build the opt-in jot benchmark suite" OFF)
 option(JOT_ENABLE_CCACHE "Use ccache as the C/C++ compiler launcher when available" ON)
+option(JOT_FETCH_DEPS "Fetch missing third-party dependencies when CMake packages are unavailable" ON)
 if(JOT_ENABLE_CCACHE)
   find_program(CCACHE_PROGRAM ccache)
   if(CCACHE_PROGRAM)
@@ -58,15 +63,36 @@ if(APPLE)
 elseif(UNIX)
   add_compile_definitions(JOT_PLATFORM_POSIX=1)
 elseif(WIN32)
-  message(FATAL_ERROR "Windows is not supported. Use Linux, macOS, or WSL.")
+  if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    message(FATAL_ERROR
+      "Native Windows support currently targets 64-bit MSVC only. "
+      "Reconfigure with -A x64 -T host=x64 and use a 64-bit Python install. "
+      "Delete the existing build directory before switching architectures.")
+  endif()
+  add_compile_definitions(
+    JOT_PLATFORM_WINDOWS=1
+    NOMINMAX
+    WIN32_LEAN_AND_MEAN
+    Py_NO_LINK_LIB
+  )
 else()
   message(WARNING "Unknown platform. Build may work, but terminal integrations are only guaranteed on POSIX.")
 endif()
 
-find_package(Python3 COMPONENTS Development REQUIRED)
+if(WIN32)
+  find_package(Python3 COMPONENTS Interpreter Development.Embed REQUIRED)
+else()
+  find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+endif()
 
 include(cmake/JotPython.cmake)
-jot_collect_python_embed_flags(PYTHON_OTHER_FLAGS_LIST PYTHON_INCLUDES PYTHON_LDFLAGS_LIST)
+if(WIN32)
+  set(PYTHON_OTHER_FLAGS_LIST "")
+  set(PYTHON_INCLUDES ${Python3_INCLUDE_DIRS})
+  set(PYTHON_LDFLAGS_LIST "")
+else()
+  jot_collect_python_embed_flags(PYTHON_OTHER_FLAGS_LIST PYTHON_INCLUDES PYTHON_LDFLAGS_LIST)
+endif()
 
 add_subdirectory(src)
 add_subdirectory(apps/jot)

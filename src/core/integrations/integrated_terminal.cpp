@@ -37,7 +37,11 @@ void Editor::create_integrated_terminal(const std::string &label,
   auto term = std::make_unique<IntegratedTerminal>();
   term->set_label(label);
   if (!term->open_shell(cwd)) {
+#ifdef _WIN32
+    set_message("Integrated terminal: ConPTY backend not implemented yet");
+#else
     set_message("Failed to open integrated terminal: check $SHELL or PTY support");
+#endif
     return;
   }
 
@@ -111,7 +115,11 @@ void Editor::toggle_integrated_terminal() {
 
   if (!term->is_active()) {
     if (!term->open_shell()) {
+#ifdef _WIN32
+      set_message("Integrated terminal: ConPTY backend not implemented yet");
+#else
       set_message("Failed to restart terminal: check $SHELL or PTY support");
+#endif
       needs_redraw = true;
       return;
     }
@@ -155,7 +163,11 @@ void Editor::handle_integrated_terminal_input(int ch, bool is_ctrl,
 
   if (!term->is_active()) {
     if (!term->open_shell()) {
+#ifdef _WIN32
+      set_message("Integrated terminal: ConPTY backend not implemented yet");
+#else
       set_message("Failed to restart terminal: check $SHELL or PTY support");
+#endif
       needs_redraw = true;
       return;
     }
@@ -245,7 +257,11 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y) {
       watch_integrated_terminal_fd(term);
       set_message("Integrated terminal restarted");
     } else {
+#ifdef _WIN32
+      set_message("Integrated terminal: ConPTY backend not implemented yet");
+#else
       set_message("Failed to restart terminal: check $SHELL or PTY support");
+#endif
     }
   }
   if (term) {
@@ -256,6 +272,10 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y) {
 }
 
 void Editor::watch_integrated_terminal_fd(IntegratedTerminal *term) {
+#ifdef _WIN32
+  (void)term;
+  return;
+#else
   if (!term || term->get_master_fd() < 0 ||
       event_loop_.is_watching_fd(term->get_master_fd())) {
     return;
@@ -281,13 +301,19 @@ void Editor::watch_integrated_terminal_fd(IntegratedTerminal *term) {
       event_loop_.unwatch_fd(fd);
     }
   });
+#endif
 }
 
 void Editor::unwatch_integrated_terminal_fd(IntegratedTerminal *term) {
+#ifdef _WIN32
+  (void)term;
+  return;
+#else
   if (!term || term->get_master_fd() < 0) {
     return;
   }
   event_loop_.unwatch_fd(term->get_master_fd());
+#endif
 }
 
 bool Editor::handle_integrated_terminal_scroll(int x, int y, bool is_scroll_up,

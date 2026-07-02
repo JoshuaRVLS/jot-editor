@@ -3,8 +3,11 @@
 
 #include <functional>
 #include <string>
-#include <unistd.h>
 #include <vector>
+
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 struct TermKey;
 
@@ -135,7 +138,13 @@ public:
   void write(const std::string &str);
   void write_char(char c);
 
-  int get_input_fd() const { return STDIN_FILENO; }
+  int get_input_fd() const {
+#ifdef _WIN32
+    return -1;
+#else
+    return STDIN_FILENO;
+#endif
+  }
   Event read_event();
   Event check_resize_event();
 

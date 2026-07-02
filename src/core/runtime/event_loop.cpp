@@ -6,12 +6,15 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fcntl.h>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
+
+#ifndef _WIN32
+#include <fcntl.h>
 #include <unistd.h>
+#endif
 
 #include "editor.h"
 #include "python_bridge/api.h"
@@ -639,6 +642,16 @@ void Editor::handle_terminal_event(const Event &ev) {
 }
 
 void Editor::render_frame() {
+#ifdef _WIN32
+  constexpr int kMaxDrainPerFrame = 64;
+  for (int drained = 0; drained < kMaxDrainPerFrame; drained++) {
+    Event ev = terminal.poll_event();
+    if (ev.type == EVENT_REDRAW) {
+      break;
+    }
+    handle_terminal_event(ev);
+  }
+#endif
   Event rsz = terminal.check_resize_event();
   if (rsz.type == EVENT_RESIZE) {
     ui->invalidate();
@@ -675,6 +688,7 @@ void Editor::run() {
 
   needs_redraw = true;
 
+#ifndef _WIN32
   int stdin_fd = terminal.get_input_fd();
 
   int stdin_flags = fcntl(stdin_fd, F_GETFL, 0);
@@ -693,6 +707,7 @@ void Editor::run() {
     }
     render_frame();
   });
+#endif
 
   int render_ms = std::max(1, 1000 / std::max(1, render_fps));
   event_loop_.set_timer(render_ms, true, [this] { render_frame(); });
@@ -762,5 +777,7 @@ void Editor::run() {
 
   event_loop_.run();
 
+#ifndef _WIN32
   fcntl(stdin_fd, F_SETFL, stdin_flags);
+#endif
 }

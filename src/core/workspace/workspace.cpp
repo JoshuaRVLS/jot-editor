@@ -126,11 +126,23 @@ std::vector<std::string> split_tab(const std::string &line) {
 }
 
 std::string session_root_dir() {
+  const char *override_home = std::getenv("JOT_CONFIG_HOME");
+  if (override_home && *override_home) {
+    return (fs::path(override_home) / "workspaces").string();
+  }
+#ifdef _WIN32
+  const char *app_data = std::getenv("APPDATA");
+  if (app_data && *app_data) {
+    return (fs::path(app_data) / "jot" / "workspaces").string();
+  }
+  const char *home = std::getenv("USERPROFILE");
+#else
   const char *home = std::getenv("HOME");
+#endif
   if (!home || !*home) {
     return "";
   }
-  return std::string(home) + "/.config/jot/workspaces";
+  return (fs::path(home) / ".config" / "jot" / "workspaces").string();
 }
 
 std::string session_file_for_root(const std::string &root) {

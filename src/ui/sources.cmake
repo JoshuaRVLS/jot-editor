@@ -7,3 +7,7 @@ set(JOT_UI_SOURCES
 set(JOT_UI_POSIX_SOURCES
   ui/terminal.cpp
 )
+
+set(JOT_UI_WINDOWS_SOURCES
+  ui/terminal_win32.cpp
+)

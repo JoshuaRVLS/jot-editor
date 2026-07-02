@@ -5,7 +5,17 @@
 #include <filesystem>
 
 #ifdef JOT_TREESITTER
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 #endif
 
 #ifdef JOT_TREESITTER
@@ -52,6 +62,42 @@ struct LanguageLookupResult {
   std::string message;
 };
 
+void *open_library(const fs::path &path, std::string &error) {
+#ifdef _WIN32
+  HMODULE handle = LoadLibraryA(path.string().c_str());
+  if (!handle) {
+    error = path.string() + ": LoadLibrary failed with " +
+            std::to_string(GetLastError());
+  }
+  return reinterpret_cast<void *>(handle);
+#else
+  void *handle = dlopen(path.string().c_str(), RTLD_NOW | RTLD_LOCAL);
+  if (!handle) {
+    const char *dl_error = dlerror();
+    error = path.string() + ": " + (dl_error ? dl_error : "dlopen failed");
+  }
+  return handle;
+#endif
+}
+
+void close_library(void *handle) {
+  if (!handle) return;
+#ifdef _WIN32
+  FreeLibrary(reinterpret_cast<HMODULE>(handle));
+#else
+  dlclose(handle);
+#endif
+}
+
+void *library_symbol(void *handle, const std::string &symbol) {
+#ifdef _WIN32
+  return reinterpret_cast<void *>(
+      GetProcAddress(reinterpret_cast<HMODULE>(handle), symbol.c_str()));
+#else
+  return reinterpret_cast<void *>(dlsym(handle, symbol.c_str()));
+#endif
+}
+
 uint32_t language_abi_version(const TSLanguage *language) {
 #if defined(TREE_SITTER_LANGUAGE_VERSION) && TREE_SITTER_LANGUAGE_VERSION >= 15
   return ts_language_abi_version(language);
@@ -66,7 +112,7 @@ LanguageLookupResult language_from_handle(void *handle, const std::string &symbo
     result.message = "invalid library handle";
     return result;
   }
-  auto fn = reinterpret_cast<TreeSitterLanguageFn>(dlsym(handle, symbol.c_str()));
+  auto fn = reinterpret_cast<TreeSitterLanguageFn>(library_symbol(handle, symbol));
   if (!fn) {
     result.message = "missing symbol " + symbol;
     return result;
@@ -113,16 +159,14 @@ const TSLanguage *TreeSitterManager::load_language(
       if (lang) {
         break;
       }
-      void *handle = dlopen(candidate.string().c_str(), RTLD_NOW | RTLD_LOCAL);
+      void *handle = open_library(candidate, last_error);
       if (!handle) {
-        const char *error = dlerror();
-        last_error = candidate.string() + ": " + (error ? error : "dlopen failed");
         continue;
       }
       LanguageLookupResult lookup = language_from_handle(handle, symbol);
       if (!lookup.language) {
         last_error = candidate.string() + ": " + lookup.message;
-        dlclose(handle);
+        close_library(handle);
         continue;
       }
       lang = lookup.language;

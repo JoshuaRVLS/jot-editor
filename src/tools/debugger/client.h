@@ -158,6 +158,9 @@ private:
   int stdout_fd = -1;
   int stderr_fd = -1;
   int child_pid = -1;
+#ifdef _WIN32
+  void *child_process_handle = nullptr;
+#endif
   bool running = false;
   bool initialized = false;
   bool launched = false;

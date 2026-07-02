@@ -1,5 +1,5 @@
-// Python.h must be first so its macros precede C++ standard headers.
-#include <Python.h>
+// Python headers must be first so their macros precede C++ standard headers.
+#include "python_bridge/python_headers.h"
 
 #include "python_bridge/api.h"
 #include "python_bridge/api_internal.h"

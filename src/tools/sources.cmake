@@ -1,5 +1,4 @@
 set(JOT_TOOLS_SOURCES
-  tools/discord_rpc.cpp
   tools/debugger/client.cpp
   tools/imageviewer.cpp
   tools/symbols/index.cpp
@@ -9,6 +8,13 @@ set(JOT_TOOLS_SOURCES
 )
 
 set(JOT_TOOLS_POSIX_SOURCES
+  tools/discord_rpc.cpp
   tools/lsp/client.cpp
   tools/terminal/integrated.cpp
+)
+
+set(JOT_TOOLS_WINDOWS_SOURCES
+  tools/discord_rpc_win32.cpp
+  tools/lsp/client.cpp
+  tools/terminal/integrated_win32.cpp
 )

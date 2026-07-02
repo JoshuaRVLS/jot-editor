@@ -1,5 +1,6 @@
 # Build artifacts
 build/
+out/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
@@ -17,8 +18,14 @@ __pycache__/
 *.pyc
 
 # IDEs/Editors
-.vscode/
+.vs/
+.vscode/*
+!.vscode/settings.json
 .idea/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
 *.swp
 *~
 .DS_Store

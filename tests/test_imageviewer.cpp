@@ -41,5 +41,9 @@ TEST_CASE("Image Viewer Sixel Command", "[jot]") {
   REQUIRE(cmd.find("img2sixel") != std::string::npos);
   REQUIRE(cmd.find("-w 80") != std::string::npos);
   REQUIRE(cmd.find("-h 80") != std::string::npos);
+#ifdef _WIN32
+  REQUIRE(cmd.find("\"/tmp/a b.png\"") != std::string::npos);
+#else
   REQUIRE(cmd.find("'/tmp/a b.png'") != std::string::npos);
+#endif
 }

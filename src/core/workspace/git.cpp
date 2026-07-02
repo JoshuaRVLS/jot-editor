@@ -5,7 +5,10 @@
 #include <cstdio>
 #include <filesystem>
 #include <sstream>
+
+#ifndef _WIN32
 #include <sys/wait.h>
+#endif
 
 namespace {
 namespace fs = std::filesystem;
@@ -18,6 +21,19 @@ std::string trim_right_newlines(std::string s) {
 }
 
 std::string shell_quote(const std::string &value) {
+#ifdef _WIN32
+  std::string out = "\"";
+  out.reserve(value.size() + 8);
+  for (char c : value) {
+    if (c == '"') {
+      out += "\"\"";
+    } else {
+      out.push_back(c);
+    }
+  }
+  out.push_back('"');
+  return out;
+#else
   std::string out = "'";
   out.reserve(value.size() + 8);
   for (char c : value) {
@@ -29,19 +45,55 @@ std::string shell_quote(const std::string &value) {
   }
   out.push_back('\'');
   return out;
+#endif
+}
+
+std::string null_redirect() {
+#ifdef _WIN32
+  return " 2>NUL";
+#else
+  return " 2>/dev/null";
+#endif
+}
+
+FILE *open_command_pipe(const std::string &command, const char *mode) {
+#ifdef _WIN32
+  return _popen(command.c_str(), mode);
+#else
+  return popen(command.c_str(), mode);
+#endif
+}
+
+int close_command_pipe(FILE *pipe) {
+#ifdef _WIN32
+  return _pclose(pipe);
+#else
+  return pclose(pipe);
+#endif
+}
+
+int command_exit_code(int status) {
+#ifdef _WIN32
+  return status;
+#else
+  if (status != -1 && WIFEXITED(status)) {
+    return WEXITSTATUS(status);
+  }
+  return 1;
+#endif
 }
 
 std::string capture_command_output(const std::string &command) {
   std::array<char, 512> buf{};
   std::string out;
-  FILE *pipe = popen(command.c_str(), "r");
+  FILE *pipe = open_command_pipe(command, "r");
   if (!pipe) {
     return "";
   }
   while (fgets(buf.data(), (int)buf.size(), pipe) != nullptr) {
     out += buf.data();
   }
-  pclose(pipe);
+  close_command_pipe(pipe);
   return out;
 }
 
@@ -55,17 +107,15 @@ struct GitCommandResult {
 GitCommandResult capture_command_status(const std::string &command) {
   std::array<char, 512> buf{};
   GitCommandResult result;
-  FILE *pipe = popen((command + " 2>&1").c_str(), "r");
+  FILE *pipe = open_command_pipe(command + " 2>&1", "r");
   if (!pipe) {
     return result;
   }
   while (fgets(buf.data(), (int)buf.size(), pipe) != nullptr) {
     result.output += buf.data();
   }
-  int status = pclose(pipe);
-  if (status != -1 && WIFEXITED(status)) {
-    result.exit_code = WEXITSTATUS(status);
-  }
+  int status = close_command_pipe(pipe);
+  result.exit_code = command_exit_code(status);
   result.output = trim_right_newlines(result.output);
   return result;
 }
@@ -134,7 +184,7 @@ GitStatusResult run_git_commands(const std::string &repo_hint) {
 
   const std::string top = trim_right_newlines(capture_command_output(
       "git -C " + shell_quote(repo_hint) +
-      " rev-parse --show-toplevel 2>/dev/null"));
+      " rev-parse --show-toplevel" + null_redirect()));
   if (top.empty()) {
     return result;
   }
@@ -144,11 +194,11 @@ GitStatusResult run_git_commands(const std::string &repo_hint) {
 
   result.branch = trim_right_newlines(capture_command_output(
       "git -C " + shell_quote(result.root) +
-      " symbolic-ref --short HEAD 2>/dev/null"));
+      " symbolic-ref --short HEAD" + null_redirect()));
   if (result.branch.empty()) {
     result.branch = trim_right_newlines(capture_command_output(
         "git -C " + shell_quote(result.root) +
-        " rev-parse --short HEAD 2>/dev/null"));
+        " rev-parse --short HEAD" + null_redirect()));
   }
   if (result.branch.empty()) {
     result.branch = "(detached)";
@@ -156,7 +206,8 @@ GitStatusResult run_git_commands(const std::string &repo_hint) {
 
   const std::string status_text =
       capture_command_output("git -C " + shell_quote(result.root) +
-                             " status --porcelain=v1 --branch 2>/dev/null");
+                             " status --porcelain=v1 --branch" +
+                             null_redirect());
   std::istringstream iss(status_text);
   std::string line;
   while (std::getline(iss, line)) {
@@ -235,7 +286,7 @@ std::string Editor::run_git_capture(const std::string &args) const {
     return "";
   }
   const std::string command = "git -C " + shell_quote(git_root) + " " + args +
-                              " 2>/dev/null";
+                              null_redirect();
   return trim_right_newlines(capture_command_output(command));
 }
 

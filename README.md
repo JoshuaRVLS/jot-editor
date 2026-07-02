@@ -36,13 +36,18 @@ Officially supported platforms:
 - Linux x86_64 / arm64
 - macOS Intel / Apple Silicon
 
+Experimental platform target:
+
+- Windows 10/11 with MSVC and Windows Terminal
+
 Notes:
 
 - `jot` relies on POSIX terminal APIs (`termios`, `poll`, PTY/forkpty) for the
-  editor UI and integrated terminal.
+  Linux/macOS editor UI and integrated terminal.
 - Linux and other non-Apple Unix builds link `libutil` for PTY support.
 - macOS uses native system PTY APIs without a `libutil` link.
-- Windows is not supported yet and is blocked at CMake configure time.
+- Windows uses a Win32 console backend for the main editor UI. Integrated
+  terminal ConPTY support and Tree-sitter source installation are still pending.
 
 ## Install
 
@@ -65,6 +70,26 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 cmake --install build --prefix "$HOME/.local"
 ```
+
+Experimental Windows/MSVC build:
+
+```bat
+cmake --preset windows-msvc-vs2026-vcpkg
+cmake --build --preset windows-msvc-vs2026-vcpkg-debug
+```
+
+The generated solution is `build\vs2026-x64\jot.sln`. You can open it directly
+in Visual Studio after configure, or open the folder and select the preset.
+If VS Code CMake Tools keeps configuring `build` with `-A win32`, run
+`CMake: Delete Cache and Reconfigure`, then select the
+`windows-msvc-vs2026` configure preset.
+
+Use 64-bit MSVC and 64-bit Python. The experimental Windows target does not
+support `-A win32`. Python development files are required. `libuv` and
+`utf8proc` are fetched automatically when CMake packages are unavailable; set
+`JOT_FETCH_DEPS=OFF` if you want to provide them through vcpkg or another package
+manager. Tree-sitter runtime support can be enabled after installing a compatible
+`tree-sitter` package and parser DLLs.
 
 Installed files include:
 

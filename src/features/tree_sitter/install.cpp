@@ -148,10 +148,16 @@ TreeSitterInstallCommand command_for_language(const std::string &language,
     return result;
   }
 
+#ifdef _WIN32
+  result.message =
+      "Tree-sitter source install is not implemented on Windows; use parser DLLs";
+  return result;
+#else
   result.supported = true;
   result.command = source_build_command(*entry, prefix);
   result.message =
       "Installing Tree-sitter " + result.language + " in terminal";
   return result;
+#endif
 }
 } // namespace TreeSitterInstall

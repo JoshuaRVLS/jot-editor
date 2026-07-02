@@ -614,7 +614,31 @@ bool Editor::execute_ex_command(const std::string &input_line) {
         }
       }
     }
-  } else if (lcmd == "lspstart") {
+  } else {
+    return execute_ex_command_tail(lcmd, arg, line);
+  }
+  return true;
+}
+
+bool Editor::execute_ex_command_tail(const std::string &lcmd,
+                                     const std::string &arg,
+                                     const std::string &line) {
+  auto goto_line_col = [&](int line_1based, int col_1based) {
+    auto &buf = get_buffer();
+    if (buf.line_count() == 0) {
+      return;
+    }
+    buf.cursor.y = std::clamp(line_1based - 1, 0, (int)buf.line_count() - 1);
+    int line_len = (int)buf.line(buf.cursor.y).length();
+    buf.cursor.x = std::clamp(col_1based - 1, 0, line_len);
+    clear_selection();
+    ensure_cursor_visible();
+    set_message("Jumped to line " + std::to_string(buf.cursor.y + 1) +
+                ", col " + std::to_string(buf.cursor.x + 1));
+  };
+
+  int parsed_line = 0, parsed_col = 1;
+  if (lcmd == "lspstart") {
     auto &buf = get_buffer();
     if (buf.filepath.empty()) {
       set_message("LSP start requires a saved file");

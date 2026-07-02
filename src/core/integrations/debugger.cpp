@@ -15,7 +15,11 @@ bool command_exists(const std::string &name) {
   if (name.empty()) {
     return false;
   }
+#ifdef _WIN32
+  return std::system(("where " + name + " >NUL 2>NUL").c_str()) == 0;
+#else
   return std::system(("command -v " + name + " >/dev/null 2>&1").c_str()) == 0;
+#endif
 }
 
 std::vector<std::string> adapter_command_for(const std::string &adapter) {
@@ -78,7 +82,19 @@ std::string default_debug_config_path(const std::string &root_dir) {
       return local.string();
     }
   }
+  const char *override_home = std::getenv("JOT_CONFIG_HOME");
+  if (override_home && *override_home) {
+    return (fs::path(override_home) / "configs" / "debug.json").string();
+  }
+#ifdef _WIN32
+  const char *app_data = std::getenv("APPDATA");
+  if (app_data && *app_data) {
+    return (fs::path(app_data) / "jot" / "configs" / "debug.json").string();
+  }
+  const char *home = std::getenv("USERPROFILE");
+#else
   const char *home = std::getenv("HOME");
+#endif
   if (!home || !*home) {
     return "";
   }
@@ -229,6 +245,10 @@ void Editor::watch_debugger_client_fds(DebuggerClient *client) {
   if (!client) {
     return;
   }
+#ifdef _WIN32
+  (void)client;
+  return;
+#else
 
   auto watch_read = [this](int fd) {
     if (fd < 0 || event_loop_.is_watching_fd(fd)) {
@@ -255,18 +275,24 @@ void Editor::watch_debugger_client_fds(DebuggerClient *client) {
 
   watch_read(client->get_stdout_fd());
   watch_read(client->get_stderr_fd());
+#endif
 }
 
 void Editor::unwatch_debugger_client_fds(DebuggerClient *client) {
   if (!client) {
     return;
   }
+#ifdef _WIN32
+  (void)client;
+  return;
+#else
   if (client->get_stdout_fd() >= 0) {
     event_loop_.unwatch_fd(client->get_stdout_fd());
   }
   if (client->get_stderr_fd() >= 0) {
     event_loop_.unwatch_fd(client->get_stderr_fd());
   }
+#endif
 }
 
 bool Editor::start_debugger_command(const std::string &adapter,

@@ -1,14 +1,45 @@
 #include "lazy_line_provider.h"
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
-#include <fcntl.h>
 #include <fstream>
 #include <stdexcept>
+
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#else
+#include <fcntl.h>
 #include <unistd.h>
+#endif
+
+namespace {
+#ifdef _WIN32
+using JotFileOffset = __int64;
+int jot_open_readonly(const char *path) { return _open(path, _O_RDONLY | _O_BINARY); }
+int jot_close(int fd) { return _close(fd); }
+intptr_t jot_read(int fd, void *buffer, unsigned int size) {
+  return _read(fd, buffer, size);
+}
+JotFileOffset jot_seek(int fd, JotFileOffset offset, int origin) {
+  return _lseeki64(fd, offset, origin);
+}
+#else
+using JotFileOffset = off_t;
+int jot_open_readonly(const char *path) { return ::open(path, O_RDONLY); }
+int jot_close(int fd) { return ::close(fd); }
+ssize_t jot_read(int fd, void *buffer, size_t size) {
+  return ::read(fd, buffer, size);
+}
+JotFileOffset jot_seek(int fd, JotFileOffset offset, int origin) {
+  return lseek(fd, offset, origin);
+}
+#endif
+} // namespace
 
 std::unique_ptr<LazyLineProvider>
 LazyLineProvider::open(const std::string &filepath) {
-  int fd = ::open(filepath.c_str(), O_RDONLY);
+  int fd = jot_open_readonly(filepath.c_str());
   if (fd < 0)
     return nullptr;
 
@@ -25,19 +56,19 @@ LazyLineProvider::LazyLineProvider(const std::string &filepath, int fd)
 
 LazyLineProvider::~LazyLineProvider() {
   if (fd_ >= 0)
-    ::close(fd_);
+    jot_close(fd_);
 }
 
 bool LazyLineProvider::build_index() {
   if (fd_ < 0)
     return false;
 
-  off_t file_size = lseek(fd_, 0, SEEK_END);
+  JotFileOffset file_size = jot_seek(fd_, 0, SEEK_END);
   if (file_size < 0) {
-    lseek(fd_, 0, SEEK_SET);
+    jot_seek(fd_, 0, SEEK_SET);
     file_size = 0;
   }
-  lseek(fd_, 0, SEEK_SET);
+  jot_seek(fd_, 0, SEEK_SET);
 
   std::vector<char> buf(256 * 1024);
   int line_number = 0;
@@ -47,11 +78,11 @@ bool LazyLineProvider::build_index() {
   sparse_index_.push_back({0, 0});
 
   while (true) {
-    ssize_t n = read(fd_, buf.data(), buf.size());
+    auto n = jot_read(fd_, buf.data(), (unsigned int)buf.size());
     if (n <= 0)
       break;
 
-    for (ssize_t i = 0; i < n; i++) {
+    for (std::int64_t i = 0; i < n; i++) {
       if (buf[i] == '\n') {
         line_number++;
         if ((line_number % kIndexInterval) == 0) {
@@ -74,7 +105,7 @@ bool LazyLineProvider::build_index() {
   if (total_lines_ == 0)
     total_lines_ = 1;
 
-  lseek(fd_, 0, SEEK_SET);
+  jot_seek(fd_, 0, SEEK_SET);
   return true;
 }
 
@@ -166,18 +197,18 @@ auto LazyLineProvider::load_chunk(int chunk_id) -> Chunk & {
   int64_t seek_offset = sparse_index_[index_position].byte_offset;
   int seek_line = sparse_index_[index_position].line_number;
 
-  lseek(fd_, seek_offset, SEEK_SET);
+  jot_seek(fd_, seek_offset, SEEK_SET);
 
   std::vector<char> buf(128 * 1024);
   std::string current_line;
   int current_line_num = seek_line;
 
   while (current_line_num < end_line) {
-    ssize_t n = read(fd_, buf.data(), buf.size());
+    auto n = jot_read(fd_, buf.data(), (unsigned int)buf.size());
     if (n <= 0)
       break;
 
-    for (ssize_t i = 0; i < n && current_line_num < end_line; i++) {
+    for (std::int64_t i = 0; i < n && current_line_num < end_line; i++) {
       if (buf[i] == '\n') {
         if (!current_line.empty() && current_line.back() == '\r')
           current_line.pop_back();
