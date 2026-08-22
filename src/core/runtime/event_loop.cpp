@@ -758,6 +758,7 @@ void Editor::run() {
           event_loop_.unwatch_fd(fd);
       }
       poll_tree_sitter_installs();
+      poll_lsp_installs();
     });
   }
   if (!safe_mode && config.get_bool("discord_rpc", false)) {

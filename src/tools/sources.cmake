@@ -1,6 +1,7 @@
 set(JOT_TOOLS_SOURCES
   tools/debugger/client.cpp
   tools/imageviewer.cpp
+  tools/lsp/install.cpp
   tools/symbols/index.cpp
   tools/telescope.cpp
   tools/telescope_async.cpp

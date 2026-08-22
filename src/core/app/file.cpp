@@ -658,9 +658,11 @@ void Editor::finish_open_file(FileBuffer fb, const std::string &path_to_open,
 
   restore_file_fold_state(buffers.back());
 
-  if (python_api)
+  if (python_api) {
     python_api->on_buffer_open(path_to_open);
-  notify_lsp_open(path_to_open);
+  } else {
+    notify_lsp_open(path_to_open);
+  }
   refresh_git_status(true);
   apply_pending_lsp_definition_jump();
   apply_pending_lsp_back_jump();
@@ -834,9 +836,11 @@ bool Editor::save_buffer_at(int index, bool announce) {
                       " (formatted: " + fmt_name + ")";
             needs_redraw = true;
           }
-          if (python_api)
+          if (python_api) {
             python_api->on_buffer_save(b.filepath);
-          notify_lsp_save(b.filepath);
+          } else {
+            notify_lsp_save(b.filepath);
+          }
           refresh_git_status(true);
         });
     buf.modified = false;
@@ -869,9 +873,11 @@ bool Editor::save_buffer_at(int index, bool announce) {
     }
     needs_redraw = true;
   }
-  if (python_api)
+  if (python_api) {
     python_api->on_buffer_save(buf.filepath);
-  notify_lsp_save(buf.filepath);
+  } else {
+    notify_lsp_save(buf.filepath);
+  }
   refresh_git_status(true);
   return true;
 }
@@ -892,6 +898,7 @@ void Editor::close_buffer_at(int index) {
 
   if (!buffers[index].filepath.empty()) {
     save_file_fold_state(buffers[index]);
+    notify_lsp_close(buffers[index].filepath);
   }
 
   const FileBuffer &snapshot_source = buffers[index];

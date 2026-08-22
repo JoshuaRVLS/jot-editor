@@ -26,6 +26,20 @@
   "default_path_exclude": [],
   "source_path_overrides": [],
   "docs_dir": "tokensave-docs",
-  "last_indexed_version": "",
-  "auto_track": false
+  "last_indexed_version": "7.10.0",
+  "auto_track": false,
+  "strict_tree": false,
+  "max_auto_sync_files": 2000,
+  "report_savings": true,
+  "artifact_extensions": [
+    "feature",
+    "json",
+    "yaml",
+    "yml",
+    "sql",
+    "toml",
+    "proto",
+    "graphql",
+    "md"
+  ]
 }

@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "lsp/client.h"
+#include "lsp/install.h"
 #include "python_bridge/api.h"
 #include "ui/text.h"
 #include <algorithm>
@@ -706,6 +707,59 @@ void Editor::poll_lsp_clients() {
   }
 }
 
+void Editor::poll_lsp_installs() {
+  bool changed = false;
+  for (auto &job : lsp_install_jobs) {
+    if (!job.running) {
+      continue;
+    }
+    IntegratedTerminal *term = get_integrated_terminal(job.terminal_index);
+    if (!term) {
+      job.running = false;
+      job.failed = true;
+      job.progress = "terminal closed";
+      changed = true;
+      continue;
+    }
+
+    for (const auto &line : term->get_recent_lines(80)) {
+      LspInstall::Marker marker;
+      if (!LspInstall::parse_marker(line, marker) || marker.server != job.server) {
+        continue;
+      }
+      if (marker.phase == "start") {
+        job.progress = "downloading";
+      } else if (marker.phase == "success" && marker.exit_code == 0) {
+        job.progress = "installed";
+        job.running = false;
+        job.succeeded = true;
+        job.failed = false;
+        set_message("LSP install OK: " + job.server);
+      } else if (marker.phase == "failed") {
+        job.progress = marker.exit_code >= 0
+                           ? "failed (exit " + std::to_string(marker.exit_code) + ")"
+                           : "failed";
+        job.running = false;
+        job.succeeded = false;
+        job.failed = true;
+        set_message("LSP install failed: " + job.server);
+      }
+      changed = true;
+    }
+
+    if (job.running && !term->is_active()) {
+      job.running = false;
+      job.succeeded = false;
+      job.failed = true;
+      job.progress = "terminal exited";
+      changed = true;
+    }
+  }
+  if (changed) {
+    needs_redraw = true;
+  }
+}
+
 void Editor::watch_lsp_client_fds(LSPClient *client) {
   if (!client) {
     return;
@@ -873,6 +927,21 @@ void Editor::notify_lsp_save(const std::string &filepath) {
   }
 }
 
+void Editor::notify_lsp_close(const std::string &filepath) {
+  if (filepath.empty()) {
+    return;
+  }
+  lsp_pending_changes.erase(filepath);
+  const std::string language = detect_lsp_language(filepath);
+  if (language.empty()) {
+    return;
+  }
+  const std::string root = find_workspace_root(filepath, language);
+  if (LSPClient *client = find_lsp_client(language, root)) {
+    client->did_close(filepath);
+  }
+}
+
 void Editor::stop_all_lsp_clients() {
   int stopped = 0;
   lsp_pending_changes.clear();
@@ -914,11 +983,16 @@ void Editor::restart_all_lsp_clients() {
       restarted++;
     }
   }
+  for (const auto &buf : buffers) {
+    if (!buf.filepath.empty() && !buf.is_lazy()) {
+      notify_lsp_open(buf.filepath);
+    }
+  }
   set_message("LSP restarted: " + std::to_string(restarted) + " client(s)");
 }
 
 void Editor::show_lsp_status() {
-  if (lsp_clients.empty()) {
+  if (lsp_clients.empty() && lsp_install_jobs.empty()) {
     set_message("LSP: no active clients");
     return;
   }
@@ -933,6 +1007,9 @@ void Editor::show_lsp_status() {
     if (i + 1 < lsp_clients.size() && i < 2) {
       status += " |";
     }
+  }
+  for (const auto &job : lsp_install_jobs) {
+    status += " install " + job.server + " [" + job.progress + "]";
   }
   set_message(status);
 }
@@ -956,11 +1033,17 @@ void Editor::show_lsp_manager() {
           (is_lsp_server_installed("lua") ? "installed" : "missing") + "]",
       std::string("bash        [") +
           (is_lsp_server_installed("bash") ? "installed" : "missing") + "]",
+      std::string("html        [") +
+          (is_lsp_server_installed("html") ? "installed" : "missing") + "]",
       "",
       "Use:",
       ":lspinstall <python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>",
       ":lspremove <python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>",
       ":lspstart :lspstatus :lspstop :lsprestart"};
+  for (const auto &job : lsp_install_jobs) {
+    lines.push_back("install " + job.server + " [" + job.progress + "] terminal " +
+                    std::to_string(job.terminal_index + 1));
+  }
   show_popup([&lines]() {
     std::string out;
     for (size_t i = 0; i < lines.size(); i++) {
@@ -981,12 +1064,7 @@ bool Editor::install_lsp_server(const std::string &name) {
     return false;
   }
 
-  std::string command;
-  if (server == "python") {
-    command = "python3 -m pip install --user -U python-lsp-server";
-  } else if (server == "typescript") {
-    command = "npm install -g typescript typescript-language-server";
-  } else if (server == "cpp") {
+  if (server == "cpp") {
     set_message("Install clangd using your OS package manager");
     return false;
   } else if (server == "rust") {
@@ -998,37 +1076,48 @@ bool Editor::install_lsp_server(const std::string &name) {
   } else if (server == "lua") {
     set_message("Install lua-language-server using install.sh or your OS package manager");
     return false;
-  } else if (server == "bash") {
-    command = "npm install -g bash-language-server";
-  } else if (server == "html") {
-    command = "npm install -g vscode-langservers-extracted";
   }
 
-  if (command.empty()) {
+  LspInstall::Command install = LspInstall::command_for_server(server);
+  if (!install.supported) {
     set_message("LSP install failed: " + server);
     return false;
   }
 
-  if (!task_queue_) {
-    int rc = std::system(command.c_str());
-    set_message(rc == 0 ? "LSP install OK: " + server
-                        : "LSP install failed: " + server);
-    return rc == 0;
+  const size_t terminal_count = integrated_terminals.size();
+  create_integrated_terminal("lspinstall:" + server);
+  if (integrated_terminals.size() == terminal_count) {
+    set_message("Failed to open LSP install terminal");
+    return false;
+  }
+  const int terminal_index = current_integrated_terminal;
+  IntegratedTerminal *term = get_integrated_terminal(terminal_index);
+  if (!term || !term->is_active()) {
+    set_message("Failed to open LSP install terminal");
+    return false;
+  }
+  activate_integrated_terminal(terminal_index, false);
+
+  auto existing = std::find_if(
+      lsp_install_jobs.begin(), lsp_install_jobs.end(),
+      [&](const LspInstallJob &job) { return job.server == server && job.running; });
+  if (existing != lsp_install_jobs.end()) {
+    existing->terminal_index = terminal_index;
+    existing->progress = "starting";
+    existing->failed = false;
+    existing->succeeded = false;
+  } else {
+    LspInstallJob job;
+    job.server = server;
+    job.terminal_index = terminal_index;
+    job.progress = "starting";
+    lsp_install_jobs.push_back(std::move(job));
   }
 
-  set_message("LSP install started: " + server);
+  term->send_text(LspInstall::terminal_command(install) + "\r");
+  set_message(install.message + " (terminal " +
+              std::to_string(terminal_index + 1) + ")");
   needs_redraw = true;
-  auto result = std::shared_ptr<LspCommandResult>(new LspCommandResult());
-  task_queue_->submit(
-      [command = std::move(command), result]() {
-        result->rc = std::system(command.c_str());
-      },
-      [this, server, result]() {
-        if (!running)
-          return;
-        set_message(result->rc == 0 ? "LSP install OK: " + server
-                                    : "LSP install failed: " + server);
-      });
   return true;
 }
 

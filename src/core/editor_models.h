@@ -162,6 +162,15 @@ struct TreeSitterInstallJob {
   std::string progress;
 };
 
+struct LspInstallJob {
+  std::string server;
+  int terminal_index = -1;
+  bool running = true;
+  bool succeeded = false;
+  bool failed = false;
+  std::string progress;
+};
+
 enum MouseSelectionMode {
   MOUSE_SELECT_CHAR,
   MOUSE_SELECT_WORD,

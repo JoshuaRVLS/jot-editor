@@ -70,6 +70,12 @@ private:
     std::string filepath;
     int line = 0;
     int character = 0;
+    int version = 0;
+  };
+
+  struct PendingDocumentRequest {
+    std::string filepath;
+    int version = 0;
   };
 
   std::string language;
@@ -84,30 +90,39 @@ private:
 #endif
   bool running;
   bool initialized;
+  bool uses_utf8_positions;
+  bool shutdown_complete;
   int next_request_id;
+  int initialize_request_id;
+  int shutdown_request_id;
   std::map<std::string, int> file_versions;
+  std::map<std::string, std::string> document_texts;
   std::string stdout_buffer;
   std::string stderr_buffer;
   std::string outbound_buffer;
+  std::vector<std::string> deferred_messages;
   std::string last_error;
   std::vector<std::pair<std::string, std::vector<Diagnostic>>>
       pending_diagnostics;
-  std::map<int, std::string> pending_completion_requests;
+  std::map<int, PendingDocumentRequest> pending_completion_requests;
   std::map<int, PendingPositionRequest> pending_hover_requests;
   std::map<int, PendingPositionRequest> pending_definition_requests;
-  std::map<int, std::string> pending_document_symbol_requests;
+  std::map<int, PendingDocumentRequest> pending_document_symbol_requests;
   std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>>
       pending_completions;
   std::vector<LSPHoverResult> pending_hovers;
   std::vector<LSPDefinitionResult> pending_definitions;
   std::vector<LSPDocumentSymbolResult> pending_document_symbols;
 
-  bool send_message(const std::string &json);
+  bool send_message(const std::string &json, bool allow_during_initialization = false);
   bool flush_pending_writes();
   std::string json_escape(const std::string &value) const;
   void append_log_line(const std::string &prefix, const std::string &line);
   void handle_stdout_data(const std::string &data);
   void handle_stderr_data(const std::string &data);
+  std::string document_line(const std::string &filepath, int line) const;
+  int lsp_character(const std::string &filepath, int line, int byte_character) const;
+  int editor_character(const std::string &filepath, int line, int character) const;
 
 public:
   LSPClient(const std::string &language_name, const std::string &workspace_root,
@@ -123,6 +138,7 @@ public:
                 const std::string &text);
   bool did_change(const std::string &filepath, const std::string &text);
   bool did_save(const std::string &filepath, const std::string &text);
+  bool did_close(const std::string &filepath);
   bool request_completion(const std::string &filepath, int line, int character,
                           char trigger_character = '\0');
   bool request_hover(const std::string &filepath, int line, int character);
@@ -146,6 +162,11 @@ public:
   const std::string &get_root_path() const { return root_path; }
   const std::string &get_last_error() const { return last_error; }
   std::string describe() const;
+
+  static std::string file_uri_from_path(const std::string &path);
+  static std::string file_path_from_uri(const std::string &uri);
+  static int utf16_offset_from_utf8(const std::string &text, int byte_offset);
+  static int utf8_offset_from_utf16(const std::string &text, int utf16_offset);
 };
 
 #endif

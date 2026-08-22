@@ -111,6 +111,7 @@ struct EditorState {
   int debugger_breakpoint_hover_line;
   std::vector<std::unique_ptr<LSPClient>> lsp_clients;
   std::unordered_map<std::string, long long> lsp_pending_changes;
+  std::vector<LspInstallJob> lsp_install_jobs;
   int current_integrated_terminal;
   std::vector<TerminalTask> terminal_tasks;
   std::string last_terminal_task_name;

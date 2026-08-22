@@ -2,12 +2,14 @@
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string.h>
+#include <thread>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -172,12 +174,26 @@ std::string to_file_uri(const std::string &path) {
     resolved = fs::path(path);
   }
   std::string normalized = resolved.lexically_normal().generic_string();
+  static constexpr char hex[] = "0123456789ABCDEF";
+  std::string encoded;
+  encoded.reserve(normalized.size());
+  for (unsigned char ch : normalized) {
+    const bool unreserved = std::isalnum(ch) || ch == '-' || ch == '.' ||
+                            ch == '_' || ch == '~' || ch == '/' || ch == ':';
+    if (unreserved) {
+      encoded.push_back(static_cast<char>(ch));
+    } else {
+      encoded.push_back('%');
+      encoded.push_back(hex[ch >> 4]);
+      encoded.push_back(hex[ch & 0x0f]);
+    }
+  }
 #ifdef _WIN32
-  if (normalized.size() >= 2 && normalized[1] == ':') {
-    return "file:///" + normalized;
+  if (encoded.size() >= 2 && encoded[1] == ':') {
+    return "file:///" + encoded;
   }
 #endif
-  return "file://" + normalized;
+  return "file://" + encoded;
 }
 
 bool ends_with(const std::string &s, const std::string &suffix) {
@@ -953,12 +969,132 @@ std::vector<LSPSymbol> document_symbols_from_result(
 }
 } // namespace
 
+std::string LSPClient::file_uri_from_path(const std::string &path) {
+  return to_file_uri(path);
+}
+
+std::string LSPClient::file_path_from_uri(const std::string &uri) {
+  return from_file_uri(uri);
+}
+
+int LSPClient::utf16_offset_from_utf8(const std::string &text, int byte_offset) {
+  const int end = std::clamp(byte_offset, 0, (int)text.size());
+  int utf16_offset = 0;
+  for (int i = 0; i < end;) {
+    const unsigned char first = static_cast<unsigned char>(text[i]);
+    int width = 1;
+    unsigned int codepoint = first;
+    if ((first & 0xe0) == 0xc0 && i + 1 < end) {
+      width = 2;
+      codepoint = ((first & 0x1f) << 6) |
+                  (static_cast<unsigned char>(text[i + 1]) & 0x3f);
+    } else if ((first & 0xf0) == 0xe0 && i + 2 < end) {
+      width = 3;
+      codepoint = ((first & 0x0f) << 12) |
+                  ((static_cast<unsigned char>(text[i + 1]) & 0x3f) << 6) |
+                  (static_cast<unsigned char>(text[i + 2]) & 0x3f);
+    } else if ((first & 0xf8) == 0xf0 && i + 3 < end) {
+      width = 4;
+      codepoint = ((first & 0x07) << 18) |
+                  ((static_cast<unsigned char>(text[i + 1]) & 0x3f) << 12) |
+                  ((static_cast<unsigned char>(text[i + 2]) & 0x3f) << 6) |
+                  (static_cast<unsigned char>(text[i + 3]) & 0x3f);
+    }
+    if (i + width > end) {
+      break;
+    }
+    utf16_offset += codepoint > 0xffff ? 2 : 1;
+    i += width;
+  }
+  return utf16_offset;
+}
+
+int LSPClient::utf8_offset_from_utf16(const std::string &text, int utf16_offset) {
+  const int target = std::max(0, utf16_offset);
+  int units = 0;
+  for (int i = 0; i < (int)text.size();) {
+    const unsigned char first = static_cast<unsigned char>(text[i]);
+    int width = 1;
+    unsigned int codepoint = first;
+    if ((first & 0xe0) == 0xc0 && i + 1 < (int)text.size()) {
+      width = 2;
+      codepoint = ((first & 0x1f) << 6) |
+                  (static_cast<unsigned char>(text[i + 1]) & 0x3f);
+    } else if ((first & 0xf0) == 0xe0 && i + 2 < (int)text.size()) {
+      width = 3;
+      codepoint = ((first & 0x0f) << 12) |
+                  ((static_cast<unsigned char>(text[i + 1]) & 0x3f) << 6) |
+                  (static_cast<unsigned char>(text[i + 2]) & 0x3f);
+    } else if ((first & 0xf8) == 0xf0 && i + 3 < (int)text.size()) {
+      width = 4;
+      codepoint = ((first & 0x07) << 18) |
+                  ((static_cast<unsigned char>(text[i + 1]) & 0x3f) << 12) |
+                  ((static_cast<unsigned char>(text[i + 2]) & 0x3f) << 6) |
+                  (static_cast<unsigned char>(text[i + 3]) & 0x3f);
+    }
+    if (units >= target) {
+      return i;
+    }
+    units += codepoint > 0xffff ? 2 : 1;
+    i += width;
+    if (units >= target) {
+      return i;
+    }
+  }
+  return (int)text.size();
+}
+
+std::string LSPClient::document_line(const std::string &filepath, int line) const {
+  if (line < 0) {
+    return "";
+  }
+  const std::string absolute = fs::absolute(filepath).string();
+  auto document = document_texts.find(absolute);
+  if (document != document_texts.end()) {
+    std::istringstream lines(document->second);
+    std::string value;
+    for (int current = 0; std::getline(lines, value); current++) {
+      if (current == line) {
+        return value;
+      }
+    }
+    return "";
+  }
+
+  std::ifstream file(absolute);
+  std::string value;
+  for (int current = 0; std::getline(file, value); current++) {
+    if (current == line) {
+      return value;
+    }
+  }
+  return "";
+}
+
+int LSPClient::lsp_character(const std::string &filepath, int line,
+                             int byte_character) const {
+  if (uses_utf8_positions) {
+    return std::max(0, byte_character);
+  }
+  return utf16_offset_from_utf8(document_line(filepath, line), byte_character);
+}
+
+int LSPClient::editor_character(const std::string &filepath, int line,
+                                int character) const {
+  if (uses_utf8_positions) {
+    return std::max(0, character);
+  }
+  return utf8_offset_from_utf16(document_line(filepath, line), character);
+}
+
 LSPClient::LSPClient(const std::string &language_name,
                      const std::string &workspace_root,
                      const std::vector<std::string> &argv)
     : language(language_name), root_path(workspace_root), command(argv),
       stdin_fd(-1), stdout_fd(-1), stderr_fd(-1), child_pid(-1),
-      running(false), initialized(false), next_request_id(1) {}
+      running(false), initialized(false), uses_utf8_positions(false),
+      shutdown_complete(false), next_request_id(1), initialize_request_id(0),
+      shutdown_request_id(0) {}
 
 LSPClient::~LSPClient() { stop(); }
 
@@ -983,7 +1119,14 @@ std::string LSPClient::json_escape(const std::string &value) const {
       out += "\\t";
       break;
     default:
-      out.push_back((char)c);
+      if (c < 0x20) {
+        static constexpr char hex[] = "0123456789abcdef";
+        out += "\\u00";
+        out.push_back(hex[c >> 4]);
+        out.push_back(hex[c & 0x0f]);
+      } else {
+        out.push_back((char)c);
+      }
       break;
     }
   }
@@ -992,16 +1135,38 @@ std::string LSPClient::json_escape(const std::string &value) const {
 
 void LSPClient::append_log_line(const std::string &prefix,
                                 const std::string &line) {
-  std::ofstream log(get_lsp_log_path(language), std::ios::app);
+  constexpr std::uintmax_t kMaxLspLogBytes = 1024 * 1024;
+  constexpr size_t kMaxLspLogLineBytes = 16 * 1024;
+  const std::string path = get_lsp_log_path(language);
+  std::error_code ec;
+  if (fs::file_size(path, ec) > kMaxLspLogBytes) {
+    std::ofstream(path, std::ios::trunc).close();
+  }
+  std::ofstream log(path, std::ios::app);
   if (!log.is_open()) {
     return;
   }
-  log << prefix << line << "\n";
+  log << prefix << line.substr(0, kMaxLspLogLineBytes) << "\n";
 }
 
-bool LSPClient::send_message(const std::string &json) {
+bool LSPClient::send_message(const std::string &json,
+                             bool allow_during_initialization) {
+  constexpr size_t kMaxLspMessageBytes = 16 * 1024 * 1024;
+  constexpr size_t kMaxDeferredMessages = 256;
   if (!running || stdin_fd < 0) {
     return false;
+  }
+  if (json.size() > kMaxLspMessageBytes) {
+    last_error = "LSP outbound message exceeds size limit";
+    return false;
+  }
+  if (!initialized && !allow_during_initialization) {
+    if (deferred_messages.size() >= kMaxDeferredMessages) {
+      last_error = "LSP initialization queue is full";
+      return false;
+    }
+    deferred_messages.push_back(json);
+    return true;
   }
 
   std::ostringstream payload;
@@ -1050,6 +1215,14 @@ bool LSPClient::start() {
     last_error = "empty command";
     return false;
   }
+
+#ifndef _WIN32
+  static const bool sigpipe_ignored = [] {
+    std::signal(SIGPIPE, SIG_IGN);
+    return true;
+  }();
+  (void)sigpipe_ignored;
+#endif
 
 #ifdef _WIN32
   SECURITY_ATTRIBUTES sa{};
@@ -1180,8 +1353,13 @@ bool LSPClient::start() {
 #endif
   running = true;
   initialized = false;
+  uses_utf8_positions = false;
+  shutdown_complete = false;
   next_request_id = 1;
+  initialize_request_id = 0;
+  shutdown_request_id = 0;
   file_versions.clear();
+  document_texts.clear();
   pending_completion_requests.clear();
   pending_hover_requests.clear();
   pending_definition_requests.clear();
@@ -1193,6 +1371,7 @@ bool LSPClient::start() {
   stdout_buffer.clear();
   stderr_buffer.clear();
   outbound_buffer.clear();
+  deferred_messages.clear();
   last_error.clear();
 
   set_non_blocking(stdin_fd);
@@ -1200,15 +1379,17 @@ bool LSPClient::start() {
   set_non_blocking(stderr_fd);
 
   std::ostringstream init;
+  initialize_request_id = next_request_id++;
   init << "{"
        << "\"jsonrpc\":\"2.0\","
-       << "\"id\":" << next_request_id++ << ","
+       << "\"id\":" << initialize_request_id << ","
        << "\"method\":\"initialize\","
        << "\"params\":{"
        << "\"processId\":" << current_process_id() << ","
        << "\"rootUri\":\"" << json_escape(to_file_uri(root_path)) << "\","
        << "\"rootPath\":\"" << json_escape(root_path) << "\","
        << "\"capabilities\":{"
+       << "\"general\":{\"positionEncodings\":[\"utf-8\",\"utf-16\"]},"
        << "\"textDocument\":{"
        << "\"completion\":{"
        << "\"dynamicRegistration\":false,"
@@ -1239,14 +1420,12 @@ bool LSPClient::start() {
        << json_escape(fs::path(root_path).filename().string()) << "\"}]"
        << "}"
        << "}";
-  if (!send_message(init.str())) {
+  if (!send_message(init.str(), true)) {
     stop();
     return false;
   }
 
-  send_message("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{}}");
-  initialized = true;
-  append_log_line("INFO ", "Started " + describe());
+  append_log_line("INFO ", "Initializing " + describe());
   return true;
 }
 
@@ -1256,8 +1435,24 @@ void LSPClient::stop() {
     return;
   }
 
+  if (running && stdin_fd >= 0 && initialized) {
+    shutdown_complete = false;
+    shutdown_request_id = next_request_id++;
+    std::ostringstream shutdown;
+    shutdown << "{\"jsonrpc\":\"2.0\",\"id\":" << shutdown_request_id
+             << ",\"method\":\"shutdown\",\"params\":null}";
+    if (send_message(shutdown.str(), true)) {
+      const auto deadline = std::chrono::steady_clock::now() +
+                            std::chrono::milliseconds(200);
+      while (!shutdown_complete && std::chrono::steady_clock::now() < deadline) {
+        poll();
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      }
+    }
+  }
   if (running && stdin_fd >= 0) {
-    send_message("{\"jsonrpc\":\"2.0\",\"method\":\"exit\",\"params\":{}}");
+    send_message("{\"jsonrpc\":\"2.0\",\"method\":\"exit\",\"params\":{}}",
+                 true);
     flush_pending_writes();
   }
   running = false;
@@ -1266,13 +1461,25 @@ void LSPClient::stop() {
   if (child_pid > 0) {
 #ifdef _WIN32
     if (child_process_handle) {
-      TerminateProcess(reinterpret_cast<HANDLE>(child_process_handle), 1);
+      if (WaitForSingleObject(reinterpret_cast<HANDLE>(child_process_handle), 200) ==
+          WAIT_TIMEOUT) {
+        TerminateProcess(reinterpret_cast<HANDLE>(child_process_handle), 1);
+      }
       CloseHandle(reinterpret_cast<HANDLE>(child_process_handle));
       child_process_handle = nullptr;
     }
 #else
-    kill(child_pid, SIGTERM);
-    waitpid(child_pid, nullptr, WNOHANG);
+    int status = 0;
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(200);
+    while (waitpid(child_pid, &status, WNOHANG) == 0 &&
+           std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    if (waitpid(child_pid, &status, WNOHANG) == 0) {
+      kill(child_pid, SIGTERM);
+      waitpid(child_pid, &status, 0);
+    }
 #endif
   }
 
@@ -1292,7 +1499,12 @@ void LSPClient::stop() {
 #endif
   running = false;
   initialized = false;
+  uses_utf8_positions = false;
+  shutdown_complete = false;
+  initialize_request_id = 0;
+  shutdown_request_id = 0;
   file_versions.clear();
+  document_texts.clear();
   pending_completion_requests.clear();
   pending_hover_requests.clear();
   pending_definition_requests.clear();
@@ -1302,6 +1514,7 @@ void LSPClient::stop() {
   pending_definitions.clear();
   pending_document_symbols.clear();
   outbound_buffer.clear();
+  deferred_messages.clear();
 }
 
 bool LSPClient::restart() {
@@ -1310,12 +1523,30 @@ bool LSPClient::restart() {
 }
 
 void LSPClient::handle_stdout_data(const std::string &data) {
+  constexpr size_t kMaxLspHeaderBytes = 64 * 1024;
+  constexpr size_t kMaxLspMessageBytes = 16 * 1024 * 1024;
   stdout_buffer += data;
   append_log_line("RECV ", data);
+
+  if (stdout_buffer.size() > kMaxLspHeaderBytes + kMaxLspMessageBytes) {
+    last_error = "LSP message exceeds size limit";
+    stdout_buffer.clear();
+    return;
+  }
 
   while (true) {
     const size_t header_end = stdout_buffer.find("\r\n\r\n");
     if (header_end == std::string::npos) {
+      if (stdout_buffer.size() > kMaxLspHeaderBytes) {
+        last_error = "LSP header exceeds size limit";
+        stdout_buffer.clear();
+      }
+      return;
+    }
+
+    if (header_end > kMaxLspHeaderBytes) {
+      last_error = "LSP header exceeds size limit";
+      stdout_buffer.clear();
       return;
     }
 
@@ -1325,6 +1556,11 @@ void LSPClient::handle_stdout_data(const std::string &data) {
       append_log_line("PARSE-ERR ", "Missing Content-Length header");
       stdout_buffer.erase(0, header_end + 4);
       continue;
+    }
+    if (content_length > kMaxLspMessageBytes) {
+      last_error = "LSP message exceeds size limit";
+      stdout_buffer.clear();
+      return;
     }
 
     const size_t body_start = header_end + 4;
@@ -1353,9 +1589,21 @@ void LSPClient::handle_stdout_data(const std::string &data) {
         continue;
       }
 
-      pending_diagnostics.push_back(
-          {from_file_uri(json_string_or_empty(uri)),
-           diagnostics_from_json(*diagnostics)});
+      const std::string filepath = from_file_uri(json_string_or_empty(uri));
+      const JsonValue *version = params ? json_object_get(*params, "version") : nullptr;
+      auto current_version = file_versions.find(fs::absolute(filepath).string());
+      if (version && version->type == JsonValue::Number &&
+          current_version != file_versions.end() &&
+          current_version->second != (int)version->number_value) {
+        continue;
+      }
+      auto parsed = diagnostics_from_json(*diagnostics);
+      for (auto &diagnostic : parsed) {
+        diagnostic.col = editor_character(filepath, diagnostic.line, diagnostic.col);
+        diagnostic.end_col =
+            editor_character(filepath, diagnostic.end_line, diagnostic.end_col);
+      }
+      pending_diagnostics.push_back({filepath, std::move(parsed)});
       continue;
     }
 
@@ -1367,13 +1615,59 @@ void LSPClient::handle_stdout_data(const std::string &data) {
     int request_id = (int)id->number_value;
     const JsonValue *result = json_object_get(root, "result");
 
+    if (request_id == initialize_request_id) {
+      if (!result || result->type != JsonValue::Object) {
+        last_error = "LSP initialize request failed";
+        stop();
+        return;
+      }
+      const JsonValue *capabilities = json_object_get(*result, "capabilities");
+      const JsonValue *encoding =
+          capabilities ? json_object_get(*capabilities, "positionEncoding") : nullptr;
+      uses_utf8_positions =
+          encoding && encoding->type == JsonValue::String &&
+          encoding->string_value == "utf-8";
+      initialized = true;
+      send_message("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{}}",
+                   true);
+      auto queued = std::move(deferred_messages);
+      deferred_messages.clear();
+      for (const auto &message : queued) {
+        if (!send_message(message, true)) {
+          break;
+        }
+      }
+      append_log_line("INFO ", "Started " + describe());
+      continue;
+    }
+
+    if (request_id == shutdown_request_id) {
+      shutdown_complete = true;
+      continue;
+    }
+
     auto completion_it = pending_completion_requests.find(request_id);
     if (completion_it != pending_completion_requests.end()) {
+      const auto current_version = file_versions.find(completion_it->second.filepath);
+      if (current_version == file_versions.end() ||
+          current_version->second != completion_it->second.version) {
+        pending_completion_requests.erase(completion_it);
+        continue;
+      }
       if (result) {
+        auto items = completion_items_from_json(*result);
+        for (auto &item : items) {
+          if (item.has_text_edit_range) {
+            item.edit_start_char = editor_character(
+                completion_it->second.filepath, item.edit_start_line, item.edit_start_char);
+            item.edit_end_char = editor_character(
+                completion_it->second.filepath, item.edit_end_line, item.edit_end_char);
+          }
+        }
         pending_completions.push_back(
-            {completion_it->second, completion_items_from_json(*result)});
+            {completion_it->second.filepath, std::move(items)});
       } else {
-        pending_completions.push_back({completion_it->second, {}});
+        pending_completions.push_back({completion_it->second.filepath, {}});
       }
       pending_completion_requests.erase(completion_it);
       continue;
@@ -1381,6 +1675,12 @@ void LSPClient::handle_stdout_data(const std::string &data) {
 
     auto hover_it = pending_hover_requests.find(request_id);
     if (hover_it != pending_hover_requests.end()) {
+      const auto current_version = file_versions.find(hover_it->second.filepath);
+      if (current_version == file_versions.end() ||
+          current_version->second != hover_it->second.version) {
+        pending_hover_requests.erase(hover_it);
+        continue;
+      }
       LSPHoverResult hover;
       hover.origin_filepath = hover_it->second.filepath;
       hover.origin_line = hover_it->second.line;
@@ -1395,12 +1695,24 @@ void LSPClient::handle_stdout_data(const std::string &data) {
 
     auto definition_it = pending_definition_requests.find(request_id);
     if (definition_it != pending_definition_requests.end()) {
+      const auto current_version = file_versions.find(definition_it->second.filepath);
+      if (current_version == file_versions.end() ||
+          current_version->second != definition_it->second.version) {
+        pending_definition_requests.erase(definition_it);
+        continue;
+      }
       LSPDefinitionResult definition;
       definition.origin_filepath = definition_it->second.filepath;
       definition.origin_line = definition_it->second.line;
       definition.origin_character = definition_it->second.character;
       if (result) {
         definition.locations = definition_locations_from_result(*result);
+        for (auto &location : definition.locations) {
+          location.character =
+              editor_character(location.filepath, location.line, location.character);
+          location.end_character = editor_character(location.filepath, location.end_line,
+                                                     location.end_character);
+        }
       }
       pending_definitions.push_back(std::move(definition));
       pending_definition_requests.erase(definition_it);
@@ -1409,8 +1721,14 @@ void LSPClient::handle_stdout_data(const std::string &data) {
 
     auto symbol_it = pending_document_symbol_requests.find(request_id);
     if (symbol_it != pending_document_symbol_requests.end()) {
+      const auto current_version = file_versions.find(symbol_it->second.filepath);
+      if (current_version == file_versions.end() ||
+          current_version->second != symbol_it->second.version) {
+        pending_document_symbol_requests.erase(symbol_it);
+        continue;
+      }
       LSPDocumentSymbolResult symbols;
-      symbols.filepath = symbol_it->second;
+      symbols.filepath = symbol_it->second.filepath;
       if (result) {
         symbols.symbols = document_symbols_from_result(*result, symbols.filepath);
       }
@@ -1423,6 +1741,10 @@ void LSPClient::handle_stdout_data(const std::string &data) {
 
 void LSPClient::handle_stderr_data(const std::string &data) {
   stderr_buffer += data;
+  constexpr size_t kMaxLspStderrBytes = 64 * 1024;
+  if (stderr_buffer.size() > kMaxLspStderrBytes) {
+    stderr_buffer.erase(0, stderr_buffer.size() - kMaxLspStderrBytes);
+  }
   append_log_line("STDERR ", data);
 }
 
@@ -1506,7 +1828,11 @@ bool LSPClient::did_open(const std::string &filepath,
   }
 
   std::string abs_path = fs::absolute(filepath).string();
+  if (file_versions.count(abs_path)) {
+    return did_change(abs_path, text);
+  }
   file_versions[abs_path] = 1;
+  document_texts[abs_path] = text;
   std::ostringstream json;
   json << "{"
        << "\"jsonrpc\":\"2.0\","
@@ -1533,6 +1859,7 @@ bool LSPClient::did_change(const std::string &filepath, const std::string &text)
     return did_open(abs_path, language_id_for(language, abs_path), text);
   }
 
+  document_texts[abs_path] = text;
   int version = ++file_versions[abs_path];
   std::ostringstream json;
   json << "{"
@@ -1556,8 +1883,11 @@ bool LSPClient::did_save(const std::string &filepath, const std::string &text) {
 
   std::string abs_path = fs::absolute(filepath).string();
   if (!file_versions.count(abs_path)) {
-    did_open(abs_path, language_id_for(language, abs_path), text);
+    if (!did_open(abs_path, language_id_for(language, abs_path), text)) {
+      return false;
+    }
   }
+  document_texts[abs_path] = text;
   std::ostringstream json;
   json << "{"
        << "\"jsonrpc\":\"2.0\","
@@ -1571,6 +1901,26 @@ bool LSPClient::did_save(const std::string &filepath, const std::string &text) {
   return send_message(json.str());
 }
 
+bool LSPClient::did_close(const std::string &filepath) {
+  if (!running) {
+    return false;
+  }
+
+  const std::string abs_path = fs::absolute(filepath).string();
+  if (!file_versions.erase(abs_path)) {
+    return true;
+  }
+  document_texts.erase(abs_path);
+  std::ostringstream json;
+  json << "{"
+       << "\"jsonrpc\":\"2.0\","
+       << "\"method\":\"textDocument/didClose\","
+       << "\"params\":{\"textDocument\":{\"uri\":\""
+       << json_escape(to_file_uri(abs_path)) << "\"}}"
+       << "}";
+  return send_message(json.str());
+}
+
 bool LSPClient::request_completion(const std::string &filepath, int line,
                                    int character, char trigger_character) {
   if (!running) {
@@ -1579,7 +1929,8 @@ bool LSPClient::request_completion(const std::string &filepath, int line,
 
   std::string abs_path = fs::absolute(filepath).string();
   int request_id = next_request_id++;
-  pending_completion_requests[request_id] = abs_path;
+  pending_completion_requests[request_id] =
+      PendingDocumentRequest{abs_path, file_versions[abs_path]};
 
   std::ostringstream json;
   json << "{"
@@ -1590,7 +1941,7 @@ bool LSPClient::request_completion(const std::string &filepath, int line,
        << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path))
        << "\"},"
        << "\"position\":{\"line\":" << std::max(0, line)
-       << ",\"character\":" << std::max(0, character) << "}";
+       << ",\"character\":" << lsp_character(abs_path, line, character) << "}";
 
   if (trigger_character != '\0') {
     json << ",\"context\":{\"triggerKind\":2,\"triggerCharacter\":\""
@@ -1619,7 +1970,8 @@ bool LSPClient::request_hover(const std::string &filepath, int line,
   std::string abs_path = fs::absolute(filepath).string();
   int request_id = next_request_id++;
   pending_hover_requests[request_id] =
-      PendingPositionRequest{abs_path, std::max(0, line), std::max(0, character)};
+      PendingPositionRequest{abs_path, std::max(0, line), std::max(0, character),
+                             file_versions[abs_path]};
 
   std::ostringstream json;
   json << "{"
@@ -1630,7 +1982,7 @@ bool LSPClient::request_hover(const std::string &filepath, int line,
        << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path))
        << "\"},"
        << "\"position\":{\"line\":" << std::max(0, line)
-       << ",\"character\":" << std::max(0, character) << "}"
+       << ",\"character\":" << lsp_character(abs_path, line, character) << "}"
        << "}"
        << "}";
 
@@ -1650,7 +2002,8 @@ bool LSPClient::request_definition(const std::string &filepath, int line,
   std::string abs_path = fs::absolute(filepath).string();
   int request_id = next_request_id++;
   pending_definition_requests[request_id] =
-      PendingPositionRequest{abs_path, std::max(0, line), std::max(0, character)};
+      PendingPositionRequest{abs_path, std::max(0, line), std::max(0, character),
+                             file_versions[abs_path]};
 
   std::ostringstream json;
   json << "{"
@@ -1661,7 +2014,7 @@ bool LSPClient::request_definition(const std::string &filepath, int line,
        << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path))
        << "\"},"
        << "\"position\":{\"line\":" << std::max(0, line)
-       << ",\"character\":" << std::max(0, character) << "}"
+       << ",\"character\":" << lsp_character(abs_path, line, character) << "}"
        << "}"
        << "}";
 
@@ -1679,7 +2032,8 @@ bool LSPClient::request_document_symbols(const std::string &filepath) {
 
   std::string abs_path = fs::absolute(filepath).string();
   int request_id = next_request_id++;
-  pending_document_symbol_requests[request_id] = abs_path;
+  pending_document_symbol_requests[request_id] =
+      PendingDocumentRequest{abs_path, file_versions[abs_path]};
 
   std::ostringstream json;
   json << "{"

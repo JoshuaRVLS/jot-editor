@@ -228,6 +228,7 @@ private:
   void render_home_menu();
   void render_buffer_content(const SplitPane &pane, int buffer_id);
   void poll_lsp_clients();
+  void poll_lsp_installs();
   void poll_debugger_sessions();
   void watch_lsp_client_fds(LSPClient *client);
   void unwatch_lsp_client_fds(LSPClient *client);
@@ -249,6 +250,7 @@ private:
   void notify_lsp_open(const std::string &filepath);
   void notify_lsp_change(const std::string &filepath);
   void notify_lsp_save(const std::string &filepath);
+  void notify_lsp_close(const std::string &filepath);
   void stop_all_lsp_clients();
   void restart_all_lsp_clients();
   void show_lsp_status();

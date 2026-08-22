@@ -7,6 +7,8 @@ add_executable(jot_tests
   test_imageviewer.cpp
   test_syntax.cpp
   test_terminal.cpp
+  test_lsp.cpp
+  test_lsp_install.cpp
   test_tree_sitter_install.cpp
   test_telescope.cpp
   test_ui_text.cpp
