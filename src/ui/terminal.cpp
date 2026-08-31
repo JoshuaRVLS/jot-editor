@@ -248,7 +248,7 @@ static int translate_termkey_key(const TermKeyKey &key) {
   }
   case TERMKEY_TYPE_FUNCTION:
     if (key.code.number > 0) {
-      return (1000 + key.code.number) | flags;
+      return KeyCode::function(key.code.number) | flags;
     }
     return -1;
   default:
@@ -723,9 +723,11 @@ Event Terminal::read_event() {
   bool mod_alt = (ch & 0x40000) != 0;
   bool mod_ctrl = (ch & 0x20000) != 0;
 
+  const bool function_key = (ch & KeyCode::FunctionMarker) != 0;
   int base_key = ch & 0xFFFF;
 
-  ev.key.key = base_key;
+  ev.key.key = function_key ? (ch & (KeyCode::FunctionMarker | 0xFFFF))
+                            : base_key;
   ev.key.ctrl = mod_ctrl || (base_key >= 1 && base_key <= 26 &&
                              base_key != 13 && base_key != 9);
   ev.key.shift = mod_shift || (base_key >= 2008 && base_key <= 2011) ||

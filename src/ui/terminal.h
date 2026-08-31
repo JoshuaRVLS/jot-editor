@@ -13,6 +13,15 @@ struct TermKey;
 
 enum EventType { EVENT_KEY, EVENT_MOUSE, EVENT_RESIZE, EVENT_REDRAW, EVENT_PASTE };
 
+namespace KeyCode {
+// Keep function keys tagged separately from text and legacy navigation codes.
+constexpr int FunctionBase = 0x3000;
+constexpr int FunctionMarker = 0x10000000;
+constexpr int function(int number) { return FunctionMarker | FunctionBase | number; }
+constexpr int FunctionFirst = function(1);
+constexpr int FunctionLast = function(24);
+} // namespace KeyCode
+
 struct KeyEvent {
   int key;
   bool ctrl;

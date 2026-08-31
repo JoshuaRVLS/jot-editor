@@ -537,9 +537,11 @@ bool PythonAPI::run_plugin_command(const std::string &name,
   return false;
 }
 
-bool PythonAPI::run_plugin_keymap(const std::string &key) {
+bool PythonAPI::run_plugin_keymap(const std::string &key,
+                                  const std::string &mode) {
   for (const auto &keymap : plugin_keymaps) {
-    if (keymap.key != key) {
+    if (keymap.key != key ||
+        (keymap.mode != "global" && keymap.mode != mode)) {
       continue;
     }
     if (!keymap.command.empty()) {

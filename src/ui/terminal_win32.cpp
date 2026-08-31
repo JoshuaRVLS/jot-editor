@@ -55,6 +55,12 @@ int translate_key_event(const KEY_EVENT_RECORD &key, bool &ctrl, bool &shift,
   alt = (state & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED)) != 0;
 
   switch (key.wVirtualKeyCode) {
+  default:
+    if (key.wVirtualKeyCode >= VK_F1 && key.wVirtualKeyCode <= VK_F24) {
+      return KeyCode::function(
+          (int)(key.wVirtualKeyCode - VK_F1 + 1));
+    }
+    break;
   case VK_BACK:
     return 127;
   case VK_TAB:
@@ -81,8 +87,6 @@ int translate_key_event(const KEY_EVENT_RECORD &key, bool &ctrl, bool &shift,
     return 1015;
   case VK_NEXT:
     return 1016;
-  default:
-    break;
   }
 
   wchar_t ch = key.uChar.UnicodeChar;

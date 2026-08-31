@@ -379,7 +379,20 @@ bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift,
   };
 
   if (is_ctrl && (ch == 'q' || ch == 'Q')) {
-    running = false;
+    bool unsaved = false;
+    for (const auto &buffer : buffers) {
+      if (buffer.modified) {
+        unsaved = true;
+        break;
+      }
+    }
+    show_home_menu = false;
+    if (unsaved) {
+      show_quit_prompt = true;
+      needs_redraw = true;
+    } else {
+      running = false;
+    }
     return true;
   }
 

@@ -81,7 +81,8 @@ public:
   void load_plugins();
   void reload_plugins();
   bool run_plugin_command(const std::string &name, const std::string &arg);
-  bool run_plugin_keymap(const std::string &key);
+  bool run_plugin_keymap(const std::string &key,
+                         const std::string &mode = "global");
   void fire_autocmd(const std::string &event, const std::string &filepath = "",
                     int buffer = -1);
   std::vector<std::string> plugin_panel_lines(const std::string &name);

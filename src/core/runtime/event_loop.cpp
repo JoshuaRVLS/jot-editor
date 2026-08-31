@@ -69,6 +69,10 @@ std::string plugin_key_name(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     base = "End";
     break;
   default:
+    if ((key & KeyCode::FunctionMarker) != 0) {
+      base = "F" + std::to_string((key & 0xFFFF) - KeyCode::FunctionBase);
+      break;
+    }
     if (key >= 32 && key < 127) {
       base = std::string(1, (char)std::toupper((unsigned char)key));
     } else {
@@ -489,6 +493,13 @@ void Editor::handle_terminal_event(const Event &ev) {
   }
   
   if (ev.type == EVENT_PASTE) {
+    IntegratedTerminal *active_terminal = get_integrated_terminal();
+    if (show_integrated_terminal && active_terminal &&
+        active_terminal->is_focused()) {
+      active_terminal->send_text(ev.paste.text ? ev.paste.text : "");
+      needs_redraw = true;
+      return;
+    }
     cancel_lsp_mouse_hover();
     clipboard = ev.paste.text ? ev.paste.text : "";
     paste();
@@ -521,24 +532,18 @@ void Editor::handle_terminal_event(const Event &ev) {
       return;
     }
 
-    if (python_api) {
-      auto candidates =
-          plugin_key_candidates(ch, is_ctrl, is_shift, is_alt, original_ch);
-      log_keymap_debug(ch, is_ctrl, is_shift, is_alt, original_ch, candidates);
-      for (const auto &candidate : candidates) {
-        if (!python_api->run_plugin_keymap(candidate)) {
-          continue;
-        }
-        needs_redraw = true;
-        return;
-      }
-    }
-
     bool toggle_terminal_shortcut =
         (is_ctrl && (ch == '`' || ch == '~' || ch == '\\' || ch == '|')) ||
         ch == 28 || original_ch == 28 || ch == 30 || original_ch == 30;
     if (toggle_terminal_shortcut) {
       toggle_integrated_terminal();
+      return;
+    }
+
+    IntegratedTerminal *active_terminal = get_integrated_terminal();
+    if (show_integrated_terminal && active_terminal &&
+        active_terminal->is_focused()) {
+      handle_integrated_terminal_input(ch, is_ctrl, is_shift, is_alt);
       return;
     }
 
@@ -558,7 +563,20 @@ void Editor::handle_terminal_event(const Event &ev) {
       handle_search_panel(ch, is_ctrl, is_shift, is_alt);
     } else if (telescope.is_active()) {
       handle_telescope(ch);
+    } else if (show_quick_pick) {
+      handle_input(ch, is_ctrl, is_shift, is_alt, original_ch);
     } else {
+      if (python_api) {
+        auto candidates =
+            plugin_key_candidates(ch, is_ctrl, is_shift, is_alt, original_ch);
+        log_keymap_debug(ch, is_ctrl, is_shift, is_alt, original_ch, candidates);
+        for (const auto &candidate : candidates) {
+          if (python_api->run_plugin_keymap(candidate, "editor")) {
+            needs_redraw = true;
+            return;
+          }
+        }
+      }
       handle_input(ch, is_ctrl, is_shift, is_alt, original_ch);
     }
     return;

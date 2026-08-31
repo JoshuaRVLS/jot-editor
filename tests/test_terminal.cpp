@@ -1,5 +1,14 @@
 #include <catch2/catch_test_macros.hpp>
 #include "tools/terminal/integrated.h"
+#include "ui/terminal.h"
+
+TEST_CASE("Function keys use a distinct key code range", "[jot]") {
+  REQUIRE((KeyCode::function(1) & KeyCode::FunctionMarker) != 0);
+  REQUIRE(KeyCode::function(1) != 1001);
+  REQUIRE(KeyCode::function(8) != 1008);
+  REQUIRE(KeyCode::function(20) != 1017);
+  REQUIRE(KeyCode::function(24) == KeyCode::FunctionLast);
+}
 
 TEST_CASE("Integrated Terminal Default Colors Resolve To Theme", "[jot]") {
   IntegratedTerminal::StyledCell cell{"x", 7, 0, true, true, false};

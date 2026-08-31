@@ -91,6 +91,13 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     return;
   }
 
+  IntegratedTerminal *active_terminal = get_integrated_terminal();
+  if (show_integrated_terminal && active_terminal &&
+      active_terminal->is_focused()) {
+    handle_integrated_terminal_input(ch, is_ctrl, is_shift, is_alt);
+    return;
+  }
+
   // Global pane keybinds (before modeless editing shortcuts).
   // Focus:
   // - Ctrl+Alt+Arrow
@@ -231,13 +238,6 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
       set_message("No pane in that direction");
       return;
     }
-  }
-
-  IntegratedTerminal *active_terminal = get_integrated_terminal();
-  if (show_integrated_terminal && active_terminal &&
-      active_terminal->is_focused()) {
-    handle_integrated_terminal_input(ch, is_ctrl, is_shift, is_alt);
-    return;
   }
 
   // Reserve Ctrl+S for save.
