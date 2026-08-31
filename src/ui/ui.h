@@ -40,6 +40,7 @@ private:
   int cursor_x, cursor_y;
   UICursorShape cursor_shape;
   bool cursor_hidden;
+  bool cursor_dirty = true;
   int default_fg = 7;
   int default_bg = 0;
 
@@ -68,6 +69,7 @@ public:
   void set_cursor(int x, int y, UICursorShape shape = UICursorShape::Block);
   void hide_cursor();
   void flush_cursor();
+  bool cursor_needs_flush() const { return cursor_dirty; }
 
   int get_width() const { return width; }
   int get_height() const { return height; }

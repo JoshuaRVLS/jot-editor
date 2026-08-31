@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "column_utils.h"
 #include "folding.h"
 #include <algorithm>
 #include <chrono>
@@ -323,38 +324,6 @@ static bool cursor_in_selection(const Selection &selection, const Cursor &pos) {
   if (compare_cursor_pos(end, start) < 0)
     std::swap(start, end);
   return compare_cursor_pos(start, pos) <= 0 && compare_cursor_pos(pos, end) <= 0;
-}
-
-static int tab_advance(int visual_col, int tab_size) {
-  const int ts = std::max(1, tab_size);
-  const int rem = visual_col % ts;
-  return rem == 0 ? ts : (ts - rem);
-}
-
-static int logical_to_visual_col(const std::string &line, int logical_col,
-                                 int tab_size) {
-  int clamped = std::clamp(logical_col, 0, (int)line.size());
-  int visual = 0;
-  for (int i = 0; i < clamped; i++) {
-    visual += (line[i] == '\t') ? tab_advance(visual, tab_size) : 1;
-  }
-  return visual;
-}
-
-static int visual_to_logical_col(const std::string &line, int visual_col,
-                                 int tab_size) {
-  int target = std::max(0, visual_col);
-  int visual = 0;
-  for (int i = 0; i < (int)line.size(); i++) {
-    int next = visual + ((line[i] == '\t') ? tab_advance(visual, tab_size) : 1);
-    if (target < next) {
-      int left_dist = target - visual;
-      int right_dist = next - target;
-      return (left_dist <= right_dist) ? i : (i + 1);
-    }
-    visual = next;
-  }
-  return (int)line.size();
 }
 
 static void flatten_nodes_for_mouse(std::vector<FileNode> &nodes,
@@ -866,9 +835,9 @@ bool Editor::open_context_menu_for_mouse(int x, int y) {
       const std::string &clicked_line = buf.line(click_y);
       int rel_visual_x = std::max(0, x - code_start_x);
       int start_visual =
-          logical_to_visual_col(clicked_line, buf.scroll_x, tab_size);
+          compute_visual_column(clicked_line, buf.scroll_x, tab_size);
       int click_visual = start_visual + rel_visual_x;
-      int click_x = visual_to_logical_col(clicked_line, click_visual, tab_size);
+      int click_x = visual_to_logical_column(clicked_line, click_visual, tab_size);
       click_x = std::clamp(click_x, 0, (int)clicked_line.length());
       Cursor clicked = {click_x, click_y};
       if (!cursor_in_selection(buf.selection, clicked)) {
@@ -1439,9 +1408,9 @@ void Editor::handle_mouse(void *event_ptr) {
   }
   const std::string &clicked_line = buf.line(click_y);
   int line_len = clicked_line.length();
-  int start_visual = logical_to_visual_col(clicked_line, buf.scroll_x, tab_size);
+  int start_visual = compute_visual_column(clicked_line, buf.scroll_x, tab_size);
   int click_visual = start_visual + rel_visual_x;
-  int click_x = visual_to_logical_col(clicked_line, click_visual, tab_size);
+  int click_x = visual_to_logical_column(clicked_line, click_visual, tab_size);
   click_x = std::clamp(click_x, 0, line_len);
 
   auto set_word_selection = [&](const Cursor &anchor_start,
@@ -1759,21 +1728,23 @@ void Editor::handle_mouse(void *event_ptr) {
         mouse_debug_log("release with-drag buf=(%d,%d) mode=%d",
                         click_x, click_y, (int)mouse_selection_mode);
       } else {
-        buf.cursor.x = mouse_press_buf_x;
-        buf.cursor.y = mouse_press_buf_y;
-        buf.preferred_x = buf.cursor.x;
         if (mouse_selection_mode == MOUSE_SELECT_CHAR) {
+          buf.cursor.x = mouse_press_buf_x;
+          buf.cursor.y = mouse_press_buf_y;
+          buf.preferred_x = buf.cursor.x;
           buf.selection.start = mouse_start;
           buf.selection.end = mouse_start;
           buf.selection.active = false;
         } else if (mouse_selection_mode == MOUSE_SELECT_WORD ||
-                   mouse_selection_mode == MOUSE_SELECT_LINE) {
+                    mouse_selection_mode == MOUSE_SELECT_LINE) {
           buf.selection.start = mouse_start;
           buf.selection.end = mouse_anchor_end;
           buf.selection.active =
               mouse_selection_mode == MOUSE_SELECT_LINE ||
               !(buf.selection.start.x == buf.selection.end.x &&
                 buf.selection.start.y == buf.selection.end.y);
+          buf.cursor = mouse_anchor_end;
+          buf.preferred_x = buf.cursor.x;
         }
         mouse_debug_log("release no-drag restoring press buf=(%d,%d)",
                         buf.cursor.x, buf.cursor.y);

@@ -3,6 +3,7 @@ add_executable(jot_tests
   test_folding.cpp
   test_features.cpp
   test_cpp_assist.cpp
+  test_cursor.cpp
   test_debugger.cpp
   test_imageviewer.cpp
   test_syntax.cpp

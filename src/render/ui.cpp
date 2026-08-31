@@ -990,6 +990,21 @@ void Editor::render_search_panel() {
                 theme.fg_comment, theme.bg_command);
 }
 
+void Editor::place_search_cursor() {
+  if (!show_search) return;
+  int w = std::min(72, std::max(42, ui->get_render_width() / 2));
+  int x = std::max(0, ui->get_width() - w - 2);
+  if (x + w > ui->get_width()) w = std::max(20, ui->get_width() - x);
+  const int label_w = 9;
+  const int input_w = std::max(1, w - label_w - 3);
+  const bool replace = search_replace_visible && search_focus_replace;
+  const std::string &input = replace ? search_replace_text : search_query;
+  const int cursor_x = x + label_w +
+      std::min(input_w - 1, std::max(0, ui_cell_count(input)));
+  const int cursor_y = 1 + tab_height + (replace ? 2 : 1);
+  ui->set_cursor(cursor_x, cursor_y);
+}
+
 void Editor::render_context_menu() {
   if (!show_context_menu || context_menu_items.empty())
     return;
@@ -1164,20 +1179,33 @@ void Editor::render_save_prompt() {
   int w = ui->get_render_width();
 
   std::string prompt = "Save As: type filename, Enter=save, Esc=cancel";
-  int x = w / 2 - prompt.length() / 2;
+  int x = std::max(0, w / 2 - ui_cell_count(prompt) / 2);
   int y = h / 2;
 
-  UIRect rect = {x - 2, y - 1, (int)prompt.length() + 4, 3};
+  UIRect rect = {std::max(0, x - 2), std::max(0, y - 1),
+                 std::min(w, ui_cell_count(prompt) + 4), 4};
   ui_draw_panel(*ui, rect, {theme.fg_command, theme.bg_command,
                            theme.fg_panel_border, theme.bg_command});
 
   ui->draw_text(x, y, prompt, theme.fg_command, theme.bg_command);
 
-  // Input area for filename if needed?
-  if (save_prompt_input.length() > 0 || get_buffer().filepath.empty()) {
-    std::string disp = "Filename: " + save_prompt_input;
-    ui->draw_text(x, y + 1, disp, theme.fg_command, theme.bg_command);
-  }
+  std::string disp = "Filename: " + save_prompt_input;
+  ui->draw_text(x, std::min(h - 1, y + 1),
+                ui_truncate_cells(disp, std::max(1, w - x - 1)),
+                theme.fg_command, theme.bg_command);
+}
+
+void Editor::place_save_prompt_cursor() {
+  if (!show_save_prompt) return;
+  const int h = ui->get_height();
+  const int w = ui->get_render_width();
+  const std::string prompt = "Save As: type filename, Enter=save, Esc=cancel";
+  const int x = std::max(0, w / 2 - ui_cell_count(prompt) / 2);
+  const int y = h / 2;
+  const std::string prefix = "Filename: ";
+  ui->set_cursor(x + std::min(std::max(0, w - x - 1),
+                              ui_cell_count(prefix + save_prompt_input)),
+                 std::min(h - 1, y + 1));
 }
 
 void Editor::render_quit_prompt() {

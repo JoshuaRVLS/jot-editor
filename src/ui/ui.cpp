@@ -77,6 +77,7 @@ void UI::resize(int w, int h) {
   cursor_y = -1;
   cursor_shape = UICursorShape::Block;
   cursor_hidden = true;
+  cursor_dirty = true;
   grid.resize(height);
   for (int y = 0; y < height; y++) {
     grid[y].resize(width);
@@ -102,6 +103,7 @@ void UI::invalidate() {
   cursor_y = -1;
   cursor_shape = UICursorShape::Block;
   cursor_hidden = true;
+  cursor_dirty = true;
   term->clear();
 }
 
@@ -312,6 +314,7 @@ void UI::render() {
 
   term->write(cursor_shape == UICursorShape::Bar ? "\033[5 q" : "\033[1 q");
   term->flush();
+  cursor_dirty = false;
 
   if (capture_on) {
     char label[64];
@@ -329,11 +332,13 @@ void UI::set_cursor(int x, int y, UICursorShape shape) {
     cursor_y = y;
     cursor_shape = shape;
     cursor_hidden = false;
+    cursor_dirty = true;
   }
 }
 
 void UI::hide_cursor() {
   cursor_hidden = true;
+  cursor_dirty = true;
 }
 
 // Emit only the current cursor state to the terminal buffer and flush.
@@ -360,6 +365,7 @@ void UI::flush_cursor() {
   }
   term->write(cursor_shape == UICursorShape::Bar ? "\033[5 q" : "\033[1 q");
   term->flush();
+  cursor_dirty = false;
 
   if (term->render_capture_enabled()) {
     term->render_capture_marker("CURSOR-ONLY", 0);
@@ -371,6 +377,7 @@ void UI::emit_raw_after_frame(const std::string &bytes) {
     return;
   term->write(bytes);
   term->flush();
+  cursor_dirty = true;
 }
 
 void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,

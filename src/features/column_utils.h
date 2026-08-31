@@ -55,4 +55,24 @@ inline std::vector<int> build_visual_columns(const std::string &line,
   return cols;
 }
 
+inline int visual_to_logical_column(const std::string &line, int visual_col,
+                                    int tab_size) {
+  const int target = std::max(0, visual_col);
+  int visual = 0;
+  for (int i = 0; i < (int)line.size();) {
+    int next = ui_next_grapheme_boundary(line, i);
+    if (next <= i) next = i + 1;
+    const int width = line[i] == '\t'
+                          ? tab_advance(visual, tab_size)
+                          : std::max(1, ui_cell_count(line.substr(i, next - i)));
+    const int next_visual = visual + width;
+    if (target < next_visual) {
+      return target - visual <= next_visual - target ? i : next;
+    }
+    visual = next_visual;
+    i = next;
+  }
+  return (int)line.size();
+}
+
 #endif

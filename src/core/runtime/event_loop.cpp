@@ -517,6 +517,10 @@ void Editor::handle_terminal_event(const Event &ev) {
   if (ev.type == EVENT_KEY) {
     keyboard_press_count++;
     cancel_lsp_mouse_hover();
+    // A key can arrive before a delayed mouse release. Preserve the current
+    // selection, but prevent that release from restoring an obsolete cursor.
+    mouse_selecting = false;
+    mouse_drag_started = false;
     int ch = ev.key.key;
     bool is_ctrl = ev.key.ctrl;
     bool is_shift = ev.key.shift;
@@ -682,7 +686,7 @@ void Editor::render_frame() {
     update_pane_layout();
     needs_redraw = true;
   }
-  if (needs_redraw) {
+  if (needs_redraw || ui->cursor_needs_flush()) {
     render();
   }
 }

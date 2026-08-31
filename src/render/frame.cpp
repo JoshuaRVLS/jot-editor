@@ -116,6 +116,12 @@ void Editor::render() {
                          std::max(1, (int)command_palette_query.length() + 1));
         int y = ui->get_height() - 1;
         ui->set_cursor(x, y);
+      } else if (show_search) {
+        place_search_cursor();
+      } else if (show_save_prompt) {
+        place_save_prompt_cursor();
+      } else {
+        ui->hide_cursor();
       }
       ui->flush_cursor();
       return;
@@ -245,6 +251,12 @@ void Editor::render() {
                          std::max(1, (int)command_palette_query.length() + 1));
         int y = ui->get_height() - 1;
         ui->set_cursor(x, y);
+      } else if (show_search) {
+        place_search_cursor();
+      } else if (show_save_prompt) {
+        place_save_prompt_cursor();
+      } else {
+        ui->hide_cursor();
       }
     } else if (show_integrated_terminal && active_terminal &&
                active_terminal->is_focused()) {

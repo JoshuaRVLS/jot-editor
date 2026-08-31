@@ -220,9 +220,11 @@ private:
   void render_command_palette();
   void render_quick_pick();
   void render_search_panel();
+  void place_search_cursor();
   void render_context_menu();
   void render_tree_sitter_status_modal();
   void render_save_prompt();
+  void place_save_prompt_cursor();
   void render_quit_prompt();
   void render_popup();
   void render_home_menu();
