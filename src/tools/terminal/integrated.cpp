@@ -261,13 +261,14 @@ void IntegratedTerminal::vterm_output_callback(const char *s, size_t len,
   }
 }
 
-void IntegratedTerminal::write_output_buffer() {
+bool IntegratedTerminal::write_output_buffer() {
   if (!active || master_fd < 0 || output_buffer.empty()) {
     output_buffer.clear();
-    return;
+    return active && master_fd >= 0;
   }
-  queue_input(output_buffer.data(), output_buffer.size());
+  const bool queued = queue_input(output_buffer.data(), output_buffer.size());
   output_buffer.clear();
+  return queued;
 }
 
 bool IntegratedTerminal::queue_input(const char *data, size_t size) {
@@ -540,8 +541,7 @@ bool IntegratedTerminal::send_key(int ch, bool is_ctrl, bool is_shift,
     }
   }
 
-  write_output_buffer();
-  return true;
+  return write_output_buffer();
 }
 
 bool IntegratedTerminal::send_text(const std::string &text) {
@@ -613,8 +613,36 @@ IntegratedTerminal::get_recent_output_rows(int max_lines) const {
 std::vector<std::string> IntegratedTerminal::get_recent_lines(
     int max_lines) const {
   std::vector<std::string> out;
-  for (const auto &row : get_recent_output_rows(max_lines)) {
-    out.push_back(row.text);
+  if (max_lines <= 0) return out;
+
+  const int total = (int)scrollback.size() + (screen ? rows : 0) +
+                    (!screen && !current_line.empty() ? 1 : 0);
+  const int take = std::min(max_lines, total);
+  const int end = std::clamp(total - scroll_offset, 0, total);
+  const int start = std::max(0, end - take);
+  out.reserve((size_t)(end - start));
+
+  for (int index = start; index < end; index++) {
+    if (index < (int)scrollback.size()) {
+      out.push_back(row_text(scrollback[(size_t)index]));
+      continue;
+    }
+    if (screen) {
+      const int row = index - (int)scrollback.size();
+      std::vector<StyledCell> cells;
+      cells.reserve((size_t)cols);
+      for (int col = 0; col < cols; col++) {
+        VTermScreenCell cell{};
+        if (vterm_screen_get_cell(screen, {row, col}, &cell)) {
+          cells.push_back(styled_from_vterm_cell(screen, cell));
+        } else {
+          cells.push_back({" ", 7, 0});
+        }
+      }
+      out.push_back(row_text(cells));
+    } else {
+      out.push_back(current_line);
+    }
   }
   return out;
 }

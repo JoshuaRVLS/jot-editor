@@ -64,8 +64,8 @@ void Telescope::scan_async(TaskQueue *tq) {
         std::vector<FileMatch> raw;
 
         std::function<void(const fs::path &, int)> scan_dir;
-        scan_dir = [&raw, &scan_dir, &scan_root](const fs::path &dir,
-                                                 int depth) {
+         scan_dir = [&raw, &scan_dir, &scan_root, generation,
+                     scan_generation](const fs::path &dir, int depth) {
            if (depth > kMaxDepth || (int)raw.size() >= kMaxResults ||
                generation->load() != scan_generation) {
             return;

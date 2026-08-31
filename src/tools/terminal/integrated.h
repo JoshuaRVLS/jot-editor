@@ -51,7 +51,7 @@ private:
   void ensure_vterm(int new_rows, int new_cols);
   void destroy_vterm();
   void append_output(const char *s, size_t len);
-  void write_output_buffer();
+  bool write_output_buffer();
   bool queue_input(const char *data, size_t size);
   void flush_pending_input();
   void refresh_current_line();

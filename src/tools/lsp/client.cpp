@@ -1829,6 +1829,7 @@ bool LSPClient::poll() {
       append_log_line("INFO ", last_error);
       CloseHandle(process);
       child_process_handle = nullptr;
+      close_transport();
       child_pid = -1;
       changed = true;
     }
@@ -1961,6 +1962,10 @@ bool LSPClient::request_completion(const std::string &filepath, int line,
   }
 
   std::string abs_path = fs::absolute(filepath).string();
+  if (pending_completion_requests.size() >= 64) {
+    last_error = "too many pending LSP completion requests";
+    return false;
+  }
   int request_id = next_request_id++;
   pending_completion_requests[request_id] =
       PendingDocumentRequest{abs_path, file_versions[abs_path]};
@@ -2001,6 +2006,10 @@ bool LSPClient::request_hover(const std::string &filepath, int line,
   }
 
   std::string abs_path = fs::absolute(filepath).string();
+  if (pending_hover_requests.size() >= 64) {
+    last_error = "too many pending LSP hover requests";
+    return false;
+  }
   int request_id = next_request_id++;
   pending_hover_requests[request_id] =
       PendingPositionRequest{abs_path, std::max(0, line), std::max(0, character),
@@ -2033,6 +2042,10 @@ bool LSPClient::request_definition(const std::string &filepath, int line,
   }
 
   std::string abs_path = fs::absolute(filepath).string();
+  if (pending_definition_requests.size() >= 64) {
+    last_error = "too many pending LSP definition requests";
+    return false;
+  }
   int request_id = next_request_id++;
   pending_definition_requests[request_id] =
       PendingPositionRequest{abs_path, std::max(0, line), std::max(0, character),
@@ -2064,6 +2077,10 @@ bool LSPClient::request_document_symbols(const std::string &filepath) {
   }
 
   std::string abs_path = fs::absolute(filepath).string();
+  if (pending_document_symbol_requests.size() >= 64) {
+    last_error = "too many pending LSP symbol requests";
+    return false;
+  }
   int request_id = next_request_id++;
   pending_document_symbol_requests[request_id] =
       PendingDocumentRequest{abs_path, file_versions[abs_path]};
