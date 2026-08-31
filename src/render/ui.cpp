@@ -452,6 +452,71 @@ void Editor::render_tree_sitter_status_modal() {
                  theme.fg_comment, theme.bg_command);
 }
 
+void Editor::render_lsp_manager() {
+  if (!show_lsp_manager_modal) return;
+
+  const int screen_w = ui->get_render_width();
+  const int screen_h = ui->get_height();
+  const int max_w = std::max(1, screen_w - 2);
+  const int min_w = std::min(54, max_w);
+  const int w = std::clamp(screen_w - 8, min_w, max_w);
+  const int max_h = std::max(1, screen_h - 2);
+  const int min_h = std::min(10, max_h);
+  const int h = std::clamp((int)lsp_manager_rows.size() + 4, min_h, max_h);
+  const int x = std::max(0, (screen_w - w) / 2);
+  const int y = std::max(1, (screen_h - h) / 2);
+  lsp_manager_x = x;
+  lsp_manager_y = y;
+  lsp_manager_w = w;
+  lsp_manager_h = h;
+
+  UIRect rect = {x, y, w, h};
+  ui_draw_panel(*ui, rect, {theme.fg_command, theme.bg_panel_border,
+                             theme.fg_panel_border, theme.bg_panel_border});
+  ui_draw_panel_title(*ui, rect, " LSP Manager ", theme.fg_command,
+                      theme.bg_panel_border);
+
+  const int list_h = std::max(1, h - 3);
+  const int max_scroll = std::max(0, (int)lsp_manager_rows.size() - list_h);
+  lsp_manager_scroll = std::clamp(lsp_manager_scroll, 0, max_scroll);
+  const int label_w = std::max(12, std::min(20, w / 4));
+  const int state_x = x + 2 + label_w;
+  const int action_x = std::max(state_x + 12, x + w - 29);
+
+  for (int row = 0; row < list_h; row++) {
+    const int index = lsp_manager_scroll + row;
+    if (index < 0 || index >= (int)lsp_manager_rows.size()) break;
+    const auto &item = lsp_manager_rows[index];
+    const bool selected = index == lsp_manager_selected;
+    const int fg = selected ? theme.fg_selection : theme.fg_command;
+    const int bg = selected ? theme.bg_selection : theme.bg_panel_border;
+    UIRect row_rect = {x + 1, y + 1 + row, w - 2, 1};
+    ui->fill_rect(row_rect, " ", fg, bg);
+    ui->draw_text(x + 2, y + 1 + row, ui_truncate_cells(item.label, label_w),
+                  fg, bg, selected);
+    std::string state = item.busy ? item.detail
+                       : !item.enabled ? "disabled"
+                       : item.installed ? "ready"
+                       : "missing";
+    ui->draw_text(state_x, y + 1 + row,
+                  ui_truncate_cells(state, std::max(1, action_x - state_x - 1)),
+                  item.enabled ? theme.fg_comment : theme.fg_status_warning, bg);
+
+    std::string actions;
+    if (item.busy) actions = "[Terminal]";
+    else if (!item.enabled) actions = "[Enable]";
+    else if (!item.installed) actions = item.managed ? "[Install]" : "[Manual]";
+    else if (item.managed) actions = "[Update] [Remove] [Disable]";
+    else actions = "[Disable]";
+    ui->draw_text(action_x, y + 1 + row,
+                  ui_truncate_cells(actions, std::max(1, x + w - action_x - 2)),
+                  selected ? theme.fg_selection : theme.fg_command, bg, selected);
+  }
+
+  const std::string footer = std::to_string(lsp_manager_rows.size()) + " servers";
+  ui_draw_footer(*ui, rect, footer, theme.fg_comment, theme.bg_panel_border);
+}
+
 void Editor::render_status_line() {
   int y = ui->get_height() - status_height;
   int w = ui->get_render_width();
@@ -1088,8 +1153,8 @@ std::vector<Editor::MenuBarMenu> Editor::build_menu_bar_model() const {
         {"Run Task...", MENU_ACTION_TASKS},
         {"Rerun Last Task", MENU_ACTION_RERUN_TASK}}},
       {"Help",
-       {{"Help", MENU_ACTION_HELP},
-        {"LSP Status", MENU_ACTION_COMMAND, ":lspstatus"},
+        {{"Help", MENU_ACTION_HELP},
+         {"LSP Manager", MENU_ACTION_COMMAND, ":lspmanager"},
         {"Tree-sitter Status", MENU_ACTION_COMMAND, ":tsstatus"},
         {"Git Status", MENU_ACTION_COMMAND, ":gitstatus"}}},
   };

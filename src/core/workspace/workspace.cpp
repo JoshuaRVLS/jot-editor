@@ -210,6 +210,7 @@ void Editor::open_workspace(const std::string &path, bool restore_session) {
 
   // Reset editor buffers when entering a workspace so sessions do not mix.
   stop_all_lsp_clients();
+  lsp_disabled_servers.clear();
   buffers.clear();
   workspace_diagnostic_severity.clear();
   invalidate_sidebar_diagnostics_cache();
@@ -543,6 +544,9 @@ void Editor::save_workspace_session() {
       << "\n";
   out << "right_panel_width\t" << right_panel_width << "\n";
   out << "sidebar_show_hidden\t" << (sidebar_show_hidden ? 1 : 0) << "\n";
+  for (const auto &server : lsp_disabled_servers) {
+    out << "lsp_disabled\t" << escape_field(server) << "\n";
+  }
 
   std::string current_file;
   if (current_buffer >= 0 && current_buffer < (int)buffers.size()) {
@@ -597,6 +601,7 @@ bool Editor::restore_workspace_session() {
   int restored_right_panel_width = right_panel_width;
   std::string target_current_file;
   std::vector<Entry> entries;
+  std::set<std::string> restored_lsp_disabled;
   auto clamp_restored_right_panel_width = [&]() {
     int max_w = max_right_panel_width();
     int min_w = std::min(min_right_panel_width(), max_w);
@@ -632,6 +637,8 @@ bool Editor::restore_workspace_session() {
       restored_hidden = (parts[1] == "1");
     } else if (key == "current_file" && parts.size() >= 2) {
       target_current_file = unescape_field(parts[1]);
+    } else if (key == "lsp_disabled" && parts.size() >= 2) {
+      restored_lsp_disabled.insert(unescape_field(parts[1]));
     } else if (key == "file" && parts.size() >= 7) {
       Entry e;
       e.path = unescape_field(parts[1]);
@@ -651,6 +658,8 @@ bool Editor::restore_workspace_session() {
       }
     }
   }
+
+  lsp_disabled_servers = std::move(restored_lsp_disabled);
 
   if (entries.empty()) {
     show_sidebar = restored_show_sidebar;

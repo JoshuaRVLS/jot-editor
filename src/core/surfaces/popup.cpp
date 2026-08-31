@@ -600,6 +600,12 @@ void Editor::execute_context_menu_item(int index) {
 }
 
 bool Editor::close_active_floating_ui() {
+  if (show_lsp_manager_modal) {
+    show_lsp_manager_modal = false;
+    needs_redraw = true;
+    return true;
+  }
+
   if (popup.visible) {
     hide_popup();
     return true;

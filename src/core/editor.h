@@ -227,6 +227,7 @@ private:
   void place_save_prompt_cursor();
   void render_quit_prompt();
   void render_popup();
+  void render_lsp_manager();
   void render_home_menu();
   void render_buffer_content(const SplitPane &pane, int buffer_id);
   void poll_lsp_clients();
@@ -255,8 +256,12 @@ private:
   void notify_lsp_close(const std::string &filepath);
   void stop_all_lsp_clients();
   void restart_all_lsp_clients();
-  void show_lsp_status();
   void show_lsp_manager();
+  void refresh_lsp_manager();
+  bool handle_lsp_manager_input(int ch);
+  bool handle_lsp_manager_mouse(int x, int y, bool is_click,
+                                bool is_scroll_up, bool is_scroll_down);
+  void set_lsp_server_enabled(const std::string &server, bool enabled);
   bool install_lsp_server(const std::string &name);
   bool remove_lsp_server(const std::string &name);
   bool install_tree_sitter_language(const std::string &language);

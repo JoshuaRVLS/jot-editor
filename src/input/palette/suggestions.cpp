@@ -125,13 +125,7 @@ const std::vector<CommandMeta> &command_palette_metadata() {
       {"stats", "Info", "Show buffer statistics", 55},
       {"line", "Navigation", "Go to line[:column]", 80},
       {"goto", "Navigation", "Go to line[:column]", 75},
-      {"lspstart", "LSP", "Start LSP for current file", 70},
-      {"lspstatus", "LSP", "Show LSP status", 70},
-      {"lspstop", "LSP", "Stop all LSP clients", 65},
-      {"lsprestart", "LSP", "Restart all LSP clients", 65},
-      {"lspinstall", "LSP", "Install LSP server", 65},
-      {"lspremove", "LSP", "Remove LSP server", 65},
-      {"lspmanager", "LSP", "Show LSP manager", 65},
+       {"lspmanager", "LSP", "Manage language servers", 75},
       {"hover", "LSP", "Show hover information", 68},
       {"lsphover", "LSP", "Show hover information", 64},
       {"definition", "LSP", "Go to definition", 72},
@@ -382,13 +376,6 @@ void Editor::refresh_command_palette() {
       auto paths = complete_workspace_path(arg);
       for (const auto &path : paths) {
         add_arg(path, "Program", "Debug executable path", 110);
-      }
-    } else if (lcmd == "lspinstall" || lcmd == "lspremove") {
-      const std::vector<std::string> opts = {
-          "python", "typescript", "javascript", "jsx", "tsx", "cpp",
-          "rust",   "go",         "lua",        "bash", "html"};
-      for (const auto &opt : opts) {
-        add_arg(opt, "LSP", "Language server", 110);
       }
     } else if (lcmd == "tsinstall" || lcmd == "treesitterinstall") {
       for (const auto &opt : TreeSitterInstall::supported_languages()) {

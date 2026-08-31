@@ -53,6 +53,25 @@ Command command_for_server(const std::string &server) {
   return install;
 }
 
+Command remove_command_for_server(const std::string &server) {
+  Command remove;
+  remove.server = server;
+  if (server == "python") {
+    remove.command = "python3 -m pip uninstall -y python-lsp-server";
+  } else if (server == "typescript") {
+    remove.command = "npm uninstall -g typescript typescript-language-server";
+  } else if (server == "bash") {
+    remove.command = "npm uninstall -g bash-language-server";
+  } else if (server == "html") {
+    remove.command = "npm uninstall -g vscode-langservers-extracted";
+  }
+  remove.supported = !remove.command.empty();
+  if (remove.supported) {
+    remove.message = "LSP remove started: " + server;
+  }
+  return remove;
+}
+
 std::string terminal_command(const Command &install) {
   if (!install.supported) {
     return "";

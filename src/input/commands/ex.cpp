@@ -639,23 +639,7 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   };
 
   int parsed_line = 0, parsed_col = 1;
-  if (lcmd == "lspstart") {
-    auto &buf = get_buffer();
-    if (buf.filepath.empty()) {
-      set_message("LSP start requires a saved file");
-    } else if (ensure_lsp_for_file(buf.filepath)) {
-      notify_lsp_open(buf.filepath);
-      set_message("LSP started for current file");
-    } else {
-      set_message("No LSP server configured for this file");
-    }
-  } else if (lcmd == "lspstatus") {
-    show_lsp_status();
-  } else if (lcmd == "lspstop") {
-    stop_all_lsp_clients();
-  } else if (lcmd == "lsprestart") {
-    restart_all_lsp_clients();
-  } else if (lcmd == "lspmanager") {
+  if (lcmd == "lspmanager") {
     show_lsp_manager();
   } else if (lcmd == "hover" || lcmd == "lsphover") {
     request_lsp_hover();
@@ -674,22 +658,6 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   } else if (lcmd == "symbols" || lcmd == "outline") {
     show_symbol_picker();
     return false;
-  } else if (lcmd == "lspinstall") {
-    if (arg.empty()) {
-      set_message(
-          "Usage: :lspinstall "
-          "<python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>");
-    } else {
-      install_lsp_server(arg);
-    }
-  } else if (lcmd == "lspremove") {
-    if (arg.empty()) {
-      set_message(
-          "Usage: :lspremove "
-          "<python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>");
-    } else {
-      remove_lsp_server(arg);
-    }
   } else if (lcmd == "tsinstall" || lcmd == "treesitterinstall") {
     if (arg.empty()) {
       set_message("Usage: :tsinstall <language>");

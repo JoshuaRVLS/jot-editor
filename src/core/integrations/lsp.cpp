@@ -15,9 +15,26 @@
 namespace fs = std::filesystem;
 
 namespace {
-struct LspCommandResult {
-  int rc = 1;
+struct LspServerSpec {
+  const char *id;
+  const char *label;
+  const char *detail;
+  bool managed;
 };
+
+const std::vector<LspServerSpec> &lsp_server_specs() {
+  static const std::vector<LspServerSpec> specs = {
+      {"python", "Python", "pylsp", true},
+      {"typescript", "TypeScript", "JS, JSX, TS, TSX", true},
+      {"cpp", "C / C++", "clangd - package manager", false},
+      {"rust", "Rust", "rust-analyzer - package manager", false},
+      {"go", "Go", "gopls - package manager", false},
+      {"lua", "Lua", "lua-language-server - package manager", false},
+      {"bash", "Bash", "bash-language-server", true},
+      {"html", "HTML", "vscode-html-language-server", true},
+  };
+  return specs;
+}
 
 std::string to_lower_copy(std::string s) {
   std::transform(s.begin(), s.end(), s.begin(),
@@ -734,13 +751,14 @@ void Editor::poll_lsp_installs() {
         continue;
       }
       if (marker.phase == "start") {
-        job.progress = "downloading";
+        job.progress = job.removing ? "removing" : "downloading";
       } else if (marker.phase == "success" && marker.exit_code == 0) {
-        job.progress = "installed";
+        job.progress = job.removing ? "removed" : "installed";
         job.running = false;
         job.succeeded = true;
         job.failed = false;
-        set_message("LSP install OK: " + job.server);
+        set_message("LSP " + std::string(job.removing ? "remove OK: " : "install OK: ") +
+                    job.server);
       } else if (marker.phase == "failed") {
         job.progress = marker.exit_code >= 0
                            ? "failed (exit " + std::to_string(marker.exit_code) + ")"
@@ -748,7 +766,8 @@ void Editor::poll_lsp_installs() {
         job.running = false;
         job.succeeded = false;
         job.failed = true;
-        set_message("LSP install failed: " + job.server);
+        set_message("LSP " + std::string(job.removing ? "remove failed: " : "install failed: ") +
+                    job.server);
       }
       changed = true;
     }
@@ -761,7 +780,8 @@ void Editor::poll_lsp_installs() {
       changed = true;
     }
   }
-  if (changed) {
+  if (changed || show_lsp_manager_modal) {
+    if (show_lsp_manager_modal) refresh_lsp_manager();
     needs_redraw = true;
   }
 }
@@ -838,6 +858,9 @@ LSPClient *Editor::ensure_lsp_for_file(const std::string &filepath) {
 
   std::string language = detect_lsp_language(filepath);
   if (language.empty()) {
+    return nullptr;
+  }
+  if (lsp_disabled_servers.count(language)) {
     return nullptr;
   }
 
@@ -997,69 +1020,170 @@ void Editor::restart_all_lsp_clients() {
   set_message("LSP restarted: " + std::to_string(restarted) + " client(s)");
 }
 
-void Editor::show_lsp_status() {
-  if (lsp_clients.empty() && lsp_install_jobs.empty()) {
-    set_message("LSP: no active clients");
-    return;
-  }
-
-  std::string status = "LSP:";
-  for (size_t i = 0; i < lsp_clients.size() && i < 3; i++) {
-    status += " ";
-    status += lsp_clients[i]->describe();
-    if (!lsp_clients[i]->is_running()) {
-      status += " [stopped]";
-    }
-    if (i + 1 < lsp_clients.size() && i < 2) {
-      status += " |";
-    }
-  }
-  for (const auto &job : lsp_install_jobs) {
-    status += " install " + job.server + " [" + job.progress + "]";
-  }
-  set_message(status);
+void Editor::show_lsp_manager() {
+  close_context_menu();
+  hide_popup();
+  show_lsp_manager_modal = true;
+  lsp_manager_selected = 0;
+  lsp_manager_scroll = 0;
+  refresh_lsp_manager();
+  needs_redraw = true;
 }
 
-void Editor::show_lsp_manager() {
-  std::vector<std::string> lines = {
-      "LSP Manager (C++ builtin)",
-      "",
-      std::string("python      [") +
-          (is_lsp_server_installed("python") ? "installed" : "missing") + "]",
-      std::string("typescript  [") +
-          (is_lsp_server_installed("typescript") ? "installed" : "missing") +
-          "] js/jsx/ts/tsx",
-      std::string("cpp         [") +
-          (is_lsp_server_installed("cpp") ? "installed" : "missing") + "]",
-      std::string("rust        [") +
-          (is_lsp_server_installed("rust") ? "installed" : "missing") + "]",
-      std::string("go          [") +
-          (is_lsp_server_installed("go") ? "installed" : "missing") + "]",
-      std::string("lua         [") +
-          (is_lsp_server_installed("lua") ? "installed" : "missing") + "]",
-      std::string("bash        [") +
-          (is_lsp_server_installed("bash") ? "installed" : "missing") + "]",
-      std::string("html        [") +
-          (is_lsp_server_installed("html") ? "installed" : "missing") + "]",
-      "",
-      "Use:",
-      ":lspinstall <python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>",
-      ":lspremove <python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>",
-      ":lspstart :lspstatus :lspstop :lsprestart"};
-  for (const auto &job : lsp_install_jobs) {
-    lines.push_back("install " + job.server + " [" + job.progress + "] terminal " +
-                    std::to_string(job.terminal_index + 1));
-  }
-  show_popup([&lines]() {
-    std::string out;
-    for (size_t i = 0; i < lines.size(); i++) {
-      out += lines[i];
-      if (i + 1 < lines.size()) {
-        out.push_back('\n');
+void Editor::refresh_lsp_manager() {
+  lsp_manager_rows.clear();
+  for (const auto &spec : lsp_server_specs()) {
+    LspManagerRow row;
+    row.server = spec.id;
+    row.label = spec.label;
+    row.detail = spec.detail;
+    row.installed = is_lsp_server_installed(row.server);
+    row.enabled = !lsp_disabled_servers.count(row.server);
+    row.managed = spec.managed;
+    for (const auto &job : lsp_install_jobs) {
+      if (job.server == row.server && job.running) {
+        row.busy = true;
+        row.detail = job.progress;
       }
     }
-    return out;
-  }(), "LSP Manager");
+    int active = 0;
+    for (const auto &client : lsp_clients) {
+      if (client && client->get_language() == row.server && client->is_running()) {
+        active++;
+      }
+    }
+    if (active > 0 && !row.busy) {
+      row.detail += " - " + std::to_string(active) + " active";
+    }
+    lsp_manager_rows.push_back(std::move(row));
+  }
+  lsp_manager_selected = std::clamp(
+      lsp_manager_selected, 0, std::max(0, (int)lsp_manager_rows.size() - 1));
+}
+
+void Editor::set_lsp_server_enabled(const std::string &server, bool enabled) {
+  if (enabled) {
+    lsp_disabled_servers.erase(server);
+    if (!buffers.empty() && current_buffer >= 0 &&
+        current_buffer < (int)buffers.size() &&
+        detect_lsp_language(get_buffer().filepath) == server) {
+      notify_lsp_open(get_buffer().filepath);
+    }
+  } else {
+    lsp_disabled_servers.insert(server);
+    for (auto &client : lsp_clients) {
+      if (client && client->get_language() == server) {
+        unwatch_lsp_client_fds(client.get());
+        client->stop();
+      }
+    }
+    for (auto &buf : buffers) {
+      if (detect_lsp_language(buf.filepath) == server) {
+        buf.diagnostics.clear();
+        lsp_pending_changes.erase(buf.filepath);
+      }
+    }
+    invalidate_sidebar_diagnostics_cache();
+  }
+  refresh_lsp_manager();
+  save_workspace_session();
+  needs_redraw = true;
+}
+
+bool Editor::handle_lsp_manager_input(int ch) {
+  if (!show_lsp_manager_modal) return false;
+  if (ch == 27 || ch == 'q' || ch == 'Q') {
+    show_lsp_manager_modal = false;
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 1008 || ch == 'k' || ch == 'K') {
+    lsp_manager_selected = std::max(0, lsp_manager_selected - 1);
+  } else if (ch == 1009 || ch == 'j' || ch == 'J') {
+    lsp_manager_selected = std::min(
+        std::max(0, (int)lsp_manager_rows.size() - 1), lsp_manager_selected + 1);
+  } else if (lsp_manager_rows.empty()) {
+    return true;
+  } else {
+    const auto &row = lsp_manager_rows[lsp_manager_selected];
+    if (ch == 'e' || ch == 'E') {
+      set_lsp_server_enabled(row.server, !row.enabled);
+      return true;
+    }
+    if (ch == 'i' || ch == 'I' || ch == 'u' || ch == 'U' ||
+        ch == '\n' || ch == 13) {
+      if (!row.enabled) {
+        set_lsp_server_enabled(row.server, true);
+      } else if (row.managed && !row.busy) {
+        install_lsp_server(row.server);
+      } else if (!row.managed) {
+        set_message(row.label + " is managed by your package manager");
+      }
+      refresh_lsp_manager();
+      return true;
+    }
+    if ((ch == 'r' || ch == 'R') && row.managed && row.installed && !row.busy) {
+      remove_lsp_server(row.server);
+      refresh_lsp_manager();
+      return true;
+    }
+  }
+  needs_redraw = true;
+  return true;
+}
+
+bool Editor::handle_lsp_manager_mouse(int x, int y, bool is_click,
+                                      bool is_scroll_up, bool is_scroll_down) {
+  if (!show_lsp_manager_modal) return false;
+  if (is_scroll_up || is_scroll_down) {
+    lsp_manager_scroll = std::max(0, lsp_manager_scroll +
+                                      (is_scroll_down ? 3 : -3));
+    needs_redraw = true;
+    return true;
+  }
+  if (!is_click) return true;
+
+  const bool inside = x >= lsp_manager_x && x < lsp_manager_x + lsp_manager_w &&
+                      y >= lsp_manager_y && y < lsp_manager_y + lsp_manager_h;
+  if (!inside) {
+    show_lsp_manager_modal = false;
+    needs_redraw = true;
+    return true;
+  }
+  const int index = lsp_manager_scroll + (y - lsp_manager_y - 1);
+  if (index < 0 || index >= (int)lsp_manager_rows.size()) return true;
+  lsp_manager_selected = index;
+  const auto &row = lsp_manager_rows[index];
+  const int action_x = std::max(lsp_manager_x + 2 + std::max(12, std::min(20, lsp_manager_w / 4)) + 12,
+                                lsp_manager_x + lsp_manager_w - 29);
+  if (x < action_x) {
+    needs_redraw = true;
+    return true;
+  }
+  if (row.busy) {
+    for (const auto &job : lsp_install_jobs) {
+      if (job.server == row.server && job.running && job.terminal_index >= 0) {
+        activate_integrated_terminal(job.terminal_index, false);
+        show_integrated_terminal = true;
+        break;
+      }
+    }
+  } else if (!row.enabled) {
+    set_lsp_server_enabled(row.server, true);
+  } else if (!row.installed) {
+    if (row.managed) install_lsp_server(row.server);
+    else set_message(row.label + " requires your package manager");
+  } else if (row.managed) {
+    const int offset = x - action_x;
+    if (offset < 9) install_lsp_server(row.server);
+    else if (offset < 18) remove_lsp_server(row.server);
+    else set_lsp_server_enabled(row.server, false);
+  } else {
+    set_lsp_server_enabled(row.server, false);
+  }
+  refresh_lsp_manager();
+  needs_redraw = true;
+  return true;
 }
 
 bool Editor::install_lsp_server(const std::string &name) {
@@ -1135,6 +1259,7 @@ bool Editor::install_lsp_server(const std::string &name) {
   } else {
     LspInstallJob job;
     job.server = server;
+    job.removing = false;
     job.terminal_index = terminal_index;
     job.progress = "starting";
     lsp_install_jobs.push_back(std::move(job));
@@ -1155,54 +1280,36 @@ bool Editor::remove_lsp_server(const std::string &name) {
     return false;
   }
 
-  std::string command;
-  if (server == "python") {
-    command = "python3 -m pip uninstall -y python-lsp-server";
-  } else if (server == "typescript") {
-    command = "npm uninstall -g typescript typescript-language-server";
-  } else if (server == "cpp") {
-    set_message("Remove clangd using your OS package manager");
-    return false;
-  } else if (server == "rust") {
-    set_message("Remove rust-analyzer using your OS package manager");
-    return false;
-  } else if (server == "go") {
-    set_message("Remove gopls using your Go toolchain or package manager");
-    return false;
-  } else if (server == "lua") {
-    set_message("Remove lua-language-server using your OS package manager");
-    return false;
-  } else if (server == "bash") {
-    command = "npm uninstall -g bash-language-server";
-  } else if (server == "html") {
-    command = "npm uninstall -g vscode-langservers-extracted";
-  }
-
-  if (command.empty()) {
-    set_message("LSP remove failed: " + server);
+  LspInstall::Command remove = LspInstall::remove_command_for_server(server);
+  if (!remove.supported) {
+    set_message("Remove " + server + " with your package manager");
     return false;
   }
 
-  if (!task_queue_) {
-    int rc = std::system(command.c_str());
-    set_message(rc == 0 ? "LSP remove OK: " + server
-                        : "LSP remove failed: " + server);
-    return rc == 0;
+  set_lsp_server_enabled(server, false);
+  const size_t terminal_count = integrated_terminals.size();
+  create_integrated_terminal("lspremove:" + server);
+  if (integrated_terminals.size() == terminal_count) {
+    set_message("Failed to open LSP remove terminal");
+    return false;
   }
-
-  set_message("LSP remove started: " + server);
+  const int terminal_index = current_integrated_terminal;
+  IntegratedTerminal *term = get_integrated_terminal(terminal_index);
+  if (!term || !term->is_active()) {
+    set_message("Failed to open LSP remove terminal");
+    return false;
+  }
+  activate_integrated_terminal(terminal_index, false);
+  LspInstallJob job;
+  job.server = server;
+  job.removing = true;
+  job.terminal_index = terminal_index;
+  job.progress = "starting";
+  lsp_install_jobs.push_back(std::move(job));
+  term->send_text(LspInstall::terminal_command(remove) + "\r");
+  set_message(remove.message + " (terminal " + std::to_string(terminal_index + 1) + ")");
+  refresh_lsp_manager();
   needs_redraw = true;
-  auto result = std::shared_ptr<LspCommandResult>(new LspCommandResult());
-  task_queue_->submit(
-      [command = std::move(command), result]() {
-        result->rc = std::system(command.c_str());
-      },
-      [this, server, result]() {
-        if (!running)
-          return;
-        set_message(result->rc == 0 ? "LSP remove OK: " + server
-                                    : "LSP remove failed: " + server);
-      });
   return true;
 }
 

@@ -186,7 +186,7 @@ void Editor::render() {
     render_status_line();
     ui->dim_rect({0, 0, ui->get_render_width(), ui->get_height()});
     render_telescope();
-    if (telescope.focus() != TelescopeFocus::Query) {
+    if (show_lsp_manager_modal || telescope.focus() != TelescopeFocus::Query) {
       ui->hide_cursor();
     }
     ui->render();
@@ -225,6 +225,11 @@ void Editor::render() {
     render_context_menu();
     render_menu_dropdown();
 
+    if (show_lsp_manager_modal) {
+      ui->dim_rect({0, 0, ui->get_render_width(), ui->get_height()});
+      render_lsp_manager();
+    }
+
     if (easter_egg_timer > 0) {
       render_easter_egg();
       easter_egg_timer--;
@@ -240,7 +245,7 @@ void Editor::render() {
 
     // Set cursor state BEFORE ui->render() so the full-row paint emits the
     // correct cursor at the end of the frame.
-    if ((popup.visible && popup.presentation == POPUP_MODAL) ||
+    if (show_lsp_manager_modal || (popup.visible && popup.presentation == POPUP_MODAL) ||
         show_menu_bar_dropdown || show_context_menu || show_quick_pick ||
         show_tree_sitter_status_modal) {
       ui->hide_cursor();

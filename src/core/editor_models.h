@@ -164,11 +164,22 @@ struct TreeSitterInstallJob {
 
 struct LspInstallJob {
   std::string server;
+  bool removing = false;
   int terminal_index = -1;
   bool running = true;
   bool succeeded = false;
   bool failed = false;
   std::string progress;
+};
+
+struct LspManagerRow {
+  std::string server;
+  std::string label;
+  std::string detail;
+  bool installed = false;
+  bool enabled = true;
+  bool managed = false;
+  bool busy = false;
 };
 
 enum MouseSelectionMode {

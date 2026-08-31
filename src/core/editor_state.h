@@ -112,6 +112,15 @@ struct EditorState {
   std::vector<std::unique_ptr<LSPClient>> lsp_clients;
   std::unordered_map<std::string, long long> lsp_pending_changes;
   std::vector<LspInstallJob> lsp_install_jobs;
+  std::set<std::string> lsp_disabled_servers;
+  bool show_lsp_manager_modal = false;
+  int lsp_manager_selected = 0;
+  int lsp_manager_scroll = 0;
+  int lsp_manager_x = 0;
+  int lsp_manager_y = 0;
+  int lsp_manager_w = 0;
+  int lsp_manager_h = 0;
+  std::vector<LspManagerRow> lsp_manager_rows;
   int current_integrated_terminal;
   std::vector<TerminalTask> terminal_tasks;
   std::string last_terminal_task_name;

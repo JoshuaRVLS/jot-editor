@@ -19,6 +19,7 @@ struct Marker {
 };
 
 Command command_for_server(const std::string &server);
+Command remove_command_for_server(const std::string &server);
 std::string terminal_command(const Command &install);
 bool parse_marker(const std::string &line, Marker &marker);
 

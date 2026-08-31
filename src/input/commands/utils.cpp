@@ -83,8 +83,7 @@ const std::vector<std::string> &ex_commands() {
       "unfoldall",
       "incnum", "decnum",
       "line", "goto",        "resizeleft",
-      "resizeright", "resizeup", "resizedown", "lspstart", "lspstatus",
-      "lspstop", "lsprestart", "lspinstall", "lspremove", "lspmanager",
+       "resizeright", "resizeup", "resizedown", "lspmanager",
       "diagnostics", "problems", "diagnext", "diagnosticnext", "diagprev",
       "symbols", "outline",
       "tsinstall", "treesitterinstall", "tsstatus", "tsreload",
@@ -126,8 +125,7 @@ bool command_takes_argument(const std::string &cmd) {
          lc == "debugconfig" || lc == "debugattach" ||
          lc == "debugmemory" || lc == "debugdisasm" ||
          lc == "mkfile" || lc == "mkdir" || lc == "rename" || lc == "rm" ||
-         lc == "cppimpl" || lc == "cpppair" ||
-         lc == "lspinstall" || lc == "lspremove" ||
+          lc == "cppimpl" || lc == "cpppair" ||
          lc == "tsinstall" || lc == "treesitterinstall" ||
          lc == "replace" || lc == "replacei" || lc == "replaceword" ||
          lc == "replacere" || lc == "surround";

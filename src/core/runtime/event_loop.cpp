@@ -555,6 +555,10 @@ void Editor::handle_terminal_event(const Event &ev) {
       ch = ch + 96;
     }
 
+    if (show_lsp_manager_modal) {
+      handle_lsp_manager_input(ch);
+      return;
+    }
     if (popup.visible && popup.presentation == POPUP_MODAL) {
       handle_popup_input(ch);
       return;
@@ -594,6 +598,14 @@ void Editor::handle_terminal_event(const Event &ev) {
   if (ev.type == EVENT_MOUSE) {
     int button = ev.mouse.button;
     bool is_wheel = (button >= 64 && button <= 67);
+
+    if (show_lsp_manager_modal) {
+      const bool is_click = ev.mouse.pressed && ((button & 0x03) == 0);
+      if (handle_lsp_manager_mouse(ev.mouse.x, ev.mouse.y, is_click,
+                                   button == 64, button == 65)) {
+        return;
+      }
+    }
 
     if (telescope.is_active()) {
       bool is_click = ev.mouse.pressed && ((button & 0x03) == 0);
