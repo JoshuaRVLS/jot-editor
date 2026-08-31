@@ -75,6 +75,19 @@ void Editor::close_integrated_terminal(int index) {
   integrated_terminals[index]->close_shell();
   integrated_terminals.erase(integrated_terminals.begin() + index);
 
+  for (auto &job : lsp_install_jobs) {
+    if (job.terminal_index == index) {
+      job.terminal_index = -1;
+      if (job.running) {
+        job.running = false;
+        job.failed = true;
+        job.progress = "terminal closed";
+      }
+    } else if (job.terminal_index > index) {
+      job.terminal_index--;
+    }
+  }
+
   if (integrated_terminals.empty()) {
     current_integrated_terminal = -1;
     show_integrated_terminal = false;

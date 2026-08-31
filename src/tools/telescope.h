@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -82,6 +83,8 @@ private:
     fs::path root_dir;
 
     std::atomic<int> scan_id_{0};
+    std::shared_ptr<std::atomic<int>> scan_generation_ =
+        std::make_shared<std::atomic<int>>(0);
     mutable bool preview_cache_valid = false;
     mutable std::string preview_cache_path;
     mutable TelescopePreview preview_cache;

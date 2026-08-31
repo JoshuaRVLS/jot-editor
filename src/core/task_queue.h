@@ -25,13 +25,13 @@ public:
   TaskQueue(const TaskQueue &) = delete;
   TaskQueue &operator=(const TaskQueue &) = delete;
 
-  void submit(std::function<void()> work, std::function<void()> on_complete);
+  bool submit(std::function<void()> work, std::function<void()> on_complete);
 
   template <typename T>
-  void submit_val(std::function<T()> work,
+  bool submit_val(std::function<T()> work,
                   std::function<void(T)> on_complete) {
     auto shared = std::make_shared<T>();
-    submit(
+    return submit(
         [work = std::move(work), shared]() mutable { *shared = work(); },
         [shared, on_complete = std::move(on_complete)]() mutable {
           on_complete(std::move(*shared));

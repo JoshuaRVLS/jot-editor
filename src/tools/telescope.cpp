@@ -116,6 +116,7 @@ void Telescope::open(const std::string &root) {
 }
 
 void Telescope::close() {
+  cancel_scan();
   active = false;
   query.clear();
   results.clear();
@@ -533,7 +534,10 @@ int Telescope::fuzzy_score(const std::string &text, const std::string &pattern) 
   return score;
 }
 
-void Telescope::cancel_scan() { scan_id_.fetch_add(1); }
+void Telescope::cancel_scan() {
+  scan_id_.fetch_add(1);
+  scan_generation_->fetch_add(1);
+}
 
 void Telescope::apply_results(std::vector<FileMatch> new_results) {
   results = std::move(new_results);

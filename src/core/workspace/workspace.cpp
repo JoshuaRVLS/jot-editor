@@ -209,6 +209,7 @@ void Editor::open_workspace(const std::string &path, bool restore_session) {
   show_home_menu = false;
 
   // Reset editor buffers when entering a workspace so sessions do not mix.
+  stop_all_lsp_clients();
   buffers.clear();
   workspace_diagnostic_severity.clear();
   invalidate_sidebar_diagnostics_cache();

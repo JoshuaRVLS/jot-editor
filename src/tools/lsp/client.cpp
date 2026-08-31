@@ -1153,6 +1153,7 @@ bool LSPClient::send_message(const std::string &json,
                              bool allow_during_initialization) {
   constexpr size_t kMaxLspMessageBytes = 16 * 1024 * 1024;
   constexpr size_t kMaxDeferredMessages = 256;
+  constexpr size_t kMaxOutboundBytes = 32 * 1024 * 1024;
   if (!running || stdin_fd < 0) {
     return false;
   }
@@ -1171,6 +1172,11 @@ bool LSPClient::send_message(const std::string &json,
 
   std::ostringstream payload;
   payload << "Content-Length: " << json.size() << "\r\n\r\n" << json;
+  if (outbound_buffer.size() >= kMaxOutboundBytes ||
+      (size_t)payload.tellp() > kMaxOutboundBytes - outbound_buffer.size()) {
+    last_error = "LSP outbound queue is full";
+    return false;
+  }
   outbound_buffer += payload.str();
 
   append_log_line("SEND ", json);
@@ -1305,14 +1311,26 @@ bool LSPClient::start() {
   int stdin_pipe[2] = {-1, -1};
   int stdout_pipe[2] = {-1, -1};
   int stderr_pipe[2] = {-1, -1};
+  auto close_pipe = [](int pipe_fds[2]) {
+    if (pipe_fds[0] >= 0) close(pipe_fds[0]);
+    if (pipe_fds[1] >= 0) close(pipe_fds[1]);
+    pipe_fds[0] = -1;
+    pipe_fds[1] = -1;
+  };
   if (pipe(stdin_pipe) != 0 || pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0) {
     last_error = strerror(errno);
+    close_pipe(stdin_pipe);
+    close_pipe(stdout_pipe);
+    close_pipe(stderr_pipe);
     return false;
   }
 
   pid_t pid = fork();
   if (pid < 0) {
     last_error = strerror(errno);
+    close_pipe(stdin_pipe);
+    close_pipe(stdout_pipe);
+    close_pipe(stderr_pipe);
     return false;
   }
 
@@ -1478,21 +1496,21 @@ void LSPClient::stop() {
     }
     if (waitpid(child_pid, &status, WNOHANG) == 0) {
       kill(child_pid, SIGTERM);
-      waitpid(child_pid, &status, 0);
+      const auto kill_deadline = std::chrono::steady_clock::now() +
+                                 std::chrono::milliseconds(200);
+      while (waitpid(child_pid, &status, WNOHANG) == 0 &&
+             std::chrono::steady_clock::now() < kill_deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      }
+      if (waitpid(child_pid, &status, WNOHANG) == 0) {
+        kill(child_pid, SIGKILL);
+        waitpid(child_pid, &status, 0);
+      }
     }
 #endif
   }
 
-  if (stdin_fd >= 0)
-    close(stdin_fd);
-  if (stdout_fd >= 0)
-    close(stdout_fd);
-  if (stderr_fd >= 0)
-    close(stderr_fd);
-
-  stdin_fd = -1;
-  stdout_fd = -1;
-  stderr_fd = -1;
+  close_transport();
   child_pid = -1;
 #ifdef _WIN32
   child_process_handle = nullptr;
@@ -1515,6 +1533,15 @@ void LSPClient::stop() {
   pending_document_symbols.clear();
   outbound_buffer.clear();
   deferred_messages.clear();
+}
+
+void LSPClient::close_transport() {
+  if (stdin_fd >= 0) close(stdin_fd);
+  if (stdout_fd >= 0) close(stdout_fd);
+  if (stderr_fd >= 0) close(stderr_fd);
+  stdin_fd = -1;
+  stdout_fd = -1;
+  stderr_fd = -1;
 }
 
 bool LSPClient::restart() {
@@ -1762,7 +1789,9 @@ bool LSPClient::poll() {
   }
 
   char buf[4096];
-  while (stdout_fd >= 0) {
+  size_t bytes_polled = 0;
+  constexpr size_t kPollByteLimit = 256 * 1024;
+  while (stdout_fd >= 0 && bytes_polled < kPollByteLimit) {
     if (!fd_has_data(stdout_fd)) {
       break;
     }
@@ -1771,9 +1800,10 @@ bool LSPClient::poll() {
       break;
     }
     handle_stdout_data(std::string(buf, buf + n));
+    bytes_polled += (size_t)n;
     changed = true;
   }
-  while (stderr_fd >= 0) {
+  while (stderr_fd >= 0 && bytes_polled < kPollByteLimit) {
     if (!fd_has_data(stderr_fd)) {
       break;
     }
@@ -1782,6 +1812,7 @@ bool LSPClient::poll() {
       break;
     }
     handle_stderr_data(std::string(buf, buf + n));
+    bytes_polled += (size_t)n;
     changed = true;
   }
 
@@ -1812,6 +1843,8 @@ bool LSPClient::poll() {
         last_error = "process exited unexpectedly";
       }
       append_log_line("INFO ", last_error);
+      close_transport();
+      child_pid = -1;
       changed = true;
     }
 #endif

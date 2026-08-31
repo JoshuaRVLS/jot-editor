@@ -3,12 +3,14 @@
 #include <algorithm>
 #include <cerrno>
 #include <cctype>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <signal.h>
 #include <string>
+#include <thread>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <termios.h>
@@ -29,16 +31,12 @@ constexpr int kMaxScrollbackLines = 2000;
 constexpr int kPollReadLimit = 16;
 constexpr size_t kPollByteLimit = 64 * 1024;
 
-void write_all(int fd, const char *data, size_t size) {
-  size_t sent = 0;
-  while (sent < size) {
-    ssize_t n = write(fd, data + sent, size - sent);
-    if (n <= 0) {
-      if (errno == EAGAIN || errno == EINTR)
-        continue;
-      break;
-    }
-    sent += (size_t)n;
+size_t write_available(int fd, const char *data, size_t size) {
+  while (true) {
+    const ssize_t written = write(fd, data, size);
+    if (written > 0) return (size_t)written;
+    if (written < 0 && errno == EINTR) continue;
+    return 0;
   }
 }
 
@@ -243,6 +241,7 @@ void IntegratedTerminal::destroy_vterm() {
   cursor_col = 0;
   current_line.clear();
   output_buffer.clear();
+  pending_input.clear();
   scrollback.clear();
   scroll_offset = 0;
 }
@@ -267,8 +266,26 @@ void IntegratedTerminal::write_output_buffer() {
     output_buffer.clear();
     return;
   }
-  write_all(master_fd, output_buffer.data(), output_buffer.size());
+  queue_input(output_buffer.data(), output_buffer.size());
   output_buffer.clear();
+}
+
+bool IntegratedTerminal::queue_input(const char *data, size_t size) {
+  constexpr size_t kMaxPendingInputBytes = 1024 * 1024;
+  if (!active || master_fd < 0 || (!data && size != 0) ||
+      size > kMaxPendingInputBytes - pending_input.size()) {
+    return false;
+  }
+  pending_input.append(data, size);
+  flush_pending_input();
+  return true;
+}
+
+void IntegratedTerminal::flush_pending_input() {
+  if (!active || master_fd < 0 || pending_input.empty()) return;
+  const size_t written =
+      write_available(master_fd, pending_input.data(), pending_input.size());
+  if (written > 0) pending_input.erase(0, written);
 }
 
 void IntegratedTerminal::refresh_current_line() {
@@ -352,7 +369,17 @@ bool IntegratedTerminal::open_shell(const std::string &cwd) {
 void IntegratedTerminal::close_shell() {
   if (child_pid > 0) {
     kill(child_pid, SIGTERM);
-    waitpid(child_pid, nullptr, WNOHANG);
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(200);
+    int status = 0;
+    while (waitpid(child_pid, &status, WNOHANG) == 0 &&
+           std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    if (waitpid(child_pid, &status, WNOHANG) == 0) {
+      kill(child_pid, SIGKILL);
+      waitpid(child_pid, &status, 0);
+    }
   }
   if (master_fd >= 0) {
     close(master_fd);
@@ -370,6 +397,7 @@ bool IntegratedTerminal::poll_output() {
   }
 
   ensure_vterm(rows, cols);
+  flush_pending_input();
 
   bool changed = false;
   char buf[4096];
@@ -495,18 +523,16 @@ bool IntegratedTerminal::send_key(int ch, bool is_ctrl, bool is_shift,
   if (!handled) {
     if (ch >= 1 && ch <= 26) {
       unsigned char ctrl = (unsigned char)ch;
-      write_all(master_fd, (const char *)&ctrl, 1);
-      return true;
+      return queue_input((const char *)&ctrl, 1);
     }
     if (is_ctrl && ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z'))) {
       unsigned char ctrl = (unsigned char)(std::tolower(ch) - 'a' + 1);
-      write_all(master_fd, (const char *)&ctrl, 1);
-      return true;
+      return queue_input((const char *)&ctrl, 1);
     }
     if (ch >= 32) {
       if (is_alt) {
         unsigned char esc = 27;
-        write_all(master_fd, (const char *)&esc, 1);
+        if (!queue_input((const char *)&esc, 1)) return false;
       }
       vterm_keyboard_unichar(vterm, (uint32_t)ch, VTERM_MOD_NONE);
     } else {
@@ -523,8 +549,7 @@ bool IntegratedTerminal::send_text(const std::string &text) {
     return false;
   }
   reset_scroll();
-  write_all(master_fd, text.data(), text.size());
-  return true;
+  return queue_input(text.data(), text.size());
 }
 
 bool IntegratedTerminal::scroll_lines(int delta, int visible_rows) {

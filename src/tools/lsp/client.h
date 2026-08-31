@@ -120,6 +120,7 @@ private:
   void append_log_line(const std::string &prefix, const std::string &line);
   void handle_stdout_data(const std::string &data);
   void handle_stderr_data(const std::string &data);
+  void close_transport();
   std::string document_line(const std::string &filepath, int line) const;
   int lsp_character(const std::string &filepath, int line, int byte_character) const;
   int editor_character(const std::string &filepath, int line, int character) const;

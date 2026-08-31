@@ -43,6 +43,7 @@ private:
   int cursor_row;
   int cursor_col;
   std::string output_buffer;
+  std::string pending_input;
   std::string current_line;
   int scroll_offset;
   std::deque<std::vector<StyledCell>> scrollback;
@@ -51,6 +52,8 @@ private:
   void destroy_vterm();
   void append_output(const char *s, size_t len);
   void write_output_buffer();
+  bool queue_input(const char *data, size_t size);
+  void flush_pending_input();
   void refresh_current_line();
   static void vterm_output_callback(const char *s, size_t len, void *user);
 

@@ -646,8 +646,14 @@ void Editor::poll_lsp_clients() {
   }
 
   for (auto &client : lsp_clients) {
+    const int stdout_fd = client ? client->get_stdout_fd() : -1;
+    const int stderr_fd = client ? client->get_stderr_fd() : -1;
     if (client && client->poll()) {
       needs_redraw = true;
+    }
+    if (client && !client->is_running()) {
+      if (stdout_fd >= 0) event_loop_.unwatch_fd(stdout_fd);
+      if (stderr_fd >= 0) event_loop_.unwatch_fd(stderr_fd);
     }
     if (!client) {
       continue;
@@ -1063,6 +1069,26 @@ bool Editor::install_lsp_server(const std::string &name) {
                 " (use python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html)");
     return false;
   }
+
+  auto active_install = std::find_if(
+      lsp_install_jobs.begin(), lsp_install_jobs.end(),
+      [&](const LspInstallJob &job) { return job.server == server && job.running; });
+  if (active_install != lsp_install_jobs.end()) {
+    if (active_install->terminal_index >= 0) {
+      activate_integrated_terminal(active_install->terminal_index, false);
+      show_integrated_terminal = true;
+    }
+    set_message("LSP install already running: " + server);
+    needs_redraw = true;
+    return true;
+  }
+
+  lsp_install_jobs.erase(
+      std::remove_if(lsp_install_jobs.begin(), lsp_install_jobs.end(),
+                     [&](const LspInstallJob &job) {
+                       return job.server == server && !job.running;
+                     }),
+      lsp_install_jobs.end());
 
   if (server == "cpp") {
     set_message("Install clangd using your OS package manager");

@@ -14,18 +14,27 @@ TaskQueue::TaskQueue(EventLoop *loop, int num_workers)
 
 TaskQueue::~TaskQueue() { shutdown(); }
 
-void TaskQueue::submit(std::function<void()> work,
+bool TaskQueue::submit(std::function<void()> work,
                        std::function<void()> on_complete) {
   Task task{std::move(work), std::move(on_complete)};
   {
     std::lock_guard<std::mutex> lock(queue_mutex_);
+    if (!running_) {
+      return false;
+    }
     task_queue_.push(std::move(task));
   }
   queue_cv_.notify_one();
+  return true;
 }
 
 void TaskQueue::shutdown() {
   running_ = false;
+  {
+    std::lock_guard<std::mutex> lock(queue_mutex_);
+    std::queue<Task> empty;
+    task_queue_.swap(empty);
+  }
   queue_cv_.notify_all();
   for (auto &worker : workers_) {
     if (worker.joinable())
@@ -35,14 +44,14 @@ void TaskQueue::shutdown() {
 }
 
 void TaskQueue::worker_loop() {
-  while (running_) {
+  while (true) {
     Task task;
     {
       std::unique_lock<std::mutex> lock(queue_mutex_);
       queue_cv_.wait(lock, [this] {
         return !running_ || !task_queue_.empty();
       });
-      if (!running_ && task_queue_.empty())
+      if (!running_)
         return;
       task = std::move(task_queue_.front());
       task_queue_.pop();
