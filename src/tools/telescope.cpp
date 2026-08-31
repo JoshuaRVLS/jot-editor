@@ -8,6 +8,7 @@
 namespace {
 constexpr int kMaxDepth = 4;
 constexpr int kMaxResults = 2000;
+constexpr int kMaxCandidates = 20000;
 constexpr int kMaxPreviewLines = 120;
 constexpr int kMaxPreviewLineLength = 240;
 constexpr std::uintmax_t kMaxPreviewFileBytes = 1024 * 1024; // 1MB
@@ -85,6 +86,50 @@ std::string format_size(std::uintmax_t bytes) {
 }
 } // namespace
 
+TelescopeLayout telescope_layout_for(int render_width, int screen_height,
+                                     int top_bound, int bottom_bound) {
+  TelescopeLayout layout;
+  const int w = std::max(1, render_width);
+  const int h = std::max(1, screen_height);
+  const int top = std::clamp(top_bound, 0, std::max(0, h - 1));
+  const int bottom = std::clamp(bottom_bound, top + 1, h);
+  const int usable_h = std::max(1, bottom - top);
+  if (w < 4 || usable_h < 4) return layout;
+
+  layout.w = std::clamp(w * 9 / 10, std::min(w, 42), w);
+  layout.h = std::clamp(usable_h * 5 / 6, std::min(usable_h, 10), usable_h);
+  layout.x = std::max(0, (w - layout.w) / 2);
+  layout.y = top + std::max(0, (usable_h - layout.h) / 2);
+  layout.inner_x = layout.x + 1;
+  layout.inner_y = layout.y + 1;
+  layout.inner_w = std::max(1, layout.w - 2);
+  layout.inner_h = std::max(1, layout.h - 2);
+  layout.query_x = layout.inner_x + 1;
+  layout.query_y = layout.inner_y + 2;
+  layout.query_w = std::max(1, layout.inner_w - 2);
+  layout.footer_y = layout.y + layout.h - 2;
+  layout.body_y = layout.inner_y + 4;
+  layout.body_h = std::max(1, layout.footer_y - layout.body_y);
+  layout.show_preview = layout.inner_w >= 64 && layout.body_h >= 4;
+  const int list_panel_w = layout.show_preview
+                               ? std::max(26, layout.inner_w * 42 / 100)
+                               : layout.inner_w;
+  layout.list_x = layout.inner_x + 1;
+  layout.list_y = layout.body_y;
+  layout.list_w = layout.show_preview ? std::max(1, list_panel_w - 2)
+                                      : std::max(1, layout.inner_w - 2);
+  layout.list_h = layout.body_h;
+  if (layout.show_preview) {
+    layout.preview_x = layout.inner_x + list_panel_w + 2;
+    layout.preview_y = layout.body_y;
+    layout.preview_w = std::max(1, layout.inner_x + layout.inner_w -
+                                       layout.preview_x - 1);
+    layout.preview_h = layout.body_h;
+  }
+  layout.valid = true;
+  return layout;
+}
+
 Telescope::Telescope() {
   active = false;
   selected_index = 0;
@@ -111,8 +156,9 @@ void Telescope::open(const std::string &root) {
   list_scroll_offset = 0;
   preview_scroll_offset = 0;
   results.clear();
+  scan_pending_ = false;
+  focus_ = TelescopeFocus::Query;
   invalidate_preview_cache();
-  update_results();
 }
 
 void Telescope::close() {
@@ -123,6 +169,7 @@ void Telescope::close() {
   selected_index = 0;
   list_scroll_offset = 0;
   preview_scroll_offset = 0;
+  scan_pending_ = false;
   invalidate_preview_cache();
 }
 
@@ -252,13 +299,13 @@ void Telescope::scan_directory(const fs::path &dir, int depth) {
     match.score = 0;
     results.push_back(std::move(match));
 
-    if ((int)results.size() >= kMaxResults) {
+    if ((int)results.size() >= kMaxCandidates) {
       return;
     }
 
     if (is_dir && depth < kMaxDepth) {
       scan_directory(entry.path(), depth + 1);
-      if ((int)results.size() >= kMaxResults) {
+      if ((int)results.size() >= kMaxCandidates) {
         return;
       }
     }
@@ -324,10 +371,9 @@ void Telescope::select() {
       query.clear();
       selected_index = 0;
       list_scroll_offset = 0;
-      preview_scroll_offset = 0;
-      invalidate_preview_cache();
-      update_results();
-    }
+       preview_scroll_offset = 0;
+       invalidate_preview_cache();
+     }
   }
 }
 
@@ -339,7 +385,6 @@ void Telescope::go_parent() {
     list_scroll_offset = 0;
     preview_scroll_offset = 0;
     invalidate_preview_cache();
-    update_results();
   }
 }
 
@@ -351,6 +396,14 @@ void Telescope::scroll_preview(int delta, int visible_rows) {
   int max_scroll = std::max(0, (int)preview.lines.size() - std::max(1, visible_rows));
   preview_scroll_offset =
       std::clamp(preview_scroll_offset + delta, 0, max_scroll);
+}
+
+void Telescope::cycle_focus(int delta) {
+  if (delta == 0) return;
+  int focus = (int)focus_;
+  const int count = 3;
+  focus = (focus + delta % count + count) % count;
+  focus_ = (TelescopeFocus)focus;
 }
 
 std::string Telescope::get_selected_path() const {
@@ -468,6 +521,11 @@ TelescopePreview Telescope::load_preview(const FileMatch &match) const {
     preview.lines.push_back(line);
     count++;
   }
+  if (!file.eof()) {
+    preview.truncated = true;
+    if (!preview.detail.empty()) preview.detail += " - ";
+    preview.detail += "preview truncated";
+  }
   if (preview.lines.empty()) {
     preview.lines.push_back("[Empty file]");
   }
@@ -537,10 +595,12 @@ int Telescope::fuzzy_score(const std::string &text, const std::string &pattern) 
 void Telescope::cancel_scan() {
   scan_id_.fetch_add(1);
   scan_generation_->fetch_add(1);
+  scan_pending_ = false;
 }
 
 void Telescope::apply_results(std::vector<FileMatch> new_results) {
   results = std::move(new_results);
+  scan_pending_ = false;
   if (selected_index >= (int)results.size())
     selected_index = std::max(0, (int)results.size() - 1);
   if (selected_index < 0)

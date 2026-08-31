@@ -311,7 +311,7 @@ void Editor::show_terminal_tasks() {
     text += "  " + task.name + " [" + task.source_kind + "]  " +
             task.command + "\n";
   }
-  show_popup(text, 2, tab_height + 1);
+  show_popup(text, "Tasks");
   needs_redraw = true;
 }
 

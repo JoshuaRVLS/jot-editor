@@ -4,6 +4,12 @@
 #include <cctype>
 
 void Editor::accept_telescope_selection() {
+  if (!telescope.can_accept_selection()) {
+    set_message(telescope.scan_pending() ? "Telescope is scanning" :
+                                         "No file selected");
+    needs_redraw = true;
+    return;
+  }
   std::string path = telescope.get_selected_path();
   if (path.empty()) {
     return;
@@ -11,8 +17,7 @@ void Editor::accept_telescope_selection() {
   if (fs::is_directory(path)) {
     auto scan_tq = task_queue_.get();
     telescope.select();
-    telescope.update_results();
-    telescope.scan_async(scan_tq);
+    telescope.scan_async(scan_tq, [this] { needs_redraw = true; });
     needs_redraw = true;
     return;
   }
@@ -42,15 +47,36 @@ void Editor::handle_telescope(int ch) {
     return;
   }
 
+  if (ch == '\t') {
+    telescope.cycle_focus(1);
+    needs_redraw = true;
+    return;
+  }
+
+  if (telescope.focus() == TelescopeFocus::Preview) {
+    if (ch == 1008 || ch == 'k' || ch == 16) {
+      telescope.scroll_preview(-1, 10);
+    } else if (ch == 1009 || ch == 'j' || ch == 14) {
+      telescope.scroll_preview(1, 10);
+    } else if (ch == 1015) {
+      telescope.scroll_preview(-10, 10);
+    } else if (ch == 1016) {
+      telescope.scroll_preview(10, 10);
+    } else {
+      telescope.set_focus(TelescopeFocus::Query);
+    }
+    needs_redraw = true;
+    if (telescope.focus() == TelescopeFocus::Preview) return;
+  }
+
   if (ch == 1011) {
     std::string q = telescope.get_query();
     if (q.empty()) {
       telescope.go_parent();
-      telescope.update_results();
-      telescope.scan_async(scan_tq);
+      telescope.scan_async(scan_tq, [this] { needs_redraw = true; });
     } else {
       q.pop_back();
-      telescope.set_query(q, scan_tq);
+      telescope.set_query(q, scan_tq, [this] { needs_redraw = true; });
     }
     needs_redraw = true;
     return;
@@ -62,16 +88,19 @@ void Editor::handle_telescope(int ch) {
   }
 
   if (ch == 1008 || ch == 'k' || ch == 16) { // Up or Ctrl+P
+    telescope.set_focus(TelescopeFocus::Results);
     telescope.move_up();
     needs_redraw = true;
     return;
   }
   if (ch == 1009 || ch == 'j' || ch == 14) { // Down or Ctrl+N
+    telescope.set_focus(TelescopeFocus::Results);
     telescope.move_down();
     needs_redraw = true;
     return;
   }
   if (ch == 1015) { // Page up
+    telescope.set_focus(TelescopeFocus::Results);
     for (int i = 0; i < 10; i++) {
       telescope.move_up();
     }
@@ -79,6 +108,7 @@ void Editor::handle_telescope(int ch) {
     return;
   }
   if (ch == 1016) { // Page down
+    telescope.set_focus(TelescopeFocus::Results);
     for (int i = 0; i < 10; i++) {
       telescope.move_down();
     }
@@ -87,27 +117,31 @@ void Editor::handle_telescope(int ch) {
   }
 
   if (ch == 127 || ch == 8) {
+    telescope.set_focus(TelescopeFocus::Query);
     std::string q = telescope.get_query();
     if (!q.empty()) {
       q.pop_back();
-      telescope.set_query(q, scan_tq);
+      telescope.set_query(q, scan_tq, [this] { needs_redraw = true; });
     } else {
       telescope.go_parent();
+      telescope.scan_async(scan_tq, [this] { needs_redraw = true; });
     }
     needs_redraw = true;
     return;
   }
 
   if (ch == 21) { // Ctrl+U: clear query
-    telescope.set_query("", scan_tq);
+    telescope.set_focus(TelescopeFocus::Query);
+    telescope.set_query("", scan_tq, [this] { needs_redraw = true; });
     needs_redraw = true;
     return;
   }
 
   if (ch >= 32 && ch < 127) {
+    telescope.set_focus(TelescopeFocus::Query);
     std::string q = telescope.get_query();
     q += (char)ch;
-    telescope.set_query(q, scan_tq);
+    telescope.set_query(q, scan_tq, [this] { needs_redraw = true; });
     needs_redraw = true;
     return;
   }

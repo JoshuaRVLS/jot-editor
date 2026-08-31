@@ -911,6 +911,8 @@ void Terminal::set_italic(bool on) {
   }
 }
 
+void Terminal::set_dim(bool on) { buffer += on ? "\x1b[2m" : "\x1b[22m"; }
+
 void Terminal::set_reverse(bool on) {
   if (on) {
     buffer += "\x1b[7m";

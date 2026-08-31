@@ -118,7 +118,11 @@ void Editor::initialize_state_defaults() {
   popup.y = 0;
   popup.w = 0;
   popup.h = 0;
-  popup.text = "";
+  popup.title.clear();
+  popup.lines.clear();
+  popup.scroll = 0;
+  popup.content_lines = 0;
+  popup.presentation = POPUP_MODAL;
 
   show_sidebar = false;
   active_sidebar_view = SIDEBAR_VIEW_EXPLORER;

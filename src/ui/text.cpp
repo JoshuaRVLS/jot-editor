@@ -87,9 +87,18 @@ bool ui_is_valid_utf8_sequence(const std::string &text) {
 std::string ui_sanitized_cell_text(const std::string &text) {
   if (text.empty())
     return " ";
-  if (ui_is_valid_utf8_sequence(text))
-    return text;
-  return "?";
+  if (!ui_is_valid_utf8_sequence(text))
+    return "?";
+  for (int i = 0; i < (int)text.size();) {
+    utf8proc_int32_t codepoint = -1;
+    int len = 0;
+    if (!decode_at(text, i, codepoint, len) || codepoint < 0x20 ||
+        codepoint == 0x7f) {
+      return "?";
+    }
+    i += len;
+  }
+  return text;
 }
 
 int ui_cell_count(const std::string &text) {

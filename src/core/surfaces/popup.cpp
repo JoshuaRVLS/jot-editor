@@ -101,27 +101,112 @@ bool popup_markdown_fence(const std::string &line) {
   }
   return line.compare(start, 3, "```") == 0;
 }
-} // namespace
 
-void Editor::show_popup(const std::string &text, int x, int y) {
-  popup.text = text;
-  popup.x = x;
-  popup.y = y;
-
-  int max_w = 0;
-  int h = 0;
-  std::stringstream ss(text);
+std::vector<std::string> wrap_popup_text(const std::string &text, int max_cells) {
+  std::vector<std::string> wrapped;
+  std::istringstream stream(text);
   std::string line;
-  while (std::getline(ss, line)) {
-    if (popup_markdown_fence(line)) {
+  while (std::getline(stream, line)) {
+    if (popup_markdown_fence(line) || ui_cell_count(line) <= max_cells) {
+      wrapped.push_back(line);
       continue;
     }
-    if (ui_cell_count(line) > max_w)
-      max_w = ui_cell_count(line);
-    h++;
+    std::string remaining = line;
+    while (!remaining.empty()) {
+      std::string part = ui_take_cells(remaining, max_cells);
+      if (part.empty()) {
+        break;
+      }
+      const size_t break_at = part.find_last_of(" \t");
+      if (break_at != std::string::npos && break_at > 0 &&
+          part.size() < remaining.size()) {
+        part.erase(break_at);
+      }
+      wrapped.push_back(part);
+      remaining.erase(0, part.size());
+      while (!remaining.empty() &&
+             (remaining.front() == ' ' || remaining.front() == '\t')) {
+        remaining.erase(remaining.begin());
+      }
+    }
   }
-  popup.w = max_w + 2;
-  popup.h = h + 2;
+  if (wrapped.empty()) {
+    wrapped.push_back("");
+  }
+  return wrapped;
+}
+
+int popup_content_lines(const std::vector<std::string> &lines) {
+  int count = 0;
+  for (const auto &line : lines) {
+    if (!popup_markdown_fence(line)) {
+      count++;
+    }
+  }
+  return std::max(1, count);
+}
+} // namespace
+
+void Editor::show_popup(const std::string &text, const std::string &title) {
+  const int render_w = ui ? ui->get_render_width() : 80;
+  const int screen_h = ui ? ui->get_height() : 24;
+  const int top = std::min(1, std::max(0, screen_h - 1));
+  const int reserved_status = std::min(
+      std::max(0, status_height), std::max(0, screen_h - top - 1));
+  const int bottom = std::max(top + 1, screen_h - reserved_status);
+  const int usable_h = std::max(1, bottom - top);
+  const int max_popup_w = std::max(1, render_w - 2);
+  const int max_inner_w = std::max(1, std::min(max_popup_w - 2,
+                                                std::max(1, render_w * 3 / 4)));
+  const int max_inner_h = std::max(1, usable_h * 2 / 3 - 2);
+
+  popup.presentation = POPUP_MODAL;
+  popup.title = title;
+  popup.lines = wrap_popup_text(text, max_inner_w);
+  popup.content_lines = popup_content_lines(popup.lines);
+  int content_w = 1;
+  for (const auto &line : popup.lines) {
+    if (!popup_markdown_fence(line)) {
+      content_w = std::max(content_w, ui_cell_count(line));
+    }
+  }
+  popup.w = std::clamp(content_w + 2, std::min(3, max_popup_w), max_popup_w);
+  popup.h = std::clamp(std::min(popup.content_lines, max_inner_h) + 2,
+                       std::min(3, usable_h), usable_h);
+  popup.x = std::max(0, (render_w - popup.w) / 2);
+  popup.y = top + std::max(0, (usable_h - popup.h) / 2);
+  popup.scroll = 0;
+  popup.visible = true;
+  needs_redraw = true;
+}
+
+void Editor::show_hover_popup(const std::string &text, int x, int y) {
+  const int render_w = ui ? ui->get_render_width() : 80;
+  const int screen_h = ui ? ui->get_height() : 24;
+  const int top = std::min(1, std::max(0, screen_h - 1));
+  const int reserved_status = std::min(
+      std::max(0, status_height), std::max(0, screen_h - top - 1));
+  const int bottom = std::max(top + 1, screen_h - reserved_status);
+  const int max_popup_w = std::max(1, render_w);
+  const int max_inner_w = std::max(1, std::min(96, max_popup_w - 2));
+
+  popup.presentation = POPUP_HOVER;
+  popup.title.clear();
+  popup.lines = wrap_popup_text(text, max_inner_w);
+  popup.content_lines = popup_content_lines(popup.lines);
+  int content_w = 1;
+  for (const auto &line : popup.lines) {
+    if (!popup_markdown_fence(line)) {
+      content_w = std::max(content_w, ui_cell_count(line));
+    }
+  }
+  popup.w = std::clamp(content_w + 2, std::min(3, max_popup_w), max_popup_w);
+  const int max_popup_h = std::max(1, bottom - top);
+  popup.h = std::clamp(std::min(popup.content_lines, 14) + 2,
+                       std::min(3, max_popup_h), max_popup_h);
+  popup.x = std::clamp(x, 0, std::max(0, render_w - popup.w));
+  popup.y = std::clamp(y, top, std::max(top, bottom - popup.h));
+  popup.scroll = 0;
   popup.visible = true;
   needs_redraw = true;
 }
@@ -129,6 +214,37 @@ void Editor::show_popup(const std::string &text, int x, int y) {
 void Editor::hide_popup() {
   popup.visible = false;
   needs_redraw = true;
+}
+
+bool Editor::handle_popup_input(int ch) {
+  if (!popup.visible || popup.presentation != POPUP_MODAL) {
+    return false;
+  }
+  if (ch == 27 || ch == 'q' || ch == 'Q') {
+    hide_popup();
+    return true;
+  }
+  const int visible_rows = std::max(1, popup.h - 2);
+  const int max_scroll = std::max(0, popup.content_lines - visible_rows);
+  int next = popup.scroll;
+  if (ch == 1008 || ch == 'k' || ch == 'K') {
+    next--;
+  } else if (ch == 1009 || ch == 'j' || ch == 'J') {
+    next++;
+  } else if (ch == 1015) {
+    next -= visible_rows;
+  } else if (ch == 1016) {
+    next += visible_rows;
+  } else if (ch == 1012) {
+    next = 0;
+  } else if (ch == 1013) {
+    next = max_scroll;
+  } else {
+    return true;
+  }
+  popup.scroll = std::clamp(next, 0, max_scroll);
+  needs_redraw = true;
+  return true;
 }
 
 void Editor::open_context_menu(int x, int y, ContextMenuSurface surface,
@@ -416,7 +532,7 @@ void Editor::execute_context_menu_item(int index) {
       if (trim_copy(diff).empty()) {
         set_message("Git diff: no unstaged changes for " + rel);
       } else {
-        show_popup(limit_lines(diff, 18), 2, tab_height + 1);
+        show_popup(limit_lines(diff, 18), "Git Diff");
       }
     }
     break;
@@ -431,7 +547,7 @@ void Editor::execute_context_menu_item(int index) {
       if (trim_copy(diff).empty()) {
         set_message("Git diff: no staged changes for " + rel);
       } else {
-        show_popup(limit_lines(diff, 18), 2, tab_height + 1);
+        show_popup(limit_lines(diff, 18), "Git Diff");
       }
     }
     break;

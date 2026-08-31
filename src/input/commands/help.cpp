@@ -123,5 +123,5 @@ void Editor::show_command_help(const std::string &topic_text) {
       out.push_back('\n');
     }
   }
-  show_popup(out, 2, tab_height + 1);
+  show_popup(out, "Keybind Help");
 }

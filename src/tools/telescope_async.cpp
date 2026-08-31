@@ -7,6 +7,7 @@
 namespace {
 constexpr int kMaxDepth = 4;
 constexpr int kMaxResults = 2000;
+constexpr int kMaxCandidates = 20000;
 
 std::string lower_copy(const std::string &s) {
   std::string out = s;
@@ -32,25 +33,30 @@ std::string parent_display_path(const std::string &relative_path) {
 }
 } // namespace
 
-void Telescope::set_query(const std::string &q, TaskQueue *tq) {
+void Telescope::set_query(const std::string &q, TaskQueue *tq,
+                          std::function<void()> on_update) {
   query = q;
   selected_index = 0;
   list_scroll_offset = 0;
   preview_scroll_offset = 0;
   invalidate_preview_cache();
+  results.clear();
+  scan_pending_ = true;
   if (tq) {
     cancel_scan();
-    scan_async(tq);
+    scan_async(tq, std::move(on_update));
   } else {
     update_results();
+    if (on_update) on_update();
   }
 }
 
-void Telescope::scan_async(TaskQueue *tq) {
+void Telescope::scan_async(TaskQueue *tq, std::function<void()> on_update) {
   if (!tq || !active) {
     return;
   }
 
+  scan_pending_ = true;
   int scan_id = scan_id_.fetch_add(1) + 1;
   const auto generation = scan_generation_;
   const int scan_generation = generation->fetch_add(1) + 1;
@@ -66,14 +72,14 @@ void Telescope::scan_async(TaskQueue *tq) {
         std::function<void(const fs::path &, int)> scan_dir;
          scan_dir = [&raw, &scan_dir, &scan_root, generation,
                      scan_generation](const fs::path &dir, int depth) {
-           if (depth > kMaxDepth || (int)raw.size() >= kMaxResults ||
+           if (depth > kMaxDepth || (int)raw.size() >= kMaxCandidates ||
                generation->load() != scan_generation) {
             return;
           }
 
           std::error_code ec;
           for (auto it = fs::directory_iterator(dir, ec);
-                !ec && it != fs::end(it) && (int)raw.size() < kMaxResults &&
+                !ec && it != fs::end(it) && (int)raw.size() < kMaxCandidates &&
                     generation->load() == scan_generation;
                it.increment(ec)) {
             std::string name = it->path().filename().string();
@@ -172,11 +178,13 @@ void Telescope::scan_async(TaskQueue *tq) {
 
         return filtered;
       },
-       [this, scan_id, generation, scan_generation](std::vector<FileMatch> filtered) {
-         if (!active || scan_id != scan_id_.load() ||
-             generation->load() != scan_generation) {
-           return;
-         }
-        apply_results(std::move(filtered));
-      });
+        [this, scan_id, generation, scan_generation,
+         on_update = std::move(on_update)](std::vector<FileMatch> filtered) {
+          if (!active || scan_id != scan_id_.load() ||
+              generation->load() != scan_generation) {
+            return;
+          }
+          apply_results(std::move(filtered));
+          if (on_update) on_update();
+       });
 }

@@ -1059,7 +1059,7 @@ void Editor::show_lsp_manager() {
       }
     }
     return out;
-  }(), 2, tab_height + 1);
+  }(), "LSP Manager");
 }
 
 bool Editor::install_lsp_server(const std::string &name) {
@@ -1559,7 +1559,7 @@ void Editor::handle_lsp_hover_result(const LSPHoverResult &hover) {
     } else {
       popup_y += 1;
     }
-    show_popup(text, popup_x, popup_y);
+    show_hover_popup(text, popup_x, popup_y);
     lsp_mouse_hover_visible = true;
     return;
   }
@@ -1594,7 +1594,7 @@ void Editor::handle_lsp_hover_result(const LSPHoverResult &hover) {
   } else {
     anchor_y += 1;
   }
-  show_popup(text, popup_x, anchor_y);
+  show_hover_popup(text, popup_x, anchor_y);
 }
 
 void Editor::handle_lsp_definition_result(

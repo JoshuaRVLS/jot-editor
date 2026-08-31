@@ -2,6 +2,7 @@
 #include "column_utils.h"
 #include "editor.h"
 #include "folding.h"
+#include "ui/text.h"
 #include <cctype>
 #include <cstdio>
 #include <filesystem>
@@ -121,26 +122,26 @@ std::string clip_text(const std::string &text, int max_w) {
   if (max_w <= 0) {
     return "";
   }
-  if ((int)text.size() <= max_w) {
+  if (ui_cell_count(text) <= max_w) {
     return text;
   }
-  if (max_w <= 2) {
-    return text.substr(0, max_w);
+  if (max_w <= 3) {
+    return ui_take_cells(text, max_w);
   }
-  return text.substr(0, max_w - 2) + "..";
+  return ui_take_cells(text, max_w - 3) + "...";
 }
 
 std::string clip_path_left(const std::string &text, int max_w) {
   if (max_w <= 0) {
     return "";
   }
-  if ((int)text.size() <= max_w) {
+  if (ui_cell_count(text) <= max_w) {
     return text;
   }
   if (max_w <= 3) {
-    return text.substr(0, max_w);
+    return ui_take_cells(text, max_w);
   }
-  return ".." + text.substr(text.size() - (max_w - 2));
+  return "..." + ui_truncate_left_cells(text, max_w - 3);
 }
 
 std::string telescope_icon(bool directory, bool use_nerd_icons) {
@@ -149,33 +150,6 @@ std::string telescope_icon(bool directory, bool use_nerd_icons) {
   }
   return directory ? " " : "󰈔 ";
 }
-
-struct TelescopeLayout {
-  bool valid = false;
-  bool show_preview = false;
-  int x = 0;
-  int y = 0;
-  int w = 0;
-  int h = 0;
-  int inner_x = 0;
-  int inner_y = 0;
-  int inner_w = 0;
-  int inner_h = 0;
-  int query_x = 0;
-  int query_y = 0;
-  int query_w = 0;
-  int body_y = 0;
-  int body_h = 0;
-  int list_x = 0;
-  int list_y = 0;
-  int list_w = 0;
-  int list_h = 0;
-  int preview_x = 0;
-  int preview_y = 0;
-  int preview_w = 0;
-  int preview_h = 0;
-  int footer_y = 0;
-};
 
 int syntax_preview_color(const Theme &theme, int token) {
   switch (token) {
@@ -196,66 +170,6 @@ int syntax_preview_color(const Theme &theme, int token) {
   }
 }
 
-TelescopeLayout telescope_layout_for(const Editor &editor, UI *ui,
-                                     int tab_height, int status_height,
-                                     bool show_sidebar, int sidebar_w) {
-  TelescopeLayout layout;
-  int h = ui->get_height();
-  int w = ui->get_render_width();
-  if (w < 4 || h < 5) {
-    return layout;
-  }
-
-  int content_x = show_sidebar ? std::max(0, sidebar_w) : 0;
-  int content_w = std::max(1, w - content_x);
-  int top_bound = std::max(0, tab_height + 1);
-  int bottom_bound = std::max(top_bound + 1, h - status_height - 1);
-  int usable_h = std::max(1, bottom_bound - top_bound);
-
-  layout.w = std::clamp(content_w - 2, std::min(content_w, 42), content_w);
-  if (content_w >= 72) {
-    layout.w = std::min(content_w - 2, std::max(72, content_w * 9 / 10));
-  }
-  layout.h = std::clamp(usable_h - 1, std::min(usable_h, 10), usable_h);
-  if (usable_h >= 18) {
-    layout.h = std::min(usable_h - 1, std::max(16, usable_h * 5 / 6));
-  }
-
-  layout.x = content_x + std::max(0, (content_w - layout.w + 1) / 2);
-  layout.x = std::clamp(layout.x, content_x,
-                        std::max(content_x, content_x + content_w - layout.w));
-  layout.y = top_bound + std::max(0, (usable_h - layout.h) / 2);
-  layout.inner_x = layout.x + 1;
-  layout.inner_y = layout.y + 1;
-  layout.inner_w = std::max(1, layout.w - 2);
-  layout.inner_h = std::max(1, layout.h - 2);
-  layout.query_x = layout.inner_x + 1;
-  layout.query_y = layout.inner_y + 2;
-  layout.query_w = std::max(1, layout.inner_w - 2);
-  layout.footer_y = layout.y + layout.h - 2;
-  layout.body_y = layout.inner_y + 4;
-  layout.body_h = std::max(1, layout.footer_y - layout.body_y);
-  layout.show_preview = layout.inner_w >= 64 && layout.body_h >= 4;
-  int list_panel_w =
-      layout.show_preview ? std::max(26, layout.inner_w * 42 / 100)
-                          : layout.inner_w;
-  layout.list_x = layout.inner_x + 1;
-  layout.list_y = layout.body_y;
-  layout.list_w =
-      layout.show_preview ? std::max(1, list_panel_w - 2)
-                          : std::max(1, layout.inner_w - 2);
-  layout.list_h = layout.body_h;
-  if (layout.show_preview) {
-    layout.preview_x = layout.inner_x + list_panel_w + 2;
-    layout.preview_y = layout.body_y;
-    layout.preview_w =
-        std::max(1, layout.inner_x + layout.inner_w - layout.preview_x - 1);
-    layout.preview_h = layout.body_h;
-  }
-  layout.valid = true;
-  (void)editor;
-  return layout;
-}
 } // namespace
 
 void Editor::render_lsp_completion() {
@@ -451,9 +365,9 @@ void Editor::render_lsp_completion() {
 }
 
 void Editor::render_telescope() {
-  TelescopeLayout layout =
-      telescope_layout_for(*this, ui, tab_height, status_height, show_sidebar,
-                           show_sidebar ? effective_sidebar_width() : 0);
+  TelescopeLayout layout = telescope_layout_for(
+      ui->get_render_width(), ui->get_height(), 1,
+      std::max(1, ui->get_height() - status_height));
   if (!layout.valid)
     return;
 
@@ -469,16 +383,15 @@ void Editor::render_telescope() {
   telescope.ensure_selected_visible(layout.list_h);
 
   std::string title = " Find Files ";
-  std::string count = std::to_string(result_count) + " match";
-  if (result_count != 1) {
-    count += "es";
-  }
-  if (!results.empty()) {
+  std::string count = telescope.scan_pending() ? "Scanning..."
+                                               : std::to_string(result_count) + " match";
+  if (!telescope.scan_pending() && result_count != 1) count += "es";
+  if (!telescope.scan_pending() && !results.empty()) {
     count += "  " + std::to_string(std::clamp(selected + 1, 1, result_count)) +
              "/" + std::to_string(result_count);
   }
   std::string root = telescope.get_root_dir();
-  if ((int)root.length() > layout.inner_w - 2) {
+  if (ui_cell_count(root) > layout.inner_w - 2) {
     root = clip_path_left(root, layout.inner_w - 2);
   }
   ui->draw_text(layout.inner_x + 1, layout.y, title, theme.fg_telescope,
@@ -496,10 +409,19 @@ void Editor::render_telescope() {
   }
   UIRect query_rect = {layout.query_x, layout.query_y, layout.query_w, 1};
   if (layout.inner_h >= 3) {
-    ui->fill_rect(query_rect, " ", theme.fg_telescope, theme.bg_command);
+    const bool query_focus = telescope.focus() == TelescopeFocus::Query;
+    ui->fill_rect(query_rect, " ", theme.fg_telescope,
+                  query_focus ? theme.bg_selection : theme.bg_command);
     ui->draw_text(layout.query_x, layout.query_y,
-                  clip_text(query, layout.query_w),
-                  theme.fg_telescope, theme.bg_command, true);
+                   clip_text(query, layout.query_w),
+                   theme.fg_telescope,
+                   query_focus ? theme.bg_selection : theme.bg_command, true);
+    if (query_focus) {
+      const int caret_x = layout.query_x +
+                          std::min(layout.query_w - 1,
+                                   std::max(0, ui_cell_count("  > " + telescope.get_query())));
+      ui->set_cursor(caret_x, layout.query_y);
+    }
   }
 
   if (layout.show_preview) {
@@ -509,14 +431,17 @@ void Editor::render_telescope() {
                     theme.bg_telescope);
     }
     ui->draw_text(layout.preview_x, layout.preview_y, "Preview",
-                  theme.fg_telescope, theme.bg_telescope, true);
+                  telescope.focus() == TelescopeFocus::Preview
+                      ? theme.fg_telescope_selected : theme.fg_telescope,
+                  theme.bg_telescope, true);
   }
 
   int start_idx = telescope.get_list_scroll_offset();
   int end_idx = std::min((int)results.size(), start_idx + layout.list_h);
 
   if (results.empty()) {
-    std::string empty = telescope.get_query().empty()
+    std::string empty = telescope.scan_pending() ? "Scanning files..."
+                        : telescope.get_query().empty()
                             ? "No files found in this workspace."
                             : "No files match the current query.";
     ui->draw_text(layout.list_x,
@@ -540,8 +465,8 @@ void Editor::render_telescope() {
     std::string name = results[i].name;
     std::string parent =
         results[i].parent_path == "." ? "" : "  " + results[i].parent_path;
-    int parent_w = std::min((int)parent.size(), std::max(0, layout.list_w / 2));
-    int name_w = std::max(1, layout.list_w - (int)icon.size() - parent_w);
+    int parent_w = std::min(ui_cell_count(parent), std::max(0, layout.list_w / 2));
+    int name_w = std::max(1, layout.list_w - ui_cell_count(icon) - parent_w);
     std::string row = icon + clip_text(name, name_w);
     if (parent_w > 0) {
       row += clip_path_left(parent, parent_w);
@@ -621,8 +546,8 @@ void Editor::render_telescope() {
     }
   }
 
-  std::string footer = results.empty() ? "No selection"
-                                       : telescope.get_selected_relative_path();
+  std::string footer = telescope.scan_pending() ? "Searching" : results.empty() ? "No selection"
+                                        : telescope.get_selected_relative_path();
   if (!results.empty() && layout.show_preview) {
     auto preview = telescope.get_selected_preview();
     if (!preview.detail.empty()) {

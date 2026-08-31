@@ -177,9 +177,12 @@ void Editor::render() {
     render_debugger_panel();
     render_git_diff_panel();
     render_plugin_panel();
-    render_telescope();
     render_status_line();
-    ui->hide_cursor();
+    ui->dim_rect({0, 0, ui->get_render_width(), ui->get_height()});
+    render_telescope();
+    if (telescope.focus() != TelescopeFocus::Query) {
+      ui->hide_cursor();
+    }
     ui->render();
     needs_redraw = false;
     return;
@@ -212,7 +215,6 @@ void Editor::render() {
     render_command_palette();
     render_quick_pick();
     render_search_panel();
-    render_popup();
     render_tree_sitter_status_modal();
     render_context_menu();
     render_menu_dropdown();
@@ -223,9 +225,17 @@ void Editor::render() {
       needs_redraw = true;
     }
 
+    if (popup.visible) {
+      if (popup.presentation == POPUP_MODAL) {
+        ui->dim_rect({0, 0, ui->get_render_width(), ui->get_height()});
+      }
+      render_popup();
+    }
+
     // Set cursor state BEFORE ui->render() so the full-row paint emits the
     // correct cursor at the end of the frame.
-    if (show_menu_bar_dropdown || show_context_menu || show_quick_pick ||
+    if ((popup.visible && popup.presentation == POPUP_MODAL) ||
+        show_menu_bar_dropdown || show_context_menu || show_quick_pick ||
         show_tree_sitter_status_modal) {
       ui->hide_cursor();
     } else if (show_command_palette || show_search || show_save_prompt ||

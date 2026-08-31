@@ -218,7 +218,7 @@ bool Editor::execute_ex_command(const std::string &input_line) {
         }
         out << "\n";
       }
-      show_popup(limit_lines(out.str(), 24), 2, tab_height + 1);
+      show_popup(limit_lines(out.str(), 24), "Plugins");
     }
   } else if (lcmd == "pluginpanel") {
     if (!python_api) {
@@ -385,6 +385,7 @@ bool Editor::execute_ex_command(const std::string &input_line) {
       target = root_dir.empty() ? "." : root_dir;
     }
     telescope.open(target);
+    telescope.scan_async(task_queue_.get(), [this] { needs_redraw = true; });
     show_command_palette = false;
     command_palette_query.clear();
     command_palette_results.clear();
@@ -718,7 +719,7 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
       if (trim_copy(status).empty()) {
         set_message("Git status unavailable");
       } else {
-        show_popup(limit_lines(status, 18), 2, tab_height + 1);
+        show_popup(limit_lines(status, 18), "Git Status");
       }
     }
   } else if (lcmd == "gitstage") {
@@ -817,7 +818,7 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
       if (trim_copy(log).empty()) {
         set_message("Git log unavailable");
       } else {
-        show_popup(limit_lines(log, 18), 2, tab_height + 1);
+        show_popup(limit_lines(log, 18), "Git Log");
       }
     }
   } else if (lcmd == "gitblame") {

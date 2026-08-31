@@ -118,10 +118,29 @@ void UI::set_default_colors(int fg, int bg) {
   default_bg = bg;
 }
 
+void UI::dim_rect(const UIRect &rect) {
+  const int x0 = std::max(0, rect.x);
+  const int y0 = std::max(0, rect.y);
+  const int x1 = std::min(width, rect.x + std::max(0, rect.w));
+  const int y1 = std::min(height, rect.y + std::max(0, rect.h));
+  for (int y = y0; y < y1; y++) {
+    for (int x = x0; x < x1; x++) {
+      grid[y][x].dim = true;
+    }
+  }
+}
+
 void UI::set_cell(int x, int y, const UICell &cell) {
   if (x >= 0 && x < width && y >= 0 && y < height) {
     grid[y][x] = cell;
   }
+}
+
+const UICell *UI::cell_at(int x, int y) const {
+  if (x < 0 || x >= width || y < 0 || y >= height) {
+    return nullptr;
+  }
+  return &grid[y][x];
 }
 
 void UI::render() {
@@ -167,6 +186,7 @@ void UI::render() {
         term->reset_color();
         if (cell.bold)   term->set_bold(true);
         if (cell.italic)  term->set_italic(true);
+        if (cell.dim)     term->set_dim(true);
         if (cell.reverse) term->set_reverse(true);
         term->set_color(cell.fg, cell.bg);
         write_cell_for_remaining_width(term, cell.ch, row_width - x);
@@ -177,6 +197,7 @@ void UI::render() {
       int run_bg = -1;
       bool run_bold = false;
       bool run_italic = false;
+      bool run_dim = false;
       bool run_reverse = false;
       int written = 0;
       
@@ -187,9 +208,10 @@ void UI::render() {
         const auto &cell = grid[y][x];
 
         if (x == 0 ||
-            cell.fg != run_fg || cell.bg != run_bg ||
-            cell.bold != run_bold || cell.italic != run_italic ||
-            cell.reverse != run_reverse) {
+             cell.fg != run_fg || cell.bg != run_bg ||
+             cell.bold != run_bold || cell.italic != run_italic ||
+             cell.dim != run_dim ||
+             cell.reverse != run_reverse) {
           // Optimization: skip ESC[0m (full reset) when only the
           // fg/bg have changed and the bold/italic/reverse bits are
           // still correct. A full reset costs ~5 bytes and reverts
@@ -199,8 +221,9 @@ void UI::render() {
           // set them in place.
           const bool attrs_unchanged =
               (x != 0) &&
-              cell.bold == run_bold && cell.italic == run_italic &&
-              cell.reverse == run_reverse &&
+               cell.bold == run_bold && cell.italic == run_italic &&
+               cell.dim == run_dim &&
+               cell.reverse == run_reverse &&
               (run_fg != -1 || run_bg != -1);
           if (!attrs_unchanged) {
             term->reset_color();
@@ -208,6 +231,8 @@ void UI::render() {
               term->set_bold(true);
             if (cell.italic)
               term->set_italic(true);
+            if (cell.dim)
+              term->set_dim(true);
             if (cell.reverse)
               term->set_reverse(true);
           } else {
@@ -217,6 +242,7 @@ void UI::render() {
             // new fg/bg in place.
             if (cell.bold != run_bold) term->set_bold(cell.bold);
             if (cell.italic != run_italic) term->set_italic(cell.italic);
+            if (cell.dim != run_dim) term->set_dim(cell.dim);
             if (cell.reverse != run_reverse) term->set_reverse(cell.reverse);
           }
           term->set_color(cell.fg, cell.bg);
@@ -224,6 +250,7 @@ void UI::render() {
           run_bg = cell.bg;
           run_bold = cell.bold;
           run_italic = cell.italic;
+          run_dim = cell.dim;
           run_reverse = cell.reverse;
         }
 
@@ -233,9 +260,10 @@ void UI::render() {
         while (x < row_width &&
                grid[y][x].fg == run_fg &&
                grid[y][x].bg == run_bg &&
-               grid[y][x].bold == run_bold &&
-               grid[y][x].italic == run_italic &&
-               grid[y][x].reverse == run_reverse) {
+                grid[y][x].bold == run_bold &&
+                grid[y][x].italic == run_italic &&
+                grid[y][x].dim == run_dim &&
+                grid[y][x].reverse == run_reverse) {
           int cell_w = std::min(rendered_cell_width(grid[y][x].ch),
                                 row_width - x);
           append_cell_for_remaining_width(body, grid[y][x].ch, row_width - x);

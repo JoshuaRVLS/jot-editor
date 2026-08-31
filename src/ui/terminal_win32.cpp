@@ -446,6 +446,7 @@ void Terminal::set_color(int fg, int bg) {
 void Terminal::reset_color() { buffer += "\x1b[0m"; }
 void Terminal::set_bold(bool on) { buffer += on ? "\x1b[1m" : "\x1b[22m"; }
 void Terminal::set_italic(bool on) { buffer += on ? "\x1b[3m" : "\x1b[23m"; }
+void Terminal::set_dim(bool on) { buffer += on ? "\x1b[2m" : "\x1b[22m"; }
 void Terminal::set_reverse(bool on) { buffer += on ? "\x1b[7m" : "\x1b[27m"; }
 void Terminal::write(const std::string &str) { buffer += str; }
 void Terminal::write_char(char c) { buffer += c; }

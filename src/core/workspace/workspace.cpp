@@ -1016,7 +1016,7 @@ void Editor::handle_sidebar_input(int ch) {
           message = ch == 'D' ? "Git diff: no staged changes for " + rel
                               : "Git diff: no unstaged changes for " + rel;
         } else {
-          show_popup(limit_lines_local(diff, 18), 2, tab_height + 1);
+          show_popup(limit_lines_local(diff, 18), "Git Diff");
         }
       }
       needs_redraw = true;

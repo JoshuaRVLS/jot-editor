@@ -176,6 +176,7 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift,
     case 'e':
     case 'E':
       telescope.open(root_dir.empty() ? "." : root_dir);
+      telescope.scan_async(task_queue_.get(), [this] { needs_redraw = true; });
       needs_redraw = true;
       return;
     case 'f':

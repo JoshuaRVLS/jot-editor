@@ -49,86 +49,6 @@ struct ScrollbarGeometry {
   int max_scroll = 0;
 };
 
-struct TelescopeMouseLayout {
-  bool valid = false;
-  bool show_preview = false;
-  int x = 0;
-  int y = 0;
-  int w = 0;
-  int h = 0;
-  int inner_x = 0;
-  int inner_y = 0;
-  int inner_w = 0;
-  int inner_h = 0;
-  int body_y = 0;
-  int body_h = 0;
-  int list_x = 0;
-  int list_y = 0;
-  int list_w = 0;
-  int list_h = 0;
-  int preview_x = 0;
-  int preview_y = 0;
-  int preview_w = 0;
-  int preview_h = 0;
-};
-
-TelescopeMouseLayout telescope_mouse_layout_for(UI *ui, int tab_height,
-                                                int status_height,
-                                                bool show_sidebar,
-                                                int sidebar_w) {
-  TelescopeMouseLayout layout;
-  int h = ui->get_height();
-  int w = ui->get_render_width();
-  if (w < 4 || h < 5) {
-    return layout;
-  }
-  int content_x = show_sidebar ? std::max(0, sidebar_w) : 0;
-  int content_w = std::max(1, w - content_x);
-  int top_bound = std::max(0, tab_height + 1);
-  int bottom_bound = std::max(top_bound + 1, h - status_height - 1);
-  int usable_h = std::max(1, bottom_bound - top_bound);
-
-  layout.w = std::clamp(content_w - 2, std::min(content_w, 42), content_w);
-  if (content_w >= 72) {
-    layout.w = std::min(content_w - 2, std::max(72, content_w * 9 / 10));
-  }
-  layout.h = std::clamp(usable_h - 1, std::min(usable_h, 10), usable_h);
-  if (usable_h >= 18) {
-    layout.h = std::min(usable_h - 1, std::max(16, usable_h * 5 / 6));
-  }
-
-  layout.x = content_x + std::max(0, (content_w - layout.w + 1) / 2);
-  layout.x = std::clamp(layout.x, content_x,
-                        std::max(content_x, content_x + content_w - layout.w));
-  layout.y = top_bound + std::max(0, (usable_h - layout.h) / 2);
-  layout.inner_x = layout.x + 1;
-  layout.inner_y = layout.y + 1;
-  layout.inner_w = std::max(1, layout.w - 2);
-  layout.inner_h = std::max(1, layout.h - 2);
-  int footer_y = layout.y + layout.h - 2;
-  layout.body_y = layout.inner_y + 4;
-  layout.body_h = std::max(1, footer_y - layout.body_y);
-  layout.show_preview = layout.inner_w >= 64 && layout.body_h >= 4;
-  int list_panel_w =
-      layout.show_preview ? std::max(26, layout.inner_w * 42 / 100)
-                          : layout.inner_w;
-  layout.list_x = layout.inner_x + 1;
-  layout.list_y = layout.body_y;
-  layout.list_w =
-      layout.show_preview ? std::max(1, list_panel_w - 2)
-                          : std::max(1, layout.inner_w - 2);
-  layout.list_h = layout.body_h;
-  if (layout.show_preview) {
-    layout.preview_x = layout.inner_x + list_panel_w + 2;
-    layout.preview_y = layout.body_y;
-    layout.preview_w =
-        std::max(1, layout.inner_x + layout.inner_w - layout.preview_x - 1);
-    layout.preview_h = layout.body_h;
-  }
-  layout.valid = true;
-  return layout;
-}
-
 ScrollbarGeometry scrollbar_geometry_for(const SplitPane &pane,
                                          const FileBuffer &buf,
                                          int tab_height,
@@ -701,9 +621,9 @@ bool Editor::handle_telescope_mouse(int x, int y, bool is_click,
     return false;
   }
 
-  TelescopeMouseLayout layout = telescope_mouse_layout_for(
-      ui, tab_height, status_height, show_sidebar,
-      show_sidebar ? effective_sidebar_width() : 0);
+  TelescopeLayout layout = telescope_layout_for(
+      ui->get_render_width(), ui->get_height(), 1,
+      std::max(1, ui->get_height() - status_height));
   if (!layout.valid) {
     return false;
   }
@@ -725,11 +645,13 @@ bool Editor::handle_telescope_mouse(int x, int y, bool is_click,
   if (is_scroll_up || is_scroll_down) {
     int delta = is_scroll_down ? 3 : -3;
     if (in_preview) {
+      telescope.set_focus(TelescopeFocus::Preview);
       int line_start_y = layout.preview_y + 4;
       int preview_lines_h =
           std::max(1, layout.preview_y + layout.preview_h - line_start_y);
       telescope.scroll_preview(delta, preview_lines_h);
     } else if (in_list || inside) {
+      telescope.set_focus(TelescopeFocus::Results);
       telescope.move_by(delta);
       telescope.ensure_selected_visible(layout.list_h);
     }
@@ -738,6 +660,7 @@ bool Editor::handle_telescope_mouse(int x, int y, bool is_click,
   }
 
   if (is_click && in_list) {
+    telescope.set_focus(TelescopeFocus::Results);
     int target = telescope.get_list_scroll_offset() + (y - layout.list_y);
     if (target >= 0 && target < telescope.get_result_count()) {
       telescope.select_index(target);
@@ -752,6 +675,12 @@ bool Editor::handle_telescope_mouse(int x, int y, bool is_click,
   }
 
   if (is_click) {
+    if (x >= layout.query_x && x < layout.query_x + layout.query_w &&
+        y == layout.query_y) {
+      telescope.set_focus(TelescopeFocus::Query);
+    } else if (in_preview) {
+      telescope.set_focus(TelescopeFocus::Preview);
+    }
     needs_redraw = true;
   }
   return true;

@@ -360,8 +360,10 @@ private:
   void outdent_selection();
   void toggle_comment();
 
-  void show_popup(const std::string &text, int x, int y);
+  void show_popup(const std::string &text, const std::string &title = "");
+  void show_hover_popup(const std::string &text, int x, int y);
   void hide_popup();
+  bool handle_popup_input(int ch);
   void open_context_menu(int x, int y, ContextMenuSurface surface,
                          const std::vector<ContextMenuItem> &items);
   void close_context_menu();

@@ -11,17 +11,18 @@ struct UIRect {
 };
 
 struct UICell {
-  std::string ch;
-  int fg;
-  int bg;
-  bool bold;
-  bool italic;
-  bool reverse;
+  std::string ch = " ";
+  int fg = 7;
+  int bg = 0;
+  bool bold = false;
+  bool italic = false;
+  bool reverse = false;
+  bool dim = false;
 
   bool operator==(const UICell &other) const {
     return ch == other.ch && fg == other.fg && bg == other.bg &&
-           bold == other.bold && italic == other.italic &&
-           reverse == other.reverse;
+            bold == other.bold && italic == other.italic &&
+            reverse == other.reverse && dim == other.dim;
   }
   bool operator!=(const UICell &other) const { return !(*this == other); }
 };
@@ -60,6 +61,7 @@ public:
   void draw_rect(const UIRect &rect, int fg, int bg);
   void draw_border(const UIRect &rect, int fg, int bg);
   void fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg);
+  void dim_rect(const UIRect &rect);
 
   // Store cursor position/visibility, no terminal writes. render() emits
   // the cursor at frame-end; flush_cursor() emits it for idle frames.
@@ -69,6 +71,7 @@ public:
 
   int get_width() const { return width; }
   int get_height() const { return height; }
+  const UICell *cell_at(int x, int y) const;
 
   // Paintable width: the physical terminal width minus the fixed one-cell
   // right-edge safety margin. The renderer intentionally leaves the

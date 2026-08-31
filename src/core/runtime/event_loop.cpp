@@ -551,6 +551,11 @@ void Editor::handle_terminal_event(const Event &ev) {
       ch = ch + 96;
     }
 
+    if (popup.visible && popup.presentation == POPUP_MODAL) {
+      handle_popup_input(ch);
+      return;
+    }
+
     if (show_menu_bar_dropdown) {
       handle_menu_bar_input(ch);
     } else if (show_context_menu) {

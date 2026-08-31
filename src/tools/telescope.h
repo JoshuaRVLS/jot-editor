@@ -28,7 +28,44 @@ struct TelescopePreview {
     bool is_directory = false;
     bool is_binary = false;
     bool skipped = false;
+    bool truncated = false;
 };
+
+enum class TelescopeFocus {
+    Query,
+    Results,
+    Preview,
+};
+
+struct TelescopeLayout {
+    bool valid = false;
+    bool show_preview = false;
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    int h = 0;
+    int inner_x = 0;
+    int inner_y = 0;
+    int inner_w = 0;
+    int inner_h = 0;
+    int query_x = 0;
+    int query_y = 0;
+    int query_w = 0;
+    int body_y = 0;
+    int body_h = 0;
+    int list_x = 0;
+    int list_y = 0;
+    int list_w = 0;
+    int list_h = 0;
+    int preview_x = 0;
+    int preview_y = 0;
+    int preview_w = 0;
+    int preview_h = 0;
+    int footer_y = 0;
+};
+
+TelescopeLayout telescope_layout_for(int render_width, int screen_height,
+                                     int top_bound, int bottom_bound);
 
 class TaskQueue;
 
@@ -40,10 +77,11 @@ public:
     void close();
     bool is_active() const { return active; }
     
-    void set_query(const std::string& q, TaskQueue *tq = nullptr);
+    void set_query(const std::string& q, TaskQueue *tq = nullptr,
+                   std::function<void()> on_update = {});
     void update_results();
 
-    void scan_async(TaskQueue *tq);
+    void scan_async(TaskQueue *tq, std::function<void()> on_update = {});
     void cancel_scan();
     void apply_results(std::vector<FileMatch> new_results);
     
@@ -55,6 +93,8 @@ public:
     void select();
     void go_parent();
     void scroll_preview(int delta, int visible_rows);
+    void cycle_focus(int delta);
+    void set_focus(TelescopeFocus value) { focus_ = value; }
     
     std::string get_selected_path() const;
     std::string get_selected_relative_path() const;
@@ -69,6 +109,9 @@ public:
     std::string get_query() const { return query; }
     std::string get_root_dir() const { return root_dir.string(); }
     int current_scan_id() const { return scan_id_.load(); }
+    bool scan_pending() const { return scan_pending_; }
+    bool can_accept_selection() const { return !scan_pending_ && !results.empty(); }
+    TelescopeFocus focus() const { return focus_; }
     
     static bool fuzzy_match(const std::string& text, const std::string& pattern);
     static int fuzzy_score(const std::string& text, const std::string& pattern);
@@ -80,6 +123,8 @@ private:
     int selected_index;
     int list_scroll_offset = 0;
     int preview_scroll_offset = 0;
+    bool scan_pending_ = false;
+    TelescopeFocus focus_ = TelescopeFocus::Query;
     fs::path root_dir;
 
     std::atomic<int> scan_id_{0};

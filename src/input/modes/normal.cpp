@@ -131,6 +131,7 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     case 'f':
     case 'F':
       telescope.open(root_dir.empty() ? "." : root_dir);
+      telescope.scan_async(task_queue_.get(), [this] { needs_redraw = true; });
       needs_redraw = true;
       return;
     case 'p':
