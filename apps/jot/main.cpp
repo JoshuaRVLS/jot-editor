@@ -11,7 +11,7 @@ int main(int argc, char *argv[]) {
 
   if (argc > 1) {
     if (std::filesystem::is_directory(argv[1])) {
-      std::error_code ec;
+      std::error_code ec; 
       std::filesystem::path workspace = std::filesystem::absolute(argv[1], ec);
       if (!ec) {
         std::filesystem::current_path(workspace, ec);

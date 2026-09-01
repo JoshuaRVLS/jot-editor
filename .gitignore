@@ -1,10 +1,18 @@
 # Build artifacts
 build/
+build*/
+**/build*/
 out/
+_deps/
+Testing/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
+cmake_uninstall.cmake
+CTestTestfile.cmake
+DartConfiguration.tcl
 Makefile
+compile_commands.json
 
 # Binary
 jcode
@@ -32,6 +40,16 @@ __pycache__/
 
 # Agent
 .agent/
+**/.agent/
+AGENTS.md
+**/AGENTS.md
+PLANS.md
+**/PLANS.md
+.codex/
+.claude/
+.cursor/
+.gemini/
+.copilot/
 
 # Temp
 tmp/
@@ -42,9 +60,6 @@ tmp/
 key_debug
 debug_api.py
 compile_commands.json
-AGENTS.md
-PLANS.md
-.codex
 build_no_ts/cmake_uninstall.cmake
 build_no_ts/CTestTestfile.cmake
 build_no_ts/DartConfiguration.tcl
@@ -53,3 +68,4 @@ build_no_ts/Testing/Temporary/CTestCostData.txt
 build_no_ts/tests/CTestTestfile.cmake
 build_no_ts/tests/jot_tests
 index.html
+.tokensave/

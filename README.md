@@ -536,10 +536,7 @@ Open the command palette with `Ctrl+P` and run ex-style commands.
 
 ### LSP
 
-- `:lspstart`, `:lspstatus`, `:lspstop`, `:lsprestart`
-- `:lspmanager`
-- `:lspinstall <python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>`
-- `:lspremove <python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>`
+- `:lspmanager` for install, update, remove, and per-workspace enable/disable
 - `:hover`, `:lsphover`
 - `:definition`, `:lspdefinition`, `:lspdef`, `:gd`
 - `:lspback`
