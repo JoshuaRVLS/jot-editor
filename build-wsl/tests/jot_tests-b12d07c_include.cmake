@@ -1,5 +1,0 @@
-if(EXISTS "/mnt/c/Users/Joshua Ravael/Documents/jot/build-wsl/tests/jot_tests-b12d07c_tests.cmake")
-  include("/mnt/c/Users/Joshua Ravael/Documents/jot/build-wsl/tests/jot_tests-b12d07c_tests.cmake")
-else()
-  add_test(jot_tests_NOT_BUILT-b12d07c jot_tests_NOT_BUILT-b12d07c)
-endif()
