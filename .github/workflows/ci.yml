@@ -1,0 +1,95 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-latest
+            platform: linux
+          - name: macOS Intel
+            os: macos-13
+            platform: macos
+          - name: macOS Apple Silicon
+            os: macos-14
+            platform: macos
+          - name: Windows x64
+            os: windows-2022
+            platform: windows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            cmake ninja-build pkg-config python3-dev \
+            libvterm-dev libtermkey-dev libuv1-dev libutf8proc-dev \
+            libtree-sitter-dev
+
+      - name: Install macOS dependencies
+        if: matrix.platform == 'macos'
+        run: |
+          brew install cmake ninja pkg-config python \
+            libvterm libtermkey libuv utf8proc tree-sitter
+
+      - name: Set up Python on Windows
+        if: matrix.platform == 'windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Windows dependencies
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          vcpkg install libuv:x64-windows utf8proc:x64-windows
+
+      - name: Configure Unix build
+        if: matrix.platform != 'windows'
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DJOT_ENABLE_CCACHE=OFF
+
+      - name: Configure Windows build
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DJOT_TREESITTER=OFF `
+            -DBUILD_TESTING=ON
+
+      - name: Build Unix
+        if: matrix.platform != 'windows'
+        run: cmake --build build --parallel 2
+
+      - name: Build Windows
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: cmake --build build --config Release --parallel 2
+
+      - name: Test Unix
+        if: matrix.platform != 'windows'
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Test Windows
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: ctest --test-dir build -C Release --output-on-failure

@@ -1,0 +1,134 @@
+name: Release packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-latest
+            platform: linux
+            archive: jot-linux-x86_64.tar.gz
+          - name: macOS Intel
+            os: macos-13
+            platform: macos
+            archive: jot-macos-x86_64.tar.gz
+          - name: macOS Apple Silicon
+            os: macos-14
+            platform: macos
+            archive: jot-macos-arm64.tar.gz
+          - name: Windows x64
+            os: windows-2022
+            platform: windows
+            archive: jot-windows-x86_64.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            cmake ninja-build pkg-config python3-dev \
+            libvterm-dev libtermkey-dev libuv1-dev libutf8proc-dev \
+            libtree-sitter-dev
+
+      - name: Install macOS dependencies
+        if: matrix.platform == 'macos'
+        run: |
+          brew install cmake ninja pkg-config python \
+            libvterm libtermkey libuv utf8proc tree-sitter
+
+      - name: Set up Python on Windows
+        if: matrix.platform == 'windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Windows dependencies
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          vcpkg install libuv:x64-windows utf8proc:x64-windows
+
+      - name: Configure Unix build
+        if: matrix.platform != 'windows'
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DJOT_ENABLE_CCACHE=OFF
+
+      - name: Configure Windows build
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DJOT_TREESITTER=OFF `
+            -DBUILD_TESTING=OFF
+
+      - name: Build Unix
+        if: matrix.platform != 'windows'
+        run: cmake --build build --parallel 2
+
+      - name: Build Windows
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: cmake --build build --config Release --parallel 2
+
+      - name: Install Unix package
+        if: matrix.platform != 'windows'
+        run: |
+          cmake --install build --prefix stage
+          tar -C stage -czf "${{ matrix.archive }}" .
+
+      - name: Install Windows package
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          cmake --install build --config Release --prefix stage
+          Compress-Archive -Path stage\* -DestinationPath "${{ matrix.archive }}"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive }}
+          path: ${{ matrix.archive }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: package
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create release and upload packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "jot $GITHUB_REF_NAME" \
+            --generate-notes
