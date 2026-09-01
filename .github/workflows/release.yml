@@ -67,6 +67,12 @@ jobs:
       - name: Configure Unix build
         if: matrix.platform != 'windows'
         run: |
+          if [ "${{ matrix.platform }}" = "macos" ]; then
+            brew_prefix="$(brew --prefix)"
+            export CPPFLAGS="-I${brew_prefix}/include ${CPPFLAGS:-}"
+            export LDFLAGS="-L${brew_prefix}/lib ${LDFLAGS:-}"
+            export PKG_CONFIG_PATH="${brew_prefix}/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          fi
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \

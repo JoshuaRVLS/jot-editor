@@ -1140,7 +1140,7 @@ void LSPClient::append_log_line(const std::string &prefix,
   const std::string path = get_lsp_log_path(language);
   std::error_code ec;
   if (fs::file_size(path, ec) > kMaxLspLogBytes) {
-    std::ofstream(path, std::ios::trunc).close();
+    std::ofstream truncated_log(path, std::ios::trunc);
   }
   std::ofstream log(path, std::ios::app);
   if (!log.is_open()) {
