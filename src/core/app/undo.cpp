@@ -205,8 +205,8 @@ void Editor::undo() {
 
   invalidate_syntax_cache(buf);
   discard_tree_sitter_tree(buf);
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);
@@ -233,8 +233,8 @@ void Editor::redo() {
 
   invalidate_syntax_cache(buf);
   discard_tree_sitter_tree(buf);
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);

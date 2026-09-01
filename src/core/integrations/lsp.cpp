@@ -1924,8 +1924,8 @@ bool Editor::apply_selected_lsp_completion() {
   ensure_cursor_visible();
   needs_redraw = true;
 
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   notify_lsp_change(buf.filepath);
 

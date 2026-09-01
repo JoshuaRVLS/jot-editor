@@ -34,8 +34,8 @@ void Editor::render_plugin_panel() {
   int content_h = std::max(0, panel_h - 3);
 
   std::vector<std::string> lines;
-  if (python_api && !active_plugin_panel.empty()) {
-    lines = python_api->plugin_panel_lines(active_plugin_panel);
+  if (lua_api && !active_plugin_panel.empty()) {
+    lines = lua_api->plugin_panel_lines(active_plugin_panel);
   }
 
   if (lines.empty()) {

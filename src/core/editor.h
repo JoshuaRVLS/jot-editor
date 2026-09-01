@@ -10,14 +10,14 @@
 #include <utility>
 #include <vector>
 
-class PythonAPI;
+class LuaAPI;
 class EditorHostAPI;
 class HostCoreAPI;
 class HostRenderAPI;
 class HostIOAPI;
 
 class Editor : private EditorState {
-  friend class PythonAPI;
+  friend class LuaAPI;
   friend class EditorHostAPI;
   friend class HostCoreAPI;
   friend class HostRenderAPI;
@@ -642,7 +642,7 @@ private:
 
   void load_runtime_config();
   void initialize_state_defaults();
-  void initialize_python_runtime();
+  void initialize_lua_runtime();
   void initialize_terminal_ui();
   void initialize_placeholder_buffer();
 

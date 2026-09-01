@@ -41,7 +41,7 @@ struct PluginLoadStatus {
 // Forward declaration
 class Editor;
 
-class PythonAPI {
+class LuaAPI {
 private:
   Editor *editor;
   std::vector<PluginCommand> plugin_commands;
@@ -63,8 +63,8 @@ private:
                             const std::string &arg);
 
 public:
-  PythonAPI(Editor *ed);
-  ~PythonAPI();
+  LuaAPI(Editor *ed);
+  ~LuaAPI();
 
   bool init();
   void cleanup();
@@ -73,7 +73,7 @@ public:
                         const std::string &content);
   void on_buffer_save(const std::string &filepath);
 
-  // Python API functions (called from Python)
+  // Lua API functions used by the embedded runtime.
   void py_show_message(const std::string &msg);
   void py_set_theme_color(const std::string &name, int fg, int bg);
   bool py_apply_colorscheme(const std::string &name);

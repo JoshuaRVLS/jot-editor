@@ -63,8 +63,8 @@ void Editor::join_lines_selection_or_current() {
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Joined " + std::to_string(joins + 1) + " lines");
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);

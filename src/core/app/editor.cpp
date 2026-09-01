@@ -263,10 +263,10 @@ void Editor::initialize_state_defaults() {
   current_theme_name = "dark";
 }
 
-void Editor::initialize_python_runtime() {
-  python_api = new PythonAPI(this);
+void Editor::initialize_lua_runtime() {
+  lua_api = new LuaAPI(this);
   host_api = std::make_unique<EditorHostAPI>(*this);
-  python_api->init();
+  lua_api->init();
 
   load_recent_files();
   load_recent_workspaces();
@@ -315,7 +315,7 @@ void Editor::initialize_placeholder_buffer() {
 Editor::Editor() {
   load_runtime_config();
   initialize_state_defaults();
-  initialize_python_runtime();
+  initialize_lua_runtime();
   initialize_terminal_ui();
   initialize_placeholder_buffer();
 }
@@ -337,9 +337,9 @@ Editor::~Editor() {
       term->close_shell();
     }
   }
-  if (python_api) {
-    python_api->cleanup();
-    delete python_api;
+  if (lua_api) {
+    lua_api->cleanup();
+    delete lua_api;
   }
   delete ui;
   terminal.cleanup();

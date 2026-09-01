@@ -129,8 +129,8 @@ bool Editor::insert_char(char c) {
         buf.is_placeholder = false;
         ensure_cursor_visible();
         needs_redraw = true;
-        if (python_api)
-          python_api->on_buffer_change(buf.filepath, "");
+        if (lua_api)
+          lua_api->on_buffer_change(buf.filepath, "");
         if (!buf.filepath.empty())
           notify_lsp_change(buf.filepath);
         return false;
@@ -197,8 +197,8 @@ bool Editor::insert_char(char c) {
   buf.modified = true;
   buf.is_placeholder = false;
   needs_redraw = true;
-  if (python_api)
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 
@@ -217,8 +217,8 @@ void Editor::insert_string(const std::string &str) {
   buf.cursor.x += text.length();
   buf.modified = true;
   buf.is_placeholder = false;
-  if (python_api)
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }
@@ -281,8 +281,8 @@ void Editor::delete_char(bool forward) {
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
   needs_redraw = true;
-  if (python_api)
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }
@@ -334,8 +334,8 @@ void Editor::delete_word_backward() {
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
   needs_redraw = true;
-  if (python_api)
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }
@@ -380,8 +380,8 @@ void Editor::delete_word_forward() {
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
   needs_redraw = true;
-  if (python_api)
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }
@@ -429,8 +429,8 @@ void Editor::delete_selection() {
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
   needs_redraw = true;
-  if (python_api)
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }
@@ -452,8 +452,8 @@ void Editor::delete_line() {
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
   needs_redraw = true;
-  if (python_api)
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }
@@ -531,8 +531,8 @@ void Editor::new_line() {
   buf.modified = true;
   ensure_cursor_visible();
   needs_redraw = true;
-  if (python_api)
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }

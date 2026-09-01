@@ -28,8 +28,8 @@ void Editor::reverse_selected_lines() {
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Reversed selected lines");
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);

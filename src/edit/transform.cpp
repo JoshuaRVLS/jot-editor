@@ -106,8 +106,8 @@ void Editor::transform_selection_uppercase() {
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Uppercase applied");
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);
@@ -180,8 +180,8 @@ void Editor::transform_selection_lowercase() {
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Lowercase applied");
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);
@@ -239,8 +239,8 @@ void Editor::sort_selected_lines() {
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Sorted selected lines");
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);

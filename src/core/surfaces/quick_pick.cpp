@@ -178,8 +178,8 @@ void Editor::accept_quick_pick() {
     std::string callback = plugin_quick_pick_select_callback;
     std::string value = item.label;
     close_quick_pick();
-    if (python_api && !callback.empty()) {
-      python_api->run_plugin_callback(callback, value);
+    if (lua_api && !callback.empty()) {
+      lua_api->run_plugin_callback(callback, value);
     }
     needs_redraw = true;
     return;

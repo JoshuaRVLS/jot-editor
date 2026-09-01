@@ -172,36 +172,36 @@ bool Editor::execute_ex_command(const std::string &input_line) {
   } else if (parse_line_col(lcmd, parsed_line, parsed_col)) {
     goto_line_col(parsed_line, parsed_col);
   } else if (lcmd == "reloadplugins") {
-    if (python_api) {
-      python_api->reload_plugins();
+    if (lua_api) {
+      lua_api->reload_plugins();
       refresh_command_palette();
       needs_redraw = true;
     } else {
       set_message("Python plugins unavailable");
     }
   } else if (lcmd == "plugins") {
-    if (!python_api) {
+    if (!lua_api) {
       set_message("Python plugins unavailable");
     } else {
       std::stringstream out;
       out << "Plugins\n";
-      for (const auto &status : python_api->load_status()) {
+      for (const auto &status : lua_api->load_status()) {
         out << (status.loaded ? "[ok] " : "[err] ") << status.name;
         if (!status.error.empty()) {
           out << " - " << status.error;
         }
         out << "\n";
       }
-      out << "\nCommands: " << python_api->commands().size() << "\n";
-      for (const auto &command : python_api->commands()) {
+      out << "\nCommands: " << lua_api->commands().size() << "\n";
+      for (const auto &command : lua_api->commands()) {
         out << "  :" << command.name;
         if (!command.detail.empty()) {
           out << " - " << command.detail;
         }
         out << "\n";
       }
-      out << "\nKeymaps: " << python_api->keymaps().size() << "\n";
-      for (const auto &keymap : python_api->keymaps()) {
+      out << "\nKeymaps: " << lua_api->keymaps().size() << "\n";
+      for (const auto &keymap : lua_api->keymaps()) {
         out << "  " << keymap.key;
         if (!keymap.detail.empty()) {
           out << " - " << keymap.detail;
@@ -210,8 +210,8 @@ bool Editor::execute_ex_command(const std::string &input_line) {
         }
         out << "\n";
       }
-      out << "\nPanels: " << python_api->panels().size() << "\n";
-      for (const auto &panel : python_api->panels()) {
+      out << "\nPanels: " << lua_api->panels().size() << "\n";
+      for (const auto &panel : lua_api->panels()) {
         out << "  " << panel.name;
         if (!panel.title.empty()) {
           out << " - " << panel.title;
@@ -221,11 +221,11 @@ bool Editor::execute_ex_command(const std::string &input_line) {
       show_popup(limit_lines(out.str(), 24), "Plugins");
     }
   } else if (lcmd == "pluginpanel") {
-    if (!python_api) {
+    if (!lua_api) {
       set_message("Python plugins unavailable");
     } else if (arg.empty()) {
       std::string names;
-      for (const auto &panel : python_api->panels()) {
+      for (const auto &panel : lua_api->panels()) {
         if (!names.empty()) {
           names += ", ";
         }
@@ -1016,7 +1016,7 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
     }
   } else if (lcmd == "help" || lcmd == "h") {
     show_command_help(arg);
-  } else if (python_api && python_api->run_plugin_command(lcmd, arg)) {
+  } else if (lua_api && lua_api->run_plugin_command(lcmd, arg)) {
     needs_redraw = true;
   } else {
     set_message("Unknown command: " + line);

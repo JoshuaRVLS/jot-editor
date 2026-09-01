@@ -26,7 +26,7 @@
 
 class DebuggerClient;
 class EditorHostAPI;
-class PythonAPI;
+class LuaAPI;
 
 struct EditorState {
   std::vector<FileBuffer> buffers;
@@ -295,7 +295,7 @@ struct EditorState {
   std::vector<int> recent_keys;
   int easter_egg_timer;
 
-  PythonAPI *python_api;
+  LuaAPI *lua_api;
   std::unique_ptr<EditorHostAPI> host_api;
 };
 

@@ -54,8 +54,8 @@ void Editor::trim_blank_lines_in_selection() {
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Removed " + std::to_string(removed) + " blank line(s)");
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);

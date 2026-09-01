@@ -316,8 +316,8 @@ void Editor::refresh_command_palette() {
                    score + (meta ? meta->priority : 40));
       }
     }
-    if (python_api) {
-      for (const auto &command : python_api->commands()) {
+    if (lua_api) {
+      for (const auto &command : lua_api->commands()) {
         int score = fuzzy_score(command.name, needle);
         if (needle.empty() || score >= 0) {
           add_result(command.name, command.name, "Plugin",
@@ -441,8 +441,8 @@ void Editor::refresh_command_palette() {
       for (const auto &c : ex_commands()) {
         add_arg(c, "Command", "Command help", 80);
       }
-    } else if (lcmd == "pluginpanel" && python_api) {
-      for (const auto &panel : python_api->panels()) {
+    } else if (lcmd == "pluginpanel" && lua_api) {
+      for (const auto &panel : lua_api->panels()) {
         add_arg(panel.name, "Plugin Panel",
                 panel.title.empty() ? "Show plugin panel" : panel.title, 120);
       }

@@ -22,8 +22,8 @@ std::string trim_copy(const std::string &s) {
 
 std::vector<std::string> Editor::list_available_themes() {
   std::vector<std::string> themes;
-  if (python_api) {
-    themes = python_api->py_list_themes();
+  if (lua_api) {
+    themes = lua_api->py_list_themes();
   }
 
   if (themes.empty()) {
@@ -61,7 +61,7 @@ void Editor::apply_theme(const std::string &name, bool persist, bool announce) {
     }
   }
 
-  if (!python_api) {
+  if (!lua_api) {
     set_message("Lua theme runtime unavailable");
     return;
   }
@@ -71,7 +71,7 @@ void Editor::apply_theme(const std::string &name, bool persist, bool announce) {
 
   // Start from defaults, then let Python colorscheme override highlight groups.
   theme = Theme();
-  if (!python_api->py_apply_colorscheme(resolved)) {
+  if (!lua_api->py_apply_colorscheme(resolved)) {
     theme = previous_theme;
     current_theme_name = previous_theme_name;
     set_message("Unknown theme: " + requested);

@@ -370,8 +370,8 @@ bool Editor::replace_current_search_match() {
         std::clamp(search_scope_end.x, 0, (int)line.size());
   }
 
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);
@@ -437,8 +437,8 @@ bool Editor::replace_all_search_matches() {
   clear_search_scope();
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);

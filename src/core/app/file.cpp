@@ -658,8 +658,8 @@ void Editor::finish_open_file(FileBuffer fb, const std::string &path_to_open,
 
   restore_file_fold_state(buffers.back());
 
-  if (python_api) {
-    python_api->on_buffer_open(path_to_open);
+  if (lua_api) {
+    lua_api->on_buffer_open(path_to_open);
   } else {
     notify_lsp_open(path_to_open);
   }
@@ -836,8 +836,8 @@ bool Editor::save_buffer_at(int index, bool announce) {
                       " (formatted: " + fmt_name + ")";
             needs_redraw = true;
           }
-          if (python_api) {
-            python_api->on_buffer_save(b.filepath);
+          if (lua_api) {
+            lua_api->on_buffer_save(b.filepath);
           } else {
             notify_lsp_save(b.filepath);
           }
@@ -873,8 +873,8 @@ bool Editor::save_buffer_at(int index, bool announce) {
     }
     needs_redraw = true;
   }
-  if (python_api) {
-    python_api->on_buffer_save(buf.filepath);
+  if (lua_api) {
+    lua_api->on_buffer_save(buf.filepath);
   } else {
     notify_lsp_save(buf.filepath);
   }

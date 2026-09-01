@@ -63,8 +63,8 @@ void Editor::increment_number_at_cursor(int delta) {
   needs_redraw = true;
   set_message(std::string(delta >= 0 ? "Incremented" : "Decremented") +
               " number to " + next_num);
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);

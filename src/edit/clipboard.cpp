@@ -357,8 +357,8 @@ void Editor::paste() {
 
   buf.modified = true;
   needs_redraw = true;
-  if (python_api)
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
   
@@ -391,8 +391,8 @@ void Editor::move_line_up() {
   buf.modified = true;
   ensure_cursor_visible();
   needs_redraw = true;
-  if (python_api)
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }
@@ -424,8 +424,8 @@ void Editor::move_line_down() {
   buf.modified = true;
   ensure_cursor_visible();
   needs_redraw = true;
-  if (python_api)
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }

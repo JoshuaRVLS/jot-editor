@@ -79,7 +79,7 @@ void Editor::insert_line_below() {
   buf.cursor.x = indent_str.length();
   buf.modified = true;
   needs_redraw = true;
-  if (python_api) python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }
@@ -97,7 +97,7 @@ void Editor::insert_line_above() {
   buf.cursor.x = indent_str.length();
   buf.modified = true;
   needs_redraw = true;
-  if (python_api) python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }
@@ -126,8 +126,8 @@ void Editor::indent_selection() {
   ensure_cursor_visible();
   buf.modified = true;
   needs_redraw = true;
-  if (python_api)
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }
@@ -151,8 +151,8 @@ void Editor::outdent_selection() {
     ensure_cursor_visible();
     buf.modified = true;
     needs_redraw = true;
-    if (python_api)
-      python_api->on_buffer_change(buf.filepath, "");
+    if (lua_api)
+      lua_api->on_buffer_change(buf.filepath, "");
     if (!buf.filepath.empty())
       notify_lsp_change(buf.filepath);
     return;
@@ -185,8 +185,8 @@ void Editor::outdent_selection() {
   ensure_cursor_visible();
   buf.modified = true;
   needs_redraw = true;
-  if (python_api)
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }

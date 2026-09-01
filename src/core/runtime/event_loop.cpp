@@ -579,12 +579,12 @@ void Editor::handle_terminal_event(const Event &ev) {
     } else if (show_quick_pick) {
       handle_input(ch, is_ctrl, is_shift, is_alt, original_ch);
     } else {
-      if (python_api) {
+      if (lua_api) {
         auto candidates =
             plugin_key_candidates(ch, is_ctrl, is_shift, is_alt, original_ch);
         log_keymap_debug(ch, is_ctrl, is_shift, is_alt, original_ch, candidates);
         for (const auto &candidate : candidates) {
-          if (python_api->run_plugin_keymap(candidate, "editor")) {
+          if (lua_api->run_plugin_keymap(candidate, "editor")) {
             needs_redraw = true;
             return;
           }

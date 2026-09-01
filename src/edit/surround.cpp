@@ -72,8 +72,8 @@ bool Editor::surround_selection_or_word(const std::string &left,
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Surrounded selection/word");
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);
@@ -137,8 +137,8 @@ bool Editor::unsurround_selection_or_cursor() {
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Removed surrounding pair");
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);
@@ -169,8 +169,8 @@ bool Editor::change_inside_quote(char quote) {
                (size_t)(range.inner_end - range.inner_start));
     buf.modified = true;
     buf.is_placeholder = false;
-    if (python_api) {
-      python_api->on_buffer_change(buf.filepath, "");
+    if (lua_api) {
+      lua_api->on_buffer_change(buf.filepath, "");
     }
     if (!buf.filepath.empty()) {
       notify_lsp_change(buf.filepath);

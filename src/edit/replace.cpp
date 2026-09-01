@@ -82,8 +82,8 @@ void Editor::replace_all_text(const std::string &needle,
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Replaced " + std::to_string(total) + " occurrence(s)");
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);
@@ -127,8 +127,8 @@ void Editor::replace_all_regex(const std::string &pattern,
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Regex replaced in " + std::to_string(changed_lines) + " line(s)");
-  if (python_api) {
-    python_api->on_buffer_change(buf.filepath, "");
+  if (lua_api) {
+    lua_api->on_buffer_change(buf.filepath, "");
   }
   if (!buf.filepath.empty()) {
     notify_lsp_change(buf.filepath);

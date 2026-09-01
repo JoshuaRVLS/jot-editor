@@ -127,8 +127,8 @@ void HostCoreAPI::set_buffer_content(const std::string &text) {
   editor.ensure_cursor_visible();
   editor.needs_redraw = true;
 
-  if (editor.python_api) {
-    editor.python_api->on_buffer_change(buf.filepath,
+  if (editor.lua_api) {
+    editor.lua_api->on_buffer_change(buf.filepath,
                                         editor.get_buffer_text(buf));
   }
 }
@@ -296,11 +296,11 @@ void HostIOAPI::run_job(const std::string &command, const std::string &cwd,
 void HostIOAPI::show_plugin_picker(const std::string &title,
                                    const std::string &items_callback,
                                    const std::string &select_callback) {
-  if (!editor.python_api) {
+  if (!editor.lua_api) {
     return;
   }
   std::vector<Editor::QuickPickItem> items;
-  for (const auto &line : editor.python_api->plugin_picker_items(items_callback)) {
+  for (const auto &line : editor.lua_api->plugin_picker_items(items_callback)) {
     Editor::QuickPickItem item;
     item.label = line;
     item.detail = "Plugin";
