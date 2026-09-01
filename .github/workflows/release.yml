@@ -20,14 +20,6 @@ jobs:
             os: ubuntu-latest
             platform: linux
             archive: jot-linux-x86_64.tar.gz
-          - name: macOS Intel
-            os: macos-13
-            platform: macos
-            archive: jot-macos-x86_64.tar.gz
-          - name: macOS Apple Silicon
-            os: macos-14
-            platform: macos
-            archive: jot-macos-arm64.tar.gz
           - name: Windows x64
             os: windows-2022
             platform: windows
@@ -46,12 +38,6 @@ jobs:
             libvterm-dev libtermkey-dev libuv1-dev libutf8proc-dev \
             libtree-sitter-dev
 
-      - name: Install macOS dependencies
-        if: matrix.platform == 'macos'
-        run: |
-          brew install cmake ninja pkg-config python \
-            libvterm libtermkey libuv utf8proc tree-sitter
-
       - name: Set up Python on Windows
         if: matrix.platform == 'windows'
         uses: actions/setup-python@v6
@@ -64,15 +50,9 @@ jobs:
         run: |
           vcpkg install libuv:x64-windows utf8proc:x64-windows
 
-      - name: Configure Unix build
-        if: matrix.platform != 'windows'
+      - name: Configure Linux build
+        if: matrix.platform == 'linux'
         run: |
-          if [ "${{ matrix.platform }}" = "macos" ]; then
-            brew_prefix="$(brew --prefix)"
-            export CPPFLAGS="-I${brew_prefix}/include ${CPPFLAGS:-}"
-            export LDFLAGS="-L${brew_prefix}/lib ${LDFLAGS:-}"
-            export PKG_CONFIG_PATH="${brew_prefix}/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
-          fi
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
@@ -87,8 +67,8 @@ jobs:
             -DJOT_TREESITTER=OFF `
             -DBUILD_TESTING=OFF
 
-      - name: Build Unix
-        if: matrix.platform != 'windows'
+      - name: Build Linux
+        if: matrix.platform == 'linux'
         run: cmake --build build --parallel 1
 
       - name: Build Windows
@@ -96,8 +76,8 @@ jobs:
         shell: pwsh
         run: cmake --build build --config Release --parallel 2
 
-      - name: Install Unix package
-        if: matrix.platform != 'windows'
+      - name: Install Linux package
+        if: matrix.platform == 'linux'
         run: |
           cmake --install build --prefix stage
           tar -C stage -czf "${{ matrix.archive }}" .
