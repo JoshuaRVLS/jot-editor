@@ -10,7 +10,8 @@ constexpr int kDefaultCols = 80;
 IntegratedTerminal::IntegratedTerminal()
     : master_fd(-1), child_pid(-1), active(false), focused(false), label(""),
       vterm(nullptr), screen(nullptr), rows(kDefaultRows), cols(kDefaultCols),
-      cursor_row(0), cursor_col(0), scroll_offset(0) {}
+      cursor_row(0), cursor_col(0), cursor_position_valid(false),
+      scroll_offset(0) {}
 
 IntegratedTerminal::~IntegratedTerminal() { close_shell(); }
 
@@ -31,8 +32,10 @@ void IntegratedTerminal::destroy_vterm() {
 }
 
 void IntegratedTerminal::append_output(const char *, size_t) {}
-void IntegratedTerminal::write_output_buffer() {}
-void IntegratedTerminal::refresh_current_line() {}
+bool IntegratedTerminal::write_output_buffer() { return false; }
+void IntegratedTerminal::refresh_current_line() {
+  cursor_position_valid = false;
+}
 void IntegratedTerminal::vterm_output_callback(const char *, size_t, void *) {}
 
 bool IntegratedTerminal::open_shell(const std::string &) {
