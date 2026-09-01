@@ -1,8 +1,23 @@
 #include "editor.h"
 #include "ui/text.h"
 #include <algorithm>
+#include <filesystem>
 
 namespace {
+  std::pair<int, int> git_diff_status_colors(const Theme &theme,
+                                             const std::string &status) {
+    if (status.find('U') != std::string::npos || status == "AA" ||
+        status == "DD")
+      return {theme.fg_git_conflict, theme.bg_git_conflict};
+    if (status.find('D') != std::string::npos)
+      return {theme.fg_git_deleted, theme.bg_git_deleted};
+    if (status.find('R') != std::string::npos)
+      return {theme.fg_git_renamed, theme.bg_git_renamed};
+    if (status.find('A') != std::string::npos || status.find('?') != std::string::npos)
+      return {theme.fg_git_added, theme.bg_git_added};
+    return {theme.fg_git_modified, theme.bg_git_modified};
+  }
+
   int diff_line_color(const Theme &theme, const std::string &line) {
     if (line.rfind("@@", 0) == 0) {
       return theme.fg_keyword;
@@ -50,7 +65,24 @@ void Editor::render_git_diff_panel() {
   
   std::string header = git_diff_panel.path.empty() ? "(repo)" : git_diff_panel.path;
   std::string count = std::to_string(git_diff_panel.lines.size()) + " lines";
-  ui->draw_text(content_x, content_y, ui_truncate_cells(header + " " + count, content_w), theme.fg_status_info, theme.bg_terminal, true);
+  std::error_code status_ec;
+  std::filesystem::path status_path = git_diff_panel.path;
+  if (!git_root.empty() && !status_path.is_absolute()) {
+    status_path = std::filesystem::path(git_root) / status_path;
+  }
+  const std::string normalized_path =
+      std::filesystem::absolute(status_path, status_ec).lexically_normal().string();
+  auto status_it = git_file_status.find(normalized_path);
+  int header_fg = theme.fg_status_info;
+  int header_bg = theme.bg_terminal;
+  if (status_it != git_file_status.end()) {
+    auto colors = git_diff_status_colors(theme, status_it->second);
+    header_fg = colors.first;
+    header_bg = colors.second;
+  }
+  ui->draw_text(content_x, content_y,
+                ui_truncate_cells(header + " " + count, content_w), header_fg,
+                header_bg, true);
   
   int body_y = content_y + 1;
   int body_h = std::max(0, content_h - 1);
@@ -75,7 +107,6 @@ void Editor::render_git_diff_panel() {
   }
   return;
 }
-
 
 
 

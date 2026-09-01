@@ -177,8 +177,14 @@ static int merge_sidebar_severity(int a, int b) {
   return sidebar_severity_rank(a) >= sidebar_severity_rank(b) ? a : b;
 }
 
+static bool git_conflict_status(const std::string &xy) {
+  return xy == "DD" || xy == "AU" || xy == "UD" || xy == "UA" ||
+         xy == "DU" || xy == "AA" || xy == "UU" ||
+         xy.find('U') != std::string::npos;
+}
+
 static int git_status_rank(const std::string &xy) {
-  if (xy.find('U') != std::string::npos)
+  if (git_conflict_status(xy))
     return 6; // conflict
   if (xy.find('D') != std::string::npos)
     return 5; // deleted
@@ -199,7 +205,7 @@ static std::string merge_git_status(const std::string &a,
 }
 
 static std::string git_status_symbol(const std::string &xy) {
-  if (xy.find('U') != std::string::npos)
+  if (git_conflict_status(xy))
     return "!";
   if (xy.find('D') != std::string::npos)
     return "D";
@@ -212,6 +218,23 @@ static std::string git_status_symbol(const std::string &xy) {
   if (xy.find('?') != std::string::npos)
     return "?";
   return "";
+}
+
+static std::pair<int, int> git_status_colors(const Theme &theme,
+                                              const std::string &xy) {
+  if (git_conflict_status(xy))
+    return {theme.fg_git_conflict, theme.bg_git_conflict};
+  if (xy.find('D') != std::string::npos)
+    return {theme.fg_git_deleted, theme.bg_git_deleted};
+  if (xy.find('R') != std::string::npos)
+    return {theme.fg_git_renamed, theme.bg_git_renamed};
+  if (xy.find('A') != std::string::npos)
+    return {theme.fg_git_added, theme.bg_git_added};
+  if (xy.find('?') != std::string::npos)
+    return {theme.fg_git_untracked, theme.bg_git_untracked};
+  if (xy.find('M') != std::string::npos)
+    return {theme.fg_git_modified, theme.bg_git_modified};
+  return {theme.fg_sidebar, theme.bg_sidebar};
 }
 
 static const char *diagnostic_symbol(int severity) {
@@ -481,22 +504,6 @@ void Editor::render_sidebar() {
     }
   };
 
-  auto git_status_color = [&](const std::string &xy, bool is_dir) {
-    if (xy.find('U') != std::string::npos || xy.find('D') != std::string::npos) {
-      return theme.fg_diagnostic_error;
-    }
-    if (xy.find('M') != std::string::npos) {
-      return theme.fg_diagnostic_warning;
-    }
-    if (xy.find('A') != std::string::npos) {
-      return theme.fg_diagnostic_hint;
-    }
-    if (xy.find('R') != std::string::npos || xy.find('?') != std::string::npos) {
-      return theme.fg_diagnostic_info;
-    }
-    return is_dir ? theme.fg_sidebar_directory : theme.fg_sidebar;
-  };
-
   if (active_sidebar_view == SIDEBAR_VIEW_GIT) {
     std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
     int header_y = y;
@@ -551,6 +558,13 @@ void Editor::render_sidebar() {
         bool selected = idx == git_sidebar_selected;
         int row_fg = theme.fg_sidebar;
         int row_bg = theme.bg_sidebar;
+        auto git_colors = git_status_colors(theme, row.status);
+        if (!selected && !row.status.empty()) {
+          row_fg = git_colors.first;
+          row_bg = git_colors.second;
+          ui->fill_rect({content_x, list_y + i, std::max(1, content_w - 1), 1},
+                        " ", row_fg, row_bg);
+        }
         if (selected) {
           if (focus_state == FOCUS_SIDEBAR) {
             row_fg = theme.fg_sidebar_selected;
@@ -569,7 +583,7 @@ void Editor::render_sidebar() {
           symbol = " ";
         }
         ui->draw_text(content_x + 1, list_y + i, symbol,
-                      git_status_color(row.status, false), row_bg, true);
+                      git_colors.first, row_bg, true);
         std::string label = " " + row.relative_path;
         ui->draw_text(content_x + 3, list_y + i,
                       truncate_cells(label, std::max(0, content_w - 5)),
@@ -645,6 +659,13 @@ void Editor::render_sidebar() {
 
     int row_fg = row.is_dir ? theme.fg_sidebar_directory : theme.fg_sidebar;
     int row_bg = theme.bg_sidebar;
+    auto git_colors = git_status_colors(theme, git_xy);
+    if (!row.is_dir && !git_xy.empty() && !selected) {
+      row_fg = git_colors.first;
+      row_bg = git_colors.second;
+      ui->fill_rect({content_x + 1, tree_y + i,
+                     std::max(1, content_w - 2), 1}, " ", row_fg, row_bg);
+    }
 
     if (selected) {
       if (focus_state == FOCUS_SIDEBAR) {
@@ -682,7 +703,7 @@ void Editor::render_sidebar() {
       }
       if (!git_symbol.empty()) {
         ui->draw_text(git_x, tree_y + i, git_symbol,
-                      git_status_color(git_xy, false), row_bg, true);
+                      git_colors.first, row_bg, true);
       }
     }
   }

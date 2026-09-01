@@ -338,6 +338,20 @@ void PythonAPI::py_set_theme_color(const std::string &name, int fg, int bg) {
   } else if (name == "terminal_tab_separator" ||
              name == "fg_terminal_tab_separator") {
     set_fg(theme.fg_terminal_tab_separator);
+  } else if (name == "git_modified") {
+    set_pair(theme.fg_git_modified, theme.bg_git_modified);
+  } else if (name == "git_added" || name == "git_untracked") {
+    set_pair(theme.fg_git_added, theme.bg_git_added);
+    if (name == "git_untracked") {
+      theme.fg_git_untracked = theme.fg_git_added;
+      theme.bg_git_untracked = theme.bg_git_added;
+    }
+  } else if (name == "git_deleted") {
+    set_pair(theme.fg_git_deleted, theme.bg_git_deleted);
+  } else if (name == "git_renamed") {
+    set_pair(theme.fg_git_renamed, theme.bg_git_renamed);
+  } else if (name == "git_conflict") {
+    set_pair(theme.fg_git_conflict, theme.bg_git_conflict);
   } else if (name == "bg_default") {
     set_bg(theme.bg_default);
   } else if (name == "fg_default") {

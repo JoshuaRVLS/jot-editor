@@ -310,6 +310,7 @@ struct FileTabSegment {
   bool active = false;
   bool modified = false;
   bool preview = false;
+  std::string git_status;
 };
 
 struct FileTabLayout {

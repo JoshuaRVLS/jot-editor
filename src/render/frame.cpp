@@ -31,6 +31,22 @@ std::string file_tab_base_name(const FileBuffer &buffer) {
   return base.empty() ? "[No Name]" : base;
 }
 
+std::pair<int, int> git_tab_colors(const Theme &theme,
+                                   const std::string &status) {
+  if (status.find('U') != std::string::npos || status == "AA" ||
+      status == "DD")
+    return {theme.fg_git_conflict, theme.bg_git_conflict};
+  if (status.find('D') != std::string::npos)
+    return {theme.fg_git_deleted, theme.bg_git_deleted};
+  if (status.find('R') != std::string::npos)
+    return {theme.fg_git_renamed, theme.bg_git_renamed};
+  if (status.find('A') != std::string::npos)
+    return {theme.fg_git_added, theme.bg_git_added};
+  if (status.find('?') != std::string::npos)
+    return {theme.fg_git_untracked, theme.bg_git_untracked};
+  return {theme.fg_git_modified, theme.bg_git_modified};
+}
+
 void compute_code_cursor_screen_pos(const SplitPane &pane, const FileBuffer &buf,
                                     bool show_minimap, int minimap_width,
                                     int tab_size, int tab_height,
@@ -481,6 +497,15 @@ Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane,
     segment.active = (id == pane.buffer_id);
     segment.modified = buffers[id].modified;
     segment.preview = buffers[id].is_preview;
+    std::error_code status_ec;
+    const std::string status_path =
+        std::filesystem::absolute(buffers[id].filepath, status_ec)
+            .lexically_normal()
+            .string();
+    auto status_it = git_file_status.find(status_path);
+    if (status_it != git_file_status.end()) {
+      segment.git_status = status_it->second;
+    }
     layout.segments.push_back(std::move(segment));
     tab_x += need;
     last_visible_index = valid_index;
@@ -638,6 +663,11 @@ void Editor::render_pane(const SplitPane &pane) {
     for (const auto &tab : tabs.segments) {
       int fg = tab.active ? theme.fg_tab_active : theme.fg_tab_inactive;
       int bg = tab.active ? theme.bg_tab_active : theme.bg_tab_inactive;
+      if (!tab.active && !tab.git_status.empty()) {
+        auto git_colors = git_tab_colors(theme, tab.git_status);
+        fg = git_colors.first;
+        bg = git_colors.second;
+      }
       ui->draw_text(tab.x, tabs.y, tab.active ? "▌" : " ", 
                     tab.active ? theme.fg_active_border
                                : theme.fg_tab_separator,

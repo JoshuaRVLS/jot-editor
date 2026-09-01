@@ -219,6 +219,18 @@ struct Theme {
   int fg_terminal_tab_plus = 7;
   int bg_terminal_tab_plus = 0;
   int fg_terminal_tab_separator = 8;
+  int fg_git_modified = 4;
+  int bg_git_modified = 17;
+  int fg_git_added = 2;
+  int bg_git_added = 22;
+  int fg_git_deleted = 1;
+  int bg_git_deleted = 52;
+  int fg_git_renamed = 6;
+  int bg_git_renamed = 23;
+  int fg_git_untracked = 2;
+  int bg_git_untracked = 22;
+  int fg_git_conflict = 1;
+  int bg_git_conflict = 52;
 
   void mark_syntax_slot_explicit(SyntaxThemeSlot slot) {
     switch (slot) {
