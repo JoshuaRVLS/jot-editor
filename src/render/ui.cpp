@@ -931,7 +931,7 @@ void Editor::render_search_panel() {
   int w = std::min(72, std::max(42, ui->get_render_width() / 2));
   int h = search_replace_visible ? 5 : 4;
   int x = ui->get_width() - w - 2;
-  int y = 1 + tab_height;
+  int y = topbar_height() + tab_height;
 
   if (x < 0)
     x = 0;
@@ -1005,7 +1005,7 @@ void Editor::place_search_cursor() {
   const std::string &input = replace ? search_replace_text : search_query;
   const int cursor_x = x + label_w +
       std::min(input_w - 1, std::max(0, ui_cell_count(input)));
-  const int cursor_y = 1 + tab_height + (replace ? 2 : 1);
+  const int cursor_y = topbar_height() + tab_height + (replace ? 2 : 1);
   ui->set_cursor(cursor_x, cursor_y);
 }
 
@@ -1100,6 +1100,9 @@ std::vector<Editor::MenuBarMenu> Editor::build_menu_bar_model() const {
 }
 
 void Editor::render_menu_bar() {
+  if (!kTopBarVisible) {
+    return;
+  }
   int w = ui ? ui->get_render_width() : 0;
   if (w <= 0) {
     return;
@@ -1127,7 +1130,7 @@ void Editor::render_menu_bar() {
 }
 
 void Editor::render_menu_dropdown() {
-  if (!show_menu_bar_dropdown || !ui) {
+  if (!kTopBarVisible || !show_menu_bar_dropdown || !ui) {
     return;
   }
 
@@ -1157,7 +1160,7 @@ void Editor::render_menu_dropdown() {
   int w = std::max(18, max_label + 4);
   int h = (int)menu.items.size() + 2;
   int x = std::clamp(label_x, 0, std::max(0, ui->get_render_width() - w));
-  int y = 1;
+  int y = topbar_height();
   int max_h = std::max(1, ui->get_height() - y - status_height);
   h = std::min(h, max_h);
 

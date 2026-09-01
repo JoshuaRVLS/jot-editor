@@ -47,7 +47,7 @@ std::pair<int, int> git_tab_colors(const Theme &theme,
   return {theme.fg_git_modified, theme.bg_git_modified};
 }
 
-void compute_code_cursor_screen_pos(const SplitPane &pane, const FileBuffer &buf,
+bool compute_code_cursor_screen_pos(const SplitPane &pane, const FileBuffer &buf,
                                     bool show_minimap, int minimap_width,
                                     int tab_size, int tab_height,
                                     int &display_x, int &display_y) {
@@ -96,12 +96,13 @@ void compute_code_cursor_screen_pos(const SplitPane &pane, const FileBuffer &buf
 
   if (code_end_x < code_start_x) {
     display_x = code_start_x;
-    return;
+    return false;
   }
   if (display_x < code_start_x)
     display_x = code_start_x;
   if (display_x > code_end_x)
     display_x = code_end_x;
+  return found_row;
 }
 
 UICursorShape editor_cursor_shape() { return UICursorShape::Bar; }
@@ -171,10 +172,13 @@ void Editor::render() {
       auto &buf = get_buffer(pane.buffer_id);
       int display_x = 0;
       int display_y = 0;
-      compute_code_cursor_screen_pos(pane, buf, show_minimap, minimap_width,
-                                     tab_size, tab_height,
-                                     display_x, display_y);
-      ui->set_cursor(display_x, display_y, editor_cursor_shape());
+      if (compute_code_cursor_screen_pos(pane, buf, show_minimap, minimap_width,
+                                         tab_size, tab_height,
+                                         display_x, display_y)) {
+        ui->set_cursor(display_x, display_y, editor_cursor_shape());
+      } else {
+        ui->hide_cursor();
+      }
       ui->flush_cursor();
     }
     return;
@@ -184,8 +188,10 @@ void Editor::render() {
 
   if (show_home_menu) {
     render_home_menu();
-    render_menu_bar();
-    render_menu_dropdown();
+    if (kTopBarVisible) {
+      render_menu_bar();
+      render_menu_dropdown();
+    }
     render_status_line();
     ui->hide_cursor();
     ui->render();
@@ -193,7 +199,9 @@ void Editor::render() {
     return;
   }
 
-  render_menu_bar();
+  if (kTopBarVisible) {
+    render_menu_bar();
+  }
   render_tabs();
   update_pane_layout();
 
@@ -248,7 +256,9 @@ void Editor::render() {
     render_search_panel();
     render_tree_sitter_status_modal();
     render_context_menu();
-    render_menu_dropdown();
+    if (kTopBarVisible) {
+      render_menu_dropdown();
+    }
 
     if (show_lsp_manager_modal) {
       ui->dim_rect({0, 0, ui->get_render_width(), ui->get_height()});
@@ -299,10 +309,13 @@ void Editor::render() {
         auto &buf = get_buffer(pane.buffer_id);
         int display_x = 0;
         int display_y = 0;
-        compute_code_cursor_screen_pos(pane, buf, show_minimap, minimap_width,
-                                       tab_size, tab_height,
-                                       display_x, display_y);
-        ui->set_cursor(display_x, display_y, editor_cursor_shape());
+        if (compute_code_cursor_screen_pos(pane, buf, show_minimap, minimap_width,
+                                           tab_size, tab_height,
+                                           display_x, display_y)) {
+          ui->set_cursor(display_x, display_y, editor_cursor_shape());
+        } else {
+          ui->hide_cursor();
+        }
       }
     }
 
@@ -333,7 +346,7 @@ void Editor::render_pane_resize_guides() {
     reserved_terminal_h =
         std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
   }
-  int menu_h = 1;
+  int menu_h = topbar_height();
   int total_h =
       std::max(1, ui->get_height() - status_height - reserved_terminal_h -
                       menu_h);

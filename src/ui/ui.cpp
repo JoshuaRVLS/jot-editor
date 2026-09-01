@@ -157,6 +157,9 @@ void UI::render() {
   bool capture_on = term->render_capture_enabled();
   bool capture_raw = term->render_capture_raw();
 
+  // Keep intermediate row cursor moves invisible. Only the final cursor
+  // state below should reach the terminal as visible state.
+  term->hide_cursor();
   term->disable_autowrap();
 
   // Per-frame right-edge safety margin. The renderer must never write the
@@ -289,6 +292,8 @@ void UI::render() {
     // characters past the row's last painted cell. With autowrap
     // disabled, the cursor stays at the end of the written text and
     // the erase is bounded to the current row.
+    // Move past the painted cells before erasing the untouched margin.
+    term->move_cursor(row_width, y);
     term->clear_to_end();
   }
 

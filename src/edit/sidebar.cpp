@@ -450,9 +450,9 @@ void Editor::render_sidebar() {
     reserved_terminal_h =
         std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
   }
-  int h = std::max(0, ui->get_height() - status_height - tab_height -
+  int h = std::max(0, ui->get_height() - status_height - topbar_height() - tab_height -
                           reserved_terminal_h);
-  int y = tab_height;
+  int y = topbar_height() + tab_height;
   if (w < 2 || h < 1)
     return;
 
@@ -460,7 +460,10 @@ void Editor::render_sidebar() {
     ui->draw_text(0, i, std::string(w, ' '), theme.fg_sidebar, theme.bg_sidebar);
   }
 
-  const int rail_w = std::min(sidebar_activity_rail_width(), std::max(1, w - 1));
+  const int rail_w = kExplorerOnly
+                         ? 0
+                         : std::min(sidebar_activity_rail_width(),
+                                    std::max(1, w - 1));
   auto draw_rail_item = [&](int row, const std::string &label,
                             SidebarView view) {
     if (row < 0 || row >= h)
@@ -476,11 +479,13 @@ void Editor::render_sidebar() {
     }
   };
 
-  draw_rail_item(1, "󰉋 ", SIDEBAR_VIEW_EXPLORER);
-  draw_rail_item(3, " ", SIDEBAR_VIEW_GIT);
-  for (int i = y; i < y + h; i++) {
-    ui->draw_text(std::max(0, rail_w - 1), i, "│", theme.fg_sidebar_border,
-                  theme.bg_sidebar);
+  if (!kExplorerOnly) {
+    draw_rail_item(1, "󰉋 ", SIDEBAR_VIEW_EXPLORER);
+    draw_rail_item(3, " ", SIDEBAR_VIEW_GIT);
+    for (int i = y; i < y + h; i++) {
+      ui->draw_text(std::max(0, rail_w - 1), i, "│", theme.fg_sidebar_border,
+                    theme.bg_sidebar);
+    }
   }
 
   const int content_x = rail_w;
@@ -504,7 +509,7 @@ void Editor::render_sidebar() {
     }
   };
 
-  if (active_sidebar_view == SIDEBAR_VIEW_GIT) {
+  if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT) {
     std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
     int header_y = y;
     int list_y = y + 1;
@@ -742,7 +747,7 @@ void Editor::render_sidebar() {
 }
 
 void Editor::render_collapsed_sidebar_handle() {
-  if (!collapsed_sidebar_handle_hit_test(0, tab_height)) {
+  if (!collapsed_sidebar_handle_hit_test(0, topbar_height() + tab_height)) {
     return;
   }
 
@@ -752,7 +757,7 @@ void Editor::render_collapsed_sidebar_handle() {
         std::clamp(integrated_terminal_height, 5,
                    std::max(5, ui->get_height() / 2));
   }
-  int top = tab_height;
+  int top = topbar_height() + tab_height;
   int bottom = ui->get_height() - status_height - reserved_terminal_h;
   int h = std::max(0, bottom - top);
   if (h <= 0) {

@@ -663,7 +663,8 @@ bool Editor::restore_workspace_session() {
 
   if (entries.empty()) {
     show_sidebar = restored_show_sidebar;
-    active_sidebar_view = restored_sidebar_view;
+    active_sidebar_view = kExplorerOnly ? SIDEBAR_VIEW_EXPLORER
+                                        : restored_sidebar_view;
     sidebar_width =
         std::clamp(restored_sidebar_width, min_sidebar_width(),
                    max_sidebar_width());
@@ -676,7 +677,8 @@ bool Editor::restore_workspace_session() {
   sidebar_width =
       std::clamp(restored_sidebar_width, min_sidebar_width(),
                  max_sidebar_width());
-  active_sidebar_view = restored_sidebar_view;
+  active_sidebar_view = kExplorerOnly ? SIDEBAR_VIEW_EXPLORER
+                                      : restored_sidebar_view;
   right_panel_width =
       clamp_restored_right_panel_width();
   sidebar_show_hidden = restored_hidden;
@@ -768,7 +770,8 @@ bool Editor::restore_workspace_session() {
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
   show_sidebar = restored_show_sidebar;
-  active_sidebar_view = restored_sidebar_view;
+  active_sidebar_view = kExplorerOnly ? SIDEBAR_VIEW_EXPLORER
+                                      : restored_sidebar_view;
   sidebar_width = effective_sidebar_width();
   set_message("Workspace restored: " + root_dir);
   return true;
@@ -860,6 +863,9 @@ void Editor::handle_sidebar_input(int ch) {
   };
 
   if (ch == '\t') {
+    if (kExplorerOnly) {
+      return;
+    }
     active_sidebar_view = active_sidebar_view == SIDEBAR_VIEW_EXPLORER
                               ? SIDEBAR_VIEW_GIT
                               : SIDEBAR_VIEW_EXPLORER;
@@ -870,7 +876,7 @@ void Editor::handle_sidebar_input(int ch) {
     return;
   }
 
-  if (active_sidebar_view == SIDEBAR_VIEW_GIT) {
+  if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT) {
     std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
     int reserved_terminal_h = 0;
     if (show_integrated_terminal && !integrated_terminals.empty()) {
@@ -1432,10 +1438,10 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click,
   if (!is_click)
     return;
 
-  int rel_y = y - tab_height;
+  int rel_y = y - topbar_height() - tab_height;
   if (rel_y < 0)
     return;
-  if (x < sidebar_activity_rail_width()) {
+  if (!kExplorerOnly && x < sidebar_activity_rail_width()) {
     if (rel_y == 1) {
       active_sidebar_view = SIDEBAR_VIEW_EXPLORER;
       needs_redraw = true;
@@ -1447,9 +1453,9 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click,
     return;
   }
 
-  if (active_sidebar_view == SIDEBAR_VIEW_GIT) {
+  if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT) {
     std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
-    int sidebar_row = y - tab_height - 1;
+    int sidebar_row = y - topbar_height() - tab_height - 1;
     if (sidebar_row < 0)
       return;
     int row = sidebar_row + git_sidebar_scroll;
@@ -1468,7 +1474,7 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click,
   flatten_nodes_mut(file_tree, flat);
 
   // Sidebar now has 1-line header, so tree rows begin after that.
-  int sidebar_row = y - tab_height - 1;
+  int sidebar_row = y - topbar_height() - tab_height - 1;
   if (sidebar_row < 0)
     return;
   int row = sidebar_row + file_tree_scroll;

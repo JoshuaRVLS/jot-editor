@@ -24,6 +24,13 @@ class Editor : private EditorState {
   friend class HostIOAPI;
 
 private:
+  // Temporary presentation gates. Keep underlying features intact while the
+  // compact editor layout is evaluated.
+  static constexpr bool kTopBarVisible = false;
+  static constexpr bool kExplorerOnly = true;
+
+  int topbar_height() const { return kTopBarVisible ? 1 : 0; }
+
   using PaneTreeNode = ::PaneTreeNode;
   using CommandPaletteSuggestion = ::CommandPaletteSuggestion;
   using QuickPickKind = ::QuickPickKind;

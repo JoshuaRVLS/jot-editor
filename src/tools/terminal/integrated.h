@@ -42,6 +42,7 @@ private:
   int cols;
   int cursor_row;
   int cursor_col;
+  bool cursor_position_valid;
   std::string output_buffer;
   std::string pending_input;
   std::string current_line;
@@ -90,6 +91,8 @@ public:
   const std::string &get_current_line() const { return current_line; }
   size_t get_cursor_column() const { return (size_t)std::max(0, cursor_col); }
   int get_cursor_row() const { return cursor_row; }
+  bool is_cursor_position_valid() const { return cursor_position_valid; }
+  int get_scroll_offset() const { return scroll_offset; }
 
   std::vector<std::string> get_recent_lines(int max_lines) const;
   std::vector<std::vector<StyledCell>> get_recent_styled_lines(int max_lines) const;

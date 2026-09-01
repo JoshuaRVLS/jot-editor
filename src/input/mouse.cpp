@@ -410,7 +410,7 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
   if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT_DIFF && ui) {
     int panel_w = effective_right_panel_width();
     int panel_x = std::max(0, ui->get_render_width() - panel_w);
-    int panel_y = 1;
+    int panel_y = topbar_height();
     int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
     bool inside = x >= panel_x && x < panel_x + panel_w && y >= panel_y && y < panel_y + panel_h;
     if (inside) {
@@ -428,7 +428,7 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
   if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_PLUGIN && ui) {
     int panel_w = effective_right_panel_width();
     int panel_x = std::max(0, ui->get_render_width() - panel_w);
-    int panel_y = 1;
+    int panel_y = topbar_height();
     int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
     bool inside = x >= panel_x && x < panel_x + panel_w && y >= panel_y &&
                   y < panel_y + panel_h;
@@ -483,7 +483,7 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
     int sidebar_w = effective_sidebar_width();
     if (x < sidebar_w) {
       if (is_scroll_up) {
-        if (active_sidebar_view == SIDEBAR_VIEW_GIT) {
+        if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT) {
           if (git_sidebar_scroll > 0)
             git_sidebar_scroll--;
         } else if (file_tree_scroll > 0) {
@@ -491,7 +491,7 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
         }
         needs_redraw = true;
       } else if (is_scroll_down) {
-        if (active_sidebar_view == SIDEBAR_VIEW_GIT) {
+        if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT) {
           git_sidebar_scroll++;
           int reserved_terminal_h = 0;
           if (show_integrated_terminal && !integrated_terminals.empty()) {
@@ -719,11 +719,12 @@ bool Editor::open_context_menu_for_mouse(int x, int y) {
     int content_bottom =
         terminal.get_height() - status_height - reserved_terminal_h;
     int sidebar_w = effective_sidebar_width();
-    if (x < sidebar_w && y >= tab_height && y < content_bottom) {
+    if (x < sidebar_w && y >= topbar_height() + tab_height &&
+        y < content_bottom) {
       focus_state = FOCUS_SIDEBAR;
-      if (active_sidebar_view == SIDEBAR_VIEW_GIT) {
+      if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT) {
         std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
-        int sidebar_row = y - tab_height - 1;
+        int sidebar_row = y - topbar_height() - tab_height - 1;
         int row = sidebar_row + git_sidebar_scroll;
         if (sidebar_row >= 0 && row >= 0 && row < (int)git_rows.size()) {
           git_sidebar_selected = row;
@@ -747,7 +748,7 @@ bool Editor::open_context_menu_for_mouse(int x, int y) {
       } else {
         std::vector<FileNode *> flat;
         flatten_nodes_for_mouse(file_tree, flat);
-        int sidebar_row = y - tab_height - 1;
+        int sidebar_row = y - topbar_height() - tab_height - 1;
         int row = sidebar_row + file_tree_scroll;
         FileNode *node = nullptr;
         if (sidebar_row >= 0 && row >= 0 && row < (int)flat.size()) {
@@ -867,7 +868,7 @@ bool Editor::open_context_menu_for_mouse(int x, int y) {
 
 bool Editor::handle_menu_bar_mouse(int x, int y, bool is_click,
                                    bool is_motion) {
-  if (!ui) {
+  if (!kTopBarVisible || !ui) {
     return false;
   }
 
@@ -929,7 +930,7 @@ bool Editor::handle_menu_bar_mouse(int x, int y, bool is_click,
                         std::max(1, ui->get_height() - 1 - status_height));
   int menu_x =
       std::clamp(label_x, 0, std::max(0, ui->get_render_width() - menu_w));
-  int menu_y = 1;
+  int menu_y = topbar_height();
 
   bool inside = x >= menu_x && x < menu_x + menu_w && y >= menu_y &&
                 y < menu_y + menu_h;
@@ -1165,16 +1166,17 @@ void Editor::handle_mouse(void *event_ptr) {
     int content_bottom =
         terminal.get_height() - status_height - reserved_terminal_h;
     int sidebar_w = effective_sidebar_width();
-    if (event->x < sidebar_w && event->y >= tab_height &&
+    if (event->x < sidebar_w && event->y >= topbar_height() + tab_height &&
         event->y < content_bottom) {
       focus_state = FOCUS_SIDEBAR;
       long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now().time_since_epoch())
                              .count();
-      int sidebar_scroll = active_sidebar_view == SIDEBAR_VIEW_GIT
+      int sidebar_scroll = !kExplorerOnly &&
+                                   active_sidebar_view == SIDEBAR_VIEW_GIT
                                ? git_sidebar_scroll
                                : file_tree_scroll;
-      int sidebar_row = event->y - tab_height - 1 + sidebar_scroll;
+      int sidebar_row = event->y - topbar_height() - tab_height - 1 + sidebar_scroll;
       bool sidebar_double = (last_sidebar_click_ms > 0) &&
                             (now_ms - last_sidebar_click_ms <= 350) &&
                             (last_sidebar_click_row == sidebar_row);

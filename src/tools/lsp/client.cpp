@@ -1782,7 +1782,6 @@ bool LSPClient::poll() {
 
   bool changed = false;
   if (!outbound_buffer.empty()) {
-    changed = true;
     if (!flush_pending_writes()) {
       return true;
     }
@@ -1813,7 +1812,6 @@ bool LSPClient::poll() {
     }
     handle_stderr_data(std::string(buf, buf + n));
     bytes_polled += (size_t)n;
-    changed = true;
   }
 
   int status = 0;

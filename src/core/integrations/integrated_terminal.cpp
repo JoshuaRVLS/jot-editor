@@ -369,6 +369,14 @@ void Editor::place_integrated_terminal_cursor() {
       !term->is_focused()) {
     return;
   }
+  if (term->get_scroll_offset() != 0) {
+    ui->hide_cursor();
+    return;
+  }
+  if (!term->is_cursor_position_valid()) {
+    ui->hide_cursor();
+    return;
+  }
 
   int panel_h = std::clamp(integrated_terminal_height, 5,
                            std::max(5, ui->get_height() / 2));

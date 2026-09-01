@@ -150,7 +150,7 @@ bool Editor::handle_debugger_mouse(int x, int y, bool activate) {
   }
   int panel_w = effective_right_panel_width();
   int panel_x = std::max(0, ui->get_render_width() - panel_w);
-  int panel_y = 1;
+  int panel_y = topbar_height();
   int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
   if (panel_w <= 0 || x < panel_x || x >= panel_x + panel_w || y < panel_y ||
       y >= panel_y + panel_h) {

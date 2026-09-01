@@ -177,7 +177,8 @@ int screen_sb_clear(void *user) {
 IntegratedTerminal::IntegratedTerminal()
     : master_fd(-1), child_pid(-1), active(false), focused(false), label(""),
       vterm(nullptr), screen(nullptr), rows(kDefaultRows), cols(kDefaultCols),
-      cursor_row(0), cursor_col(0), scroll_offset(0) {}
+      cursor_row(0), cursor_col(0), cursor_position_valid(false),
+      scroll_offset(0) {}
 
 IntegratedTerminal::~IntegratedTerminal() { close_shell(); }
 
@@ -294,6 +295,7 @@ void IntegratedTerminal::refresh_current_line() {
     current_line.clear();
     cursor_row = 0;
     cursor_col = 0;
+    cursor_position_valid = false;
     return;
   }
 
@@ -302,6 +304,7 @@ void IntegratedTerminal::refresh_current_line() {
   vterm_state_get_cursorpos(state, &pos);
   cursor_row = std::clamp(pos.row, 0, std::max(0, rows - 1));
   cursor_col = std::clamp(pos.col, 0, std::max(0, cols - 1));
+  cursor_position_valid = true;
 
   current_line.clear();
   for (int col = 0; col < cols; col++) {
@@ -389,6 +392,7 @@ void IntegratedTerminal::close_shell() {
   child_pid = -1;
   active = false;
   focused = false;
+  cursor_position_valid = false;
   destroy_vterm();
 }
 
@@ -469,6 +473,7 @@ bool IntegratedTerminal::send_key(int ch, bool is_ctrl, bool is_shift,
   }
 
   reset_scroll();
+  cursor_position_valid = false;
   ensure_vterm(rows, cols);
 
   VTermModifier mod = VTERM_MOD_NONE;
@@ -549,6 +554,7 @@ bool IntegratedTerminal::send_text(const std::string &text) {
     return false;
   }
   reset_scroll();
+  cursor_position_valid = false;
   return queue_input(text.data(), text.size());
 }
 
