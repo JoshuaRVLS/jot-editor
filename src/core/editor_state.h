@@ -121,6 +121,8 @@ struct EditorState {
   int lsp_manager_w = 0;
   int lsp_manager_h = 0;
   std::vector<LspManagerRow> lsp_manager_rows;
+  std::vector<LspManagerButton> lsp_manager_buttons;
+  int lsp_manager_action_selected = 0;
   int current_integrated_terminal;
   std::vector<TerminalTask> terminal_tasks;
   std::string last_terminal_task_name;

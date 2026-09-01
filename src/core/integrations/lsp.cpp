@@ -1026,6 +1026,7 @@ void Editor::show_lsp_manager() {
   show_lsp_manager_modal = true;
   lsp_manager_selected = 0;
   lsp_manager_scroll = 0;
+  lsp_manager_action_selected = 0;
   refresh_lsp_manager();
   needs_redraw = true;
 }
@@ -1090,6 +1091,29 @@ void Editor::set_lsp_server_enabled(const std::string &server, bool enabled) {
   needs_redraw = true;
 }
 
+void Editor::activate_lsp_manager_action(const std::string &server,
+                                         const std::string &action) {
+  if (action == "enable") {
+    set_lsp_server_enabled(server, true);
+  } else if (action == "disable") {
+    set_lsp_server_enabled(server, false);
+  } else if (action == "install" || action == "update") {
+    install_lsp_server(server);
+  } else if (action == "remove") {
+    remove_lsp_server(server);
+  } else if (action == "terminal") {
+    for (const auto &job : lsp_install_jobs) {
+      if (job.server == server && job.running && job.terminal_index >= 0) {
+        show_integrated_terminal = true;
+        activate_integrated_terminal(job.terminal_index, false);
+        break;
+      }
+    }
+  }
+  refresh_lsp_manager();
+  needs_redraw = true;
+}
+
 bool Editor::handle_lsp_manager_input(int ch) {
   if (!show_lsp_manager_modal) return false;
   if (ch == 27 || ch == 'q' || ch == 'Q') {
@@ -1099,32 +1123,35 @@ bool Editor::handle_lsp_manager_input(int ch) {
   }
   if (ch == 1008 || ch == 'k' || ch == 'K') {
     lsp_manager_selected = std::max(0, lsp_manager_selected - 1);
+    lsp_manager_action_selected = 0;
   } else if (ch == 1009 || ch == 'j' || ch == 'J') {
     lsp_manager_selected = std::min(
         std::max(0, (int)lsp_manager_rows.size() - 1), lsp_manager_selected + 1);
+    lsp_manager_action_selected = 0;
+  } else if (ch == '\t') {
+    lsp_manager_action_selected = (lsp_manager_action_selected + 1) % 3;
   } else if (lsp_manager_rows.empty()) {
     return true;
   } else {
     const auto &row = lsp_manager_rows[lsp_manager_selected];
     if (ch == 'e' || ch == 'E') {
-      set_lsp_server_enabled(row.server, !row.enabled);
+      activate_lsp_manager_action(row.server, row.enabled ? "disable" : "enable");
       return true;
     }
-    if (ch == 'i' || ch == 'I' || ch == 'u' || ch == 'U' ||
-        ch == '\n' || ch == 13) {
-      if (!row.enabled) {
-        set_lsp_server_enabled(row.server, true);
-      } else if (row.managed && !row.busy) {
-        install_lsp_server(row.server);
-      } else if (!row.managed) {
-        set_message(row.label + " is managed by your package manager");
+    if (ch == '\n' || ch == 13) {
+      if (row.busy) {
+        activate_lsp_manager_action(row.server, "terminal");
+      } else if (!row.enabled) {
+        activate_lsp_manager_action(row.server, "enable");
+      } else if (lsp_manager_action_selected == 1 && row.installed && row.managed) {
+        activate_lsp_manager_action(row.server, "remove");
+      } else if (lsp_manager_action_selected == 2 && row.installed) {
+        activate_lsp_manager_action(row.server, "disable");
+      } else if (row.managed) {
+        activate_lsp_manager_action(row.server, row.installed ? "update" : "install");
+      } else {
+        set_message(row.label + " requires your package manager");
       }
-      refresh_lsp_manager();
-      return true;
-    }
-    if ((ch == 'r' || ch == 'R') && row.managed && row.installed && !row.busy) {
-      remove_lsp_server(row.server);
-      refresh_lsp_manager();
       return true;
     }
   }
@@ -1154,34 +1181,15 @@ bool Editor::handle_lsp_manager_mouse(int x, int y, bool is_click,
   if (index < 0 || index >= (int)lsp_manager_rows.size()) return true;
   lsp_manager_selected = index;
   const auto &row = lsp_manager_rows[index];
-  const int action_x = std::max(lsp_manager_x + 2 + std::max(12, std::min(20, lsp_manager_w / 4)) + 12,
-                                lsp_manager_x + lsp_manager_w - 29);
-  if (x < action_x) {
-    needs_redraw = true;
-    return true;
-  }
-  if (row.busy) {
-    for (const auto &job : lsp_install_jobs) {
-      if (job.server == row.server && job.running && job.terminal_index >= 0) {
-        activate_integrated_terminal(job.terminal_index, false);
-        show_integrated_terminal = true;
-        break;
-      }
+  for (const auto &button : lsp_manager_buttons) {
+    if (button.server != row.server) continue;
+    const bool hit = x >= button.x && x < button.x + button.w &&
+                     y >= button.y && y < button.y + button.h;
+    if (hit) {
+      activate_lsp_manager_action(button.server, button.action);
+      return true;
     }
-  } else if (!row.enabled) {
-    set_lsp_server_enabled(row.server, true);
-  } else if (!row.installed) {
-    if (row.managed) install_lsp_server(row.server);
-    else set_message(row.label + " requires your package manager");
-  } else if (row.managed) {
-    const int offset = x - action_x;
-    if (offset < 9) install_lsp_server(row.server);
-    else if (offset < 18) remove_lsp_server(row.server);
-    else set_lsp_server_enabled(row.server, false);
-  } else {
-    set_lsp_server_enabled(row.server, false);
   }
-  refresh_lsp_manager();
   needs_redraw = true;
   return true;
 }

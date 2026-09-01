@@ -182,6 +182,15 @@ struct LspManagerRow {
   bool busy = false;
 };
 
+struct LspManagerButton {
+  std::string server;
+  std::string action;
+  int x = 0;
+  int y = 0;
+  int w = 0;
+  int h = 1;
+};
+
 enum MouseSelectionMode {
   MOUSE_SELECT_CHAR,
   MOUSE_SELECT_WORD,

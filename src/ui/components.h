@@ -27,6 +27,22 @@ struct UISelectableRow {
   bool enabled = true;
 };
 
+enum class UIButtonVariant {
+  Primary,
+  Secondary,
+  Danger,
+  Muted,
+};
+
+struct UIButton {
+  std::string id;
+  std::string label;
+  UIRect rect;
+  UIButtonVariant variant = UIButtonVariant::Secondary;
+  bool enabled = true;
+  bool focused = false;
+};
+
 void ui_draw_panel(UI &ui, const UIRect &rect, const UIPanelStyle &style);
 void ui_draw_panel_title(UI &ui, const UIRect &rect, const std::string &title,
                          int fg, int bg);
@@ -35,5 +51,9 @@ void ui_draw_footer(UI &ui, const UIRect &rect, const std::string &text,
 void ui_draw_selectable_rows(UI &ui, int x, int y, int w, int max_rows,
                              const std::vector<UISelectableRow> &rows,
                              const UIListStyle &style);
+void ui_draw_button(UI &ui, const UIButton &button, int primary_fg,
+                    int primary_bg, int secondary_fg, int secondary_bg,
+                    int danger_fg, int danger_bg, int muted_fg, int muted_bg);
+bool ui_button_hit(const UIButton &button, int x, int y);
 
 #endif

@@ -47,3 +47,50 @@ void ui_draw_selectable_rows(UI &ui, int x, int y, int w, int max_rows,
                  row.selected && row.enabled);
   }
 }
+
+void ui_draw_button(UI &ui, const UIButton &button, int primary_fg,
+                    int primary_bg, int secondary_fg, int secondary_bg,
+                    int danger_fg, int danger_bg, int muted_fg, int muted_bg) {
+  if (button.rect.w <= 0 || button.rect.h <= 0) return;
+
+  int fg = secondary_fg;
+  int bg = secondary_bg;
+  switch (button.variant) {
+  case UIButtonVariant::Primary:
+    fg = primary_fg;
+    bg = primary_bg;
+    break;
+  case UIButtonVariant::Danger:
+    fg = danger_fg;
+    bg = danger_bg;
+    break;
+  case UIButtonVariant::Muted:
+    fg = muted_fg;
+    bg = muted_bg;
+    break;
+  case UIButtonVariant::Secondary:
+    break;
+  }
+  if (!button.enabled) {
+    fg = muted_fg;
+    bg = muted_bg;
+  }
+
+  ui.fill_rect(button.rect, " ", fg, bg);
+  std::string label = ui_truncate_cells(button.label, button.rect.w);
+  int label_w = ui_cell_count(label);
+  int x = button.rect.x + std::max(0, (button.rect.w - label_w) / 2);
+  for (int row = 0; row < button.rect.h; row++) {
+    ui.draw_text(x, button.rect.y + row, label, fg, bg,
+                 button.focused && button.enabled);
+  }
+  if (button.focused && button.enabled && button.rect.h >= 3) {
+    ui.draw_border(button.rect, fg, bg);
+  }
+}
+
+bool ui_button_hit(const UIButton &button, int x, int y) {
+  return button.enabled && x >= button.rect.x &&
+         x < button.rect.x + button.rect.w && y >= button.rect.y &&
+         y < button.rect.y + button.rect.h;
+}

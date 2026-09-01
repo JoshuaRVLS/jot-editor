@@ -261,6 +261,8 @@ private:
   bool handle_lsp_manager_input(int ch);
   bool handle_lsp_manager_mouse(int x, int y, bool is_click,
                                 bool is_scroll_up, bool is_scroll_down);
+  void activate_lsp_manager_action(const std::string &server,
+                                   const std::string &action);
   void set_lsp_server_enabled(const std::string &server, bool enabled);
   bool install_lsp_server(const std::string &name);
   bool remove_lsp_server(const std::string &name);

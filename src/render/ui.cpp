@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <set>
 #include <sstream>
+#include <tuple>
 #include <vector>
 
 namespace {
@@ -481,7 +482,8 @@ void Editor::render_lsp_manager() {
   lsp_manager_scroll = std::clamp(lsp_manager_scroll, 0, max_scroll);
   const int label_w = std::max(12, std::min(20, w / 4));
   const int state_x = x + 2 + label_w;
-  const int action_x = std::max(state_x + 12, x + w - 29);
+  const int action_x = std::max(state_x + 12, x + w - 31);
+  lsp_manager_buttons.clear();
 
   for (int row = 0; row < list_h; row++) {
     const int index = lsp_manager_scroll + row;
@@ -502,15 +504,40 @@ void Editor::render_lsp_manager() {
                   ui_truncate_cells(state, std::max(1, action_x - state_x - 1)),
                   item.enabled ? theme.fg_comment : theme.fg_status_warning, bg);
 
-    std::string actions;
-    if (item.busy) actions = "[Terminal]";
-    else if (!item.enabled) actions = "[Enable]";
-    else if (!item.installed) actions = item.managed ? "[Install]" : "[Manual]";
-    else if (item.managed) actions = "[Update] [Remove] [Disable]";
-    else actions = "[Disable]";
-    ui->draw_text(action_x, y + 1 + row,
-                  ui_truncate_cells(actions, std::max(1, x + w - action_x - 2)),
-                  selected ? theme.fg_selection : theme.fg_command, bg, selected);
+    std::vector<std::tuple<std::string, std::string, UIButtonVariant, bool>> actions;
+    if (item.busy) {
+      actions.push_back({"terminal", "Terminal", UIButtonVariant::Secondary, true});
+    } else if (!item.enabled) {
+      actions.push_back({"enable", "Enable", UIButtonVariant::Primary, true});
+    } else if (!item.installed) {
+      actions.push_back({"install", item.managed ? "Install" : "Manual",
+                         item.managed ? UIButtonVariant::Primary : UIButtonVariant::Muted,
+                         item.managed});
+    } else if (item.managed) {
+      actions.push_back({"update", "Update", UIButtonVariant::Primary, true});
+      actions.push_back({"remove", "Remove", UIButtonVariant::Danger, true});
+      actions.push_back({"disable", "Disable", UIButtonVariant::Secondary, true});
+    } else {
+      actions.push_back({"disable", "Disable", UIButtonVariant::Secondary, true});
+    }
+    int button_x = action_x;
+    for (size_t action_index = 0; action_index < actions.size(); action_index++) {
+      const auto &[action, label, variant, enabled] = actions[action_index];
+      const int button_w = ui_cell_count(label) + 2;
+      UIButton button;
+      button.id = action;
+      button.label = label;
+      button.rect = {button_x, y + 1 + row, button_w, 1};
+      button.variant = variant;
+      button.enabled = enabled;
+      button.focused = selected && (int)action_index == lsp_manager_action_selected;
+      ui_draw_button(*ui, button, theme.fg_selection, theme.bg_selection,
+                     theme.fg_command, theme.bg_command, theme.fg_status_error,
+                     theme.bg_status_error, theme.fg_comment, theme.bg_panel_border);
+      lsp_manager_buttons.push_back(
+          {item.server, action, button_x, y + 1 + row, button_w, 1});
+      button_x += button_w + 1;
+    }
   }
 
   const std::string footer = std::to_string(lsp_manager_rows.size()) + " servers";
