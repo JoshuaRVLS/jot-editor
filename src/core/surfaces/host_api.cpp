@@ -1,6 +1,6 @@
 #include "host_api.h"
 #include "editor.h"
-#include "python_bridge/api.h"
+#include "lua_bridge/api.h"
 
 #include <algorithm>
 #include <sstream>

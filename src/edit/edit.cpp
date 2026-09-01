@@ -2,7 +2,7 @@
 #include "editor.h"
 #include "html.h"
 #include "text_features.h"
-#include "python_bridge/api.h"
+#include "lua_bridge/api.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <cctype>

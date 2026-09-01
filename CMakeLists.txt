@@ -79,21 +79,6 @@ else()
   message(WARNING "Unknown platform. Build may work, but terminal integrations are only guaranteed on POSIX.")
 endif()
 
-if(WIN32)
-  find_package(Python3 COMPONENTS Interpreter Development.Embed REQUIRED)
-else()
-  find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
-endif()
-
-include(cmake/JotPython.cmake)
-if(WIN32)
-  set(PYTHON_OTHER_FLAGS_LIST "")
-  set(PYTHON_INCLUDES ${Python3_INCLUDE_DIRS})
-  set(PYTHON_LDFLAGS_LIST "")
-else()
-  jot_collect_python_embed_flags(PYTHON_OTHER_FLAGS_LIST PYTHON_INCLUDES PYTHON_LDFLAGS_LIST)
-endif()
-
 add_subdirectory(src)
 add_subdirectory(apps/jot)
 
@@ -126,15 +111,6 @@ install(CODE [[
 
 install(TARGETS jot
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-
-install(DIRECTORY src/python/
-  DESTINATION ${CMAKE_INSTALL_DATADIR}/jot/python
-  FILES_MATCHING
-    PATTERN "*.py"
-    PATTERN "__pycache__" EXCLUDE
-    PATTERN "*.pyc" EXCLUDE
-    PATTERN "*.pyo" EXCLUDE
 )
 
 install(DIRECTORY .configs/configs

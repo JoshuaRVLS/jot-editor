@@ -1,7 +1,7 @@
 #include "commands/utils.h"
 #include "cpp_assist.h"
 #include "editor.h"
-#include "python_bridge/api.h"
+#include "lua_bridge/api.h"
 #include "tree_sitter/install.h"
 #include <algorithm>
 #include <cctype>
@@ -160,7 +160,7 @@ const std::vector<CommandMeta> &command_palette_metadata() {
       {"help", "Help", "Show help or command list", 80},
       {"h", "Help", "Show help or command list", 70},
       {"plugins", "Plugin", "Show loaded plugins and APIs", 80},
-      {"reloadplugins", "Plugin", "Reload init.py and plugins", 78},
+      {"reloadplugins", "Plugin", "Reload init.lua and plugins", 78},
       {"pluginpanel", "Plugin", "Show a plugin panel", 75},
       {"gitdiffclose", "Git", "Close git diff panel", 68},
       {"gitdiffrefresh", "Git", "Refresh Open Git Diff", 68}

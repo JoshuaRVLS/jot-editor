@@ -1,5 +1,5 @@
 #include "editor.h"
-#include "python_bridge/api.h"
+#include "lua_bridge/api.h"
 #include "quote_text_object.h"
 #include <algorithm>
 #include <cctype>

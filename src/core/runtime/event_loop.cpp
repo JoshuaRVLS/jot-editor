@@ -17,7 +17,7 @@
 #endif
 
 #include "editor.h"
-#include "python_bridge/api.h"
+#include "lua_bridge/api.h"
 
 namespace {
 std::string plugin_key_name(int ch, bool is_ctrl, bool is_shift, bool is_alt,

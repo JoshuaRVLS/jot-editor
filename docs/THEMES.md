@@ -1,169 +1,28 @@
 # jot Theme Guide
 
-Python support in `jot` is limited to colorscheme discovery and application.
-Theme files can set highlight groups, but they cannot register editor commands,
-keybindings, events, or palette entries.
+Themes are native JSON data. The primary location is
+`~/.config/jot/configs/colors/`; legacy `~/.config/jot/themes/` is also scanned.
+Bundled themes live in `.configs/configs/colors/`.
 
-The primary theme location is `~/.config/jot/configs/colors/`.
+Apply with `:colorscheme light` or from Lua:
 
-Legacy themes in `~/.config/jot/themes/` still load.
-
-## Bundled Themes
-
-jot ships with two bundled themes (stored in `.configs/configs/colors/`):
-
-- `dark` (default)
-- `light`
-
-Apply any of them with:
-
-```python
-from jot_api import jot
-jot.cmd.colorscheme("light")
+```lua
+set_hl("Normal", { fg = 252, bg = 234 })
 ```
 
-## Creating a Theme
+Theme files contain highlight groups mapped to foreground/background xterm
+256-color values. Use `-1` or `null` for transparent/inherited values.
 
-1. Create `~/.config/jot/configs/colors/my_theme.py`.
-2. Use the compatibility `jot.api.nvim_set_hl(...)` facade, or the lower-level `set_theme_color(...)`.
-
-```python
-from jot_api import jot
-
-theme = {
-    "Normal": {"fg": 252, "bg": 234},
-    "LineNr": {"fg": 240, "bg": 234},
-    "Comment": {"fg": 244, "bg": 234},
-    "Keyword": {"fg": 81, "bg": 234},
-    "String": {"fg": 114, "bg": 234},
-    "Function": {"fg": 223, "bg": 234},
-    "Type": {"fg": 110, "bg": 234},
-    "Visual": {"fg": 234, "bg": 110},
-    "StatusLine": {"fg": 252, "bg": 236},
-    "FloatBorder": {"fg": 239, "bg": 234},
-    "TelescopeSelection": {"fg": 234, "bg": 110},
+```json
+{
+  "Normal": {"fg": 252, "bg": 234},
+  "Comment": {"fg": 244, "bg": 234},
+  "Keyword": {"fg": 81, "bg": 234},
+  "Visual": {"fg": 234, "bg": 110}
 }
-
-for group, spec in theme.items():
-    jot.api.nvim_set_hl(0, group, spec)
 ```
 
-To load a theme from config:
-
-```python
-from jot_api import jot
-
-jot.cmd.colorscheme("my_theme")
-```
-
-## Color Slots
-
-| Slot Name | Description |
-|-----------|-------------|
-| `default` | Main text color and background |
-| `line_num` | Line numbers in gutter |
-| `cursor` | Cursor color (usually swap fg/bg) |
-| `status` | Status bar |
-| `status_message` | Status message text on line 2 |
-| `status_logo` | Status bar logo segment |
-| `status_file` | Status bar file segment |
-| `status_info` | Status bar informational segments |
-| `status_warning` | Status bar warning/diagnostic segment |
-| `status_error` | Status bar error/diagnostic segment |
-| `status_muted` | Status bar secondary segments |
-| `command` | Command palette / input areas |
-| `panel_border` | Borders of split panes and popups |
-| `selection` | Highlighted text selection |
-| `search_match` | Search result highlight |
-| `minimap` | Minimap dots |
-| `active_border` | Border of active pane |
-| `sidebar` | Sidebar base foreground/background |
-| `sidebar_directory` | Sidebar directory/file icon text |
-| `sidebar_selected` | Focused sidebar selected row |
-| `sidebar_selected_inactive` | Unfocused sidebar selected row |
-| `sidebar_border` | Sidebar right border |
-| `tab_active` | Active file tab |
-| `tab_inactive` | Inactive file tab |
-| `tab_close` | File tab close glyph (`x`) |
-| `tab_separator` | File tab separator (`|`) |
-| `diagnostic_error` | Diagnostic marker/tooltip error color |
-| `diagnostic_warning` | Diagnostic marker/tooltip warning color |
-| `diagnostic_info` | Diagnostic marker/tooltip info color |
-| `diagnostic_hint` | Diagnostic marker/tooltip hint color |
-| `bracket1` | Rainbow bracket level 1 |
-| `bracket2` | Rainbow bracket level 2 |
-| `bracket3` | Rainbow bracket level 3 |
-| `bracket4` | Rainbow bracket level 4 |
-| `bracket5` | Rainbow bracket level 5 |
-| `bracket6` | Rainbow bracket level 6 |
-| `terminal` | Integrated terminal foreground/background |
-| `terminal_tab_inactive` | Inactive terminal tab |
-| `terminal_tab_active` | Active terminal tab |
-| `terminal_tab_focused` | Focused terminal tab |
-| `terminal_tab_close` | Terminal tab close glyph (`x`) |
-| `terminal_tab_plus` | New terminal tab button (`+`) |
-| `terminal_tab_separator` | Terminal tab separator (`|`) |
-| `telescope` | File finder text |
-| `telescope_selected` | Selected item in file finder |
-| `telescope_preview` | Preview pane text in file finder |
-
-### Syntax Highlighting
-| Slot Name | Description |
-|-----------|-------------|
-| `keyword` | `if`, `else`, `return`, `class`, etc. |
-| `keyword_control` | Control-flow keywords such as `if`, `for`, `return` |
-| `keyword_storage` | Storage/modifier keywords such as `static`, `const`, `virtual` |
-| `keyword_preproc` | Preprocessor/directive keywords such as `#include`, `#define` |
-| `string` | `"String literals"` |
-| `string_escape` | Escape sequences inside strings |
-| `comment` | `// Comments` or `# Comments` |
-| `number` | `123`, `3.14` |
-| `function` | Function names, calls |
-| `function_method` | Method/member function names and calls |
-| `function_constructor` | Constructor names |
-| `type` | Types (`int`, `bool`, ClassNames) |
-| `type_builtin` | Built-in/primitive types |
-| `variable` | Variables and identifiers |
-| `parameter` | Function parameters |
-| `field` | Struct/class fields and properties |
-| `constant` | Constants and enum-like values |
-| `constant_macro` | Preprocessor macro constants |
-| `builtin` | Built-in functions/constants |
-| `operator` | Operators |
-| `punctuation` | General punctuation |
-| `punctuation_bracket` | Brackets and braces |
-| `punctuation_delimiter` | Delimiters such as commas, semicolons, and scope separators |
-| `namespace` | Namespaces |
-| `module` | Modules/imported names |
-| `attribute` | Attributes and annotations |
-| `tag` | Markup tags |
-| `bracket_match` | Matched bracket highlight |
-
-### Extra Highlight Group Mapping
-
-You can also style these compatibility highlight groups in theme files:
-
-- `Search`, `IncSearch`
-- `StatusLineMsg`
-- `StatusLineLogo`, `StatusLineFile`, `StatusLineInfo`
-- `StatusLineWarn`, `StatusLineWarning`, `StatusLineError`, `StatusLineMuted`
-- `WinActiveBorder`
-- `TabLine`, `TabLineSel`, `TabLineFill`
-- `TabClose`
-- `DiagnosticError`, `DiagnosticWarn`, `DiagnosticInfo`, `DiagnosticHint`
-- `Sidebar`, `SidebarDir`, `SidebarSel`, `SidebarSelNC`, `SidebarBorder`
-- `Terminal`, `TerminalTab`, `TerminalTabActive`, `TerminalTabFocused`
-- `TerminalTabClose`, `TerminalTabPlus`, `TerminalTabSeparator`
-- Tree-sitter captures such as `@keyword.control`, `@keyword.storage`,
-  `@keyword.directive`, `@function.method`, `@function.constructor`,
-  `@type.builtin`, `@constant.macro`, `@string.escape`,
-  `@punctuation.bracket`, and `@punctuation.delimiter`
-
-## Terminal Colors
-
-jot uses standard 256-color codes (Xterm).
-- 0-15: Standard ANSI colors (Black, Red, Green...)
-- 16-231: 6x6x6 Color Cube
-- 232-255: Grayscale (232=Black, 255=White)
-
-Tip: Use `-1` for transparency (inherit terminal background), but be careful with rendering artifacts if the editor background is not -1.
+All compatibility highlight groups documented by the editor remain supported,
+including syntax captures such as `@keyword.control`, `@function.method`, and
+`@punctuation.bracket`. See the color slot names in the source theme defaults
+and use standard 0-255 xterm color codes.

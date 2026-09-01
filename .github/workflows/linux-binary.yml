@@ -28,7 +28,6 @@ jobs:
             ninja-build \
             ccache \
             pkg-config \
-            libpython3-dev \
             libvterm-dev \
             libtermkey-dev \
             libuv1-dev \

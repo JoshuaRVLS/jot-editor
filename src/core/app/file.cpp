@@ -1,7 +1,7 @@
 #include "editor.h"
 #include "folding.h"
 #include "lazy_line_provider.h"
-#include "python_bridge/api.h"
+#include "lua_bridge/api.h"
 #ifdef JOT_TREESITTER
 #include <tree_sitter/api.h>
 #endif

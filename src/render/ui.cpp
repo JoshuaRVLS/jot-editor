@@ -1,5 +1,5 @@
 #include "editor.h"
-#include "python_bridge/api.h"
+#include "lua_bridge/api.h"
 #include "tree_sitter/catalog.h"
 #include "tree_sitter/manager.h"
 #include "ui/components.h"

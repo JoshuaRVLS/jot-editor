@@ -1,105 +1,45 @@
-// Python headers must be first so their macros precede C++ standard headers.
-#include "python_bridge/python_headers.h"
-
 #include "editor.h"
-#include "python_bridge/api.h"
+#include "lua_bridge/api.h"
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <regex>
 #include <string>
 #include <vector>
+#include <cstdlib>
 
-// C++ implementations of the theme-facing Python API methods.
+namespace {
+std::vector<std::filesystem::path> theme_dirs() {
+  namespace fs = std::filesystem; std::vector<fs::path> out;
+  const char *home = getenv("HOME"); const char *app = getenv("APPDATA"); const char *cfg = getenv("JOT_CONFIG_HOME");
+  fs::path root = cfg && *cfg ? fs::path(cfg) : (app && *app ? fs::path(app)/"jot" : (home ? fs::path(home)/".config"/"jot" : fs::path()));
+  if (!root.empty()) { out.push_back(root/"configs"/"colors"); out.push_back(root/"themes"); }
+  const char *data = getenv("JOT_DATA_HOME");
+  if (data && *data) out.push_back(fs::path(data) / "configs" / "colors");
+#ifdef JOT_DEFAULT_DATA_DIR
+  out.push_back(fs::path(JOT_DEFAULT_DATA_DIR) / "configs" / "colors");
+#endif
+  out.push_back(fs::current_path()/".configs"/"configs"/"colors");
+  out.push_back(fs::current_path()/"configs"/"colors");
+  return out;
+}
+int value(const std::string &s, const char *key) {
+  std::regex r(std::string("\\\"")+key+"\\\"\\s*:\\s*(-?[0-9]+)"); std::smatch m;
+  return std::regex_search(s,m,r) ? std::stoi(m[1].str()) : -1;
+}
+}
+
 void PythonAPI::py_show_message(const std::string &msg) {
-  if (editor)
-    editor->set_message(msg);
+  if (editor) editor->set_message(msg);
 }
 
 bool PythonAPI::py_apply_colorscheme(const std::string &name) {
-  if (!python_initialized || !py_module) {
-    return false;
-  }
-
-  PyObject *module = reinterpret_cast<PyObject *>(py_module);
-  PyObject *func = PyObject_GetAttrString(module, "apply_colorscheme");
-  if (!func) {
-    PyErr_Clear();
-    return false;
-  }
-
-  if (!PyCallable_Check(func)) {
-    Py_DECREF(func);
-    return false;
-  }
-
-  PyObject *arg = PyUnicode_FromString(name.c_str());
-  if (!arg) {
-    Py_DECREF(func);
-    PyErr_Clear();
-    return false;
-  }
-
-  PyObject *result = PyObject_CallFunctionObjArgs(func, arg, nullptr);
-  Py_DECREF(arg);
-  Py_DECREF(func);
-  if (!result) {
-    PyErr_Print();
-    PyErr_Clear();
-    return false;
-  }
-
-  bool ok = PyObject_IsTrue(result) == 1;
-  Py_DECREF(result);
-  return ok;
+  for (const auto &dir : theme_dirs()) { auto p=dir/(name+".json"); std::ifstream in(p); if(!in) continue; std::string text((std::istreambuf_iterator<char>(in)),{});
+    std::regex group("\\\"([^\"]+)\\\"\\s*:\\s*\\{([^}]*)\\}"); for(std::sregex_iterator i(text.begin(),text.end(),group),e;i!=e;++i) py_set_theme_color((*i)[1].str(),value((*i)[2].str(),"fg"),value((*i)[2].str(),"bg")); return true; }
+  return false;
 }
-
-std::vector<std::string> PythonAPI::py_list_themes() {
-  std::vector<std::string> themes;
-  if (!python_initialized || !py_module) {
-    return themes;
-  }
-
-  PyObject *module = reinterpret_cast<PyObject *>(py_module);
-  PyObject *func = PyObject_GetAttrString(module, "list_colorschemes");
-  if (!func) {
-    PyErr_Clear();
-    return themes;
-  }
-
-  if (!PyCallable_Check(func)) {
-    Py_DECREF(func);
-    return themes;
-  }
-
-  PyObject *result = PyObject_CallObject(func, nullptr);
-  Py_DECREF(func);
-  if (!result) {
-    PyErr_Print();
-    PyErr_Clear();
-    return themes;
-  }
-
-  if (PyList_Check(result) || PyTuple_Check(result)) {
-    const Py_ssize_t count = PySequence_Size(result);
-    themes.reserve((size_t)std::max<Py_ssize_t>(0, count));
-    for (Py_ssize_t i = 0; i < count; i++) {
-      PyObject *item = PySequence_GetItem(result, i);
-      if (!item) {
-        PyErr_Clear();
-        continue;
-      }
-      if (PyUnicode_Check(item)) {
-        const char *s = PyUnicode_AsUTF8(item);
-        if (s && *s) {
-          themes.emplace_back(s);
-        }
-      }
-      Py_DECREF(item);
-    }
-  }
-
-  Py_DECREF(result);
-  return themes;
-}
+std::vector<std::string> PythonAPI::py_list_themes() { std::vector<std::string> out; for(const auto&d:theme_dirs()) if(std::filesystem::exists(d)) for(const auto&e:std::filesystem::directory_iterator(d)) if(e.path().extension()==".json") out.push_back(e.path().stem().string()); return out; }
 
 void PythonAPI::py_set_theme_color(const std::string &name, int fg, int bg) {
   if (!editor)

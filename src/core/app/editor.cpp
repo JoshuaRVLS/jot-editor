@@ -1,6 +1,6 @@
 #include "editor.h"
 #include "host_api.h"
-#include "python_bridge/api.h"
+#include "lua_bridge/api.h"
 #include <algorithm>
 #include <filesystem>
 
@@ -259,7 +259,7 @@ void Editor::initialize_state_defaults() {
   // Easter egg
   easter_egg_timer = 0;
 
-  // Default Python-backed theme name.
+  // Default embedded-runtime theme name.
   current_theme_name = "dark";
 }
 
@@ -271,7 +271,7 @@ void Editor::initialize_python_runtime() {
   load_recent_files();
   load_recent_workspaces();
 
-  // Restore saved color scheme now that Python runtime is ready.
+  // Restore saved color scheme now that embedded runtime is ready.
   {
     std::string saved = config.get("color_scheme", "dark");
     apply_theme(saved, false, false);

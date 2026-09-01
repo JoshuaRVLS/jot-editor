@@ -1,6 +1,6 @@
-function(jot_configure_object_target target_name)
-  target_compile_options(${target_name} PRIVATE ${PYTHON_OTHER_FLAGS_LIST})
+add_compile_definitions(JOT_DEFAULT_DATA_DIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/jot")
 
+function(jot_configure_object_target target_name)
   target_include_directories(${target_name} PRIVATE
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/src
@@ -10,13 +10,10 @@ function(jot_configure_object_target target_name)
     ${PROJECT_SOURCE_DIR}/src/edit
     ${PROJECT_SOURCE_DIR}/src/features
     ${PROJECT_SOURCE_DIR}/src/ui
-    ${PROJECT_SOURCE_DIR}/src/python_bridge
+    ${PROJECT_SOURCE_DIR}/src/lua_bridge
     ${PROJECT_SOURCE_DIR}/src/tools
   )
 
-  if(PYTHON_INCLUDES)
-    target_include_directories(${target_name} SYSTEM PRIVATE ${PYTHON_INCLUDES})
-  endif()
   if(LIBUV_INCLUDE_DIRS)
     target_include_directories(${target_name} SYSTEM PRIVATE ${LIBUV_INCLUDE_DIRS})
   endif()
@@ -86,6 +83,43 @@ else()
   if(NOT UTF8PROC_FOUND)
     pkg_check_modules(UTF8PROC QUIET utf8proc)
   endif()
+endif()
+
+find_path(LUA_INCLUDE_DIR lua.h PATH_SUFFIXES lua5.4 lua54 lua5.3 lua53)
+find_library(LUA_LIBRARY NAMES lua5.4 lua54 lua5.3 lua53 lua)
+if(LUA_INCLUDE_DIR AND LUA_LIBRARY)
+  set(LUA_INCLUDE_DIRS ${LUA_INCLUDE_DIR})
+  set(LUA_LIBRARIES ${LUA_LIBRARY})
+else()
+  if(NOT JOT_FETCH_DEPS)
+    message(FATAL_ERROR "Lua 5.3 or newer is required. Install Lua development files or set JOT_FETCH_DEPS=ON.")
+  endif()
+  include(FetchContent)
+  FetchContent_Declare(lua
+    URL https://www.lua.org/ftp/lua-5.4.7.tar.gz
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  )
+  FetchContent_MakeAvailable(lua)
+  set(LUA_INCLUDE_DIRS ${lua_SOURCE_DIR}/src)
+  add_library(jot_lua STATIC
+    ${lua_SOURCE_DIR}/src/lapi.c ${lua_SOURCE_DIR}/src/lauxlib.c
+    ${lua_SOURCE_DIR}/src/lbaselib.c ${lua_SOURCE_DIR}/src/lcode.c
+    ${lua_SOURCE_DIR}/src/lcorolib.c ${lua_SOURCE_DIR}/src/lctype.c
+    ${lua_SOURCE_DIR}/src/ldblib.c ${lua_SOURCE_DIR}/src/ldebug.c
+    ${lua_SOURCE_DIR}/src/ldo.c ${lua_SOURCE_DIR}/src/ldump.c
+    ${lua_SOURCE_DIR}/src/lfunc.c ${lua_SOURCE_DIR}/src/lgc.c
+    ${lua_SOURCE_DIR}/src/linit.c ${lua_SOURCE_DIR}/src/liolib.c
+    ${lua_SOURCE_DIR}/src/llex.c ${lua_SOURCE_DIR}/src/lmathlib.c
+    ${lua_SOURCE_DIR}/src/lmem.c ${lua_SOURCE_DIR}/src/loadlib.c
+    ${lua_SOURCE_DIR}/src/lobject.c ${lua_SOURCE_DIR}/src/lopcodes.c
+    ${lua_SOURCE_DIR}/src/loslib.c ${lua_SOURCE_DIR}/src/lparser.c
+    ${lua_SOURCE_DIR}/src/lstate.c ${lua_SOURCE_DIR}/src/lstring.c
+    ${lua_SOURCE_DIR}/src/lstrlib.c ${lua_SOURCE_DIR}/src/ltable.c
+    ${lua_SOURCE_DIR}/src/ltablib.c ${lua_SOURCE_DIR}/src/ltm.c
+    ${lua_SOURCE_DIR}/src/lundump.c ${lua_SOURCE_DIR}/src/lutf8lib.c
+    ${lua_SOURCE_DIR}/src/lvm.c ${lua_SOURCE_DIR}/src/lzio.c)
+  target_include_directories(jot_lua PUBLIC ${LUA_INCLUDE_DIRS})
+  set(LUA_LIBRARIES jot_lua)
 endif()
 if(NOT UTF8PROC_FOUND)
   find_path(UTF8PROC_INCLUDE_DIR utf8proc.h)
@@ -169,7 +203,7 @@ include(features/sources.cmake)
 include(input/sources.cmake)
 include(render/sources.cmake)
 include(tools/sources.cmake)
-include(python_bridge/sources.cmake)
+include(lua_bridge/sources.cmake)
 include(ui/sources.cmake)
 
 # Module object libraries
@@ -213,8 +247,9 @@ if(NOT WIN32)
   target_compile_options(jot_tools_obj PRIVATE ${VTERM_CFLAGS_OTHER})
 endif()
 
-add_library(jot_python_bridge_obj OBJECT ${JOT_PYTHON_BRIDGE_SOURCES})
-jot_configure_object_target(jot_python_bridge_obj)
+add_library(jot_lua_bridge_obj OBJECT ${JOT_LUA_BRIDGE_SOURCES})
+jot_configure_object_target(jot_lua_bridge_obj)
+target_include_directories(jot_lua_bridge_obj SYSTEM PRIVATE ${LUA_INCLUDE_DIRS})
 
 add_library(jot_ui_obj OBJECT ${JOT_UI_SOURCES})
 if(WIN32)
@@ -242,7 +277,8 @@ add_library(jot_features STATIC $<TARGET_OBJECTS:jot_features_obj>)
 add_library(jot_input STATIC $<TARGET_OBJECTS:jot_input_obj>)
 add_library(jot_render STATIC $<TARGET_OBJECTS:jot_render_obj>)
 add_library(jot_tools STATIC $<TARGET_OBJECTS:jot_tools_obj>)
-add_library(jot_python_bridge STATIC $<TARGET_OBJECTS:jot_python_bridge_obj>)
+add_library(jot_lua_bridge STATIC $<TARGET_OBJECTS:jot_lua_bridge_obj>)
+target_link_libraries(jot_lua_bridge PUBLIC ${LUA_LIBRARIES})
 add_library(jot_ui STATIC $<TARGET_OBJECTS:jot_ui_obj>)
 
 jot_expose_module_api(jot_core)
@@ -251,7 +287,7 @@ jot_expose_module_api(jot_features)
 jot_expose_module_api(jot_input)
 jot_expose_module_api(jot_render)
 jot_expose_module_api(jot_tools)
-jot_expose_module_api(jot_python_bridge)
+jot_expose_module_api(jot_lua_bridge)
 jot_expose_module_api(jot_ui)
 
 # Aggregated engine library consumed by the app target.
@@ -263,16 +299,17 @@ add_library(jot_engine STATIC
   $<TARGET_OBJECTS:jot_input_obj>
   $<TARGET_OBJECTS:jot_render_obj>
   $<TARGET_OBJECTS:jot_tools_obj>
-  $<TARGET_OBJECTS:jot_python_bridge_obj>
+  $<TARGET_OBJECTS:jot_lua_bridge_obj>
   $<TARGET_OBJECTS:jot_ui_obj>
 )
+target_link_libraries(jot_engine PUBLIC ${LUA_LIBRARIES})
 
 jot_expose_module_api(jot_engine)
 if(JOT_TREESITTER_ENABLED)
-  foreach(target_name IN ITEMS jot_core_obj jot_edit_obj jot_input_obj jot_render_obj jot_python_bridge_obj jot_tools_obj jot_ui_obj jot_core jot_edit jot_features jot_input jot_render jot_tools jot_python_bridge jot_ui jot_engine)
+  foreach(target_name IN ITEMS jot_core_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_bridge_obj jot_tools_obj jot_ui_obj jot_core jot_edit jot_features jot_input jot_render jot_tools jot_lua_bridge jot_ui jot_engine)
     target_compile_definitions(${target_name} PUBLIC JOT_TREESITTER=1)
   endforeach()
-  foreach(target_name IN ITEMS jot_core_obj jot_edit_obj jot_input_obj jot_render_obj jot_python_bridge_obj jot_tools_obj jot_ui_obj)
+  foreach(target_name IN ITEMS jot_core_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_bridge_obj jot_tools_obj jot_ui_obj)
     target_include_directories(${target_name} SYSTEM PRIVATE ${TREE_SITTER_INCLUDE_DIRS})
   endforeach()
   target_link_libraries(jot_features PUBLIC

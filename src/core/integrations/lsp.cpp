@@ -1,7 +1,7 @@
 #include "editor.h"
 #include "lsp/client.h"
 #include "lsp/install.h"
-#include "python_bridge/api.h"
+#include "lua_bridge/api.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <cctype>

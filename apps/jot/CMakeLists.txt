@@ -1,9 +1,6 @@
 add_executable(jot main.cpp)
 
-target_link_libraries(jot PRIVATE jot_engine ${PYTHON_LDFLAGS_LIST})
-if(WIN32 AND TARGET Python3::Python)
-  target_link_libraries(jot PRIVATE Python3::Python)
-endif()
+target_link_libraries(jot PRIVATE jot_engine)
 
 # Use a clean, portable install RPATH so the installed jot binary can find
 # runtime libraries in ${CMAKE_INSTALL_LIBDIR} relative to the binary.

@@ -1,5 +1,5 @@
 #include "editor.h"
-#include "python_bridge/api.h"
+#include "lua_bridge/api.h"
 #include <algorithm>
 #include <cctype>
 
@@ -62,7 +62,7 @@ void Editor::apply_theme(const std::string &name, bool persist, bool announce) {
   }
 
   if (!python_api) {
-    set_message("Python runtime unavailable for themes");
+    set_message("Lua theme runtime unavailable");
     return;
   }
 

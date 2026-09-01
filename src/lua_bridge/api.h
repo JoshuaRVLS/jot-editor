@@ -1,9 +1,10 @@
-#ifndef PYTHON_API_H
-#define PYTHON_API_H
+#ifndef LUA_API_H
+#define LUA_API_H
 
 #include "text_features.h"
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 struct PluginCommand {
   std::string name;
@@ -49,11 +50,12 @@ private:
   std::vector<PluginPanel> plugin_panels;
   std::vector<PluginLoadStatus> plugin_load_status;
 
-  void *py_module; // PyObject* (using void* to avoid including Python.h in
-                   // header)
-  bool python_initialized;
+  void *lua_state; // lua_State* (opaque in public header)
+  bool lua_initialized;
+public:
+  std::unordered_map<std::string, int> lua_callbacks;
 
-  bool import_jot_api_module();
+private:
   void clear_plugin_state();
   bool load_script_path(const std::string &module_name,
                         const std::string &path);

@@ -27,7 +27,7 @@ The installed binary name is `jot`.
   breakpoints, threads, stack, variables, memory, disassembly, and output.
 - Git workflow commands for status, diffs, staging, unstaging, committing, log,
   blame, and refresh.
-- Python-backed colorschemes only; editor behavior is owned by the C++ core.
+- Lua-backed plugins and JSON colorschemes; editor behavior is owned by the C++ core.
 
 ## Platform Support
 
@@ -84,8 +84,8 @@ If VS Code CMake Tools keeps configuring `build` with `-A win32`, run
 `CMake: Delete Cache and Reconfigure`, then select the
 `windows-msvc-vs2026` configure preset.
 
-Use 64-bit MSVC and 64-bit Python. The experimental Windows target does not
-support `-A win32`. Python development files are required. `libuv` and
+Use 64-bit MSVC. The experimental Windows target does not support `-A win32`.
+Lua is fetched at a pinned version when unavailable. `libuv` and
 `utf8proc` are fetched automatically when CMake packages are unavailable; set
 `JOT_FETCH_DEPS=OFF` if you want to provide them through vcpkg or another package
 manager. Tree-sitter runtime support can be enabled after installing a compatible
@@ -94,7 +94,7 @@ manager. Tree-sitter runtime support can be enabled after installing a compatibl
 Installed files include:
 
 - `$prefix/bin/jot`
-- `$prefix/share/jot/python/`
+- `$prefix/share/jot/lua/`
 - `$prefix/share/jot/configs/`
 
 ## Run
@@ -328,7 +328,7 @@ are intentionally not exposed as editor commands.
 
 ### Themes
 
-- Embedded Python runtime for colorscheme discovery and application.
+- Embedded Lua runtime for plugin callbacks and native JSON colorscheme application.
 - Bundled and user theme directories.
 - `vim` compatibility alias for existing theme files.
 - Neovim-style highlight group mapping for classic groups and Tree-sitter
@@ -601,7 +601,7 @@ Current layout:
   configs/
     settings.conf
     colors/
-      my_theme.py
+      my_theme.json
   themes/      # legacy colorscheme path
 ```
 
@@ -658,7 +658,7 @@ lsp_change_debounce_ms=120
 
 - CMake 3.16+
 - C++17 compiler
-- Python 3 development headers and `python3-config`
+- Lua 5.3+ development headers (or allow CMake to fetch Lua 5.4.7)
 - libvterm development headers (`vterm` pkg-config package)
 - libtermkey development headers (`termkey` pkg-config package)
 - libuv development headers (`libuv` pkg-config package)
@@ -703,9 +703,8 @@ src/features/    syntax, folding, config, bracket helpers, C++ assist
 src/input/       keyboard, mouse, command palette, command dispatch
 src/render/      buffer drawing, minimap, overlays, panels, UI views
 src/tools/       integrated terminal, DAP client, LSP client, search helpers
-src/python/      Python-side theme runtime
-src/python_bridge/
-                  C++ bridge for theme-facing Python API
+  src/lua_bridge/
+                  C++ bridge for embedded Lua plugin/theme API
 src/ui/          raw terminal and UI abstraction
 docs/            user-facing documentation
 tests/           unit test scaffolding
@@ -715,7 +714,7 @@ Build graph highlights:
 
 - `jot_engine`: aggregated static engine target for the app
 - `jot_core`, `jot_edit`, `jot_features`, `jot_input`, `jot_render`,
-  `jot_tools`, `jot_python_bridge`, `jot_ui`: module libraries for ownership
+  `jot_tools`, `jot_lua_bridge`, `jot_ui`: module libraries for ownership
   boundaries and reuse
 
 ## Notes And Limitations
@@ -726,8 +725,7 @@ Build graph highlights:
 - The integrated terminal is useful for normal shell/task workflows, but it is
   not intended to be a complete replacement for a mature standalone terminal
   emulator.
-- Python is reserved for themes. Plugins, keybindings, editor commands, and
-  behavior hooks are not loaded from Python.
+- Lua globals are injected for plugins; no package import is required.
 - Windows is not supported yet.
 
 ## License

@@ -19,7 +19,7 @@ add_executable(jot_tests
 target_link_libraries(jot_tests PRIVATE
   Catch2::Catch2WithMain
   jot_features
-  jot_python_bridge
+  jot_lua_bridge
   jot_tools
   jot_ui
 )
