@@ -89,4 +89,43 @@ Lua owns runtime composition, commands, actions, and event policy. C++ owns
 terminal rendering, raw input, event-loop scheduling, buffer storage, process
 transports, LSP/DAP protocol handling, Tree-sitter parser ownership, and
 platform integration. Lua receives typed wrappers and never receives native
-pointers.
+ pointers.
+
+## Floating Windows
+
+`jot.ui.buffer` and `jot.ui.float` provide native Jot buffer and floating-window
+calls. Handles are stable positive integers and scratch buffers are independent
+from editor files. Line ranges are zero-based, end-exclusive; `-1` means the
+end.
+
+Buffer functions: `jot.ui.buffer.create`, `set_lines`, `get_lines`, and
+`delete`. Float functions: `jot.ui.float.open`, `set_lines`, `get_lines`,
+`configure`, `get_config`, `close`, `is_valid`, `buffer`, `focus`, `current`,
+`on_key`, and `on_mouse`.
+
+```lua
+local buf = jot.ui.buffer.create(false, true)
+jot.ui.buffer.set_lines(buf, 0, -1, true, {"Build complete", "Press q to close"})
+local win = jot.ui.float.open(buf, {
+  relative = "cursor", row = 1, col = 2, width = 32, height = 4,
+  border = "rounded", title = " Status ", zindex = 100,
+  on_key = function(event)
+    return event.key == "q" and jot.ui.float.close(event.window)
+  end,
+})
+```
+
+Config supports `relative` (`editor`, `cursor`, `win`, `mouse`), `row`, `col`,
+`width`, `height`, `anchor` (`NW`, `NE`, `SW`, `SE`), `border` (`none`,
+`single`, `double`, `rounded`, `custom`), `border_chars` (8 cells in
+top/right/bottom/left/top-left/top-right/bottom-right/bottom-left order),
+`zindex`, `focusable`, `mouse`, `hide`, `style_minimal`, `style`, `fg`, `bg`,
+`title`, `footer`, `on_key`, and `on_mouse`. Floats clamp to the paintable
+editor area above the status row. `win` uses the active pane; `mouse` is
+reserved for future mouse-anchor support.
+
+Convenience calls are available as `jot.ui.float.open(buf, config)`,
+`set_lines(win, lines)`, `get_lines(win)`, `configure(win, config)`,
+`close(win)`, `on_key(win, callback)`, and `on_mouse(win, callback)`. Callbacks
+receive a table and return truthy to consume the event. They are protected,
+main-thread only, and released when their window or buffer closes.

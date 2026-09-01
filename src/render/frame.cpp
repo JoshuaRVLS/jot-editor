@@ -1,6 +1,7 @@
 #include "bracket.h"
 #include "column_utils.h"
 #include "editor.h"
+#include "lua_bridge/api.h"
 #include "folding.h"
 #include "ui/text.h"
 #include <cstdio>
@@ -276,6 +277,10 @@ void Editor::render() {
         ui->dim_rect({0, 0, ui->get_render_width(), ui->get_height()});
       }
       render_popup();
+    }
+
+    if (lua_api) {
+      lua_api->render_floats();
     }
 
     // Set cursor state BEFORE ui->render() so the full-row paint emits the

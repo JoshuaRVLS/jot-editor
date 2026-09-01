@@ -5,6 +5,40 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <array>
+#include <map>
+
+struct LuaScratchBuffer {
+  int handle = 0;
+  bool listed = false;
+  bool scratch = true;
+  bool valid = true;
+  std::vector<std::string> lines = {""};
+};
+
+struct LuaFloatWindow {
+  int handle = 0;
+  int buffer = 0;
+  int x = 0, y = 0, w = 1, h = 1;
+  int row = 0, col = 0;
+  int zindex = 50;
+  bool valid = true;
+  bool enter = false;
+  bool focusable = true;
+  bool mouse = false;
+  bool hide = false;
+  bool style_minimal = false;
+  int fg = 7, bg = 0;
+  std::string relative = "editor";
+  std::string anchor = "NW";
+  std::string border = "none";
+  std::array<std::string, 8> custom_border = {"", "", "", "", "", "", "", ""};
+  std::string title;
+  std::string footer;
+  int key_callback = -1;
+  int mouse_callback = -1;
+  int creation_order = 0;
+};
 
 struct PluginCommand {
   std::string name;
@@ -41,6 +75,7 @@ struct PluginLoadStatus {
 // Forward declaration
 class Editor;
 class EditorHostAPI;
+struct lua_State;
 
 class LuaAPI {
 private:
@@ -54,6 +89,13 @@ private:
   void *lua_state; // lua_State* (opaque in public header)
   bool lua_initialized;
 public:
+  int next_scratch_buffer = 1;
+  int next_float_window = 1;
+  int next_float_order = 1;
+  int current_float_window = 0;
+  std::map<int, LuaScratchBuffer> scratch_buffers;
+  std::map<int, LuaFloatWindow> float_windows;
+ public:
   std::unordered_map<std::string, int> lua_callbacks;
 
 private:
@@ -132,6 +174,22 @@ public:
                       const std::string &items_callback,
                       const std::string &select_callback);
   void show_panel(const std::string &name);
+
+  int create_scratch_buffer(bool listed, bool scratch);
+  bool set_scratch_lines(int buffer, int start, int end, bool strict,
+                         const std::vector<std::string> &lines);
+  std::vector<std::string> get_scratch_lines(int buffer, int start, int end,
+                                             bool strict) const;
+  bool delete_scratch_buffer(int buffer);
+  int open_float(int buffer, bool enter, lua_State *L, int config_index);
+  bool configure_float(int window, lua_State *L, int config_index);
+  bool close_float(int window, bool force);
+  bool is_float_valid(int window) const;
+  bool float_input(int ch, bool ctrl, bool shift, bool alt);
+  bool float_mouse(int x, int y, int button, bool pressed, bool released,
+                   bool motion, bool ctrl, bool shift, bool alt);
+  void render_floats();
+  void clear_floats();
 };
 
 #endif

@@ -331,7 +331,7 @@ are intentionally not exposed as editor commands.
 - Embedded Lua runtime for plugin callbacks and native JSON colorscheme application.
 - Bundled and user theme directories.
 - `vim` compatibility alias for existing theme files.
-- Neovim-style highlight group mapping for classic groups and Tree-sitter
+- Highlight group mapping for classic groups and Tree-sitter
   captures.
 - Theme chooser, `:theme`, and `:colorscheme` commands.
 

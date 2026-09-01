@@ -528,6 +528,11 @@ void Editor::handle_terminal_event(const Event &ev) {
     bool is_alt = ev.key.alt;
     int original_ch = ch;
 
+    if (lua_api && lua_api->float_input(ch, is_ctrl, is_shift, is_alt)) {
+      needs_redraw = true;
+      return;
+    }
+
     bool ctrl_q_shortcut =
         (is_ctrl && (ch == 'q' || ch == 'Q' || original_ch == 'q' ||
                      original_ch == 'Q')) ||
@@ -599,6 +604,14 @@ void Editor::handle_terminal_event(const Event &ev) {
   if (ev.type == EVENT_MOUSE) {
     int button = ev.mouse.button;
     bool is_wheel = (button >= 64 && button <= 67);
+
+    if (lua_api && lua_api->float_mouse(ev.mouse.x, ev.mouse.y, button,
+                                        ev.mouse.pressed, ev.mouse.released,
+                                        (button & 0x20) != 0, ev.mouse.ctrl,
+                                        ev.mouse.shift, ev.mouse.alt)) {
+      needs_redraw = true;
+      return;
+    }
 
     if (show_lsp_manager_modal) {
       const bool is_click = ev.mouse.pressed && ((button & 0x03) == 0);
