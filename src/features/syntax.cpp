@@ -3,8 +3,11 @@
 #include <algorithm>
 #include <cstring>
 #include <regex>
+#include <unordered_map>
 
 namespace {
+
+std::unordered_map<std::string, int> capture_color_overrides;
 
 struct CaptureStyle {
   int token = TS_TOKEN_NONE;
@@ -116,10 +119,18 @@ CaptureStyle capture_style_for_name(std::string_view sv) {
 } // namespace
 
 int tree_sitter_capture_color_for_name(const std::string &name) {
+  auto it = capture_color_overrides.find(name);
+  if (it != capture_color_overrides.end()) return it->second;
   return capture_style_for_name(name).token;
 }
 
+void tree_sitter_set_capture_color(const std::string &name, int color) {
+  capture_color_overrides[name] = color;
+}
+
 int tree_sitter_capture_token_for_name(const std::string &name) {
+  auto it = capture_color_overrides.find(name);
+  if (it != capture_color_overrides.end()) return it->second;
   return capture_style_for_name(name).token;
 }
 

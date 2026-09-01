@@ -15,6 +15,8 @@ add_executable(jot_tests
   test_telescope.cpp
   test_ui_text.cpp
   test_lua_float.cpp
+  test_tree_sitter_lua.cpp
+  test_lua_treesitter_module.cpp
 )
 
 target_link_libraries(jot_tests PRIVATE
@@ -24,6 +26,9 @@ target_link_libraries(jot_tests PRIVATE
 
 target_include_directories(jot_tests PRIVATE
   ${PROJECT_SOURCE_DIR}/tests
+)
+target_compile_definitions(jot_tests PRIVATE
+  JOT_LUA_SOURCE_DIR="${PROJECT_SOURCE_DIR}/lua"
 )
 
 include(Catch)

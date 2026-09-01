@@ -209,4 +209,54 @@ TSParser *TreeSitterManager::create_parser(const std::string &extension) const {
   return parser;
 }
 
+TreeSitterHandle TreeSitterManager::create_parser_handle(const std::string &extension) {
+  TSParser *parser = create_parser(extension);
+  if (!parser) return 0;
+  const TreeSitterHandle handle = next_handle_++;
+  lua_parsers_[handle] = parser;
+  return handle;
+}
+
+bool TreeSitterManager::delete_parser_handle(TreeSitterHandle handle) {
+  auto it = lua_parsers_.find(handle);
+  if (it == lua_parsers_.end()) return false;
+  ts_parser_delete(it->second);
+  lua_parsers_.erase(it);
+  return true;
+}
+
+TreeSitterHandle TreeSitterManager::parse_handle(TreeSitterHandle parser_handle,
+                                                 const std::string &text,
+                                                 TreeSitterHandle old_handle) {
+  auto parser = lua_parsers_.find(parser_handle);
+  if (parser == lua_parsers_.end()) return 0;
+  TSTree *old_tree = nullptr;
+  if (old_handle) {
+    auto old = lua_trees_.find(old_handle);
+    if (old == lua_trees_.end()) return 0;
+    old_tree = old->second;
+  }
+  TSTree *tree = ts_parser_parse_string(parser->second, old_tree, text.c_str(),
+                                         static_cast<uint32_t>(text.size()));
+  if (!tree) return 0;
+  const TreeSitterHandle handle = next_handle_++;
+  lua_trees_[handle] = tree;
+  return handle;
+}
+
+bool TreeSitterManager::delete_tree_handle(TreeSitterHandle handle) {
+  auto it = lua_trees_.find(handle);
+  if (it == lua_trees_.end()) return false;
+  ts_tree_delete(it->second);
+  lua_trees_.erase(it);
+  return true;
+}
+
+#endif
+
+#ifndef JOT_TREESITTER
+TreeSitterHandle TreeSitterManager::create_parser_handle(const std::string &) { return 0; }
+bool TreeSitterManager::delete_parser_handle(TreeSitterHandle) { return false; }
+TreeSitterHandle TreeSitterManager::parse_handle(TreeSitterHandle, const std::string &, TreeSitterHandle) { return 0; }
+bool TreeSitterManager::delete_tree_handle(TreeSitterHandle) { return false; }
 #endif

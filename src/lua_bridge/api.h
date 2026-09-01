@@ -75,6 +75,7 @@ struct PluginLoadStatus {
 // Forward declaration
 class Editor;
 class EditorHostAPI;
+class TreeSitterManager;
 struct lua_State;
 
 class LuaAPI {
@@ -111,6 +112,10 @@ public:
   LuaAPI(Editor *ed);
   ~LuaAPI();
   EditorHostAPI &host();
+  TreeSitterManager &tree_sitter_manager();
+  bool is_main_thread() const;
+  void register_treesitter_api(lua_State *L);
+  bool load_treesitter_runtime(lua_State *L);
 
   bool init();
   void cleanup();

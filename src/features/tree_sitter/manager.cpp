@@ -78,6 +78,9 @@ void close_library_handle(void *handle) {
 TreeSitterManager::TreeSitterManager() { register_languages(); }
 TreeSitterManager::~TreeSitterManager() {
 #ifdef JOT_TREESITTER
+  for (auto &entry : lua_parsers_) ts_parser_delete(entry.second);
+  for (auto &entry : lua_trees_) ts_tree_delete(entry.second);
+  for (auto &entry : lua_queries_) ts_query_delete(entry.second);
   for (auto &entry : query_cache_) {
     if (entry.second) {
       ts_query_delete(entry.second);
@@ -89,6 +92,48 @@ TreeSitterManager::~TreeSitterManager() {
     }
   }
 #endif
+}
+
+bool TreeSitterManager::register_language(
+    const std::string &language_id, const std::vector<std::string> &extensions,
+    const std::string &query_source) {
+  const std::string language = TreeSitterCatalog::normalize_language_name(language_id);
+  if (language.empty() || extensions.empty()) return false;
+  TSLanguageEntry entry;
+  entry.language_id = language;
+  entry.highlight_query_source = query_source;
+  if (entry.highlight_query_source.empty()) {
+    entry.highlight_query_source =
+        TreeSitterLanguageSpecs::highlight_query_for_language(language);
+  }
+  languages_[language] = std::move(entry);
+  for (auto extension : extensions) {
+    if (extension.empty()) continue;
+    if (extension.front() != '.') extension.insert(extension.begin(), '.');
+    ext_to_lang_[extension] = language;
+  }
+  return true;
+}
+
+std::string TreeSitterManager::language_for_extension(
+    const std::string &extension) const {
+  if (languages_.find(TreeSitterCatalog::normalize_language_name(extension)) !=
+      languages_.end()) {
+    return TreeSitterCatalog::normalize_language_name(extension);
+  }
+  if (extension.empty()) return "";
+  return language_id_for_extension(extension.front() == '.' ? extension
+                                                            : "." + extension);
+}
+
+TreeSitterRuntimeStatus TreeSitterManager::status(
+    const std::string &language_or_extension) const {
+  if (language_or_extension.find('.') != std::string::npos) {
+    return runtime_status_for_extension(language_or_extension.front() == '.'
+                                            ? language_or_extension
+                                            : "." + language_or_extension);
+  }
+  return runtime_status_for_language(language_or_extension);
 }
 
 void TreeSitterManager::register_languages() {
@@ -295,6 +340,12 @@ void TreeSitterManager::set_runtime_options(
 
 void TreeSitterManager::reload() {
 #ifdef JOT_TREESITTER
+  for (auto &entry : lua_parsers_) ts_parser_delete(entry.second);
+  for (auto &entry : lua_trees_) ts_tree_delete(entry.second);
+  for (auto &entry : lua_queries_) ts_query_delete(entry.second);
+  lua_parsers_.clear();
+  lua_trees_.clear();
+  lua_queries_.clear();
   for (auto &entry : query_cache_) {
     if (entry.second) {
       ts_query_delete(entry.second);

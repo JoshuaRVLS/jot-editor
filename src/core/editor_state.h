@@ -15,9 +15,7 @@
 #include "tools/lsp/client.h"
 #include "tools/terminal/integrated.h"
 #include "ui.h"
-#ifdef JOT_TREESITTER
 #include "tree_sitter/manager.h"
-#endif
 #include <map>
 #include <memory>
 #include <string>
@@ -131,9 +129,7 @@ struct EditorState {
   Theme theme;
   std::string current_theme_name;
 
-#ifdef JOT_TREESITTER
   TreeSitterManager ts_manager_;
-#endif
 
   bool show_tree_sitter_status_modal;
   int tree_sitter_status_scroll;

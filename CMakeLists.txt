@@ -117,6 +117,10 @@ install(DIRECTORY .configs/configs
   DESTINATION ${CMAKE_INSTALL_DATADIR}/jot
 )
 
+install(DIRECTORY lua
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/jot
+)
+
 # ── Uninstall target ──────────────────────────────────────────────────────────
 # `cmake --build build --target uninstall` removes every file CMake installed.
 configure_file(

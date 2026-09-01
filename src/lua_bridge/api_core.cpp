@@ -203,7 +203,8 @@ bool LuaAPI::init(){
    lua_getglobal(L,"jot");lua_getfield(L,-1,"ui");lua_newtable(L);field(L,"create",l_ui_buffer_create);field(L,"set_lines",l_ui_buffer_set_lines);field(L,"get_lines",l_ui_buffer_get_lines);field(L,"delete",l_ui_buffer_delete);lua_setfield(L,-2,"buffer");lua_newtable(L);field(L,"open",l_float_open);field(L,"set_lines",l_float_set_lines);field(L,"get_lines",l_float_get_lines);field(L,"configure",l_float_configure);field(L,"get_config",l_ui_float_get_config);field(L,"close",l_float_close);field(L,"is_valid",l_ui_float_is_valid);field(L,"buffer",l_ui_float_buffer);field(L,"focus",l_ui_float_focus);field(L,"current",l_ui_float_current);field(L,"on_key",l_float_on_key);field(L,"on_mouse",l_float_on_mouse);lua_setfield(L,-2,"float");lua_pop(L,2);
    lua_getglobal(L,"jot");lua_getfield(L,-1,"theme");field(L,"set_color",[](lua_State*s){auto&a=api(s);luaL_checktype(s,2,LUA_TTABLE);lua_getfield(s,2,"fg");int fg=lua_isnumber(s,-1)?(int)lua_tointeger(s,-1):-1;lua_pop(s,1);lua_getfield(s,2,"bg");int bg=lua_isnumber(s,-1)?(int)lua_tointeger(s,-1):-1;lua_pop(s,1);a.set_theme_color(luaL_optstring(s,1,""),fg,bg);return 0;});lua_pop(L,2);
   lua_getglobal(L,"jot");lua_getfield(L,-1,"ui");field(L,"register_panel",l_register_panel);lua_pop(L,2);
-  load_plugins();
+   load_treesitter_runtime(L);
+   load_plugins();
   return true;
 }
  void LuaAPI::cleanup(){if(!lua_state)return;clear_floats();lua_close(static_cast<lua_State*>(lua_state));lua_state=nullptr;lua_callbacks.clear();lua_initialized=false;}

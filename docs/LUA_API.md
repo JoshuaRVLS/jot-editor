@@ -51,7 +51,8 @@ jot.tasks        execute, list, run
 jot.lsp          execute, definition, back, completion
 jot.debugger     execute, continue, pause, step_in, step_over, step_out, stop
 jot.git          execute, refresh, stage_all
-jot.treesitter   execute, status, reload
+jot.treesitter   register_language, language_for_extension, status, parser,
+                 parse, query, captures, set_query, set_capture_color, reload
 jot.image        execute, open
 ```
 
@@ -89,7 +90,13 @@ Lua owns runtime composition, commands, actions, and event policy. C++ owns
 terminal rendering, raw input, event-loop scheduling, buffer storage, process
 transports, LSP/DAP protocol handling, Tree-sitter parser ownership, and
 platform integration. Lua receives typed wrappers and never receives native
- pointers.
+pointers.
+
+Tree-sitter parser, tree, and query values are positive opaque integer handles.
+Delete them with `delete_parser`, `delete_tree`, and `delete_query`. Handles
+become invalid after `reload`; native functions return Lua errors for invalid
+handles. The bundled runtime loads before user plugins and compiled catalog
+data remains the fallback when no Lua override is present.
 
 ## Floating Windows
 

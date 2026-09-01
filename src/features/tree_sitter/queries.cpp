@@ -179,3 +179,85 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension) {
   return nullptr;
 }
 #endif
+
+#ifdef JOT_TREESITTER
+TreeSitterHandle TreeSitterManager::compile_query_handle(
+    const std::string &extension, const std::string &source) {
+  const std::string language_id = language_for_extension(extension);
+  const TSLanguage *language = load_language(language_id);
+  if (!language) return 0;
+  std::string query_source = source;
+  if (query_source.empty()) query_source = load_query_source(language_id).source;
+  uint32_t offset = 0;
+  TSQueryError error = TSQueryErrorNone;
+  TSQuery *query = ts_query_new(language, query_source.c_str(),
+                                static_cast<uint32_t>(query_source.size()),
+                                &offset, &error);
+  if (!query) return 0;
+  const TreeSitterHandle handle = next_handle_++;
+  lua_queries_[handle] = query;
+  return handle;
+}
+
+bool TreeSitterManager::delete_query_handle(TreeSitterHandle handle) {
+  auto it = lua_queries_.find(handle);
+  if (it == lua_queries_.end()) return false;
+  ts_query_delete(it->second);
+  lua_queries_.erase(it);
+  return true;
+}
+
+std::vector<TreeSitterCapture> TreeSitterManager::captures_for_handles(
+    TreeSitterHandle query_handle, TreeSitterHandle tree_handle,
+    uint32_t start_byte, uint32_t end_byte) const {
+  std::vector<TreeSitterCapture> result;
+  auto query_it = lua_queries_.find(query_handle);
+  auto tree_it = lua_trees_.find(tree_handle);
+  if (query_it == lua_queries_.end() || tree_it == lua_trees_.end()) return result;
+  TSQueryCursor *cursor = ts_query_cursor_new();
+  if (!cursor) return result;
+  ts_query_cursor_set_byte_range(cursor, start_byte, end_byte);
+  ts_query_cursor_exec(cursor, query_it->second, ts_tree_root_node(tree_it->second));
+  TSQueryMatch match;
+  while (ts_query_cursor_next_match(cursor, &match)) {
+    for (uint16_t i = 0; i < match.capture_count; ++i) {
+      const TSQueryCapture &capture = match.captures[i];
+      uint32_t name_length = 0;
+      const char *name = ts_query_capture_name_for_id(
+          query_it->second, capture.index, &name_length);
+      TSPoint start = ts_node_start_point(capture.node);
+      TSPoint end = ts_node_end_point(capture.node);
+      result.push_back({std::string(name, name_length), ts_node_start_byte(capture.node),
+                        ts_node_end_byte(capture.node), start.row, start.column,
+                        end.row, end.column});
+    }
+  }
+  ts_query_cursor_delete(cursor);
+  return result;
+}
+
+bool TreeSitterManager::set_query_source(const std::string &extension,
+                                         const std::string &source,
+                                         std::string &error) {
+  TreeSitterHandle handle = compile_query_handle(extension, source);
+  if (!handle) {
+    error = "query compilation failed";
+    return false;
+  }
+  const std::string language_id = language_for_extension(extension);
+  auto query_it = lua_queries_.find(handle);
+  auto cached = query_cache_.find(language_id);
+  if (cached != query_cache_.end()) ts_query_delete(cached->second);
+  query_cache_[language_id] = query_it->second;
+  lua_queries_.erase(query_it);
+  runtime_query_used_[language_id] = false;
+  builtin_query_used_[language_id] = false;
+  query_diagnostics_[language_id] = "Lua query loaded";
+  return true;
+}
+#else
+TreeSitterHandle TreeSitterManager::compile_query_handle(const std::string &, const std::string &) { return 0; }
+bool TreeSitterManager::delete_query_handle(TreeSitterHandle) { return false; }
+std::vector<TreeSitterCapture> TreeSitterManager::captures_for_handles(TreeSitterHandle, TreeSitterHandle, uint32_t, uint32_t) const { return {}; }
+bool TreeSitterManager::set_query_source(const std::string &, const std::string &, std::string &error) { error = "Tree-sitter runtime not available"; return false; }
+#endif

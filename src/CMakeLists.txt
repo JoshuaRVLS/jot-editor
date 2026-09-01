@@ -1,4 +1,5 @@
 add_compile_definitions(JOT_DEFAULT_DATA_DIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/jot")
+add_compile_definitions(JOT_LUA_SOURCE_DIR="${PROJECT_SOURCE_DIR}/lua")
 
 function(jot_configure_object_target target_name)
   target_include_directories(${target_name} PRIVATE

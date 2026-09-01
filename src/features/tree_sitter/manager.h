@@ -2,6 +2,7 @@
 #define TREE_SITTER_MANAGER_H
 
 #include <string>
+#include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -49,6 +50,7 @@ enum TreeSitterTokenKind {
 int tree_sitter_capture_color_for_name(const std::string &name);
 int tree_sitter_capture_token_for_name(const std::string &name);
 int tree_sitter_capture_priority_for_name(const std::string &name);
+void tree_sitter_set_capture_color(const std::string &name, int color);
 
 struct TSLanguageEntry {
   std::string language_id;
@@ -64,6 +66,18 @@ struct TreeSitterRuntimeStatus {
   std::string language_id;
   std::string parser_message;
   std::string query_message;
+};
+
+using TreeSitterHandle = std::uint64_t;
+
+struct TreeSitterCapture {
+  std::string name;
+  std::uint32_t start_byte = 0;
+  std::uint32_t end_byte = 0;
+  std::uint32_t start_row = 0;
+  std::uint32_t start_column = 0;
+  std::uint32_t end_row = 0;
+  std::uint32_t end_column = 0;
 };
 
 class TreeSitterManager {
@@ -87,6 +101,28 @@ public:
                            const std::vector<std::string> &query_paths,
                            const std::vector<std::string> &language_overrides);
   void reload();
+
+  // Lua-facing operations. Handles are opaque and valid only while this
+  // manager is alive; all ownership remains native.
+  bool register_language(const std::string &language_id,
+                         const std::vector<std::string> &extensions,
+                         const std::string &query_source = "");
+  std::string language_for_extension(const std::string &extension) const;
+  TreeSitterRuntimeStatus status(const std::string &language_or_extension) const;
+  TreeSitterHandle create_parser_handle(const std::string &extension);
+  bool delete_parser_handle(TreeSitterHandle handle);
+  TreeSitterHandle parse_handle(TreeSitterHandle parser,
+                                const std::string &text,
+                                TreeSitterHandle old_tree = 0);
+  bool delete_tree_handle(TreeSitterHandle handle);
+  TreeSitterHandle compile_query_handle(const std::string &extension,
+                                        const std::string &source = "");
+  bool delete_query_handle(TreeSitterHandle handle);
+  std::vector<TreeSitterCapture> captures_for_handles(
+      TreeSitterHandle query, TreeSitterHandle tree,
+      std::uint32_t start_byte = 0, std::uint32_t end_byte = UINT32_MAX) const;
+  bool set_query_source(const std::string &extension,
+                       const std::string &source, std::string &error);
 
 #ifdef JOT_TREESITTER
   const TSLanguage *load_language(const std::string &language_id) const;
@@ -118,7 +154,11 @@ private:
   mutable std::unordered_map<std::string, bool> runtime_query_used_;
   mutable std::unordered_map<std::string, bool> builtin_query_used_;
   std::unordered_map<std::string, TSQuery *> query_cache_;
+  std::unordered_map<TreeSitterHandle, TSParser *> lua_parsers_;
+  std::unordered_map<TreeSitterHandle, TSTree *> lua_trees_;
+  std::unordered_map<TreeSitterHandle, TSQuery *> lua_queries_;
 #endif
+  TreeSitterHandle next_handle_ = 1;
 };
 
 #endif
