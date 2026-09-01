@@ -327,16 +327,22 @@ void UI::render() {
 // flush_cursor() when render() is not called) is responsible for
 // materialising the cursor on the terminal.
 void UI::set_cursor(int x, int y, UICursorShape shape) {
-  if (x >= 0 && x < width && y >= 0 && y < height) {
-    cursor_x = x;
-    cursor_y = y;
-    cursor_shape = shape;
-    cursor_hidden = false;
-    cursor_dirty = true;
-  }
+  cursor_x = std::clamp(x, 0, std::max(0, width - 1));
+  cursor_y = std::clamp(y, 0, std::max(0, height - 1));
+  cursor_shape = shape;
+  cursor_hidden = false;
+  cursor_dirty = true;
 }
 
 void UI::hide_cursor() {
+  cursor_hidden = true;
+  cursor_dirty = true;
+}
+
+void UI::reset_cursor_state() {
+  cursor_x = -1;
+  cursor_y = -1;
+  cursor_shape = UICursorShape::Block;
   cursor_hidden = true;
   cursor_dirty = true;
 }

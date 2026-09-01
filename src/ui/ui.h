@@ -68,6 +68,7 @@ public:
   // the cursor at frame-end; flush_cursor() emits it for idle frames.
   void set_cursor(int x, int y, UICursorShape shape = UICursorShape::Block);
   void hide_cursor();
+  void reset_cursor_state();
   void flush_cursor();
   bool cursor_needs_flush() const { return cursor_dirty; }
 

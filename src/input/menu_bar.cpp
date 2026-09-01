@@ -211,7 +211,6 @@ bool Editor::handle_menu_bar_input(int ch) {
     }
     needs_redraw = true;
   };
-
   if (ch == 27) {
     close_menu_bar();
     return true;

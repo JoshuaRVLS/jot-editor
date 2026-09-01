@@ -93,6 +93,14 @@ UICursorShape editor_cursor_shape() { return UICursorShape::Bar; }
 
 void Editor::render() {
   IntegratedTerminal *active_terminal = get_integrated_terminal();
+  if (show_sidebar && ui &&
+      ui->get_render_width() < min_sidebar_width() + 12) {
+    show_sidebar = false;
+    if (focus_state == FOCUS_SIDEBAR) {
+      focus_state = FOCUS_EDITOR;
+    }
+  }
+  ui->reset_cursor_state();
 
   if (!needs_redraw) {
     if (show_home_menu) {
@@ -129,6 +137,7 @@ void Editor::render() {
     if (show_integrated_terminal && active_terminal &&
         active_terminal->is_focused()) {
       place_integrated_terminal_cursor();
+      ui->flush_cursor();
       return;
     }
     if (show_right_panel) {
@@ -617,8 +626,8 @@ void Editor::render_pane(const SplitPane &pane) {
   int border_bg = pane.active ? theme.bg_active_border : theme.bg_panel_border;
   ui->draw_border(rect, border_fg, border_bg);
 
-  // Pane-local file tabs.
-  {
+  // Pane-local file tabs are useful once a group has multiple buffers.
+  if (pane.tab_buffer_ids.size() > 1) {
     FileTabLayout tabs = build_file_tab_layout(pane, draw_w);
 
     if (!tabs.scroll_left_label.empty() && tabs.scroll_left_x >= 0) {

@@ -27,6 +27,9 @@ int Editor::max_sidebar_width() const {
 }
 
 int Editor::effective_sidebar_width() const {
+  if (ui && ui->get_render_width() < min_sidebar_width() + kMinPaneWidth) {
+    return 0;
+  }
   return std::clamp(sidebar_width, min_sidebar_width(), max_sidebar_width());
 }
 

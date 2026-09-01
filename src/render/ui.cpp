@@ -560,14 +560,6 @@ void Editor::render_status_line() {
 
   std::vector<StatusSegment> left_segments;
   std::vector<StatusSegment> right_segments;
-  if (content_w >= 34) {
-    left_segments.push_back({" 󰚩 jot ", theme.fg_status_logo,
-                             theme.bg_status_logo, true, true, 10});
-  }
-
-  left_segments.push_back({" NORMAL ", theme.fg_status_info,
-                           theme.bg_status_info, true, false, 100});
-
   FileBuffer *active_buf = nullptr;
   if (!buffers.empty() && current_buffer >= 0 &&
       current_buffer < (int)buffers.size()) {
@@ -705,81 +697,6 @@ void Editor::render_status_line() {
     right_segments.push_back({lsp_text, lsp_fg, lsp_bg, false, true, 60});
   }
 
-  if (!show_home_menu && active_buf) {
-    SyntaxEngine engine = active_buf->syntax_engine;
-    if (engine == SYNTAX_ENGINE_UNKNOWN && !active_buf->filepath.empty() &&
-        active_buf->line_count() > 0) {
-      int line_idx = std::clamp(active_buf->cursor.y, 0,
-                                (int)active_buf->line_count() - 1);
-      get_line_syntax_colors(*active_buf, line_idx);
-      engine = active_buf->syntax_engine;
-    }
-
-    std::string syntax_text;
-    int syntax_fg = theme.fg_status_muted;
-    int syntax_bg = theme.bg_status_muted;
-    if (engine == SYNTAX_ENGINE_TREESITTER) {
-      std::string label = active_buf->syntax_language_label.empty()
-                              ? "tree-sitter"
-                              : active_buf->syntax_language_label;
-      syntax_text = " 󰜫 " + ui_truncate_cells(label, 12) + " ";
-      syntax_fg = theme.fg_status_info;
-      syntax_bg = theme.bg_status_info;
-    } else if (engine == SYNTAX_ENGINE_REGEX) {
-      std::string label = active_buf->syntax_language_label.empty()
-                              ? "regex"
-                              : active_buf->syntax_language_label;
-      syntax_text = " 󰈞 " + ui_truncate_cells(label, 8) + " ";
-    } else {
-      syntax_text = " 󰅙 syntax ";
-    }
-    right_segments.push_back(
-        {syntax_text, syntax_fg, syntax_bg, false, true, 55});
-  }
-
-  if (!integrated_terminals.empty()) {
-    std::string term_label = "terminal";
-    IntegratedTerminal *term = get_integrated_terminal();
-    if (term && !term->get_label().empty()) {
-      term_label = term->get_label();
-    } else if ((int)integrated_terminals.size() > 1) {
-      term_label = std::to_string(integrated_terminals.size()) + " terms";
-    }
-    std::string term_text = "  " + ui_truncate_cells(term_label, 16);
-    if (term && term->is_focused()) {
-      term_text += " ●";
-    }
-    term_text += " ";
-    right_segments.push_back({term_text, theme.fg_status_info,
-                              theme.bg_status_info, true, true, 50});
-  }
-
-  if (auto_save_enabled) {
-    right_segments.push_back(
-        {" 󰆓 " + std::to_string(auto_save_interval_ms) + "ms ",
-         theme.fg_status_info, theme.bg_status_info, false, true, 40});
-  }
-
-  if (!current_theme_name.empty()) {
-    right_segments.push_back({"  " +
-                                  ui_truncate_cells(current_theme_name, 14) +
-                                  " ",
-                              theme.fg_status_muted, theme.bg_status_muted,
-                              false, true, 30});
-  }
-
-  if (discord_rpc.is_connected()) {
-    right_segments.push_back({" 󰙯 RPC ", theme.fg_status_muted,
-                              theme.bg_status_muted, false, true, 20});
-  }
-  
-  right_segments.push_back({" 󰌌 " + std::to_string(keyboard_press_count) + " ",
-                            theme.fg_status_info, theme.bg_status_info, false,
-                            true, 18});
-
-  right_segments.push_back({" UTF-8 ", theme.fg_status_muted,
-                            theme.bg_status_muted, false, true, 10});
-
   const int min_gap = content_w >= 40 ? 2 : 1;
   status_drop_optional_to_fit(right_segments, std::max(0, content_w / 2));
   int right_w = status_layout_width(right_segments);
@@ -842,11 +759,6 @@ void Editor::render_status_line() {
                         theme.fg_status_message, theme.bg_status, true);
   } else {
     std::string context = "  " + status_workspace_label(root_dir);
-    if (active_buf && !active_buf->filepath.empty()) {
-      context += "  " + active_buf->filepath;
-    } else if (show_home_menu) {
-      context += "  ·  Home";
-    }
     status_draw_clipped(ui, content_x, y + 1, content_w,
                         ui_truncate_cells(context, std::max(0, content_w)),
                         theme.fg_status_muted, theme.bg_status);
