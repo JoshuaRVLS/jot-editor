@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "lua_bridge/api.h"
 #include "column_utils.h"
 #include "folding.h"
 #include "ui/text.h"
@@ -71,6 +72,7 @@ void Editor::move_cursor(int dx, int dy, bool extend_selection) {
     buf.selection.end = buf.cursor;
   }
   needs_redraw = true;
+  if (lua_api) lua_api->fire_autocmd("CursorMoved", buf.filepath, current_buffer);
 } 
 
 void Editor::clamp_cursor(int buffer_id) {

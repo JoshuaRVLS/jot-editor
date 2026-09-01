@@ -315,9 +315,9 @@ void Editor::initialize_placeholder_buffer() {
 Editor::Editor() {
   load_runtime_config();
   initialize_state_defaults();
-  initialize_lua_runtime();
   initialize_terminal_ui();
   initialize_placeholder_buffer();
+  initialize_lua_runtime();
 }
 
 EditorHostAPI &Editor::host() { return *host_api; }
@@ -330,6 +330,8 @@ Editor::~Editor() {
   save_recent_files();
   save_recent_workspaces();
   stop_all_lsp_clients();
+
+  if (lua_api) lua_api->fire_autocmd("Shutdown");
 
   for (auto &term : integrated_terminals) {
     if (term) {
@@ -395,6 +397,8 @@ void Editor::set_diagnostics(const std::string &filepath,
       // Continue to check other buffers in case of duplicates
     }
   }
+
+  if (lua_api) lua_api->fire_autocmd("DiagnosticChanged", filepath, current_buffer);
 }
 
 void Editor::add_diagnostic(const std::string &filepath,

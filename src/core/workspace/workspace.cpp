@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "lua_bridge/api.h"
 #include "cpp_assist.h"
 #include "folding.h"
 #include <algorithm>
@@ -245,6 +246,7 @@ void Editor::open_workspace(const std::string &path, bool restore_session) {
   }
   refresh_git_status(true);
   needs_redraw = true;
+  if (lua_api) lua_api->fire_autocmd("WorkspaceEnter", normalized, -1);
 }
 
 bool Editor::resume_last_workspace_session() {

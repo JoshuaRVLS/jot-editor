@@ -343,6 +343,7 @@ User theme paths:
 ```
 
 See [docs/THEMES.md](docs/THEMES.md) for theme authoring.
+See [docs/LUA_API.md](docs/LUA_API.md) for runtime scripting and extension APIs.
 
 ### UI And Mouse
 

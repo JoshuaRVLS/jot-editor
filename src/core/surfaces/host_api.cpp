@@ -62,7 +62,9 @@ bool HostCoreAPI::close_buffer(int index) {
   if (index < 0 || index >= (int)editor.buffers.size()) {
     return false;
   }
+  const std::string path = editor.buffers[(size_t)index].filepath;
   editor.close_buffer_at(index);
+  if (editor.lua_api) editor.lua_api->fire_autocmd("BufClose", path, index);
   editor.needs_redraw = true;
   return true;
 }
@@ -212,6 +214,9 @@ void HostCoreAPI::set_cursor(int line, int col) {
   editor.clear_selection();
   editor.ensure_cursor_visible();
   editor.needs_redraw = true;
+  if (editor.lua_api) {
+    editor.lua_api->fire_autocmd("CursorMoved", buf.filepath, editor.current_buffer);
+  }
 }
 
 HostLayoutInfo HostRenderAPI::layout() const {

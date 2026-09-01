@@ -511,6 +511,7 @@ void Editor::handle_terminal_event(const Event &ev) {
     ui->resize(ev.resize.width, ev.resize.height);
     update_pane_layout();
     needs_redraw = true;
+    if (lua_api) lua_api->fire_autocmd("UIResize", "", -1);
     return;
   }
 
@@ -697,6 +698,7 @@ void Editor::render_frame() {
     ui->resize(rsz.resize.width, rsz.resize.height);
     update_pane_layout();
     needs_redraw = true;
+    if (lua_api) lua_api->fire_autocmd("UIResize", "", -1);
   }
   if (needs_redraw || ui->cursor_needs_flush()) {
     render();
