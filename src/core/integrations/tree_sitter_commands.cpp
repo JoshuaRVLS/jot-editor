@@ -1,6 +1,6 @@
 #include "editor.h"
+#include "lua_bridge/api.h"
 #include "tree_sitter/install.h"
-#include "tree_sitter/catalog.h"
 
 #include <algorithm>
 #include <cctype>
@@ -148,8 +148,10 @@ void Editor::reload_tree_sitter() {
     buf.ts_language_id.clear();
     invalidate_syntax_cache(buf);
   }
-  ts_manager_.reload();
-  set_message("Tree-sitter reloaded");
+   if (lua_api && lua_api->reload_treesitter_runtime())
+     set_message("Tree-sitter reloaded");
+   else
+     set_message("Tree-sitter Lua runtime unavailable");
 #else
   set_message("Tree-sitter inactive: runtime not available");
 #endif
@@ -177,8 +179,7 @@ void Editor::poll_tree_sitter_installs() {
       if (!parse_tree_sitter_marker(line, phase, lang)) {
         continue;
       }
-      if (!lang.empty() && TreeSitterCatalog::normalize_language_name(lang) !=
-                             job.language) {
+      if (!lang.empty() && lang != job.language) {
         continue;
       }
       if (phase == "start") {

@@ -3,7 +3,21 @@
 
 #include <string>
 
+namespace {
+void register_install_metadata() {
+  for (const auto &name : {"cpp", "javascript", "typescript", "tsx", "zig"}) {
+    std::string repo = name == std::string("typescript") || name == std::string("tsx")
+                         ? "typescript" : name;
+    TreeSitterInstall::register_language({name,
+      std::string("https://github.com/tree-sitter/tree-sitter-") + repo,
+      name == std::string("typescript") || name == std::string("tsx") ? name : "",
+      {std::string("libtree-sitter-") + name + ".so"}});
+  }
+}
+}
+
 TEST_CASE("Tree Sitter Install Language Validation", "[jot]") {
+  register_install_metadata();
   REQUIRE(TreeSitterInstall::is_supported_language("cpp"));
   REQUIRE(TreeSitterInstall::is_supported_language("CPP"));
   REQUIRE(TreeSitterInstall::is_supported_language("jsx"));
@@ -15,6 +29,7 @@ TEST_CASE("Tree Sitter Install Language Validation", "[jot]") {
 }
 
 TEST_CASE("Tree Sitter Install Command Mapping", "[jot]") {
+  register_install_metadata();
   auto cpp = TreeSitterInstall::command_for_language("cpp");
 #ifdef _WIN32
   REQUIRE_FALSE(cpp.supported);
@@ -24,7 +39,10 @@ TEST_CASE("Tree Sitter Install Command Mapping", "[jot]") {
   REQUIRE(cpp.language == "cpp");
   REQUIRE(cpp.command.find("github.com/tree-sitter/tree-sitter-cpp") !=
               std::string::npos);
-  REQUIRE(cpp.command.find("lib/jot/tree-sitter") != std::string::npos);
+   REQUIRE(cpp.command.find("/parsers") != std::string::npos);
+   REQUIRE(cpp.command.find("XDG_DATA_HOME") != std::string::npos);
+   REQUIRE(cpp.command.find("queries/cpp") != std::string::npos);
+   REQUIRE(cpp.command.find("install root is not writable") != std::string::npos);
   REQUIRE(cpp.command.find("objdir=\"$work/.jot-build\"") !=
               std::string::npos);
   REQUIRE(cpp.command.find("set -- \"$@\" \"$objdir/parser.o\"") !=
@@ -51,11 +69,13 @@ TEST_CASE("Tree Sitter Install Command Mapping", "[jot]") {
               std::string::npos);
   REQUIRE(cpp.command.find("-name '*.scm'") != std::string::npos);
 
-  auto javascript = TreeSitterInstall::command_for_language("javascript");
+   auto javascript = TreeSitterInstall::command_for_language("javascript");
   REQUIRE(javascript.supported);
   REQUIRE(javascript.language == "javascript");
-  REQUIRE(javascript.command.find("github.com/tree-sitter/tree-sitter-javascript") !=
-              std::string::npos);
+   REQUIRE(javascript.command.find("github.com/tree-sitter/tree-sitter-javascript") !=
+               std::string::npos);
+   auto override_root = TreeSitterInstall::command_for_language("cpp", "/tmp/jot-ts");
+   REQUIRE(override_root.command.find("prefix='/tmp/jot-ts'") != std::string::npos);
 
   auto jsx = TreeSitterInstall::command_for_language("jsx");
   REQUIRE(jsx.supported);

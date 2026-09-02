@@ -23,6 +23,8 @@ TEST_CASE("Bundled Lua Tree-sitter module loads in deterministic layers") {
   lua_newtable(L); // jot
   lua_newtable(L); // jot.treesitter
   native(L, "register_language", ok); native(L, "language_for_extension", name);
+  native(L, "disable_language", ok);
+  native(L, "install_command", ok);
   native(L, "status", status); native(L, "parser", ok); native(L, "parse", ok);
   native(L, "query", ok); native(L, "captures", ok); native(L, "set_query", ok);
   native(L, "set_capture_color", ok); native(L, "reload", ok);

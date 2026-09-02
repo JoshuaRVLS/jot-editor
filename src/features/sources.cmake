@@ -6,13 +6,10 @@ set(JOT_FEATURES_SOURCES
   features/folding.cpp
   features/text_features.cpp
   features/syntax.cpp
-  features/tree_sitter/catalog.cpp
   features/tree_sitter/install.cpp
-  features/tree_sitter/language_spec.cpp
   features/tree_sitter/manager.cpp
   features/tree_sitter/queries.cpp
   features/tree_sitter/runtime.cpp
   features/html.cpp
   features/quote_text_object.cpp
-  ${JOT_TREE_SITTER_LANGUAGE_SOURCES}
 )

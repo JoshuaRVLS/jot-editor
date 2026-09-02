@@ -1,6 +1,5 @@
 #include "editor.h"
 #include "lua_bridge/api.h"
-#include "tree_sitter/catalog.h"
 #include "tree_sitter/manager.h"
 #include "ui/components.h"
 #include "ui/text.h"
@@ -333,8 +332,7 @@ void Editor::render_tree_sitter_status_modal() {
       } else
 #endif
       if (!buf.syntax_language_label.empty()) {
-        active.insert(TreeSitterCatalog::normalize_language_name(
-            buf.syntax_language_label));
+        active.insert(buf.syntax_language_label);
       }
     }
   }
@@ -359,7 +357,7 @@ void Editor::render_tree_sitter_status_modal() {
   std::vector<TreeSitterStatusRenderRow> installed_rows;
   std::vector<TreeSitterStatusRenderRow> uninstalled_rows;
 
-  for (const auto &lang : TreeSitterCatalog::language_names()) {
+  for (const auto &lang : ts_manager_.language_names()) {
     if (active.find(lang) != active.end()) {
       active_rows.push_back({"", ts_display_name(lang),
                              "active in open buffer", theme.fg_status_info});

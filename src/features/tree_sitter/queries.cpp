@@ -1,5 +1,4 @@
 #include "tree_sitter/manager.h"
-#include "tree_sitter/language_spec.h"
 
 #include <filesystem>
 #include <fstream>
@@ -25,8 +24,8 @@ TreeSitterManager::load_query_source(const std::string &language_name) const {
              base / language_name / "highlights.scm",
              base / (language_name + ".scm"),
          }) {
-      std::string source = read_file(candidate);
-      if (!source.empty()) {
+       if (fs::exists(candidate)) {
+         std::string source = read_file(candidate);
         QuerySource query;
         query.source = source;
         query.path = candidate.string();
@@ -35,10 +34,8 @@ TreeSitterManager::load_query_source(const std::string &language_name) const {
       }
     }
   }
-  auto it = languages_.find(language_name);
   QuerySource query;
-  query.source = it != languages_.end() ? it->second.highlight_query_source
-                                        : std::string();
+  query.source.clear();
   query.runtime = false;
   return query;
 }
@@ -69,13 +66,11 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension) {
                         &error_offset, &error_type);
   };
 
-  auto compile_empty_query = [&]() {
-    uint32_t empty_error_offset = 0;
-    TSQueryError empty_error_type = TSQueryErrorNone;
-    return compile_query("", empty_error_offset, empty_error_type);
-  };
-
   QuerySource source = load_query_source(language_id);
+  if (!source.runtime) {
+    query_diagnostics_[language_id] = "query unavailable; Lua policy not loaded";
+    return nullptr;
+  }
   uint32_t error_offset = 0;
   TSQueryError error_type = TSQueryErrorNone;
   TSQuery *query = compile_query(source.source, error_offset, error_type);
@@ -83,78 +78,7 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension) {
   builtin_query_used_[language_id] = !source.runtime && query != nullptr;
   if (query) {
     query_cache_[language_id] = query;
-    query_diagnostics_[language_id] =
-        source.runtime ? ("runtime query loaded: " + source.path)
-                       : "built-in query loaded";
-    return query;
-  }
-
-  std::string runtime_error;
-  if (source.runtime) {
-    runtime_error = "runtime query failed: " + source.path +
-                    " error " + std::to_string((int)error_type) +
-                    " at offset " + std::to_string(error_offset);
-    const auto entry_it = languages_.find(language_id);
-    const std::string fallback_source =
-        entry_it != languages_.end() ? entry_it->second.highlight_query_source
-                                     : std::string();
-    error_offset = 0;
-    error_type = TSQueryErrorNone;
-    query = compile_query(fallback_source, error_offset, error_type);
-    if (query) {
-      query_cache_[language_id] = query;
-      runtime_query_used_[language_id] = false;
-      builtin_query_used_[language_id] = true;
-      query_diagnostics_[language_id] =
-          "built-in query loaded; " + runtime_error;
-      return query;
-    }
-  }
-
-  std::string builtin_error;
-  if (!query && source.runtime) {
-    builtin_error = "built-in query failed: error " +
-                    std::to_string((int)error_type) + " at offset " +
-                    std::to_string(error_offset);
-  }
-
-  if (!query && language_id == "cpp") {
-    error_offset = 0;
-    error_type = TSQueryErrorNone;
-    query = compile_query(
-        TreeSitterLanguageSpecs::minimal_query_for_language(language_id),
-        error_offset, error_type);
-    if (query) {
-      query_cache_[language_id] = query;
-      runtime_query_used_[language_id] = false;
-      builtin_query_used_[language_id] = true;
-      std::string message = "minimal built-in query loaded";
-      if (!runtime_error.empty()) {
-        message += "; " + runtime_error;
-      }
-      if (!builtin_error.empty()) {
-        message += "; " + builtin_error;
-      }
-      query_diagnostics_[language_id] = message;
-      return query;
-    }
-  }
-
-  query = compile_empty_query();
-  if (query) {
-    query_cache_[language_id] = query;
-    runtime_query_used_[language_id] = false;
-    builtin_query_used_[language_id] = true;
-    std::string message = "empty built-in query loaded";
-    if (!runtime_error.empty()) {
-      message += "; " + runtime_error;
-    }
-    if (!builtin_error.empty()) {
-      message += "; " + builtin_error;
-    } else if (source.runtime) {
-      message += "; built-in query failed";
-    }
-    query_diagnostics_[language_id] = message;
+     query_diagnostics_[language_id] = "runtime query loaded: " + source.path;
     return query;
   }
 
@@ -164,17 +88,9 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension) {
   runtime_query_used_[language_id] = false;
   builtin_query_used_[language_id] = false;
   std::string message;
-  if (!runtime_error.empty()) {
-    message = runtime_error;
-    if (!builtin_error.empty()) {
-      message += "; " + builtin_error;
-    }
-    if (language_id == "cpp") {
-      message += "; minimal built-in " + final_query_error;
-    }
-  } else {
-    message = final_query_error;
-  }
+  message = source.runtime ? "runtime query failed: " + source.path + "; "
+                            : "query unavailable; ";
+  message += final_query_error;
   query_diagnostics_[language_id] = message;
   return nullptr;
 }
@@ -241,7 +157,11 @@ bool TreeSitterManager::set_query_source(const std::string &extension,
                                          std::string &error) {
   TreeSitterHandle handle = compile_query_handle(extension, source);
   if (!handle) {
+    const std::string language_id = language_for_extension(extension);
     error = "query compilation failed";
+    query_diagnostics_[language_id] = error;
+    runtime_query_used_[language_id] = false;
+    builtin_query_used_[language_id] = false;
     return false;
   }
   const std::string language_id = language_for_extension(extension);

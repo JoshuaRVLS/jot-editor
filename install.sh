@@ -556,7 +556,7 @@ install_prettier() {
 }
 
 install_treesitter_deps() {
-  echo "[jot:treesitter] Installing Tree-sitter runtime package"
+  echo "[jot:treesitter] Installing Tree-sitter runtime package (parsers remain user-owned)"
   local failures=0
   ensure_prefix_pkg_config_path "${INSTALL_PREFIX}"
 

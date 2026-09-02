@@ -550,6 +550,13 @@ Open the command palette with `Ctrl+P` and run ex-style commands.
 - `:tsstatus`
 - `:tsreload`, `:treesitterreload`
 
+Tree-sitter language metadata and query policy are Lua-owned. Bundled queries use
+`lua/treesitter/queries/<language>/highlights.scm`; parser libraries install under
+`${XDG_DATA_HOME:-$HOME/.local/share}/jot/treesitter/parsers` on POSIX or
+`%LOCALAPPDATA%/jot/treesitter/parsers` on Windows. Set
+`JOT_TREESITTER_PREFIX` only when selecting another writable root. Failed Lua
+metadata or queries disable that language and preserve regex highlighting.
+
 ### Terminal And Tasks
 
 - `:term`, `:terminal`

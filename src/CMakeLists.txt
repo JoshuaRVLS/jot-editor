@@ -197,7 +197,6 @@ function(jot_expose_module_api target_name)
   )
 endfunction()
 
-include(features/tree_sitter/languages/sources.cmake)
 include(core/sources.cmake)
 include(edit/sources.cmake)
 include(features/sources.cmake)

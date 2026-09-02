@@ -1,7 +1,5 @@
 #include "tree_sitter/manager.h"
-#include "tree_sitter/catalog.h"
 
-#include <algorithm>
 #include <filesystem>
 
 #ifdef JOT_TREESITTER
@@ -23,38 +21,8 @@ namespace {
 namespace fs = std::filesystem;
 using TreeSitterLanguageFn = const TSLanguage *(*)();
 
-std::vector<fs::path> library_candidates(
-    const std::string &language_name,
-    const std::vector<std::string> &runtime_paths) {
-  std::vector<std::string> library_names;
-  if (const auto *entry = TreeSitterCatalog::find_language(language_name)) {
-    library_names = entry->library_names;
-  } else {
-    library_names =
-        TreeSitterCatalog::entry_for_github_url("https://github.com/x/tree-sitter-" +
-                                                language_name)
-            .library_names;
-  }
-
-  std::vector<fs::path> candidates;
-  for (const auto &name : library_names) {
-    candidates.emplace_back(name);
-  }
-  for (const auto &root : runtime_paths) {
-    for (const auto &name : library_names) {
-      candidates.emplace_back(fs::path(root) / name);
-    }
-  }
-  return candidates;
-}
-
 std::string symbol_for_language(const std::string &language_name) {
-  if (const auto *entry = TreeSitterCatalog::find_language(language_name)) {
-    return entry->symbol;
-  }
-  std::string symbol = "tree_sitter_" + language_name;
-  std::replace(symbol.begin(), symbol.end(), '-', '_');
-  return symbol;
+  return "tree_sitter_" + language_name;
 }
 
 struct LanguageLookupResult {
@@ -138,13 +106,17 @@ LanguageLookupResult language_from_handle(void *handle, const std::string &symbo
 
 const TSLanguage *TreeSitterManager::load_language(
     const std::string &language_id) const {
-  const std::string lid = TreeSitterCatalog::normalize_language_name(language_id);
+  const std::string lid = language_id;
+  auto metadata = languages_.find(lid);
+  if (metadata == languages_.end()) return nullptr;
   const TSLanguage *lang = nullptr;
   auto cached = parser_languages_.find(lid);
   if (cached != parser_languages_.end()) {
     lang = cached->second;
   } else {
-    const std::string symbol = symbol_for_language(lid);
+     const std::string symbol = metadata->second.symbol.empty()
+                                    ? symbol_for_language(lid)
+                                    : metadata->second.symbol;
     auto handle_it = library_handles_.find(lid);
     if (handle_it != library_handles_.end()) {
       LanguageLookupResult lookup =
@@ -152,8 +124,13 @@ const TSLanguage *TreeSitterManager::load_language(
       lang = lookup.language;
       parser_diagnostics_[lid] = lookup.message;
     }
-    std::vector<fs::path> candidates =
-        library_candidates(lid, runtime_library_paths_);
+     std::vector<fs::path> candidates;
+     for (const auto &name : metadata->second.library_names) {
+       candidates.emplace_back(name);
+     }
+     for (const auto &root : runtime_library_paths_)
+       for (const auto &name : metadata->second.library_names)
+         candidates.emplace_back(fs::path(root) / name);
     std::string last_error;
     for (const auto &candidate : candidates) {
       if (lang) {

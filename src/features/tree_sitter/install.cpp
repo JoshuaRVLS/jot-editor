@@ -1,11 +1,12 @@
 #include "tree_sitter/install.h"
-#include "tree_sitter/catalog.h"
 
 #include <algorithm>
 #include <cctype>
 #include <sstream>
+#include <unordered_map>
 
 namespace {
+std::unordered_map<std::string, TreeSitterInstallMetadata> metadata;
 std::string shell_quote(const std::string &s) {
   std::string out = "'";
   for (char c : s) {
@@ -23,7 +24,7 @@ std::string shell_var_quote(const std::string &s) {
   return shell_quote(s);
 }
 
-std::string library_stem(const TreeSitterCatalogEntry &entry) {
+std::string library_stem(const TreeSitterInstallMetadata &entry) {
   std::string name = entry.library_names.empty()
                          ? ("libtree-sitter-" + entry.name + ".so")
                          : entry.library_names.front();
@@ -36,14 +37,17 @@ std::string library_stem(const TreeSitterCatalogEntry &entry) {
 }
 
 std::string normalize_install_language(const std::string &language) {
-  std::string normalized = TreeSitterCatalog::normalize_language_name(language);
+  std::string normalized = language;
+  std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                 [](unsigned char c) { return (char)std::tolower(c); });
+  for (char &c : normalized) if (c == '-' || c == ' ') c = '_';
   if (normalized == "jsx") {
     return "javascript";
   }
   return normalized;
 }
 
-std::string source_build_command(const TreeSitterCatalogEntry &entry,
+std::string source_build_command(const TreeSitterInstallMetadata &entry,
                                  const std::string &prefix) {
   const std::string lib_stem = library_stem(entry);
   std::ostringstream cmd;
@@ -52,14 +56,14 @@ std::string source_build_command(const TreeSitterCatalogEntry &entry,
          "failed "
       << entry.name << " exit=$rc\"; fi' EXIT; ";
   cmd << "echo '[jot:treesitter] start " << entry.name << "'; ";
-  if (prefix.empty()) {
-    cmd << "prefix=\"${JOT_TREESITTER_PREFIX:-$HOME/.local}\"; ";
+   if (prefix.empty()) {
+     cmd << "prefix=\"${JOT_TREESITTER_PREFIX:-${XDG_DATA_HOME:-$HOME/.local/share}/jot/treesitter}\"; ";
   } else {
     cmd << "prefix=" << shell_var_quote(prefix) << "; ";
   }
-  cmd << "libdir=\"$prefix/lib/jot/tree-sitter\"; ";
-  cmd << "querydir=\"$prefix/share/jot/treesitter/queries/"
-      << entry.name << "\"; ";
+   cmd << "if ! mkdir -p \"$prefix\" 2>/dev/null || [ ! -w \"$prefix\" ]; then echo \"[jot:treesitter] install root is not writable: $prefix\"; exit 1; fi; ";
+   cmd << "libdir=\"$prefix/parsers\"; ";
+   cmd << "querydir=\"$prefix/queries/" << entry.name << "\"; ";
   cmd << "case \"$(uname)\" in Darwin) libext=dylib; linkflag=-dynamiclib ;; "
          "*) libext=so; linkflag=-shared ;; esac; ";
   cmd << "libfile=\"" << lib_stem << ".$libext\"; ";
@@ -110,22 +114,26 @@ std::string source_build_command(const TreeSitterCatalogEntry &entry,
 } // namespace
 
 namespace TreeSitterInstall {
+void clear_languages() { metadata.clear(); }
+
+void register_language(const TreeSitterInstallMetadata &entry) {
+  if (!entry.name.empty()) metadata[entry.name] = entry;
+}
+
 const std::vector<std::string> &supported_languages() {
-  static const std::vector<std::string> languages = [] {
-    std::vector<std::string> out = TreeSitterCatalog::language_names();
-    if (std::find(out.begin(), out.end(), "jsx") == out.end()) {
-      auto js = std::find(out.begin(), out.end(), "javascript");
-      out.insert(js == out.end() ? out.end() : js + 1, "jsx");
-    }
-    return out;
-  }();
+  static std::vector<std::string> languages;
+  languages.clear();
+  for (const auto &entry : metadata) languages.push_back(entry.first);
+  if (metadata.find("javascript") != metadata.end()) languages.push_back("jsx");
+  std::sort(languages.begin(), languages.end());
   return languages;
 }
 
 bool is_supported_language(const std::string &language) {
   std::string normalized = normalize_install_language(language);
-  return TreeSitterCatalog::find_language(normalized) != nullptr ||
-         TreeSitterCatalog::is_github_url(language);
+  return metadata.find(normalized) != metadata.end() ||
+         language.rfind("https://github.com/", 0) == 0 ||
+         language.rfind("github.com/", 0) == 0;
 }
 
 TreeSitterInstallCommand command_for_language(const std::string &language) {
@@ -136,10 +144,16 @@ TreeSitterInstallCommand command_for_language(const std::string &language,
                                              const std::string &prefix) {
   TreeSitterInstallCommand result;
   result.language = normalize_install_language(language);
-  TreeSitterCatalogEntry url_entry;
-  const TreeSitterCatalogEntry *entry = TreeSitterCatalog::find_language(result.language);
-  if (!entry && TreeSitterCatalog::is_github_url(language)) {
-    url_entry = TreeSitterCatalog::entry_for_github_url(language);
+  TreeSitterInstallMetadata url_entry;
+  auto found = metadata.find(result.language);
+  const TreeSitterInstallMetadata *entry = found == metadata.end() ? nullptr : &found->second;
+  if (!entry && (language.rfind("https://github.com/", 0) == 0 || language.rfind("github.com/", 0) == 0)) {
+    url_entry.url = language.rfind("github.com/", 0) == 0 ? "https://" + language : language;
+    std::string repo = url_entry.url.substr(url_entry.url.find_last_of('/') + 1);
+    if (repo.size() > 4 && repo.substr(repo.size() - 4) == ".git") repo.resize(repo.size() - 4);
+    if (repo.rfind("tree-sitter-", 0) == 0) repo.erase(0, 12);
+    url_entry.name = normalize_install_language(repo);
+    url_entry.library_names = {"libtree-sitter-" + url_entry.name + ".so"};
     entry = &url_entry;
     result.language = entry->name;
   }

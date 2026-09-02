@@ -1,0 +1,10 @@
+(tag_name) @tag
+(class_name) @type
+(id_name) @type
+(property_name) @property
+(string_value) @string
+(comment) @comment
+(integer_value) @number
+(float_value) @number
+"@" @keyword
+"!important" @keyword

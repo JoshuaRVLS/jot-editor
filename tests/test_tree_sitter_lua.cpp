@@ -3,6 +3,7 @@
 
 TEST_CASE("Lua Tree-sitter registry maps extensions") {
   TreeSitterManager manager;
+  manager.register_language("cpp", {".cpp"});
   REQUIRE(manager.language_for_extension(".cpp") == "cpp");
   REQUIRE(manager.language_for_extension("cpp") == "cpp");
   REQUIRE(manager.language_for_extension("unknown") == "");

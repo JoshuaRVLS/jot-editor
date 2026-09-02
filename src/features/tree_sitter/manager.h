@@ -55,6 +55,11 @@ void tree_sitter_set_capture_color(const std::string &name, int color);
 struct TSLanguageEntry {
   std::string language_id;
   std::string highlight_query_source;
+  std::string minimal_query_source;
+  std::string url;
+  std::string symbol;
+  std::string source_subdir;
+  std::vector<std::string> library_names;
 };
 
 struct TreeSitterRuntimeStatus {
@@ -89,6 +94,7 @@ public:
   TreeSitterManager &operator=(const TreeSitterManager &) = delete;
 
   const TSLanguageEntry *get_language(const std::string &extension) const;
+  std::vector<std::string> language_names() const;
 
   bool has_language(const std::string &extension) const;
   bool has_language_override(const std::string &extension) const;
@@ -106,7 +112,13 @@ public:
   // manager is alive; all ownership remains native.
   bool register_language(const std::string &language_id,
                          const std::vector<std::string> &extensions,
-                         const std::string &query_source = "");
+                         const std::string &query_source = "",
+                         const std::string &url = "",
+                         const std::string &source_subdir = "",
+                         const std::string &symbol = "",
+                         const std::vector<std::string> &library_names = {},
+                         const std::string &minimal_query = "");
+  void disable_language(const std::string &language_id);
   std::string language_for_extension(const std::string &extension) const;
   TreeSitterRuntimeStatus status(const std::string &language_or_extension) const;
   TreeSitterHandle create_parser_handle(const std::string &extension);
@@ -122,7 +134,8 @@ public:
       TreeSitterHandle query, TreeSitterHandle tree,
       std::uint32_t start_byte = 0, std::uint32_t end_byte = UINT32_MAX) const;
   bool set_query_source(const std::string &extension,
-                       const std::string &source, std::string &error);
+                        const std::string &source, std::string &error);
+  void configure_runtime_paths();
 
 #ifdef JOT_TREESITTER
   const TSLanguage *load_language(const std::string &language_id) const;
@@ -136,8 +149,6 @@ private:
     std::string path;
     bool runtime = false;
   };
-
-  void register_languages();
 
   QuerySource load_query_source(const std::string &language_name) const;
 

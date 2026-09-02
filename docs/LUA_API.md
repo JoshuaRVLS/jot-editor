@@ -52,7 +52,8 @@ jot.lsp          execute, definition, back, completion
 jot.debugger     execute, continue, pause, step_in, step_over, step_out, stop
 jot.git          execute, refresh, stage_all
 jot.treesitter   register_language, language_for_extension, status, parser,
-                 parse, query, captures, set_query, set_capture_color, reload
+                  parse, query, captures, set_query, set_capture_color,
+                  disable_language, install_command, reload
 jot.image        execute, open
 ```
 
@@ -83,6 +84,29 @@ local capabilities = jot.capabilities()
 
 `jot.capabilities()` returns the available runtime namespaces. Use it when a
 script must work across different Jot builds.
+
+## Tree-sitter Runtime
+
+`lua/treesitter/registry.lua` is the sole language registry. Each entry contains
+`name`, `extensions`, `aliases`, `url`, `source_subdir`, `symbol`,
+`library_names`, and `query_file`. Queries live at
+`lua/treesitter/queries/<language>/highlights.scm`, one directory per language.
+The bundled registry covers every parser previously shipped by Jot. Lua loads
+the registry and queries before syntax detection. Missing or malformed metadata
+or query disables that language; no native catalog fallback exists.
+
+Parser installs use this layout:
+
+```text
+${XDG_DATA_HOME:-$HOME/.local/share}/jot/treesitter/
+  parsers/<dynamic parser library>
+  queries/<language>/highlights.scm
+```
+
+Set `JOT_TREESITTER_PREFIX` for an explicit writable root. `JOT_TREESITTER_PATH`
+and `JOT_TREESITTER_QUERY_PATH` remain search-path overrides. `:tsreload` reloads
+Lua registry/query policy and clears native parser, tree, query, and library
+caches together.
 
 ## Native Boundary
 

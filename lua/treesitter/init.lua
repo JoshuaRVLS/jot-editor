@@ -6,7 +6,12 @@ local queries = dofile(root .. "/queries.lua")
 local highlight = dofile(root .. "/highlight.lua")
 
 registry.register(native)
-queries.load_all(native, root, registry)
+local query_ok, query_errors = queries.load_all(native, root, registry)
+if not query_ok then
+  for _, error in ipairs(query_errors) do
+    io.stderr:write("Tree-sitter language disabled: " .. error .. "\n")
+  end
+end
 highlight.configure(native)
 
 local M = {}
@@ -20,11 +25,23 @@ M.query = native.query
 M.captures = native.captures
 M.set_query = native.set_query
 M.set_capture_color = native.set_capture_color
+M.install_command = native.install_command
 M.reload = function()
   native.reload()
+  registry = dofile(root .. "/registry.lua")
+  queries = dofile(root .. "/queries.lua")
+  highlight = dofile(root .. "/highlight.lua")
   registry.register(native)
-  queries.load_all(native, root, registry)
+  local query_ok, query_errors = queries.load_all(native, root, registry)
+  if not query_ok then
+    for _, error in ipairs(query_errors) do
+      io.stderr:write("Tree-sitter language disabled: " .. error .. "\n")
+    end
+  end
   highlight.configure(native)
+  M.registry = registry
+  M.query_loader = queries
+  M.highlight_policy = highlight
 end
 
 -- Handle cleanup is explicit and named by resource type.

@@ -1,8 +1,8 @@
 #include "tree_sitter/manager.h"
-#include "tree_sitter/catalog.h"
-#include "tree_sitter/language_spec.h"
+#include "tree_sitter/install.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -51,16 +51,24 @@ std::vector<std::string> split_list(const std::string &text, char delimiter = pa
   return out;
 }
 
-fs::path home_path(const std::string &suffix) {
+fs::path data_root() {
 #ifdef _WIN32
+  const char *local = getenv("LOCALAPPDATA");
+  if (local && *local) return fs::path(local) / "jot" / "treesitter";
   const char *app_data = getenv("APPDATA");
-  if (app_data && *app_data) return fs::path(app_data) / "jot" / suffix;
+  if (app_data && *app_data) return fs::path(app_data) / "jot" / "treesitter";
   const char *home = getenv("USERPROFILE");
 #else
+  const char *xdg = getenv("XDG_DATA_HOME");
+  if (xdg && *xdg) return fs::path(xdg) / "jot" / "treesitter";
   const char *home = getenv("HOME");
 #endif
-  if (!home) return fs::path();
-  return fs::path(home) / suffix;
+  return home ? fs::path(home) / ".local" / "share" / "jot" / "treesitter" : fs::path();
+}
+
+fs::path home_path(const std::string &suffix) {
+  fs::path root = data_root();
+  return root.empty() ? fs::path() : root / suffix;
 }
 
 #ifdef JOT_TREESITTER
@@ -75,7 +83,10 @@ void close_library_handle(void *handle) {
 #endif
 }
 
-TreeSitterManager::TreeSitterManager() { register_languages(); }
+TreeSitterManager::TreeSitterManager() {
+  // Language policy is loaded by Lua before syntax is used.
+  configure_runtime_paths();
+}
 TreeSitterManager::~TreeSitterManager() {
 #ifdef JOT_TREESITTER
   for (auto &entry : lua_parsers_) ts_parser_delete(entry.second);
@@ -96,30 +107,56 @@ TreeSitterManager::~TreeSitterManager() {
 
 bool TreeSitterManager::register_language(
     const std::string &language_id, const std::vector<std::string> &extensions,
-    const std::string &query_source) {
-  const std::string language = TreeSitterCatalog::normalize_language_name(language_id);
+    const std::string &query_source, const std::string &url,
+    const std::string &source_subdir, const std::string &symbol,
+    const std::vector<std::string> &library_names, const std::string &minimal_query) {
+  std::string language = language_id;
+  std::transform(language.begin(), language.end(), language.begin(),
+                 [](unsigned char c) { return (char)std::tolower(c); });
+  for (char &c : language) if (c == '-' || c == ' ') c = '_';
   if (language.empty() || extensions.empty()) return false;
   TSLanguageEntry entry;
   entry.language_id = language;
   entry.highlight_query_source = query_source;
-  if (entry.highlight_query_source.empty()) {
-    entry.highlight_query_source =
-        TreeSitterLanguageSpecs::highlight_query_for_language(language);
-  }
+  entry.minimal_query_source = minimal_query;
+  entry.url = url;
+  entry.source_subdir = source_subdir;
+  entry.symbol = symbol;
+  entry.library_names = library_names;
+  TreeSitterInstall::register_language({language, url, source_subdir, library_names});
   languages_[language] = std::move(entry);
   for (auto extension : extensions) {
     if (extension.empty()) continue;
     if (extension.front() != '.') extension.insert(extension.begin(), '.');
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+                   [](unsigned char c) { return (char)std::tolower(c); });
     ext_to_lang_[extension] = language;
   }
   return true;
 }
 
+std::vector<std::string> TreeSitterManager::language_names() const {
+  std::vector<std::string> names;
+  for (const auto &entry : languages_) names.push_back(entry.first);
+  std::sort(names.begin(), names.end());
+  return names;
+}
+
+void TreeSitterManager::disable_language(const std::string &language_id) {
+  languages_.erase(language_id);
+  for (auto it = ext_to_lang_.begin(); it != ext_to_lang_.end();) {
+    if (it->second == language_id) it = ext_to_lang_.erase(it); else ++it;
+  }
+}
+
 std::string TreeSitterManager::language_for_extension(
     const std::string &extension) const {
-  if (languages_.find(TreeSitterCatalog::normalize_language_name(extension)) !=
-      languages_.end()) {
-    return TreeSitterCatalog::normalize_language_name(extension);
+  std::string normalized = extension;
+  std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                 [](unsigned char c) { return (char)std::tolower(c); });
+  for (char &c : normalized) if (c == '-' || c == ' ') c = '_';
+  if (languages_.find(normalized) != languages_.end()) {
+    return normalized;
   }
   if (extension.empty()) return "";
   return language_id_for_extension(extension.front() == '.' ? extension
@@ -136,39 +173,14 @@ TreeSitterRuntimeStatus TreeSitterManager::status(
   return runtime_status_for_language(language_or_extension);
 }
 
-void TreeSitterManager::register_languages() {
-  ext_to_lang_.clear();
-  languages_.clear();
-  for (const auto &catalog_entry : TreeSitterCatalog::entries()) {
-    TSLanguageEntry entry;
-    entry.language_id = catalog_entry.name;
-    entry.highlight_query_source =
-        TreeSitterLanguageSpecs::highlight_query_for_language(catalog_entry.name);
-    languages_[catalog_entry.name] = std::move(entry);
-    for (const auto &ext : catalog_entry.extensions) {
-      ext_to_lang_[ext] = catalog_entry.name;
-    }
-  }
-
+void TreeSitterManager::configure_runtime_paths() {
   std::vector<std::string> default_library_paths;
   const char *env_paths = getenv("JOT_TREESITTER_PATH");
   if (env_paths && *env_paths) {
     default_library_paths = split_list(env_paths);
   }
-  for (const auto &path : {
-#ifdef _WIN32
-           home_path("tree-sitter"),
-#else
-           home_path(".local/lib/jot/tree-sitter"),
-           home_path(".local/lib"),
-           fs::path("/usr/local/lib"),
-           fs::path("/usr/lib"),
-           fs::path("/opt/homebrew/lib"),
-#endif
-        }) {
-    if (!path.empty()) {
-      default_library_paths.push_back(path.string());
-    }
+  if (!home_path("parsers").empty()) {
+    default_library_paths.push_back(home_path("parsers").string());
   }
   runtime_library_paths_ = default_library_paths;
 
@@ -177,23 +189,18 @@ void TreeSitterManager::register_languages() {
   if (env_query_paths && *env_query_paths) {
     default_query_paths = split_list(env_query_paths);
   }
-  for (const auto &path : {
-#ifdef _WIN32
-           home_path("treesitter/queries"),
-#else
-           home_path(".config/jot/treesitter/queries"),
-           home_path(".local/share/jot/treesitter/queries"),
-#endif
-        }) {
-    if (!path.empty()) {
-      default_query_paths.push_back(path.string());
-    }
+  if (!home_path("queries").empty()) {
+    default_query_paths.push_back(home_path("queries").string());
   }
   runtime_query_paths_ = default_query_paths;
 }
 
 const TSLanguageEntry *TreeSitterManager::get_language(const std::string &extension) const {
-  auto ext_it = ext_to_lang_.find(extension);
+  std::string normalized = extension;
+  if (!normalized.empty() && normalized.front() != '.') normalized.insert(normalized.begin(), '.');
+  std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                 [](unsigned char c) { return (char)std::tolower(c); });
+  auto ext_it = ext_to_lang_.find(normalized);
   if (ext_it == ext_to_lang_.end()) return nullptr;
   auto lang_it = languages_.find(ext_it->second);
   if (lang_it == languages_.end()) return nullptr;
@@ -261,7 +268,11 @@ TreeSitterRuntimeStatus
 TreeSitterManager::runtime_status_for_language(
     const std::string &language_id) const {
   TreeSitterRuntimeStatus status;
-  status.language_id = TreeSitterCatalog::normalize_language_name(language_id);
+  status.language_id = language_id;
+  std::transform(status.language_id.begin(), status.language_id.end(),
+                 status.language_id.begin(),
+                 [](unsigned char c) { return (char)std::tolower(c); });
+  for (char &c : status.language_id) if (c == '-' || c == ' ') c = '_';
   status.has_language = !status.language_id.empty() &&
                         languages_.find(status.language_id) != languages_.end();
   if (!status.has_language) {
@@ -318,20 +329,22 @@ void TreeSitterManager::set_runtime_options(
       continue;
     }
     std::string ext = trim_copy(raw.substr(0, sep));
-    std::string lang =
-        TreeSitterCatalog::normalize_language_name(trim_copy(raw.substr(sep + 1)));
+      std::string lang = trim_copy(raw.substr(sep + 1));
+      std::transform(lang.begin(), lang.end(), lang.begin(),
+                     [](unsigned char c) { return (char)std::tolower(c); });
+      for (char &c : lang) if (c == '-' || c == ' ') c = '_';
     if (ext.empty() || lang.empty()) {
       continue;
     }
     if (ext.front() != '.') {
       ext = "." + ext;
     }
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return (char)std::tolower(c); });
     if (languages_.find(lang) == languages_.end()) {
       TSLanguageEntry entry;
       entry.language_id = lang;
-      entry.highlight_query_source =
-        TreeSitterLanguageSpecs::highlight_query_for_language(lang);
-      languages_[lang] = std::move(entry);
+       languages_[lang] = std::move(entry);
     }
     ext_to_lang_[ext] = lang;
     language_override_extensions_.insert(ext);
@@ -339,6 +352,8 @@ void TreeSitterManager::set_runtime_options(
 }
 
 void TreeSitterManager::reload() {
+  ext_to_lang_.clear();
+  languages_.clear();
 #ifdef JOT_TREESITTER
   for (auto &entry : lua_parsers_) ts_parser_delete(entry.second);
   for (auto &entry : lua_trees_) ts_tree_delete(entry.second);

@@ -116,6 +116,7 @@ public:
   bool is_main_thread() const;
   void register_treesitter_api(lua_State *L);
   bool load_treesitter_runtime(lua_State *L);
+  bool reload_treesitter_runtime();
 
   bool init();
   void cleanup();

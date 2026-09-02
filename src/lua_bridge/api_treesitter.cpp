@@ -1,6 +1,7 @@
 #include "editor.h"
 #include "lua_bridge/api.h"
 #include "tree_sitter/manager.h"
+#include "tree_sitter/install.h"
 
 #include <filesystem>
 #include <cstdint>
@@ -60,9 +61,38 @@ int l_register_language(lua_State *L) {
     extensions.emplace_back(luaL_checkstring(L, -1));
     lua_pop(L, 1);
   }
-  bool ok = manager(L).register_language(luaL_checkstring(L, 1), extensions,
-                                          luaL_optstring(L, 3, ""));
+  std::vector<std::string> libraries;
+  if (lua_istable(L, 7)) {
+    for (lua_Integer i = 1;; ++i) {
+      lua_rawgeti(L, 7, i);
+      if (lua_isnil(L, -1)) { lua_pop(L, 1); break; }
+      libraries.emplace_back(luaL_checkstring(L, -1));
+      lua_pop(L, 1);
+    }
+  }
+  bool ok = manager(L).register_language(
+      luaL_checkstring(L, 1), extensions, luaL_optstring(L, 3, ""),
+      luaL_optstring(L, 4, ""), luaL_optstring(L, 5, ""),
+      luaL_optstring(L, 6, ""), libraries, luaL_optstring(L, 8, ""));
   lua_pushboolean(L, ok);
+  return 1;
+}
+
+int l_disable_language(lua_State *L) {
+  check_main_thread(L);
+  manager(L).disable_language(luaL_checkstring(L, 1));
+  return 0;
+}
+
+int l_install_command(lua_State *L) {
+  check_main_thread(L);
+  auto result = TreeSitterInstall::command_for_language(
+      luaL_checkstring(L, 1), luaL_optstring(L, 2, ""));
+  lua_newtable(L);
+  lua_pushboolean(L, result.supported); lua_setfield(L, -2, "supported");
+  lua_pushstring(L, result.language.c_str()); lua_setfield(L, -2, "language");
+  lua_pushstring(L, result.command.c_str()); lua_setfield(L, -2, "command");
+  lua_pushstring(L, result.message.c_str()); lua_setfield(L, -2, "message");
   return 1;
 }
 
@@ -131,6 +161,8 @@ void LuaAPI::register_treesitter_api(lua_State *L) {
   lua_newtable(L);
   bind(L, this, "language_for_extension", l_language_for_extension);
   bind(L, this, "status", l_status); bind(L, this, "register_language", l_register_language);
+  bind(L, this, "disable_language", l_disable_language);
+  bind(L, this, "install_command", l_install_command);
   bind(L, this, "parser", l_parser); bind(L, this, "delete_parser", l_parser_delete);
   bind(L, this, "parse", l_parse); bind(L, this, "delete_tree", l_tree_delete);
   bind(L, this, "query", l_query); bind(L, this, "delete_query", l_query_delete);
@@ -157,4 +189,19 @@ bool LuaAPI::load_treesitter_runtime(lua_State *L) {
     return false;
   }
   return true;
+}
+
+bool LuaAPI::reload_treesitter_runtime() {
+  if (!lua_state) return false;
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  int top = lua_gettop(L);
+  lua_getglobal(L, "jot");
+  lua_getfield(L, -1, "treesitter");
+  lua_getfield(L, -1, "reload");
+  bool ok = lua_isfunction(L, -1) && lua_pcall(L, 0, 0, 0) == LUA_OK;
+  if (!ok && lua_gettop(L) > top) {
+    std::cerr << "Tree-sitter Lua reload failed: " << lua_tostring(L, -1) << "\n";
+  }
+  lua_settop(L, top);
+  return ok;
 }

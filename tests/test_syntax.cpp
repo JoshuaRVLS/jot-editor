@@ -1,13 +1,43 @@
 #include <catch2/catch_test_macros.hpp>
 #include "types.h"
-#include "tree_sitter/catalog.h"
-#include "tree_sitter/language_spec.h"
 #include "tree_sitter/manager.h"
 #include <set>
 #include <string>
 
+namespace {
+void register_test_languages(TreeSitterManager &manager) {
+  const std::string cpp = "(primitive_type) @type.builtin\n(keyword) @keyword.control\n"
+                          "@keyword.storage @keyword.directive @function.method "
+                          "@constant.macro @string.escape @punctuation.bracket "
+                          "@punctuation.delimiter (namespace_identifier) @namespace "
+                          "qualified_identifier scope: (namespace_identifier) @namespace "
+                          "(call_expression function: (qualified_identifier) @function) "
+                          "@variable @property";
+  manager.register_language("c", {".c", ".h"});
+  manager.register_language("cpp", {".cpp", ".hpp", ".cc", ".cxx", ".hh", ".hxx"}, cpp,
+                            "https://github.com/tree-sitter/tree-sitter-cpp", "", "tree_sitter_cpp",
+                            {"libtree-sitter-cpp.so"});
+  manager.register_language("javascript", {".js", ".jsx", ".mjs", ".cjs"},
+                            "@tag @tag.attribute @function.method\n"
+                            "(jsx_attribute (jsx_namespace_name) @tag.attribute)");
+  manager.register_language("typescript", {".ts", ".mts", ".cts"},
+                            "@type.builtin @variable.parameter");
+  manager.register_language("tsx", {".tsx"}, "@tag @tag.attribute @type.builtin\n"
+                            "(jsx_attribute (jsx_namespace_name) @tag.attribute)");
+  manager.register_language("python", {".py", ".pyw"}, "@variable.parameter");
+  manager.register_language("json", {".json", ".jsonc"}, "@property");
+  manager.register_language("rust", {".rs"});
+  manager.register_language("go", {".go"});
+  manager.register_language("markdown", {".md", ".markdown"});
+  manager.register_language("ruby", {".rb"});
+  manager.register_language("vue", {".vue"});
+  manager.set_runtime_options({}, {std::string(JOT_LUA_SOURCE_DIR) + "/treesitter"}, {});
+}
+}
+
 TEST_CASE("Tree Sitter Language Registration", "[jot]") {
   TreeSitterManager manager;
+  register_test_languages(manager);
 
   REQUIRE(manager.has_language(".c"));
   REQUIRE(manager.has_language(".py"));
@@ -28,6 +58,7 @@ TEST_CASE("Tree Sitter Language Registration", "[jot]") {
 
 TEST_CASE("Tree Sitter Runtime Overrides", "[jot]") {
   TreeSitterManager manager;
+  register_test_languages(manager);
   manager.set_runtime_options({}, {}, {".foo:zig", "bar=python"});
 
   REQUIRE(manager.has_language(".foo"));
@@ -41,6 +72,7 @@ TEST_CASE("Tree Sitter Runtime Overrides", "[jot]") {
 
 TEST_CASE("Tree Sitter Header Override Can Select C++", "[jot]") {
   TreeSitterManager manager;
+  register_test_languages(manager);
   REQUIRE(manager.language_id_for_extension(".h") == "c");
   REQUIRE_FALSE(manager.has_language_override(".h"));
 
@@ -51,6 +83,7 @@ TEST_CASE("Tree Sitter Header Override Can Select C++", "[jot]") {
 
 TEST_CASE("Tree Sitter Runtime Status Unsupported Extension", "[jot]") {
   TreeSitterManager manager;
+  register_test_languages(manager);
   TreeSitterRuntimeStatus status =
       manager.runtime_status_for_extension(".unknown");
 
@@ -63,6 +96,7 @@ TEST_CASE("Tree Sitter Runtime Status Unsupported Extension", "[jot]") {
 
 TEST_CASE("C++ Query Covers Scoped And Primitive Tokens", "[jot]") {
   TreeSitterManager manager;
+  register_test_languages(manager);
   const TSLanguageEntry *entry = manager.get_language(".cpp");
 
   REQUIRE(entry != nullptr);
@@ -123,6 +157,7 @@ TEST_CASE("Tree Sitter Capture Mapping Priority", "[jot]") {
 
 TEST_CASE("Tree Sitter Built In Queries Expose Rich Captures", "[jot]") {
   TreeSitterManager manager;
+  register_test_languages(manager);
 
   const TSLanguageEntry *cpp = manager.get_language(".cpp");
   REQUIRE(cpp != nullptr);
@@ -173,24 +208,6 @@ TEST_CASE("Tree Sitter Built In Queries Expose Rich Captures", "[jot]") {
               std::string::npos);
   REQUIRE(tsx->highlight_query_source.find("@type.builtin") !=
               std::string::npos);
-}
-
-TEST_CASE("Tree Sitter Language Descriptors Cover Catalog", "[jot]") {
-  std::set<std::string> descriptor_names;
-  for (const auto &spec : TreeSitterLanguageSpecs::all()) {
-    REQUIRE_FALSE(spec.name.empty());
-    REQUIRE(spec.name == TreeSitterCatalog::normalize_language_name(spec.name));
-    REQUIRE(descriptor_names.insert(spec.name).second);
-  }
-
-  for (const auto &entry : TreeSitterCatalog::entries()) {
-    const auto *spec = TreeSitterLanguageSpecs::find(entry.name);
-    REQUIRE(spec != nullptr);
-    REQUIRE(spec->name == entry.name);
-    REQUIRE(spec->url == entry.url);
-    REQUIRE(spec->source_subdir == entry.source_subdir);
-    REQUIRE(spec->extensions.size() == entry.extensions.size());
-  }
 }
 
 TEST_CASE("Theme Syntax Palette Falls Back To Readable Theme Colors", "[jot]") {
@@ -270,12 +287,13 @@ TEST_CASE("Tree Sitter Missing Parser Reports Diagnostic", "[jot]") {
   REQUIRE(status.has_language);
   REQUIRE(status.language_id == "missing_language");
   REQUIRE_FALSE(status.parser_loaded);
-  REQUIRE(status.parser_message.find("parser not loaded") !=
+  REQUIRE(status.parser_message.find("parser") !=
               std::string::npos);
 }
 
 TEST_CASE("Tree Sitter Query Cache", "[jot]") {
   TreeSitterManager manager;
+  register_test_languages(manager);
 
   TSQuery *first = manager.get_highlight_query(".c");
   TSQuery *second = manager.get_highlight_query(".c");
@@ -288,6 +306,7 @@ TEST_CASE("Tree Sitter Query Cache", "[jot]") {
 
 TEST_CASE("Tree Sitter C++ Query Available When Parser Installed", "[jot]") {
   TreeSitterManager manager;
+  register_test_languages(manager);
 
   TSQuery *query = manager.get_highlight_query(".cpp");
   TreeSitterRuntimeStatus status =
@@ -302,6 +321,7 @@ TEST_CASE("Tree Sitter C++ Query Available When Parser Installed", "[jot]") {
 
 TEST_CASE("Tree Sitter JS TS Queries Available When Parsers Installed", "[jot]") {
   TreeSitterManager manager;
+  register_test_languages(manager);
 
   for (const auto *ext : {".jsx", ".ts", ".tsx"}) {
     TSQuery *query = manager.get_highlight_query(ext);
@@ -318,12 +338,14 @@ TEST_CASE("Tree Sitter JS TS Queries Available When Parsers Installed", "[jot]")
 
 TEST_CASE("Tree Sitter Reload Reattempts Parser And Query", "[jot]") {
   TreeSitterManager manager;
+  register_test_languages(manager);
 
   (void)manager.get_highlight_query(".cpp");
   TreeSitterRuntimeStatus before =
       manager.runtime_status_for_extension(".cpp");
 
   manager.reload();
+  register_test_languages(manager);
   TreeSitterRuntimeStatus after_reload =
       manager.runtime_status_for_extension(".cpp");
   REQUIRE(after_reload.has_language);

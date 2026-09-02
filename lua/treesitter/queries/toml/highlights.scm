@@ -1,0 +1,9 @@
+(bare_key) @property
+(quoted_key) @property
+(string) @string
+(integer) @number
+(float) @number
+(boolean) @keyword
+(comment) @comment
+"[" @punctuation
+"]" @punctuation
