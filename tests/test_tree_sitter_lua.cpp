@@ -188,8 +188,16 @@ TEST_CASE("Tree-sitter install metadata follows Lua language registration")
     const auto &languages = TreeSitterInstall::supported_languages();
     REQUIRE(std::find(languages.begin(), languages.end(), "zig") != languages.end());
     auto command = TreeSitterInstall::command_for_language("zig");
+#ifndef _WIN32
     REQUIRE(command.supported);
     REQUIRE(command.command.find("tree-sitter-zig") != std::string::npos);
+#else
+    // Source installs run a POSIX shell build script, so they are deliberately
+    // unavailable on Windows (parsers load from DLLs instead). The command must
+    // report that, not claim support.
+    REQUIRE_FALSE(command.supported);
+    REQUIRE_FALSE(command.message.empty());
+#endif
   }
   TreeSitterInstall::clear_languages();
   REQUIRE(TreeSitterInstall::supported_languages().empty());

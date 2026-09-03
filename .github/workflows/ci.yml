@@ -80,4 +80,13 @@ jobs:
       - name: Test Windows
         if: matrix.platform == 'windows'
         shell: pwsh
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: |
+          # Deterministic order first (whole suite, one process).
+          & build\tests\jot_tests.exe --order decl
+          Write-Host "=== full suite (decl order) exit: $LASTEXITCODE"
+          # Then each crashing test in its own fresh process to detect
+          # cross-test state corruption.
+          foreach ($t in @('*Real Lua runtime boot*','*Tree-sitter install metadata*','*Bundled Lua Tree-sitter startup*','*Bundled Lua Tree-sitter module loads*','*Windows CI tree-sitter boot probe*')) {
+            & build\tests\jot_tests.exe --order decl $t
+            Write-Host "=== isolated: $t exit: $LASTEXITCODE"
+          }
