@@ -450,14 +450,52 @@ void Editor::render_sidebar() {
     reserved_terminal_h =
         std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
   }
-  int h = std::max(0, ui->get_height() - status_height - topbar_height() - tab_height -
+  // Full height, aligned with the editor pane: the buffer-tab strip is
+  // pane-local (rendered inside the pane frame), so no row belongs above
+  // the explorer's top border.
+  int h = std::max(0, ui->get_height() - status_height - topbar_height() -
                           reserved_terminal_h);
-  int y = topbar_height() + tab_height;
+  int y = topbar_height();
   if (w < 2 || h < 1)
     return;
 
   for (int i = y; i < y + h; i++) {
     ui->draw_text(0, i, std::string(w, ' '), theme.fg_sidebar, theme.bg_sidebar);
+  }
+
+  // Full panel frame: top/left/right/bottom borders with connected corners,
+  // so the explorer is a closed box (not just a right edge).
+  const int border_fg =
+      sidebar_resize_dragging ? theme.fg_active_border : theme.fg_sidebar_border;
+  if (h >= 2) {
+    ui->draw_text(0, y, "╭", border_fg, theme.bg_sidebar,
+                  sidebar_resize_dragging);
+    for (int bx = 1; bx < w - 1; bx++) {
+      ui->draw_text(bx, y, "─", border_fg, theme.bg_sidebar,
+                    sidebar_resize_dragging);
+    }
+    ui->draw_text(w - 1, y, "╮", border_fg, theme.bg_sidebar,
+                  sidebar_resize_dragging);
+    for (int i = y + 1; i < y + h - 1; i++) {
+      ui->draw_text(0, i, "│", border_fg, theme.bg_sidebar,
+                    sidebar_resize_dragging);
+      ui->draw_text(w - 1, i, "│", border_fg, theme.bg_sidebar,
+                    sidebar_resize_dragging);
+    }
+    ui->draw_text(0, y + h - 1, "╰", border_fg, theme.bg_sidebar,
+                  sidebar_resize_dragging);
+    for (int bx = 1; bx < w - 1; bx++) {
+      ui->draw_text(bx, y + h - 1, "─", border_fg, theme.bg_sidebar,
+                    sidebar_resize_dragging);
+    }
+    ui->draw_text(w - 1, y + h - 1, "╯", border_fg, theme.bg_sidebar,
+                  sidebar_resize_dragging);
+  } else {
+    ui->draw_text(0, y, "─", border_fg, theme.bg_sidebar);
+    for (int bx = 1; bx < w - 1; bx++) {
+      ui->draw_text(bx, y, "─", border_fg, theme.bg_sidebar);
+    }
+    ui->draw_text(w - 1, y, "─", border_fg, theme.bg_sidebar);
   }
 
   const int rail_w = kExplorerOnly
@@ -470,26 +508,30 @@ void Editor::render_sidebar() {
       return;
     bool active = active_sidebar_view == view;
     int fg = active ? theme.fg_sidebar_directory : theme.fg_comment;
-    ui->draw_text(0, y + row, std::string(std::max(0, rail_w - 1), ' '), fg,
+    // The panel's left border occupies column 0, so the activity rail lives
+    // one cell inside the frame.
+    ui->draw_text(1, y + row, std::string(std::max(0, rail_w - 2), ' '), fg,
                   theme.bg_sidebar);
-    ui->draw_text(0, y + row, active ? "▌" : " ", fg, theme.bg_sidebar,
+    ui->draw_text(1, y + row, active ? "▌" : " ", fg, theme.bg_sidebar,
                   active);
-    if (rail_w >= 2) {
-      ui->draw_text(1, y + row, label, fg, theme.bg_sidebar, active);
+    if (rail_w >= 3) {
+      ui->draw_text(2, y + row, label, fg, theme.bg_sidebar, active);
     }
   };
 
   if (!kExplorerOnly) {
     draw_rail_item(1, "󰉋 ", SIDEBAR_VIEW_EXPLORER);
     draw_rail_item(3, " ", SIDEBAR_VIEW_GIT);
-    for (int i = y; i < y + h; i++) {
+    for (int i = y + 1; i < y + h - 1; i++) {
       ui->draw_text(std::max(0, rail_w - 1), i, "│", theme.fg_sidebar_border,
                     theme.bg_sidebar);
     }
   }
 
-  const int content_x = rail_w;
-  const int content_w = std::max(0, w - rail_w - 1);
+  // Content lives inside the frame: at least column 1 (the left border)
+  // plus the activity rail when present.
+  const int content_x = std::max(1, rail_w);
+  const int content_w = std::max(0, w - content_x - 1);
   if (content_w < 2) {
     return;
   }
@@ -513,7 +555,9 @@ void Editor::render_sidebar() {
     std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
     int header_y = y;
     int list_y = y + 1;
-    int list_h = std::max(0, h - 2);
+    // One extra row is reserved at the bottom for the panel border, so the
+    // footer moves up to y + h - 2.
+    int list_h = std::max(0, h - 3);
 
     std::string header_label = has_git_repo() ? "  " + git_branch : "  Git";
     if (has_git_repo()) {
@@ -530,8 +574,6 @@ void Editor::render_sidebar() {
         header_label += " !" + std::to_string(git_conflict_count);
       }
     }
-    ui->draw_text(content_x, header_y, "╭", theme.fg_sidebar_border,
-                  theme.bg_sidebar, true);
     ui->draw_text(content_x + 1, header_y,
                   truncate_cells(header_label, std::max(0, content_w - 3)),
                   theme.fg_sidebar_directory, theme.bg_sidebar, true);
@@ -605,34 +647,27 @@ void Editor::render_sidebar() {
     } else {
       footer = "Open a Git workspace";
     }
-    ui->draw_text(content_x + 1, y + h - 1,
-                  truncate_cells(footer, std::max(0, content_w - 3)),
-                  theme.fg_comment, theme.bg_sidebar);
-
-    int border_fg =
-        sidebar_resize_dragging ? theme.fg_active_border : theme.fg_sidebar_border;
-    for (int i = y; i < y + h; i++) {
-      ui->draw_text(w - 1, i, "│", border_fg, theme.bg_sidebar,
-                    sidebar_resize_dragging);
+    if (h >= 3) {
+      ui->draw_text(content_x + 1, y + h - 2,
+                    truncate_cells(footer, std::max(0, content_w - 3)),
+                    theme.fg_comment, theme.bg_sidebar);
     }
+
     return;
   }
 
   std::string header_label = "  " + sidebar_render_cache_.root_label + " ";
   int header_w = std::min(std::max(6, cell_count(header_label) + 2),
                           std::max(1, content_w - 1));
-  ui->draw_text(content_x, y, "╭", theme.fg_sidebar_border, theme.bg_sidebar, true);
   if (header_w > 2) {
     ui->draw_text(content_x + 1, y, truncate_cells(header_label, header_w - 2),
                   theme.fg_sidebar_directory, theme.bg_sidebar, true);
   }
-  if (header_w > 1) {
-    ui->draw_text(content_x + header_w - 1, y, "╮", theme.fg_sidebar_border,
-                  theme.bg_sidebar, true);
-  }
 
   int tree_y = y + 1;
-  int tree_h = std::max(0, h - 2);
+  // One extra row is reserved at the bottom for the panel border, so the
+  // footer moves up to y + h - 2 and the tree ends above it.
+  int tree_h = std::max(0, h - 3);
   const auto &rows = sidebar_render_cache_.rows;
 
   int max_scroll = std::max(0, (int)rows.size() - std::max(1, tree_h));
@@ -734,20 +769,16 @@ void Editor::render_sidebar() {
   } else {
     footer = std::to_string(rows.size()) + " items";
   }
-  ui->draw_text(content_x + 1, y + h - 1,
-                truncate_cells(footer, std::max(0, content_w - 3)),
-                theme.fg_comment, theme.bg_sidebar);
-
-  int border_fg =
-      sidebar_resize_dragging ? theme.fg_active_border : theme.fg_sidebar_border;
-  for (int i = y; i < y + h; i++) {
-    ui->draw_text(w - 1, i, "│", border_fg, theme.bg_sidebar,
-                  sidebar_resize_dragging);
+  if (h >= 3) {
+    ui->draw_text(content_x + 1, y + h - 2,
+                  truncate_cells(footer, std::max(0, content_w - 3)),
+                  theme.fg_comment, theme.bg_sidebar);
   }
+
 }
 
 void Editor::render_collapsed_sidebar_handle() {
-  if (!collapsed_sidebar_handle_hit_test(0, topbar_height() + tab_height)) {
+  if (!collapsed_sidebar_handle_hit_test(0, topbar_height())) {
     return;
   }
 
@@ -757,7 +788,7 @@ void Editor::render_collapsed_sidebar_handle() {
         std::clamp(integrated_terminal_height, 5,
                    std::max(5, ui->get_height() / 2));
   }
-  int top = topbar_height() + tab_height;
+  int top = topbar_height();
   int bottom = ui->get_height() - status_height - reserved_terminal_h;
   int h = std::max(0, bottom - top);
   if (h <= 0) {

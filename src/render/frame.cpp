@@ -661,9 +661,10 @@ void Editor::render_pane(const SplitPane &pane) {
   }
 
   UIRect rect = {pane.x, pane.y, draw_w, pane.h};
-  int border_fg = pane.active ? theme.fg_active_border : theme.fg_panel_border;
-  int border_bg = pane.active ? theme.bg_active_border : theme.bg_panel_border;
-  ui->draw_border(rect, border_fg, border_bg);
+  // Deliberately dim: the pane frame uses the quiet panel border color for
+  // both focused and unfocused panes (focus is shown by the cursor and the
+  // active tab marker instead of a loud border).
+  ui->draw_border(rect, theme.fg_panel_border, theme.bg_panel_border);
 
   // Pane-local file tabs are useful once a group has multiple buffers.
   if (pane.tab_buffer_ids.size() > 1) {
@@ -699,48 +700,4 @@ void Editor::render_pane(const SplitPane &pane) {
     }
   }
 
-  render_scrollbar(pane, draw_w);
-}
-
-void Editor::render_scrollbar(const SplitPane &pane, int draw_w) {
-  if (draw_w < 3) {
-    return;
-  }
-
-  auto &buf = get_buffer(pane.buffer_id);
-
-  const int track_x = pane.x + draw_w - 1;
-  const int track_y = pane.y + tab_height;
-  const int track_h = std::max(0, pane.h - tab_height - 1);
-  if (track_h <= 0) {
-    return;
-  }
-
-  const int total_lines = std::max(1, (int)buf.line_count());
-  const int visible_lines = std::max(1, track_h);
-  const int max_scroll = std::max(0, total_lines - visible_lines);
-  const int clamped_scroll = std::clamp(buf.scroll_offset, 0, max_scroll);
-
-  for (int i = 0; i < track_h; i++) {
-    ui->draw_text(track_x, track_y + i, "│",
-                  pane.active ? theme.fg_panel_border : theme.fg_line_num,
-                  theme.bg_default);
-  }
-
-  if (max_scroll <= 0) {
-    return;
-  }
-
-  int thumb_h = std::max(1, (visible_lines * visible_lines) / total_lines);
-  thumb_h = std::min(track_h, thumb_h);
-
-  int thumb_y = track_y;
-  if (track_h > thumb_h) {
-    thumb_y = track_y + (clamped_scroll * (track_h - thumb_h)) / max_scroll;
-  }
-
-  const int thumb_fg = pane.active ? theme.fg_active_border : theme.fg_line_num;
-  for (int i = 0; i < thumb_h; i++) {
-    ui->draw_text(track_x, thumb_y + i, "█", thumb_fg, theme.bg_default);
-  }
 }

@@ -1442,7 +1442,7 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click,
   if (!is_click)
     return;
 
-  int rel_y = y - topbar_height() - tab_height;
+  int rel_y = y - topbar_height();
   if (rel_y < 0)
     return;
   if (!kExplorerOnly && x < sidebar_activity_rail_width()) {
@@ -1459,7 +1459,7 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click,
 
   if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT) {
     std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
-    int sidebar_row = y - topbar_height() - tab_height - 1;
+    int sidebar_row = y - topbar_height() - 1;
     if (sidebar_row < 0)
       return;
     int row = sidebar_row + git_sidebar_scroll;
@@ -1478,7 +1478,7 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click,
   flatten_nodes_mut(file_tree, flat);
 
   // Sidebar now has 1-line header, so tree rows begin after that.
-  int sidebar_row = y - topbar_height() - tab_height - 1;
+  int sidebar_row = y - topbar_height() - 1;
   if (sidebar_row < 0)
     return;
   int row = sidebar_row + file_tree_scroll;

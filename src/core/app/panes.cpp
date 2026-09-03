@@ -66,7 +66,7 @@ bool Editor::collapsed_sidebar_handle_hit_test(int x, int y) const {
         std::clamp(integrated_terminal_height, 5,
                    std::max(5, ui->get_height() / 2));
   }
-  int top = topbar_height() + tab_height;
+  int top = topbar_height();
   int bottom = ui->get_height() - status_height - reserved_terminal_h;
   return y >= top && y < bottom;
 }
@@ -88,7 +88,7 @@ bool Editor::sidebar_resize_hit_test(int x, int y) const {
         std::clamp(integrated_terminal_height, 5,
                    std::max(5, ui->get_height() / 2));
   }
-  int top = topbar_height() + tab_height;
+  int top = topbar_height();
   int bottom = ui->get_height() - status_height - reserved_terminal_h;
   return y >= top && y < bottom;
 }

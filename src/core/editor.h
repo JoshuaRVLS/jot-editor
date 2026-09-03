@@ -213,7 +213,6 @@ private:
   bool scroll_local_tabs(SplitPane &pane, int delta);
   bool switch_to_local_tab(int target_index);
   bool cycle_local_tab(int delta);
-  void render_scrollbar(const SplitPane &pane, int draw_w);
   void render_telescope();
   void render_minimap(int x, int y, int w, int h, int buffer_id);
   void render_image_viewer();
@@ -422,7 +421,7 @@ private:
                             bool is_double_click = false);
   void render_sidebar();
   void render_collapsed_sidebar_handle();
-  int sidebar_activity_rail_width() const { return 4; }
+  int sidebar_activity_rail_width() const { return 5; }
   int min_sidebar_width() const { return sidebar_activity_rail_width() + 18; }
   int sidebar_close_threshold() const { return 12; }
   int max_sidebar_width() const;

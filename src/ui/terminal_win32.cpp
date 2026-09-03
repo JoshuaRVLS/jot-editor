@@ -22,7 +22,7 @@ DWORD g_original_input_mode = 0;
 DWORD g_original_output_mode = 0;
 bool g_have_input_mode = false;
 bool g_have_output_mode = false;
-DWORD g_last_button_state = 0;
+DWORD g_last_button_state = 0; 
 
 bool read_console_input(INPUT_RECORD &record) {
   DWORD count = 0;

@@ -232,7 +232,9 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y) {
       int tab_w = (int)label.size() + 2;
 
       if (x >= tab_x && x < tab_x + tab_w) {
-        if ((int)integrated_terminals.size() > 1 && x == close_x) {
+        // The close "x" always closes its terminal, even the last one:
+        // closing the final terminal hides the whole panel (Esc-like).
+        if (x == close_x) {
           close_integrated_terminal(i);
         } else {
           show_integrated_terminal = true;
@@ -439,9 +441,9 @@ void Editor::render_integrated_terminal() {
 
     ui->draw_text(tab_x, tab_y, label, fg, bg, active);
     int close_x = tab_x + (int)label.size();
-    int close_fg =
-        ((int)integrated_terminals.size() > 1) ? theme.fg_terminal_tab_close : fg;
-    ui->draw_text(close_x, tab_y, "x", close_fg, bg);
+    // Always render the close marker in the close color so it reads as a
+    // button even when it is the only tab (clicking it closes the panel).
+    ui->draw_text(close_x, tab_y, "x", theme.fg_terminal_tab_close, bg);
     ui->draw_text(close_x + 1, tab_y, "|", theme.fg_terminal_tab_separator,
                   theme.bg_terminal);
     tab_x += (int)label.size() + 2;

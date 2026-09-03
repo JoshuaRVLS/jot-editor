@@ -40,74 +40,6 @@ void mouse_debug_log(const char *fmt, ...) {
 
 constexpr int kMouseDragThreshold = 1;
 
-struct ScrollbarGeometry {
-  bool visible = false;
-  int x = 0;
-  int y = 0;
-  int h = 0;
-  int thumb_y = 0;
-  int thumb_h = 0;
-  int max_scroll = 0;
-};
-
-ScrollbarGeometry scrollbar_geometry_for(const SplitPane &pane,
-                                         const FileBuffer &buf,
-                                         int tab_height,
-                                         bool show_minimap,
-                                         int minimap_width) {
-  ScrollbarGeometry g;
-  int draw_w = std::max(1, pane.w);
-  if (show_minimap && draw_w > 20) {
-    draw_w = std::max(1, draw_w - minimap_width);
-  }
-  if (draw_w < 3) {
-    return g;
-  }
-
-  g.x = pane.x + draw_w - 1;
-  g.y = pane.y + tab_height;
-  g.h = std::max(0, pane.h - tab_height - 1);
-  if (g.h <= 0) {
-    return g;
-  }
-
-  const int total_lines =
-      Folding::visible_line_count(buf.fold_ranges, (int)buf.line_count());
-  const int visible_lines = std::max(1, g.h);
-  g.max_scroll = std::max(0, total_lines - visible_lines);
-  if (g.max_scroll <= 0) {
-    return g;
-  }
-
-  g.thumb_h = std::max(1, (visible_lines * visible_lines) / total_lines);
-  g.thumb_h = std::min(g.h, g.thumb_h);
-  g.thumb_y = g.y;
-  if (g.h > g.thumb_h) {
-    int visible_scroll = 0;
-    for (int line = 0; line < (int)buf.line_count() &&
-                       line < buf.scroll_offset;
-         line++) {
-      if (!Folding::is_line_hidden(buf.fold_ranges, line)) {
-        visible_scroll++;
-      }
-    }
-    visible_scroll = std::clamp(visible_scroll, 0, g.max_scroll);
-    g.thumb_y = g.y + (visible_scroll * (g.h - g.thumb_h)) / g.max_scroll;
-  }
-  g.visible = true;
-  return g;
-}
-
-int scrollbar_scroll_for_y(const ScrollbarGeometry &g, int y) {
-  if (!g.visible || g.max_scroll <= 0) {
-    return 0;
-  }
-  const int travel = std::max(1, g.h - g.thumb_h);
-  const int rel = std::clamp(y - g.y - g.thumb_h / 2, 0, travel);
-  return std::clamp((rel * g.max_scroll + travel / 2) / travel, 0,
-                    g.max_scroll);
-}
-
 int buffer_line_for_visible_index(const FileBuffer &buf, int visible_index) {
   int target = std::max(0, visible_index);
   for (int line = 0; line < (int)buf.line_count(); line++) {
@@ -736,12 +668,12 @@ bool Editor::open_context_menu_for_mouse(int x, int y) {
     int content_bottom =
         terminal.get_height() - status_height - reserved_terminal_h;
     int sidebar_w = effective_sidebar_width();
-    if (x < sidebar_w && y >= topbar_height() + tab_height &&
+    if (x < sidebar_w && y >= topbar_height() &&
         y < content_bottom) {
       focus_state = FOCUS_SIDEBAR;
       if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT) {
         std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
-        int sidebar_row = y - topbar_height() - tab_height - 1;
+        int sidebar_row = y - topbar_height() - 1;
         int row = sidebar_row + git_sidebar_scroll;
         if (sidebar_row >= 0 && row >= 0 && row < (int)git_rows.size()) {
           git_sidebar_selected = row;
@@ -765,7 +697,7 @@ bool Editor::open_context_menu_for_mouse(int x, int y) {
       } else {
         std::vector<FileNode *> flat;
         flatten_nodes_for_mouse(file_tree, flat);
-        int sidebar_row = y - topbar_height() - tab_height - 1;
+        int sidebar_row = y - topbar_height() - 1;
         int row = sidebar_row + file_tree_scroll;
         FileNode *node = nullptr;
         if (sidebar_row >= 0 && row >= 0 && row < (int)flat.size()) {
@@ -1054,10 +986,6 @@ void Editor::handle_mouse(void *event_ptr) {
       end_sidebar_resize_drag();
       return;
     }
-    if (scrollbar_dragging) {
-      scrollbar_dragging = false;
-      scrollbar_drag_pane = -1;
-    }
     if (mouse_selecting) {
       mouse_selecting = false;
       mouse_drag_started = false;
@@ -1104,50 +1032,6 @@ void Editor::handle_mouse(void *event_ptr) {
     return;
   }
 
-  if (scrollbar_dragging) {
-    if (is_click_release) {
-      scrollbar_dragging = false;
-      scrollbar_drag_pane = -1;
-      needs_redraw = true;
-      return;
-    }
-    if (is_motion || is_click) {
-      if (scrollbar_drag_pane >= 0 &&
-          scrollbar_drag_pane < (int)panes.size()) {
-        auto &drag_pane = panes[scrollbar_drag_pane];
-        auto &drag_buf = get_buffer(drag_pane.buffer_id);
-        const int travel =
-            std::max(1, scrollbar_drag_track_h - scrollbar_drag_thumb_h);
-        const int delta_y = event->y - scrollbar_drag_start_y;
-        const int scaled = delta_y * scrollbar_drag_max_scroll;
-        const int scroll_delta =
-            scaled >= 0 ? (scaled + travel / 2) / travel
-                        : (scaled - travel / 2) / travel;
-        int start_visible = 0;
-        for (int line = 0; line < (int)drag_buf.line_count() &&
-                           line < scrollbar_drag_start_scroll;
-             line++) {
-          if (!Folding::is_line_hidden(drag_buf.fold_ranges, line)) {
-            start_visible++;
-          }
-        }
-        int visible_target =
-            std::clamp(start_visible + scroll_delta, 0,
-                       scrollbar_drag_max_scroll);
-        drag_buf.scroll_offset =
-            buffer_line_for_visible_index(drag_buf, visible_target);
-        current_pane = scrollbar_drag_pane;
-        current_buffer = drag_pane.buffer_id;
-        for (int i = 0; i < (int)panes.size(); i++) {
-          panes[i].active = (i == current_pane);
-        }
-        focus_state = FOCUS_EDITOR;
-        needs_redraw = true;
-      }
-      return;
-    }
-  }
-
   if (is_click && begin_sidebar_resize_drag(event->x, event->y)) {
     return;
   }
@@ -1183,7 +1067,7 @@ void Editor::handle_mouse(void *event_ptr) {
     int content_bottom =
         terminal.get_height() - status_height - reserved_terminal_h;
     int sidebar_w = effective_sidebar_width();
-    if (event->x < sidebar_w && event->y >= topbar_height() + tab_height &&
+    if (event->x < sidebar_w && event->y >= topbar_height() &&
         event->y < content_bottom) {
       focus_state = FOCUS_SIDEBAR;
       long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1193,7 +1077,7 @@ void Editor::handle_mouse(void *event_ptr) {
                                    active_sidebar_view == SIDEBAR_VIEW_GIT
                                ? git_sidebar_scroll
                                : file_tree_scroll;
-      int sidebar_row = event->y - topbar_height() - tab_height - 1 + sidebar_scroll;
+      int sidebar_row = event->y - topbar_height() - 1 + sidebar_scroll;
       bool sidebar_double = (last_sidebar_click_ms > 0) &&
                             (now_ms - last_sidebar_click_ms <= 350) &&
                             (last_sidebar_click_row == sidebar_row);
@@ -1205,9 +1089,13 @@ void Editor::handle_mouse(void *event_ptr) {
     }
   }
 
-  if (is_primary_click && handle_integrated_terminal_mouse(event->x, event->y)) {
+  // Act on the press only: acting on the release too would re-dispatch the
+  // same header click after a close rebases the surviving tab onto the same
+  // cell, closing two terminals from one click.
+  if (is_click && handle_integrated_terminal_mouse(event->x, event->y)) {
     return;
   }
+
 
   IntegratedTerminal *active_terminal = get_integrated_terminal();
   if (is_click && show_integrated_terminal && active_terminal &&
@@ -1237,35 +1125,6 @@ void Editor::handle_mouse(void *event_ptr) {
   auto &buf = get_buffer(pane.buffer_id);
   refresh_folds(buf);
 
-  if (is_click) {
-    ScrollbarGeometry scrollbar =
-        scrollbar_geometry_for(pane, buf, tab_height, show_minimap,
-                               minimap_width);
-    if (scrollbar.visible && event->x == scrollbar.x &&
-        event->y >= scrollbar.y && event->y < scrollbar.y + scrollbar.h) {
-      if (event->y < scrollbar.thumb_y ||
-          event->y >= scrollbar.thumb_y + scrollbar.thumb_h) {
-        buf.scroll_offset = buffer_line_for_visible_index(
-            buf, scrollbar_scroll_for_y(scrollbar, event->y));
-        scrollbar =
-            scrollbar_geometry_for(pane, buf, tab_height, show_minimap,
-                                   minimap_width);
-      }
-      scrollbar_dragging = true;
-      scrollbar_drag_pane = current_pane;
-      scrollbar_drag_start_y = event->y;
-      scrollbar_drag_start_scroll = buf.scroll_offset;
-      scrollbar_drag_track_y = scrollbar.y;
-      scrollbar_drag_track_h = scrollbar.h;
-      scrollbar_drag_thumb_h = scrollbar.thumb_h;
-      scrollbar_drag_max_scroll = scrollbar.max_scroll;
-      focus_state = FOCUS_EDITOR;
-      mouse_selecting = false;
-      mouse_drag_started = false;
-      needs_redraw = true;
-      return;
-    }
-  }
 
   if ((is_click || is_middle_click) && event->y == pane.y && !buffers.empty()) {
     int draw_w = std::max(1, pane.w);
