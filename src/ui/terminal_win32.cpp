@@ -578,7 +578,14 @@ void Terminal::enable_raw_mode()
     // of single VK_* records, and suppresses MOUSE_EVENT records entirely
     // (they arrive as SGR sequences). The parser below is built around
     // KEY_EVENT_RECORD/MOUSE_EVENT_RECORD, so VT input mode breaks both.
-    input_mode &= ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
+    //
+    // Windows Terminal / conpty enable this bit by default, so it must be
+    // cleared explicitly -- removing only ENABLE_ECHO_INPUT/LINE_INPUT/
+    // PROCESSED_INPUT leaves it set, and every Ctrl+letter / navigation
+    // key then arrives as a raw VT byte instead of a clean key record
+    // (e.g. Ctrl+S mangled into stray mouse-report text).
+    input_mode &= ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT
+                    | ENABLE_VIRTUAL_TERMINAL_INPUT);
 #ifdef ENABLE_QUICK_EDIT_MODE
     // Quick-edit is only honored when ENABLE_EXTENDED_FLAGS is set. Without
     // this dance the bit is silently ignored, the console keeps doing
