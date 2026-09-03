@@ -437,7 +437,12 @@ void Editor::render_tree_sitter_status_modal() {
     }
     std::string lang = ui_truncate_cells(row.language, lang_w);
     std::string detail = ui_truncate_cells(row.detail, w - lang_w - 5);
-    ui->draw_text(x + 2, row_y, lang, row.color, theme.bg_command, true);
+    // Language names must stay readable on the flat panel background. The
+    // status chip colors (fg_status_info / fg_status_warning) default to 0
+    // (black) when a theme does not define them, which is invisible here, so
+    // fall back to the panel text color instead of trusting row.color.
+    int name_fg = row.color != 0 ? row.color : theme.fg_command;
+    ui->draw_text(x + 2, row_y, lang, name_fg, theme.bg_command, true);
     ui->draw_text(x + 2 + lang_w, row_y, detail, theme.fg_comment,
                   theme.bg_command);
   }

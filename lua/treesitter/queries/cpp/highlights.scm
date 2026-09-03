@@ -58,7 +58,6 @@
 (preproc_if) @keyword.directive
 (preproc_elif) @keyword.directive
 (preproc_else) @keyword.directive
-(preproc_endif) @keyword.directive
 (preproc_arg) @constant.macro
 (operator_name) @operator
 "(" @punctuation.bracket

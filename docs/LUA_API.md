@@ -92,8 +92,10 @@ script must work across different Jot builds.
 `library_names`, and `query_file`. Queries live at
 `lua/treesitter/queries/<language>/highlights.scm`, one directory per language.
 The bundled registry covers every parser previously shipped by Jot. Lua loads
-the registry and queries before syntax detection. Missing or malformed metadata
-or query disables that language; no native catalog fallback exists.
+the registry and queries before syntax detection. A bundled query that is
+missing or does not compile against the installed parser never disables the
+language: runtime queries shipped with the parser (or regex syntax) are used
+instead.
 
 Parser installs use this layout:
 

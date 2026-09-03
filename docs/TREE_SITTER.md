@@ -8,8 +8,9 @@ subdirectory, and query path. Highlight queries are stored in
 Startup loads Lua policy before syntax detection. Native C++ provides dynamic
 library loading, ABI checks, parsers, trees, queries, incremental parsing,
 caches, and capture rendering. It has no compiled language catalog or query
-fallback. A bad Lua file or query disables only its language and regex syntax
-continues to work.
+fallback. A bundled query that is missing or does not compile against the
+installed parser never disables the language: runtime queries shipped with the
+parser (or regex syntax) are used instead.
 
 ## Install Layout
 

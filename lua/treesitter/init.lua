@@ -9,7 +9,8 @@ registry.register(native)
 local query_ok, query_errors = queries.load_all(native, root, registry)
 if not query_ok then
   for _, error in ipairs(query_errors) do
-    io.stderr:write("Tree-sitter language disabled: " .. error .. "\n")
+    io.stderr:write("Tree-sitter bundled query skipped (" .. error
+      .. "); runtime queries or regex will be used\n")
   end
 end
 highlight.configure(native)
@@ -35,7 +36,8 @@ M.reload = function()
   local query_ok, query_errors = queries.load_all(native, root, registry)
   if not query_ok then
     for _, error in ipairs(query_errors) do
-      io.stderr:write("Tree-sitter language disabled: " .. error .. "\n")
+      io.stderr:write("Tree-sitter bundled query skipped (" .. error
+        .. "); runtime queries or regex will be used\n")
     end
   end
   highlight.configure(native)
