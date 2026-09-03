@@ -102,6 +102,10 @@ void LuaAPI::set_theme_color(std::string name, int fg, int bg) {
   auto alias = group_aliases.find(name);
   if (alias != group_aliases.end()) {
     name = alias->second;
+  } else if (!name.empty() && name[0] == '@') {
+    // Tree-sitter capture style ("@keyword.control", "@property") is
+    // accepted as a theme group name; the slot chain matches the rest.
+    name = name.substr(1);
   }
   Theme &theme = editor->get_theme();
   auto set_pair = [&](int &slot_fg, int &slot_bg) {

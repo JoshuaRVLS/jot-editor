@@ -35,6 +35,90 @@
     "fg": 31,
     "bg": 255
   },
+  "keyword.control": {
+    "fg": 99,
+    "bg": 255
+  },
+  "keyword.storage": {
+    "fg": 61,
+    "bg": 255
+  },
+  "keyword.directive": {
+    "fg": 130,
+    "bg": 255
+  },
+  "string.escape": {
+    "fg": 94,
+    "bg": 255
+  },
+  "variable": {
+    "fg": 236,
+    "bg": 255
+  },
+  "parameter": {
+    "fg": 238,
+    "bg": 255
+  },
+  "property": {
+    "fg": 66,
+    "bg": 255
+  },
+  "constant": {
+    "fg": 166,
+    "bg": 255
+  },
+  "constant_macro": {
+    "fg": 130,
+    "bg": 255
+  },
+  "builtin": {
+    "fg": 67,
+    "bg": 255
+  },
+  "operator": {
+    "fg": 97,
+    "bg": 255
+  },
+  "function.method": {
+    "fg": 26,
+    "bg": 255
+  },
+  "function.constructor": {
+    "fg": 30,
+    "bg": 255
+  },
+  "type.builtin": {
+    "fg": 60,
+    "bg": 255
+  },
+  "tag": {
+    "fg": 25,
+    "bg": 255
+  },
+  "attribute": {
+    "fg": 130,
+    "bg": 255
+  },
+  "namespace": {
+    "fg": 31,
+    "bg": 255
+  },
+  "module": {
+    "fg": 31,
+    "bg": 255
+  },
+  "punctuation": {
+    "fg": 240,
+    "bg": 255
+  },
+  "punctuation.bracket": {
+    "fg": 240,
+    "bg": 255
+  },
+  "punctuation.delimiter": {
+    "fg": 240,
+    "bg": 255
+  },
   "Cursor": {
     "fg": 255,
     "bg": 236
