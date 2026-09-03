@@ -1,5 +1,10 @@
 add_executable(jot main.cpp)
 
+# Embed the application icon into the executable on Windows.
+if(WIN32)
+  target_sources(jot PRIVATE jot.rc)
+endif()
+
 target_link_libraries(jot PRIVATE jot_engine)
 
 # Use a clean, portable install RPATH so the installed jot binary can find

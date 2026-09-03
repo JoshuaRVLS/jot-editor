@@ -1,0 +1,3 @@
+// Jot application icon (Windows only).
+// The path is resolved by rc.exe relative to this file's directory.
+IDI_APP_ICON ICON "../../packaging/windows/jot.ico"
