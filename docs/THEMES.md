@@ -2,7 +2,11 @@
 
 Themes are native JSON data. The primary location is
 `~/.config/jot/configs/colors/`; legacy `~/.config/jot/themes/` is also scanned.
-Bundled themes live in `.configs/configs/colors/`.
+Bundled themes live in `.configs/configs/colors/` and currently ship `dark`,
+`light`, `tokyonight`, `nord`, `gruvbox`, `dracula`, `catppuccin`, `onedark`,
+`monokai`, and `solarized`. Colors are xterm 256 indices, so the popular
+palettes are faithful but coarse approximations of their original 24-bit
+colors; tune any slot by copying the file to `~/.config/jot/configs/colors/`.
 
 Apply with `:colorscheme light` or from Lua:
 
@@ -79,9 +83,37 @@ one explicitly in a theme overrides the fallback.
 `TerminalTabActive`, `TerminalTabFocused`, `TerminalTabClose`,
 `TerminalTabPlus`, `TerminalTabSeparator`.
 
+Git status colors for file rows (git view), file tabs, and the diff panel use
+`git_modified`, `git_added`, `git_untracked`, `git_deleted`, `git_renamed`,
+and `git_conflict` (`fg` text / `bg` row tint). Themes that omit them fall
+back to the built-in ANSI defaults, which do not match the colorscheme.
+
 ## Authoring a theme
 
-Copy a bundled theme as a starting point, then tune the syntax slots:
+### Inherit a base with `extends`
+
+A theme only needs to list what it overrides. Start from any bundled theme and
+keep its full look — file explorer, status bar, git colors, diagnostics, and
+syntax — by extending it:
+
+```json
+{
+  "extends": "tokyonight",
+  "Comment": {"fg": 244},
+  "keyword.control": {"fg": 214},
+  "StatusLine": {"fg": 188, "bg": 236}
+}
+```
+
+Any group the theme does not set is inherited from the base (`extends` chains
+depth and cycles are guarded). Without `extends`, unlisted groups fall back to
+the built-in ANSI defaults, which is why explorer and status bar colors would
+otherwise not follow a minimal custom theme.
+
+### Standalone theme
+
+For a fully self-contained theme, copy a bundled theme as a starting point,
+then tune the syntax slots:
 
 ```bash
 mkdir -p ~/.config/jot/configs/colors

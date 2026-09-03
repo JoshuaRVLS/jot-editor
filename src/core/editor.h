@@ -642,7 +642,9 @@ private:
   void toggle_auto_indent_setting();
   void change_tab_size(int delta);
   std::vector<std::string> list_available_themes();
-  void apply_theme(const std::string &name, bool persist = true,
+  // Applies a theme; when persist is set, also saves it to the config file so
+  // it survives the next session. Returns true on success.
+  bool apply_theme(const std::string &name, bool persist = true,
                    bool announce = true);
   int detect_indent_width(const std::vector<std::string> &lines) const;
 

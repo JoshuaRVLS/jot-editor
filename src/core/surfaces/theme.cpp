@@ -44,11 +44,11 @@ std::vector<std::string> Editor::list_available_themes() {
   return themes;
 }
 
-void Editor::apply_theme(const std::string &name, bool persist, bool announce) {
+bool Editor::apply_theme(const std::string &name, bool persist, bool announce) {
   const std::string requested = trim_copy(name);
   if (requested.empty()) {
     set_message("Theme name is empty");
-    return;
+    return false;
   }
 
   std::string resolved = requested;
@@ -63,7 +63,7 @@ void Editor::apply_theme(const std::string &name, bool persist, bool announce) {
 
   if (!lua_api) {
     set_message("Lua theme runtime unavailable");
-    return;
+    return false;
   }
 
   Theme previous_theme = theme;
@@ -75,13 +75,16 @@ void Editor::apply_theme(const std::string &name, bool persist, bool announce) {
     theme = previous_theme;
     current_theme_name = previous_theme_name;
     set_message("Unknown theme: " + requested);
-    return;
+    return false;
   }
   theme.normalize_syntax_palette();
 
   current_theme_name = resolved;
   if (persist) {
     config.set("color_scheme", resolved);
+    // Write the config file immediately so the choice survives the next
+    // session (config.set only mutates the in-memory map).
+    config.save();
   }
 
   if (ui) {
@@ -92,4 +95,6 @@ void Editor::apply_theme(const std::string &name, bool persist, bool announce) {
   if (announce) {
     set_message("Theme: " + resolved);
   }
+  if (lua_api) lua_api->emit_theme_switched(resolved);
+  return true;
 }

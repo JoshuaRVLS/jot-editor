@@ -1,0 +1,302 @@
+{
+  "Normal": {
+    "fg": 153,
+    "bg": 234
+  },
+  "NormalFloat": {
+    "fg": 153,
+    "bg": 235
+  },
+  "LineNr": {
+    "fg": 60,
+    "bg": 234
+  },
+  "Comment": {
+    "fg": 60,
+    "bg": 234
+  },
+  "Keyword": {
+    "fg": 141,
+    "bg": 234
+  },
+  "String": {
+    "fg": 149,
+    "bg": 234
+  },
+  "Number": {
+    "fg": 215,
+    "bg": 234
+  },
+  "Function": {
+    "fg": 111,
+    "bg": 234
+  },
+  "Type": {
+    "fg": 117,
+    "bg": 234
+  },
+  "keyword.control": {
+    "fg": 141,
+    "bg": 234
+  },
+  "keyword.storage": {
+    "fg": 111,
+    "bg": 234
+  },
+  "keyword.directive": {
+    "fg": 215,
+    "bg": 234
+  },
+  "string.escape": {
+    "fg": 215,
+    "bg": 234
+  },
+  "variable": {
+    "fg": 153,
+    "bg": 234
+  },
+  "parameter": {
+    "fg": 153,
+    "bg": 234
+  },
+  "property": {
+    "fg": 80,
+    "bg": 234
+  },
+  "constant": {
+    "fg": 215,
+    "bg": 234
+  },
+  "constant_macro": {
+    "fg": 179,
+    "bg": 234
+  },
+  "builtin": {
+    "fg": 117,
+    "bg": 234
+  },
+  "operator": {
+    "fg": 117,
+    "bg": 234
+  },
+  "function.method": {
+    "fg": 111,
+    "bg": 234
+  },
+  "function.constructor": {
+    "fg": 117,
+    "bg": 234
+  },
+  "type.builtin": {
+    "fg": 111,
+    "bg": 234
+  },
+  "tag": {
+    "fg": 111,
+    "bg": 234
+  },
+  "attribute": {
+    "fg": 141,
+    "bg": 234
+  },
+  "namespace": {
+    "fg": 117,
+    "bg": 234
+  },
+  "module": {
+    "fg": 111,
+    "bg": 234
+  },
+  "punctuation": {
+    "fg": 60,
+    "bg": 234
+  },
+  "punctuation.bracket": {
+    "fg": 60,
+    "bg": 234
+  },
+  "punctuation.delimiter": {
+    "fg": 60,
+    "bg": 234
+  },
+  "Cursor": {
+    "fg": 234,
+    "bg": 153
+  },
+  "Visual": {
+    "fg": 234,
+    "bg": 237
+  },
+  "Search": {
+    "fg": 234,
+    "bg": 237
+  },
+  "StatusLine": {
+    "fg": 153,
+    "bg": 236
+  },
+  "StatusLineMsg": {
+    "fg": 215,
+    "bg": 236
+  },
+  "StatusLineLogo": {
+    "fg": 234,
+    "bg": 236
+  },
+  "StatusLineFile": {
+    "fg": 234,
+    "bg": 236
+  },
+  "StatusLineInfo": {
+    "fg": 234,
+    "bg": 236
+  },
+  "StatusLineWarn": {
+    "fg": 234,
+    "bg": 236
+  },
+  "StatusLineError": {
+    "fg": 234,
+    "bg": 236
+  },
+  "StatusLineMuted": {
+    "fg": 60,
+    "bg": 236
+  },
+  "FloatBorder": {
+    "fg": 60,
+    "bg": 234
+  },
+  "WinSeparator": {
+    "fg": 60,
+    "bg": 234
+  },
+  "WinActiveBorder": {
+    "fg": 111,
+    "bg": 234
+  },
+  "TabLine": {
+    "fg": 60,
+    "bg": 236
+  },
+  "TabLineSel": {
+    "fg": 234,
+    "bg": 111
+  },
+  "TabLineFill": {
+    "fg": 60,
+    "bg": 236
+  },
+  "TabClose": {
+    "fg": 210,
+    "bg": 236
+  },
+  "Sidebar": {
+    "fg": 153,
+    "bg": 235
+  },
+  "SidebarDir": {
+    "fg": 111,
+    "bg": 235
+  },
+  "SidebarSel": {
+    "fg": 234,
+    "bg": 111
+  },
+  "SidebarSelNC": {
+    "fg": 153,
+    "bg": 235
+  },
+  "SidebarBorder": {
+    "fg": 60,
+    "bg": 235
+  },
+  "DiagnosticError": {
+    "fg": 210,
+    "bg": 234
+  },
+  "DiagnosticWarn": {
+    "fg": 179,
+    "bg": 234
+  },
+  "DiagnosticInfo": {
+    "fg": 117,
+    "bg": 234
+  },
+  "DiagnosticHint": {
+    "fg": 149,
+    "bg": 234
+  },
+  "Pmenu": {
+    "fg": 153,
+    "bg": 235
+  },
+  "PmenuSel": {
+    "fg": 234,
+    "bg": 111
+  },
+  "TelescopeNormal": {
+    "fg": 153,
+    "bg": 235
+  },
+  "TelescopeSelection": {
+    "fg": 234,
+    "bg": 111
+  },
+  "TelescopePreviewNormal": {
+    "fg": 153,
+    "bg": 234
+  },
+  "Terminal": {
+    "fg": 153,
+    "bg": 234
+  },
+  "TerminalTab": {
+    "fg": 60,
+    "bg": 234
+  },
+  "TerminalTabActive": {
+    "fg": 153,
+    "bg": 235
+  },
+  "TerminalTabFocused": {
+    "fg": 234,
+    "bg": 111
+  },
+  "TerminalTabClose": {
+    "fg": 210,
+    "bg": 234
+  },
+  "TerminalTabPlus": {
+    "fg": 149,
+    "bg": 234
+  },
+  "TerminalTabSeparator": {
+    "fg": 60,
+    "bg": 234
+  },
+  "git_modified": {
+    "fg": 179,
+    "bg": 238
+  },
+  "git_added": {
+    "fg": 149,
+    "bg": 238
+  },
+  "git_untracked": {
+    "fg": 149,
+    "bg": 238
+  },
+  "git_deleted": {
+    "fg": 210,
+    "bg": 238
+  },
+  "git_renamed": {
+    "fg": 111,
+    "bg": 238
+  },
+  "git_conflict": {
+    "fg": 141,
+    "bg": 238
+  }
+}

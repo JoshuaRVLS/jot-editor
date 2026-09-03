@@ -35,10 +35,49 @@ void LuaAPI::show_message(const std::string &msg) {
   if (editor) editor->set_message(msg);
 }
 
-bool LuaAPI::apply_colorscheme(const std::string &name) {
-  for (const auto &dir : theme_dirs()) { auto p=dir/(name+".json"); std::ifstream in(p); if(!in) continue; std::string text((std::istreambuf_iterator<char>(in)),{});
-    std::regex group("\\\"([^\"]+)\\\"\\s*:\\s*\\{([^}]*)\\}"); for(std::sregex_iterator i(text.begin(),text.end(),group),e;i!=e;++i) set_theme_color((*i)[1].str(),value((*i)[2].str(),"fg"),value((*i)[2].str(),"bg")); return true; }
+bool LuaAPI::apply_theme_file(const std::string &name,
+                              std::vector<std::string> &stack) {
+  for (const auto &dir : theme_dirs()) {
+    auto p = dir / (name + ".json");
+    std::ifstream in(p);
+    if (!in) continue;
+    std::string text((std::istreambuf_iterator<char>(in)), {});
+    // "extends": "<base>" lets a custom theme inherit every group of a
+    // bundled theme (file explorer, status bar, syntax, ...) and override
+    // only what it sets. Bases are applied first so overrides win.
+    std::smatch base_match;
+    std::regex base_re("\\\"extends\\\"\\s*:\\s*\\\"([^\"]+)\\\"");
+    if (std::regex_search(text, base_match, base_re) &&
+        base_match[1].str() != name) {
+      const std::string base = base_match[1].str();
+      if (std::find(stack.begin(), stack.end(), base) == stack.end() &&
+          stack.size() < 8) {
+        stack.push_back(name);
+        apply_theme_file(base, stack);
+        stack.pop_back();
+      }
+    }
+    std::regex group("\\\"([^\"]+)\\\"\\s*:\\s*\\{([^}]*)\\}");
+    for (std::sregex_iterator i(text.begin(), text.end(), group), e;
+         i != e; ++i) {
+      set_theme_color((*i)[1].str(), value((*i)[2].str(), "fg"),
+                      value((*i)[2].str(), "bg"));
+    }
+    return true;
+  }
   return false;
+}
+
+bool LuaAPI::apply_colorscheme(const std::string &name) {
+  std::vector<std::string> stack;
+  return apply_theme_file(name, stack);
+}
+
+bool LuaAPI::apply_theme_and_persist(const std::string &name) {
+  if (!editor) {
+    return false;
+  }
+  return editor->apply_theme(name);
 }
 std::vector<std::string> LuaAPI::list_themes() { std::vector<std::string> out; for(const auto&d:theme_dirs()) if(std::filesystem::exists(d)) for(const auto&e:std::filesystem::directory_iterator(d)) if(e.path().extension()==".json") out.push_back(e.path().stem().string()); return out; }
 
