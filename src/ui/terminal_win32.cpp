@@ -521,8 +521,14 @@ namespace
         out.key.alt = false;
         return kVtEvent;
       }
-      // ESC + printable: swallow the ESC prefix, forward the character.
-      return emit_vt_char(byte, out);
+      // ESC + printable is Alt+<char> (the console emits Alt combos as an
+      // ESC prefix in byte mode). Forward the character with Alt set.
+      VtByteResult result = emit_vt_char(byte, out);
+      if (result == kVtEvent)
+      {
+        out.key.alt = true;
+      }
+      return result;
     }
     if (byte == 27)
     {
@@ -844,6 +850,19 @@ Event Terminal::read_event()
       int keycode = translate_key_event(key, ctrl, shift, alt);
       if (keycode < 0)
       {
+        continue;
+      }
+      if (keycode == 27 && !ctrl && !alt)
+      {
+        // A plain Escape may be the start of a VT sequence whose bytes the
+        // console delivered with real virtual-key codes (reports typed as
+        // '[M...'). Enter the assembler instead of emitting Escape right
+        // away: if a continuation arrives in this batch it is decoded as a
+        // mouse report / key sequence, otherwise the drain tail below
+        // emits the Escape as a real key. Real Escapes arrive in their own
+        // batch, so this adds no perceptible delay.
+        g_vt_state = 1;
+        g_vt_state_since_ms = GetTickCount64();
         continue;
       }
       ev.type = EVENT_KEY;
