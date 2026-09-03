@@ -141,23 +141,23 @@
   },
   "StatusLineLogo": {
     "fg": 255,
-    "bg": 33
+    "bg": 253
   },
   "StatusLineFile": {
     "fg": 255,
-    "bg": 99
+    "bg": 253
   },
   "StatusLineInfo": {
     "fg": 255,
-    "bg": 31
+    "bg": 253
   },
   "StatusLineWarn": {
     "fg": 236,
-    "bg": 222
+    "bg": 253
   },
   "StatusLineError": {
     "fg": 255,
-    "bg": 160
+    "bg": 253
   },
   "StatusLineMuted": {
     "fg": 102,
@@ -205,7 +205,7 @@
   },
   "SidebarSelNC": {
     "fg": 236,
-    "bg": 153
+    "bg": 254
   },
   "SidebarBorder": {
     "fg": 99,
@@ -274,5 +274,29 @@
   "TerminalTabSeparator": {
     "fg": 33,
     "bg": 254
+  },
+  "git_modified": {
+    "fg": 166,
+    "bg": 187
+  },
+  "git_added": {
+    "fg": 65,
+    "bg": 251
+  },
+  "git_untracked": {
+    "fg": 65,
+    "bg": 251
+  },
+  "git_deleted": {
+    "fg": 160,
+    "bg": 181
+  },
+  "git_renamed": {
+    "fg": 25,
+    "bg": 152
+  },
+  "git_conflict": {
+    "fg": 97,
+    "bg": 252
   }
 }
