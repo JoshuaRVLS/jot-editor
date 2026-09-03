@@ -88,6 +88,9 @@ void Editor::handle_command_palette(int ch) {
   };
 
   if (ch == 27) {
+    // Remember what the user left in the box so the next Ctrl+P resumes it;
+    // closing with an empty box clears the memory for a fresh start.
+    command_palette_last_query = command_palette_query;
     show_command_palette = false;
     command_palette_query.clear();
     command_palette_results.clear();
@@ -106,6 +109,34 @@ void Editor::handle_command_palette(int ch) {
     if (!command_palette_results.empty()) {
       command_palette_selected =
           (command_palette_selected + 1) % (int)command_palette_results.size();
+      needs_redraw = true;
+    }
+  } else if (ch == 1015) { // PageUp
+    refresh_command_palette();
+    if (!command_palette_results.empty()) {
+      command_palette_selected =
+          std::max(0, command_palette_selected - 8);
+      needs_redraw = true;
+    }
+  } else if (ch == 1016) { // PageDown
+    refresh_command_palette();
+    if (!command_palette_results.empty()) {
+      command_palette_selected =
+          std::min((int)command_palette_results.size() - 1,
+                   command_palette_selected + 8);
+      needs_redraw = true;
+    }
+  } else if (ch == 1012) { // Home
+    refresh_command_palette();
+    if (!command_palette_results.empty()) {
+      command_palette_selected = 0;
+      needs_redraw = true;
+    }
+  } else if (ch == 1013) { // End
+    refresh_command_palette();
+    if (!command_palette_results.empty()) {
+      command_palette_selected =
+          (int)command_palette_results.size() - 1;
       needs_redraw = true;
     }
   } else if (ch == '\n' || ch == 13) {

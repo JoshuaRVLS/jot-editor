@@ -238,6 +238,7 @@ private:
   void render_command_palette();
   void render_quick_pick();
   void render_search_panel();
+  void place_command_palette_cursor();
   void place_search_cursor();
   void render_context_menu();
   void render_tree_sitter_status_modal();
@@ -562,6 +563,7 @@ private:
   void open_search();
   bool open_scoped_replace_from_selection();
   void toggle_command_palette();
+  void open_command_palette(const std::string &query);
   void open_theme_chooser();
   void execute_command(const std::string &cmd);
 

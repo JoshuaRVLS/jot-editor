@@ -42,6 +42,10 @@ struct EditorState {
 
   bool show_command_palette;
   std::string command_palette_query;
+  // Query text remembered when the palette closes with Esc; restored on the
+  // next Ctrl+P open so an abandoned search can be picked up where it left
+  // off. Cleared when the palette closes with an empty input.
+  std::string command_palette_last_query;
   std::vector<CommandPaletteSuggestion> command_palette_results;
   int command_palette_selected;
   bool command_palette_theme_mode;

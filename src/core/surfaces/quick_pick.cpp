@@ -237,6 +237,18 @@ bool Editor::handle_quick_pick_input(int ch) {
     needs_redraw = true;
     return true;
   }
+  if (ch == 1015) {
+    quick_pick_selected = std::max(0, quick_pick_selected - 8);
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 1016) {
+    quick_pick_selected =
+        std::min(std::max(0, (int)quick_pick_items.size() - 1),
+                 quick_pick_selected + 8);
+    needs_redraw = true;
+    return true;
+  }
   if (ch == 1012) {
     quick_pick_selected = 0;
     needs_redraw = true;
@@ -452,6 +464,11 @@ void Editor::request_document_symbols() {
 
 void Editor::handle_document_symbols_result(
     const LSPDocumentSymbolResult &result) {
+  // A Lua one-shot sink (jot.lsp.request_symbols) consumes the result first;
+  // otherwise it only feeds the native symbols picker when one is open.
+  if (lua_api && lua_api->try_deliver_lsp_symbols(result)) {
+    return;
+  }
   if (!show_quick_pick || quick_pick_kind != QUICK_PICK_SYMBOLS ||
       buffers.empty() || current_buffer < 0 ||
       current_buffer >= (int)buffers.size()) {

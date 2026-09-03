@@ -160,6 +160,15 @@ const std::vector<CommandMeta> &command_palette_metadata() {
       {"help", "Help", "Show help or command list", 80},
       {"h", "Help", "Show help or command list", 70},
       {"plugins", "Plugin", "Show loaded plugins and APIs", 80},
+      {"save", "File", "Save current file", 78},
+      {"definition", "Navigation", "Go to definition", 76},
+      {"gd", "Navigation", "Go to definition", 74},
+      {"hover", "Navigation", "Show LSP hover info", 70},
+      {"lsphover", "Navigation", "Show LSP hover info", 66},
+      {"lspback", "Navigation", "Jump back from definition", 70},
+      {"outlinepanel", "Navigation", "Toggle the outline panel", 72},
+      {"reload", "Session", "Reload config, Lua plugins, and tree-sitter", 82},
+      {"reloadconfig", "Session", "Reload config.lua and re-apply settings live", 80},
       {"reloadplugins", "Plugin", "Reload init.lua and plugins", 78},
       {"pluginpanel", "Plugin", "Show a plugin panel", 75},
       {"gitdiffclose", "Git", "Close git diff panel", 68},
@@ -215,6 +224,39 @@ int fuzzy_score(const std::string &value, const std::string &query) {
   return score - (int)hay.size();
 }
 
+// Greedy match positions mirroring fuzzy_score: byte offsets into `value` of
+// the characters the query consumed, or empty when there is no match (or when
+// case folding changes the byte length, which would make offsets unsafe).
+std::vector<int> fuzzy_match_positions(const std::string &value,
+                                       const std::string &query) {
+  std::vector<int> positions;
+  if (query.empty() || value.empty()) {
+    return positions;
+  }
+  const std::string hay = to_lower_copy(value);
+  const std::string needle = to_lower_copy(query);
+  if (hay.size() != value.size()) {
+    return positions;
+  }
+  size_t pos = 0;
+  for (char qc : needle) {
+    bool found = false;
+    for (; pos < hay.size(); pos++) {
+      if (hay[pos] == qc) {
+        positions.push_back((int)pos);
+        pos++;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      positions.clear();
+      return positions;
+    }
+  }
+  return positions;
+}
+
 std::string strip_leading_colon(std::string s) {
   if (!s.empty() && s[0] == ':') {
     s.erase(s.begin());
@@ -231,7 +273,8 @@ void Editor::refresh_command_palette() {
                                ? command_palette_theme_original
                                : command_palette_query;
   auto add_result = [&](const std::string &insert_text, std::string label,
-                        std::string category, std::string detail, int score) {
+                        std::string category, std::string detail, int score,
+                        std::vector<int> match = {}) {
     if (insert_text.empty()) {
       return;
     }
@@ -244,6 +287,7 @@ void Editor::refresh_command_palette() {
     suggestion.category = std::move(category);
     suggestion.detail = std::move(detail);
     suggestion.score = score;
+    suggestion.match = std::move(match);
     command_palette_results.push_back(std::move(suggestion));
   };
   auto complete_workspace_path = [&](const std::string &path_arg) {
@@ -313,7 +357,9 @@ void Editor::refresh_command_palette() {
         const CommandMeta *meta = find_command_meta(c);
         add_result(c, c, meta ? meta->category : "Command",
                    meta ? meta->detail : "Run command",
-                   score + (meta ? meta->priority : 40));
+                   score + (meta ? meta->priority : 40),
+                   needle.empty() ? std::vector<int>{} :
+                                    fuzzy_match_positions(c, needle));
       }
     }
     if (lua_api) {
@@ -323,7 +369,10 @@ void Editor::refresh_command_palette() {
           add_result(command.name, command.name, "Plugin",
                      command.detail.empty() ? "Run plugin command"
                                             : command.detail,
-                     score + 75);
+                     score + 75,
+                     needle.empty() ? std::vector<int>{} :
+                                      fuzzy_match_positions(command.name,
+                                                            needle));
         }
       }
     }
@@ -333,7 +382,9 @@ void Editor::refresh_command_palette() {
                        const std::string &detail, int base_score = 100) {
       int score = fuzzy_score(value, arg);
       if (arg.empty() || score >= 0) {
-        add_result(value, value, category, detail, score + base_score);
+        add_result(value, value, category, detail, score + base_score,
+                   arg.empty() ? std::vector<int>{} :
+                                 fuzzy_match_positions(value, arg));
       }
     };
     if (lcmd == "theme" || lcmd == "colorscheme" || lcmd == "colo") {

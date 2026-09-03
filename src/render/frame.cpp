@@ -138,10 +138,7 @@ void Editor::render() {
     if (show_command_palette || show_search || show_save_prompt ||
         show_quit_prompt) {
       if (show_command_palette) {
-        int x = std::min(ui->get_width() - 1,
-                         std::max(1, (int)command_palette_query.length() + 1));
-        int y = ui->get_height() - 1;
-        ui->set_cursor(x, y);
+        place_command_palette_cursor();
       } else if (show_search) {
         place_search_cursor();
       } else if (show_save_prompt) {
@@ -294,10 +291,7 @@ void Editor::render() {
     } else if (show_command_palette || show_search || show_save_prompt ||
         show_quit_prompt) {
       if (show_command_palette) {
-        int x = std::min(ui->get_width() - 1,
-                         std::max(1, (int)command_palette_query.length() + 1));
-        int y = ui->get_height() - 1;
-        ui->set_cursor(x, y);
+        place_command_palette_cursor();
       } else if (show_search) {
         place_search_cursor();
       } else if (show_save_prompt) {

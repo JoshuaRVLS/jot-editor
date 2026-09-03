@@ -25,6 +25,9 @@ struct CommandPaletteSuggestion {
   std::string category;
   std::string detail;
   int score = 0;
+  // 0-based byte offsets into `label` matched by the query; used to
+  // emphasize matched characters while rendering. Empty when not computed.
+  std::vector<int> match;
 };
 
 enum QuickPickKind {
