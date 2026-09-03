@@ -29,6 +29,9 @@ namespace
   DWORD g_original_output_mode = 0;
   bool g_have_input_mode = false;
   bool g_have_output_mode = false;
+  UINT g_original_input_cp = 0;
+  UINT g_original_output_cp = 0;
+  bool g_have_cp = false;
   DWORD g_last_button_state = 0;
 
   bool read_console_input(INPUT_RECORD &record)
@@ -218,17 +221,37 @@ void Terminal::enable_raw_mode()
   HANDLE out = output_handle();
   DWORD input_mode = 0;
   DWORD output_mode = 0;
+
+  // The renderer emits UTF-8 (box-drawing characters, etc.). The console only
+  // interprets bytes as UTF-8 when the output code page is set to CP_UTF8,
+  // otherwise box-drawing chars render as mojibake (e.g. "Γöé").
+  if (!g_have_cp)
+  {
+    g_original_input_cp = GetConsoleCP();
+    g_original_output_cp = GetConsoleOutputCP();
+    g_have_cp = true;
+  }
+  SetConsoleCP(CP_UTF8);
+  SetConsoleOutputCP(CP_UTF8);
+
   if (GetConsoleMode(in, &input_mode))
   {
     g_original_input_mode = input_mode;
     g_have_input_mode = true;
     input_mode |= ENABLE_WINDOW_INPUT | ENABLE_MOUSE_INPUT;
-#ifdef ENABLE_VIRTUAL_TERMINAL_INPUT
-    input_mode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
-#endif
+    // NOTE: ENABLE_VIRTUAL_TERMINAL_INPUT must stay OFF. When it is on, the
+    // console delivers navigation keys (arrows, home/end, ...) as raw VT
+    // sequences split into separate KEY_EVENT records (ESC, '[', 'A') instead
+    // of single VK_* records, and suppresses MOUSE_EVENT records entirely
+    // (they arrive as SGR sequences). The parser below is built around
+    // KEY_EVENT_RECORD/MOUSE_EVENT_RECORD, so VT input mode breaks both.
     input_mode &= ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
 #ifdef ENABLE_QUICK_EDIT_MODE
+    // Quick-edit is only honored when ENABLE_EXTENDED_FLAGS is set. Without
+    // this dance the bit is silently ignored, the console keeps doing
+    // text-selection on click, and we never receive MOUSE_EVENT records.
     input_mode &= ~ENABLE_QUICK_EDIT_MODE;
+    input_mode |= ENABLE_EXTENDED_FLAGS;
 #endif
     SetConsoleMode(in, input_mode);
   }
@@ -258,6 +281,11 @@ void Terminal::disable_raw_mode()
   if (g_have_output_mode)
   {
     SetConsoleMode(output_handle(), g_original_output_mode);
+  }
+  if (g_have_cp)
+  {
+    SetConsoleCP(g_original_input_cp);
+    SetConsoleOutputCP(g_original_output_cp);
   }
   raw_mode = false;
 }
