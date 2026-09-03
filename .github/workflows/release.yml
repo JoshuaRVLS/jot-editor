@@ -89,6 +89,28 @@ jobs:
           cmake --install build --config Release --prefix stage
           Compress-Archive -Path stage\* -DestinationPath "${{ matrix.archive }}"
 
+      - name: Install Inno Setup
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build Windows installer
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $version = "$env:GITHUB_REF_NAME".TrimStart('v')
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DAppVersion=$version" `
+            "packaging\windows\jot.iss"
+
+      - name: Upload installer
+        if: matrix.platform == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jot-windows-installer
+          path: packaging/windows/installer/jot-setup-*.exe
+          if-no-files-found: error
+
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
