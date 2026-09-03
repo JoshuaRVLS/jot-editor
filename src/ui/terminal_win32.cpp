@@ -230,6 +230,69 @@ namespace
   int g_x10_last_button = 0;
   DWORD g_vt_state_since_ms = 0; // last byte fed to the assembler
 
+  // When JOT_WIN32_INPUT_LOG=<path> is set, every raw console input record
+  // is appended to that file (type, VK, unicode char, key state) so exotic
+  // console delivery formats can be diagnosed from a real log instead of
+  // inferred. Windows-only; best effort.
+  FILE *win32_input_log()
+  {
+    static FILE *file = []()
+    {
+      const char *path = std::getenv("JOT_WIN32_INPUT_LOG");
+      if (!path || !path[0])
+      {
+        return (FILE *)nullptr;
+      }
+      FILE *f = std::fopen(path, "a");
+      if (f)
+      {
+        std::fprintf(f, "\n-- win32 input log start --\n");
+        std::fflush(f);
+      }
+      return f;
+    }();
+    return file;
+  }
+
+  void log_input_record(const INPUT_RECORD &record, const char *action)
+  {
+    FILE *f = win32_input_log();
+    if (!f)
+    {
+      return;
+    }
+    if (record.EventType == KEY_EVENT)
+    {
+      const KEY_EVENT_RECORD &k = record.Event.KeyEvent;
+      std::fprintf(f,
+                   "key %s vk=0x%04x ch=0x%04x '%lc' state=0x%08lx\n",
+                   k.bKeyDown ? "down" : "up",
+                   k.wVirtualKeyCode,
+                   (unsigned)k.uChar.UnicodeChar,
+                   (wint_t)k.uChar.UnicodeChar,
+                   (unsigned long)k.dwControlKeyState);
+    }
+    else if (record.EventType == MOUSE_EVENT)
+    {
+      const MOUSE_EVENT_RECORD &m = record.Event.MouseEvent;
+      std::fprintf(f,
+                   "mouse flags=0x%04x buttons=0x%08lx at=%d,%d\n",
+                   m.dwEventFlags,
+                   (unsigned long)m.dwButtonState,
+                   m.dwMousePosition.X,
+                   m.dwMousePosition.Y);
+    }
+    else if (record.EventType == WINDOW_BUFFER_SIZE_EVENT)
+    {
+      std::fprintf(f, "resize\n");
+    }
+    else
+    {
+      std::fprintf(f, "record type=%u -> %s\n", (unsigned)record.EventType, action);
+    }
+    std::fflush(f);
+  }
+
   void reset_vt_state()
   {
     g_vt_state = 0;
@@ -824,6 +887,7 @@ Event Terminal::read_event()
     {
       break;
     }
+    log_input_record(record, "queued");
 
     if (record.EventType == KEY_EVENT && record.Event.KeyEvent.bKeyDown)
     {
