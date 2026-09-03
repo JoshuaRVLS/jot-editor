@@ -20,6 +20,7 @@ INSTALL_TOOLS=0
 INSTALL_TREESITTER=1
 JOBS="2"
 PREFIX_EXPLICIT=0
+BUILD_DIR_EXPLICIT=0
 
 print_help() {
   cat <<'USAGE'
@@ -64,6 +65,7 @@ while [[ $# -gt 0 ]]; do
     --build-dir)
       [[ $# -ge 2 ]] || { echo "Missing value for --build-dir" >&2; exit 1; }
       BUILD_DIR="$2"
+      BUILD_DIR_EXPLICIT=1
       shift 2
       ;;
     --debug)
@@ -560,6 +562,25 @@ install_treesitter_deps() {
   local failures=0
   ensure_prefix_pkg_config_path "${INSTALL_PREFIX}"
 
+  if pkg-config --exists tree-sitter >/dev/null 2>&1; then
+    echo "[jot:treesitter] Tree-sitter runtime already available via pkg-config; skipping."
+    return 0
+  fi
+
+  can_use_package_manager() {
+    if [[ "${EUID}" -eq 0 ]]; then
+      return 0
+    fi
+    sudo -n true >/dev/null 2>&1
+  }
+
+  if ! can_use_package_manager; then
+    echo "[jot:treesitter] Skipped system Tree-sitter package install (requires root)." >&2
+    echo "[jot:treesitter] The bundled build works without it; regex highlighting is the fallback." >&2
+    echo "[jot:treesitter] Per-user parsers are installed later with :tsinstall <language>." >&2
+    return 0
+  fi
+
   if command -v pacman >/dev/null 2>&1; then
     attempt_cmd "Installing Tree-sitter runtime via pacman" \
       run_maybe_sudo pacman -Sy --noconfirm tree-sitter || failures=$((failures + 1))
@@ -707,6 +728,34 @@ install_builtin_lsps() {
   fi
 }
 
+choose_build_dir() {
+  local default_relocate="${XDG_CACHE_HOME:-${HOME}/.cache}/jot/build"
+  if [[ "${BUILD_DIR_EXPLICIT}" -eq 1 ]]; then
+    if [[ -d "${BUILD_DIR}" && ! -w "${BUILD_DIR}" ]]; then
+      echo "[jot] Error: --build-dir is not writable: ${BUILD_DIR}" >&2
+      echo "[jot]   Fix ownership first:" >&2
+      echo "[jot]   sudo chown -R \"$(id -un)\" \"${BUILD_DIR}\"" >&2
+      exit 1
+    fi
+    return 0
+  fi
+  if [[ ! -d "${BUILD_DIR}" ]]; then
+    if mkdir -p "${BUILD_DIR}" 2>/dev/null; then
+      return 0
+    fi
+    echo "[jot] ${PROJECT_ROOT} is not writable; building in ${default_relocate}"
+    BUILD_DIR="${default_relocate}"
+    return 0
+  fi
+  if [[ -w "${BUILD_DIR}" ]]; then
+    return 0
+  fi
+  echo "[jot] Default build dir is root-owned: ${BUILD_DIR}"
+  echo "[jot]   Building in user cache instead: ${default_relocate}"
+  BUILD_DIR="${default_relocate}"
+}
+
+choose_build_dir
 mkdir -p "${BUILD_DIR}"
 
 install_required_native_deps
@@ -727,6 +776,23 @@ else
 fi
 
 ensure_prefix_pkg_config_path "${INSTALL_PREFIX}"
+
+if [[ "${USE_SUDO}" -eq 0 ]]; then
+  prefix_blocked=0
+  if [[ -e "${INSTALL_PREFIX}/bin/jot" && ! -w "${INSTALL_PREFIX}/bin/jot" ]]; then
+    prefix_blocked=1
+  fi
+  if [[ -d "${INSTALL_PREFIX}" && ! -w "${INSTALL_PREFIX}" ]]; then
+    prefix_blocked=1
+  fi
+  if [[ "${prefix_blocked}" -eq 1 ]]; then
+    echo "[jot] Install prefix is not writable: ${INSTALL_PREFIX}" >&2
+    echo "[jot] This is usually left over from a previous 'sudo ./install.sh'." >&2
+    echo "[jot]   Fix ownership once, then rerun without sudo:" >&2
+    echo "[jot]   sudo chown -R \"$(id -un)\" \"${INSTALL_PREFIX}\"" >&2
+    exit 1
+  fi
+fi
 
 CMAKE_ARGS=(
   -S "${PROJECT_ROOT}"

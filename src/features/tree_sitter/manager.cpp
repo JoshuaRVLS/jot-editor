@@ -71,6 +71,24 @@ fs::path home_path(const std::string &suffix) {
   return root.empty() ? fs::path() : root / suffix;
 }
 
+fs::path cache_root() {
+#ifdef _WIN32
+  const char *local = getenv("LOCALAPPDATA");
+  if (local && *local) return fs::path(local) / "jot" / "treesitter";
+  const char *home = getenv("USERPROFILE");
+#else
+  const char *xdg = getenv("XDG_CACHE_HOME");
+  if (xdg && *xdg) return fs::path(xdg) / "jot" / "treesitter";
+  const char *home = getenv("HOME");
+#endif
+  return home ? fs::path(home) / ".cache" / "jot" / "treesitter" : fs::path();
+}
+
+fs::path cache_path(const std::string &suffix) {
+  fs::path root = cache_root();
+  return root.empty() ? fs::path() : root / suffix;
+}
+
 #ifdef JOT_TREESITTER
 void close_library_handle(void *handle) {
   if (!handle) return;
@@ -179,8 +197,19 @@ void TreeSitterManager::configure_runtime_paths() {
   if (env_paths && *env_paths) {
     default_library_paths = split_list(env_paths);
   }
+  // JOT_TREESITTER_PREFIX is the documented explicit install root that
+  // :tsinstall installs into; it must also be searched so installed parsers
+  // are found. JOT_TREESITTER_PATH remains an additional search override.
+  const char *prefix = getenv("JOT_TREESITTER_PREFIX");
+  if (prefix && *prefix) {
+    default_library_paths.insert(
+        default_library_paths.begin(), (fs::path(prefix) / "parsers").string());
+  }
   if (!home_path("parsers").empty()) {
     default_library_paths.push_back(home_path("parsers").string());
+  }
+  if (!cache_path("parsers").empty()) {
+    default_library_paths.push_back(cache_path("parsers").string());
   }
   runtime_library_paths_ = default_library_paths;
 
@@ -189,8 +218,15 @@ void TreeSitterManager::configure_runtime_paths() {
   if (env_query_paths && *env_query_paths) {
     default_query_paths = split_list(env_query_paths);
   }
+  if (prefix && *prefix) {
+    default_query_paths.insert(
+        default_query_paths.begin(), (fs::path(prefix) / "queries").string());
+  }
   if (!home_path("queries").empty()) {
     default_query_paths.push_back(home_path("queries").string());
+  }
+  if (!cache_path("queries").empty()) {
+    default_query_paths.push_back(cache_path("queries").string());
   }
   runtime_query_paths_ = default_query_paths;
 }
@@ -352,8 +388,9 @@ void TreeSitterManager::set_runtime_options(
 }
 
 void TreeSitterManager::reload() {
-  ext_to_lang_.clear();
-  languages_.clear();
+  // Keep language registry across reloads to avoid transient empty state
+  // if Lua re-registration fails. Stale entries are overwritten by
+  // registry.register(native) which is authoritative.
 #ifdef JOT_TREESITTER
   for (auto &entry : lua_parsers_) ts_parser_delete(entry.second);
   for (auto &entry : lua_trees_) ts_tree_delete(entry.second);

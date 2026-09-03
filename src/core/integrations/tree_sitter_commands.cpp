@@ -21,11 +21,17 @@ std::string trim_copy(const std::string &s) {
 bool parse_tree_sitter_marker(const std::string &line, std::string &phase,
                               std::string &language) {
   const std::string marker = "[jot:treesitter] ";
-  size_t pos = line.find(marker);
-  if (pos == std::string::npos) {
+  // Only trust markers that start their own terminal row. The install command
+  // is echoed into the terminal as typed, and that echo contains the marker
+  // strings as literal text - notably the EXIT trap's "failed" echo, which
+  // parses as a genuine failure marker for the language. Requiring the marker
+  // at the start of the line keeps the poll from reacting to the echo.
+  size_t first = line.find_first_not_of(" \t");
+  if (first == std::string::npos ||
+      line.compare(first, marker.size(), marker) != 0) {
     return false;
   }
-  std::string rest = trim_copy(line.substr(pos + marker.size()));
+  std::string rest = trim_copy(line.substr(first + marker.size()));
   size_t space = rest.find(' ');
   if (space == std::string::npos) {
     phase = rest;
@@ -172,11 +178,21 @@ void Editor::poll_tree_sitter_installs() {
       continue;
     }
 
-    std::vector<std::string> lines = term->get_recent_lines(80);
+    std::vector<std::string> lines = term->get_recent_lines(200);
+    bool saw_success = false;
+    bool saw_failed = false;
     for (const auto &line : lines) {
       std::string phase;
       std::string lang;
       if (!parse_tree_sitter_marker(line, phase, lang)) {
+        continue;
+      }
+      if (phase == "prefix") {
+        // The script reports the install root it actually used (its shell
+        // environment may differ from the editor's). Remember it so the
+        // parser can be found during verification.
+        job.install_prefix = lang;
+        changed = true;
         continue;
       }
       if (!lang.empty() && lang != job.language) {
@@ -193,26 +209,68 @@ void Editor::poll_tree_sitter_installs() {
       } else if (phase == "query") {
         job.progress = "installing queries";
       } else if (phase == "success") {
+        saw_success = true;
+      } else if (phase == "failed") {
+        saw_failed = true;
+      }
+      changed = true;
+    }
+    if (!job.install_prefix.empty() && !job.prefix_applied) {
+      // Make the installed root searchable even when it is outside the
+      // editor's default paths (e.g. JOT_TREESITTER_PREFIX or shell-only
+      // XDG variables).
+      ts_manager_.set_runtime_options({job.install_prefix + "/parsers"},
+                                      {job.install_prefix + "/queries"}, {});
+      job.prefix_applied = true;
+    }
+    if (saw_success && !job.succeeded) {
+#ifdef JOT_TREESITTER
+      auto status = ts_manager_.runtime_status_for_language(job.language);
+      if (status.parser_loaded) {
         job.progress = "installed";
         job.running = false;
         job.succeeded = true;
         job.failed = false;
-#ifdef JOT_TREESITTER
+        job.verify_attempts = 0;
         reload_tree_sitter();
         for (auto &buf : buffers) {
           if (!buf.filepath.empty()) {
             init_ts_for_buffer(buf);
           }
         }
-#endif
         set_message("Tree-sitter installed: " + job.language);
-      } else if (phase == "failed") {
-        job.progress = "failed";
-        job.running = false;
-        job.failed = true;
-        job.succeeded = false;
-        set_message("Tree-sitter install failed: " + job.language);
+      } else {
+        job.verify_attempts++;
+        if (job.verify_attempts < 4) {
+          job.progress = "installed — verifying…";
+          // Keep running to re-check next poll (filesystem / dlopen may need a moment).
+        } else {
+          job.progress = "installed — parser not found: " +
+                         status.parser_message;
+          job.running = false;
+          job.succeeded = false;
+          job.failed = true;
+          set_message("Tree-sitter installed but parser not found: " +
+                      job.language + " (" + status.parser_message + ")");
+        }
       }
+#else
+      job.progress = "installed";
+      job.running = false;
+      job.succeeded = true;
+      job.failed = false;
+      set_message("Tree-sitter installed: " + job.language);
+#endif
+      changed = true;
+    } else if (saw_failed && !saw_success) {
+      // Ignore transient failed markers that appear before clone (e.g. stale work dir)
+      // Only treat as real failure if we have not yet seen success and job has been running a bit.
+      // The shell script's trap prints failed only on non-zero exit, so respect it, but debounce.
+      job.progress = "failed";
+      job.running = false;
+      job.failed = true;
+      job.succeeded = false;
+      set_message("Tree-sitter install failed: " + job.language);
       changed = true;
     }
 

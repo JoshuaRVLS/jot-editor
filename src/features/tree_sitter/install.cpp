@@ -56,20 +56,29 @@ std::string source_build_command(const TreeSitterInstallMetadata &entry,
          "failed "
       << entry.name << " exit=$rc\"; fi' EXIT; ";
   cmd << "echo '[jot:treesitter] start " << entry.name << "'; ";
-   if (prefix.empty()) {
-     cmd << "prefix=\"${JOT_TREESITTER_PREFIX:-${XDG_DATA_HOME:-$HOME/.local/share}/jot/treesitter}\"; ";
-  } else {
-    cmd << "prefix=" << shell_var_quote(prefix) << "; ";
-  }
-   cmd << "if ! mkdir -p \"$prefix\" 2>/dev/null || [ ! -w \"$prefix\" ]; then echo \"[jot:treesitter] install root is not writable: $prefix\"; exit 1; fi; ";
+    if (prefix.empty()) {
+      cmd << "prefix=\"${JOT_TREESITTER_PREFIX:-${XDG_DATA_HOME:-$HOME/.local/share}/jot/treesitter}\"; ";
+      cmd << "if ! mkdir -p \"$prefix\" 2>/dev/null || [ ! -w \"$prefix\" ]; then ";
+      cmd << "prefix=\"${XDG_CACHE_HOME:-$HOME/.cache}/jot/treesitter\"; ";
+      cmd << "if ! mkdir -p \"$prefix\" 2>/dev/null || [ ! -w \"$prefix\" ]; then echo \"[jot:treesitter] install root is not writable: $prefix\"; exit 1; fi; ";
+      cmd << "echo \"[jot:treesitter] using cache fallback: $prefix\"; ";
+      cmd << "fi; ";
+   } else {
+     cmd << "prefix=" << shell_var_quote(prefix) << "; ";
+     cmd << "if ! mkdir -p \"$prefix\" 2>/dev/null || [ ! -w \"$prefix\" ]; then echo \"[jot:treesitter] install root is not writable: $prefix\"; exit 1; fi; ";
+   }
+   // Report the resolved install root so the editor can search it regardless
+   // of environment differences between the editor and the shell.
+   cmd << "echo \"[jot:treesitter] prefix $prefix\"; ";
    cmd << "libdir=\"$prefix/parsers\"; ";
    cmd << "querydir=\"$prefix/queries/" << entry.name << "\"; ";
   cmd << "case \"$(uname)\" in Darwin) libext=dylib; linkflag=-dynamiclib ;; "
          "*) libext=so; linkflag=-shared ;; esac; ";
-  cmd << "libfile=\"" << lib_stem << ".$libext\"; ";
-  cmd << "work=\"${TMPDIR:-/tmp}/jot-tree-sitter-" << entry.name << "\"; ";
-  cmd << "rm -rf \"$work\"; ";
-  cmd << "mkdir -p \"$libdir\" \"$querydir\"; ";
+   cmd << "libfile=\"" << lib_stem << ".$libext\"; ";
+   cmd << "work_root=\"$(mktemp -d \"${TMPDIR:-/tmp}/jot-tree-sitter-XXXXXX\" 2>/dev/null || echo \"${TMPDIR:-/tmp}/jot-tree-sitter-" << entry.name << "-$$\")\"; ";
+   cmd << "work=\"$work_root/repo\"; ";
+   cmd << "mkdir -p \"$work_root\" 2>/dev/null || { echo \"[jot:treesitter] failed " << entry.name << "\"; exit 1; }; ";
+   cmd << "mkdir -p \"$libdir\" \"$querydir\"; ";
   cmd << "echo '[jot:treesitter] clone " << entry.name << "'; ";
   cmd << "git clone --depth 1 " << shell_quote(entry.url) << " \"$work\"; ";
   cmd << "src=\"$work";
@@ -97,9 +106,10 @@ std::string source_build_command(const TreeSitterInstallMetadata &entry,
   cmd << "if [ \"$#\" -eq 0 ]; then "
          "echo '[jot:treesitter] No generated parser sources found.'; exit 1; "
          "fi; ";
-  cmd << "echo '[jot:treesitter] link " << entry.name << "'; ";
-  cmd << "$cxx \"$linkflag\" \"$@\" -o \"$libdir/$libfile\"; ";
-  cmd << "echo '[jot:treesitter] query " << entry.name << "'; ";
+   cmd << "echo '[jot:treesitter] link " << entry.name << "'; ";
+   cmd << "$cxx \"$linkflag\" \"$@\" -o \"$libdir/$libfile\"; ";
+   cmd << "if [ ! -s \"$libdir/$libfile\" ]; then echo \"[jot:treesitter] failed " << entry.name << "\"; exit 1; fi; ";
+   cmd << "echo '[jot:treesitter] query " << entry.name << "'; ";
   cmd << "if [ -d \"$work/queries\" ]; then "
          "find \"$work/queries\" -maxdepth 1 -type f -name '*.scm' "
          "-exec cp {} \"$querydir/\" \\;; "

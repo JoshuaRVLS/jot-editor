@@ -160,6 +160,9 @@ struct TreeSitterInstallJob {
   bool succeeded = false;
   bool failed = false;
   std::string progress;
+  int verify_attempts = 0;
+  std::string install_prefix;
+  bool prefix_applied = false;
 };
 
 struct LspInstallJob {

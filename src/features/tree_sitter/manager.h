@@ -148,6 +148,7 @@ private:
     std::string source;
     std::string path;
     bool runtime = false;
+    bool stored = false;
   };
 
   QuerySource load_query_source(const std::string &language_name) const;

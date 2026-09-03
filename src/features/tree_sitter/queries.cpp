@@ -34,6 +34,14 @@ TreeSitterManager::load_query_source(const std::string &language_name) const {
       }
     }
   }
+  auto entry_it = languages_.find(language_name);
+  if (entry_it != languages_.end() &&
+      !entry_it->second.highlight_query_source.empty()) {
+    QuerySource query;
+    query.source = entry_it->second.highlight_query_source;
+    query.stored = true;
+    return query;
+  }
   QuerySource query;
   query.source.clear();
   query.runtime = false;
@@ -67,7 +75,7 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension) {
   };
 
   QuerySource source = load_query_source(language_id);
-  if (!source.runtime) {
+  if (source.source.empty()) {
     query_diagnostics_[language_id] = "query unavailable; Lua policy not loaded";
     return nullptr;
   }
@@ -75,10 +83,12 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension) {
   TSQueryError error_type = TSQueryErrorNone;
   TSQuery *query = compile_query(source.source, error_offset, error_type);
   runtime_query_used_[language_id] = source.runtime && query != nullptr;
-  builtin_query_used_[language_id] = !source.runtime && query != nullptr;
+  builtin_query_used_[language_id] = source.stored && query != nullptr;
   if (query) {
     query_cache_[language_id] = query;
-     query_diagnostics_[language_id] = "runtime query loaded: " + source.path;
+     query_diagnostics_[language_id] =
+         source.runtime ? ("runtime query loaded: " + source.path)
+                        : "Lua query loaded";
     return query;
   }
 
@@ -88,8 +98,13 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension) {
   runtime_query_used_[language_id] = false;
   builtin_query_used_[language_id] = false;
   std::string message;
-  message = source.runtime ? "runtime query failed: " + source.path + "; "
-                            : "query unavailable; ";
+  if (source.runtime) {
+    message = "runtime query failed: " + source.path + "; ";
+  } else if (source.stored) {
+    message = "Lua query failed; ";
+  } else {
+    message = "query unavailable; ";
+  }
   message += final_query_error;
   query_diagnostics_[language_id] = message;
   return nullptr;
@@ -155,29 +170,70 @@ std::vector<TreeSitterCapture> TreeSitterManager::captures_for_handles(
 bool TreeSitterManager::set_query_source(const std::string &extension,
                                          const std::string &source,
                                          std::string &error) {
-  TreeSitterHandle handle = compile_query_handle(extension, source);
-  if (!handle) {
-    const std::string language_id = language_for_extension(extension);
+  const std::string language_id = language_for_extension(extension);
+  if (language_id.empty()) {
+    error = "unsupported language";
+    return false;
+  }
+  auto entry_it = languages_.find(language_id);
+  if (entry_it == languages_.end()) {
+    error = "language not registered";
+    return false;
+  }
+  // Store the Lua-provided source first. A parser may not be installed yet;
+  // the query is compiled lazily (or validated now when possible).
+  entry_it->second.highlight_query_source = source;
+
+#ifdef JOT_TREESITTER
+  const TSLanguage *language = load_language(language_id);
+  if (!language) {
+    query_diagnostics_[language_id] =
+        "Lua query stored (parser not installed yet)";
+    runtime_query_used_[language_id] = false;
+    builtin_query_used_[language_id] = false;
+    return true;
+  }
+
+  uint32_t offset = 0;
+  TSQueryError query_error = TSQueryErrorNone;
+  TSQuery *query = ts_query_new(language, source.c_str(),
+                                static_cast<uint32_t>(source.size()),
+                                &offset, &query_error);
+  if (!query) {
     error = "query compilation failed";
     query_diagnostics_[language_id] = error;
     runtime_query_used_[language_id] = false;
     builtin_query_used_[language_id] = false;
     return false;
   }
-  const std::string language_id = language_for_extension(extension);
-  auto query_it = lua_queries_.find(handle);
+
   auto cached = query_cache_.find(language_id);
   if (cached != query_cache_.end()) ts_query_delete(cached->second);
-  query_cache_[language_id] = query_it->second;
-  lua_queries_.erase(query_it);
+  query_cache_[language_id] = query;
   runtime_query_used_[language_id] = false;
-  builtin_query_used_[language_id] = false;
+  builtin_query_used_[language_id] = true;
   query_diagnostics_[language_id] = "Lua query loaded";
+#endif
   return true;
 }
 #else
 TreeSitterHandle TreeSitterManager::compile_query_handle(const std::string &, const std::string &) { return 0; }
 bool TreeSitterManager::delete_query_handle(TreeSitterHandle) { return false; }
 std::vector<TreeSitterCapture> TreeSitterManager::captures_for_handles(TreeSitterHandle, TreeSitterHandle, uint32_t, uint32_t) const { return {}; }
-bool TreeSitterManager::set_query_source(const std::string &, const std::string &, std::string &error) { error = "Tree-sitter runtime not available"; return false; }
+bool TreeSitterManager::set_query_source(const std::string &extension,
+                                         const std::string &source,
+                                         std::string &error) {
+  const std::string language_id = language_for_extension(extension);
+  if (language_id.empty()) {
+    error = "unsupported language";
+    return false;
+  }
+  auto entry_it = languages_.find(language_id);
+  if (entry_it == languages_.end()) {
+    error = "language not registered";
+    return false;
+  }
+  entry_it->second.highlight_query_source = source;
+  return true;
+}
 #endif

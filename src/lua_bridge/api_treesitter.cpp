@@ -158,6 +158,19 @@ bool LuaAPI::is_main_thread() const { return editor && editor->event_loop_.is_ma
 
 void LuaAPI::register_treesitter_api(lua_State *L) {
   lua_getglobal(L, "jot");
+  if (lua_isnil(L, -1)) {
+    lua_pop(L, 1);
+    lua_newtable(L);
+    lua_pushvalue(L, -1);
+    lua_setglobal(L, "jot");
+  }
+  lua_getfield(L, -1, "treesitter");
+  if (lua_isnil(L, -1)) {
+    lua_pop(L, 1);
+    lua_newtable(L);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -3, "treesitter");
+  }
   lua_newtable(L);
   bind(L, this, "language_for_extension", l_language_for_extension);
   bind(L, this, "status", l_status); bind(L, this, "register_language", l_register_language);
@@ -169,7 +182,7 @@ void LuaAPI::register_treesitter_api(lua_State *L) {
   bind(L, this, "captures", l_captures); bind(L, this, "set_query", l_set_query);
   bind(L, this, "set_capture_color", l_set_capture_color); bind(L, this, "reload", l_reload);
   lua_setfield(L, -2, "native");
-  lua_pop(L, 1);
+  lua_pop(L, 2);
 }
 
 bool LuaAPI::load_treesitter_runtime(lua_State *L) {

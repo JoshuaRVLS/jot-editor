@@ -89,7 +89,8 @@ for _, item in ipairs(data) do
   local language = {name = item[1], url = item[2], extensions = item[3],
     source_subdir = item[4] or "", aliases = item[5] or {},
     symbol = "tree_sitter_" .. item[1], library_names = libraries(item[1]),
-    query_file = "queries/" .. item[1] .. "/highlights.scm", minimal_query = ""}
+    -- Relative to lua/treesitter/queries/ (queries.lua prepends the dir).
+    query_file = item[1] .. "/highlights.scm", minimal_query = ""}
   if language.name == "cpp" then
     language.minimal_query = [[
 "break" @keyword

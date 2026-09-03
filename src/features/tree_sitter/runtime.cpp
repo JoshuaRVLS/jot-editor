@@ -111,7 +111,10 @@ const TSLanguage *TreeSitterManager::load_language(
   if (metadata == languages_.end()) return nullptr;
   const TSLanguage *lang = nullptr;
   auto cached = parser_languages_.find(lid);
-  if (cached != parser_languages_.end()) {
+  // Only trust a cached parser when it actually loaded. A null entry means an
+  // earlier attempt failed (e.g. before :tsinstall finished downloading), and
+  // the library may exist now - so fall through and re-search the paths.
+  if (cached != parser_languages_.end() && cached->second != nullptr) {
     lang = cached->second;
   } else {
      const std::string symbol = metadata->second.symbol.empty()
@@ -155,9 +158,15 @@ const TSLanguage *TreeSitterManager::load_language(
       parser_diagnostics_[lid] = "parser loaded";
     } else {
       parser_languages_[lid] = nullptr;
+      std::string roots;
+      for (const auto &root : runtime_library_paths_) {
+        if (!roots.empty()) roots += ", ";
+        roots += root;
+      }
       parser_diagnostics_[lid] =
           last_error.empty()
-              ? "no parser library candidates for " + lid
+              ? "no parser library candidates for " + lid +
+                    (roots.empty() ? "" : "; search roots: " + roots)
               : "parser not loaded; tried " +
                     std::to_string(candidates.size()) +
                     " candidate(s); last error: " + last_error;
