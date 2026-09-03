@@ -29,6 +29,9 @@ public:
                                     bool trim_items = true);
   bool has(const std::string &key) const;
   void unset(const std::string &key);
+  // All currently-known keys (defaults + loaded/overridden values).
+  std::vector<std::string> keys() const;
+  const std::string &path() const { return config_path; }
 };
 
 #endif

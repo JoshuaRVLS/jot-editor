@@ -645,6 +645,10 @@ private:
   void initialize_lua_runtime();
   void initialize_terminal_ui();
   void initialize_placeholder_buffer();
+  // Re-reads every config key that maps to live editor state and applies it
+  // immediately (no restart). Idempotent; called after Lua config/plugin load
+  // and by reload_config().
+  void apply_config_live();
 
   int create_pane(int x, int y, int w, int h, int buffer_id);
   void update_pane_layout();

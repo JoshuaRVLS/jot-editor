@@ -254,3 +254,13 @@ bool Config::has(const std::string &key) const {
 void Config::unset(const std::string &key) {
   settings.erase(key);
 }
+
+std::vector<std::string> Config::keys() const {
+  std::vector<std::string> out;
+  out.reserve(settings.size());
+  for (const auto &[key, value] : settings) {
+    (void)value;
+    out.push_back(key);
+  }
+  return out;
+}
