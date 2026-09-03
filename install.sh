@@ -22,6 +22,31 @@ JOBS="2"
 PREFIX_EXPLICIT=0
 BUILD_DIR_EXPLICIT=0
 
+# --- logging helpers ---------------------------------------------------------
+# Colors are used only when attached to a terminal (and NO_COLOR is unset),
+# so piped output stays plain.
+if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then
+  C_BOLD=$'\033[1m'
+  C_CYAN=$'\033[36m'
+  C_GREEN=$'\033[32m'
+  C_YELLOW=$'\033[33m'
+  C_RED=$'\033[31m'
+  C_RESET=$'\033[0m'
+else
+  C_BOLD=''
+  C_CYAN=''
+  C_GREEN=''
+  C_YELLOW=''
+  C_RED=''
+  C_RESET=''
+fi
+
+log_step()  { printf '%s==>%s %s%s%s\n' "${C_CYAN}" "${C_RESET}" "${C_BOLD}" "$*" "${C_RESET}"; }
+log_ok()    { printf '%s✓%s %s\n' "${C_GREEN}" "${C_RESET}" "$*"; }
+log_info()  { printf '%s\n' "$*"; }
+log_warn()  { printf '%s!%s %s\n' "${C_YELLOW}" "${C_RESET}" "$*" >&2; }
+log_error() { printf '%s✗%s %s\n' "${C_RED}" "${C_RESET}" "$*" >&2; }
+
 print_help() {
   cat <<'USAGE'
 Usage: ./install.sh [options]
@@ -57,13 +82,13 @@ USAGE
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --prefix)
-      [[ $# -ge 2 ]] || { echo "Missing value for --prefix" >&2; exit 1; }
+      [[ $# -ge 2 ]] || { log_error "Missing value for --prefix"; exit 1; }
       INSTALL_PREFIX="$2"
       PREFIX_EXPLICIT=1
       shift 2
       ;;
     --build-dir)
-      [[ $# -ge 2 ]] || { echo "Missing value for --build-dir" >&2; exit 1; }
+      [[ $# -ge 2 ]] || { log_error "Missing value for --build-dir"; exit 1; }
       BUILD_DIR="$2"
       BUILD_DIR_EXPLICIT=1
       shift 2
@@ -109,7 +134,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -j|--jobs)
-      [[ $# -ge 2 ]] || { echo "Missing value for $1" >&2; exit 1; }
+      [[ $# -ge 2 ]] || { log_error "Missing value for $1"; exit 1; }
       JOBS="$2"
       shift 2
       ;;
@@ -118,7 +143,7 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      echo "Unknown option: $1" >&2
+      log_error "Unknown option: $1"
       print_help
       exit 1
       ;;
@@ -126,31 +151,31 @@ while [[ $# -gt 0 ]]; do
 done
 
 if ! [[ "${JOBS}" =~ ^[1-9][0-9]*$ ]]; then
-  echo "Error: --jobs must be a positive number" >&2
+  log_error "--jobs must be a positive number"
   exit 1
 fi
 
 if [[ "${EUID}" -eq 0 ]] && [[ "${PREFIX_EXPLICIT}" -eq 0 ]]; then
   if [[ "${INSTALL_PREFIX}" == "/root/.local" ]] && [[ -n "${SUDO_USER:-}" ]]; then
-    echo "[jot] Running as root via sudo, using ${DEFAULT_HOME}/.local for ${SUDO_USER}"
+    log_info "Running as root via sudo; installing to ${DEFAULT_HOME}/.local for ${SUDO_USER}"
   elif [[ "${INSTALL_PREFIX}" == "/root/.local" ]]; then
-    echo "[jot] Warning: install prefix is /root/.local"
-    echo "[jot] If this is not intended, run as your normal user or pass --prefix <path>."
+    log_warn "Install prefix is /root/.local"
+    log_warn "If this is not intended, run as your normal user or pass --prefix <path>."
   fi
 fi
 
 if ! command -v cmake >/dev/null 2>&1; then
-  echo "Error: cmake not found in PATH" >&2
+  log_error "cmake not found in PATH"
   exit 1
 fi
 
 if ! command -v pkg-config >/dev/null 2>&1; then
-  echo "Error: pkg-config not found in PATH" >&2
+  log_error "pkg-config not found in PATH"
   exit 1
 fi
 
 if [[ "${USE_SUDO}" -eq 1 ]] && ! command -v sudo >/dev/null 2>&1; then
-  echo "Error: --sudo requested but sudo is not available" >&2
+  log_error "--sudo requested but sudo is not available"
   exit 1
 fi
 
@@ -204,25 +229,24 @@ ensure_valid_built_jot() {
     return 0
   fi
 
-  echo "[jot] Detected invalid build artifact at ${binary}; rebuilding jot"
+  log_warn "Invalid build artifact at ${binary}; rebuilding jot"
   rm -f "${binary}"
   cmake --build "${BUILD_DIR}" --target jot --parallel "${JOBS}"
 
   if ! is_valid_jot_binary "${binary}"; then
-    echo "[jot] Error: build did not produce a valid jot executable at ${binary}" >&2
+    log_error "Build did not produce a valid jot executable at ${binary}"
     return 1
   fi
 }
 
+# Runs a command silently; only reports when it fails.
 attempt_cmd() {
   local desc="$1"
   shift
-  echo "[jot:lsp] ${desc}"
   if "$@"; then
-    echo "[jot:lsp] OK: ${desc}"
     return 0
   fi
-  echo "[jot:lsp] Failed: ${desc}" >&2
+  log_warn "Failed: ${desc}"
   return 1
 }
 
@@ -244,7 +268,6 @@ ensure_prefix_pkg_config_path() {
 
 install_python_lsp() {
   if command -v pylsp >/dev/null 2>&1; then
-    echo "[jot:lsp] pylsp already installed"
     return 0
   fi
 
@@ -286,18 +309,16 @@ install_python_lsp() {
       run_as_default_user "${venv_dir}/bin/python" -m pip install -U python-lsp-server; then
       run_as_default_user mkdir -p "${user_bin}"
       run_as_default_user ln -sf "${venv_dir}/bin/pylsp" "${user_bin}/pylsp"
-      echo "[jot:lsp] Installed pylsp in venv and linked to ${user_bin}/pylsp"
       return 0
     fi
   fi
 
-  echo "[jot:lsp] Warning: unable to install pylsp automatically." >&2
+  log_warn "Unable to install pylsp automatically"
   return 1
 }
 
 install_typescript_lsp() {
   if command -v typescript-language-server >/dev/null 2>&1; then
-    echo "[jot:lsp] typescript-language-server already installed"
     return 0
   fi
   if command -v npm >/dev/null 2>&1; then
@@ -306,13 +327,12 @@ install_typescript_lsp() {
       return 0
     fi
   fi
-  echo "[jot:lsp] Warning: unable to install typescript-language-server automatically." >&2
+  log_warn "Unable to install typescript-language-server automatically"
   return 1
 }
 
 install_html_lsp() {
   if command -v vscode-html-language-server >/dev/null 2>&1; then
-    echo "[jot:lsp] vscode-html-language-server already installed"
     return 0
   fi
   if command -v npm >/dev/null 2>&1; then
@@ -321,13 +341,12 @@ install_html_lsp() {
       return 0
     fi
   fi
-  echo "[jot:lsp] Warning: unable to install vscode-html-language-server automatically." >&2
+  log_warn "Unable to install vscode-html-language-server automatically"
   return 1
 }
 
 install_bash_lsp() {
   if command -v bash-language-server >/dev/null 2>&1; then
-    echo "[jot:lsp] bash-language-server already installed"
     return 0
   fi
   if command -v npm >/dev/null 2>&1; then
@@ -336,13 +355,12 @@ install_bash_lsp() {
       return 0
     fi
   fi
-  echo "[jot:lsp] Warning: unable to install bash-language-server automatically." >&2
+  log_warn "Unable to install bash-language-server automatically"
   return 1
 }
 
 install_rust_analyzer() {
   if command -v rust-analyzer >/dev/null 2>&1; then
-    echo "[jot:lsp] rust-analyzer already installed"
     return 0
   fi
 
@@ -371,13 +389,12 @@ install_rust_analyzer() {
       brew install rust-analyzer && return 0
   fi
 
-  echo "[jot:lsp] Warning: unable to install rust-analyzer automatically." >&2
+  log_warn "Unable to install rust-analyzer automatically"
   return 1
 }
 
 install_gopls() {
   if command -v gopls >/dev/null 2>&1; then
-    echo "[jot:lsp] gopls already installed"
     return 0
   fi
 
@@ -407,19 +424,17 @@ install_gopls() {
       brew install gopls && return 0
   fi
 
-  echo "[jot:lsp] Warning: unable to install gopls automatically." >&2
+  log_warn "Unable to install gopls automatically"
   return 1
 }
 
 install_lua_ls() {
   if command -v lua-language-server >/dev/null 2>&1; then
-    echo "[jot:lsp] lua-language-server already installed"
     return 0
   fi
   if command -v lua_ls >/dev/null 2>&1; then
     run_as_default_user mkdir -p "${DEFAULT_HOME}/.local/bin"
     run_as_default_user ln -sf "$(command -v lua_ls)" "${DEFAULT_HOME}/.local/bin/lua-language-server"
-    echo "[jot:lsp] Linked lua_ls -> ${DEFAULT_HOME}/.local/bin/lua-language-server"
     return 0
   fi
 
@@ -451,17 +466,15 @@ install_lua_ls() {
   if command -v lua_ls >/dev/null 2>&1; then
     run_as_default_user mkdir -p "${DEFAULT_HOME}/.local/bin"
     run_as_default_user ln -sf "$(command -v lua_ls)" "${DEFAULT_HOME}/.local/bin/lua-language-server"
-    echo "[jot:lsp] Linked lua_ls -> ${DEFAULT_HOME}/.local/bin/lua-language-server"
     return 0
   fi
 
-  echo "[jot:lsp] Warning: unable to install lua-language-server automatically." >&2
+  log_warn "Unable to install lua-language-server automatically"
   return 1
 }
 
 install_clangd() {
   if command -v clangd >/dev/null 2>&1; then
-    echo "[jot:lsp] clangd already installed"
     return 0
   fi
 
@@ -495,13 +508,12 @@ install_clangd() {
       brew install llvm && return 0
   fi
 
-  echo "[jot:lsp] Warning: unable to install clangd automatically." >&2
+  log_warn "Unable to install clangd automatically"
   return 1
 }
 
 install_prettier() {
   if command -v prettier >/dev/null 2>&1; then
-    echo "[jot] prettier already installed"
     return 0
   fi
 
@@ -553,17 +565,17 @@ install_prettier() {
     fi
   fi
 
-  echo "[jot] Warning: unable to install prettier automatically." >&2
+  log_warn "Unable to install prettier automatically"
   return 1
 }
 
 install_treesitter_deps() {
-  echo "[jot:treesitter] Installing Tree-sitter runtime package (parsers remain user-owned)"
+  log_step "Tree-sitter runtime"
   local failures=0
   ensure_prefix_pkg_config_path "${INSTALL_PREFIX}"
 
   if pkg-config --exists tree-sitter >/dev/null 2>&1; then
-    echo "[jot:treesitter] Tree-sitter runtime already available via pkg-config; skipping."
+    log_ok "Tree-sitter runtime already available via pkg-config"
     return 0
   fi
 
@@ -575,9 +587,8 @@ install_treesitter_deps() {
   }
 
   if ! can_use_package_manager; then
-    echo "[jot:treesitter] Skipped system Tree-sitter package install (requires root)." >&2
-    echo "[jot:treesitter] The bundled build works without it; regex highlighting is the fallback." >&2
-    echo "[jot:treesitter] Per-user parsers are installed later with :tsinstall <language>." >&2
+    log_info "Skipped system Tree-sitter package install (requires root); the bundled build works and"
+    log_info "per-user parsers install later with :tsinstall <language>."
     return 0
   fi
 
@@ -600,14 +611,14 @@ install_treesitter_deps() {
     attempt_cmd "Installing Tree-sitter runtime via brew" \
       brew install tree-sitter || failures=$((failures + 1))
   else
-    echo "[jot:treesitter] Warning: no supported package manager found." >&2
+    log_warn "No supported package manager found for Tree-sitter"
     failures=$((failures + 1))
   fi
 
   if [[ "${failures}" -gt 0 ]]; then
-    echo "[jot:treesitter] Completed with warning(s). Tree-sitter may fall back to regex highlighting." >&2
+    log_warn "Tree-sitter install had warnings; highlighting may fall back to regex"
   else
-    echo "[jot:treesitter] Tree-sitter runtime install completed."
+    log_ok "Tree-sitter runtime ready"
   fi
 }
 
@@ -626,7 +637,7 @@ install_required_native_deps() {
       return 0
     fi
 
-    echo "[jot:deps] Installing build acceleration tools (ninja, ccache)"
+    log_step "Build tools (ninja, ccache)"
     if command -v pacman >/dev/null 2>&1; then
       attempt_cmd "Installing ninja and ccache via pacman" \
         run_maybe_sudo pacman -Sy --noconfirm ninja ccache || true
@@ -646,7 +657,7 @@ install_required_native_deps() {
       attempt_cmd "Installing ninja and ccache via brew" \
         brew install ninja ccache || true
     else
-      echo "[jot:deps] Warning: no supported package manager found for ninja/ccache." >&2
+      log_warn "No supported package manager found for ninja/ccache"
     fi
   }
 
@@ -656,7 +667,7 @@ install_required_native_deps() {
     return 0
   fi
 
-  echo "[jot:deps] Installing required native packages (libvterm, libtermkey, libuv, utf8proc)"
+  log_step "Required native packages (libvterm, libtermkey, libuv, utf8proc)"
   ensure_prefix_pkg_config_path "${INSTALL_PREFIX}"
 
   if command -v pacman >/dev/null 2>&1; then
@@ -703,13 +714,13 @@ install_required_native_deps() {
       brew install libvterm libtermkey libuv utf8proc && return 0
   fi
 
-  echo "[jot:deps] Error: install libvterm, libtermkey, libuv, and utf8proc development packages, then rerun install.sh." >&2
-  echo "[jot:deps] Arch note: libtermkey may be available from AUR as 'libtermkey'." >&2
+  log_error "Install libvterm, libtermkey, libuv, and utf8proc development packages, then rerun install.sh"
+  log_info "Arch note: libtermkey may be available from AUR as 'libtermkey'."
   return 1
 }
 
 install_builtin_lsps() {
-  echo "[jot:lsp] Installing built-in LSP servers (python/typescript/js/jsx/tsx/html/cpp/rust/go/lua/bash)"
+  log_step "LSP servers (python/typescript/js/jsx/tsx/html/cpp/rust/go/lua/bash)"
   local failures=0
 
   install_python_lsp || failures=$((failures + 1))
@@ -722,9 +733,9 @@ install_builtin_lsps() {
   install_bash_lsp || failures=$((failures + 1))
 
   if [[ "${failures}" -gt 0 ]]; then
-    echo "[jot:lsp] Completed with ${failures} warning(s). Some LSP servers may need manual install." >&2
+    log_warn "${failures} LSP server(s) could not be installed automatically; install them manually"
   else
-    echo "[jot:lsp] All built-in LSP servers are installed."
+    log_ok "All built-in LSP servers installed"
   fi
 }
 
@@ -732,9 +743,8 @@ choose_build_dir() {
   local default_relocate="${XDG_CACHE_HOME:-${HOME}/.cache}/jot/build"
   if [[ "${BUILD_DIR_EXPLICIT}" -eq 1 ]]; then
     if [[ -d "${BUILD_DIR}" && ! -w "${BUILD_DIR}" ]]; then
-      echo "[jot] Error: --build-dir is not writable: ${BUILD_DIR}" >&2
-      echo "[jot]   Fix ownership first:" >&2
-      echo "[jot]   sudo chown -R \"$(id -un)\" \"${BUILD_DIR}\"" >&2
+      log_error "--build-dir is not writable: ${BUILD_DIR}"
+      log_info "Fix ownership first: sudo chown -R \"$(id -un)\" \"${BUILD_DIR}\""
       exit 1
     fi
     return 0
@@ -743,15 +753,14 @@ choose_build_dir() {
     if mkdir -p "${BUILD_DIR}" 2>/dev/null; then
       return 0
     fi
-    echo "[jot] ${PROJECT_ROOT} is not writable; building in ${default_relocate}"
+    log_info "${PROJECT_ROOT} is not writable; building in ${default_relocate}"
     BUILD_DIR="${default_relocate}"
     return 0
   fi
   if [[ -w "${BUILD_DIR}" ]]; then
     return 0
   fi
-  echo "[jot] Default build dir is root-owned: ${BUILD_DIR}"
-  echo "[jot]   Building in user cache instead: ${default_relocate}"
+  log_info "Default build dir is root-owned: ${BUILD_DIR}; building in ${default_relocate} instead"
   BUILD_DIR="${default_relocate}"
 }
 
@@ -762,17 +771,17 @@ install_required_native_deps
 
 NINJA_BIN="$(ninja_command || true)"
 if [[ -z "${NINJA_BIN}" ]]; then
-  echo "[jot:deps] Error: Ninja is required for install builds. Install ninja or ninja-build, then rerun install.sh." >&2
+  log_error "Ninja is required for install builds. Install ninja or ninja-build, then rerun install.sh."
   exit 1
 fi
 if ! command -v ccache >/dev/null 2>&1; then
-  echo "[jot:deps] Warning: ccache not found; rebuilds will be slower." >&2
+  log_info "ccache not found; rebuilds will be slower"
 fi
 
 if [[ "${INSTALL_TREESITTER}" -eq 1 ]]; then
   install_treesitter_deps || true
 else
-  echo "[jot:treesitter] Skipped Tree-sitter dependency install (--with-treesitter to enable)"
+  log_info "Skipped Tree-sitter dependency install (--with-treesitter to enable)"
 fi
 
 ensure_prefix_pkg_config_path "${INSTALL_PREFIX}"
@@ -786,10 +795,9 @@ if [[ "${USE_SUDO}" -eq 0 ]]; then
     prefix_blocked=1
   fi
   if [[ "${prefix_blocked}" -eq 1 ]]; then
-    echo "[jot] Install prefix is not writable: ${INSTALL_PREFIX}" >&2
-    echo "[jot] This is usually left over from a previous 'sudo ./install.sh'." >&2
-    echo "[jot]   Fix ownership once, then rerun without sudo:" >&2
-    echo "[jot]   sudo chown -R \"$(id -un)\" \"${INSTALL_PREFIX}\"" >&2
+    log_error "Install prefix is not writable: ${INSTALL_PREFIX}"
+    log_info "This is usually left over from a previous 'sudo ./install.sh'."
+    log_info "Fix ownership once, then rerun without sudo: sudo chown -R \"$(id -un)\" \"${INSTALL_PREFIX}\""
     exit 1
   fi
 fi
@@ -804,19 +812,19 @@ CMAKE_ARGS=(
 
 BUILD_ARGS=(--build "${BUILD_DIR}" --parallel "${JOBS}")
 
-echo "[jot] Configuring (${BUILD_TYPE})"
+log_step "Configuring (${BUILD_TYPE})"
 cmake "${CMAKE_ARGS[@]}"
 
-echo "[jot] Building"
+log_step "Building"
 cmake "${BUILD_ARGS[@]}"
 ensure_valid_built_jot
 
 if [[ "${RUN_TESTS}" -eq 1 ]]; then
-  echo "[jot] Running tests"
+  log_step "Running tests"
   ctest --test-dir "${BUILD_DIR}" --output-on-failure
 fi
 
-echo "[jot] Installing to ${INSTALL_PREFIX}"
+log_step "Installing to ${INSTALL_PREFIX}"
 if [[ "${USE_SUDO}" -eq 1 ]]; then
   sudo cmake --install "${BUILD_DIR}"
 else
@@ -824,35 +832,29 @@ else
 fi
 
 if [[ "${INSTALL_TOOLS}" -eq 1 ]]; then
-  echo "[jot] Installing formatter dependency (prettier)"
+  log_step "Formatter tooling (prettier)"
   install_prettier || true
 else
-  echo "[jot] Skipped optional formatter tooling (--with-tools to enable)"
+  log_info "Skipped optional formatter tooling (--with-tools to enable)"
 fi
 
 if [[ "${INSTALL_LSP}" -eq 1 ]]; then
   install_builtin_lsps
 else
-  echo "[jot:lsp] Skipped optional LSP server install (--with-lsp to enable)"
+  log_info "Skipped optional LSP server install (--with-lsp to enable)"
 fi
-
-echo "[jot] Done"
-echo "Add ${INSTALL_PREFIX}/bin to PATH if needed."
 
 EXPECTED_BIN="${INSTALL_PREFIX}/bin/jot"
 ACTIVE_JOT="$(command -v jot 2>/dev/null || true)"
 
-echo "[jot] Installed binary: ${EXPECTED_BIN}"
+log_ok "jot installed at ${EXPECTED_BIN}"
 if [[ -n "${ACTIVE_JOT}" ]]; then
   ACTIVE_REAL="$(realpath "${ACTIVE_JOT}" 2>/dev/null || echo "${ACTIVE_JOT}")"
   EXPECTED_REAL="$(realpath "${EXPECTED_BIN}" 2>/dev/null || echo "${EXPECTED_BIN}")"
-  echo "[jot] Active jot in PATH: ${ACTIVE_REAL}"
   if [[ "${ACTIVE_REAL}" != "${EXPECTED_REAL}" ]]; then
-    echo "[jot] WARNING: active 'jot' is not the one just installed." >&2
-    echo "[jot] Use '${EXPECTED_BIN}' directly or fix PATH order." >&2
-    echo "[jot] Tip: run 'hash -r' after updating PATH in current shell." >&2
+    log_warn "Active 'jot' in PATH is ${ACTIVE_REAL}, not the one just installed"
+    log_info "Use '${EXPECTED_BIN}' directly or fix PATH order (run 'hash -r' in the current shell)."
   fi
 else
-  echo "[jot] No 'jot' found in PATH yet."
-  echo "[jot] Run '${EXPECTED_BIN}' directly or add '${INSTALL_PREFIX}/bin' to PATH."
+  log_info "Run '${EXPECTED_BIN}' directly, or add '${INSTALL_PREFIX}/bin' to PATH."
 fi
