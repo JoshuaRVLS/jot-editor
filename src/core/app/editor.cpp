@@ -57,6 +57,52 @@ void Editor::load_runtime_config() {
 #endif
 }
 
+void Editor::apply_config_live() {
+  tab_size = std::clamp(config.get_int("tab_size", 2), 1, 16);
+  show_indent_guides = config.get_bool("show_indent_guides", false);
+  relative_line_numbers = config.get_bool("relative_line_numbers", false);
+  auto_indent = config.get_bool("auto_indent", true);
+  smart_paste_indent = config.get_bool("smart_paste_indent", true);
+  set_auto_save(config.get_bool("auto_save", false), false);
+  set_auto_save_interval(config.get_int("auto_save_interval_ms", 2000),
+                         false);
+  render_fps = std::clamp(config.get_int("render_fps", 120), 30, 240);
+  idle_fps = std::clamp(config.get_int("idle_fps", 60), 5, 240);
+  lsp_change_debounce_ms =
+      std::clamp(config.get_int("lsp_change_debounce_ms", 120), 25, 1000);
+  integrated_terminal_height =
+      std::clamp(config.get_int("terminal_height", 10), 5, 20);
+  debugger_panel_height =
+      std::clamp(config.get_int("debugger_height", 12), 6, 24);
+  right_panel_width =
+      std::clamp(config.get_int("right_panel_width", 42), 28, 80);
+  image_viewer.configure_backend(config.get("image_viewer_backend", "auto"));
+#ifdef JOT_TREESITTER
+  ts_manager_.set_runtime_options(
+      config.get_list("treesitter_library_paths"),
+      config.get_list("treesitter_query_paths"),
+      config.get_list("treesitter_language_overrides"));
+#endif
+  // Keys that are read on every use (prettier_on_save, clang_format_on_save,
+  // auto_detect_indent, lsp_completion_*) need no mirroring: they are live
+  // automatically. show_minimap / show_sidebar / widths are toggled by their
+  // own commands and intentionally not forced here.
+  const std::string scheme = config.get("color_scheme", "");
+  if (!scheme.empty() && scheme != current_theme_name) {
+    apply_theme(scheme, false, false);
+  }
+  needs_redraw = true;
+}
+
+void Editor::reload_config() {
+  config.load();
+  if (lua_api) {
+    lua_api->load_config_file();
+  }
+  apply_config_live();
+  set_message("Config reloaded");
+}
+
 void Editor::initialize_state_defaults() {
   running = true;
   keyboard_press_count = 0;
@@ -399,6 +445,7 @@ void Editor::set_diagnostics(const std::string &filepath,
   }
 
   if (lua_api) lua_api->fire_autocmd("DiagnosticChanged", filepath, current_buffer);
+  if (lua_api) lua_api->emit_diagnostics_changed(filepath, diagnostics);
 }
 
 void Editor::add_diagnostic(const std::string &filepath,

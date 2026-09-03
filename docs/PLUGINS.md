@@ -24,7 +24,12 @@ Available injected globals include `command`, `autocmd`, `register_keymap`,
 `get_selection`, `replace_selection`, `insert_text`, `cursor`, `set_cursor`,
 `current_file`, `open_file`, `save`, `execute`, `run_job`, `show_picker`, and
 `show_panel`. The `jot` global contains runtime metadata such as
-`jot.api_version`.
+`jot.api_version` and the extended namespaces documented in
+`docs/LUA_API.md`: `jot.buffer.set_var/get_var/del_var` (buffer-local
+variables), `jot.diagnostics.get`, `jot.marks.*` (named marks),
+`jot.job.capture` (async output capture), and `jot.status.register`
+(custom status bar segments). `BufChange` autocmd callbacks now receive the
+editing buffer's `buffer`, `line`, and `column` fields.
 
 Callbacks receive a string. Autocmd callbacks receive `event\nfile\nbuffer`.
 Picker and panel callbacks return a Lua array of strings.

@@ -243,6 +243,7 @@ struct EditorState {
   std::vector<std::string> recent_files;
   std::vector<std::string> recent_workspaces;
   std::unordered_map<std::string, int> workspace_diagnostic_severity;
+  std::map<char, GlobalMark> global_marks; // global marks ('A'-'Z'), cross-file
   std::string git_root;
   std::string git_branch;
   int git_dirty_count;

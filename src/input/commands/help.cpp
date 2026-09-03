@@ -23,6 +23,7 @@ void Editor::show_command_help(const std::string &topic_text) {
         ":surround :unsurround :fold :unfold :togglefold :foldall "
          ":unfoldall :incnum :decnum :lspmanager "
          ":tsinstall <language> :tsstatus :tsreload "
+        ":reload :reloadconfig :reloadplugins "
         ":task [name] :tasknew <name> :taskrerun "
         ":debug <program> :debugconfig [name] :debugstop "
         ":debugcontinue :debugnext :debugstep :debugout "

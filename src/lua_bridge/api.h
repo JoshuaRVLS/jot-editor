@@ -2,11 +2,15 @@
 #define LUA_API_H
 
 #include "text_features.h"
-#include <string>
-#include <vector>
-#include <unordered_map>
+#include "tools/debugger/client.h"
+#include "tools/lsp/client.h"
 #include <array>
+#include <cstdint>
+#include <functional>
 #include <map>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 struct LuaScratchBuffer {
   int handle = 0;
@@ -65,11 +69,31 @@ struct PluginPanel {
   std::string title;
 };
 
+struct PluginStatusSegment {
+  std::string name;
+  std::string callback; // registry key into lua_callbacks
+  std::string side;     // "left" or "right"
+  int priority = 50;
+  int fg = -1; // optional xterm color override; -1 = theme status color
+};
+
+struct RenderedStatusSegment {
+  std::string text;
+  std::string side;
+  int priority = 50;
+  int fg = -1;
+};
+
 struct PluginLoadStatus {
   std::string name;
   std::string path;
   bool loaded;
   std::string error;
+};
+
+struct EventBusSubscriber {
+  std::string key;
+  int ref;
 };
 
 // Forward declaration
@@ -78,6 +102,29 @@ class EditorHostAPI;
 class TreeSitterManager;
 struct lua_State;
 
+// Timer API (jot.timer): native event-loop timers with Lua callbacks. Entries
+// are keyed by the native EventLoop::TimerId (uint64_t); the callback ref is
+// also registered under "timer.<ref>" in lua_callbacks so cleanup paths unref
+// everything through the existing callback sweep.
+struct LuaTimerEntry {
+  int ref = -1;
+  bool repeat = false;
+};
+
+// Rich per-edit description attached to BufChange events (see
+// LuaAPI::on_buffer_change). All line/col values are 1-based; end_line /
+// end_col describe the exclusive end of the inserted region in the NEW text.
+struct LuaEditDelta {
+  bool valid = false;
+  int start_line = 1;
+  int start_col = 1;
+  int end_line = 1;
+  int end_col = 1;
+  std::string inserted; // text added by the edit
+  std::string removed;  // text replaced/removed by the edit
+  bool multiline = false;
+};
+
 class LuaAPI {
 private:
   Editor *editor;
@@ -85,7 +132,34 @@ private:
   std::vector<PluginKeymap> plugin_keymaps;
   std::vector<PluginAutocmd> plugin_autocmds;
   std::vector<PluginPanel> plugin_panels;
+  std::vector<PluginStatusSegment> status_segments_;
   std::vector<PluginLoadStatus> plugin_load_status;
+  // One-shot LSP result sinks: when non-empty (a "lsp.*" key into
+  // lua_callbacks), the next matching native result is delivered to Lua and
+  // skipped by the native handler instead.
+  std::string pending_lsp_hover;
+  std::string pending_lsp_definition;
+  std::string pending_lsp_symbols;
+  std::string pending_lsp_completion;
+  // One-shot debugger result sinks (jot.debugger.request_*): when non-empty,
+  // the next matching debugger event (for pending_debugger_session) is
+  // delivered to Lua instead of the native side effects where applicable.
+  std::string pending_debugger_stack;
+  std::string pending_debugger_variables;
+  std::string pending_debugger_threads;
+  int pending_debugger_session = -1;
+  // Ambient event bus (jot.events): native events broadcast to every
+  // subscriber. Refs are unregistered on plugin reload/cleanup.
+  std::map<std::string, std::vector<EventBusSubscriber>> event_subscribers_;
+  int next_event_sub_id_ = 1;
+  // Per-buffer last-known text (only tracked while a BufChange listener is
+  // registered) so edit deltas can be computed without touching call sites.
+  std::unordered_map<std::string, std::string> edit_snapshots_;
+  LuaEditDelta last_edit_;
+  // Native timers with Lua callbacks (jot.timer).
+  std::unordered_map<uint64_t, LuaTimerEntry> timer_entries_;
+  // Last observed debugger state signature (dedupes debugger.state_changed).
+  std::string last_debugger_sig_;
 
   void *lua_state; // lua_State* (opaque in public header)
   bool lua_initialized;
@@ -101,12 +175,17 @@ public:
 
 private:
   void clear_runtime_state();
+  bool apply_theme_file(const std::string &name,
+                        std::vector<std::string> &extends_stack);
   bool load_script_path(const std::string &module_name,
                         const std::string &path);
   bool call_callback_string(const std::string &callback,
                             const std::string &arg);
   bool call_callback_event(const std::string &callback, const std::string &event,
                            const std::string &filepath, int buffer);
+  // Resolves the optional buffer argument (1-based index or filepath, or the
+  // current buffer when omitted) to a 0-based buffer index, or -1.
+  int resolve_buffer_arg(lua_State *L, int arg_index);
 
 public:
   LuaAPI(Editor *ed);
@@ -131,11 +210,17 @@ public:
   // translated to jot slot names inside.
   void set_theme_color(std::string name, int fg, int bg);
   bool apply_colorscheme(const std::string &name);
+  // Applies a theme and persists it to the config file (jot.theme.apply).
+  bool apply_theme_and_persist(const std::string &name);
   std::vector<std::string> list_themes();
 
   // Plugin system
   void load_plugins();
   void reload_plugins();
+  // Re-runs config.lua (the Lua-first configuration file) only. Idempotent:
+  // config.lua should only call jot.config.set / other pure config calls.
+  // Backing of the `:reload` command together with Editor::reload_config().
+  void load_config_file();
   bool run_plugin_command(const std::string &name, const std::string &arg);
   bool run_plugin_keymap(const std::string &key,
                          const std::string &mode = "global");
@@ -158,6 +243,175 @@ public:
                          const std::string &callback,
                          const std::string &title);
 
+  // Diagnostics / buffer vars / marks / status segments (push/act on the
+  // active lua_State; callbacks run on the main thread only).
+  void push_diagnostics(lua_State *L);
+  void set_buffer_var(lua_State *L);
+  void push_buffer_var(lua_State *L);
+  void delete_buffer_var(lua_State *L);
+  void set_mark(lua_State *L);
+  void push_mark(lua_State *L);
+  void jump_mark(lua_State *L);
+  void delete_mark(lua_State *L);
+  void push_mark_list(lua_State *L);
+  void register_status_segment(lua_State *L);
+  void unregister_status_segment(lua_State *L);
+  std::vector<RenderedStatusSegment> render_status_segments();
+
+  // Extended native surface (jot.config / jot.git / jot.tasks / jot.symbols /
+  // jot.debugger / jot.editor / jot.theme). These read and act on live
+  // Editor state directly so feature code can live in Lua without touching
+  // C++: everything below is reachable without recompiling jot.
+  void lua_config_get(lua_State *L, int kind); // kind: 0 string, 1 number, 2 bool
+  void config_set_from_lua(lua_State *L);
+  void config_unset_from_lua(lua_State *L);
+  void config_has_from_lua(lua_State *L);
+  void push_config_keys(lua_State *L);
+  void push_config_path(lua_State *L);
+  void push_editor_info(lua_State *L);
+  void push_theme_current(lua_State *L);
+  void push_git_info(lua_State *L);
+  void push_git_status(lua_State *L);
+  void git_stage_from_lua(lua_State *L);
+  void git_unstage_from_lua(lua_State *L);
+  void git_stage_all_from_lua(lua_State *L);
+  void git_unstage_all_from_lua(lua_State *L);
+  void git_commit_from_lua(lua_State *L);
+  void git_refresh_from_lua(lua_State *L);
+  void push_task_list(lua_State *L);
+  void run_task_from_lua(lua_State *L);
+  void rerun_task_from_lua(lua_State *L);
+  void push_symbols(lua_State *L);
+  void push_debugger_configs(lua_State *L);
+  void run_debugger_config_from_lua(lua_State *L);
+  void push_buffer_current(lua_State *L);
+  void push_buffer_count(lua_State *L);
+  void push_buffer_text(lua_State *L);
+  void push_buffer_meta(lua_State *L);
+  void push_buffer_selection(lua_State *L);
+  void push_buffer_bookmarks(lua_State *L);
+  void push_buffer_folds(lua_State *L);
+  void clipboard_copy_from_lua(lua_State *L);
+  void clipboard_cut_from_lua(lua_State *L);
+  void clipboard_paste_from_lua(lua_State *L);
+  void push_terminal_list(lua_State *L);
+  void terminal_write_from_lua(lua_State *L);
+  void terminal_close_from_lua(lua_State *L);
+  void terminal_activate_from_lua(lua_State *L);
+  void terminal_spawn_from_lua(lua_State *L);
+  void push_workspace_path(lua_State *L);
+  void push_recent_files(lua_State *L);
+  void push_recent_workspaces(lua_State *L);
+  void push_lsp_clients(lua_State *L);
+  void popup_from_lua(lua_State *L);
+  void push_search_info(lua_State *L);
+  void push_search_matches(lua_State *L);
+  void push_picker_active(lua_State *L);
+  void push_picker_info(lua_State *L);
+  void push_picker_items(lua_State *L);
+  void picker_accept_from_lua(lua_State *L);
+  void picker_close_from_lua(lua_State *L);
+  void push_buffer_tokens(lua_State *L);
+  void lsp_request_from_lua(lua_State *L, int kind); // 0 hover, 1 definition, 2 document symbols, 3 completion
+  void push_lsp_diagnostics(lua_State *L);
+  void push_lsp_last_results(lua_State *L);
+  void push_lsp_completions(lua_State *L);
+  bool try_deliver_lsp_completion(const std::string &filepath,
+                                  const std::vector<LSPCompletionItem> &items);
+  // Event bus: subscribe/unsubscribe from Lua, native broadcast entry point.
+  void events_subscribe_from_lua(lua_State *L);
+  void events_unsubscribe_from_lua(lua_State *L);
+  bool has_event_subscribers(const std::string &name) const {
+    auto it = event_subscribers_.find(name);
+    return it != event_subscribers_.end() && !it->second.empty();
+  }
+  void emit_event_bus(const std::string &name,
+                      const std::function<void(lua_State *)> &build);
+  void emit_lsp_hover(const LSPHoverResult &hover);
+  void emit_lsp_definition(const LSPDefinitionResult &definition);
+  void emit_lsp_symbols(const LSPDocumentSymbolResult &symbols);
+  void emit_lsp_completion(const std::string &filepath,
+                           const std::vector<LSPCompletionItem> &items);
+  void emit_git_refreshed();
+  // Viewport: mirror the focused pane / editor geometry and scroll state.
+  void push_viewport_info(lua_State *L);
+  void push_viewport_line_at(lua_State *L);
+  void viewport_scroll_top_from_lua(lua_State *L);
+  void viewport_scroll_lines_from_lua(lua_State *L);
+  void viewport_scroll_col_from_lua(lua_State *L);
+  void viewport_reveal_from_lua(lua_State *L);
+  // File tree: mirror the native explorer tree (same FileNode data the
+  // sidebar renders) without re-walking the disk.
+  void push_filetree_root(lua_State *L);
+  // Cursor motions (jot.motion): native movement primitives for macros.
+  // kind: 0 word_next, 1 word_prev, 2 line_start, 3 line_end, 4 file_start,
+  // 5 file_end, 6 matching_bracket, 7 select_function.
+  void motion_from_lua(lua_State *L, int kind);
+  // Sidebar (jot.sidebar): mirror/control the explorer/git activity views.
+  void push_sidebar_info(lua_State *L);
+  void sidebar_set_view_from_lua(lua_State *L);
+  // LSP manager actions (jot.lsp): disabled set + server enable/install/remove.
+  void push_lsp_disabled(lua_State *L);
+  void lsp_set_enabled_from_lua(lua_State *L);
+  void lsp_install_from_lua(lua_State *L);
+  void lsp_remove_from_lua(lua_State *L);
+  void lsp_restart_all_from_lua(lua_State *L);
+  // Buffer extras: extension-based filetype and single-line read.
+  void push_buffer_filetype(lua_State *L);
+  void push_buffer_get_line(lua_State *L);
+  // Git diff panel (jot.git.diff).
+  void git_diff_from_lua(lua_State *L);
+  // Timers (jot.timer): schedule native event-loop timers that invoke Lua
+  // callbacks on the main thread; cancelled on plugin reload and shutdown.
+  void timer_set_from_lua(lua_State *L, bool repeat);
+  void timer_clear_from_lua(lua_State *L);
+  void cancel_all_timers();
+  void fire_timer(int ref);
+  // Debugger live state (jot.debugger.state / breakpoints / toggling).
+  void push_debugger_state(lua_State *L);
+  void push_debugger_breakpoints(lua_State *L);
+  void debugger_toggle_breakpoint_from_lua(lua_State *L);
+  void debugger_has_breakpoint_from_lua(lua_State *L);
+  // One-shot debugger requests (jot.debugger.request_stack / request_variables
+  // / request_threads): register a sink, issue the native DAP request, deliver
+  // the fresh answer to Lua; stack/variables yield native side effects for
+  // that one response.
+  void debugger_request_from_lua(lua_State *L, int kind); // 0 stack, 1 variables, 2 threads
+  bool try_deliver_debugger_stack(int session,
+                                  const std::vector<DebuggerFrame> &frames);
+  bool try_deliver_debugger_variables(
+      int session, const std::vector<DebuggerVariable> &variables);
+  bool try_deliver_debugger_threads(int session,
+                                    const std::vector<DebuggerThread> &threads);
+  // request_variables chain: after the scopes answer, ask the adapter for the
+  // first expandable scope's variables (sink stays pending for the Variables
+  // event). Returns true when the chain advanced.
+  bool debugger_chain_variables(int session,
+                                const std::vector<DebuggerVariable> &scopes);
+  // Theme palette readback (jot.theme.palette): full current slot table.
+  void push_theme_palette(lua_State *L);
+  // Buffer lines (jot.buffer.lines) and clipboard text (jot.clipboard.get).
+  void push_buffer_lines(lua_State *L);
+  void push_clipboard_text(lua_State *L);
+  void push_filetree_tree(lua_State *L);
+  void push_filetree_children(lua_State *L);
+  // Selection control on a real buffer.
+  void buffer_select_from_lua(lua_State *L);
+  void buffer_clear_selection_from_lua(lua_State *L);
+  // Additional bus emitters.
+  void emit_buffer_event(const std::string &event, const std::string &path);
+  void emit_diagnostics_changed(const std::string &path,
+                                const std::vector<Diagnostic> &items);
+  void emit_theme_switched(const std::string &name);
+  // Emits "debugger.state_changed" when any session's observable state
+  // changed since the last poll (deduped by an internal signature).
+  void emit_debugger_state_changed();
+  // Deliver a native LSP result to a pending Lua one-shot sink. Returns true
+  // when the result was consumed by Lua (the caller must skip native UI).
+  bool try_deliver_lsp_hover(const LSPHoverResult &hover);
+  bool try_deliver_lsp_definition(const LSPDefinitionResult &definition);
+  bool try_deliver_lsp_symbols(const LSPDocumentSymbolResult &symbols);
+
   const std::vector<PluginCommand> &commands() const { return plugin_commands; }
   const std::vector<PluginKeymap> &keymaps() const { return plugin_keymaps; }
   const std::vector<PluginAutocmd> &autocmds() const { return plugin_autocmds; }
@@ -178,6 +432,13 @@ public:
   void execute_command(const std::string &command);
   void run_job(const std::string &command, const std::string &cwd,
                   const std::string &label);
+  // Async shell capture: runs the command on a worker thread and delivers a
+  // {output=..., exit_code=..., ok=...} table to the Lua callback registered
+  // under `callback` (a key into lua_callbacks) on the main thread.
+  bool run_job_capture(const std::string &command, const std::string &cwd,
+                       const std::string &callback);
+  bool deliver_job_result(const std::string &callback,
+                          const std::string &output, int exit_code);
   void show_picker(const std::string &title,
                       const std::string &items_callback,
                       const std::string &select_callback);

@@ -104,6 +104,13 @@ private:
   std::string last_error;
   std::vector<std::pair<std::string, std::vector<Diagnostic>>>
       pending_diagnostics;
+  // Mirrors of the last results each consume_* call handed to the editor, so
+  // other consumers (the Lua API) can read per-server answers without racing
+  // or stealing results from the native UI flow.
+  std::vector<std::pair<std::string, std::vector<Diagnostic>>> last_diagnostics_;
+  LSPHoverResult last_hover_;
+  std::vector<LSPDefinitionResult> last_definitions_;
+  std::vector<LSPDocumentSymbolResult> last_symbols_;
   std::map<int, PendingDocumentRequest> pending_completion_requests;
   std::map<int, PendingPositionRequest> pending_hover_requests;
   std::map<int, PendingPositionRequest> pending_definition_requests;
@@ -156,6 +163,18 @@ public:
 
   bool is_running() const { return running; }
   bool is_initialized() const { return initialized; }
+
+  const std::vector<std::pair<std::string, std::vector<Diagnostic>>> &
+  last_diagnostics() const {
+    return last_diagnostics_;
+  }
+  const LSPHoverResult &last_hover() const { return last_hover_; }
+  const std::vector<LSPDefinitionResult> &last_definitions() const {
+    return last_definitions_;
+  }
+  const std::vector<LSPDocumentSymbolResult> &last_document_symbols() const {
+    return last_symbols_;
+  }
   int get_stdin_fd() const { return stdin_fd; }
   int get_stdout_fd() const { return stdout_fd; }
   int get_stderr_fd() const { return stderr_fd; }

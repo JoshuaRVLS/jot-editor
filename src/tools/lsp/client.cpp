@@ -2105,6 +2105,7 @@ std::vector<std::pair<std::string, std::vector<Diagnostic>>>
 LSPClient::consume_published_diagnostics() {
   auto out = std::move(pending_diagnostics);
   pending_diagnostics.clear();
+  last_diagnostics_ = out;
   return out;
 }
 
@@ -2118,12 +2119,18 @@ LSPClient::consume_completion_items() {
 std::vector<LSPHoverResult> LSPClient::consume_hover_results() {
   auto out = std::move(pending_hovers);
   pending_hovers.clear();
+  if (!out.empty()) {
+    last_hover_ = out.back();
+  }
   return out;
 }
 
 std::vector<LSPDefinitionResult> LSPClient::consume_definition_results() {
   auto out = std::move(pending_definitions);
   pending_definitions.clear();
+  if (!out.empty()) {
+    last_definitions_ = out;
+  }
   return out;
 }
 
@@ -2131,6 +2138,9 @@ std::vector<LSPDocumentSymbolResult>
 LSPClient::consume_document_symbol_results() {
   auto out = std::move(pending_document_symbols);
   pending_document_symbols.clear();
+  if (!out.empty()) {
+    last_symbols_ = out;
+  }
   return out;
 }
 

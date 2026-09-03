@@ -662,6 +662,9 @@ public:
   ~Editor();
   void load_file(const std::string &fname);
   void run();
+  // Reloads configuration from disk (settings.conf overlay + config.lua) and
+  // live-applies every setting. Backing of the `:reload` command.
+  void reload_config();
   EditorHostAPI &host();
   const EditorHostAPI &host() const;
 };

@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "lua_bridge/api.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -559,6 +560,7 @@ void Editor::refresh_git_status(bool force) {
             invalidate_sidebar_git_cache();
             needs_redraw = true;
           }
+          if (lua_api) lua_api->emit_git_refreshed();
         });
   } else {
     GitStatusResult result = run_git_commands(repo_hint);

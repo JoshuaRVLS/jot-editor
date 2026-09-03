@@ -64,7 +64,10 @@ bool HostCoreAPI::close_buffer(int index) {
   }
   const std::string path = editor.buffers[(size_t)index].filepath;
   editor.close_buffer_at(index);
-  if (editor.lua_api) editor.lua_api->fire_autocmd("BufClose", path, index);
+  if (editor.lua_api) {
+    editor.lua_api->fire_autocmd("BufClose", path, index);
+    editor.lua_api->emit_buffer_event("buffer.close", path);
+  }
   editor.needs_redraw = true;
   return true;
 }
@@ -273,6 +276,9 @@ void HostIOAPI::open_workspace(const std::string &path) {
   editor.open_workspace(path);
 }
 
+void HostIOAPI::open_command_palette(const std::string &query) {
+  editor.open_command_palette(query);
+}
 void HostIOAPI::toggle_sidebar() { editor.toggle_sidebar(); }
 
 void HostIOAPI::toggle_terminal() { editor.toggle_integrated_terminal(); }

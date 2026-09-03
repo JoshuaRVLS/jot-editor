@@ -80,6 +80,7 @@ public:
   void save_current_file();
   bool save_buffer(int index);
   void open_workspace(const std::string &path);
+  void open_command_palette(const std::string &query);
   void toggle_sidebar();
   void toggle_terminal();
   void execute_command(const std::string &command);

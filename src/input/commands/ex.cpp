@@ -171,6 +171,21 @@ bool Editor::execute_ex_command(const std::string &input_line) {
     // Nothing to execute, just close.
   } else if (parse_line_col(lcmd, parsed_line, parsed_col)) {
     goto_line_col(parsed_line, parsed_col);
+  } else if (lcmd == "reload") {
+    // Reload everything configurable at runtime: settings.conf overlay +
+    // config.lua (live-applied), Lua plugins, and tree-sitter policy.
+    reload_config();
+    if (lua_api) {
+      lua_api->reload_plugins();
+    }
+    reload_tree_sitter();
+    refresh_command_palette();
+    needs_redraw = true;
+  } else if (lcmd == "reloadconfig") {
+    // Config-only reload: settings.conf overlay + config.lua, live-applied.
+    reload_config();
+    refresh_command_palette();
+    needs_redraw = true;
   } else if (lcmd == "reloadplugins") {
     if (lua_api) {
       lua_api->reload_plugins();

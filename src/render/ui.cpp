@@ -700,6 +700,25 @@ void Editor::render_status_line() {
     right_segments.push_back({lsp_text, lsp_fg, lsp_bg, false, true, 60});
   }
 
+  // Lua-registered status segments (see jot.status.register). They render on
+  // the flat status background and drop first when space runs low.
+  if (lua_api) {
+    for (const auto &seg : lua_api->render_status_segments()) {
+      StatusSegment s;
+      s.text = " " + seg.text + " ";
+      s.fg = (seg.fg >= 0 && seg.fg <= 255) ? seg.fg : theme.fg_status;
+      s.bg = theme.bg_status;
+      s.bold = false;
+      s.optional = true;
+      s.priority = seg.priority;
+      if (seg.side == "left") {
+        left_segments.push_back(std::move(s));
+      } else {
+        right_segments.push_back(std::move(s));
+      }
+    }
+  }
+
   const int min_gap = content_w >= 40 ? 2 : 1;
   status_drop_optional_to_fit(right_segments, std::max(0, content_w / 2));
   int right_w = status_layout_width(right_segments);

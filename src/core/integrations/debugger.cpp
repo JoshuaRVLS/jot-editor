@@ -1,5 +1,6 @@
-#include "editor.h"
 #include "commands/utils.h"
+#include "editor.h"
+#include "lua_bridge/api.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -671,12 +672,15 @@ void Editor::poll_debugger_sessions() {
         break;
       case DebuggerEvent::Threads:
         state.threads = event.threads;
+        if (lua_api) {
+          lua_api->try_deliver_debugger_threads(i, event.threads);
+        }
         if (state.active_thread_id <= 0 && !state.threads.empty()) {
           state.active_thread_id = state.threads.front().id;
           client->stack_trace(state.active_thread_id);
         }
         break;
-      case DebuggerEvent::StackTrace:
+      case DebuggerEvent::StackTrace: {
         if (state.threads.empty()) {
           DebuggerThread thread;
           thread.id = state.active_thread_id;
@@ -686,30 +690,46 @@ void Editor::poll_debugger_sessions() {
         for (auto &thread : state.threads) {
           if (thread.id == state.active_thread_id) {
             thread.frames = event.frames;
+            const bool lua_took = lua_api &&
+                lua_api->try_deliver_debugger_stack(i, event.frames);
             if (!event.frames.empty()) {
               state.active_frame_id = event.frames.front().id;
-              if (!event.frames.front().filepath.empty()) {
-                open_file(event.frames.front().filepath, true);
-                if (current_buffer >= 0 && current_buffer < (int)buffers.size()) {
-                  auto &buf = get_buffer();
-                  buf.cursor.y = std::clamp(
-                      event.frames.front().line, 0,
-                      std::max(0, (int)buf.line_count() - 1));
-                  buf.cursor.x =
-                      std::clamp(event.frames.front().column, 0,
-                                 (int)buf.line(buf.cursor.y).size());
-                  ensure_cursor_visible();
+              if (!lua_took) {
+                if (!event.frames.front().filepath.empty()) {
+                  open_file(event.frames.front().filepath, true);
+                  if (current_buffer >= 0 &&
+                      current_buffer < (int)buffers.size()) {
+                    auto &buf = get_buffer();
+                    buf.cursor.y = std::clamp(
+                        event.frames.front().line, 0,
+                        std::max(0, (int)buf.line_count() - 1));
+                    buf.cursor.x =
+                        std::clamp(event.frames.front().column, 0,
+                                   (int)buf.line(buf.cursor.y).size());
+                    ensure_cursor_visible();
+                  }
                 }
+                client->scopes(state.active_frame_id);
               }
-              client->scopes(state.active_frame_id);
             }
             break;
           }
         }
         break;
+      }
       case DebuggerEvent::Scopes:
       case DebuggerEvent::Variables:
         state.variables = event.variables;
+        if (lua_api) {
+          if (event.type == DebuggerEvent::Scopes) {
+            // request_variables chain: ask the adapter for the first
+            // expandable scope's variables; the sink stays pending for the
+            // Variables event that follows.
+            lua_api->debugger_chain_variables(i, event.variables);
+          } else {
+            lua_api->try_deliver_debugger_variables(i, event.variables);
+          }
+        }
         break;
       case DebuggerEvent::Memory:
         state.memory_rows = event.memory_rows;
@@ -725,5 +745,8 @@ void Editor::poll_debugger_sessions() {
         break;
       }
     }
+  }
+  if (lua_api) {
+    lua_api->emit_debugger_state_changed();
   }
 }

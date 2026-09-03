@@ -692,10 +692,24 @@ void Editor::poll_lsp_clients() {
         continue;
       }
 
+      // A Lua one-shot sink (jot.lsp.request_completion) consumes the items
+      // first; the native completion popup only shows when Lua did not take
+      // them.
+      if (lua_api &&
+          lua_api->try_deliver_lsp_completion(entry.first, entry.second)) {
+        lsp_completion_manual_request = false;
+        continue;
+      }
+
       if (!lsp_completion_manual_request &&
           (buf.cursor.y != lsp_completion_anchor.y ||
            std::abs(buf.cursor.x - lsp_completion_anchor.x) > 4)) {
         continue;
+      }
+
+      if (lua_api &&
+          lua_api->has_event_subscribers("lsp.completion")) {
+        lua_api->emit_lsp_completion(entry.first, entry.second);
       }
 
       lsp_completion_all_items = std::move(entry.second);
@@ -711,20 +725,21 @@ void Editor::poll_lsp_clients() {
       }
       lsp_completion_manual_request = false;
       needs_redraw = true;
-    }
-
-    auto hovers = client->consume_hover_results();
+    }      auto hovers = client->consume_hover_results();
     for (const auto &hover : hovers) {
+      if (lua_api) lua_api->emit_lsp_hover(hover);
       handle_lsp_hover_result(hover);
     }
 
     auto definitions = client->consume_definition_results();
     for (const auto &definition : definitions) {
+      if (lua_api) lua_api->emit_lsp_definition(definition);
       handle_lsp_definition_result(definition);
     }
 
     auto document_symbols = client->consume_document_symbol_results();
     for (const auto &symbols : document_symbols) {
+      if (lua_api) lua_api->emit_lsp_symbols(symbols);
       handle_document_symbols_result(symbols);
     }
   }
@@ -1648,6 +1663,11 @@ void Editor::request_lsp_definition() {
 }
 
 void Editor::handle_lsp_hover_result(const LSPHoverResult &hover) {
+  // A Lua one-shot sink (jot.lsp.request_hover) consumes this result first;
+  // the native popup only shows when Lua did not take it.
+  if (lua_api && lua_api->try_deliver_lsp_hover(hover)) {
+    return;
+  }
   if (buffers.empty() || current_buffer < 0 ||
       current_buffer >= (int)buffers.size()) {
     return;
@@ -1714,6 +1734,11 @@ void Editor::handle_lsp_hover_result(const LSPHoverResult &hover) {
 
 void Editor::handle_lsp_definition_result(
     const LSPDefinitionResult &definition) {
+  // Lua one-shot sink (jot.lsp.request_definition) takes precedence over the
+  // native jump when it is waiting for this result.
+  if (lua_api && lua_api->try_deliver_lsp_definition(definition)) {
+    return;
+  }
   if (buffers.empty() || current_buffer < 0 ||
       current_buffer >= (int)buffers.size()) {
     return;

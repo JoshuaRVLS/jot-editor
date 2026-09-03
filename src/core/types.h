@@ -5,6 +5,7 @@
 #include "line_provider.h"
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <regex>
 #include <set>
@@ -401,6 +402,12 @@ struct Selection {
   bool active;
 };
 
+struct GlobalMark {
+  std::string filepath;
+  int line = 0;
+  int col = 0;
+};
+
 struct State {
   bool full_snapshot = false;
   int start_line = 0;
@@ -445,13 +452,27 @@ struct FileBuffer {
   std::stack<State> undo_stack;
   std::stack<State> redo_stack;
   std::set<int> bookmarks;
+  std::unordered_map<std::string, std::string> lua_vars;
+  std::map<char, Cursor> marks; // buffer-local marks ('a'-'z')
   std::vector<Diagnostic> diagnostics;
   std::vector<FoldRange> fold_ranges;
+  bool folds_dirty = true;
+  // Lazy prefix sums of line sizes (+1 for each newline), used to resolve the
+  // start byte of a line in O(1) for tree-sitter byte-range queries. Cleared
+  // on every edit (see mark_edited) and rebuilt incrementally on demand.
+  std::vector<uint32_t> ts_line_offsets;
   std::string syntax_cache_extension;
   std::size_t syntax_cache_line_count = 0;
   std::unordered_map<int, SyntaxLineCache> syntax_cache;
   SyntaxEngine syntax_engine = SYNTAX_ENGINE_UNKNOWN;
   std::string syntax_language_label;
+
+  // Called after any content mutation: fold ranges and tree-sitter byte
+  // offsets become stale and must be rebuilt lazily on next use.
+  void mark_edited() {
+    folds_dirty = true;
+    ts_line_offsets.clear();
+  }
 
 #ifdef JOT_TREESITTER
   TSParser *ts_parser = nullptr;
