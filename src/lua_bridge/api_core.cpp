@@ -296,7 +296,15 @@ namespace
   int l_capabilities(lua_State *L)
   {
     lua_newtable(L);
-    const char *names[] = {"buffer", "cursor", "selection", "clipboard", "picker", "events", "viewport", "filetree", "pane", "file", "ui", "keymap", "job", "edit", "search", "folds", "bookmarks", "workspace", "terminal", "tasks", "theme", "config", "lsp", "debugger", "git", "treesitter", "symbols", "image", "diagnostics", "marks", "status", "timer", "motion", "sidebar"};
+    const char *names[] = {"buffer",       "cursor",   "selection", "clipboard",
+                           "picker",       "events",   "viewport",  "filetree",
+                           "pane",         "file",     "ui",        "keymap",
+                           "job",          "edit",     "search",    "folds",
+                           "bookmarks",    "workspace", "terminal", "tasks",
+                           "theme",        "config",   "lsp",       "debugger",
+                           "git",          "treesitter", "symbols", "image",
+                           "diagnostics",  "marks",    "status",    "timer",
+                           "motion",       "sidebar"};
     for (const char *name : names)
     {
       lua_pushboolean(L, 1);
@@ -424,7 +432,13 @@ namespace
     }
     return 1;
   }
-  int l_switch_buffer(lua_State *L) { return api(L).host().core.switch_buffer((int)luaL_checkinteger(L, 1) - 1) ? (lua_pushboolean(L, 1), 1) : (lua_pushboolean(L, 0), 1); }
+  int l_switch_buffer(lua_State *L)
+  {
+    const bool ok =
+        api(L).host().core.switch_buffer((int)luaL_checkinteger(L, 1) - 1);
+    lua_pushboolean(L, ok ? 1 : 0);
+    return 1;
+  }
   int l_split_h(lua_State *L)
   {
     api(L).host().render.split_horizontal();
@@ -475,12 +489,18 @@ namespace
       v.emplace_back(luaL_checkstring(L, -1));
       lua_pop(L, 1);
     }
-    lua_pushboolean(L, api(L).set_scratch_lines((int)luaL_checkinteger(L, 1), (int)luaL_checkinteger(L, 2), (int)luaL_checkinteger(L, 3), lua_toboolean(L, 4), v));
+    const bool ok = api(L).set_scratch_lines(
+        (int)luaL_checkinteger(L, 1), (int)luaL_checkinteger(L, 2),
+        (int)luaL_checkinteger(L, 3), lua_toboolean(L, 4), v);
+    lua_pushboolean(L, ok);
     return 1;
   }
   int l_ui_buffer_get_lines(lua_State *L)
   {
-    auto v = api(L).get_scratch_lines((int)luaL_checkinteger(L, 1), (int)luaL_checkinteger(L, 2), (int)luaL_checkinteger(L, 3), lua_toboolean(L, 4));
+    auto v = api(L).get_scratch_lines((int)luaL_checkinteger(L, 1),
+                                      (int)luaL_checkinteger(L, 2),
+                                      (int)luaL_checkinteger(L, 3),
+                                      lua_toboolean(L, 4));
     lua_newtable(L);
     int n = 1;
     for (auto &s : v)
@@ -1373,7 +1393,12 @@ bool LuaAPI::configure_float(int id, lua_State *L, int ti)
   f.relative = table_string(L, ti, "relative", f.relative);
   f.anchor = table_string(L, ti, "anchor", f.anchor);
   f.border = table_string(L, ti, "border", f.border);
-  if (f.w < 1 || f.h < 1 || (f.relative != "editor" && f.relative != "cursor" && f.relative != "win" && f.relative != "mouse") || (f.border != "none" && f.border != "single" && f.border != "double" && f.border != "rounded" && f.border != "custom"))
+  if (f.w < 1 || f.h < 1 ||
+      (f.relative != "editor" && f.relative != "cursor" &&
+       f.relative != "win" && f.relative != "mouse") ||
+      (f.border != "none" && f.border != "single" &&
+       f.border != "double" && f.border != "rounded" &&
+       f.border != "custom"))
     return false;
   f.zindex = table_int(L, ti, "zindex", f.zindex);
   f.focusable = table_bool(L, ti, "focusable", f.focusable);
@@ -1517,7 +1542,8 @@ bool LuaAPI::float_input(int ch, bool ctrl, bool shift, bool alt)
   }
   return false;
 }
-bool LuaAPI::float_mouse(int x, int y, int button, bool pressed, bool released, bool motion, bool ctrl, bool shift, bool alt)
+bool LuaAPI::float_mouse(int x, int y, int button, bool pressed, bool released,
+                         bool motion, bool ctrl, bool shift, bool alt)
 {
   if (!lua_state || !editor || !editor->event_loop_.is_main_thread())
     return false;
@@ -1629,13 +1655,25 @@ void LuaAPI::render_floats()
     auto bi = scratch_buffers.find(f->buffer);
     if (bi == scratch_buffers.end())
       continue;
-    int ix = x + (f->border == "none" ? 0 : 1), iy = y + (f->border == "none" ? 0 : 1), iw = std::max(0, r.w - (f->border == "none" ? 0 : 2)), ih = std::max(0, r.h - (f->border == "none" ? 0 : 2));
+    const int inset = (f->border == "none" ? 0 : 1);
+    int ix = x + inset;
+    int iy = y + inset;
+    int iw = std::max(0, r.w - (f->border == "none" ? 0 : 2));
+    int ih = std::max(0, r.h - (f->border == "none" ? 0 : 2));
     for (int i = 0; i < ih && i < (int)bi->second.lines.size(); i++)
       editor->ui->draw_text(ix, iy + i, ui_truncate_cells(bi->second.lines[i], iw), f->fg, f->bg);
     if (!f->title.empty())
-      editor->ui->draw_text(x + 1, y, ui_truncate_cells(" " + f->title + " ", std::max(0, r.w - 2)), f->fg, f->bg, true);
+    {
+      const std::string title_text =
+          ui_truncate_cells(" " + f->title + " ", std::max(0, r.w - 2));
+      editor->ui->draw_text(x + 1, y, title_text, f->fg, f->bg, true);
+    }
     if (!f->footer.empty())
-      editor->ui->draw_text(x + 1, y + r.h - 1, ui_truncate_cells(" " + f->footer + " ", std::max(0, r.w - 2)), f->fg, f->bg);
+    {
+      const std::string footer_text =
+          ui_truncate_cells(" " + f->footer + " ", std::max(0, r.w - 2));
+      editor->ui->draw_text(x + 1, y + r.h - 1, footer_text, f->fg, f->bg);
+    }
   }
 }
 bool LuaAPI::init()
@@ -1652,7 +1690,18 @@ bool LuaAPI::init()
   inject(L, this, "command", l_register_command);
   inject(L, this, "autocmd", l_register_autocmd);
   inject(L, this, "set_hl", [](lua_State *s)
-         {auto&a=api(s);luaL_checktype(s,2,LUA_TTABLE);lua_getfield(s,2,"fg");int fg=lua_isnumber(s,-1)?(int)lua_tointeger(s,-1):-1;lua_pop(s,1);lua_getfield(s,2,"bg");int bg=lua_isnumber(s,-1)?(int)lua_tointeger(s,-1):-1;lua_pop(s,1);a.set_theme_color(luaL_optstring(s,1,""),fg,bg);return 0; });
+  {
+    auto &a = api(s);
+    luaL_checktype(s, 2, LUA_TTABLE);
+    lua_getfield(s, 2, "fg");
+    int fg = lua_isnumber(s, -1) ? (int)lua_tointeger(s, -1) : -1;
+    lua_pop(s, 1);
+    lua_getfield(s, 2, "bg");
+    int bg = lua_isnumber(s, -1) ? (int)lua_tointeger(s, -1) : -1;
+    lua_pop(s, 1);
+    a.set_theme_color(luaL_optstring(s, 1, ""), fg, bg);
+    return 0;
+  });
   inject(L, this, "get_current_buffer", l_get_buffer);
   inject(L, this, "set_current_buffer", l_set_buffer);
   inject(L, this, "get_selection", l_get_selection);
@@ -1735,7 +1784,18 @@ bool LuaAPI::init()
   lua_setfield(L, -2, "job");
   lua_newtable(L);
   field(L, "set", [](lua_State *s)
-        {auto&a=api(s);luaL_checktype(s,2,LUA_TTABLE);lua_getfield(s,2,"fg");int fg=lua_isnumber(s,-1)?(int)lua_tointeger(s,-1):-1;lua_pop(s,1);lua_getfield(s,2,"bg");int bg=lua_isnumber(s,-1)?(int)lua_tointeger(s,-1):-1;lua_pop(s,1);a.set_theme_color(luaL_optstring(s,1,""),fg,bg);return 0; });
+  {
+    auto &a = api(s);
+    luaL_checktype(s, 2, LUA_TTABLE);
+    lua_getfield(s, 2, "fg");
+    int fg = lua_isnumber(s, -1) ? (int)lua_tointeger(s, -1) : -1;
+    lua_pop(s, 1);
+    lua_getfield(s, 2, "bg");
+    int bg = lua_isnumber(s, -1) ? (int)lua_tointeger(s, -1) : -1;
+    lua_pop(s, 1);
+    a.set_theme_color(luaL_optstring(s, 1, ""), fg, bg);
+    return 0;
+  });
   lua_setfield(L, -2, "theme");
   lua_getglobal(L, "show_message");
   lua_setfield(L, -2, "notify");
@@ -2082,7 +2142,18 @@ bool LuaAPI::init()
   lua_getglobal(L, "jot");
   lua_getfield(L, -1, "theme");
   field(L, "set_color", [](lua_State *s)
-        {auto&a=api(s);luaL_checktype(s,2,LUA_TTABLE);lua_getfield(s,2,"fg");int fg=lua_isnumber(s,-1)?(int)lua_tointeger(s,-1):-1;lua_pop(s,1);lua_getfield(s,2,"bg");int bg=lua_isnumber(s,-1)?(int)lua_tointeger(s,-1):-1;lua_pop(s,1);a.set_theme_color(luaL_optstring(s,1,""),fg,bg);return 0; });
+  {
+    auto &a = api(s);
+    luaL_checktype(s, 2, LUA_TTABLE);
+    lua_getfield(s, 2, "fg");
+    int fg = lua_isnumber(s, -1) ? (int)lua_tointeger(s, -1) : -1;
+    lua_pop(s, 1);
+    lua_getfield(s, 2, "bg");
+    int bg = lua_isnumber(s, -1) ? (int)lua_tointeger(s, -1) : -1;
+    lua_pop(s, 1);
+    a.set_theme_color(luaL_optstring(s, 1, ""), fg, bg);
+    return 0;
+  });
   field(L, "palette", l_theme_palette);
   lua_pop(L, 2);
   lua_getglobal(L, "jot");
@@ -2242,7 +2313,9 @@ bool LuaAPI::call_callback_string(const std::string &id, const std::string &arg)
   lua_settop(L, top);
   return ok;
 }
-bool LuaAPI::call_callback_event(const std::string &id, const std::string &event, const std::string &filepath, int buffer)
+bool LuaAPI::call_callback_event(const std::string &id,
+                                 const std::string &event,
+                                 const std::string &filepath, int buffer)
 {
   if (!lua_initialized || !editor || !editor->event_loop_.is_main_thread())
     return false;
@@ -2581,11 +2654,30 @@ void LuaAPI::fire_autocmd(const std::string &e, const std::string &f, int b)
     if (x.event == e)
       call_callback_event(x.callback, e, f, b);
 }
-void LuaAPI::register_keymap(const std::string &k, const std::string &c, const std::string &cmd, const std::string &d, const std::string &m) { plugin_keymaps.push_back({key_name(k), c, cmd, d, m}); }
-void LuaAPI::register_autocmd(const std::string &e, const std::string &c) { plugin_autocmds.push_back({e, c}); }
-void LuaAPI::register_panel(const std::string &n, const std::string &c, const std::string &t) { plugin_panels.push_back({n, c, t}); }
-bool LuaAPI::run_plugin_callback(const std::string &c, const std::string &a) { return call_callback_string(c, a); }
-std::string LuaAPI::get_current_buffer() { return editor && editor->host_api ? editor->host_api->core.buffer_content() : ""; }
+void LuaAPI::register_keymap(const std::string &k, const std::string &c,
+                             const std::string &cmd, const std::string &d,
+                             const std::string &m)
+{
+  plugin_keymaps.push_back({key_name(k), c, cmd, d, m});
+}
+void LuaAPI::register_autocmd(const std::string &e, const std::string &c)
+{
+  plugin_autocmds.push_back({e, c});
+}
+void LuaAPI::register_panel(const std::string &n, const std::string &c,
+                            const std::string &t)
+{
+  plugin_panels.push_back({n, c, t});
+}
+bool LuaAPI::run_plugin_callback(const std::string &c, const std::string &a)
+{
+  return call_callback_string(c, a);
+}
+std::string LuaAPI::get_current_buffer()
+{
+  return editor && editor->host_api ? editor->host_api->core.buffer_content()
+                                    : "";
+}
 void LuaAPI::set_current_buffer(const std::string &s)
 {
   if (editor && editor->host_api)
@@ -2602,7 +2694,11 @@ void LuaAPI::insert_text(const std::string &s)
   if (editor && editor->host_api)
     editor->host_api->core.insert_text(s);
 }
-std::pair<int, int> LuaAPI::get_cursor() { return editor && editor->host_api ? editor->host_api->core.cursor() : std::pair<int, int>{0, 0}; }
+std::pair<int, int> LuaAPI::get_cursor()
+{
+  return editor && editor->host_api ? editor->host_api->core.cursor()
+                                    : std::pair<int, int>{0, 0};
+}
 void LuaAPI::set_cursor(int l, int c)
 {
   if (editor && editor->host_api)

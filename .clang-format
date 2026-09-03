@@ -1,0 +1,34 @@
+# Jot formatting standard.
+# Matches the Allman brace style used across the codebase.
+# Editors (clangd, VS Code C/C++, `clang-format -i`) pick this up automatically.
+BasedOnStyle: LLVM
+IndentWidth: 2
+ContinuationIndentWidth: 4
+TabWidth: 2
+UseTab: Never
+BreakBeforeBraces: Allman
+ColumnLimit: 100
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+PointerAlignment: Right
+ReferenceAlignment: Right
+SpaceAfterCStyleCast: false
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+DerivePointerAlignment: false
+SortIncludes: CaseSensitive
+IndentCaseLabels: false
+NamespaceIndentation: All
+FixNamespaceComments: true
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+BinPackArguments: false
+BinPackParameters: false
+AlignAfterOpenBracket: Align
+AlignOperands: Align
+BreakBeforeBinaryOperators: NonAssignment
