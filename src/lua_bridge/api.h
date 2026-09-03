@@ -127,7 +127,9 @@ public:
 
   // Lua API functions used by the embedded runtime.
   void show_message(const std::string &msg);
-  void set_theme_color(const std::string &name, int fg, int bg);
+  // Takes the group name by value: nvim-style names ("StatusLineInfo") are
+  // translated to jot slot names inside.
+  void set_theme_color(std::string name, int fg, int bg);
   bool apply_colorscheme(const std::string &name);
   std::vector<std::string> list_themes();
 

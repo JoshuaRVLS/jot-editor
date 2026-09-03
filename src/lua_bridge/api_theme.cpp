@@ -6,6 +6,7 @@
 #include <fstream>
 #include <regex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <cstdlib>
 
@@ -41,9 +42,67 @@ bool LuaAPI::apply_colorscheme(const std::string &name) {
 }
 std::vector<std::string> LuaAPI::list_themes() { std::vector<std::string> out; for(const auto&d:theme_dirs()) if(std::filesystem::exists(d)) for(const auto&e:std::filesystem::directory_iterator(d)) if(e.path().extension()==".json") out.push_back(e.path().stem().string()); return out; }
 
-void LuaAPI::set_theme_color(const std::string &name, int fg, int bg) {
+void LuaAPI::set_theme_color(std::string name, int fg, int bg) {
   if (!editor)
     return;
+  // The bundled JSON color schemes (.configs/configs/colors/*.json) and the
+  // documented set_hl API use Neovim-style highlight group names such as
+  // "StatusLineInfo" or "Pmenu". The slot chain below matches lowercase jot
+  // names, so translate known groups before matching.
+  static const std::unordered_map<std::string, std::string> group_aliases = {
+      {"Normal", "normal"},
+      {"NormalFloat", "command"},
+      {"LineNr", "line_num"},
+      {"Comment", "comment"},
+      {"Keyword", "keyword"},
+      {"String", "string"},
+      {"Number", "number"},
+      {"Function", "function"},
+      {"Type", "type"},
+      {"Cursor", "cursor"},
+      {"Visual", "selection"},
+      {"Search", "search_match"},
+      {"StatusLine", "status"},
+      {"StatusLineMsg", "status_message"},
+      {"StatusLineLogo", "status_logo"},
+      {"StatusLineFile", "status_file"},
+      {"StatusLineInfo", "status_info"},
+      {"StatusLineWarn", "status_warning"},
+      {"StatusLineError", "status_error"},
+      {"StatusLineMuted", "status_muted"},
+      {"FloatBorder", "panel_border"},
+      {"WinSeparator", "panel_border"},
+      {"WinActiveBorder", "active_border"},
+      {"TabLine", "tab_inactive"},
+      {"TabLineSel", "tab_active"},
+      {"TabLineFill", "tab_separator"},
+      {"TabClose", "tab_close"},
+      {"Sidebar", "sidebar"},
+      {"SidebarDir", "sidebar_directory"},
+      {"SidebarSel", "sidebar_selected"},
+      {"SidebarSelNC", "sidebar_selected_inactive"},
+      {"SidebarBorder", "sidebar_border"},
+      {"DiagnosticError", "diagnostic_error"},
+      {"DiagnosticWarn", "diagnostic_warning"},
+      {"DiagnosticInfo", "diagnostic_info"},
+      {"DiagnosticHint", "diagnostic_hint"},
+      {"Pmenu", "command"},
+      {"PmenuSel", "selection"},
+      {"TelescopeNormal", "telescope"},
+      {"TelescopeSelection", "telescope_selected"},
+      {"TelescopePreviewNormal", "telescope_preview"},
+      {"Terminal", "terminal"},
+      {"TerminalTab", "terminal_tab_inactive"},
+      {"TerminalTabActive", "terminal_tab_active"},
+      {"TerminalTabFocused", "terminal_tab_focused"},
+      {"TerminalTabClose", "terminal_tab_close"},
+      {"TerminalTabPlus", "terminal_tab_plus"},
+      {"TerminalTabSeparator", "terminal_tab_separator"},
+  };
+  auto alias = group_aliases.find(name);
+  if (alias != group_aliases.end()) {
+    name = alias->second;
+  }
   Theme &theme = editor->get_theme();
   auto set_pair = [&](int &slot_fg, int &slot_bg) {
     if (fg != -1)
