@@ -875,6 +875,22 @@ void Editor::run()
 
   needs_redraw = true;
 
+#ifdef _WIN32
+  // Windows Terminal intercepts Ctrl+S (XOFF / "pause output", same as the
+  // Pause key) before any application ever sees the keystroke, so the save
+  // shortcut cannot fire there no matter what the app does. Tell the user
+  // once which save keys actually work so they stop hitting a frozen
+  // terminal. Classic conhost does not grab Ctrl+S, hence the WT_SESSION
+  // gate.
+  {
+    const char *wt = std::getenv("WT_SESSION");
+    if (wt && wt[0])
+    {
+      set_message("Windows Terminal takes Ctrl+S (pauses output): use Ctrl+Shift+S or :w to save");
+    }
+  }
+#endif
+
 #ifndef _WIN32
   int stdin_fd = terminal.get_input_fd();
 
