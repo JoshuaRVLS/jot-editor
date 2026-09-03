@@ -228,6 +228,17 @@ namespace
   int g_x10_code = 0;          // X10 button byte, already -32
   int g_x10_bytes[2] = {0, 0}; // X10 x/y bytes, already -32
   int g_x10_last_button = 0;
+  DWORD g_vt_state_since_ms = 0; // last byte fed to the assembler
+
+  void reset_vt_state()
+  {
+    g_vt_state = 0;
+    g_vt_params.clear();
+    g_x10_pos = 0;
+    g_x10_code = 0;
+    g_x10_bytes[0] = 0;
+    g_x10_bytes[1] = 0;
+  }
 
   BOOL WINAPI ignore_console_control(DWORD type)
   {
@@ -316,7 +327,13 @@ namespace
     const bool shift = (code & 4) != 0;
     const bool alt = (code & 8) != 0;
     MouseEvent m;
-    if (code & 0x20)
+    if (code >= 64 && code <= 67)
+    {
+      // Wheel (X10 extension): 64 = up, 65 = down. Must not be mistaken
+      // for a button press (the editor maps 64/65 to scroll events).
+      fill_mouse_event(code, x - 1, y - 1, ctrl, shift, alt, true, false, m);
+    }
+    else if (code & 0x20)
     {
       // Motion (hover / drag): no press or release state.
       fill_mouse_event(code, x - 1, y - 1, ctrl, shift, alt, false, false, m);
@@ -427,9 +444,16 @@ namespace
     return kVtEvent;
   }
 
-  // Feed one raw byte from a VK==0 KEY_EVENT record into the VT assembler.
+  // Feed one raw byte from a KEY_EVENT record into the VT assembler.
   VtByteResult feed_vt_byte(int byte, Event &out)
   {
+    if (g_vt_state != 0)
+    {
+      // Keep the freshness window alive while a sequence is progressing so
+      // a slowly-delivered report is not reset mid-flight (read_event resets
+      // stale state so a truncated report can never swallow real keys).
+      g_vt_state_since_ms = GetTickCount64();
+    }
     if (g_vt_state == 3)
     {
       // X10 payload: consume exactly three bytes after ESC [ M.
@@ -503,6 +527,7 @@ namespace
     if (byte == 27)
     {
       g_vt_state = 1;
+      g_vt_state_since_ms = GetTickCount64();
       return kVtNone;
     }
     return emit_vt_char(byte, out);
@@ -590,6 +615,7 @@ void Terminal::disable_raw_mode()
   {
     return;
   }
+  reset_vt_state();
   if (g_have_input_mode)
   {
     SetConsoleMode(input_handle(), g_original_input_mode);
@@ -771,6 +797,14 @@ Event Terminal::read_event()
   int processed = 0;
   while (processed < 256 && peek_has_console_input())
   {
+    // A truncated VT sequence must not linger: if the remaining bytes never
+    // arrive, reset the assembler so real keystrokes are never consumed as
+    // phantom mouse-report payload. Reports are delivered within a few
+    // milliseconds, so 250 ms is a generous bound.
+    if (g_vt_state != 0 && GetTickCount64() - g_vt_state_since_ms > 250)
+    {
+      reset_vt_state();
+    }
     processed++;
     INPUT_RECORD record{};
     if (!read_console_input(record))
@@ -781,10 +815,14 @@ Event Terminal::read_event()
     if (record.EventType == KEY_EVENT && record.Event.KeyEvent.bKeyDown)
     {
       const KEY_EVENT_RECORD &key = record.Event.KeyEvent;
-      if (key.wVirtualKeyCode == 0 && key.uChar.UnicodeChar != 0)
+      // Raw bytes injected by the console (mouse reports, bracketed paste,
+      // CSI sequences). The console assigns virtual-key codes to printable
+      // bytes (via VkKeyScan), so continuation bytes of an in-flight
+      // sequence must be fed to the assembler regardless of
+      // wVirtualKeyCode; only while the assembler is idle (state 0) does a
+      // printable record represent a genuine keystroke.
+      if (key.uChar.UnicodeChar != 0 && (key.wVirtualKeyCode == 0 || g_vt_state != 0))
       {
-        // Raw byte injected by the console (mouse reports, bracketed paste,
-        // CSI sequences). Assemble it instead of typing it into the buffer.
         VtByteResult result = feed_vt_byte((int)key.uChar.UnicodeChar, ev);
         if (result == kVtEvent)
         {
