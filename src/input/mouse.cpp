@@ -425,6 +425,32 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
     }
   }
 
+  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_SYMBOLS && ui) {
+    int panel_w = effective_right_panel_width();
+    int panel_x = std::max(0, ui->get_render_width() - panel_w);
+    int panel_y = topbar_height();
+    int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
+    bool inside = x >= panel_x && x < panel_x + panel_w && y >= panel_y &&
+                  y < panel_y + panel_h;
+    if (inside) {
+      if (is_scroll_up) {
+        outline_move_selection(-3);
+      } else if (is_scroll_down) {
+        outline_move_selection(3);
+      } else if (is_click) {
+        ensure_outline_fresh();
+        int row = y - (panel_y + 3) + outline_panel.scroll;
+        if (row >= 0 && row < (int)outline_panel.symbols.size()) {
+          outline_panel.selected = row;
+          outline_jump_selected();
+        } else {
+          needs_redraw = true;
+        }
+      }
+      return;
+    }
+  }
+
   if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_PLUGIN && ui) {
     int panel_w = effective_right_panel_width();
     int panel_x = std::max(0, ui->get_render_width() - panel_w);

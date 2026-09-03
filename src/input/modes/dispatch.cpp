@@ -1,4 +1,5 @@
 #include "editor.h"
+#include <algorithm>
 #include <cctype>
 
 void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
@@ -324,6 +325,39 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     
     if (ch == 'r' || ch == 'R') {
       open_git_diff_panel(git_diff_panel.path, git_diff_panel.staged);
+      return;
+    }
+    return;
+  }
+
+  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_SYMBOLS &&
+      !is_ctrl && !is_alt) {
+    if (ch == 'q' || ch == 'Q' || ch == 27) {
+      close_outline_panel();
+      set_message("Outline closed");
+      return;
+    }
+    if (ch == '\n' || ch == 13) {
+      outline_jump_selected();
+      return;
+    }
+    if (ch == 'j' || ch == 'J' || ch == 1009 || ch == 14) {
+      outline_move_selection(1);
+      return;
+    }
+    if (ch == 'k' || ch == 'K' || ch == 1008 || ch == 16) {
+      outline_move_selection(-1);
+      return;
+    }
+    if (ch == 1012) { // Home
+      outline_panel.selected = 0;
+      needs_redraw = true;
+      return;
+    }
+    if (ch == 1013) { // End
+      outline_panel.selected =
+          std::max(0, (int)outline_panel.symbols.size() - 1);
+      needs_redraw = true;
       return;
     }
     return;

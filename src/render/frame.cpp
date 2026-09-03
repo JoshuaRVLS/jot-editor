@@ -216,6 +216,7 @@ void Editor::render() {
     render_integrated_terminal();
     render_debugger_panel();
     render_git_diff_panel();
+    render_outline_panel();
     render_plugin_panel();
     render_status_line();
     ui->dim_rect({0, 0, ui->get_render_width(), ui->get_height()});
@@ -248,6 +249,7 @@ void Editor::render() {
     render_integrated_terminal();
     render_debugger_panel();
     render_git_diff_panel();
+    render_outline_panel();
     render_plugin_panel();
     }
 

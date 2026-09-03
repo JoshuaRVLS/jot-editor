@@ -132,6 +132,7 @@ private:
 
   static constexpr RightPanelTab RIGHT_PANEL_DEBUG = ::RIGHT_PANEL_DEBUG;
   static constexpr RightPanelTab RIGHT_PANEL_GIT_DIFF = ::RIGHT_PANEL_GIT_DIFF;
+  static constexpr RightPanelTab RIGHT_PANEL_SYMBOLS = ::RIGHT_PANEL_SYMBOLS;
   static constexpr RightPanelTab RIGHT_PANEL_PLUGIN = ::RIGHT_PANEL_PLUGIN;
 
   static constexpr MouseSelectionMode MOUSE_SELECT_CHAR = ::MOUSE_SELECT_CHAR;
@@ -219,6 +220,16 @@ private:
   void render_integrated_terminal();
   void render_debugger_panel();
   void render_git_diff_panel();
+  void render_outline_panel();
+  bool outline_active() const {
+    return show_right_panel && active_right_panel_tab == RIGHT_PANEL_SYMBOLS;
+  }
+  void toggle_outline_panel();
+  void close_outline_panel();
+  void note_outline_edit();
+  void ensure_outline_fresh(bool force = false);
+  void outline_move_selection(int delta);
+  void outline_jump_selected();
   void render_plugin_panel();
   int effective_right_panel_width() const;
   void render_menu_bar();

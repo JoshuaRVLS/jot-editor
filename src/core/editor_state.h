@@ -90,6 +90,7 @@ struct EditorState {
   int right_panel_width;
   RightPanelTab active_right_panel_tab;
   GitDiffPanel git_diff_panel;
+  OutlinePanelState outline_panel;
   std::string active_plugin_panel;
   std::string plugin_quick_pick_select_callback;
 

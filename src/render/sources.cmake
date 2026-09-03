@@ -8,4 +8,5 @@ set(JOT_RENDER_SOURCES
   render/plugin_panel.cpp
   render/ui.cpp
   render/git_diff.cpp
+  render/outline.cpp
 )

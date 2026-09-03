@@ -670,8 +670,11 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
     goto_next_diagnostic(1);
   } else if (lcmd == "diagprev") {
     goto_next_diagnostic(-1);
-  } else if (lcmd == "symbols" || lcmd == "outline") {
+  } else if (lcmd == "symbols") {
     show_symbol_picker();
+    return false;
+  } else if (lcmd == "outline" || lcmd == "outlinepanel") {
+    toggle_outline_panel();
     return false;
   } else if (lcmd == "tsinstall" || lcmd == "treesitterinstall") {
     if (arg.empty()) {

@@ -3,6 +3,7 @@
 
 #include "types.h"
 #include "tools/debugger/client.h"
+#include "tools/symbols/index.h"
 #include <string>
 #include <tuple>
 #include <unordered_map>
@@ -116,6 +117,7 @@ struct MenuBarSegment {
 enum RightPanelTab {
   RIGHT_PANEL_DEBUG,
   RIGHT_PANEL_GIT_DIFF,
+  RIGHT_PANEL_SYMBOLS,
   RIGHT_PANEL_PLUGIN
 };
 
@@ -124,6 +126,16 @@ struct GitDiffPanel {
   bool staged = false;
   std::string path;
   std::vector<std::string> lines;
+  int scroll = 0;
+};
+
+// Persistent per-buffer symbol outline shown in the right panel.
+struct OutlinePanelState {
+  bool dirty = true;     // buffer content changed since the last rebuild
+  int buffer = -1;       // buffer index the symbol list was built for
+  long long last_rebuild_ms = 0; // throttles rebuilds while typing
+  std::vector<SymbolMatch> symbols;
+  int selected = 0;
   int scroll = 0;
 };
 
