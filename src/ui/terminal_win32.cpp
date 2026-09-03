@@ -199,6 +199,314 @@ namespace
     buffer += "\x1b[?1004l";
     buffer += "\x1b[?2004l";
   }
+
+  // ---------------------------------------------------------------------------
+  // VT passthrough input.
+  //
+  // The renderer enables mouse tracking and bracketed paste by writing
+  // \x1b[?1003h / \x1b[?2004h ... to the output stream. Some console
+  // configurations (classic conhost, certain conpty versions) then deliver
+  // the resulting input as raw byte records (wVirtualKeyCode == 0) even
+  // though this backend reads with the legacy console API. Those bytes used
+  // to be interpreted as regular key events, so hovering printed garbage
+  // like "[MC4'" straight into the buffer. The assembler below reconstructs
+  // the sequences (X10/SGR mouse reports, CSI keys, bracketed-paste
+  // delimiters) into proper events; anything unrecognized is dropped instead
+  // of being typed.
+  // ---------------------------------------------------------------------------
+
+  enum VtByteResult
+  {
+    kVtNone,  // consumed, waiting for more bytes
+    kVtEvent, // out contains a complete event
+    kVtDrop,  // consumed, deliberately discarded
+  };
+
+  int g_vt_state = 0;          // 0 idle, 1 ESC seen, 2 CSI, 3 X10 body, 4 SS3
+  std::string g_vt_params;     // CSI parameter bytes
+  int g_x10_pos = 0;           // X10 payload bytes consumed (out of 3)
+  int g_x10_code = 0;          // X10 button byte, already -32
+  int g_x10_bytes[2] = {0, 0}; // X10 x/y bytes, already -32
+  int g_x10_last_button = 0;
+
+  BOOL WINAPI ignore_console_control(DWORD type)
+  {
+    (void)type;
+    // Swallow console control events (Ctrl+C, Ctrl+Break). With
+    // ENABLE_PROCESSED_INPUT cleared, Ctrl+C also arrives as an ordinary key
+    // event; this handler guarantees a control event can never tear the
+    // editor down (which used to drop the user back into the shell while the
+    // stale editor frame stayed on screen).
+    return TRUE;
+  }
+
+  VtByteResult emit_vt_char(int byte, Event &out)
+  {
+    if (byte == 0)
+    {
+      return kVtDrop;
+    }
+    out.type = EVENT_KEY;
+    out.key.key = byte;
+    out.key.ctrl = byte >= 1 && byte <= 26 && byte != 9 && byte != 13;
+    out.key.shift = false;
+    out.key.alt = false;
+    return kVtEvent;
+  }
+
+  void fill_mouse_event(int button,
+                        int x,
+                        int y,
+                        bool ctrl,
+                        bool shift,
+                        bool alt,
+                        bool pressed,
+                        bool released,
+                        MouseEvent &event)
+  {
+    reset_mouse_event(event);
+    event.x = x;
+    event.y = y;
+    event.button = button;
+    event.ctrl = ctrl;
+    event.shift = shift;
+    event.alt = alt;
+    event.pressed = pressed;
+    event.released = released;
+  }
+
+  // SGR mouse: ESC [ < b ; x ; y M | m  (x/y are 1-based; 'm' = release).
+  // Mirrors the POSIX Terminal::parse_mouse_event semantics exactly so both
+  // backends deliver identical MouseEvent values to the editor.
+  VtByteResult decode_sgr_mouse(const std::string &params, char final, Event &out)
+  {
+    int b = 0;
+    int x = 0;
+    int y = 0;
+    if (sscanf(params.c_str(), "<%d;%d;%d", &b, &x, &y) != 3 || x <= 0 || y <= 0)
+    {
+      return kVtDrop;
+    }
+    const bool release = final == 'm';
+    const bool motion = (b & 0x20) != 0;
+    const bool wheel = b >= 64 && b <= 67;
+    MouseEvent m;
+    fill_mouse_event(b,
+                     x - 1,
+                     y - 1,
+                     (b & 16) != 0,
+                     (b & 4) != 0,
+                     (b & 8) != 0,
+                     wheel || (!release && !motion),
+                     release && !motion && !wheel,
+                     m);
+    out.type = EVENT_MOUSE;
+    out.mouse = m;
+    return kVtEvent;
+  }
+
+  VtByteResult decode_x10_mouse(int code, int x, int y, Event &out)
+  {
+    if (x <= 0 || y <= 0)
+    {
+      g_x10_last_button = 0;
+      return kVtDrop;
+    }
+    const bool ctrl = (code & 16) != 0;
+    const bool shift = (code & 4) != 0;
+    const bool alt = (code & 8) != 0;
+    MouseEvent m;
+    if (code & 0x20)
+    {
+      // Motion (hover / drag): no press or release state.
+      fill_mouse_event(code, x - 1, y - 1, ctrl, shift, alt, false, false, m);
+    }
+    else if ((code & 3) == 3)
+    {
+      // Release-all: report the button we last saw pressed.
+      fill_mouse_event(g_x10_last_button, x - 1, y - 1, ctrl, shift, alt, false, true, m);
+    }
+    else
+    {
+      g_x10_last_button = code & 3;
+      fill_mouse_event(code & 3, x - 1, y - 1, ctrl, shift, alt, true, false, m);
+    }
+    out.type = EVENT_MOUSE;
+    out.mouse = m;
+    return kVtEvent;
+  }
+
+  // A finished CSI sequence (params already collected, final byte in hand).
+  VtByteResult finish_csi(const std::string &params, char final, Event &out)
+  {
+    if (!params.empty() && params[0] == '<')
+    {
+      return decode_sgr_mouse(params, final, out);
+    }
+    if (params.empty() && final == 'M')
+    {
+      // X10 mouse report: ESC [ M followed by three payload bytes.
+      g_vt_state = 3;
+      g_x10_pos = 0;
+      g_x10_code = 0;
+      g_x10_bytes[0] = 0;
+      g_x10_bytes[1] = 0;
+      return kVtNone;
+    }
+    if (params == "200" && final == '~')
+    {
+      return kVtDrop; // bracketed-paste start
+    }
+    if (params == "201" && final == '~')
+    {
+      return kVtDrop; // bracketed-paste end
+    }
+
+    // CSI key sequences (only reachable if a terminal feeds keys as bytes).
+    int key = 0;
+    bool shift = false;
+    bool ctrl = false;
+    bool alt = false;
+    size_t semi = params.find(';');
+    std::string main = semi == std::string::npos ? params : params.substr(0, semi);
+    if (semi != std::string::npos)
+    {
+      int mod = atoi(params.c_str() + (int)semi + 1);
+      shift = (mod == 2 || mod == 4 || mod == 6 || mod == 8);
+      alt = (mod == 3 || mod == 4 || mod == 7 || mod == 8);
+      ctrl = (mod >= 5 && mod <= 8);
+    }
+    if (final == 'A')
+      key = 1008;
+    else if (final == 'B')
+      key = 1009;
+    else if (final == 'C')
+      key = 1010;
+    else if (final == 'D')
+      key = 1011;
+    else if (final == 'H')
+      key = 1012;
+    else if (final == 'F')
+      key = 1013;
+    else if (final == 'Z')
+      key = 1017;
+    else if (final == '~')
+    {
+      switch (atoi(main.c_str()))
+      {
+      case 1:
+      case 7:
+        key = 1012;
+        break;
+      case 3:
+        key = 1001;
+        break;
+      case 4:
+      case 8:
+        key = 1013;
+        break;
+      case 5:
+        key = 1015;
+        break;
+      case 6:
+        key = 1016;
+        break;
+      default:
+        return kVtDrop;
+      }
+    }
+    else
+    {
+      return kVtDrop;
+    }
+    out.type = EVENT_KEY;
+    out.key.key = key;
+    out.key.ctrl = ctrl;
+    out.key.shift = shift;
+    out.key.alt = alt;
+    return kVtEvent;
+  }
+
+  // Feed one raw byte from a VK==0 KEY_EVENT record into the VT assembler.
+  VtByteResult feed_vt_byte(int byte, Event &out)
+  {
+    if (g_vt_state == 3)
+    {
+      // X10 payload: consume exactly three bytes after ESC [ M.
+      if (g_x10_pos == 0)
+      {
+        g_x10_code = byte - 32;
+      }
+      else
+      {
+        g_x10_bytes[g_x10_pos - 1] = byte - 32;
+      }
+      g_x10_pos++;
+      if (g_x10_pos < 3)
+      {
+        return kVtNone;
+      }
+      g_vt_state = 0;
+      return decode_x10_mouse(g_x10_code, g_x10_bytes[0], g_x10_bytes[1], out);
+    }
+    if (g_vt_state == 2)
+    {
+      // Collecting CSI: parameters are 0x30..0x3F, final byte 0x40..0x7E.
+      if (byte >= 0x30 && byte <= 0x3F)
+      {
+        g_vt_params.push_back((char)byte);
+        return kVtNone;
+      }
+      if (byte >= 0x40 && byte <= 0x7E)
+      {
+        std::string params = g_vt_params;
+        g_vt_params.clear();
+        g_vt_state = 0;
+        return finish_csi(params, (char)byte, out);
+      }
+      // Malformed: discard what we collected and retry this byte fresh.
+      g_vt_params.clear();
+      g_vt_state = 0;
+      return feed_vt_byte(byte, out);
+    }
+    if (g_vt_state == 4)
+    {
+      g_vt_state = 0; // SS3 final byte (function keys): not supported as bytes
+      return kVtDrop;
+    }
+    if (g_vt_state == 1)
+    {
+      g_vt_state = 0;
+      if (byte == '[')
+      {
+        g_vt_state = 2;
+        return kVtNone;
+      }
+      if (byte == 'O')
+      {
+        g_vt_state = 4;
+        return kVtNone;
+      }
+      if (byte == 27)
+      {
+        // ESC ESC: treat as a single Escape key.
+        out.type = EVENT_KEY;
+        out.key.key = 27;
+        out.key.ctrl = false;
+        out.key.shift = false;
+        out.key.alt = false;
+        return kVtEvent;
+      }
+      // ESC + printable: swallow the ESC prefix, forward the character.
+      return emit_vt_char(byte, out);
+    }
+    if (byte == 27)
+    {
+      g_vt_state = 1;
+      return kVtNone;
+    }
+    return emit_vt_char(byte, out);
+  }
 } // namespace
 
 Terminal::Terminal() : width(80), height(24), poll_timeout_ms(8), raw_mode(false), termkey_(nullptr)
@@ -265,6 +573,14 @@ void Terminal::enable_raw_mode()
 #endif
     SetConsoleMode(out, output_mode);
   }
+
+  // Never let the console deliver Ctrl+C / Ctrl+Break as process-killing
+  // control events. With ENABLE_PROCESSED_INPUT cleared above, ^C also
+  // arrives as an ordinary key event; the handler guarantees a stray control
+  // event (for example one generated while another console app runs in the
+  // same window) cannot terminate jot mid-session.
+  SetConsoleCtrlHandler(&ignore_console_control, TRUE);
+
   raw_mode = true;
 }
 
@@ -287,6 +603,7 @@ void Terminal::disable_raw_mode()
     SetConsoleCP(g_original_input_cp);
     SetConsoleOutputCP(g_original_output_cp);
   }
+  SetConsoleCtrlHandler(&ignore_console_control, FALSE);
   raw_mode = false;
 }
 
@@ -447,22 +764,46 @@ Event Terminal::read_event()
   Event ev{};
   ev.type = EVENT_REDRAW;
 
-  INPUT_RECORD record{};
-  while (peek_has_console_input() && read_console_input(record))
+  // Drain whatever the console has queued right now: a VT mouse report or key
+  // sequence arrives as several byte records, so a sequence can only be
+  // reassembled when the whole batch is visible. Records we don't consume
+  // stay in the queue for the next poll.
+  int processed = 0;
+  while (processed < 256 && peek_has_console_input())
   {
+    processed++;
+    INPUT_RECORD record{};
+    if (!read_console_input(record))
+    {
+      break;
+    }
+
     if (record.EventType == KEY_EVENT && record.Event.KeyEvent.bKeyDown)
     {
+      const KEY_EVENT_RECORD &key = record.Event.KeyEvent;
+      if (key.wVirtualKeyCode == 0 && key.uChar.UnicodeChar != 0)
+      {
+        // Raw byte injected by the console (mouse reports, bracketed paste,
+        // CSI sequences). Assemble it instead of typing it into the buffer.
+        VtByteResult result = feed_vt_byte((int)key.uChar.UnicodeChar, ev);
+        if (result == kVtEvent)
+        {
+          return ev;
+        }
+        continue;
+      }
+
       bool ctrl = false;
       bool shift = false;
       bool alt = false;
-      int key = translate_key_event(record.Event.KeyEvent, ctrl, shift, alt);
-      if (key < 0)
+      int keycode = translate_key_event(key, ctrl, shift, alt);
+      if (keycode < 0)
       {
         continue;
       }
       ev.type = EVENT_KEY;
-      ev.key.key = key;
-      ev.key.ctrl = ctrl || (key >= 1 && key <= 26 && key != 13 && key != 9);
+      ev.key.key = keycode;
+      ev.key.ctrl = ctrl || (keycode >= 1 && keycode <= 26 && keycode != 13 && keycode != 9);
       ev.key.shift = shift;
       ev.key.alt = alt;
       return ev;
@@ -484,6 +825,17 @@ Event Terminal::read_event()
       ev.resize.height = height;
       return ev;
     }
+  }
+
+  // A lone ESC byte with nothing after it in the queue is a real Escape key.
+  if (g_vt_state == 1)
+  {
+    g_vt_state = 0;
+    ev.type = EVENT_KEY;
+    ev.key.key = 27;
+    ev.key.ctrl = false;
+    ev.key.shift = false;
+    ev.key.alt = false;
   }
   return ev;
 }
