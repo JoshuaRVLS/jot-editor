@@ -255,6 +255,23 @@ namespace
     return file;
   }
 
+  // Whether VT mouse-tracking sequences (\x1b[?1002h/1003h/1006h) can be
+  // requested safely. Classic conhost converts tracking into native
+  // MOUSE_EVENT records, so writing the sequences is harmless there.
+  // Windows Terminal / ConEmu (conpty) instead deliver the tracking
+  // reports back as raw VT byte records -- ESC [ M <payload> -- whose
+  // bytes can leak into the editor as typed text ("[MYS", "[MC", ...)
+  // regardless of how they are parsed. Detect those consoles and skip the
+  // sequences entirely: ENABLE_MOUSE_INPUT alone still yields clean
+  // MOUSE_EVENT records for clicks and the wheel, and no tracking request
+  // means the terminal never generates report bytes to leak.
+  bool vt_mouse_safe()
+  {
+    const char *wt = std::getenv("WT_SESSION");
+    const char *ce = std::getenv("ConEmuANSI");
+    return (!wt || !wt[0]) && (!ce || !ce[0]);
+  }
+
   void log_input_record(const INPUT_RECORD &record, const char *action)
   {
     FILE *f = win32_input_log();
@@ -1075,9 +1092,12 @@ void Terminal::write_char(char c)
 
 void Terminal::enable_mouse()
 {
-  buffer += "\x1b[?1002h";
-  buffer += "\x1b[?1006h";
   buffer += "\x1b[?2004h";
+  if (vt_mouse_safe())
+  {
+    buffer += "\x1b[?1002h";
+    buffer += "\x1b[?1006h";
+  }
   flush();
 }
 
@@ -1089,12 +1109,23 @@ void Terminal::disable_mouse()
 
 void Terminal::enable_mouse_hover()
 {
-  buffer += "\x1b[?1003h";
-  flush();
+  // Under conpty (Windows Terminal / ConEmu) hover tracking is what floods
+  // the input stream with byte reports that leak as text -- never request
+  // it there. Classic conhost converts it to MOUSE_EVENT records, so it is
+  // requested only when vt_mouse_safe().
+  if (vt_mouse_safe())
+  {
+    buffer += "\x1b[?1003h";
+    flush();
+  }
 }
 
 void Terminal::disable_mouse_hover()
 {
+  if (!vt_mouse_safe())
+  {
+    return; // tracking was never requested under conpty; do not enable it now
+  }
   buffer += "\x1b[?1003l";
   buffer += "\x1b[?1002h";
   buffer += "\x1b[?1006h";
