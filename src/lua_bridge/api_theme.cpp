@@ -10,6 +10,10 @@
 #include <unordered_map>
 #include <vector>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace
 {
   std::vector<std::filesystem::path> theme_dirs()
@@ -33,6 +37,21 @@ namespace
       out.push_back(fs::path(data) / "configs" / "colors");
 #ifdef JOT_DEFAULT_DATA_DIR
     out.push_back(fs::path(JOT_DEFAULT_DATA_DIR) / "configs" / "colors");
+#endif
+#ifdef _WIN32
+    // Installed layout fallback: <exe>\..\share\jot\configs\colors.  Per-user
+    // installers unpack to arbitrary locations, so the compile-time default
+    // (JOT_DEFAULT_DATA_DIR) rarely matches the real install path.
+    {
+      wchar_t buf[MAX_PATH];
+      const DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+      if (n > 0 && n < MAX_PATH)
+      {
+        fs::path exe(buf);
+        out.push_back(exe.parent_path().parent_path() / "share" / "jot" /
+                      "configs" / "colors");
+      }
+    }
 #endif
     out.push_back(fs::current_path() / ".configs" / "configs" / "colors");
     out.push_back(fs::current_path() / "configs" / "colors");
