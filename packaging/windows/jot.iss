@@ -87,9 +87,11 @@ var
 begin
   if RegQueryStringValue(HKCU, 'Environment', 'Path', Path) then
   begin
-    Path := StringReplace(Path, ';' + InstalledPath, '', [rfReplaceAll, rfIgnoreCase]);
-    Path := StringReplace(Path, InstalledPath + ';', '', [rfReplaceAll, rfIgnoreCase]);
-    Path := StringReplace(Path, InstalledPath, '', [rfReplaceAll, rfIgnoreCase]);
+    // StringChangeEx is Inno's PascalScript replacement API (there is no
+    // Delphi StringReplace in the scripting engine).
+    StringChangeEx(Path, ';' + InstalledPath, '', [rfReplaceAll, rfIgnoreCase]);
+    StringChangeEx(Path, InstalledPath + ';', '', [rfReplaceAll, rfIgnoreCase]);
+    StringChangeEx(Path, InstalledPath, '', [rfReplaceAll, rfIgnoreCase]);
     RegWriteExpandStringValue(HKCU, 'Environment', 'Path', Path);
   end;
 end;
