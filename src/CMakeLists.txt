@@ -346,6 +346,15 @@ target_link_directories(jot_core PUBLIC ${LIBUV_LIBRARY_DIRS})
 target_link_libraries(jot_engine PUBLIC ${LIBUV_LIBRARIES})
 target_link_directories(jot_engine PUBLIC ${LIBUV_LIBRARY_DIRS})
 if(WIN32)
+  # Static libuv needs its Windows system dependencies linked explicitly:
+  # the vcpkg config does not propagate them, and source builds only export
+  # their own targets. Without these the link fails with unresolved
+  # ws2_32/dbghelp/iphlpapi/userenv symbols.
+  set(LIBUV_WIN32_SYSTEM_LIBS
+      ws2_32 psapi userenv iphlpapi dbghelp
+      advapi32 user32 shell32 ole32)
+  target_link_libraries(jot_core PUBLIC ${LIBUV_WIN32_SYSTEM_LIBS})
+  target_link_libraries(jot_engine PUBLIC ${LIBUV_WIN32_SYSTEM_LIBS})
   target_link_libraries(jot_edit PUBLIC user32)
   target_link_libraries(jot_engine PUBLIC user32)
 endif()

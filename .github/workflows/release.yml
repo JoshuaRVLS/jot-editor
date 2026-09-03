@@ -48,11 +48,13 @@ jobs:
         if: matrix.platform == 'windows'
         shell: pwsh
         run: |
-          # Static triplet: libuv/utf8proc get linked INTO jot.exe, so the
-          # shipped binary has no DLL dependencies (zip and installer are
-          # self-contained). Lua is already built statically via
-          # FetchContent.
-          vcpkg install libuv:x64-windows-static utf8proc:x64-windows-static
+          # utf8proc comes from vcpkg (static). libuv is deliberately NOT
+          # installed: the CMakeLists FetchContent fallback builds it from
+          # source with the project's own compiler/CRT settings (vcpkg's
+          # prebuilt static libuv links a mismatched CRT and drops its
+          # ws2_32/dbghelp system dependencies). Everything ends up linked
+          # INTO jot.exe, so the zip and installer are self-contained.
+          vcpkg install utf8proc:x64-windows-static
 
       - name: Configure Linux build
         if: matrix.platform == 'linux'
@@ -70,6 +72,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows-static `
             '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$<CONFIG:Debug>:Debug>' `
+            -DLIBUV_BUILD_SHARED=OFF `
             -DJOT_TREESITTER=OFF `
             -DBUILD_TESTING=OFF
 
