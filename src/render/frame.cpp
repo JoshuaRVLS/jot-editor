@@ -1,8 +1,8 @@
 #include "bracket.h"
 #include "column_utils.h"
 #include "editor.h"
-#include "lua_bridge/api.h"
 #include "folding.h"
+#include "lua_bridge/api.h"
 #include "ui/text.h"
 #include <cstdio>
 #include <filesystem>
@@ -39,11 +39,9 @@ namespace
     return base.empty() ? "[No Name]" : base;
   }
 
-  std::pair<int, int> git_tab_colors(const Theme &theme,
-                                     const std::string &status)
+  std::pair<int, int> git_tab_colors(const Theme &theme, const std::string &status)
   {
-    if (status.find('U') != std::string::npos || status == "AA" ||
-        status == "DD")
+    if (status.find('U') != std::string::npos || status == "AA" || status == "DD")
       return {theme.fg_git_conflict, theme.bg_git_conflict};
     if (status.find('D') != std::string::npos)
       return {theme.fg_git_deleted, theme.bg_git_deleted};
@@ -56,10 +54,14 @@ namespace
     return {theme.fg_git_modified, theme.bg_git_modified};
   }
 
-  bool compute_code_cursor_screen_pos(const SplitPane &pane, const FileBuffer &buf,
-                                      bool show_minimap, int minimap_width,
-                                      int tab_size, int tab_height,
-                                      int &display_x, int &display_y)
+  bool compute_code_cursor_screen_pos(const SplitPane &pane,
+                                      const FileBuffer &buf,
+                                      bool show_minimap,
+                                      int minimap_width,
+                                      int tab_size,
+                                      int tab_height,
+                                      int &display_x,
+                                      int &display_y)
   {
     int draw_w = std::max(1, pane.w);
     if (show_minimap && draw_w > 20)
@@ -79,8 +81,7 @@ namespace
     {
       int line = Folding::buffer_line_for_visible_offset(
           buf.fold_ranges, buf.scroll_offset, row, (int)buf.line_count());
-      if (line >= 0 && line == buf.cursor.y &&
-          !Folding::is_line_hidden(buf.fold_ranges, line))
+      if (line >= 0 && line == buf.cursor.y && !Folding::is_line_hidden(buf.fold_ranges, line))
       {
         visible_row = row;
         found_row = true;
@@ -122,14 +123,16 @@ namespace
     return found_row;
   }
 
-  UICursorShape editor_cursor_shape() { return UICursorShape::Bar; }
+  UICursorShape editor_cursor_shape()
+  {
+    return UICursorShape::Bar;
+  }
 } // namespace
 
 void Editor::render()
 {
   IntegratedTerminal *active_terminal = get_integrated_terminal();
-  if (show_sidebar && ui &&
-      ui->get_render_width() < min_sidebar_width() + 12)
+  if (show_sidebar && ui && ui->get_render_width() < min_sidebar_width() + 12)
   {
     show_sidebar = false;
     if (focus_state == FOCUS_SIDEBAR)
@@ -149,16 +152,15 @@ void Editor::render()
     }
 
     // Keep cursor visibility in sync even when no redraw is needed.
-    if (show_menu_bar_dropdown || show_context_menu || show_quick_pick ||
-        show_tree_sitter_status_modal)
+    if (show_menu_bar_dropdown || show_context_menu || show_quick_pick
+        || show_tree_sitter_status_modal)
     {
       ui->hide_cursor();
       ui->flush_cursor();
       return;
     }
 
-    if (show_command_palette || show_search || show_save_prompt ||
-        show_quit_prompt)
+    if (show_command_palette || show_search || show_save_prompt || show_quit_prompt)
     {
       if (show_command_palette)
       {
@@ -179,8 +181,7 @@ void Editor::render()
       ui->flush_cursor();
       return;
     }
-    if (show_integrated_terminal && active_terminal &&
-        active_terminal->is_focused())
+    if (show_integrated_terminal && active_terminal && active_terminal->is_focused())
     {
       place_integrated_terminal_cursor();
       ui->flush_cursor();
@@ -204,9 +205,8 @@ void Editor::render()
       auto &buf = get_buffer(pane.buffer_id);
       int display_x = 0;
       int display_y = 0;
-      if (compute_code_cursor_screen_pos(pane, buf, show_minimap, minimap_width,
-                                         tab_size, tab_height,
-                                         display_x, display_y))
+      if (compute_code_cursor_screen_pos(
+              pane, buf, show_minimap, minimap_width, tab_size, tab_height, display_x, display_y))
       {
         ui->set_cursor(display_x, display_y, editor_cursor_shape());
       }
@@ -343,14 +343,13 @@ void Editor::render()
 
     // Set cursor state BEFORE ui->render() so the full-row paint emits the
     // correct cursor at the end of the frame.
-    if (show_lsp_manager_modal || (popup.visible && popup.presentation == POPUP_MODAL) ||
-        show_menu_bar_dropdown || show_context_menu || show_quick_pick ||
-        show_tree_sitter_status_modal)
+    if (show_lsp_manager_modal || (popup.visible && popup.presentation == POPUP_MODAL)
+        || show_menu_bar_dropdown || show_context_menu || show_quick_pick
+        || show_tree_sitter_status_modal)
     {
       ui->hide_cursor();
     }
-    else if (show_command_palette || show_search || show_save_prompt ||
-             show_quit_prompt)
+    else if (show_command_palette || show_search || show_save_prompt || show_quit_prompt)
     {
       if (show_command_palette)
       {
@@ -369,8 +368,7 @@ void Editor::render()
         ui->hide_cursor();
       }
     }
-    else if (show_integrated_terminal && active_terminal &&
-             active_terminal->is_focused())
+    else if (show_integrated_terminal && active_terminal && active_terminal->is_focused())
     {
       place_integrated_terminal_cursor();
     }
@@ -386,9 +384,8 @@ void Editor::render()
         auto &buf = get_buffer(pane.buffer_id);
         int display_x = 0;
         int display_y = 0;
-        if (compute_code_cursor_screen_pos(pane, buf, show_minimap, minimap_width,
-                                           tab_size, tab_height,
-                                           display_x, display_y))
+        if (compute_code_cursor_screen_pos(
+                pane, buf, show_minimap, minimap_width, tab_size, tab_height, display_x, display_y))
         {
           ui->set_cursor(display_x, display_y, editor_cursor_shape());
         }
@@ -419,8 +416,7 @@ void Editor::render_panes()
 
 void Editor::render_pane_resize_guides()
 {
-  if (!pane_resize_dragging || pane_resize_node < 0 ||
-      pane_resize_node >= (int)pane_tree.size())
+  if (!pane_resize_dragging || pane_resize_node < 0 || pane_resize_node >= (int)pane_tree.size())
   {
     return;
   }
@@ -433,9 +429,7 @@ void Editor::render_pane_resize_guides()
         std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
   }
   int menu_h = topbar_height();
-  int total_h =
-      std::max(1, ui->get_height() - status_height - reserved_terminal_h -
-                      menu_h);
+  int total_h = std::max(1, ui->get_height() - status_height - reserved_terminal_h - menu_h);
   int origin_x = show_sidebar ? effective_sidebar_width() : 0;
   int right_w = effective_right_panel_width();
   int available_w = std::max(1, total_w - origin_x - right_w);
@@ -443,8 +437,7 @@ void Editor::render_pane_resize_guides()
   std::function<void(int, int, int, int, int)> draw_node =
       [&](int node_index, int x, int y, int w, int h)
   {
-    if (node_index < 0 || node_index >= (int)pane_tree.size() || w <= 1 ||
-        h <= 1)
+    if (node_index < 0 || node_index >= (int)pane_tree.size() || w <= 1 || h <= 1)
     {
       return;
     }
@@ -467,8 +460,7 @@ void Editor::render_pane_resize_guides()
         int bx = x + first_w - 1;
         for (int row = y; row < y + h; row++)
         {
-          ui->draw_text(bx, row, "│", theme.fg_active_border,
-                        theme.bg_active_border, true);
+          ui->draw_text(bx, row, "│", theme.fg_active_border, theme.bg_active_border, true);
         }
       }
       int second_w = std::max(1, w - first_w);
@@ -487,8 +479,7 @@ void Editor::render_pane_resize_guides()
         int by = y + first_h - 1;
         for (int col = x; col < x + w; col++)
         {
-          ui->draw_text(col, by, "─", theme.fg_active_border,
-                        theme.bg_active_border, true);
+          ui->draw_text(col, by, "─", theme.fg_active_border, theme.bg_active_border, true);
         }
       }
       int second_h = std::max(1, h - first_h);
@@ -500,8 +491,7 @@ void Editor::render_pane_resize_guides()
   draw_node(pane_root, origin_x, menu_h, available_w, total_h);
 }
 
-Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane,
-                                                    int draw_w)
+Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane, int draw_w)
 {
   FileTabLayout layout;
   layout.x = pane.x + 1;
@@ -509,8 +499,7 @@ Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane,
   layout.w = std::max(1, draw_w - 2);
 
   std::vector<int> tab_ids = pane.tab_buffer_ids;
-  if (tab_ids.empty() && pane.buffer_id >= 0 &&
-      pane.buffer_id < (int)buffers.size())
+  if (tab_ids.empty() && pane.buffer_id >= 0 && pane.buffer_id < (int)buffers.size())
   {
     tab_ids.push_back(pane.buffer_id);
   }
@@ -523,8 +512,7 @@ Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane,
     {
       continue;
     }
-    if (buffers[id].is_placeholder && !buffers[id].modified &&
-        buffers[id].filepath.empty())
+    if (buffers[id].is_placeholder && !buffers[id].modified && buffers[id].filepath.empty())
     {
       continue;
     }
@@ -536,23 +524,19 @@ Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane,
   int hidden_total = 0;
   for (int id : tab_ids)
   {
-    if (id >= 0 && id < (int)buffers.size() &&
-        !(buffers[id].is_placeholder && !buffers[id].modified &&
-          buffers[id].filepath.empty()))
+    if (id >= 0 && id < (int)buffers.size()
+        && !(buffers[id].is_placeholder && !buffers[id].modified && buffers[id].filepath.empty()))
     {
       hidden_total++;
     }
   }
 
-  const int valid_start =
-      std::clamp(pane.tab_scroll_index, 0, std::max(0, hidden_total - 1));
+  const int valid_start = std::clamp(pane.tab_scroll_index, 0, std::max(0, hidden_total - 1));
   layout.hidden_before = valid_start;
   const bool reserve_left = valid_start > 0;
-  layout.scroll_left_label =
-      reserve_left ? ("‹" + std::to_string(valid_start)) : "";
+  layout.scroll_left_label = reserve_left ? ("‹" + std::to_string(valid_start)) : "";
   layout.scroll_left_x = reserve_left ? layout.x : -1;
-  layout.scroll_left_end_x =
-      reserve_left ? layout.x + ui_cell_count(layout.scroll_left_label) : -1;
+  layout.scroll_left_end_x = reserve_left ? layout.x + ui_cell_count(layout.scroll_left_label) : -1;
 
   int tab_x = reserve_left ? layout.scroll_left_end_x : layout.x;
   int valid_index = 0;
@@ -564,8 +548,7 @@ Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane,
     {
       continue;
     }
-    if (buffers[id].is_placeholder && !buffers[id].modified &&
-        buffers[id].filepath.empty())
+    if (buffers[id].is_placeholder && !buffers[id].modified && buffers[id].filepath.empty())
     {
       continue;
     }
@@ -625,9 +608,7 @@ Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane,
     segment.preview = buffers[id].is_preview;
     std::error_code status_ec;
     const std::string status_path =
-        std::filesystem::absolute(buffers[id].filepath, status_ec)
-            .lexically_normal()
-            .string();
+        std::filesystem::absolute(buffers[id].filepath, status_ec).lexically_normal().string();
     auto status_it = git_file_status.find(status_path);
     if (status_it != git_file_status.end())
     {
@@ -648,11 +629,10 @@ Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane,
   if (layout.hidden_after > 0)
   {
     layout.overflow_label = "›+" + std::to_string(layout.hidden_after);
-    layout.overflow_x = std::max(
-        layout.x, layout.x + layout.w - ui_cell_count(layout.overflow_label));
+    layout.overflow_x =
+        std::max(layout.x, layout.x + layout.w - ui_cell_count(layout.overflow_label));
     layout.scroll_right_x = layout.overflow_x;
-    layout.scroll_right_end_x =
-        layout.overflow_x + ui_cell_count(layout.overflow_label);
+    layout.scroll_right_end_x = layout.overflow_x + ui_cell_count(layout.overflow_label);
   }
 
   return layout;
@@ -673,8 +653,7 @@ int Editor::find_local_tab_index(const SplitPane &pane, int buffer_id) const
 void Editor::clamp_tab_scroll(SplitPane &pane)
 {
   pane.tab_scroll_index =
-      std::clamp(pane.tab_scroll_index, 0,
-                 std::max(0, (int)pane.tab_buffer_ids.size() - 1));
+      std::clamp(pane.tab_scroll_index, 0, std::max(0, (int)pane.tab_buffer_ids.size() - 1));
 }
 
 void Editor::reveal_local_tab(SplitPane &pane, int target_index, int draw_w)
@@ -684,8 +663,7 @@ void Editor::reveal_local_tab(SplitPane &pane, int target_index, int draw_w)
     pane.tab_scroll_index = 0;
     return;
   }
-  target_index =
-      std::clamp(target_index, 0, (int)pane.tab_buffer_ids.size() - 1);
+  target_index = std::clamp(target_index, 0, (int)pane.tab_buffer_ids.size() - 1);
   clamp_tab_scroll(pane);
   if (target_index < pane.tab_scroll_index)
   {
@@ -711,9 +689,8 @@ bool Editor::scroll_local_tabs(SplitPane &pane, int delta)
     return false;
   }
   int old_scroll = pane.tab_scroll_index;
-  pane.tab_scroll_index =
-      std::clamp(pane.tab_scroll_index + delta, 0,
-                 std::max(0, (int)pane.tab_buffer_ids.size() - 1));
+  pane.tab_scroll_index = std::clamp(
+      pane.tab_scroll_index + delta, 0, std::max(0, (int)pane.tab_buffer_ids.size() - 1));
   if (pane.tab_scroll_index > 0)
   {
     int draw_w = std::max(1, pane.w);
@@ -721,8 +698,7 @@ bool Editor::scroll_local_tabs(SplitPane &pane, int delta)
     {
       draw_w = std::max(1, draw_w - minimap_width);
     }
-    while (pane.tab_scroll_index > 0 &&
-           build_file_tab_layout(pane, draw_w).segments.empty())
+    while (pane.tab_scroll_index > 0 && build_file_tab_layout(pane, draw_w).segments.empty())
     {
       pane.tab_scroll_index--;
     }
@@ -737,8 +713,7 @@ bool Editor::switch_to_local_tab(int target_index)
   {
     return false;
   }
-  target_index =
-      std::clamp(target_index, 0, (int)pane.tab_buffer_ids.size() - 1);
+  target_index = std::clamp(target_index, 0, (int)pane.tab_buffer_ids.size() - 1);
   int buffer_id = pane.tab_buffer_ids[target_index];
   if (buffer_id < 0 || buffer_id >= (int)buffers.size())
   {
@@ -796,8 +771,7 @@ void Editor::render_pane(const SplitPane &pane)
 
   if (show_minimap && pane.w > 20)
   {
-    render_minimap(pane.x + draw_w, pane.y + 1, minimap_width, pane.h - 1,
-                   pane.buffer_id);
+    render_minimap(pane.x + draw_w, pane.y + 1, minimap_width, pane.h - 1, pane.buffer_id);
   }
 
   UIRect rect = {pane.x, pane.y, draw_w, pane.h};
@@ -813,8 +787,8 @@ void Editor::render_pane(const SplitPane &pane)
 
     if (!tabs.scroll_left_label.empty() && tabs.scroll_left_x >= 0)
     {
-      ui->draw_text(tabs.scroll_left_x, tabs.y, tabs.scroll_left_label,
-                    theme.fg_comment, theme.bg_status);
+      ui->draw_text(
+          tabs.scroll_left_x, tabs.y, tabs.scroll_left_label, theme.fg_comment, theme.bg_status);
     }
 
     for (const auto &tab : tabs.segments)
@@ -827,21 +801,22 @@ void Editor::render_pane(const SplitPane &pane)
         fg = git_colors.first;
         bg = git_colors.second;
       }
-      ui->draw_text(tab.x, tabs.y, tab.active ? "▌" : " ",
-                    tab.active ? theme.fg_active_border
-                               : theme.fg_tab_separator,
-                    bg, tab.active);
-      ui->draw_text(tab.label_x, tabs.y, tab.label, fg, bg, tab.active,
-                    tab.preview);
-      ui->draw_text(tab.close_x, tabs.y, "×",
-                    tab.active ? theme.fg_tab_close : theme.fg_comment, bg);
+      ui->draw_text(tab.x,
+                    tabs.y,
+                    tab.active ? "▌" : " ",
+                    tab.active ? theme.fg_active_border : theme.fg_tab_separator,
+                    bg,
+                    tab.active);
+      ui->draw_text(tab.label_x, tabs.y, tab.label, fg, bg, tab.active, tab.preview);
+      ui->draw_text(
+          tab.close_x, tabs.y, "×", tab.active ? theme.fg_tab_close : theme.fg_comment, bg);
       ui->draw_text(tab.close_x + 1, tabs.y, " ", theme.fg_tab_separator, bg);
     }
 
     if (!tabs.overflow_label.empty())
     {
-      ui->draw_text(tabs.overflow_x, tabs.y, tabs.overflow_label,
-                    theme.fg_comment, theme.bg_status);
+      ui->draw_text(
+          tabs.overflow_x, tabs.y, tabs.overflow_label, theme.fg_comment, theme.bg_status);
     }
   }
 }

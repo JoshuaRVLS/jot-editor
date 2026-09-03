@@ -2,72 +2,86 @@
 #include "ui/text.h"
 #include <algorithm>
 
-namespace {
-int rendered_cell_width(const std::string &text) {
-  if (text.empty())
-    return 1;
-  return std::max(1, ui_cell_count(text));
-}
+namespace
+{
+  int rendered_cell_width(const std::string &text)
+  {
+    if (text.empty())
+      return 1;
+    return std::max(1, ui_cell_count(text));
+  }
 
-void append_sanitized_cell_text(std::string &out, const std::string &text) {
-  if (text.empty()) {
-    out.push_back(' '); 
-    return;
+  void append_sanitized_cell_text(std::string &out, const std::string &text)
+  {
+    if (text.empty())
+    {
+      out.push_back(' ');
+      return;
+    }
+    if (text.size() == 1 && ((unsigned char)text[0] & 0x80) == 0)
+    {
+      out.push_back(text[0]);
+      return;
+    }
+    out += ui_is_valid_utf8_sequence(text) ? text : "?";
   }
-  if (text.size()==1&&((unsigned char)text[0] & 0x80) == 0) {
-    out.push_back(text[0]);
-    return;
-  }
-  out += ui_is_valid_utf8_sequence(text) ? text : "?";
-}
 
-void write_sanitized_cell_text(Terminal *term, const std::string &text) {
-  if (text.empty()) {
-    term->write_char(' ');
-    return;
-  }
-  if (text.size()==1&&((unsigned char)text[0] & 0x80) == 0) {
-    term->write_char(text[0]);
-    return;
-  }
-  term->write(ui_is_valid_utf8_sequence(text) ? text : "?");
-}
-
-void append_cell_for_remaining_width(std::string &out, const std::string &text,
-                                     int remaining) {
-  int width = rendered_cell_width(text);
-  if (width > remaining) {
-    out.append((size_t)remaining, ' ');
-    return;
-  }
-  append_sanitized_cell_text(out, text);
-}
-
-void write_cell_for_remaining_width(Terminal *term, const std::string &text,
-                                    int remaining) {
-  int width = rendered_cell_width(text);
-  if (width > remaining) {
-    for (int i = 0; i < remaining; i++)
+  void write_sanitized_cell_text(Terminal *term, const std::string &text)
+  {
+    if (text.empty())
+    {
       term->write_char(' ');
-    return;
+      return;
+    }
+    if (text.size() == 1 && ((unsigned char)text[0] & 0x80) == 0)
+    {
+      term->write_char(text[0]);
+      return;
+    }
+    term->write(ui_is_valid_utf8_sequence(text) ? text : "?");
   }
-  write_sanitized_cell_text(term, text);
-}
-}
+
+  void append_cell_for_remaining_width(std::string &out, const std::string &text, int remaining)
+  {
+    int width = rendered_cell_width(text);
+    if (width > remaining)
+    {
+      out.append((size_t)remaining, ' ');
+      return;
+    }
+    append_sanitized_cell_text(out, text);
+  }
+
+  void write_cell_for_remaining_width(Terminal *term, const std::string &text, int remaining)
+  {
+    int width = rendered_cell_width(text);
+    if (width > remaining)
+    {
+      for (int i = 0; i < remaining; i++)
+        term->write_char(' ');
+      return;
+    }
+    write_sanitized_cell_text(term, text);
+  }
+} // namespace
 
 UI::UI(Terminal *t)
     : term(t), width(80), height(24), cursor_x(-1), cursor_y(-1),
-      cursor_shape(UICursorShape::Block), cursor_hidden(true) {
+      cursor_shape(UICursorShape::Block), cursor_hidden(true)
+{
   grid.resize(height);
-  for (int y = 0; y < height; y++) {
+  for (int y = 0; y < height; y++)
+  {
     grid[y].resize(width);
-    for (int x = 0; x < width; x++) {
+    for (int x = 0; x < width; x++)
+    {
       grid[y][x] = {" ", default_fg, default_bg, false, false, false};
     }
   }
 }
 
-void UI::resize(int w, int h) {
+void UI::resize(int w, int h)
+{
   int new_w = std::max(1, w);
   int new_h = std::max(1, h);
   bool dim_changed = (new_w != width) || (new_h != height);
@@ -79,9 +93,11 @@ void UI::resize(int w, int h) {
   cursor_hidden = true;
   cursor_dirty = true;
   grid.resize(height);
-  for (int y = 0; y < height; y++) {
+  for (int y = 0; y < height; y++)
+  {
     grid[y].resize(width);
-    for (int x = 0; x < width; x++) {
+    for (int x = 0; x < width; x++)
+    {
       grid[y][x] = {" ", default_fg, default_bg, false, false, false};
     }
   }
@@ -93,12 +109,14 @@ void UI::resize(int w, int h) {
   // when the Editor constructor and Editor::run() each call resize() at
   // startup. Skipping it on dimension-stable resizes removes the duplicate
   // clear and the duplicate full-redraw pass.
-  if (dim_changed) {
+  if (dim_changed)
+  {
     invalidate();
   }
 }
 
-void UI::invalidate() {
+void UI::invalidate()
+{
   cursor_x = -1;
   cursor_y = -1;
   cursor_shape = UICursorShape::Block;
@@ -107,45 +125,57 @@ void UI::invalidate() {
   term->clear();
 }
 
-void UI::clear() {
-  for (auto &row : grid) {
-    for (auto &cell : row) {
+void UI::clear()
+{
+  for (auto &row : grid)
+  {
+    for (auto &cell : row)
+    {
       cell = {" ", default_fg, default_bg, false, false, false};
     }
   }
 }
 
-void UI::set_default_colors(int fg, int bg) {
+void UI::set_default_colors(int fg, int bg)
+{
   default_fg = fg;
   default_bg = bg;
 }
 
-void UI::dim_rect(const UIRect &rect) {
+void UI::dim_rect(const UIRect &rect)
+{
   const int x0 = std::max(0, rect.x);
   const int y0 = std::max(0, rect.y);
   const int x1 = std::min(width, rect.x + std::max(0, rect.w));
   const int y1 = std::min(height, rect.y + std::max(0, rect.h));
-  for (int y = y0; y < y1; y++) {
-    for (int x = x0; x < x1; x++) {
+  for (int y = y0; y < y1; y++)
+  {
+    for (int x = x0; x < x1; x++)
+    {
       grid[y][x].dim = true;
     }
   }
 }
 
-void UI::set_cell(int x, int y, const UICell &cell) {
-  if (x >= 0 && x < width && y >= 0 && y < height) {
+void UI::set_cell(int x, int y, const UICell &cell)
+{
+  if (x >= 0 && x < width && y >= 0 && y < height)
+  {
     grid[y][x] = cell;
   }
 }
 
-const UICell *UI::cell_at(int x, int y) const {
-  if (x < 0 || x >= width || y < 0 || y >= height) {
+const UICell *UI::cell_at(int x, int y) const
+{
+  if (x < 0 || x >= width || y < 0 || y >= height)
+  {
     return nullptr;
   }
   return &grid[y][x];
 }
 
-void UI::render() {
+void UI::render()
+{
   // Full-row paint renderer. Every row is written from column 0 with
   // explicit colors and padded so stale terminal content is always
   // overwritten. No diff against last_grid. Autowrap is disabled for the
@@ -171,13 +201,16 @@ void UI::render() {
   // is fixed so full-width borders do not leave an oversized right gap.
   const int margin = term->render_margin();
   const int row_width = std::max(0, width - margin);
-  for (int y = 0; y < height; y++) {
-    if (row_width <= 0) {
+  for (int y = 0; y < height; y++)
+  {
+    if (row_width <= 0)
+    {
       // Still emit \x1b[K on the previous row's position so any stale
       // content in the (unpaintable) right margin is cleared. This is
       // belt-and-suspenders for terminals that ignore the move_cursor
       // and try to continue from the previous cursor position.
-      if (y > 0) {
+      if (y > 0)
+      {
         term->clear_to_end();
       }
       continue;
@@ -185,19 +218,27 @@ void UI::render() {
 
     term->move_cursor(0, y);
 
-    if (capture_raw) {
-      for (int x = 0; x < row_width; ) {
+    if (capture_raw)
+    {
+      for (int x = 0; x < row_width;)
+      {
         const auto &cell = grid[y][x];
         term->reset_color();
-        if (cell.bold)   term->set_bold(true);
-        if (cell.italic)  term->set_italic(true);
-        if (cell.dim)     term->set_dim(true);
-        if (cell.reverse) term->set_reverse(true);
+        if (cell.bold)
+          term->set_bold(true);
+        if (cell.italic)
+          term->set_italic(true);
+        if (cell.dim)
+          term->set_dim(true);
+        if (cell.reverse)
+          term->set_reverse(true);
         term->set_color(cell.fg, cell.bg);
         write_cell_for_remaining_width(term, cell.ch, row_width - x);
         x += std::min(rendered_cell_width(cell.ch), row_width - x);
       }
-    } else {
+    }
+    else
+    {
       int run_fg = -1;
       int run_bg = -1;
       bool run_bold = false;
@@ -205,18 +246,17 @@ void UI::render() {
       bool run_dim = false;
       bool run_reverse = false;
       int written = 0;
-      
+
       std::string body;
       body.reserve((size_t)row_width);
 
-      for (int x = 0; x < row_width; ) {
+      for (int x = 0; x < row_width;)
+      {
         const auto &cell = grid[y][x];
 
-        if (x == 0 ||
-             cell.fg != run_fg || cell.bg != run_bg ||
-             cell.bold != run_bold || cell.italic != run_italic ||
-             cell.dim != run_dim ||
-             cell.reverse != run_reverse) {
+        if (x == 0 || cell.fg != run_fg || cell.bg != run_bg || cell.bold != run_bold
+            || cell.italic != run_italic || cell.dim != run_dim || cell.reverse != run_reverse)
+        {
           // Optimization: skip ESC[0m (full reset) when only the
           // fg/bg have changed and the bold/italic/reverse bits are
           // still correct. A full reset costs ~5 bytes and reverts
@@ -225,12 +265,10 @@ void UI::render() {
           // 48;5; are independent of bold/italic/reverse so we can
           // set them in place.
           const bool attrs_unchanged =
-              (x != 0) &&
-               cell.bold == run_bold && cell.italic == run_italic &&
-               cell.dim == run_dim &&
-               cell.reverse == run_reverse &&
-              (run_fg != -1 || run_bg != -1);
-          if (!attrs_unchanged) {
+              (x != 0) && cell.bold == run_bold && cell.italic == run_italic && cell.dim == run_dim
+              && cell.reverse == run_reverse && (run_fg != -1 || run_bg != -1);
+          if (!attrs_unchanged)
+          {
             term->reset_color();
             if (cell.bold)
               term->set_bold(true);
@@ -240,15 +278,21 @@ void UI::render() {
               term->set_dim(true);
             if (cell.reverse)
               term->set_reverse(true);
-          } else {
+          }
+          else
+          {
             // Only fg/bg changed within the same attribute set.
             // reset_color() is still needed only when transitioning
             // *out* of bold/italic/reverse; otherwise just emit the
             // new fg/bg in place.
-            if (cell.bold != run_bold) term->set_bold(cell.bold);
-            if (cell.italic != run_italic) term->set_italic(cell.italic);
-            if (cell.dim != run_dim) term->set_dim(cell.dim);
-            if (cell.reverse != run_reverse) term->set_reverse(cell.reverse);
+            if (cell.bold != run_bold)
+              term->set_bold(cell.bold);
+            if (cell.italic != run_italic)
+              term->set_italic(cell.italic);
+            if (cell.dim != run_dim)
+              term->set_dim(cell.dim);
+            if (cell.reverse != run_reverse)
+              term->set_reverse(cell.reverse);
           }
           term->set_color(cell.fg, cell.bg);
           run_fg = cell.fg;
@@ -262,15 +306,11 @@ void UI::render() {
         body.clear();
 
         int run_start = x;
-        while (x < row_width &&
-               grid[y][x].fg == run_fg &&
-               grid[y][x].bg == run_bg &&
-                grid[y][x].bold == run_bold &&
-                grid[y][x].italic == run_italic &&
-                grid[y][x].dim == run_dim &&
-                grid[y][x].reverse == run_reverse) {
-          int cell_w = std::min(rendered_cell_width(grid[y][x].ch),
-                                row_width - x);
+        while (x < row_width && grid[y][x].fg == run_fg && grid[y][x].bg == run_bg
+               && grid[y][x].bold == run_bold && grid[y][x].italic == run_italic
+               && grid[y][x].dim == run_dim && grid[y][x].reverse == run_reverse)
+        {
+          int cell_w = std::min(rendered_cell_width(grid[y][x].ch), row_width - x);
           append_cell_for_remaining_width(body, grid[y][x].ch, row_width - x);
           x += cell_w;
         }
@@ -279,7 +319,8 @@ void UI::render() {
         written += (x - run_start);
       }
 
-      while (written < row_width) {
+      while (written < row_width)
+      {
         term->write(" ");
         written++;
       }
@@ -299,9 +340,12 @@ void UI::render() {
 
   term->reset_color();
 
-  if (cursor_hidden) {
+  if (cursor_hidden)
+  {
     term->hide_cursor();
-  } else {
+  }
+  else
+  {
     int cx = (cursor_x < 0) ? 0 : cursor_x;
     int cy = (cursor_y < 0) ? 0 : cursor_y;
     // Clamp x one cell inside the render margin so the cursor itself is
@@ -309,10 +353,14 @@ void UI::render() {
     // greater than 1; on a single-column terminal we obviously cannot
     // move the cursor further left.
     const int cursor_max_x = (width > 1) ? (width - margin - 1) : (width - 1);
-    if (cx > cursor_max_x) cx = cursor_max_x;
-    if (cx < 0) cx = 0;
-    if (cy >= height) cy = height - 1;
-    if (cy < 0) cy = 0;
+    if (cx > cursor_max_x)
+      cx = cursor_max_x;
+    if (cx < 0)
+      cx = 0;
+    if (cy >= height)
+      cy = height - 1;
+    if (cy < 0)
+      cy = 0;
     term->move_cursor(cx, cy);
     term->show_cursor();
   }
@@ -321,7 +369,8 @@ void UI::render() {
   term->flush();
   cursor_dirty = false;
 
-  if (capture_on) {
+  if (capture_on)
+  {
     char label[64];
     snprintf(label, sizeof(label), "FRAME w=%d h=%d", width, height);
     term->render_capture_marker(label, height);
@@ -331,7 +380,8 @@ void UI::render() {
 // Store cursor state without emitting terminal writes. render() (or
 // flush_cursor() when render() is not called) is responsible for
 // materialising the cursor on the terminal.
-void UI::set_cursor(int x, int y, UICursorShape shape) {
+void UI::set_cursor(int x, int y, UICursorShape shape)
+{
   cursor_x = std::clamp(x, 0, std::max(0, width - 1));
   cursor_y = std::clamp(y, 0, std::max(0, height - 1));
   cursor_shape = shape;
@@ -339,12 +389,14 @@ void UI::set_cursor(int x, int y, UICursorShape shape) {
   cursor_dirty = true;
 }
 
-void UI::hide_cursor() {
+void UI::hide_cursor()
+{
   cursor_hidden = true;
   cursor_dirty = true;
 }
 
-void UI::reset_cursor_state() {
+void UI::reset_cursor_state()
+{
   cursor_x = -1;
   cursor_y = -1;
   cursor_shape = UICursorShape::Block;
@@ -356,21 +408,29 @@ void UI::reset_cursor_state() {
 // Used by the !needs_redraw path in Editor::render() when the frame's
 // grid is unchanged and the only thing that needs updating is the
 // blinking cursor / selection caret.
-void UI::flush_cursor() {
+void UI::flush_cursor()
+{
   term->disable_autowrap();
   const int margin = term->render_margin();
-  if (cursor_hidden) {
+  if (cursor_hidden)
+  {
     term->hide_cursor();
-  } else {
+  }
+  else
+  {
     int cx = (cursor_x < 0) ? 0 : cursor_x;
     int cy = (cursor_y < 0) ? 0 : cursor_y;
     // Same right-edge clamp as render(): never park the cursor on the
     // rightmost cell the renderer leaves untouched.
     const int cursor_max_x = (width > 1) ? (width - margin - 1) : (width - 1);
-    if (cx > cursor_max_x) cx = cursor_max_x;
-    if (cx < 0) cx = 0;
-    if (cy >= height) cy = height - 1;
-    if (cy < 0) cy = 0;
+    if (cx > cursor_max_x)
+      cx = cursor_max_x;
+    if (cx < 0)
+      cx = 0;
+    if (cy >= height)
+      cy = height - 1;
+    if (cy < 0)
+      cy = 0;
     term->move_cursor(cx, cy);
     term->show_cursor();
   }
@@ -378,12 +438,14 @@ void UI::flush_cursor() {
   term->flush();
   cursor_dirty = false;
 
-  if (term->render_capture_enabled()) {
+  if (term->render_capture_enabled())
+  {
     term->render_capture_marker("CURSOR-ONLY", 0);
   }
 }
 
-void UI::emit_raw_after_frame(const std::string &bytes) {
+void UI::emit_raw_after_frame(const std::string &bytes)
+{
   if (bytes.empty())
     return;
   term->write(bytes);
@@ -391,8 +453,8 @@ void UI::emit_raw_after_frame(const std::string &bytes) {
   cursor_dirty = true;
 }
 
-void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,
-                   bool bold, bool italic) {
+void UI::draw_text(int x, int y, const std::string &text, int fg, int bg, bool bold, bool italic)
+{
   // Guard against invisible normal text: if the caller used the default-bg
   // path (bg < 0) and the requested foreground would match the background,
   // substitute the default foreground so editor text is always readable.
@@ -400,15 +462,19 @@ void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,
   // (fg_default == bg_default) without overriding intentional styling
   // where both fg and bg are explicitly set (e.g., selection highlights).
   bool used_default_bg = (bg < 0);
-  if (used_default_bg) bg = default_bg;
-  if (used_default_bg && fg == default_bg) {
+  if (used_default_bg)
+    bg = default_bg;
+  if (used_default_bg && fg == default_bg)
+  {
     fg = default_fg;
   }
   int i = 0;
   int cell_offset = 0;
-  while (i < (int)text.length() && x + cell_offset < width) {
+  while (i < (int)text.length() && x + cell_offset < width)
+  {
     int cluster_end = ui_next_grapheme_boundary(text, i);
-    if (cluster_end <= i) {
+    if (cluster_end <= i)
+    {
       UICell bad;
       bad.ch = "?";
       bad.fg = fg;
@@ -421,7 +487,8 @@ void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,
       cell_offset++;
       continue;
     }
-    if (cluster_end > (int)text.length()) {
+    if (cluster_end > (int)text.length())
+    {
       break;
     }
 
@@ -435,8 +502,8 @@ void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,
     set_cell(x + cell_offset, y, cell);
 
     int cell_width = rendered_cell_width(cell.ch);
-    for (int fill = 1; fill < cell_width && x + cell_offset + fill < width;
-         fill++) {
+    for (int fill = 1; fill < cell_width && x + cell_offset + fill < width; fill++)
+    {
       UICell continuation = cell;
       continuation.ch = "";
       set_cell(x + cell_offset + fill, y, continuation);
@@ -447,9 +514,12 @@ void UI::draw_text(int x, int y, const std::string &text, int fg, int bg,
   }
 }
 
-void UI::draw_rect(const UIRect &rect, int fg, int bg) {
-  for (int y = rect.y; y < rect.y + rect.h && y < height; y++) {
-    for (int x = rect.x; x < rect.x + rect.w && x < width; x++) {
+void UI::draw_rect(const UIRect &rect, int fg, int bg)
+{
+  for (int y = rect.y; y < rect.y + rect.h && y < height; y++)
+  {
+    for (int x = rect.x; x < rect.x + rect.w && x < width; x++)
+    {
       UICell cell;
       cell.ch = " ";
       cell.fg = fg;
@@ -462,7 +532,8 @@ void UI::draw_rect(const UIRect &rect, int fg, int bg) {
   }
 }
 
-void UI::draw_border(const UIRect &rect, int fg, int bg) {
+void UI::draw_border(const UIRect &rect, int fg, int bg)
+{
   // Defensive clamp: if the caller asked for a right edge that lands
   // in the right-edge render margin (the column the renderer will
   // not paint), pull the border one cell inside so the right side
@@ -470,14 +541,16 @@ void UI::draw_border(const UIRect &rect, int fg, int bg) {
   // for any full-width panel that does its own layout.
   UIRect clamped = rect;
   int paint_w = get_render_width();
-  if (clamped.x + clamped.w > paint_w) {
+  if (clamped.x + clamped.w > paint_w)
+  {
     clamped.w = paint_w - clamped.x;
     if (clamped.w < 1)
       clamped.w = 1;
   }
 
   // Top and Bottom
-  for (int x = clamped.x; x < clamped.x + clamped.w && x < width; x++) {
+  for (int x = clamped.x; x < clamped.x + clamped.w && x < width; x++)
+  {
     UICell cell;
     cell.ch = "─"; // U+2500
     cell.fg = fg;
@@ -509,7 +582,8 @@ void UI::draw_border(const UIRect &rect, int fg, int bg) {
   }
 
   // Left and Right (excluding corners which are already drawn)
-  for (int y = clamped.y + 1; y < clamped.y + clamped.h - 1 && y < height; y++) {
+  for (int y = clamped.y + 1; y < clamped.y + clamped.h - 1 && y < height; y++)
+  {
     UICell cell;
     cell.ch = "│"; // U+2502
     cell.fg = fg;
@@ -526,9 +600,12 @@ void UI::draw_border(const UIRect &rect, int fg, int bg) {
   }
 }
 
-void UI::fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg) {
-  for (int y = rect.y; y < rect.y + rect.h && y < height; y++) {
-    for (int x = rect.x; x < rect.x + rect.w && x < width; x++) {
+void UI::fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg)
+{
+  for (int y = rect.y; y < rect.y + rect.h && y < height; y++)
+  {
+    for (int x = rect.x; x < rect.x + rect.w && x < width; x++)
+    {
       UICell cell;
       cell.ch = ch;
       cell.fg = fg;

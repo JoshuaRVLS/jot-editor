@@ -1,13 +1,16 @@
 #include "editor.h"
 
-void Editor::duplicate_selection_or_line() {
+void Editor::duplicate_selection_or_line()
+{
   auto &buf = get_buffer();
-  if (buf.selection.active) {
+  if (buf.selection.active)
+  {
     std::string prev_clipboard = clipboard;
     copy();
     Cursor s = buf.selection.start;
     Cursor e = buf.selection.end;
-    if (s.y > e.y || (s.y == e.y && s.x > e.x)) {
+    if (s.y > e.y || (s.y == e.y && s.x > e.x))
+    {
       std::swap(s, e);
     }
     clear_selection();

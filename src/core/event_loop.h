@@ -9,12 +9,14 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
-#include <vector>
 #include <uv.h>
+#include <vector>
 
-class EventLoop {
+class EventLoop
+{
 public:
-  struct FdWatcher {
+  struct FdWatcher
+  {
     int fd;
     std::function<void()> on_read;
     std::function<void()> on_write;
@@ -36,8 +38,8 @@ public:
   void run();
   void stop();
 
-  void watch_fd(int fd, bool read = true, bool write = false,
-                std::function<void()> on_ready = nullptr);
+  void
+  watch_fd(int fd, bool read = true, bool write = false, std::function<void()> on_ready = nullptr);
   void unwatch_fd(int fd);
   bool is_watching_fd(int fd) const;
 
@@ -45,8 +47,7 @@ public:
   void cancel_timer(TimerId id);
   TimerId set_timeout(int delay_ms, TimerCallback cb);
 
-  bool watch_path(const std::string &path, FsEventCallback cb,
-                  bool recursive = false);
+  bool watch_path(const std::string &path, FsEventCallback cb, bool recursive = false);
   void unwatch_path(const std::string &path);
 
   void post(PostCallback cb);
@@ -55,27 +56,30 @@ public:
   void assert_main_thread() const;
 
 private:
-  struct FdWatcherHandle {
+  struct FdWatcherHandle
+  {
     EventLoop *owner = nullptr;
     int fd = -1;
-    uv_poll_t poll {};
+    uv_poll_t poll{};
     std::function<void()> on_read;
     std::function<void()> on_write;
     std::function<void()> on_error;
   };
 
-  struct TimerHandle {
+  struct TimerHandle
+  {
     EventLoop *owner = nullptr;
     TimerId id = 0;
     bool repeat = false;
-    uv_timer_t timer {};
+    uv_timer_t timer{};
     TimerCallback callback;
   };
 
-  struct FsEventHandle {
+  struct FsEventHandle
+  {
     EventLoop *owner = nullptr;
     std::string path;
-    uv_fs_event_t event {};
+    uv_fs_event_t event{};
     FsEventCallback callback;
   };
 
@@ -87,9 +91,9 @@ private:
 
   std::atomic<bool> running_{false};
   std::thread::id main_thread_id_;
-  uv_loop_t loop_ {};
+  uv_loop_t loop_{};
   bool loop_initialized_ = false;
-  uv_async_t async_ {};
+  uv_async_t async_{};
   bool async_initialized_ = false;
 
   std::unordered_map<int, std::unique_ptr<FdWatcherHandle>> watchers_;

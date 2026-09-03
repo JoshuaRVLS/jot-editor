@@ -5,35 +5,35 @@
 
 using namespace CommandLineUtils;
 
-void Editor::show_command_help(const std::string &topic_text) {
+void Editor::show_command_help(const std::string &topic_text)
+{
   const std::string topic = to_lower_copy(trim_copy(topic_text));
-  if (topic == "commands" || topic == "cmd" || topic == "ex") {
-    set_message(
-        "Commands: :w :q :wq :e <file> :find [dir] :mkfile <p> :mkdir <p> "
-        ":rename <old> <new> :rm <p> :cpppair <p> :cppimpl [p] "
-        ":line N[:C] :bd :sp "
-        "[left|right|up|down] :vsp [left|right] "
-        ":splitleft/:splitright/:splitup/:splitdown :bn :bp :home "
-        ":resume :recent :openrecent [n] :reopen :autosave [on/off/ms] "
-        ":grep <text> :diagnostics :diagnext :diagprev :symbols :outline "
-        ":format :trim "
-        ":trimblank :upper :lower :sortlines :sortdesc :reverselines "
-        ":uniquelines :shufflelines :joinlines :dupe :copypath :copyname "
-        ":datetime :stats :replace :replacei :replaceword :replacere "
-        ":surround :unsurround :fold :unfold :togglefold :foldall "
-         ":unfoldall :incnum :decnum :lspmanager "
-         ":tsinstall <language> :tsstatus :tsreload "
-        ":reload :reloadconfig :reloadplugins "
-        ":task [name] :tasknew <name> :taskrerun "
-        ":debug <program> :debugconfig [name] :debugstop "
-        ":debugcontinue :debugnext :debugstep :debugout "
-        ":gitstatus :gitdiff [file] :gitdiffstaged [file] "
-        ":gitstage [file] :gitunstage [file] :gitstageall "
-        ":gitunstageall :gitcommit <message> :gitlog :gitblame "
-        ":gitrefresh :theme <name>"
-        ":gitdiffclose"
-        ":gitdiffrefresh"
-        );
+  if (topic == "commands" || topic == "cmd" || topic == "ex")
+  {
+    set_message("Commands: :w :q :wq :e <file> :find [dir] :mkfile <p> :mkdir <p> "
+                ":rename <old> <new> :rm <p> :cpppair <p> :cppimpl [p] "
+                ":line N[:C] :bd :sp "
+                "[left|right|up|down] :vsp [left|right] "
+                ":splitleft/:splitright/:splitup/:splitdown :bn :bp :home "
+                ":resume :recent :openrecent [n] :reopen :autosave [on/off/ms] "
+                ":grep <text> :diagnostics :diagnext :diagprev :symbols :outline "
+                ":format :trim "
+                ":trimblank :upper :lower :sortlines :sortdesc :reverselines "
+                ":uniquelines :shufflelines :joinlines :dupe :copypath :copyname "
+                ":datetime :stats :replace :replacei :replaceword :replacere "
+                ":surround :unsurround :fold :unfold :togglefold :foldall "
+                ":unfoldall :incnum :decnum :lspmanager "
+                ":tsinstall <language> :tsstatus :tsreload "
+                ":reload :reloadconfig :reloadplugins "
+                ":task [name] :tasknew <name> :taskrerun "
+                ":debug <program> :debugconfig [name] :debugstop "
+                ":debugcontinue :debugnext :debugstep :debugout "
+                ":gitstatus :gitdiff [file] :gitdiffstaged [file] "
+                ":gitstage [file] :gitunstage [file] :gitstageall "
+                ":gitunstageall :gitcommit <message> :gitlog :gitblame "
+                ":gitrefresh :theme <name>"
+                ":gitdiffclose"
+                ":gitdiffrefresh");
     return;
   }
 
@@ -119,9 +119,11 @@ void Editor::show_command_help(const std::string &topic_text) {
       "                  :surround :unsurround :incnum :decnum"};
 
   std::string out;
-  for (size_t i = 0; i < lines.size(); i++) {
+  for (size_t i = 0; i < lines.size(); i++)
+  {
     out += lines[i];
-    if (i + 1 < lines.size()) {
+    if (i + 1 < lines.size())
+    {
       out.push_back('\n');
     }
   }

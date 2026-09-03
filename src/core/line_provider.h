@@ -6,7 +6,8 @@
 #include <string>
 #include <vector>
 
-class LineProvider {
+class LineProvider
+{
 public:
   virtual ~LineProvider() = default;
 
@@ -15,26 +16,25 @@ public:
   virtual char get_char(int line, int col) const = 0;
 
   virtual size_t line_count() const = 0;
-  virtual bool empty() const { return line_count() == 0; }
+  virtual bool empty() const
+  {
+    return line_count() == 0;
+  }
 
   virtual void insert_line(int after, const std::string &line) = 0;
-  virtual void insert_lines(int after,
-                            const std::vector<std::string> &lines) = 0;
+  virtual void insert_lines(int after, const std::vector<std::string> &lines) = 0;
   virtual void delete_line(int n) = 0;
   virtual void delete_lines(int start, int end) = 0;
   virtual void append_line(const std::string &line) = 0;
   virtual void clear() = 0;
 
-  virtual void
-  set_all_lines(const std::vector<std::string> &lines) = 0;
-  virtual void
-  swap_all_lines(std::vector<std::string> &out) = 0;
+  virtual void set_all_lines(const std::vector<std::string> &lines) = 0;
+  virtual void swap_all_lines(std::vector<std::string> &out) = 0;
   virtual std::vector<std::string> copy_all_lines() const = 0;
 
   virtual void move_lines(int start, int end, int dest) = 0;
 
-  virtual void replace_lines(int start, int count,
-                             const std::vector<std::string> &new_lines) = 0;
+  virtual void replace_lines(int start, int count, const std::vector<std::string> &new_lines) = 0;
 
   using LineVisitor = std::function<void(int, std::string &)>;
   virtual void for_each_line(LineVisitor fn) = 0;

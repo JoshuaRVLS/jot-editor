@@ -8,13 +8,15 @@
 #include <unordered_map>
 #include <vector>
 
-static std::string lower_copy(std::string s) {
-  std::transform(s.begin(), s.end(), s.begin(),
-                 [](unsigned char c) { return (char)std::tolower(c); });
+static std::string lower_copy(std::string s)
+{
+  std::transform(
+      s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
   return s;
 }
 
-static int utf8_cell_len(const std::string &text, size_t i) {
+static int utf8_cell_len(const std::string &text, size_t i)
+{
   if (i >= text.size())
     return 0;
   const unsigned char c = (unsigned char)text[i];
@@ -29,14 +31,19 @@ static int utf8_cell_len(const std::string &text, size_t i) {
   return 0;
 }
 
-static int cell_count(const std::string &text) {
+static int cell_count(const std::string &text)
+{
   int cells = 0;
   size_t i = 0;
-  while (i < text.size()) {
+  while (i < text.size())
+  {
     int len = utf8_cell_len(text, i);
-    if (len <= 0 || i + (size_t)len > text.size()) {
+    if (len <= 0 || i + (size_t)len > text.size())
+    {
       i++;
-    } else {
+    }
+    else
+    {
       i += (size_t)len;
     }
     cells++;
@@ -44,19 +51,24 @@ static int cell_count(const std::string &text) {
   return cells;
 }
 
-static std::string take_cells(const std::string &text, int max_cells) {
+static std::string take_cells(const std::string &text, int max_cells)
+{
   if (max_cells <= 0)
     return "";
 
   std::string out;
   int cells = 0;
   size_t i = 0;
-  while (i < text.size() && cells < max_cells) {
+  while (i < text.size() && cells < max_cells)
+  {
     int len = utf8_cell_len(text, i);
-    if (len <= 0 || i + (size_t)len > text.size()) {
+    if (len <= 0 || i + (size_t)len > text.size())
+    {
       out += "?";
       i++;
-    } else {
+    }
+    else
+    {
       out.append(text, i, (size_t)len);
       i += (size_t)len;
     }
@@ -65,7 +77,8 @@ static std::string take_cells(const std::string &text, int max_cells) {
   return out;
 }
 
-static std::string truncate_cells(const std::string &text, int max_cells) {
+static std::string truncate_cells(const std::string &text, int max_cells)
+{
   if (max_cells <= 0)
     return "";
   if (cell_count(text) <= max_cells)
@@ -75,19 +88,21 @@ static std::string truncate_cells(const std::string &text, int max_cells) {
   return take_cells(text, max_cells - 2) + "..";
 }
 
-static std::string normalize_sidebar_path(const std::string &path) {
+static std::string normalize_sidebar_path(const std::string &path)
+{
   if (path.empty())
     return "";
   std::error_code ec;
   std::filesystem::path p = std::filesystem::absolute(path, ec);
-  if (ec) {
+  if (ec)
+  {
     p = std::filesystem::path(path);
   }
   return p.lexically_normal().string();
 }
 
-static bool sidebar_path_is_child_of(const std::string &child,
-                                     const std::string &parent) {
+static bool sidebar_path_is_child_of(const std::string &child, const std::string &parent)
+{
   if (child.size() <= parent.size())
     return false;
   if (child.compare(0, parent.size(), parent) != 0)
@@ -96,7 +111,8 @@ static bool sidebar_path_is_child_of(const std::string &child,
   return sep == '/' || sep == '\\';
 }
 
-static std::string sidebar_parent_path(const std::string &path) {
+static std::string sidebar_parent_path(const std::string &path)
+{
   if (path.empty())
     return "";
   std::filesystem::path p(path);
@@ -106,7 +122,8 @@ static std::string sidebar_parent_path(const std::string &path) {
   return parent.lexically_normal().string();
 }
 
-static std::string root_display_name(const std::string &root) {
+static std::string root_display_name(const std::string &root)
+{
   std::filesystem::path p(root);
   std::string name = p.filename().string();
   if (!name.empty())
@@ -116,40 +133,43 @@ static std::string root_display_name(const std::string &root) {
 }
 
 static std::string workspace_relative_display(const std::string &abs_path,
-                                              const std::string &root_dir) {
+                                              const std::string &root_dir)
+{
   const std::string norm_path = normalize_sidebar_path(abs_path);
   const std::string norm_root = normalize_sidebar_path(root_dir);
-  std::filesystem::path rel =
-      std::filesystem::path(norm_path).lexically_relative(norm_root);
+  std::filesystem::path rel = std::filesystem::path(norm_path).lexically_relative(norm_root);
   std::string rel_s = rel.string();
-  bool escapes_root = rel_s == ".." || rel_s.rfind("../", 0) == 0 ||
-                      rel_s.rfind("..\\", 0) == 0;
-  if (!rel_s.empty() && rel_s != "." && !escapes_root) {
+  bool escapes_root = rel_s == ".." || rel_s.rfind("../", 0) == 0 || rel_s.rfind("..\\", 0) == 0;
+  if (!rel_s.empty() && rel_s != "." && !escapes_root)
+  {
     return rel_s;
   }
-  if (rel_s == ".") {
+  if (rel_s == ".")
+  {
     return root_display_name(norm_root);
   }
   return norm_path.empty() ? abs_path : norm_path;
 }
 
-static std::string get_file_icon(const FileNode &node) {
-  if (node.is_dir) {
+static std::string get_file_icon(const FileNode &node)
+{
+  if (node.is_dir)
+  {
     return node.expanded ? " " : " ";
   }
 
   static const std::unordered_map<std::string, std::string> ext_icons = {
-      {".cpp", " "}, {".cc", " "},   {".cxx", " "}, {".c", " "},
-      {".h", " "},   {".hpp", " "},  {".py", " "},  {".js", " "},
-      {".ts", " "},  {".jsx", " "},  {".tsx", " "}, {".json", " "},
-      {".md", " "},  {".toml", " "}, {".yaml", " "}, {".yml", " "},
-      {".html", " "}, {".css", " "},  {".scss", " "}, {".sh", " "},
-      {".go", " "},  {".rs", " "},   {".java", " "}, {".php", " "},
-      {".rb", " "},  {".xml", "󰗀 "},  {".txt", "󰈙 "}, {".lock", "󰌾 "}};
+      {".cpp", " "},  {".cc", " "},   {".cxx", " "},  {".c", " "},    {".h", " "},
+      {".hpp", " "},  {".py", " "},   {".js", " "},   {".ts", " "},   {".jsx", " "},
+      {".tsx", " "},  {".json", " "}, {".md", " "},   {".toml", " "}, {".yaml", " "},
+      {".yml", " "},  {".html", " "}, {".css", " "},  {".scss", " "}, {".sh", " "},
+      {".go", " "},   {".rs", " "},   {".java", " "}, {".php", " "},  {".rb", " "},
+      {".xml", "󰗀 "}, {".txt", "󰈙 "}, {".lock", "󰌾 "}};
 
   std::string name = lower_copy(node.name);
   size_t dot = name.find_last_of('.');
-  if (dot != std::string::npos) {
+  if (dot != std::string::npos)
+  {
     std::string ext = name.substr(dot);
     auto it = ext_icons.find(ext);
     if (it != ext_icons.end())
@@ -158,8 +178,10 @@ static std::string get_file_icon(const FileNode &node) {
   return "󰈔 ";
 }
 
-static int sidebar_severity_rank(int severity) {
-  switch (severity) {
+static int sidebar_severity_rank(int severity)
+{
+  switch (severity)
+  {
   case 1:
     return 4; // error
   case 2:
@@ -173,17 +195,19 @@ static int sidebar_severity_rank(int severity) {
   }
 }
 
-static int merge_sidebar_severity(int a, int b) {
+static int merge_sidebar_severity(int a, int b)
+{
   return sidebar_severity_rank(a) >= sidebar_severity_rank(b) ? a : b;
 }
 
-static bool git_conflict_status(const std::string &xy) {
-  return xy == "DD" || xy == "AU" || xy == "UD" || xy == "UA" ||
-         xy == "DU" || xy == "AA" || xy == "UU" ||
-         xy.find('U') != std::string::npos;
+static bool git_conflict_status(const std::string &xy)
+{
+  return xy == "DD" || xy == "AU" || xy == "UD" || xy == "UA" || xy == "DU" || xy == "AA"
+         || xy == "UU" || xy.find('U') != std::string::npos;
 }
 
-static int git_status_rank(const std::string &xy) {
+static int git_status_rank(const std::string &xy)
+{
   if (git_conflict_status(xy))
     return 6; // conflict
   if (xy.find('D') != std::string::npos)
@@ -199,12 +223,13 @@ static int git_status_rank(const std::string &xy) {
   return 0;
 }
 
-static std::string merge_git_status(const std::string &a,
-                                    const std::string &b) {
+static std::string merge_git_status(const std::string &a, const std::string &b)
+{
   return git_status_rank(a) >= git_status_rank(b) ? a : b;
 }
 
-static std::string git_status_symbol(const std::string &xy) {
+static std::string git_status_symbol(const std::string &xy)
+{
   if (git_conflict_status(xy))
     return "!";
   if (xy.find('D') != std::string::npos)
@@ -220,8 +245,8 @@ static std::string git_status_symbol(const std::string &xy) {
   return "";
 }
 
-static std::pair<int, int> git_status_colors(const Theme &theme,
-                                              const std::string &xy) {
+static std::pair<int, int> git_status_colors(const Theme &theme, const std::string &xy)
+{
   if (git_conflict_status(xy))
     return {theme.fg_git_conflict, theme.bg_git_conflict};
   if (xy.find('D') != std::string::npos)
@@ -237,8 +262,10 @@ static std::pair<int, int> git_status_colors(const Theme &theme,
   return {theme.fg_sidebar, theme.bg_sidebar};
 }
 
-static const char *diagnostic_symbol(int severity) {
-  switch (severity) {
+static const char *diagnostic_symbol(int severity)
+{
+  switch (severity)
+  {
   case 1:
     return "E";
   case 2:
@@ -252,40 +279,49 @@ static const char *diagnostic_symbol(int severity) {
   }
 }
 
-void Editor::invalidate_sidebar_tree_cache() {
+void Editor::invalidate_sidebar_tree_cache()
+{
   sidebar_render_cache_.tree_dirty = true;
   sidebar_render_cache_.diagnostics_dirty = true;
   sidebar_render_cache_.git_dirty = true;
 }
 
-void Editor::invalidate_sidebar_diagnostics_cache() {
+void Editor::invalidate_sidebar_diagnostics_cache()
+{
   sidebar_render_cache_.diagnostics_dirty = true;
 }
 
-void Editor::invalidate_sidebar_git_cache() {
+void Editor::invalidate_sidebar_git_cache()
+{
   sidebar_render_cache_.git_dirty = true;
 }
 
-void Editor::ensure_sidebar_render_cache() {
-  if (sidebar_render_cache_.tree_dirty) {
+void Editor::ensure_sidebar_render_cache()
+{
+  if (sidebar_render_cache_.tree_dirty)
+  {
     rebuild_sidebar_tree_cache();
   }
-  if (sidebar_render_cache_.diagnostics_dirty) {
+  if (sidebar_render_cache_.diagnostics_dirty)
+  {
     rebuild_sidebar_diagnostics_cache();
   }
-  if (sidebar_render_cache_.git_dirty) {
+  if (sidebar_render_cache_.git_dirty)
+  {
     rebuild_sidebar_git_cache();
   }
 }
 
-void Editor::rebuild_sidebar_tree_cache() {
+void Editor::rebuild_sidebar_tree_cache()
+{
   sidebar_render_cache_.rows.clear();
   sidebar_render_cache_.path_to_row.clear();
   sidebar_render_cache_.normalized_root = normalize_sidebar_path(root_dir);
   sidebar_render_cache_.root_label = root_display_name(root_dir);
 
   sidebar_render_cache_.rows.reserve(file_tree.size());
-  std::function<void(const FileNode &)> append_row = [&](const FileNode &node) {
+  std::function<void(const FileNode &)> append_row = [&](const FileNode &node)
+  {
     SidebarRenderRow row;
     row.path = node.path;
     row.normalized_path = normalize_sidebar_path(node.path);
@@ -299,20 +335,24 @@ void Editor::rebuild_sidebar_tree_cache() {
     row.label = indent + chevron + get_file_icon(node) + node.name;
     row.footer_label = workspace_relative_display(node.path, root_dir);
 
-    if (!row.normalized_path.empty()) {
+    if (!row.normalized_path.empty())
+    {
       sidebar_render_cache_.path_to_row[row.normalized_path] =
           (int)sidebar_render_cache_.rows.size();
     }
     sidebar_render_cache_.rows.push_back(std::move(row));
 
-    if (node.is_dir && node.expanded) {
-      for (const auto &child : node.children) {
+    if (node.is_dir && node.expanded)
+    {
+      for (const auto &child : node.children)
+      {
         append_row(child);
       }
     }
   };
 
-  for (const auto &node : file_tree) {
+  for (const auto &node : file_tree)
+  {
     append_row(node);
   }
 
@@ -321,28 +361,33 @@ void Editor::rebuild_sidebar_tree_cache() {
   sidebar_render_cache_.git_dirty = true;
 }
 
-void Editor::rebuild_sidebar_diagnostics_cache() {
-  if (sidebar_render_cache_.tree_dirty) {
+void Editor::rebuild_sidebar_diagnostics_cache()
+{
+  if (sidebar_render_cache_.tree_dirty)
+  {
     rebuild_sidebar_tree_cache();
   }
 
-  for (auto &row : sidebar_render_cache_.rows) {
+  for (auto &row : sidebar_render_cache_.rows)
+  {
     row.diagnostic_severity = 0;
   }
 
-  auto propagate = [&](const std::string &path, int severity) {
+  auto propagate = [&](const std::string &path, int severity)
+  {
     if (severity <= 0)
       return;
     std::string current = normalize_sidebar_path(path);
     if (current.empty())
       return;
     const std::string root = sidebar_render_cache_.normalized_root;
-    while (!current.empty()) {
+    while (!current.empty())
+    {
       auto row_it = sidebar_render_cache_.path_to_row.find(current);
-      if (row_it != sidebar_render_cache_.path_to_row.end()) {
+      if (row_it != sidebar_render_cache_.path_to_row.end())
+      {
         auto &row = sidebar_render_cache_.rows[(size_t)row_it->second];
-        row.diagnostic_severity =
-            merge_sidebar_severity(row.diagnostic_severity, severity);
+        row.diagnostic_severity = merge_sidebar_severity(row.diagnostic_severity, severity);
       }
       if (!root.empty() && current == root)
         break;
@@ -355,15 +400,18 @@ void Editor::rebuild_sidebar_diagnostics_cache() {
     }
   };
 
-  for (const auto &it : workspace_diagnostic_severity) {
+  for (const auto &it : workspace_diagnostic_severity)
+  {
     propagate(it.first, it.second);
   }
 
-  for (const auto &buf : buffers) {
+  for (const auto &buf : buffers)
+  {
     if (buf.filepath.empty())
       continue;
     int severity = 0;
-    for (const auto &d : buf.diagnostics) {
+    for (const auto &d : buf.diagnostics)
+    {
       severity = merge_sidebar_severity(severity, d.severity);
     }
     propagate(buf.filepath, severity);
@@ -372,25 +420,31 @@ void Editor::rebuild_sidebar_diagnostics_cache() {
   sidebar_render_cache_.diagnostics_dirty = false;
 }
 
-void Editor::rebuild_sidebar_git_cache() {
-  if (sidebar_render_cache_.tree_dirty) {
+void Editor::rebuild_sidebar_git_cache()
+{
+  if (sidebar_render_cache_.tree_dirty)
+  {
     rebuild_sidebar_tree_cache();
   }
 
-  for (auto &row : sidebar_render_cache_.rows) {
+  for (auto &row : sidebar_render_cache_.rows)
+  {
     row.git_status.clear();
   }
 
-  auto propagate = [&](const std::string &path, const std::string &status) {
+  auto propagate = [&](const std::string &path, const std::string &status)
+  {
     if (status.empty())
       return;
     std::string current = normalize_sidebar_path(path);
     if (current.empty())
       return;
     const std::string root = sidebar_render_cache_.normalized_root;
-    while (!current.empty()) {
+    while (!current.empty())
+    {
       auto row_it = sidebar_render_cache_.path_to_row.find(current);
-      if (row_it != sidebar_render_cache_.path_to_row.end()) {
+      if (row_it != sidebar_render_cache_.path_to_row.end())
+      {
         auto &row = sidebar_render_cache_.rows[(size_t)row_it->second];
         row.git_status = merge_git_status(row.git_status, status);
       }
@@ -405,19 +459,22 @@ void Editor::rebuild_sidebar_git_cache() {
     }
   };
 
-  for (const auto &entry : git_file_status) {
+  for (const auto &entry : git_file_status)
+  {
     propagate(entry.first, entry.second);
   }
 
   sidebar_render_cache_.git_dirty = false;
 }
 
-std::vector<Editor::GitSidebarRow> Editor::build_git_sidebar_rows() const {
+std::vector<Editor::GitSidebarRow> Editor::build_git_sidebar_rows() const
+{
   std::vector<GitSidebarRow> rows;
   rows.reserve(git_file_status.size());
 
   std::string base_root = git_root.empty() ? root_dir : git_root;
-  for (const auto &entry : git_file_status) {
+  for (const auto &entry : git_file_status)
+  {
     GitSidebarRow row;
     row.path = entry.first;
     row.status = entry.second;
@@ -425,20 +482,24 @@ std::vector<Editor::GitSidebarRow> Editor::build_git_sidebar_rows() const {
     rows.push_back(std::move(row));
   }
 
-  std::sort(rows.begin(), rows.end(), [](const GitSidebarRow &a,
-                                         const GitSidebarRow &b) {
-    int ar = git_status_rank(a.status);
-    int br = git_status_rank(b.status);
-    if (ar != br) {
-      return ar > br;
-    }
-    return a.relative_path < b.relative_path;
-  });
+  std::sort(rows.begin(),
+            rows.end(),
+            [](const GitSidebarRow &a, const GitSidebarRow &b)
+            {
+              int ar = git_status_rank(a.status);
+              int br = git_status_rank(b.status);
+              if (ar != br)
+              {
+                return ar > br;
+              }
+              return a.relative_path < b.relative_path;
+            });
 
   return rows;
 }
 
-void Editor::render_sidebar() {
+void Editor::render_sidebar()
+{
   if (!show_sidebar)
     return;
 
@@ -446,85 +507,82 @@ void Editor::render_sidebar() {
 
   int w = effective_sidebar_width();
   int reserved_terminal_h = 0;
-  if (show_integrated_terminal && !integrated_terminals.empty()) {
+  if (show_integrated_terminal && !integrated_terminals.empty())
+  {
     reserved_terminal_h =
         std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
   }
   // Full height, aligned with the editor pane: the buffer-tab strip is
   // pane-local (rendered inside the pane frame), so no row belongs above
   // the explorer's top border.
-  int h = std::max(0, ui->get_height() - status_height - topbar_height() -
-                          reserved_terminal_h);
+  int h = std::max(0, ui->get_height() - status_height - topbar_height() - reserved_terminal_h);
   int y = topbar_height();
   if (w < 2 || h < 1)
     return;
 
-  for (int i = y; i < y + h; i++) {
+  for (int i = y; i < y + h; i++)
+  {
     ui->draw_text(0, i, std::string(w, ' '), theme.fg_sidebar, theme.bg_sidebar);
   }
 
   // Full panel frame: top/left/right/bottom borders with connected corners,
   // so the explorer is a closed box (not just a right edge).
-  const int border_fg =
-      sidebar_resize_dragging ? theme.fg_active_border : theme.fg_sidebar_border;
-  if (h >= 2) {
-    ui->draw_text(0, y, "╭", border_fg, theme.bg_sidebar,
-                  sidebar_resize_dragging);
-    for (int bx = 1; bx < w - 1; bx++) {
-      ui->draw_text(bx, y, "─", border_fg, theme.bg_sidebar,
-                    sidebar_resize_dragging);
+  const int border_fg = sidebar_resize_dragging ? theme.fg_active_border : theme.fg_sidebar_border;
+  if (h >= 2)
+  {
+    ui->draw_text(0, y, "╭", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
+    for (int bx = 1; bx < w - 1; bx++)
+    {
+      ui->draw_text(bx, y, "─", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
     }
-    ui->draw_text(w - 1, y, "╮", border_fg, theme.bg_sidebar,
-                  sidebar_resize_dragging);
-    for (int i = y + 1; i < y + h - 1; i++) {
-      ui->draw_text(0, i, "│", border_fg, theme.bg_sidebar,
-                    sidebar_resize_dragging);
-      ui->draw_text(w - 1, i, "│", border_fg, theme.bg_sidebar,
-                    sidebar_resize_dragging);
+    ui->draw_text(w - 1, y, "╮", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
+    for (int i = y + 1; i < y + h - 1; i++)
+    {
+      ui->draw_text(0, i, "│", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
+      ui->draw_text(w - 1, i, "│", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
     }
-    ui->draw_text(0, y + h - 1, "╰", border_fg, theme.bg_sidebar,
-                  sidebar_resize_dragging);
-    for (int bx = 1; bx < w - 1; bx++) {
-      ui->draw_text(bx, y + h - 1, "─", border_fg, theme.bg_sidebar,
-                    sidebar_resize_dragging);
+    ui->draw_text(0, y + h - 1, "╰", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
+    for (int bx = 1; bx < w - 1; bx++)
+    {
+      ui->draw_text(bx, y + h - 1, "─", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
     }
-    ui->draw_text(w - 1, y + h - 1, "╯", border_fg, theme.bg_sidebar,
-                  sidebar_resize_dragging);
-  } else {
+    ui->draw_text(w - 1, y + h - 1, "╯", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
+  }
+  else
+  {
     ui->draw_text(0, y, "─", border_fg, theme.bg_sidebar);
-    for (int bx = 1; bx < w - 1; bx++) {
+    for (int bx = 1; bx < w - 1; bx++)
+    {
       ui->draw_text(bx, y, "─", border_fg, theme.bg_sidebar);
     }
     ui->draw_text(w - 1, y, "─", border_fg, theme.bg_sidebar);
   }
 
-  const int rail_w = kExplorerOnly
-                         ? 0
-                         : std::min(sidebar_activity_rail_width(),
-                                    std::max(1, w - 1));
-  auto draw_rail_item = [&](int row, const std::string &label,
-                            SidebarView view) {
+  const int rail_w =
+      kExplorerOnly ? 0 : std::min(sidebar_activity_rail_width(), std::max(1, w - 1));
+  auto draw_rail_item = [&](int row, const std::string &label, SidebarView view)
+  {
     if (row < 0 || row >= h)
       return;
     bool active = active_sidebar_view == view;
     int fg = active ? theme.fg_sidebar_directory : theme.fg_comment;
     // The panel's left border occupies column 0, so the activity rail lives
     // one cell inside the frame.
-    ui->draw_text(1, y + row, std::string(std::max(0, rail_w - 2), ' '), fg,
-                  theme.bg_sidebar);
-    ui->draw_text(1, y + row, active ? "▌" : " ", fg, theme.bg_sidebar,
-                  active);
-    if (rail_w >= 3) {
+    ui->draw_text(1, y + row, std::string(std::max(0, rail_w - 2), ' '), fg, theme.bg_sidebar);
+    ui->draw_text(1, y + row, active ? "▌" : " ", fg, theme.bg_sidebar, active);
+    if (rail_w >= 3)
+    {
       ui->draw_text(2, y + row, label, fg, theme.bg_sidebar, active);
     }
   };
 
-  if (!kExplorerOnly) {
+  if (!kExplorerOnly)
+  {
     draw_rail_item(1, "󰉋 ", SIDEBAR_VIEW_EXPLORER);
     draw_rail_item(3, " ", SIDEBAR_VIEW_GIT);
-    for (int i = y + 1; i < y + h - 1; i++) {
-      ui->draw_text(std::max(0, rail_w - 1), i, "│", theme.fg_sidebar_border,
-                    theme.bg_sidebar);
+    for (int i = y + 1; i < y + h - 1; i++)
+    {
+      ui->draw_text(std::max(0, rail_w - 1), i, "│", theme.fg_sidebar_border, theme.bg_sidebar);
     }
   }
 
@@ -532,12 +590,15 @@ void Editor::render_sidebar() {
   // plus the activity rail when present.
   const int content_x = std::max(1, rail_w);
   const int content_w = std::max(0, w - content_x - 1);
-  if (content_w < 2) {
+  if (content_w < 2)
+  {
     return;
   }
 
-  auto severity_to_color = [&](int severity, bool is_dir) {
-    switch (severity) {
+  auto severity_to_color = [&](int severity, bool is_dir)
+  {
+    switch (severity)
+    {
     case 1:
       return theme.fg_diagnostic_error;
     case 2:
@@ -551,7 +612,8 @@ void Editor::render_sidebar() {
     }
   };
 
-  if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT) {
+  if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT)
+  {
     std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
     int header_y = y;
     int list_y = y + 1;
@@ -560,43 +622,59 @@ void Editor::render_sidebar() {
     int list_h = std::max(0, h - 3);
 
     std::string header_label = has_git_repo() ? "  " + git_branch : "  Git";
-    if (has_git_repo()) {
-      if (git_staged_count > 0) {
+    if (has_git_repo())
+    {
+      if (git_staged_count > 0)
+      {
         header_label += " +" + std::to_string(git_staged_count);
       }
-      if (git_unstaged_count > 0) {
+      if (git_unstaged_count > 0)
+      {
         header_label += " ~" + std::to_string(git_unstaged_count);
       }
-      if (git_untracked_count > 0) {
+      if (git_untracked_count > 0)
+      {
         header_label += " ?" + std::to_string(git_untracked_count);
       }
-      if (git_conflict_count > 0) {
+      if (git_conflict_count > 0)
+      {
         header_label += " !" + std::to_string(git_conflict_count);
       }
     }
-    ui->draw_text(content_x + 1, header_y,
+    ui->draw_text(content_x + 1,
+                  header_y,
                   truncate_cells(header_label, std::max(0, content_w - 3)),
-                  theme.fg_sidebar_directory, theme.bg_sidebar, true);
+                  theme.fg_sidebar_directory,
+                  theme.bg_sidebar,
+                  true);
 
-    if (!git_rows.empty()) {
-      git_sidebar_selected =
-          std::clamp(git_sidebar_selected, 0, (int)git_rows.size() - 1);
-    } else {
+    if (!git_rows.empty())
+    {
+      git_sidebar_selected = std::clamp(git_sidebar_selected, 0, (int)git_rows.size() - 1);
+    }
+    else
+    {
       git_sidebar_selected = 0;
     }
-    int max_scroll =
-        std::max(0, (int)git_rows.size() - std::max(1, list_h));
+    int max_scroll = std::max(0, (int)git_rows.size() - std::max(1, list_h));
     git_sidebar_scroll = std::clamp(git_sidebar_scroll, 0, max_scroll);
 
-    if (git_rows.empty()) {
+    if (git_rows.empty())
+    {
       std::string empty = has_git_repo() ? "No changes" : "Not a Git repo";
-      if (list_h > 0) {
-        ui->draw_text(content_x + 1, list_y,
+      if (list_h > 0)
+      {
+        ui->draw_text(content_x + 1,
+                      list_y,
                       truncate_cells(empty, std::max(0, content_w - 3)),
-                      theme.fg_comment, theme.bg_sidebar);
+                      theme.fg_comment,
+                      theme.bg_sidebar);
       }
-    } else {
-      for (int i = 0; i < list_h; i++) {
+    }
+    else
+    {
+      for (int i = 0; i < list_h; i++)
+      {
         int idx = i + git_sidebar_scroll;
         if (idx >= (int)git_rows.size())
           break;
@@ -606,62 +684,80 @@ void Editor::render_sidebar() {
         int row_fg = theme.fg_sidebar;
         int row_bg = theme.bg_sidebar;
         auto git_colors = git_status_colors(theme, row.status);
-        if (!selected && !row.status.empty()) {
+        if (!selected && !row.status.empty())
+        {
           row_fg = git_colors.first;
           row_bg = git_colors.second;
-          ui->fill_rect({content_x, list_y + i, std::max(1, content_w - 1), 1},
-                        " ", row_fg, row_bg);
+          ui->fill_rect(
+              {content_x, list_y + i, std::max(1, content_w - 1), 1}, " ", row_fg, row_bg);
         }
-        if (selected) {
-          if (focus_state == FOCUS_SIDEBAR) {
+        if (selected)
+        {
+          if (focus_state == FOCUS_SIDEBAR)
+          {
             row_fg = theme.fg_sidebar_selected;
             row_bg = theme.bg_sidebar_selected;
-          } else {
+          }
+          else
+          {
             row_fg = theme.fg_sidebar_selected_inactive;
             row_bg = theme.bg_sidebar_selected_inactive;
           }
-          ui->draw_text(content_x, list_y + i,
-                        std::string(std::max(0, content_w - 1), ' '),
-                        row_fg, row_bg);
+          ui->draw_text(
+              content_x, list_y + i, std::string(std::max(0, content_w - 1), ' '), row_fg, row_bg);
         }
 
         std::string symbol = git_status_symbol(row.status);
-        if (symbol.empty()) {
+        if (symbol.empty())
+        {
           symbol = " ";
         }
-        ui->draw_text(content_x + 1, list_y + i, symbol,
-                      git_colors.first, row_bg, true);
+        ui->draw_text(content_x + 1, list_y + i, symbol, git_colors.first, row_bg, true);
         std::string label = " " + row.relative_path;
-        ui->draw_text(content_x + 3, list_y + i,
+        ui->draw_text(content_x + 3,
+                      list_y + i,
                       truncate_cells(label, std::max(0, content_w - 5)),
-                      row_fg, row_bg);
+                      row_fg,
+                      row_bg);
       }
     }
 
     std::string footer;
-    if (!git_rows.empty() && git_sidebar_selected >= 0 &&
-        git_sidebar_selected < (int)git_rows.size()) {
+    if (!git_rows.empty() && git_sidebar_selected >= 0
+        && git_sidebar_selected < (int)git_rows.size())
+    {
       footer = " " + git_rows[(size_t)git_sidebar_selected].relative_path;
-    } else if (has_git_repo()) {
+    }
+    else if (has_git_repo())
+    {
       footer = std::to_string(git_dirty_count) + " changes";
-    } else {
+    }
+    else
+    {
       footer = "Open a Git workspace";
     }
-    if (h >= 3) {
-      ui->draw_text(content_x + 1, y + h - 2,
+    if (h >= 3)
+    {
+      ui->draw_text(content_x + 1,
+                    y + h - 2,
                     truncate_cells(footer, std::max(0, content_w - 3)),
-                    theme.fg_comment, theme.bg_sidebar);
+                    theme.fg_comment,
+                    theme.bg_sidebar);
     }
 
     return;
   }
 
   std::string header_label = "  " + sidebar_render_cache_.root_label + " ";
-  int header_w = std::min(std::max(6, cell_count(header_label) + 2),
-                          std::max(1, content_w - 1));
-  if (header_w > 2) {
-    ui->draw_text(content_x + 1, y, truncate_cells(header_label, header_w - 2),
-                  theme.fg_sidebar_directory, theme.bg_sidebar, true);
+  int header_w = std::min(std::max(6, cell_count(header_label) + 2), std::max(1, content_w - 1));
+  if (header_w > 2)
+  {
+    ui->draw_text(content_x + 1,
+                  y,
+                  truncate_cells(header_label, header_w - 2),
+                  theme.fg_sidebar_directory,
+                  theme.bg_sidebar,
+                  true);
   }
 
   int tree_y = y + 1;
@@ -671,18 +767,23 @@ void Editor::render_sidebar() {
   const auto &rows = sidebar_render_cache_.rows;
 
   int max_scroll = std::max(0, (int)rows.size() - std::max(1, tree_h));
-  if (file_tree_scroll < 0) {
+  if (file_tree_scroll < 0)
+  {
     file_tree_scroll = 0;
-  } else if (file_tree_scroll > max_scroll) {
+  }
+  else if (file_tree_scroll > max_scroll)
+  {
     file_tree_scroll = max_scroll;
   }
 
   std::string active_file_path;
-  if (current_buffer >= 0 && current_buffer < (int)buffers.size()) {
+  if (current_buffer >= 0 && current_buffer < (int)buffers.size())
+  {
     active_file_path = normalize_sidebar_path(buffers[current_buffer].filepath);
   }
 
-  for (int i = 0; i < tree_h; i++) {
+  for (int i = 0; i < tree_h; i++)
+  {
     int idx = i + file_tree_scroll;
     if (idx >= (int)rows.size())
       break;
@@ -694,109 +795,123 @@ void Editor::render_sidebar() {
     const std::string diag_symbol = diagnostic_symbol(sev);
     const bool selected = idx == file_tree_selected;
     const bool is_active_file =
-        !row.is_dir && !active_file_path.empty() &&
-        row.normalized_path == active_file_path;
+        !row.is_dir && !active_file_path.empty() && row.normalized_path == active_file_path;
 
     int row_fg = row.is_dir ? theme.fg_sidebar_directory : theme.fg_sidebar;
     int row_bg = theme.bg_sidebar;
     auto git_colors = git_status_colors(theme, git_xy);
-    if (!row.is_dir && !git_xy.empty() && !selected) {
+    if (!row.is_dir && !git_xy.empty() && !selected)
+    {
       row_fg = git_colors.first;
       row_bg = git_colors.second;
-      ui->fill_rect({content_x + 1, tree_y + i,
-                     std::max(1, content_w - 2), 1}, " ", row_fg, row_bg);
+      ui->fill_rect(
+          {content_x + 1, tree_y + i, std::max(1, content_w - 2), 1}, " ", row_fg, row_bg);
     }
 
-    if (selected) {
-      if (focus_state == FOCUS_SIDEBAR) {
+    if (selected)
+    {
+      if (focus_state == FOCUS_SIDEBAR)
+      {
         row_fg = theme.fg_sidebar_selected;
         row_bg = theme.bg_sidebar_selected;
-      } else {
+      }
+      else
+      {
         row_fg = theme.fg_sidebar_selected_inactive;
         row_bg = theme.bg_sidebar_selected_inactive;
       }
-      ui->draw_text(content_x, tree_y + i,
-                    std::string(std::max(0, content_w - 1), ' '),
-                    row_fg, row_bg);
+      ui->draw_text(
+          content_x, tree_y + i, std::string(std::max(0, content_w - 1), ' '), row_fg, row_bg);
     }
 
-    if (is_active_file) {
-      ui->draw_text(content_x, tree_y + i, "▌", theme.fg_sidebar_directory,
-                    row_bg, true);
+    if (is_active_file)
+    {
+      ui->draw_text(content_x, tree_y + i, "▌", theme.fg_sidebar_directory, row_bg, true);
     }
 
     const bool show_badges = w >= 16;
     const int border_x = w - 1;
     const int diag_x = border_x - 5;
     const int git_x = border_x - 3;
-    const int label_max =
-        show_badges ? std::max(0, diag_x - (content_x + 1) - 1)
-                    : std::max(0, border_x - (content_x + 1));
+    const int label_max = show_badges ? std::max(0, diag_x - (content_x + 1) - 1)
+                                      : std::max(0, border_x - (content_x + 1));
 
-    ui->draw_text(content_x + 1, tree_y + i,
-                  truncate_cells(row.label, label_max), row_fg, row_bg);
+    ui->draw_text(content_x + 1, tree_y + i, truncate_cells(row.label, label_max), row_fg, row_bg);
 
-    if (show_badges) {
-      if (!diag_symbol.empty()) {
-        ui->draw_text(diag_x, tree_y + i, diag_symbol,
-                      severity_to_color(sev, false), row_bg, true);
+    if (show_badges)
+    {
+      if (!diag_symbol.empty())
+      {
+        ui->draw_text(diag_x, tree_y + i, diag_symbol, severity_to_color(sev, false), row_bg, true);
       }
-      if (!git_symbol.empty()) {
-        ui->draw_text(git_x, tree_y + i, git_symbol,
-                      git_colors.first, row_bg, true);
+      if (!git_symbol.empty())
+      {
+        ui->draw_text(git_x, tree_y + i, git_symbol, git_colors.first, row_bg, true);
       }
     }
   }
 
   std::string footer;
-  if (!rows.empty() && file_tree_selected >= 0 &&
-      file_tree_selected < (int)rows.size()) {
+  if (!rows.empty() && file_tree_selected >= 0 && file_tree_selected < (int)rows.size())
+  {
     footer = " " + rows[(size_t)file_tree_selected].footer_label;
-  } else if (has_git_repo()) {
+  }
+  else if (has_git_repo())
+  {
     footer = " " + git_branch;
-    if (git_staged_count > 0) {
+    if (git_staged_count > 0)
+    {
       footer += " +" + std::to_string(git_staged_count);
     }
-    if (git_unstaged_count > 0) {
+    if (git_unstaged_count > 0)
+    {
       footer += " ~" + std::to_string(git_unstaged_count);
     }
-    if (git_untracked_count > 0) {
+    if (git_untracked_count > 0)
+    {
       footer += " ?" + std::to_string(git_untracked_count);
     }
-    if (git_conflict_count > 0) {
+    if (git_conflict_count > 0)
+    {
       footer += " !" + std::to_string(git_conflict_count);
     }
-  } else {
+  }
+  else
+  {
     footer = std::to_string(rows.size()) + " items";
   }
-  if (h >= 3) {
-    ui->draw_text(content_x + 1, y + h - 2,
+  if (h >= 3)
+  {
+    ui->draw_text(content_x + 1,
+                  y + h - 2,
                   truncate_cells(footer, std::max(0, content_w - 3)),
-                  theme.fg_comment, theme.bg_sidebar);
+                  theme.fg_comment,
+                  theme.bg_sidebar);
   }
-
 }
 
-void Editor::render_collapsed_sidebar_handle() {
-  if (!collapsed_sidebar_handle_hit_test(0, topbar_height())) {
+void Editor::render_collapsed_sidebar_handle()
+{
+  if (!collapsed_sidebar_handle_hit_test(0, topbar_height()))
+  {
     return;
   }
 
   int reserved_terminal_h = 0;
-  if (show_integrated_terminal && !integrated_terminals.empty()) {
+  if (show_integrated_terminal && !integrated_terminals.empty())
+  {
     reserved_terminal_h =
-        std::clamp(integrated_terminal_height, 5,
-                   std::max(5, ui->get_height() / 2));
+        std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
   }
   int top = topbar_height();
   int bottom = ui->get_height() - status_height - reserved_terminal_h;
   int h = std::max(0, bottom - top);
-  if (h <= 0) {
+  if (h <= 0)
+  {
     return;
   }
 
   int mid = top + h / 2;
-  int fg = sidebar_resize_dragging ? theme.fg_active_border
-                                   : theme.fg_sidebar_border;
+  int fg = sidebar_resize_dragging ? theme.fg_active_border : theme.fg_sidebar_border;
   ui->draw_text(0, mid, "›", fg, theme.bg_default, true);
 }

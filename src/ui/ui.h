@@ -6,11 +6,13 @@
 #include <string>
 #include <vector>
 
-struct UIRect {
+struct UIRect
+{
   int x, y, w, h;
 };
 
-struct UICell {
+struct UICell
+{
   std::string ch = " ";
   int fg = 7;
   int bg = 0;
@@ -19,20 +21,25 @@ struct UICell {
   bool reverse = false;
   bool dim = false;
 
-  bool operator==(const UICell &other) const {
-    return ch == other.ch && fg == other.fg && bg == other.bg &&
-            bold == other.bold && italic == other.italic &&
-            reverse == other.reverse && dim == other.dim;
+  bool operator==(const UICell &other) const
+  {
+    return ch == other.ch && fg == other.fg && bg == other.bg && bold == other.bold
+           && italic == other.italic && reverse == other.reverse && dim == other.dim;
   }
-  bool operator!=(const UICell &other) const { return !(*this == other); }
+  bool operator!=(const UICell &other) const
+  {
+    return !(*this == other);
+  }
 };
 
-enum class UICursorShape {
+enum class UICursorShape
+{
   Block,
   Bar,
 };
 
-class UI {
+class UI
+{
 private:
   Terminal *term;
   std::vector<std::vector<UICell>> grid;
@@ -57,8 +64,13 @@ public:
 
   void set_default_colors(int fg, int bg);
 
-  void draw_text(int x, int y, const std::string &text, int fg = 7, int bg = -1,
-                 bool bold = false, bool italic = false);
+  void draw_text(int x,
+                 int y,
+                 const std::string &text,
+                 int fg = 7,
+                 int bg = -1,
+                 bool bold = false,
+                 bool italic = false);
   void draw_rect(const UIRect &rect, int fg, int bg);
   void draw_border(const UIRect &rect, int fg, int bg);
   void fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg);
@@ -70,10 +82,19 @@ public:
   void hide_cursor();
   void reset_cursor_state();
   void flush_cursor();
-  bool cursor_needs_flush() const { return cursor_dirty; }
+  bool cursor_needs_flush() const
+  {
+    return cursor_dirty;
+  }
 
-  int get_width() const { return width; }
-  int get_height() const { return height; }
+  int get_width() const
+  {
+    return width;
+  }
+  int get_height() const
+  {
+    return height;
+  }
   const UICell *cell_at(int x, int y) const;
 
   // Paintable width: the physical terminal width minus the fixed one-cell
@@ -87,9 +108,11 @@ public:
   // the cursor clamp in render()/flush_cursor() already parks the
   // cursor one cell inside, and mouse click handlers ignore
   // positions beyond the rightmost paintable column.
-  int get_render_width() const {
+  int get_render_width() const
+  {
     int m = term ? term->render_margin() : 0;
-    if (m < 0) m = 0;
+    if (m < 0)
+      m = 0;
     int w = width - m;
     return w < 1 ? 1 : w;
   }

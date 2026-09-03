@@ -1,8 +1,9 @@
-#include <catch2/catch_test_macros.hpp>
 #include "tools/terminal/integrated.h"
 #include "ui/terminal.h"
+#include <catch2/catch_test_macros.hpp>
 
-TEST_CASE("Function keys use a distinct key code range", "[jot]") {
+TEST_CASE("Function keys use a distinct key code range", "[jot]")
+{
   REQUIRE((KeyCode::function(1) & KeyCode::FunctionMarker) != 0);
   REQUIRE(KeyCode::function(1) != 1001);
   REQUIRE(KeyCode::function(8) != 1008);
@@ -10,7 +11,8 @@ TEST_CASE("Function keys use a distinct key code range", "[jot]") {
   REQUIRE(KeyCode::function(24) == KeyCode::FunctionLast);
 }
 
-TEST_CASE("Integrated Terminal Default Colors Resolve To Theme", "[jot]") {
+TEST_CASE("Integrated Terminal Default Colors Resolve To Theme", "[jot]")
+{
   IntegratedTerminal::StyledCell cell{"x", 7, 0, true, true, false};
   auto colors = IntegratedTerminal::resolve_cell_colors(cell, 189, 235);
 
@@ -18,7 +20,8 @@ TEST_CASE("Integrated Terminal Default Colors Resolve To Theme", "[jot]") {
   REQUIRE(colors.bg == 235);
 }
 
-TEST_CASE("Integrated Terminal Explicit Colors Stay Explicit", "[jot]") {
+TEST_CASE("Integrated Terminal Explicit Colors Stay Explicit", "[jot]")
+{
   IntegratedTerminal::StyledCell cell{"x", 196, 22, false, false, false};
   auto colors = IntegratedTerminal::resolve_cell_colors(cell, 189, 235);
 
@@ -26,7 +29,8 @@ TEST_CASE("Integrated Terminal Explicit Colors Stay Explicit", "[jot]") {
   REQUIRE(colors.bg == 22);
 }
 
-TEST_CASE("Integrated Terminal Reverse Swaps After Default Resolution", "[jot]") {
+TEST_CASE("Integrated Terminal Reverse Swaps After Default Resolution", "[jot]")
+{
   IntegratedTerminal::StyledCell cell{"x", 7, 22, true, false, true};
   auto colors = IntegratedTerminal::resolve_cell_colors(cell, 189, 235);
 

@@ -5,34 +5,46 @@
 #include <string>
 #include <vector>
 
-namespace Dap {
+namespace Dap
+{
 
-struct Value {
-  enum Type { Null, Bool, Number, String, Array, Object } type = Null;
-  bool bool_value = false;
-  long long number_value = 0;
-  std::string string_value;
-  std::vector<Value> array_value;
-  std::map<std::string, Value> object_value;
-};
+  struct Value
+  {
+    enum Type
+    {
+      Null,
+      Bool,
+      Number,
+      String,
+      Array,
+      Object
+    } type = Null;
+    bool bool_value = false;
+    long long number_value = 0;
+    std::string string_value;
+    std::vector<Value> array_value;
+    std::map<std::string, Value> object_value;
+  };
 
-bool parse_json(const std::string &text, Value &out);
-std::string json_escape(const std::string &value);
-const Value *object_get(const Value &value, const std::string &key);
-std::string string_or_empty(const Value *value);
-int int_or_default(const Value *value, int fallback);
-bool bool_or_default(const Value *value, bool fallback);
-bool extract_content_length(const std::string &headers, size_t &length_out);
+  bool parse_json(const std::string &text, Value &out);
+  std::string json_escape(const std::string &value);
+  const Value *object_get(const Value &value, const std::string &key);
+  std::string string_or_empty(const Value *value);
+  int int_or_default(const Value *value, int fallback);
+  bool bool_or_default(const Value *value, bool fallback);
+  bool extract_content_length(const std::string &headers, size_t &length_out);
 
 } // namespace Dap
 
-struct DebuggerBreakpoint {
+struct DebuggerBreakpoint
+{
   std::string filepath;
   int line = 0; // zero-based
   bool verified = false;
 };
 
-struct DebuggerFrame {
+struct DebuggerFrame
+{
   int id = 0;
   std::string name;
   std::string filepath;
@@ -40,31 +52,36 @@ struct DebuggerFrame {
   int column = 0;
 };
 
-struct DebuggerThread {
+struct DebuggerThread
+{
   int id = 0;
   std::string name;
   std::vector<DebuggerFrame> frames;
 };
 
-struct DebuggerVariable {
+struct DebuggerVariable
+{
   std::string name;
   std::string value;
   std::string type;
   int variables_reference = 0;
 };
 
-struct DebuggerMemoryRow {
+struct DebuggerMemoryRow
+{
   std::string address;
   std::string bytes;
   std::string ascii;
 };
 
-struct DebuggerInstruction {
+struct DebuggerInstruction
+{
   std::string address;
   std::string instruction;
 };
 
-struct DebuggerSessionConfig {
+struct DebuggerSessionConfig
+{
   std::string name;
   std::string adapter = "gdb";
   std::string program;
@@ -75,8 +92,10 @@ struct DebuggerSessionConfig {
   int pid = 0;
 };
 
-struct DebuggerEvent {
-  enum Type {
+struct DebuggerEvent
+{
+  enum Type
+  {
     None,
     Initialized,
     Stopped,
@@ -108,10 +127,10 @@ struct DebuggerEvent {
   bool supports_disassemble = false;
 };
 
-class DebuggerClient {
+class DebuggerClient
+{
 public:
-  DebuggerClient(const DebuggerSessionConfig &config,
-                 const std::vector<std::string> &adapter_argv);
+  DebuggerClient(const DebuggerSessionConfig &config, const std::vector<std::string> &adapter_argv);
   ~DebuggerClient();
 
   bool start();
@@ -132,23 +151,52 @@ public:
   bool scopes(int frame_id);
   bool variables(int variables_reference);
   bool read_memory(const std::string &memory_reference, int offset, int count);
-  bool disassemble(const std::string &memory_reference, int offset,
-                   int instruction_offset, int count);
-  bool set_breakpoints(const std::string &source_path,
-                       const std::vector<int> &zero_based_lines);
+  bool
+  disassemble(const std::string &memory_reference, int offset, int instruction_offset, int count);
+  bool set_breakpoints(const std::string &source_path, const std::vector<int> &zero_based_lines);
 
   std::vector<DebuggerEvent> consume_events();
 
-  bool is_running() const { return running; }
-  bool is_initialized() const { return initialized; }
-  bool is_launched() const { return launched; }
-  int get_stdin_fd() const { return stdin_fd; }
-  int get_stdout_fd() const { return stdout_fd; }
-  int get_stderr_fd() const { return stderr_fd; }
-  bool supports_read_memory() const { return supports_read_memory_; }
-  bool supports_disassemble() const { return supports_disassemble_; }
-  const std::string &get_last_error() const { return last_error; }
-  const DebuggerSessionConfig &get_config() const { return config; }
+  bool is_running() const
+  {
+    return running;
+  }
+  bool is_initialized() const
+  {
+    return initialized;
+  }
+  bool is_launched() const
+  {
+    return launched;
+  }
+  int get_stdin_fd() const
+  {
+    return stdin_fd;
+  }
+  int get_stdout_fd() const
+  {
+    return stdout_fd;
+  }
+  int get_stderr_fd() const
+  {
+    return stderr_fd;
+  }
+  bool supports_read_memory() const
+  {
+    return supports_read_memory_;
+  }
+  bool supports_disassemble() const
+  {
+    return supports_disassemble_;
+  }
+  const std::string &get_last_error() const
+  {
+    return last_error;
+  }
+  const DebuggerSessionConfig &get_config() const
+  {
+    return config;
+  }
   std::string describe() const;
 
 private:
@@ -174,8 +222,7 @@ private:
   bool supports_read_memory_ = false;
   bool supports_disassemble_ = false;
 
-  bool send_request(const std::string &command_name,
-                    const std::string &arguments_json = "{}");
+  bool send_request(const std::string &command_name, const std::string &arguments_json = "{}");
   bool send_message(const std::string &json);
   bool flush_pending_writes();
   void handle_stdout_data(const std::string &data);
@@ -186,7 +233,6 @@ private:
   void push_error(const std::string &message);
 };
 
-std::vector<DebuggerSessionConfig>
-parse_debugger_config_text(const std::string &text);
+std::vector<DebuggerSessionConfig> parse_debugger_config_text(const std::string &text);
 
 #endif

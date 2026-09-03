@@ -1,121 +1,157 @@
 #include "editor.h"
 #include <cctype>
 
-void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
-                                bool is_alt) {
-  if (lsp_completion_visible) {
-    if (ch == 1008) {
+void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt)
+{
+  if (lsp_completion_visible)
+  {
+    if (ch == 1008)
+    {
+      lsp_completion_selected = std::max(0, lsp_completion_selected - 1);
+      needs_redraw = true;
+      return;
+    }
+    if (ch == 1009)
+    {
       lsp_completion_selected =
-          std::max(0, lsp_completion_selected - 1);
+          std::min(std::max(0, (int)lsp_completion_items.size() - 1), lsp_completion_selected + 1);
       needs_redraw = true;
       return;
     }
-    if (ch == 1009) {
-      lsp_completion_selected = std::min(
-          std::max(0, (int)lsp_completion_items.size() - 1),
-          lsp_completion_selected + 1);
-      needs_redraw = true;
-      return;
-    }
-    if (ch == '\n' || ch == 13 || ch == '\t' || ch == 9) {
-      if (apply_selected_lsp_completion()) {
+    if (ch == '\n' || ch == 13 || ch == '\t' || ch == 9)
+    {
+      if (apply_selected_lsp_completion())
+      {
         needs_redraw = true;
       }
       return;
     }
-    if (ch == 27) {
+    if (ch == 27)
+    {
       hide_lsp_completion();
       enter_normal_mode();
       return;
     }
   }
 
-  if (is_ctrl && is_shift && (ch == 'l' || ch == 'L')) {
+  if (is_ctrl && is_shift && (ch == 'l' || ch == 'L'))
+  {
     select_current_line();
     return;
   }
-  if (is_ctrl && is_shift && (ch == 's' || ch == 'S')) {
+  if (is_ctrl && is_shift && (ch == 's' || ch == 'S'))
+  {
     int saved = 0;
-    for (int i = 0; i < (int)buffers.size(); i++) {
-      if (!buffers[i].filepath.empty() && buffers[i].modified &&
-          save_buffer_at(i, false)) {
+    for (int i = 0; i < (int)buffers.size(); i++)
+    {
+      if (!buffers[i].filepath.empty() && buffers[i].modified && save_buffer_at(i, false))
+      {
         saved++;
       }
     }
-    if (saved > 0) {
+    if (saved > 0)
+    {
       set_message("Saved " + std::to_string(saved) + " file(s)");
-    } else {
+    }
+    else
+    {
       set_message("No modified saved files");
     }
     needs_redraw = true;
     return;
   }
-  if (is_ctrl && is_shift && (ch == 't' || ch == 'T')) {
+  if (is_ctrl && is_shift && (ch == 't' || ch == 'T'))
+  {
     reopen_last_closed_buffer();
     return;
   }
-  if (is_ctrl && is_shift && (ch == 'u' || ch == 'U')) {
+  if (is_ctrl && is_shift && (ch == 'u' || ch == 'U'))
+  {
     transform_selection_uppercase();
     return;
   }
-  if (is_ctrl && is_shift && (ch == 'n' || ch == 'N')) {
+  if (is_ctrl && is_shift && (ch == 'n' || ch == 'N'))
+  {
     transform_selection_lowercase();
     return;
   }
-  if (is_ctrl && is_shift && (ch == 'f' || ch == 'F')) {
+  if (is_ctrl && is_shift && (ch == 'f' || ch == 'F'))
+  {
     hide_lsp_completion();
-    if (open_scoped_replace_from_selection()) {
+    if (open_scoped_replace_from_selection())
+    {
       return;
     }
     show_project_search();
     return;
   }
-  if (is_ctrl && is_shift && (ch == 'm' || ch == 'M')) {
+  if (is_ctrl && is_shift && (ch == 'm' || ch == 'M'))
+  {
     hide_lsp_completion();
     show_diagnostics_picker();
     return;
   }
-  if (is_ctrl && is_shift && (ch == 'o' || ch == 'O')) {
+  if (is_ctrl && is_shift && (ch == 'o' || ch == 'O'))
+  {
     hide_lsp_completion();
     show_symbol_picker();
     return;
   }
   // Ctrl+Tab / Ctrl+Shift+Tab: cycle pane-local tabs.
-  if (is_ctrl && (ch == '\t' || ch == 9)) {
-    if (is_shift) {
-      if (cycle_local_tab(-1)) {
+  if (is_ctrl && (ch == '\t' || ch == 9))
+  {
+    if (is_shift)
+    {
+      if (cycle_local_tab(-1))
+      {
         return;
       }
-    } else {
-      if (cycle_local_tab(1)) {
+    }
+    else
+    {
+      if (cycle_local_tab(1))
+      {
         return;
       }
     }
   }
-  if (is_ctrl && ch == 1017) { // Shift+Tab code path
-    if (cycle_local_tab(-1)) {
+  if (is_ctrl && ch == 1017)
+  { // Shift+Tab code path
+    if (cycle_local_tab(-1))
+    {
       return;
     }
   }
 
-  if (is_ctrl) {
-    switch (ch) {
+  if (is_ctrl)
+  {
+    switch (ch)
+    {
     case 'q':
-    case 'Q': {
-      if (panes.size() > 1) {
+    case 'Q':
+    {
+      if (panes.size() > 1)
+      {
         close_pane();
-      } else {
+      }
+      else
+      {
         bool unsaved = false;
-        for (const auto &b : buffers) {
-          if (b.modified) {
+        for (const auto &b : buffers)
+        {
+          if (b.modified)
+          {
             unsaved = true;
             break;
           }
         }
-        if (unsaved) {
+        if (unsaved)
+        {
           show_quit_prompt = true;
           needs_redraw = true;
-        } else {
+        }
+        else
+        {
           running = false;
         }
       }
@@ -235,12 +271,14 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
   }
 
   // Some terminals send Ctrl+Space as NUL without the ctrl modifier flag.
-  if (ch == 0) {
+  if (ch == 0)
+  {
     request_lsp_completion(true);
     return;
   }
 
-  if (ch == 27) {
+  if (ch == 27)
+  {
     hide_lsp_completion();
     enter_normal_mode();
     return;
@@ -248,7 +286,8 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
 
   // Terminal fallback mappings for control bytes that may arrive without the
   // ctrl modifier bit on some terminals.
-  if (ch == 19) { // Ctrl+S
+  if (ch == 19)
+  { // Ctrl+S
     hide_lsp_completion();
     save_file();
     needs_redraw = true;
@@ -256,12 +295,14 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
   }
 
   // Terminal fallback mappings for Ctrl+Backspace / Ctrl+/
-  if (ch == 23) {
+  if (ch == 23)
+  {
     hide_lsp_completion();
     delete_word_backward();
     return;
   }
-  if (ch == 31) {
+  if (ch == 31)
+  {
     hide_lsp_completion();
     toggle_comment();
     return;
@@ -272,205 +313,253 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
   // - Alt+, / Alt+.
   // - Alt+1..9
   // - Alt+0 (last tab)
-  if (is_alt && (ch == ',' || ch == '<')) {
-    if (cycle_local_tab(-1)) {
+  if (is_alt && (ch == ',' || ch == '<'))
+  {
+    if (cycle_local_tab(-1))
+    {
       return;
     }
   }
-  if (is_alt && (ch == '.' || ch == '>')) {
-    if (cycle_local_tab(1)) {
+  if (is_alt && (ch == '.' || ch == '>'))
+  {
+    if (cycle_local_tab(1))
+    {
       return;
     }
   }
-  if (is_alt && ch >= '1' && ch <= '9') {
+  if (is_alt && ch >= '1' && ch <= '9')
+  {
     int target = (ch - '1');
-    if (switch_to_local_tab(target)) {
+    if (switch_to_local_tab(target))
+    {
       return;
     }
   }
-  if (is_alt && ch == '0') {
+  if (is_alt && ch == '0')
+  {
     auto &pane = get_pane();
-    if (!pane.tab_buffer_ids.empty() &&
-        switch_to_local_tab((int)pane.tab_buffer_ids.size() - 1)) {
+    if (!pane.tab_buffer_ids.empty() && switch_to_local_tab((int)pane.tab_buffer_ids.size() - 1))
+    {
       return;
     }
   }
 
   // Power user action shortcuts (modeless-friendly).
-  if (is_alt && (ch == 'w' || ch == 'W')) {
+  if (is_alt && (ch == 'w' || ch == 'W'))
+  {
     close_buffer();
     return;
   }
-  if (is_alt && ch == 'g') { // vim-ish: gg
+  if (is_alt && ch == 'g')
+  { // vim-ish: gg
     move_to_file_start(false);
     return;
   }
-  if (is_alt && ch == 'G') { // vim-ish: G
+  if (is_alt && ch == 'G')
+  { // vim-ish: G
     move_to_file_end(false);
     return;
   }
-  if (is_alt && (ch == 'i' || ch == 'I')) { // vim-ish: ^
+  if (is_alt && (ch == 'i' || ch == 'I'))
+  { // vim-ish: ^
     move_to_line_smart_start(false);
     return;
   }
-  if (is_alt && (ch == 'a' || ch == 'A')) { // vim-ish: $
+  if (is_alt && (ch == 'a' || ch == 'A'))
+  { // vim-ish: $
     move_to_line_end(false);
     return;
   }
-  if (is_alt && (ch == 'h' || ch == 'H')) { // vim-ish: b
+  if (is_alt && (ch == 'h' || ch == 'H'))
+  { // vim-ish: b
     move_word_backward(false);
     return;
   }
-  if (is_alt && (ch == 'l' || ch == 'L')) { // vim-ish: w
+  if (is_alt && (ch == 'l' || ch == 'L'))
+  { // vim-ish: w
     move_word_forward(false);
     return;
   }
-  if (is_alt && ch == 'd') { // vim-ish: dd
+  if (is_alt && ch == 'd')
+  { // vim-ish: dd
     delete_line();
     return;
   }
-  if (is_alt && ch == 'D') { // convenience: duplicate current line
+  if (is_alt && ch == 'D')
+  { // convenience: duplicate current line
     duplicate_line();
     return;
   }
-  if (is_alt && (ch == 'n' || ch == 'N')) {
+  if (is_alt && (ch == 'n' || ch == 'N'))
+  {
     create_new_buffer();
     needs_redraw = true;
     return;
   }
-  if (is_alt && (ch == 's' || ch == 'S')) {
+  if (is_alt && (ch == 's' || ch == 'S'))
+  {
     save_file();
     needs_redraw = true;
     return;
   }
-  if (is_alt && (ch == 'f' || ch == 'F')) {
+  if (is_alt && (ch == 'f' || ch == 'F'))
+  {
     toggle_search();
     needs_redraw = true;
     return;
   }
-  if (is_alt && ch == 'e') {
+  if (is_alt && ch == 'e')
+  {
     goto_next_diagnostic(1);
     return;
   }
-  if (is_alt && ch == 'E') {
+  if (is_alt && ch == 'E')
+  {
     goto_next_diagnostic(-1);
     return;
   }
-  if (is_alt && (ch == 'p' || ch == 'P')) {
+  if (is_alt && (ch == 'p' || ch == 'P'))
+  {
     toggle_command_palette();
     needs_redraw = true;
     return;
   }
-  if (is_alt && (ch == 'b' || ch == 'B')) {
+  if (is_alt && (ch == 'b' || ch == 'B'))
+  {
     toggle_sidebar();
     return;
   }
-  if (is_alt && (ch == 'm' || ch == 'M')) {
+  if (is_alt && (ch == 'm' || ch == 'M'))
+  {
     toggle_minimap();
     needs_redraw = true;
     return;
   }
-  if (is_alt && (ch == 't' || ch == 'T')) {
+  if (is_alt && (ch == 't' || ch == 'T'))
+  {
     open_theme_chooser();
     needs_redraw = true;
     return;
   }
-  if (is_alt && (ch == 'u' || ch == 'U')) {
+  if (is_alt && (ch == 'u' || ch == 'U'))
+  {
     transform_selection_uppercase();
     return;
   }
-  if (is_alt && (ch == 'n' || ch == 'N')) {
+  if (is_alt && (ch == 'n' || ch == 'N'))
+  {
     transform_selection_lowercase();
     return;
   }
-  if (is_alt && (ch == 'o' || ch == 'O')) {
+  if (is_alt && (ch == 'o' || ch == 'O'))
+  {
     sort_selected_lines();
     return;
   }
 
   // VSCode-like line move shortcut.
-  if (is_alt && ch == 1008) {
+  if (is_alt && ch == 1008)
+  {
     move_line_up();
     return;
   }
-  if (is_alt && ch == 1009) {
+  if (is_alt && ch == 1009)
+  {
     move_line_down();
     return;
   }
 
-  if (ch == 1008) {
+  if (ch == 1008)
+  {
     hide_lsp_completion();
     move_cursor(0, -1, is_shift);
     return;
   }
-  if (ch == 1009) {
+  if (ch == 1009)
+  {
     hide_lsp_completion();
     move_cursor(0, 1, is_shift);
     return;
   }
-  if (ch == 1010) {
+  if (ch == 1010)
+  {
     hide_lsp_completion();
     move_cursor(1, 0, is_shift);
     return;
   }
-  if (ch == 1011) {
+  if (ch == 1011)
+  {
     hide_lsp_completion();
     move_cursor(-1, 0, is_shift);
     return;
   }
-  if (ch == 1012) {
+  if (ch == 1012)
+  {
     hide_lsp_completion();
     move_to_line_smart_start(is_shift);
     return;
   }
-  if (ch == 1013) {
+  if (ch == 1013)
+  {
     hide_lsp_completion();
     move_to_line_end(is_shift);
     return;
   }
-  if (ch == 1015) {
+  if (ch == 1015)
+  {
     hide_lsp_completion();
     move_cursor(0, -10, is_shift);
     return;
   }
-  if (ch == 1016) {
+  if (ch == 1016)
+  {
     hide_lsp_completion();
     move_cursor(0, 10, is_shift);
     return;
   }
 
-  if (ch == 127 || ch == 8) {
+  if (ch == 127 || ch == 8)
+  {
     bool had_completion = lsp_completion_visible;
     delete_char(false);
     needs_redraw = true;
-    if (had_completion && refresh_lsp_completion_filter()) {
+    if (had_completion && refresh_lsp_completion_filter())
+    {
       request_lsp_completion(false, '_');
-    } else {
+    }
+    else
+    {
       hide_lsp_completion();
       request_lsp_completion(false, '_');
     }
     return;
   }
-  if (ch == 1001) {
+  if (ch == 1001)
+  {
     hide_lsp_completion();
     delete_char(true);
     needs_redraw = true;
     return;
   }
 
-  if (ch == '\n' || ch == 13) {
+  if (ch == '\n' || ch == 13)
+  {
     hide_lsp_completion();
     new_line();
     needs_redraw = true;
     return;
   }
 
-  if (ch == '\t' || ch == 9) {
+  if (ch == '\t' || ch == 9)
+  {
     hide_lsp_completion();
     auto &buf = get_buffer();
-    if (buf.selection.active) {
+    if (buf.selection.active)
+    {
       indent_selection();
-    } else {
+    }
+    else
+    {
       insert_char('\t');
     }
     needs_redraw = true;
@@ -478,17 +567,20 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
   }
 
   // Shift+Tab (terminal escape \e[Z mapped in terminal.cpp)
-  if (ch == 1017) {
+  if (ch == 1017)
+  {
     hide_lsp_completion();
     auto &buf = get_buffer();
-    if (buf.selection.active) {
+    if (buf.selection.active)
+    {
       outdent_selection();
     }
     needs_redraw = true;
     return;
   }
 
-  if (ch >= 32 && ch < 1000) {
+  if (ch >= 32 && ch < 1000)
+  {
     auto &buf = get_buffer();
     if (buf.selection.active)
       delete_selection();
@@ -496,21 +588,25 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift,
     bool inserted_html_closing_tag = insert_char((char)ch);
     char typed = (char)ch;
 
-    if (inserted_html_closing_tag) {
+    if (inserted_html_closing_tag)
+    {
       hide_lsp_completion();
       needs_redraw = true;
       return;
     }
 
-    bool trigger_completion =
-        std::isalnum((unsigned char)typed) || typed == '_' || typed == '.' ||
-        typed == ':' || typed == '>' || typed == '<' || typed == '/';
-    if (trigger_completion) {
-      if (had_completion) {
+    bool trigger_completion = std::isalnum((unsigned char)typed) || typed == '_' || typed == '.'
+                              || typed == ':' || typed == '>' || typed == '<' || typed == '/';
+    if (trigger_completion)
+    {
+      if (had_completion)
+      {
         refresh_lsp_completion_filter();
       }
       request_lsp_completion(false, typed);
-    } else {
+    }
+    else
+    {
       hide_lsp_completion();
     }
     needs_redraw = true;

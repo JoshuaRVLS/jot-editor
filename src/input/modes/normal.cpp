@@ -1,40 +1,46 @@
 #include "editor.h"
 #include "quote_text_object.h"
 
-void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
-                                bool /*is_alt*/) {
+void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift, bool /*is_alt*/)
+{
   auto &buf = get_buffer();
 
-  if (!is_ctrl) {
+  if (!is_ctrl)
+  {
     recent_keys.push_back(ch);
     if ((int)recent_keys.size() > 8)
       recent_keys.erase(recent_keys.begin());
 
-    if ((int)recent_keys.size() == 8 &&
-        recent_keys[0] == 1008 && recent_keys[1] == 1008 &&
-        recent_keys[2] == 1009 && recent_keys[3] == 1009 &&
-        recent_keys[4] == 1011 && recent_keys[5] == 1010 &&
-        recent_keys[6] == 1011 && recent_keys[7] == 1010) {
+    if ((int)recent_keys.size() == 8 && recent_keys[0] == 1008 && recent_keys[1] == 1008
+        && recent_keys[2] == 1009 && recent_keys[3] == 1009 && recent_keys[4] == 1011
+        && recent_keys[5] == 1010 && recent_keys[6] == 1011 && recent_keys[7] == 1010)
+    {
       easter_egg_timer = 180;
       recent_keys.clear();
       needs_redraw = true;
     }
   }
 
-  if (is_ctrl) {
-    switch (ch) {
+  if (is_ctrl)
+  {
+    switch (ch)
+    {
     case 'q':
-    case 'Q': {
+    case 'Q':
+    {
       bool unsaved = false;
       for (const auto &b : buffers)
-        if (b.modified) {
+        if (b.modified)
+        {
           unsaved = true;
           break;
         }
-      if (unsaved) {
+      if (unsaved)
+      {
         show_quit_prompt = true;
         needs_redraw = true;
-      } else
+      }
+      else
         running = false;
       return;
     }
@@ -88,46 +94,60 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     return;
   }
 
-  if (leader_key_pending) {
+  if (leader_key_pending)
+  {
     leader_key_pending = false;
 
-    auto save_all = [&] {
+    auto save_all = [&]
+    {
       int saved = 0;
-      for (int i = 0; i < (int)buffers.size(); i++) {
-        if (!buffers[i].filepath.empty() && buffers[i].modified &&
-            save_buffer_at(i, false)) {
+      for (int i = 0; i < (int)buffers.size(); i++)
+      {
+        if (!buffers[i].filepath.empty() && buffers[i].modified && save_buffer_at(i, false))
+        {
           saved++;
         }
       }
-      if (saved > 0) {
+      if (saved > 0)
+      {
         set_message("Saved " + std::to_string(saved) + " file(s)");
-      } else {
+      }
+      else
+      {
         set_message("No modified saved files");
       }
       needs_redraw = true;
     };
 
-    auto close_or_quit = [&] {
-      if (panes.size() > 1) {
+    auto close_or_quit = [&]
+    {
+      if (panes.size() > 1)
+      {
         close_pane();
         return;
       }
       bool unsaved = false;
-      for (const auto &b : buffers) {
-        if (b.modified) {
+      for (const auto &b : buffers)
+      {
+        if (b.modified)
+        {
           unsaved = true;
           break;
         }
       }
-      if (unsaved) {
+      if (unsaved)
+      {
         show_quit_prompt = true;
         needs_redraw = true;
-      } else {
+      }
+      else
+      {
         running = false;
       }
     };
 
-    switch (ch) {
+    switch (ch)
+    {
     case 'f':
     case 'F':
       telescope.open(root_dir.empty() ? "." : root_dir);
@@ -232,46 +252,60 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     }
   }
 
-  if (ch == ' ') {
+  if (ch == ' ')
+  {
     leader_key_pending = true;
     set_message("Leader");
     needs_redraw = true;
     return;
   }
 
-  if (has_pending_key) {
+  if (has_pending_key)
+  {
     char first = pending_key;
     has_pending_key = false;
     pending_key = 0;
 
-    if (first == 'g') {
-      if (ch == 'g') {
+    if (first == 'g')
+    {
+      if (ch == 'g')
+      {
         move_to_file_start();
         needs_redraw = true;
         return;
       }
-    } else if (first == 'd') {
-      if (ch == 'd') {
+    }
+    else if (first == 'd')
+    {
+      if (ch == 'd')
+      {
         vim_delete_line();
         needs_redraw = true;
         return;
       }
-      if (ch == 'w') {
+      if (ch == 'w')
+      {
         move_word_forward();
         delete_char(false);
         needs_redraw = true;
         return;
       }
       return;
-    } else if (first == 'y') {
-      if (ch == 'y') {
+    }
+    else if (first == 'y')
+    {
+      if (ch == 'y')
+      {
         vim_yank();
         needs_redraw = true;
         return;
       }
       return;
-    } else if (first == 'c') {
-      if (ch == 'c') {
+    }
+    else if (first == 'c')
+    {
+      if (ch == 'c')
+      {
         save_state();
         buf.line_mut(buf.cursor.y) = "";
         buf.cursor.x = 0;
@@ -279,23 +313,31 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
         enter_insert_mode();
         return;
       }
-      if (ch == 'i') {
+      if (ch == 'i')
+      {
         has_pending_key = true;
         pending_key = 'I';
         return;
       }
       return;
-    } else if (first == 'I') {
-      if (QuoteTextObject::is_supported_quote((char)ch)) {
+    }
+    else if (first == 'I')
+    {
+      if (QuoteTextObject::is_supported_quote((char)ch))
+      {
         change_inside_quote((char)ch);
         return;
       }
       return;
-    } else if (first == 'r') {
-      if (ch >= 32 && ch < 127) {
+    }
+    else if (first == 'r')
+    {
+      if (ch >= 32 && ch < 127)
+      {
         save_state();
         int line_len = (int)buf.line(buf.cursor.y).length();
-        if (buf.cursor.x < line_len) {
+        if (buf.cursor.x < line_len)
+        {
           buf.line_mut(buf.cursor.y)[buf.cursor.x] = (char)ch;
           buf.modified = true;
         }
@@ -305,7 +347,8 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     }
   }
 
-  switch (ch) {
+  switch (ch)
+  {
   case 'i':
     enter_insert_mode();
     return;
@@ -401,7 +444,8 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     vim_delete_char();
     return;
   case 'X':
-    if (buf.cursor.x > 0) {
+    if (buf.cursor.x > 0)
+    {
       save_state();
       buf.cursor.x--;
       buf.line_mut(buf.cursor.y).erase(buf.cursor.x, 1);
@@ -416,7 +460,8 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     return;
   case 'D':
     save_state();
-    if (buf.cursor.x < (int)buf.line(buf.cursor.y).length()) {
+    if (buf.cursor.x < (int)buf.line(buf.cursor.y).length())
+    {
       buf.line_mut(buf.cursor.y).erase(buf.cursor.x);
       buf.modified = true;
       clamp_cursor(get_pane().buffer_id);
@@ -446,29 +491,34 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift,
     pending_key = 'r';
     return;
   case 'J':
-    if (buf.cursor.y < (int)buf.line_count() - 1) {
+    if (buf.cursor.y < (int)buf.line_count() - 1)
+    {
       save_state();
-      if (buf.is_lazy()) buf.materialize();
+      if (buf.is_lazy())
+        buf.materialize();
       buf.line_mut(buf.cursor.y) += " " + buf.line(buf.cursor.y + 1);
       buf.lines.erase(buf.lines.begin() + buf.cursor.y + 1);
       buf.modified = true;
       needs_redraw = true;
     }
     return;
-  case '>': {
+  case '>':
+  {
     save_state();
     buf.line_mut(buf.cursor.y).insert(0, "    ");
     buf.modified = true;
     needs_redraw = true;
     return;
   }
-  case '<': {
+  case '<':
+  {
     save_state();
     auto &line = buf.line_mut(buf.cursor.y);
     int count = 0;
     while (count < 4 && count < (int)line.size() && line[count] == ' ')
       count++;
-    if (count > 0) {
+    if (count > 0)
+    {
       line.erase(0, count);
       buf.modified = true;
     }

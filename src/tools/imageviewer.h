@@ -8,16 +8,19 @@
 //     COLOR_IMAGE_BORDER = 10
 // };
 
-struct ImageInfo {
+struct ImageInfo
+{
   std::string path;
   int width;
   int height;
   std::string format;
 };
 
-class ImageViewer {
+class ImageViewer
+{
 public:
-  enum class Backend {
+  enum class Backend
+  {
     Auto,
     Kitty,
     Sixel,
@@ -57,8 +60,7 @@ public:
   static bool terminal_may_support_sixel();
   static bool helper_available(const std::string &cmd);
   static std::string base64_encode(const std::string &input);
-  static std::string build_kitty_file_command(const std::string &path, int x,
-                                              int y, int w, int h);
+  static std::string build_kitty_file_command(const std::string &path, int x, int y, int w, int h);
   static std::string build_kitty_delete_command();
   static std::string build_sixel_command(const std::string &path, int w, int h);
 
@@ -67,25 +69,66 @@ public:
   void close();
   void render(int x, int y, int w, int h, int border_fg, int border_bg);
   std::string take_graphics_output();
-  bool is_active() const { return is_open; }
-  std::string get_current() const { return current_image; }
-  int get_view_x() const { return view_x; }
-  int get_view_y() const { return view_y; }
-  int get_view_w() const { return view_w; }
-  int get_view_h() const { return view_h; }
-  int get_border_fg() const { return border_fg; }
-  int get_border_bg() const { return border_bg; }
-  const std::vector<std::string> &get_preview_lines() const { return ascii_preview; }
-  bool has_color_preview_data() const { return has_color_preview; }
-  const std::vector<std::vector<int>> &get_color_preview_bg() const {
+  bool is_active() const
+  {
+    return is_open;
+  }
+  std::string get_current() const
+  {
+    return current_image;
+  }
+  int get_view_x() const
+  {
+    return view_x;
+  }
+  int get_view_y() const
+  {
+    return view_y;
+  }
+  int get_view_w() const
+  {
+    return view_w;
+  }
+  int get_view_h() const
+  {
+    return view_h;
+  }
+  int get_border_fg() const
+  {
+    return border_fg;
+  }
+  int get_border_bg() const
+  {
+    return border_bg;
+  }
+  const std::vector<std::string> &get_preview_lines() const
+  {
+    return ascii_preview;
+  }
+  bool has_color_preview_data() const
+  {
+    return has_color_preview;
+  }
+  const std::vector<std::vector<int>> &get_color_preview_bg() const
+  {
     return color_preview_bg;
   }
-  Backend get_active_backend() const { return active_backend; }
-  std::string get_status_text() const { return status_text; }
-  bool uses_real_graphics() const {
+  Backend get_active_backend() const
+  {
+    return active_backend;
+  }
+  std::string get_status_text() const
+  {
+    return status_text;
+  }
+  bool uses_real_graphics() const
+  {
     return active_backend == Backend::Kitty || active_backend == Backend::Sixel;
   }
-  bool has_pending_graphics_output() const { return graphics_dirty; }
+  bool has_pending_graphics_output() const
+  {
+    return graphics_dirty;
+  }
 };
 
 #endif

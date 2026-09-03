@@ -2,10 +2,13 @@
 #include "lua_bridge/api.h"
 #include <algorithm>
 
-void Editor::reverse_selected_lines() {
+void Editor::reverse_selected_lines()
+{
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
-  if (!buf.selection.active) {
+  if (buf.is_lazy())
+    buf.materialize();
+  if (!buf.selection.active)
+  {
     set_message("Select lines first: :reverselines");
     return;
   }
@@ -14,7 +17,8 @@ void Editor::reverse_selected_lines() {
   int end_y = std::max(buf.selection.start.y, buf.selection.end.y);
   start_y = std::clamp(start_y, 0, (int)buf.lines.size() - 1);
   end_y = std::clamp(end_y, 0, (int)buf.lines.size() - 1);
-  if (start_y >= end_y) {
+  if (start_y >= end_y)
+  {
     set_message("Select multiple lines to reverse");
     return;
   }
@@ -28,10 +32,12 @@ void Editor::reverse_selected_lines() {
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Reversed selected lines");
-  if (lua_api) {
+  if (lua_api)
+  {
     lua_api->on_buffer_change(buf.filepath, "");
   }
-  if (!buf.filepath.empty()) {
+  if (!buf.filepath.empty())
+  {
     notify_lsp_change(buf.filepath);
   }
 }

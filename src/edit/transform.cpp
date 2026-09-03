@@ -3,91 +3,113 @@
 #include <algorithm>
 #include <cctype>
 
-namespace {
-struct Range {
-  int start_y = 0;
-  int end_y = 0;
-  int start_x = 0;
-  int end_x = 0;
-};
+namespace
+{
+  struct Range
+  {
+    int start_y = 0;
+    int end_y = 0;
+    int start_x = 0;
+    int end_x = 0;
+  };
 
-Range normalized_selection_range(const FileBuffer &buf) {
-  Range r;
-  r.start_y = std::min(buf.selection.start.y, buf.selection.end.y);
-  r.end_y = std::max(buf.selection.start.y, buf.selection.end.y);
-  r.start_x =
-      buf.selection.start.y < buf.selection.end.y
-          ? buf.selection.start.x
-          : (buf.selection.start.y == buf.selection.end.y
-                 ? std::min(buf.selection.start.x, buf.selection.end.x)
-                 : buf.selection.end.x);
-  r.end_x = buf.selection.start.y < buf.selection.end.y
-                ? buf.selection.end.x
-                : (buf.selection.start.y == buf.selection.end.y
-                       ? std::max(buf.selection.start.x, buf.selection.end.x)
-                       : buf.selection.start.x);
-  return r;
-}
+  Range normalized_selection_range(const FileBuffer &buf)
+  {
+    Range r;
+    r.start_y = std::min(buf.selection.start.y, buf.selection.end.y);
+    r.end_y = std::max(buf.selection.start.y, buf.selection.end.y);
+    r.start_x = buf.selection.start.y < buf.selection.end.y
+                    ? buf.selection.start.x
+                    : (buf.selection.start.y == buf.selection.end.y
+                           ? std::min(buf.selection.start.x, buf.selection.end.x)
+                           : buf.selection.end.x);
+    r.end_x = buf.selection.start.y < buf.selection.end.y
+                  ? buf.selection.end.x
+                  : (buf.selection.start.y == buf.selection.end.y
+                         ? std::max(buf.selection.start.x, buf.selection.end.x)
+                         : buf.selection.start.x);
+    return r;
+  }
 
-bool is_word_char(char c) {
-  const unsigned char uc = (unsigned char)c;
-  return std::isalnum(uc) || c == '_';
-}
+  bool is_word_char(char c)
+  {
+    const unsigned char uc = (unsigned char)c;
+    return std::isalnum(uc) || c == '_';
+  }
 
-char apply_case_char(char c, bool upper) {
-  const unsigned char uc = (unsigned char)c;
-  return (char)(upper ? std::toupper(uc) : std::tolower(uc));
-}
+  char apply_case_char(char c, bool upper)
+  {
+    const unsigned char uc = (unsigned char)c;
+    return (char)(upper ? std::toupper(uc) : std::tolower(uc));
+  }
 } // namespace
 
-void Editor::transform_selection_uppercase() {
+void Editor::transform_selection_uppercase()
+{
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
+  if (buf.is_lazy())
+    buf.materialize();
   save_state();
 
   bool changed = false;
-  if (buf.selection.active) {
+  if (buf.selection.active)
+  {
     Range r = normalized_selection_range(buf);
-    for (int y = r.start_y; y <= r.end_y; y++) {
-      if (y < 0 || y >= (int)buf.line_count()) {
+    for (int y = r.start_y; y <= r.end_y; y++)
+    {
+      if (y < 0 || y >= (int)buf.line_count())
+      {
         continue;
       }
       std::string &line = buf.lines[y];
       int from = 0;
       int to = (int)line.size();
-      if (y == r.start_y) {
+      if (y == r.start_y)
+      {
         from = std::clamp(r.start_x, 0, (int)line.size());
       }
-      if (y == r.end_y) {
+      if (y == r.end_y)
+      {
         to = std::clamp(r.end_x, 0, (int)line.size());
       }
-      if (to < from) {
+      if (to < from)
+      {
         std::swap(to, from);
       }
-      for (int i = from; i < to; i++) {
+      for (int i = from; i < to; i++)
+      {
         char next = apply_case_char(line[i], true);
-        if (next != line[i]) {
+        if (next != line[i])
+        {
           line[i] = next;
           changed = true;
         }
       }
     }
-  } else if (buf.cursor.y >= 0 && buf.cursor.y < (int)buf.line_count()) {
+  }
+  else if (buf.cursor.y >= 0 && buf.cursor.y < (int)buf.line_count())
+  {
     std::string &line = buf.lines[buf.cursor.y];
-    if (!line.empty()) {
+    if (!line.empty())
+    {
       int cursor = std::clamp(buf.cursor.x, 0, (int)line.size());
       int start = cursor;
       int end = cursor;
-      while (start > 0 && is_word_char(line[start - 1])) {
+      while (start > 0 && is_word_char(line[start - 1]))
+      {
         start--;
       }
-      while (end < (int)line.size() && is_word_char(line[end])) {
+      while (end < (int)line.size() && is_word_char(line[end]))
+      {
         end++;
       }
-      if (start < end) {
-        for (int i = start; i < end; i++) {
+      if (start < end)
+      {
+        for (int i = start; i < end; i++)
+        {
           char next = apply_case_char(line[i], true);
-          if (next != line[i]) {
+          if (next != line[i])
+          {
             line[i] = next;
             changed = true;
           }
@@ -96,7 +118,8 @@ void Editor::transform_selection_uppercase() {
     }
   }
 
-  if (!changed) {
+  if (!changed)
+  {
     set_message("Nothing to uppercase (select text or place cursor on a word)");
     return;
   }
@@ -106,62 +129,82 @@ void Editor::transform_selection_uppercase() {
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Uppercase applied");
-  if (lua_api) {
+  if (lua_api)
+  {
     lua_api->on_buffer_change(buf.filepath, "");
   }
-  if (!buf.filepath.empty()) {
+  if (!buf.filepath.empty())
+  {
     notify_lsp_change(buf.filepath);
   }
 }
 
-void Editor::transform_selection_lowercase() {
+void Editor::transform_selection_lowercase()
+{
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
+  if (buf.is_lazy())
+    buf.materialize();
   save_state();
 
   bool changed = false;
-  if (buf.selection.active) {
+  if (buf.selection.active)
+  {
     Range r = normalized_selection_range(buf);
-    for (int y = r.start_y; y <= r.end_y; y++) {
-      if (y < 0 || y >= (int)buf.line_count()) {
+    for (int y = r.start_y; y <= r.end_y; y++)
+    {
+      if (y < 0 || y >= (int)buf.line_count())
+      {
         continue;
       }
       std::string &line = buf.lines[y];
       int from = 0;
       int to = (int)line.size();
-      if (y == r.start_y) {
+      if (y == r.start_y)
+      {
         from = std::clamp(r.start_x, 0, (int)line.size());
       }
-      if (y == r.end_y) {
+      if (y == r.end_y)
+      {
         to = std::clamp(r.end_x, 0, (int)line.size());
       }
-      if (to < from) {
+      if (to < from)
+      {
         std::swap(to, from);
       }
-      for (int i = from; i < to; i++) {
+      for (int i = from; i < to; i++)
+      {
         char next = apply_case_char(line[i], false);
-        if (next != line[i]) {
+        if (next != line[i])
+        {
           line[i] = next;
           changed = true;
         }
       }
     }
-  } else if (buf.cursor.y >= 0 && buf.cursor.y < (int)buf.line_count()) {
+  }
+  else if (buf.cursor.y >= 0 && buf.cursor.y < (int)buf.line_count())
+  {
     std::string &line = buf.lines[buf.cursor.y];
-    if (!line.empty()) {
+    if (!line.empty())
+    {
       int cursor = std::clamp(buf.cursor.x, 0, (int)line.size());
       int start = cursor;
       int end = cursor;
-      while (start > 0 && is_word_char(line[start - 1])) {
+      while (start > 0 && is_word_char(line[start - 1]))
+      {
         start--;
       }
-      while (end < (int)line.size() && is_word_char(line[end])) {
+      while (end < (int)line.size() && is_word_char(line[end]))
+      {
         end++;
       }
-      if (start < end) {
-        for (int i = start; i < end; i++) {
+      if (start < end)
+      {
+        for (int i = start; i < end; i++)
+        {
           char next = apply_case_char(line[i], false);
-          if (next != line[i]) {
+          if (next != line[i])
+          {
             line[i] = next;
             changed = true;
           }
@@ -170,7 +213,8 @@ void Editor::transform_selection_lowercase() {
     }
   }
 
-  if (!changed) {
+  if (!changed)
+  {
     set_message("Nothing to lowercase (select text or place cursor on a word)");
     return;
   }
@@ -180,55 +224,67 @@ void Editor::transform_selection_lowercase() {
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Lowercase applied");
-  if (lua_api) {
+  if (lua_api)
+  {
     lua_api->on_buffer_change(buf.filepath, "");
   }
-  if (!buf.filepath.empty()) {
+  if (!buf.filepath.empty())
+  {
     notify_lsp_change(buf.filepath);
   }
 }
 
-void Editor::sort_selected_lines() {
+void Editor::sort_selected_lines()
+{
   auto &buf = get_buffer();
-  if (buf.line_count() == 0) {
+  if (buf.line_count() == 0)
+  {
     set_message("Nothing to sort");
     return;
   }
 
   int start_y = 0;
   int end_y = 0;
-  if (buf.selection.active) {
+  if (buf.selection.active)
+  {
     start_y = std::min(buf.selection.start.y, buf.selection.end.y);
     end_y = std::max(buf.selection.start.y, buf.selection.end.y);
-  } else {
+  }
+  else
+  {
     set_message("Select lines first to sort");
     return;
   }
 
   start_y = std::clamp(start_y, 0, (int)buf.line_count() - 1);
   end_y = std::clamp(end_y, 0, (int)buf.line_count() - 1);
-  if (start_y > end_y) {
+  if (start_y > end_y)
+  {
     std::swap(start_y, end_y);
   }
-  if (start_y == end_y) {
+  if (start_y == end_y)
+  {
     set_message("Select multiple lines to sort");
     return;
   }
 
   save_state();
-  if (buf.is_lazy()) buf.materialize();
-  std::stable_sort(buf.lines.begin() + start_y, buf.lines.begin() + end_y + 1,
-                   [](const std::string &a, const std::string &b) {
+  if (buf.is_lazy())
+    buf.materialize();
+  std::stable_sort(buf.lines.begin() + start_y,
+                   buf.lines.begin() + end_y + 1,
+                   [](const std::string &a, const std::string &b)
+                   {
                      std::string la = a;
                      std::string lb = b;
-                     std::transform(la.begin(), la.end(), la.begin(),
-                                    [](unsigned char c) {
-                                      return (char)std::tolower(c);
-                                    });
-                     std::transform(lb.begin(), lb.end(), lb.begin(),
-                                    [](unsigned char c) {
-                                      return (char)std::tolower(c);
-                                    });
+                     std::transform(la.begin(),
+                                    la.end(),
+                                    la.begin(),
+                                    [](unsigned char c) { return (char)std::tolower(c); });
+                     std::transform(lb.begin(),
+                                    lb.end(),
+                                    lb.begin(),
+                                    [](unsigned char c) { return (char)std::tolower(c); });
                      return la < lb;
                    });
 
@@ -239,10 +295,12 @@ void Editor::sort_selected_lines() {
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Sorted selected lines");
-  if (lua_api) {
+  if (lua_api)
+  {
     lua_api->on_buffer_change(buf.filepath, "");
   }
-  if (!buf.filepath.empty()) {
+  if (!buf.filepath.empty())
+  {
     notify_lsp_change(buf.filepath);
   }
 }

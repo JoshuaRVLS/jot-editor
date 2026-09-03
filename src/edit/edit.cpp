@@ -1,117 +1,130 @@
 #include "autoclose.h"
 #include "editor.h"
 #include "html.h"
-#include "text_features.h"
 #include "lua_bridge/api.h"
+#include "text_features.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <cctype>
 
-namespace {
-int tab_advance(int visual_col, int tab_size) {
-  const int ts = std::max(1, tab_size);
-  const int rem = visual_col % ts;
-  return rem == 0 ? ts : (ts - rem);
-}
-
-int compute_visual_column(const std::string &line, int logical_col,
-                          int tab_size) {
-  int clamped =
-      ui_clamp_to_utf8_boundary(line, std::clamp(logical_col, 0, (int)line.size()));
-  int visual = 0;
-  for (int i = 0; i < clamped;) {
-    int next = ui_next_grapheme_boundary(line, i);
-    if (next <= i)
-      next = i + 1;
-    visual += (line[i] == '\t')
-                  ? tab_advance(visual, tab_size)
-                  : std::max(1, ui_cell_count(line.substr(i, next - i)));
-    i = next;
+namespace
+{
+  int tab_advance(int visual_col, int tab_size)
+  {
+    const int ts = std::max(1, tab_size);
+    const int rem = visual_col % ts;
+    return rem == 0 ? ts : (ts - rem);
   }
-  return visual;
-}
 
-bool ascii_space_at(const std::string &line, int pos) {
-  if (pos < 0 || pos >= (int)line.size())
-    return false;
-  unsigned char c = static_cast<unsigned char>(line[pos]);
-  return c < 0x80 && std::isspace(c);
-}
-
-bool word_grapheme_at(const std::string &line, int pos) {
-  if (pos < 0 || pos >= (int)line.size())
-    return false;
-  unsigned char c = static_cast<unsigned char>(line[pos]);
-  if (c >= 0x80)
-    return true;
-  return std::isalnum(c) || c == '_';
-}
-
-bool has_python_extension(const std::string &path) {
-  if (path.size() < 3)
-    return false;
-  const size_t dot = path.find_last_of('.');
-  if (dot == std::string::npos)
-    return false;
-  std::string ext = path.substr(dot);
-  std::transform(ext.begin(), ext.end(), ext.begin(),
-                 [](unsigned char c) { return (char)std::tolower(c); });
-  return ext == ".py";
-}
-
-bool is_python_buffer(const FileBuffer &buf) {
-  return has_python_extension(buf.filepath);
-}
-
-bool should_indent_after_line(const FileBuffer &buf, const std::string &line) {
-  if (is_python_buffer(buf)) {
-    return EditorFeatures::should_python_auto_indent(line);
+  int compute_visual_column(const std::string &line, int logical_col, int tab_size)
+  {
+    int clamped = ui_clamp_to_utf8_boundary(line, std::clamp(logical_col, 0, (int)line.size()));
+    int visual = 0;
+    for (int i = 0; i < clamped;)
+    {
+      int next = ui_next_grapheme_boundary(line, i);
+      if (next <= i)
+        next = i + 1;
+      visual += (line[i] == '\t') ? tab_advance(visual, tab_size)
+                                  : std::max(1, ui_cell_count(line.substr(i, next - i)));
+      i = next;
+    }
+    return visual;
   }
-  return EditorFeatures::should_auto_indent(line);
-}
 
-void dedent_current_line_one_level(FileBuffer &buf, int tab_size) {
-  std::string &line = buf.line_mut(buf.cursor.y);
-  const int current_indent = EditorFeatures::get_indent_level(line);
-  if (current_indent < tab_size)
-    return;
+  bool ascii_space_at(const std::string &line, int pos)
+  {
+    if (pos < 0 || pos >= (int)line.size())
+      return false;
+    unsigned char c = static_cast<unsigned char>(line[pos]);
+    return c < 0x80 && std::isspace(c);
+  }
 
-  const size_t start = line.find_first_not_of(" \t");
-  if (start == std::string::npos)
-    return;
+  bool word_grapheme_at(const std::string &line, int pos)
+  {
+    if (pos < 0 || pos >= (int)line.size())
+      return false;
+    unsigned char c = static_cast<unsigned char>(line[pos]);
+    if (c >= 0x80)
+      return true;
+    return std::isalnum(c) || c == '_';
+  }
 
-  const int new_indent = current_indent - tab_size;
-  const std::string new_indent_str =
-      EditorFeatures::get_indent_string(new_indent, tab_size);
-  const std::string trimmed = line.substr(start);
-  line = new_indent_str + trimmed;
-  buf.cursor.x =
-      std::max(0, buf.cursor.x - (int)start + (int)new_indent_str.size());
-}
+  bool has_python_extension(const std::string &path)
+  {
+    if (path.size() < 3)
+      return false;
+    const size_t dot = path.find_last_of('.');
+    if (dot == std::string::npos)
+      return false;
+    std::string ext = path.substr(dot);
+    std::transform(
+        ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+    return ext == ".py";
+  }
+
+  bool is_python_buffer(const FileBuffer &buf)
+  {
+    return has_python_extension(buf.filepath);
+  }
+
+  bool should_indent_after_line(const FileBuffer &buf, const std::string &line)
+  {
+    if (is_python_buffer(buf))
+    {
+      return EditorFeatures::should_python_auto_indent(line);
+    }
+    return EditorFeatures::should_auto_indent(line);
+  }
+
+  void dedent_current_line_one_level(FileBuffer &buf, int tab_size)
+  {
+    std::string &line = buf.line_mut(buf.cursor.y);
+    const int current_indent = EditorFeatures::get_indent_level(line);
+    if (current_indent < tab_size)
+      return;
+
+    const size_t start = line.find_first_not_of(" \t");
+    if (start == std::string::npos)
+      return;
+
+    const int new_indent = current_indent - tab_size;
+    const std::string new_indent_str = EditorFeatures::get_indent_string(new_indent, tab_size);
+    const std::string trimmed = line.substr(start);
+    line = new_indent_str + trimmed;
+    buf.cursor.x = std::max(0, buf.cursor.x - (int)start + (int)new_indent_str.size());
+  }
 } // namespace
 
-bool Editor::insert_char(char c) {
+bool Editor::insert_char(char c)
+{
   save_state();
   auto &buf = get_buffer();
 
-  if (buf.selection.active && AutoClose::should_auto_close(c)) {
+  if (buf.selection.active && AutoClose::should_auto_close(c))
+  {
     Cursor s = buf.selection.start;
     Cursor e = buf.selection.end;
-    if (s.y > e.y || (s.y == e.y && s.x > e.x)) {
+    if (s.y > e.y || (s.y == e.y && s.x > e.x))
+    {
       std::swap(s, e);
     }
 
-    if (s.y >= 0 && s.y < (int)buf.line_count() && e.y >= 0 &&
-        e.y < (int)buf.line_count()) {
+    if (s.y >= 0 && s.y < (int)buf.line_count() && e.y >= 0 && e.y < (int)buf.line_count())
+    {
       char closing = AutoClose::get_closing_bracket(c);
-      if (closing != '\0') {
-        if (s.y == e.y) {
+      if (closing != '\0')
+      {
+        if (s.y == e.y)
+        {
           auto &line = buf.line_mut(s.y);
           s.x = std::max(0, std::min(s.x, (int)line.length()));
           e.x = std::max(0, std::min(e.x, (int)line.length()));
           line.insert(e.x, 1, closing);
           line.insert(s.x, 1, c);
-        } else {
+        }
+        else
+        {
           auto &end_line = buf.line_mut(e.y);
           auto &start_line = buf.line_mut(s.y);
           e.x = std::max(0, std::min(e.x, (int)end_line.length()));
@@ -138,24 +151,28 @@ bool Editor::insert_char(char c) {
     }
   }
 
-  if (buf.selection.active) {
+  if (buf.selection.active)
+  {
     delete_selection();
   }
 
   bool inserted_html_closing_tag = false;
 
-  if (c == '\t') {
+  if (c == '\t')
+  {
     const std::string &line = buf.line(buf.cursor.y);
     int visual_col = compute_visual_column(line, buf.cursor.x, tab_size);
     int spaces_to_insert = tab_advance(visual_col, tab_size);
     std::string spaces(spaces_to_insert, ' ');
     buf.line_mut(buf.cursor.y).insert(buf.cursor.x, spaces);
     buf.cursor.x += spaces_to_insert;
-  } else {
+  }
+  else
+  {
     // Check if we should skip closing bracket
-    if (AutoClose::is_closing_bracket(c) &&
-        AutoClose::should_skip_closing(c, buf.line_mut(buf.cursor.y),
-                                       buf.cursor.x)) {
+    if (AutoClose::is_closing_bracket(c)
+        && AutoClose::should_skip_closing(c, buf.line_mut(buf.cursor.y), buf.cursor.x))
+    {
       buf.cursor.x++;
       needs_redraw = true;
       return false;
@@ -164,31 +181,38 @@ bool Editor::insert_char(char c) {
     buf.line_mut(buf.cursor.y).insert(buf.cursor.x, 1, c);
     buf.cursor.x++;
 
-
-    if (c == '>' && HtmlFeatures::is_markup_tag_extension(buf.filepath)) {
+    if (c == '>' && HtmlFeatures::is_markup_tag_extension(buf.filepath))
+    {
       std::string closing;
       std::string &line = buf.line_mut(buf.cursor.y);
-      if (HtmlFeatures::should_insert_closing_tag(line, buf.cursor.x, closing)) {
+      if (HtmlFeatures::should_insert_closing_tag(line, buf.cursor.x, closing))
+      {
         line.insert(buf.cursor.x, closing);
         inserted_html_closing_tag = true;
       }
     }
 
-    if (auto_indent && (c == '}' || c == ']' || c == ')')) {
-      if (EditorFeatures::should_dedent(buf.line_mut(buf.cursor.y))) {
+    if (auto_indent && (c == '}' || c == ']' || c == ')'))
+    {
+      if (EditorFeatures::should_dedent(buf.line_mut(buf.cursor.y)))
+      {
         dedent_current_line_one_level(buf, tab_size);
       }
     }
 
-    if (auto_indent && c == ':' && is_python_buffer(buf)) {
-      if (EditorFeatures::should_python_dedent(buf.line_mut(buf.cursor.y))) {
+    if (auto_indent && c == ':' && is_python_buffer(buf))
+    {
+      if (EditorFeatures::should_python_dedent(buf.line_mut(buf.cursor.y)))
+      {
         dedent_current_line_one_level(buf, tab_size);
       }
     }
-    
-    if (AutoClose::should_auto_close(c)) {
+
+    if (AutoClose::should_auto_close(c))
+    {
       char closing = AutoClose::get_closing_bracket(c);
-      if (closing != '\0') {
+      if (closing != '\0')
+      {
         buf.line_mut(buf.cursor.y).insert(buf.cursor.x, 1, closing);
       }
     }
@@ -203,13 +227,14 @@ bool Editor::insert_char(char c) {
     notify_lsp_change(buf.filepath);
 
   return inserted_html_closing_tag;
-
 }
 
-void Editor::insert_string(const std::string &str) {
+void Editor::insert_string(const std::string &str)
+{
   save_state();
   auto &buf = get_buffer();
-  if (buf.selection.active) {
+  if (buf.selection.active)
+  {
     delete_selection();
   }
   std::string text = ui_normalize_nfc(str);
@@ -223,54 +248,70 @@ void Editor::insert_string(const std::string &str) {
     notify_lsp_change(buf.filepath);
 }
 
-void Editor::delete_char(bool forward) {
+void Editor::delete_char(bool forward)
+{
   save_state();
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
-  if (buf.selection.active) {
+  if (buf.is_lazy())
+    buf.materialize();
+  if (buf.selection.active)
+  {
     delete_selection();
     needs_redraw = true;
     return;
   }
 
-  if (forward) {
-    if (buf.cursor.x < (int)buf.line_mut(buf.cursor.y).length()) {
+  if (forward)
+  {
+    if (buf.cursor.x < (int)buf.line_mut(buf.cursor.y).length())
+    {
       auto &line = buf.line_mut(buf.cursor.y);
       const int end = ui_next_grapheme_boundary(line, buf.cursor.x);
       line.erase(buf.cursor.x, end - buf.cursor.x);
       buf.modified = true;
-    } else if (buf.cursor.y < (int)buf.line_count() - 1) {
+    }
+    else if (buf.cursor.y < (int)buf.line_count() - 1)
+    {
       buf.line_mut(buf.cursor.y) += buf.line_mut(buf.cursor.y + 1);
       buf.lines.erase(buf.lines.begin() + buf.cursor.y + 1);
       buf.modified = true;
     }
-  } else {
-    if (buf.cursor.x > 0) {
+  }
+  else
+  {
+    if (buf.cursor.x > 0)
+    {
       auto &line = buf.line_mut(buf.cursor.y);
-      if (buf.cursor.x < (int)line.length()) {
+      if (buf.cursor.x < (int)line.length())
+      {
         const int left_start = ui_prev_grapheme_boundary(line, buf.cursor.x);
         char left = line[left_start];
         char right = line[buf.cursor.x];
         char expected = AutoClose::get_closing_bracket(left);
-        if (expected != '\0' && right == expected) {
+        if (expected != '\0' && right == expected)
+        {
           line.erase(buf.cursor.x, 1);
           buf.cursor.x = left_start;
-          line.erase(left_start, ui_next_grapheme_boundary(line, left_start) -
-                                     left_start);
-          buf.modified = true;
-        } else {
-          buf.cursor.x = left_start;
-          line.erase(left_start, ui_next_grapheme_boundary(line, left_start) -
-                                     left_start);
+          line.erase(left_start, ui_next_grapheme_boundary(line, left_start) - left_start);
           buf.modified = true;
         }
-      } else {
+        else
+        {
+          buf.cursor.x = left_start;
+          line.erase(left_start, ui_next_grapheme_boundary(line, left_start) - left_start);
+          buf.modified = true;
+        }
+      }
+      else
+      {
         const int start = ui_prev_grapheme_boundary(line, buf.cursor.x);
         line.erase(start, buf.cursor.x - start);
         buf.cursor.x = start;
         buf.modified = true;
       }
-    } else if (buf.cursor.y > 0) {
+    }
+    else if (buf.cursor.y > 0)
+    {
       buf.cursor.y--;
       buf.cursor.x = buf.line_mut(buf.cursor.y).length();
       buf.line_mut(buf.cursor.y) += buf.line_mut(buf.cursor.y + 1);
@@ -287,10 +328,13 @@ void Editor::delete_char(bool forward) {
     notify_lsp_change(buf.filepath);
 }
 
-void Editor::delete_word_backward() {
+void Editor::delete_word_backward()
+{
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
-  if (buf.selection.active) {
+  if (buf.is_lazy())
+    buf.materialize();
+  if (buf.selection.active)
+  {
     delete_selection();
     return;
   }
@@ -300,29 +344,35 @@ void Editor::delete_word_backward() {
 
   save_state();
 
-  if (buf.cursor.x == 0 && buf.cursor.y > 0) {
+  if (buf.cursor.x == 0 && buf.cursor.y > 0)
+  {
     buf.cursor.y--;
     buf.cursor.x = (int)buf.line_mut(buf.cursor.y).length();
     buf.line_mut(buf.cursor.y) += buf.line_mut(buf.cursor.y + 1);
     buf.lines.erase(buf.lines.begin() + buf.cursor.y + 1);
     buf.modified = true;
-  } else {
+  }
+  else
+  {
     auto &line = buf.line_mut(buf.cursor.y);
     int start = ui_clamp_to_utf8_boundary(line, buf.cursor.x);
 
-    while (start > 0) {
+    while (start > 0)
+    {
       int prev = ui_prev_grapheme_boundary(line, start);
       if (!ascii_space_at(line, prev))
         break;
       start = prev;
     }
-    while (start > 0) {
+    while (start > 0)
+    {
       int prev = ui_prev_grapheme_boundary(line, start);
       if (!word_grapheme_at(line, prev))
         break;
       start = prev;
     }
-    if (start == buf.cursor.x) {
+    if (start == buf.cursor.x)
+    {
       start = ui_prev_grapheme_boundary(line, buf.cursor.x);
     }
 
@@ -340,36 +390,44 @@ void Editor::delete_word_backward() {
     notify_lsp_change(buf.filepath);
 }
 
-void Editor::delete_word_forward() {
+void Editor::delete_word_forward()
+{
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
-  if (buf.selection.active) {
+  if (buf.is_lazy())
+    buf.materialize();
+  if (buf.selection.active)
+  {
     delete_selection();
     return;
   }
 
-  if (buf.cursor.y == (int)buf.line_count() - 1 &&
-      buf.cursor.x == (int)buf.line_mut(buf.cursor.y).length())
+  if (buf.cursor.y == (int)buf.line_count() - 1
+      && buf.cursor.x == (int)buf.line_mut(buf.cursor.y).length())
     return;
 
   save_state();
 
   auto &line = buf.line_mut(buf.cursor.y);
-  if (buf.cursor.x >= (int)line.length() &&
-      buf.cursor.y < (int)buf.line_count() - 1) {
+  if (buf.cursor.x >= (int)line.length() && buf.cursor.y < (int)buf.line_count() - 1)
+  {
     buf.line_mut(buf.cursor.y) += buf.line_mut(buf.cursor.y + 1);
     buf.lines.erase(buf.lines.begin() + buf.cursor.y + 1);
     buf.modified = true;
-  } else {
+  }
+  else
+  {
     int end = buf.cursor.x;
 
-    while (end < (int)line.length() && ascii_space_at(line, end)) {
+    while (end < (int)line.length() && ascii_space_at(line, end))
+    {
       end = ui_next_grapheme_boundary(line, end);
     }
-    while (end < (int)line.length() && word_grapheme_at(line, end)) {
+    while (end < (int)line.length() && word_grapheme_at(line, end))
+    {
       end = ui_next_grapheme_boundary(line, end);
     }
-    if (end == buf.cursor.x) {
+    if (end == buf.cursor.x)
+    {
       end = ui_next_grapheme_boundary(line, buf.cursor.x);
     }
 
@@ -386,40 +444,43 @@ void Editor::delete_word_forward() {
     notify_lsp_change(buf.filepath);
 }
 
-void Editor::delete_selection() {
+void Editor::delete_selection()
+{
   save_state();
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
+  if (buf.is_lazy())
+    buf.materialize();
   if (!buf.selection.active)
     return;
 
   int start_y = std::min(buf.selection.start.y, buf.selection.end.y);
   int end_y = std::max(buf.selection.start.y, buf.selection.end.y);
-  int start_x =
-      buf.selection.start.y < buf.selection.end.y
-          ? buf.selection.start.x
-          : (buf.selection.start.y == buf.selection.end.y
-                 ? std::min(buf.selection.start.x, buf.selection.end.x)
-                 : buf.selection.end.x);
+  int start_x = buf.selection.start.y < buf.selection.end.y
+                    ? buf.selection.start.x
+                    : (buf.selection.start.y == buf.selection.end.y
+                           ? std::min(buf.selection.start.x, buf.selection.end.x)
+                           : buf.selection.end.x);
   int end_x = buf.selection.start.y < buf.selection.end.y
                   ? buf.selection.end.x
                   : (buf.selection.start.y == buf.selection.end.y
                          ? std::max(buf.selection.start.x, buf.selection.end.x)
                          : buf.selection.start.x);
 
-  if (start_y == end_y) {
+  if (start_y == end_y)
+  {
     start_x = ui_clamp_to_utf8_boundary(buf.line(start_y), start_x);
     end_x = ui_clamp_to_utf8_boundary(buf.line(start_y), end_x);
     buf.line_mut(start_y).erase(start_x, end_x - start_x);
     buf.cursor.y = start_y;
     buf.cursor.x = start_x;
-  } else {
+  }
+  else
+  {
     start_x = ui_clamp_to_utf8_boundary(buf.line(start_y), start_x);
     end_x = ui_clamp_to_utf8_boundary(buf.line(end_y), end_x);
     buf.line_mut(start_y) =
         buf.line_mut(start_y).substr(0, start_x) + buf.line_mut(end_y).substr(end_x);
-    buf.lines.erase(buf.lines.begin() + start_y + 1,
-                    buf.lines.begin() + end_y + 1);
+    buf.lines.erase(buf.lines.begin() + start_y + 1, buf.lines.begin() + end_y + 1);
     buf.cursor.y = start_y;
     buf.cursor.x = start_x;
   }
@@ -435,14 +496,19 @@ void Editor::delete_selection() {
     notify_lsp_change(buf.filepath);
 }
 
-void Editor::delete_line() {
+void Editor::delete_line()
+{
   save_state();
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
-  if (buf.line_count() == 1) {
+  if (buf.is_lazy())
+    buf.materialize();
+  if (buf.line_count() == 1)
+  {
     clipboard = buf.line_mut(0);
     buf.line_mut(0) = "";
-  } else {
+  }
+  else
+  {
     clipboard = buf.line_mut(buf.cursor.y);
     buf.lines.erase(buf.lines.begin() + buf.cursor.y);
     if (buf.cursor.y >= (int)buf.line_count())
@@ -458,10 +524,12 @@ void Editor::delete_line() {
     notify_lsp_change(buf.filepath);
 }
 
-void Editor::new_line() {
+void Editor::new_line()
+{
   save_state();
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
+  if (buf.is_lazy())
+    buf.materialize();
   std::string current_line = buf.line_mut(buf.cursor.y);
   buf.cursor.x = ui_clamp_to_utf8_boundary(current_line, buf.cursor.x);
   std::string remaining = current_line.substr(buf.cursor.x);
@@ -471,41 +539,47 @@ void Editor::new_line() {
   bool split_closing_bracket_line = false;
   std::string closing_line_str = remaining;
   bool preserve_remaining_as_is = false;
-  if (auto_indent && buf.cursor.y >= 0) {
+  if (auto_indent && buf.cursor.y >= 0)
+  {
     int indent = EditorFeatures::get_indent_level(buf.line_mut(buf.cursor.y));
 
     std::string html_tag;
-    if (HtmlFeatures::is_markup_tag_extension(buf.filepath) &&
-        HtmlFeatures::is_between_matching_tags(buf.line_mut(buf.cursor.y), remaining, html_tag)) {
-          int closing_indent = indent;
-          int inner_indent = indent + tab_size;
+    if (HtmlFeatures::is_markup_tag_extension(buf.filepath)
+        && HtmlFeatures::is_between_matching_tags(buf.line_mut(buf.cursor.y), remaining, html_tag))
+    {
+      int closing_indent = indent;
+      int inner_indent = indent + tab_size;
 
-          new_line_str = EditorFeatures::get_indent_string(inner_indent, tab_size);
-          closing_line_str = EditorFeatures::get_indent_string(closing_indent, tab_size) + remaining;
-          split_closing_bracket_line = true; 
-        } else if (should_indent_after_line(buf, buf.line_mut(buf.cursor.y))) {
-          indent += tab_size;
-        }
+      new_line_str = EditorFeatures::get_indent_string(inner_indent, tab_size);
+      closing_line_str = EditorFeatures::get_indent_string(closing_indent, tab_size) + remaining;
+      split_closing_bracket_line = true;
+    }
+    else if (should_indent_after_line(buf, buf.line_mut(buf.cursor.y)))
+    {
+      indent += tab_size;
+    }
 
-    if (!split_closing_bracket_line) {
+    if (!split_closing_bracket_line)
+    {
       new_line_str = EditorFeatures::get_indent_string(indent, tab_size);
     }
 
-    if (EditorFeatures::should_dedent(remaining)) {
+    if (EditorFeatures::should_dedent(remaining))
+    {
       size_t content_start = remaining.find_first_not_of(" \t");
       std::string trimmed_remaining =
           content_start == std::string::npos ? "" : remaining.substr(content_start);
       int closing_indent = EditorFeatures::get_indent_level(buf.line_mut(buf.cursor.y));
       closing_line_str =
-          EditorFeatures::get_indent_string(closing_indent, tab_size) +
-          trimmed_remaining;
+          EditorFeatures::get_indent_string(closing_indent, tab_size) + trimmed_remaining;
       split_closing_bracket_line = true;
-    } else if (!remaining.empty() && buf.cursor.x > 0) {
+    }
+    else if (!remaining.empty() && buf.cursor.x > 0)
+    {
       const char left = current_line[buf.cursor.x - 1];
-      const bool has_non_space_remaining =
-          remaining.find_first_not_of(" \t") != std::string::npos;
-      if (!std::isspace(static_cast<unsigned char>(left)) &&
-          has_non_space_remaining) {
+      const bool has_non_space_remaining = remaining.find_first_not_of(" \t") != std::string::npos;
+      if (!std::isspace(static_cast<unsigned char>(left)) && has_non_space_remaining)
+      {
         // When splitting in the middle of content, keep the moved text as-is
         // to avoid adding unexpected extra indentation.
         preserve_remaining_as_is = true;
@@ -513,18 +587,22 @@ void Editor::new_line() {
     }
   }
 
-  if (split_closing_bracket_line) {
+  if (split_closing_bracket_line)
+  {
     buf.lines.insert(buf.lines.begin() + buf.cursor.y + 1, new_line_str);
     buf.lines.insert(buf.lines.begin() + buf.cursor.y + 2, closing_line_str);
     buf.cursor.y++;
     buf.cursor.x = new_line_str.length();
-  } else if (preserve_remaining_as_is) {
+  }
+  else if (preserve_remaining_as_is)
+  {
     buf.lines.insert(buf.lines.begin() + buf.cursor.y + 1, remaining);
     buf.cursor.y++;
     buf.cursor.x = 0;
-  } else {
-    buf.lines.insert(buf.lines.begin() + buf.cursor.y + 1,
-                     new_line_str + remaining);
+  }
+  else
+  {
+    buf.lines.insert(buf.lines.begin() + buf.cursor.y + 1, new_line_str + remaining);
     buf.cursor.y++;
     buf.cursor.x = new_line_str.length();
   }

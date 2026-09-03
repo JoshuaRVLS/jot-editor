@@ -3,50 +3,59 @@
 #include <algorithm>
 #include <cctype>
 
-namespace {
-std::string to_lower_copy(std::string s) {
-  std::transform(s.begin(), s.end(), s.begin(),
-                 [](unsigned char c) { return (char)std::tolower(c); });
-  return s;
-}
-
-std::string trim_copy(const std::string &s) {
-  const size_t start = s.find_first_not_of(" \t");
-  if (start == std::string::npos) {
-    return "";
+namespace
+{
+  std::string to_lower_copy(std::string s)
+  {
+    std::transform(
+        s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+    return s;
   }
-  const size_t end = s.find_last_not_of(" \t");
-  return s.substr(start, end - start + 1);
-}
+
+  std::string trim_copy(const std::string &s)
+  {
+    const size_t start = s.find_first_not_of(" \t");
+    if (start == std::string::npos)
+    {
+      return "";
+    }
+    const size_t end = s.find_last_not_of(" \t");
+    return s.substr(start, end - start + 1);
+  }
 } // namespace
 
-std::vector<std::string> Editor::list_available_themes() {
+std::vector<std::string> Editor::list_available_themes()
+{
   std::vector<std::string> themes;
-  if (lua_api) {
+  if (lua_api)
+  {
     themes = lua_api->list_themes();
   }
 
-  if (themes.empty()) {
+  if (themes.empty())
+  {
     themes.push_back("dark");
     return themes;
   }
 
-  std::sort(themes.begin(), themes.end(),
-            [](const std::string &a, const std::string &b) {
-              return to_lower_copy(a) < to_lower_copy(b);
-            });
+  std::sort(themes.begin(),
+            themes.end(),
+            [](const std::string &a, const std::string &b)
+            { return to_lower_copy(a) < to_lower_copy(b); });
 
-  auto unique_end = std::unique(
-      themes.begin(), themes.end(), [](const std::string &a, const std::string &b) {
-        return to_lower_copy(a) == to_lower_copy(b);
-      });
+  auto unique_end = std::unique(themes.begin(),
+                                themes.end(),
+                                [](const std::string &a, const std::string &b)
+                                { return to_lower_copy(a) == to_lower_copy(b); });
   themes.erase(unique_end, themes.end());
   return themes;
 }
 
-bool Editor::apply_theme(const std::string &name, bool persist, bool announce) {
+bool Editor::apply_theme(const std::string &name, bool persist, bool announce)
+{
   const std::string requested = trim_copy(name);
-  if (requested.empty()) {
+  if (requested.empty())
+  {
     set_message("Theme name is empty");
     return false;
   }
@@ -54,14 +63,17 @@ bool Editor::apply_theme(const std::string &name, bool persist, bool announce) {
   std::string resolved = requested;
   const std::string needle = to_lower_copy(requested);
   const auto themes = list_available_themes();
-  for (const auto &theme_name : themes) {
-    if (to_lower_copy(theme_name) == needle) {
+  for (const auto &theme_name : themes)
+  {
+    if (to_lower_copy(theme_name) == needle)
+    {
       resolved = theme_name;
       break;
     }
   }
 
-  if (!lua_api) {
+  if (!lua_api)
+  {
     set_message("Lua theme runtime unavailable");
     return false;
   }
@@ -71,7 +83,8 @@ bool Editor::apply_theme(const std::string &name, bool persist, bool announce) {
 
   // Start from defaults, then let Python colorscheme override highlight groups.
   theme = Theme();
-  if (!lua_api->apply_colorscheme(resolved)) {
+  if (!lua_api->apply_colorscheme(resolved))
+  {
     theme = previous_theme;
     current_theme_name = previous_theme_name;
     set_message("Unknown theme: " + requested);
@@ -80,21 +93,25 @@ bool Editor::apply_theme(const std::string &name, bool persist, bool announce) {
   theme.normalize_syntax_palette();
 
   current_theme_name = resolved;
-  if (persist) {
+  if (persist)
+  {
     config.set("color_scheme", resolved);
     // Write the config file immediately so the choice survives the next
     // session (config.set only mutates the in-memory map).
     config.save();
   }
 
-  if (ui) {
+  if (ui)
+  {
     ui->set_default_colors(theme.fg_default, theme.bg_default);
     ui->invalidate();
   }
   needs_redraw = true;
-  if (announce) {
+  if (announce)
+  {
     set_message("Theme: " + resolved);
   }
-  if (lua_api) lua_api->emit_theme_switched(resolved);
+  if (lua_api)
+    lua_api->emit_theme_switched(resolved);
   return true;
 }

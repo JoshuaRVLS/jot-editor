@@ -9,9 +9,11 @@
 typedef struct VTerm VTerm;
 typedef struct VTermScreen VTermScreen;
 
-class IntegratedTerminal {
+class IntegratedTerminal
+{
 public:
-  struct StyledCell {
+  struct StyledCell
+  {
     std::string ch;
     int fg;
     int bg;
@@ -20,12 +22,14 @@ public:
     bool reverse = false;
   };
 
-  struct ResolvedCellColors {
+  struct ResolvedCellColors
+  {
     int fg;
     int bg;
   };
 
-  struct OutputRow {
+  struct OutputRow
+  {
     std::string text;
     std::vector<StyledCell> cells;
   };
@@ -62,12 +66,13 @@ public:
   IntegratedTerminal();
   ~IntegratedTerminal();
 
-  static ResolvedCellColors resolve_cell_colors(const StyledCell &cell,
-                                                int default_fg,
-                                                int default_bg) {
+  static ResolvedCellColors
+  resolve_cell_colors(const StyledCell &cell, int default_fg, int default_bg)
+  {
     ResolvedCellColors colors{cell.fg_default ? default_fg : cell.fg,
                               cell.bg_default ? default_bg : cell.bg};
-    if (cell.reverse) {
+    if (cell.reverse)
+    {
       std::swap(colors.fg, colors.bg);
     }
     return colors;
@@ -82,17 +87,50 @@ public:
   bool scroll_lines(int delta, int visible_rows);
   void reset_scroll();
 
-  bool is_active() const { return active; }
-  int get_master_fd() const { return master_fd; }
-  bool is_focused() const { return focused; }
-  void set_focused(bool value) { focused = value; }
-  const std::string &get_label() const { return label; }
-  void set_label(const std::string &value) { label = value; }
-  const std::string &get_current_line() const { return current_line; }
-  size_t get_cursor_column() const { return (size_t)std::max(0, cursor_col); }
-  int get_cursor_row() const { return cursor_row; }
-  bool is_cursor_position_valid() const { return cursor_position_valid; }
-  int get_scroll_offset() const { return scroll_offset; }
+  bool is_active() const
+  {
+    return active;
+  }
+  int get_master_fd() const
+  {
+    return master_fd;
+  }
+  bool is_focused() const
+  {
+    return focused;
+  }
+  void set_focused(bool value)
+  {
+    focused = value;
+  }
+  const std::string &get_label() const
+  {
+    return label;
+  }
+  void set_label(const std::string &value)
+  {
+    label = value;
+  }
+  const std::string &get_current_line() const
+  {
+    return current_line;
+  }
+  size_t get_cursor_column() const
+  {
+    return (size_t)std::max(0, cursor_col);
+  }
+  int get_cursor_row() const
+  {
+    return cursor_row;
+  }
+  bool is_cursor_position_valid() const
+  {
+    return cursor_position_valid;
+  }
+  int get_scroll_offset() const
+  {
+    return scroll_offset;
+  }
 
   std::vector<std::string> get_recent_lines(int max_lines) const;
   std::vector<std::vector<StyledCell>> get_recent_styled_lines(int max_lines) const;

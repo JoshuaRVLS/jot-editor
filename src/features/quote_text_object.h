@@ -3,18 +3,20 @@
 
 #include <string>
 
-namespace QuoteTextObject {
+namespace QuoteTextObject
+{
 
-struct Range {
-  bool found = false;
-  int open = -1;
-  int close = -1;
-  int inner_start = -1;
-  int inner_end = -1;
-};
+  struct Range
+  {
+    bool found = false;
+    int open = -1;
+    int close = -1;
+    int inner_start = -1;
+    int inner_end = -1;
+  };
 
-bool is_supported_quote(char quote);
-Range find_inner_range(const std::string &line, int cursor_x, char quote);
+  bool is_supported_quote(char quote);
+  Range find_inner_range(const std::string &line, int cursor_x, char quote);
 
 } // namespace QuoteTextObject
 

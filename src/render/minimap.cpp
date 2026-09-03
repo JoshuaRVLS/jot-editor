@@ -4,7 +4,8 @@
 #include <cstdio>
 #include <sstream>
 
-void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
+void Editor::render_minimap(int x, int y, int w, int h, int buffer_id)
+{
   if (buffer_id < 0 || buffer_id >= (int)buffers.size())
     return;
   if (w <= 0 || h <= 0)
@@ -36,14 +37,15 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
   ui->fill_rect(viewport, " ", theme.fg_minimap, theme.bg_selection);
 
   // Draw content (blocks)
-  for (int i = 0; i < h; i++) {
+  for (int i = 0; i < h; i++)
+  {
     int line_idx = (int)(i / ratio);
-    if (line_idx >= 0 && line_idx < total_lines) {
+    if (line_idx >= 0 && line_idx < total_lines)
+    {
       const std::string &line = buf.line(line_idx);
       // The minimap only samples the first few dozen columns of each line, so
       // window the highlight accordingly instead of colorizing whole lines.
-      const auto &colors =
-          get_line_syntax_colors(buf, line_idx, std::max(16, w * 4 + 8));
+      const auto &colors = get_line_syntax_colors(buf, line_idx, std::max(16, w * 4 + 8));
 
       int draw_x = x;
       int max_x = x + w;
@@ -61,7 +63,8 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
       // get_colors(line) returns vector<pair<int, int>> which is one pair per
       // character. Pair is {bold, color}.
 
-      for (size_t k = 0; k < line.length(); k += 4) {
+      for (size_t k = 0; k < line.length(); k += 4)
+      {
         if (draw_x >= max_x)
           break;
 
@@ -69,11 +72,14 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
         bool has_code = false;
         int chunk_color = theme.fg_minimap;
 
-        for (size_t j = 0; j < 4 && k + j < line.length(); j++) {
-          if (!std::isspace(line[k + j])) {
+        for (size_t j = 0; j < 4 && k + j < line.length(); j++)
+        {
+          if (!std::isspace(line[k + j]))
+          {
             has_code = true;
             // Get color of this char
-            if (k + j < colors.size()) {
+            if (k + j < colors.size())
+            {
               int c = colors[k + j].second;
               if (c != 0)
                 chunk_color = c;
@@ -82,7 +88,8 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
           }
         }
 
-        if (has_code) {
+        if (has_code)
+        {
           // Block character: UTF-8 for full block is \xE2\x96\x88
           // ui->draw_text expects std::string.
           // Windows/Curses might need special handling but we are on Linux zsh.

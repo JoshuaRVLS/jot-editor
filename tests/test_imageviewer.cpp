@@ -1,9 +1,10 @@
-#include <catch2/catch_test_macros.hpp>
 #include "imageviewer.h"
+#include <catch2/catch_test_macros.hpp>
 
 #include <string>
 
-TEST_CASE("Image Viewer Backend Parsing", "[jot]") {
+TEST_CASE("Image Viewer Backend Parsing", "[jot]")
+{
   REQUIRE(ImageViewer::parse_backend("auto") == ImageViewer::Backend::Auto);
   REQUIRE(ImageViewer::parse_backend("kitty") == ImageViewer::Backend::Kitty);
   REQUIRE(ImageViewer::parse_backend("sixel") == ImageViewer::Backend::Sixel);
@@ -12,7 +13,8 @@ TEST_CASE("Image Viewer Backend Parsing", "[jot]") {
   REQUIRE(ImageViewer::parse_backend("unknown") == ImageViewer::Backend::Auto);
 }
 
-TEST_CASE("Image Viewer Base64", "[jot]") {
+TEST_CASE("Image Viewer Base64", "[jot]")
+{
   REQUIRE(ImageViewer::base64_encode("") == "");
   REQUIRE(ImageViewer::base64_encode("f") == "Zg==");
   REQUIRE(ImageViewer::base64_encode("fo") == "Zm8=");
@@ -20,9 +22,9 @@ TEST_CASE("Image Viewer Base64", "[jot]") {
   REQUIRE(ImageViewer::base64_encode("/tmp/a.png") == "L3RtcC9hLnBuZw==");
 }
 
-TEST_CASE("Image Viewer Kitty Command", "[jot]") {
-  std::string cmd =
-      ImageViewer::build_kitty_file_command("/tmp/a.png", 2, 3, 40, 12);
+TEST_CASE("Image Viewer Kitty Command", "[jot]")
+{
+  std::string cmd = ImageViewer::build_kitty_file_command("/tmp/a.png", 2, 3, 40, 12);
 
   REQUIRE(cmd.find("\x1b[4;3H") != std::string::npos);
   REQUIRE(cmd.find("\x1b_G") != std::string::npos);
@@ -35,7 +37,8 @@ TEST_CASE("Image Viewer Kitty Command", "[jot]") {
   REQUIRE(cmd.find("\x1b\\") != std::string::npos);
 }
 
-TEST_CASE("Image Viewer Sixel Command", "[jot]") {
+TEST_CASE("Image Viewer Sixel Command", "[jot]")
+{
   std::string cmd = ImageViewer::build_sixel_command("/tmp/a b.png", 10, 5);
 
   REQUIRE(cmd.find("img2sixel") != std::string::npos);

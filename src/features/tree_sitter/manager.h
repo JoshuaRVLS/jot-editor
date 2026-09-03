@@ -1,8 +1,8 @@
 #ifndef TREE_SITTER_MANAGER_H
 #define TREE_SITTER_MANAGER_H
 
-#include <string>
 #include <cstdint>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -16,7 +16,8 @@ typedef struct TSTree TSTree;
 typedef struct TSQuery TSQuery;
 #endif
 
-enum TreeSitterTokenKind {
+enum TreeSitterTokenKind
+{
   TS_TOKEN_NONE = 0,
   TS_TOKEN_KEYWORD = 1,
   TS_TOKEN_STRING = 2,
@@ -52,7 +53,8 @@ int tree_sitter_capture_token_for_name(const std::string &name);
 int tree_sitter_capture_priority_for_name(const std::string &name);
 void tree_sitter_set_capture_color(const std::string &name, int color);
 
-struct TSLanguageEntry {
+struct TSLanguageEntry
+{
   std::string language_id;
   std::string highlight_query_source;
   std::string minimal_query_source;
@@ -62,7 +64,8 @@ struct TSLanguageEntry {
   std::vector<std::string> library_names;
 };
 
-struct TreeSitterRuntimeStatus {
+struct TreeSitterRuntimeStatus
+{
   bool has_language = false;
   bool parser_loaded = false;
   bool query_loaded = false;
@@ -75,7 +78,8 @@ struct TreeSitterRuntimeStatus {
 
 using TreeSitterHandle = std::uint64_t;
 
-struct TreeSitterCapture {
+struct TreeSitterCapture
+{
   std::string name;
   std::uint32_t start_byte = 0;
   std::uint32_t end_byte = 0;
@@ -85,7 +89,8 @@ struct TreeSitterCapture {
   std::uint32_t end_column = 0;
 };
 
-class TreeSitterManager {
+class TreeSitterManager
+{
 public:
   TreeSitterManager();
   ~TreeSitterManager();
@@ -99,10 +104,8 @@ public:
   bool has_language(const std::string &extension) const;
   bool has_language_override(const std::string &extension) const;
   std::string language_id_for_extension(const std::string &extension) const;
-  TreeSitterRuntimeStatus runtime_status_for_extension(
-      const std::string &extension) const;
-  TreeSitterRuntimeStatus runtime_status_for_language(
-      const std::string &language_id) const;
+  TreeSitterRuntimeStatus runtime_status_for_extension(const std::string &extension) const;
+  TreeSitterRuntimeStatus runtime_status_for_language(const std::string &language_id) const;
   void set_runtime_options(const std::vector<std::string> &library_paths,
                            const std::vector<std::string> &query_paths,
                            const std::vector<std::string> &language_overrides);
@@ -123,18 +126,18 @@ public:
   TreeSitterRuntimeStatus status(const std::string &language_or_extension) const;
   TreeSitterHandle create_parser_handle(const std::string &extension);
   bool delete_parser_handle(TreeSitterHandle handle);
-  TreeSitterHandle parse_handle(TreeSitterHandle parser,
-                                const std::string &text,
-                                TreeSitterHandle old_tree = 0);
+  TreeSitterHandle
+  parse_handle(TreeSitterHandle parser, const std::string &text, TreeSitterHandle old_tree = 0);
   bool delete_tree_handle(TreeSitterHandle handle);
   TreeSitterHandle compile_query_handle(const std::string &extension,
                                         const std::string &source = "");
   bool delete_query_handle(TreeSitterHandle handle);
-  std::vector<TreeSitterCapture> captures_for_handles(
-      TreeSitterHandle query, TreeSitterHandle tree,
-      std::uint32_t start_byte = 0, std::uint32_t end_byte = UINT32_MAX) const;
-  bool set_query_source(const std::string &extension,
-                        const std::string &source, std::string &error);
+  std::vector<TreeSitterCapture> captures_for_handles(TreeSitterHandle query,
+                                                      TreeSitterHandle tree,
+                                                      std::uint32_t start_byte = 0,
+                                                      std::uint32_t end_byte = UINT32_MAX) const;
+  bool
+  set_query_source(const std::string &extension, const std::string &source, std::string &error);
   void configure_runtime_paths();
 
 #ifdef JOT_TREESITTER
@@ -144,7 +147,8 @@ public:
 #endif
 
 private:
-  struct QuerySource {
+  struct QuerySource
+  {
     std::string source;
     std::string path;
     bool runtime = false;

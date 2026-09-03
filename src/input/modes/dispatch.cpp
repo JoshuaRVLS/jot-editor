@@ -2,8 +2,8 @@
 #include <algorithm>
 #include <cctype>
 
-void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
-                          int original_ch) {
+void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int original_ch)
+{
   idle_frame_count = 0;
   cursor_visible = true;
   cursor_blink_frame = 0;
@@ -14,12 +14,14 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
   //   backtick is hard to emit)
   // - control code 30 (Ctrl+^ / sometimes emitted for Ctrl+`)
   bool ctrl_backtick =
-      (is_ctrl && (ch == '`' || original_ch == '`' || ch == '~' ||
-                   original_ch == '~' || ch == '\\' || original_ch == '\\' ||
-                   ch == '|' || original_ch == '|')) ||
-      ch == 28 || original_ch == 28 || ch == 30 || original_ch == 30;
-  if (ctrl_backtick) {
-    if (show_home_menu) {
+      (is_ctrl
+       && (ch == '`' || original_ch == '`' || ch == '~' || original_ch == '~' || ch == '\\'
+           || original_ch == '\\' || ch == '|' || original_ch == '|'))
+      || ch == 28 || original_ch == 28 || ch == 30 || original_ch == 30;
+  if (ctrl_backtick)
+  {
+    if (show_home_menu)
+    {
       show_home_menu = false;
     }
     toggle_integrated_terminal();
@@ -27,65 +29,82 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
   }
 
   // Fallback for terminals where Ctrl+` cannot be emitted reliably.
-  bool alt_backtick = is_alt && (ch == '`' || original_ch == '`' ||
-                                 ch == '\\' || original_ch == '\\' ||
-                                 ch == '|' || original_ch == '|');
-  if (alt_backtick) {
-    if (show_home_menu) {
+  bool alt_backtick = is_alt
+                      && (ch == '`' || original_ch == '`' || ch == '\\' || original_ch == '\\'
+                          || ch == '|' || original_ch == '|');
+  if (alt_backtick)
+  {
+    if (show_home_menu)
+    {
       show_home_menu = false;
     }
     toggle_integrated_terminal();
     return;
   }
 
-  if (show_home_menu) {
-    if (handle_home_menu_input(ch, is_ctrl, is_shift, is_alt)) {
+  if (show_home_menu)
+  {
+    if (handle_home_menu_input(ch, is_ctrl, is_shift, is_alt))
+    {
       return;
     }
   }
 
-  if (show_menu_bar_dropdown) {
+  if (show_menu_bar_dropdown)
+  {
     handle_menu_bar_input(ch);
     return;
   }
 
-  if (show_context_menu) {
+  if (show_context_menu)
+  {
     handle_context_menu_input(ch);
     return;
   }
 
-  if (show_tree_sitter_status_modal) {
+  if (show_tree_sitter_status_modal)
+  {
     handle_tree_sitter_status_input(ch);
     return;
   }
 
-  if (show_quick_pick) {
+  if (show_quick_pick)
+  {
     handle_quick_pick_input(ch);
     return;
   }
 
   const bool ctrl_q =
-      (is_ctrl && (ch == 'q' || ch == 'Q' || original_ch == 'q' ||
-                   original_ch == 'Q')) ||
-      ch == 17 || original_ch == 17;
-  if (ctrl_q) {
-    if (close_active_floating_ui()) {
+      (is_ctrl && (ch == 'q' || ch == 'Q' || original_ch == 'q' || original_ch == 'Q')) || ch == 17
+      || original_ch == 17;
+  if (ctrl_q)
+  {
+    if (close_active_floating_ui())
+    {
       return;
     }
-    if (panes.size() > 1) {
+    if (panes.size() > 1)
+    {
       close_pane();
-    } else {
+    }
+    else
+    {
       bool unsaved = false;
-      for (const auto &b : buffers) {
-        if (b.modified) {
+      for (const auto &b : buffers)
+      {
+        if (b.modified)
+        {
           unsaved = true;
           break;
         }
       }
-      if (unsaved) {
+      if (unsaved)
+      {
         show_quit_prompt = true;
         needs_redraw = true;
-      } else {
+      }
+      else
+      {
         running = false;
       }
     }
@@ -93,8 +112,8 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
   }
 
   IntegratedTerminal *active_terminal = get_integrated_terminal();
-  if (show_integrated_terminal && active_terminal &&
-      active_terminal->is_focused()) {
+  if (show_integrated_terminal && active_terminal && active_terminal->is_focused())
+  {
     handle_integrated_terminal_input(ch, is_ctrl, is_shift, is_alt);
     return;
   }
@@ -102,22 +121,30 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
   // Global pane keybinds (before modeless editing shortcuts).
   // Focus:
   // - Ctrl+Alt+Arrow
-  if (is_ctrl && is_alt &&
-      (ch == 1008 || ch == 1009 || ch == 1010 || ch == 1011 ||
-       original_ch == 1008 || original_ch == 1009 || original_ch == 1010 ||
-       original_ch == 1011)) {
+  if (is_ctrl && is_alt
+      && (ch == 1008 || ch == 1009 || ch == 1010 || ch == 1011 || original_ch == 1008
+          || original_ch == 1009 || original_ch == 1010 || original_ch == 1011))
+  {
     bool focused = false;
-    if (ch == 1011 || original_ch == 1011) {
+    if (ch == 1011 || original_ch == 1011)
+    {
       focused = focus_pane_direction('h');
-    } else if (ch == 1009 || original_ch == 1009) {
+    }
+    else if (ch == 1009 || original_ch == 1009)
+    {
       focused = focus_pane_direction('j');
-    } else if (ch == 1008 || original_ch == 1008) {
+    }
+    else if (ch == 1008 || original_ch == 1008)
+    {
       focused = focus_pane_direction('k');
-    } else if (ch == 1010 || original_ch == 1010) {
+    }
+    else if (ch == 1010 || original_ch == 1010)
+    {
       focused = focus_pane_direction('l');
     }
 
-    if (!focused) {
+    if (!focused)
+    {
       set_message("No pane in that direction");
     }
     return;
@@ -126,29 +153,37 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
   // Resize:
   // - Ctrl+Shift+H/J/K/L
   // - Ctrl+Arrow
-  if (is_ctrl &&
-      (((is_shift || std::isupper((unsigned char)ch)) &&
-        (ch == 'h' || ch == 'H' || ch == 'j' || ch == 'J' || ch == 'k' ||
-         ch == 'K' || ch == 'l' || ch == 'L')) ||
-       ch == 1008 || ch == 1009 || ch == 1010 || ch == 1011 ||
-       original_ch == 1008 || original_ch == 1009 || original_ch == 1010 ||
-       original_ch == 1011)) {
+  if (is_ctrl
+      && (((is_shift || std::isupper((unsigned char)ch))
+           && (ch == 'h' || ch == 'H' || ch == 'j' || ch == 'J' || ch == 'k' || ch == 'K'
+               || ch == 'l' || ch == 'L'))
+          || ch == 1008 || ch == 1009 || ch == 1010 || ch == 1011 || original_ch == 1008
+          || original_ch == 1009 || original_ch == 1010 || original_ch == 1011))
+  {
     bool resized = false;
-    if (ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H' ||
-        ch == 1011 || original_ch == 1011) {
+    if (ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H' || ch == 1011
+        || original_ch == 1011)
+    {
       resized = resize_current_pane_direction('h', 2);
-    } else if (ch == 'j' || ch == 'J' || original_ch == 'j' ||
-               original_ch == 'J' || ch == 1009 || original_ch == 1009) {
+    }
+    else if (ch == 'j' || ch == 'J' || original_ch == 'j' || original_ch == 'J' || ch == 1009
+             || original_ch == 1009)
+    {
       resized = resize_current_pane_direction('j', 1);
-    } else if (ch == 'k' || ch == 'K' || original_ch == 'k' ||
-               original_ch == 'K' || ch == 1008 || original_ch == 1008) {
+    }
+    else if (ch == 'k' || ch == 'K' || original_ch == 'k' || original_ch == 'K' || ch == 1008
+             || original_ch == 1008)
+    {
       resized = resize_current_pane_direction('k', 1);
-    } else if (ch == 'l' || ch == 'L' || original_ch == 'l' ||
-               original_ch == 'L' || ch == 1010 || original_ch == 1010) {
+    }
+    else if (ch == 'l' || ch == 'L' || original_ch == 'l' || original_ch == 'L' || ch == 1010
+             || original_ch == 1010)
+    {
       resized = resize_current_pane_direction('l', 2);
     }
 
-    if (resized) {
+    if (resized)
+    {
       set_message("Pane resized");
       return;
     }
@@ -158,57 +193,69 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
 
   // Split:
   // - Ctrl+Alt+H/J/K/L
-  if (is_ctrl && is_alt) {
-    if (ch == 'q' || ch == 'Q' || original_ch == 'q' || original_ch == 'Q') {
-      if (panes.size() > 1) {
+  if (is_ctrl && is_alt)
+  {
+    if (ch == 'q' || ch == 'Q' || original_ch == 'q' || original_ch == 'Q')
+    {
+      if (panes.size() > 1)
+      {
         close_pane();
-      } else {
+      }
+      else
+      {
         bool unsaved = false;
-        for (const auto &b : buffers) {
-          if (b.modified) {
+        for (const auto &b : buffers)
+        {
+          if (b.modified)
+          {
             unsaved = true;
             break;
           }
         }
-        if (unsaved) {
+        if (unsaved)
+        {
           show_quit_prompt = true;
           needs_redraw = true;
-        } else {
+        }
+        else
+        {
           running = false;
         }
       }
       return;
     }
-    if (ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H') {
+    if (ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H')
+    {
       split_pane_left();
       return;
     }
-    if (ch == 'j' || ch == 'J' || original_ch == 'j' || original_ch == 'J') {
+    if (ch == 'j' || ch == 'J' || original_ch == 'j' || original_ch == 'J')
+    {
       split_pane_down();
       return;
     }
-    if (ch == 'k' || ch == 'K' || original_ch == 'k' || original_ch == 'K') {
+    if (ch == 'k' || ch == 'K' || original_ch == 'k' || original_ch == 'K')
+    {
       split_pane_up();
       return;
     }
-    if (ch == 'l' || ch == 'L' || original_ch == 'l' || original_ch == 'L') {
+    if (ch == 'l' || ch == 'L' || original_ch == 'l' || original_ch == 'L')
+    {
       split_pane_right();
       return;
     }
   }
 
-  if (is_alt) {
-    const bool alt_h =
-        ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H';
-    const bool alt_j =
-        ch == 'j' || ch == 'J' || original_ch == 'j' || original_ch == 'J';
-    const bool alt_k =
-        ch == 'k' || ch == 'K' || original_ch == 'k' || original_ch == 'K';
-    const bool alt_l =
-        ch == 'l' || ch == 'L' || original_ch == 'l' || original_ch == 'L';
+  if (is_alt)
+  {
+    const bool alt_h = ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H';
+    const bool alt_j = ch == 'j' || ch == 'J' || original_ch == 'j' || original_ch == 'J';
+    const bool alt_k = ch == 'k' || ch == 'K' || original_ch == 'k' || original_ch == 'K';
+    const bool alt_l = ch == 'l' || ch == 'L' || original_ch == 'l' || original_ch == 'L';
     const bool alt_direction = alt_h || alt_j || alt_k || alt_l;
 
-    if (focus_state == FOCUS_SIDEBAR && alt_l) {
+    if (focus_state == FOCUS_SIDEBAR && alt_l)
+    {
       focus_state = FOCUS_EDITOR;
       set_message("Focused editor");
       needs_redraw = true;
@@ -216,61 +263,76 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     }
 
     bool focused = false;
-    if (alt_h) {
+    if (alt_h)
+    {
       focused = focus_pane_direction('h');
-    } else if (alt_l) {
+    }
+    else if (alt_l)
+    {
       focused = focus_pane_direction('l');
-    } else if (alt_k) {
+    }
+    else if (alt_k)
+    {
       focused = focus_pane_direction('k');
-    } else if (alt_j) {
+    }
+    else if (alt_j)
+    {
       focused = focus_pane_direction('j');
     }
 
-    if (focused) {
+    if (focused)
+    {
       return;
     }
-    if (focus_state == FOCUS_EDITOR && alt_h && show_sidebar) {
+    if (focus_state == FOCUS_EDITOR && alt_h && show_sidebar)
+    {
       focus_state = FOCUS_SIDEBAR;
       set_message("Focused explorer");
       needs_redraw = true;
       return;
     }
-    if (alt_direction) {
+    if (alt_direction)
+    {
       set_message("No pane in that direction");
       return;
     }
   }
 
   // Reserve Ctrl+S for save.
-  if ((is_ctrl && (ch == 's' || ch == 'S')) || ch == 19 || original_ch == 19) {
+  if ((is_ctrl && (ch == 's' || ch == 'S')) || ch == 19 || original_ch == 19)
+  {
     save_file();
     needs_redraw = true;
     return;
   }
 
   // Save prompt input should always receive keystrokes first.
-  if (show_save_prompt) {
+  if (show_save_prompt)
+  {
     handle_save_prompt(ch);
     return;
   }
 
   // Global sidebar toggle should work regardless of current focus.
-  if (is_ctrl && (ch == 'b' || ch == 'B')) {
+  if (is_ctrl && (ch == 'b' || ch == 'B'))
+  {
     toggle_sidebar();
     return;
   }
 
-  if (show_sidebar && focus_state == FOCUS_SIDEBAR) {
-    if (ch == 27) {
+  if (show_sidebar && focus_state == FOCUS_SIDEBAR)
+  {
+    if (ch == 27)
+    {
       focus_state = FOCUS_EDITOR;
       needs_redraw = true;
       return;
     }
     // Keep global/editor shortcuts usable while explorer is focused.
     // Ctrl-based keybinds are routed through modeless editor handlers.
-    bool ctrl_control_byte = (ch >= 1 && ch <= 26 && ch != 9 && ch != 10 &&
-                              ch != 13);
-    if (is_ctrl || ctrl_control_byte || ch == 23 || ch == 12) {
+    bool ctrl_control_byte = (ch >= 1 && ch <= 26 && ch != 9 && ch != 10 && ch != 13);
+    if (is_ctrl || ctrl_control_byte || ch == 23 || ch == 12)
+    {
       handle_modeless_input(ch, is_ctrl, is_shift, is_alt);
       return;
     }
@@ -278,17 +340,22 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     return;
   }
 
-  if (ch == 12) {
+  if (ch == 12)
+  {
     focus_state = FOCUS_EDITOR;
     ui->invalidate();
     needs_redraw = true;
     return;
   }
 
-  if (show_quit_prompt) {
-    if (ch == 'y' || ch == 'Y' || ch == '\n') {
+  if (show_quit_prompt)
+  {
+    if (ch == 'y' || ch == 'Y' || ch == '\n')
+    {
       running = false;
-    } else if (ch == 'n' || ch == 'N' || ch == 27) {
+    }
+    else if (ch == 'n' || ch == 'N' || ch == 27)
+    {
       show_quit_prompt = false;
       needs_redraw = true;
       set_message("Quit cancelled");
@@ -296,76 +363,89 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     return;
   }
 
-  if (show_search) {
+  if (show_search)
+  {
     handle_search_panel(ch, is_ctrl, is_shift, is_alt);
     return;
   }
 
-  if (show_command_palette) {
+  if (show_command_palette)
+  {
     handle_command_palette(ch);
     return;
   }
-  
-  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT_DIFF && !is_ctrl && !is_alt) {
-    if (ch == 'q' || ch == 'Q' || ch == 27) {
+
+  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT_DIFF && !is_ctrl && !is_alt)
+  {
+    if (ch == 'q' || ch == 'Q' || ch == 27)
+    {
       close_git_diff_panel();
       set_message("git diff closed");
       return;
     }
-    
-    if (ch == 'j' || ch == 'J' || ch == 1009 || ch == 14) {
+
+    if (ch == 'j' || ch == 'J' || ch == 1009 || ch == 14)
+    {
       scroll_git_diff_panel(1);
       return;
     }
-    
-    if (ch == 'k' || ch == 'K' || ch == 1008 || ch == 16) {
+
+    if (ch == 'k' || ch == 'K' || ch == 1008 || ch == 16)
+    {
       scroll_git_diff_panel(-1);
       return;
     }
-    
-    if (ch == 'r' || ch == 'R') {
+
+    if (ch == 'r' || ch == 'R')
+    {
       open_git_diff_panel(git_diff_panel.path, git_diff_panel.staged);
       return;
     }
     return;
   }
 
-  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_SYMBOLS &&
-      !is_ctrl && !is_alt) {
-    if (ch == 'q' || ch == 'Q' || ch == 27) {
+  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_SYMBOLS && !is_ctrl && !is_alt)
+  {
+    if (ch == 'q' || ch == 'Q' || ch == 27)
+    {
       close_outline_panel();
       set_message("Outline closed");
       return;
     }
-    if (ch == '\n' || ch == 13) {
+    if (ch == '\n' || ch == 13)
+    {
       outline_jump_selected();
       return;
     }
-    if (ch == 'j' || ch == 'J' || ch == 1009 || ch == 14) {
+    if (ch == 'j' || ch == 'J' || ch == 1009 || ch == 14)
+    {
       outline_move_selection(1);
       return;
     }
-    if (ch == 'k' || ch == 'K' || ch == 1008 || ch == 16) {
+    if (ch == 'k' || ch == 'K' || ch == 1008 || ch == 16)
+    {
       outline_move_selection(-1);
       return;
     }
-    if (ch == 1012) { // Home
+    if (ch == 1012)
+    { // Home
       outline_panel.selected = 0;
       needs_redraw = true;
       return;
     }
-    if (ch == 1013) { // End
-      outline_panel.selected =
-          std::max(0, (int)outline_panel.symbols.size() - 1);
+    if (ch == 1013)
+    { // End
+      outline_panel.selected = std::max(0, (int)outline_panel.symbols.size() - 1);
       needs_redraw = true;
       return;
     }
     return;
   }
 
-  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_PLUGIN &&
-      !is_ctrl && !is_alt) {
-    if (ch == 'q' || ch == 'Q' || ch == 27) {
+  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_PLUGIN && !is_ctrl && !is_alt)
+  {
+    if (ch == 'q' || ch == 'Q' || ch == 27)
+    {
       show_right_panel = false;
       active_right_panel_tab = RIGHT_PANEL_DEBUG;
       active_plugin_panel.clear();
@@ -375,8 +455,10 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt,
     }
   }
 
-  if (image_viewer.is_active()) {
-    if (ch == 'q' || ch == 27) {
+  if (image_viewer.is_active())
+  {
+    if (ch == 'q' || ch == 27)
+    {
       image_viewer.close();
       needs_redraw = true;
     }

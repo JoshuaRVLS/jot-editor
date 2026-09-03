@@ -32,8 +32,7 @@ namespace
   int leading_indent_visual_column(const std::string &line, int tab_size)
   {
     int indent_end = 0;
-    while (indent_end < (int)line.size() &&
-           (line[indent_end] == ' ' || line[indent_end] == '\t'))
+    while (indent_end < (int)line.size() && (line[indent_end] == ' ' || line[indent_end] == '\t'))
     {
       indent_end++;
     }
@@ -79,9 +78,15 @@ namespace
     return line >= diag.line && line <= diag.end_line;
   }
 
-  bool is_open_bracket(char c) { return c == '(' || c == '[' || c == '{'; }
+  bool is_open_bracket(char c)
+  {
+    return c == '(' || c == '[' || c == '{';
+  }
 
-  bool is_close_bracket(char c) { return c == ')' || c == ']' || c == '}'; }
+  bool is_close_bracket(char c)
+  {
+    return c == ')' || c == ']' || c == '}';
+  }
 
   int rainbow_bracket_color(const Theme &theme, int depth)
   {
@@ -175,8 +180,8 @@ namespace
     if (is_open)
     {
       int depth = 1;
-      const int max_line = std::min((int)buf.line_count() - 1,
-                                    line + kBracketMatchSearchLimitLines);
+      const int max_line =
+          std::min((int)buf.line_count() - 1, line + kBracketMatchSearchLimitLines);
       for (int y = line; y <= max_line; y++)
       {
         int start_x = (y == line) ? col + 1 : 0;
@@ -237,8 +242,7 @@ namespace
     return result;
   }
 
-  const Diagnostic *find_line_diagnostic(const FileBuffer &buf, int line,
-                                         int cursor_col)
+  const Diagnostic *find_line_diagnostic(const FileBuffer &buf, int line, int cursor_col)
   {
     const Diagnostic *best = nullptr;
     for (const auto &diag : buf.diagnostics)
@@ -332,15 +336,16 @@ namespace
     return out;
   }
 
-  int visible_row_for_line(const std::vector<FoldRange> &ranges, int first_line,
-                           int target_line, int viewport_h, int line_count)
+  int visible_row_for_line(const std::vector<FoldRange> &ranges,
+                           int first_line,
+                           int target_line,
+                           int viewport_h,
+                           int line_count)
   {
     for (int row = 0; row < viewport_h; row++)
     {
-      int line = Folding::buffer_line_for_visible_offset(ranges, first_line, row,
-                                                         line_count);
-      if (line >= 0 && line == target_line &&
-          !Folding::is_line_hidden(ranges, line))
+      int line = Folding::buffer_line_for_visible_offset(ranges, first_line, row, line_count);
+      if (line >= 0 && line == target_line && !Folding::is_line_hidden(ranges, line))
       {
         return row;
       }
@@ -348,8 +353,7 @@ namespace
     return -1;
   }
 
-  ActiveBracketGuide build_active_bracket_guide(const FileBuffer &buf,
-                                                int tab_size)
+  ActiveBracketGuide build_active_bracket_guide(const FileBuffer &buf, int tab_size)
   {
     ActiveBracketGuide guide;
     if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.line_count())
@@ -422,8 +426,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
   if (w > 3)
     w = std::max(1, w - 1);
 
-  if (buf.is_placeholder && !buf.modified && buf.filepath.empty() &&
-      buf.line_count() == 1 && buf.line(0).empty())
+  if (buf.is_placeholder && !buf.modified && buf.filepath.empty() && buf.line_count() == 1
+      && buf.line(0).empty())
   {
     std::string prompt = "Open or create empty file to start editing.";
     const int max_prompt_w = std::max(1, w - 4);
@@ -434,22 +438,19 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
     }
     const int prompt_x = x + std::max(0, (w - (int)prompt.size()) / 2);
     const int prompt_y = y + h / 2;
-    ui->draw_text(prompt_x, prompt_y, prompt, theme.fg_comment,
-                  theme.bg_default);
+    ui->draw_text(prompt_x, prompt_y, prompt, theme.fg_comment, theme.bg_default);
     return;
   }
 
   int line_num_width = 8;
   ActiveBracketGuide bracket_guide = build_active_bracket_guide(buf, tab_size);
   int bracket_depth = 0;
-  const int scan_start =
-      std::max(0, buf.scroll_offset - kBracketDepthScanLimitLines);
+  const int scan_start = std::max(0, buf.scroll_offset - kBracketDepthScanLimitLines);
   // Also cap the backscan by bytes: for files made of giant single lines this
   // would otherwise walk megabytes every frame just to seed bracket depth.
   constexpr std::size_t kBracketDepthScanMaxBytes = 1u << 20;
   std::size_t scanned_bytes = 0;
-  for (int scan_line = scan_start;
-       scan_line < std::min(buf.scroll_offset, (int)buf.line_count());
+  for (int scan_line = scan_start; scan_line < std::min(buf.scroll_offset, (int)buf.line_count());
        scan_line++)
   {
     const std::string &line = buf.line(scan_line);
@@ -467,8 +468,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
   std::vector<int> visual_cols;
 
   refresh_folds(buf);
-  buf.scroll_offset = Folding::clamp_scroll_offset(
-      buf.fold_ranges, buf.scroll_offset, h, (int)buf.line_count());
+  buf.scroll_offset =
+      Folding::clamp_scroll_offset(buf.fold_ranges, buf.scroll_offset, h, (int)buf.line_count());
 
   for (int i = 0; i < h; i++)
   {
@@ -476,23 +477,19 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
         buf.fold_ranges, buf.scroll_offset, i, (int)buf.line_count());
     int draw_y = y + i;
 
-    if (line_idx >= 0 && line_idx < (int)buf.line_count() &&
-        !Folding::is_line_hidden(buf.fold_ranges, line_idx))
+    if (line_idx >= 0 && line_idx < (int)buf.line_count()
+        && !Folding::is_line_hidden(buf.fold_ranges, line_idx))
     {
       int line_diag_severity = line_diagnostic_severity(buf, line_idx);
-      int diag_fg = line_diag_severity > 0
-                        ? diagnostic_severity_color(theme, line_diag_severity)
-                        : theme.fg_line_num;
+      int diag_fg = line_diag_severity > 0 ? diagnostic_severity_color(theme, line_diag_severity)
+                                           : theme.fg_line_num;
       if (!buf.filepath.empty() && has_debugger_breakpoint(buf.filepath, line_idx))
       {
-        ui->draw_text(x + 1, draw_y, "●", theme.fg_status_error,
-                      theme.bg_default, true);
+        ui->draw_text(x + 1, draw_y, "●", theme.fg_status_error, theme.bg_default, true);
       }
-      else if (!buf.filepath.empty() &&
-               is_debugger_breakpoint_hover(pane.buffer_id, line_idx))
+      else if (!buf.filepath.empty() && is_debugger_breakpoint_hover(pane.buffer_id, line_idx))
       {
-        ui->draw_text(x + 1, draw_y, "●", theme.fg_comment,
-                      theme.bg_default);
+        ui->draw_text(x + 1, draw_y, "●", theme.fg_comment, theme.bg_default);
       }
       else if (line_diag_severity > 0)
       {
@@ -523,15 +520,12 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       }
       ui->draw_text(x + 3, draw_y, num_buf, ln_fg, ln_bg);
       int fold_index = -1;
-      bool folded_header =
-          Folding::is_line_folded_header(buf.fold_ranges, line_idx, &fold_index);
+      bool folded_header = Folding::is_line_folded_header(buf.fold_ranges, line_idx, &fold_index);
       bool foldable_header =
-          folded_header ||
-          Folding::fold_starting_at_line(buf.fold_ranges, line_idx) >= 0;
+          folded_header || Folding::fold_starting_at_line(buf.fold_ranges, line_idx) >= 0;
       if (foldable_header)
       {
-        ui->draw_text(x + 2, draw_y, folded_header ? "▸" : "▾", theme.fg_comment,
-                      theme.bg_default);
+        ui->draw_text(x + 2, draw_y, folded_header ? "▸" : "▾", theme.fg_comment, theme.bg_default);
       }
 
       const std::string &line = buf.line(line_idx);
@@ -540,37 +534,34 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       int visible_len = w - 2 - line_num_width;
       if (folded_header)
       {
-        int hidden_count =
-            Folding::hidden_line_count_for_header(buf.fold_ranges, line_idx);
+        int hidden_count = Folding::hidden_line_count_for_header(buf.fold_ranges, line_idx);
         std::string suffix = "  … " + std::to_string(hidden_count) + " lines";
         int suffix_x = current_x + std::max(0, visible_len - (int)suffix.size());
         if (suffix_x > current_x)
         {
-          ui->draw_text(suffix_x, draw_y, suffix, theme.fg_comment,
-                        theme.bg_default);
+          ui->draw_text(suffix_x, draw_y, suffix, theme.fg_comment, theme.bg_default);
           visible_len = std::max(0, suffix_x - current_x - 1);
         }
       }
-      int clamped_scroll_x = ui_clamp_to_utf8_boundary(
-          line, std::clamp(scroll_x, 0, (int)line.size()));
+      int clamped_scroll_x =
+          ui_clamp_to_utf8_boundary(line, std::clamp(scroll_x, 0, (int)line.size()));
       // Only the visible window (plus a wide-glyph margin) needs per-frame
       // work. Walking entire multi-KB single lines (minified/generated code)
       // on every row of every frame made scrolling freeze.
       const int render_limit =
-          std::min((int)line.size(),
-                   clamped_scroll_x + (visible_len + 2) * 4 + 8);
+          std::min((int)line.size(), clamped_scroll_x + (visible_len + 2) * 4 + 8);
       visual_cols = build_visual_columns(line, tab_size, render_limit);
       int start_visual = visual_cols[clamped_scroll_x];
       int leading_ws_end = 0;
-      while (leading_ws_end < (int)line.length() &&
-             (line[leading_ws_end] == ' ' || line[leading_ws_end] == '\t'))
+      while (leading_ws_end < (int)line.length()
+             && (line[leading_ws_end] == ' ' || line[leading_ws_end] == '\t'))
       {
         leading_ws_end++;
       }
       auto active_guide_on_row = [&]()
       {
-        return bracket_guide.active && line_idx > bracket_guide.start_line &&
-               line_idx < bracket_guide.end_line;
+        return bracket_guide.active && line_idx > bracket_guide.start_line
+               && line_idx < bracket_guide.end_line;
       };
 
       auto is_in_selection = [&](int char_idx)
@@ -634,8 +625,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
         span.start = start_x;
         span.end = end_x;
         span.full_line =
-            (line_idx > s.y && line_idx < e.y) ||
-            (span.start == 0 && span.end == (int)line.size());
+            (line_idx > s.y && line_idx < e.y) || (span.start == 0 && span.end == (int)line.size());
         return span;
       };
 
@@ -643,23 +633,21 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       {
         // Colors only matter up to the visible window; huge single lines are
         // highlighted per-window instead of per-line.
-        const auto &colors =
-            get_line_syntax_colors(buf, line_idx, render_limit);
+        const auto &colors = get_line_syntax_colors(buf, line_idx, render_limit);
         int line_bracket_depth = bracket_depth;
         std::vector<Editor::SearchMatch> search_hits;
         Editor::SearchMatch active_search_match{-1, -1, 0};
         if (show_search && !search_query.empty())
         {
-          auto it = std::lower_bound(search_results.begin(), search_results.end(),
-                                     Editor::SearchMatch{line_idx, 0, 0});
+          auto it = std::lower_bound(
+              search_results.begin(), search_results.end(), Editor::SearchMatch{line_idx, 0, 0});
           while (it != search_results.end() && it->line == line_idx)
           {
             search_hits.push_back(*it);
             ++it;
           }
-          if (search_result_index >= 0 &&
-              search_result_index < (int)search_results.size() &&
-              search_results[search_result_index].line == line_idx)
+          if (search_result_index >= 0 && search_result_index < (int)search_results.size()
+              && search_results[search_result_index].line == line_idx)
           {
             active_search_match = search_results[search_result_index];
           }
@@ -672,11 +660,9 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             return;
 
           const int chunk_end =
-              ui_clamp_to_utf8_boundary(line, std::min((int)line.size(),
-                                                       start_idx + len));
+              ui_clamp_to_utf8_boundary(line, std::min((int)line.size(), start_idx + len));
           int char_idx =
-              ui_clamp_to_utf8_boundary(line, std::clamp(start_idx, 0,
-                                                         (int)line.size()));
+              ui_clamp_to_utf8_boundary(line, std::clamp(start_idx, 0, (int)line.size()));
 
           while (char_idx < chunk_end)
           {
@@ -687,8 +673,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
               next_idx = char_idx + 1;
 
             char c = line[char_idx];
-            const bool tokenized =
-                char_idx < (int)colors.size() && colors[char_idx].first == 1;
+            const bool tokenized = char_idx < (int)colors.size() && colors[char_idx].first == 1;
             const int token_type = tokenized ? colors[char_idx].second : 0;
             const bool skip_bracket_logic = (token_type == 2 || token_type == 3);
             int bracket_color = -1;
@@ -711,8 +696,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             int vis_idx = visual_cols[char_idx] - start_visual;
             if (vis_idx >= visible_len)
               break;
-            int char_w =
-                std::max(1, visual_cols[next_idx] - visual_cols[char_idx]);
+            int char_w = std::max(1, visual_cols[next_idx] - visual_cols[char_idx]);
 
             int fg = color;
             int bg = theme.bg_default;
@@ -726,22 +710,19 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
 
             if (!search_hits.empty())
             {
-              while (next_search_hit < search_hits.size() &&
-                     char_idx >= search_hits[next_search_hit].col +
-                                     search_hits[next_search_hit].len)
+              while (next_search_hit < search_hits.size()
+                     && char_idx
+                            >= search_hits[next_search_hit].col + search_hits[next_search_hit].len)
               {
                 next_search_hit++;
               }
-              if (next_search_hit < search_hits.size() &&
-                  char_idx >= search_hits[next_search_hit].col &&
-                  char_idx < search_hits[next_search_hit].col +
-                                 search_hits[next_search_hit].len)
+              if (next_search_hit < search_hits.size()
+                  && char_idx >= search_hits[next_search_hit].col
+                  && char_idx < search_hits[next_search_hit].col + search_hits[next_search_hit].len)
               {
                 const bool is_active_match =
-                    search_hits[next_search_hit].line ==
-                        active_search_match.line &&
-                    search_hits[next_search_hit].col ==
-                        active_search_match.col;
+                    search_hits[next_search_hit].line == active_search_match.line
+                    && search_hits[next_search_hit].col == active_search_match.col;
                 if (is_active_match)
                 {
                   bg = theme.bg_selection;
@@ -760,52 +741,46 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             {
               int guide_fg = in_sel ? theme.fg_selection : theme.fg_line_num;
               int char_visual = visual_cols[char_idx];
-              for (int fill = 0; fill < char_w && vis_idx + fill < visible_len;
-                   fill++)
+              for (int fill = 0; fill < char_w && vis_idx + fill < visible_len; fill++)
               {
                 int cell_visual = char_visual + fill;
                 const bool active_guide =
-                    active_guide_on_row() &&
-                    cell_visual == bracket_guide.visual_column;
-                int cell_guide_fg =
-                    (show_indent_guides && active_guide && !in_sel)
-                        ? theme.fg_bracket_match
-                        : guide_fg;
+                    active_guide_on_row() && cell_visual == bracket_guide.visual_column;
+                int cell_guide_fg = (show_indent_guides && active_guide && !in_sel)
+                                        ? theme.fg_bracket_match
+                                        : guide_fg;
                 std::string guide = " ";
-                if (show_indent_guides &&
-                    (active_guide ||
-                     (tab_size > 0 && cell_visual % tab_size == 0)))
+                if (show_indent_guides
+                    && (active_guide || (tab_size > 0 && cell_visual % tab_size == 0)))
                 {
                   guide = "│";
                 }
-                ui->draw_text(current_x + vis_idx + fill, draw_y, guide,
-                              cell_guide_fg, bg);
+                ui->draw_text(current_x + vis_idx + fill, draw_y, guide, cell_guide_fg, bg);
               }
               char_idx = next_idx;
               continue;
             }
 
-            if (bracket_color != -1 && !in_sel &&
-                !(next_search_hit < search_hits.size() &&
-                  char_idx >= search_hits[next_search_hit].col &&
-                  char_idx < search_hits[next_search_hit].col +
-                                 search_hits[next_search_hit].len))
+            if (bracket_color != -1 && !in_sel
+                && !(next_search_hit < search_hits.size()
+                     && char_idx >= search_hits[next_search_hit].col
+                     && char_idx
+                            < search_hits[next_search_hit].col + search_hits[next_search_hit].len))
             {
               fg = bracket_color;
             }
 
             if (c == '\t')
             {
-              for (int fill = 0; fill < char_w && vis_idx + fill < visible_len;
-                   fill++)
+              for (int fill = 0; fill < char_w && vis_idx + fill < visible_len; fill++)
               {
                 ui->draw_text(current_x + vis_idx + fill, draw_y, " ", fg, bg);
               }
             }
             else
             {
-              ui->draw_text(current_x + vis_idx, draw_y,
-                            line.substr(char_idx, next_idx - char_idx), fg, bg);
+              ui->draw_text(
+                  current_x + vis_idx, draw_y, line.substr(char_idx, next_idx - char_idx), fg, bg);
             }
             char_idx = next_idx;
           }
@@ -834,8 +809,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
               current_type = colors[i].second;
             }
 
-            bool changed = (current_token != last_token) ||
-                           (current_token == 1 && current_type != last_type);
+            bool changed =
+                (current_token != last_token) || (current_token == 1 && current_type != last_type);
 
             if (i > 0 && (changed || i >= render_limit))
             {
@@ -958,20 +933,16 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       auto selected_span = selection_row_span();
       if (selected_span.active)
       {
-        int selected_start_visual =
-            compute_visual_column(line, selected_span.start, tab_size);
-        int selected_end_visual =
-            compute_visual_column(line, selected_span.end, tab_size);
-        int tail_start = selected_span.full_line
-                             ? std::max(selected_end_visual, start_visual)
-                             : std::max(selected_start_visual, start_visual);
+        int selected_start_visual = compute_visual_column(line, selected_span.start, tab_size);
+        int selected_end_visual = compute_visual_column(line, selected_span.end, tab_size);
+        int tail_start = selected_span.full_line ? std::max(selected_end_visual, start_visual)
+                                                 : std::max(selected_start_visual, start_visual);
         bool select_empty_cell =
             selected_span.start == selected_span.end && !selected_span.full_line;
         if (select_empty_cell)
         {
           tail_start = std::max(selected_start_visual, start_visual);
-          selected_end_visual =
-              std::max(selected_end_visual + 1, tail_start + 1);
+          selected_end_visual = std::max(selected_end_visual + 1, tail_start + 1);
         }
         else if (selected_span.full_line)
         {
@@ -989,20 +960,18 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
           int draw_cells = std::min(tail_cells, max_tail);
           for (int fill = 0; fill < draw_cells; fill++)
           {
-            ui->draw_text(tail_x + fill, draw_y, " ", theme.fg_selection,
-                          theme.bg_selection);
+            ui->draw_text(tail_x + fill, draw_y, " ", theme.fg_selection, theme.bg_selection);
           }
         }
       }
 
-      if (show_indent_guides && active_guide_on_row() &&
-          leading_ws_end == (int)line.size())
+      if (show_indent_guides && active_guide_on_row() && leading_ws_end == (int)line.size())
       {
         int guide_vis_idx = bracket_guide.visual_column - start_visual;
         if (guide_vis_idx >= 0 && guide_vis_idx < visible_len)
         {
-          ui->draw_text(current_x + guide_vis_idx, draw_y, "│",
-                        theme.fg_bracket_match, theme.bg_default);
+          ui->draw_text(
+              current_x + guide_vis_idx, draw_y, "│", theme.fg_bracket_match, theme.bg_default);
         }
       }
     }
@@ -1014,13 +983,11 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
 
   if (pane.active)
   {
-    int cursor_visible_row =
-        visible_row_for_line(buf.fold_ranges, buf.scroll_offset, buf.cursor.y,
-                             h, (int)buf.line_count());
-    const Diagnostic *active_diag =
-        find_line_diagnostic(buf, buf.cursor.y, buf.cursor.x);
-    if (active_diag && diagnostic_covers_line(*active_diag, buf.cursor.y) &&
-        cursor_visible_row >= 0)
+    int cursor_visible_row = visible_row_for_line(
+        buf.fold_ranges, buf.scroll_offset, buf.cursor.y, h, (int)buf.line_count());
+    const Diagnostic *active_diag = find_line_diagnostic(buf, buf.cursor.y, buf.cursor.x);
+    if (active_diag && diagnostic_covers_line(*active_diag, buf.cursor.y)
+        && cursor_visible_row >= 0)
     {
       const int code_start_x = x + 1 + line_num_width;
       const int code_end_x = x + w - 2;
@@ -1034,11 +1001,9 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       {
         anchor_col = active_diag->end_col;
       }
-      else if (buf.cursor.y == active_diag->line &&
-               buf.cursor.y == active_diag->end_line)
+      else if (buf.cursor.y == active_diag->line && buf.cursor.y == active_diag->end_line)
       {
-        anchor_col =
-            std::clamp(buf.cursor.x, active_diag->col, active_diag->end_col);
+        anchor_col = std::clamp(buf.cursor.x, active_diag->col, active_diag->end_col);
       }
       else if (buf.cursor.y == active_diag->line)
       {
@@ -1052,13 +1017,11 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       int cursor_line = std::clamp(buf.cursor.y, 0, (int)buf.line_count() - 1);
       const std::string &anchor_line = buf.line(cursor_line);
       int anchor_visual = compute_visual_column(anchor_line, anchor_col, tab_size);
-      int scroll_visual =
-          compute_visual_column(anchor_line, buf.scroll_x, tab_size);
+      int scroll_visual = compute_visual_column(anchor_line, buf.scroll_x, tab_size);
       int anchor_x = code_start_x + (anchor_visual - scroll_visual);
       anchor_x = std::clamp(anchor_x, code_start_x, code_end_x);
       int anchor_y = y + cursor_visible_row;
-      int line_end_visual =
-          compute_visual_column(anchor_line, (int)anchor_line.size(), tab_size);
+      int line_end_visual = compute_visual_column(anchor_line, (int)anchor_line.size(), tab_size);
       int line_end_x = code_start_x + (line_end_visual - scroll_visual);
       // Draw diagnostics only in trailing whitespace area, never over code.
       int inline_x = std::max(anchor_x + 2, line_end_x + 1);
@@ -1069,22 +1032,19 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
         if (available >= 8)
         {
           std::string msg = compact_diagnostic_text(active_diag->message);
-          std::string inline_text =
-              diagnostic_severity_label(active_diag->severity) + ": " + msg;
+          std::string inline_text = diagnostic_severity_label(active_diag->severity) + ": " + msg;
           if ((int)inline_text.length() > available)
           {
             if (available > 3)
             {
-              inline_text =
-                  inline_text.substr(0, (size_t)(available - 3)) + "...";
+              inline_text = inline_text.substr(0, (size_t)(available - 3)) + "...";
             }
             else
             {
               inline_text = inline_text.substr(0, (size_t)available);
             }
           }
-          ui->draw_text(inline_x, inline_y, inline_text, theme.fg_comment,
-                        theme.bg_default);
+          ui->draw_text(inline_x, inline_y, inline_text, theme.fg_comment, theme.bg_default);
         }
       }
     }

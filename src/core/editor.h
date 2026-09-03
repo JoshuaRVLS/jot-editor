@@ -16,7 +16,8 @@ class HostCoreAPI;
 class HostRenderAPI;
 class HostIOAPI;
 
-class Editor : private EditorState {
+class Editor : private EditorState
+{
   friend class LuaAPI;
   friend class EditorHostAPI;
   friend class HostCoreAPI;
@@ -29,7 +30,10 @@ private:
   static constexpr bool kTopBarVisible = false;
   static constexpr bool kExplorerOnly = true;
 
-  int topbar_height() const { return kTopBarVisible ? 1 : 0; }
+  int topbar_height() const
+  {
+    return kTopBarVisible ? 1 : 0;
+  }
 
   using PaneTreeNode = ::PaneTreeNode;
   using CommandPaletteSuggestion = ::CommandPaletteSuggestion;
@@ -61,73 +65,48 @@ private:
   using EditorFocus = ::EditorFocus;
 
   static constexpr QuickPickKind QUICK_PICK_NONE = ::QUICK_PICK_NONE;
-  static constexpr QuickPickKind QUICK_PICK_PROJECT_SEARCH =
-      ::QUICK_PICK_PROJECT_SEARCH;
-  static constexpr QuickPickKind QUICK_PICK_DIAGNOSTICS =
-      ::QUICK_PICK_DIAGNOSTICS;
+  static constexpr QuickPickKind QUICK_PICK_PROJECT_SEARCH = ::QUICK_PICK_PROJECT_SEARCH;
+  static constexpr QuickPickKind QUICK_PICK_DIAGNOSTICS = ::QUICK_PICK_DIAGNOSTICS;
   static constexpr QuickPickKind QUICK_PICK_SYMBOLS = ::QUICK_PICK_SYMBOLS;
   static constexpr QuickPickKind QUICK_PICK_PLUGIN = ::QUICK_PICK_PLUGIN;
 
   static constexpr MenuBarAction MENU_ACTION_NONE = ::MENU_ACTION_NONE;
   static constexpr MenuBarAction MENU_ACTION_COMMAND = ::MENU_ACTION_COMMAND;
   static constexpr MenuBarAction MENU_ACTION_NEW_FILE = ::MENU_ACTION_NEW_FILE;
-  static constexpr MenuBarAction MENU_ACTION_OPEN_FINDER =
-      ::MENU_ACTION_OPEN_FINDER;
+  static constexpr MenuBarAction MENU_ACTION_OPEN_FINDER = ::MENU_ACTION_OPEN_FINDER;
   static constexpr MenuBarAction MENU_ACTION_SAVE = ::MENU_ACTION_SAVE;
   static constexpr MenuBarAction MENU_ACTION_SAVE_AS = ::MENU_ACTION_SAVE_AS;
-  static constexpr MenuBarAction MENU_ACTION_CLOSE_FILE =
-      ::MENU_ACTION_CLOSE_FILE;
+  static constexpr MenuBarAction MENU_ACTION_CLOSE_FILE = ::MENU_ACTION_CLOSE_FILE;
   static constexpr MenuBarAction MENU_ACTION_QUIT = ::MENU_ACTION_QUIT;
   static constexpr MenuBarAction MENU_ACTION_UNDO = ::MENU_ACTION_UNDO;
   static constexpr MenuBarAction MENU_ACTION_REDO = ::MENU_ACTION_REDO;
   static constexpr MenuBarAction MENU_ACTION_CUT = ::MENU_ACTION_CUT;
   static constexpr MenuBarAction MENU_ACTION_COPY = ::MENU_ACTION_COPY;
   static constexpr MenuBarAction MENU_ACTION_PASTE = ::MENU_ACTION_PASTE;
-  static constexpr MenuBarAction MENU_ACTION_SELECT_ALL =
-      ::MENU_ACTION_SELECT_ALL;
-  static constexpr MenuBarAction MENU_ACTION_SELECT_LINE =
-      ::MENU_ACTION_SELECT_LINE;
-  static constexpr MenuBarAction MENU_ACTION_DUPLICATE_LINE =
-      ::MENU_ACTION_DUPLICATE_LINE;
-  static constexpr MenuBarAction MENU_ACTION_MOVE_LINE_UP =
-      ::MENU_ACTION_MOVE_LINE_UP;
-  static constexpr MenuBarAction MENU_ACTION_MOVE_LINE_DOWN =
-      ::MENU_ACTION_MOVE_LINE_DOWN;
-  static constexpr MenuBarAction MENU_ACTION_TOGGLE_COMMENT =
-      ::MENU_ACTION_TOGGLE_COMMENT;
-  static constexpr MenuBarAction MENU_ACTION_COMMAND_PALETTE =
-      ::MENU_ACTION_COMMAND_PALETTE;
-  static constexpr MenuBarAction MENU_ACTION_TOGGLE_SIDEBAR =
-      ::MENU_ACTION_TOGGLE_SIDEBAR;
-  static constexpr MenuBarAction MENU_ACTION_TOGGLE_MINIMAP =
-      ::MENU_ACTION_TOGGLE_MINIMAP;
+  static constexpr MenuBarAction MENU_ACTION_SELECT_ALL = ::MENU_ACTION_SELECT_ALL;
+  static constexpr MenuBarAction MENU_ACTION_SELECT_LINE = ::MENU_ACTION_SELECT_LINE;
+  static constexpr MenuBarAction MENU_ACTION_DUPLICATE_LINE = ::MENU_ACTION_DUPLICATE_LINE;
+  static constexpr MenuBarAction MENU_ACTION_MOVE_LINE_UP = ::MENU_ACTION_MOVE_LINE_UP;
+  static constexpr MenuBarAction MENU_ACTION_MOVE_LINE_DOWN = ::MENU_ACTION_MOVE_LINE_DOWN;
+  static constexpr MenuBarAction MENU_ACTION_TOGGLE_COMMENT = ::MENU_ACTION_TOGGLE_COMMENT;
+  static constexpr MenuBarAction MENU_ACTION_COMMAND_PALETTE = ::MENU_ACTION_COMMAND_PALETTE;
+  static constexpr MenuBarAction MENU_ACTION_TOGGLE_SIDEBAR = ::MENU_ACTION_TOGGLE_SIDEBAR;
+  static constexpr MenuBarAction MENU_ACTION_TOGGLE_MINIMAP = ::MENU_ACTION_TOGGLE_MINIMAP;
   static constexpr MenuBarAction MENU_ACTION_THEME = ::MENU_ACTION_THEME;
   static constexpr MenuBarAction MENU_ACTION_HOME = ::MENU_ACTION_HOME;
-  static constexpr MenuBarAction MENU_ACTION_TOGGLE_TERMINAL =
-      ::MENU_ACTION_TOGGLE_TERMINAL;
-  static constexpr MenuBarAction MENU_ACTION_NEW_TERMINAL =
-      ::MENU_ACTION_NEW_TERMINAL;
+  static constexpr MenuBarAction MENU_ACTION_TOGGLE_TERMINAL = ::MENU_ACTION_TOGGLE_TERMINAL;
+  static constexpr MenuBarAction MENU_ACTION_NEW_TERMINAL = ::MENU_ACTION_NEW_TERMINAL;
   static constexpr MenuBarAction MENU_ACTION_TASKS = ::MENU_ACTION_TASKS;
-  static constexpr MenuBarAction MENU_ACTION_RERUN_TASK =
-      ::MENU_ACTION_RERUN_TASK;
-  static constexpr MenuBarAction MENU_ACTION_TOGGLE_DEBUG_PANEL =
-      ::MENU_ACTION_TOGGLE_DEBUG_PANEL;
-  static constexpr MenuBarAction MENU_ACTION_DEBUG_STOP =
-      ::MENU_ACTION_DEBUG_STOP;
-  static constexpr MenuBarAction MENU_ACTION_DEBUG_CONTINUE =
-      ::MENU_ACTION_DEBUG_CONTINUE;
-  static constexpr MenuBarAction MENU_ACTION_DEBUG_PAUSE =
-      ::MENU_ACTION_DEBUG_PAUSE;
-  static constexpr MenuBarAction MENU_ACTION_DEBUG_STEP_IN =
-      ::MENU_ACTION_DEBUG_STEP_IN;
-  static constexpr MenuBarAction MENU_ACTION_DEBUG_STEP_OVER =
-      ::MENU_ACTION_DEBUG_STEP_OVER;
-  static constexpr MenuBarAction MENU_ACTION_DEBUG_STEP_OUT =
-      ::MENU_ACTION_DEBUG_STEP_OUT;
-  static constexpr MenuBarAction MENU_ACTION_LSP_DEFINITION =
-      ::MENU_ACTION_LSP_DEFINITION;
-  static constexpr MenuBarAction MENU_ACTION_LSP_BACK =
-      ::MENU_ACTION_LSP_BACK;
+  static constexpr MenuBarAction MENU_ACTION_RERUN_TASK = ::MENU_ACTION_RERUN_TASK;
+  static constexpr MenuBarAction MENU_ACTION_TOGGLE_DEBUG_PANEL = ::MENU_ACTION_TOGGLE_DEBUG_PANEL;
+  static constexpr MenuBarAction MENU_ACTION_DEBUG_STOP = ::MENU_ACTION_DEBUG_STOP;
+  static constexpr MenuBarAction MENU_ACTION_DEBUG_CONTINUE = ::MENU_ACTION_DEBUG_CONTINUE;
+  static constexpr MenuBarAction MENU_ACTION_DEBUG_PAUSE = ::MENU_ACTION_DEBUG_PAUSE;
+  static constexpr MenuBarAction MENU_ACTION_DEBUG_STEP_IN = ::MENU_ACTION_DEBUG_STEP_IN;
+  static constexpr MenuBarAction MENU_ACTION_DEBUG_STEP_OVER = ::MENU_ACTION_DEBUG_STEP_OVER;
+  static constexpr MenuBarAction MENU_ACTION_DEBUG_STEP_OUT = ::MENU_ACTION_DEBUG_STEP_OUT;
+  static constexpr MenuBarAction MENU_ACTION_LSP_DEFINITION = ::MENU_ACTION_LSP_DEFINITION;
+  static constexpr MenuBarAction MENU_ACTION_LSP_BACK = ::MENU_ACTION_LSP_BACK;
   static constexpr MenuBarAction MENU_ACTION_HELP = ::MENU_ACTION_HELP;
 
   static constexpr RightPanelTab RIGHT_PANEL_DEBUG = ::RIGHT_PANEL_DEBUG;
@@ -140,27 +119,18 @@ private:
   static constexpr MouseSelectionMode MOUSE_SELECT_LINE = ::MOUSE_SELECT_LINE;
 
   static constexpr ContextMenuSurface CONTEXT_MENU_NONE = ::CONTEXT_MENU_NONE;
-  static constexpr ContextMenuSurface CONTEXT_MENU_EDITOR =
-      ::CONTEXT_MENU_EDITOR;
+  static constexpr ContextMenuSurface CONTEXT_MENU_EDITOR = ::CONTEXT_MENU_EDITOR;
   static constexpr ContextMenuSurface CONTEXT_MENU_TAB = ::CONTEXT_MENU_TAB;
-  static constexpr ContextMenuSurface CONTEXT_MENU_SIDEBAR =
-      ::CONTEXT_MENU_SIDEBAR;
-  static constexpr ContextMenuSurface CONTEXT_MENU_TERMINAL =
-      ::CONTEXT_MENU_TERMINAL;
+  static constexpr ContextMenuSurface CONTEXT_MENU_SIDEBAR = ::CONTEXT_MENU_SIDEBAR;
+  static constexpr ContextMenuSurface CONTEXT_MENU_TERMINAL = ::CONTEXT_MENU_TERMINAL;
 
-  static constexpr ContextMenuAction CONTEXT_ACTION_NONE =
-      ::CONTEXT_ACTION_NONE;
-  static constexpr ContextMenuAction CONTEXT_ACTION_COPY =
-      ::CONTEXT_ACTION_COPY;
+  static constexpr ContextMenuAction CONTEXT_ACTION_NONE = ::CONTEXT_ACTION_NONE;
+  static constexpr ContextMenuAction CONTEXT_ACTION_COPY = ::CONTEXT_ACTION_COPY;
   static constexpr ContextMenuAction CONTEXT_ACTION_CUT = ::CONTEXT_ACTION_CUT;
-  static constexpr ContextMenuAction CONTEXT_ACTION_PASTE =
-      ::CONTEXT_ACTION_PASTE;
-  static constexpr ContextMenuAction CONTEXT_ACTION_SAVE_BUFFER =
-      ::CONTEXT_ACTION_SAVE_BUFFER;
-  static constexpr ContextMenuAction CONTEXT_ACTION_CLOSE_BUFFER =
-      ::CONTEXT_ACTION_CLOSE_BUFFER;
-  static constexpr ContextMenuAction CONTEXT_ACTION_SIDEBAR_OPEN =
-      ::CONTEXT_ACTION_SIDEBAR_OPEN;
+  static constexpr ContextMenuAction CONTEXT_ACTION_PASTE = ::CONTEXT_ACTION_PASTE;
+  static constexpr ContextMenuAction CONTEXT_ACTION_SAVE_BUFFER = ::CONTEXT_ACTION_SAVE_BUFFER;
+  static constexpr ContextMenuAction CONTEXT_ACTION_CLOSE_BUFFER = ::CONTEXT_ACTION_CLOSE_BUFFER;
+  static constexpr ContextMenuAction CONTEXT_ACTION_SIDEBAR_OPEN = ::CONTEXT_ACTION_SIDEBAR_OPEN;
   static constexpr ContextMenuAction CONTEXT_ACTION_SIDEBAR_NEW_FILE =
       ::CONTEXT_ACTION_SIDEBAR_NEW_FILE;
   static constexpr ContextMenuAction CONTEXT_ACTION_SIDEBAR_NEW_FOLDER =
@@ -171,28 +141,21 @@ private:
       ::CONTEXT_ACTION_SIDEBAR_REFRESH;
   static constexpr ContextMenuAction CONTEXT_ACTION_SIDEBAR_COPY_PATH =
       ::CONTEXT_ACTION_SIDEBAR_COPY_PATH;
-  static constexpr ContextMenuAction CONTEXT_ACTION_GIT_STAGE =
-      ::CONTEXT_ACTION_GIT_STAGE;
-  static constexpr ContextMenuAction CONTEXT_ACTION_GIT_UNSTAGE =
-      ::CONTEXT_ACTION_GIT_UNSTAGE;
-  static constexpr ContextMenuAction CONTEXT_ACTION_GIT_DIFF =
-      ::CONTEXT_ACTION_GIT_DIFF;
+  static constexpr ContextMenuAction CONTEXT_ACTION_GIT_STAGE = ::CONTEXT_ACTION_GIT_STAGE;
+  static constexpr ContextMenuAction CONTEXT_ACTION_GIT_UNSTAGE = ::CONTEXT_ACTION_GIT_UNSTAGE;
+  static constexpr ContextMenuAction CONTEXT_ACTION_GIT_DIFF = ::CONTEXT_ACTION_GIT_DIFF;
   static constexpr ContextMenuAction CONTEXT_ACTION_GIT_DIFF_STAGED =
       ::CONTEXT_ACTION_GIT_DIFF_STAGED;
-  static constexpr ContextMenuAction CONTEXT_ACTION_GIT_STAGE_ALL =
-      ::CONTEXT_ACTION_GIT_STAGE_ALL;
-  static constexpr ContextMenuAction CONTEXT_ACTION_GIT_REFRESH =
-      ::CONTEXT_ACTION_GIT_REFRESH;
+  static constexpr ContextMenuAction CONTEXT_ACTION_GIT_STAGE_ALL = ::CONTEXT_ACTION_GIT_STAGE_ALL;
+  static constexpr ContextMenuAction CONTEXT_ACTION_GIT_REFRESH = ::CONTEXT_ACTION_GIT_REFRESH;
   static constexpr ContextMenuAction CONTEXT_ACTION_TERMINAL_FOCUS =
       ::CONTEXT_ACTION_TERMINAL_FOCUS;
-  static constexpr ContextMenuAction CONTEXT_ACTION_TERMINAL_NEW =
-      ::CONTEXT_ACTION_TERMINAL_NEW;
+  static constexpr ContextMenuAction CONTEXT_ACTION_TERMINAL_NEW = ::CONTEXT_ACTION_TERMINAL_NEW;
   static constexpr ContextMenuAction CONTEXT_ACTION_TERMINAL_CLOSE =
       ::CONTEXT_ACTION_TERMINAL_CLOSE;
   static constexpr ContextMenuAction CONTEXT_ACTION_TERMINAL_RESET_SCROLL =
       ::CONTEXT_ACTION_TERMINAL_RESET_SCROLL;
-  static constexpr ContextMenuAction CONTEXT_ACTION_TOGGLE_FOLD =
-      ::CONTEXT_ACTION_TOGGLE_FOLD;
+  static constexpr ContextMenuAction CONTEXT_ACTION_TOGGLE_FOLD = ::CONTEXT_ACTION_TOGGLE_FOLD;
 
   static constexpr SidebarView SIDEBAR_VIEW_EXPLORER = ::SIDEBAR_VIEW_EXPLORER;
   static constexpr SidebarView SIDEBAR_VIEW_GIT = ::SIDEBAR_VIEW_GIT;
@@ -220,7 +183,8 @@ private:
   void render_debugger_panel();
   void render_git_diff_panel();
   void render_outline_panel();
-  bool outline_active() const {
+  bool outline_active() const
+  {
     return show_right_panel && active_right_panel_tab == RIGHT_PANEL_SYMBOLS;
   }
   void toggle_outline_panel();
@@ -258,12 +222,12 @@ private:
   void watch_integrated_terminal_fd(IntegratedTerminal *term);
   void unwatch_integrated_terminal_fd(IntegratedTerminal *term);
   void arm_file_tree_watch();
-  bool lsp_work_pending() const {
+  bool lsp_work_pending() const
+  {
     return !lsp_pending_changes.empty() || !lsp_clients.empty();
   }
   void poll_discord_rpc(long long now_ms);
-  LSPClient *find_lsp_client(const std::string &language,
-                             const std::string &root_path);
+  LSPClient *find_lsp_client(const std::string &language, const std::string &root_path);
 
   void handle_terminal_event(const Event &ev);
   void render_frame();
@@ -277,10 +241,9 @@ private:
   void show_lsp_manager();
   void refresh_lsp_manager();
   bool handle_lsp_manager_input(int ch);
-  bool handle_lsp_manager_mouse(int x, int y, bool is_click,
-                                bool is_scroll_up, bool is_scroll_down);
-  void activate_lsp_manager_action(const std::string &server,
-                                   const std::string &action);
+  bool
+  handle_lsp_manager_mouse(int x, int y, bool is_click, bool is_scroll_up, bool is_scroll_down);
+  void activate_lsp_manager_action(const std::string &server, const std::string &action);
   void set_lsp_server_enabled(const std::string &server, bool enabled);
   bool install_lsp_server(const std::string &name);
   bool remove_lsp_server(const std::string &name);
@@ -290,13 +253,13 @@ private:
   void poll_tree_sitter_installs();
   bool handle_tree_sitter_status_input(int ch);
   bool handle_quick_pick_input(int ch);
-  void open_quick_pick(QuickPickKind kind, const std::string &title,
+  void open_quick_pick(QuickPickKind kind,
+                       const std::string &title,
                        std::vector<QuickPickItem> items,
                        const std::string &query = "");
   void close_quick_pick();
   void refresh_quick_pick();
-  int quick_pick_match_score(const std::string &query,
-                             const QuickPickItem &item) const;
+  int quick_pick_match_score(const std::string &query, const QuickPickItem &item) const;
   void accept_quick_pick();
   void show_project_search(const std::string &query = "");
   void show_diagnostics_picker();
@@ -308,8 +271,12 @@ private:
   std::vector<QuickPickItem> fallback_symbol_items();
   void request_lsp_completion(bool manual, char trigger_character = '\0');
   void request_lsp_hover();
-  void request_lsp_hover_at(int pane_index, int buffer_id, const Cursor &pos,
-                            int token_start, int token_end, int screen_x,
+  void request_lsp_hover_at(int pane_index,
+                            int buffer_id,
+                            const Cursor &pos,
+                            int token_start,
+                            int token_end,
+                            int screen_x,
                             int screen_y);
   void cancel_lsp_mouse_hover(bool hide_popup = true);
   void maybe_fire_lsp_mouse_hover();
@@ -326,8 +293,7 @@ private:
   void render_lsp_completion();
   std::string get_buffer_text(const FileBuffer &buf) const;
   const std::vector<std::pair<int, int>> &
-  get_line_syntax_colors(FileBuffer &buf, int line_idx,
-                         int byte_limit = 0x7fffffff);
+  get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit = 0x7fffffff);
   void invalidate_syntax_cache(FileBuffer &buf);
 
 #ifdef JOT_TREESITTER
@@ -336,35 +302,34 @@ private:
   std::string tree_sitter_extension_for_buffer(const FileBuffer &buf);
 #endif
 
-  void handle_input(int ch, bool is_ctrl = false, bool is_shift = false,
-                    bool is_alt = false, int original_ch = 0);
-  void handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
-                          bool is_scroll_down);
+  void handle_input(int ch,
+                    bool is_ctrl = false,
+                    bool is_shift = false,
+                    bool is_alt = false,
+                    int original_ch = 0);
+  void handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up, bool is_scroll_down);
 
   void handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
 
   void handle_command_palette(int ch);
   bool execute_ex_command(const std::string &line);
-  bool execute_ex_command_tail(const std::string &lcmd, const std::string &arg,
-                               const std::string &line);
+  bool
+  execute_ex_command_tail(const std::string &lcmd, const std::string &arg, const std::string &line);
   void show_command_help(const std::string &topic);
   void submit_command_palette();
-  void handle_search_panel(int ch, bool is_ctrl = false,
-                           bool is_shift = false, bool is_alt = false);
+  void
+  handle_search_panel(int ch, bool is_ctrl = false, bool is_shift = false, bool is_alt = false);
   void handle_telescope(int ch);
   void handle_save_prompt(int ch);
-  void handle_integrated_terminal_input(int ch, bool is_ctrl, bool is_shift,
-                                        bool is_alt);
-  bool handle_telescope_mouse(int x, int y, bool is_click,
-                              bool is_double_click, bool is_scroll_up,
-                              bool is_scroll_down);
+  void handle_integrated_terminal_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
+  bool handle_telescope_mouse(
+      int x, int y, bool is_click, bool is_double_click, bool is_scroll_up, bool is_scroll_down);
   bool handle_home_menu_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
   bool handle_home_menu_mouse(int x, int y, bool is_click);
   bool handle_menu_bar_input(int ch);
   bool handle_menu_bar_mouse(int x, int y, bool is_click, bool is_motion);
   bool handle_integrated_terminal_mouse(int x, int y);
-  bool handle_integrated_terminal_scroll(int x, int y, bool is_scroll_up,
-                                         bool is_scroll_down);
+  bool handle_integrated_terminal_scroll(int x, int y, bool is_scroll_up, bool is_scroll_down);
   bool handle_debugger_mouse(int x, int y, bool activate = true);
   void place_integrated_terminal_cursor();
   void handle_mouse(void *event);
@@ -392,7 +357,9 @@ private:
   void show_hover_popup(const std::string &text, int x, int y);
   void hide_popup();
   bool handle_popup_input(int ch);
-  void open_context_menu(int x, int y, ContextMenuSurface surface,
+  void open_context_menu(int x,
+                         int y,
+                         ContextMenuSurface surface,
                          const std::vector<ContextMenuItem> &items);
   void close_context_menu();
   bool handle_context_menu_input(int ch);
@@ -403,10 +370,8 @@ private:
   void close_menu_bar();
   void open_menu_bar(int index);
   void execute_menu_bar_item(int menu_index, int item_index);
-  void set_diagnostics(const std::string &filepath,
-                       const std::vector<Diagnostic> &diagnostics);
-  void add_diagnostic(const std::string &filepath,
-                      const Diagnostic &diagnostic);
+  void set_diagnostics(const std::string &filepath, const std::vector<Diagnostic> &diagnostics);
+  void add_diagnostic(const std::string &filepath, const Diagnostic &diagnostic);
 
 public:
   void toggle_sidebar();
@@ -417,13 +382,21 @@ public:
 
 private:
   void handle_sidebar_input(int ch);
-  void handle_sidebar_mouse(int x, int y, bool is_click,
-                            bool is_double_click = false);
+  void handle_sidebar_mouse(int x, int y, bool is_click, bool is_double_click = false);
   void render_sidebar();
   void render_collapsed_sidebar_handle();
-  int sidebar_activity_rail_width() const { return 5; }
-  int min_sidebar_width() const { return sidebar_activity_rail_width() + 18; }
-  int sidebar_close_threshold() const { return 12; }
+  int sidebar_activity_rail_width() const
+  {
+    return 5;
+  }
+  int min_sidebar_width() const
+  {
+    return sidebar_activity_rail_width() + 18;
+  }
+  int sidebar_close_threshold() const
+  {
+    return 12;
+  }
   int max_sidebar_width() const;
   int effective_sidebar_width() const;
   bool collapsed_sidebar_handle_hit_test(int x, int y) const;
@@ -431,14 +404,16 @@ private:
   bool begin_sidebar_resize_drag(int x, int y);
   bool update_sidebar_resize_drag(int x);
   void end_sidebar_resize_drag();
-  int min_right_panel_width() const { return 28; }
+  int min_right_panel_width() const
+  {
+    return 28;
+  }
   int max_right_panel_width() const;
   bool right_panel_resize_hit_test(int x, int y) const;
   bool begin_right_panel_resize_drag(int x, int y);
   bool update_right_panel_resize_drag(int x);
   void end_right_panel_resize_drag();
-  void build_tree(const std::string &path, std::vector<FileNode> &nodes,
-                  int depth);
+  void build_tree(const std::string &path, std::vector<FileNode> &nodes, int depth);
   void refresh_tree_children(FileNode &node);
   std::string build_file_tree_signature() const;
   void refresh_file_tree_watch_baseline();
@@ -474,8 +449,7 @@ private:
   void clear_selection();
 
   void open_file(const std::string &path, bool preview = false);
-  void finish_open_file(FileBuffer fb, const std::string &path_to_open,
-                        bool preview);
+  void finish_open_file(FileBuffer fb, const std::string &path_to_open, bool preview);
   void open_recent_file(const std::string &query = "");
   void reopen_last_closed_buffer();
   void close_buffer_at(int index);
@@ -501,14 +475,12 @@ private:
   void refresh_git_status(bool force = false);
   void clear_git_status();
   bool has_git_repo() const;
-  bool git_status_active() const {
-    return !git_root.empty() || !git_branch.empty() || git_dirty_count != 0 ||
-           git_staged_count != 0 || git_unstaged_count != 0 ||
-           git_untracked_count != 0 || git_deleted_count != 0 ||
-           git_renamed_count != 0 || git_conflict_count != 0 ||
-           !git_file_status.empty() ||
-           (workspace_session_enabled && !workspace_session_root.empty()) ||
-           !root_dir.empty();
+  bool git_status_active() const
+  {
+    return !git_root.empty() || !git_branch.empty() || git_dirty_count != 0 || git_staged_count != 0
+           || git_unstaged_count != 0 || git_untracked_count != 0 || git_deleted_count != 0
+           || git_renamed_count != 0 || git_conflict_count != 0 || !git_file_status.empty()
+           || (workspace_session_enabled && !workspace_session_root.empty()) || !root_dir.empty();
   }
   std::string run_git_capture(const std::string &args) const;
   std::string to_git_relative_path(const std::string &path) const;
@@ -524,8 +496,7 @@ private:
   void toggle_minimap();
   void toggle_integrated_terminal();
   void create_integrated_terminal();
-  void create_integrated_terminal(const std::string &label,
-                                  const std::string &cwd = "");
+  void create_integrated_terminal(const std::string &label, const std::string &cwd = "");
   void close_integrated_terminal(int index);
   void activate_integrated_terminal(int index, bool focus = true);
   void load_terminal_tasks();
@@ -535,10 +506,8 @@ private:
   bool rerun_last_terminal_task();
   void toggle_debugger_panel();
   bool start_debugger_session(DebuggerSessionConfig config);
-  bool start_debugger_command(const std::string &adapter,
-                              const std::string &command_line);
-  bool attach_debugger_command(const std::string &adapter,
-                               const std::string &pid_text);
+  bool start_debugger_command(const std::string &adapter, const std::string &command_line);
+  bool attach_debugger_command(const std::string &adapter, const std::string &pid_text);
   void stop_debugger_session();
   void restart_debugger_session();
   void continue_debugger_session();
@@ -551,8 +520,7 @@ private:
   void request_debugger_disassembly(const std::string &expression = "");
   bool toggle_debugger_breakpoint(const std::string &filepath, int line);
   bool has_debugger_breakpoint(const std::string &filepath, int line) const;
-  void update_debugger_breakpoint_hover(int pane_index, int buffer_id,
-                                        int line);
+  void update_debugger_breakpoint_hover(int pane_index, int buffer_id, int line);
   void clear_debugger_breakpoint_hover();
   bool is_debugger_breakpoint_hover(int buffer_id, int line) const;
   void load_debugger_configs();
@@ -581,8 +549,7 @@ private:
   void fold_all();
   void unfold_all();
   bool is_line_hidden_by_fold(const FileBuffer &buf, int line) const;
-  int buffer_line_for_visible_row(const FileBuffer &buf, int first_line,
-                                  int row) const;
+  int buffer_line_for_visible_row(const FileBuffer &buf, int first_line, int row) const;
 
   void split_pane_horizontal();
   void split_pane_vertical();
@@ -600,12 +567,15 @@ private:
   bool begin_pane_resize_drag(int x, int y);
   bool update_pane_resize_drag(int x, int y);
   void end_pane_resize_drag();
-  bool is_pane_resize_dragging() const { return pane_resize_dragging; }
-  bool pane_split_is_resizing(int node_index) const {
+  bool is_pane_resize_dragging() const
+  {
+    return pane_resize_dragging;
+  }
+  bool pane_split_is_resizing(int node_index) const
+  {
     return pane_resize_dragging && pane_resize_node == node_index;
   }
-  bool adjust_pane_split_ratio(int node_index, int delta,
-                               bool clamp_only = false);
+  bool adjust_pane_split_ratio(int node_index, int delta, bool clamp_only = false);
 
   void toggle_bookmark();
   void next_bookmark();
@@ -631,11 +601,10 @@ private:
   void show_buffer_stats();
   void replace_all_text(const std::string &needle,
                         const std::string &replacement,
-                        bool case_sensitive = true, bool whole_word = false);
-  void replace_all_regex(const std::string &pattern,
-                         const std::string &replacement);
-  bool surround_selection_or_word(const std::string &left,
-                                  const std::string &right);
+                        bool case_sensitive = true,
+                        bool whole_word = false);
+  void replace_all_regex(const std::string &pattern, const std::string &replacement);
+  bool surround_selection_or_word(const std::string &left, const std::string &right);
   bool unsurround_selection_or_cursor();
   bool change_inside_quote(char quote);
   void increment_number_at_cursor(int delta);
@@ -644,15 +613,17 @@ private:
   std::vector<std::string> list_available_themes();
   // Applies a theme; when persist is set, also saves it to the config file so
   // it survives the next session. Returns true on success.
-  bool apply_theme(const std::string &name, bool persist = true,
-                   bool announce = true);
+  bool apply_theme(const std::string &name, bool persist = true, bool announce = true);
   int detect_indent_width(const std::vector<std::string> &lines) const;
 
   FileBuffer &get_buffer(int id = -1);
   SplitPane &get_pane(int id = -1);
   std::string get_file_extension(const std::string &path);
   std::string get_filename(const std::string &path);
-  Theme &get_theme() { return theme; }
+  Theme &get_theme()
+  {
+    return theme;
+  }
   IntegratedTerminal *get_integrated_terminal(int index = -1);
 
   void load_runtime_config();

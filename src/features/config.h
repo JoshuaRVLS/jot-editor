@@ -5,7 +5,8 @@
 #include <string>
 #include <vector>
 
-class Config {
+class Config
+{
 private:
   std::map<std::string, std::string> settings;
   std::string config_path;
@@ -25,13 +26,16 @@ public:
   int get_int(const std::string &key, int default_val = 0);
   double get_double(const std::string &key, double default_val = 0.0);
   bool get_bool(const std::string &key, bool default_val = false);
-  std::vector<std::string> get_list(const std::string &key, char delimiter = ',',
-                                    bool trim_items = true);
+  std::vector<std::string>
+  get_list(const std::string &key, char delimiter = ',', bool trim_items = true);
   bool has(const std::string &key) const;
   void unset(const std::string &key);
   // All currently-known keys (defaults + loaded/overridden values).
   std::vector<std::string> keys() const;
-  const std::string &path() const { return config_path; }
+  const std::string &path() const
+  {
+    return config_path;
+  }
 };
 
 #endif

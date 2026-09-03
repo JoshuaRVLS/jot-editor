@@ -11,25 +11,38 @@
 
 struct TermKey;
 
-enum EventType { EVENT_KEY, EVENT_MOUSE, EVENT_RESIZE, EVENT_REDRAW, EVENT_PASTE };
+enum EventType
+{
+  EVENT_KEY,
+  EVENT_MOUSE,
+  EVENT_RESIZE,
+  EVENT_REDRAW,
+  EVENT_PASTE
+};
 
-namespace KeyCode {
-// Keep function keys tagged separately from text and legacy navigation codes.
-constexpr int FunctionBase = 0x3000;
-constexpr int FunctionMarker = 0x10000000;
-constexpr int function(int number) { return FunctionMarker | FunctionBase | number; }
-constexpr int FunctionFirst = function(1);
-constexpr int FunctionLast = function(24);
+namespace KeyCode
+{
+  // Keep function keys tagged separately from text and legacy navigation codes.
+  constexpr int FunctionBase = 0x3000;
+  constexpr int FunctionMarker = 0x10000000;
+  constexpr int function(int number)
+  {
+    return FunctionMarker | FunctionBase | number;
+  }
+  constexpr int FunctionFirst = function(1);
+  constexpr int FunctionLast = function(24);
 } // namespace KeyCode
 
-struct KeyEvent {
+struct KeyEvent
+{
   int key;
   bool ctrl;
   bool shift;
   bool alt;
 };
 
-struct MouseEvent {
+struct MouseEvent
+{
   int x, y;
   int button;
   bool pressed;
@@ -39,17 +52,21 @@ struct MouseEvent {
   bool alt;
 };
 
-struct ResizeEvent {
+struct ResizeEvent
+{
   int width, height;
 };
 
-struct PasteEvent {
+struct PasteEvent
+{
   const char *text;
 };
 
-struct Event {
+struct Event
+{
   EventType type;
-  union {
+  union
+  {
     KeyEvent key;
     MouseEvent mouse;
     ResizeEvent resize;
@@ -57,7 +74,8 @@ struct Event {
   };
 };
 
-class Terminal {
+class Terminal
+{
 private:
   int width, height;
   int poll_timeout_ms;
@@ -109,8 +127,14 @@ public:
   void init();
   void cleanup();
 
-  int get_width() const { return width; }
-  int get_height() const { return height; }
+  int get_width() const
+  {
+    return width;
+  }
+  int get_height() const
+  {
+    return height;
+  }
 
   // Probe the current terminal size from the OS and update width/height if
   // it differs from the cached values. Returns true if either dimension
@@ -148,7 +172,8 @@ public:
   void write(const std::string &str);
   void write_char(char c);
 
-  int get_input_fd() const {
+  int get_input_fd() const
+  {
 #ifdef _WIN32
     return -1;
 #else
@@ -187,16 +212,28 @@ public:
   // Terminal::flush() appends summary metadata to that file path.
   // Set `JOT_RENDER_CAPTURE_RAW=1` to also capture the full raw bytes.
   // Frame/cursor markers are written by UI::render() / UI::flush_cursor().
-  bool render_capture_enabled() const { return render_capture_ != nullptr; }
-  bool render_capture_raw() const { return render_capture_raw_; }
-  int render_capture_bytes_since_last_flush() const { return last_flush_bytes_; }
-  void render_capture_marker(const std::string &label, int rows_rendered); 
+  bool render_capture_enabled() const
+  {
+    return render_capture_ != nullptr;
+  }
+  bool render_capture_raw() const
+  {
+    return render_capture_raw_;
+  }
+  int render_capture_bytes_since_last_flush() const
+  {
+    return last_flush_bytes_;
+  }
+  void render_capture_marker(const std::string &label, int rows_rendered);
 
   // Number of physical columns on the right edge of every row that the
   // renderer must leave untouched. This is fixed at exactly one cell so
   // full-width borders sit on the last paintable column without creating
   // a wider visual gap.
-  int render_margin() const { return 1; }
+  int render_margin() const
+  {
+    return 1;
+  }
 
   // Drain the output buffer to the kernel PTY without blocking. If
   // `render_chunk_bytes_` is 0 (default), this is a no-op. When

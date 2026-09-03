@@ -1,41 +1,51 @@
-#include <catch2/catch_test_macros.hpp>
-#include "types.h"
 #include "tree_sitter/manager.h"
+#include "types.h"
+#include <catch2/catch_test_macros.hpp>
 #include <set>
 #include <string>
 
-namespace {
-void register_test_languages(TreeSitterManager &manager) {
-  const std::string cpp = "(primitive_type) @type.builtin\n(keyword) @keyword.control\n"
-                          "@keyword.storage @keyword.directive @function.method "
-                          "@constant.macro @string.escape @punctuation.bracket "
-                          "@punctuation.delimiter (namespace_identifier) @namespace "
-                          "qualified_identifier scope: (namespace_identifier) @namespace "
-                          "(call_expression function: (qualified_identifier) @function) "
-                          "@variable @property";
-  manager.register_language("c", {".c", ".h"});
-  manager.register_language("cpp", {".cpp", ".hpp", ".cc", ".cxx", ".hh", ".hxx"}, cpp,
-                            "https://github.com/tree-sitter/tree-sitter-cpp", "", "tree_sitter_cpp",
-                            {"libtree-sitter-cpp.so"});
-  manager.register_language("javascript", {".js", ".jsx", ".mjs", ".cjs"},
-                            "@tag @tag.attribute @function.method\n"
-                            "(jsx_attribute (jsx_namespace_name) @tag.attribute)");
-  manager.register_language("typescript", {".ts", ".mts", ".cts"},
-                            "@type.builtin @variable.parameter");
-  manager.register_language("tsx", {".tsx"}, "@tag @tag.attribute @type.builtin\n"
-                            "(jsx_attribute (jsx_namespace_name) @tag.attribute)");
-  manager.register_language("python", {".py", ".pyw"}, "@variable.parameter");
-  manager.register_language("json", {".json", ".jsonc"}, "@property");
-  manager.register_language("rust", {".rs"});
-  manager.register_language("go", {".go"});
-  manager.register_language("markdown", {".md", ".markdown"});
-  manager.register_language("ruby", {".rb"});
-  manager.register_language("vue", {".vue"});
-  manager.set_runtime_options({}, {std::string(JOT_LUA_SOURCE_DIR) + "/treesitter"}, {});
-}
-}
+namespace
+{
+  void register_test_languages(TreeSitterManager &manager)
+  {
+    const std::string cpp = "(primitive_type) @type.builtin\n(keyword) @keyword.control\n"
+                            "@keyword.storage @keyword.directive @function.method "
+                            "@constant.macro @string.escape @punctuation.bracket "
+                            "@punctuation.delimiter (namespace_identifier) @namespace "
+                            "qualified_identifier scope: (namespace_identifier) @namespace "
+                            "(call_expression function: (qualified_identifier) @function) "
+                            "@variable @property";
+    manager.register_language("c", {".c", ".h"});
+    manager.register_language("cpp",
+                              {".cpp", ".hpp", ".cc", ".cxx", ".hh", ".hxx"},
+                              cpp,
+                              "https://github.com/tree-sitter/tree-sitter-cpp",
+                              "",
+                              "tree_sitter_cpp",
+                              {"libtree-sitter-cpp.so"});
+    manager.register_language("javascript",
+                              {".js", ".jsx", ".mjs", ".cjs"},
+                              "@tag @tag.attribute @function.method\n"
+                              "(jsx_attribute (jsx_namespace_name) @tag.attribute)");
+    manager.register_language(
+        "typescript", {".ts", ".mts", ".cts"}, "@type.builtin @variable.parameter");
+    manager.register_language("tsx",
+                              {".tsx"},
+                              "@tag @tag.attribute @type.builtin\n"
+                              "(jsx_attribute (jsx_namespace_name) @tag.attribute)");
+    manager.register_language("python", {".py", ".pyw"}, "@variable.parameter");
+    manager.register_language("json", {".json", ".jsonc"}, "@property");
+    manager.register_language("rust", {".rs"});
+    manager.register_language("go", {".go"});
+    manager.register_language("markdown", {".md", ".markdown"});
+    manager.register_language("ruby", {".rb"});
+    manager.register_language("vue", {".vue"});
+    manager.set_runtime_options({}, {std::string(JOT_LUA_SOURCE_DIR) + "/treesitter"}, {});
+  }
+} // namespace
 
-TEST_CASE("Tree Sitter Language Registration", "[jot]") {
+TEST_CASE("Tree Sitter Language Registration", "[jot]")
+{
   TreeSitterManager manager;
   register_test_languages(manager);
 
@@ -56,7 +66,8 @@ TEST_CASE("Tree Sitter Language Registration", "[jot]") {
   REQUIRE_FALSE(manager.has_language(".unknown"));
 }
 
-TEST_CASE("Tree Sitter Runtime Overrides", "[jot]") {
+TEST_CASE("Tree Sitter Runtime Overrides", "[jot]")
+{
   TreeSitterManager manager;
   register_test_languages(manager);
   manager.set_runtime_options({}, {}, {".foo:zig", "bar=python"});
@@ -70,7 +81,8 @@ TEST_CASE("Tree Sitter Runtime Overrides", "[jot]") {
   REQUIRE_FALSE(manager.has_language_override(".py"));
 }
 
-TEST_CASE("Tree Sitter Header Override Can Select C++", "[jot]") {
+TEST_CASE("Tree Sitter Header Override Can Select C++", "[jot]")
+{
   TreeSitterManager manager;
   register_test_languages(manager);
   REQUIRE(manager.language_id_for_extension(".h") == "c");
@@ -81,28 +93,27 @@ TEST_CASE("Tree Sitter Header Override Can Select C++", "[jot]") {
   REQUIRE(manager.has_language_override(".h"));
 }
 
-TEST_CASE("Tree Sitter Runtime Status Unsupported Extension", "[jot]") {
+TEST_CASE("Tree Sitter Runtime Status Unsupported Extension", "[jot]")
+{
   TreeSitterManager manager;
   register_test_languages(manager);
-  TreeSitterRuntimeStatus status =
-      manager.runtime_status_for_extension(".unknown");
+  TreeSitterRuntimeStatus status = manager.runtime_status_for_extension(".unknown");
 
   REQUIRE_FALSE(status.has_language);
   REQUIRE_FALSE(status.parser_loaded);
   REQUIRE_FALSE(status.query_loaded);
-  REQUIRE(status.parser_message.find("unsupported extension") !=
-              std::string::npos);
+  REQUIRE(status.parser_message.find("unsupported extension") != std::string::npos);
 }
 
-TEST_CASE("C++ Query Covers Scoped And Primitive Tokens", "[jot]") {
+TEST_CASE("C++ Query Covers Scoped And Primitive Tokens", "[jot]")
+{
   TreeSitterManager manager;
   register_test_languages(manager);
   const TSLanguageEntry *entry = manager.get_language(".cpp");
 
   REQUIRE(entry != nullptr);
   std::string query = entry->highlight_query_source;
-  REQUIRE(query.find("(primitive_type) @type.builtin") !=
-              std::string::npos);
+  REQUIRE(query.find("(primitive_type) @type.builtin") != std::string::npos);
   REQUIRE(query.find("@keyword.control") != std::string::npos);
   REQUIRE(query.find("@keyword.storage") != std::string::npos);
   REQUIRE(query.find("@keyword.directive") != std::string::npos);
@@ -111,15 +122,15 @@ TEST_CASE("C++ Query Covers Scoped And Primitive Tokens", "[jot]") {
   REQUIRE(query.find("@string.escape") != std::string::npos);
   REQUIRE(query.find("@punctuation.bracket") != std::string::npos);
   REQUIRE(query.find("@punctuation.delimiter") != std::string::npos);
-  REQUIRE(query.find("(namespace_identifier) @namespace") !=
-              std::string::npos);
+  REQUIRE(query.find("(namespace_identifier) @namespace") != std::string::npos);
   REQUIRE(query.find("qualified_identifier scope: (namespace_identifier) "
-                         "@namespace") != std::string::npos);
-  REQUIRE(query.find("(call_expression function: (qualified_identifier") !=
-              std::string::npos);
+                     "@namespace")
+          != std::string::npos);
+  REQUIRE(query.find("(call_expression function: (qualified_identifier") != std::string::npos);
 }
 
-TEST_CASE("Tree Sitter Capture Mapping Priority", "[jot]") {
+TEST_CASE("Tree Sitter Capture Mapping Priority", "[jot]")
+{
   REQUIRE(tree_sitter_capture_color_for_name("keyword") == 1);
   REQUIRE(tree_sitter_capture_color_for_name("string") == 2);
   REQUIRE(tree_sitter_capture_color_for_name("comment") == 3);
@@ -130,87 +141,79 @@ TEST_CASE("Tree Sitter Capture Mapping Priority", "[jot]") {
   REQUIRE(tree_sitter_capture_token_for_name("variable.parameter") == TS_TOKEN_PARAMETER);
   REQUIRE(tree_sitter_capture_token_for_name("function.builtin") == TS_TOKEN_BUILTIN);
   REQUIRE(tree_sitter_capture_token_for_name("function.method") == TS_TOKEN_FUNCTION_METHOD);
-  REQUIRE(tree_sitter_capture_token_for_name("function.constructor") == TS_TOKEN_FUNCTION_CONSTRUCTOR);
+  REQUIRE(tree_sitter_capture_token_for_name("function.constructor")
+          == TS_TOKEN_FUNCTION_CONSTRUCTOR);
   REQUIRE(tree_sitter_capture_token_for_name("constant.builtin") == TS_TOKEN_BUILTIN);
   REQUIRE(tree_sitter_capture_token_for_name("constant.macro") == TS_TOKEN_CONSTANT_MACRO);
   REQUIRE(tree_sitter_capture_token_for_name("keyword.control") == TS_TOKEN_KEYWORD_CONTROL);
   REQUIRE(tree_sitter_capture_token_for_name("keyword.storage") == TS_TOKEN_KEYWORD_STORAGE);
   REQUIRE(tree_sitter_capture_token_for_name("keyword.directive") == TS_TOKEN_KEYWORD_PREPROC);
   REQUIRE(tree_sitter_capture_token_for_name("operator") == TS_TOKEN_OPERATOR);
-  REQUIRE(tree_sitter_capture_token_for_name("punctuation.bracket") == TS_TOKEN_PUNCTUATION_BRACKET);
-  REQUIRE(tree_sitter_capture_token_for_name("punctuation.delimiter") == TS_TOKEN_PUNCTUATION_DELIMITER);
+  REQUIRE(tree_sitter_capture_token_for_name("punctuation.bracket")
+          == TS_TOKEN_PUNCTUATION_BRACKET);
+  REQUIRE(tree_sitter_capture_token_for_name("punctuation.delimiter")
+          == TS_TOKEN_PUNCTUATION_DELIMITER);
   REQUIRE(tree_sitter_capture_token_for_name("string.escape") == TS_TOKEN_STRING_ESCAPE);
   REQUIRE(tree_sitter_capture_token_for_name("tag.attribute") == TS_TOKEN_ATTRIBUTE);
   REQUIRE(tree_sitter_capture_token_for_name("type.builtin") == TS_TOKEN_TYPE_BUILTIN);
   REQUIRE(tree_sitter_capture_token_for_name("property") == TS_TOKEN_FIELD);
   REQUIRE(tree_sitter_capture_color_for_name("unknown.capture") == 0);
 
-  REQUIRE(tree_sitter_capture_priority_for_name("comment") >
-              tree_sitter_capture_priority_for_name("keyword"));
-  REQUIRE(tree_sitter_capture_priority_for_name("string") >
-              tree_sitter_capture_priority_for_name("function"));
-  REQUIRE(tree_sitter_capture_priority_for_name("function") >
-              tree_sitter_capture_priority_for_name("type"));
-  REQUIRE(tree_sitter_capture_priority_for_name("tag.attribute") >
-              tree_sitter_capture_priority_for_name("property"));
+  REQUIRE(tree_sitter_capture_priority_for_name("comment")
+          > tree_sitter_capture_priority_for_name("keyword"));
+  REQUIRE(tree_sitter_capture_priority_for_name("string")
+          > tree_sitter_capture_priority_for_name("function"));
+  REQUIRE(tree_sitter_capture_priority_for_name("function")
+          > tree_sitter_capture_priority_for_name("type"));
+  REQUIRE(tree_sitter_capture_priority_for_name("tag.attribute")
+          > tree_sitter_capture_priority_for_name("property"));
 }
 
-TEST_CASE("Tree Sitter Built In Queries Expose Rich Captures", "[jot]") {
+TEST_CASE("Tree Sitter Built In Queries Expose Rich Captures", "[jot]")
+{
   TreeSitterManager manager;
   register_test_languages(manager);
 
   const TSLanguageEntry *cpp = manager.get_language(".cpp");
   REQUIRE(cpp != nullptr);
-  REQUIRE(cpp->highlight_query_source.find("@variable") !=
-              std::string::npos);
-  REQUIRE(cpp->highlight_query_source.find("@property") !=
-              std::string::npos);
+  REQUIRE(cpp->highlight_query_source.find("@variable") != std::string::npos);
+  REQUIRE(cpp->highlight_query_source.find("@property") != std::string::npos);
 
   const TSLanguageEntry *python = manager.get_language(".py");
   REQUIRE(python != nullptr);
-  REQUIRE(python->highlight_query_source.find("@variable.parameter") !=
-              std::string::npos);
+  REQUIRE(python->highlight_query_source.find("@variable.parameter") != std::string::npos);
 
   const TSLanguageEntry *json = manager.get_language(".json");
   REQUIRE(json != nullptr);
-  REQUIRE(json->highlight_query_source.find("@property") !=
-              std::string::npos);
+  REQUIRE(json->highlight_query_source.find("@property") != std::string::npos);
 
   const TSLanguageEntry *javascript = manager.get_language(".jsx");
   REQUIRE(javascript != nullptr);
   REQUIRE(javascript->language_id == "javascript");
-  REQUIRE(javascript->highlight_query_source.find("@tag") !=
-              std::string::npos);
-  REQUIRE(javascript->highlight_query_source.find("@tag.attribute") !=
-              std::string::npos);
-  REQUIRE(javascript->highlight_query_source.find(
-                  "(jsx_attribute (jsx_namespace_name) @tag.attribute)") !=
-              std::string::npos);
-  REQUIRE(javascript->highlight_query_source.find("@function.method") !=
-              std::string::npos);
+  REQUIRE(javascript->highlight_query_source.find("@tag") != std::string::npos);
+  REQUIRE(javascript->highlight_query_source.find("@tag.attribute") != std::string::npos);
+  REQUIRE(
+      javascript->highlight_query_source.find("(jsx_attribute (jsx_namespace_name) @tag.attribute)")
+      != std::string::npos);
+  REQUIRE(javascript->highlight_query_source.find("@function.method") != std::string::npos);
 
   const TSLanguageEntry *typescript = manager.get_language(".ts");
   REQUIRE(typescript != nullptr);
-  REQUIRE(typescript->highlight_query_source.find("@type.builtin") !=
-              std::string::npos);
-  REQUIRE(typescript->highlight_query_source.find("@variable.parameter") !=
-              std::string::npos);
+  REQUIRE(typescript->highlight_query_source.find("@type.builtin") != std::string::npos);
+  REQUIRE(typescript->highlight_query_source.find("@variable.parameter") != std::string::npos);
 
   const TSLanguageEntry *tsx = manager.get_language(".tsx");
   REQUIRE(tsx != nullptr);
   REQUIRE(tsx->language_id == "tsx");
-  REQUIRE(tsx->highlight_query_source.find("@tag") !=
-              std::string::npos);
-  REQUIRE(tsx->highlight_query_source.find("@tag.attribute") !=
-              std::string::npos);
-  REQUIRE(tsx->highlight_query_source.find(
-                  "(jsx_attribute (jsx_namespace_name) @tag.attribute)") !=
-              std::string::npos);
-  REQUIRE(tsx->highlight_query_source.find("@type.builtin") !=
-              std::string::npos);
+  REQUIRE(tsx->highlight_query_source.find("@tag") != std::string::npos);
+  REQUIRE(tsx->highlight_query_source.find("@tag.attribute") != std::string::npos);
+  REQUIRE(tsx->highlight_query_source.find("(jsx_attribute (jsx_namespace_name) @tag.attribute)")
+          != std::string::npos);
+  REQUIRE(tsx->highlight_query_source.find("@type.builtin") != std::string::npos);
 }
 
-TEST_CASE("Theme Syntax Palette Falls Back To Readable Theme Colors", "[jot]") {
+TEST_CASE("Theme Syntax Palette Falls Back To Readable Theme Colors", "[jot]")
+{
   Theme theme;
   theme.fg_default = 252;
   theme.bg_default = 234;
@@ -247,7 +250,8 @@ TEST_CASE("Theme Syntax Palette Falls Back To Readable Theme Colors", "[jot]") {
   REQUIRE(theme.fg_punctuation_delimiter == 252);
 }
 
-TEST_CASE("Theme Syntax Palette Keeps Explicit Syntax Slots", "[jot]") {
+TEST_CASE("Theme Syntax Palette Keeps Explicit Syntax Slots", "[jot]")
+{
   Theme theme;
   theme.fg_default = 252;
   theme.bg_default = 234;
@@ -276,86 +280,95 @@ TEST_CASE("Theme Syntax Palette Keeps Explicit Syntax Slots", "[jot]") {
 }
 
 #ifdef JOT_TREESITTER
-TEST_CASE("Tree Sitter Missing Parser Reports Diagnostic", "[jot]") {
+TEST_CASE("Tree Sitter Missing Parser Reports Diagnostic", "[jot]")
+{
   TreeSitterManager manager;
   manager.set_runtime_options({}, {}, {".missing:missing_language"});
 
   REQUIRE(manager.get_highlight_query(".missing") == nullptr);
-  TreeSitterRuntimeStatus status =
-      manager.runtime_status_for_extension(".missing");
+  TreeSitterRuntimeStatus status = manager.runtime_status_for_extension(".missing");
 
   REQUIRE(status.has_language);
   REQUIRE(status.language_id == "missing_language");
   REQUIRE_FALSE(status.parser_loaded);
-  REQUIRE(status.parser_message.find("parser") !=
-              std::string::npos);
+  REQUIRE(status.parser_message.find("parser") != std::string::npos);
 }
 
-TEST_CASE("Tree Sitter Query Cache", "[jot]") {
+TEST_CASE("Tree Sitter Query Cache", "[jot]")
+{
   TreeSitterManager manager;
   register_test_languages(manager);
 
   TSQuery *first = manager.get_highlight_query(".c");
   TSQuery *second = manager.get_highlight_query(".c");
-  if (first) {
+  if (first)
+  {
     REQUIRE(first == second);
-  } else {
+  }
+  else
+  {
     REQUIRE(second == nullptr);
   }
 }
 
-TEST_CASE("Tree Sitter C++ Query Available When Parser Installed", "[jot]") {
+TEST_CASE("Tree Sitter C++ Query Available When Parser Installed", "[jot]")
+{
   TreeSitterManager manager;
   register_test_languages(manager);
 
   TSQuery *query = manager.get_highlight_query(".cpp");
-  TreeSitterRuntimeStatus status =
-      manager.runtime_status_for_extension(".cpp");
-  if (status.parser_loaded) {
+  TreeSitterRuntimeStatus status = manager.runtime_status_for_extension(".cpp");
+  if (status.parser_loaded)
+  {
     REQUIRE(query != nullptr);
     REQUIRE(status.query_loaded);
-  } else {
+  }
+  else
+  {
     REQUIRE(query == nullptr);
   }
 }
 
-TEST_CASE("Tree Sitter JS TS Queries Available When Parsers Installed", "[jot]") {
+TEST_CASE("Tree Sitter JS TS Queries Available When Parsers Installed", "[jot]")
+{
   TreeSitterManager manager;
   register_test_languages(manager);
 
-  for (const auto *ext : {".jsx", ".ts", ".tsx"}) {
+  for (const auto *ext : {".jsx", ".ts", ".tsx"})
+  {
     TSQuery *query = manager.get_highlight_query(ext);
-    TreeSitterRuntimeStatus status =
-        manager.runtime_status_for_extension(ext);
-    if (status.parser_loaded) {
+    TreeSitterRuntimeStatus status = manager.runtime_status_for_extension(ext);
+    if (status.parser_loaded)
+    {
       REQUIRE(query != nullptr);
       REQUIRE(status.query_loaded);
-    } else {
+    }
+    else
+    {
       REQUIRE(query == nullptr);
     }
   }
 }
 
-TEST_CASE("Tree Sitter Reload Reattempts Parser And Query", "[jot]") {
+TEST_CASE("Tree Sitter Reload Reattempts Parser And Query", "[jot]")
+{
   TreeSitterManager manager;
   register_test_languages(manager);
 
   (void)manager.get_highlight_query(".cpp");
-  TreeSitterRuntimeStatus before =
-      manager.runtime_status_for_extension(".cpp");
+  TreeSitterRuntimeStatus before = manager.runtime_status_for_extension(".cpp");
 
   manager.reload();
   register_test_languages(manager);
-  TreeSitterRuntimeStatus after_reload =
-      manager.runtime_status_for_extension(".cpp");
+  TreeSitterRuntimeStatus after_reload = manager.runtime_status_for_extension(".cpp");
   REQUIRE(after_reload.has_language);
   REQUIRE_FALSE(after_reload.parser_loaded);
   REQUIRE_FALSE(after_reload.query_loaded);
 
   (void)manager.get_highlight_query(".cpp");
-  TreeSitterRuntimeStatus after_retry =
-      manager.runtime_status_for_extension(".cpp");
-  if (before.parser_loaded) {
+  TreeSitterRuntimeStatus after_retry = manager.runtime_status_for_extension(".cpp");
+  if (before.parser_loaded)
+  {
     REQUIRE(after_retry.parser_loaded);
     REQUIRE(after_retry.query_loaded);
   }

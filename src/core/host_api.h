@@ -6,7 +6,8 @@
 
 class Editor;
 
-struct HostBufferInfo {
+struct HostBufferInfo
+{
   int index;
   std::string filepath;
   bool modified;
@@ -14,7 +15,8 @@ struct HostBufferInfo {
   bool preview;
 };
 
-struct HostPaneInfo {
+struct HostPaneInfo
+{
   int index;
   int buffer_id;
   int x;
@@ -24,7 +26,8 @@ struct HostPaneInfo {
   bool focused;
 };
 
-struct HostLayoutInfo {
+struct HostLayoutInfo
+{
   int width;
   int height;
   bool sidebar_visible;
@@ -34,9 +37,12 @@ struct HostLayoutInfo {
   int terminal_height;
 };
 
-class HostCoreAPI {
+class HostCoreAPI
+{
 public:
-  explicit HostCoreAPI(Editor &editor) : editor(editor) {}
+  explicit HostCoreAPI(Editor &editor) : editor(editor)
+  {
+  }
 
   std::string current_file() const;
   std::vector<HostBufferInfo> list_buffers() const;
@@ -55,9 +61,12 @@ private:
   Editor &editor;
 };
 
-class HostRenderAPI {
+class HostRenderAPI
+{
 public:
-  explicit HostRenderAPI(Editor &editor) : editor(editor) {}
+  explicit HostRenderAPI(Editor &editor) : editor(editor)
+  {
+  }
 
   HostLayoutInfo layout() const;
   std::vector<HostPaneInfo> list_panes() const;
@@ -72,9 +81,12 @@ private:
   Editor &editor;
 };
 
-class HostIOAPI {
+class HostIOAPI
+{
 public:
-  explicit HostIOAPI(Editor &editor) : editor(editor) {}
+  explicit HostIOAPI(Editor &editor) : editor(editor)
+  {
+  }
 
   void open_file(const std::string &path);
   void save_current_file();
@@ -84,8 +96,7 @@ public:
   void toggle_sidebar();
   void toggle_terminal();
   void execute_command(const std::string &command);
-  void run_job(const std::string &command, const std::string &cwd,
-               const std::string &label);
+  void run_job(const std::string &command, const std::string &cwd, const std::string &label);
   void show_plugin_picker(const std::string &title,
                           const std::string &items_callback,
                           const std::string &select_callback);
@@ -95,7 +106,8 @@ private:
   Editor &editor;
 };
 
-class EditorHostAPI {
+class EditorHostAPI
+{
 public:
   explicit EditorHostAPI(Editor &editor);
 

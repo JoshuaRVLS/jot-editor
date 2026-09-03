@@ -13,58 +13,80 @@
 #include <unistd.h>
 #endif
 
-namespace {
+namespace
+{
 #ifdef _WIN32
-using JotFileOffset = __int64;
-int jot_open_readonly(const char *path) { return _open(path, _O_RDONLY | _O_BINARY); }
-int jot_close(int fd) { return _close(fd); }
-intptr_t jot_read(int fd, void *buffer, unsigned int size) {
-  return _read(fd, buffer, size);
-}
-JotFileOffset jot_seek(int fd, JotFileOffset offset, int origin) {
-  return _lseeki64(fd, offset, origin);
-}
+  using JotFileOffset = __int64;
+  int jot_open_readonly(const char *path)
+  {
+    return _open(path, _O_RDONLY | _O_BINARY);
+  }
+  int jot_close(int fd)
+  {
+    return _close(fd);
+  }
+  intptr_t jot_read(int fd, void *buffer, unsigned int size)
+  {
+    return _read(fd, buffer, size);
+  }
+  JotFileOffset jot_seek(int fd, JotFileOffset offset, int origin)
+  {
+    return _lseeki64(fd, offset, origin);
+  }
 #else
-using JotFileOffset = off_t;
-int jot_open_readonly(const char *path) { return ::open(path, O_RDONLY); }
-int jot_close(int fd) { return ::close(fd); }
-ssize_t jot_read(int fd, void *buffer, size_t size) {
-  return ::read(fd, buffer, size);
-}
-JotFileOffset jot_seek(int fd, JotFileOffset offset, int origin) {
-  return lseek(fd, offset, origin);
-}
+  using JotFileOffset = off_t;
+  int jot_open_readonly(const char *path)
+  {
+    return ::open(path, O_RDONLY);
+  }
+  int jot_close(int fd)
+  {
+    return ::close(fd);
+  }
+  ssize_t jot_read(int fd, void *buffer, size_t size)
+  {
+    return ::read(fd, buffer, size);
+  }
+  JotFileOffset jot_seek(int fd, JotFileOffset offset, int origin)
+  {
+    return lseek(fd, offset, origin);
+  }
 #endif
 } // namespace
 
-std::unique_ptr<LazyLineProvider>
-LazyLineProvider::open(const std::string &filepath) {
+std::unique_ptr<LazyLineProvider> LazyLineProvider::open(const std::string &filepath)
+{
   int fd = jot_open_readonly(filepath.c_str());
   if (fd < 0)
     return nullptr;
 
-  auto provider =
-      std::unique_ptr<LazyLineProvider>(new LazyLineProvider(filepath, fd));
-  if (!provider->build_index()) {
+  auto provider = std::unique_ptr<LazyLineProvider>(new LazyLineProvider(filepath, fd));
+  if (!provider->build_index())
+  {
     return nullptr;
   }
   return provider;
 }
 
 LazyLineProvider::LazyLineProvider(const std::string &filepath, int fd)
-    : filepath_(filepath), fd_(fd) {}
+    : filepath_(filepath), fd_(fd)
+{
+}
 
-LazyLineProvider::~LazyLineProvider() {
+LazyLineProvider::~LazyLineProvider()
+{
   if (fd_ >= 0)
     jot_close(fd_);
 }
 
-bool LazyLineProvider::build_index() {
+bool LazyLineProvider::build_index()
+{
   if (fd_ < 0)
     return false;
 
   JotFileOffset file_size = jot_seek(fd_, 0, SEEK_END);
-  if (file_size < 0) {
+  if (file_size < 0)
+  {
     jot_seek(fd_, 0, SEEK_SET);
     file_size = 0;
   }
@@ -77,22 +99,30 @@ bool LazyLineProvider::build_index() {
 
   sparse_index_.push_back({0, 0});
 
-  while (true) {
+  while (true)
+  {
     auto n = jot_read(fd_, buf.data(), (unsigned int)buf.size());
     if (n <= 0)
       break;
 
-    for (std::int64_t i = 0; i < n; i++) {
-      if (buf[i] == '\n') {
+    for (std::int64_t i = 0; i < n; i++)
+    {
+      if (buf[i] == '\n')
+      {
         line_number++;
-        if ((line_number % kIndexInterval) == 0) {
+        if ((line_number % kIndexInterval) == 0)
+        {
           sparse_index_.push_back({line_number, byte_offset + i + 1});
         }
         line_start = true;
-      } else if (line_start && buf[i] == '\r') {
+      }
+      else if (line_start && buf[i] == '\r')
+      {
         byte_offset++;
         continue;
-      } else {
+      }
+      else
+      {
         line_start = false;
       }
     }
@@ -109,8 +139,10 @@ bool LazyLineProvider::build_index() {
   return true;
 }
 
-const std::string &LazyLineProvider::get_line(int n) const {
-  if (n < 0 || n >= (int)total_lines_) {
+const std::string &LazyLineProvider::get_line(int n) const
+{
+  if (n < 0 || n >= (int)total_lines_)
+  {
     static const std::string empty;
     return empty;
   }
@@ -119,13 +151,15 @@ const std::string &LazyLineProvider::get_line(int n) const {
   int offset = n - chunk_id * kChunkSize;
 
   auto edit_it = edited_chunks_.find(chunk_id);
-  if (edit_it != edited_chunks_.end()) {
+  if (edit_it != edited_chunks_.end())
+  {
     if (offset >= 0 && offset < (int)edit_it->second.lines.size())
       return edit_it->second.lines[offset];
   }
 
   auto cache_it = chunk_cache_.find(chunk_id);
-  if (cache_it != chunk_cache_.end()) {
+  if (cache_it != chunk_cache_.end())
+  {
     if (offset >= 0 && offset < (int)cache_it->second.lines.size())
       return cache_it->second.lines[offset];
   }
@@ -138,8 +172,10 @@ const std::string &LazyLineProvider::get_line(int n) const {
   return empty;
 }
 
-std::string &LazyLineProvider::get_line_mutable(int n) {
-  if (n < 0 || n >= (int)total_lines_) {
+std::string &LazyLineProvider::get_line_mutable(int n)
+{
+  if (n < 0 || n >= (int)total_lines_)
+  {
     static std::string empty;
     return empty;
   }
@@ -148,27 +184,31 @@ std::string &LazyLineProvider::get_line_mutable(int n) {
   int offset = n - chunk_id * kChunkSize;
 
   Chunk &chunk = ensure_chunk(chunk_id);
-  if (offset < 0 || offset >= (int)chunk.lines.size()) {
+  if (offset < 0 || offset >= (int)chunk.lines.size())
+  {
     static std::string empty;
     return empty;
   }
   return chunk.lines[offset];
 }
 
-char LazyLineProvider::get_char(int line, int col) const {
+char LazyLineProvider::get_char(int line, int col) const
+{
   const std::string &l = get_line(line);
   if (col < 0 || col >= (int)l.size())
     return ' ';
   return l[col];
 }
 
-auto LazyLineProvider::ensure_chunk(int chunk_id) -> Chunk & {
+auto LazyLineProvider::ensure_chunk(int chunk_id) -> Chunk &
+{
   auto edit_it = edited_chunks_.find(chunk_id);
   if (edit_it != edited_chunks_.end())
     return edit_it->second;
 
   auto cache_it = chunk_cache_.find(chunk_id);
-  if (cache_it != chunk_cache_.end()) {
+  if (cache_it != chunk_cache_.end())
+  {
     Chunk chunk = std::move(cache_it->second);
     chunk.is_edited = true;
     chunk_cache_.erase(cache_it);
@@ -183,7 +223,8 @@ auto LazyLineProvider::ensure_chunk(int chunk_id) -> Chunk & {
   return it->second;
 }
 
-auto LazyLineProvider::load_chunk(int chunk_id) -> Chunk & {
+auto LazyLineProvider::load_chunk(int chunk_id) -> Chunk &
+{
   int start_line = chunk_id * kChunkSize;
   int end_line = std::min(start_line + kChunkSize, (int)total_lines_);
 
@@ -203,26 +244,32 @@ auto LazyLineProvider::load_chunk(int chunk_id) -> Chunk & {
   std::string current_line;
   int current_line_num = seek_line;
 
-  while (current_line_num < end_line) {
+  while (current_line_num < end_line)
+  {
     auto n = jot_read(fd_, buf.data(), (unsigned int)buf.size());
     if (n <= 0)
       break;
 
-    for (std::int64_t i = 0; i < n && current_line_num < end_line; i++) {
-      if (buf[i] == '\n') {
+    for (std::int64_t i = 0; i < n && current_line_num < end_line; i++)
+    {
+      if (buf[i] == '\n')
+      {
         if (!current_line.empty() && current_line.back() == '\r')
           current_line.pop_back();
         if (current_line_num >= start_line)
           chunk.lines.push_back(std::move(current_line));
         current_line.clear();
         current_line_num++;
-      } else {
+      }
+      else
+      {
         current_line += buf[i];
       }
     }
   }
 
-  if (!current_line.empty()) {
+  if (!current_line.empty())
+  {
     if (!current_line.empty() && current_line.back() == '\r')
       current_line.pop_back();
     if (current_line_num >= start_line)
@@ -237,10 +284,13 @@ auto LazyLineProvider::load_chunk(int chunk_id) -> Chunk & {
   return it->second;
 }
 
-void LazyLineProvider::evict_lru() {
-  while ((int)chunk_cache_.size() >= kMaxCachedChunks) {
+void LazyLineProvider::evict_lru()
+{
+  while ((int)chunk_cache_.size() >= kMaxCachedChunks)
+  {
     auto it = chunk_cache_.begin();
-    if (it != chunk_cache_.end() && it->second.is_edited) {
+    if (it != chunk_cache_.end() && it->second.is_edited)
+    {
       ++it;
       if (it == chunk_cache_.end())
         it = chunk_cache_.begin();
@@ -251,17 +301,19 @@ void LazyLineProvider::evict_lru() {
   }
 }
 
-void LazyLineProvider::invalidate_chunk(int chunk_id) {
+void LazyLineProvider::invalidate_chunk(int chunk_id)
+{
   chunk_cache_.erase(chunk_id);
   edited_chunks_.erase(chunk_id);
 }
 
-void LazyLineProvider::insert_line(int after, const std::string &line) {
+void LazyLineProvider::insert_line(int after, const std::string &line)
+{
   insert_lines(after, {line});
 }
 
-void LazyLineProvider::insert_lines(int after,
-                                    const std::vector<std::string> &lines) {
+void LazyLineProvider::insert_lines(int after, const std::vector<std::string> &lines)
+{
   int affected_chunk = after / kChunkSize;
   if (affected_chunk < 0)
     affected_chunk = 0;
@@ -274,22 +326,24 @@ void LazyLineProvider::insert_lines(int after,
     line_in_chunk = 0;
   if (line_in_chunk > (int)chunk.lines.size())
     line_in_chunk = (int)chunk.lines.size();
-  chunk.lines.insert(chunk.lines.begin() + line_in_chunk, lines.begin(),
-                     lines.end());
+  chunk.lines.insert(chunk.lines.begin() + line_in_chunk, lines.begin(), lines.end());
   chunk.is_edited = true;
 
-  for (int i = affected_chunk + 1;; i++) {
+  for (int i = affected_chunk + 1;; i++)
+  {
     auto cache = chunk_cache_.find(i);
     auto edit = edited_chunks_.find(i);
     if (cache == chunk_cache_.end() && edit == edited_chunks_.end())
       break;
-    if (cache != chunk_cache_.end()) {
+    if (cache != chunk_cache_.end())
+    {
       cache->second.chunk_id++;
       auto node = chunk_cache_.extract(cache);
       node.key()++;
       chunk_cache_.insert(std::move(node));
     }
-    if (edit != edited_chunks_.end()) {
+    if (edit != edited_chunks_.end())
+    {
       edit->second.chunk_id++;
       auto node = edited_chunks_.extract(edit);
       node.key()++;
@@ -300,9 +354,13 @@ void LazyLineProvider::insert_lines(int after,
   total_lines_ += lines.size();
 }
 
-void LazyLineProvider::delete_line(int n) { delete_lines(n, n); }
+void LazyLineProvider::delete_line(int n)
+{
+  delete_lines(n, n);
+}
 
-void LazyLineProvider::delete_lines(int start, int end) {
+void LazyLineProvider::delete_lines(int start, int end)
+{
   if (start > end)
     std::swap(start, end);
   if (start < 0)
@@ -316,7 +374,8 @@ void LazyLineProvider::delete_lines(int start, int end) {
   int end_chunk = end / kChunkSize;
   int start_in_chunk = start - start_chunk * kChunkSize;
 
-  if (start_chunk == end_chunk) {
+  if (start_chunk == end_chunk)
+  {
     Chunk &chunk = ensure_chunk(start_chunk);
     if (start_in_chunk < 0)
       start_in_chunk = 0;
@@ -330,16 +389,18 @@ void LazyLineProvider::delete_lines(int start, int end) {
     chunk.lines.erase(chunk.lines.begin() + start_in_chunk,
                       chunk.lines.begin() + start_in_chunk + remove);
     chunk.is_edited = true;
-  } else {
+  }
+  else
+  {
     Chunk &first = ensure_chunk(start_chunk);
     if (start_in_chunk < 0)
       start_in_chunk = 0;
     if (start_in_chunk > (int)first.lines.size())
       start_in_chunk = (int)first.lines.size();
     int remove_count = (int)first.lines.size() - start_in_chunk;
-    if (remove_count > 0) {
-      first.lines.erase(first.lines.begin() + start_in_chunk,
-                        first.lines.end());
+    if (remove_count > 0)
+    {
+      first.lines.erase(first.lines.begin() + start_in_chunk, first.lines.end());
     }
 
     Chunk &last = ensure_chunk(end_chunk);
@@ -348,9 +409,9 @@ void LazyLineProvider::delete_lines(int start, int end) {
       end_in_chunk = 0;
     if (end_in_chunk > (int)last.lines.size())
       end_in_chunk = (int)last.lines.size();
-    if (end_in_chunk < (int)last.lines.size()) {
-      first.lines.insert(first.lines.end(),
-                         last.lines.begin() + end_in_chunk, last.lines.end());
+    if (end_in_chunk < (int)last.lines.size())
+    {
+      first.lines.insert(first.lines.end(), last.lines.begin() + end_in_chunk, last.lines.end());
     }
 
     invalidate_chunk(end_chunk);
@@ -362,18 +423,21 @@ void LazyLineProvider::delete_lines(int start, int end) {
   int removed = end - start + 1;
   total_lines_ = total_lines_ > (size_t)removed ? total_lines_ - removed : 1;
 
-  for (int i = end_chunk + 1;; i++) {
+  for (int i = end_chunk + 1;; i++)
+  {
     auto cache = chunk_cache_.find(i);
     auto edit = edited_chunks_.find(i);
     if (cache == chunk_cache_.end() && edit == edited_chunks_.end())
       break;
-    if (cache != chunk_cache_.end()) {
+    if (cache != chunk_cache_.end())
+    {
       cache->second.chunk_id--;
       auto node = chunk_cache_.extract(cache);
       node.key()--;
       chunk_cache_.insert(std::move(node));
     }
-    if (edit != edited_chunks_.end()) {
+    if (edit != edited_chunks_.end())
+    {
       edit->second.chunk_id--;
       auto node = edited_chunks_.extract(edit);
       node.key()--;
@@ -382,29 +446,32 @@ void LazyLineProvider::delete_lines(int start, int end) {
   }
 }
 
-void LazyLineProvider::append_line(const std::string &line) {
-  int last_chunk = (total_lines_ > 0) ? ((int)total_lines_ - 1) / kChunkSize
-                                      : 0;
+void LazyLineProvider::append_line(const std::string &line)
+{
+  int last_chunk = (total_lines_ > 0) ? ((int)total_lines_ - 1) / kChunkSize : 0;
   Chunk &chunk = ensure_chunk(last_chunk);
   chunk.lines.push_back(line);
   chunk.is_edited = true;
   total_lines_++;
 }
 
-void LazyLineProvider::clear() {
+void LazyLineProvider::clear()
+{
   total_lines_ = 1;
   chunk_cache_.clear();
   edited_chunks_.clear();
   edited_chunks_[0] = Chunk{0, {""}, true, 0, 0};
 }
 
-void LazyLineProvider::set_all_lines(const std::vector<std::string> &lines) {
+void LazyLineProvider::set_all_lines(const std::vector<std::string> &lines)
+{
   clear();
   total_lines_ = lines.empty() ? 1 : lines.size();
   edited_chunks_.clear();
   chunk_cache_.clear();
 
-  for (size_t i = 0; i < lines.size(); i += kChunkSize) {
+  for (size_t i = 0; i < lines.size(); i += kChunkSize)
+  {
     int chunk_id = i / kChunkSize;
     Chunk chunk;
     chunk.chunk_id = chunk_id;
@@ -417,12 +484,14 @@ void LazyLineProvider::set_all_lines(const std::vector<std::string> &lines) {
     edited_chunks_[0] = Chunk{0, {""}, true, 0, 0};
 }
 
-void LazyLineProvider::swap_all_lines(std::vector<std::string> &out) {
+void LazyLineProvider::swap_all_lines(std::vector<std::string> &out)
+{
   out = copy_all_lines();
   clear();
 }
 
-std::vector<std::string> LazyLineProvider::copy_all_lines() const {
+std::vector<std::string> LazyLineProvider::copy_all_lines() const
+{
   std::vector<std::string> result;
   result.reserve(total_lines_);
   for (size_t i = 0; i < total_lines_; i++)
@@ -430,7 +499,8 @@ std::vector<std::string> LazyLineProvider::copy_all_lines() const {
   return result;
 }
 
-void LazyLineProvider::move_lines(int start, int end, int dest) {
+void LazyLineProvider::move_lines(int start, int end, int dest)
+{
   if (start > end)
     std::swap(start, end);
 
@@ -447,25 +517,35 @@ void LazyLineProvider::move_lines(int start, int end, int dest) {
   insert_lines(adjusted_dest - 1, moved);
 }
 
-void LazyLineProvider::replace_lines(int start, int count,
-                                     const std::vector<std::string> &new_lines) {
-  if (count < 0) count = 0;
-  if (start < 0) start = 0;
+void LazyLineProvider::replace_lines(int start,
+                                     int count,
+                                     const std::vector<std::string> &new_lines)
+{
+  if (count < 0)
+    count = 0;
+  if (start < 0)
+    start = 0;
   int curr_total = (int)total_lines_;
-  if (start > curr_total) start = curr_total;
-  if (start + count > curr_total) {
+  if (start > curr_total)
+    start = curr_total;
+  if (start + count > curr_total)
+  {
     count = curr_total - start;
   }
-  if (count > 0) {
+  if (count > 0)
+  {
     delete_lines(start, start + count - 1);
   }
-  if (!new_lines.empty()) {
+  if (!new_lines.empty())
+  {
     insert_lines(start - 1, new_lines);
   }
 }
 
-void LazyLineProvider::for_each_line(LineVisitor fn) {
-  for (size_t i = 0; i < total_lines_; i++) {
+void LazyLineProvider::for_each_line(LineVisitor fn)
+{
+  for (size_t i = 0; i < total_lines_; i++)
+  {
     int chunk_id = (int)i / kChunkSize;
     int line_in_chunk = (int)i - chunk_id * kChunkSize;
     fn((int)i, ensure_chunk(chunk_id).lines[line_in_chunk]);
@@ -473,19 +553,25 @@ void LazyLineProvider::for_each_line(LineVisitor fn) {
   }
 }
 
-void LazyLineProvider::scroll_hint(int center_line) {
+void LazyLineProvider::scroll_hint(int center_line)
+{
   int center_chunk = center_line / kChunkSize;
-  for (int i = center_chunk - 1; i <= center_chunk + 2; i++) {
+  for (int i = center_chunk - 1; i <= center_chunk + 2; i++)
+  {
     if (i < 0 || i >= (int)((total_lines_ + kChunkSize - 1) / kChunkSize))
       continue;
-    try {
+    try
+    {
       load_chunk(i);
-    } catch (...) {
+    }
+    catch (...)
+    {
     }
   }
 }
 
-bool LazyLineProvider::save_to(const std::string &filepath) {
+bool LazyLineProvider::save_to(const std::string &filepath)
+{
   std::ofstream out(filepath);
   if (!out.is_open())
     return false;
@@ -496,7 +582,8 @@ bool LazyLineProvider::save_to(const std::string &filepath) {
   return out.good();
 }
 
-size_t LazyLineProvider::memory_usage() const {
+size_t LazyLineProvider::memory_usage() const
+{
   size_t total = sizeof(*this);
   total += sparse_index_.size() * sizeof(IndexEntry);
   for (const auto &[_, chunk] : edited_chunks_)

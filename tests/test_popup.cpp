@@ -1,7 +1,8 @@
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>
 
-TEST_CASE("UI dim scrim preserves popup grid content", "[jot]") {
+TEST_CASE("UI dim scrim preserves popup grid content", "[jot]")
+{
   UI ui(nullptr);
   ui.draw_text(1, 1, "base", 7, 0);
   ui.dim_rect({0, 0, 8, 4});

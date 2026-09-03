@@ -1,81 +1,111 @@
-#include "tree_sitter/manager.h"
 #include "tree_sitter/install.h"
-#include <catch2/catch_test_macros.hpp>
+#include "tree_sitter/manager.h"
 #include <algorithm>
+#include <catch2/catch_test_macros.hpp>
 #include <string>
 #include <vector>
 
-extern "C" {
-#include <lua.h>
+extern "C"
+{
 #include <lauxlib.h>
+#include <lua.h>
 #include <lualib.h>
 }
 
-namespace {
-// Native bindings that drive a real TreeSitterManager from the real bundled
-// init.lua (no Editor needed), mirroring lua_bridge/api_treesitter.cpp.
-TreeSitterManager &boot_mgr(lua_State *L) {
-  return *static_cast<TreeSitterManager *>(lua_touserdata(L, lua_upvalueindex(1)));
-}
-
-int boot_register_language(lua_State *L) {
-  luaL_checktype(L, 2, LUA_TTABLE);
-  std::vector<std::string> extensions;
-  for (lua_Integer i = 1;; ++i) {
-    lua_rawgeti(L, 2, i);
-    if (lua_isnil(L, -1)) { lua_pop(L, 1); break; }
-    extensions.emplace_back(luaL_checkstring(L, -1));
-    lua_pop(L, 1);
+namespace
+{
+  // Native bindings that drive a real TreeSitterManager from the real bundled
+  // init.lua (no Editor needed), mirroring lua_bridge/api_treesitter.cpp.
+  TreeSitterManager &boot_mgr(lua_State *L)
+  {
+    return *static_cast<TreeSitterManager *>(lua_touserdata(L, lua_upvalueindex(1)));
   }
-  std::vector<std::string> libraries;
-  if (lua_istable(L, 7)) {
-    for (lua_Integer i = 1;; ++i) {
-      lua_rawgeti(L, 7, i);
-      if (lua_isnil(L, -1)) { lua_pop(L, 1); break; }
-      libraries.emplace_back(luaL_checkstring(L, -1));
+
+  int boot_register_language(lua_State *L)
+  {
+    luaL_checktype(L, 2, LUA_TTABLE);
+    std::vector<std::string> extensions;
+    for (lua_Integer i = 1;; ++i)
+    {
+      lua_rawgeti(L, 2, i);
+      if (lua_isnil(L, -1))
+      {
+        lua_pop(L, 1);
+        break;
+      }
+      extensions.emplace_back(luaL_checkstring(L, -1));
       lua_pop(L, 1);
     }
+    std::vector<std::string> libraries;
+    if (lua_istable(L, 7))
+    {
+      for (lua_Integer i = 1;; ++i)
+      {
+        lua_rawgeti(L, 7, i);
+        if (lua_isnil(L, -1))
+        {
+          lua_pop(L, 1);
+          break;
+        }
+        libraries.emplace_back(luaL_checkstring(L, -1));
+        lua_pop(L, 1);
+      }
+    }
+    bool ok = boot_mgr(L).register_language(luaL_checkstring(L, 1),
+                                            extensions,
+                                            luaL_optstring(L, 3, ""),
+                                            luaL_optstring(L, 4, ""),
+                                            luaL_optstring(L, 5, ""),
+                                            luaL_optstring(L, 6, ""),
+                                            libraries,
+                                            luaL_optstring(L, 8, ""));
+    lua_pushboolean(L, ok);
+    return 1;
   }
-  bool ok = boot_mgr(L).register_language(
-      luaL_checkstring(L, 1), extensions, luaL_optstring(L, 3, ""),
-      luaL_optstring(L, 4, ""), luaL_optstring(L, 5, ""),
-      luaL_optstring(L, 6, ""), libraries, luaL_optstring(L, 8, ""));
-  lua_pushboolean(L, ok);
-  return 1;
-}
 
-int boot_disable_language(lua_State *L) {
-  boot_mgr(L).disable_language(luaL_checkstring(L, 1));
-  return 0;
-}
-
-int boot_language_for_extension(lua_State *L) {
-  lua_pushstring(L, boot_mgr(L).language_for_extension(luaL_optstring(L, 1, "")).c_str());
-  return 1;
-}
-
-int boot_status(lua_State *L) { lua_newtable(L); return 1; }
-int boot_void(lua_State *) { return 0; }
-
-int boot_set_query(lua_State *L) {
-  std::string error;
-  if (!boot_mgr(L).set_query_source(luaL_checkstring(L, 1),
-                                    luaL_checkstring(L, 2), error)) {
-    return luaL_error(L, "%s", error.c_str()), 0;
+  int boot_disable_language(lua_State *L)
+  {
+    boot_mgr(L).disable_language(luaL_checkstring(L, 1));
+    return 0;
   }
-  lua_pushboolean(L, 1);
-  return 1;
-}
 
-void boot_bind(lua_State *L, TreeSitterManager *manager, const char *name,
-               lua_CFunction fn) {
-  lua_pushlightuserdata(L, manager);
-  lua_pushcclosure(L, fn, 1);
-  lua_setfield(L, -2, name);
-}
+  int boot_language_for_extension(lua_State *L)
+  {
+    lua_pushstring(L, boot_mgr(L).language_for_extension(luaL_optstring(L, 1, "")).c_str());
+    return 1;
+  }
+
+  int boot_status(lua_State *L)
+  {
+    lua_newtable(L);
+    return 1;
+  }
+  int boot_void(lua_State *)
+  {
+    return 0;
+  }
+
+  int boot_set_query(lua_State *L)
+  {
+    std::string error;
+    if (!boot_mgr(L).set_query_source(luaL_checkstring(L, 1), luaL_checkstring(L, 2), error))
+    {
+      return luaL_error(L, "%s", error.c_str()), 0;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+  }
+
+  void boot_bind(lua_State *L, TreeSitterManager *manager, const char *name, lua_CFunction fn)
+  {
+    lua_pushlightuserdata(L, manager);
+    lua_pushcclosure(L, fn, 1);
+    lua_setfield(L, -2, name);
+  }
 } // namespace
 
-TEST_CASE("Real Lua runtime boot keeps every registry language registered") {
+TEST_CASE("Real Lua runtime boot keeps every registry language registered")
+{
   TreeSitterManager manager;
   lua_State *L = luaL_newstate();
   REQUIRE(L != nullptr);
@@ -107,9 +137,9 @@ TEST_CASE("Real Lua runtime boot keeps every registry language registered") {
   lua_setfield(L, -2, "treesitter");
   lua_setglobal(L, "jot");
 
-  std::string script =
-      "local f,e=loadfile('" JOT_LUA_SOURCE_DIR "/treesitter/init.lua" "'); "
-      "assert(f,e); assert(f())";
+  std::string script = "local f,e=loadfile('" JOT_LUA_SOURCE_DIR "/treesitter/init.lua"
+                       "'); "
+                       "assert(f,e); assert(f())";
   int result = luaL_dostring(L, script.c_str());
   INFO(lua_tostring(L, -1));
   REQUIRE(result == LUA_OK);
@@ -119,7 +149,8 @@ TEST_CASE("Real Lua runtime boot keeps every registry language registered") {
   // disables that language and :tsinstall/:tsstatus break.
   const auto names = manager.language_names();
   INFO("registered languages: " << names.size());
-  for (const auto &name : names) INFO("  " << name);
+  for (const auto &name : names)
+    INFO("  " << name);
   REQUIRE(names.size() == 62);
   REQUIRE(std::find(names.begin(), names.end(), "cpp") != names.end());
 
@@ -130,7 +161,8 @@ TEST_CASE("Real Lua runtime boot keeps every registry language registered") {
   lua_close(L);
 }
 
-TEST_CASE("Lua Tree-sitter registry maps extensions") {
+TEST_CASE("Lua Tree-sitter registry maps extensions")
+{
   TreeSitterManager manager;
   manager.register_language("cpp", {".cpp"});
   REQUIRE(manager.language_for_extension(".cpp") == "cpp");
@@ -140,13 +172,19 @@ TEST_CASE("Lua Tree-sitter registry maps extensions") {
   REQUIRE(manager.language_for_extension(".test") == "test_language");
 }
 
-TEST_CASE("Tree-sitter install metadata follows Lua language registration") {
+TEST_CASE("Tree-sitter install metadata follows Lua language registration")
+{
   TreeSitterInstall::clear_languages();
   {
     TreeSitterManager manager;
-    manager.register_language(
-        "zig", {".zig"}, "", "https://github.com/tree-sitter-grammars/tree-sitter-zig",
-        "", "tree_sitter_zig", {"libtree-sitter-zig.so"}, "");
+    manager.register_language("zig",
+                              {".zig"},
+                              "",
+                              "https://github.com/tree-sitter-grammars/tree-sitter-zig",
+                              "",
+                              "tree_sitter_zig",
+                              {"libtree-sitter-zig.so"},
+                              "");
     const auto &languages = TreeSitterInstall::supported_languages();
     REQUIRE(std::find(languages.begin(), languages.end(), "zig") != languages.end());
     auto command = TreeSitterInstall::command_for_language("zig");
@@ -157,7 +195,8 @@ TEST_CASE("Tree-sitter install metadata follows Lua language registration") {
   REQUIRE(TreeSitterInstall::supported_languages().empty());
 }
 
-TEST_CASE("Lua Tree-sitter handles reject invalid lifecycle operations") {
+TEST_CASE("Lua Tree-sitter handles reject invalid lifecycle operations")
+{
   TreeSitterManager manager;
   REQUIRE_FALSE(manager.delete_parser_handle(42));
   REQUIRE_FALSE(manager.delete_tree_handle(42));
@@ -168,7 +207,8 @@ TEST_CASE("Lua Tree-sitter handles reject invalid lifecycle operations") {
   REQUIRE(manager.parse_handle(42, "text") == 0);
 
 #ifdef JOT_TREESITTER
-  if (manager.status(".cpp").parser_loaded) {
+  if (manager.status(".cpp").parser_loaded)
+  {
     TreeSitterHandle parser = manager.create_parser_handle(".cpp");
     REQUIRE(parser != 0);
     TreeSitterHandle tree = manager.parse_handle(parser, "int value = 1;");
@@ -185,14 +225,16 @@ TEST_CASE("Lua Tree-sitter handles reject invalid lifecycle operations") {
 #endif
 }
 
-TEST_CASE("Lua Tree-sitter registration accepts query overrides") {
+TEST_CASE("Lua Tree-sitter registration accepts query overrides")
+{
   TreeSitterManager manager;
   REQUIRE(manager.register_language("example", {".example"}, ""));
   REQUIRE(manager.status(".example").language_id == "example");
   REQUIRE(manager.status("example").language_id == "example");
 }
 
-TEST_CASE("Lua query source is accepted before a parser is installed") {
+TEST_CASE("Lua query source is accepted before a parser is installed")
+{
   TreeSitterManager manager;
   REQUIRE(manager.register_language("cpp", {".cpp"}, ""));
   std::string error;

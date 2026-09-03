@@ -1,8 +1,8 @@
 #include "tools/debugger/client.h"
 
 #include <algorithm>
-#include <cerrno>
 #include <cctype>
+#include <cerrno>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -18,9 +18,9 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
-#include <windows.h>
 #include <fcntl.h>
 #include <io.h>
+#include <windows.h>
 using ssize_t = intptr_t;
 #define read _read
 #define write _write
@@ -35,655 +35,798 @@ using ssize_t = intptr_t;
 
 namespace fs = std::filesystem;
 
-namespace {
-bool set_non_blocking(int fd) {
+namespace
+{
+  bool set_non_blocking(int fd)
+  {
 #ifdef _WIN32
-  (void)fd;
-  return true;
+    (void)fd;
+    return true;
 #else
-  int flags = fcntl(fd, F_GETFL, 0);
-  if (flags < 0) {
-    return false;
-  }
-  return fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0;
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0)
+    {
+      return false;
+    }
+    return fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0;
 #endif
-}
+  }
 
 #ifdef _WIN32
-std::string windows_error_message(DWORD code) {
-  char *text = nullptr;
-  DWORD len = FormatMessageA(
-      FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-          FORMAT_MESSAGE_IGNORE_INSERTS,
-      nullptr, code, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-      reinterpret_cast<LPSTR>(&text), 0, nullptr);
-  std::string message = len && text ? std::string(text, len)
-                                    : "Windows error " + std::to_string(code);
-  if (text) {
-    LocalFree(text);
+  std::string windows_error_message(DWORD code)
+  {
+    char *text = nullptr;
+    DWORD len = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM
+                                   | FORMAT_MESSAGE_IGNORE_INSERTS,
+                               nullptr,
+                               code,
+                               MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                               reinterpret_cast<LPSTR>(&text),
+                               0,
+                               nullptr);
+    std::string message =
+        len && text ? std::string(text, len) : "Windows error " + std::to_string(code);
+    if (text)
+    {
+      LocalFree(text);
+    }
+    while (!message.empty()
+           && (message.back() == '\r' || message.back() == '\n' || message.back() == ' '))
+    {
+      message.pop_back();
+    }
+    return message;
   }
-  while (!message.empty() &&
-         (message.back() == '\r' || message.back() == '\n' ||
-          message.back() == ' ')) {
-    message.pop_back();
-  }
-  return message;
-}
 
-std::string quote_windows_arg(const std::string &arg) {
-  if (arg.empty()) {
-    return "\"\"";
-  }
-  bool needs_quotes = false;
-  for (char c : arg) {
-    if (std::isspace((unsigned char)c) || c == '"') {
-      needs_quotes = true;
-      break;
+  std::string quote_windows_arg(const std::string &arg)
+  {
+    if (arg.empty())
+    {
+      return "\"\"";
     }
-  }
-  if (!needs_quotes) {
-    return arg;
-  }
-  std::string out = "\"";
-  int backslashes = 0;
-  for (char c : arg) {
-    if (c == '\\') {
-      backslashes++;
-      continue;
+    bool needs_quotes = false;
+    for (char c : arg)
+    {
+      if (std::isspace((unsigned char)c) || c == '"')
+      {
+        needs_quotes = true;
+        break;
+      }
     }
-    if (c == '"') {
-      out.append((size_t)(backslashes * 2 + 1), '\\');
-      out.push_back(c);
+    if (!needs_quotes)
+    {
+      return arg;
+    }
+    std::string out = "\"";
+    int backslashes = 0;
+    for (char c : arg)
+    {
+      if (c == '\\')
+      {
+        backslashes++;
+        continue;
+      }
+      if (c == '"')
+      {
+        out.append((size_t)(backslashes * 2 + 1), '\\');
+        out.push_back(c);
+        backslashes = 0;
+        continue;
+      }
+      out.append((size_t)backslashes, '\\');
       backslashes = 0;
-      continue;
+      out.push_back(c);
     }
-    out.append((size_t)backslashes, '\\');
-    backslashes = 0;
-    out.push_back(c);
+    out.append((size_t)(backslashes * 2), '\\');
+    out.push_back('"');
+    return out;
   }
-  out.append((size_t)(backslashes * 2), '\\');
-  out.push_back('"');
-  return out;
-}
 
-std::string windows_command_line(const std::vector<std::string> &argv) {
-  std::string out;
-  for (size_t i = 0; i < argv.size(); i++) {
-    if (i > 0) {
-      out.push_back(' ');
+  std::string windows_command_line(const std::vector<std::string> &argv)
+  {
+    std::string out;
+    for (size_t i = 0; i < argv.size(); i++)
+    {
+      if (i > 0)
+      {
+        out.push_back(' ');
+      }
+      out += quote_windows_arg(argv[i]);
     }
-    out += quote_windows_arg(argv[i]);
+    return out;
   }
-  return out;
-}
 
-bool fd_has_data(int fd) {
-  intptr_t os_handle = _get_osfhandle(fd);
-  if (os_handle == -1) {
-    return false;
+  bool fd_has_data(int fd)
+  {
+    intptr_t os_handle = _get_osfhandle(fd);
+    if (os_handle == -1)
+    {
+      return false;
+    }
+    DWORD available = 0;
+    if (!PeekNamedPipe(
+            reinterpret_cast<HANDLE>(os_handle), nullptr, 0, nullptr, &available, nullptr))
+    {
+      return false;
+    }
+    return available > 0;
   }
-  DWORD available = 0;
-  if (!PeekNamedPipe(reinterpret_cast<HANDLE>(os_handle), nullptr, 0, nullptr,
-                     &available, nullptr)) {
-    return false;
-  }
-  return available > 0;
-}
 #else
-bool fd_has_data(int) { return true; }
+  bool fd_has_data(int)
+  {
+    return true;
+  }
 #endif
 
-std::string debug_log_path(const std::string &name) {
-  const char *override_home = getenv("JOT_CONFIG_HOME");
-  if (override_home && *override_home) {
-    fs::path base = fs::path(override_home) / "logs";
+  std::string debug_log_path(const std::string &name)
+  {
+    const char *override_home = getenv("JOT_CONFIG_HOME");
+    if (override_home && *override_home)
+    {
+      fs::path base = fs::path(override_home) / "logs";
+      std::error_code ec;
+      fs::create_directories(base, ec);
+      std::string safe = name.empty() ? "session" : name;
+      for (char &c : safe)
+      {
+        if (!std::isalnum((unsigned char)c) && c != '-' && c != '_')
+        {
+          c = '_';
+        }
+      }
+      return (base / ("debug_" + safe + ".log")).string();
+    }
+#ifdef _WIN32
+    const char *app_data = getenv("APPDATA");
+    fs::path base = app_data && *app_data ? fs::path(app_data) / "jot" / "logs"
+                                          : fs::temp_directory_path() / "jot-logs";
+#else
+    const char *home = getenv("HOME");
+    fs::path base =
+        home ? fs::path(home) / ".config" / "jot" / "logs" : fs::temp_directory_path() / "jot-logs";
+#endif
     std::error_code ec;
     fs::create_directories(base, ec);
     std::string safe = name.empty() ? "session" : name;
-    for (char &c : safe) {
-      if (!std::isalnum((unsigned char)c) && c != '-' && c != '_') {
+    for (char &c : safe)
+    {
+      if (!std::isalnum((unsigned char)c) && c != '-' && c != '_')
+      {
         c = '_';
       }
     }
     return (base / ("debug_" + safe + ".log")).string();
   }
-#ifdef _WIN32
-  const char *app_data = getenv("APPDATA");
-  fs::path base = app_data && *app_data ? fs::path(app_data) / "jot" / "logs"
-                                       : fs::temp_directory_path() / "jot-logs";
-#else
-  const char *home = getenv("HOME");
-  fs::path base = home ? fs::path(home) / ".config" / "jot" / "logs"
-                       : fs::temp_directory_path() / "jot-logs";
-#endif
-  std::error_code ec;
-  fs::create_directories(base, ec);
-  std::string safe = name.empty() ? "session" : name;
-  for (char &c : safe) {
-    if (!std::isalnum((unsigned char)c) && c != '-' && c != '_') {
-      c = '_';
+
+  void append_log(const std::string &name, const std::string &prefix, const std::string &line)
+  {
+    std::ofstream log(debug_log_path(name), std::ios::app);
+    if (!log.is_open())
+    {
+      return;
+    }
+    log << prefix << line << "\n";
+  }
+
+  void skip_ws(const std::string &text, size_t &pos)
+  {
+    while (pos < text.size() && std::isspace(static_cast<unsigned char>(text[pos])))
+    {
+      pos++;
     }
   }
-  return (base / ("debug_" + safe + ".log")).string();
-}
 
-void append_log(const std::string &name, const std::string &prefix,
-                const std::string &line) {
-  std::ofstream log(debug_log_path(name), std::ios::app);
-  if (!log.is_open()) {
-    return;
-  }
-  log << prefix << line << "\n";
-}
-
-void skip_ws(const std::string &text, size_t &pos) {
-  while (pos < text.size() &&
-         std::isspace(static_cast<unsigned char>(text[pos]))) {
+  bool parse_json_string(const std::string &text, size_t &pos, std::string &out)
+  {
+    if (pos >= text.size() || text[pos] != '"')
+    {
+      return false;
+    }
     pos++;
-  }
-}
-
-bool parse_json_string(const std::string &text, size_t &pos, std::string &out) {
-  if (pos >= text.size() || text[pos] != '"') {
-    return false;
-  }
-  pos++;
-  out.clear();
-  while (pos < text.size()) {
-    char c = text[pos++];
-    if (c == '"') {
-      return true;
-    }
-    if (c == '\\') {
-      if (pos >= text.size()) {
-        return false;
+    out.clear();
+    while (pos < text.size())
+    {
+      char c = text[pos++];
+      if (c == '"')
+      {
+        return true;
       }
-      char esc = text[pos++];
-      switch (esc) {
-      case '"':
-      case '\\':
-      case '/':
-        out.push_back(esc);
-        break;
-      case 'b':
-        out.push_back('\b');
-        break;
-      case 'f':
-        out.push_back('\f');
-        break;
-      case 'n':
-        out.push_back('\n');
-        break;
-      case 'r':
-        out.push_back('\r');
-        break;
-      case 't':
-        out.push_back('\t');
-        break;
-      case 'u': {
-        if (pos + 4 > text.size()) {
+      if (c == '\\')
+      {
+        if (pos >= text.size())
+        {
           return false;
         }
-        unsigned int codepoint = 0;
-        for (int i = 0; i < 4; i++) {
-          char h = text[pos++];
-          codepoint <<= 4;
-          if (h >= '0' && h <= '9') {
-            codepoint |= (unsigned int)(h - '0');
-          } else if (h >= 'a' && h <= 'f') {
-            codepoint |= (unsigned int)(10 + h - 'a');
-          } else if (h >= 'A' && h <= 'F') {
-            codepoint |= (unsigned int)(10 + h - 'A');
-          } else {
+        char esc = text[pos++];
+        switch (esc)
+        {
+        case '"':
+        case '\\':
+        case '/':
+          out.push_back(esc);
+          break;
+        case 'b':
+          out.push_back('\b');
+          break;
+        case 'f':
+          out.push_back('\f');
+          break;
+        case 'n':
+          out.push_back('\n');
+          break;
+        case 'r':
+          out.push_back('\r');
+          break;
+        case 't':
+          out.push_back('\t');
+          break;
+        case 'u':
+        {
+          if (pos + 4 > text.size())
+          {
             return false;
           }
+          unsigned int codepoint = 0;
+          for (int i = 0; i < 4; i++)
+          {
+            char h = text[pos++];
+            codepoint <<= 4;
+            if (h >= '0' && h <= '9')
+            {
+              codepoint |= (unsigned int)(h - '0');
+            }
+            else if (h >= 'a' && h <= 'f')
+            {
+              codepoint |= (unsigned int)(10 + h - 'a');
+            }
+            else if (h >= 'A' && h <= 'F')
+            {
+              codepoint |= (unsigned int)(10 + h - 'A');
+            }
+            else
+            {
+              return false;
+            }
+          }
+          if (codepoint <= 0x7F)
+          {
+            out.push_back((char)codepoint);
+          }
+          else if (codepoint <= 0x7FF)
+          {
+            out.push_back((char)(0xC0 | ((codepoint >> 6) & 0x1F)));
+            out.push_back((char)(0x80 | (codepoint & 0x3F)));
+          }
+          else
+          {
+            out.push_back((char)(0xE0 | ((codepoint >> 12) & 0x0F)));
+            out.push_back((char)(0x80 | ((codepoint >> 6) & 0x3F)));
+            out.push_back((char)(0x80 | (codepoint & 0x3F)));
+          }
+          break;
         }
-        if (codepoint <= 0x7F) {
-          out.push_back((char)codepoint);
-        } else if (codepoint <= 0x7FF) {
-          out.push_back((char)(0xC0 | ((codepoint >> 6) & 0x1F)));
-          out.push_back((char)(0x80 | (codepoint & 0x3F)));
-        } else {
-          out.push_back((char)(0xE0 | ((codepoint >> 12) & 0x0F)));
-          out.push_back((char)(0x80 | ((codepoint >> 6) & 0x3F)));
-          out.push_back((char)(0x80 | (codepoint & 0x3F)));
+        default:
+          return false;
         }
-        break;
+        continue;
       }
-      default:
+      out.push_back(c);
+    }
+    return false;
+  }
+
+  bool parse_json_value(const std::string &text, size_t &pos, Dap::Value &out);
+
+  bool parse_json_array(const std::string &text, size_t &pos, Dap::Value &out)
+  {
+    if (pos >= text.size() || text[pos] != '[')
+    {
+      return false;
+    }
+    pos++;
+    out = Dap::Value{};
+    out.type = Dap::Value::Array;
+    skip_ws(text, pos);
+    if (pos < text.size() && text[pos] == ']')
+    {
+      pos++;
+      return true;
+    }
+    while (pos < text.size())
+    {
+      Dap::Value item;
+      if (!parse_json_value(text, pos, item))
+      {
         return false;
       }
-      continue;
-    }
-    out.push_back(c);
-  }
-  return false;
-}
-
-bool parse_json_value(const std::string &text, size_t &pos, Dap::Value &out);
-
-bool parse_json_array(const std::string &text, size_t &pos, Dap::Value &out) {
-  if (pos >= text.size() || text[pos] != '[') {
-    return false;
-  }
-  pos++;
-  out = Dap::Value{};
-  out.type = Dap::Value::Array;
-  skip_ws(text, pos);
-  if (pos < text.size() && text[pos] == ']') {
-    pos++;
-    return true;
-  }
-  while (pos < text.size()) {
-    Dap::Value item;
-    if (!parse_json_value(text, pos, item)) {
-      return false;
-    }
-    out.array_value.push_back(std::move(item));
-    skip_ws(text, pos);
-    if (pos >= text.size()) {
-      return false;
-    }
-    if (text[pos] == ']') {
-      pos++;
-      return true;
-    }
-    if (text[pos] != ',') {
-      return false;
-    }
-    pos++;
-    skip_ws(text, pos);
-  }
-  return false;
-}
-
-bool parse_json_object(const std::string &text, size_t &pos, Dap::Value &out) {
-  if (pos >= text.size() || text[pos] != '{') {
-    return false;
-  }
-  pos++;
-  out = Dap::Value{};
-  out.type = Dap::Value::Object;
-  skip_ws(text, pos);
-  if (pos < text.size() && text[pos] == '}') {
-    pos++;
-    return true;
-  }
-  while (pos < text.size()) {
-    std::string key;
-    if (!parse_json_string(text, pos, key)) {
-      return false;
-    }
-    skip_ws(text, pos);
-    if (pos >= text.size() || text[pos] != ':') {
-      return false;
-    }
-    pos++;
-    Dap::Value value;
-    if (!parse_json_value(text, pos, value)) {
-      return false;
-    }
-    out.object_value[key] = std::move(value);
-    skip_ws(text, pos);
-    if (pos >= text.size()) {
-      return false;
-    }
-    if (text[pos] == '}') {
-      pos++;
-      return true;
-    }
-    if (text[pos] != ',') {
-      return false;
-    }
-    pos++;
-    skip_ws(text, pos);
-  }
-  return false;
-}
-
-bool parse_json_number(const std::string &text, size_t &pos, Dap::Value &out) {
-  size_t start = pos;
-  if (pos < text.size() && text[pos] == '-') {
-    pos++;
-  }
-  while (pos < text.size() &&
-         std::isdigit(static_cast<unsigned char>(text[pos]))) {
-    pos++;
-  }
-  if (start == pos || (start + 1 == pos && text[start] == '-')) {
-    return false;
-  }
-  out = Dap::Value{};
-  out.type = Dap::Value::Number;
-  out.number_value = std::strtoll(text.substr(start, pos - start).c_str(),
-                                  nullptr, 10);
-  while (pos < text.size() &&
-         (std::isdigit((unsigned char)text[pos]) || text[pos] == '.' ||
-          text[pos] == 'e' || text[pos] == 'E' || text[pos] == '+' ||
-          text[pos] == '-')) {
-    pos++;
-  }
-  return true;
-}
-
-bool parse_json_value(const std::string &text, size_t &pos, Dap::Value &out) {
-  skip_ws(text, pos);
-  if (pos >= text.size()) {
-    return false;
-  }
-  char c = text[pos];
-  if (c == '"') {
-    out = Dap::Value{};
-    out.type = Dap::Value::String;
-    return parse_json_string(text, pos, out.string_value);
-  }
-  if (c == '{') {
-    return parse_json_object(text, pos, out);
-  }
-  if (c == '[') {
-    return parse_json_array(text, pos, out);
-  }
-  if (c == '-' || std::isdigit((unsigned char)c)) {
-    return parse_json_number(text, pos, out);
-  }
-  if (text.compare(pos, 4, "null") == 0) {
-    out = Dap::Value{};
-    out.type = Dap::Value::Null;
-    pos += 4;
-    return true;
-  }
-  if (text.compare(pos, 4, "true") == 0) {
-    out = Dap::Value{};
-    out.type = Dap::Value::Bool;
-    out.bool_value = true;
-    pos += 4;
-    return true;
-  }
-  if (text.compare(pos, 5, "false") == 0) {
-    out = Dap::Value{};
-    out.type = Dap::Value::Bool;
-    out.bool_value = false;
-    pos += 5;
-    return true;
-  }
-  return false;
-}
-
-std::string json_array_strings(const std::vector<std::string> &items) {
-  std::string out = "[";
-  for (size_t i = 0; i < items.size(); i++) {
-    if (i > 0) {
-      out += ",";
-    }
-    out += "\"" + Dap::json_escape(items[i]) + "\"";
-  }
-  out += "]";
-  return out;
-}
-
-std::string json_object_strings(const std::map<std::string, std::string> &items) {
-  std::string out = "{";
-  size_t i = 0;
-  for (const auto &entry : items) {
-    if (i++ > 0) {
-      out += ",";
-    }
-    out += "\"" + Dap::json_escape(entry.first) + "\":\"" +
-           Dap::json_escape(entry.second) + "\"";
-  }
-  out += "}";
-  return out;
-}
-
-std::string adapter_type(const std::string &adapter) {
-  std::string lower = adapter;
-  std::transform(lower.begin(), lower.end(), lower.begin(),
-                 [](unsigned char c) { return (char)std::tolower(c); });
-  return lower == "lldb" || lower == "lldb-dap" ? "lldb" : "gdb";
-}
-
-std::string source_path_from(const Dap::Value *source) {
-  if (!source || source->type != Dap::Value::Object) {
-    return "";
-  }
-  return Dap::string_or_empty(Dap::object_get(*source, "path"));
-}
-
-DebuggerFrame frame_from_json(const Dap::Value &value) {
-  DebuggerFrame frame;
-  if (value.type != Dap::Value::Object) {
-    return frame;
-  }
-  frame.id = Dap::int_or_default(Dap::object_get(value, "id"), 0);
-  frame.name = Dap::string_or_empty(Dap::object_get(value, "name"));
-  frame.line = std::max(0, Dap::int_or_default(Dap::object_get(value, "line"), 1) - 1);
-  frame.column =
-      std::max(0, Dap::int_or_default(Dap::object_get(value, "column"), 1) - 1);
-  frame.filepath = source_path_from(Dap::object_get(value, "source"));
-  return frame;
-}
-
-std::vector<DebuggerFrame> frames_from_body(const Dap::Value &body) {
-  std::vector<DebuggerFrame> frames;
-  const Dap::Value *stack = Dap::object_get(body, "stackFrames");
-  if (!stack || stack->type != Dap::Value::Array) {
-    return frames;
-  }
-  for (const auto &item : stack->array_value) {
-    frames.push_back(frame_from_json(item));
-  }
-  return frames;
-}
-
-std::vector<DebuggerThread> threads_from_body(const Dap::Value &body) {
-  std::vector<DebuggerThread> threads;
-  const Dap::Value *items = Dap::object_get(body, "threads");
-  if (!items || items->type != Dap::Value::Array) {
-    return threads;
-  }
-  for (const auto &item : items->array_value) {
-    if (item.type != Dap::Value::Object) {
-      continue;
-    }
-    DebuggerThread thread;
-    thread.id = Dap::int_or_default(Dap::object_get(item, "id"), 0);
-    thread.name = Dap::string_or_empty(Dap::object_get(item, "name"));
-    threads.push_back(std::move(thread));
-  }
-  return threads;
-}
-
-std::vector<DebuggerVariable> variables_from_body(const Dap::Value &body) {
-  std::vector<DebuggerVariable> variables;
-  const Dap::Value *items = Dap::object_get(body, "variables");
-  if (!items || items->type != Dap::Value::Array) {
-    return variables;
-  }
-  for (const auto &item : items->array_value) {
-    if (item.type != Dap::Value::Object) {
-      continue;
-    }
-    DebuggerVariable var;
-    var.name = Dap::string_or_empty(Dap::object_get(item, "name"));
-    var.value = Dap::string_or_empty(Dap::object_get(item, "value"));
-    var.type = Dap::string_or_empty(Dap::object_get(item, "type"));
-    var.variables_reference =
-        Dap::int_or_default(Dap::object_get(item, "variablesReference"), 0);
-    variables.push_back(std::move(var));
-  }
-  return variables;
-}
-
-std::vector<DebuggerInstruction> instructions_from_body(const Dap::Value &body) {
-  std::vector<DebuggerInstruction> instructions;
-  const Dap::Value *items = Dap::object_get(body, "instructions");
-  if (!items || items->type != Dap::Value::Array) {
-    return instructions;
-  }
-  for (const auto &item : items->array_value) {
-    if (item.type != Dap::Value::Object) {
-      continue;
-    }
-    DebuggerInstruction inst;
-    inst.address = Dap::string_or_empty(Dap::object_get(item, "address"));
-    inst.instruction = Dap::string_or_empty(Dap::object_get(item, "instruction"));
-    instructions.push_back(std::move(inst));
-  }
-  return instructions;
-}
-
-std::vector<DebuggerMemoryRow> memory_from_body(const Dap::Value &body) {
-  std::vector<DebuggerMemoryRow> rows;
-  std::string address = Dap::string_or_empty(Dap::object_get(body, "address"));
-  std::string data = Dap::string_or_empty(Dap::object_get(body, "data"));
-  if (data.empty()) {
-    return rows;
-  }
-  int addr = 0;
-  try {
-    addr = address.empty() ? 0 : std::stoi(address, nullptr, 0);
-  } catch (...) {
-    addr = 0;
-  }
-  for (size_t i = 0; i < data.size(); i += 16) {
-    std::string chunk = data.substr(i, 16);
-    DebuggerMemoryRow row;
-    std::ostringstream addr_stream;
-    addr_stream << "0x" << std::hex << std::setw(8) << std::setfill('0')
-                << (addr + (int)i);
-    row.address = addr_stream.str();
-    for (unsigned char c : chunk) {
-      std::ostringstream byte;
-      byte << std::hex << std::setw(2) << std::setfill('0') << (int)c;
-      if (!row.bytes.empty()) {
-        row.bytes.push_back(' ');
+      out.array_value.push_back(std::move(item));
+      skip_ws(text, pos);
+      if (pos >= text.size())
+      {
+        return false;
       }
-      row.bytes += byte.str();
-      row.ascii.push_back(std::isprint(c) ? (char)c : '.');
+      if (text[pos] == ']')
+      {
+        pos++;
+        return true;
+      }
+      if (text[pos] != ',')
+      {
+        return false;
+      }
+      pos++;
+      skip_ws(text, pos);
     }
-    rows.push_back(std::move(row));
+    return false;
   }
-  return rows;
-}
 
-std::vector<DebuggerBreakpoint> breakpoints_from_body(const Dap::Value &body,
-                                                      const std::string &path) {
-  std::vector<DebuggerBreakpoint> out;
-  const Dap::Value *items = Dap::object_get(body, "breakpoints");
-  if (!items || items->type != Dap::Value::Array) {
+  bool parse_json_object(const std::string &text, size_t &pos, Dap::Value &out)
+  {
+    if (pos >= text.size() || text[pos] != '{')
+    {
+      return false;
+    }
+    pos++;
+    out = Dap::Value{};
+    out.type = Dap::Value::Object;
+    skip_ws(text, pos);
+    if (pos < text.size() && text[pos] == '}')
+    {
+      pos++;
+      return true;
+    }
+    while (pos < text.size())
+    {
+      std::string key;
+      if (!parse_json_string(text, pos, key))
+      {
+        return false;
+      }
+      skip_ws(text, pos);
+      if (pos >= text.size() || text[pos] != ':')
+      {
+        return false;
+      }
+      pos++;
+      Dap::Value value;
+      if (!parse_json_value(text, pos, value))
+      {
+        return false;
+      }
+      out.object_value[key] = std::move(value);
+      skip_ws(text, pos);
+      if (pos >= text.size())
+      {
+        return false;
+      }
+      if (text[pos] == '}')
+      {
+        pos++;
+        return true;
+      }
+      if (text[pos] != ',')
+      {
+        return false;
+      }
+      pos++;
+      skip_ws(text, pos);
+    }
+    return false;
+  }
+
+  bool parse_json_number(const std::string &text, size_t &pos, Dap::Value &out)
+  {
+    size_t start = pos;
+    if (pos < text.size() && text[pos] == '-')
+    {
+      pos++;
+    }
+    while (pos < text.size() && std::isdigit(static_cast<unsigned char>(text[pos])))
+    {
+      pos++;
+    }
+    if (start == pos || (start + 1 == pos && text[start] == '-'))
+    {
+      return false;
+    }
+    out = Dap::Value{};
+    out.type = Dap::Value::Number;
+    out.number_value = std::strtoll(text.substr(start, pos - start).c_str(), nullptr, 10);
+    while (pos < text.size()
+           && (std::isdigit((unsigned char)text[pos]) || text[pos] == '.' || text[pos] == 'e'
+               || text[pos] == 'E' || text[pos] == '+' || text[pos] == '-'))
+    {
+      pos++;
+    }
+    return true;
+  }
+
+  bool parse_json_value(const std::string &text, size_t &pos, Dap::Value &out)
+  {
+    skip_ws(text, pos);
+    if (pos >= text.size())
+    {
+      return false;
+    }
+    char c = text[pos];
+    if (c == '"')
+    {
+      out = Dap::Value{};
+      out.type = Dap::Value::String;
+      return parse_json_string(text, pos, out.string_value);
+    }
+    if (c == '{')
+    {
+      return parse_json_object(text, pos, out);
+    }
+    if (c == '[')
+    {
+      return parse_json_array(text, pos, out);
+    }
+    if (c == '-' || std::isdigit((unsigned char)c))
+    {
+      return parse_json_number(text, pos, out);
+    }
+    if (text.compare(pos, 4, "null") == 0)
+    {
+      out = Dap::Value{};
+      out.type = Dap::Value::Null;
+      pos += 4;
+      return true;
+    }
+    if (text.compare(pos, 4, "true") == 0)
+    {
+      out = Dap::Value{};
+      out.type = Dap::Value::Bool;
+      out.bool_value = true;
+      pos += 4;
+      return true;
+    }
+    if (text.compare(pos, 5, "false") == 0)
+    {
+      out = Dap::Value{};
+      out.type = Dap::Value::Bool;
+      out.bool_value = false;
+      pos += 5;
+      return true;
+    }
+    return false;
+  }
+
+  std::string json_array_strings(const std::vector<std::string> &items)
+  {
+    std::string out = "[";
+    for (size_t i = 0; i < items.size(); i++)
+    {
+      if (i > 0)
+      {
+        out += ",";
+      }
+      out += "\"" + Dap::json_escape(items[i]) + "\"";
+    }
+    out += "]";
     return out;
   }
-  for (const auto &item : items->array_value) {
-    if (item.type != Dap::Value::Object) {
-      continue;
+
+  std::string json_object_strings(const std::map<std::string, std::string> &items)
+  {
+    std::string out = "{";
+    size_t i = 0;
+    for (const auto &entry : items)
+    {
+      if (i++ > 0)
+      {
+        out += ",";
+      }
+      out += "\"" + Dap::json_escape(entry.first) + "\":\"" + Dap::json_escape(entry.second) + "\"";
     }
-    DebuggerBreakpoint bp;
-    bp.filepath = path;
-    bp.line = std::max(0, Dap::int_or_default(Dap::object_get(item, "line"), 1) - 1);
-    bp.verified = Dap::bool_or_default(Dap::object_get(item, "verified"), false);
-    out.push_back(std::move(bp));
+    out += "}";
+    return out;
   }
-  return out;
-}
+
+  std::string adapter_type(const std::string &adapter)
+  {
+    std::string lower = adapter;
+    std::transform(lower.begin(),
+                   lower.end(),
+                   lower.begin(),
+                   [](unsigned char c) { return (char)std::tolower(c); });
+    return lower == "lldb" || lower == "lldb-dap" ? "lldb" : "gdb";
+  }
+
+  std::string source_path_from(const Dap::Value *source)
+  {
+    if (!source || source->type != Dap::Value::Object)
+    {
+      return "";
+    }
+    return Dap::string_or_empty(Dap::object_get(*source, "path"));
+  }
+
+  DebuggerFrame frame_from_json(const Dap::Value &value)
+  {
+    DebuggerFrame frame;
+    if (value.type != Dap::Value::Object)
+    {
+      return frame;
+    }
+    frame.id = Dap::int_or_default(Dap::object_get(value, "id"), 0);
+    frame.name = Dap::string_or_empty(Dap::object_get(value, "name"));
+    frame.line = std::max(0, Dap::int_or_default(Dap::object_get(value, "line"), 1) - 1);
+    frame.column = std::max(0, Dap::int_or_default(Dap::object_get(value, "column"), 1) - 1);
+    frame.filepath = source_path_from(Dap::object_get(value, "source"));
+    return frame;
+  }
+
+  std::vector<DebuggerFrame> frames_from_body(const Dap::Value &body)
+  {
+    std::vector<DebuggerFrame> frames;
+    const Dap::Value *stack = Dap::object_get(body, "stackFrames");
+    if (!stack || stack->type != Dap::Value::Array)
+    {
+      return frames;
+    }
+    for (const auto &item : stack->array_value)
+    {
+      frames.push_back(frame_from_json(item));
+    }
+    return frames;
+  }
+
+  std::vector<DebuggerThread> threads_from_body(const Dap::Value &body)
+  {
+    std::vector<DebuggerThread> threads;
+    const Dap::Value *items = Dap::object_get(body, "threads");
+    if (!items || items->type != Dap::Value::Array)
+    {
+      return threads;
+    }
+    for (const auto &item : items->array_value)
+    {
+      if (item.type != Dap::Value::Object)
+      {
+        continue;
+      }
+      DebuggerThread thread;
+      thread.id = Dap::int_or_default(Dap::object_get(item, "id"), 0);
+      thread.name = Dap::string_or_empty(Dap::object_get(item, "name"));
+      threads.push_back(std::move(thread));
+    }
+    return threads;
+  }
+
+  std::vector<DebuggerVariable> variables_from_body(const Dap::Value &body)
+  {
+    std::vector<DebuggerVariable> variables;
+    const Dap::Value *items = Dap::object_get(body, "variables");
+    if (!items || items->type != Dap::Value::Array)
+    {
+      return variables;
+    }
+    for (const auto &item : items->array_value)
+    {
+      if (item.type != Dap::Value::Object)
+      {
+        continue;
+      }
+      DebuggerVariable var;
+      var.name = Dap::string_or_empty(Dap::object_get(item, "name"));
+      var.value = Dap::string_or_empty(Dap::object_get(item, "value"));
+      var.type = Dap::string_or_empty(Dap::object_get(item, "type"));
+      var.variables_reference = Dap::int_or_default(Dap::object_get(item, "variablesReference"), 0);
+      variables.push_back(std::move(var));
+    }
+    return variables;
+  }
+
+  std::vector<DebuggerInstruction> instructions_from_body(const Dap::Value &body)
+  {
+    std::vector<DebuggerInstruction> instructions;
+    const Dap::Value *items = Dap::object_get(body, "instructions");
+    if (!items || items->type != Dap::Value::Array)
+    {
+      return instructions;
+    }
+    for (const auto &item : items->array_value)
+    {
+      if (item.type != Dap::Value::Object)
+      {
+        continue;
+      }
+      DebuggerInstruction inst;
+      inst.address = Dap::string_or_empty(Dap::object_get(item, "address"));
+      inst.instruction = Dap::string_or_empty(Dap::object_get(item, "instruction"));
+      instructions.push_back(std::move(inst));
+    }
+    return instructions;
+  }
+
+  std::vector<DebuggerMemoryRow> memory_from_body(const Dap::Value &body)
+  {
+    std::vector<DebuggerMemoryRow> rows;
+    std::string address = Dap::string_or_empty(Dap::object_get(body, "address"));
+    std::string data = Dap::string_or_empty(Dap::object_get(body, "data"));
+    if (data.empty())
+    {
+      return rows;
+    }
+    int addr = 0;
+    try
+    {
+      addr = address.empty() ? 0 : std::stoi(address, nullptr, 0);
+    }
+    catch (...)
+    {
+      addr = 0;
+    }
+    for (size_t i = 0; i < data.size(); i += 16)
+    {
+      std::string chunk = data.substr(i, 16);
+      DebuggerMemoryRow row;
+      std::ostringstream addr_stream;
+      addr_stream << "0x" << std::hex << std::setw(8) << std::setfill('0') << (addr + (int)i);
+      row.address = addr_stream.str();
+      for (unsigned char c : chunk)
+      {
+        std::ostringstream byte;
+        byte << std::hex << std::setw(2) << std::setfill('0') << (int)c;
+        if (!row.bytes.empty())
+        {
+          row.bytes.push_back(' ');
+        }
+        row.bytes += byte.str();
+        row.ascii.push_back(std::isprint(c) ? (char)c : '.');
+      }
+      rows.push_back(std::move(row));
+    }
+    return rows;
+  }
+
+  std::vector<DebuggerBreakpoint> breakpoints_from_body(const Dap::Value &body,
+                                                        const std::string &path)
+  {
+    std::vector<DebuggerBreakpoint> out;
+    const Dap::Value *items = Dap::object_get(body, "breakpoints");
+    if (!items || items->type != Dap::Value::Array)
+    {
+      return out;
+    }
+    for (const auto &item : items->array_value)
+    {
+      if (item.type != Dap::Value::Object)
+      {
+        continue;
+      }
+      DebuggerBreakpoint bp;
+      bp.filepath = path;
+      bp.line = std::max(0, Dap::int_or_default(Dap::object_get(item, "line"), 1) - 1);
+      bp.verified = Dap::bool_or_default(Dap::object_get(item, "verified"), false);
+      out.push_back(std::move(bp));
+    }
+    return out;
+  }
 } // namespace
 
-namespace Dap {
-bool parse_json(const std::string &text, Value &out) {
-  size_t pos = 0;
-  if (!parse_json_value(text, pos, out)) {
-    return false;
-  }
-  skip_ws(text, pos);
-  return pos == text.size();
-}
-
-std::string json_escape(const std::string &value) {
-  std::string out;
-  out.reserve(value.size() + 8);
-  for (unsigned char c : value) {
-    switch (c) {
-    case '\\':
-      out += "\\\\";
-      break;
-    case '"':
-      out += "\\\"";
-      break;
-    case '\n':
-      out += "\\n";
-      break;
-    case '\r':
-      out += "\\r";
-      break;
-    case '\t':
-      out += "\\t";
-      break;
-    default:
-      out.push_back((char)c);
-      break;
-    }
-  }
-  return out;
-}
-
-const Value *object_get(const Value &value, const std::string &key) {
-  if (value.type != Value::Object) {
-    return nullptr;
-  }
-  auto it = value.object_value.find(key);
-  return it == value.object_value.end() ? nullptr : &it->second;
-}
-
-std::string string_or_empty(const Value *value) {
-  return value && value->type == Value::String ? value->string_value : "";
-}
-
-int int_or_default(const Value *value, int fallback) {
-  return value && value->type == Value::Number ? (int)value->number_value
-                                               : fallback;
-}
-
-bool bool_or_default(const Value *value, bool fallback) {
-  return value && value->type == Value::Bool ? value->bool_value : fallback;
-}
-
-bool extract_content_length(const std::string &headers, size_t &length_out) {
-  std::istringstream stream(headers);
-  std::string line;
-  while (std::getline(stream, line)) {
-    if (!line.empty() && line.back() == '\r') {
-      line.pop_back();
-    }
-    const std::string prefix = "Content-Length:";
-    if (line.rfind(prefix, 0) != 0) {
-      continue;
-    }
-    std::string number = line.substr(prefix.size());
+namespace Dap
+{
+  bool parse_json(const std::string &text, Value &out)
+  {
     size_t pos = 0;
-    while (pos < number.size() &&
-           std::isspace(static_cast<unsigned char>(number[pos]))) {
-      pos++;
-    }
-    if (pos >= number.size()) {
+    if (!parse_json_value(text, pos, out))
+    {
       return false;
     }
-    length_out = (size_t)std::strtoull(number.c_str() + pos, nullptr, 10);
-    return true;
+    skip_ws(text, pos);
+    return pos == text.size();
   }
-  return false;
-}
+
+  std::string json_escape(const std::string &value)
+  {
+    std::string out;
+    out.reserve(value.size() + 8);
+    for (unsigned char c : value)
+    {
+      switch (c)
+      {
+      case '\\':
+        out += "\\\\";
+        break;
+      case '"':
+        out += "\\\"";
+        break;
+      case '\n':
+        out += "\\n";
+        break;
+      case '\r':
+        out += "\\r";
+        break;
+      case '\t':
+        out += "\\t";
+        break;
+      default:
+        out.push_back((char)c);
+        break;
+      }
+    }
+    return out;
+  }
+
+  const Value *object_get(const Value &value, const std::string &key)
+  {
+    if (value.type != Value::Object)
+    {
+      return nullptr;
+    }
+    auto it = value.object_value.find(key);
+    return it == value.object_value.end() ? nullptr : &it->second;
+  }
+
+  std::string string_or_empty(const Value *value)
+  {
+    return value && value->type == Value::String ? value->string_value : "";
+  }
+
+  int int_or_default(const Value *value, int fallback)
+  {
+    return value && value->type == Value::Number ? (int)value->number_value : fallback;
+  }
+
+  bool bool_or_default(const Value *value, bool fallback)
+  {
+    return value && value->type == Value::Bool ? value->bool_value : fallback;
+  }
+
+  bool extract_content_length(const std::string &headers, size_t &length_out)
+  {
+    std::istringstream stream(headers);
+    std::string line;
+    while (std::getline(stream, line))
+    {
+      if (!line.empty() && line.back() == '\r')
+      {
+        line.pop_back();
+      }
+      const std::string prefix = "Content-Length:";
+      if (line.rfind(prefix, 0) != 0)
+      {
+        continue;
+      }
+      std::string number = line.substr(prefix.size());
+      size_t pos = 0;
+      while (pos < number.size() && std::isspace(static_cast<unsigned char>(number[pos])))
+      {
+        pos++;
+      }
+      if (pos >= number.size())
+      {
+        return false;
+      }
+      length_out = (size_t)std::strtoull(number.c_str() + pos, nullptr, 10);
+      return true;
+    }
+    return false;
+  }
 } // namespace Dap
 
 DebuggerClient::DebuggerClient(const DebuggerSessionConfig &session_config,
                                const std::vector<std::string> &adapter_argv)
-    : config(session_config), command(adapter_argv) {}
+    : config(session_config), command(adapter_argv)
+{
+}
 
-DebuggerClient::~DebuggerClient() { stop(); }
+DebuggerClient::~DebuggerClient()
+{
+  stop();
+}
 
-bool DebuggerClient::start() {
-  if (running) {
+bool DebuggerClient::start()
+{
+  if (running)
+  {
     return true;
   }
-  if (command.empty()) {
+  if (command.empty())
+  {
     last_error = "empty debugger adapter command";
     return false;
   }
@@ -700,16 +843,19 @@ bool DebuggerClient::start() {
   HANDLE stderr_read = nullptr;
   HANDLE stderr_write = nullptr;
 
-  auto close_handle = [](HANDLE &handle) {
-    if (handle) {
+  auto close_handle = [](HANDLE &handle)
+  {
+    if (handle)
+    {
       CloseHandle(handle);
       handle = nullptr;
     }
   };
 
-  if (!CreatePipe(&stdin_read, &stdin_write, &sa, 0) ||
-      !CreatePipe(&stdout_read, &stdout_write, &sa, 0) ||
-      !CreatePipe(&stderr_read, &stderr_write, &sa, 0)) {
+  if (!CreatePipe(&stdin_read, &stdin_write, &sa, 0)
+      || !CreatePipe(&stdout_read, &stdout_write, &sa, 0)
+      || !CreatePipe(&stderr_read, &stderr_write, &sa, 0))
+  {
     last_error = windows_error_message(GetLastError());
     close_handle(stdin_read);
     close_handle(stdin_write);
@@ -734,15 +880,23 @@ bool DebuggerClient::start() {
   PROCESS_INFORMATION process{};
   std::string command_line = windows_command_line(command);
   std::string cwd = config.cwd.empty() ? std::string() : config.cwd;
-  BOOL created = CreateProcessA(
-      nullptr, command_line.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
-      nullptr, cwd.empty() ? nullptr : cwd.c_str(), &startup, &process);
+  BOOL created = CreateProcessA(nullptr,
+                                command_line.data(),
+                                nullptr,
+                                nullptr,
+                                TRUE,
+                                CREATE_NO_WINDOW,
+                                nullptr,
+                                cwd.empty() ? nullptr : cwd.c_str(),
+                                &startup,
+                                &process);
 
   close_handle(stdin_read);
   close_handle(stdout_write);
   close_handle(stderr_write);
 
-  if (!created) {
+  if (!created)
+  {
     last_error = windows_error_message(GetLastError());
     close_handle(stdin_write);
     close_handle(stdout_read);
@@ -753,13 +907,11 @@ bool DebuggerClient::start() {
   CloseHandle(process.hThread);
   child_process_handle = process.hProcess;
   child_pid = (int)process.dwProcessId;
-  stdin_fd = _open_osfhandle(reinterpret_cast<intptr_t>(stdin_write),
-                             _O_WRONLY | _O_BINARY);
-  stdout_fd = _open_osfhandle(reinterpret_cast<intptr_t>(stdout_read),
-                              _O_RDONLY | _O_BINARY);
-  stderr_fd = _open_osfhandle(reinterpret_cast<intptr_t>(stderr_read),
-                              _O_RDONLY | _O_BINARY);
-  if (stdin_fd < 0 || stdout_fd < 0 || stderr_fd < 0) {
+  stdin_fd = _open_osfhandle(reinterpret_cast<intptr_t>(stdin_write), _O_WRONLY | _O_BINARY);
+  stdout_fd = _open_osfhandle(reinterpret_cast<intptr_t>(stdout_read), _O_RDONLY | _O_BINARY);
+  stderr_fd = _open_osfhandle(reinterpret_cast<intptr_t>(stderr_read), _O_RDONLY | _O_BINARY);
+  if (stdin_fd < 0 || stdout_fd < 0 || stderr_fd < 0)
+  {
     last_error = "failed to convert debugger pipes to file descriptors";
     stop();
     return false;
@@ -768,18 +920,21 @@ bool DebuggerClient::start() {
   int stdin_pipe[2] = {-1, -1};
   int stdout_pipe[2] = {-1, -1};
   int stderr_pipe[2] = {-1, -1};
-  if (pipe(stdin_pipe) != 0 || pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0) {
+  if (pipe(stdin_pipe) != 0 || pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0)
+  {
     last_error = strerror(errno);
     return false;
   }
 
   pid_t pid = fork();
-  if (pid < 0) {
+  if (pid < 0)
+  {
     last_error = strerror(errno);
     return false;
   }
 
-  if (pid == 0) {
+  if (pid == 0)
+  {
     dup2(stdin_pipe[0], STDIN_FILENO);
     dup2(stdout_pipe[1], STDOUT_FILENO);
     dup2(stderr_pipe[1], STDERR_FILENO);
@@ -790,18 +945,22 @@ bool DebuggerClient::start() {
     close(stderr_pipe[0]);
     close(stderr_pipe[1]);
 
-    if (!config.cwd.empty()) {
-      if (chdir(config.cwd.c_str()) != 0) {
+    if (!config.cwd.empty())
+    {
+      if (chdir(config.cwd.c_str()) != 0)
+      {
         _exit(127);
       }
     }
-    for (const auto &entry : config.env) {
+    for (const auto &entry : config.env)
+    {
       setenv(entry.first.c_str(), entry.second.c_str(), 1);
     }
 
     std::vector<char *> argv;
     argv.reserve(command.size() + 1);
-    for (const auto &arg : command) {
+    for (const auto &arg : command)
+    {
       argv.push_back(const_cast<char *>(arg.c_str()));
     }
     argv.push_back(nullptr);
@@ -835,17 +994,20 @@ bool DebuggerClient::start() {
   return initialize();
 }
 
-void DebuggerClient::stop() {
-  if (!running && stdin_fd < 0 && stdout_fd < 0 && stderr_fd < 0 &&
-      child_pid <= 0) {
+void DebuggerClient::stop()
+{
+  if (!running && stdin_fd < 0 && stdout_fd < 0 && stderr_fd < 0 && child_pid <= 0)
+  {
     return;
   }
   running = false;
   initialized = false;
   launched = false;
-  if (child_pid > 0) {
+  if (child_pid > 0)
+  {
 #ifdef _WIN32
-    if (child_process_handle) {
+    if (child_process_handle)
+    {
       TerminateProcess(reinterpret_cast<HANDLE>(child_process_handle), 1);
       CloseHandle(reinterpret_cast<HANDLE>(child_process_handle));
       child_process_handle = nullptr;
@@ -855,13 +1017,16 @@ void DebuggerClient::stop() {
     waitpid(child_pid, nullptr, WNOHANG);
 #endif
   }
-  if (stdin_fd >= 0) {
+  if (stdin_fd >= 0)
+  {
     close(stdin_fd);
   }
-  if (stdout_fd >= 0) {
+  if (stdout_fd >= 0)
+  {
     close(stdout_fd);
   }
-  if (stderr_fd >= 0) {
+  if (stderr_fd >= 0)
+  {
     close(stderr_fd);
   }
   stdin_fd = stdout_fd = stderr_fd = -1;
@@ -873,43 +1038,54 @@ void DebuggerClient::stop() {
   pending_requests.clear();
 }
 
-bool DebuggerClient::poll() {
-  if (!running) {
+bool DebuggerClient::poll()
+{
+  if (!running)
+  {
     return false;
   }
   bool changed = false;
-  if (!outbound_buffer.empty()) {
+  if (!outbound_buffer.empty())
+  {
     changed = true;
     flush_pending_writes();
   }
   char buf[4096];
-  while (stdout_fd >= 0) {
-    if (!fd_has_data(stdout_fd)) {
+  while (stdout_fd >= 0)
+  {
+    if (!fd_has_data(stdout_fd))
+    {
       break;
     }
     ssize_t n = read(stdout_fd, buf, sizeof(buf));
-    if (n <= 0) {
+    if (n <= 0)
+    {
       break;
     }
     handle_stdout_data(std::string(buf, buf + n));
     changed = true;
   }
-  while (stderr_fd >= 0) {
-    if (!fd_has_data(stderr_fd)) {
+  while (stderr_fd >= 0)
+  {
+    if (!fd_has_data(stderr_fd))
+    {
       break;
     }
     ssize_t n = read(stderr_fd, buf, sizeof(buf));
-    if (n <= 0) {
+    if (n <= 0)
+    {
       break;
     }
     handle_stderr_data(std::string(buf, buf + n));
     changed = true;
   }
   int status = 0;
-  if (child_pid > 0) {
+  if (child_pid > 0)
+  {
 #ifdef _WIN32
     HANDLE process = reinterpret_cast<HANDLE>(child_process_handle);
-    if (process && WaitForSingleObject(process, 0) == WAIT_OBJECT_0) {
+    if (process && WaitForSingleObject(process, 0) == WAIT_OBJECT_0)
+    {
       DWORD exit_code = 0;
       GetExitCodeProcess(process, &exit_code);
       running = false;
@@ -924,13 +1100,13 @@ bool DebuggerClient::poll() {
     }
 #else
     pid_t result = waitpid(child_pid, &status, WNOHANG);
-    if (result == child_pid) {
+    if (result == child_pid)
+    {
       running = false;
       initialized = false;
       launched = false;
       last_error = WIFEXITED(status)
-                       ? "adapter exited with status " +
-                             std::to_string(WEXITSTATUS(status))
+                       ? "adapter exited with status " + std::to_string(WEXITSTATUS(status))
                        : "adapter exited unexpectedly";
       push_error(last_error);
       changed = true;
@@ -940,21 +1116,24 @@ bool DebuggerClient::poll() {
   return changed;
 }
 
-bool DebuggerClient::initialize() {
-  std::string args =
-      "{\"adapterID\":\"jot\",\"clientID\":\"jot\",\"clientName\":\"jot\","
-      "\"locale\":\"en-us\",\"pathFormat\":\"path\",\"linesStartAt1\":true,"
-      "\"columnsStartAt1\":true,\"supportsVariableType\":true,"
-      "\"supportsVariablePaging\":false,\"supportsRunInTerminalRequest\":false,"
-      "\"supportsMemoryReferences\":true}";
+bool DebuggerClient::initialize()
+{
+  std::string args = "{\"adapterID\":\"jot\",\"clientID\":\"jot\",\"clientName\":\"jot\","
+                     "\"locale\":\"en-us\",\"pathFormat\":\"path\",\"linesStartAt1\":true,"
+                     "\"columnsStartAt1\":true,\"supportsVariableType\":true,"
+                     "\"supportsVariablePaging\":false,\"supportsRunInTerminalRequest\":false,"
+                     "\"supportsMemoryReferences\":true}";
   return send_request("initialize", args);
 }
 
-bool DebuggerClient::launch_or_attach() {
-  if (config.attach) {
+bool DebuggerClient::launch_or_attach()
+{
+  if (config.attach)
+  {
     std::ostringstream args;
     args << "{\"pid\":" << config.pid;
-    if (!config.cwd.empty()) {
+    if (!config.cwd.empty())
+    {
       args << ",\"cwd\":\"" << Dap::json_escape(config.cwd) << "\"";
     }
     args << "}";
@@ -964,9 +1143,8 @@ bool DebuggerClient::launch_or_attach() {
 
   std::ostringstream args;
   args << "{\"program\":\"" << Dap::json_escape(config.program) << "\""
-       << ",\"args\":" << json_array_strings(config.args)
-       << ",\"cwd\":\"" << Dap::json_escape(config.cwd.empty() ? "." : config.cwd)
-       << "\""
+       << ",\"args\":" << json_array_strings(config.args) << ",\"cwd\":\""
+       << Dap::json_escape(config.cwd.empty() ? "." : config.cwd) << "\""
        << ",\"env\":" << json_object_strings(config.env)
        << ",\"stopAtBeginningOfMainSubprogram\":false"
        << ",\"stopOnEntry\":false}";
@@ -974,96 +1152,96 @@ bool DebuggerClient::launch_or_attach() {
   return launched;
 }
 
-bool DebuggerClient::disconnect(bool terminate_debuggee) {
+bool DebuggerClient::disconnect(bool terminate_debuggee)
+{
   return send_request("disconnect",
-                      std::string("{\"terminateDebuggee\":") +
-                          (terminate_debuggee ? "true" : "false") + "}");
+                      std::string("{\"terminateDebuggee\":")
+                          + (terminate_debuggee ? "true" : "false") + "}");
 }
 
-bool DebuggerClient::configuration_done() {
+bool DebuggerClient::configuration_done()
+{
   return send_request("configurationDone");
 }
 
-bool DebuggerClient::continue_thread(int thread_id) {
-  return send_request("continue",
-                      "{\"threadId\":" + std::to_string(std::max(0, thread_id)) +
-                          "}");
+bool DebuggerClient::continue_thread(int thread_id)
+{
+  return send_request("continue", "{\"threadId\":" + std::to_string(std::max(0, thread_id)) + "}");
 }
 
-bool DebuggerClient::pause_thread(int thread_id) {
-  return send_request("pause",
-                      "{\"threadId\":" + std::to_string(std::max(0, thread_id)) +
-                          "}");
+bool DebuggerClient::pause_thread(int thread_id)
+{
+  return send_request("pause", "{\"threadId\":" + std::to_string(std::max(0, thread_id)) + "}");
 }
 
-bool DebuggerClient::next(int thread_id) {
-  return send_request("next",
-                      "{\"threadId\":" + std::to_string(std::max(0, thread_id)) +
-                          "}");
+bool DebuggerClient::next(int thread_id)
+{
+  return send_request("next", "{\"threadId\":" + std::to_string(std::max(0, thread_id)) + "}");
 }
 
-bool DebuggerClient::step_in(int thread_id) {
-  return send_request("stepIn",
-                      "{\"threadId\":" + std::to_string(std::max(0, thread_id)) +
-                          "}");
+bool DebuggerClient::step_in(int thread_id)
+{
+  return send_request("stepIn", "{\"threadId\":" + std::to_string(std::max(0, thread_id)) + "}");
 }
 
-bool DebuggerClient::step_out(int thread_id) {
-  return send_request("stepOut",
-                      "{\"threadId\":" + std::to_string(std::max(0, thread_id)) +
-                          "}");
+bool DebuggerClient::step_out(int thread_id)
+{
+  return send_request("stepOut", "{\"threadId\":" + std::to_string(std::max(0, thread_id)) + "}");
 }
 
-bool DebuggerClient::threads() { return send_request("threads"); }
+bool DebuggerClient::threads()
+{
+  return send_request("threads");
+}
 
-bool DebuggerClient::stack_trace(int thread_id) {
+bool DebuggerClient::stack_trace(int thread_id)
+{
   return send_request("stackTrace",
-                      "{\"threadId\":" + std::to_string(std::max(0, thread_id)) +
-                          ",\"startFrame\":0,\"levels\":20}");
+                      "{\"threadId\":" + std::to_string(std::max(0, thread_id))
+                          + ",\"startFrame\":0,\"levels\":20}");
 }
 
-bool DebuggerClient::scopes(int frame_id) {
-  return send_request("scopes",
-                      "{\"frameId\":" + std::to_string(std::max(0, frame_id)) +
-                          "}");
+bool DebuggerClient::scopes(int frame_id)
+{
+  return send_request("scopes", "{\"frameId\":" + std::to_string(std::max(0, frame_id)) + "}");
 }
 
-bool DebuggerClient::variables(int variables_reference) {
+bool DebuggerClient::variables(int variables_reference)
+{
   return send_request("variables",
-                      "{\"variablesReference\":" +
-                          std::to_string(std::max(0, variables_reference)) +
-                          "}");
+                      "{\"variablesReference\":" + std::to_string(std::max(0, variables_reference))
+                          + "}");
 }
 
-bool DebuggerClient::read_memory(const std::string &memory_reference, int offset,
-                                 int count) {
+bool DebuggerClient::read_memory(const std::string &memory_reference, int offset, int count)
+{
   return send_request("readMemory",
-                      "{\"memoryReference\":\"" +
-                          Dap::json_escape(memory_reference) +
-                          "\",\"offset\":" + std::to_string(offset) +
-                          ",\"count\":" + std::to_string(std::max(1, count)) +
-                          "}");
+                      "{\"memoryReference\":\"" + Dap::json_escape(memory_reference)
+                          + "\",\"offset\":" + std::to_string(offset)
+                          + ",\"count\":" + std::to_string(std::max(1, count)) + "}");
 }
 
-bool DebuggerClient::disassemble(const std::string &memory_reference, int offset,
-                                 int instruction_offset, int count) {
+bool DebuggerClient::disassemble(const std::string &memory_reference,
+                                 int offset,
+                                 int instruction_offset,
+                                 int count)
+{
   return send_request("disassemble",
-                      "{\"memoryReference\":\"" +
-                          Dap::json_escape(memory_reference) +
-                          "\",\"offset\":" + std::to_string(offset) +
-                          ",\"instructionOffset\":" +
-                          std::to_string(instruction_offset) +
-                          ",\"instructionCount\":" +
-                          std::to_string(std::max(1, count)) + "}");
+                      "{\"memoryReference\":\"" + Dap::json_escape(memory_reference)
+                          + "\",\"offset\":" + std::to_string(offset)
+                          + ",\"instructionOffset\":" + std::to_string(instruction_offset)
+                          + ",\"instructionCount\":" + std::to_string(std::max(1, count)) + "}");
 }
 
-bool DebuggerClient::set_breakpoints(
-    const std::string &source_path, const std::vector<int> &zero_based_lines) {
+bool DebuggerClient::set_breakpoints(const std::string &source_path,
+                                     const std::vector<int> &zero_based_lines)
+{
   std::ostringstream args;
-  args << "{\"source\":{\"path\":\"" << Dap::json_escape(source_path)
-       << "\"},\"breakpoints\":[";
-  for (size_t i = 0; i < zero_based_lines.size(); i++) {
-    if (i > 0) {
+  args << "{\"source\":{\"path\":\"" << Dap::json_escape(source_path) << "\"},\"breakpoints\":[";
+  for (size_t i = 0; i < zero_based_lines.size(); i++)
+  {
+    if (i > 0)
+    {
       args << ",";
     }
     args << "{\"line\":" << (zero_based_lines[i] + 1) << "}";
@@ -1072,50 +1250,56 @@ bool DebuggerClient::set_breakpoints(
   return send_request("setBreakpoints", args.str());
 }
 
-std::vector<DebuggerEvent> DebuggerClient::consume_events() {
+std::vector<DebuggerEvent> DebuggerClient::consume_events()
+{
   auto out = std::move(pending_events);
   pending_events.clear();
   return out;
 }
 
 bool DebuggerClient::send_request(const std::string &command_name,
-                                  const std::string &arguments_json) {
+                                  const std::string &arguments_json)
+{
   int request_id = next_request_id++;
   pending_requests[request_id] = command_name;
   std::ostringstream json;
-  json << "{\"seq\":" << request_id
-       << ",\"type\":\"request\",\"command\":\"" << command_name
-       << "\",\"arguments\":" << (arguments_json.empty() ? "{}" : arguments_json)
-       << "}";
-  if (!send_message(json.str())) {
+  json << "{\"seq\":" << request_id << ",\"type\":\"request\",\"command\":\"" << command_name
+       << "\",\"arguments\":" << (arguments_json.empty() ? "{}" : arguments_json) << "}";
+  if (!send_message(json.str()))
+  {
     pending_requests.erase(request_id);
     return false;
   }
   return true;
 }
 
-bool DebuggerClient::send_message(const std::string &json) {
-  if (!running || stdin_fd < 0) {
+bool DebuggerClient::send_message(const std::string &json)
+{
+  if (!running || stdin_fd < 0)
+  {
     return false;
   }
-  outbound_buffer +=
-      "Content-Length: " + std::to_string(json.size()) + "\r\n\r\n" + json;
+  outbound_buffer += "Content-Length: " + std::to_string(json.size()) + "\r\n\r\n" + json;
   append_log(config.name, "SEND ", json);
   return flush_pending_writes();
 }
 
-bool DebuggerClient::flush_pending_writes() {
-  while (!outbound_buffer.empty()) {
-    ssize_t written =
-        write(stdin_fd, outbound_buffer.data(), outbound_buffer.size());
-    if (written > 0) {
+bool DebuggerClient::flush_pending_writes()
+{
+  while (!outbound_buffer.empty())
+  {
+    ssize_t written = write(stdin_fd, outbound_buffer.data(), outbound_buffer.size());
+    if (written > 0)
+    {
       outbound_buffer.erase(0, (size_t)written);
       continue;
     }
-    if (written < 0 && errno == EINTR) {
+    if (written < 0 && errno == EINTR)
+    {
       continue;
     }
-    if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+    if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+    {
       return true;
     }
     last_error = written < 0 ? strerror(errno) : "debugger stdin closed";
@@ -1126,23 +1310,27 @@ bool DebuggerClient::flush_pending_writes() {
   return true;
 }
 
-void DebuggerClient::handle_stdout_data(const std::string &data) {
+void DebuggerClient::handle_stdout_data(const std::string &data)
+{
   stdout_buffer += data;
   append_log(config.name, "RECV ", data);
-  while (true) {
+  while (true)
+  {
     size_t header_end = stdout_buffer.find("\r\n\r\n");
-    if (header_end == std::string::npos) {
+    if (header_end == std::string::npos)
+    {
       return;
     }
     size_t content_length = 0;
-    if (!Dap::extract_content_length(stdout_buffer.substr(0, header_end),
-                                     content_length)) {
+    if (!Dap::extract_content_length(stdout_buffer.substr(0, header_end), content_length))
+    {
       stdout_buffer.erase(0, header_end + 4);
       push_error("DAP parse error: missing Content-Length");
       continue;
     }
     size_t body_start = header_end + 4;
-    if (stdout_buffer.size() < body_start + content_length) {
+    if (stdout_buffer.size() < body_start + content_length)
+    {
       return;
     }
     std::string message = stdout_buffer.substr(body_start, content_length);
@@ -1151,7 +1339,8 @@ void DebuggerClient::handle_stdout_data(const std::string &data) {
   }
 }
 
-void DebuggerClient::handle_stderr_data(const std::string &data) {
+void DebuggerClient::handle_stderr_data(const std::string &data)
+{
   stderr_buffer += data;
   append_log(config.name, "STDERR ", data);
   DebuggerEvent ev;
@@ -1160,41 +1349,48 @@ void DebuggerClient::handle_stderr_data(const std::string &data) {
   pending_events.push_back(std::move(ev));
 }
 
-void DebuggerClient::handle_message(const std::string &message) {
+void DebuggerClient::handle_message(const std::string &message)
+{
   Dap::Value root;
-  if (!Dap::parse_json(message, root)) {
+  if (!Dap::parse_json(message, root))
+  {
     push_error("DAP parse error: invalid JSON");
     return;
   }
   std::string type = Dap::string_or_empty(Dap::object_get(root, "type"));
-  if (type == "response") {
+  if (type == "response")
+  {
     handle_response(root);
-  } else if (type == "event") {
+  }
+  else if (type == "event")
+  {
     handle_event(root);
   }
 }
 
-void DebuggerClient::handle_response(const Dap::Value &root) {
+void DebuggerClient::handle_response(const Dap::Value &root)
+{
   int request_id = Dap::int_or_default(Dap::object_get(root, "request_seq"), 0);
   std::string command_name = Dap::string_or_empty(Dap::object_get(root, "command"));
   auto it = pending_requests.find(request_id);
-  if (it != pending_requests.end()) {
+  if (it != pending_requests.end())
+  {
     command_name = it->second;
     pending_requests.erase(it);
   }
   bool success = Dap::bool_or_default(Dap::object_get(root, "success"), true);
   const Dap::Value *body = Dap::object_get(root, "body");
-  if (!success) {
+  if (!success)
+  {
     push_error(Dap::string_or_empty(Dap::object_get(root, "message")));
     return;
   }
-  if (command_name == "initialize" && body && body->type == Dap::Value::Object) {
+  if (command_name == "initialize" && body && body->type == Dap::Value::Object)
+  {
     supports_read_memory_ =
-        Dap::bool_or_default(Dap::object_get(*body, "supportsReadMemoryRequest"),
-                             false);
+        Dap::bool_or_default(Dap::object_get(*body, "supportsReadMemoryRequest"), false);
     supports_disassemble_ =
-        Dap::bool_or_default(Dap::object_get(*body, "supportsDisassembleRequest"),
-                             false);
+        Dap::bool_or_default(Dap::object_get(*body, "supportsDisassembleRequest"), false);
     initialized = true;
     DebuggerEvent ev;
     ev.type = DebuggerEvent::Capabilities;
@@ -1203,125 +1399,160 @@ void DebuggerClient::handle_response(const Dap::Value &root) {
     pending_events.push_back(std::move(ev));
     return;
   }
-  if (!body || body->type != Dap::Value::Object) {
+  if (!body || body->type != Dap::Value::Object)
+  {
     return;
   }
   DebuggerEvent ev;
-  if (command_name == "threads") {
+  if (command_name == "threads")
+  {
     ev.type = DebuggerEvent::Threads;
     ev.threads = threads_from_body(*body);
-  } else if (command_name == "stackTrace") {
+  }
+  else if (command_name == "stackTrace")
+  {
     ev.type = DebuggerEvent::StackTrace;
     ev.frames = frames_from_body(*body);
-  } else if (command_name == "scopes" || command_name == "variables") {
-    ev.type = command_name == "scopes" ? DebuggerEvent::Scopes
-                                       : DebuggerEvent::Variables;
+  }
+  else if (command_name == "scopes" || command_name == "variables")
+  {
+    ev.type = command_name == "scopes" ? DebuggerEvent::Scopes : DebuggerEvent::Variables;
     ev.variables = variables_from_body(*body);
-  } else if (command_name == "readMemory") {
+  }
+  else if (command_name == "readMemory")
+  {
     ev.type = DebuggerEvent::Memory;
     ev.memory_rows = memory_from_body(*body);
-  } else if (command_name == "disassemble") {
+  }
+  else if (command_name == "disassemble")
+  {
     ev.type = DebuggerEvent::Disassembly;
     ev.instructions = instructions_from_body(*body);
-  } else if (command_name == "setBreakpoints") {
+  }
+  else if (command_name == "setBreakpoints")
+  {
     ev.type = DebuggerEvent::Breakpoints;
     std::string path;
     ev.breakpoints = breakpoints_from_body(*body, path);
-  } else {
+  }
+  else
+  {
     return;
   }
   pending_events.push_back(std::move(ev));
 }
 
-void DebuggerClient::handle_event(const Dap::Value &root) {
+void DebuggerClient::handle_event(const Dap::Value &root)
+{
   std::string name = Dap::string_or_empty(Dap::object_get(root, "event"));
   const Dap::Value *body = Dap::object_get(root, "body");
   DebuggerEvent ev;
-  if (name == "initialized") {
+  if (name == "initialized")
+  {
     ev.type = DebuggerEvent::Initialized;
-  } else if (name == "stopped") {
+  }
+  else if (name == "stopped")
+  {
     ev.type = DebuggerEvent::Stopped;
     ev.message = body ? Dap::string_or_empty(Dap::object_get(*body, "reason")) : "";
-    ev.thread_id = body ? Dap::int_or_default(Dap::object_get(*body, "threadId"), 0)
-                        : 0;
-  } else if (name == "continued") {
+    ev.thread_id = body ? Dap::int_or_default(Dap::object_get(*body, "threadId"), 0) : 0;
+  }
+  else if (name == "continued")
+  {
     ev.type = DebuggerEvent::Continued;
-    ev.thread_id = body ? Dap::int_or_default(Dap::object_get(*body, "threadId"), 0)
-                        : 0;
-  } else if (name == "terminated") {
+    ev.thread_id = body ? Dap::int_or_default(Dap::object_get(*body, "threadId"), 0) : 0;
+  }
+  else if (name == "terminated")
+  {
     ev.type = DebuggerEvent::Terminated;
-  } else if (name == "exited") {
+  }
+  else if (name == "exited")
+  {
     ev.type = DebuggerEvent::Exited;
-    ev.exit_code = body ? Dap::int_or_default(Dap::object_get(*body, "exitCode"), 0)
-                        : 0;
-  } else if (name == "output") {
+    ev.exit_code = body ? Dap::int_or_default(Dap::object_get(*body, "exitCode"), 0) : 0;
+  }
+  else if (name == "output")
+  {
     ev.type = DebuggerEvent::Output;
     ev.message = body ? Dap::string_or_empty(Dap::object_get(*body, "output")) : "";
-  } else {
+  }
+  else
+  {
     return;
   }
   pending_events.push_back(std::move(ev));
 }
 
-void DebuggerClient::push_error(const std::string &message) {
+void DebuggerClient::push_error(const std::string &message)
+{
   DebuggerEvent ev;
   ev.type = DebuggerEvent::Error;
   ev.message = message.empty() ? "Debugger error" : message;
   pending_events.push_back(std::move(ev));
 }
 
-std::string DebuggerClient::describe() const {
+std::string DebuggerClient::describe() const
+{
   return config.name + " (" + adapter_type(config.adapter) + ")";
 }
 
-std::vector<DebuggerSessionConfig>
-parse_debugger_config_text(const std::string &text) {
+std::vector<DebuggerSessionConfig> parse_debugger_config_text(const std::string &text)
+{
   Dap::Value root;
-  if (!Dap::parse_json(text, root) || root.type != Dap::Value::Object) {
+  if (!Dap::parse_json(text, root) || root.type != Dap::Value::Object)
+  {
     return {};
   }
   const Dap::Value *sessions = Dap::object_get(root, "sessions");
-  if (!sessions || sessions->type != Dap::Value::Object) {
+  if (!sessions || sessions->type != Dap::Value::Object)
+  {
     return {};
   }
   std::vector<DebuggerSessionConfig> out;
-  for (const auto &entry : sessions->object_value) {
-    if (entry.second.type != Dap::Value::Object) {
+  for (const auto &entry : sessions->object_value)
+  {
+    if (entry.second.type != Dap::Value::Object)
+    {
       continue;
     }
     DebuggerSessionConfig config;
     config.name = entry.first;
-    config.adapter =
-        Dap::string_or_empty(Dap::object_get(entry.second, "adapter"));
-    if (config.adapter.empty()) {
+    config.adapter = Dap::string_or_empty(Dap::object_get(entry.second, "adapter"));
+    if (config.adapter.empty())
+    {
       config.adapter = "gdb";
     }
-    config.program =
-        Dap::string_or_empty(Dap::object_get(entry.second, "program"));
+    config.program = Dap::string_or_empty(Dap::object_get(entry.second, "program"));
     config.cwd = Dap::string_or_empty(Dap::object_get(entry.second, "cwd"));
-    config.attach =
-        Dap::bool_or_default(Dap::object_get(entry.second, "attach"), false);
+    config.attach = Dap::bool_or_default(Dap::object_get(entry.second, "attach"), false);
     config.pid = Dap::int_or_default(Dap::object_get(entry.second, "pid"), 0);
     const Dap::Value *args = Dap::object_get(entry.second, "args");
-    if (args && args->type == Dap::Value::Array) {
-      for (const auto &arg : args->array_value) {
-        if (arg.type == Dap::Value::String) {
+    if (args && args->type == Dap::Value::Array)
+    {
+      for (const auto &arg : args->array_value)
+      {
+        if (arg.type == Dap::Value::String)
+        {
           config.args.push_back(arg.string_value);
         }
       }
     }
     const Dap::Value *env = Dap::object_get(entry.second, "env");
-    if (env && env->type == Dap::Value::Object) {
-      for (const auto &env_entry : env->object_value) {
-        if (env_entry.second.type == Dap::Value::String) {
+    if (env && env->type == Dap::Value::Object)
+    {
+      for (const auto &env_entry : env->object_value)
+      {
+        if (env_entry.second.type == Dap::Value::String)
+        {
           config.env[env_entry.first] = env_entry.second.string_value;
         }
       }
     }
     out.push_back(std::move(config));
   }
-  std::sort(out.begin(), out.end(),
-            [](const DebuggerSessionConfig &a,
-               const DebuggerSessionConfig &b) { return a.name < b.name; });
+  std::sort(out.begin(),
+            out.end(),
+            [](const DebuggerSessionConfig &a, const DebuggerSessionConfig &b)
+            { return a.name < b.name; });
   return out;
 }

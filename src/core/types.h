@@ -1,8 +1,8 @@
 #ifndef EDITOR_TYPES_H
 #define EDITOR_TYPES_H
 
-#include "text_features.h"
 #include "line_provider.h"
+#include "text_features.h"
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -20,13 +20,15 @@ struct TSParser;
 struct TSTree;
 #endif
 
-namespace {
-constexpr std::uintmax_t kFileSizeLazyThreshold = 10ULL * 1024ULL * 1024ULL;
-constexpr int kDeltaWindowHalfSize = 50;
-constexpr int kMaxFullSnapshotLines = 5000;
-}
+namespace
+{
+  constexpr std::uintmax_t kFileSizeLazyThreshold = 10ULL * 1024ULL * 1024ULL;
+  constexpr int kDeltaWindowHalfSize = 50;
+  constexpr int kMaxFullSnapshotLines = 5000;
+} // namespace
 
-enum PanelType {
+enum PanelType
+{
   PANEL_EDITOR,
   PANEL_MINIMAP,
   PANEL_SEARCH,
@@ -34,14 +36,16 @@ enum PanelType {
   PANEL_TELESCOPE
 };
 
-enum SyntaxEngine {
+enum SyntaxEngine
+{
   SYNTAX_ENGINE_UNKNOWN,
   SYNTAX_ENGINE_NONE,
   SYNTAX_ENGINE_REGEX,
   SYNTAX_ENGINE_TREESITTER
 };
 
-enum class SyntaxThemeSlot {
+enum class SyntaxThemeSlot
+{
   Variable,
   Constant,
   Builtin,
@@ -65,7 +69,8 @@ enum class SyntaxThemeSlot {
   PunctuationDelimiter
 };
 
-struct Theme {
+struct Theme
+{
   int fg_default = 7;
   int bg_default = 0;
   int fg_keyword = 6;
@@ -233,8 +238,10 @@ struct Theme {
   int fg_git_conflict = 1;
   int bg_git_conflict = 52;
 
-  void mark_syntax_slot_explicit(SyntaxThemeSlot slot) {
-    switch (slot) {
+  void mark_syntax_slot_explicit(SyntaxThemeSlot slot)
+  {
+    switch (slot)
+    {
     case SyntaxThemeSlot::Variable:
       syntax_variable_explicit = true;
       break;
@@ -301,114 +308,141 @@ struct Theme {
     }
   }
 
-  void normalize_syntax_palette() {
-    if (!syntax_variable_explicit) {
+  void normalize_syntax_palette()
+  {
+    if (!syntax_variable_explicit)
+    {
       fg_variable = fg_default;
       bg_variable = bg_default;
     }
-    if (!syntax_parameter_explicit) {
+    if (!syntax_parameter_explicit)
+    {
       fg_parameter = fg_default;
       bg_parameter = bg_default;
     }
-    if (!syntax_field_explicit) {
+    if (!syntax_field_explicit)
+    {
       fg_field = fg_default;
       bg_field = bg_default;
     }
-    if (!syntax_punctuation_explicit) {
+    if (!syntax_punctuation_explicit)
+    {
       fg_punctuation = fg_default;
       bg_punctuation = bg_default;
     }
-    if (!syntax_operator_explicit) {
+    if (!syntax_operator_explicit)
+    {
       fg_operator = fg_keyword;
       bg_operator = bg_keyword;
     }
-    if (!syntax_tag_explicit) {
+    if (!syntax_tag_explicit)
+    {
       fg_tag = fg_keyword;
       bg_tag = bg_keyword;
     }
-    if (!syntax_constant_explicit) {
+    if (!syntax_constant_explicit)
+    {
       fg_constant = fg_number;
       bg_constant = bg_number;
     }
-    if (!syntax_builtin_explicit) {
+    if (!syntax_builtin_explicit)
+    {
       fg_builtin = fg_type;
       bg_builtin = bg_type;
     }
-    if (!syntax_attribute_explicit) {
+    if (!syntax_attribute_explicit)
+    {
       fg_attribute = fg_type;
       bg_attribute = bg_type;
     }
-    if (!syntax_namespace_explicit) {
+    if (!syntax_namespace_explicit)
+    {
       fg_namespace = fg_default;
       bg_namespace = bg_default;
     }
-    if (!syntax_module_explicit) {
+    if (!syntax_module_explicit)
+    {
       fg_module = fg_default;
       bg_module = bg_default;
     }
-    if (!syntax_keyword_control_explicit) {
+    if (!syntax_keyword_control_explicit)
+    {
       fg_keyword_control = fg_keyword;
       bg_keyword_control = bg_keyword;
     }
-    if (!syntax_keyword_storage_explicit) {
+    if (!syntax_keyword_storage_explicit)
+    {
       fg_keyword_storage = fg_type;
       bg_keyword_storage = bg_type;
     }
-    if (!syntax_keyword_preproc_explicit) {
+    if (!syntax_keyword_preproc_explicit)
+    {
       fg_keyword_preproc = fg_constant;
       bg_keyword_preproc = bg_constant;
     }
-    if (!syntax_function_method_explicit) {
+    if (!syntax_function_method_explicit)
+    {
       fg_function_method = fg_function;
       bg_function_method = bg_function;
     }
-    if (!syntax_function_constructor_explicit) {
+    if (!syntax_function_constructor_explicit)
+    {
       fg_function_constructor = fg_type;
       bg_function_constructor = bg_type;
     }
-    if (!syntax_type_builtin_explicit) {
+    if (!syntax_type_builtin_explicit)
+    {
       fg_type_builtin = fg_builtin;
       bg_type_builtin = bg_builtin;
     }
-    if (!syntax_constant_macro_explicit) {
+    if (!syntax_constant_macro_explicit)
+    {
       fg_constant_macro = fg_constant;
       bg_constant_macro = bg_constant;
     }
-    if (!syntax_string_escape_explicit) {
+    if (!syntax_string_escape_explicit)
+    {
       fg_string_escape = fg_builtin;
       bg_string_escape = bg_builtin;
     }
-    if (!syntax_punctuation_bracket_explicit) {
+    if (!syntax_punctuation_bracket_explicit)
+    {
       fg_punctuation_bracket = fg_punctuation;
       bg_punctuation_bracket = bg_punctuation;
     }
-    if (!syntax_punctuation_delimiter_explicit) {
+    if (!syntax_punctuation_delimiter_explicit)
+    {
       fg_punctuation_delimiter = fg_punctuation;
       bg_punctuation_delimiter = bg_punctuation;
     }
   }
 };
 
-struct Cursor {
+struct Cursor
+{
   int x, y;
-  bool operator==(const Cursor &other) const {
+  bool operator==(const Cursor &other) const
+  {
     return x == other.x && y == other.y;
   }
 };
 
-struct Selection {
+struct Selection
+{
   Cursor start;
   Cursor end;
   bool active;
 };
 
-struct GlobalMark {
+struct GlobalMark
+{
   std::string filepath;
   int line = 0;
   int col = 0;
 };
 
-struct State {
+struct State
+{
   bool full_snapshot = false;
   int start_line = 0;
   std::vector<std::string> old_lines;
@@ -423,7 +457,8 @@ struct State {
   bool is_placeholder;
 };
 
-struct SyntaxLineCache {
+struct SyntaxLineCache
+{
   bool valid = false;
   std::size_t line_hash = 0;
   std::size_t line_length = 0;
@@ -434,13 +469,15 @@ struct SyntaxLineCache {
   std::vector<std::pair<int, int>> colors;
 };
 
-struct FoldRange {
+struct FoldRange
+{
   int start_line = 0;
   int end_line = 0;
   bool collapsed = false;
 };
 
-struct FileBuffer {
+struct FileBuffer
+{
   std::vector<std::string> lines;
   std::unique_ptr<LineProvider> lazy_provider;
 
@@ -473,7 +510,8 @@ struct FileBuffer {
 
   // Called after any content mutation: fold ranges and tree-sitter byte
   // offsets become stale and must be rebuilt lazily on next use.
-  void mark_edited() {
+  void mark_edited()
+  {
     folds_dirty = true;
     ts_line_offsets.clear();
   }
@@ -485,79 +523,106 @@ struct FileBuffer {
 #endif
 
   // Line accessor methods
-  bool is_lazy() const { return lazy_provider != nullptr; }
+  bool is_lazy() const
+  {
+    return lazy_provider != nullptr;
+  }
 
-  const std::string &line(int n) const {
+  const std::string &line(int n) const
+  {
     if (lazy_provider)
       return lazy_provider->get_line(n);
-    if (n < 0 || n >= (int)lines.size()) {
+    if (n < 0 || n >= (int)lines.size())
+    {
       static const std::string empty;
       return empty;
     }
     return lines[n];
   }
 
-  std::string &line_mut(int n) {
+  std::string &line_mut(int n)
+  {
     if (lazy_provider)
       materialize();
-    if (n < 0 || n >= (int)lines.size()) {
-      if (lines.empty()) lines.push_back("");
+    if (n < 0 || n >= (int)lines.size())
+    {
+      if (lines.empty())
+        lines.push_back("");
       return lines[0];
     }
     return lines[n];
   }
 
-  size_t line_count() const {
+  size_t line_count() const
+  {
     if (lazy_provider)
       return lazy_provider->line_count();
     return lines.size();
   }
 
-  bool has_lines() const { return line_count() > 0; }
+  bool has_lines() const
+  {
+    return line_count() > 0;
+  }
 
-  char char_at(int line_idx, int col) const {
+  char char_at(int line_idx, int col) const
+  {
     if (lazy_provider)
       return lazy_provider->get_char(line_idx, col);
-    if (line_idx < 0 || line_idx >= (int)lines.size()) return '\0';
-    if (col < 0 || col >= (int)lines[line_idx].size()) return '\0';
+    if (line_idx < 0 || line_idx >= (int)lines.size())
+      return '\0';
+    if (col < 0 || col >= (int)lines[line_idx].size())
+      return '\0';
     return lines[line_idx][col];
   }
 
-  void scroll_hint(int center_line) {
+  void scroll_hint(int center_line)
+  {
     if (lazy_provider)
       lazy_provider->scroll_hint(center_line);
   }
 
   void materialize();
 
-  void replace_lines(int start, int count,
-                     const std::vector<std::string> &new_lines) {
+  void replace_lines(int start, int count, const std::vector<std::string> &new_lines)
+  {
     mark_edited();
-    if (lazy_provider) {
+    if (lazy_provider)
+    {
       lazy_provider->replace_lines(start, count, new_lines);
-    } else {
-      if (count < 0) count = 0;
-      if (start < 0) start = 0;
-      if (start > (int)lines.size()) start = (int)lines.size();
-      if (start + count > (int)lines.size()) {
+    }
+    else
+    {
+      if (count < 0)
+        count = 0;
+      if (start < 0)
+        start = 0;
+      if (start > (int)lines.size())
+        start = (int)lines.size();
+      if (start + count > (int)lines.size())
+      {
         count = (int)lines.size() - start;
       }
-      if (count > 0) {
+      if (count > 0)
+      {
         lines.erase(lines.begin() + start, lines.begin() + start + count);
       }
-      if (!new_lines.empty()) {
+      if (!new_lines.empty())
+      {
         lines.insert(lines.begin() + start, new_lines.begin(), new_lines.end());
       }
     }
   }
 };
 
-enum PopupPresentation {
+enum PopupPresentation
+{
   POPUP_MODAL,
   POPUP_HOVER,
 };
 
-struct Popup {
+struct Popup
+{
   bool visible = false;
   PopupPresentation presentation = POPUP_MODAL;
   std::string title;
@@ -568,7 +633,8 @@ struct Popup {
   int content_lines = 0;
 };
 
-struct FileNode {
+struct FileNode
+{
   std::string name;
   std::string path;
   bool is_dir;
@@ -577,7 +643,8 @@ struct FileNode {
   std::vector<FileNode> children;
 };
 
-struct SplitPane {
+struct SplitPane
+{
   int x, y, w, h;
   int buffer_id;
   bool active;
@@ -585,13 +652,15 @@ struct SplitPane {
   std::vector<int> tab_buffer_ids;
 };
 
-enum PaneLayoutMode {
+enum PaneLayoutMode
+{
   PANE_LAYOUT_SINGLE,
   PANE_LAYOUT_VERTICAL,
   PANE_LAYOUT_HORIZONTAL
 };
 
-struct SyntaxRule {
+struct SyntaxRule
+{
   std::regex pattern;
   int color;
 };

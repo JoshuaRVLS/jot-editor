@@ -19,20 +19,24 @@ static struct termios orig_termios;
 
 static volatile sig_atomic_t g_resize_pending = 0;
 
-static void sigwinch_handler(int) {
+static void sigwinch_handler(int)
+{
   g_resize_pending = 1;
 }
 
-static bool probe_terminal_size_via_ioctl(int fd, struct winsize &ws) {
+static bool probe_terminal_size_via_ioctl(int fd, struct winsize &ws)
+{
   return ioctl(fd, TIOCGWINSZ, &ws) != -1;
 }
 
-static bool get_terminal_size(int &width, int &height) {
+static bool get_terminal_size(int &width, int &height)
+{
   struct winsize ws;
 
-  if (probe_terminal_size_via_ioctl(STDOUT_FILENO, ws) ||
-      probe_terminal_size_via_ioctl(STDIN_FILENO, ws) ||
-      probe_terminal_size_via_ioctl(STDERR_FILENO, ws)) {
+  if (probe_terminal_size_via_ioctl(STDOUT_FILENO, ws)
+      || probe_terminal_size_via_ioctl(STDIN_FILENO, ws)
+      || probe_terminal_size_via_ioctl(STDERR_FILENO, ws))
+  {
     width = std::max(1, (int)ws.ws_col);
     height = std::max(1, (int)ws.ws_row);
     return true;
@@ -40,10 +44,12 @@ static bool get_terminal_size(int &width, int &height) {
 
   {
     int tty_fd = open("/dev/tty", O_RDONLY);
-    if (tty_fd >= 0) {
+    if (tty_fd >= 0)
+    {
       bool ok = probe_terminal_size_via_ioctl(tty_fd, ws);
       ::close(tty_fd);
-      if (ok) {
+      if (ok)
+      {
         width = std::max(1, (int)ws.ws_col);
         height = std::max(1, (int)ws.ws_row);
         return true;
@@ -53,14 +59,18 @@ static bool get_terminal_size(int &width, int &height) {
 
   const char *env_cols = getenv("COLUMNS");
   const char *env_lines = getenv("LINES");
-  if (env_cols) width = std::max(1, atoi(env_cols));
-  if (env_lines) height = std::max(1, atoi(env_lines));
-  if (env_lines || env_cols) return true;
+  if (env_cols)
+    width = std::max(1, atoi(env_cols));
+  if (env_lines)
+    height = std::max(1, atoi(env_lines));
+  if (env_lines || env_cols)
+    return true;
 
   return false;
 }
 
-static bool cursor_probe_size(int &width, int &height) {
+static bool cursor_probe_size(int &width, int &height)
+{
   // Move cursor to (999, 999) — most terminals clamp to the bottom-right
   // corner — then ask for the cursor position with DSR (CSI 6 n). The
   // terminal replies `\x1b[<rows>;<cols>R` which gives us the real
@@ -73,17 +83,21 @@ static bool cursor_probe_size(int &width, int &height) {
 
   char buf[32] = {};
   int i = 0;
-  while (i < 31) {
+  while (i < 31)
+  {
     struct pollfd pfd;
     pfd.fd = STDIN_FILENO;
     pfd.events = POLLIN;
     pfd.revents = 0;
     int ready = poll(&pfd, 1, 200); // 200ms total budget
-    if (ready <= 0 || !(pfd.revents & POLLIN)) {
+    if (ready <= 0 || !(pfd.revents & POLLIN))
+    {
       break;
     }
-    if (read(STDIN_FILENO, &buf[i], 1) != 1) break;
-    if (buf[i] == 'R') {
+    if (read(STDIN_FILENO, &buf[i], 1) != 1)
+      break;
+    if (buf[i] == 'R')
+    {
       i++;
       break;
     }
@@ -91,9 +105,12 @@ static bool cursor_probe_size(int &width, int &height) {
   }
 
   int rows = 0, cols = 0;
-  if (sscanf(buf, "\x1b[%d;%d", &rows, &cols) == 2) {
-    if (rows > 0) height = rows;
-    if (cols > 0) width = cols;
+  if (sscanf(buf, "\x1b[%d;%d", &rows, &cols) == 2)
+  {
+    if (rows > 0)
+      height = rows;
+    if (cols > 0)
+      width = cols;
     ::write(STDOUT_FILENO, "\x1b[H", 3);
     return true;
   }
@@ -101,46 +118,65 @@ static bool cursor_probe_size(int &width, int &height) {
   return false;
 }
 
-
-static bool read_char_with_timeout(char &out, int timeout_ms) {
+static bool read_char_with_timeout(char &out, int timeout_ms)
+{
   struct pollfd pfd;
   pfd.fd = STDIN_FILENO;
   pfd.events = POLLIN;
   pfd.revents = 0;
 
   int ready = poll(&pfd, 1, std::max(0, timeout_ms));
-  if (ready <= 0 || !(pfd.revents & POLLIN)) {
+  if (ready <= 0 || !(pfd.revents & POLLIN))
+  {
     return false;
   }
 
   return read(STDIN_FILENO, &out, 1) == 1;
 }
 
-static bool read_paste_until_end(std::string &out) {
+static bool read_paste_until_end(std::string &out)
+{
   out.clear();
-  while (true) {
+  while (true)
+  {
     char c = 0;
-    if (!read_char_with_timeout(c, 1000)) return false;
-      if (c == '\x1b') {
-        char a = 0, b = 0, c2 = 0, d = 0;
-        if (read_char_with_timeout(a, 20) && a == '[' &&
-            read_char_with_timeout(b, 20) && b == '2' &&
-            read_char_with_timeout(c2, 20) && c2 == '0' &&
-            read_char_with_timeout(d, 20) && d == '1'            
-        ) {
-          char tilde = 0;
-          if (read_char_with_timeout(tilde, 20) && tilde == '~') return true;
-          out.push_back('\x1b'); out.push_back(a); out.push_back(b); out.push_back(c2); out.push_back(d); out.push_back(tilde);
-        } else {
-          out.push_back('\x1b'); out.push_back(a); out.push_back(b); out.push_back(c2); out.push_back(d);
-        }
-      } else {
-        out.push_back(c);
+    if (!read_char_with_timeout(c, 1000))
+      return false;
+    if (c == '\x1b')
+    {
+      char a = 0, b = 0, c2 = 0, d = 0;
+      if (read_char_with_timeout(a, 20) && a == '[' && read_char_with_timeout(b, 20) && b == '2'
+          && read_char_with_timeout(c2, 20) && c2 == '0' && read_char_with_timeout(d, 20)
+          && d == '1')
+      {
+        char tilde = 0;
+        if (read_char_with_timeout(tilde, 20) && tilde == '~')
+          return true;
+        out.push_back('\x1b');
+        out.push_back(a);
+        out.push_back(b);
+        out.push_back(c2);
+        out.push_back(d);
+        out.push_back(tilde);
       }
+      else
+      {
+        out.push_back('\x1b');
+        out.push_back(a);
+        out.push_back(b);
+        out.push_back(c2);
+        out.push_back(d);
+      }
+    }
+    else
+    {
+      out.push_back(c);
+    }
   }
 }
 
-static int termkey_modifier_flags(int mod) {
+static int termkey_modifier_flags(int mod)
+{
   int flags = 0;
   if (mod & TERMKEY_KEYMOD_SHIFT)
     flags |= 0x80000; // Shift
@@ -151,8 +187,10 @@ static int termkey_modifier_flags(int mod) {
   return flags;
 }
 
-static int translate_termkey_keysym(TermKeySym sym) {
-  switch (sym) {
+static int translate_termkey_keysym(TermKeySym sym)
+{
+  switch (sym)
+  {
   case TERMKEY_SYM_BACKSPACE:
     return 127;
   case TERMKEY_SYM_TAB:
@@ -224,30 +262,38 @@ static int translate_termkey_keysym(TermKeySym sym) {
   }
 }
 
-static int translate_termkey_key(const TermKeyKey &key) {
+static int translate_termkey_key(const TermKeyKey &key)
+{
   int flags = termkey_modifier_flags(key.modifiers);
 
-  switch (key.type) {
-  case TERMKEY_TYPE_UNICODE: {
+  switch (key.type)
+  {
+  case TERMKEY_TYPE_UNICODE:
+  {
     int codepoint = static_cast<int>(key.code.codepoint);
-    if (codepoint <= 0) {
+    if (codepoint <= 0)
+    {
       return -1;
     }
-    if (codepoint >= 'A' && codepoint <= 'Z') {
+    if (codepoint >= 'A' && codepoint <= 'Z')
+    {
       codepoint |= 0x8000;
     }
     return codepoint | flags;
   }
-  case TERMKEY_TYPE_KEYSYM: {
+  case TERMKEY_TYPE_KEYSYM:
+  {
     int mapped = translate_termkey_keysym(key.code.sym);
-    if (mapped == '\t' && (key.modifiers & TERMKEY_KEYMOD_SHIFT)) {
+    if (mapped == '\t' && (key.modifiers & TERMKEY_KEYMOD_SHIFT))
+    {
       mapped = 1017;
       flags &= ~0x80000;
     }
     return mapped ? (mapped | flags) : -1;
   }
   case TERMKEY_TYPE_FUNCTION:
-    if (key.code.number > 0) {
+    if (key.code.number > 0)
+    {
       return KeyCode::function(key.code.number) | flags;
     }
     return -1;
@@ -256,7 +302,8 @@ static int translate_termkey_key(const TermKeyKey &key) {
   }
 }
 
-static void append_mouse_reset(std::string &buffer) {
+static void append_mouse_reset(std::string &buffer)
+{
   buffer += "\x1b[?1003l"; // any-motion mouse tracking
   buffer += "\x1b[?1002l"; // button-event mouse tracking
   buffer += "\x1b[?1000l"; // basic mouse tracking
@@ -266,13 +313,17 @@ static void append_mouse_reset(std::string &buffer) {
   buffer += "\x1b[?2004l"; // bracketed paste
 }
 
-Terminal::Terminal()
-    : width(80), height(24), poll_timeout_ms(8), raw_mode(false),
-      termkey_(nullptr) {}
+Terminal::Terminal() : width(80), height(24), poll_timeout_ms(8), raw_mode(false), termkey_(nullptr)
+{
+}
 
-Terminal::~Terminal() { cleanup(); }
+Terminal::~Terminal()
+{
+  cleanup();
+}
 
-void Terminal::enable_raw_mode() {
+void Terminal::enable_raw_mode()
+{
   if (raw_mode)
     return;
 
@@ -290,14 +341,16 @@ void Terminal::enable_raw_mode() {
   raw_mode = true;
 }
 
-void Terminal::disable_raw_mode() {
+void Terminal::disable_raw_mode()
+{
   if (!raw_mode)
     return;
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
   raw_mode = false;
 }
 
-void Terminal::setup_terminal() {
+void Terminal::setup_terminal()
+{
   write("\x1b[?1049h");
   write("\x1b[?25l");
   write("\x1b[2J");
@@ -305,7 +358,8 @@ void Terminal::setup_terminal() {
   write("\x1b[?2004h");
 }
 
-void Terminal::restore_terminal() {
+void Terminal::restore_terminal()
+{
   append_mouse_reset(buffer);
   write("\x1b[?25h");
   write("\x1b[1 q"); // restore block cursor for the host shell
@@ -317,7 +371,8 @@ void Terminal::restore_terminal() {
   flush();
 }
 
-void Terminal::init() {
+void Terminal::init()
+{
   setup_terminal();
   flush();
 
@@ -329,12 +384,15 @@ void Terminal::init() {
   // terminal bytes to the capture file.
   {
     const char *cp = getenv("JOT_RENDER_CAPTURE");
-    if (cp && cp[0] != '\0') {
+    if (cp && cp[0] != '\0')
+    {
       render_capture_ = fopen(cp, "wb");
-      if (render_capture_) {
+      if (render_capture_)
+      {
         const char *raw = getenv("JOT_RENDER_CAPTURE_RAW");
         render_capture_raw_ = (raw && raw[0] == '1');
-        fprintf(render_capture_, "--JOT-RENDER-CAPTURE-START (raw=%d)--\n",
+        fprintf(render_capture_,
+                "--JOT-RENDER-CAPTURE-START (raw=%d)--\n",
                 render_capture_raw_ ? 1 : 0);
         fflush(render_capture_);
       }
@@ -350,22 +408,26 @@ void Terminal::init() {
 
   TERMKEY_CHECK_VERSION;
   const char *term = getenv("TERM");
-  if (!term || term[0] == '\0') {
+  if (!term || term[0] == '\0')
+  {
     term = "xterm-256color";
   }
-  termkey_ = termkey_new_abstract(
-      term, TERMKEY_FLAG_UTF8 | TERMKEY_FLAG_CTRLC | TERMKEY_FLAG_CONVERTKP);
-  if (!termkey_) {
+  termkey_ =
+      termkey_new_abstract(term, TERMKEY_FLAG_UTF8 | TERMKEY_FLAG_CTRLC | TERMKEY_FLAG_CONVERTKP);
+  if (!termkey_)
+  {
     termkey_ = termkey_new_abstract(
-        "xterm-256color",
-        TERMKEY_FLAG_UTF8 | TERMKEY_FLAG_CTRLC | TERMKEY_FLAG_CONVERTKP);
+        "xterm-256color", TERMKEY_FLAG_UTF8 | TERMKEY_FLAG_CTRLC | TERMKEY_FLAG_CONVERTKP);
   }
-  if (termkey_) {
+  if (termkey_)
+  {
     termkey_set_waittime(termkey_, 10);
   }
 
-  if (width <= 0) width = 80;
-  if (height <= 0) height = 24;
+  if (width <= 0)
+    width = 80;
+  if (height <= 0)
+    height = 24;
 
   // Renderer safety margin is fixed at one cell. Larger margins create a
   // visible right-edge gap; zero brings back the rightmost-column wrap bug.
@@ -378,9 +440,11 @@ void Terminal::init() {
   // the event loop while the kernel drains the PTY buffer.
   {
     const char *m = getenv("JOT_RENDER_CHUNK_BYTES");
-    if (m && m[0] != '\0') {
+    if (m && m[0] != '\0')
+    {
       int v = atoi(m);
-      if (v >= 0) {
+      if (v >= 0)
+      {
         render_chunk_bytes_ = (size_t)v;
       }
     }
@@ -395,7 +459,8 @@ void Terminal::init() {
   enable_mouse();
 }
 
-bool Terminal::refresh_size(bool force_probe) {
+bool Terminal::refresh_size(bool force_probe)
+{
   int new_width = width;
   int new_height = height;
 
@@ -409,11 +474,12 @@ bool Terminal::refresh_size(bool force_probe) {
   // This is the only way to recover when ioctl is returning stale
   // dimensions (e.g. after the alternate screen was entered) or when the
   // controlling TTY / foreground process group changed.
-  if ((force_probe || !got) && isatty(STDIN_FILENO) &&
-      isatty(STDOUT_FILENO)) {
+  if ((force_probe || !got) && isatty(STDIN_FILENO) && isatty(STDOUT_FILENO))
+  {
     int probe_w = new_width;
     int probe_h = new_height;
-    if (cursor_probe_size(probe_w, probe_h)) {
+    if (cursor_probe_size(probe_w, probe_h))
+    {
       if (probe_w > 0)
         new_width = probe_w;
       if (probe_h > 0)
@@ -422,52 +488,65 @@ bool Terminal::refresh_size(bool force_probe) {
     }
   }
 
-  if (!got) {
+  if (!got)
+  {
     return false;
   }
 
-  if (new_width < 1) new_width = 1;
-  if (new_height < 1) new_height = 1;
+  if (new_width < 1)
+    new_width = 1;
+  if (new_height < 1)
+    new_height = 1;
   bool changed = (new_width != width) || (new_height != height);
   width = new_width;
   height = new_height;
   return changed;
 }
 
-void Terminal::cleanup() {
-  if (termkey_) {
+void Terminal::cleanup()
+{
+  if (termkey_)
+  {
     termkey_destroy(termkey_);
     termkey_ = nullptr;
   }
   disable_mouse();
   disable_raw_mode();
   restore_terminal();
-  if (render_capture_) {
+  if (render_capture_)
+  {
     fprintf(render_capture_, "\n--JOT-RENDER-CAPTURE-END--\n");
     fclose(render_capture_);
     render_capture_ = nullptr;
   }
 }
 
-int Terminal::read_termkey_result() {
-  if (!termkey_) {
+int Terminal::read_termkey_result()
+{
+  if (!termkey_)
+  {
     return -1;
   }
 
   TermKeyKey key;
-  while (true) {
+  while (true)
+  {
     TermKeyResult result = termkey_getkey(termkey_, &key);
-    if (result == TERMKEY_RES_KEY) {
+    if (result == TERMKEY_RES_KEY)
+    {
       return translate_termkey_key(key);
     }
-    if (result == TERMKEY_RES_AGAIN) {
+    if (result == TERMKEY_RES_AGAIN)
+    {
       char next;
-      if (read_char_with_timeout(next, termkey_get_waittime(termkey_))) {
+      if (read_char_with_timeout(next, termkey_get_waittime(termkey_)))
+      {
         termkey_push_bytes(termkey_, &next, 1);
         continue;
       }
       result = termkey_getkey_force(termkey_, &key);
-      if (result == TERMKEY_RES_KEY) {
+      if (result == TERMKEY_RES_KEY)
+      {
         return translate_termkey_key(key);
       }
       return -1;
@@ -476,7 +555,8 @@ int Terminal::read_termkey_result() {
   }
 }
 
-int Terminal::read_key() {
+int Terminal::read_key()
+{
   char c;
   if (read(STDIN_FILENO, &c, 1) != 1)
     return -1;
@@ -484,13 +564,18 @@ int Terminal::read_key() {
   std::string bytes;
   bytes.push_back(c);
 
-  if (c == '\x1b') {
+  if (c == '\x1b')
+  {
     char second;
-    if (read_char_with_timeout(second, 5)) {
+    if (read_char_with_timeout(second, 5))
+    {
       bytes.push_back(second);
-      if (second == '\x1b') {
-        if (!read_char_with_timeout(second, 5)) {
-          if (!termkey_) {
+      if (second == '\x1b')
+      {
+        if (!read_char_with_timeout(second, 5))
+        {
+          if (!termkey_)
+          {
             return -1;
           }
           termkey_push_bytes(termkey_, bytes.data(), bytes.size());
@@ -498,18 +583,23 @@ int Terminal::read_key() {
         }
         bytes.push_back(second);
       }
-      if (second == '[') {
+      if (second == '[')
+      {
         char third;
-        if (read_char_with_timeout(third, 5)) {
+        if (read_char_with_timeout(third, 5))
+        {
           bytes.push_back(third);
-          if (third == '<') {
+          if (third == '<')
+          {
             mouse_event_buffer.clear();
             char mouse_seq[32] = {0};
             int mouse_pos = 0;
-            while (mouse_pos < 31) {
+            while (mouse_pos < 31)
+            {
               if (!read_char_with_timeout(mouse_seq[mouse_pos], 5))
                 return '\x1b';
-              if (mouse_seq[mouse_pos] == 'M' || mouse_seq[mouse_pos] == 'm') {
+              if (mouse_seq[mouse_pos] == 'M' || mouse_seq[mouse_pos] == 'm')
+              {
                 mouse_seq[mouse_pos + 1] = '\0';
                 break;
               }
@@ -518,42 +608,51 @@ int Terminal::read_key() {
             mouse_event_buffer = std::string(mouse_seq);
             return 1014;
           }
-          
-          if (third == '2') {
+
+          if (third == '2')
+          {
             char a = 0, b = 0, tilde = 0;
-            if (read_char_with_timeout(a, 5) && a == '0' &&
-                read_char_with_timeout(b, 5) && b == '0' &&
-                read_char_with_timeout(tilde, 5) && tilde == '~'
-            ) {
-              if (read_paste_until_end(paste_event_buffer)) return 1020;
+            if (read_char_with_timeout(a, 5) && a == '0' && read_char_with_timeout(b, 5) && b == '0'
+                && read_char_with_timeout(tilde, 5) && tilde == '~')
+            {
+              if (read_paste_until_end(paste_event_buffer))
+                return 1020;
             }
           }
-          
-          while (third < 0x40 || third > 0x7e) {
-            if (!read_char_with_timeout(third, 5)) {
+
+          while (third < 0x40 || third > 0x7e)
+          {
+            if (!read_char_with_timeout(third, 5))
+            {
               break;
             }
             bytes.push_back(third);
           }
         }
-      } else if (second == 'O') {
+      }
+      else if (second == 'O')
+      {
         char third;
-        if (read_char_with_timeout(third, 5)) {
+        if (read_char_with_timeout(third, 5))
+        {
           bytes.push_back(third);
         }
       }
     }
   }
 
-  if (!termkey_) {
+  if (!termkey_)
+  {
     return -1;
   }
   termkey_push_bytes(termkey_, bytes.data(), bytes.size());
   return read_termkey_result();
 }
 
-void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
-  if (mouse_event_buffer.empty()) {
+void Terminal::parse_mouse_event(int ch, MouseEvent &event)
+{
+  if (mouse_event_buffer.empty())
+  {
     event.x = -1;
     event.y = -1;
     event.button = 0;
@@ -568,10 +667,12 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
   const char *seq = mouse_event_buffer.c_str();
 
   char terminator = '\0';
-  if (!mouse_event_buffer.empty()) {
+  if (!mouse_event_buffer.empty())
+  {
     terminator = mouse_event_buffer.back();
   }
-  if (terminator != 'M' && terminator != 'm') {
+  if (terminator != 'M' && terminator != 'm')
+  {
     event.x = -1;
     event.y = -1;
     event.button = 0;
@@ -584,8 +685,10 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
   }
 
   int button, x, y;
-  if (sscanf(seq, "%d;%d;%d", &button, &x, &y) == 3) {
-    if (x <= 0 || y <= 0) {
+  if (sscanf(seq, "%d;%d;%d", &button, &x, &y) == 3)
+  {
+    if (x <= 0 || y <= 0)
+    {
       event.x = -1;
       event.y = -1;
       event.button = button;
@@ -607,20 +710,29 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
     bool is_wheel = (button >= 64 && button <= 67);
     bool is_release = (terminator == 'm');
 
-    if (is_wheel) {
+    if (is_wheel)
+    {
       event.pressed = true;
       event.released = false;
-    } else if (is_motion) {
+    }
+    else if (is_motion)
+    {
       event.pressed = false;
       event.released = false;
-    } else if (!is_release) {
+    }
+    else if (!is_release)
+    {
       event.pressed = true;
       event.released = false;
-    } else {
+    }
+    else
+    {
       event.pressed = false;
       event.released = true;
     }
-  } else {
+  }
+  else
+  {
     event.x = -1;
     event.y = -1;
     event.button = 0;
@@ -632,7 +744,8 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event) {
   }
 }
 
-Event Terminal::poll_event() {
+Event Terminal::poll_event()
+{
   Event ev{};
   ev.type = EVENT_REDRAW;
 
@@ -642,7 +755,8 @@ Event Terminal::poll_event() {
   pfd.revents = 0;
   poll(&pfd, 1, std::max(0, poll_timeout_ms));
 
-  if (pfd.revents & POLLIN) {
+  if (pfd.revents & POLLIN)
+  {
     Event input = read_event();
     if (input.type != EVENT_REDRAW)
       return input;
@@ -655,7 +769,8 @@ Event Terminal::poll_event() {
   return ev;
 }
 
-Event Terminal::check_resize_event() {
+Event Terminal::check_resize_event()
+{
   Event ev;
   ev.type = EVENT_REDRAW;
 
@@ -665,7 +780,8 @@ Event Terminal::check_resize_event() {
   // when no signal has been delivered. Reset g_resize_pending so a single
   // signal doesn't keep forcing resizes after we've already absorbed it.
   g_resize_pending = 0;
-  if (refresh_size()) {
+  if (refresh_size())
+  {
     ev.type = EVENT_RESIZE;
     ev.resize.width = width;
     ev.resize.height = height;
@@ -674,44 +790,58 @@ Event Terminal::check_resize_event() {
   return ev;
 }
 
-Event Terminal::read_event() {
+Event Terminal::read_event()
+{
   Event ev{};
   ev.type = EVENT_REDRAW;
 
   int ch = read_key();
-  if (ch < 0) {
+  if (ch < 0)
+  {
     ev.type = EVENT_REDRAW;
     return ev;
   }
-  
-  if (ch == 1020) {
+
+  if (ch == 1020)
+  {
     ev.type = EVENT_PASTE;
     ev.paste.text = paste_event_buffer.c_str();
     return ev;
   }
 
-  if (ch == 1014) {
+  if (ch == 1014)
+  {
     parse_mouse_event(ch, ev.mouse);
-    if (const char *p = std::getenv("JOT_MOUSE_DEBUG"); p && *p) {
+    if (const char *p = std::getenv("JOT_MOUSE_DEBUG"); p && *p)
+    {
       FILE *f = std::fopen(p, "a");
-      if (f) {
-        std::fprintf(f, "[proto] SGR buffer='%s' parsed=(%d,%d) btn=%d "
-                          "pressed=%d released=%d\n",
-                     mouse_event_buffer.c_str(), ev.mouse.x, ev.mouse.y,
-                     ev.mouse.button, ev.mouse.pressed ? 1 : 0,
+      if (f)
+      {
+        std::fprintf(f,
+                     "[proto] SGR buffer='%s' parsed=(%d,%d) btn=%d "
+                     "pressed=%d released=%d\n",
+                     mouse_event_buffer.c_str(),
+                     ev.mouse.x,
+                     ev.mouse.y,
+                     ev.mouse.button,
+                     ev.mouse.pressed ? 1 : 0,
                      ev.mouse.released ? 1 : 0);
         std::fclose(f);
       }
     }
-    if (ev.mouse.x < 0 || ev.mouse.y < 0) {
+    if (ev.mouse.x < 0 || ev.mouse.y < 0)
+    {
       ev.type = EVENT_REDRAW;
-    } else {
+    }
+    else
+    {
       ev.type = EVENT_MOUSE;
     }
     return ev;
   }
 
-  if (ch == 28) {
+  if (ch == 28)
+  {
     ev = check_resize_event();
     if (ev.type != EVENT_REDRAW)
       return ev;
@@ -726,31 +856,34 @@ Event Terminal::read_event() {
   const bool function_key = (ch & KeyCode::FunctionMarker) != 0;
   int base_key = ch & 0xFFFF;
 
-  ev.key.key = function_key ? (ch & (KeyCode::FunctionMarker | 0xFFFF))
-                            : base_key;
-  ev.key.ctrl = mod_ctrl || (base_key >= 1 && base_key <= 26 &&
-                             base_key != 13 && base_key != 9);
-  ev.key.shift = mod_shift || (base_key >= 2008 && base_key <= 2011) ||
-                 (base_key & 0x8000);
+  ev.key.key = function_key ? (ch & (KeyCode::FunctionMarker | 0xFFFF)) : base_key;
+  ev.key.ctrl = mod_ctrl || (base_key >= 1 && base_key <= 26 && base_key != 13 && base_key != 9);
+  ev.key.shift = mod_shift || (base_key >= 2008 && base_key <= 2011) || (base_key & 0x8000);
   ev.key.alt = mod_alt;
 
-  if (ev.key.shift && (base_key >= 2008 && base_key <= 2011)) {
+  if (ev.key.shift && (base_key >= 2008 && base_key <= 2011))
+  {
     ev.key.key = base_key - 1000;
-  } else if (ev.key.shift && (base_key & 0x8000)) {
+  }
+  else if (ev.key.shift && (base_key & 0x8000))
+  {
     ev.key.key = base_key & 0x7FFF;
   }
 
   return ev;
 }
 
-void Terminal::set_poll_timeout_ms(int timeout_ms) {
+void Terminal::set_poll_timeout_ms(int timeout_ms)
+{
   poll_timeout_ms = std::clamp(timeout_ms, 1, 250);
 }
 
-void Terminal::flush() {
+void Terminal::flush()
+{
   int n = (int)buffer.length();
   last_flush_bytes_ = n;
-  if (n <= 0) {
+  if (n <= 0)
+  {
     return;
   }
 
@@ -758,7 +891,8 @@ void Terminal::flush() {
   // does not touch the PTY, so it cannot interleave with the
   // terminal output and keeps the capture in sync with what we are
   // about to emit.
-  if (render_capture_ && render_capture_raw_) {
+  if (render_capture_ && render_capture_raw_)
+  {
     fwrite(buffer.c_str(), 1, n, render_capture_);
   }
 
@@ -773,29 +907,37 @@ void Terminal::flush() {
   // EINTR-safe.
   const char *p = buffer.c_str();
   size_t remaining = (size_t)n;
-  while (remaining > 0) {
+  while (remaining > 0)
+  {
     ssize_t w = ::write(STDOUT_FILENO, p, remaining);
-    if (w > 0) {
+    if (w > 0)
+    {
       p += w;
       remaining -= (size_t)w;
-    } else if (w == -1 && errno == EINTR) {
+    }
+    else if (w == -1 && errno == EINTR)
+    {
       // Interrupted by a signal; retry the same bytes.
       continue;
-    } else if (w == -1 &&
-               (errno == EAGAIN || errno == EWOULDBLOCK)) {
+    }
+    else if (w == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+    {
       // stdout was switched to O_NONBLOCK somewhere; fall back to
       // a short blocking wait by poll()-ing for writability.
       struct pollfd pfd;
       pfd.fd = STDOUT_FILENO;
       pfd.events = POLLOUT;
       pfd.revents = 0;
-      if (::poll(&pfd, 1, 1000) <= 0) {
+      if (::poll(&pfd, 1, 1000) <= 0)
+      {
         // Give up after 1s; drop the rest of the frame to avoid a
         // permanent hang.
         break;
       }
       continue;
-    } else {
+    }
+    else
+    {
       // EPIPE, EBADF, etc. Drop the rest of the frame.
       break;
     }
@@ -804,30 +946,38 @@ void Terminal::flush() {
   buffer.clear();
 }
 
-void Terminal::flush_if_buffer_exceeds() {
-  if (render_chunk_bytes_ == 0) {
+void Terminal::flush_if_buffer_exceeds()
+{
+  if (render_chunk_bytes_ == 0)
+  {
     return;
   }
-  if (buffer.size() >= render_chunk_bytes_) {
+  if (buffer.size() >= render_chunk_bytes_)
+  {
     flush();
   }
 }
 
-void Terminal::try_drain() {
-  if (render_chunk_bytes_ == 0) {
+void Terminal::try_drain()
+{
+  if (render_chunk_bytes_ == 0)
+  {
     return;
   }
-  if (buffer.size() < render_chunk_bytes_) {
+  if (buffer.size() < render_chunk_bytes_)
+  {
     return;
   }
-  if (buffer.empty()) {
+  if (buffer.empty())
+  {
     return;
   }
 
   // Write the capture file first (fwrite is buffered and fast; does
   // not block on the PTY). This keeps the diagnostic capture in
   // sync with what we actually attempt to write to the terminal.
-  if (render_capture_ && render_capture_raw_) {
+  if (render_capture_ && render_capture_raw_)
+  {
     fwrite(buffer.c_str(), 1, buffer.size(), render_capture_);
   }
 
@@ -835,25 +985,33 @@ void Terminal::try_drain() {
   // a short count (or EAGAIN) if the kernel PTY buffer is full,
   // instead of blocking while the terminal drains.
   int flags = fcntl(STDOUT_FILENO, F_GETFL, 0);
-  if (flags == -1) {
+  if (flags == -1)
+  {
     return;
   }
-  if (fcntl(STDOUT_FILENO, F_SETFL, flags | O_NONBLOCK) == -1) {
+  if (fcntl(STDOUT_FILENO, F_SETFL, flags | O_NONBLOCK) == -1)
+  {
     return;
   }
 
   size_t total = buffer.size();
   size_t written = 0;
-  while (written < total) {
+  while (written < total)
+  {
     ssize_t n = ::write(STDOUT_FILENO, buffer.c_str() + written, total - written);
-    if (n > 0) {
+    if (n > 0)
+    {
       written += (size_t)n;
-    } else if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+    }
+    else if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+    {
       // PTY buffer is full; terminal hasn't drained yet. Keep the
       // remaining data in the buffer for the next try_drain() or
       // the final flush() at frame end.
       break;
-    } else {
+    }
+    else
+    {
       // Real error (EPIPE, EBADF, etc). Bail and let the final
       // flush() decide what to do.
       break;
@@ -863,113 +1021,176 @@ void Terminal::try_drain() {
   // Restore the original non-blocking flag state.
   fcntl(STDOUT_FILENO, F_SETFL, flags);
 
-  if (written > 0) {
-    if (written == total) {
+  if (written > 0)
+  {
+    if (written == total)
+    {
       buffer.clear();
-    } else {
+    }
+    else
+    {
       buffer.erase(0, written);
     }
   }
 }
 
-void Terminal::clear() {
+void Terminal::clear()
+{
   buffer += "\x1b[2J";
   buffer += "\x1b[H";
 }
 
-void Terminal::move_cursor(int x, int y) {
+void Terminal::move_cursor(int x, int y)
+{
   char buf[32];
   snprintf(buf, sizeof(buf), "\x1b[%d;%dH", y + 1, x + 1);
   buffer += buf;
 }
 
-void Terminal::hide_cursor() { buffer += "\x1b[?25l"; }
+void Terminal::hide_cursor()
+{
+  buffer += "\x1b[?25l";
+}
 
-void Terminal::show_cursor() { buffer += "\x1b[?25h"; }
+void Terminal::show_cursor()
+{
+  buffer += "\x1b[?25h";
+}
 
-void Terminal::set_color(int fg, int bg) {
+void Terminal::set_color(int fg, int bg)
+{
   char buf[32];
   snprintf(buf, sizeof(buf), "\x1b[38;5;%dm\x1b[48;5;%dm", fg, bg);
   buffer += buf;
 }
 
-void Terminal::reset_color() { buffer += "\x1b[0m"; }
+void Terminal::reset_color()
+{
+  buffer += "\x1b[0m";
+}
 
-void Terminal::set_bold(bool on) {
-  if (on) {
+void Terminal::set_bold(bool on)
+{
+  if (on)
+  {
     buffer += "\x1b[1m";
-  } else {
+  }
+  else
+  {
     buffer += "\x1b[22m";
   }
 }
 
-void Terminal::set_italic(bool on) {
-  if (on) {
+void Terminal::set_italic(bool on)
+{
+  if (on)
+  {
     buffer += "\x1b[3m";
-  } else {
+  }
+  else
+  {
     buffer += "\x1b[23m";
   }
 }
 
-void Terminal::set_dim(bool on) { buffer += on ? "\x1b[2m" : "\x1b[22m"; }
+void Terminal::set_dim(bool on)
+{
+  buffer += on ? "\x1b[2m" : "\x1b[22m";
+}
 
-void Terminal::set_reverse(bool on) {
-  if (on) {
+void Terminal::set_reverse(bool on)
+{
+  if (on)
+  {
     buffer += "\x1b[7m";
-  } else {
+  }
+  else
+  {
     buffer += "\x1b[27m";
   }
 }
 
-void Terminal::write(const std::string &str) { buffer += str; }
+void Terminal::write(const std::string &str)
+{
+  buffer += str;
+}
 
-void Terminal::write_char(char c) { buffer += c; }
+void Terminal::write_char(char c)
+{
+  buffer += c;
+}
 
-void Terminal::enable_mouse() {
+void Terminal::enable_mouse()
+{
   buffer += "\x1b[?1002h";
   buffer += "\x1b[?1006h";
   buffer += "\x1b[?2004h";
   flush();
 }
 
-void Terminal::disable_mouse() {
+void Terminal::disable_mouse()
+{
   append_mouse_reset(buffer);
   flush();
 }
 
-void Terminal::enable_mouse_hover() {
+void Terminal::enable_mouse_hover()
+{
   buffer += "\x1b[?1003h";
   flush();
 }
 
-void Terminal::disable_mouse_hover() {
+void Terminal::disable_mouse_hover()
+{
   buffer += "\x1b[?1003l";
   buffer += "\x1b[?1002h";
   buffer += "\x1b[?1006h";
   flush();
 }
 
-void Terminal::save_cursor() { buffer += "\x1b[s"; }
+void Terminal::save_cursor()
+{
+  buffer += "\x1b[s";
+}
 
-void Terminal::restore_cursor() { buffer += "\x1b[u"; }
+void Terminal::restore_cursor()
+{
+  buffer += "\x1b[u";
+}
 
-void Terminal::clear_line() { buffer += "\x1b[2K"; }
+void Terminal::clear_line()
+{
+  buffer += "\x1b[2K";
+}
 
-void Terminal::clear_to_end() { buffer += "\x1b[K"; }
+void Terminal::clear_to_end()
+{
+  buffer += "\x1b[K";
+}
 
-void Terminal::disable_autowrap() { buffer += "\x1b[?7l"; }
+void Terminal::disable_autowrap()
+{
+  buffer += "\x1b[?7l";
+}
 
-void Terminal::enable_autowrap() { buffer += "\x1b[?7h"; }
+void Terminal::enable_autowrap()
+{
+  buffer += "\x1b[?7h";
+}
 
-void Terminal::render_capture_marker(const std::string &label,
-                                     int rows_rendered) {
+void Terminal::render_capture_marker(const std::string &label, int rows_rendered)
+{
   if (!render_capture_)
     return;
   render_capture_seq_++;
   int bytes = last_flush_bytes_;
   fprintf(render_capture_,
           "\n--MARKER %d: %s bytes=%d w=%d h=%d rows=%d--\n",
-          render_capture_seq_, label.c_str(),
-          bytes, width, height, rows_rendered);
+          render_capture_seq_,
+          label.c_str(),
+          bytes,
+          width,
+          height,
+          rows_rendered);
   fflush(render_capture_);
 }

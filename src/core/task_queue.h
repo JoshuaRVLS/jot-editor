@@ -12,12 +12,14 @@
 
 class EventLoop;
 
-struct Task {
+struct Task
+{
   std::function<void()> work;
   std::function<void()> on_complete;
 };
 
-class TaskQueue {
+class TaskQueue
+{
 public:
   explicit TaskQueue(EventLoop *loop, int num_workers = 0);
   ~TaskQueue();
@@ -27,19 +29,19 @@ public:
 
   bool submit(std::function<void()> work, std::function<void()> on_complete);
 
-  template <typename T>
-  bool submit_val(std::function<T()> work,
-                  std::function<void(T)> on_complete) {
+  template <typename T> bool submit_val(std::function<T()> work, std::function<void(T)> on_complete)
+  {
     auto shared = std::make_shared<T>();
-    return submit(
-        [work = std::move(work), shared]() mutable { *shared = work(); },
-        [shared, on_complete = std::move(on_complete)]() mutable {
-          on_complete(std::move(*shared));
-        });
+    return submit([work = std::move(work), shared]() mutable { *shared = work(); },
+                  [shared, on_complete = std::move(on_complete)]() mutable
+                  { on_complete(std::move(*shared)); });
   }
 
   void shutdown();
-  int worker_count() const { return num_workers_; }
+  int worker_count() const
+  {
+    return num_workers_;
+  }
 
 private:
   void worker_loop();

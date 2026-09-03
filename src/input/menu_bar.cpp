@@ -2,24 +2,29 @@
 
 #include <algorithm>
 
-void Editor::close_menu_bar() {
+void Editor::close_menu_bar()
+{
   show_menu_bar_dropdown = false;
   menu_bar_active = -1;
   menu_bar_selected = 0;
   needs_redraw = true;
 }
 
-void Editor::open_menu_bar(int index) {
+void Editor::open_menu_bar(int index)
+{
   std::vector<MenuBarMenu> menus = build_menu_bar_model();
-  if (menus.empty()) {
+  if (menus.empty())
+  {
     close_menu_bar();
     return;
   }
   menu_bar_active = std::clamp(index, 0, (int)menus.size() - 1);
   show_menu_bar_dropdown = true;
   menu_bar_selected = 0;
-  for (int i = 0; i < (int)menus[menu_bar_active].items.size(); i++) {
-    if (menus[menu_bar_active].items[i].enabled) {
+  for (int i = 0; i < (int)menus[menu_bar_active].items.size(); i++)
+  {
+    if (menus[menu_bar_active].items[i].enabled)
+    {
       menu_bar_selected = i;
       break;
     }
@@ -29,23 +34,27 @@ void Editor::open_menu_bar(int index) {
   needs_redraw = true;
 }
 
-void Editor::execute_menu_bar_item(int menu_index, int item_index) {
+void Editor::execute_menu_bar_item(int menu_index, int item_index)
+{
   std::vector<MenuBarMenu> menus = build_menu_bar_model();
-  if (menu_index < 0 || menu_index >= (int)menus.size()) {
+  if (menu_index < 0 || menu_index >= (int)menus.size())
+  {
     return;
   }
   const auto &items = menus[menu_index].items;
-  if (item_index < 0 || item_index >= (int)items.size() ||
-      !items[item_index].enabled) {
+  if (item_index < 0 || item_index >= (int)items.size() || !items[item_index].enabled)
+  {
     return;
   }
 
   MenuBarItem item = items[item_index];
   close_menu_bar();
 
-  switch (item.action) {
+  switch (item.action)
+  {
   case MENU_ACTION_COMMAND:
-    if (!item.command.empty() && item.command.back() == ' ') {
+    if (!item.command.empty() && item.command.back() == ' ')
+    {
       show_command_palette = true;
       command_palette_query = item.command;
       command_palette_results.clear();
@@ -54,7 +63,9 @@ void Editor::execute_menu_bar_item(int menu_index, int item_index) {
       command_palette_theme_original.clear();
       refresh_command_palette();
       needs_redraw = true;
-    } else {
+    }
+    else
+    {
       execute_command(item.command);
     }
     break;
@@ -173,23 +184,29 @@ void Editor::execute_menu_bar_item(int menu_index, int item_index) {
   needs_redraw = true;
 }
 
-bool Editor::handle_menu_bar_input(int ch) {
-  if (!show_menu_bar_dropdown) {
+bool Editor::handle_menu_bar_input(int ch)
+{
+  if (!show_menu_bar_dropdown)
+  {
     return false;
   }
 
   std::vector<MenuBarMenu> menus = build_menu_bar_model();
-  if (menus.empty()) {
+  if (menus.empty())
+  {
     close_menu_bar();
     return true;
   }
 
-  auto move_menu = [&](int delta) {
+  auto move_menu = [&](int delta)
+  {
     int n = (int)menus.size();
     menu_bar_active = (menu_bar_active + delta + n) % n;
     menu_bar_selected = 0;
-    for (int i = 0; i < (int)menus[menu_bar_active].items.size(); i++) {
-      if (menus[menu_bar_active].items[i].enabled) {
+    for (int i = 0; i < (int)menus[menu_bar_active].items.size(); i++)
+    {
+      if (menus[menu_bar_active].items[i].enabled)
+      {
         menu_bar_selected = i;
         break;
       }
@@ -197,41 +214,51 @@ bool Editor::handle_menu_bar_input(int ch) {
     needs_redraw = true;
   };
 
-  auto move_item = [&](int delta) {
-    if (menu_bar_active < 0 || menu_bar_active >= (int)menus.size() ||
-        menus[menu_bar_active].items.empty()) {
+  auto move_item = [&](int delta)
+  {
+    if (menu_bar_active < 0 || menu_bar_active >= (int)menus.size()
+        || menus[menu_bar_active].items.empty())
+    {
       return;
     }
     int n = (int)menus[menu_bar_active].items.size();
-    for (int step = 0; step < n; step++) {
+    for (int step = 0; step < n; step++)
+    {
       menu_bar_selected = (menu_bar_selected + delta + n) % n;
-      if (menus[menu_bar_active].items[menu_bar_selected].enabled) {
+      if (menus[menu_bar_active].items[menu_bar_selected].enabled)
+      {
         break;
       }
     }
     needs_redraw = true;
   };
-  if (ch == 27) {
+  if (ch == 27)
+  {
     close_menu_bar();
     return true;
   }
-  if (ch == 1011 || ch == 'h' || ch == 'H') {
+  if (ch == 1011 || ch == 'h' || ch == 'H')
+  {
     move_menu(-1);
     return true;
   }
-  if (ch == 1010 || ch == 'l' || ch == 'L') {
+  if (ch == 1010 || ch == 'l' || ch == 'L')
+  {
     move_menu(1);
     return true;
   }
-  if (ch == 1008 || ch == 'k' || ch == 'K') {
+  if (ch == 1008 || ch == 'k' || ch == 'K')
+  {
     move_item(-1);
     return true;
   }
-  if (ch == 1009 || ch == 'j' || ch == 'J') {
+  if (ch == 1009 || ch == 'j' || ch == 'J')
+  {
     move_item(1);
     return true;
   }
-  if (ch == '\n' || ch == 13 || ch == ' ') {
+  if (ch == '\n' || ch == 13 || ch == ' ')
+  {
     execute_menu_bar_item(menu_bar_active, menu_bar_selected);
     return true;
   }

@@ -4,34 +4,41 @@
 #include <algorithm>
 #include <cctype>
 
-namespace {
-bool is_word_char(char c) {
-  const unsigned char uc = (unsigned char)c;
-  return std::isalnum(uc) || c == '_';
-}
+namespace
+{
+  bool is_word_char(char c)
+  {
+    const unsigned char uc = (unsigned char)c;
+    return std::isalnum(uc) || c == '_';
+  }
 
-bool pair_match(char left, char right) {
-  return (left == '(' && right == ')') || (left == '[' && right == ']') ||
-         (left == '{' && right == '}') || (left == '"' && right == '"') ||
-         (left == '\'' && right == '\'') || (left == '`' && right == '`');
-}
+  bool pair_match(char left, char right)
+  {
+    return (left == '(' && right == ')') || (left == '[' && right == ']')
+           || (left == '{' && right == '}') || (left == '"' && right == '"')
+           || (left == '\'' && right == '\'') || (left == '`' && right == '`');
+  }
 } // namespace
 
-bool Editor::surround_selection_or_word(const std::string &left,
-                                        const std::string &right) {
-  if (left.empty() || right.empty()) {
+bool Editor::surround_selection_or_word(const std::string &left, const std::string &right)
+{
+  if (left.empty() || right.empty())
+  {
     set_message("Usage: :surround <left> <right>");
     return false;
   }
 
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
+  if (buf.is_lazy())
+    buf.materialize();
   save_state();
 
-  if (buf.selection.active) {
+  if (buf.selection.active)
+  {
     Cursor s = buf.selection.start;
     Cursor e = buf.selection.end;
-    if (s.y > e.y || (s.y == e.y && s.x > e.x)) {
+    if (s.y > e.y || (s.y == e.y && s.x > e.x))
+    {
       std::swap(s, e);
     }
 
@@ -45,19 +52,24 @@ bool Editor::surround_selection_or_word(const std::string &left,
     buf.selection.start = {s.x + (int)left.size(), s.y};
     buf.selection.end = {e.x + (int)left.size(), e.y};
     buf.cursor = buf.selection.end;
-  } else {
+  }
+  else
+  {
     int y = std::clamp(buf.cursor.y, 0, (int)buf.lines.size() - 1);
     std::string &line = buf.lines[y];
     int x = std::clamp(buf.cursor.x, 0, (int)line.size());
     int start = x;
     int end = x;
-    while (start > 0 && is_word_char(line[start - 1])) {
+    while (start > 0 && is_word_char(line[start - 1]))
+    {
       start--;
     }
-    while (end < (int)line.size() && is_word_char(line[end])) {
+    while (end < (int)line.size() && is_word_char(line[end]))
+    {
       end++;
     }
-    if (start == end) {
+    if (start == end)
+    {
       set_message("No selection/word to surround");
       return false;
     }
@@ -72,19 +84,24 @@ bool Editor::surround_selection_or_word(const std::string &left,
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Surrounded selection/word");
-  if (lua_api) {
+  if (lua_api)
+  {
     lua_api->on_buffer_change(buf.filepath, "");
   }
-  if (!buf.filepath.empty()) {
+  if (!buf.filepath.empty())
+  {
     notify_lsp_change(buf.filepath);
   }
   return true;
 }
 
-bool Editor::unsurround_selection_or_cursor() {
+bool Editor::unsurround_selection_or_cursor()
+{
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
-  if (buf.lines.empty()) {
+  if (buf.is_lazy())
+    buf.materialize();
+  if (buf.lines.empty())
+  {
     set_message("Nothing to unsurround");
     return false;
   }
@@ -92,7 +109,8 @@ bool Editor::unsurround_selection_or_cursor() {
   save_state();
   int y = std::clamp(buf.cursor.y, 0, (int)buf.lines.size() - 1);
   std::string &line = buf.lines[y];
-  if (line.size() < 2) {
+  if (line.size() < 2)
+  {
     set_message("Nothing to unsurround");
     return false;
   }
@@ -102,24 +120,28 @@ bool Editor::unsurround_selection_or_cursor() {
   int right_idx = std::clamp(x, 0, (int)line.size() - 1);
 
   bool done = false;
-  if (left_idx >= 0 && right_idx >= 0 && left_idx < (int)line.size() &&
-      right_idx < (int)line.size() &&
-      pair_match(line[left_idx], line[right_idx])) {
+  if (left_idx >= 0 && right_idx >= 0 && left_idx < (int)line.size() && right_idx < (int)line.size()
+      && pair_match(line[left_idx], line[right_idx]))
+  {
     line.erase((size_t)right_idx, 1);
     line.erase((size_t)left_idx, 1);
     buf.cursor.x = left_idx;
     done = true;
-  } else {
+  }
+  else
+  {
     int start = x;
     int end = x;
-    while (start > 0 && is_word_char(line[start - 1])) {
+    while (start > 0 && is_word_char(line[start - 1]))
+    {
       start--;
     }
-    while (end < (int)line.size() && is_word_char(line[end])) {
+    while (end < (int)line.size() && is_word_char(line[end]))
+    {
       end++;
     }
-    if (start > 0 && end < (int)line.size() &&
-        pair_match(line[start - 1], line[end])) {
+    if (start > 0 && end < (int)line.size() && pair_match(line[start - 1], line[end]))
+    {
       line.erase((size_t)end, 1);
       line.erase((size_t)(start - 1), 1);
       buf.cursor.x = start - 1;
@@ -127,7 +149,8 @@ bool Editor::unsurround_selection_or_cursor() {
     }
   }
 
-  if (!done) {
+  if (!done)
+  {
     set_message("No surrounding pair found");
     return false;
   }
@@ -137,42 +160,49 @@ bool Editor::unsurround_selection_or_cursor() {
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Removed surrounding pair");
-  if (lua_api) {
+  if (lua_api)
+  {
     lua_api->on_buffer_change(buf.filepath, "");
   }
-  if (!buf.filepath.empty()) {
+  if (!buf.filepath.empty())
+  {
     notify_lsp_change(buf.filepath);
   }
   return true;
 }
 
-bool Editor::change_inside_quote(char quote) {
+bool Editor::change_inside_quote(char quote)
+{
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
-  if (buf.lines.empty()) {
+  if (buf.is_lazy())
+    buf.materialize();
+  if (buf.lines.empty())
+  {
     set_message("No quote pair found");
     return false;
   }
 
   int y = std::clamp(buf.cursor.y, 0, (int)buf.lines.size() - 1);
   std::string &line = buf.lines[y];
-  QuoteTextObject::Range range =
-      QuoteTextObject::find_inner_range(line, buf.cursor.x, quote);
-  if (!range.found) {
+  QuoteTextObject::Range range = QuoteTextObject::find_inner_range(line, buf.cursor.x, quote);
+  if (!range.found)
+  {
     set_message("No quote pair found");
     return false;
   }
 
   save_state();
-  if (range.inner_end > range.inner_start) {
-    line.erase((size_t)range.inner_start,
-               (size_t)(range.inner_end - range.inner_start));
+  if (range.inner_end > range.inner_start)
+  {
+    line.erase((size_t)range.inner_start, (size_t)(range.inner_end - range.inner_start));
     buf.modified = true;
     buf.is_placeholder = false;
-    if (lua_api) {
+    if (lua_api)
+    {
       lua_api->on_buffer_change(buf.filepath, "");
     }
-    if (!buf.filepath.empty()) {
+    if (!buf.filepath.empty())
+    {
       notify_lsp_change(buf.filepath);
     }
   }

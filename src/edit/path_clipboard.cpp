@@ -3,9 +3,11 @@
 
 namespace fs = std::filesystem;
 
-void Editor::copy_current_file_path() {
+void Editor::copy_current_file_path()
+{
   auto &buf = get_buffer();
-  if (buf.filepath.empty()) {
+  if (buf.filepath.empty())
+  {
     set_message("No file path to copy");
     return;
   }
@@ -15,14 +17,17 @@ void Editor::copy_current_file_path() {
   set_message("Copied file path");
 }
 
-void Editor::copy_current_file_name() {
+void Editor::copy_current_file_name()
+{
   auto &buf = get_buffer();
-  if (buf.filepath.empty()) {
+  if (buf.filepath.empty())
+  {
     set_message("No file name to copy");
     return;
   }
   clipboard = fs::path(buf.filepath).filename().string();
-  if (clipboard.empty()) {
+  if (clipboard.empty())
+  {
     clipboard = buf.filepath;
   }
   set_message("Copied file name");

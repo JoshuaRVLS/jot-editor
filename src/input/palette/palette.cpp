@@ -1,12 +1,16 @@
 #include "editor.h"
 
-void Editor::toggle_command_palette() {
+void Editor::toggle_command_palette()
+{
   show_command_palette = !show_command_palette;
-  if (show_command_palette) {
+  if (show_command_palette)
+  {
     // Re-open with the query left behind last time (if any), so a cancelled
     // search can be resumed instead of starting from scratch every time.
     open_command_palette(command_palette_last_query);
-  } else {
+  }
+  else
+  {
     // Toggling closed counts as abandoning the search, like Esc: remember
     // what was in the box for the next open.
     command_palette_last_query = command_palette_query;
@@ -19,7 +23,8 @@ void Editor::toggle_command_palette() {
   }
 }
 
-void Editor::open_command_palette(const std::string &query) {
+void Editor::open_command_palette(const std::string &query)
+{
   show_command_palette = true;
   command_palette_query = query;
   command_palette_results.clear();
@@ -30,7 +35,8 @@ void Editor::open_command_palette(const std::string &query) {
   needs_redraw = true;
 }
 
-void Editor::open_theme_chooser() {
+void Editor::open_theme_chooser()
+{
   show_command_palette = true;
   command_palette_query = "theme ";
   command_palette_results.clear();

@@ -3,51 +3,66 @@
 #include <algorithm>
 #include <cctype>
 
-void Editor::increment_number_at_cursor(int delta) {
+void Editor::increment_number_at_cursor(int delta)
+{
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
-  if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.lines.size()) {
+  if (buf.is_lazy())
+    buf.materialize();
+  if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.lines.size())
+  {
     set_message("No number at cursor");
     return;
   }
 
   std::string &line = buf.lines[buf.cursor.y];
-  if (line.empty()) {
+  if (line.empty())
+  {
     set_message("No number at cursor");
     return;
   }
 
   int x = std::clamp(buf.cursor.x, 0, (int)line.size());
   int i = std::min(x, (int)line.size() - 1);
-  if (!std::isdigit((unsigned char)line[i])) {
-    if (i > 0 && std::isdigit((unsigned char)line[i - 1])) {
+  if (!std::isdigit((unsigned char)line[i]))
+  {
+    if (i > 0 && std::isdigit((unsigned char)line[i - 1]))
+    {
       i--;
-    } else {
+    }
+    else
+    {
       set_message("No number at cursor");
       return;
     }
   }
 
   int start = i;
-  while (start > 0 && std::isdigit((unsigned char)line[start - 1])) {
+  while (start > 0 && std::isdigit((unsigned char)line[start - 1]))
+  {
     start--;
   }
-  if (start > 0 && (line[start - 1] == '-' || line[start - 1] == '+')) {
-    if (start - 1 == 0 || !std::isalnum((unsigned char)line[start - 2])) {
+  if (start > 0 && (line[start - 1] == '-' || line[start - 1] == '+'))
+  {
+    if (start - 1 == 0 || !std::isalnum((unsigned char)line[start - 2]))
+    {
       start--;
     }
   }
 
   int end = i + 1;
-  while (end < (int)line.size() && std::isdigit((unsigned char)line[end])) {
+  while (end < (int)line.size() && std::isdigit((unsigned char)line[end]))
+  {
     end++;
   }
 
   std::string old_num = line.substr((size_t)start, (size_t)(end - start));
   long long value = 0;
-  try {
+  try
+  {
     value = std::stoll(old_num);
-  } catch (...) {
+  }
+  catch (...)
+  {
     set_message("Invalid number format");
     return;
   }
@@ -61,12 +76,13 @@ void Editor::increment_number_at_cursor(int delta) {
   buf.modified = true;
   ensure_cursor_visible();
   needs_redraw = true;
-  set_message(std::string(delta >= 0 ? "Incremented" : "Decremented") +
-              " number to " + next_num);
-  if (lua_api) {
+  set_message(std::string(delta >= 0 ? "Incremented" : "Decremented") + " number to " + next_num);
+  if (lua_api)
+  {
     lua_api->on_buffer_change(buf.filepath, "");
   }
-  if (!buf.filepath.empty()) {
+  if (!buf.filepath.empty())
+  {
     notify_lsp_change(buf.filepath);
   }
 }

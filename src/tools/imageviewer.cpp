@@ -1,8 +1,8 @@
 #include "imageviewer.h"
 #include <algorithm>
 #include <cctype>
-#include <cstdlib>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -21,222 +21,267 @@
 
 namespace fs = std::filesystem;
 
-namespace {
-std::string lower_copy(std::string value) {
-  std::transform(value.begin(), value.end(), value.begin(),
-                 [](unsigned char c) { return (char)std::tolower(c); });
-  return value;
-}
-
-std::string shell_quote(const std::string &s) {
-#ifdef _WIN32
-  std::string out = "\"";
-  for (char c : s) {
-    if (c == '"')
-      out += "\"\"";
-    else
-      out += c;
-  }
-  out += "\"";
-  return out;
-#else
-  std::string out = "'";
-  for (char c : s) {
-    if (c == '\'')
-      out += "'\\''";
-    else
-      out += c;
-  }
-  out += "'";
-  return out;
-#endif
-}
-
-std::string null_redirect() {
-#ifdef _WIN32
-  return " 2>NUL";
-#else
-  return " 2>/dev/null";
-#endif
-}
-
-FILE *open_command_pipe(const std::string &command, const char *mode) {
-#ifdef _WIN32
-  return _popen(command.c_str(), mode);
-#else
-  return popen(command.c_str(), mode);
-#endif
-}
-
-int close_command_pipe(FILE *pipe) {
-#ifdef _WIN32
-  return _pclose(pipe);
-#else
-  return pclose(pipe);
-#endif
-}
-
-long long process_id() {
-#ifdef _WIN32
-  return (long long)GetCurrentProcessId();
-#else
-  return (long long)getpid();
-#endif
-}
-
-bool command_exists(const char *cmd) {
-#ifdef _WIN32
-  std::string check = "where ";
-  check += cmd;
-  check += " >NUL 2>NUL";
-#else
-  std::string check = std::string("command -v ") + cmd + " >/dev/null 2>&1";
-#endif
-  return std::system(check.c_str()) == 0;
-}
-
-bool env_present(const char *name) {
-  const char *value = std::getenv(name);
-  return value && value[0] != '\0';
-}
-
-std::string getenv_string(const char *name) {
-  const char *value = std::getenv(name);
-  return value ? std::string(value) : std::string();
-}
-
-int grayscale_to_char_index(int gray) {
-  static const std::string ramp =
-      " .'`^\",:;Il!i~+_-?][}{1)(|\\/*tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
-  int g = std::clamp(gray, 0, 255);
-  int idx = (g * (int)(ramp.size() - 1)) / 255;
-  return std::clamp(idx, 0, (int)ramp.size() - 1);
-}
-
-int rgb_to_xterm256(int r, int g, int b) {
-  r = std::clamp(r, 0, 255);
-  g = std::clamp(g, 0, 255);
-  b = std::clamp(b, 0, 255);
-
-  if (std::abs(r - g) < 8 && std::abs(g - b) < 8) {
-    int gray = (r + g + b) / 3;
-    int idx = 232 + (gray * 23 + 127) / 255;
-    return std::clamp(idx, 232, 255);
+namespace
+{
+  std::string lower_copy(std::string value)
+  {
+    std::transform(value.begin(),
+                   value.end(),
+                   value.begin(),
+                   [](unsigned char c) { return (char)std::tolower(c); });
+    return value;
   }
 
-  int rr = (r * 5 + 127) / 255;
-  int gg = (g * 5 + 127) / 255;
-  int bb = (b * 5 + 127) / 255;
-  return 16 + (36 * rr) + (6 * gg) + bb;
-}
+  std::string shell_quote(const std::string &s)
+  {
+#ifdef _WIN32
+    std::string out = "\"";
+    for (char c : s)
+    {
+      if (c == '"')
+        out += "\"\"";
+      else
+        out += c;
+    }
+    out += "\"";
+    return out;
+#else
+    std::string out = "'";
+    for (char c : s)
+    {
+      if (c == '\'')
+        out += "'\\''";
+      else
+        out += c;
+    }
+    out += "'";
+    return out;
+#endif
+  }
 
-bool parse_rgb_triplet(const std::string &line, int &r, int &g, int &b) {
-  auto parse_component = [](const std::string &token) -> int {
-    std::string t;
-    for (char c : token) {
-      if (!std::isspace((unsigned char)c)) {
-        t.push_back(c);
+  std::string null_redirect()
+  {
+#ifdef _WIN32
+    return " 2>NUL";
+#else
+    return " 2>/dev/null";
+#endif
+  }
+
+  FILE *open_command_pipe(const std::string &command, const char *mode)
+  {
+#ifdef _WIN32
+    return _popen(command.c_str(), mode);
+#else
+    return popen(command.c_str(), mode);
+#endif
+  }
+
+  int close_command_pipe(FILE *pipe)
+  {
+#ifdef _WIN32
+    return _pclose(pipe);
+#else
+    return pclose(pipe);
+#endif
+  }
+
+  long long process_id()
+  {
+#ifdef _WIN32
+    return (long long)GetCurrentProcessId();
+#else
+    return (long long)getpid();
+#endif
+  }
+
+  bool command_exists(const char *cmd)
+  {
+#ifdef _WIN32
+    std::string check = "where ";
+    check += cmd;
+    check += " >NUL 2>NUL";
+#else
+    std::string check = std::string("command -v ") + cmd + " >/dev/null 2>&1";
+#endif
+    return std::system(check.c_str()) == 0;
+  }
+
+  bool env_present(const char *name)
+  {
+    const char *value = std::getenv(name);
+    return value && value[0] != '\0';
+  }
+
+  std::string getenv_string(const char *name)
+  {
+    const char *value = std::getenv(name);
+    return value ? std::string(value) : std::string();
+  }
+
+  int grayscale_to_char_index(int gray)
+  {
+    static const std::string ramp =
+        " .'`^\",:;Il!i~+_-?][}{1)(|\\/*tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
+    int g = std::clamp(gray, 0, 255);
+    int idx = (g * (int)(ramp.size() - 1)) / 255;
+    return std::clamp(idx, 0, (int)ramp.size() - 1);
+  }
+
+  int rgb_to_xterm256(int r, int g, int b)
+  {
+    r = std::clamp(r, 0, 255);
+    g = std::clamp(g, 0, 255);
+    b = std::clamp(b, 0, 255);
+
+    if (std::abs(r - g) < 8 && std::abs(g - b) < 8)
+    {
+      int gray = (r + g + b) / 3;
+      int idx = 232 + (gray * 23 + 127) / 255;
+      return std::clamp(idx, 232, 255);
+    }
+
+    int rr = (r * 5 + 127) / 255;
+    int gg = (g * 5 + 127) / 255;
+    int bb = (b * 5 + 127) / 255;
+    return 16 + (36 * rr) + (6 * gg) + bb;
+  }
+
+  bool parse_rgb_triplet(const std::string &line, int &r, int &g, int &b)
+  {
+    auto parse_component = [](const std::string &token) -> int
+    {
+      std::string t;
+      for (char c : token)
+      {
+        if (!std::isspace((unsigned char)c))
+        {
+          t.push_back(c);
+        }
       }
-    }
-    if (t.empty()) {
-      return -1;
-    }
-    bool percent = !t.empty() && t.back() == '%';
-    if (percent) {
-      t.pop_back();
-    }
-    if (t.empty()) {
-      return -1;
-    }
-    char *end = nullptr;
-    double v = std::strtod(t.c_str(), &end);
-    if (!end || *end != '\0') {
-      return -1;
-    }
-    if (percent) {
-      v = (v * 255.0) / 100.0;
-    }
-    return std::clamp((int)(v + 0.5), 0, 255);
-  };
+      if (t.empty())
+      {
+        return -1;
+      }
+      bool percent = !t.empty() && t.back() == '%';
+      if (percent)
+      {
+        t.pop_back();
+      }
+      if (t.empty())
+      {
+        return -1;
+      }
+      char *end = nullptr;
+      double v = std::strtod(t.c_str(), &end);
+      if (!end || *end != '\0')
+      {
+        return -1;
+      }
+      if (percent)
+      {
+        v = (v * 255.0) / 100.0;
+      }
+      return std::clamp((int)(v + 0.5), 0, 255);
+    };
 
-  size_t p = line.find('(');
-  size_t q = (p == std::string::npos) ? std::string::npos : line.find(')', p + 1);
-  if (p != std::string::npos && q != std::string::npos && q > p + 1) {
-    std::string inner = line.substr(p + 1, q - p - 1);
-    std::vector<std::string> parts;
-    std::string cur;
-    for (char c : inner) {
-      if (c == ',') {
+    size_t p = line.find('(');
+    size_t q = (p == std::string::npos) ? std::string::npos : line.find(')', p + 1);
+    if (p != std::string::npos && q != std::string::npos && q > p + 1)
+    {
+      std::string inner = line.substr(p + 1, q - p - 1);
+      std::vector<std::string> parts;
+      std::string cur;
+      for (char c : inner)
+      {
+        if (c == ',')
+        {
+          parts.push_back(cur);
+          cur.clear();
+        }
+        else
+        {
+          cur.push_back(c);
+        }
+      }
+      if (!cur.empty())
+      {
         parts.push_back(cur);
-        cur.clear();
-      } else {
-        cur.push_back(c);
       }
-    }
-    if (!cur.empty()) {
-      parts.push_back(cur);
+
+      if (parts.size() >= 3)
+      {
+        int rr = parse_component(parts[0]);
+        int gg = parse_component(parts[1]);
+        int bb = parse_component(parts[2]);
+        if (rr >= 0 && gg >= 0 && bb >= 0)
+        {
+          r = rr;
+          g = gg;
+          b = bb;
+          return true;
+        }
+      }
     }
 
-    if (parts.size() >= 3) {
-      int rr = parse_component(parts[0]);
-      int gg = parse_component(parts[1]);
-      int bb = parse_component(parts[2]);
-      if (rr >= 0 && gg >= 0 && bb >= 0) {
-        r = rr;
-        g = gg;
-        b = bb;
-        return true;
-      }
-    }
-  }
-
-  size_t h = line.find('#');
-  if (h != std::string::npos && h + 6 < line.size()) {
-    char hex[7] = {0};
-    bool ok = true;
-    for (int i = 0; i < 6; i++) {
-      char c = line[h + 1 + i];
-      if (!std::isxdigit((unsigned char)c)) {
-        ok = false;
-        break;
-      }
-      hex[i] = c;
-    }
-    if (ok) {
-      unsigned int v = 0;
-      if (sscanf(hex, "%x", &v) == 1) {
-        r = (int)((v >> 16) & 0xFF);
-        g = (int)((v >> 8) & 0xFF);
-        b = (int)(v & 0xFF);
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-std::string strip_ansi(const std::string &s) {
-  std::string out;
-  out.reserve(s.size());
-  for (size_t i = 0; i < s.size(); i++) {
-    if (s[i] == '\x1b' && i + 1 < s.size() && s[i + 1] == '[') {
-      i += 2;
-      while (i < s.size()) {
-        unsigned char c = (unsigned char)s[i];
-        if (c >= 0x40 && c <= 0x7E) {
+    size_t h = line.find('#');
+    if (h != std::string::npos && h + 6 < line.size())
+    {
+      char hex[7] = {0};
+      bool ok = true;
+      for (int i = 0; i < 6; i++)
+      {
+        char c = line[h + 1 + i];
+        if (!std::isxdigit((unsigned char)c))
+        {
+          ok = false;
           break;
         }
-        i++;
+        hex[i] = c;
       }
-      continue;
+      if (ok)
+      {
+        unsigned int v = 0;
+        if (sscanf(hex, "%x", &v) == 1)
+        {
+          r = (int)((v >> 16) & 0xFF);
+          g = (int)((v >> 8) & 0xFF);
+          b = (int)(v & 0xFF);
+          return true;
+        }
+      }
     }
-    out.push_back(s[i]);
+    return false;
   }
-  return out;
-}
+
+  std::string strip_ansi(const std::string &s)
+  {
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); i++)
+    {
+      if (s[i] == '\x1b' && i + 1 < s.size() && s[i + 1] == '[')
+      {
+        i += 2;
+        while (i < s.size())
+        {
+          unsigned char c = (unsigned char)s[i];
+          if (c >= 0x40 && c <= 0x7E)
+          {
+            break;
+          }
+          i++;
+        }
+        continue;
+      }
+      out.push_back(s[i]);
+    }
+    return out;
+  }
 } // namespace
 
-ImageViewer::ImageViewer() {
+ImageViewer::ImageViewer()
+{
   is_open = false;
   view_x = view_y = view_w = view_h = 0;
   border_fg = 7;
@@ -252,7 +297,8 @@ ImageViewer::ImageViewer() {
   remove_graphics_file = false;
 }
 
-ImageViewer::Backend ImageViewer::parse_backend(const std::string &name) {
+ImageViewer::Backend ImageViewer::parse_backend(const std::string &name)
+{
   std::string n = lower_copy(name);
   if (n == "kitty")
     return Backend::Kitty;
@@ -265,8 +311,10 @@ ImageViewer::Backend ImageViewer::parse_backend(const std::string &name) {
   return Backend::Auto;
 }
 
-std::string ImageViewer::backend_name(Backend backend) {
-  switch (backend) {
+std::string ImageViewer::backend_name(Backend backend)
+{
+  switch (backend)
+  {
   case Backend::Auto:
     return "auto";
   case Backend::Kitty:
@@ -281,14 +329,16 @@ std::string ImageViewer::backend_name(Backend backend) {
   return "cell";
 }
 
-bool ImageViewer::terminal_supports_kitty() {
+bool ImageViewer::terminal_supports_kitty()
+{
   if (env_present("KITTY_WINDOW_ID"))
     return true;
   std::string term = lower_copy(getenv_string("TERM"));
   return term.find("kitty") != std::string::npos;
 }
 
-bool ImageViewer::terminal_may_support_sixel() {
+bool ImageViewer::terminal_may_support_sixel()
+{
   std::string term = lower_copy(getenv_string("TERM"));
   std::string program = lower_copy(getenv_string("TERM_PROGRAM"));
   if (term.find("sixel") != std::string::npos)
@@ -304,58 +354,60 @@ bool ImageViewer::terminal_may_support_sixel() {
   return false;
 }
 
-bool ImageViewer::helper_available(const std::string &cmd) {
+bool ImageViewer::helper_available(const std::string &cmd)
+{
   if (cmd.empty())
     return false;
   return command_exists(cmd.c_str());
 }
 
-std::string ImageViewer::base64_encode(const std::string &input) {
-  static const char alphabet[] =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+std::string ImageViewer::base64_encode(const std::string &input)
+{
+  static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   std::string out;
   out.reserve(((input.size() + 2) / 3) * 4);
-  for (size_t i = 0; i < input.size(); i += 3) {
+  for (size_t i = 0; i < input.size(); i += 3)
+  {
     unsigned int b0 = (unsigned char)input[i];
     unsigned int b1 = (i + 1 < input.size()) ? (unsigned char)input[i + 1] : 0;
     unsigned int b2 = (i + 2 < input.size()) ? (unsigned char)input[i + 2] : 0;
     out.push_back(alphabet[(b0 >> 2) & 0x3F]);
     out.push_back(alphabet[((b0 & 0x03) << 4) | ((b1 >> 4) & 0x0F)]);
-    out.push_back(i + 1 < input.size()
-                      ? alphabet[((b1 & 0x0F) << 2) | ((b2 >> 6) & 0x03)]
-                      : '=');
+    out.push_back(i + 1 < input.size() ? alphabet[((b1 & 0x0F) << 2) | ((b2 >> 6) & 0x03)] : '=');
     out.push_back(i + 2 < input.size() ? alphabet[b2 & 0x3F] : '=');
   }
   return out;
 }
 
-std::string ImageViewer::build_kitty_file_command(const std::string &path,
-                                                  int x, int y, int w, int h) {
+std::string
+ImageViewer::build_kitty_file_command(const std::string &path, int x, int y, int w, int h)
+{
   if (path.empty() || w <= 0 || h <= 0)
     return "";
   std::ostringstream out;
   out << "\x1b[" << y + 1 << ";" << x + 1 << "H";
-  out << "\x1b_Ga=T,f=100,t=f,q=2,c=" << std::max(1, w)
-      << ",r=" << std::max(1, h) << ";"
+  out << "\x1b_Ga=T,f=100,t=f,q=2,c=" << std::max(1, w) << ",r=" << std::max(1, h) << ";"
       << base64_encode(path) << "\x1b\\";
   return out.str();
 }
 
-std::string ImageViewer::build_kitty_delete_command() {
+std::string ImageViewer::build_kitty_delete_command()
+{
   return "\x1b_Ga=d,d=A,q=2;\x1b\\";
 }
 
-std::string ImageViewer::build_sixel_command(const std::string &path, int w,
-                                             int h) {
+std::string ImageViewer::build_sixel_command(const std::string &path, int w, int h)
+{
   if (path.empty() || w <= 0 || h <= 0)
     return "";
   int px_w = std::max(1, w * 8);
   int px_h = std::max(1, h * 16);
-  return "img2sixel -w " + std::to_string(px_w) + " -h " +
-         std::to_string(px_h) + " " + shell_quote(path) + null_redirect();
+  return "img2sixel -w " + std::to_string(px_w) + " -h " + std::to_string(px_h) + " "
+         + shell_quote(path) + null_redirect();
 }
 
-void ImageViewer::configure_backend(const std::string &backend) {
+void ImageViewer::configure_backend(const std::string &backend)
+{
   Backend parsed = parse_backend(backend);
   if (parsed == configured_backend)
     return;
@@ -364,7 +416,8 @@ void ImageViewer::configure_backend(const std::string &backend) {
   graphics_dirty = true;
 }
 
-ImageViewer::Backend ImageViewer::resolve_backend() const {
+ImageViewer::Backend ImageViewer::resolve_backend() const
+{
   Backend requested = configured_backend;
   if (requested == Backend::Off)
     return Backend::Off;
@@ -372,10 +425,10 @@ ImageViewer::Backend ImageViewer::resolve_backend() const {
     return Backend::Cell;
   if (requested == Backend::Kitty)
     return terminal_supports_kitty() ? Backend::Kitty : Backend::Cell;
-  if (requested == Backend::Sixel) {
-    return terminal_may_support_sixel() && helper_available("img2sixel")
-               ? Backend::Sixel
-               : Backend::Cell;
+  if (requested == Backend::Sixel)
+  {
+    return terminal_may_support_sixel() && helper_available("img2sixel") ? Backend::Sixel
+                                                                         : Backend::Cell;
   }
   if (terminal_supports_kitty())
     return Backend::Kitty;
@@ -384,8 +437,10 @@ ImageViewer::Backend ImageViewer::resolve_backend() const {
   return Backend::Cell;
 }
 
-void ImageViewer::clear_graphics_file() {
-  if (remove_graphics_file && !graphics_file.empty()) {
+void ImageViewer::clear_graphics_file()
+{
+  if (remove_graphics_file && !graphics_file.empty())
+  {
     std::error_code ec;
     fs::remove(graphics_file, ec);
   }
@@ -393,35 +448,41 @@ void ImageViewer::clear_graphics_file() {
   remove_graphics_file = false;
 }
 
-std::string ImageViewer::prepare_kitty_graphics_file() {
+std::string ImageViewer::prepare_kitty_graphics_file()
+{
   clear_graphics_file();
   if (current_image.empty())
     return "";
 
   std::string ext = fs::path(current_image).extension().string();
   ext = lower_copy(ext);
-  if (ext == ".png") {
+  if (ext == ".png")
+  {
     graphics_file = current_image;
     remove_graphics_file = false;
     return graphics_file;
   }
 
-  if (!helper_available("magick") && !helper_available("convert")) {
+  if (!helper_available("magick") && !helper_available("convert"))
+  {
     return "";
   }
 
-  fs::path tmp = fs::temp_directory_path() /
-                 ("jot-image-viewer-" + std::to_string(process_id()) +
-                  ".png");
+  fs::path tmp =
+      fs::temp_directory_path() / ("jot-image-viewer-" + std::to_string(process_id()) + ".png");
   std::string cmd;
-  if (helper_available("magick")) {
-    cmd = "magick " + shell_quote(current_image) +
-          " -auto-orient " + shell_quote(tmp.string()) + null_redirect();
-  } else {
-    cmd = "convert " + shell_quote(current_image) +
-          " -auto-orient " + shell_quote(tmp.string()) + null_redirect();
+  if (helper_available("magick"))
+  {
+    cmd = "magick " + shell_quote(current_image) + " -auto-orient " + shell_quote(tmp.string())
+          + null_redirect();
   }
-  if (std::system(cmd.c_str()) != 0 || !fs::exists(tmp)) {
+  else
+  {
+    cmd = "convert " + shell_quote(current_image) + " -auto-orient " + shell_quote(tmp.string())
+          + null_redirect();
+  }
+  if (std::system(cmd.c_str()) != 0 || !fs::exists(tmp))
+  {
     return "";
   }
 
@@ -430,7 +491,8 @@ std::string ImageViewer::prepare_kitty_graphics_file() {
   return graphics_file;
 }
 
-bool ImageViewer::is_image_file(const std::string &path) {
+bool ImageViewer::is_image_file(const std::string &path)
+{
   std::string ext = path;
   std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
@@ -439,25 +501,31 @@ bool ImageViewer::is_image_file(const std::string &path) {
     return false;
 
   ext = ext.substr(dot);
-  return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" ||
-         ext == ".bmp" || ext == ".svg" || ext == ".webp" || ext == ".ico" ||
-         ext == ".tif" || ext == ".tiff" || ext == ".avif" || ext == ".heic" ||
-         ext == ".ppm" || ext == ".pgm" || ext == ".pbm" || ext == ".xpm" ||
-         ext == ".jxl";
+  return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".bmp"
+         || ext == ".svg" || ext == ".webp" || ext == ".ico" || ext == ".tif" || ext == ".tiff"
+         || ext == ".avif" || ext == ".heic" || ext == ".ppm" || ext == ".pgm" || ext == ".pbm"
+         || ext == ".xpm" || ext == ".jxl";
 }
 
-std::string ImageViewer::get_image_info(const std::string &path) {
+std::string ImageViewer::get_image_info(const std::string &path)
+{
   if (!fs::exists(path))
     return "File not found";
 
-  try {
+  try
+  {
     auto size = fs::file_size(path);
     std::string size_str;
-    if (size < 1024) {
+    if (size < 1024)
+    {
       size_str = std::to_string(size) + " B";
-    } else if (size < 1024 * 1024) {
+    }
+    else if (size < 1024 * 1024)
+    {
       size_str = std::to_string(size / 1024) + " KB";
-    } else {
+    }
+    else
+    {
       size_str = std::to_string(size / (1024 * 1024)) + " MB";
     }
 
@@ -465,16 +533,19 @@ std::string ImageViewer::get_image_info(const std::string &path) {
     std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
     std::string dims;
-    if (command_exists("identify")) {
-      std::string cmd = "identify -format '%wx%h' " + shell_quote(path) +
-                        null_redirect();
+    if (command_exists("identify"))
+    {
+      std::string cmd = "identify -format '%wx%h' " + shell_quote(path) + null_redirect();
       FILE *pipe = open_command_pipe(cmd, "r");
-      if (pipe) {
+      if (pipe)
+      {
         char buf[128] = {0};
-        if (fgets(buf, sizeof(buf), pipe) != nullptr) {
+        if (fgets(buf, sizeof(buf), pipe) != nullptr)
+        {
           dims = std::string(buf);
-          while (!dims.empty() &&
-                 (dims.back() == '\n' || dims.back() == '\r' || dims.back() == ' ')) {
+          while (!dims.empty()
+                 && (dims.back() == '\n' || dims.back() == '\r' || dims.back() == ' '))
+          {
             dims.pop_back();
           }
         }
@@ -482,21 +553,26 @@ std::string ImageViewer::get_image_info(const std::string &path) {
       }
     }
 
-    if (!dims.empty()) {
+    if (!dims.empty())
+    {
       return ext + " | " + dims + " | " + size_str;
     }
     return ext + " | " + size_str;
-  } catch (...) {
+  }
+  catch (...)
+  {
     return "Unknown";
   }
 }
 
-void ImageViewer::generate_ascii_preview(const std::string &path) {
+void ImageViewer::generate_ascii_preview(const std::string &path)
+{
   ascii_preview.clear();
   color_preview_bg.clear();
   has_color_preview = false;
 
-  if (!fs::exists(path)) {
+  if (!fs::exists(path))
+  {
     ascii_preview.push_back("Image not found");
     return;
   }
@@ -509,19 +585,24 @@ void ImageViewer::generate_ascii_preview(const std::string &path) {
   ascii_preview.push_back(info);
   ascii_preview.push_back("");
 
-  if (command_exists("convert")) {
+  if (command_exists("convert"))
+  {
     const int target_w = 56;
     const int target_h = 24;
-    std::string cmd = "convert " + shell_quote(path) + " -auto-orient "
-                      "-resize " + std::to_string(target_w) + "x" +
-                      std::to_string(target_h) + "\\! txt:-" + null_redirect();
+    std::string cmd = "convert " + shell_quote(path)
+                      + " -auto-orient "
+                        "-resize "
+                      + std::to_string(target_w) + "x" + std::to_string(target_h) + "\\! txt:-"
+                      + null_redirect();
     FILE *pipe = open_command_pipe(cmd, "r");
-    if (pipe) {
-      std::vector<std::vector<int>> colors(
-          (size_t)target_h, std::vector<int>((size_t)target_w, 16));
+    if (pipe)
+    {
+      std::vector<std::vector<int>> colors((size_t)target_h,
+                                           std::vector<int>((size_t)target_w, 16));
       bool any = false;
       char buffer[1024];
-      while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+      while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+      {
         std::string line(buffer);
         if (line.empty() || line[0] == '#')
           continue;
@@ -540,7 +621,8 @@ void ImageViewer::generate_ascii_preview(const std::string &path) {
         any = true;
       }
       close_command_pipe(pipe);
-      if (any) {
+      if (any)
+      {
         color_preview_bg = std::move(colors);
         has_color_preview = true;
         ascii_preview.push_back("Preview: 256-color");
@@ -550,31 +632,35 @@ void ImageViewer::generate_ascii_preview(const std::string &path) {
   }
 
   // Best quality terminal preview path.
-  if (command_exists("chafa")) {
+  if (command_exists("chafa"))
+  {
     const int target_w = 56;
     const int target_h = 24;
-    std::string cmd = "chafa --format=symbols --colors=none --size=" +
-                      std::to_string(target_w) + "x" + std::to_string(target_h) +
-                      " " + shell_quote(path) + null_redirect();
+    std::string cmd = "chafa --format=symbols --colors=none --size=" + std::to_string(target_w)
+                      + "x" + std::to_string(target_h) + " " + shell_quote(path) + null_redirect();
     FILE *pipe = open_command_pipe(cmd, "r");
-    if (pipe) {
+    if (pipe)
+    {
       std::vector<std::string> rows;
       char buffer[2048];
-      while (fgets(buffer, sizeof(buffer), pipe) != nullptr &&
-             (int)rows.size() < target_h) {
+      while (fgets(buffer, sizeof(buffer), pipe) != nullptr && (int)rows.size() < target_h)
+      {
         std::string row = strip_ansi(std::string(buffer));
-        while (!row.empty() &&
-               (row.back() == '\n' || row.back() == '\r')) {
+        while (!row.empty() && (row.back() == '\n' || row.back() == '\r'))
+        {
           row.pop_back();
         }
-        if (!row.empty()) {
+        if (!row.empty())
+        {
           rows.push_back(row);
         }
       }
       close_command_pipe(pipe);
-      if (!rows.empty()) {
+      if (!rows.empty())
+      {
         ascii_preview.push_back("Preview:");
-        for (const auto &r : rows) {
+        for (const auto &r : rows)
+        {
           ascii_preview.push_back(r);
         }
         return;
@@ -583,20 +669,22 @@ void ImageViewer::generate_ascii_preview(const std::string &path) {
   }
 
   bool rendered_ascii = false;
-  if (command_exists("convert")) {
+  if (command_exists("convert"))
+  {
     const int target_w = 56;
     const int target_h = 24;
-    std::string cmd = "convert " + shell_quote(path) + " -auto-orient "
-                      "-resize " + std::to_string(target_w) + "x" +
-                      std::to_string(target_h) +
-                      "\\! -colorspace Gray -contrast-stretch 1%x10% txt:-" +
-                      null_redirect();
+    std::string cmd = "convert " + shell_quote(path)
+                      + " -auto-orient "
+                        "-resize "
+                      + std::to_string(target_w) + "x" + std::to_string(target_h)
+                      + "\\! -colorspace Gray -contrast-stretch 1%x10% txt:-" + null_redirect();
     FILE *pipe = open_command_pipe(cmd, "r");
-    if (pipe) {
-      std::vector<std::string> rows(
-          target_h, std::string((size_t)target_w, ' '));
+    if (pipe)
+    {
+      std::vector<std::string> rows(target_h, std::string((size_t)target_w, ' '));
       char buffer[512];
-      while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+      while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+      {
         std::string line(buffer);
         if (line.empty() || line[0] == '#')
           continue;
@@ -610,16 +698,22 @@ void ImageViewer::generate_ascii_preview(const std::string &path) {
 
         int gray = -1;
         size_t gpos = line.find("gray(");
-        if (gpos != std::string::npos) {
+        if (gpos != std::string::npos)
+        {
           int gv = -1;
-          if (sscanf(line.c_str() + gpos, "gray(%d)", &gv) == 1) {
+          if (sscanf(line.c_str() + gpos, "gray(%d)", &gv) == 1)
+          {
             gray = gv;
           }
-        } else {
+        }
+        else
+        {
           size_t rpos = line.find("rgb(");
-          if (rpos != std::string::npos) {
+          if (rpos != std::string::npos)
+          {
             int r = 0, g = 0, b = 0;
-            if (sscanf(line.c_str() + rpos, "rgb(%d,%d,%d)", &r, &g, &b) == 3) {
+            if (sscanf(line.c_str() + rpos, "rgb(%d,%d,%d)", &r, &g, &b) == 3)
+            {
               gray = (r + g + b) / 3;
             }
           }
@@ -634,14 +728,16 @@ void ImageViewer::generate_ascii_preview(const std::string &path) {
       close_command_pipe(pipe);
 
       ascii_preview.push_back("Preview:");
-      for (const auto &row : rows) {
+      for (const auto &row : rows)
+      {
         ascii_preview.push_back(row);
       }
       rendered_ascii = true;
     }
   }
 
-  if (!rendered_ascii) {
+  if (!rendered_ascii)
+  {
     ascii_preview.push_back("Preview unavailable (ImageMagick 'convert' missing)");
     ascii_preview.push_back("");
     ascii_preview.push_back("You can still open with external viewer:");
@@ -649,7 +745,8 @@ void ImageViewer::generate_ascii_preview(const std::string &path) {
   }
 }
 
-void ImageViewer::open(const std::string &path) {
+void ImageViewer::open(const std::string &path)
+{
   if (!is_image_file(path))
     return;
   if (!fs::exists(path))
@@ -664,10 +761,14 @@ void ImageViewer::open(const std::string &path) {
   graphics_dirty = true;
 }
 
-void ImageViewer::close() {
-  if (graphics_visible) {
+void ImageViewer::close()
+{
+  if (graphics_visible)
+  {
     graphics_dirty = true;
-  } else {
+  }
+  else
+  {
     clear_graphics_file();
   }
   is_open = false;
@@ -677,8 +778,8 @@ void ImageViewer::close() {
   status_text.clear();
 }
 
-void ImageViewer::render(int x, int y, int w, int h, int border_fg,
-                         int border_bg) {
+void ImageViewer::render(int x, int y, int w, int h, int border_fg, int border_bg)
+{
   if (!is_open)
     return;
 
@@ -693,8 +794,8 @@ void ImageViewer::render(int x, int y, int w, int h, int border_fg,
   int next_y = y + 2;
   int next_w = std::max(1, w - 2);
   int next_h = std::max(1, h - 3);
-  if (graphics_x != next_x || graphics_y != next_y || graphics_w != next_w ||
-      graphics_h != next_h) {
+  if (graphics_x != next_x || graphics_y != next_y || graphics_w != next_w || graphics_h != next_h)
+  {
     graphics_dirty = true;
     graphics_x = next_x;
     graphics_y = next_y;
@@ -704,57 +805,67 @@ void ImageViewer::render(int x, int y, int w, int h, int border_fg,
   active_backend = resolve_backend();
 }
 
-std::string ImageViewer::take_graphics_output() {
-  if (!graphics_dirty && !(is_open && uses_real_graphics() && !graphics_visible)) {
+std::string ImageViewer::take_graphics_output()
+{
+  if (!graphics_dirty && !(is_open && uses_real_graphics() && !graphics_visible))
+  {
     return "";
   }
 
   std::string out;
   const bool delete_existing =
-      graphics_visible &&
-      (!is_open || graphics_dirty || !uses_real_graphics());
-  if (delete_existing) {
-    if (terminal_supports_kitty()) {
+      graphics_visible && (!is_open || graphics_dirty || !uses_real_graphics());
+  if (delete_existing)
+  {
+    if (terminal_supports_kitty())
+    {
       out += build_kitty_delete_command();
     }
     graphics_visible = false;
   }
 
   graphics_dirty = false;
-  if (!is_open || current_image.empty()) {
+  if (!is_open || current_image.empty())
+  {
     current_image.clear();
     clear_graphics_file();
     return out;
   }
 
   active_backend = resolve_backend();
-  if (active_backend == Backend::Off) {
+  if (active_backend == Backend::Off)
+  {
     status_text = "Image viewer disabled";
     return out;
   }
-  if (active_backend == Backend::Kitty) {
+  if (active_backend == Backend::Kitty)
+  {
     std::string file = prepare_kitty_graphics_file();
-    if (file.empty()) {
+    if (file.empty())
+    {
       active_backend = Backend::Cell;
       status_text = "Image conversion unavailable; using cell preview";
       return out;
     }
-    out += build_kitty_file_command(file, graphics_x, graphics_y,
-                                    graphics_w, graphics_h);
+    out += build_kitty_file_command(file, graphics_x, graphics_y, graphics_w, graphics_h);
     graphics_visible = true;
     status_text = "Real image: kitty";
     return out;
   }
-  if (active_backend == Backend::Sixel) {
+  if (active_backend == Backend::Sixel)
+  {
     std::string cmd = build_sixel_command(current_image, graphics_w, graphics_h);
     FILE *pipe = open_command_pipe(cmd, "r");
-    if (pipe) {
+    if (pipe)
+    {
       char buffer[4096];
-      while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+      while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+      {
         out += buffer;
       }
       int rc = close_command_pipe(pipe);
-      if (rc == 0 && !out.empty()) {
+      if (rc == 0 && !out.empty())
+      {
         graphics_visible = true;
         status_text = "Real image: sixel";
         return out;

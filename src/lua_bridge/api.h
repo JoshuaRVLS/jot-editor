@@ -12,7 +12,8 @@
 #include <unordered_map>
 #include <vector>
 
-struct LuaScratchBuffer {
+struct LuaScratchBuffer
+{
   int handle = 0;
   bool listed = false;
   bool scratch = true;
@@ -20,7 +21,8 @@ struct LuaScratchBuffer {
   std::vector<std::string> lines = {""};
 };
 
-struct LuaFloatWindow {
+struct LuaFloatWindow
+{
   int handle = 0;
   int buffer = 0;
   int x = 0, y = 0, w = 1, h = 1;
@@ -44,13 +46,15 @@ struct LuaFloatWindow {
   int creation_order = 0;
 };
 
-struct PluginCommand {
+struct PluginCommand
+{
   std::string name;
   std::string callback;
   std::string detail;
 };
 
-struct PluginKeymap {
+struct PluginKeymap
+{
   std::string key;
   std::string callback;
   std::string command;
@@ -58,18 +62,21 @@ struct PluginKeymap {
   std::string mode;
 };
 
-struct PluginAutocmd {
+struct PluginAutocmd
+{
   std::string event;
   std::string callback;
 };
 
-struct PluginPanel {
+struct PluginPanel
+{
   std::string name;
   std::string callback;
   std::string title;
 };
 
-struct PluginStatusSegment {
+struct PluginStatusSegment
+{
   std::string name;
   std::string callback; // registry key into lua_callbacks
   std::string side;     // "left" or "right"
@@ -77,21 +84,24 @@ struct PluginStatusSegment {
   int fg = -1; // optional xterm color override; -1 = theme status color
 };
 
-struct RenderedStatusSegment {
+struct RenderedStatusSegment
+{
   std::string text;
   std::string side;
   int priority = 50;
   int fg = -1;
 };
 
-struct PluginLoadStatus {
+struct PluginLoadStatus
+{
   std::string name;
   std::string path;
   bool loaded;
   std::string error;
 };
 
-struct EventBusSubscriber {
+struct EventBusSubscriber
+{
   std::string key;
   int ref;
 };
@@ -106,7 +116,8 @@ struct lua_State;
 // are keyed by the native EventLoop::TimerId (uint64_t); the callback ref is
 // also registered under "timer.<ref>" in lua_callbacks so cleanup paths unref
 // everything through the existing callback sweep.
-struct LuaTimerEntry {
+struct LuaTimerEntry
+{
   int ref = -1;
   bool repeat = false;
 };
@@ -114,7 +125,8 @@ struct LuaTimerEntry {
 // Rich per-edit description attached to BufChange events (see
 // LuaAPI::on_buffer_change). All line/col values are 1-based; end_line /
 // end_col describe the exclusive end of the inserted region in the NEW text.
-struct LuaEditDelta {
+struct LuaEditDelta
+{
   bool valid = false;
   int start_line = 1;
   int start_col = 1;
@@ -125,7 +137,8 @@ struct LuaEditDelta {
   bool multiline = false;
 };
 
-class LuaAPI {
+class LuaAPI
+{
 private:
   Editor *editor;
   std::vector<PluginCommand> plugin_commands;
@@ -163,6 +176,7 @@ private:
 
   void *lua_state; // lua_State* (opaque in public header)
   bool lua_initialized;
+
 public:
   int next_scratch_buffer = 1;
   int next_float_window = 1;
@@ -170,19 +184,19 @@ public:
   int current_float_window = 0;
   std::map<int, LuaScratchBuffer> scratch_buffers;
   std::map<int, LuaFloatWindow> float_windows;
- public:
+
+public:
   std::unordered_map<std::string, int> lua_callbacks;
 
 private:
   void clear_runtime_state();
-  bool apply_theme_file(const std::string &name,
-                        std::vector<std::string> &extends_stack);
-  bool load_script_path(const std::string &module_name,
-                        const std::string &path);
-  bool call_callback_string(const std::string &callback,
-                            const std::string &arg);
-  bool call_callback_event(const std::string &callback, const std::string &event,
-                           const std::string &filepath, int buffer);
+  bool apply_theme_file(const std::string &name, std::vector<std::string> &extends_stack);
+  bool load_script_path(const std::string &module_name, const std::string &path);
+  bool call_callback_string(const std::string &callback, const std::string &arg);
+  bool call_callback_event(const std::string &callback,
+                           const std::string &event,
+                           const std::string &filepath,
+                           int buffer);
   // Resolves the optional buffer argument (1-based index or filepath, or the
   // current buffer when omitted) to a 0-based buffer index, or -1.
   int resolve_buffer_arg(lua_State *L, int arg_index);
@@ -200,8 +214,7 @@ public:
   bool init();
   void cleanup();
   void on_buffer_open(const std::string &filepath);
-  void on_buffer_change(const std::string &filepath,
-                        const std::string &content);
+  void on_buffer_change(const std::string &filepath, const std::string &content);
   void on_buffer_save(const std::string &filepath);
 
   // Lua API functions used by the embedded runtime.
@@ -222,26 +235,21 @@ public:
   // Backing of the `:reload` command together with Editor::reload_config().
   void load_config_file();
   bool run_plugin_command(const std::string &name, const std::string &arg);
-  bool run_plugin_keymap(const std::string &key,
-                         const std::string &mode = "global");
-  void fire_autocmd(const std::string &event, const std::string &filepath = "",
-                    int buffer = -1);
+  bool run_plugin_keymap(const std::string &key, const std::string &mode = "global");
+  void fire_autocmd(const std::string &event, const std::string &filepath = "", int buffer = -1);
   std::vector<std::string> plugin_panel_lines(const std::string &name);
   std::vector<std::string> plugin_picker_items(const std::string &callback);
-  bool run_plugin_callback(const std::string &callback,
-                           const std::string &arg = "");
-  void register_command(const std::string &name,
-                           const std::string &callback,
-                           const std::string &detail);
-  void register_keymap(const std::string &key, const std::string &callback,
-                          const std::string &command,
-                          const std::string &detail,
-                          const std::string &mode);
-  void register_autocmd(const std::string &event,
-                           const std::string &callback);
-  void register_panel(const std::string &name,
-                         const std::string &callback,
-                         const std::string &title);
+  bool run_plugin_callback(const std::string &callback, const std::string &arg = "");
+  void
+  register_command(const std::string &name, const std::string &callback, const std::string &detail);
+  void register_keymap(const std::string &key,
+                       const std::string &callback,
+                       const std::string &command,
+                       const std::string &detail,
+                       const std::string &mode);
+  void register_autocmd(const std::string &event, const std::string &callback);
+  void
+  register_panel(const std::string &name, const std::string &callback, const std::string &title);
 
   // Diagnostics / buffer vars / marks / status segments (push/act on the
   // active lua_State; callbacks run on the main thread only).
@@ -312,7 +320,8 @@ public:
   void picker_accept_from_lua(lua_State *L);
   void picker_close_from_lua(lua_State *L);
   void push_buffer_tokens(lua_State *L);
-  void lsp_request_from_lua(lua_State *L, int kind); // 0 hover, 1 definition, 2 document symbols, 3 completion
+  void lsp_request_from_lua(lua_State *L,
+                            int kind); // 0 hover, 1 definition, 2 document symbols, 3 completion
   void push_lsp_diagnostics(lua_State *L);
   void push_lsp_last_results(lua_State *L);
   void push_lsp_completions(lua_State *L);
@@ -321,12 +330,12 @@ public:
   // Event bus: subscribe/unsubscribe from Lua, native broadcast entry point.
   void events_subscribe_from_lua(lua_State *L);
   void events_unsubscribe_from_lua(lua_State *L);
-  bool has_event_subscribers(const std::string &name) const {
+  bool has_event_subscribers(const std::string &name) const
+  {
     auto it = event_subscribers_.find(name);
     return it != event_subscribers_.end() && !it->second.empty();
   }
-  void emit_event_bus(const std::string &name,
-                      const std::function<void(lua_State *)> &build);
+  void emit_event_bus(const std::string &name, const std::function<void(lua_State *)> &build);
   void emit_lsp_hover(const LSPHoverResult &hover);
   void emit_lsp_definition(const LSPDefinitionResult &definition);
   void emit_lsp_symbols(const LSPDocumentSymbolResult &symbols);
@@ -377,17 +386,13 @@ public:
   // the fresh answer to Lua; stack/variables yield native side effects for
   // that one response.
   void debugger_request_from_lua(lua_State *L, int kind); // 0 stack, 1 variables, 2 threads
-  bool try_deliver_debugger_stack(int session,
-                                  const std::vector<DebuggerFrame> &frames);
-  bool try_deliver_debugger_variables(
-      int session, const std::vector<DebuggerVariable> &variables);
-  bool try_deliver_debugger_threads(int session,
-                                    const std::vector<DebuggerThread> &threads);
+  bool try_deliver_debugger_stack(int session, const std::vector<DebuggerFrame> &frames);
+  bool try_deliver_debugger_variables(int session, const std::vector<DebuggerVariable> &variables);
+  bool try_deliver_debugger_threads(int session, const std::vector<DebuggerThread> &threads);
   // request_variables chain: after the scopes answer, ask the adapter for the
   // first expandable scope's variables (sink stays pending for the Variables
   // event). Returns true when the chain advanced.
-  bool debugger_chain_variables(int session,
-                                const std::vector<DebuggerVariable> &scopes);
+  bool debugger_chain_variables(int session, const std::vector<DebuggerVariable> &scopes);
   // Theme palette readback (jot.theme.palette): full current slot table.
   void push_theme_palette(lua_State *L);
   // Buffer lines (jot.buffer.lines) and clipboard text (jot.clipboard.get).
@@ -400,8 +405,7 @@ public:
   void buffer_clear_selection_from_lua(lua_State *L);
   // Additional bus emitters.
   void emit_buffer_event(const std::string &event, const std::string &path);
-  void emit_diagnostics_changed(const std::string &path,
-                                const std::vector<Diagnostic> &items);
+  void emit_diagnostics_changed(const std::string &path, const std::vector<Diagnostic> &items);
   void emit_theme_switched(const std::string &name);
   // Emits "debugger.state_changed" when any session's observable state
   // changed since the last poll (deduped by an internal signature).
@@ -412,11 +416,24 @@ public:
   bool try_deliver_lsp_definition(const LSPDefinitionResult &definition);
   bool try_deliver_lsp_symbols(const LSPDocumentSymbolResult &symbols);
 
-  const std::vector<PluginCommand> &commands() const { return plugin_commands; }
-  const std::vector<PluginKeymap> &keymaps() const { return plugin_keymaps; }
-  const std::vector<PluginAutocmd> &autocmds() const { return plugin_autocmds; }
-  const std::vector<PluginPanel> &panels() const { return plugin_panels; }
-  const std::vector<PluginLoadStatus> &load_status() const {
+  const std::vector<PluginCommand> &commands() const
+  {
+    return plugin_commands;
+  }
+  const std::vector<PluginKeymap> &keymaps() const
+  {
+    return plugin_keymaps;
+  }
+  const std::vector<PluginAutocmd> &autocmds() const
+  {
+    return plugin_autocmds;
+  }
+  const std::vector<PluginPanel> &panels() const
+  {
+    return plugin_panels;
+  }
+  const std::vector<PluginLoadStatus> &load_status() const
+  {
     return plugin_load_status;
   }
   std::string get_current_buffer();
@@ -430,33 +447,37 @@ public:
   void open_file(const std::string &path);
   void save_current_file();
   void execute_command(const std::string &command);
-  void run_job(const std::string &command, const std::string &cwd,
-                  const std::string &label);
+  void run_job(const std::string &command, const std::string &cwd, const std::string &label);
   // Async shell capture: runs the command on a worker thread and delivers a
   // {output=..., exit_code=..., ok=...} table to the Lua callback registered
   // under `callback` (a key into lua_callbacks) on the main thread.
-  bool run_job_capture(const std::string &command, const std::string &cwd,
-                       const std::string &callback);
-  bool deliver_job_result(const std::string &callback,
-                          const std::string &output, int exit_code);
+  bool
+  run_job_capture(const std::string &command, const std::string &cwd, const std::string &callback);
+  bool deliver_job_result(const std::string &callback, const std::string &output, int exit_code);
   void show_picker(const std::string &title,
-                      const std::string &items_callback,
-                      const std::string &select_callback);
+                   const std::string &items_callback,
+                   const std::string &select_callback);
   void show_panel(const std::string &name);
 
   int create_scratch_buffer(bool listed, bool scratch);
-  bool set_scratch_lines(int buffer, int start, int end, bool strict,
-                         const std::vector<std::string> &lines);
-  std::vector<std::string> get_scratch_lines(int buffer, int start, int end,
-                                             bool strict) const;
+  bool set_scratch_lines(
+      int buffer, int start, int end, bool strict, const std::vector<std::string> &lines);
+  std::vector<std::string> get_scratch_lines(int buffer, int start, int end, bool strict) const;
   bool delete_scratch_buffer(int buffer);
   int open_float(int buffer, bool enter, lua_State *L, int config_index);
   bool configure_float(int window, lua_State *L, int config_index);
   bool close_float(int window, bool force);
   bool is_float_valid(int window) const;
   bool float_input(int ch, bool ctrl, bool shift, bool alt);
-  bool float_mouse(int x, int y, int button, bool pressed, bool released,
-                   bool motion, bool ctrl, bool shift, bool alt);
+  bool float_mouse(int x,
+                   int y,
+                   int button,
+                   bool pressed,
+                   bool released,
+                   bool motion,
+                   bool ctrl,
+                   bool shift,
+                   bool alt);
   void render_floats();
   void clear_floats();
 };

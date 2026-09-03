@@ -1,60 +1,69 @@
 #include "editor.h"
-#include "text_features.h"
 #include "lua_bridge/api.h"
+#include "text_features.h"
 #include <algorithm>
 #include <cctype>
 
-namespace {
-int count_one_indent_level(const std::string &line, int tab_size) {
-  if (line.empty())
-    return 0;
+namespace
+{
+  int count_one_indent_level(const std::string &line, int tab_size)
+  {
+    if (line.empty())
+      return 0;
 
-  if (line[0] == '\t') {
-    return 1;
+    if (line[0] == '\t')
+    {
+      return 1;
+    }
+
+    int removed = 0;
+    while (removed < tab_size && removed < (int)line.size() && line[removed] == ' ')
+    {
+      removed++;
+    }
+    return removed;
   }
 
-  int removed = 0;
-  while (removed < tab_size && removed < (int)line.size() &&
-         line[removed] == ' ') {
-    removed++;
+  int remove_one_indent_level(std::string &line, int tab_size)
+  {
+    int removed = count_one_indent_level(line, tab_size);
+    if (removed > 0)
+    {
+      line.erase(0, removed);
+    }
+    return removed;
   }
-  return removed;
-}
 
-int remove_one_indent_level(std::string &line, int tab_size) {
-  int removed = count_one_indent_level(line, tab_size);
-  if (removed > 0) {
-    line.erase(0, removed);
+  bool has_python_extension(const std::string &path)
+  {
+    if (path.size() < 3)
+      return false;
+    const size_t dot = path.find_last_of('.');
+    if (dot == std::string::npos)
+      return false;
+    std::string ext = path.substr(dot);
+    std::transform(
+        ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+    return ext == ".py";
   }
-  return removed;
-}
 
-bool has_python_extension(const std::string &path) {
-  if (path.size() < 3)
-    return false;
-  const size_t dot = path.find_last_of('.');
-  if (dot == std::string::npos)
-    return false;
-  std::string ext = path.substr(dot);
-  std::transform(ext.begin(), ext.end(), ext.begin(),
-                 [](unsigned char c) { return (char)std::tolower(c); });
-  return ext == ".py";
-}
-
-bool should_indent_after_line(const FileBuffer &buf, const std::string &line) {
-  if (has_python_extension(buf.filepath)) {
-    return EditorFeatures::should_python_auto_indent(line);
+  bool should_indent_after_line(const FileBuffer &buf, const std::string &line)
+  {
+    if (has_python_extension(buf.filepath))
+    {
+      return EditorFeatures::should_python_auto_indent(line);
+    }
+    return EditorFeatures::should_auto_indent(line);
   }
-  return EditorFeatures::should_auto_indent(line);
-}
 } // namespace
 
-void Editor::duplicate_line() {
+void Editor::duplicate_line()
+{
   save_state();
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
-  buf.lines.insert(buf.lines.begin() + buf.cursor.y + 1,
-                   buf.lines[buf.cursor.y]);
+  if (buf.is_lazy())
+    buf.materialize();
+  buf.lines.insert(buf.lines.begin() + buf.cursor.y + 1, buf.lines[buf.cursor.y]);
   buf.cursor.y++;
   buf.modified = true;
   needs_redraw = true;
@@ -62,13 +71,16 @@ void Editor::duplicate_line() {
     notify_lsp_change(buf.filepath);
 }
 
-void Editor::insert_line_below() {
+void Editor::insert_line_below()
+{
   save_state();
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
+  if (buf.is_lazy())
+    buf.materialize();
   // Compute indent from current line
   std::string indent_str = "";
-  if (auto_indent) {
+  if (auto_indent)
+  {
     int indent = EditorFeatures::get_indent_level(buf.lines[buf.cursor.y]);
     if (should_indent_after_line(buf, buf.lines[buf.cursor.y]))
       indent += tab_size;
@@ -79,17 +91,21 @@ void Editor::insert_line_below() {
   buf.cursor.x = indent_str.length();
   buf.modified = true;
   needs_redraw = true;
-  if (lua_api) lua_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }
 
-void Editor::insert_line_above() {
+void Editor::insert_line_above()
+{
   save_state();
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
+  if (buf.is_lazy())
+    buf.materialize();
   std::string indent_str = "";
-  if (auto_indent) {
+  if (auto_indent)
+  {
     int indent = EditorFeatures::get_indent_level(buf.lines[buf.cursor.y]);
     indent_str = EditorFeatures::get_indent_string(indent, tab_size);
   }
@@ -97,14 +113,17 @@ void Editor::insert_line_above() {
   buf.cursor.x = indent_str.length();
   buf.modified = true;
   needs_redraw = true;
-  if (lua_api) lua_api->on_buffer_change(buf.filepath, "");
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }
 
-void Editor::indent_selection() {
+void Editor::indent_selection()
+{
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
+  if (buf.is_lazy())
+    buf.materialize();
   if (!buf.selection.active)
     return;
 
@@ -114,7 +133,8 @@ void Editor::indent_selection() {
   const int end_y = std::max(buf.selection.start.y, buf.selection.end.y);
   const std::string indent(tab_size, ' ');
 
-  for (int y = start_y; y <= end_y; y++) {
+  for (int y = start_y; y <= end_y; y++)
+  {
     buf.lines[y].insert(0, indent);
   }
 
@@ -132,14 +152,18 @@ void Editor::indent_selection() {
     notify_lsp_change(buf.filepath);
 }
 
-void Editor::outdent_selection() {
+void Editor::outdent_selection()
+{
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
+  if (buf.is_lazy())
+    buf.materialize();
 
-  if (!buf.selection.active) {
+  if (!buf.selection.active)
+  {
     int y = std::clamp(buf.cursor.y, 0, (int)buf.line_count() - 1);
     int removed = count_one_indent_level(buf.lines[y], tab_size);
-    if (removed <= 0) {
+    if (removed <= 0)
+    {
       return;
     }
 
@@ -167,7 +191,8 @@ void Editor::outdent_selection() {
   int removed_end = 0;
   int removed_cursor = 0;
 
-  for (int y = start_y; y <= end_y; y++) {
+  for (int y = start_y; y <= end_y; y++)
+  {
     int removed = remove_one_indent_level(buf.lines[y], tab_size);
     if (y == buf.selection.start.y)
       removed_start = removed;
@@ -191,12 +216,12 @@ void Editor::outdent_selection() {
     notify_lsp_change(buf.filepath);
 }
 
-
-
-void Editor::toggle_comment() {
+void Editor::toggle_comment()
+{
   save_state();
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
+  if (buf.is_lazy())
+    buf.materialize();
   std::string ext = get_file_extension(buf.filepath);
   std::string comment = "//";
   if (ext == ".py")
@@ -205,26 +230,31 @@ void Editor::toggle_comment() {
     comment = "<!--";
 
   bool all_commented = true;
-  int start_y = buf.selection.active
-                    ? std::min(buf.selection.start.y, buf.selection.end.y)
-                    : buf.cursor.y;
-  int end_y = buf.selection.active
-                  ? std::max(buf.selection.start.y, buf.selection.end.y)
-                  : buf.cursor.y;
+  int start_y =
+      buf.selection.active ? std::min(buf.selection.start.y, buf.selection.end.y) : buf.cursor.y;
+  int end_y =
+      buf.selection.active ? std::max(buf.selection.start.y, buf.selection.end.y) : buf.cursor.y;
 
-  for (int i = start_y; i <= end_y; i++) {
-    if (buf.lines[i].substr(0, comment.length()) != comment) {
+  for (int i = start_y; i <= end_y; i++)
+  {
+    if (buf.lines[i].substr(0, comment.length()) != comment)
+    {
       all_commented = false;
       break;
     }
   }
 
-  for (int i = start_y; i <= end_y; i++) {
-    if (all_commented) {
-      if (buf.lines[i].substr(0, comment.length()) == comment) {
+  for (int i = start_y; i <= end_y; i++)
+  {
+    if (all_commented)
+    {
+      if (buf.lines[i].substr(0, comment.length()) == comment)
+      {
         buf.lines[i] = buf.lines[i].substr(comment.length());
       }
-    } else {
+    }
+    else
+    {
       buf.lines[i] = comment + buf.lines[i];
     }
   }

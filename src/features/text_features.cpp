@@ -2,66 +2,80 @@
 #include <algorithm>
 #include <cctype>
 
-namespace {
-std::string trim_left(const std::string &s) {
-  const size_t start = s.find_first_not_of(" \t");
-  return start == std::string::npos ? "" : s.substr(start);
-}
-
-std::string trim_right_ws(const std::string &s) {
-  const size_t end = s.find_last_not_of(" \t");
-  return end == std::string::npos ? "" : s.substr(0, end + 1);
-}
-
-bool starts_with_keyword(const std::string &line, const std::string &keyword) {
-  if (line.size() < keyword.size() ||
-      line.compare(0, keyword.size(), keyword) != 0) {
-    return false;
+namespace
+{
+  std::string trim_left(const std::string &s)
+  {
+    const size_t start = s.find_first_not_of(" \t");
+    return start == std::string::npos ? "" : s.substr(start);
   }
 
-  if (line.size() == keyword.size()) {
-    return true;
+  std::string trim_right_ws(const std::string &s)
+  {
+    const size_t end = s.find_last_not_of(" \t");
+    return end == std::string::npos ? "" : s.substr(0, end + 1);
   }
 
-  const unsigned char next = static_cast<unsigned char>(line[keyword.size()]);
-  return !std::isalnum(next) && next != '_';
-}
+  bool starts_with_keyword(const std::string &line, const std::string &keyword)
+  {
+    if (line.size() < keyword.size() || line.compare(0, keyword.size(), keyword) != 0)
+    {
+      return false;
+    }
 
-std::string strip_python_comment(const std::string &line) {
-  bool in_single = false;
-  bool in_double = false;
-  bool escaped = false;
+    if (line.size() == keyword.size())
+    {
+      return true;
+    }
 
-  for (size_t i = 0; i < line.size(); i++) {
-    const char c = line[i];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (c == '\\' && (in_single || in_double)) {
-      escaped = true;
-      continue;
-    }
-    if (c == '\'' && !in_double) {
-      in_single = !in_single;
-      continue;
-    }
-    if (c == '"' && !in_single) {
-      in_double = !in_double;
-      continue;
-    }
-    if (c == '#' && !in_single && !in_double) {
-      return trim_right_ws(line.substr(0, i));
-    }
+    const unsigned char next = static_cast<unsigned char>(line[keyword.size()]);
+    return !std::isalnum(next) && next != '_';
   }
 
-  return trim_right_ws(line);
-}
+  std::string strip_python_comment(const std::string &line)
+  {
+    bool in_single = false;
+    bool in_double = false;
+    bool escaped = false;
+
+    for (size_t i = 0; i < line.size(); i++)
+    {
+      const char c = line[i];
+      if (escaped)
+      {
+        escaped = false;
+        continue;
+      }
+      if (c == '\\' && (in_single || in_double))
+      {
+        escaped = true;
+        continue;
+      }
+      if (c == '\'' && !in_double)
+      {
+        in_single = !in_single;
+        continue;
+      }
+      if (c == '"' && !in_single)
+      {
+        in_double = !in_double;
+        continue;
+      }
+      if (c == '#' && !in_single && !in_double)
+      {
+        return trim_right_ws(line.substr(0, i));
+      }
+    }
+
+    return trim_right_ws(line);
+  }
 } // namespace
 
-int EditorFeatures::get_indent_level(const std::string &line) {
+int EditorFeatures::get_indent_level(const std::string &line)
+{
   int level = 0;
-  for (char c : line) {
+  for (char c : line)
+  {
     if (c == ' ')
       level++;
     else if (c == '\t')
@@ -72,7 +86,8 @@ int EditorFeatures::get_indent_level(const std::string &line) {
   return level;
 }
 
-std::string EditorFeatures::get_indent_string(int level, int tab_size) {
+std::string EditorFeatures::get_indent_string(int level, int tab_size)
+{
   if (level <= 0)
     return "";
 
@@ -82,7 +97,8 @@ std::string EditorFeatures::get_indent_string(int level, int tab_size) {
   return std::string(tabs * step + spaces, ' ');
 }
 
-bool EditorFeatures::should_auto_indent(const std::string &line) {
+bool EditorFeatures::should_auto_indent(const std::string &line)
+{
   std::string trimmed = trim_left(line);
   if (trimmed.empty())
     return false;
@@ -94,7 +110,8 @@ bool EditorFeatures::should_auto_indent(const std::string &line) {
 
   // Remove comments
   const size_t comment_pos = trimmed.find("//");
-  if (comment_pos != std::string::npos) {
+  if (comment_pos != std::string::npos)
+  {
     trimmed = trim_right_ws(trimmed.substr(0, comment_pos));
   }
 
@@ -103,16 +120,26 @@ bool EditorFeatures::should_auto_indent(const std::string &line) {
 
   // Check for block starters
   const char last_char = trimmed.back();
-  if (last_char == '{' || last_char == '[' || last_char == '(' ||
-      last_char == ':')
+  if (last_char == '{' || last_char == '[' || last_char == '(' || last_char == ':')
     return true;
 
   // Check for specific keywords
-  static const std::vector<std::string> keywords = {
-      "if",    "for",    "while", "else", "def", "class", "switch",
-      "case",  "default", "try",   "catch", "do",  "finally"};
+  static const std::vector<std::string> keywords = {"if",
+                                                    "for",
+                                                    "while",
+                                                    "else",
+                                                    "def",
+                                                    "class",
+                                                    "switch",
+                                                    "case",
+                                                    "default",
+                                                    "try",
+                                                    "catch",
+                                                    "do",
+                                                    "finally"};
 
-  for (const auto &kw : keywords) {
+  for (const auto &kw : keywords)
+  {
     if (starts_with_keyword(trimmed, kw))
       return true;
   }
@@ -120,29 +147,29 @@ bool EditorFeatures::should_auto_indent(const std::string &line) {
   return false;
 }
 
-bool EditorFeatures::should_dedent(const std::string &line) {
+bool EditorFeatures::should_dedent(const std::string &line)
+{
   const std::string trimmed = trim_left(line);
 
   if (trimmed.empty())
     return false;
 
   // Dedent if the line starts with a closing brace/bracket
-  if (trimmed.front() == '}' || trimmed.front() == ']' ||
-      trimmed.front() == ')')
+  if (trimmed.front() == '}' || trimmed.front() == ']' || trimmed.front() == ')')
     return true;
 
-  if (starts_with_keyword(trimmed, "else") ||
-      starts_with_keyword(trimmed, "catch") ||
-      starts_with_keyword(trimmed, "finally") ||
-      starts_with_keyword(trimmed, "case") ||
-      starts_with_keyword(trimmed, "default")) {
+  if (starts_with_keyword(trimmed, "else") || starts_with_keyword(trimmed, "catch")
+      || starts_with_keyword(trimmed, "finally") || starts_with_keyword(trimmed, "case")
+      || starts_with_keyword(trimmed, "default"))
+  {
     return true;
   }
 
   return false;
 }
 
-bool EditorFeatures::should_python_auto_indent(const std::string &line) {
+bool EditorFeatures::should_python_auto_indent(const std::string &line)
+{
   std::string trimmed = trim_left(strip_python_comment(line));
   if (trimmed.empty() || trimmed.back() != ':')
     return false;
@@ -152,12 +179,25 @@ bool EditorFeatures::should_python_auto_indent(const std::string &line) {
   if (trimmed.empty())
     return false;
 
-  static const std::vector<std::string> keywords = {
-      "def",   "class",   "if",    "elif",   "else", "for",
-      "while", "try",     "except", "finally", "with", "match",
-      "case",  "async def", "async with", "async for"};
+  static const std::vector<std::string> keywords = {"def",
+                                                    "class",
+                                                    "if",
+                                                    "elif",
+                                                    "else",
+                                                    "for",
+                                                    "while",
+                                                    "try",
+                                                    "except",
+                                                    "finally",
+                                                    "with",
+                                                    "match",
+                                                    "case",
+                                                    "async def",
+                                                    "async with",
+                                                    "async for"};
 
-  for (const auto &kw : keywords) {
+  for (const auto &kw : keywords)
+  {
     if (starts_with_keyword(trimmed, kw))
       return true;
   }
@@ -165,7 +205,8 @@ bool EditorFeatures::should_python_auto_indent(const std::string &line) {
   return false;
 }
 
-bool EditorFeatures::should_python_dedent(const std::string &line) {
+bool EditorFeatures::should_python_dedent(const std::string &line)
+{
   std::string trimmed = trim_left(strip_python_comment(line));
   if (trimmed.empty() || trimmed.back() != ':')
     return false;
@@ -175,16 +216,14 @@ bool EditorFeatures::should_python_dedent(const std::string &line) {
   if (trimmed.empty())
     return false;
 
-  return starts_with_keyword(trimmed, "elif") ||
-         starts_with_keyword(trimmed, "else") ||
-         starts_with_keyword(trimmed, "except") ||
-         starts_with_keyword(trimmed, "finally") ||
-         starts_with_keyword(trimmed, "case");
+  return starts_with_keyword(trimmed, "elif") || starts_with_keyword(trimmed, "else")
+         || starts_with_keyword(trimmed, "except") || starts_with_keyword(trimmed, "finally")
+         || starts_with_keyword(trimmed, "case");
 }
 
-int EditorFeatures::find_matching_bracket(const std::vector<std::string> &lines,
-                                          int line, int col, char open,
-                                          char close) {
+int EditorFeatures::find_matching_bracket(
+    const std::vector<std::string> &lines, int line, int col, char open, char close)
+{
   if (line < 0 || line >= (int)lines.size())
     return -1;
   if (col < 0 || col >= (int)lines[line].length())
@@ -200,32 +239,41 @@ int EditorFeatures::find_matching_bracket(const std::vector<std::string> &lines,
   int cur_line = line;
   int cur_col = col + dir;
 
-  while (cur_line >= 0 && cur_line < (int)lines.size()) {
-    while (cur_col >= 0 && cur_col < (int)lines[cur_line].length()) {
+  while (cur_line >= 0 && cur_line < (int)lines.size())
+  {
+    while (cur_col >= 0 && cur_col < (int)lines[cur_line].length())
+    {
       const char ch = lines[cur_line][cur_col];
-      if (forward) {
+      if (forward)
+      {
         if (ch == open)
           depth++;
         else if (ch == close)
           depth--;
-      } else {
+      }
+      else
+      {
         if (ch == close)
           depth++;
         else if (ch == open)
           depth--;
       }
 
-      if (depth == 0) {
+      if (depth == 0)
+      {
         return cur_line * 10000 + cur_col;
       }
 
       cur_col += dir;
     }
 
-    if (dir > 0) {
+    if (dir > 0)
+    {
       cur_line++;
       cur_col = 0;
-    } else {
+    }
+    else
+    {
       cur_line--;
       if (cur_line >= 0)
         cur_col = lines[cur_line].length() - 1;
@@ -235,20 +283,23 @@ int EditorFeatures::find_matching_bracket(const std::vector<std::string> &lines,
   return -1;
 }
 
-void EditorFeatures::format_line(std::string &line, int tab_size) {
+void EditorFeatures::format_line(std::string &line, int tab_size)
+{
   size_t pos = 0;
-  while ((pos = line.find('\t', pos)) != std::string::npos) {
+  while ((pos = line.find('\t', pos)) != std::string::npos)
+  {
     line.replace(pos, 1, std::string(tab_size, ' '));
     pos += tab_size;
   }
 }
 
-std::string EditorFeatures::trim_right(const std::string &s) {
+std::string EditorFeatures::trim_right(const std::string &s)
+{
   size_t end = s.find_last_not_of(" \t");
   return (end == std::string::npos) ? "" : s.substr(0, end + 1);
 }
 
-bool EditorFeatures::is_whitespace(const std::string &s) {
-  return std::all_of(s.begin(), s.end(),
-                     [](char c) { return std::isspace(c); });
+bool EditorFeatures::is_whitespace(const std::string &s)
+{
+  return std::all_of(s.begin(), s.end(), [](char c) { return std::isspace(c); });
 }

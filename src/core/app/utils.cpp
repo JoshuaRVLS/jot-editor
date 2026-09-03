@@ -2,89 +2,109 @@
 #include <algorithm>
 #include <cctype>
 
-FileBuffer& Editor::get_buffer(int id) {
-    if (id == -1) id = current_buffer;
-    if (buffers.empty()) {
-        FileBuffer fb;
-        fb.lines.push_back("");
-        fb.cursor = {0, 0};
-        fb.preferred_x = 0;
-        fb.selection = {{0, 0}, {0, 0}, false};
-        fb.scroll_offset = 0;
-        fb.scroll_x = 0;
-        fb.modified = false;
-        fb.is_placeholder = true;
-        buffers.push_back(std::move(fb));
-    }
-    return buffers[id >= 0 && id < buffers.size() ? id : 0];
+FileBuffer &Editor::get_buffer(int id)
+{
+  if (id == -1)
+    id = current_buffer;
+  if (buffers.empty())
+  {
+    FileBuffer fb;
+    fb.lines.push_back("");
+    fb.cursor = {0, 0};
+    fb.preferred_x = 0;
+    fb.selection = {{0, 0}, {0, 0}, false};
+    fb.scroll_offset = 0;
+    fb.scroll_x = 0;
+    fb.modified = false;
+    fb.is_placeholder = true;
+    buffers.push_back(std::move(fb));
+  }
+  return buffers[id >= 0 && id < buffers.size() ? id : 0];
 }
 
-SplitPane& Editor::get_pane(int id) {
-    if (id == -1) id = current_pane;
-    if (panes.empty()) {
-        int h = ui->get_height();
-        int w = ui->get_render_width();
-        create_pane(0, 0, w, h, -1);
-    }
-    return panes[id >= 0 && id < panes.size() ? id : 0];
+SplitPane &Editor::get_pane(int id)
+{
+  if (id == -1)
+    id = current_pane;
+  if (panes.empty())
+  {
+    int h = ui->get_height();
+    int w = ui->get_render_width();
+    create_pane(0, 0, w, h, -1);
+  }
+  return panes[id >= 0 && id < panes.size() ? id : 0];
 }
 
-std::string Editor::get_file_extension(const std::string& path) {
-    std::string name = get_filename(path);
-    std::string lower_name = name;
-    std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(),
-                   [](unsigned char c) { return (char)std::tolower(c); });
+std::string Editor::get_file_extension(const std::string &path)
+{
+  std::string name = get_filename(path);
+  std::string lower_name = name;
+  std::transform(lower_name.begin(),
+                 lower_name.end(),
+                 lower_name.begin(),
+                 [](unsigned char c) { return (char)std::tolower(c); });
 
-    if (lower_name == "dockerfile") {
-        return ".dockerfile";
-    }
-    if (lower_name == "cmakelists.txt") {
-        return ".cmake";
-    }
-    if (lower_name == "makefile" || lower_name == "gnumakefile") {
-        return ".make";
-    }
+  if (lower_name == "dockerfile")
+  {
+    return ".dockerfile";
+  }
+  if (lower_name == "cmakelists.txt")
+  {
+    return ".cmake";
+  }
+  if (lower_name == "makefile" || lower_name == "gnumakefile")
+  {
+    return ".make";
+  }
 
-    size_t dot = lower_name.find_last_of('.');
-    if (dot != std::string::npos) {
-        return lower_name.substr(dot);
-    }
-    return "";
+  size_t dot = lower_name.find_last_of('.');
+  if (dot != std::string::npos)
+  {
+    return lower_name.substr(dot);
+  }
+  return "";
 }
 
-std::string Editor::get_filename(const std::string& path) {
-    size_t pos = path.find_last_of("/\\");
-    if (pos != std::string::npos) {
-        return path.substr(pos + 1);
-    }
-    return path;
+std::string Editor::get_filename(const std::string &path)
+{
+  size_t pos = path.find_last_of("/\\");
+  if (pos != std::string::npos)
+  {
+    return path.substr(pos + 1);
+  }
+  return path;
 }
 
-void Editor::select_all() {
-    auto& buf = get_buffer();
-  if (buf.line_count() == 0) return;
+void Editor::select_all()
+{
+  auto &buf = get_buffer();
+  if (buf.line_count() == 0)
+    return;
   buf.selection.start = {0, 0};
   buf.selection.end = {(int)buf.line(buf.line_count() - 1).length(), (int)buf.line_count() - 1};
-    buf.selection.active = true;
-    buf.cursor = buf.selection.end;
+  buf.selection.active = true;
+  buf.cursor = buf.selection.end;
 }
 
-void Editor::select_current_line() {
-    auto& buf = get_buffer();
-  if (buf.line_count() == 0) {
+void Editor::select_current_line()
+{
+  auto &buf = get_buffer();
+  if (buf.line_count() == 0)
+  {
     return;
   }
   int y = std::max(0, std::min(buf.cursor.y, (int)buf.line_count() - 1));
   int line_len = (int)buf.line(y).length();
-    buf.selection.start = {0, y};
-    buf.selection.end = {line_len, y};
-    buf.selection.active = true;
-    buf.cursor = buf.selection.end;
-    buf.preferred_x = buf.cursor.x;
-    ensure_cursor_visible();
-    needs_redraw = true;
+  buf.selection.start = {0, y};
+  buf.selection.end = {line_len, y};
+  buf.selection.active = true;
+  buf.cursor = buf.selection.end;
+  buf.preferred_x = buf.cursor.x;
+  ensure_cursor_visible();
+  needs_redraw = true;
 }
 
-void Editor::clear_selection() {
-    get_buffer().selection.active = false;
+void Editor::clear_selection()
+{
+  get_buffer().selection.active = false;
 }

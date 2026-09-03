@@ -4,7 +4,8 @@
 #include <string>
 #include <vector>
 
-struct SymbolMatch {
+struct SymbolMatch
+{
   std::string name;
   std::string kind;
   std::string detail;
@@ -12,9 +13,10 @@ struct SymbolMatch {
   int column = 0;
 };
 
-namespace SymbolIndex {
-std::vector<SymbolMatch> extract_document_symbols(
-    const std::vector<std::string> &lines, const std::string &filepath);
+namespace SymbolIndex
+{
+  std::vector<SymbolMatch> extract_document_symbols(const std::vector<std::string> &lines,
+                                                    const std::string &filepath);
 } // namespace SymbolIndex
 
 #endif

@@ -14,8 +14,8 @@
 #include "terminal.h"
 #include "tools/lsp/client.h"
 #include "tools/terminal/integrated.h"
-#include "ui.h"
 #include "tree_sitter/manager.h"
+#include "ui.h"
 #include <map>
 #include <memory>
 #include <string>
@@ -26,7 +26,8 @@ class DebuggerClient;
 class EditorHostAPI;
 class LuaAPI;
 
-struct EditorState {
+struct EditorState
+{
   std::vector<FileBuffer> buffers;
   std::vector<SplitPane> panes;
   std::vector<float> pane_weights;

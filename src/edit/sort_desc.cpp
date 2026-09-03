@@ -3,10 +3,13 @@
 #include <algorithm>
 #include <cctype>
 
-void Editor::sort_selected_lines_desc() {
+void Editor::sort_selected_lines_desc()
+{
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
-  if (!buf.selection.active) {
+  if (buf.is_lazy())
+    buf.materialize();
+  if (!buf.selection.active)
+  {
     set_message("Select lines first: :sortdesc");
     return;
   }
@@ -15,24 +18,27 @@ void Editor::sort_selected_lines_desc() {
   int end_y = std::max(buf.selection.start.y, buf.selection.end.y);
   start_y = std::clamp(start_y, 0, (int)buf.lines.size() - 1);
   end_y = std::clamp(end_y, 0, (int)buf.lines.size() - 1);
-  if (start_y >= end_y) {
+  if (start_y >= end_y)
+  {
     set_message("Select multiple lines to sort descending");
     return;
   }
 
   save_state();
-  std::stable_sort(buf.lines.begin() + start_y, buf.lines.begin() + end_y + 1,
-                   [](const std::string &a, const std::string &b) {
+  std::stable_sort(buf.lines.begin() + start_y,
+                   buf.lines.begin() + end_y + 1,
+                   [](const std::string &a, const std::string &b)
+                   {
                      std::string la = a;
                      std::string lb = b;
-                     std::transform(la.begin(), la.end(), la.begin(),
-                                    [](unsigned char c) {
-                                      return (char)std::tolower(c);
-                                    });
-                     std::transform(lb.begin(), lb.end(), lb.begin(),
-                                    [](unsigned char c) {
-                                      return (char)std::tolower(c);
-                                    });
+                     std::transform(la.begin(),
+                                    la.end(),
+                                    la.begin(),
+                                    [](unsigned char c) { return (char)std::tolower(c); });
+                     std::transform(lb.begin(),
+                                    lb.end(),
+                                    lb.begin(),
+                                    [](unsigned char c) { return (char)std::tolower(c); });
                      return la > lb;
                    });
 
@@ -43,10 +49,12 @@ void Editor::sort_selected_lines_desc() {
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Sorted selected lines (desc)");
-  if (lua_api) {
+  if (lua_api)
+  {
     lua_api->on_buffer_change(buf.filepath, "");
   }
-  if (!buf.filepath.empty()) {
+  if (!buf.filepath.empty())
+  {
     notify_lsp_change(buf.filepath);
   }
 }

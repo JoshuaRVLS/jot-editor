@@ -1,15 +1,16 @@
 #ifndef EDITOR_MODELS_H
 #define EDITOR_MODELS_H
 
-#include "types.h"
 #include "tools/debugger/client.h"
 #include "tools/symbols/index.h"
+#include "types.h"
 #include <string>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
 
-struct PaneTreeNode {
+struct PaneTreeNode
+{
   bool leaf = true;
   int pane_index = -1;
   int parent = -1;
@@ -19,7 +20,8 @@ struct PaneTreeNode {
   float ratio = 0.5f;
 };
 
-struct CommandPaletteSuggestion {
+struct CommandPaletteSuggestion
+{
   std::string insert_text;
   std::string label;
   std::string category;
@@ -30,7 +32,8 @@ struct CommandPaletteSuggestion {
   std::vector<int> match;
 };
 
-enum QuickPickKind {
+enum QuickPickKind
+{
   QUICK_PICK_NONE,
   QUICK_PICK_PROJECT_SEARCH,
   QUICK_PICK_DIAGNOSTICS,
@@ -38,7 +41,8 @@ enum QuickPickKind {
   QUICK_PICK_PLUGIN
 };
 
-struct QuickPickItem {
+struct QuickPickItem
+{
   std::string label;
   std::string detail;
   std::string preview;
@@ -48,17 +52,20 @@ struct QuickPickItem {
   int severity = 0;
 };
 
-struct SearchMatch {
+struct SearchMatch
+{
   int line = 0;
   int col = 0;
   int len = 0;
 
-  bool operator<(const SearchMatch &other) const {
+  bool operator<(const SearchMatch &other) const
+  {
     return std::tie(line, col, len) < std::tie(other.line, other.col, other.len);
   }
 };
 
-enum MenuBarAction {
+enum MenuBarAction
+{
   MENU_ACTION_NONE,
   MENU_ACTION_COMMAND,
   MENU_ACTION_NEW_FILE,
@@ -99,32 +106,37 @@ enum MenuBarAction {
   MENU_ACTION_HELP
 };
 
-struct MenuBarItem {
+struct MenuBarItem
+{
   std::string label;
   MenuBarAction action = MENU_ACTION_NONE;
   std::string command;
   bool enabled = true;
 };
 
-struct MenuBarMenu {
+struct MenuBarMenu
+{
   std::string label;
   std::vector<MenuBarItem> items;
 };
 
-struct MenuBarSegment {
+struct MenuBarSegment
+{
   int menu_index = -1;
   int x = 0;
   int end_x = 0;
 };
 
-enum RightPanelTab {
+enum RightPanelTab
+{
   RIGHT_PANEL_DEBUG,
   RIGHT_PANEL_GIT_DIFF,
   RIGHT_PANEL_SYMBOLS,
   RIGHT_PANEL_PLUGIN
 };
 
-struct GitDiffPanel {
+struct GitDiffPanel
+{
   bool visible = false;
   bool staged = false;
   std::string path;
@@ -133,16 +145,18 @@ struct GitDiffPanel {
 };
 
 // Persistent per-buffer symbol outline shown in the right panel.
-struct OutlinePanelState {
-  bool dirty = true;     // buffer content changed since the last rebuild
-  int buffer = -1;       // buffer index the symbol list was built for
+struct OutlinePanelState
+{
+  bool dirty = true;             // buffer content changed since the last rebuild
+  int buffer = -1;               // buffer index the symbol list was built for
   long long last_rebuild_ms = 0; // throttles rebuilds while typing
   std::vector<SymbolMatch> symbols;
   int selected = 0;
   int scroll = 0;
 };
 
-struct DebuggerSessionState {
+struct DebuggerSessionState
+{
   std::string name;
   std::string adapter;
   std::string program;
@@ -160,7 +174,8 @@ struct DebuggerSessionState {
   std::string last_error;
 };
 
-struct TerminalTask {
+struct TerminalTask
+{
   std::string name;
   std::string command;
   std::string source_path;
@@ -168,7 +183,8 @@ struct TerminalTask {
   std::string cwd;
 };
 
-struct TreeSitterInstallJob {
+struct TreeSitterInstallJob
+{
   std::string language;
   int terminal_index = -1;
   bool running = true;
@@ -180,7 +196,8 @@ struct TreeSitterInstallJob {
   bool prefix_applied = false;
 };
 
-struct LspInstallJob {
+struct LspInstallJob
+{
   std::string server;
   bool removing = false;
   int terminal_index = -1;
@@ -190,7 +207,8 @@ struct LspInstallJob {
   std::string progress;
 };
 
-struct LspManagerRow {
+struct LspManagerRow
+{
   std::string server;
   std::string label;
   std::string detail;
@@ -200,7 +218,8 @@ struct LspManagerRow {
   bool busy = false;
 };
 
-struct LspManagerButton {
+struct LspManagerButton
+{
   std::string server;
   std::string action;
   int x = 0;
@@ -209,13 +228,15 @@ struct LspManagerButton {
   int h = 1;
 };
 
-enum MouseSelectionMode {
+enum MouseSelectionMode
+{
   MOUSE_SELECT_CHAR,
   MOUSE_SELECT_WORD,
   MOUSE_SELECT_LINE
 };
 
-enum ContextMenuSurface {
+enum ContextMenuSurface
+{
   CONTEXT_MENU_NONE,
   CONTEXT_MENU_EDITOR,
   CONTEXT_MENU_TAB,
@@ -223,7 +244,8 @@ enum ContextMenuSurface {
   CONTEXT_MENU_TERMINAL
 };
 
-enum ContextMenuAction {
+enum ContextMenuAction
+{
   CONTEXT_ACTION_NONE,
   CONTEXT_ACTION_COPY,
   CONTEXT_ACTION_CUT,
@@ -249,13 +271,15 @@ enum ContextMenuAction {
   CONTEXT_ACTION_TOGGLE_FOLD
 };
 
-struct ContextMenuItem {
+struct ContextMenuItem
+{
   std::string label;
   ContextMenuAction action = CONTEXT_ACTION_NONE;
   bool enabled = true;
 };
 
-struct LSPJumpLocation {
+struct LSPJumpLocation
+{
   std::string filepath;
   Cursor cursor;
   int scroll_offset = 0;
@@ -263,7 +287,8 @@ struct LSPJumpLocation {
   bool preview = false;
 };
 
-struct ClosedBufferSnapshot {
+struct ClosedBufferSnapshot
+{
   std::string filepath;
   std::vector<std::string> lines;
   Cursor cursor;
@@ -274,7 +299,8 @@ struct ClosedBufferSnapshot {
   std::vector<FoldRange> collapsed_folds;
 };
 
-struct HomeMenuEntry {
+struct HomeMenuEntry
+{
   int action;
   int recent_index;
   int recent_workspace_index;
@@ -283,12 +309,14 @@ struct HomeMenuEntry {
   int w;
 };
 
-enum SidebarView {
+enum SidebarView
+{
   SIDEBAR_VIEW_EXPLORER,
   SIDEBAR_VIEW_GIT
 };
 
-struct SidebarRenderRow {
+struct SidebarRenderRow
+{
   std::string path;
   std::string normalized_path;
   std::string name;
@@ -301,7 +329,8 @@ struct SidebarRenderRow {
   std::string git_status;
 };
 
-struct SidebarRenderCache {
+struct SidebarRenderCache
+{
   std::vector<SidebarRenderRow> rows;
   std::unordered_map<std::string, int> path_to_row;
   std::string root_label;
@@ -311,13 +340,15 @@ struct SidebarRenderCache {
   bool git_dirty = true;
 };
 
-struct GitSidebarRow {
+struct GitSidebarRow
+{
   std::string path;
   std::string relative_path;
   std::string status;
 };
 
-struct FileTabSegment {
+struct FileTabSegment
+{
   int buffer_id = -1;
   int tab_index = -1;
   int x = 0;
@@ -331,7 +362,8 @@ struct FileTabSegment {
   std::string git_status;
 };
 
-struct FileTabLayout {
+struct FileTabLayout
+{
   int x = 0;
   int y = 0;
   int w = 0;
@@ -348,6 +380,10 @@ struct FileTabLayout {
   int hidden_count = 0;
 };
 
-enum EditorFocus { FOCUS_EDITOR, FOCUS_SIDEBAR };
+enum EditorFocus
+{
+  FOCUS_EDITOR,
+  FOCUS_SIDEBAR
+};
 
 #endif

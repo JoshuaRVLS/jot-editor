@@ -2,47 +2,57 @@
 #include <algorithm>
 #include <cctype>
 
-namespace {
-constexpr int kMaxVisualMotionCount = 100000;
+namespace
+{
+  constexpr int kMaxVisualMotionCount = 100000;
 }
 
-static void update_visual_selection(FileBuffer &buf, const Cursor &visual_start,
-                                    bool line_mode) {
-  if (line_mode) {
+static void update_visual_selection(FileBuffer &buf, const Cursor &visual_start, bool line_mode)
+{
+  if (line_mode)
+  {
     int sy = visual_start.y;
     int ey = buf.cursor.y;
     if (sy > ey)
       std::swap(sy, ey);
     buf.selection.start = {0, sy};
     buf.selection.end = {(int)buf.line(ey).length(), ey};
-  } else {
+  }
+  else
+  {
     buf.selection.start = visual_start;
     buf.selection.end = buf.cursor;
   }
   buf.selection.active = true;
 }
 
-void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
-                                bool /*is_alt*/) {
+void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift, bool /*is_alt*/)
+{
   auto &buf = get_buffer();
 
   auto clear_visual_count = [&] { visual_motion_count = 0; };
 
-  if (is_ctrl) {
+  if (is_ctrl)
+  {
     clear_visual_count();
-    switch (ch) {
+    switch (ch)
+    {
     case 'q':
-    case 'Q': {
+    case 'Q':
+    {
       bool unsaved = false;
       for (const auto &b : buffers)
-        if (b.modified) {
+        if (b.modified)
+        {
           unsaved = true;
           break;
         }
-      if (unsaved) {
+      if (unsaved)
+      {
         show_quit_prompt = true;
         needs_redraw = true;
-      } else
+      }
+      else
         running = false;
       return;
     }
@@ -57,22 +67,26 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
 
   (void)is_shift;
 
-  if (ch == 27) {
+  if (ch == 27)
+  {
     enter_normal_mode();
     return;
   }
 
-  if (ch == 'v' && !visual_line_mode) {
+  if (ch == 'v' && !visual_line_mode)
+  {
     clear_visual_count();
     enter_normal_mode();
     return;
   }
-  if (ch == 'V' && visual_line_mode) {
+  if (ch == 'V' && visual_line_mode)
+  {
     clear_visual_count();
     enter_normal_mode();
     return;
   }
-  if (ch == 'v' && visual_line_mode) {
+  if (ch == 'v' && visual_line_mode)
+  {
     clear_visual_count();
     visual_line_mode = false;
     visual_start = buf.cursor;
@@ -80,7 +94,8 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     needs_redraw = true;
     return;
   }
-  if (ch == 'V' && !visual_line_mode) {
+  if (ch == 'V' && !visual_line_mode)
+  {
     clear_visual_count();
     visual_line_mode = true;
     update_visual_selection(buf, visual_start, true);
@@ -88,28 +103,32 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     return;
   }
 
-  if (ch >= '0' && ch <= '9' && (visual_motion_count > 0 || ch != '0')) {
+  if (ch >= '0' && ch <= '9' && (visual_motion_count > 0 || ch != '0'))
+  {
     int digit = ch - '0';
-    visual_motion_count =
-        std::min(kMaxVisualMotionCount, visual_motion_count * 10 + digit);
+    visual_motion_count = std::min(kMaxVisualMotionCount, visual_motion_count * 10 + digit);
     return;
   }
 
-  auto take_count = [&] {
+  auto take_count = [&]
+  {
     int count = visual_motion_count > 0 ? visual_motion_count : 1;
     clear_visual_count();
     return count;
   };
 
-  auto move_and_update = [&](auto move_fn) {
+  auto move_and_update = [&](auto move_fn)
+  {
     clear_visual_count();
     move_fn();
     update_visual_selection(buf, visual_start, visual_line_mode);
     needs_redraw = true;
   };
 
-  switch (ch) {
-  case 'h': {
+  switch (ch)
+  {
+  case 'h':
+  {
     int count = take_count();
     move_and_update([&] { move_cursor(-count, 0); });
     return;
@@ -117,7 +136,8 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
   case 1011:
     move_and_update([&] { move_cursor(-1, 0); });
     return;
-  case 'l': {
+  case 'l':
+  {
     int count = take_count();
     move_and_update([&] { move_cursor(count, 0); });
     return;
@@ -125,7 +145,8 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
   case 1010:
     move_and_update([&] { move_cursor(1, 0); });
     return;
-  case 'k': {
+  case 'k':
+  {
     int count = take_count();
     move_and_update([&] { move_cursor(0, -count); });
     return;
@@ -133,7 +154,8 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
   case 1008:
     move_and_update([&] { move_cursor(0, -1); });
     return;
-  case 'j': {
+  case 'j':
+  {
     int count = take_count();
     move_and_update([&] { move_cursor(0, count); });
     return;
@@ -188,7 +210,8 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     enter_insert_mode();
     return;
 
-  case '>': {
+  case '>':
+  {
     clear_visual_count();
     save_state();
     Cursor s = buf.selection.start, e = buf.selection.end;
@@ -201,13 +224,15 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     needs_redraw = true;
     return;
   }
-  case '<': {
+  case '<':
+  {
     clear_visual_count();
     save_state();
     Cursor s = buf.selection.start, e = buf.selection.end;
     if (s.y > e.y)
       std::swap(s, e);
-    for (int ly = s.y; ly <= e.y && ly < (int)buf.line_count(); ly++) {
+    for (int ly = s.y; ly <= e.y && ly < (int)buf.line_count(); ly++)
+    {
       auto &line = buf.line_mut(ly);
       int count = 0;
       while (count < 4 && count < (int)line.size() && line[count] == ' ')
@@ -220,17 +245,20 @@ void Editor::handle_visual_mode(int ch, bool is_ctrl, bool is_shift,
     needs_redraw = true;
     return;
   }
-  case '~': {
+  case '~':
+  {
     clear_visual_count();
     save_state();
     Cursor s = buf.selection.start, e = buf.selection.end;
     if (s.y > e.y || (s.y == e.y && s.x > e.x))
       std::swap(s, e);
-    for (int ly = s.y; ly <= e.y && ly < (int)buf.line_count(); ly++) {
+    for (int ly = s.y; ly <= e.y && ly < (int)buf.line_count(); ly++)
+    {
       auto &line = buf.line_mut(ly);
       int x0 = (ly == s.y) ? s.x : 0;
       int x1 = (ly == e.y) ? e.x : (int)line.length();
-      for (int xi = x0; xi < x1 && xi < (int)line.size(); xi++) {
+      for (int xi = x0; xi < x1 && xi < (int)line.size(); xi++)
+      {
         char c = line[xi];
         if (std::isupper((unsigned char)c))
           line[xi] = (char)std::tolower((unsigned char)c);

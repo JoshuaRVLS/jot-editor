@@ -3,45 +3,54 @@
 #include <algorithm>
 #include <cctype>
 
-namespace {
-std::string ltrim_copy(const std::string &s) {
-  size_t i = 0;
-  while (i < s.size() && std::isspace((unsigned char)s[i])) {
-    i++;
+namespace
+{
+  std::string ltrim_copy(const std::string &s)
+  {
+    size_t i = 0;
+    while (i < s.size() && std::isspace((unsigned char)s[i]))
+    {
+      i++;
+    }
+    return s.substr(i);
   }
-  return s.substr(i);
-}
 } // namespace
 
-void Editor::join_lines_selection_or_current() {
+void Editor::join_lines_selection_or_current()
+{
   auto &buf = get_buffer();
-  if (buf.is_lazy()) buf.materialize();
-  if (buf.lines.size() <= 1) {
+  if (buf.is_lazy())
+    buf.materialize();
+  if (buf.lines.size() <= 1)
+  {
     set_message("Nothing to join");
     return;
   }
 
   int start_y = buf.cursor.y;
   int end_y = buf.cursor.y + 1;
-  if (buf.selection.active) {
+  if (buf.selection.active)
+  {
     start_y = std::min(buf.selection.start.y, buf.selection.end.y);
     end_y = std::max(buf.selection.start.y, buf.selection.end.y);
   }
 
   start_y = std::clamp(start_y, 0, (int)buf.lines.size() - 1);
   end_y = std::clamp(end_y, 0, (int)buf.lines.size() - 1);
-  if (end_y <= start_y) {
+  if (end_y <= start_y)
+  {
     set_message("Nothing to join");
     return;
   }
 
   save_state();
   int joins = 0;
-  for (int y = start_y; y < end_y && y + 1 < (int)buf.lines.size();) {
+  for (int y = start_y; y < end_y && y + 1 < (int)buf.lines.size();)
+  {
     std::string left = buf.lines[y];
     std::string right = ltrim_copy(buf.lines[y + 1]);
-    if (!left.empty() && !right.empty() &&
-        !std::isspace((unsigned char)left.back())) {
+    if (!left.empty() && !right.empty() && !std::isspace((unsigned char)left.back()))
+    {
       left.push_back(' ');
     }
     buf.lines[y] = left + right;
@@ -50,7 +59,8 @@ void Editor::join_lines_selection_or_current() {
     joins++;
   }
 
-  if (joins == 0) {
+  if (joins == 0)
+  {
     set_message("Nothing to join");
     return;
   }
@@ -63,10 +73,12 @@ void Editor::join_lines_selection_or_current() {
   ensure_cursor_visible();
   needs_redraw = true;
   set_message("Joined " + std::to_string(joins + 1) + " lines");
-  if (lua_api) {
+  if (lua_api)
+  {
     lua_api->on_buffer_change(buf.filepath, "");
   }
-  if (!buf.filepath.empty()) {
+  if (!buf.filepath.empty())
+  {
     notify_lsp_change(buf.filepath);
   }
 }

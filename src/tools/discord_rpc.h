@@ -5,16 +5,28 @@
 #include <string>
 #include <vector>
 
-class DiscordRPC {
+class DiscordRPC
+{
 public:
-  enum State { DISCONNECTED, HANDSHAKING, CONNECTED };
+  enum State
+  {
+    DISCONNECTED,
+    HANDSHAKING,
+    CONNECTED
+  };
 
   DiscordRPC();
   ~DiscordRPC();
 
   void poll(long long now_ms);
-  bool is_connected() const { return state_ == CONNECTED; }
-  State get_state() const { return state_; }
+  bool is_connected() const
+  {
+    return state_ == CONNECTED;
+  }
+  State get_state() const
+  {
+    return state_;
+  }
 
   void update_presence(const std::string &details, const std::string &state);
   void clear_presence();

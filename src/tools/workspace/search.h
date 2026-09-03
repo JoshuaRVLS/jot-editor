@@ -5,7 +5,8 @@
 #include <string>
 #include <vector>
 
-struct WorkspaceSearchResult {
+struct WorkspaceSearchResult
+{
   std::string path;
   std::string relative_path;
   std::string line_text;
@@ -14,12 +15,14 @@ struct WorkspaceSearchResult {
   int score = 0;
 };
 
-namespace WorkspaceSearch {
-bool should_skip_path_component(const std::string &name);
-bool text_looks_binary(const std::string &sample);
-std::vector<WorkspaceSearchResult>
-search(const std::string &root, const std::string &query,
-       std::size_t max_file_bytes = 1024 * 1024, int max_results = 1000);
+namespace WorkspaceSearch
+{
+  bool should_skip_path_component(const std::string &name);
+  bool text_looks_binary(const std::string &sample);
+  std::vector<WorkspaceSearchResult> search(const std::string &root,
+                                            const std::string &query,
+                                            std::size_t max_file_bytes = 1024 * 1024,
+                                            int max_results = 1000);
 } // namespace WorkspaceSearch
 
 #endif
