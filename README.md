@@ -183,8 +183,9 @@ Workspace sessions are stored under:
   previews.
 - Project-wide text search picker.
 - Diagnostics picker and next/previous diagnostic navigation.
-- Document symbol/outline picker using LSP symbols when available and a regex
-  fallback for supported buffers.
+- Symbols/outline: a persistent outline panel for the current file (`:outline`,
+  j/k to select, Enter to jump) plus a symbol picker (`Ctrl+Shift+O`, `:symbols`)
+  using LSP symbols when available and a regex fallback for supported buffers.
 
 ### Syntax Highlighting And Folding
 
@@ -232,7 +233,8 @@ Built-in fallback syntax rules cover common file types including:
 - Hover popup by command or debounced mouse hover.
 - Go to definition, preview/cross-file open, Ctrl-click definition requests when
   terminal mouse modifiers are available, and `:lspback` return stack.
-- Document symbols from LSP with regex fallback.
+- Document symbols from LSP with regex fallback, exposed both as a picker and
+  as a persistent outline panel.
 - LSP status, start, stop, restart, manager, install, and remove commands.
 
 Default language server commands:
@@ -412,7 +414,8 @@ See [docs/LUA_API.md](docs/LUA_API.md) for runtime scripting and extension APIs.
 - `Ctrl+Shift+F`: replace inside selected text, or project-wide search when no
   text is selected
 - `Ctrl+Shift+M`: diagnostics picker
-- `Ctrl+Shift+O`: document symbols
+- `Ctrl+Shift+O`: document symbol picker
+- `:outline`: persistent symbols/outline panel for the current file
 - `Ctrl+M` or `Alt+M`: toggle minimap
 - `Ctrl+T` or `Alt+T`: theme chooser
 - `Ctrl+\``: open, focus, or hide terminal panel
@@ -519,7 +522,7 @@ Open the command palette with `Ctrl+P` and run ex-style commands.
 - `:grep <text>`, `:projectsearch <text>`, `:searchall <text>`
 - `:diagnostics`, `:problems`
 - `:diagnext`, `:diagnosticnext`, `:diagprev`
-- `:symbols`, `:outline`
+- `:symbols` (picker), `:outline` (panel)
 - `:line <line>[:col]`, `:goto <line>[:col]`
 - `:format`, `:trim`, `:trimblank`
 - `:upper`, `:lower`
@@ -602,16 +605,39 @@ User config lives in:
 ~/.config/jot/
 ```
 
+Configuration is **Lua-first**: settings are defined in `config.lua`
+(loaded before `init.lua` and plugins) and applied **live** — no restart
+needed. `configs/settings.conf` is just the runtime-save overlay written by
+`jot.config.set` from Lua.
+
 Current layout:
 
 ```text
 ~/.config/jot/
+  config.lua    # Lua-first config (loaded first, re-run on :reload)
+  init.lua      # startup script
+  plugins/      # *.lua or plugin.lua
   configs/
-    settings.conf
+    settings.conf   # runtime-save overlay for jot.config.set
     colors/
       my_theme.json
   themes/      # legacy colorscheme path
 ```
+
+Example `config.lua`:
+
+```lua
+jot.config.set("tab_size", 4)
+jot.config.set("show_indent_guides", true)
+jot.config.set("color_scheme", "monokai")
+jot.config.set("auto_save", true)
+jot.config.set("auto_save_interval_ms", 5000)
+```
+
+`jot.config.set` persists and live-applies every setting that maps to editor
+state; `:reload` re-reads `settings.conf`, re-runs `config.lua`, live-applies
+it, and reloads Lua plugins and tree-sitter. `:reloadconfig` is the
+config-only variant.
 
 Bundled starter config in this repo:
 
