@@ -7,72 +7,88 @@
 #include <cctype>
 #include <filesystem>
 
-namespace {
+namespace
+{
 
-std::string outline_lower(std::string s) {
-  std::transform(s.begin(), s.end(), s.begin(),
-                 [](unsigned char c) { return (char)std::tolower(c); });
-  return s;
-}
+  std::string outline_lower(std::string s)
+  {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c)
+                   { return (char)std::tolower(c); });
+    return s;
+  }
 
-int outline_symbol_color(const Theme &theme, const std::string &kind) {
-  const std::string k = outline_lower(kind);
-  if (k == "function" || k == "method" || k == "constructor" ||
-      k == "macro") {
-    return theme.fg_function;
+  int outline_symbol_color(const Theme &theme, const std::string &kind)
+  {
+    const std::string k = outline_lower(kind);
+    if (k == "function" || k == "method" || k == "constructor" ||
+        k == "macro")
+    {
+      return theme.fg_function;
+    }
+    if (k == "class" || k == "struct" || k == "union" || k == "interface" ||
+        k == "enum" || k == "type" || k == "typedef" || k == "type_alias" ||
+        k == "enum_member")
+    {
+      return theme.fg_type;
+    }
+    if (k == "namespace" || k == "module" || k == "package")
+    {
+      return theme.fg_namespace;
+    }
+    if (k == "variable" || k == "property" || k == "field" ||
+        k == "parameter")
+    {
+      return theme.fg_variable;
+    }
+    if (k == "constant")
+    {
+      return theme.fg_constant;
+    }
+    return theme.fg_command;
   }
-  if (k == "class" || k == "struct" || k == "union" || k == "interface" ||
-      k == "enum" || k == "type" || k == "typedef" || k == "type_alias" ||
-      k == "enum_member") {
-    return theme.fg_type;
-  }
-  if (k == "namespace" || k == "module" || k == "package") {
-    return theme.fg_namespace;
-  }
-  if (k == "variable" || k == "property" || k == "field" ||
-      k == "parameter") {
-    return theme.fg_variable;
-  }
-  if (k == "constant") {
-    return theme.fg_constant;
-  }
-  return theme.fg_command;
-}
 
 } // namespace
 
 void Editor::note_outline_edit() { outline_panel.dirty = true; }
 
-void Editor::ensure_outline_fresh(bool force) {
-  if (!outline_active()) {
+void Editor::ensure_outline_fresh(bool force)
+{
+  if (!outline_active())
+  {
     return;
   }
   if (buffers.empty() || current_buffer < 0 ||
-      current_buffer >= (int)buffers.size()) {
+      current_buffer >= (int)buffers.size())
+  {
     return;
   }
   FileBuffer &buf = get_buffer();
   if (!force && outline_panel.buffer == current_buffer &&
-      !outline_panel.dirty) {
+      !outline_panel.dirty)
+  {
     return;
   }
   // While the user is typing in the same buffer, rebuild at most every
   // ~250 ms so the symbol extractor never runs on every keystroke of a
   // large file. A buffer switch always rebuilds immediately.
   if (!force && outline_panel.dirty &&
-      outline_panel.buffer == current_buffer) {
+      outline_panel.buffer == current_buffer)
+  {
     const long long now = std::chrono::duration_cast<std::chrono::milliseconds>(
                               std::chrono::steady_clock::now()
                                   .time_since_epoch())
                               .count();
     if (outline_panel.last_rebuild_ms > 0 &&
-        now - outline_panel.last_rebuild_ms < 250) {
+        now - outline_panel.last_rebuild_ms < 250)
+    {
       return;
     }
   }
 
   outline_panel.symbols.clear();
-  if (!buf.is_lazy() && !buf.filepath.empty() && buf.line_count() > 0) {
+  if (!buf.is_lazy() && !buf.filepath.empty() && buf.line_count() > 0)
+  {
     outline_panel.symbols =
         SymbolIndex::extract_document_symbols(buf.lines, buf.filepath);
   }
@@ -88,8 +104,10 @@ void Editor::ensure_outline_fresh(bool force) {
   outline_panel.scroll = 0;
 }
 
-void Editor::toggle_outline_panel() {
-  if (outline_active()) {
+void Editor::toggle_outline_panel()
+{
+  if (outline_active())
+  {
     close_outline_panel();
     return;
   }
@@ -99,25 +117,32 @@ void Editor::toggle_outline_panel() {
   show_debugger_panel = false;
   needs_redraw = true;
   ensure_outline_fresh(true);
-  if (outline_panel.symbols.empty()) {
+  if (outline_panel.symbols.empty())
+  {
     set_message("Outline: no symbols in this file");
-  } else {
+  }
+  else
+  {
     set_message("Outline: " +
                 std::to_string(outline_panel.symbols.size()) + " symbols");
   }
 }
 
-void Editor::close_outline_panel() {
-  if (outline_active()) {
+void Editor::close_outline_panel()
+{
+  if (outline_active())
+  {
     show_right_panel = false;
     active_right_panel_tab = RIGHT_PANEL_DEBUG;
   }
   needs_redraw = true;
 }
 
-void Editor::outline_move_selection(int delta) {
+void Editor::outline_move_selection(int delta)
+{
   ensure_outline_fresh();
-  if (outline_panel.symbols.empty()) {
+  if (outline_panel.symbols.empty())
+  {
     return;
   }
   outline_panel.selected =
@@ -126,9 +151,11 @@ void Editor::outline_move_selection(int delta) {
   needs_redraw = true;
 }
 
-void Editor::outline_jump_selected() {
+void Editor::outline_jump_selected()
+{
   ensure_outline_fresh(true);
-  if (outline_panel.symbols.empty()) {
+  if (outline_panel.symbols.empty())
+  {
     set_message("Outline: no symbols in this file");
     return;
   }
@@ -137,7 +164,8 @@ void Editor::outline_jump_selected() {
                  (int)outline_panel.symbols.size() - 1);
   const SymbolMatch &symbol = outline_panel.symbols[(size_t)index];
   FileBuffer &buf = get_buffer();
-  if (buf.line_count() == 0) {
+  if (buf.line_count() == 0)
+  {
     return;
   }
   buf.cursor.y =
@@ -153,14 +181,17 @@ void Editor::outline_jump_selected() {
               symbol.name);
 }
 
-void Editor::render_outline_panel() {
-  if (!outline_active() || !ui) {
+void Editor::render_outline_panel()
+{
+  if (!outline_active() || !ui)
+  {
     return;
   }
   ensure_outline_fresh();
 
   const int panel_w = effective_right_panel_width();
-  if (panel_w <= 0) {
+  if (panel_w <= 0)
+  {
     return;
   }
   const int panel_x = std::max(0, ui->get_render_width() - panel_w);
@@ -183,10 +214,12 @@ void Editor::render_outline_panel() {
   // Header: current file + symbol count.
   std::string file_label = "No file";
   const FileBuffer *buf = nullptr;
-  if (current_buffer >= 0 && current_buffer < (int)buffers.size()) {
+  if (current_buffer >= 0 && current_buffer < (int)buffers.size())
+  {
     buf = &buffers[(size_t)current_buffer];
   }
-  if (buf && !buf->filepath.empty()) {
+  if (buf && !buf->filepath.empty())
+  {
     file_label = std::filesystem::path(buf->filepath).filename().string();
   }
   const std::string header =
@@ -199,9 +232,11 @@ void Editor::render_outline_panel() {
   const int body_y = content_y + 1;
   const int body_h = std::max(0, content_h - 1);
 
-  if (outline_panel.symbols.empty()) {
+  if (outline_panel.symbols.empty())
+  {
     std::string note = "No symbols found";
-    if (!buf || buf->filepath.empty()) {
+    if (!buf || buf->filepath.empty())
+    {
       note = "Open a file to see its symbols";
     }
     ui->draw_text(content_x, body_y, ui_truncate_cells(note, content_w),
@@ -212,10 +247,12 @@ void Editor::render_outline_panel() {
   // Keep the selection on screen, then clamp the scroll window.
   int max_scroll =
       std::max(0, (int)outline_panel.symbols.size() - body_h);
-  if (outline_panel.selected < outline_panel.scroll) {
+  if (outline_panel.selected < outline_panel.scroll)
+  {
     outline_panel.scroll = outline_panel.selected;
   }
-  if (outline_panel.selected >= outline_panel.scroll + body_h) {
+  if (outline_panel.selected >= outline_panel.scroll + body_h)
+  {
     outline_panel.scroll =
         std::max(0, outline_panel.selected - body_h + 1);
   }
@@ -224,9 +261,11 @@ void Editor::render_outline_panel() {
   const int line_w = std::min(content_w / 4, 7); // right-aligned line number
   const int name_w = std::max(1, content_w - line_w);
 
-  for (int row = 0; row < body_h; row++) {
+  for (int row = 0; row < body_h; row++)
+  {
     const int index = outline_panel.scroll + row;
-    if (index < 0 || index >= (int)outline_panel.symbols.size()) {
+    if (index < 0 || index >= (int)outline_panel.symbols.size())
+    {
       break;
     }
     const SymbolMatch &symbol = outline_panel.symbols[(size_t)index];
