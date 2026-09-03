@@ -427,6 +427,10 @@ struct SyntaxLineCache {
   bool valid = false;
   std::size_t line_hash = 0;
   std::size_t line_length = 0;
+  // Byte extent for which `colors` is valid ([0, colors_upto)). Highlighting
+  // is windowed to the visible area, so huge single-line files don't pay for
+  // full-line colorization on every newly-scrolled-into-view line.
+  std::size_t colors_upto = 0;
   std::vector<std::pair<int, int>> colors;
 };
 
@@ -528,6 +532,7 @@ struct FileBuffer {
 
   void replace_lines(int start, int count,
                      const std::vector<std::string> &new_lines) {
+    mark_edited();
     if (lazy_provider) {
       lazy_provider->replace_lines(start, count, new_lines);
     } else {

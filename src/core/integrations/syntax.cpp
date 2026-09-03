@@ -58,27 +58,49 @@ bool has_cpp_sibling_source(const std::string &path) {
   return false;
 }
 
+// Start byte of `line_idx` in the buffer, resolved in O(1) via lazily built
+// prefix sums (cleared by FileBuffer::mark_edited on every edit).
+// offsets[i] = byte offset where line i begins in the joined buffer text:
+// offsets[0] = 0 and offsets[i] = offsets[i-1] + line(i-1).size() + 1.
+uint32_t line_start_byte(FileBuffer &buf, int line_idx) {
+  auto &offsets = buf.ts_line_offsets;
+  while ((int)offsets.size() <= line_idx) {
+    const int next = (int)offsets.size();
+    if (next == 0) {
+      // First line starts at byte 0. (The previous loop body would have read
+      // line(-1) here, shifting every line origin by +1 and making every
+      // token span end one byte early — dropping the last char of each word.)
+      offsets.push_back(0);
+    } else {
+      const uint32_t acc = offsets.back();
+      offsets.push_back(acc + (uint32_t)buf.line(next - 1).size() + 1);
+    }
+  }
+  return offsets[line_idx];
+}
+
 std::vector<std::pair<int, int>>
 query_ts_highlights(FileBuffer &buf, int line_idx, TSQuery *query,
-                    TSTree *tree) {
+                    TSTree *tree, int byte_limit) {
   if (!query || !tree) {
     return {};
   }
 
   const std::string &line = buf.line(line_idx);
-  std::vector<std::pair<int, int>> colors(line.size(), {0, 0});
-  std::vector<int> priorities(line.size(), 0);
+  const int n = (int)line.size();
+  const int limit = std::clamp(byte_limit, 0, n);
+  std::vector<std::pair<int, int>> colors(limit, {0, 0});
+  std::vector<int> priorities(limit, 0);
 
-  uint32_t line_start_byte = 0;
-  for (int i = 0; i < line_idx; i++) {
-    line_start_byte += (uint32_t)buf.line(i).size() + 1;
-  }
+  const uint32_t line_start = line_start_byte(buf, line_idx);
 
   TSNode root = ts_tree_root_node(tree);
   TSQueryCursor *cursor = ts_query_cursor_new();
 
-  ts_query_cursor_set_byte_range(cursor, line_start_byte,
-                                 line_start_byte + (uint32_t)line.size());
+  // Query only the visible window of the line: for minified single-line files
+  // this keeps per-line highlight cost proportional to the on-screen width
+  // instead of the line length.
+  ts_query_cursor_set_byte_range(cursor, line_start, line_start + (uint32_t)limit);
   ts_query_cursor_exec(cursor, query, root);
 
   TSQueryMatch match;
@@ -87,10 +109,13 @@ query_ts_highlights(FileBuffer &buf, int line_idx, TSQuery *query,
       TSQueryCapture cap = match.captures[ci];
       uint32_t s = ts_node_start_byte(cap.node);
       uint32_t e = ts_node_end_byte(cap.node);
-      uint32_t start = (s > line_start_byte) ? (s - line_start_byte) : 0;
-      uint32_t end = (e > line_start_byte) ? (e - line_start_byte) : 0;
-      if (end > (uint32_t)line.size()) {
-        end = (uint32_t)line.size();
+      uint32_t start = (s > line_start) ? (s - line_start) : 0;
+      uint32_t end = (e > line_start) ? (e - line_start) : 0;
+      if (end > (uint32_t)limit) {
+        end = (uint32_t)limit;
+      }
+      if (start >= (uint32_t)limit) {
+        continue;
       }
 
       uint32_t name_len;
@@ -190,7 +215,7 @@ std::string Editor::tree_sitter_extension_for_buffer(const FileBuffer &buf) {
 #endif
 
 const std::vector<std::pair<int, int>> &
-Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx) {
+Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit) {
   static const std::vector<std::pair<int, int>> empty_colors;
 
   if (line_idx < 0 || line_idx >= (int)buf.line_count()) {
@@ -231,7 +256,7 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx) {
 
   const std::string &line = buf.line(line_idx);
   SyntaxLineCache &cache = buf.syntax_cache[line_idx];
-  const std::size_t line_hash = std::hash<std::string>{}(line);
+  const int limit = std::clamp(byte_limit, 0, (int)line.size());
 
   bool retry_tree_sitter = false;
 #ifdef JOT_TREESITTER
@@ -239,18 +264,25 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx) {
       tree_sitter_candidate && buf.ts_tree &&
       buf.syntax_engine != SYNTAX_ENGINE_TREESITTER;
 #endif
-  if (!retry_tree_sitter && cache.valid && cache.line_hash == line_hash &&
-      cache.line_length == line.length()) {
+  // Compare lengths first so cache hits on huge single lines don't pay for a
+  // full-line hash every frame; only hash when the length matches.
+  if (!retry_tree_sitter && cache.valid &&
+      cache.line_length == line.length() &&
+      cache.colors_upto >= (std::size_t)limit &&
+      cache.line_hash == std::hash<std::string>{}(line)) {
     return cache.colors;
   }
+  const std::size_t line_hash = std::hash<std::string>{}(line);
 
 #ifdef JOT_TREESITTER
   if (tree_sitter_candidate && buf.ts_tree) {
     TSQuery *query = ts_manager_.get_highlight_query(ts_extension);
     if (query) {
-      cache.colors = query_ts_highlights(buf, line_idx, query, buf.ts_tree);
+      cache.colors = query_ts_highlights(buf, line_idx, query, buf.ts_tree,
+                                         limit);
       cache.line_hash = line_hash;
       cache.line_length = line.length();
+      cache.colors_upto = (std::size_t)limit;
       cache.valid = true;
       buf.syntax_engine = SYNTAX_ENGINE_TREESITTER;
       buf.syntax_language_label =
@@ -261,7 +293,7 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx) {
 #endif
 
   highlighter.set_language(raw_extension);
-  cache.colors = highlighter.get_colors(line);
+  cache.colors = highlighter.get_colors(line, limit);
   if (highlighter.has_rules()) {
     buf.syntax_engine = SYNTAX_ENGINE_REGEX;
     buf.syntax_language_label = raw_extension.empty() ? "plain" : raw_extension;
@@ -271,11 +303,13 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx) {
   }
   cache.line_hash = line_hash;
   cache.line_length = line.length();
+  cache.colors_upto = (std::size_t)limit;
   cache.valid = true;
   return cache.colors;
 }
 
 void Editor::invalidate_syntax_cache(FileBuffer &buf) {
+  buf.mark_edited();
   buf.syntax_cache_extension.clear();
   buf.syntax_cache_line_count = 0;
   buf.syntax_cache.clear();

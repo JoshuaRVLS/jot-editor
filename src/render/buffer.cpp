@@ -372,10 +372,18 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
   int bracket_depth = 0;
   const int scan_start =
       std::max(0, buf.scroll_offset - kBracketDepthScanLimitLines);
+  // Also cap the backscan by bytes: for files made of giant single lines this
+  // would otherwise walk megabytes every frame just to seed bracket depth.
+  constexpr std::size_t kBracketDepthScanMaxBytes = 1u << 20;
+  std::size_t scanned_bytes = 0;
   for (int scan_line = scan_start;
        scan_line < std::min(buf.scroll_offset, (int)buf.line_count());
        scan_line++) {
     const std::string &line = buf.line(scan_line);
+    if (scanned_bytes + line.size() > kBracketDepthScanMaxBytes) {
+      break;
+    }
+    scanned_bytes += line.size();
     for (char c : line) {
       apply_bracket_depth_delta(c, bracket_depth);
     }
@@ -452,9 +460,15 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
           visible_len = std::max(0, suffix_x - current_x - 1);
         }
       }
-      visual_cols = build_visual_columns(line, tab_size);
       int clamped_scroll_x = ui_clamp_to_utf8_boundary(
           line, std::clamp(scroll_x, 0, (int)line.size()));
+      // Only the visible window (plus a wide-glyph margin) needs per-frame
+      // work. Walking entire multi-KB single lines (minified/generated code)
+      // on every row of every frame made scrolling freeze.
+      const int render_limit =
+          std::min((int)line.size(),
+                   clamped_scroll_x + (visible_len + 2) * 4 + 8);
+      visual_cols = build_visual_columns(line, tab_size, render_limit);
       int start_visual = visual_cols[clamped_scroll_x];
       int leading_ws_end = 0;
       while (leading_ws_end < (int)line.length() &&
@@ -529,7 +543,10 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
       };
 
       if (scroll_x < (int)line.length()) {
-        const auto &colors = get_line_syntax_colors(buf, line_idx);
+        // Colors only matter up to the visible window; huge single lines are
+        // highlighted per-window instead of per-line.
+        const auto &colors =
+            get_line_syntax_colors(buf, line_idx, render_limit);
         int line_bracket_depth = bracket_depth;
         std::vector<Editor::SearchMatch> search_hits;
         Editor::SearchMatch active_search_match{-1, -1, 0};
@@ -679,11 +696,13 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
           int last_type = -1;
           int last_token = 0;
 
-          for (int i = 0; i <= (int)line.length();) {
+          // Color runs only matter up to the visible window, so stop chunk
+          // detection at render_limit instead of walking the whole line.
+          for (int i = 0; i <= render_limit;) {
             int current_type = -1;
             int current_token = 0;
 
-            if (i < (int)line.length() && i < (int)colors.size()) {
+            if (i < render_limit && i < (int)colors.size()) {
               current_token = colors[i].first;
               current_type = colors[i].second;
             }
@@ -691,7 +710,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
             bool changed = (current_token != last_token) ||
                            (current_token == 1 && current_type != last_type);
 
-            if (i > 0 && (changed || i == (int)line.length())) {
+            if (i > 0 && (changed || i >= render_limit)) {
               int len = i - chunk_start;
               int color = theme.fg_default;
 
@@ -790,7 +809,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id) {
 
             last_token = current_token;
             last_type = current_type;
-            if (i >= (int)line.length())
+            if (i >= render_limit)
               break;
             int next_i = ui_next_grapheme_boundary(line, i);
             i = next_i > i ? next_i : i + 1;

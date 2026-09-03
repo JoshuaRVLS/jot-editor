@@ -31,11 +31,19 @@ inline int compute_visual_column(const std::string &line, int logical_col,
   return visual;
 }
 
+// Like build_visual_columns, but stops walking once `byte_limit` bytes are
+// covered. Renderers only ever index columns up to the visible window, so for
+// huge single-line files (minified/generated code) this keeps per-frame cost
+// proportional to the on-screen width instead of the line length.
 inline std::vector<int> build_visual_columns(const std::string &line,
-                                             int tab_size) {
-  std::vector<int> cols(line.size() + 1, 0);
+                                             int tab_size, int byte_limit) {
+  const int n = (int)line.size();
+  const int limit = std::clamp(byte_limit, 0, n);
+  // +8 headroom: graphemes are at most 4 bytes, so a walk that stops at
+  // `limit` may emit an index up to limit + 3.
+  std::vector<int> cols(limit + 8, 0);
   int visual = 0;
-  for (int i = 0; i < (int)line.size();) {
+  for (int i = 0; i < limit;) {
     int next = ui_next_grapheme_boundary(line, i);
     if (next <= i)
       next = i + 1;
@@ -49,10 +57,17 @@ inline std::vector<int> build_visual_columns(const std::string &line,
       cols[j] = visual;
     }
     visual += width;
-    cols[next] = visual;
+    if (next < (int)cols.size()) {
+      cols[next] = visual;
+    }
     i = next;
   }
   return cols;
+}
+
+inline std::vector<int> build_visual_columns(const std::string &line,
+                                             int tab_size) {
+  return build_visual_columns(line, tab_size, (int)line.size());
 }
 
 inline int visual_to_logical_column(const std::string &line, int visual_col,

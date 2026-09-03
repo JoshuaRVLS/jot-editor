@@ -1254,6 +1254,7 @@ void Editor::save_file_fold_state(FileBuffer &buf) {
 
   Folding::refresh_ranges(buf.fold_ranges, buf.lines,
                           get_file_extension(buf.filepath));
+  buf.folds_dirty = false;
   const std::string normalized = normalize_existing_path(buf.filepath);
   if (normalized.empty()) {
     return;
@@ -1279,6 +1280,7 @@ void Editor::save_file_fold_states() {
     }
     Folding::refresh_ranges(buf.fold_ranges, buf.lines,
                             get_file_extension(buf.filepath));
+    buf.folds_dirty = false;
     const std::string normalized = normalize_existing_path(buf.filepath);
     if (normalized.empty()) {
       continue;
@@ -1316,6 +1318,7 @@ void Editor::restore_file_fold_state(FileBuffer &buf) {
 
   Folding::refresh_ranges(buf.fold_ranges, buf.lines,
                           get_file_extension(buf.filepath));
+  buf.folds_dirty = false;
   Folding::apply_collapsed_ranges(
       buf.fold_ranges, Folding::decode_collapsed_ranges(it->second));
   while (buf.cursor.y > 0 &&

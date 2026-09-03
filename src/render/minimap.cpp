@@ -40,7 +40,10 @@ void Editor::render_minimap(int x, int y, int w, int h, int buffer_id) {
     int line_idx = (int)(i / ratio);
     if (line_idx >= 0 && line_idx < total_lines) {
       const std::string &line = buf.line(line_idx);
-      const auto &colors = get_line_syntax_colors(buf, line_idx);
+      // The minimap only samples the first few dozen columns of each line, so
+      // window the highlight accordingly instead of colorizing whole lines.
+      const auto &colors =
+          get_line_syntax_colors(buf, line_idx, std::max(16, w * 4 + 8));
 
       int draw_x = x;
       int max_x = x + w;

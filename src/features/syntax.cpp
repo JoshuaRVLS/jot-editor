@@ -446,20 +446,29 @@ void SyntaxHighlighter::set_language(const std::string &ext) {
 }
 
 std::vector<std::pair<int, int>>
-SyntaxHighlighter::get_colors(const std::string &line) {
-  std::vector<std::pair<int, int>> colors(line.length(), {0, 0});
-  std::vector<bool> protected_region(line.length(), false);
+SyntaxHighlighter::get_colors(const std::string &line, int byte_limit) {
+  const int n = (int)line.length();
+  const int limit = std::clamp(byte_limit, 0, n);
+  // Scan a margin beyond the requested window so strings/comments that begin
+  // near the window edge still get colored; the result is truncated back to
+  // the window. For very long lines this bounds regex cost to the window
+  // instead of the whole line.
+  const int scan = std::min(n, limit + 8192);
+  std::vector<std::pair<int, int>> colors(scan, {0, 0});
+  std::vector<bool> protected_region(scan, false);
 
   auto apply_rule = [&](const SyntaxRule &rule, bool protect_only,
                         bool skip_protected) {
-    auto words_begin = std::sregex_iterator(line.begin(), line.end(), rule.pattern);
+    const std::string &src =
+        (scan == n) ? line : line.substr(0, (size_t)scan);
+    auto words_begin = std::sregex_iterator(src.begin(), src.end(), rule.pattern);
     auto words_end = std::sregex_iterator();
 
     for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
       std::smatch match = *i;
       size_t start = static_cast<size_t>(match.position());
       size_t end = static_cast<size_t>(match.position() + match.length());
-      for (size_t pos = start; pos < end && pos < line.length(); pos++) {
+      for (size_t pos = start; pos < end && pos < colors.size(); pos++) {
         if (skip_protected && protected_region[pos]) {
           continue;
         }
@@ -486,5 +495,8 @@ SyntaxHighlighter::get_colors(const std::string &line) {
     apply_rule(rule, false, true);
   }
 
+  if (scan > limit) {
+    colors.resize((size_t)limit);
+  }
   return colors;
 }

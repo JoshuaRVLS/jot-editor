@@ -162,6 +162,7 @@ void Editor::save_state() {
   search_result_index = -1;
 
   auto &buf = get_buffer();
+  buf.mark_edited();
 
 #ifdef JOT_TREESITTER
   if (buf.ts_tree) {

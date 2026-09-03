@@ -327,7 +327,8 @@ private:
   void render_lsp_completion();
   std::string get_buffer_text(const FileBuffer &buf) const;
   const std::vector<std::pair<int, int>> &
-  get_line_syntax_colors(FileBuffer &buf, int line_idx);
+  get_line_syntax_colors(FileBuffer &buf, int line_idx,
+                         int byte_limit = 0x7fffffff);
   void invalidate_syntax_cache(FileBuffer &buf);
 
 #ifdef JOT_TREESITTER

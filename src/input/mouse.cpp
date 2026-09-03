@@ -568,15 +568,10 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
   auto &pane = get_pane(current_pane);
   auto &buf = get_buffer(pane.buffer_id);
   refresh_folds(buf);
-  refresh_folds(buf);
   int visible_rows = std::max(1, pane.h - tab_height - 1);
-  int max_scroll_offset =
-      std::max(0, Folding::visible_line_count(buf.fold_ranges,
-                                              (int)buf.line_count()) -
-                      visible_rows);
+  const int wheel_step = std::max(1, std::min(5, visible_rows / 6));
 
   if (is_scroll_up) {
-    int wheel_step = std::max(1, std::min(5, visible_rows / 6));
     for (int i = 0; i < wheel_step && buf.scroll_offset > 0; i++) {
       int prev = Folding::previous_visible_line(buf.fold_ranges,
                                                 buf.scroll_offset);
@@ -589,19 +584,15 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up,
     return;
   }
   if (is_scroll_down) {
-    int wheel_step = std::max(1, std::min(5, visible_rows / 6));
-    int current_visible = 0;
-    for (int line = 0; line < (int)buf.line_count() &&
-                       line < buf.scroll_offset;
-         line++) {
-      if (!Folding::is_line_hidden(buf.fold_ranges, line)) {
-        current_visible++;
+    // Walk the next visible lines directly instead of counting all visible
+    // lines before the scroll offset (O(scroll_offset) per wheel event).
+    for (int i = 0; i < wheel_step; i++) {
+      int next = Folding::next_visible_line(buf.fold_ranges, buf.scroll_offset,
+                                            (int)buf.line_count());
+      if (next <= buf.scroll_offset ||
+          next >= (int)buf.line_count()) {
+        break;
       }
-    }
-    int target_visible = std::min(max_scroll_offset,
-                                  current_visible + wheel_step);
-    int next = buffer_line_for_visible_index(buf, target_visible);
-    if (next != buf.scroll_offset) {
       buf.scroll_offset = next;
       needs_redraw = true;
     }

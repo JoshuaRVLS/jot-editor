@@ -35,6 +35,13 @@ void Editor::refresh_folds(FileBuffer &buf) {
   if (buf.is_lazy()) {
     return;
   }
+  // Recompute only after edits: refresh_ranges walks every byte of the file,
+  // which is far too expensive to run on every wheel event / render frame for
+  // large or minified files. Edits set folds_dirty via FileBuffer::mark_edited.
+  if (!buf.folds_dirty) {
+    return;
+  }
+  buf.folds_dirty = false;
   Folding::refresh_ranges(buf.fold_ranges, buf.lines,
                           get_file_extension(buf.filepath));
   if (Folding::is_line_hidden(buf.fold_ranges, buf.cursor.y)) {
