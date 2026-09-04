@@ -21,6 +21,13 @@ struct LuaScratchBuffer
   std::vector<std::string> lines = {""};
 };
 
+struct FloatSpan
+{
+  int start = 0; // byte offset into the line
+  int len = 0;   // byte length
+  int fg = 7;    // color for the span (bg stays the float's bg)
+};
+
 struct LuaFloatWindow
 {
   int handle = 0;
@@ -35,12 +42,18 @@ struct LuaFloatWindow
   bool hide = false;
   bool style_minimal = false;
   int fg = 7, bg = 0;
+  int border_fg = -1; // -1 = fall back to fg
+  int title_fg = -1;  // -1 = fall back to fg
+  int footer_fg = -1; // -1 = fall back to fg
   std::string relative = "editor";
   std::string anchor = "NW";
   std::string border = "none";
   std::array<std::string, 8> custom_border = {"", "", "", "", "", "", "", ""};
   std::string title;
   std::string footer;
+  // Per-line inline spans (1-based line index). Used for syntax highlighting
+  // inside float content; lines without spans render in fg/bg as before.
+  std::map<int, std::vector<FloatSpan>> spans;
   int key_callback = -1;
   int mouse_callback = -1;
   int creation_order = 0;
@@ -488,6 +501,7 @@ public:
   bool delete_scratch_buffer(int buffer);
   int open_float(int buffer, bool enter, lua_State *L, int config_index);
   bool configure_float(int window, lua_State *L, int config_index);
+  bool set_float_spans(int window, int line, lua_State *L, int spans_index);
   bool close_float(int window, bool force);
   bool is_float_valid(int window) const;
   bool float_input(int ch, bool ctrl, bool shift, bool alt);

@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "features/syntax_highlighter.h"
 #include "features/tree_sitter/manager.h"
 #include "host_api.h"
 #include "lua_bridge/api.h"
@@ -624,6 +625,127 @@ namespace
   {
     luaL_checktype(L, 2, LUA_TTABLE);
     lua_pushboolean(L, api(L).configure_float((int)luaL_checkinteger(L, 1), L, 2));
+    return 1;
+  }
+  const char *syntax_token_kind_name(int token)
+  {
+    switch (token)
+    {
+    case TS_TOKEN_KEYWORD:
+      return "keyword";
+    case TS_TOKEN_STRING:
+      return "string";
+    case TS_TOKEN_COMMENT:
+      return "comment";
+    case TS_TOKEN_NUMBER:
+      return "number";
+    case TS_TOKEN_TYPE:
+      return "type";
+    case TS_TOKEN_FUNCTION:
+      return "function";
+    case TS_TOKEN_VARIABLE:
+      return "variable";
+    case TS_TOKEN_CONSTANT:
+      return "constant";
+    case TS_TOKEN_BUILTIN:
+      return "builtin";
+    case TS_TOKEN_OPERATOR:
+      return "operator";
+    case TS_TOKEN_PUNCTUATION:
+      return "punctuation";
+    case TS_TOKEN_TAG:
+      return "tag";
+    case TS_TOKEN_ATTRIBUTE:
+      return "attribute";
+    case TS_TOKEN_NAMESPACE:
+      return "namespace";
+    case TS_TOKEN_MODULE:
+      return "module";
+    case TS_TOKEN_PARAMETER:
+      return "parameter";
+    case TS_TOKEN_FIELD:
+      return "field";
+    case TS_TOKEN_KEYWORD_CONTROL:
+      return "keyword_control";
+    case TS_TOKEN_KEYWORD_STORAGE:
+      return "keyword_storage";
+    case TS_TOKEN_KEYWORD_PREPROC:
+      return "keyword_preproc";
+    case TS_TOKEN_FUNCTION_METHOD:
+      return "function_method";
+    case TS_TOKEN_FUNCTION_CONSTRUCTOR:
+      return "function_constructor";
+    case TS_TOKEN_TYPE_BUILTIN:
+      return "type_builtin";
+    case TS_TOKEN_CONSTANT_MACRO:
+      return "constant_macro";
+    case TS_TOKEN_STRING_ESCAPE:
+      return "string_escape";
+    case TS_TOKEN_PUNCTUATION_BRACKET:
+      return "punctuation_bracket";
+    case TS_TOKEN_PUNCTUATION_DELIMITER:
+      return "punctuation_delimiter";
+    default:
+      return "";
+    }
+  }
+
+  int l_syntax_highlight(lua_State *L)
+  {
+    const std::string ext = luaL_optstring(L, 1, "");
+    const std::string text = luaL_optstring(L, 2, "");
+    SyntaxHighlighter highlighter;
+    highlighter.set_language(ext);
+    const auto colors = highlighter.get_colors(text);
+    lua_newtable(L);
+    if (!highlighter.has_rules())
+    {
+      return 1;
+    }
+    int out = 1;
+    int chunk_start = 0;
+    int chunk_token = 0;
+    for (int i = 0; i <= (int)colors.size(); i++)
+    {
+      int token = 0;
+      if (i < (int)colors.size() && colors[i].first == 1)
+      {
+        token = colors[i].second;
+      }
+      if (i == 0)
+      {
+        chunk_token = token;
+      }
+      if (i == (int)colors.size() || token != chunk_token)
+      {
+        if (i > chunk_start && chunk_token != TS_TOKEN_NONE)
+        {
+          lua_newtable(L);
+          lua_pushinteger(L, chunk_start);
+          lua_setfield(L, -2, "start");
+          lua_pushinteger(L, i - chunk_start);
+          lua_setfield(L, -2, "len");
+          lua_pushstring(L, syntax_token_kind_name(chunk_token));
+          lua_setfield(L, -2, "kind");
+          lua_rawseti(L, -2, out++);
+        }
+        chunk_start = i;
+        chunk_token = token;
+      }
+    }
+    return 1;
+  }
+
+  int l_float_set_spans(lua_State *L)
+  {
+    // (window, line, spans) - spans is an array of {start, len, fg} tables
+    // with byte offsets into the line; replaces any previous spans for the line.
+    const int win = (int)luaL_checkinteger(L, 1);
+    const int line = (int)luaL_checkinteger(L, 2);
+    if (line < 1)
+      return (lua_pushboolean(L, 0), 1);
+    luaL_checktype(L, 3, LUA_TTABLE);
+    lua_pushboolean(L, api(L).set_float_spans(win, line, L, 3));
     return 1;
   }
   int l_float_close(lua_State *L)
@@ -1433,12 +1555,18 @@ bool LuaAPI::configure_float(int id, lua_State *L, int ti)
   f.footer = table_string(L, ti, "footer", f.footer);
   f.fg = table_int(L, ti, "fg", f.fg);
   f.bg = table_int(L, ti, "bg", f.bg);
+  f.border_fg = table_int(L, ti, "border_fg", f.border_fg);
+  f.title_fg = table_int(L, ti, "title_fg", f.title_fg);
+  f.footer_fg = table_int(L, ti, "footer_fg", f.footer_fg);
   lua_getfield(L, ti, "style");
   if (lua_istable(L, -1))
   {
     f.style_minimal = table_bool(L, -1, "minimal", f.style_minimal);
     f.fg = table_int(L, -1, "fg", f.fg);
     f.bg = table_int(L, -1, "bg", f.bg);
+    f.border_fg = table_int(L, -1, "border_fg", f.border_fg);
+    f.title_fg = table_int(L, -1, "title_fg", f.title_fg);
+    f.footer_fg = table_int(L, -1, "footer_fg", f.footer_fg);
   }
   lua_pop(L, 1);
   lua_getfield(L, ti, "border_chars");
@@ -1478,6 +1606,46 @@ bool LuaAPI::configure_float(int id, lua_State *L, int ti)
       break;
     }
     lua_pop(L, 1);
+  }
+  return true;
+}
+bool LuaAPI::set_float_spans(int window, int line, lua_State *L, int spans_index)
+{
+  auto it = float_windows.find(window);
+  if (it == float_windows.end())
+  {
+    return false;
+  }
+  auto &f = it->second;
+  f.spans.erase(line);
+  if (!lua_istable(L, spans_index))
+  {
+    return true;
+  }
+  const int n = (int)lua_rawlen(L, spans_index);
+  if (n == 0)
+  {
+    return true;
+  }
+  std::vector<FloatSpan> out;
+  out.reserve((size_t)n);
+  for (int i = 1; i <= n; i++)
+  {
+    lua_rawgeti(L, spans_index, i);
+    if (lua_istable(L, -1))
+    {
+      FloatSpan s;
+      s.start = table_int(L, -1, "start", 0);
+      s.len = table_int(L, -1, "len", 0);
+      s.fg = table_int(L, -1, "fg", f.fg);
+      if (s.len > 0)
+        out.push_back(s);
+    }
+    lua_pop(L, 1);
+  }
+  if (!out.empty())
+  {
+    f.spans[line] = std::move(out);
   }
   return true;
 }
@@ -1673,6 +1841,7 @@ void LuaAPI::render_floats()
     f->y = y;
     UIRect r{x, y, std::min(f->w, rw - x), std::min(f->h, rh - y)};
     editor->ui->fill_rect(r, " ", f->fg, f->bg);
+    const int border_fg = f->border_fg >= 0 ? f->border_fg : f->fg;
     if (f->border != "none")
     {
       std::array<std::string, 8> b = {"─", "│", "─", "│", "┌", "┐", "┘", "└"};
@@ -1682,19 +1851,19 @@ void LuaAPI::render_floats()
         b = {"─", "│", "─", "│", "╭", "╮", "╯", "╰"};
       if (f->border == "custom")
         b = f->custom_border;
-      editor->ui->draw_text(x, y, b[4], f->fg, f->bg);
-      editor->ui->draw_text(x + f->w - 1, y, b[5], f->fg, f->bg);
-      editor->ui->draw_text(x, y + f->h - 1, b[7], f->fg, f->bg);
-      editor->ui->draw_text(x + f->w - 1, y + f->h - 1, b[6], f->fg, f->bg);
+      editor->ui->draw_text(x, y, b[4], border_fg, f->bg);
+      editor->ui->draw_text(x + f->w - 1, y, b[5], border_fg, f->bg);
+      editor->ui->draw_text(x, y + f->h - 1, b[7], border_fg, f->bg);
+      editor->ui->draw_text(x + f->w - 1, y + f->h - 1, b[6], border_fg, f->bg);
       for (int i = 1; i < f->w - 1; i++)
       {
-        editor->ui->draw_text(x + i, y, b[0], f->fg, f->bg);
-        editor->ui->draw_text(x + i, y + f->h - 1, b[2], f->fg, f->bg);
+        editor->ui->draw_text(x + i, y, b[0], border_fg, f->bg);
+        editor->ui->draw_text(x + i, y + f->h - 1, b[2], border_fg, f->bg);
       }
       for (int i = 1; i < f->h - 1; i++)
       {
-        editor->ui->draw_text(x, y + i, b[3], f->fg, f->bg);
-        editor->ui->draw_text(x + f->w - 1, y + i, b[1], f->fg, f->bg);
+        editor->ui->draw_text(x, y + i, b[3], border_fg, f->bg);
+        editor->ui->draw_text(x + f->w - 1, y + i, b[1], border_fg, f->bg);
       }
     }
     auto bi = scratch_buffers.find(f->buffer);
@@ -1706,17 +1875,46 @@ void LuaAPI::render_floats()
     int iw = std::max(0, r.w - (f->border == "none" ? 0 : 2));
     int ih = std::max(0, r.h - (f->border == "none" ? 0 : 2));
     for (int i = 0; i < ih && i < (int)bi->second.lines.size(); i++)
-      editor->ui->draw_text(ix, iy + i, ui_truncate_cells(bi->second.lines[i], iw), f->fg, f->bg);
+    {
+      const std::string &line = bi->second.lines[i];
+      const std::string clipped = ui_truncate_cells(line, iw);
+      auto sit = f->spans.find(i + 1);
+      if (sit == f->spans.end() || sit->second.empty())
+      {
+        editor->ui->draw_text(ix, iy + i, clipped, f->fg, f->bg);
+        continue;
+      }
+      auto spans = sit->second;
+      std::sort(spans.begin(),
+                spans.end(),
+                [](const FloatSpan &a, const FloatSpan &b) { return a.start < b.start; });
+      int pos = 0;
+      for (const auto &sp : spans)
+      {
+        const int s = std::clamp(sp.start, 0, (int)clipped.size());
+        const int e = std::clamp(sp.start + sp.len, s, (int)clipped.size());
+        if (e <= s)
+          continue;
+        if (s > pos)
+          editor->ui->draw_text(ix + pos, iy + i, clipped.substr(pos, s - pos), f->fg, f->bg);
+        editor->ui->draw_text(ix + s, iy + i, clipped.substr(s, e - s), sp.fg, f->bg);
+        pos = e;
+      }
+      if (pos < (int)clipped.size())
+        editor->ui->draw_text(ix + pos, iy + i, clipped.substr(pos), f->fg, f->bg);
+    }
+    const int title_fg = f->title_fg >= 0 ? f->title_fg : f->fg;
     if (!f->title.empty())
     {
       const std::string title_text = ui_truncate_cells(" " + f->title + " ", std::max(0, r.w - 2));
-      editor->ui->draw_text(x + 1, y, title_text, f->fg, f->bg, true);
+      editor->ui->draw_text(x + 1, y, title_text, title_fg, f->bg, true);
     }
+    const int footer_fg = f->footer_fg >= 0 ? f->footer_fg : f->fg;
     if (!f->footer.empty())
     {
       const std::string footer_text =
           ui_truncate_cells(" " + f->footer + " ", std::max(0, r.w - 2));
-      editor->ui->draw_text(x + 1, y + r.h - 1, footer_text, f->fg, f->bg);
+      editor->ui->draw_text(x + 1, y + r.h - 1, footer_text, footer_fg, f->bg);
     }
   }
 }
@@ -1846,6 +2044,9 @@ bool LuaAPI::init()
           return 0;
         });
   lua_setfield(L, -2, "theme");
+  lua_newtable(L);
+  field(L, "highlight", l_syntax_highlight);
+  lua_setfield(L, -2, "syntax");
   lua_getglobal(L, "show_message");
   lua_setfield(L, -2, "notify");
   lua_getglobal(L, "command");
@@ -2187,6 +2388,7 @@ bool LuaAPI::init()
   field(L, "current", l_ui_float_current);
   field(L, "on_key", l_float_on_key);
   field(L, "on_mouse", l_float_on_mouse);
+  field(L, "set_spans", l_float_set_spans);
   lua_setfield(L, -2, "float");
   lua_pop(L, 2);
   lua_getglobal(L, "jot");
@@ -4515,18 +4717,51 @@ bool LuaAPI::present_lsp_hover(const std::string &contents,
   lua_push_int_field(L, "anchor_x", (long long)anchor_x);
   lua_push_int_field(L, "anchor_y", (long long)anchor_y);
   // Theme colors mirror the native hover popup: command text on the panel
-  // border background, panel border for the frame.
-  int fg = 7, bg = 0, border = 7;
+  // background, panel border for the frame. The `colors` table maps syntax
+  // token kind names to their theme colors so the Lua UI can highlight code
+  // fences the same way the editor does.
+  int fg = 7, bg = 0, border = 8;
   if (editor)
   {
     const Theme &t = editor->get_theme();
     fg = t.fg_command >= 0 ? t.fg_command : 7;
-    bg = t.fg_panel_border >= 0 ? t.fg_panel_border : 0;
+    bg = t.bg_panel_border >= 0 ? t.bg_panel_border : 0;
     border = t.fg_panel_border >= 0 ? t.fg_panel_border : fg;
   }
   lua_push_int_field(L, "fg", fg);
   lua_push_int_field(L, "bg", bg);
-  lua_push_int_field(L, "border", border);
+  lua_push_int_field(L, "border_fg", border);
+  lua_push_int_field(L, "border", border); // legacy alias
+  lua_newtable(L);
+  const Theme &t = editor ? editor->get_theme() : Theme{};
+  lua_push_int_field(L, "keyword", t.fg_keyword);
+  lua_push_int_field(L, "string", t.fg_string);
+  lua_push_int_field(L, "comment", t.fg_comment);
+  lua_push_int_field(L, "number", t.fg_number);
+  lua_push_int_field(L, "type", t.fg_type);
+  lua_push_int_field(L, "function", t.fg_function);
+  lua_push_int_field(L, "variable", t.fg_variable);
+  lua_push_int_field(L, "constant", t.fg_constant);
+  lua_push_int_field(L, "builtin", t.fg_builtin);
+  lua_push_int_field(L, "operator", t.fg_operator);
+  lua_push_int_field(L, "punctuation", t.fg_punctuation);
+  lua_push_int_field(L, "tag", t.fg_tag);
+  lua_push_int_field(L, "attribute", t.fg_attribute);
+  lua_push_int_field(L, "namespace", t.fg_namespace);
+  lua_push_int_field(L, "module", t.fg_module);
+  lua_push_int_field(L, "parameter", t.fg_parameter);
+  lua_push_int_field(L, "field", t.fg_field);
+  lua_push_int_field(L, "keyword_control", t.fg_keyword_control);
+  lua_push_int_field(L, "keyword_storage", t.fg_keyword_storage);
+  lua_push_int_field(L, "keyword_preproc", t.fg_keyword_preproc);
+  lua_push_int_field(L, "function_method", t.fg_function_method);
+  lua_push_int_field(L, "function_constructor", t.fg_function_constructor);
+  lua_push_int_field(L, "type_builtin", t.fg_type_builtin);
+  lua_push_int_field(L, "constant_macro", t.fg_constant_macro);
+  lua_push_int_field(L, "string_escape", t.fg_string_escape);
+  lua_push_int_field(L, "punctuation_bracket", t.fg_punctuation_bracket);
+  lua_push_int_field(L, "punctuation_delimiter", t.fg_punctuation_delimiter);
+  lua_setfield(L, -2, "colors");
   const int ok = lua_pcall(L, 1, 1, 0);
   bool consumed = false;
   if (ok != LUA_OK)

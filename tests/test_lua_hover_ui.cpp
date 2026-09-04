@@ -29,7 +29,15 @@ namespace
     std::string last_border;
     int last_fg = -1;
     int last_bg = -1;
+    int last_border_fg = -1;
+    int last_footer_fg = -1;
     int lines_count = 0;
+    int set_spans_count = 0;
+    int last_spans_line = 0;
+    int spans_total = 0; // sum of span lens across all set_spans calls
+    int highlight_calls = 0;
+    std::string last_highlight_ext;
+    std::string last_highlight_text;
   };
 
   StubState g;
@@ -110,6 +118,12 @@ namespace
     lua_getfield(L, 2, "bg");
     g.last_bg = (int)lua_tointeger(L, -1);
     lua_pop(L, 1);
+    lua_getfield(L, 2, "border_fg");
+    g.last_border_fg = lua_isnil(L, -1) ? -1 : (int)lua_tointeger(L, -1);
+    lua_pop(L, 1);
+    lua_getfield(L, 2, "footer_fg");
+    g.last_footer_fg = lua_isnil(L, -1) ? -1 : (int)lua_tointeger(L, -1);
+    lua_pop(L, 1);
     lua_pushinteger(L, ++g.next_float);
     return 1;
   }
@@ -118,6 +132,50 @@ namespace
   {
     g.close_count++;
     return 0;
+  }
+
+  int stub_float_set_spans(lua_State *L)
+  {
+    // (window, line, spans) - spans is an array of {start, len, fg} tables.
+    g.set_spans_count++;
+    g.last_spans_line = (int)luaL_checkinteger(L, 2);
+    luaL_checktype(L, 3, LUA_TTABLE);
+    const int n = (int)lua_rawlen(L, 3);
+    for (int i = 1; i <= n; i++)
+    {
+      lua_rawgeti(L, 3, i);
+      if (lua_istable(L, -1))
+      {
+        lua_getfield(L, -1, "len");
+        g.spans_total += (int)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+      }
+      lua_pop(L, 1);
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+  }
+
+  int stub_syntax_highlight(lua_State *L)
+  {
+    // jot.syntax.highlight(ext, text) -> {{start, len, kind}, ...}
+    g.highlight_calls++;
+    g.last_highlight_ext = luaL_optstring(L, 1, "");
+    g.last_highlight_text = luaL_optstring(L, 2, "");
+    lua_newtable(L);
+    if (g.last_highlight_ext == ".cpp")
+    {
+      // "int x;" -> keyword span over "int" plus a number-free rest.
+      lua_newtable(L);
+      lua_pushinteger(L, 0);
+      lua_setfield(L, -2, "start");
+      lua_pushinteger(L, 3);
+      lua_setfield(L, -2, "len");
+      lua_pushstring(L, "keyword");
+      lua_setfield(L, -2, "kind");
+      lua_rawseti(L, -2, 1);
+    }
+    return 1;
   }
 
   // Pushes jot.lsp.hover_ui onto the stack (caller pops).
@@ -140,8 +198,14 @@ namespace
     lua_setfield(L, -2, "open");
     lua_pushcfunction(L, stub_float_close);
     lua_setfield(L, -2, "close");
+    lua_pushcfunction(L, stub_float_set_spans);
+    lua_setfield(L, -2, "set_spans");
     lua_setfield(L, -2, "float");
     lua_setfield(L, -2, "ui"); // jot.ui
+    lua_newtable(L);
+    lua_pushcfunction(L, stub_syntax_highlight);
+    lua_setfield(L, -2, "highlight");
+    lua_setfield(L, -2, "syntax"); // jot.syntax
     lua_newtable(L);
     lua_pushcfunction(L, stub_hover_ui);
     lua_setfield(L, -2, "hover_ui");
@@ -208,7 +272,7 @@ TEST_CASE("Bundled Lua hover UI renders and dismisses a float")
   // --- present(): opens a float sized to the content ---
   push_module_field(L, 1, "present");
   lua_newtable(L);
-  lua_pushstring(L, "Some **hover** content here");
+  lua_pushstring(L, "Some **hover** content here\n```cpp\nint x;\n```");
   lua_setfield(L, -2, "contents");
   lua_pushstring(L, "main.cpp");
   lua_setfield(L, -2, "path");
@@ -226,6 +290,16 @@ TEST_CASE("Bundled Lua hover UI renders and dismisses a float")
   lua_setfield(L, -2, "fg");
   lua_pushinteger(L, 237);
   lua_setfield(L, -2, "bg");
+  lua_pushinteger(L, 41);
+  lua_setfield(L, -2, "border_fg");
+  lua_newtable(L); // info.colors
+  lua_pushinteger(L, 1);
+  lua_setfield(L, -2, "keyword");
+  lua_pushinteger(L, 2);
+  lua_setfield(L, -2, "string");
+  lua_pushinteger(L, 3);
+  lua_setfield(L, -2, "comment");
+  lua_setfield(L, -2, "colors");
   {
     const int pcr = lua_pcall(L, 1, 1, 0);
     if (pcr != LUA_OK)
@@ -245,6 +319,34 @@ TEST_CASE("Bundled Lua hover UI renders and dismisses a float")
   REQUIRE(g.last_col == "40");
   REQUIRE(g.last_row == "15");
   REQUIRE((g.last_height >= 3 && g.last_height <= 16));
+
+  // Theme colors: border/footer use their own slots (footer falls back to
+  // colors.comment), and the code fence produced syntax spans.
+  REQUIRE(g.last_border_fg == 41);
+  REQUIRE(g.last_footer_fg == 3); // colors.comment
+  REQUIRE(g.highlight_calls == 1);
+  REQUIRE(g.last_highlight_ext == ".cpp");
+  REQUIRE(g.last_highlight_text == "int x;");
+  REQUIRE(g.set_spans_count == 1);
+  REQUIRE(g.last_spans_line >= 1);
+  REQUIRE(g.spans_total == 3); // "int" highlighted as keyword
+
+  // --- build_display exposes spans; lang_to_ext maps fence tags ---
+  push_module_field(L, 1, "lang_to_ext");
+  lua_pushstring(L, "C++");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(std::string(lua_tostring(L, -1)) == ".cpp");
+  lua_pop(L, 1);
+  push_module_field(L, 1, "lang_to_ext");
+  lua_pushstring(L, "py");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(std::string(lua_tostring(L, -1)) == ".py");
+  lua_pop(L, 1);
+  push_module_field(L, 1, "lang_to_ext");
+  lua_pushstring(L, "unknownlang");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(std::string(lua_tostring(L, -1)) == "");
+  lua_pop(L, 1);
 
   // --- close(): dismisses the float and deletes the buffer ---
   push_module_field(L, 1, "close");
