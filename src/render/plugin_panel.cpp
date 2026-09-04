@@ -38,6 +38,15 @@ void Editor::render_plugin_panel()
   int content_w = std::max(1, panel_w - 2);
   int content_h = std::max(0, panel_h - 3);
 
+  // Hand the model to a Lua UI handler when one is registered; it owns the
+  // paint. Native fallback below stays byte-identical.
+  SidePanelView view;
+  view.x = panel_x;
+  view.y = panel_y;
+  view.w = panel_w;
+  view.h = panel_h;
+  view.title = active_plugin_panel.empty() ? " Plugin " : " " + active_plugin_panel + " ";
+
   std::vector<std::string> lines;
   if (lua_api && !active_plugin_panel.empty())
   {
@@ -46,6 +55,12 @@ void Editor::render_plugin_panel()
 
   if (lines.empty())
   {
+    view.note = "No plugin panel content";
+    view.note_fg = theme.fg_comment;
+    if (lua_api && lua_api->has_lua_ui_handler("side_panel") && lua_api->emit_side_panel(view))
+    {
+      return;
+    }
     ui->draw_text(
         content_x, content_y, "No plugin panel content", theme.fg_comment, theme.bg_terminal);
     return;
@@ -53,9 +68,21 @@ void Editor::render_plugin_panel()
 
   for (int row = 0; row < content_h && row < (int)lines.size(); row++)
   {
+    SidePanelRowView r;
+    r.text = ui_truncate_cells(lines[(size_t)row], content_w);
+    r.fg = theme.fg_terminal;
+    r.bg = theme.bg_terminal;
+    view.rows.push_back(std::move(r));
+  }
+  if (lua_api && lua_api->has_lua_ui_handler("side_panel") && lua_api->emit_side_panel(view))
+  {
+    return;
+  }
+  for (int row = 0; row < (int)view.rows.size(); row++)
+  {
     ui->draw_text(content_x,
                   content_y + row,
-                  ui_truncate_cells(lines[(size_t)row], content_w),
+                  view.rows[(size_t)row].text,
                   theme.fg_terminal,
                   theme.bg_terminal);
   }

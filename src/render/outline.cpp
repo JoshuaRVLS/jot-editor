@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "lua_bridge/api.h"
 #include "tools/symbols/index.h"
 #include "ui/text.h"
 
@@ -199,6 +200,15 @@ void Editor::render_outline_panel()
   const int content_w = std::max(1, panel_w - 2);
   const int content_h = std::max(0, panel_h - 3);
 
+  // Hand the model to a Lua UI handler when one is registered; it owns the
+  // paint. Native fallback below stays byte-identical.
+  SidePanelView view;
+  view.x = panel_x;
+  view.y = panel_y;
+  view.w = panel_w;
+  view.h = panel_h;
+  view.title = " Outline ";
+
   // Header: current file + symbol count.
   std::string file_label = "No file";
   const FileBuffer *buf = nullptr;
@@ -212,12 +222,9 @@ void Editor::render_outline_panel()
   }
   const std::string header = file_label + "  " + std::to_string(outline_panel.symbols.size())
                              + " symbol" + (outline_panel.symbols.size() == 1 ? "" : "s");
-  ui->draw_text(content_x,
-                content_y,
-                ui_truncate_cells(header, content_w),
-                theme.fg_status_info,
-                theme.bg_terminal,
-                true);
+  view.header = ui_truncate_cells(header, content_w);
+  view.header_fg = theme.fg_status_info;
+  ui->draw_text(content_x, content_y, view.header, theme.fg_status_info, theme.bg_terminal, true);
 
   const int body_y = content_y + 1;
   const int body_h = std::max(0, content_h - 1);
@@ -228,6 +235,12 @@ void Editor::render_outline_panel()
     if (!buf || buf->filepath.empty())
     {
       note = "Open a file to see its symbols";
+    }
+    view.note = note;
+    view.note_fg = theme.fg_comment;
+    if (lua_api && lua_api->has_lua_ui_handler("side_panel") && lua_api->emit_side_panel(view))
+    {
+      return;
     }
     ui->draw_text(
         content_x, body_y, ui_truncate_cells(note, content_w), theme.fg_comment, theme.bg_terminal);
@@ -262,13 +275,31 @@ void Editor::render_outline_panel()
 
     int bg = selected ? theme.bg_selection : theme.bg_terminal;
     int fg = selected ? theme.fg_selection : outline_symbol_color(theme, symbol.kind);
-    ui->fill_rect({content_x, row_y, content_w, 1}, " ", fg, bg);
-    ui->draw_text(content_x, row_y, ui_truncate_cells(symbol.name, name_w), fg, bg, selected);
     const std::string line_no = std::to_string(symbol.line + 1);
-    ui->draw_text(content_x + std::max(0, name_w - (int)line_no.size()),
-                  row_y,
-                  line_no,
-                  selected ? theme.fg_selection : theme.fg_comment,
-                  bg);
+
+    SidePanelRowView r;
+    r.text = symbol.name;
+    r.detail = line_no;
+    r.fg = fg;
+    r.bg = bg;
+    r.bold = selected;
+    r.selected = selected;
+    view.rows.push_back(std::move(r));
+  }
+  if (lua_api && lua_api->has_lua_ui_handler("side_panel") && lua_api->emit_side_panel(view))
+  {
+    return;
+  }
+  for (size_t i = 0; i < view.rows.size(); i++)
+  {
+    const SidePanelRowView &r = view.rows[i];
+    ui->fill_rect({content_x, body_y + (int)i, content_w, 1}, " ", r.fg, r.bg);
+    ui->draw_text(
+        content_x, body_y + (int)i, ui_truncate_cells(r.text, name_w), r.fg, r.bg, r.bold);
+    ui->draw_text(content_x + std::max(0, name_w - (int)r.detail.size()),
+                  body_y + (int)i,
+                  r.detail,
+                  r.selected ? theme.fg_selection : theme.fg_comment,
+                  r.bg);
   }
 }

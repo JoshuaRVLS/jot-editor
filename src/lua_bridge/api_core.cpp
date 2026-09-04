@@ -5440,6 +5440,52 @@ bool LuaAPI::emit_sidebar(const SidebarPanelView &view)
                      });
 }
 
+bool LuaAPI::emit_side_panel(const SidePanelView &view)
+{
+  return emit_lua_ui("side_panel",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_set_str_field(L, t, "title", view.title);
+                       lua_set_str_field(L, t, "header", view.header);
+                       lua_set_int_field(L, t, "header_fg", view.header_fg);
+                       lua_set_str_field(L, t, "note", view.note);
+                       lua_set_int_field(L, t, "note_fg", view.note_fg);
+                       lua_set_str_field(L, t, "error", view.error);
+                       lua_newtable(L);
+                       const int tabs = lua_gettop(L);
+                       for (size_t i = 0; i < view.tabs.size(); i++)
+                       {
+                         lua_newtable(L);
+                         const int ti = lua_gettop(L);
+                         lua_set_str_field(L, ti, "label", view.tabs[i].label);
+                         lua_set_bool_field(L, ti, "active", view.tabs[i].active);
+                         lua_rawseti(L, tabs, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "tabs");
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.rows.size(); i++)
+                       {
+                         const SidePanelRowView &r = view.rows[i];
+                         lua_newtable(L);
+                         const int ri = lua_gettop(L);
+                         lua_set_str_field(L, ri, "text", r.text);
+                         lua_set_str_field(L, ri, "detail", r.detail);
+                         lua_set_int_field(L, ri, "fg", r.fg);
+                         lua_set_int_field(L, ri, "bg", r.bg);
+                         lua_set_bool_field(L, ri, "bold", r.bold);
+                         lua_set_bool_field(L, ri, "selected", r.selected);
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "rows");
+                       push_ui_colors(L, t);
+                     });
+}
+
 void LuaAPI::ui_set_cursor(int x, int y)
 {
   if (editor && editor->ui)

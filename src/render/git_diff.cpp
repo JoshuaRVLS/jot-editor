@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "lua_bridge/api.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <filesystem>
@@ -77,6 +78,15 @@ void Editor::render_git_diff_panel()
   int content_w = std::max(1, panel_w - 2);
   int content_h = std::max(1, panel_h - 3);
 
+  // Hand the model to a Lua UI handler when one is registered; it owns the
+  // paint. Native fallback below stays byte-identical.
+  SidePanelView view;
+  view.x = panel_x;
+  view.y = panel_y;
+  view.w = panel_w;
+  view.h = panel_h;
+  view.title = git_diff_panel.staged ? " Git Diff: staged " : " Git Diff: unstaged";
+
   std::string header = git_diff_panel.path.empty() ? "(repo)" : git_diff_panel.path;
   std::string count = std::to_string(git_diff_panel.lines.size()) + " lines";
   std::error_code status_ec;
@@ -96,18 +106,20 @@ void Editor::render_git_diff_panel()
     header_fg = colors.first;
     header_bg = colors.second;
   }
-  ui->draw_text(content_x,
-                content_y,
-                ui_truncate_cells(header + " " + count, content_w),
-                header_fg,
-                header_bg,
-                true);
+  view.header = ui_truncate_cells(header + " " + count, content_w);
+  view.header_fg = header_fg;
 
   int body_y = content_y + 1;
   int body_h = std::max(0, content_h - 1);
 
   if (git_diff_panel.lines.empty())
   {
+    view.note = "No Diff";
+    view.note_fg = theme.fg_comment;
+    if (lua_api && lua_api->has_lua_ui_handler("side_panel") && lua_api->emit_side_panel(view))
+    {
+      return;
+    }
     ui->draw_text(content_x, content_y, "No Diff", theme.fg_comment, theme.bg_terminal);
     return;
   }
@@ -124,9 +136,23 @@ void Editor::render_git_diff_panel()
     }
 
     const std::string &line = git_diff_panel.lines[line_index];
-    int fg = diff_line_color(theme, line);
-    ui->draw_text(
-        content_x, body_y + row, ui_truncate_cells(line, content_w), fg, theme.bg_terminal);
+    SidePanelRowView r;
+    r.text = line;
+    r.fg = diff_line_color(theme, line);
+    r.bg = theme.bg_terminal;
+    view.rows.push_back(std::move(r));
+  }
+  if (lua_api && lua_api->has_lua_ui_handler("side_panel") && lua_api->emit_side_panel(view))
+  {
+    return;
+  }
+  for (int row = 0; row < (int)view.rows.size(); row++)
+  {
+    ui->draw_text(content_x,
+                  body_y + row,
+                  ui_truncate_cells(view.rows[(size_t)row].text, content_w),
+                  view.rows[(size_t)row].fg,
+                  theme.bg_terminal);
   }
   return;
 }

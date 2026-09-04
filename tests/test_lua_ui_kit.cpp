@@ -254,12 +254,13 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
   REQUIRE(lua_istable(L, 1));
-  REQUIRE(g.handler_count == 15);
+  REQUIRE(g.handler_count == 16);
   bool has_palette = false, has_quick_pick = false, has_popup = false;
   bool has_save = false, has_quit = false, has_ts = false;
   bool has_lsp = false, has_telescope = false;
   bool has_completion = false, has_context = false, has_menu = false;
   bool has_search = false, has_home = false, has_status = false, has_sidebar = false;
+  bool has_side_panel = false;
   for (int i = 0; i < g.handler_count; i++)
   {
     has_palette = has_palette || g.handlers[i] == "command_palette";
@@ -277,6 +278,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
     has_home = has_home || g.handlers[i] == "home_screen";
     has_status = has_status || g.handlers[i] == "status_line";
     has_sidebar = has_sidebar || g.handlers[i] == "sidebar";
+    has_side_panel = has_side_panel || g.handlers[i] == "side_panel";
   }
   REQUIRE(has_palette);
   REQUIRE(has_quick_pick);
@@ -293,6 +295,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(has_home);
   REQUIRE(has_status);
   REQUIRE(has_sidebar);
+  REQUIRE(has_side_panel);
 
   // --- command palette ---
   push_module_field(L, 1, "command_palette");
@@ -965,6 +968,45 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(g.lines_count == 10);     // full panel height
   REQUIRE(g.set_spans_count >= 10); // every row gets at least one span
   push_module_field(L, 1, "sidebar");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+
+  // --- side panel (outline style with detail + selection) ---
+  push_module_field(L, 1, "side_panel");
+  push_box(L, 100, 1, 30, 12);
+  lua_pushstring(L, " Outline ");
+  lua_setfield(L, -2, "title");
+  lua_pushstring(L, "main.cpp  14 symbols");
+  lua_setfield(L, -2, "header");
+  lua_newtable(L); // rows
+  const char *sp_labels[] = {"namespace jot", "void run()", "int main()"};
+  const char *sp_details[] = {"1", "24", "48"};
+  for (int i = 1; i <= 3; i++)
+  {
+    lua_newtable(L);
+    lua_pushstring(L, sp_labels[i - 1]);
+    lua_setfield(L, -2, "text");
+    lua_pushstring(L, sp_details[i - 1]);
+    lua_setfield(L, -2, "detail");
+    lua_pushinteger(L, 7);
+    lua_setfield(L, -2, "fg");
+    lua_pushinteger(L, 0);
+    lua_setfield(L, -2, "bg");
+    lua_pushboolean(L, i == 2 ? 1 : 0);
+    lua_setfield(L, -2, "selected");
+    lua_rawseti(L, -2, i);
+  }
+  lua_setfield(L, -2, "rows");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.last_width == 30);
+  REQUIRE(g.last_height == 12);
+  REQUIRE(g.last_border == "single");
+  REQUIRE(g.last_title == " Outline ");
+  REQUIRE(g.lines_count == 4); // header + 3 rows
+  push_module_field(L, 1, "side_panel");
   lua_pushnil(L);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);

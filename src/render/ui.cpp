@@ -2048,6 +2048,7 @@ void Editor::sync_lua_ui_surfaces()
     lua_ui_prev_search = false;
     lua_ui_prev_home = false;
     lua_ui_prev_sidebar = false;
+    lua_ui_prev_side_panel = false;
     return;
   }
   auto sync = [&](bool visible, bool &prev, const char *name)
@@ -2074,6 +2075,7 @@ void Editor::sync_lua_ui_surfaces()
   sync(show_search, lua_ui_prev_search, "search_panel");
   sync(show_home_menu, lua_ui_prev_home, "home_screen");
   sync(show_sidebar, lua_ui_prev_sidebar, "sidebar");
+  sync(show_right_panel, lua_ui_prev_side_panel, "side_panel");
 }
 
 void Editor::render_popup()

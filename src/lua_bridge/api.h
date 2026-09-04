@@ -316,6 +316,34 @@ struct SidebarPanelView
   std::vector<SidebarPanelRowView> rows;
 };
 
+struct SidePanelRowView
+{
+  std::string text;   // main text (name / diff line / debug line)
+  std::string detail; // right-aligned secondary text (line number), may be empty
+  int fg = 0, bg = 0;
+  bool bold = false;
+  bool selected = false; // full-row selection background
+};
+
+struct SidePanelTabView
+{
+  std::string label; // e.g. " dbg1 paused "
+  bool active = false;
+};
+
+struct SidePanelView
+{
+  int x = 0, y = 0, w = 0, h = 0; // panel rect (absolute)
+  std::string title;              // kept in the float frame
+  std::string header;             // content header row (file + counts etc), may be empty
+  int header_fg = 0;
+  std::string note; // empty-state message, may be empty
+  int note_fg = 0;
+  std::string error; // bottom error line (debugger), may be empty
+  std::vector<SidePanelTabView> tabs;
+  std::vector<SidePanelRowView> rows;
+};
+
 struct LuaFloatWindow
 {
   int handle = 0;
@@ -549,6 +577,7 @@ public:
   bool emit_home(const HomeView &view);
   bool emit_status(const StatusView &view);
   bool emit_sidebar(const SidebarPanelView &view);
+  bool emit_side_panel(const SidePanelView &view);
 
   // Terminal-cursor control from Lua (friend access to editor->ui).
   void ui_set_cursor(int x, int y);

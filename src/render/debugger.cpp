@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "lua_bridge/api.h"
 
 #include <algorithm>
 #include <sstream>
@@ -65,6 +66,24 @@ void Editor::render_debugger_panel()
                 theme.bg_terminal_tab_focused,
                 true);
 
+  // Hand the model to a Lua UI handler when one is registered; it owns the
+  // paint. Native fallback below stays byte-identical.
+  SidePanelView view;
+  view.x = panel_x;
+  view.y = panel_y;
+  view.w = panel_w;
+  view.h = panel_h;
+  view.title = " Debug ";
+
+  auto emit_view = [&]() -> bool
+  {
+    if (lua_api && lua_api->has_lua_ui_handler("side_panel"))
+    {
+      return lua_api->emit_side_panel(view);
+    }
+    return false;
+  };
+
   int tab_x = panel_x + 1;
   int tab_y = panel_y + 1;
   for (int i = 0; i < (int)debugger_session_state.size(); i++)
@@ -77,6 +96,7 @@ void Editor::render_debugger_panel()
       break;
     }
     bool active = i == current_debugger_session;
+    view.tabs.push_back({label, active});
     ui->draw_text(tab_x,
                   tab_y,
                   label,
@@ -109,12 +129,24 @@ void Editor::render_debugger_panel()
         break;
       }
       int fg = row == 0 ? theme.fg_status_info : theme.fg_comment;
+      SidePanelRowView r;
+      r.text = clip(line, content_w);
+      r.fg = fg;
+      r.bg = theme.bg_terminal;
+      r.bold = row == 0;
+      view.rows.push_back(std::move(r));
       ui->draw_text(
           content_x, content_y + row, clip(line, content_w), fg, theme.bg_terminal, row == 0);
       row++;
     }
     if (!debugger_configs.empty() && row + 1 < content_h)
     {
+      SidePanelRowView r;
+      r.text = "Configs";
+      r.fg = theme.fg_status_info;
+      r.bg = theme.bg_terminal;
+      r.bold = true;
+      view.rows.push_back(std::move(r));
       ui->draw_text(
           content_x, content_y + row, "Configs", theme.fg_status_info, theme.bg_terminal, true);
       row++;
@@ -124,6 +156,11 @@ void Editor::render_debugger_panel()
         {
           break;
         }
+        SidePanelRowView rc;
+        rc.text = clip("  " + cfg.name, content_w);
+        rc.fg = theme.fg_terminal;
+        rc.bg = theme.bg_terminal;
+        view.rows.push_back(std::move(rc));
         ui->draw_text(content_x,
                       content_y + row,
                       clip("  " + cfg.name, content_w),
@@ -131,6 +168,10 @@ void Editor::render_debugger_panel()
                       theme.bg_terminal);
         row++;
       }
+    }
+    if (emit_view())
+    {
+      return;
     }
     return;
   }
@@ -145,6 +186,14 @@ void Editor::render_debugger_panel()
   int col4_w = content_w;
 
   const auto &state = debugger_session_state[current_debugger_session];
+  {
+    SidePanelRowView r;
+    r.text = "Threads / Stack";
+    r.fg = theme.fg_status_info;
+    r.bg = theme.bg_terminal;
+    r.bold = true;
+    view.rows.push_back(std::move(r));
+  }
   ui->draw_text(x1, content_y, "Threads / Stack", theme.fg_status_info, theme.bg_terminal, true);
 
   int row = 1;
@@ -155,6 +204,13 @@ void Editor::render_debugger_panel()
       break;
     }
     std::string prefix = thread.id == state.active_thread_id ? "> " : "  ";
+    {
+      SidePanelRowView r;
+      r.text = clip(prefix + "T" + std::to_string(thread.id) + " " + thread.name, col1_w);
+      r.fg = theme.fg_terminal;
+      r.bg = theme.bg_terminal;
+      view.rows.push_back(std::move(r));
+    }
     ui->draw_text(x1,
                   content_y + row,
                   clip(prefix + "T" + std::to_string(thread.id) + " " + thread.name, col1_w),
@@ -170,6 +226,13 @@ void Editor::render_debugger_panel()
       std::string loc = frame.filepath.empty()
                             ? frame.name
                             : get_filename(frame.filepath) + ":" + std::to_string(frame.line + 1);
+      {
+        SidePanelRowView r;
+        r.text = clip("  #" + loc, col1_w);
+        r.fg = theme.fg_comment;
+        r.bg = theme.bg_terminal;
+        view.rows.push_back(std::move(r));
+      }
       ui->draw_text(
           x1, content_y + row, clip("  #" + loc, col1_w), theme.fg_comment, theme.bg_terminal);
       row++;
@@ -182,6 +245,14 @@ void Editor::render_debugger_panel()
   }
   if (row < content_h)
   {
+    {
+      SidePanelRowView r;
+      r.text = "Variables";
+      r.fg = theme.fg_status_info;
+      r.bg = theme.bg_terminal;
+      r.bold = true;
+      view.rows.push_back(std::move(r));
+    }
     ui->draw_text(x2, content_y + row, "Variables", theme.fg_status_info, theme.bg_terminal, true);
     row++;
   }
@@ -196,6 +267,13 @@ void Editor::render_debugger_panel()
     {
       text += " : " + var.type;
     }
+    {
+      SidePanelRowView r;
+      r.text = clip(text, col2_w);
+      r.fg = theme.fg_terminal;
+      r.bg = theme.bg_terminal;
+      view.rows.push_back(std::move(r));
+    }
     ui->draw_text(x2, content_y + row, clip(text, col2_w), theme.fg_terminal, theme.bg_terminal);
     row++;
   }
@@ -206,6 +284,14 @@ void Editor::render_debugger_panel()
   }
   if (row < content_h)
   {
+    {
+      SidePanelRowView r;
+      r.text = "Memory";
+      r.fg = theme.fg_status_info;
+      r.bg = theme.bg_terminal;
+      r.bold = true;
+      view.rows.push_back(std::move(r));
+    }
     ui->draw_text(x3, content_y + row, "Memory", theme.fg_status_info, theme.bg_terminal, true);
     row++;
   }
@@ -214,6 +300,13 @@ void Editor::render_debugger_panel()
     if (row >= content_h)
     {
       break;
+    }
+    {
+      SidePanelRowView r;
+      r.text = clip(mem.address + "  " + mem.bytes + "  " + mem.ascii, col3_w);
+      r.fg = theme.fg_terminal;
+      r.bg = theme.bg_terminal;
+      view.rows.push_back(std::move(r));
     }
     ui->draw_text(x3,
                   content_y + row,
@@ -229,6 +322,14 @@ void Editor::render_debugger_panel()
   }
   if (row < content_h)
   {
+    {
+      SidePanelRowView r;
+      r.text = "Disassembly / Output";
+      r.fg = theme.fg_status_info;
+      r.bg = theme.bg_terminal;
+      r.bold = true;
+      view.rows.push_back(std::move(r));
+    }
     ui->draw_text(
         x4, content_y + row, "Disassembly / Output", theme.fg_status_info, theme.bg_terminal, true);
     row++;
@@ -238,6 +339,13 @@ void Editor::render_debugger_panel()
     if (row >= content_h)
     {
       break;
+    }
+    {
+      SidePanelRowView r;
+      r.text = clip(inst.address + "  " + inst.instruction, col4_w);
+      r.fg = theme.fg_terminal;
+      r.bg = theme.bg_terminal;
+      view.rows.push_back(std::move(r));
     }
     ui->draw_text(x4,
                   content_y + row,
@@ -256,17 +364,29 @@ void Editor::render_debugger_panel()
       {
         break;
       }
+      {
+        SidePanelRowView r;
+        r.text = clip(line, col4_w);
+        r.fg = theme.fg_comment;
+        r.bg = theme.bg_terminal;
+        view.rows.push_back(std::move(r));
+      }
       ui->draw_text(x4, content_y + row, clip(line, col4_w), theme.fg_comment, theme.bg_terminal);
       row++;
     }
   }
   if (!state.last_error.empty())
   {
+    view.error = clip(" " + state.last_error, panel_w - 2);
     ui->draw_text(panel_x + 1,
                   panel_y + panel_h - 1,
                   clip(" " + state.last_error, panel_w - 2),
                   theme.fg_status_error,
                   theme.bg_status_error,
                   true);
+  }
+  if (emit_view())
+  {
+    return;
   }
 }
