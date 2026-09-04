@@ -117,7 +117,7 @@ install(DIRECTORY .configs/configs
   DESTINATION ${CMAKE_INSTALL_DATADIR}/jot
 )
 
-install(DIRECTORY lua
+install(DIRECTORY src/lua
   DESTINATION ${CMAKE_INSTALL_DATADIR}/jot
 )
 

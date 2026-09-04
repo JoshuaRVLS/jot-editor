@@ -1,16 +1,16 @@
 add_compile_definitions(JOT_DEFAULT_DATA_DIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/jot")
-add_compile_definitions(JOT_LUA_SOURCE_DIR="${PROJECT_SOURCE_DIR}/lua")
+add_compile_definitions(JOT_LUA_SOURCE_DIR="${PROJECT_SOURCE_DIR}/src/lua")
 
-# Embed the bundled Lua sources (lua/*.lua) into the binary so it always
+# Embed the bundled Lua sources (src/lua/*.lua) into the binary so it always
 # carries a working copy of the Lua UI / features, regenerated whenever the
 # .lua files change. Runtime loaders try the user data dir and the developer
 # source dir first; the embedded bytes are the final fallback.
-file(GLOB_RECURSE JOT_LUA_BUNDLED "${PROJECT_SOURCE_DIR}/lua/*.lua")
+file(GLOB_RECURSE JOT_LUA_BUNDLED "${PROJECT_SOURCE_DIR}/src/lua/*.lua")
 set(JOT_LUA_EMBED_CPP "${CMAKE_CURRENT_BINARY_DIR}/embedded_lua.cpp")
 add_custom_command(
   OUTPUT "${JOT_LUA_EMBED_CPP}"
   COMMAND ${CMAKE_COMMAND}
-    -DLUA_DIR=${PROJECT_SOURCE_DIR}/lua
+    -DLUA_DIR=${PROJECT_SOURCE_DIR}/src/lua
     -DOUTPUT=${JOT_LUA_EMBED_CPP}
     -P ${PROJECT_SOURCE_DIR}/cmake/embed_lua.cmake
   DEPENDS ${JOT_LUA_BUNDLED} "${PROJECT_SOURCE_DIR}/cmake/embed_lua.cmake"

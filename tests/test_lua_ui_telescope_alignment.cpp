@@ -1,4 +1,4 @@
-// Regression test for the Lua telescope renderer (lua/features/ui.lua):
+// Regression test for the Lua telescope renderer (src/lua/features/ui.lua):
 //   - every buffer row fits the float interior in *cells* (so the C++
 //     renderer never clips a row and appends ".." at the border),
 //   - the list/preview separator '│' lands on the same cell column in every
@@ -308,7 +308,7 @@ TEST_CASE("Telescope Lua render: straight separator, bounded rows, byte-aligned 
                            "src",
                            ".",
                            "src/库",
-                           "lua/features",
+                           "src/lua/features",
                            "tests",
                            "src/tools"};
   lua_newtable(L); // results

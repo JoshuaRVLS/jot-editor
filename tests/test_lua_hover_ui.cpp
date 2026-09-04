@@ -1,4 +1,4 @@
-// Headless test of the bundled Lua LSP hover UI (lua/features/hover.lua).
+// Headless test of the bundled Lua LSP hover UI (src/lua/features/hover.lua).
 // The module is loaded into a raw Lua state whose jot.* API is stubbed with
 // recording functions, so no Editor / terminal is needed.
 #include <catch2/catch_test_macros.hpp>

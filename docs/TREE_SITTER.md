@@ -1,9 +1,9 @@
 # Tree-sitter
 
-Jot keeps Tree-sitter language policy in `lua/treesitter/registry.lua`. Every
+Jot keeps Tree-sitter language policy in `src/lua/treesitter/registry.lua`. Every
 entry declares parser URL, symbol, library names, extensions, aliases, source
 subdirectory, and query path. Highlight queries are stored in
-`lua/treesitter/queries/<language>/highlights.scm`.
+`src/lua/treesitter/queries/<language>/highlights.scm`.
 
 Startup loads Lua policy before syntax detection. Native C++ provides dynamic
 library loading, ABI checks, parsers, trees, queries, incremental parsing,

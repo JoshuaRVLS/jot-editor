@@ -33,7 +33,7 @@ target_include_directories(jot_tests PRIVATE
   ${PROJECT_SOURCE_DIR}/tests
 )
 target_compile_definitions(jot_tests PRIVATE
-  JOT_LUA_SOURCE_DIR="${PROJECT_SOURCE_DIR}/lua"
+  JOT_LUA_SOURCE_DIR="${PROJECT_SOURCE_DIR}/src/lua"
 )
 
 include(Catch)

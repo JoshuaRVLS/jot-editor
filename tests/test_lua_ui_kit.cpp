@@ -1,4 +1,4 @@
-// Headless test of the bundled Lua UI kit (lua/features/ui.lua).
+// Headless test of the bundled Lua UI kit (src/lua/features/ui.lua).
 // The module is loaded into a raw Lua state whose jot.* API is stubbed with
 // recording functions, so no Editor / terminal is needed.
 #include <catch2/catch_test_macros.hpp>

@@ -672,10 +672,11 @@ script must work across different Jot builds.
 
 ## Tree-sitter Runtime
 
-`lua/treesitter/registry.lua` is the sole language registry. Each entry contains
-`name`, `extensions`, `aliases`, `url`, `source_subdir`, `symbol`,
+`src/lua/treesitter/registry.lua` is the sole language registry. Each entry
+contains `name`, `extensions`, `aliases`, `url`, `source_subdir`, `symbol`,
 `library_names`, and `query_file`. Queries live at
-`lua/treesitter/queries/<language>/highlights.scm`, one directory per language.
+`src/lua/treesitter/queries/<language>/highlights.scm`, one directory per
+language.
 The bundled registry covers every parser previously shipped by Jot. Lua loads
 the registry and queries before syntax detection. A bundled query that is
 missing or does not compile against the installed parser never disables the
