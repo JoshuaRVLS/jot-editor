@@ -145,6 +145,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # A release can outlive its tag (e.g. tag deleted then re-pushed), which
+          # makes gh release create fail. Delete any stale release first, keeping
+          # the tag so it still points at the commit that triggered this run.
+          gh release delete "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --yes || true
           gh release create "$GITHUB_REF_NAME" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "jot $GITHUB_REF_NAME" \
