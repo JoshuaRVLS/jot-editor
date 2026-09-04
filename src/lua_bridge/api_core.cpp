@@ -4878,6 +4878,14 @@ void LuaAPI::push_ui_colors(lua_State *L, int t)
   lua_set_int_field(L, c, "sidebar_dir", th.fg_sidebar_directory);
   lua_set_int_field(L, c, "sidebar_sel_fg", th.fg_sidebar_selected);
   lua_set_int_field(L, c, "sidebar_sel_bg", th.bg_sidebar_selected);
+  lua_set_int_field(L, c, "sidebar_sel_inactive_fg", th.fg_sidebar_selected_inactive);
+  lua_set_int_field(L, c, "sidebar_sel_inactive_bg", th.bg_sidebar_selected_inactive);
+  lua_set_int_field(L, c, "sidebar_border", th.fg_sidebar_border);
+  lua_set_int_field(L, c, "active_border", th.fg_active_border);
+  lua_set_int_field(L, c, "diag_error", th.fg_diagnostic_error);
+  lua_set_int_field(L, c, "diag_warning", th.fg_diagnostic_warning);
+  lua_set_int_field(L, c, "diag_info", th.fg_diagnostic_info);
+  lua_set_int_field(L, c, "diag_hint", th.fg_diagnostic_hint);
   lua_set_int_field(L, c, "status_fg", th.fg_status);
   lua_set_int_field(L, c, "status_bg", th.bg_status);
   lua_set_int_field(L, c, "status_file_fg", th.fg_status_file);
@@ -5369,6 +5377,65 @@ bool LuaAPI::emit_status(const StatusView &view)
                          lua_rawseti(L, arr, (lua_Integer)i + 1);
                        }
                        lua_setfield(L, t, "segments");
+                       push_ui_colors(L, t);
+                     });
+}
+
+bool LuaAPI::emit_sidebar(const SidebarPanelView &view)
+{
+  return emit_lua_ui("sidebar",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_set_int_field(L, t, "content_x", view.content_x);
+                       lua_set_int_field(L, t, "content_w", view.content_w);
+                       lua_set_int_field(L, t, "rail_w", view.rail_w);
+                       lua_set_int_field(L, t, "border_fg", view.border_fg);
+                       lua_set_int_field(L, t, "bg", view.bg);
+                       lua_set_bool_field(L, t, "git_view", view.git_view);
+                       lua_set_bool_field(L, t, "resizing", view.resizing);
+                       lua_set_int_field(L, t, "rail_explorer_row", view.rail_explorer_row);
+                       lua_set_int_field(L, t, "rail_git_row", view.rail_git_row);
+                       lua_set_str_field(L, t, "header", view.header);
+                       lua_set_int_field(L, t, "header_x", view.header_x);
+                       lua_set_int_field(L, t, "header_y", view.header_y);
+                       lua_set_int_field(L, t, "header_fg", view.header_fg);
+                       lua_set_str_field(L, t, "footer", view.footer);
+                       lua_set_int_field(L, t, "footer_x", view.footer_x);
+                       lua_set_int_field(L, t, "footer_y", view.footer_y);
+                       lua_set_int_field(L, t, "footer_fg", view.footer_fg);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.rows.size(); i++)
+                       {
+                         const SidebarPanelRowView &r = view.rows[i];
+                         lua_newtable(L);
+                         const int ri = lua_gettop(L);
+                         lua_set_int_field(L, ri, "x", r.x);
+                         lua_set_int_field(L, ri, "y", r.y);
+                         lua_set_int_field(L, ri, "w", r.w);
+                         lua_set_str_field(L, ri, "text", r.text);
+                         lua_set_int_field(L, ri, "text_x", r.text_x);
+                         lua_set_str_field(L, ri, "symbol", r.symbol);
+                         lua_set_int_field(L, ri, "symbol_x", r.symbol_x);
+                         lua_set_int_field(L, ri, "symbol_fg", r.symbol_fg);
+                         lua_set_bool_field(L, ri, "symbol_bold", r.symbol_bold);
+                         lua_set_int_field(L, ri, "fg", r.fg);
+                         lua_set_int_field(L, ri, "bg", r.bg);
+                         lua_set_bool_field(L, ri, "bold", r.bold);
+                         lua_set_bool_field(L, ri, "active_file", r.active_file);
+                         lua_set_int_field(L, ri, "badge_x", r.badge_x);
+                         lua_set_str_field(L, ri, "badge", r.badge);
+                         lua_set_int_field(L, ri, "badge_fg", r.badge_fg);
+                         lua_set_int_field(L, ri, "badge2_x", r.badge2_x);
+                         lua_set_str_field(L, ri, "badge2", r.badge2);
+                         lua_set_int_field(L, ri, "badge2_fg", r.badge2_fg);
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "rows");
                        push_ui_colors(L, t);
                      });
 }

@@ -254,12 +254,12 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
   REQUIRE(lua_istable(L, 1));
-  REQUIRE(g.handler_count == 14);
+  REQUIRE(g.handler_count == 15);
   bool has_palette = false, has_quick_pick = false, has_popup = false;
   bool has_save = false, has_quit = false, has_ts = false;
   bool has_lsp = false, has_telescope = false;
   bool has_completion = false, has_context = false, has_menu = false;
-  bool has_search = false, has_home = false, has_status = false;
+  bool has_search = false, has_home = false, has_status = false, has_sidebar = false;
   for (int i = 0; i < g.handler_count; i++)
   {
     has_palette = has_palette || g.handlers[i] == "command_palette";
@@ -276,6 +276,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
     has_search = has_search || g.handlers[i] == "search_panel";
     has_home = has_home || g.handlers[i] == "home_screen";
     has_status = has_status || g.handlers[i] == "status_line";
+    has_sidebar = has_sidebar || g.handlers[i] == "sidebar";
   }
   REQUIRE(has_palette);
   REQUIRE(has_quick_pick);
@@ -291,6 +292,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(has_search);
   REQUIRE(has_home);
   REQUIRE(has_status);
+  REQUIRE(has_sidebar);
 
   // --- command palette ---
   push_module_field(L, 1, "command_palette");
@@ -888,6 +890,81 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(g.lines_count == 2); // strip rows
   REQUIRE(g.set_spans_count > 0);
   push_module_field(L, 1, "status_line");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+
+  // --- sidebar ---
+  push_module_field(L, 1, "sidebar");
+  push_box(L, 0, 1, 28, 10);
+  lua_pushinteger(L, 3);
+  lua_setfield(L, -2, "content_x");
+  lua_pushinteger(L, 24);
+  lua_setfield(L, -2, "content_w");
+  lua_pushinteger(L, 3);
+  lua_setfield(L, -2, "rail_w");
+  lua_pushinteger(L, 1);
+  lua_setfield(L, -2, "rail_explorer_row");
+  lua_pushinteger(L, 3);
+  lua_setfield(L, -2, "rail_git_row");
+  lua_pushinteger(L, 8);
+  lua_setfield(L, -2, "border_fg");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "bg");
+  lua_pushstring(L, "  src");
+  lua_setfield(L, -2, "header");
+  lua_pushinteger(L, 4);
+  lua_setfield(L, -2, "header_x");
+  lua_pushinteger(L, 1);
+  lua_setfield(L, -2, "header_y");
+  lua_pushstring(L, " 3 items");
+  lua_setfield(L, -2, "footer");
+  lua_pushinteger(L, 4);
+  lua_setfield(L, -2, "footer_x");
+  lua_pushinteger(L, 8);
+  lua_setfield(L, -2, "footer_y");
+  lua_newtable(L); // rows
+  const char *sb_labels[] = {"  src", "  main.cpp", "  api.h"};
+  const int sb_fgs[] = {7, 15, 15};
+  const int sb_bgs[] = {0, 0, 0};
+  for (int i = 1; i <= 3; i++)
+  {
+    lua_newtable(L);
+    lua_pushinteger(L, 4);
+    lua_setfield(L, -2, "x");
+    lua_pushinteger(L, 2 + i);
+    lua_setfield(L, -2, "y");
+    lua_pushinteger(L, 23);
+    lua_setfield(L, -2, "w");
+    lua_pushstring(L, sb_labels[i - 1]);
+    lua_setfield(L, -2, "text");
+    lua_pushinteger(L, 5);
+    lua_setfield(L, -2, "text_x");
+    lua_pushinteger(L, sb_fgs[i - 1]);
+    lua_setfield(L, -2, "fg");
+    lua_pushinteger(L, sb_bgs[i - 1]);
+    lua_setfield(L, -2, "bg");
+    if (i == 2)
+    {
+      lua_pushstring(L, "M");
+      lua_setfield(L, -2, "badge");
+      lua_pushinteger(L, 24);
+      lua_setfield(L, -2, "badge_x");
+      lua_pushinteger(L, 15);
+      lua_setfield(L, -2, "badge_fg");
+    }
+    lua_rawseti(L, -2, i);
+  }
+  lua_setfield(L, -2, "rows");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.last_width == 28);
+  REQUIRE(g.last_height == 10);
+  REQUIRE(g.last_border == "none");
+  REQUIRE(g.lines_count == 10);     // full panel height
+  REQUIRE(g.set_spans_count >= 10); // every row gets at least one span
+  push_module_field(L, 1, "sidebar");
   lua_pushnil(L);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);

@@ -279,6 +279,43 @@ struct StatusView
   int sel_lines = 0, sel_cols = 0;
 };
 
+struct SidebarPanelRowView
+{
+  int x = 0, y = 0, w = 0; // absolute row rect for the background fill
+  std::string text;        // label, already truncated
+  int text_x = 0;          // absolute column where `text` starts
+  std::string symbol;      // leading glyph before the text (may be empty)
+  int symbol_x = -1;       // absolute column for the symbol, -1 = none
+  int symbol_fg = 0;
+  bool symbol_bold = false;
+  int fg = 0, bg = 0;
+  bool bold = false;
+  bool active_file = false; // draw the ▌ marker at the left edge
+  int badge_x = -1;         // right badge column (absolute), -1 = none
+  std::string badge;        // badge glyph (git symbol)
+  int badge_fg = 0;
+  int badge2_x = -1; // second badge column (diagnostic symbol), -1 = none
+  std::string badge2;
+  int badge2_fg = 0;
+};
+
+struct SidebarPanelView
+{
+  int x = 0, y = 0, w = 0, h = 0; // panel rect (absolute)
+  int content_x = 0, content_w = 0;
+  int rail_w = 0;
+  int border_fg = 0;
+  int bg = 0;
+  bool git_view = false;
+  bool resizing = false;
+  int rail_explorer_row = -1, rail_git_row = -1; // active rail rows, -1 = none
+  std::string header;
+  int header_x = 0, header_y = 0, header_fg = 0;
+  std::string footer;
+  int footer_x = 0, footer_y = 0, footer_fg = 0;
+  std::vector<SidebarPanelRowView> rows;
+};
+
 struct LuaFloatWindow
 {
   int handle = 0;
@@ -511,6 +548,7 @@ public:
   bool emit_search(const SearchView &view);
   bool emit_home(const HomeView &view);
   bool emit_status(const StatusView &view);
+  bool emit_sidebar(const SidebarPanelView &view);
 
   // Terminal-cursor control from Lua (friend access to editor->ui).
   void ui_set_cursor(int x, int y);

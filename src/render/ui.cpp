@@ -2047,6 +2047,7 @@ void Editor::sync_lua_ui_surfaces()
     lua_ui_prev_menu_dropdown = false;
     lua_ui_prev_search = false;
     lua_ui_prev_home = false;
+    lua_ui_prev_sidebar = false;
     return;
   }
   auto sync = [&](bool visible, bool &prev, const char *name)
@@ -2072,6 +2073,7 @@ void Editor::sync_lua_ui_surfaces()
   sync(show_menu_bar_dropdown, lua_ui_prev_menu_dropdown, "menu_dropdown");
   sync(show_search, lua_ui_prev_search, "search_panel");
   sync(show_home_menu, lua_ui_prev_home, "home_screen");
+  sync(show_sidebar, lua_ui_prev_sidebar, "sidebar");
 }
 
 void Editor::render_popup()
