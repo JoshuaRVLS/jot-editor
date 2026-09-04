@@ -200,6 +200,7 @@ private:
   void render_status_line();
   void render_command_palette();
   void render_quick_pick();
+  void sync_lua_ui_surfaces();
   void render_search_panel();
   void place_command_palette_cursor();
   void place_search_cursor();

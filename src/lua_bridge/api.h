@@ -28,6 +28,59 @@ struct FloatSpan
   int fg = 7;    // color for the span (bg stays the float's bg)
 };
 
+// Views handed to Lua UI surface handlers (jot.ui.handler). Native code fills
+// these with state; api_core turns them into a payload table and calls the
+// registered handler. Returning true from the handler suppresses the native
+// render for that surface.
+struct PaletteItemView
+{
+  std::string label;
+  std::string category;
+  std::string detail;
+  std::vector<int> match; // 0-based byte offsets into label matched by query
+};
+
+struct PaletteView
+{
+  std::string query;
+  int selected = 0;
+  std::vector<PaletteItemView> results;
+  int x = 0, y = 0, w = 0, h = 0;
+  int screen_w = 0, screen_h = 0;
+};
+
+struct QuickPickItemView
+{
+  std::string label;
+  std::string detail;
+  std::string preview;
+  int severity = 0;
+};
+
+struct QuickPickView
+{
+  std::string title;
+  std::string query;
+  int selected = 0;
+  int all_count = 0;
+  std::vector<QuickPickItemView> items;
+  int x = 0, y = 0, w = 0, h = 0;
+};
+
+struct PopupView
+{
+  std::string title;
+  std::vector<std::string> lines;
+  int scroll = 0;
+  int x = 0, y = 0, w = 0, h = 0;
+};
+
+struct PromptView
+{
+  std::string input;
+  int x = 0, y = 0, w = 0, h = 0;
+};
+
 struct LuaFloatWindow
 {
   int handle = 0;
@@ -162,6 +215,9 @@ private:
   std::vector<PluginLoadStatus> plugin_load_status;
   // Registry ref (LUA_NOREF when unset) of the jot.lsp.hover_ui handler.
   int lsp_hover_ui_ref_ = -2;
+  // Surface name -> registered handler (jot.ui.handler). Values are registry
+  // refs; -1 entries are removed lazily on next emit.
+  std::map<std::string, int> lua_ui_handlers_;
   // One-shot LSP result sinks: when non-empty (a "lsp.*" key into
   // lua_callbacks), the next matching native result is delivered to Lua and
   // skipped by the native handler instead.
@@ -188,6 +244,8 @@ private:
   std::unordered_map<uint64_t, LuaTimerEntry> timer_entries_;
   // Last observed debugger state signature (dedupes debugger.state_changed).
   std::string last_debugger_sig_;
+
+  void push_ui_colors(lua_State *L, int payload_index);
 
   void *lua_state; // lua_State* (opaque in public header)
   bool lua_initialized;
@@ -228,6 +286,22 @@ public:
   // Bundled feature modules (lua/features/*), loaded after the API tables so
   // they can register handlers against them (see load_treesitter_runtime).
   bool load_hover_ui_runtime(lua_State *L);
+  bool load_ui_kit_runtime(lua_State *L);
+
+  // Lua UI surfaces: a handler registered through jot.ui.handler(name, fn)
+  // takes over rendering of a native surface. Native state is pushed as a
+  // payload table; returning true suppresses the native render. The handler is
+  // called with nil when the surface closes so it can tear down its floats.
+  bool register_lua_ui_handler(const std::string &name, lua_State *L, int fn_index);
+  void clear_lua_ui_handler(const std::string &name);
+  bool has_lua_ui_handler(const std::string &name) const;
+  bool emit_lua_ui(const std::string &name,
+                   const std::function<void(lua_State *, int)> &fill_payload);
+  bool emit_lua_ui_close(const std::string &name);
+  bool emit_command_palette(const PaletteView &view);
+  bool emit_quick_pick(const QuickPickView &view);
+  bool emit_popup(const PopupView &view);
+  bool emit_prompt(const std::string &name, const PromptView &view);
 
   // LSP hover UI: a Lua handler registered through jot.lsp.hover_ui renders
   // hover results with floats instead of the native popup. When the handler is

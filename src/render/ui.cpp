@@ -1029,6 +1029,36 @@ void Editor::render_command_palette()
   const int x = layout.x;
   const int y = layout.y;
 
+  // A registered Lua UI handler (jot.ui.handler("command_palette", fn))
+  // renders the whole surface from the state below; the native render is
+  // skipped when it returns true.
+  if (lua_api && lua_api->has_lua_ui_handler("command_palette"))
+  {
+    PaletteView view;
+    view.query = command_palette_query;
+    view.selected = command_palette_selected;
+    view.x = x;
+    view.y = y;
+    view.w = w;
+    view.h = h;
+    view.screen_w = screen_w;
+    view.screen_h = screen_h;
+    view.results.reserve(command_palette_results.size());
+    for (const auto &r : command_palette_results)
+    {
+      PaletteItemView item;
+      item.label = r.label;
+      item.category = r.category;
+      item.detail = r.detail;
+      item.match = r.match;
+      view.results.push_back(std::move(item));
+    }
+    if (lua_api->emit_command_palette(view))
+    {
+      return;
+    }
+  }
+
   // Panel surface uses the theme's panel-background slot (bg_panel_border),
   // the same convention as the popup and LSP manager.
   const Theme panel_theme = [&]()
@@ -1189,6 +1219,34 @@ void Editor::render_quick_pick()
   }
   int x = std::max(0, (screen_w - w) / 2);
   int y = std::max(1, (screen_h - h) / 3);
+
+  // Lua UI handler takes over rendering when registered.
+  if (lua_api && lua_api->has_lua_ui_handler("quick_pick"))
+  {
+    QuickPickView view;
+    view.title = quick_pick_title;
+    view.query = quick_pick_query;
+    view.selected = quick_pick_selected;
+    view.all_count = (int)quick_pick_all_items.size();
+    view.x = x;
+    view.y = y;
+    view.w = w;
+    view.h = h;
+    view.items.reserve(quick_pick_items.size());
+    for (const auto &item : quick_pick_items)
+    {
+      QuickPickItemView v;
+      v.label = item.label;
+      v.detail = item.detail;
+      v.preview = item.preview;
+      v.severity = item.severity;
+      view.items.push_back(std::move(v));
+    }
+    if (lua_api->emit_quick_pick(view))
+    {
+      return;
+    }
+  }
 
   // Same panel surface convention as the palette / popup / LSP manager.
   const Theme panel_theme = [&]()
@@ -1674,6 +1732,21 @@ void Editor::render_save_prompt()
   }();
 
   UIRect rect = {std::max(0, x - 2), std::max(0, y - 1), std::min(w, ui_cell_count(prompt) + 4), 4};
+
+  if (lua_api && lua_api->has_lua_ui_handler("save_prompt"))
+  {
+    PromptView view;
+    view.input = save_prompt_input;
+    view.x = rect.x;
+    view.y = rect.y;
+    view.w = rect.w;
+    view.h = rect.h;
+    if (lua_api->emit_prompt("save_prompt", view))
+    {
+      return;
+    }
+  }
+
   ui_draw_panel(
       *ui,
       rect,
@@ -1720,6 +1793,20 @@ void Editor::render_quit_prompt()
   }();
 
   UIRect rect = {x - 2, y - 1, (int)prompt.length() + 4, 3};
+
+  if (lua_api && lua_api->has_lua_ui_handler("quit_prompt"))
+  {
+    PromptView view;
+    view.x = rect.x;
+    view.y = rect.y;
+    view.w = rect.w;
+    view.h = rect.h;
+    if (lua_api->emit_prompt("quit_prompt", view))
+    {
+      return;
+    }
+  }
+
   ui_draw_panel(
       *ui,
       rect,
@@ -1728,10 +1815,55 @@ void Editor::render_quit_prompt()
   ui->draw_text(x, y, prompt, theme.fg_command, panel_theme.bg_command);
 }
 
+void Editor::sync_lua_ui_surfaces()
+{
+  if (!lua_api)
+  {
+    lua_ui_prev_command_palette = false;
+    lua_ui_prev_quick_pick = false;
+    lua_ui_prev_popup = false;
+    lua_ui_prev_save_prompt = false;
+    lua_ui_prev_quit_prompt = false;
+    return;
+  }
+  auto sync = [&](bool visible, bool &prev, const char *name)
+  {
+    if (prev && !visible)
+    {
+      lua_api->emit_lua_ui_close(name);
+    }
+    prev = visible;
+  };
+  sync(show_command_palette, lua_ui_prev_command_palette, "command_palette");
+  sync(show_quick_pick, lua_ui_prev_quick_pick, "quick_pick");
+  sync(popup.visible && popup.presentation == POPUP_MODAL, lua_ui_prev_popup, "popup");
+  sync(show_save_prompt, lua_ui_prev_save_prompt, "save_prompt");
+  sync(show_quit_prompt, lua_ui_prev_quit_prompt, "quit_prompt");
+}
+
 void Editor::render_popup()
 {
   if (!popup.visible)
     return;
+
+  // Modal popups (help, keymap listings, ...) hand off to a Lua UI handler
+  // when registered; hover popups keep the native path (their Lua counterpart
+  // is the lsp.hover_ui handler).
+  if (popup.presentation == POPUP_MODAL && lua_api && lua_api->has_lua_ui_handler("popup"))
+  {
+    PopupView view;
+    view.title = popup.title;
+    view.scroll = popup.scroll;
+    view.x = popup.x;
+    view.y = popup.y;
+    view.w = popup.w;
+    view.h = popup.h;
+    view.lines = popup.lines;
+    if (lua_api->emit_popup(view))
+    {
+      return;
+    }
+  }
 
   UIRect rect = {popup.x, popup.y, popup.w, popup.h};
   Theme popup_theme = theme;

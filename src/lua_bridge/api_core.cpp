@@ -514,6 +514,25 @@ namespace
     lua_pushboolean(L, api(L).delete_scratch_buffer((int)luaL_checkinteger(L, 1)));
     return 1;
   }
+  int l_ui_handler(lua_State *L)
+  {
+    // jot.ui.handler(name, fn) registers a Lua renderer for a native UI
+    // surface; handler(name, nil) unregisters it. fn(state) is called with a
+    // payload table while the surface is visible (returning true suppresses
+    // the native render) and with nil when the surface closes.
+    const std::string name = luaL_checkstring(L, 1);
+    if (lua_isnoneornil(L, 2))
+    {
+      api(L).clear_lua_ui_handler(name);
+    }
+    else
+    {
+      luaL_checktype(L, 2, LUA_TFUNCTION);
+      api(L).register_lua_ui_handler(name, L, 2);
+    }
+    return 0;
+  }
+
   int l_ui_float_open(lua_State *L)
   {
     luaL_checktype(L, 3, LUA_TTABLE);
@@ -2375,6 +2394,7 @@ bool LuaAPI::init()
   field(L, "get_lines", l_ui_buffer_get_lines);
   field(L, "delete", l_ui_buffer_delete);
   lua_setfield(L, -2, "buffer");
+  field(L, "handler", l_ui_handler);
   lua_newtable(L);
   field(L, "open", l_float_open);
   field(L, "set_lines", l_float_set_lines);
@@ -2416,6 +2436,7 @@ bool LuaAPI::init()
   lua_pop(L, 2);
   load_treesitter_runtime(L);
   load_hover_ui_runtime(L);
+  load_ui_kit_runtime(L);
   load_plugins();
   return true;
 }
@@ -2430,6 +2451,15 @@ void LuaAPI::cleanup()
     luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, lsp_hover_ui_ref_);
     lsp_hover_ui_ref_ = LUA_NOREF;
   }
+  for (auto &[name, ref] : lua_ui_handlers_)
+  {
+    (void)name;
+    if (ref >= 0)
+    {
+      luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, ref);
+    }
+  }
+  lua_ui_handlers_.clear();
   lua_close(static_cast<lua_State *>(lua_state));
   lua_state = nullptr;
   lua_callbacks.clear();
@@ -3633,6 +3663,23 @@ static void lua_push_bool_field(lua_State *L, const char *k, bool v)
   lua_setfield(L, -2, k);
 }
 
+// Absolute-index variants used when building UI payload tables.
+static void lua_set_str_field(lua_State *L, int t, const char *k, const std::string &v)
+{
+  lua_pushlstring(L, v.data(), v.size());
+  lua_setfield(L, t, k);
+}
+static void lua_set_int_field(lua_State *L, int t, const char *k, long long v)
+{
+  lua_pushinteger(L, v);
+  lua_setfield(L, t, k);
+}
+static void lua_set_bool_field(lua_State *L, int t, const char *k, bool v)
+{
+  lua_pushboolean(L, v);
+  lua_setfield(L, t, k);
+}
+
 static void lua_push_git_entry(lua_State *L,
                                const std::string &root,
                                const std::string &abs_path,
@@ -4688,6 +4735,212 @@ bool LuaAPI::has_lsp_hover_ui() const
   return lsp_hover_ui_ref_ != LUA_NOREF && lua_state != nullptr;
 }
 
+bool LuaAPI::register_lua_ui_handler(const std::string &name, lua_State *L, int fn_index)
+{
+  lua_pushvalue(L, fn_index);
+  const int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  auto it = lua_ui_handlers_.find(name);
+  if (it != lua_ui_handlers_.end() && it->second >= 0)
+  {
+    luaL_unref(L, LUA_REGISTRYINDEX, it->second);
+  }
+  lua_ui_handlers_[name] = ref;
+  return true;
+}
+
+void LuaAPI::clear_lua_ui_handler(const std::string &name)
+{
+  auto it = lua_ui_handlers_.find(name);
+  if (it == lua_ui_handlers_.end())
+  {
+    return;
+  }
+  if (it->second >= 0 && lua_state)
+  {
+    luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, it->second);
+  }
+  lua_ui_handlers_.erase(it);
+}
+
+bool LuaAPI::has_lua_ui_handler(const std::string &name) const
+{
+  auto it = lua_ui_handlers_.find(name);
+  return it != lua_ui_handlers_.end() && it->second >= 0;
+}
+
+bool LuaAPI::emit_lua_ui(const std::string &name,
+                         const std::function<void(lua_State *, int)> &fill_payload)
+{
+  if (!lua_state || !editor)
+  {
+    return false;
+  }
+  auto it = lua_ui_handlers_.find(name);
+  if (it == lua_ui_handlers_.end() || it->second < 0)
+  {
+    return false;
+  }
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  const int top = lua_gettop(L);
+  lua_rawgeti(L, LUA_REGISTRYINDEX, it->second);
+  if (!lua_isfunction(L, -1))
+  {
+    lua_settop(L, top);
+    return false;
+  }
+  if (fill_payload)
+  {
+    lua_newtable(L);
+    fill_payload(L, lua_gettop(L));
+  }
+  else
+  {
+    lua_pushnil(L); // surface closed
+  }
+  const int ok = lua_pcall(L, 1, 1, 0);
+  bool consumed = false;
+  if (ok != LUA_OK)
+  {
+    std::string msg = lua_tostring(L, -1) ? lua_tostring(L, -1) : "unknown";
+    if (msg.size() > 80)
+      msg.resize(80);
+    editor->set_message("Lua UI error (" + name + "): " + msg);
+  }
+  else
+  {
+    consumed = lua_toboolean(L, -1) != 0;
+  }
+  lua_settop(L, top);
+  return consumed;
+}
+
+bool LuaAPI::emit_lua_ui_close(const std::string &name)
+{
+  return emit_lua_ui(name, nullptr);
+}
+
+void LuaAPI::push_ui_colors(lua_State *L, int t)
+{
+  const Theme &th = editor ? editor->get_theme() : Theme{};
+  lua_newtable(L);
+  const int c = lua_gettop(L);
+  lua_set_int_field(L, c, "fg", th.fg_command);
+  lua_set_int_field(L, c, "bg", th.bg_command);
+  lua_set_int_field(L, c, "panel_bg", th.bg_panel_border);
+  lua_set_int_field(L, c, "border", th.fg_panel_border);
+  lua_set_int_field(L, c, "selection_fg", th.fg_selection);
+  lua_set_int_field(L, c, "selection_bg", th.bg_selection);
+  lua_set_int_field(L, c, "comment", th.fg_comment);
+  lua_set_int_field(L, c, "accent", th.fg_keyword);
+  lua_setfield(L, t, "colors");
+}
+
+bool LuaAPI::emit_command_palette(const PaletteView &view)
+{
+  return emit_lua_ui("command_palette",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_str_field(L, t, "query", view.query);
+                       lua_set_int_field(L, t, "selected", view.selected);
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_set_int_field(L, t, "screen_w", view.screen_w);
+                       lua_set_int_field(L, t, "screen_h", view.screen_h);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.results.size(); i++)
+                       {
+                         const PaletteItemView &item = view.results[i];
+                         lua_newtable(L);
+                         const int it = lua_gettop(L);
+                         lua_set_str_field(L, it, "label", item.label);
+                         lua_set_str_field(L, it, "category", item.category);
+                         lua_set_str_field(L, it, "detail", item.detail);
+                         lua_newtable(L);
+                         const int m = lua_gettop(L);
+                         for (size_t k = 0; k < item.match.size(); k++)
+                         {
+                           lua_pushinteger(L, item.match[k]);
+                           lua_rawseti(L, m, (lua_Integer)k + 1);
+                         }
+                         lua_setfield(L, it, "match");
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "results");
+                       push_ui_colors(L, t);
+                     });
+}
+
+bool LuaAPI::emit_quick_pick(const QuickPickView &view)
+{
+  return emit_lua_ui("quick_pick",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_str_field(L, t, "title", view.title);
+                       lua_set_str_field(L, t, "query", view.query);
+                       lua_set_int_field(L, t, "selected", view.selected);
+                       lua_set_int_field(L, t, "all_count", view.all_count);
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.items.size(); i++)
+                       {
+                         const QuickPickItemView &item = view.items[i];
+                         lua_newtable(L);
+                         const int it = lua_gettop(L);
+                         lua_set_str_field(L, it, "label", item.label);
+                         lua_set_str_field(L, it, "detail", item.detail);
+                         lua_set_str_field(L, it, "preview", item.preview);
+                         lua_set_int_field(L, it, "severity", item.severity);
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "items");
+                       push_ui_colors(L, t);
+                     });
+}
+
+bool LuaAPI::emit_popup(const PopupView &view)
+{
+  return emit_lua_ui("popup",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_str_field(L, t, "title", view.title);
+                       lua_set_int_field(L, t, "scroll", view.scroll);
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.lines.size(); i++)
+                       {
+                         lua_pushlstring(L, view.lines[i].data(), view.lines[i].size());
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "lines");
+                       push_ui_colors(L, t);
+                     });
+}
+
+bool LuaAPI::emit_prompt(const std::string &name, const PromptView &view)
+{
+  return emit_lua_ui(name,
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_str_field(L, t, "input", view.input);
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       push_ui_colors(L, t);
+                     });
+}
+
 bool LuaAPI::present_lsp_hover(const std::string &contents,
                                const std::string &filepath,
                                int line,
@@ -4829,6 +5082,28 @@ bool LuaAPI::load_hover_ui_runtime(lua_State *L)
   if (luaL_loadfile(L, path.string().c_str()) || lua_pcall(L, 0, 0, 0))
   {
     std::cerr << "Hover UI Lua runtime failed: " << lua_tostring(L, -1) << "\n";
+    lua_settop(L, top);
+    return false;
+  }
+  return true;
+}
+
+bool LuaAPI::load_ui_kit_runtime(lua_State *L)
+{
+  namespace fs = std::filesystem;
+  fs::path path = fs::path(JOT_DEFAULT_DATA_DIR) / "lua" / "features" / "ui.lua";
+  if (!fs::exists(path))
+  {
+    path = fs::path(JOT_LUA_SOURCE_DIR) / "features" / "ui.lua";
+  }
+  if (!fs::exists(path))
+  {
+    return false;
+  }
+  int top = lua_gettop(L);
+  if (luaL_loadfile(L, path.string().c_str()) || lua_pcall(L, 0, 0, 0))
+  {
+    std::cerr << "Lua UI runtime failed: " << lua_tostring(L, -1) << "\n";
     lua_settop(L, top);
     return false;
   }

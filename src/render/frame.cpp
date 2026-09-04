@@ -141,6 +141,7 @@ void Editor::render()
     }
   }
   ui->reset_cursor_state();
+  sync_lua_ui_surfaces();
 
   if (!needs_redraw)
   {

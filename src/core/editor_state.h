@@ -80,6 +80,14 @@ struct EditorState
   std::string save_prompt_input;
   bool show_quit_prompt;
 
+  // Lua UI surface close-tracking: remembered visibility from the previous
+  // frame so render() can notify handlers (fn(nil)) when a surface closes.
+  bool lua_ui_prev_command_palette = false;
+  bool lua_ui_prev_quick_pick = false;
+  bool lua_ui_prev_popup = false;
+  bool lua_ui_prev_save_prompt = false;
+  bool lua_ui_prev_quit_prompt = false;
+
   bool show_menu_bar_dropdown;
   int menu_bar_active;
   int menu_bar_selected;
