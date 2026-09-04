@@ -224,6 +224,20 @@ struct MenuDropdownView
   std::vector<MenuItemView> items;
 };
 
+struct SearchView
+{
+  int x = 0, y = 0, w = 0, h = 0;
+  std::string query;
+  std::string replace_text;
+  bool replace_visible = false;
+  bool focus_replace = false; // false = find field focused
+  bool case_sensitive = false;
+  bool whole_word = false;
+  bool regex = false;
+  bool scoped_to_selection = false;
+  std::string count; // "3/12" or "0/0"
+};
+
 struct LuaFloatWindow
 {
   int handle = 0;
@@ -451,6 +465,7 @@ public:
   bool emit_lsp_completion(const CompletionView &view);
   bool emit_context_menu(const ContextMenuView &view);
   bool emit_menu_dropdown(const MenuDropdownView &view);
+  bool emit_search(const SearchView &view);
 
   // Terminal-cursor control from Lua (friend access to editor->ui).
   void ui_set_cursor(int x, int y);

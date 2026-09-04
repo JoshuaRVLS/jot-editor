@@ -1490,6 +1490,39 @@ void Editor::render_search_panel()
   if (x + w > ui->get_width())
     w = std::max(20, ui->get_width() - x);
 
+  // A registered Lua UI handler paints the search panel from this state; the
+  // native rect and row geometry stay the source of truth so the input caret
+  // (placed natively) lands on the Lua-drawn fields.
+  if (lua_api && lua_api->has_lua_ui_handler("search_panel"))
+  {
+    SearchView view;
+    view.x = x;
+    view.y = y;
+    view.w = w;
+    view.h = h;
+    view.query = search_query;
+    view.replace_text = search_replace_text;
+    view.replace_visible = search_replace_visible;
+    view.focus_replace = search_replace_visible && search_focus_replace;
+    view.case_sensitive = search_case_sensitive;
+    view.whole_word = search_whole_word;
+    view.regex = search_regex;
+    view.scoped_to_selection = search_scoped_to_selection;
+    if (search_result_index >= 0 && !search_results.empty())
+    {
+      view.count =
+          std::to_string(search_result_index + 1) + "/" + std::to_string(search_results.size());
+    }
+    else
+    {
+      view.count = "0/0";
+    }
+    if (lua_api->emit_search(view))
+    {
+      return;
+    }
+  }
+
   UIRect rect = {x, y, w, h};
   ui_draw_panel(
       *ui, rect, {theme.fg_command, theme.bg_command, theme.fg_panel_border, theme.bg_command});
@@ -1977,6 +2010,7 @@ void Editor::sync_lua_ui_surfaces()
     lua_ui_prev_lsp_completion = false;
     lua_ui_prev_context_menu = false;
     lua_ui_prev_menu_dropdown = false;
+    lua_ui_prev_search = false;
     return;
   }
   auto sync = [&](bool visible, bool &prev, const char *name)
@@ -2000,6 +2034,7 @@ void Editor::sync_lua_ui_surfaces()
        "lsp_completion");
   sync(show_context_menu, lua_ui_prev_context_menu, "context_menu");
   sync(show_menu_bar_dropdown, lua_ui_prev_menu_dropdown, "menu_dropdown");
+  sync(show_search, lua_ui_prev_search, "search_panel");
 }
 
 void Editor::render_popup()

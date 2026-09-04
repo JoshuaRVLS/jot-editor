@@ -237,11 +237,12 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
   REQUIRE(lua_istable(L, 1));
-  REQUIRE(g.handler_count == 11);
+  REQUIRE(g.handler_count == 12);
   bool has_palette = false, has_quick_pick = false, has_popup = false;
   bool has_save = false, has_quit = false, has_ts = false;
   bool has_lsp = false, has_telescope = false;
   bool has_completion = false, has_context = false, has_menu = false;
+  bool has_search = false;
   for (int i = 0; i < g.handler_count; i++)
   {
     has_palette = has_palette || g.handlers[i] == "command_palette";
@@ -255,6 +256,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
     has_completion = has_completion || g.handlers[i] == "lsp_completion";
     has_context = has_context || g.handlers[i] == "context_menu";
     has_menu = has_menu || g.handlers[i] == "menu_dropdown";
+    has_search = has_search || g.handlers[i] == "search_panel";
   }
   REQUIRE(has_palette);
   REQUIRE(has_quick_pick);
@@ -267,6 +269,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(has_completion);
   REQUIRE(has_context);
   REQUIRE(has_menu);
+  REQUIRE(has_search);
 
   // --- command palette ---
   push_module_field(L, 1, "command_palette");
@@ -716,6 +719,39 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(g.last_title == " File ");
   REQUIRE(g.lines_count == 5); // item rows
   push_module_field(L, 1, "menu_dropdown");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+
+  // --- search panel ---
+  push_module_field(L, 1, "search_panel");
+  push_box(L, 60, 2, 70, 4);
+  lua_pushstring(L, "emplace");
+  lua_setfield(L, -2, "query");
+  lua_pushstring(L, "");
+  lua_setfield(L, -2, "replace_text");
+  lua_pushboolean(L, 0);
+  lua_setfield(L, -2, "replace_visible");
+  lua_pushboolean(L, 0);
+  lua_setfield(L, -2, "focus_replace");
+  lua_pushboolean(L, 1);
+  lua_setfield(L, -2, "case_sensitive");
+  lua_pushboolean(L, 0);
+  lua_setfield(L, -2, "whole_word");
+  lua_pushboolean(L, 0);
+  lua_setfield(L, -2, "regex");
+  lua_pushboolean(L, 0);
+  lua_setfield(L, -2, "scoped_to_selection");
+  lua_pushstring(L, "2/7");
+  lua_setfield(L, -2, "count");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.last_width == 70);
+  REQUIRE(g.last_border == "single");
+  REQUIRE(g.lines_count == 2); // find row + footer
+  REQUIRE(g.spans_total >= 0);
+  push_module_field(L, 1, "search_panel");
   lua_pushnil(L);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);

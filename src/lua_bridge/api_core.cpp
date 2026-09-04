@@ -5259,6 +5259,28 @@ bool LuaAPI::emit_menu_dropdown(const MenuDropdownView &view)
                      });
 }
 
+bool LuaAPI::emit_search(const SearchView &view)
+{
+  return emit_lua_ui("search_panel",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_set_str_field(L, t, "query", view.query);
+                       lua_set_str_field(L, t, "replace_text", view.replace_text);
+                       lua_set_str_field(L, t, "count", view.count);
+                       lua_set_bool_field(L, t, "replace_visible", view.replace_visible);
+                       lua_set_bool_field(L, t, "focus_replace", view.focus_replace);
+                       lua_set_bool_field(L, t, "case_sensitive", view.case_sensitive);
+                       lua_set_bool_field(L, t, "whole_word", view.whole_word);
+                       lua_set_bool_field(L, t, "regex", view.regex);
+                       lua_set_bool_field(L, t, "scoped_to_selection", view.scoped_to_selection);
+                       push_ui_colors(L, t);
+                     });
+}
+
 void LuaAPI::ui_set_cursor(int x, int y)
 {
   if (editor && editor->ui)
