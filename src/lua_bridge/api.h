@@ -147,6 +147,8 @@ private:
   std::vector<PluginPanel> plugin_panels;
   std::vector<PluginStatusSegment> status_segments_;
   std::vector<PluginLoadStatus> plugin_load_status;
+  // Registry ref (LUA_NOREF when unset) of the jot.lsp.hover_ui handler.
+  int lsp_hover_ui_ref_ = -2;
   // One-shot LSP result sinks: when non-empty (a "lsp.*" key into
   // lua_callbacks), the next matching native result is delivered to Lua and
   // skipped by the native handler instead.
@@ -210,6 +212,26 @@ public:
   void register_treesitter_api(lua_State *L);
   bool load_treesitter_runtime(lua_State *L);
   bool reload_treesitter_runtime();
+  // Bundled feature modules (lua/features/*), loaded after the API tables so
+  // they can register handlers against them (see load_treesitter_runtime).
+  bool load_hover_ui_runtime(lua_State *L);
+
+  // LSP hover UI: a Lua handler registered through jot.lsp.hover_ui renders
+  // hover results with floats instead of the native popup. When the handler is
+  // set, present_lsp_hover() is called right before the native popup would
+  // show; returning true suppresses it. notify_lsp_hover_closed() is invoked
+  // wherever the native popup would have been dismissed (any key, click, drag,
+  // paste, hover replaced, context menu, ...).
+  void set_lsp_hover_ui_handler(lua_State *L, int fn_index);
+  bool has_lsp_hover_ui() const;
+  bool present_lsp_hover(const std::string &contents,
+                         const std::string &filepath,
+                         int line,
+                         int character,
+                         const std::string &kind,
+                         int anchor_x,
+                         int anchor_y);
+  void notify_lsp_hover_closed();
 
   bool init();
   void cleanup();

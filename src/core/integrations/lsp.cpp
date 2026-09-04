@@ -1922,8 +1922,19 @@ void Editor::request_lsp_hover_at(int pane_index,
   lsp_mouse_hover_filepath = buf.filepath;
 }
 
+void Editor::close_lua_hover_ui()
+{
+  if (lua_api)
+  {
+    lua_api->notify_lsp_hover_closed();
+  }
+}
+
 void Editor::cancel_lsp_mouse_hover(bool hide_popup_now)
 {
+  // Any key, click, drag, paste or hover replacement dismisses the current
+  // hover; when Lua renders the hover UI, mirror that by closing its float.
+  close_lua_hover_ui();
   lsp_mouse_hover_pending = false;
   lsp_mouse_hover_deadline_ms = 0;
   lsp_mouse_hover_pane = -1;
@@ -2031,11 +2042,29 @@ void Editor::handle_lsp_hover_result(const LSPHoverResult &hover)
     if (hover.contents.empty())
     {
       lsp_mouse_hover_visible = false;
+      close_lua_hover_ui();
+      needs_redraw = true;
+      return;
+    }
+    int popup_x = lsp_mouse_hover_screen_x + 2;
+    int popup_y = lsp_mouse_hover_screen_y;
+    // Lua hover UI (jot.lsp.hover_ui) renders the popup when registered; the
+    // native popup only shows when no handler consumed the result. The Lua
+    // float clamps itself to the screen, so raw anchor coordinates are used.
+    if (lua_api && lua_api->has_lsp_hover_ui()
+        && lua_api->present_lsp_hover(hover.contents,
+                                      hover.origin_filepath,
+                                      hover.origin_line,
+                                      hover.origin_character,
+                                      "mouse",
+                                      popup_x,
+                                      popup_y))
+    {
+      lsp_mouse_hover_visible = true;
+      needs_redraw = true;
       return;
     }
     std::string text = compact_lsp_popup_text(hover.contents, 14, 96);
-    int popup_x = lsp_mouse_hover_screen_x + 2;
-    int popup_y = lsp_mouse_hover_screen_y;
     if (ui)
     {
       auto [popup_w, popup_h] = lsp_popup_size(text);
@@ -2077,6 +2106,19 @@ void Editor::handle_lsp_hover_result(const LSPHoverResult &hover)
   int anchor_y = pane.y + tab_height + std::clamp(row, 0, max_row);
   int popup_x =
       pane.x + 1 + line_num_width + std::max(0, hover.origin_character - buf.scroll_x) + 2;
+  // Lua hover UI: same hook as the mouse path, anchored at the cursor line.
+  if (lua_api && lua_api->has_lsp_hover_ui()
+      && lua_api->present_lsp_hover(hover.contents,
+                                    hover.origin_filepath,
+                                    hover.origin_line,
+                                    hover.origin_character,
+                                    "cursor",
+                                    popup_x,
+                                    anchor_y))
+  {
+    needs_redraw = true;
+    return;
+  }
   std::string text = compact_lsp_popup_text(hover.contents, 14, 96);
   if (ui)
   {

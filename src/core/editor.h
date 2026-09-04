@@ -280,6 +280,9 @@ private:
                             int screen_y);
   void cancel_lsp_mouse_hover(bool hide_popup = true);
   void maybe_fire_lsp_mouse_hover();
+  // Dismisses a Lua-rendered hover float (notifies the jot.lsp.hover_ui
+  // handler); no-op when the Lua hover UI is not registered.
+  void close_lua_hover_ui();
   void request_lsp_definition();
   void handle_lsp_hover_result(const LSPHoverResult &hover);
   void handle_lsp_definition_result(const LSPDefinitionResult &definition);

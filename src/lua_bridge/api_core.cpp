@@ -1243,6 +1243,20 @@ namespace
     api(L).lsp_restart_all_from_lua(L);
     return 0;
   }
+  int l_lsp_hover_ui(lua_State *L)
+  {
+    // jot.lsp.hover_ui(fn) registers a Lua hover renderer; nil clears it.
+    if (lua_isnoneornil(L, 1))
+    {
+      api(L).set_lsp_hover_ui_handler(L, 0);
+    }
+    else
+    {
+      luaL_checktype(L, 1, LUA_TFUNCTION);
+      api(L).set_lsp_hover_ui_handler(L, 1);
+    }
+    return 0;
+  }
   int l_buf_filetype(lua_State *L)
   {
     api(L).push_buffer_filetype(L);
@@ -2029,6 +2043,7 @@ bool LuaAPI::init()
   field(L, "request_definition", l_lsp_request_definition);
   field(L, "request_symbols", l_lsp_request_symbols);
   field(L, "request_completion", l_lsp_request_completion);
+  field(L, "hover_ui", l_lsp_hover_ui);
   field(L, "disabled", l_lsp_disabled);
   field(L, "set_enabled", l_lsp_set_enabled);
   field(L, "install", l_lsp_install);
@@ -2198,6 +2213,7 @@ bool LuaAPI::init()
   field(L, "register_panel", l_register_panel);
   lua_pop(L, 2);
   load_treesitter_runtime(L);
+  load_hover_ui_runtime(L);
   load_plugins();
   return true;
 }
@@ -2207,6 +2223,11 @@ void LuaAPI::cleanup()
     return;
   cancel_all_timers();
   clear_floats();
+  if (lsp_hover_ui_ref_ != LUA_NOREF)
+  {
+    luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, lsp_hover_ui_ref_);
+    lsp_hover_ui_ref_ = LUA_NOREF;
+  }
   lua_close(static_cast<lua_State *>(lua_state));
   lua_state = nullptr;
   lua_callbacks.clear();
@@ -4441,6 +4462,127 @@ bool LuaAPI::try_deliver_lsp_hover(const LSPHoverResult &hover)
                                 lua_push_int_field(
                                     L, "column", (long long)hover.origin_character + 1);
                               });
+}
+
+void LuaAPI::set_lsp_hover_ui_handler(lua_State *L, int fn_index)
+{
+  if (lsp_hover_ui_ref_ != LUA_NOREF)
+  {
+    luaL_unref(L, LUA_REGISTRYINDEX, lsp_hover_ui_ref_);
+  }
+  if (fn_index > 0)
+  {
+    lua_pushvalue(L, fn_index);
+    lsp_hover_ui_ref_ = luaL_ref(L, LUA_REGISTRYINDEX);
+  }
+  else
+  {
+    lsp_hover_ui_ref_ = LUA_NOREF;
+  }
+}
+
+bool LuaAPI::has_lsp_hover_ui() const
+{
+  return lsp_hover_ui_ref_ != LUA_NOREF && lua_state != nullptr;
+}
+
+bool LuaAPI::present_lsp_hover(const std::string &contents,
+                               const std::string &filepath,
+                               int line,
+                               int character,
+                               const std::string &kind,
+                               int anchor_x,
+                               int anchor_y)
+{
+  if (!has_lsp_hover_ui())
+  {
+    return false;
+  }
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  const int top = lua_gettop(L);
+  lua_rawgeti(L, LUA_REGISTRYINDEX, lsp_hover_ui_ref_);
+  if (!lua_isfunction(L, -1))
+  {
+    lua_settop(L, top);
+    return false;
+  }
+  lua_newtable(L);
+  lua_push_str_field(L, "contents", contents);
+  lua_push_str_field(L, "path", filepath);
+  lua_push_int_field(L, "line", (long long)line + 1);
+  lua_push_int_field(L, "column", (long long)character + 1);
+  lua_push_str_field(L, "kind", kind);
+  lua_push_int_field(L, "anchor_x", (long long)anchor_x);
+  lua_push_int_field(L, "anchor_y", (long long)anchor_y);
+  // Theme colors mirror the native hover popup: command text on the panel
+  // border background, panel border for the frame.
+  int fg = 7, bg = 0, border = 7;
+  if (editor)
+  {
+    const Theme &t = editor->get_theme();
+    fg = t.fg_command >= 0 ? t.fg_command : 7;
+    bg = t.fg_panel_border >= 0 ? t.fg_panel_border : 0;
+    border = t.fg_panel_border >= 0 ? t.fg_panel_border : fg;
+  }
+  lua_push_int_field(L, "fg", fg);
+  lua_push_int_field(L, "bg", bg);
+  lua_push_int_field(L, "border", border);
+  const int ok = lua_pcall(L, 1, 1, 0);
+  bool consumed = false;
+  if (ok != LUA_OK)
+  {
+    std::cerr << "Lua hover UI error: " << lua_tostring(L, -1) << "\n";
+  }
+  else
+  {
+    consumed = lua_toboolean(L, -1) != 0;
+  }
+  lua_settop(L, top);
+  return consumed;
+}
+
+void LuaAPI::notify_lsp_hover_closed()
+{
+  if (!has_lsp_hover_ui())
+  {
+    return;
+  }
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  const int top = lua_gettop(L);
+  lua_rawgeti(L, LUA_REGISTRYINDEX, lsp_hover_ui_ref_);
+  if (!lua_isfunction(L, -1))
+  {
+    lua_settop(L, top);
+    return;
+  }
+  lua_pushnil(L); // handler receives nil to mean "hide"
+  if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+  {
+    std::cerr << "Lua hover UI close error: " << lua_tostring(L, -1) << "\n";
+  }
+  lua_settop(L, top);
+}
+
+bool LuaAPI::load_hover_ui_runtime(lua_State *L)
+{
+  namespace fs = std::filesystem;
+  fs::path path = fs::path(JOT_DEFAULT_DATA_DIR) / "lua" / "features" / "hover.lua";
+  if (!fs::exists(path))
+  {
+    path = fs::path(JOT_LUA_SOURCE_DIR) / "features" / "hover.lua";
+  }
+  if (!fs::exists(path))
+  {
+    return false;
+  }
+  int top = lua_gettop(L);
+  if (luaL_loadfile(L, path.string().c_str()) || lua_pcall(L, 0, 0, 0))
+  {
+    std::cerr << "Hover UI Lua runtime failed: " << lua_tostring(L, -1) << "\n";
+    lua_settop(L, top);
+    return false;
+  }
+  return true;
 }
 
 bool LuaAPI::try_deliver_lsp_definition(const LSPDefinitionResult &definition)
