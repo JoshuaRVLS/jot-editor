@@ -231,6 +231,11 @@ void Editor::render()
       render_menu_dropdown();
     }
     render_status_line();
+    if (lua_api)
+    {
+      // A registered home_screen handler paints its float on this early path.
+      lua_api->render_floats();
+    }
     ui->hide_cursor();
     ui->render();
     needs_redraw = false;

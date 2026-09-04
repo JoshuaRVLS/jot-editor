@@ -224,6 +224,27 @@ struct MenuDropdownView
   std::vector<MenuItemView> items;
 };
 
+struct HomeEntryView
+{
+  std::string label;     // icon + text
+  std::string secondary; // dimmed right-aligned path (may be empty)
+  int x = 0, y = 0, w = 0;
+  bool section = false; // section title row
+  bool selected = false;
+};
+
+struct HomeView
+{
+  // Content panel geometry (absolute screen coords).
+  int panel_x = 0, panel_y = 0, panel_w = 0, panel_h = 0;
+  std::string wordmark; // "JOT"
+  std::string tagline;  // "Developer workspace"
+  std::string context;  // "Last folder ..." / "No recent workspace yet"
+  // Section titles and item rows in layout order with absolute rects (mouse
+  // hit-testing uses the same rects natively).
+  std::vector<HomeEntryView> rows;
+};
+
 struct SearchView
 {
   int x = 0, y = 0, w = 0, h = 0;
@@ -466,6 +487,7 @@ public:
   bool emit_context_menu(const ContextMenuView &view);
   bool emit_menu_dropdown(const MenuDropdownView &view);
   bool emit_search(const SearchView &view);
+  bool emit_home(const HomeView &view);
 
   // Terminal-cursor control from Lua (friend access to editor->ui).
   void ui_set_cursor(int x, int y);

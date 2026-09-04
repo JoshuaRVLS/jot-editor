@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "lua_bridge/api.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -197,62 +198,70 @@ void Editor::render_home_menu()
   items.push_back({HOME_ACTION_THEME_CHOOSER, -1, -1, "󰔎  Theme", ""});
   items.push_back({HOME_ACTION_CONTINUE_EDITOR, -1, -1, "󰋖  Continue Editing", ""});
 
-  auto draw_section_title = [&](int x, int y, const std::string &title, int width)
+  // Build the full home model first (rows + native hit rects), then hand it
+  // to a Lua UI handler when one is registered; otherwise paint it natively.
+  // Mouse and keyboard input keep working because home_menu_entries (the
+  // rects they hit-test) are populated during the model build either way.
+  HomeView view;
+  view.panel_x = content_x;
+  view.panel_y = content_y;
+  view.panel_w = content_w;
+  view.panel_h = content_h;
+  view.wordmark = "JOT";
+  view.tagline = "Developer workspace";
+  view.context = context;
+
+  auto add_section = [&](int x, int y, const std::string &title, int width)
   {
     if (y >= row_limit || width <= 0)
     {
       return;
     }
-    ui->draw_text(
-        x, y, ellipsize_right(title, width), theme.fg_sidebar_directory, theme.bg_default, true);
+    HomeEntryView r;
+    r.section = true;
+    r.label = ellipsize_right(title, width);
+    r.x = x;
+    r.y = y;
+    r.w = width;
+    view.rows.push_back(std::move(r));
   };
 
-  auto draw_home_item = [&](const HomeMenuRenderItem &item, int x, int y, int width) -> bool
+  auto add_home_item = [&](const HomeMenuRenderItem &item, int x, int y, int width) -> bool
   {
     if (y >= row_limit || width <= 0)
     {
       return false;
     }
-    const int entry_index = (int)home_menu_entries.size();
-    bool selected = (entry_index == home_menu_selected);
-    int fg = selected ? theme.fg_selection : theme.fg_default;
-    int bg = selected ? theme.bg_selection : theme.bg_default;
-
-    UIRect row_rect = {x, y, width, 1};
-    ui->fill_rect(row_rect, " ", fg, bg);
-    std::string label = ellipsize_right(item.label, std::max(0, width - 2));
-    ui->draw_text(x + 1, y, label, fg, bg, selected);
-
+    HomeEntryView r;
+    r.x = x;
+    r.y = y;
+    r.w = width;
+    r.selected = ((int)home_menu_entries.size() == home_menu_selected);
+    r.label = ellipsize_right(item.label, std::max(0, width - 2));
     if (!item.secondary.empty() && width > 34)
     {
-      std::string secondary = shorten_tail(item.secondary, width / 2);
-      int sx = x + width - (int)secondary.size() - 1;
-      if (sx > x + (int)label.size() + 2)
-      {
-        int path_fg = selected ? theme.fg_selection : theme.fg_comment;
-        ui->draw_text(sx, y, secondary, path_fg, bg);
-      }
+      r.secondary = shorten_tail(item.secondary, width / 2);
     }
-
+    view.rows.push_back(std::move(r));
     home_menu_entries.push_back(
         {item.action, item.recent_index, item.recent_workspace_index, x, y, width});
     return true;
   };
 
   int action_y = section_y;
-  draw_section_title(action_x, action_y, "Start", action_w);
+  add_section(action_x, action_y, "Start", action_w);
   action_y += 2;
   for (const auto &item : items)
   {
-    if (draw_home_item(item, action_x, action_y, action_w))
+    if (add_home_item(item, action_x, action_y, action_w))
     {
       action_y++;
     }
   }
 
-  auto draw_recent_list = [&](int x, int &y, int width, const std::string &title, bool workspaces)
+  auto add_recent_list = [&](int x, int &y, int width, const std::string &title, bool workspaces)
   {
-    draw_section_title(x, y, title, width);
+    add_section(x, y, title, width);
     y++;
     const int max_show = workspaces ? std::min(7, (int)recent_workspaces.size())
                                     : std::min(9, (int)recent_files.size());
@@ -260,11 +269,14 @@ void Editor::render_home_menu()
     {
       if (y < row_limit)
       {
-        ui->draw_text(x + 1,
-                      y,
-                      workspaces ? "No recent folders" : "No recent files",
-                      theme.fg_comment,
-                      theme.bg_default);
+        HomeEntryView r;
+        r.section = false;
+        r.label = workspaces ? "No recent folders" : "No recent files";
+        r.x = x;
+        r.y = y;
+        r.w = width;
+        r.selected = false;
+        view.rows.push_back(std::move(r));
         y++;
       }
       return;
@@ -286,7 +298,7 @@ void Editor::render_home_menu()
         recent.label = icon_for_path(recent_files[i]) + get_filename(recent_files[i]);
         recent.secondary = display_parent(recent_files[i]);
       }
-      if (draw_home_item(recent, x, y, width))
+      if (add_home_item(recent, x, y, width))
       {
         y++;
       }
@@ -294,12 +306,12 @@ void Editor::render_home_menu()
   };
 
   int recent_y = two_column ? section_y : action_y + 1;
-  draw_recent_list(recent_x, recent_y, recent_w, "Recent Folders", true);
+  add_recent_list(recent_x, recent_y, recent_w, "Recent Folders", true);
   if (recent_y < row_limit)
   {
     recent_y++;
   }
-  draw_recent_list(recent_x, recent_y, recent_w, "Recent Files", false);
+  add_recent_list(recent_x, recent_y, recent_w, "Recent Files", false);
 
   if (home_menu_entries.empty())
   {
@@ -308,6 +320,38 @@ void Editor::render_home_menu()
   else
   {
     home_menu_selected = std::clamp(home_menu_selected, 0, (int)home_menu_entries.size() - 1);
+  }
+
+  if (lua_api && lua_api->has_lua_ui_handler("home_screen") && lua_api->emit_home(view))
+  {
+    return;
+  }
+
+  // Native fallback paint: header rows are drawn before the model rows.
+  for (const auto &row : view.rows)
+  {
+    if (row.section)
+    {
+      ui->draw_text(row.x, row.y, row.label, theme.fg_sidebar_directory, theme.bg_default, true);
+      continue;
+    }
+    bool selected = row.selected;
+    int fg = selected ? theme.fg_selection : theme.fg_default;
+    int bg = selected ? theme.bg_selection : theme.bg_default;
+    UIRect row_rect = {row.x, row.y, row.w, 1};
+    ui->fill_rect(row_rect, " ", fg, bg);
+    std::string label = row.label;
+    ui->draw_text(row.x + 1, row.y, label, fg, bg, selected);
+    if (!row.secondary.empty())
+    {
+      std::string secondary = row.secondary;
+      int sx = row.x + row.w - (int)secondary.size() - 1;
+      if (sx > row.x + (int)label.size() + 2)
+      {
+        int path_fg = selected ? theme.fg_selection : theme.fg_comment;
+        ui->draw_text(sx, row.y, secondary, path_fg, bg);
+      }
+    }
   }
 }
 

@@ -237,12 +237,12 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
   REQUIRE(lua_istable(L, 1));
-  REQUIRE(g.handler_count == 12);
+  REQUIRE(g.handler_count == 13);
   bool has_palette = false, has_quick_pick = false, has_popup = false;
   bool has_save = false, has_quit = false, has_ts = false;
   bool has_lsp = false, has_telescope = false;
   bool has_completion = false, has_context = false, has_menu = false;
-  bool has_search = false;
+  bool has_search = false, has_home = false;
   for (int i = 0; i < g.handler_count; i++)
   {
     has_palette = has_palette || g.handlers[i] == "command_palette";
@@ -257,6 +257,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
     has_context = has_context || g.handlers[i] == "context_menu";
     has_menu = has_menu || g.handlers[i] == "menu_dropdown";
     has_search = has_search || g.handlers[i] == "search_panel";
+    has_home = has_home || g.handlers[i] == "home_screen";
   }
   REQUIRE(has_palette);
   REQUIRE(has_quick_pick);
@@ -270,6 +271,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(has_context);
   REQUIRE(has_menu);
   REQUIRE(has_search);
+  REQUIRE(has_home);
 
   // --- command palette ---
   push_module_field(L, 1, "command_palette");
@@ -752,6 +754,76 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(g.lines_count == 2); // find row + footer
   REQUIRE(g.spans_total >= 0);
   push_module_field(L, 1, "search_panel");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+
+  // --- home screen ---
+  push_module_field(L, 1, "home_screen");
+  lua_newtable(L);
+  lua_pushinteger(L, 2);
+  lua_setfield(L, -2, "panel_x");
+  lua_pushinteger(L, 1);
+  lua_setfield(L, -2, "panel_y");
+  lua_pushinteger(L, 100);
+  lua_setfield(L, -2, "panel_w");
+  lua_pushinteger(L, 30);
+  lua_setfield(L, -2, "panel_h");
+  lua_pushstring(L, "JOT");
+  lua_setfield(L, -2, "wordmark");
+  lua_pushstring(L, "Developer workspace");
+  lua_setfield(L, -2, "tagline");
+  lua_pushstring(L, "Last folder  repo");
+  lua_setfield(L, -2, "context");
+  lua_newtable(L); // rows
+  const char *h_labels[] = {"Start", "  Open Folder / File", "  New File"};
+  const int h_y[] = {5, 7, 8};
+  for (int i = 1; i <= 3; i++)
+  {
+    lua_newtable(L);
+    lua_pushstring(L, h_labels[i - 1]);
+    lua_setfield(L, -2, "label");
+    lua_pushinteger(L, 2);
+    lua_setfield(L, -2, "x");
+    lua_pushinteger(L, h_y[i - 1]);
+    lua_setfield(L, -2, "y");
+    lua_pushinteger(L, 100);
+    lua_setfield(L, -2, "w");
+    lua_pushboolean(L, i == 1 ? 1 : 0);
+    lua_setfield(L, -2, "section");
+    lua_pushboolean(L, i == 2 ? 1 : 0);
+    lua_setfield(L, -2, "selected");
+    if (i == 2)
+    {
+      lua_pushstring(L, "/home/user/repo");
+      lua_setfield(L, -2, "secondary");
+    }
+    lua_rawseti(L, -2, i);
+  }
+  lua_setfield(L, -2, "rows");
+  lua_newtable(L); // colors
+  lua_pushinteger(L, 250);
+  lua_setfield(L, -2, "default_fg");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "default_bg");
+  lua_pushinteger(L, 244);
+  lua_setfield(L, -2, "comment");
+  lua_pushinteger(L, 215);
+  lua_setfield(L, -2, "accent");
+  lua_pushinteger(L, 8);
+  lua_setfield(L, -2, "sidebar_dir");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "sidebar_sel_fg");
+  lua_pushinteger(L, 6);
+  lua_setfield(L, -2, "sidebar_sel_bg");
+  lua_setfield(L, -2, "colors");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.last_width == 100);
+  REQUIRE(g.last_height == 30);
+  REQUIRE(g.last_border == "none");
+  push_module_field(L, 1, "home_screen");
   lua_pushnil(L);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);

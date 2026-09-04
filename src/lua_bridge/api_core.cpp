@@ -4866,6 +4866,16 @@ void LuaAPI::push_ui_colors(lua_State *L, int t)
   const int c = lua_gettop(L);
   lua_set_int_field(L, c, "fg", th.fg_command);
   lua_set_int_field(L, c, "bg", th.bg_command);
+  lua_set_int_field(L, c, "default_fg", th.fg_default);
+  lua_set_int_field(L, c, "default_bg", th.bg_default);
+  // Sidebar / home + status line slots.
+  lua_set_int_field(L, c, "sidebar_fg", th.fg_sidebar);
+  lua_set_int_field(L, c, "sidebar_bg", th.bg_sidebar);
+  lua_set_int_field(L, c, "sidebar_dir", th.fg_sidebar_directory);
+  lua_set_int_field(L, c, "sidebar_sel_fg", th.fg_sidebar_selected);
+  lua_set_int_field(L, c, "sidebar_sel_bg", th.bg_sidebar_selected);
+  lua_set_int_field(L, c, "status_fg", th.fg_status);
+  lua_set_int_field(L, c, "status_bg", th.bg_status);
   lua_set_int_field(L, c, "panel_bg", th.bg_panel_border);
   lua_set_int_field(L, c, "border", th.fg_panel_border);
   lua_set_int_field(L, c, "selection_fg", th.fg_selection);
@@ -5255,6 +5265,39 @@ bool LuaAPI::emit_menu_dropdown(const MenuDropdownView &view)
                          lua_rawseti(L, arr, (lua_Integer)i + 1);
                        }
                        lua_setfield(L, t, "items");
+                       push_ui_colors(L, t);
+                     });
+}
+
+bool LuaAPI::emit_home(const HomeView &view)
+{
+  return emit_lua_ui("home_screen",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_int_field(L, t, "panel_x", view.panel_x);
+                       lua_set_int_field(L, t, "panel_y", view.panel_y);
+                       lua_set_int_field(L, t, "panel_w", view.panel_w);
+                       lua_set_int_field(L, t, "panel_h", view.panel_h);
+                       lua_set_str_field(L, t, "wordmark", view.wordmark);
+                       lua_set_str_field(L, t, "tagline", view.tagline);
+                       lua_set_str_field(L, t, "context", view.context);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.rows.size(); i++)
+                       {
+                         const HomeEntryView &r = view.rows[i];
+                         lua_newtable(L);
+                         const int ri = lua_gettop(L);
+                         lua_set_str_field(L, ri, "label", r.label);
+                         lua_set_str_field(L, ri, "secondary", r.secondary);
+                         lua_set_int_field(L, ri, "x", r.x);
+                         lua_set_int_field(L, ri, "y", r.y);
+                         lua_set_int_field(L, ri, "w", r.w);
+                         lua_set_bool_field(L, ri, "section", r.section);
+                         lua_set_bool_field(L, ri, "selected", r.selected);
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "rows");
                        push_ui_colors(L, t);
                      });
 }
