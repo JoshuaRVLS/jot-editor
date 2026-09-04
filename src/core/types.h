@@ -520,6 +520,16 @@ struct FileBuffer
   TSParser *ts_parser = nullptr;
   TSTree *ts_tree = nullptr;
   std::string ts_language_id;
+  // Incremental-parse bookkeeping. ts_tree matches the buffer text exactly
+  // while ts_tree_in_sync is true. On an edit (save_state/undo/redo) the text
+  // the tree was parsed from is snapshotted into ts_edit_base and
+  // ts_tree_in_sync is cleared; the next highlight rebuild diffs ts_edit_base
+  // against the current text, applies one bounded ts_tree_edit and reparses,
+  // so per-keystroke cost tracks the edited region instead of a whole-file
+  // parse. Fields are only touched on the main thread (edit + render paths).
+  bool ts_tree_in_sync = true;
+  bool ts_edit_base_valid = false;
+  std::string ts_edit_base;
 #endif
 
   // Line accessor methods

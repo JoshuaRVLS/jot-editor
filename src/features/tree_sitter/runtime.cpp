@@ -1,5 +1,6 @@
 #include "tree_sitter/manager.h"
 
+#include <algorithm>
 #include <filesystem>
 
 #ifdef JOT_TREESITTER
@@ -222,6 +223,73 @@ TSParser *TreeSitterManager::create_parser(const std::string &extension) const
     return nullptr;
   }
   return parser;
+}
+
+TSTree *TreeSitterManager::reparse_incremental(TSParser *parser,
+                                               TSTree *tree,
+                                               const std::string &base,
+                                               const std::string &text)
+{
+  if (!parser)
+    return tree;
+  if (!tree)
+    return ts_parser_parse_string(parser, nullptr, text.data(), (uint32_t)text.size());
+
+  // Longest common prefix of base and text: bytes before this are untouched.
+  const size_t min_size = std::min(base.size(), text.size());
+  size_t prefix = 0;
+  while (prefix < min_size && base[prefix] == text[prefix])
+  {
+    ++prefix;
+  }
+  if (prefix == base.size() && prefix == text.size())
+  {
+    return tree; // no change
+  }
+
+  // Longest common suffix: bytes at or beyond this (old/new) are the edit.
+  size_t old_end = base.size();
+  size_t new_end = text.size();
+  while (old_end > prefix && new_end > prefix && base[old_end - 1] == text[new_end - 1])
+  {
+    --old_end;
+    --new_end;
+  }
+
+  auto point_at = [](const std::string &s, size_t offset) -> TSPoint
+  {
+    uint32_t row = 0;
+    size_t last_newline = 0;
+    for (size_t i = 0; i < offset && i < s.size(); ++i)
+    {
+      if (s[i] == '\n')
+      {
+        ++row;
+        last_newline = i + 1;
+      }
+    }
+    return {row, static_cast<uint32_t>(offset - last_newline)};
+  };
+
+  TSInputEdit edit;
+  edit.start_byte = static_cast<uint32_t>(prefix);
+  edit.old_end_byte = static_cast<uint32_t>(old_end);
+  edit.new_end_byte = static_cast<uint32_t>(new_end);
+  edit.start_point = point_at(base, prefix);
+  edit.old_end_point = point_at(base, old_end);
+  edit.new_end_point = point_at(text, new_end);
+
+  ts_tree_edit(tree, &edit);
+  TSTree *new_tree =
+      ts_parser_parse_string(parser, tree, text.data(), static_cast<uint32_t>(text.size()));
+  if (new_tree)
+  {
+    ts_tree_delete(tree);
+    return new_tree;
+  }
+  // Parse failure: keep the caller's tree (still matches base) so the pending
+  // edit can be retried; the caller must not treat it as in sync.
+  return tree;
 }
 
 TreeSitterHandle TreeSitterManager::create_parser_handle(const std::string &extension)

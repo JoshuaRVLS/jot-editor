@@ -176,19 +176,6 @@ namespace
     buf.modified = prev.modified;
     buf.is_placeholder = prev.is_placeholder;
   }
-
-  void discard_tree_sitter_tree(FileBuffer &buf)
-  {
-#ifdef JOT_TREESITTER
-    if (buf.ts_tree)
-    {
-      ts_tree_delete(buf.ts_tree);
-      buf.ts_tree = nullptr;
-    }
-#else
-    (void)buf;
-#endif
-  }
 } // namespace
 
 void Editor::save_state()
@@ -199,13 +186,12 @@ void Editor::save_state()
   auto &buf = get_buffer();
   buf.mark_edited();
 
+  // Keep the tree-sitter tree alive across edits and reparse incrementally on
+  // the next paint: deleting it here forced a whole-file parse per keystroke.
 #ifdef JOT_TREESITTER
-  if (buf.ts_tree)
-  {
-    ts_tree_delete(buf.ts_tree);
-    buf.ts_tree = nullptr;
-  }
+  ts_begin_edit(buf);
 #endif
+
   if (buf.is_preview)
   {
     buf.is_preview = false;
@@ -244,10 +230,15 @@ void Editor::undo()
   State prev = std::move(buf.undo_stack.top());
   buf.undo_stack.pop();
 
+#ifdef JOT_TREESITTER
+  ts_begin_edit(buf);
+#endif
   apply_state(buf, prev);
+  // Full-snapshot restores replace buf.lines directly and would otherwise skip
+  // mark_edited (stale fold ranges / tree-sitter line offsets); incremental
+  // undo/redo reparse needs offsets rebuilt lazily from the restored text.
+  buf.mark_edited();
 
-  invalidate_syntax_cache(buf);
-  discard_tree_sitter_tree(buf);
   if (lua_api)
   {
     lua_api->on_buffer_change(buf.filepath, "");
@@ -276,10 +267,12 @@ void Editor::redo()
   State next = std::move(buf.redo_stack.top());
   buf.redo_stack.pop();
 
+#ifdef JOT_TREESITTER
+  ts_begin_edit(buf);
+#endif
   apply_state(buf, next);
+  buf.mark_edited();
 
-  invalidate_syntax_cache(buf);
-  discard_tree_sitter_tree(buf);
   if (lua_api)
   {
     lua_api->on_buffer_change(buf.filepath, "");

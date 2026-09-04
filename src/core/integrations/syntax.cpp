@@ -10,6 +10,10 @@
 namespace
 {
 
+  // Lines no longer than this are highlighted whole and cached; only longer
+  // lines use windowed highlighting bounded by the visible width.
+  constexpr int kFullHighlightLineBytes = 4096;
+
 #ifdef JOT_TREESITTER
   bool contains_any(const std::string &text, const std::vector<std::string> &needles)
   {
@@ -181,6 +185,19 @@ namespace
 } // namespace
 
 #ifdef JOT_TREESITTER
+void Editor::ts_begin_edit(FileBuffer &buf)
+{
+  // Only the first edit after a rebuild needs a snapshot: later edits in the
+  // same batch leave ts_edit_base at the original text the tree was parsed
+  // from, so one bounded ts_tree_edit covers all of them.
+  if (buf.ts_parser && buf.ts_tree && buf.ts_tree_in_sync)
+  {
+    buf.ts_edit_base = get_buffer_text(buf);
+    buf.ts_edit_base_valid = true;
+    buf.ts_tree_in_sync = false;
+  }
+}
+
 void Editor::reparse_tree(FileBuffer &buf)
 {
   if (!buf.ts_parser)
@@ -188,14 +205,38 @@ void Editor::reparse_tree(FileBuffer &buf)
     return;
   }
   std::string text = get_buffer_text(buf);
-  TSTree *new_tree =
-      ts_parser_parse_string(buf.ts_parser, buf.ts_tree, text.c_str(), (uint32_t)text.size());
+
+  if (buf.ts_tree && buf.ts_edit_base_valid)
+  {
+    // Incremental path: edits were snapshotted by ts_begin_edit, so the tree
+    // still matches ts_edit_base. A single bounded edit covers everything that
+    // changed since then (typing is usually one line, ~1ms instead of a
+    // whole-file parse).
+    const std::string base = std::move(buf.ts_edit_base);
+    buf.ts_edit_base.clear();
+    buf.ts_edit_base_valid = false;
+    TSTree *result = TreeSitterManager::reparse_incremental(buf.ts_parser, buf.ts_tree, base, text);
+    // reparse_incremental returns the same pointer on no-op; if it also failed
+    // to parse (still matching base, not text), keep the edit pending so the
+    // next rebuild retries instead of querying a stale tree.
+    buf.ts_tree_in_sync = (result == buf.ts_tree && base != text) ? false : true;
+    buf.ts_tree = result;
+    return;
+  }
+
+  // Full rebuild (first parse, language switch, or an edit path that did not
+  // go through ts_begin_edit). The per-line syntax cache is intentionally NOT
+  // cleared: entries are content-hashed, so untouched lines stay cached and
+  // only genuinely changed lines are re-queried.
   if (buf.ts_tree)
   {
     ts_tree_delete(buf.ts_tree);
+    buf.ts_tree = nullptr;
   }
-  buf.ts_tree = new_tree;
-  buf.syntax_cache.clear();
+  buf.ts_tree = ts_parser_parse_string(buf.ts_parser, nullptr, text.c_str(), (uint32_t)text.size());
+  buf.ts_edit_base_valid = false;
+  buf.ts_edit_base.clear();
+  buf.ts_tree_in_sync = true;
 }
 
 void Editor::init_ts_for_buffer(FileBuffer &buf)
@@ -215,12 +256,17 @@ void Editor::init_ts_for_buffer(FileBuffer &buf)
       buf.ts_parser = nullptr;
     }
     buf.ts_language_id.clear();
+    buf.ts_edit_base_valid = false;
+    buf.ts_edit_base.clear();
+    buf.ts_tree_in_sync = true;
     return;
   }
 
   if (buf.ts_parser && buf.ts_language_id == language_id)
   {
-    if (!buf.ts_tree)
+    // Rebuild when the tree is missing or when edits are pending (ts_begin_edit
+    // cleared ts_tree_in_sync); the incremental path keeps this cheap.
+    if (!buf.ts_tree || !buf.ts_tree_in_sync)
     {
       reparse_tree(buf);
     }
@@ -238,6 +284,9 @@ void Editor::init_ts_for_buffer(FileBuffer &buf)
     buf.ts_parser = nullptr;
   }
   buf.ts_language_id.clear();
+  buf.ts_edit_base_valid = false;
+  buf.ts_edit_base.clear();
+  buf.ts_tree_in_sync = true;
 
   TSParser *parser = ts_manager_.create_parser(ext);
   if (!parser)
@@ -312,7 +361,14 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit)
 
   const std::string &line = buf.line(line_idx);
   SyntaxLineCache &cache = buf.syntax_cache[line_idx];
-  const int limit = std::clamp(byte_limit, 0, (int)line.size());
+  // Normal lines are highlighted whole once and cached for good: requests with
+  // a growing window (horizontal scroll into the line, minimap probing) then
+  // hit the cache instead of re-running the query/regexes at every window size.
+  // Only genuinely huge lines keep the windowed behavior so first paint of a
+  // minified single-line file stays proportional to the visible width.
+  const int line_len = (int)line.size();
+  const int limit =
+      std::clamp(line_len <= kFullHighlightLineBytes ? line_len : byte_limit, 0, line_len);
 
   bool retry_tree_sitter = false;
 #ifdef JOT_TREESITTER

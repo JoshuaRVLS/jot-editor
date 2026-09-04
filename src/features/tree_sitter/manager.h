@@ -144,6 +144,18 @@ public:
   const TSLanguage *load_language(const std::string &language_id) const;
   TSParser *create_parser(const std::string &extension) const;
   TSQuery *get_highlight_query(const std::string &extension);
+
+  // Reparse `text` reusing `tree`, which must describe `base`. One bounded
+  // ts_tree_edit covering the diff between `base` and `text` is applied first,
+  // so cost tracks the edited region instead of a whole-file parse. Consumes
+  // `tree` on success and returns the new tree (caller owns it). Returns
+  // `tree` unchanged when base == text (nothing to do) or when the incremental
+  // parse fails (the caller should keep its edit-pending state and retry).
+  // Passing a null `tree` performs a full parse from scratch.
+  static TSTree *reparse_incremental(TSParser *parser,
+                                     TSTree *tree,
+                                     const std::string &base,
+                                     const std::string &text);
 #endif
 
 private:
