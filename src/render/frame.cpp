@@ -261,6 +261,13 @@ void Editor::render()
     render_status_line();
     ui->dim_rect({0, 0, ui->get_render_width(), ui->get_height()});
     render_telescope();
+    // Lua surface floats must be drawn on this early-return path too: when a
+    // registered handler consumes the native telescope render, it paints a
+    // float that only appears here.
+    if (lua_api)
+    {
+      lua_api->render_floats();
+    }
     if (show_lsp_manager_modal || telescope.focus() != TelescopeFocus::Query)
     {
       ui->hide_cursor();
