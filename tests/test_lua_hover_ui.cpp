@@ -86,28 +86,28 @@ namespace
 
   int stub_float_open(lua_State *L)
   {
-    // (buffer, enter, config)
-    luaL_checktype(L, 3, LUA_TTABLE);
+    // Real binding: jot.ui.float.open(buffer, config) - config at arg #2.
+    luaL_checktype(L, 2, LUA_TTABLE);
     g.open_count++;
-    lua_getfield(L, 3, "width");
+    lua_getfield(L, 2, "width");
     g.last_width = (int)lua_tointeger(L, -1);
     lua_pop(L, 1);
-    lua_getfield(L, 3, "height");
+    lua_getfield(L, 2, "height");
     g.last_height = (int)lua_tointeger(L, -1);
     lua_pop(L, 1);
-    lua_getfield(L, 3, "col");
+    lua_getfield(L, 2, "col");
     g.last_col = lua_isnil(L, -1) ? "?" : lua_tostring(L, -1);
     lua_pop(L, 1);
-    lua_getfield(L, 3, "row");
+    lua_getfield(L, 2, "row");
     g.last_row = lua_isnil(L, -1) ? "?" : lua_tostring(L, -1);
     lua_pop(L, 1);
-    lua_getfield(L, 3, "border");
+    lua_getfield(L, 2, "border");
     g.last_border = lua_isnil(L, -1) ? "" : lua_tostring(L, -1);
     lua_pop(L, 1);
-    lua_getfield(L, 3, "fg");
+    lua_getfield(L, 2, "fg");
     g.last_fg = (int)lua_tointeger(L, -1);
     lua_pop(L, 1);
-    lua_getfield(L, 3, "bg");
+    lua_getfield(L, 2, "bg");
     g.last_bg = (int)lua_tointeger(L, -1);
     lua_pop(L, 1);
     lua_pushinteger(L, ++g.next_float);
@@ -226,7 +226,12 @@ TEST_CASE("Bundled Lua hover UI renders and dismisses a float")
   lua_setfield(L, -2, "fg");
   lua_pushinteger(L, 237);
   lua_setfield(L, -2, "bg");
-  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  {
+    const int pcr = lua_pcall(L, 1, 1, 0);
+    if (pcr != LUA_OK)
+      std::fprintf(stderr, "[hover test] present error: %s\n", lua_tostring(L, -1));
+    REQUIRE(pcr == LUA_OK);
+  }
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
 

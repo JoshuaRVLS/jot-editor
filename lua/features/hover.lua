@@ -171,7 +171,9 @@ local function present(info)
   local bg = info.bg or 0
   local h = shown + 2
   local w = width + 2
-  win = jot.ui.float.open(buf, false, {
+  -- jot.ui.float.open(buffer, config): the enter flag is not part of this
+  -- binding (config is argument #2); focusable=false keeps it display-only.
+  win = jot.ui.float.open(buf, {
     col = info.anchor_x or 0,
     row = info.anchor_y or 0,
     width = w,
