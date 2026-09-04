@@ -483,22 +483,22 @@ local function tree_sitter_status(p)
     count = count + 1
     local b = j + 2 -- rows start on the float's second inner line
     if row.section then
-      local text = " " .. truncate(row.label or "", inner_w - 4)
+      local text = " " .. trunc_cells(row.label or "", inner_w - 4)
       if row.detail and row.detail ~= "" then
         text = text .. " (" .. row.detail .. ")"
       end
-      body[b] = pad(text, inner_w)
-      spans[b] = { { start = 0, len = inner_w, fg = comment, bg = bg } }
+      body[b] = pad_cells(text, inner_w)
+      spans[b] = { { start = 0, len = 65535, fg = comment, bg = bg } }
     else
-      local name = pad(truncate(row.label or "", lang_w), lang_w)
-      local detail = truncate(row.detail or "", math.max(1, inner_w - lang_w - 3))
+      local name = pad_cells(trunc_cells(row.label or "", lang_w), lang_w)
+      local detail = trunc_cells(row.detail or "", math.max(1, inner_w - lang_w - 3))
       local name_fg = (row.color and row.color ~= 0) and row.color or fg
       local line = " " .. name .. " " .. detail
-      body[b] = pad(line, inner_w)
+      body[b] = pad_cells(line, inner_w)
       spans[b] = {
-        { start = 0, len = inner_w, fg = fg, bg = bg },
+        { start = 0, len = 65535, fg = fg, bg = bg },
         { start = 1, len = #name, fg = name_fg, bg = bg },
-        { start = lang_w + 2, len = #detail, fg = comment, bg = bg },
+        { start = #name + 2, len = #detail, fg = comment, bg = bg },
       }
     end
   end
@@ -510,7 +510,7 @@ local function tree_sitter_status(p)
   local inner_h = math.max(1, p.h - 2)
   local body_list = {}
   for i = 1, inner_h do
-    body_list[i] = pad(body[i] or "", inner_w)
+    body_list[i] = pad_cells(body[i] or "", inner_w)
   end
 
   local footer = "Esc close   Up/Down scroll"
@@ -571,9 +571,10 @@ local function lsp_manager(p)
     local b = j + 1
 
     -- Compose the row: label at inner col 1, state at state_x, then buttons
-    -- at their native rects so mouse clicks stay aligned.
+    -- at their native rects so mouse clicks stay aligned. Columns are cells
+    -- (wide glyphs count 2) so rows never drift out of alignment.
     local function emit(col, text, span_fg)
-      local cur = #(body[b] or "")
+      local cur = cell_len(body[b] or "")
       if cur < col then
         body[b] = (body[b] or "") .. string.rep(" ", col - cur)
       end
@@ -585,11 +586,11 @@ local function lsp_manager(p)
       end
     end
     -- Background row span first (full width once padded later).
-    spans[b] = { { start = 0, len = inner_w, fg = row_fg, bg = row_bg } }
-    emit(1, truncate(row.label or "", label_w), row_fg)
+    spans[b] = { { start = 0, len = 65535, fg = row_fg, bg = row_bg } }
+    emit(1, trunc_cells(row.label or "", label_w), row_fg)
     local state_col = math.max(1 + label_w, state_x)
-    emit(state_col, truncate(row.state or "", math.max(1, (p.action_x or p.x + p.w - 31) - (p.state_x or 0) - 1)),
-         row.state_color or comment)
+    local state_w = math.max(1, (p.action_x or p.x + p.w - 31) - (p.state_x or 0) - 1)
+    emit(state_col, trunc_cells(row.state or "", state_w), row.state_color or comment)
     for _, btn in ipairs(row.actions or {}) do
       local col = (btn.x or 0) - (p.x or 0) - 1
       if col >= 1 then
@@ -597,13 +598,14 @@ local function lsp_manager(p)
           or btn.variant == "primary" and accent
           or (btn.variant == "secondary" or btn.variant == "muted") and comment
           or fg
-        local label = truncate(btn.label or "", math.max(1, inner_w - col))
+        local avail = math.max(1, inner_w - col)
+        local label = trunc_cells(btn.label or "", avail)
         if btn.focused then
           label = "[" .. label .. "]"
         else
           label = " " .. label .. " "
         end
-        label = truncate(label, math.max(1, (btn.w or #label) + (btn.focused and 0 or 0)))
+        label = trunc_cells(label, math.max(1, (btn.w or #label) + (btn.focused and 0 or 0)))
         emit(col, label, btn.enabled and variant_fg or comment)
       end
     end
@@ -619,7 +621,7 @@ local function lsp_manager(p)
   local inner_h = math.max(1, p.h - 2)
   local body_list = {}
   for i = 1, inner_h do
-    body_list[i] = pad(body[i] or "", inner_w)
+    body_list[i] = pad_cells(body[i] or "", inner_w)
   end
 
   local footer = tostring(#rows) .. " servers"
@@ -705,11 +707,14 @@ local function telescope(p)
       return
     end
     body[b] = body[b] or ""
-    if #body[b] < col then
-      body[b] = body[b] .. string.rep(" ", col - #body[b])
+    -- Pad by *cells* (wide glyphs count 2) so content lands at the exact
+    -- column and vertical lines stay straight across rows; wide glyphs are
+    -- dropped only when they would overshoot.
+    local cur = cell_len(body[b])
+    if cur < col then
+      body[b] = body[b] .. string.rep(" ", col - cur)
     end
-    -- Span offsets are bytes and must match the actual append position, not
-    -- the requested column (columns drift once a wide glyph is in the row).
+    -- Span offsets are bytes and must match the actual append position.
     local start = #body[b]
     span(b, start, #text, fg, bg)
     body[b] = body[b] .. text
@@ -758,7 +763,7 @@ local function telescope(p)
           or "No files match the current query.")
     put(list_row0 + math.max(0, math.floor((p.list_h or 0) / 2)),
         list_col,
-        truncate(empty, list_w),
+        trunc_cells(empty, list_w),
         comment,
         t_bg)
   end
@@ -767,9 +772,20 @@ local function telescope(p)
     local is_selected = (p.selected or -1) == (p.list_scroll or 0) + i - 1
     local icon = r.is_directory and "[D] " or "[F] "
     local parent = (r.parent_path or "") == "." and "" or r.parent_path or ""
-    local parent_w = math.min(rune_len(parent), math.max(0, math.floor(list_w / 2)))
-    local name_w = math.max(1, list_w - rune_len(icon) - parent_w)
-    local name = truncate(r.name or "", name_w)
+    local parent_w = parent == ""
+        and 0
+        or math.min(cell_len(parent), math.max(0, math.floor(list_w / 2)))
+    -- Reserve a 1-cell gap between the name and a right-aligned parent so a
+    -- long name never glues onto the dimmed path (which reads as a broken,
+    -- ragged layout even when the separator column itself is straight).
+    local gap = parent_w > 0 and 1 or 0
+    local name_budget = math.max(1, list_w - cell_len(icon) - parent_w - gap)
+    local raw_name = r.name or ""
+    local name = trunc_cells(raw_name, name_budget)
+    if parent_w > 0 and cell_len(raw_name) > name_budget and name_budget >= 2 then
+      -- Signal truncation with an ellipsis inside the budget.
+      name = trunc_cells(raw_name, name_budget - 1) .. "…"
+    end
     if is_selected then
       fill_row(b, t_sel_bg, t_sel_fg)
     end
@@ -778,7 +794,7 @@ local function telescope(p)
     if parent_w > 0 and r.parent_path then
       put(b,
           list_col + math.max(0, list_w - parent_w),
-          left_clip(r.parent_path, parent_w),
+          trunc_cells(left_clip(r.parent_path, parent_w), parent_w),
           comment,
           is_selected and t_sel_bg or t_bg)
     end
@@ -801,9 +817,10 @@ local function telescope(p)
         prev_focus and (colors.t_sel_fg or accent) or t_fg,
         t_bg)
     local title = preview.title or ""
-    put(prev_row + 1, prev_col, left_clip(title, prev_inner_w), t_prev_fg, t_prev_bg)
+    put(prev_row + 1, prev_col, trunc_cells(left_clip(title, prev_inner_w), prev_inner_w), t_prev_fg,
+        t_prev_bg)
     if preview.detail and preview.detail ~= "" then
-      put(prev_row + 2, prev_col, truncate(preview.detail, prev_inner_w), comment, t_prev_bg)
+      put(prev_row + 2, prev_col, trunc_cells(preview.detail, prev_inner_w), comment, t_prev_bg)
     end
     local code_row = prev_row + 3
     local line_no = preview.start_line or 0
@@ -817,7 +834,7 @@ local function telescope(p)
       if not plain then
         put(b, prev_col, string.format("%3d ", line_no + 1), comment, t_prev_bg)
         local text_col = prev_col + 4
-        local clipped = truncate(ln, prev_inner_w - 4)
+        local clipped = trunc_cells(ln, math.max(1, prev_inner_w - 4))
         put(b, text_col, clipped, t_prev_fg, t_prev_bg)
         if jot.syntax and jot.syntax.highlight then
           local ok, caps = pcall(jot.syntax.highlight, ext, clipped)
@@ -831,7 +848,7 @@ local function telescope(p)
           end
         end
       else
-        put(b, prev_col, truncate(ln, prev_inner_w), row_fg, t_prev_bg)
+        put(b, prev_col, trunc_cells(ln, prev_inner_w), row_fg, t_prev_bg)
       end
       line_no = line_no + 1
     end
