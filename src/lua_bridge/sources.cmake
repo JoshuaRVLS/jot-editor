@@ -1,8 +1,10 @@
 set(JOT_LUA_BRIDGE_SOURCES
   lua_bridge/api_bindings.cpp
   lua_bridge/api_core.cpp
+  lua_bridge/api_events.cpp
   lua_bridge/api_float.cpp
   lua_bridge/api_lsp_bridge.cpp
+  lua_bridge/api_viewport.cpp
   lua_bridge/api_theme.cpp
   lua_bridge/api_ui_surfaces.cpp
   lua_bridge/api_treesitter.cpp
