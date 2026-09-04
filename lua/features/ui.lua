@@ -290,10 +290,13 @@ local function command_palette(p)
     local row_fg = is_selected and selection_fg or fg
     local row_bg = is_selected and selection_bg or bg
     local label = truncate(item.label or "", inner_w - 2)
+    -- item.match holds byte offsets into label; the row text is " " .. label,
+    -- so spans must be shifted by the 1-byte prefix or the highlight lands on
+    -- the wrong character (and can split a multibyte label rune).
     local spans = {}
     for _, m in ipairs(item.match or {}) do
-      if m + 1 <= #label then
-        spans[#spans + 1] = { start = m, len = 1, fg = is_selected and selection_fg or accent }
+      if m >= 0 and m + 1 <= #label then
+        spans[#spans + 1] = { start = m + 1, len = 1, fg = is_selected and selection_fg or accent }
       end
     end
     rows[#rows + 1] = { text = pad(" " .. label, inner_w), fg = row_fg, bg = row_bg, spans = spans }
@@ -356,6 +359,11 @@ local function quick_pick(p)
     local prefix = is_selected and " ▎" or "  "
     local label = truncate(item.label or "", label_w)
     local spans = match_spans(label, query, is_selected and selection_fg or accent)
+    -- match_spans offsets are bytes into label; shift them past the prefix
+    -- (which is multibyte when selected: " ▎") so they point into the row.
+    for _, sp in ipairs(spans) do
+      sp.start = sp.start + #prefix
+    end
     local line = prefix .. label
     if detail_w > 0 and item.detail and item.detail ~= "" then
       line = line .. string.rep(" ", math.max(1, inner_w - rune_len(line) - detail_w))
@@ -504,7 +512,7 @@ local function tree_sitter_status(p)
   end
   if count == 0 then
     body[2] = pad(" " .. truncate("No languages registered", inner_w - 2), inner_w)
-    spans[2] = { { start = 0, len = inner_w, fg = comment, bg = bg } }
+    spans[2] = { { start = 0, len = 65535, fg = comment, bg = bg } }
   end
 
   local inner_h = math.max(1, p.h - 2)
@@ -615,7 +623,7 @@ local function lsp_manager(p)
   end
   if count == 0 then
     body[1] = pad(" No servers registered", inner_w)
-    spans[1] = { { start = 0, len = inner_w, fg = comment, bg = bg } }
+    spans[1] = { { start = 0, len = 65535, fg = comment, bg = bg } }
   end
 
   local inner_h = math.max(1, p.h - 2)
@@ -694,17 +702,22 @@ local function telescope(p)
     spans[b][#spans[b] + 1] = { start = col, len = len, fg = fg, bg = bg }
   end
 
+  -- Appends text at a *cell* column and returns the *byte* offset where it
+  -- was placed (or -1 when dropped). Callers that build derived spans (e.g.
+  -- syntax highlighting inside the appended text) must use this byte offset
+  -- as their origin -- columns and bytes diverge once a row contains a
+  -- multibyte glyph like the list/preview separator.
   local function put(b, col, text, fg, bg)
     if b < 1 or b > inner_h then
-      return
+      return -1
     end
     if col < 0 then
       -- Left of the float's interior: the border owns those cells and a
       -- partial slice would cut a UTF-8 glyph in half, so drop it.
-      return
+      return -1
     end
     if text == "" then
-      return
+      return -1
     end
     body[b] = body[b] or ""
     -- Pad by *cells* (wide glyphs count 2) so content lands at the exact
@@ -718,6 +731,7 @@ local function telescope(p)
     local start = #body[b]
     span(b, start, #text, fg, bg)
     body[b] = body[b] .. text
+    return start
   end
 
   local function fill_row(b, row_bg, row_fg)
@@ -835,14 +849,18 @@ local function telescope(p)
         put(b, prev_col, string.format("%3d ", line_no + 1), comment, t_prev_bg)
         local text_col = prev_col + 4
         local clipped = trunc_cells(ln, math.max(1, prev_inner_w - 4))
-        put(b, text_col, clipped, t_prev_fg, t_prev_bg)
+        local code_start = put(b, text_col, clipped, t_prev_fg, t_prev_bg)
         if jot.syntax and jot.syntax.highlight then
           local ok, caps = pcall(jot.syntax.highlight, ext, clipped)
           if ok and type(caps) == "table" then
             for _, cap in ipairs(caps) do
               local cap_fg = colors[cap.kind]
-              if cap_fg then
-                span(b, text_col + (cap.start or 0), cap.len or 0, cap_fg, t_prev_bg)
+              if cap_fg and code_start >= 0 then
+                -- cap.start is a byte offset into clipped; the row origin is
+                -- where clipped was actually appended (code_start), which is
+                -- NOT the same as the cell column once the separator or any
+                -- wide glyph precedes it.
+                span(b, code_start + (cap.start or 0), cap.len or 0, cap_fg, t_prev_bg)
               end
             end
           end
