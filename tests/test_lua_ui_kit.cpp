@@ -17,7 +17,7 @@ namespace
   struct StubState
   {
     int handler_count = 0;
-    std::string handlers[8];
+    std::string handlers[16];
     int open_count = 0;
     int close_count = 0;
     int delete_count = 0;
@@ -44,7 +44,7 @@ namespace
   int stub_handler(lua_State *L)
   {
     const char *name = luaL_checkstring(L, 1);
-    if (g.handler_count < 8)
+    if (g.handler_count < 16)
     {
       g.handlers[g.handler_count++] = name;
     }
@@ -237,10 +237,11 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
   REQUIRE(lua_istable(L, 1));
-  REQUIRE(g.handler_count == 8);
+  REQUIRE(g.handler_count == 11);
   bool has_palette = false, has_quick_pick = false, has_popup = false;
   bool has_save = false, has_quit = false, has_ts = false;
   bool has_lsp = false, has_telescope = false;
+  bool has_completion = false, has_context = false, has_menu = false;
   for (int i = 0; i < g.handler_count; i++)
   {
     has_palette = has_palette || g.handlers[i] == "command_palette";
@@ -251,6 +252,9 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
     has_ts = has_ts || g.handlers[i] == "tree_sitter_status";
     has_lsp = has_lsp || g.handlers[i] == "lsp_manager";
     has_telescope = has_telescope || g.handlers[i] == "telescope";
+    has_completion = has_completion || g.handlers[i] == "lsp_completion";
+    has_context = has_context || g.handlers[i] == "context_menu";
+    has_menu = has_menu || g.handlers[i] == "menu_dropdown";
   }
   REQUIRE(has_palette);
   REQUIRE(has_quick_pick);
@@ -260,6 +264,9 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(has_ts);
   REQUIRE(has_lsp);
   REQUIRE(has_telescope);
+  REQUIRE(has_completion);
+  REQUIRE(has_context);
+  REQUIRE(has_menu);
 
   // --- command palette ---
   push_module_field(L, 1, "command_palette");
@@ -599,6 +606,116 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(g.last_cursor_x >= 1);
 
   push_module_field(L, 1, "telescope");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+
+  // --- lsp completion ---
+  push_module_field(L, 1, "lsp_completion");
+  push_box(L, 30, 8, 44, 4); // content box: 3 items + footer
+  lua_pushinteger(L, 3);
+  lua_setfield(L, -2, "max_items");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "start");
+  lua_pushinteger(L, 1);
+  lua_setfield(L, -2, "selected");
+  lua_pushinteger(L, 6);
+  lua_setfield(L, -2, "total");
+  lua_pushinteger(L, 9);
+  lua_setfield(L, -2, "all_total");
+  lua_pushboolean(L, 1);
+  lua_setfield(L, -2, "filtered");
+  lua_pushstring(L, "pri");
+  lua_setfield(L, -2, "prefix");
+  lua_newtable(L); // items
+  const char *c_labels[] = {"printf", "printf_s", "print_buffer"};
+  const char *c_kinds[] = {"Function", "Function", "Function"};
+  for (int i = 1; i <= 3; i++)
+  {
+    lua_newtable(L);
+    lua_pushstring(L, c_labels[i - 1]);
+    lua_setfield(L, -2, "label");
+    lua_pushinteger(L, 12);
+    lua_setfield(L, -2, "kind");
+    lua_pushstring(L, c_kinds[i - 1]);
+    lua_setfield(L, -2, "kind_name");
+    lua_pushstring(L, "󰊕");
+    lua_setfield(L, -2, "kind_icon");
+    lua_pushstring(L, "prints to stdout");
+    lua_setfield(L, -2, "detail");
+    lua_pushstring(L, "");
+    lua_setfield(L, -2, "documentation");
+    lua_rawseti(L, -2, i);
+  }
+  lua_setfield(L, -2, "items");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  // float wraps the content box in a 1-cell border
+  REQUIRE(g.last_width == 46);
+  REQUIRE(g.last_height == 6);
+  REQUIRE(g.last_border == "single");
+  REQUIRE(g.lines_count == 4); // 3 items + footer
+  push_module_field(L, 1, "lsp_completion");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+
+  // --- context menu ---
+  push_module_field(L, 1, "context_menu");
+  push_box(L, 12, 6, 26, 6);
+  lua_pushinteger(L, 1);
+  lua_setfield(L, -2, "selected");
+  lua_newtable(L); // items
+  const char *x_labels[] = {"Cut", "Copy", "Paste", "Go to Definition"};
+  const int x_enabled[] = {1, 1, 1, 1};
+  for (int i = 1; i <= 4; i++)
+  {
+    lua_newtable(L);
+    lua_pushstring(L, x_labels[i - 1]);
+    lua_setfield(L, -2, "label");
+    lua_pushboolean(L, x_enabled[i - 1]);
+    lua_setfield(L, -2, "enabled");
+    lua_rawseti(L, -2, i);
+  }
+  lua_setfield(L, -2, "items");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.last_width == 26);
+  REQUIRE(g.last_height == 6);
+  REQUIRE(g.lines_count == 4); // item rows
+  push_module_field(L, 1, "context_menu");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+
+  // --- menu dropdown ---
+  push_module_field(L, 1, "menu_dropdown");
+  push_box(L, 4, 1, 30, 7);
+  lua_pushstring(L, "File");
+  lua_setfield(L, -2, "menu_label");
+  lua_pushinteger(L, 2);
+  lua_setfield(L, -2, "selected");
+  lua_newtable(L); // items
+  const char *m_labels[] = {"New File", "Open File...", "Save", "Save As...", "Quit"};
+  for (int i = 1; i <= 5; i++)
+  {
+    lua_newtable(L);
+    lua_pushstring(L, m_labels[i - 1]);
+    lua_setfield(L, -2, "label");
+    lua_pushboolean(L, 1);
+    lua_setfield(L, -2, "enabled");
+    lua_rawseti(L, -2, i);
+  }
+  lua_setfield(L, -2, "items");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.last_width == 30);
+  REQUIRE(g.last_title == " File ");
+  REQUIRE(g.lines_count == 5); // item rows
+  push_module_field(L, 1, "menu_dropdown");
   lua_pushnil(L);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);

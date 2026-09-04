@@ -166,9 +166,62 @@ struct TelescopeView
   int list_scroll = 0;
   int result_count = 0;
   bool scan_pending = false;
-  std::string focus; // query | results | preview
+  std::string focus;                        // query | results | preview
   std::vector<TelescopeResultView> results; // windowed to visible rows
   TelescopePreviewView preview;
+};
+
+struct CompletionItemView
+{
+  std::string label;
+  int kind = 0;
+  std::string kind_name; // e.g. "Function", "Keyword", ...
+  std::string kind_icon; // nerd-font glyph as rendered natively
+  bool deprecated = false;
+  std::string detail;
+  std::string documentation;
+};
+
+struct CompletionView
+{
+  // Content-box geometry (rows + footer); the Lua render wraps it in a
+  // bordered float one cell larger on each side, matching the native popup.
+  int x = 0, y = 0, w = 0, h = 0;
+  int max_items = 0; // visible row window
+  int start = 0;     // absolute index of items[0]
+  int selected = 0;  // index into the full filtered list
+  int total = 0;     // filtered item count
+  int all_total = 0; // unfiltered count (footer "filtered" hint)
+  bool filtered = false;
+  std::string prefix;
+  std::vector<CompletionItemView> items; // windowed to max_items rows
+};
+
+struct ContextMenuItemView
+{
+  std::string label;
+  bool enabled = true;
+};
+
+struct ContextMenuView
+{
+  int x = 0, y = 0, w = 0, h = 0;
+  int selected = 0;
+  std::vector<ContextMenuItemView> items;
+};
+
+struct MenuItemView
+{
+  std::string label;
+  bool enabled = true;
+};
+
+struct MenuDropdownView
+{
+  std::string menu_label;
+  int x = 0, y = 0, w = 0, h = 0;
+  int selected = 0;
+  std::vector<MenuItemView> items;
 };
 
 struct LuaFloatWindow
@@ -395,6 +448,9 @@ public:
   bool emit_tree_sitter_status(const TsStatusView &view);
   bool emit_lsp_manager(const LspManagerView &view);
   bool emit_telescope(const TelescopeView &view);
+  bool emit_lsp_completion(const CompletionView &view);
+  bool emit_context_menu(const ContextMenuView &view);
+  bool emit_menu_dropdown(const MenuDropdownView &view);
 
   // Terminal-cursor control from Lua (friend access to editor->ui).
   void ui_set_cursor(int x, int y);

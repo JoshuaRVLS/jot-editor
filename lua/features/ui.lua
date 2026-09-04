@@ -901,6 +901,193 @@ local function telescope(p)
 end
 
 -- ---------------------------------------------------------------------------
+-- LSP completion popup
+-- ---------------------------------------------------------------------------
+
+local function completion_kind_color(kind_name, colors)
+  local k = (kind_name or ""):lower()
+  if k == "function" or k == "method" then
+    return colors.function_method or colors["function"] or colors.fg or 7
+  end
+  if k == "constructor" then
+    return colors.function_constructor or colors["function"] or colors.fg or 7
+  end
+  if k == "class" or k == "struct" or k == "interface" or k == "typeparameter" then
+    return colors.type or colors.fg or 7
+  end
+  if k == "keyword" then
+    return colors.keyword or colors.fg or 7
+  end
+  if k == "variable" then
+    return colors.variable or colors.fg or 7
+  end
+  if k == "field" or k == "property" then
+    return colors.field or colors.fg or 7
+  end
+  if k == "constant" or k == "enum" or k == "enummember" or k == "value" then
+    return colors.constant or colors.fg or 7
+  end
+  if k == "module" or k == "namespace" then
+    return colors.module or colors.namespace or colors.fg or 7
+  end
+  if k == "snippet" or k == "string" then
+    return colors.string or colors.fg or 7
+  end
+  if k == "number" or k == "unit" then
+    return colors.number or colors.fg or 7
+  end
+  if k == "operator" then
+    return colors.operator or colors.fg or 7
+  end
+  return colors.fg or 7
+end
+
+-- Appends one styled part to a row, tracking byte offsets for spans. The row
+-- text gets cell-padded by present_panel afterwards, so trailing content can
+-- stop at any cell column without breaking span alignment.
+local function add_part(parts, offsets, text, fg)
+  if text == nil or text == "" then
+    return
+  end
+  offsets[#offsets + 1] = { start = #table.concat(parts), len = #text, fg = fg }
+  parts[#parts + 1] = text
+end
+
+local function lsp_completion(p)
+  if not p then
+    close("lsp_completion")
+    return true
+  end
+  local colors = p.colors or {}
+  local fg = colors.fg or 7
+  local bg = colors.panel_bg or colors.bg or 0
+  local selection_fg = colors.selection_fg or 0
+  local selection_bg = colors.selection_bg or 6
+  local comment = colors.comment or 8
+
+  -- Native passes the content box; the float wraps it in a one-cell border.
+  local f = {
+    x = p.x - 1,
+    y = p.y - 1,
+    w = p.w + 2,
+    h = p.h + 2,
+    colors = p.colors,
+  }
+  local content_w = math.max(1, (p.w or 2))
+  local items = p.items or {}
+  local total = math.max(1, p.total or 0)
+  local rows = {}
+  local meta_w = math.max(8, math.floor(content_w / 3))
+  local label_w = math.max(1, content_w - meta_w - 1)
+  for i, it in ipairs(items) do
+    local sel = (p.start or 0) + i - 1 == (p.selected or 0)
+    local row_fg = sel and selection_fg or fg
+    local row_bg = sel and selection_bg or bg
+    local parts = {}
+    local offsets = {}
+    local icon = it.kind_icon or " "
+    -- Reserve the first cell as a gutter; icon + label stay within label_w.
+    local name = trunc_cells((it.label or ""), math.max(1, label_w - cell_len(icon) - 1))
+    parts[#parts + 1] = " "
+    add_part(parts, offsets, icon, completion_kind_color(it.kind_name, colors))
+    add_part(parts, offsets, name, it.deprecated and comment or row_fg)
+    local meta = it.kind_name or ""
+    if it.deprecated then
+      meta = meta == "" and "deprecated" or (meta .. " deprecated")
+    end
+    local detail = (it.detail ~= nil and it.detail ~= "") and it.detail or it.documentation or ""
+    if detail ~= "" then
+      meta = meta == "" and detail or (meta .. "  " .. detail)
+    end
+    local line = table.concat(parts)
+    -- Right-align the meta column by cells (wide glyphs count 2).
+    local cur = cell_len(line)
+    local meta_col = math.max(cur + 1, content_w - meta_w)
+    if cur < meta_col then
+      line = line .. string.rep(" ", meta_col - cur)
+    end
+    local meta_off = #line
+    local meta_text = trunc_cells(meta, math.max(1, content_w - meta_col))
+    line = line .. meta_text
+    if meta_text ~= "" then
+      offsets[#offsets + 1] = { start = meta_off, len = #meta_text, fg = sel and selection_fg or comment }
+    end
+    rows[#rows + 1] = {
+      text = line,
+      fg = row_fg,
+      bg = row_bg,
+      spans = offsets,
+    }
+  end
+  -- Footer row: position counter + typed prefix + filtered hint.
+  local footer = tostring((p.selected or 0) + 1) .. "/" .. tostring(total)
+  if p.prefix and p.prefix ~= "" then
+    footer = footer .. "  " .. trunc_cells(p.prefix, math.max(1, content_w - 10))
+  end
+  if p.filtered then
+    footer = footer .. "  filtered"
+  end
+  rows[#rows + 1] = { text = footer, fg = comment, bg = bg }
+  return present_panel("lsp_completion", f, rows, { border = "single" })
+end
+
+-- ---------------------------------------------------------------------------
+-- Context menu
+-- ---------------------------------------------------------------------------
+
+local function menu_rows(p, list, selected)
+  -- Renders an item list as a bordered panel: enabled rows are selectable,
+  -- disabled rows are dimmed and skip the selection bar.
+  local colors = p.colors or {}
+  local fg = colors.fg or 7
+  local bg = colors.panel_bg or colors.bg or 0
+  local selection_fg = colors.selection_fg or 0
+  local selection_bg = colors.selection_bg or 6
+  local comment = colors.comment or 8
+  local inner_w = math.max(1, p.w - 2)
+  local rows = {}
+  for i, item in ipairs(list) do
+    local enabled = item.enabled ~= false
+    local sel = enabled and (i - 1) == (selected or 0)
+    local label = trunc_cells(item.label or "", math.max(1, inner_w - 4))
+    rows[#rows + 1] = {
+      text = " " .. label,
+      fg = sel and selection_fg or (enabled and fg or comment),
+      bg = sel and selection_bg or bg,
+    }
+  end
+  return rows
+end
+
+local function context_menu(p)
+  if not p then
+    close("context_menu")
+    return true
+  end
+  local rows = menu_rows(p, p.items or {}, p.selected)
+  return present_panel("context_menu", p, rows, {})
+end
+
+-- ---------------------------------------------------------------------------
+-- Menu bar dropdown
+-- ---------------------------------------------------------------------------
+
+local function menu_dropdown(p)
+  if not p then
+    close("menu_dropdown")
+    return true
+  end
+  local colors = p.colors or {}
+  local accent = colors.accent or colors.fg or 7
+  local rows = menu_rows(p, p.items or {}, p.selected)
+  local label = (p.menu_label or "") ~= "" and (" " .. p.menu_label .. " ") or nil
+  return present_panel("menu_dropdown",
+                       p,
+                       rows,
+                       { border = "single", title = label, title_fg = accent })
+end
+
+-- ---------------------------------------------------------------------------
 
 jot.ui.handler("command_palette", command_palette)
 jot.ui.handler("quick_pick", quick_pick)
@@ -910,6 +1097,9 @@ jot.ui.handler("quit_prompt", quit_prompt)
 jot.ui.handler("tree_sitter_status", tree_sitter_status)
 jot.ui.handler("lsp_manager", lsp_manager)
 jot.ui.handler("telescope", telescope)
+jot.ui.handler("lsp_completion", lsp_completion)
+jot.ui.handler("context_menu", context_menu)
+jot.ui.handler("menu_dropdown", menu_dropdown)
 
 -- Exposed for tests / reuse; the loader ignores the return value.
 return {
@@ -924,4 +1114,7 @@ return {
   tree_sitter_status = tree_sitter_status,
   lsp_manager = lsp_manager,
   telescope = telescope,
+  lsp_completion = lsp_completion,
+  context_menu = context_menu,
+  menu_dropdown = menu_dropdown,
 }

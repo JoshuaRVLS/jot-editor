@@ -5169,6 +5169,96 @@ bool LuaAPI::emit_telescope(const TelescopeView &view)
                      });
 }
 
+bool LuaAPI::emit_lsp_completion(const CompletionView &view)
+{
+  return emit_lua_ui("lsp_completion",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_set_int_field(L, t, "max_items", view.max_items);
+                       lua_set_int_field(L, t, "start", view.start);
+                       lua_set_int_field(L, t, "selected", view.selected);
+                       lua_set_int_field(L, t, "total", view.total);
+                       lua_set_int_field(L, t, "all_total", view.all_total);
+                       lua_set_bool_field(L, t, "filtered", view.filtered);
+                       lua_set_str_field(L, t, "prefix", view.prefix);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.items.size(); i++)
+                       {
+                         const CompletionItemView &it = view.items[i];
+                         lua_newtable(L);
+                         const int ii = lua_gettop(L);
+                         lua_set_str_field(L, ii, "label", it.label);
+                         lua_set_int_field(L, ii, "kind", it.kind);
+                         lua_set_str_field(L, ii, "kind_name", it.kind_name);
+                         lua_set_str_field(L, ii, "kind_icon", it.kind_icon);
+                         lua_set_bool_field(L, ii, "deprecated", it.deprecated);
+                         lua_set_str_field(L, ii, "detail", it.detail);
+                         lua_set_str_field(L, ii, "documentation", it.documentation);
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "items");
+                       push_ui_colors(L, t);
+                     });
+}
+
+bool LuaAPI::emit_context_menu(const ContextMenuView &view)
+{
+  return emit_lua_ui("context_menu",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_set_int_field(L, t, "selected", view.selected);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.items.size(); i++)
+                       {
+                         const ContextMenuItemView &it = view.items[i];
+                         lua_newtable(L);
+                         const int ii = lua_gettop(L);
+                         lua_set_str_field(L, ii, "label", it.label);
+                         lua_set_bool_field(L, ii, "enabled", it.enabled);
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "items");
+                       push_ui_colors(L, t);
+                     });
+}
+
+bool LuaAPI::emit_menu_dropdown(const MenuDropdownView &view)
+{
+  return emit_lua_ui("menu_dropdown",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_str_field(L, t, "menu_label", view.menu_label);
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_set_int_field(L, t, "selected", view.selected);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.items.size(); i++)
+                       {
+                         const MenuItemView &it = view.items[i];
+                         lua_newtable(L);
+                         const int ii = lua_gettop(L);
+                         lua_set_str_field(L, ii, "label", it.label);
+                         lua_set_bool_field(L, ii, "enabled", it.enabled);
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "items");
+                       push_ui_colors(L, t);
+                     });
+}
+
 void LuaAPI::ui_set_cursor(int x, int y)
 {
   if (editor && editor->ui)

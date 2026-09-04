@@ -1610,6 +1610,29 @@ void Editor::render_context_menu()
   if (y + h > ui->get_height())
     y = std::max(0, ui->get_height() - h);
 
+  // A registered Lua UI handler paints the menu from this state; the native
+  // rect (already clamped) is passed through so mouse hits stay aligned.
+  if (lua_api && lua_api->has_lua_ui_handler("context_menu"))
+  {
+    ContextMenuView view;
+    view.x = x;
+    view.y = y;
+    view.w = w;
+    view.h = h;
+    view.selected = context_menu_selected;
+    for (const auto &item : context_menu_items)
+    {
+      ContextMenuItemView iv;
+      iv.label = item.label;
+      iv.enabled = item.enabled;
+      view.items.push_back(std::move(iv));
+    }
+    if (lua_api->emit_context_menu(view))
+    {
+      return;
+    }
+  }
+
   // Same panel surface convention as the popup / palette / quick-pick.
   const Theme panel_theme = [&]()
   {
@@ -1781,6 +1804,30 @@ void Editor::render_menu_dropdown()
   int max_h = std::max(1, ui->get_height() - y - status_height);
   h = std::min(h, max_h);
 
+  // A registered Lua UI handler paints the dropdown from this state; the rect
+  // stays native so the bar highlight and mouse hover keep their hit regions.
+  if (lua_api && lua_api->has_lua_ui_handler("menu_dropdown"))
+  {
+    MenuDropdownView view;
+    view.menu_label = menu.label;
+    view.x = x;
+    view.y = y;
+    view.w = w;
+    view.h = h;
+    view.selected = menu_bar_selected;
+    for (const auto &item : menu.items)
+    {
+      MenuItemView iv;
+      iv.label = item.label;
+      iv.enabled = item.enabled;
+      view.items.push_back(std::move(iv));
+    }
+    if (lua_api->emit_menu_dropdown(view))
+    {
+      return;
+    }
+  }
+
   const Theme panel_theme = [&]()
   {
     Theme t = theme;
@@ -1927,6 +1974,9 @@ void Editor::sync_lua_ui_surfaces()
     lua_ui_prev_tree_sitter_status = false;
     lua_ui_prev_lsp_manager = false;
     lua_ui_prev_telescope = false;
+    lua_ui_prev_lsp_completion = false;
+    lua_ui_prev_context_menu = false;
+    lua_ui_prev_menu_dropdown = false;
     return;
   }
   auto sync = [&](bool visible, bool &prev, const char *name)
@@ -1945,6 +1995,11 @@ void Editor::sync_lua_ui_surfaces()
   sync(show_tree_sitter_status_modal, lua_ui_prev_tree_sitter_status, "tree_sitter_status");
   sync(show_lsp_manager_modal, lua_ui_prev_lsp_manager, "lsp_manager");
   sync(telescope.is_active(), lua_ui_prev_telescope, "telescope");
+  sync(lsp_completion_visible && !lsp_completion_items.empty(),
+       lua_ui_prev_lsp_completion,
+       "lsp_completion");
+  sync(show_context_menu, lua_ui_prev_context_menu, "context_menu");
+  sync(show_menu_bar_dropdown, lua_ui_prev_menu_dropdown, "menu_dropdown");
 }
 
 void Editor::render_popup()

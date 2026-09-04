@@ -342,6 +342,47 @@ void Editor::render_lsp_completion()
     }
   }
 
+  // A registered Lua UI handler paints the completion popup from this state;
+  // the box geometry stays native (placement is cursor-avoidance logic the
+  // Lua layer shouldn't duplicate) so the popup tracks the caret exactly.
+  if (lua_api && lua_api->has_lua_ui_handler("lsp_completion"))
+  {
+    CompletionView view;
+    view.x = box_x;
+    view.y = box_y;
+    view.w = box_w;
+    view.h = box_h;
+    view.max_items = max_items;
+    view.start = start_idx;
+    view.selected = selected;
+    view.total = (int)lsp_completion_items.size();
+    view.all_total = (int)lsp_completion_all_items.size();
+    view.filtered = view.all_total > view.total;
+    view.prefix = lsp_completion_prefix;
+    for (int row = 0; row < max_items; row++)
+    {
+      const int item_idx = start_idx + row;
+      if (item_idx < 0 || item_idx >= (int)lsp_completion_items.size())
+      {
+        break;
+      }
+      const auto &item = lsp_completion_items[item_idx];
+      CompletionItemView iv;
+      iv.label = item.label;
+      iv.kind = item.kind;
+      iv.kind_name = completion_kind_name(item.kind);
+      iv.kind_icon = completion_kind_icon(item.kind, use_nerd_icons);
+      iv.deprecated = item.deprecated;
+      iv.detail = one_line_text(item.detail);
+      iv.documentation = one_line_text(item.documentation);
+      view.items.push_back(std::move(iv));
+    }
+    if (lua_api->emit_lsp_completion(view))
+    {
+      return;
+    }
+  }
+
   UIRect rect = {box_x, box_y, box_w, box_h};
   ui->fill_rect(rect, " ", theme.fg_command, theme.bg_command);
   UIRect border_rect = {box_x - 1, box_y - 1, box_w + 2, box_h + 2};
