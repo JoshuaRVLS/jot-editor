@@ -3,7 +3,11 @@
 // recording functions, so no Editor / terminal is needed.
 #include <catch2/catch_test_macros.hpp>
 #include <cstdio>
+#include <cstring>
+#include <fstream>
 #include <string>
+
+#include "lua_bridge/embedded_lua.h"
 
 extern "C"
 {
@@ -1027,6 +1031,40 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 3, 1, 0) == LUA_OK);
   REQUIRE(lua_rawlen(L, -1) == 0);
   lua_pop(L, 1);
+
+  lua_close(L);
+}
+
+TEST_CASE("Embedded Lua UI kit registers every handler from the binary copy")
+{
+  g = StubState{};
+  lua_State *L = luaL_newstate();
+  REQUIRE(L != nullptr);
+  luaL_openlibs(L);
+  push_stub_jot(L);
+
+  // The generated embedded_lua.cpp must carry a byte-identical copy of the
+  // source ui.lua. This guards generator staleness: editing the .lua without
+  // regenerating (or generating from the wrong dir) would silently ship an
+  // outdated UI in the binary.
+  size_t emb_size = 0;
+  const unsigned char *emb = jot_embedded::find("features/ui.lua", &emb_size);
+  REQUIRE(emb != nullptr);
+  REQUIRE(emb_size > 0);
+
+  const std::string path = std::string(JOT_LUA_SOURCE_DIR) + "/features/ui.lua";
+  std::ifstream in(path, std::ios::binary);
+  REQUIRE(in.good());
+  const std::string src((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  REQUIRE(src.size() == emb_size);
+  REQUIRE(std::memcmp(src.data(), emb, emb_size) == 0);
+
+  // The embedded bytes alone (no disk, no loader) must boot the full UI kit.
+  REQUIRE(luaL_loadbuffer(L, reinterpret_cast<const char *>(emb), emb_size, "embedded ui.lua")
+          == LUA_OK);
+  REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  REQUIRE(lua_istable(L, 1));
+  REQUIRE(g.handler_count == 16);
 
   lua_close(L);
 }

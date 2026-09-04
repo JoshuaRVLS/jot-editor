@@ -1,6 +1,22 @@
 add_compile_definitions(JOT_DEFAULT_DATA_DIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/jot")
 add_compile_definitions(JOT_LUA_SOURCE_DIR="${PROJECT_SOURCE_DIR}/lua")
 
+# Embed the bundled Lua sources (lua/*.lua) into the binary so it always
+# carries a working copy of the Lua UI / features, regenerated whenever the
+# .lua files change. Runtime loaders try the user data dir and the developer
+# source dir first; the embedded bytes are the final fallback.
+file(GLOB_RECURSE JOT_LUA_BUNDLED "${PROJECT_SOURCE_DIR}/lua/*.lua")
+set(JOT_LUA_EMBED_CPP "${CMAKE_CURRENT_BINARY_DIR}/embedded_lua.cpp")
+add_custom_command(
+  OUTPUT "${JOT_LUA_EMBED_CPP}"
+  COMMAND ${CMAKE_COMMAND}
+    -DLUA_DIR=${PROJECT_SOURCE_DIR}/lua
+    -DOUTPUT=${JOT_LUA_EMBED_CPP}
+    -P ${PROJECT_SOURCE_DIR}/cmake/embed_lua.cmake
+  DEPENDS ${JOT_LUA_BUNDLED} "${PROJECT_SOURCE_DIR}/cmake/embed_lua.cmake"
+  COMMENT "Embedding bundled Lua sources"
+  VERBATIM)
+
 function(jot_configure_object_target target_name)
   target_include_directories(${target_name} PRIVATE
     ${PROJECT_SOURCE_DIR}/include
@@ -247,7 +263,8 @@ if(NOT WIN32)
   target_compile_options(jot_tools_obj PRIVATE ${VTERM_CFLAGS_OTHER})
 endif()
 
-add_library(jot_lua_bridge_obj OBJECT ${JOT_LUA_BRIDGE_SOURCES})
+add_library(jot_lua_bridge_obj OBJECT ${JOT_LUA_BRIDGE_SOURCES} "${JOT_LUA_EMBED_CPP}")
+target_include_directories(jot_lua_bridge_obj PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 jot_configure_object_target(jot_lua_bridge_obj)
 target_include_directories(jot_lua_bridge_obj SYSTEM PRIVATE ${LUA_INCLUDE_DIRS})
 

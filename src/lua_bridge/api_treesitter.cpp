@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "lua_bridge/api.h"
+#include "lua_bridge/lua_loader.h"
 #include "tree_sitter/install.h"
 #include "tree_sitter/manager.h"
 
@@ -304,10 +305,11 @@ void LuaAPI::register_treesitter_api(lua_State *L)
 bool LuaAPI::load_treesitter_runtime(lua_State *L)
 {
   register_treesitter_api(L);
-  fs::path path = fs::path(JOT_DEFAULT_DATA_DIR) / "lua" / "treesitter" / "init.lua";
-  if (!fs::exists(path))
-    path = fs::path(JOT_LUA_SOURCE_DIR) / "treesitter" / "init.lua";
-  if (!fs::exists(path))
+  // User config dir -> install data dir -> developer source dir, then the
+  // embedded copy materialized into the user config dir. The treesitter Lua
+  // uses dofile relative to runtime_path, so it needs real files on disk.
+  const fs::path path = jot_lua_resolve_path("treesitter/init.lua");
+  if (path.empty())
     return false;
   lua_getglobal(L, "jot");
   lua_getfield(L, -1, "treesitter");

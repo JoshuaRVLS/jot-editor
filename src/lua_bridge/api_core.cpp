@@ -3,6 +3,8 @@
 #include "features/tree_sitter/manager.h"
 #include "host_api.h"
 #include "lua_bridge/api.h"
+#include "lua_bridge/embedded_lua.h"
+#include "lua_bridge/lua_loader.h"
 #include "tools/symbols/index.h"
 #include "ui/components.h"
 #include "ui/text.h"
@@ -5630,48 +5632,54 @@ void LuaAPI::notify_lsp_hover_closed()
   lua_settop(L, top);
 }
 
+namespace
+{
+  // Loads a bundled Lua feature file. Resolution: the first candidate path
+  // on disk (user config dir -> install data dir -> developer source dir)
+  // wins so edits never need a recompile; otherwise the copy embedded into
+  // the binary runs straight from memory (no disk writes needed).
+  bool load_bundled_lua_file(lua_State *L, const char *rel_path, const char *label)
+  {
+    const auto candidates = jot_lua_candidate_paths(rel_path);
+    if (!candidates.empty())
+    {
+      const int top = lua_gettop(L);
+      if (luaL_loadfile(L, candidates.front().string().c_str()) || lua_pcall(L, 0, 0, 0))
+      {
+        std::cerr << label << " Lua runtime failed: "
+                  << (lua_tostring(L, -1) ? lua_tostring(L, -1) : "unknown") << "\n";
+        lua_settop(L, top);
+        return false;
+      }
+      return true;
+    }
+    size_t size = 0;
+    const unsigned char *data = jot_embedded::find(rel_path, &size);
+    if (!data || size == 0)
+    {
+      return false;
+    }
+    const int top = lua_gettop(L);
+    if (luaL_loadbuffer(L, reinterpret_cast<const char *>(data), size, rel_path)
+        || lua_pcall(L, 0, 0, 0))
+    {
+      std::cerr << label << " embedded Lua runtime failed: "
+                << (lua_tostring(L, -1) ? lua_tostring(L, -1) : "unknown") << "\n";
+      lua_settop(L, top);
+      return false;
+    }
+    return true;
+  }
+} // namespace
+
 bool LuaAPI::load_hover_ui_runtime(lua_State *L)
 {
-  namespace fs = std::filesystem;
-  fs::path path = fs::path(JOT_DEFAULT_DATA_DIR) / "lua" / "features" / "hover.lua";
-  if (!fs::exists(path))
-  {
-    path = fs::path(JOT_LUA_SOURCE_DIR) / "features" / "hover.lua";
-  }
-  if (!fs::exists(path))
-  {
-    return false;
-  }
-  int top = lua_gettop(L);
-  if (luaL_loadfile(L, path.string().c_str()) || lua_pcall(L, 0, 0, 0))
-  {
-    std::cerr << "Hover UI Lua runtime failed: " << lua_tostring(L, -1) << "\n";
-    lua_settop(L, top);
-    return false;
-  }
-  return true;
+  return load_bundled_lua_file(L, "features/hover.lua", "Hover UI");
 }
 
 bool LuaAPI::load_ui_kit_runtime(lua_State *L)
 {
-  namespace fs = std::filesystem;
-  fs::path path = fs::path(JOT_DEFAULT_DATA_DIR) / "lua" / "features" / "ui.lua";
-  if (!fs::exists(path))
-  {
-    path = fs::path(JOT_LUA_SOURCE_DIR) / "features" / "ui.lua";
-  }
-  if (!fs::exists(path))
-  {
-    return false;
-  }
-  int top = lua_gettop(L);
-  if (luaL_loadfile(L, path.string().c_str()) || lua_pcall(L, 0, 0, 0))
-  {
-    std::cerr << "Lua UI runtime failed: " << lua_tostring(L, -1) << "\n";
-    lua_settop(L, top);
-    return false;
-  }
-  return true;
+  return load_bundled_lua_file(L, "features/ui.lua", "UI kit");
 }
 
 bool LuaAPI::try_deliver_lsp_definition(const LSPDefinitionResult &definition)
