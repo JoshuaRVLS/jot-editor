@@ -1920,6 +1920,17 @@ void LuaAPI::render_floats()
         if (e >= (int)clipped.size())
           line_bg = sp.bg;
       }
+      // Span starts are byte offsets, but draw_text columns are terminal
+      // *cells*: a wide glyph (CJK name, the '│' separator, ...) occupies 2
+      // cells yet 3 bytes, so placing a segment at ix + byte drifts it right
+      // by the byte surplus accumulated before it -- vertical lines then
+      // zigzag from row to row depending on the content to their left.
+      // Map each byte offset to its cell column before drawing.
+      const auto cell_col = [&clipped](int byte)
+      {
+        const int b = ui_clamp_to_utf8_boundary(clipped, std::clamp(byte, 0, (int)clipped.size()));
+        return ui_cell_count(clipped.substr(0, (size_t)b));
+      };
       int pos = 0;
       for (const auto &sp : spans)
       {
@@ -1929,12 +1940,13 @@ void LuaAPI::render_floats()
           continue;
         const int span_bg = sp.bg >= 0 ? sp.bg : line_bg;
         if (s > pos)
-          editor->ui->draw_text(ix + pos, iy + i, clipped.substr(pos, s - pos), f->fg, line_bg);
-        editor->ui->draw_text(ix + s, iy + i, clipped.substr(s, e - s), sp.fg, span_bg);
+          editor->ui->draw_text(
+              ix + cell_col(pos), iy + i, clipped.substr(pos, s - pos), f->fg, line_bg);
+        editor->ui->draw_text(ix + cell_col(s), iy + i, clipped.substr(s, e - s), sp.fg, span_bg);
         pos = e;
       }
       if (pos < (int)clipped.size())
-        editor->ui->draw_text(ix + pos, iy + i, clipped.substr(pos), f->fg, line_bg);
+        editor->ui->draw_text(ix + cell_col(pos), iy + i, clipped.substr(pos), f->fg, line_bg);
     }
     const int title_fg = f->title_fg >= 0 ? f->title_fg : f->fg;
     if (!f->title.empty())
@@ -5147,7 +5159,8 @@ bool LuaAPI::emit_telescope(const TelescopeView &view)
                        const int pl = lua_gettop(L);
                        for (size_t i = 0; i < view.preview.lines.size(); i++)
                        {
-                         lua_pushlstring(L, view.preview.lines[i].data(), view.preview.lines[i].size());
+                         lua_pushlstring(
+                             L, view.preview.lines[i].data(), view.preview.lines[i].size());
                          lua_rawseti(L, pl, (lua_Integer)i + 1);
                        }
                        lua_setfield(L, pv, "lines");
