@@ -86,8 +86,10 @@ end
 
 -- Opens a float panel for a surface and fills it with themed rows.
 -- rows = {{text=, fg=, bg=, spans=}, ...}; the float footer renders the
--- bottom row (opts.footer) with opts.footer_fg.
-local function present_panel(name, p, rows, opts)
+-- bottom row (opts.footer) with opts.footer_fg. Surfaces with sparse layouts
+-- (tree-sitter modal, LSP manager, telescope) pass prebuilt body lines and
+-- spans directly instead of rows.
+local function present_panel(name, p, rows, opts, body_override, spans_override)
   close(name)
   opts = opts or {}
   local colors = p.colors or {}
@@ -100,14 +102,31 @@ local function present_panel(name, p, rows, opts)
   local accent = colors.accent or 6
 
   local inner_h = math.max(1, p.h - 2)
-  local body = {}
-  local spans_by_line = {}
-  local shown = math.min(#rows, inner_h)
-  for i = 1, shown do
-    local row = rows[i]
-    body[i] = row.text or ""
-    if row.spans and #row.spans > 0 then
-      spans_by_line[i] = row.spans
+  local body
+  local spans_by_line
+  local shown
+  if body_override then
+    body = body_override
+    spans_by_line = spans_override or {}
+    shown = inner_h
+  else
+    body = {}
+    spans_by_line = {}
+    shown = math.min(#rows, inner_h)
+    for i = 1, shown do
+      local row = rows[i]
+      body[i] = row.text or ""
+      -- A full-line span paints the row background (e.g. the selected / input
+      -- rows); text spans drawn on top override individual characters.
+      local spans = {
+        { start = 0, len = math.max(1, #(row.text or "")), fg = row.fg or fg, bg = row.bg or bg },
+      }
+      if row.spans then
+        for _, sp in ipairs(row.spans) do
+          spans[#spans + 1] = sp
+        end
+      end
+      spans_by_line[i] = spans
     end
   end
 
@@ -368,11 +387,413 @@ end
 
 -- ---------------------------------------------------------------------------
 
+-- ---------------------------------------------------------------------------
+-- Tree-sitter status modal
+-- ---------------------------------------------------------------------------
+
+local function tree_sitter_status(p)
+  if not p then
+    close("tree_sitter_status")
+    return true
+  end
+  local colors = p.colors or {}
+  local fg = colors.fg or 7
+  local bg = colors.panel_bg or colors.bg or 0
+  local comment = colors.comment or 8
+  local inner_w = math.max(1, p.w - 2)
+
+  local list_h = math.max(0, p.h - 4)
+  local rows = p.rows or {}
+  local scroll = math.max(0, p.scroll or 0)
+  local lang_w = math.max(12, math.min(24, math.floor(p.w / 3)))
+  local body = {}
+  local spans = {}
+  local count = 0
+  for j = 0, list_h - 1 do
+    local idx = scroll + j
+    if idx >= #rows then
+      break
+    end
+    local row = rows[idx + 1]
+    count = count + 1
+    local b = j + 2 -- rows start on the float's second inner line
+    if row.section then
+      local text = " " .. truncate(row.label or "", inner_w - 4)
+      if row.detail and row.detail ~= "" then
+        text = text .. " (" .. row.detail .. ")"
+      end
+      body[b] = pad(text, inner_w)
+      spans[b] = { { start = 0, len = inner_w, fg = comment, bg = bg } }
+    else
+      local name = pad(truncate(row.label or "", lang_w), lang_w)
+      local detail = truncate(row.detail or "", math.max(1, inner_w - lang_w - 3))
+      local name_fg = (row.color and row.color ~= 0) and row.color or fg
+      local line = " " .. name .. " " .. detail
+      body[b] = pad(line, inner_w)
+      spans[b] = {
+        { start = 0, len = inner_w, fg = fg, bg = bg },
+        { start = 1, len = #name, fg = name_fg, bg = bg },
+        { start = lang_w + 2, len = #detail, fg = comment, bg = bg },
+      }
+    end
+  end
+  if count == 0 then
+    body[2] = pad(" " .. truncate("No languages registered", inner_w - 2), inner_w)
+    spans[2] = { { start = 0, len = inner_w, fg = comment, bg = bg } }
+  end
+
+  local inner_h = math.max(1, p.h - 2)
+  local body_list = {}
+  for i = 1, inner_h do
+    body_list[i] = pad(body[i] or "", inner_w)
+  end
+
+  local footer = "Esc close   Up/Down scroll"
+  local max_scroll = math.max(0, #rows - list_h)
+  if max_scroll > 0 then
+    footer = footer .. "  " .. tostring(scroll + 1) .. "/" .. tostring(max_scroll + 1)
+  end
+  return present_panel("tree_sitter_status",
+                       p,
+                       {},
+                       {
+                         title = " Tree-sitter",
+                         title_fg = colors.accent or colors.fg or 7,
+                         footer = footer,
+                       },
+                       body_list,
+                       spans)
+end
+
+-- ---------------------------------------------------------------------------
+-- LSP manager modal
+-- ---------------------------------------------------------------------------
+
+local function lsp_manager(p)
+  if not p then
+    close("lsp_manager")
+    return true
+  end
+  local colors = p.colors or {}
+  local fg = colors.fg or 7
+  local bg = colors.panel_bg or colors.bg or 0
+  local selection_fg = colors.selection_fg or 0
+  local selection_bg = colors.selection_bg or 6
+  local comment = colors.comment or 8
+  local accent = colors.accent or 6
+  local error = colors.error or 1
+  local inner_w = math.max(1, p.w - 2)
+
+  local list_h = math.max(1, p.h - 3)
+  local rows = p.rows or {}
+  local scroll = math.max(0, p.scroll or 0)
+  local selected = math.max(0, p.selected or 0)
+  local label_w = math.max(1, p.label_w or 12)
+  local state_x = (p.state_x or 0) - (p.x or 0) - 1 -- inner col of the state
+  local body = {}
+  local spans = {}
+  local count = 0
+  for j = 0, list_h - 1 do
+    local idx = scroll + j
+    if idx >= #rows then
+      break
+    end
+    local row = rows[idx + 1]
+    count = count + 1
+    local is_selected = idx == selected
+    local row_fg = is_selected and selection_fg or fg
+    local row_bg = is_selected and selection_bg or bg
+    local b = j + 1
+
+    -- Compose the row: label at inner col 1, state at state_x, then buttons
+    -- at their native rects so mouse clicks stay aligned.
+    local function emit(col, text, span_fg)
+      local cur = #(body[b] or "")
+      if cur < col then
+        body[b] = (body[b] or "") .. string.rep(" ", col - cur)
+      end
+      local start = #(body[b] or "")
+      body[b] = body[b] .. text
+      if span_fg then
+        spans[b] = spans[b] or {}
+        spans[b][#spans[b] + 1] = { start = start, len = #text, fg = span_fg, bg = row_bg }
+      end
+    end
+    -- Background row span first (full width once padded later).
+    spans[b] = { { start = 0, len = inner_w, fg = row_fg, bg = row_bg } }
+    emit(1, truncate(row.label or "", label_w), row_fg)
+    local state_col = math.max(1 + label_w, state_x)
+    emit(state_col, truncate(row.state or "", math.max(1, (p.action_x or p.x + p.w - 31) - (p.state_x or 0) - 1)),
+         row.state_color or comment)
+    for _, btn in ipairs(row.actions or {}) do
+      local col = (btn.x or 0) - (p.x or 0) - 1
+      if col >= 1 then
+        local variant_fg = btn.variant == "danger" and error
+          or btn.variant == "primary" and accent
+          or (btn.variant == "secondary" or btn.variant == "muted") and comment
+          or fg
+        local label = truncate(btn.label or "", math.max(1, inner_w - col))
+        if btn.focused then
+          label = "[" .. label .. "]"
+        else
+          label = " " .. label .. " "
+        end
+        label = truncate(label, math.max(1, (btn.w or #label) + (btn.focused and 0 or 0)))
+        emit(col, label, btn.enabled and variant_fg or comment)
+      end
+    end
+    if #(body[b] or "") < inner_w then
+      body[b] = pad(body[b], inner_w)
+    end
+  end
+  if count == 0 then
+    body[1] = pad(" No servers registered", inner_w)
+    spans[1] = { { start = 0, len = inner_w, fg = comment, bg = bg } }
+  end
+
+  local inner_h = math.max(1, p.h - 2)
+  local body_list = {}
+  for i = 1, inner_h do
+    body_list[i] = pad(body[i] or "", inner_w)
+  end
+
+  local footer = tostring(#rows) .. " servers"
+  return present_panel("lsp_manager",
+                       p,
+                       {},
+                       {
+                         title = " LSP Manager ",
+                         title_fg = colors.accent or colors.fg or 7,
+                         footer = footer,
+                       },
+                       body_list,
+                       spans)
+end
+
+-- ---------------------------------------------------------------------------
+-- Telescope (file finder with preview)
+-- ---------------------------------------------------------------------------
+
+local function left_clip(s, w)
+  if rune_len(s) <= w then
+    return s
+  end
+  return "…" .. truncate(s:sub(#s - w * 3), w - 1)
+end
+
+local function telescope(p)
+  if not p then
+    close("telescope")
+    return true
+  end
+  local colors = p.colors or {}
+  local t_fg = colors.t_fg or colors.fg or 7
+  local t_bg = colors.t_bg or colors.bg or 0
+  local t_sel_fg = colors.t_sel_fg or colors.selection_fg or 0
+  local t_sel_bg = colors.t_sel_bg or colors.selection_bg or 6
+  local t_prev_fg = colors.t_prev_fg or t_fg
+  local t_prev_bg = colors.t_prev_bg or t_bg
+  local border = colors.border or t_fg
+  local comment = colors.comment or 8
+  local accent = colors.accent or 6
+
+  local inner_w = math.max(1, p.w - 2)
+  local inner_h = math.max(1, p.h - 2)
+  local body = {}
+  local spans = {}
+
+  local function bof(abs_row)
+    return abs_row - (p.y or 0)
+  end
+
+  local function span(b, col, len, fg, bg)
+    if b < 1 or b > inner_h or len <= 0 then
+      return
+    end
+    spans[b] = spans[b] or {}
+    spans[b][#spans[b] + 1] = { start = col, len = len, fg = fg, bg = bg }
+  end
+
+  local function put(b, col, text, fg, bg)
+    if b < 1 or b > inner_h then
+      return
+    end
+    if col < 0 then
+      text = truncate(text, math.max(0, #text + col))
+      col = 0
+    end
+    if text == "" then
+      return
+    end
+    body[b] = body[b] or ""
+    local cur = #body[b]
+    if cur < col then
+      body[b] = body[b] .. string.rep(" ", col - cur)
+    end
+    span(b, col, #text, fg, bg)
+    body[b] = body[b] .. text
+  end
+
+  local function fill_row(b, row_bg, row_fg)
+    if b < 1 or b > inner_h then
+      return
+    end
+    body[b] = body[b] or ""
+    span(b, 0, inner_w, row_fg, row_bg)
+  end
+
+  -- Root line + query row.
+  local root_row = bof(p.inner_y or 0)
+  put(root_row, 1, left_clip(p.root or "", math.max(1, inner_w - 2)), comment, t_bg)
+  local query_row = bof(p.query_y or 0)
+  local query = p.query or ""
+  local query_text = "  > " .. query
+  if query == "" then
+    query_text = query_text .. "type to filter files"
+  end
+  local query_focus = (p.focus or "results") == "query"
+  local query_bg = query_focus and (colors.selection_bg or 6)
+    or colors.bg_command or colors.bg or 0
+  fill_row(query_row, query_bg, t_fg)
+  put(query_row,
+      (p.query_x or 0) - (p.x or 0) - 1,
+      truncate(query_text, math.max(1, inner_w - 1)),
+      t_fg,
+      query_bg)
+  if query_focus and jot.ui.set_cursor then
+    local caret = (p.query_x or 0) + math.min(math.max(0, (p.query_w or 1) - 1),
+                                             math.max(0, #("  > " .. query)))
+    jot.ui.set_cursor(caret, p.query_y or 0)
+  end
+
+  -- Result list.
+  local list_row0 = bof(p.list_y or 0)
+  local list_col = (p.list_x or 0) - (p.x or 0) - 1
+  local list_w = math.max(1, p.list_w or 1)
+  local results = p.results or {}
+  if #results == 0 then
+    local empty = p.scan_pending and "Scanning files..."
+      or (query == "" and "No files found in this workspace."
+          or "No files match the current query.")
+    put(list_row0 + math.max(0, math.floor((p.list_h or 0) / 2)),
+        list_col,
+        truncate(empty, list_w),
+        comment,
+        t_bg)
+  end
+  for i, r in ipairs(results) do
+    local b = list_row0 + i - 1
+    local is_selected = (p.selected or -1) == (p.list_scroll or 0) + i - 1
+    local icon = r.is_directory and "[D] " or "[F] "
+    local parent = (r.parent_path or "") == "." and "" or r.parent_path or ""
+    local parent_w = math.min(rune_len(parent), math.max(0, math.floor(list_w / 2)))
+    local name_w = math.max(1, list_w - rune_len(icon) - parent_w)
+    local name = truncate(r.name or "", name_w)
+    if is_selected then
+      fill_row(b, t_sel_bg, t_sel_fg)
+    end
+    put(b, list_col, icon .. name, is_selected and t_sel_fg or t_fg,
+        is_selected and t_sel_bg or t_bg)
+    if parent_w > 0 and r.parent_path then
+      put(b,
+          list_col + math.max(0, list_w - parent_w),
+          left_clip(r.parent_path, parent_w),
+          comment,
+          is_selected and t_sel_bg or t_bg)
+    end
+  end
+
+  -- Preview pane.
+  if p.show_preview then
+    local sep_col = (p.preview_x or 0) - 2 - (p.x or 0) - 1
+    for ar = p.body_y or 0, (p.body_y or 0) + (p.body_h or 0) - 1 do
+      put(bof(ar), sep_col, "│", border, t_bg)
+    end
+    local prev_row = bof(p.preview_y or 0)
+    local prev_col = (p.preview_x or 0) - (p.x or 0) - 1
+    local prev_inner_w = math.max(1, (p.preview_w or 1))
+    local preview = p.preview or {}
+    local prev_focus = (p.focus or "") == "preview"
+    put(prev_row,
+        prev_col,
+        "Preview",
+        prev_focus and (colors.t_sel_fg or accent) or t_fg,
+        t_bg)
+    local title = preview.title or ""
+    put(prev_row + 1, prev_col, left_clip(title, prev_inner_w), t_prev_fg, t_prev_bg)
+    if preview.detail and preview.detail ~= "" then
+      put(prev_row + 2, prev_col, truncate(preview.detail, prev_inner_w), comment, t_prev_bg)
+    end
+    local code_row = prev_row + 3
+    local line_no = preview.start_line or 0
+    local ext = preview.extension or ""
+    local plain = preview.is_directory or preview.skipped or ext == ""
+    for _, ln in ipairs(preview.lines or {}) do
+      local b = code_row
+      code_row = code_row + 1
+      local row_bg = t_prev_bg
+      local row_fg = plain and comment or t_prev_fg
+      if not plain then
+        put(b, prev_col, string.format("%3d ", line_no + 1), comment, t_prev_bg)
+        local text_col = prev_col + 4
+        local clipped = truncate(ln, prev_inner_w - 4)
+        put(b, text_col, clipped, t_prev_fg, t_prev_bg)
+        if jot.syntax and jot.syntax.highlight then
+          local ok, caps = pcall(jot.syntax.highlight, ext, clipped)
+          if ok and type(caps) == "table" then
+            for _, cap in ipairs(caps) do
+              local cap_fg = colors[cap.kind]
+              if cap_fg then
+                span(b, text_col + (cap.start or 0), cap.len or 0, cap_fg, t_prev_bg)
+              end
+            end
+          end
+        end
+      else
+        put(b, prev_col, truncate(ln, prev_inner_w), row_fg, t_prev_bg)
+      end
+      line_no = line_no + 1
+    end
+  end
+
+  -- Footer: selected path on the bottom border row (native geometry).
+  local footer = p.scan_pending and "Searching"
+    or (#results == 0 and "No selection" or "")
+  -- Native shows the selected relative path; approximate with first result.
+  if footer == "" then
+    footer = "Enter open   Esc close   Tab cycle   Up/Down move"
+  end
+  local footer_b = bof(p.footer_y or 0)
+  if footer_b >= 1 and footer_b <= inner_h then
+    put(footer_b, 1, truncate(footer, math.max(1, inner_w - 2)), comment, t_bg)
+  end
+
+  local body_list = {}
+  for i = 1, inner_h do
+    body_list[i] = pad(body[i] or "", inner_w)
+  end
+  return present_panel("telescope",
+                       p,
+                       {},
+                       {
+                         border = "single",
+                         title = p.title or " ",
+                         title_fg = t_fg,
+                       },
+                       body_list,
+                       spans)
+end
+
+-- ---------------------------------------------------------------------------
+
 jot.ui.handler("command_palette", command_palette)
 jot.ui.handler("quick_pick", quick_pick)
 jot.ui.handler("popup", popup)
 jot.ui.handler("save_prompt", save_prompt)
 jot.ui.handler("quit_prompt", quit_prompt)
+jot.ui.handler("tree_sitter_status", tree_sitter_status)
+jot.ui.handler("lsp_manager", lsp_manager)
+jot.ui.handler("telescope", telescope)
 
 -- Exposed for tests / reuse; the loader ignores the return value.
 return {
@@ -384,4 +805,7 @@ return {
   popup = popup,
   save_prompt = save_prompt,
   quit_prompt = quit_prompt,
+  tree_sitter_status = tree_sitter_status,
+  lsp_manager = lsp_manager,
+  telescope = telescope,
 }

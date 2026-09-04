@@ -87,6 +87,9 @@ struct EditorState
   bool lua_ui_prev_popup = false;
   bool lua_ui_prev_save_prompt = false;
   bool lua_ui_prev_quit_prompt = false;
+  bool lua_ui_prev_tree_sitter_status = false;
+  bool lua_ui_prev_lsp_manager = false;
+  bool lua_ui_prev_telescope = false;
 
   bool show_menu_bar_dropdown;
   int menu_bar_active;

@@ -2,6 +2,7 @@
 #include "column_utils.h"
 #include "editor.h"
 #include "folding.h"
+#include "lua_bridge/api.h"
 #include "ui/text.h"
 #include <cctype>
 #include <cstdio>
@@ -419,14 +420,87 @@ void Editor::render_telescope()
 
   const bool use_nerd_icons = config.get_bool("lsp_completion_nerd_icons", true);
 
-  UIRect rect = {layout.x, layout.y, layout.w, layout.h};
-  ui->fill_rect(rect, " ", theme.fg_telescope, theme.bg_telescope);
-  ui->draw_border(rect, theme.fg_panel_border, theme.bg_telescope);
-
   const auto &results = telescope.get_results();
   int selected = telescope.get_selected_index();
   int result_count = telescope.get_result_count();
   telescope.ensure_selected_visible(layout.list_h);
+
+  // A registered Lua UI handler renders the whole telescope from this state;
+  // the native layout geometry is passed through unchanged so mouse
+  // hit-testing (row clicks, wheel regions, query focus) keeps working.
+  if (lua_api && lua_api->has_lua_ui_handler("telescope"))
+  {
+    TelescopeView view;
+    view.x = layout.x;
+    view.y = layout.y;
+    view.w = layout.w;
+    view.h = layout.h;
+    view.inner_x = layout.inner_x;
+    view.inner_y = layout.inner_y;
+    view.inner_w = layout.inner_w;
+    view.inner_h = layout.inner_h;
+    view.query_x = layout.query_x;
+    view.query_y = layout.query_y;
+    view.query_w = layout.query_w;
+    view.body_y = layout.body_y;
+    view.body_h = layout.body_h;
+    view.list_x = layout.list_x;
+    view.list_y = layout.list_y;
+    view.list_w = layout.list_w;
+    view.list_h = layout.list_h;
+    view.preview_x = layout.preview_x;
+    view.preview_y = layout.preview_y;
+    view.preview_w = layout.preview_w;
+    view.preview_h = layout.preview_h;
+    view.footer_y = layout.footer_y;
+    view.show_preview = layout.show_preview;
+    view.query = telescope.get_query();
+    view.root = telescope.get_root_dir();
+    view.title = " Find Files ";
+    view.selected = selected;
+    view.list_scroll = telescope.get_list_scroll_offset();
+    view.result_count = result_count;
+    view.scan_pending = telescope.scan_pending();
+    view.focus = telescope.focus() == TelescopeFocus::Query     ? "query"
+                 : telescope.focus() == TelescopeFocus::Preview ? "preview"
+                                                                : "results";
+    const int start_idx = telescope.get_list_scroll_offset();
+    const int end_idx = std::min((int)results.size(), start_idx + layout.list_h);
+    for (int i = start_idx; i < end_idx; i++)
+    {
+      TelescopeResultView rv;
+      rv.name = results[(size_t)i].name;
+      rv.parent_path = results[(size_t)i].parent_path;
+      rv.is_directory = results[(size_t)i].is_directory;
+      view.results.push_back(std::move(rv));
+    }
+    if (layout.show_preview && selected >= 0 && selected < (int)results.size())
+    {
+      auto preview = telescope.get_selected_preview();
+      view.preview.title = preview.title;
+      view.preview.detail = preview.detail;
+      view.preview.is_directory = preview.is_directory;
+      view.preview.skipped = preview.skipped;
+      view.preview.extension =
+          std::filesystem::path(telescope.get_selected_path()).extension().string();
+      const int preview_scroll = telescope.get_preview_scroll_offset();
+      const int line_start_y = layout.preview_y + 4;
+      const int preview_lines_h = std::max(0, layout.preview_y + layout.preview_h - line_start_y);
+      view.preview.start_line = preview_scroll;
+      for (int i = 0; i < preview_lines_h && preview_scroll + i < (int)preview.lines.size(); i++)
+      {
+        view.preview.lines.push_back(preview.lines[(size_t)(preview_scroll + i)]);
+      }
+    }
+    if (lua_api->emit_telescope(view))
+    {
+      return;
+    }
+  }
+
+  UIRect rect = {layout.x, layout.y, layout.w, layout.h};
+  ui->fill_rect(rect, " ", theme.fg_telescope, theme.bg_telescope);
+  ui->draw_border(rect, theme.fg_panel_border, theme.bg_telescope);
 
   std::string title = " Find Files ";
   std::string count =

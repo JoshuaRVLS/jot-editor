@@ -34,6 +34,9 @@ namespace
     std::string last_footer;
     int lines_count = 0;
     int spans_total = 0; // sum of span lens across set_spans calls
+    int set_cursor_count = 0;
+    int last_cursor_x = -1;
+    int last_cursor_y = -1;
   };
 
   StubState g;
@@ -123,6 +126,14 @@ namespace
     return 0;
   }
 
+  int stub_ui_set_cursor(lua_State *L)
+  {
+    g.set_cursor_count++;
+    g.last_cursor_x = (int)luaL_checkinteger(L, 1);
+    g.last_cursor_y = (int)luaL_checkinteger(L, 2);
+    return 0;
+  }
+
   int stub_float_set_spans(lua_State *L)
   {
     g.set_spans_count++;
@@ -134,7 +145,12 @@ namespace
       if (lua_istable(L, -1))
       {
         lua_getfield(L, -1, "len");
-        g.spans_total += (int)lua_tointeger(L, -1);
+        // Count only single-char emphasis spans (match highlighting); full
+        // row-background spans are long and not what these asserts measure.
+        if ((int)lua_tointeger(L, -1) == 1)
+        {
+          g.spans_total++;
+        }
         lua_pop(L, 1);
       }
       lua_pop(L, 1);
@@ -165,6 +181,8 @@ namespace
     lua_pushcfunction(L, stub_float_set_spans);
     lua_setfield(L, -2, "set_spans");
     lua_setfield(L, -2, "float");
+    lua_pushcfunction(L, stub_ui_set_cursor);
+    lua_setfield(L, -2, "set_cursor");
     lua_setfield(L, -2, "ui"); // jot.ui
     lua_setglobal(L, "jot");
   }
@@ -219,9 +237,10 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
   REQUIRE(lua_istable(L, 1));
-  REQUIRE(g.handler_count == 5);
+  REQUIRE(g.handler_count == 8);
   bool has_palette = false, has_quick_pick = false, has_popup = false;
-  bool has_save = false, has_quit = false;
+  bool has_save = false, has_quit = false, has_ts = false;
+  bool has_lsp = false, has_telescope = false;
   for (int i = 0; i < g.handler_count; i++)
   {
     has_palette = has_palette || g.handlers[i] == "command_palette";
@@ -229,12 +248,18 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
     has_popup = has_popup || g.handlers[i] == "popup";
     has_save = has_save || g.handlers[i] == "save_prompt";
     has_quit = has_quit || g.handlers[i] == "quit_prompt";
+    has_ts = has_ts || g.handlers[i] == "tree_sitter_status";
+    has_lsp = has_lsp || g.handlers[i] == "lsp_manager";
+    has_telescope = has_telescope || g.handlers[i] == "telescope";
   }
   REQUIRE(has_palette);
   REQUIRE(has_quick_pick);
   REQUIRE(has_popup);
   REQUIRE(has_save);
   REQUIRE(has_quit);
+  REQUIRE(has_ts);
+  REQUIRE(has_lsp);
+  REQUIRE(has_telescope);
 
   // --- command palette ---
   push_module_field(L, 1, "command_palette");
@@ -385,6 +410,198 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);
   REQUIRE(g.close_count == 5);
+
+  // --- tree-sitter status modal ---
+  push_module_field(L, 1, "tree_sitter_status");
+  push_box(L, 30, 4, 60, 16);
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "scroll");
+  lua_newtable(L); // rows
+  lua_newtable(L);
+  lua_pushboolean(L, 1);
+  lua_setfield(L, -2, "section");
+  lua_pushstring(L, "Active");
+  lua_setfield(L, -2, "label");
+  lua_pushstring(L, "1");
+  lua_setfield(L, -2, "detail");
+  lua_rawseti(L, -2, 1);
+  lua_newtable(L);
+  lua_pushboolean(L, 0);
+  lua_setfield(L, -2, "section");
+  lua_pushstring(L, "cpp");
+  lua_setfield(L, -2, "label");
+  lua_pushstring(L, "parser loaded");
+  lua_setfield(L, -2, "detail");
+  lua_pushinteger(L, 3);
+  lua_setfield(L, -2, "color");
+  lua_rawseti(L, -2, 2);
+  lua_setfield(L, -2, "rows");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.open_count == 6);
+  REQUIRE(g.last_title.find("Tree-sitter") != std::string::npos);
+  REQUIRE(g.lines_count == 14); // h-2 padded rows
+  REQUIRE(g.last_footer.find("Up/Down scroll") != std::string::npos);
+
+  push_module_field(L, 1, "tree_sitter_status");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+
+  // --- LSP manager modal ---
+  push_module_field(L, 1, "lsp_manager");
+  push_box(L, 20, 5, 70, 12);
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "selected");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "scroll");
+  lua_pushinteger(L, 20);
+  lua_setfield(L, -2, "label_w");
+  lua_pushinteger(L, 32);
+  lua_setfield(L, -2, "state_x");
+  lua_pushinteger(L, 52);
+  lua_setfield(L, -2, "action_x");
+  lua_newtable(L); // rows
+  lua_newtable(L);
+  lua_pushstring(L, "clangd");
+  lua_setfield(L, -2, "server");
+  lua_pushstring(L, "cpp");
+  lua_setfield(L, -2, "label");
+  lua_pushstring(L, "ready");
+  lua_setfield(L, -2, "state");
+  lua_pushinteger(L, 244);
+  lua_setfield(L, -2, "state_color");
+  lua_newtable(L); // actions
+  lua_newtable(L);
+  lua_pushstring(L, "update");
+  lua_setfield(L, -2, "action");
+  lua_pushstring(L, "Update");
+  lua_setfield(L, -2, "label");
+  lua_pushstring(L, "primary");
+  lua_setfield(L, -2, "variant");
+  lua_pushboolean(L, 1);
+  lua_setfield(L, -2, "enabled");
+  lua_pushinteger(L, 52);
+  lua_setfield(L, -2, "x");
+  lua_pushinteger(L, 6);
+  lua_setfield(L, -2, "y");
+  lua_pushinteger(L, 8);
+  lua_setfield(L, -2, "w");
+  lua_rawseti(L, -2, 1);
+  lua_setfield(L, -2, "actions");
+  lua_rawseti(L, -2, 1);
+  lua_setfield(L, -2, "rows");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.open_count == 7);
+  REQUIRE(g.last_title.find("LSP Manager") != std::string::npos);
+  REQUIRE(g.last_footer == "1 servers");
+  REQUIRE(g.lines_count == 10);
+  REQUIRE(g.set_spans_count > 0); // bg + colored segments
+
+  push_module_field(L, 1, "lsp_manager");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+
+  // --- telescope ---
+  push_module_field(L, 1, "telescope");
+  push_box(L, 0, 1, 60, 18);
+  lua_pushinteger(L, 1);
+  lua_setfield(L, -2, "inner_x");
+  lua_pushinteger(L, 2);
+  lua_setfield(L, -2, "inner_y");
+  lua_pushinteger(L, 58);
+  lua_setfield(L, -2, "inner_w");
+  lua_pushinteger(L, 16);
+  lua_setfield(L, -2, "inner_h");
+  lua_pushinteger(L, 1);
+  lua_setfield(L, -2, "query_x");
+  lua_pushinteger(L, 2);
+  lua_setfield(L, -2, "query_y");
+  lua_pushinteger(L, 56);
+  lua_setfield(L, -2, "query_w");
+  lua_pushinteger(L, 3);
+  lua_setfield(L, -2, "body_y");
+  lua_pushinteger(L, 15);
+  lua_setfield(L, -2, "body_h");
+  lua_pushinteger(L, 2);
+  lua_setfield(L, -2, "list_x");
+  lua_pushinteger(L, 4);
+  lua_setfield(L, -2, "list_y");
+  lua_pushinteger(L, 56);
+  lua_setfield(L, -2, "list_w");
+  lua_pushinteger(L, 12);
+  lua_setfield(L, -2, "list_h");
+  lua_pushinteger(L, 30);
+  lua_setfield(L, -2, "preview_x");
+  lua_pushinteger(L, 4);
+  lua_setfield(L, -2, "preview_y");
+  lua_pushinteger(L, 28);
+  lua_setfield(L, -2, "preview_w");
+  lua_pushinteger(L, 12);
+  lua_setfield(L, -2, "preview_h");
+  lua_pushinteger(L, 17);
+  lua_setfield(L, -2, "footer_y");
+  lua_pushboolean(L, 1);
+  lua_setfield(L, -2, "show_preview");
+  lua_pushstring(L, "mai");
+  lua_setfield(L, -2, "query");
+  lua_pushstring(L, "/home/user");
+  lua_setfield(L, -2, "root");
+  lua_pushstring(L, " Find Files ");
+  lua_setfield(L, -2, "title");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "selected");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "list_scroll");
+  lua_pushinteger(L, 3);
+  lua_setfield(L, -2, "result_count");
+  lua_pushstring(L, "query");
+  lua_setfield(L, -2, "focus");
+  lua_newtable(L); // results
+  lua_newtable(L);
+  lua_pushstring(L, "main.cpp");
+  lua_setfield(L, -2, "name");
+  lua_pushstring(L, "src");
+  lua_setfield(L, -2, "parent_path");
+  lua_pushboolean(L, 0);
+  lua_setfield(L, -2, "is_directory");
+  lua_rawseti(L, -2, 1);
+  lua_setfield(L, -2, "results");
+  lua_newtable(L); // preview
+  lua_pushstring(L, "main.cpp");
+  lua_setfield(L, -2, "title");
+  lua_pushstring(L, "12 KB");
+  lua_setfield(L, -2, "detail");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "start_line");
+  lua_pushstring(L, ".cpp");
+  lua_setfield(L, -2, "extension");
+  lua_pushboolean(L, 0);
+  lua_setfield(L, -2, "is_directory");
+  lua_pushboolean(L, 0);
+  lua_setfield(L, -2, "skipped");
+  lua_newtable(L); // lines
+  lua_pushstring(L, "int main() { return 0; }");
+  lua_rawseti(L, -2, 1);
+  lua_setfield(L, -2, "lines");
+  lua_setfield(L, -2, "preview");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.open_count == 8);
+  REQUIRE(g.lines_count == 16);     // h-2 body rows
+  REQUIRE(g.set_cursor_count == 1); // query focus caret
+  REQUIRE(g.last_cursor_y == 2);
+  REQUIRE(g.last_cursor_x >= 1);
+
+  push_module_field(L, 1, "telescope");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
 
   // --- match_spans helper ---
   push_module_field(L, 1, "match_spans");

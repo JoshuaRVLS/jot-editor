@@ -25,7 +25,10 @@ struct FloatSpan
 {
   int start = 0; // byte offset into the line
   int len = 0;   // byte length
-  int fg = 7;    // color for the span (bg stays the float's bg)
+  int fg = 7;    // foreground for the span
+  int bg = -1;   // background for the span (-1 = the float's bg). A span that
+                 // covers the whole line (start 0, len >= line length) sets
+                 // the background for the whole line, like a selected row.
 };
 
 // Views handed to Lua UI surface handlers (jot.ui.handler). Native code fills
@@ -79,6 +82,93 @@ struct PromptView
 {
   std::string input;
   int x = 0, y = 0, w = 0, h = 0;
+};
+
+struct TsStatusRowView
+{
+  bool section = false;
+  std::string label; // section title or language name
+  std::string detail;
+  int color = 0; // theme color slot for language names (0 = default fg)
+};
+
+struct TsStatusView
+{
+  std::vector<TsStatusRowView> rows;
+  int scroll = 0;
+  int x = 0, y = 0, w = 0, h = 0;
+};
+
+struct LspActionView
+{
+  std::string action;
+  std::string label;
+  std::string variant; // primary | secondary | danger | muted
+  bool enabled = true;
+  bool focused = false;
+  int x = 0, y = 0, w = 0; // screen rect of the button
+};
+
+struct LspManagerRowView
+{
+  std::string server;
+  std::string label;
+  std::string state;
+  int state_color = 0;
+  std::vector<LspActionView> actions;
+};
+
+struct LspManagerView
+{
+  std::vector<LspManagerRowView> rows;
+  int selected = 0;
+  int scroll = 0;
+  int x = 0, y = 0, w = 0, h = 0;
+  int label_w = 0;
+  int state_x = 0;
+  int action_x = 0;
+};
+
+struct TelescopeResultView
+{
+  std::string name;
+  std::string parent_path;
+  bool is_directory = false;
+};
+
+struct TelescopePreviewView
+{
+  std::string title;
+  std::string detail;
+  std::vector<std::string> lines; // windowed to the visible region
+  int start_line = 0;             // 0-based line number of lines[0]
+  std::string extension;          // ".cpp" or empty
+  bool is_directory = false;
+  bool skipped = false;
+};
+
+struct TelescopeView
+{
+  // Native layout geometry is passed through unchanged so mouse hit-testing
+  // (row clicks, wheel regions, query focus) keeps working on the Lua render.
+  int x = 0, y = 0, w = 0, h = 0;
+  int inner_x = 0, inner_y = 0, inner_w = 0, inner_h = 0;
+  int query_x = 0, query_y = 0, query_w = 0;
+  int body_y = 0, body_h = 0;
+  int list_x = 0, list_y = 0, list_w = 0, list_h = 0;
+  int preview_x = 0, preview_y = 0, preview_w = 0, preview_h = 0;
+  int footer_y = 0;
+  bool show_preview = false;
+  std::string query;
+  std::string root;
+  std::string title;
+  int selected = 0;
+  int list_scroll = 0;
+  int result_count = 0;
+  bool scan_pending = false;
+  std::string focus; // query | results | preview
+  std::vector<TelescopeResultView> results; // windowed to visible rows
+  TelescopePreviewView preview;
 };
 
 struct LuaFloatWindow
@@ -302,6 +392,13 @@ public:
   bool emit_quick_pick(const QuickPickView &view);
   bool emit_popup(const PopupView &view);
   bool emit_prompt(const std::string &name, const PromptView &view);
+  bool emit_tree_sitter_status(const TsStatusView &view);
+  bool emit_lsp_manager(const LspManagerView &view);
+  bool emit_telescope(const TelescopeView &view);
+
+  // Terminal-cursor control from Lua (friend access to editor->ui).
+  void ui_set_cursor(int x, int y);
+  void ui_hide_cursor();
 
   // LSP hover UI: a Lua handler registered through jot.lsp.hover_ui renders
   // hover results with floats instead of the native popup. When the handler is

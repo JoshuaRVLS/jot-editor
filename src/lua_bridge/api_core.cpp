@@ -1657,6 +1657,7 @@ bool LuaAPI::set_float_spans(int window, int line, lua_State *L, int spans_index
       s.start = table_int(L, -1, "start", 0);
       s.len = table_int(L, -1, "len", 0);
       s.fg = table_int(L, -1, "fg", f.fg);
+      s.bg = table_int(L, -1, "bg", -1);
       if (s.len > 0)
         out.push_back(s);
     }
@@ -1907,6 +1908,18 @@ void LuaAPI::render_floats()
       std::sort(spans.begin(),
                 spans.end(),
                 [](const FloatSpan &a, const FloatSpan &b) { return a.start < b.start; });
+      // A full-line span (start 0, covers the clipped line) paints the row's
+      // background, like a selection highlight. Its own text is still drawn
+      // below so narrower spans can overdraw it.
+      int line_bg = f->bg;
+      for (const auto &sp : spans)
+      {
+        if (sp.bg < 0 || sp.start > 0)
+          continue;
+        const int e = std::clamp(sp.start + sp.len, 0, (int)clipped.size());
+        if (e >= (int)clipped.size())
+          line_bg = sp.bg;
+      }
       int pos = 0;
       for (const auto &sp : spans)
       {
@@ -1914,13 +1927,14 @@ void LuaAPI::render_floats()
         const int e = std::clamp(sp.start + sp.len, s, (int)clipped.size());
         if (e <= s)
           continue;
+        const int span_bg = sp.bg >= 0 ? sp.bg : line_bg;
         if (s > pos)
-          editor->ui->draw_text(ix + pos, iy + i, clipped.substr(pos, s - pos), f->fg, f->bg);
-        editor->ui->draw_text(ix + s, iy + i, clipped.substr(s, e - s), sp.fg, f->bg);
+          editor->ui->draw_text(ix + pos, iy + i, clipped.substr(pos, s - pos), f->fg, line_bg);
+        editor->ui->draw_text(ix + s, iy + i, clipped.substr(s, e - s), sp.fg, span_bg);
         pos = e;
       }
       if (pos < (int)clipped.size())
-        editor->ui->draw_text(ix + pos, iy + i, clipped.substr(pos), f->fg, f->bg);
+        editor->ui->draw_text(ix + pos, iy + i, clipped.substr(pos), f->fg, line_bg);
     }
     const int title_fg = f->title_fg >= 0 ? f->title_fg : f->fg;
     if (!f->title.empty())
@@ -2395,6 +2409,20 @@ bool LuaAPI::init()
   field(L, "delete", l_ui_buffer_delete);
   lua_setfield(L, -2, "buffer");
   field(L, "handler", l_ui_handler);
+  field(L,
+        "set_cursor",
+        [](lua_State *s)
+        {
+          api(s).ui_set_cursor((int)luaL_checkinteger(s, 1), (int)luaL_checkinteger(s, 2));
+          return 0;
+        });
+  field(L,
+        "hide_cursor",
+        [](lua_State *s)
+        {
+          api(s).ui_hide_cursor();
+          return 0;
+        });
   lua_newtable(L);
   field(L, "open", l_float_open);
   field(L, "set_lines", l_float_set_lines);
@@ -4832,6 +4860,45 @@ void LuaAPI::push_ui_colors(lua_State *L, int t)
   lua_set_int_field(L, c, "selection_bg", th.bg_selection);
   lua_set_int_field(L, c, "comment", th.fg_comment);
   lua_set_int_field(L, c, "accent", th.fg_keyword);
+  lua_set_int_field(L, c, "error", th.fg_status_error);
+  lua_set_int_field(L, c, "warning", th.fg_status_warning);
+  lua_set_int_field(L, c, "info", th.fg_status_info);
+  // Telescope slots.
+  lua_set_int_field(L, c, "t_fg", th.fg_telescope);
+  lua_set_int_field(L, c, "t_bg", th.bg_telescope);
+  lua_set_int_field(L, c, "t_sel_fg", th.fg_telescope_selected);
+  lua_set_int_field(L, c, "t_sel_bg", th.bg_telescope_selected);
+  lua_set_int_field(L, c, "t_prev_fg", th.fg_telescope_preview);
+  lua_set_int_field(L, c, "t_prev_bg", th.bg_telescope_preview);
+  // Syntax colors (token kind name -> theme color), matching the hover payload
+  // so code previews highlight with the same colors as the editor.
+  lua_set_int_field(L, c, "keyword", th.fg_keyword);
+  lua_set_int_field(L, c, "string", th.fg_string);
+  lua_set_int_field(L, c, "comment", th.fg_comment);
+  lua_set_int_field(L, c, "number", th.fg_number);
+  lua_set_int_field(L, c, "type", th.fg_type);
+  lua_set_int_field(L, c, "function", th.fg_function);
+  lua_set_int_field(L, c, "variable", th.fg_variable);
+  lua_set_int_field(L, c, "constant", th.fg_constant);
+  lua_set_int_field(L, c, "builtin", th.fg_builtin);
+  lua_set_int_field(L, c, "operator", th.fg_operator);
+  lua_set_int_field(L, c, "punctuation", th.fg_punctuation);
+  lua_set_int_field(L, c, "tag", th.fg_tag);
+  lua_set_int_field(L, c, "attribute", th.fg_attribute);
+  lua_set_int_field(L, c, "namespace", th.fg_namespace);
+  lua_set_int_field(L, c, "module", th.fg_module);
+  lua_set_int_field(L, c, "parameter", th.fg_parameter);
+  lua_set_int_field(L, c, "field", th.fg_field);
+  lua_set_int_field(L, c, "keyword_control", th.fg_keyword_control);
+  lua_set_int_field(L, c, "keyword_storage", th.fg_keyword_storage);
+  lua_set_int_field(L, c, "keyword_preproc", th.fg_keyword_preproc);
+  lua_set_int_field(L, c, "function_method", th.fg_function_method);
+  lua_set_int_field(L, c, "function_constructor", th.fg_function_constructor);
+  lua_set_int_field(L, c, "type_builtin", th.fg_type_builtin);
+  lua_set_int_field(L, c, "constant_macro", th.fg_constant_macro);
+  lua_set_int_field(L, c, "string_escape", th.fg_string_escape);
+  lua_set_int_field(L, c, "punctuation_bracket", th.fg_punctuation_bracket);
+  lua_set_int_field(L, c, "punctuation_delimiter", th.fg_punctuation_delimiter);
   lua_setfield(L, t, "colors");
 }
 
@@ -4939,6 +5006,170 @@ bool LuaAPI::emit_prompt(const std::string &name, const PromptView &view)
                        lua_set_int_field(L, t, "h", view.h);
                        push_ui_colors(L, t);
                      });
+}
+
+bool LuaAPI::emit_tree_sitter_status(const TsStatusView &view)
+{
+  return emit_lua_ui("tree_sitter_status",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_int_field(L, t, "scroll", view.scroll);
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.rows.size(); i++)
+                       {
+                         const TsStatusRowView &row = view.rows[i];
+                         lua_newtable(L);
+                         const int it = lua_gettop(L);
+                         lua_set_bool_field(L, it, "section", row.section);
+                         lua_set_str_field(L, it, "label", row.label);
+                         lua_set_str_field(L, it, "detail", row.detail);
+                         lua_set_int_field(L, it, "color", row.color);
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "rows");
+                       push_ui_colors(L, t);
+                     });
+}
+
+bool LuaAPI::emit_lsp_manager(const LspManagerView &view)
+{
+  return emit_lua_ui("lsp_manager",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_int_field(L, t, "selected", view.selected);
+                       lua_set_int_field(L, t, "scroll", view.scroll);
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_set_int_field(L, t, "label_w", view.label_w);
+                       lua_set_int_field(L, t, "state_x", view.state_x);
+                       lua_set_int_field(L, t, "action_x", view.action_x);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.rows.size(); i++)
+                       {
+                         const LspManagerRowView &row = view.rows[i];
+                         lua_newtable(L);
+                         const int it = lua_gettop(L);
+                         lua_set_str_field(L, it, "server", row.server);
+                         lua_set_str_field(L, it, "label", row.label);
+                         lua_set_str_field(L, it, "state", row.state);
+                         lua_set_int_field(L, it, "state_color", row.state_color);
+                         lua_newtable(L);
+                         const int act = lua_gettop(L);
+                         for (size_t k = 0; k < row.actions.size(); k++)
+                         {
+                           const LspActionView &a = row.actions[k];
+                           lua_newtable(L);
+                           const int ai = lua_gettop(L);
+                           lua_set_str_field(L, ai, "action", a.action);
+                           lua_set_str_field(L, ai, "label", a.label);
+                           lua_set_str_field(L, ai, "variant", a.variant);
+                           lua_set_bool_field(L, ai, "enabled", a.enabled);
+                           lua_set_bool_field(L, ai, "focused", a.focused);
+                           lua_set_int_field(L, ai, "x", a.x);
+                           lua_set_int_field(L, ai, "y", a.y);
+                           lua_set_int_field(L, ai, "w", a.w);
+                           lua_rawseti(L, act, (lua_Integer)k + 1);
+                         }
+                         lua_setfield(L, it, "actions");
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "rows");
+                       push_ui_colors(L, t);
+                     });
+}
+
+bool LuaAPI::emit_telescope(const TelescopeView &view)
+{
+  return emit_lua_ui("telescope",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_set_int_field(L, t, "inner_x", view.inner_x);
+                       lua_set_int_field(L, t, "inner_y", view.inner_y);
+                       lua_set_int_field(L, t, "inner_w", view.inner_w);
+                       lua_set_int_field(L, t, "inner_h", view.inner_h);
+                       lua_set_int_field(L, t, "query_x", view.query_x);
+                       lua_set_int_field(L, t, "query_y", view.query_y);
+                       lua_set_int_field(L, t, "query_w", view.query_w);
+                       lua_set_int_field(L, t, "body_y", view.body_y);
+                       lua_set_int_field(L, t, "body_h", view.body_h);
+                       lua_set_int_field(L, t, "list_x", view.list_x);
+                       lua_set_int_field(L, t, "list_y", view.list_y);
+                       lua_set_int_field(L, t, "list_w", view.list_w);
+                       lua_set_int_field(L, t, "list_h", view.list_h);
+                       lua_set_int_field(L, t, "preview_x", view.preview_x);
+                       lua_set_int_field(L, t, "preview_y", view.preview_y);
+                       lua_set_int_field(L, t, "preview_w", view.preview_w);
+                       lua_set_int_field(L, t, "preview_h", view.preview_h);
+                       lua_set_int_field(L, t, "footer_y", view.footer_y);
+                       lua_set_bool_field(L, t, "show_preview", view.show_preview);
+                       lua_set_str_field(L, t, "query", view.query);
+                       lua_set_str_field(L, t, "root", view.root);
+                       lua_set_str_field(L, t, "title", view.title);
+                       lua_set_int_field(L, t, "selected", view.selected);
+                       lua_set_int_field(L, t, "list_scroll", view.list_scroll);
+                       lua_set_int_field(L, t, "result_count", view.result_count);
+                       lua_set_bool_field(L, t, "scan_pending", view.scan_pending);
+                       lua_set_str_field(L, t, "focus", view.focus);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.results.size(); i++)
+                       {
+                         const TelescopeResultView &r = view.results[i];
+                         lua_newtable(L);
+                         const int it = lua_gettop(L);
+                         lua_set_str_field(L, it, "name", r.name);
+                         lua_set_str_field(L, it, "parent_path", r.parent_path);
+                         lua_set_bool_field(L, it, "is_directory", r.is_directory);
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "results");
+                       lua_newtable(L); // preview
+                       const int pv = lua_gettop(L);
+                       lua_set_str_field(L, pv, "title", view.preview.title);
+                       lua_set_str_field(L, pv, "detail", view.preview.detail);
+                       lua_set_int_field(L, pv, "start_line", view.preview.start_line);
+                       lua_set_str_field(L, pv, "extension", view.preview.extension);
+                       lua_set_bool_field(L, pv, "is_directory", view.preview.is_directory);
+                       lua_set_bool_field(L, pv, "skipped", view.preview.skipped);
+                       lua_newtable(L);
+                       const int pl = lua_gettop(L);
+                       for (size_t i = 0; i < view.preview.lines.size(); i++)
+                       {
+                         lua_pushlstring(L, view.preview.lines[i].data(), view.preview.lines[i].size());
+                         lua_rawseti(L, pl, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, pv, "lines");
+                       lua_setfield(L, t, "preview");
+                       push_ui_colors(L, t);
+                     });
+}
+
+void LuaAPI::ui_set_cursor(int x, int y)
+{
+  if (editor && editor->ui)
+  {
+    editor->ui->set_cursor(x, y);
+  }
+}
+
+void LuaAPI::ui_hide_cursor()
+{
+  if (editor && editor->ui)
+  {
+    editor->ui->hide_cursor();
+  }
 }
 
 bool LuaAPI::present_lsp_hover(const std::string &contents,

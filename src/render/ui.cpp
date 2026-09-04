@@ -558,6 +558,32 @@ void Editor::render_tree_sitter_status_modal()
   // Modal overlay: dim the editor underneath (same as popup / LSP manager).
   ui->dim_rect({0, 0, screen_w, screen_h});
 
+  // Lua UI handler takes over rendering when registered; geometry is passed
+  // unchanged so wheel-scroll and click-outside-to-close keep working.
+  if (lua_api && lua_api->has_lua_ui_handler("tree_sitter_status"))
+  {
+    TsStatusView view;
+    view.scroll = tree_sitter_status_scroll;
+    view.x = x;
+    view.y = y;
+    view.w = w;
+    view.h = h;
+    view.rows.reserve(rows.size());
+    for (const auto &row : rows)
+    {
+      TsStatusRowView v;
+      v.section = !row.section.empty();
+      v.label = v.section ? row.section : row.language;
+      v.detail = row.detail;
+      v.color = row.color;
+      view.rows.push_back(std::move(v));
+    }
+    if (lua_api->emit_tree_sitter_status(view))
+    {
+      return;
+    }
+  }
+
   // Same panel surface convention as the popup / LSP manager / palette.
   const Theme panel_theme = [&]()
   {
@@ -639,44 +665,45 @@ void Editor::render_lsp_manager()
   lsp_manager_w = w;
   lsp_manager_h = h;
 
-  UIRect rect = {x, y, w, h};
-  ui_draw_panel(
-      *ui,
-      rect,
-      {theme.fg_command, theme.bg_panel_border, theme.fg_panel_border, theme.bg_panel_border});
-  ui_draw_panel_title(*ui, rect, " LSP Manager ", theme.fg_command, theme.bg_panel_border);
-
   const int list_h = std::max(1, h - 3);
   const int max_scroll = std::max(0, (int)lsp_manager_rows.size() - list_h);
   lsp_manager_scroll = std::clamp(lsp_manager_scroll, 0, max_scroll);
   const int label_w = std::max(12, std::min(20, w / 4));
   const int state_x = x + 2 + label_w;
   const int action_x = std::max(state_x + 12, x + w - 31);
+
+  // Compute every row's state/actions once; the result feeds both the Lua UI
+  // handler (when registered) and the native fallback. Native button rects
+  // are recorded so mouse clicks keep working regardless of who renders.
   lsp_manager_buttons.clear();
-
-  for (int row = 0; row < list_h; row++)
+  std::vector<LspManagerRowView> row_views;
+  std::vector<std::vector<std::tuple<std::string, std::string, UIButtonVariant, bool>>> row_actions;
+  row_actions.resize(lsp_manager_rows.size());
+  row_views.reserve(lsp_manager_rows.size());
+  for (size_t index = 0; index < lsp_manager_rows.size(); index++)
   {
-    const int index = lsp_manager_scroll + row;
-    if (index < 0 || index >= (int)lsp_manager_rows.size())
-      break;
     const auto &item = lsp_manager_rows[index];
-    const bool selected = index == lsp_manager_selected;
-    const int fg = selected ? theme.fg_selection : theme.fg_command;
-    const int bg = selected ? theme.bg_selection : theme.bg_panel_border;
-    UIRect row_rect = {x + 1, y + 1 + row, w - 2, 1};
-    ui->fill_rect(row_rect, " ", fg, bg);
-    ui->draw_text(x + 2, y + 1 + row, ui_truncate_cells(item.label, label_w), fg, bg, selected);
-    std::string state = item.busy        ? item.detail
-                        : !item.enabled  ? "disabled"
-                        : item.installed ? "ready"
-                                         : "missing";
-    ui->draw_text(state_x,
-                  y + 1 + row,
-                  ui_truncate_cells(state, std::max(1, action_x - state_x - 1)),
-                  item.enabled ? theme.fg_comment : theme.fg_status_warning,
-                  bg);
-
-    std::vector<std::tuple<std::string, std::string, UIButtonVariant, bool>> actions;
+    LspManagerRowView vw;
+    vw.server = item.server;
+    vw.label = item.label;
+    if (item.busy)
+    {
+      vw.state = item.detail;
+    }
+    else if (!item.enabled)
+    {
+      vw.state = "disabled";
+    }
+    else if (item.installed)
+    {
+      vw.state = "ready";
+    }
+    else
+    {
+      vw.state = "missing";
+    }
+    vw.state_color = item.enabled ? theme.fg_comment : theme.fg_status_warning;
+    auto &actions = row_actions[index];
     if (item.busy)
     {
       actions.push_back({"terminal", "Terminal", UIButtonVariant::Secondary, true});
@@ -702,18 +729,91 @@ void Editor::render_lsp_manager()
     {
       actions.push_back({"disable", "Disable", UIButtonVariant::Secondary, true});
     }
+    const bool selected = index == (size_t)lsp_manager_selected;
     int button_x = action_x;
     for (size_t action_index = 0; action_index < actions.size(); action_index++)
     {
       const auto &[action, label, variant, enabled] = actions[action_index];
-      const int button_w = ui_cell_count(label) + 2;
+      const int button_w = (int)label.size() + 2;
+      const std::string variant_name = variant == UIButtonVariant::Primary  ? "primary"
+                                       : variant == UIButtonVariant::Danger ? "danger"
+                                       : variant == UIButtonVariant::Muted  ? "muted"
+                                                                            : "secondary";
+      LspActionView av;
+      av.action = action;
+      av.label = label;
+      av.variant = variant_name;
+      av.enabled = enabled;
+      av.focused = selected && action_index == (size_t)lsp_manager_action_selected;
+      av.x = button_x;
+      av.y = y + 1 + (int)index - lsp_manager_scroll;
+      av.w = button_w;
+      vw.actions.push_back(std::move(av));
+      if (av.y >= y + 1 && av.y < y + 1 + list_h)
+      {
+        lsp_manager_buttons.push_back({item.server, action, button_x, av.y, button_w, 1});
+      }
+      button_x += button_w + 1;
+    }
+    row_views.push_back(std::move(vw));
+  }
+
+  if (lua_api && lua_api->has_lua_ui_handler("lsp_manager"))
+  {
+    LspManagerView view;
+    view.rows = std::move(row_views);
+    view.selected = lsp_manager_selected;
+    view.scroll = lsp_manager_scroll;
+    view.x = x;
+    view.y = y;
+    view.w = w;
+    view.h = h;
+    view.label_w = label_w;
+    view.state_x = state_x;
+    view.action_x = action_x;
+    if (lua_api->emit_lsp_manager(view))
+    {
+      return;
+    }
+  }
+
+  UIRect rect = {x, y, w, h};
+  ui_draw_panel(
+      *ui,
+      rect,
+      {theme.fg_command, theme.bg_panel_border, theme.fg_panel_border, theme.bg_panel_border});
+  ui_draw_panel_title(*ui, rect, " LSP Manager ", theme.fg_command, theme.bg_panel_border);
+
+  for (int row = 0; row < list_h; row++)
+  {
+    const int index = lsp_manager_scroll + row;
+    if (index < 0 || index >= (int)lsp_manager_rows.size())
+      break;
+    const auto &item = lsp_manager_rows[index];
+    const bool selected = index == lsp_manager_selected;
+    const int fg = selected ? theme.fg_selection : theme.fg_command;
+    const int bg = selected ? theme.bg_selection : theme.bg_panel_border;
+    UIRect row_rect = {x + 1, y + 1 + row, w - 2, 1};
+    ui->fill_rect(row_rect, " ", fg, bg);
+    ui->draw_text(x + 2, y + 1 + row, ui_truncate_cells(item.label, label_w), fg, bg, selected);
+    ui->draw_text(state_x,
+                  y + 1 + row,
+                  ui_truncate_cells(row_views[index].state, std::max(1, action_x - state_x - 1)),
+                  item.enabled ? theme.fg_comment : theme.fg_status_warning,
+                  bg);
+    int button_x = action_x;
+    size_t action_index = 0;
+    for (const auto &[action, label, variant, enabled] : row_actions[index])
+    {
+      const int button_w = (int)label.size() + 2;
       UIButton button;
       button.id = action;
       button.label = label;
       button.rect = {button_x, y + 1 + row, button_w, 1};
       button.variant = variant;
       button.enabled = enabled;
-      button.focused = selected && (int)action_index == lsp_manager_action_selected;
+      button.focused = action_index < row_views[index].actions.size()
+                       && row_views[index].actions[action_index].focused;
       ui_draw_button(*ui,
                      button,
                      theme.fg_selection,
@@ -724,8 +824,8 @@ void Editor::render_lsp_manager()
                      theme.bg_status_error,
                      theme.fg_comment,
                      theme.bg_panel_border);
-      lsp_manager_buttons.push_back({item.server, action, button_x, y + 1 + row, button_w, 1});
       button_x += button_w + 1;
+      action_index++;
     }
   }
 
@@ -1824,6 +1924,9 @@ void Editor::sync_lua_ui_surfaces()
     lua_ui_prev_popup = false;
     lua_ui_prev_save_prompt = false;
     lua_ui_prev_quit_prompt = false;
+    lua_ui_prev_tree_sitter_status = false;
+    lua_ui_prev_lsp_manager = false;
+    lua_ui_prev_telescope = false;
     return;
   }
   auto sync = [&](bool visible, bool &prev, const char *name)
@@ -1839,6 +1942,9 @@ void Editor::sync_lua_ui_surfaces()
   sync(popup.visible && popup.presentation == POPUP_MODAL, lua_ui_prev_popup, "popup");
   sync(show_save_prompt, lua_ui_prev_save_prompt, "save_prompt");
   sync(show_quit_prompt, lua_ui_prev_quit_prompt, "quit_prompt");
+  sync(show_tree_sitter_status_modal, lua_ui_prev_tree_sitter_status, "tree_sitter_status");
+  sync(show_lsp_manager_modal, lua_ui_prev_lsp_manager, "lsp_manager");
+  sync(telescope.is_active(), lua_ui_prev_telescope, "telescope");
 }
 
 void Editor::render_popup()
