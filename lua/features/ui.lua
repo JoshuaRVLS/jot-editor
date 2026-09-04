@@ -38,6 +38,64 @@ local function rune_len(s)
   return n
 end
 
+-- Terminal cell width helpers. Spans are byte offsets and the renderer slices
+-- by bytes, so everything must stay on rune boundaries and never exceed the
+-- panel width in *cells* (wide glyphs count 2) or the renderer clips and
+-- mangles the row.
+local function rune_width(cp)
+  if cp >= 0x1100 and (cp <= 0x115F or cp == 0x2329 or cp == 0x232A
+      or (cp >= 0x2E80 and cp <= 0xA4CF and cp ~= 0x303F)
+      or (cp >= 0xAC00 and cp <= 0xD7A3) or (cp >= 0xF900 and cp <= 0xFAFF)
+      or (cp >= 0xFE30 and cp <= 0xFE4F) or (cp >= 0xFF00 and cp <= 0xFF60)
+      or (cp >= 0xFFE0 and cp <= 0xFFE6) or (cp >= 0x1F300 and cp <= 0x1FAFF)
+      or (cp >= 0x20000 and cp <= 0x3FFFD)) then
+    return 2
+  end
+  return 1
+end
+
+local function cell_len(s)
+  local n = 0
+  for _, cp in utf8.codes(s) do
+    n = n + rune_width(cp)
+  end
+  return n
+end
+
+-- Rune-safe prefix of at most n cells.
+local function take_cells(s, n)
+  if n <= 0 then
+    return ""
+  end
+  local out = {}
+  local cells = 0
+  for pos, cp in utf8.codes(s) do
+    local w = rune_width(cp)
+    if cells + w > n then
+      return table.concat(out)
+    end
+    out[#out + 1] = utf8.char(cp)
+    cells = cells + w
+  end
+  return s
+end
+
+local function trunc_cells(s, n)
+  return take_cells(s, n)
+end
+
+-- Pads with spaces up to n cells (truncating cell-safe when already wider).
+local function pad_cells(s, n)
+  if n < 0 then
+    n = 0
+  end
+  local c = cell_len(s)
+  if c >= n then
+    return take_cells(s, n)
+  end
+  return s .. string.rep(" ", n - c)
+end
+
 -- Truncates to at most n runes (never splits a UTF-8 sequence).
 local function truncate(s, n)
   if n < 0 then
@@ -117,9 +175,10 @@ local function present_panel(name, p, rows, opts, body_override, spans_override)
       local row = rows[i]
       body[i] = row.text or ""
       -- A full-line span paints the row background (e.g. the selected / input
-      -- rows); text spans drawn on top override individual characters.
+      -- rows); text spans drawn on top override individual characters. The
+      -- huge len makes it cover whatever the renderer clips the line to.
       local spans = {
-        { start = 0, len = math.max(1, #(row.text or "")), fg = row.fg or fg, bg = row.bg or bg },
+        { start = 0, len = 65535, fg = row.fg or fg, bg = row.bg or bg },
       }
       if row.spans then
         for _, sp in ipairs(row.spans) do
@@ -128,6 +187,12 @@ local function present_panel(name, p, rows, opts, body_override, spans_override)
       end
       spans_by_line[i] = spans
     end
+  end
+
+  -- Pad every row to the panel width in cells so the renderer never clips a
+  -- line (its clip would append ".." and split long runs of text).
+  for i = 1, shown do
+    body[i] = pad_cells(body[i] or "", p.w - 2)
   end
 
   local buf = jot.ui.buffer.create(false, true)
@@ -574,11 +639,24 @@ end
 -- Telescope (file finder with preview)
 -- ---------------------------------------------------------------------------
 
+-- Byte-safe tail clip: keeps the last n runes (never splits a UTF-8
+-- sequence) and prefixes an ellipsis when text is cut.
+local function tail_runes(s, n)
+  local starts = {}
+  for pos in utf8.codes(s) do
+    starts[#starts + 1] = pos
+  end
+  if #starts <= n then
+    return s
+  end
+  return s:sub(starts[#starts - n + 1])
+end
+
 local function left_clip(s, w)
   if rune_len(s) <= w then
     return s
   end
-  return "…" .. truncate(s:sub(#s - w * 3), w - 1)
+  return "…" .. truncate(tail_runes(s, w - 1), w - 1)
 end
 
 local function telescope(p)
@@ -619,18 +697,21 @@ local function telescope(p)
       return
     end
     if col < 0 then
-      text = truncate(text, math.max(0, #text + col))
-      col = 0
+      -- Left of the float's interior: the border owns those cells and a
+      -- partial slice would cut a UTF-8 glyph in half, so drop it.
+      return
     end
     if text == "" then
       return
     end
     body[b] = body[b] or ""
-    local cur = #body[b]
-    if cur < col then
-      body[b] = body[b] .. string.rep(" ", col - cur)
+    if #body[b] < col then
+      body[b] = body[b] .. string.rep(" ", col - #body[b])
     end
-    span(b, col, #text, fg, bg)
+    -- Span offsets are bytes and must match the actual append position, not
+    -- the requested column (columns drift once a wide glyph is in the row).
+    local start = #body[b]
+    span(b, start, #text, fg, bg)
     body[b] = body[b] .. text
   end
 
@@ -639,7 +720,7 @@ local function telescope(p)
       return
     end
     body[b] = body[b] or ""
-    span(b, 0, inner_w, row_fg, row_bg)
+    span(b, 0, 65535, row_fg, row_bg)
   end
 
   -- Root line + query row.
@@ -770,7 +851,7 @@ local function telescope(p)
 
   local body_list = {}
   for i = 1, inner_h do
-    body_list[i] = pad(body[i] or "", inner_w)
+    body_list[i] = pad_cells(body[i] or "", inner_w)
   end
   return present_panel("telescope",
                        p,
