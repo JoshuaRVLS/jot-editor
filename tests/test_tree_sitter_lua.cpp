@@ -227,6 +227,14 @@ TEST_CASE("Lua Tree-sitter handles reject invalid lifecycle operations")
     REQUIRE(query != 0);
     REQUIRE_FALSE(manager.captures_for_handles(query, tree).empty());
     REQUIRE(manager.delete_query_handle(query));
+    // The compile failure must name the offending construct (error kind and
+    // byte offset) instead of a generic message, so bundled-query / grammar
+    // version mismatches are self-explanatory at startup.
+    std::string query_error;
+    REQUIRE_FALSE(
+        manager.set_query_source(".cpp", "(totally_bogus_node) @variable", query_error));
+    REQUIRE(query_error.find("unknown node type") != std::string::npos);
+    REQUIRE(query_error.find("at byte") != std::string::npos);
     REQUIRE(manager.delete_tree_handle(tree));
     REQUIRE(manager.delete_parser_handle(parser));
   }

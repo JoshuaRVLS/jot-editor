@@ -1,5 +1,6 @@
 #include "tree_sitter/manager.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -236,7 +237,45 @@ bool TreeSitterManager::set_query_source(const std::string &extension,
       language, source.c_str(), static_cast<uint32_t>(source.size()), &offset, &query_error);
   if (!query)
   {
-    error = "query compilation failed";
+    // Name the actual construct that failed so bundled-query / grammar version
+    // mismatches are self-explanatory instead of a generic message.
+    const char *kind = "invalid query";
+    switch (query_error)
+    {
+      case TSQueryErrorSyntax:
+        kind = "syntax error";
+        break;
+      case TSQueryErrorNodeType:
+        kind = "unknown node type";
+        break;
+      case TSQueryErrorField:
+        kind = "unknown field";
+        break;
+      case TSQueryErrorCapture:
+        kind = "unknown capture";
+        break;
+      case TSQueryErrorStructure:
+        kind = "invalid structure";
+        break;
+      case TSQueryErrorLanguage:
+        kind = "language mismatch";
+        break;
+      default:
+        break;
+    }
+    std::string near;
+    if (offset < source.size())
+    {
+      near = source.substr(offset, std::min<std::string::size_type>(48, source.size() - offset));
+      const auto newline = near.find('\n');
+      if (newline != std::string::npos)
+        near.erase(newline);
+    }
+    error = std::string("query compilation failed (") + kind + " at byte "
+            + std::to_string(offset);
+    if (!near.empty())
+      error += " near \"" + near + "\"";
+    error += ")";
     query_diagnostics_[language_id] = error;
     runtime_query_used_[language_id] = false;
     builtin_query_used_[language_id] = false;

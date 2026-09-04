@@ -52,11 +52,13 @@
   "instanceof"
   "keyof"
   "of"
-  "this"
   "typeof"
   "void"
   "yield"
 ] @keyword
+
+(this) @variable.builtin
+(super) @variable.builtin
 
 (string) @string
 (template_string) @string
@@ -69,15 +71,14 @@
 (call_expression function: (member_expression property: (property_identifier) @function.method))
 (function_declaration name: (identifier) @function)
 (method_definition name: (property_identifier) @function.method)
-(class_declaration name: (identifier) @type)
+(class_declaration name: (type_identifier) @type)
 (interface_declaration name: (type_identifier) @type)
 (type_alias_declaration name: (type_identifier) @type)
 (enum_declaration name: (identifier) @type)
 (type_identifier) @type
 (predefined_type) @type.builtin
-(formal_parameters (identifier) @variable.parameter)
-(required_parameter name: (identifier) @variable.parameter)
-(optional_parameter name: (identifier) @variable.parameter)
+(required_parameter pattern: (identifier) @variable.parameter)
+(optional_parameter pattern: (identifier) @variable.parameter)
 (property_identifier) @property
 (pair key: (property_identifier) @property)
 

@@ -6,12 +6,31 @@ local queries = dofile(root .. "/queries.lua")
 local highlight = dofile(root .. "/highlight.lua")
 
 registry.register(native)
-local query_ok, query_errors = queries.load_all(native, root, registry)
-if not query_ok then
-  for _, error in ipairs(query_errors) do
-    io.stderr:write("Tree-sitter bundled query skipped (" .. error
+
+-- Logs bundled-query failures to stderr (boot logs / headless) and, when
+-- running inside the editor, also shows a summary on the message line so the
+-- warning does not flash by unnoticed before the UI paints.
+local function report_query_failures(query_errors)
+  for _, reason in ipairs(query_errors) do
+    io.stderr:write("Tree-sitter bundled query skipped (" .. reason
       .. "); runtime queries or regex will be used\n")
   end
+  local notify = show_message
+  if notify and query_errors[1] then
+    local names = {}
+    for _, reason in ipairs(query_errors) do
+      local lang = reason:match("^([^:]+):")
+      names[#names + 1] = lang or reason
+    end
+    local word = #query_errors == 1 and "query" or "queries"
+    pcall(notify, "Tree-sitter: " .. #query_errors .. " bundled highlight " .. word
+      .. " skipped (" .. table.concat(names, ", ") .. "); run :tsstatus for details")
+  end
+end
+
+local query_ok, query_errors = queries.load_all(native, root, registry)
+if not query_ok then
+  report_query_failures(query_errors)
 end
 highlight.configure(native)
 
@@ -35,10 +54,7 @@ M.reload = function()
   registry.register(native)
   local query_ok, query_errors = queries.load_all(native, root, registry)
   if not query_ok then
-    for _, error in ipairs(query_errors) do
-      io.stderr:write("Tree-sitter bundled query skipped (" .. error
-        .. "); runtime queries or regex will be used\n")
-    end
+    report_query_failures(query_errors)
   end
   highlight.configure(native)
   M.registry = registry
