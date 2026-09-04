@@ -4531,7 +4531,16 @@ bool LuaAPI::present_lsp_hover(const std::string &contents,
   bool consumed = false;
   if (ok != LUA_OK)
   {
-    std::cerr << "Lua hover UI error: " << lua_tostring(L, -1) << "\n";
+    // Never write to stderr here: if it reaches the terminal it inserts a raw
+    // line into the live screen and makes the editor "jump". Surface it in the
+    // message bar instead.
+    if (editor)
+    {
+      std::string msg = lua_tostring(L, -1) ? lua_tostring(L, -1) : "unknown";
+      if (msg.size() > 80)
+        msg.resize(80);
+      editor->set_message("Lua hover UI error: " + msg);
+    }
   }
   else
   {
@@ -4558,7 +4567,13 @@ void LuaAPI::notify_lsp_hover_closed()
   lua_pushnil(L); // handler receives nil to mean "hide"
   if (lua_pcall(L, 1, 0, 0) != LUA_OK)
   {
-    std::cerr << "Lua hover UI close error: " << lua_tostring(L, -1) << "\n";
+    if (editor)
+    {
+      std::string msg = lua_tostring(L, -1) ? lua_tostring(L, -1) : "unknown";
+      if (msg.size() > 80)
+        msg.resize(80);
+      editor->set_message("Lua hover UI close error: " + msg);
+    }
   }
   lua_settop(L, top);
 }
