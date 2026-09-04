@@ -1652,14 +1652,18 @@ local function sidebar(p)
   local tail = math.max(0, (w - 2) - lead - hcells)
   local top = "╭" .. string.rep("─", lead) .. htxt .. string.rep("─", tail) .. "╮"
   body[1] = pad_cells(top, w)
-  local top_spans = { { start = 0, len = 1 + lead, fg = border_fg, bg = bg, bold = p.resizing } }
+  -- Border glyphs are 3-byte UTF-8, so the border prefix is 3 + 3*lead
+  -- bytes; spans must never slice mid-rune or the corner renders as `?`.
+  local border_bytes = 3 + 3 * lead
+  local top_spans = { { start = 0, len = border_bytes, fg = border_fg, bg = bg,
+                        bold = p.resizing } }
   if htxt ~= "" then
     top_spans[#top_spans + 1] =
-        { start = 1 + lead, len = #htxt, fg = p.header_fg or dir, bg = bg, bold = true }
-    top_spans[#top_spans + 1] = { start = 1 + lead + #htxt,
-                                  len = #top - (1 + lead + #htxt),
-                                  fg = border_fg, bg = bg, bold = p.resizing }
+        { start = border_bytes, len = #htxt, fg = p.header_fg or dir, bg = bg, bold = true }
   end
+  top_spans[#top_spans + 1] = { start = border_bytes + #htxt,
+                                len = #top - border_bytes - #htxt,
+                                fg = border_fg, bg = bg, bold = p.resizing }
   if #top_spans > 0 then
     spans[1] = top_spans
   end

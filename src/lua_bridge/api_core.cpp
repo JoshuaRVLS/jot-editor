@@ -1863,7 +1863,10 @@ void LuaAPI::render_floats()
     y = std::clamp(y, 0, std::max(0, max_y));
     f->x = x;
     f->y = y;
-    UIRect r{x, y, std::min(f->w, rw - x), std::min(f->h, rh - y)};
+    // Strip floats may occupy the status rows, so their rect spans the full
+    // screen height; every other float stays above the status line.
+    const int max_h = f->strip ? editor->ui->get_height() : rh;
+    UIRect r{x, y, std::min(f->w, rw - x), std::min(f->h, max_h - y)};
     editor->ui->fill_rect(r, " ", f->fg, f->bg);
     const int border_fg = f->border_fg >= 0 ? f->border_fg : f->fg;
     if (f->border != "none")
