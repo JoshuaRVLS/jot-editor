@@ -4,10 +4,15 @@
 // as inline functions instead of being duplicated per translation unit.
 #pragma once
 
+#include "lua_bridge/embedded_lua.h"
+#include "lua_bridge/lua_loader.h"
+
 #include <array>
 #include <cctype>
 #include <cstdio>
+#include <iostream>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 #ifndef _WIN32
@@ -22,6 +27,35 @@ extern "C"
 }
 
 class LuaAPI;
+
+// Runs a one-shot Lua callback (registered under `id` in `callbacks`) with a
+// single table argument built by `build`. Returns true when the callback
+// existed and ran. Shared by the LSP and debugger result deliverers.
+template <typename BuildFn>
+inline bool lua_deliver_one_shot(const std::string &id,
+                                 std::unordered_map<std::string, int> &callbacks,
+                                 void *lua_state,
+                                 BuildFn build)
+{
+  if (id.empty() || !lua_state)
+    return false;
+  auto it = callbacks.find(id);
+  if (it == callbacks.end())
+    return false;
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  const int top = lua_gettop(L);
+  const int ref = it->second;
+  callbacks.erase(it);
+  lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+  luaL_unref(L, LUA_REGISTRYINDEX, ref);
+  build(L);
+  if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+  {
+    std::cerr << "Lua one-shot callback error: " << lua_tostring(L, -1) << "\n";
+  }
+  lua_settop(L, top);
+  return true;
+}
 
 // Single active bridge instance, used as the fallback target for namespaced
 // binding functions that have no upvalue (see api_bindings.cpp). Defined in
@@ -118,6 +152,43 @@ namespace jot_lua
     code = status;
 #endif
     return {std::move(out), code};
+  }
+
+  // Loads a bundled Lua feature file. The first candidate path on disk (user
+  // config dir -> install data dir -> developer source dir) wins so edits never
+  // need a recompile; otherwise the copy embedded into the binary runs straight
+  // from memory (no disk writes needed). Shared by the hover / ui-kit runtimes.
+  inline bool load_bundled_lua_file(lua_State *L, const char *rel_path, const char *label)
+  {
+    const auto candidates = jot_lua_candidate_paths(rel_path);
+    if (!candidates.empty())
+    {
+      const int top = lua_gettop(L);
+      if (luaL_loadfile(L, candidates.front().string().c_str()) || lua_pcall(L, 0, 0, 0))
+      {
+        std::cerr << label << " Lua runtime failed: "
+                  << (lua_tostring(L, -1) ? lua_tostring(L, -1) : "unknown") << "\n";
+        lua_settop(L, top);
+        return false;
+      }
+      return true;
+    }
+    size_t size = 0;
+    const unsigned char *data = jot_embedded::find(rel_path, &size);
+    if (!data || size == 0)
+    {
+      return false;
+    }
+    const int top = lua_gettop(L);
+    if (luaL_loadbuffer(L, reinterpret_cast<const char *>(data), size, rel_path)
+        || lua_pcall(L, 0, 0, 0))
+    {
+      std::cerr << label << " embedded Lua runtime failed: "
+                << (lua_tostring(L, -1) ? lua_tostring(L, -1) : "unknown") << "\n";
+      lua_settop(L, top);
+      return false;
+    }
+    return true;
   }
 
   // Reads an integer / boolean / string field off a Lua table, falling back to
