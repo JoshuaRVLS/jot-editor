@@ -1256,6 +1256,210 @@ local function search_panel(p)
 end
 
 -- ---------------------------------------------------------------------------
+-- Status line (bottom strip, 2 rows)
+-- ---------------------------------------------------------------------------
+
+local function status_line(p)
+  if not p then
+    close("status_line")
+    return true
+  end
+  local colors = p.colors or {}
+  local status_fg = colors.status_fg or 7
+  local status_bg = colors.status_bg or 0
+  local message_fg = colors.status_message or status_fg
+  local muted_fg = colors.status_muted_fg or colors.comment or 8
+
+  local w = math.max(1, p.w or 1)
+  local h = math.max(1, p.h or 2)
+
+  -- Split the native model into left / right segment lists and mirror the
+  -- native layout: right side drops to half the width, left gets the rest,
+  -- the file segment truncates first when space runs low.
+  local left, right = {}, {}
+  for _, s in ipairs(p.segments or {}) do
+    local seg = {
+      text = s.text or "",
+      fg = s.fg or status_fg,
+      bg = s.bg or status_bg,
+      bold = s.bold or false,
+      optional = s.optional or false,
+      priority = s.priority or 100,
+    }
+    if s.side == "left" then
+      left[#left + 1] = seg
+    else
+      right[#right + 1] = seg
+    end
+  end
+
+  local function block_width(list)
+    local n = 0
+    for i, s in ipairs(list) do
+      n = n + cell_len(s.text)
+      if i > 1 then
+        n = n + 1 -- powerline separator
+      end
+    end
+    return n
+  end
+
+  local function drop_to_fit(list, max_w)
+    while block_width(list) > max_w do
+      local rem
+      for i, s in ipairs(list) do
+        if s.optional and (not rem or s.priority < list[rem].priority) then
+          rem = i
+        end
+      end
+      if not rem then
+        break
+      end
+      table.remove(list, rem)
+    end
+  end
+
+  drop_to_fit(right, math.max(0, math.floor(w / 2)))
+  local right_w = block_width(right)
+  local min_gap = w >= 40 and 2 or 1
+  local left_budget = math.max(0, w - right_w - (right_w > 0 and min_gap or 0))
+  drop_to_fit(left, left_budget)
+  if block_width(left) > left_budget and #left > 2 then
+    for i = #left, 1, -1 do
+      if (left[i].text or ""):find("jot") then
+        table.remove(left, i)
+        break
+      end
+    end
+  end
+  if block_width(left) > left_budget and #left > 2 then
+    local excess = block_width(left) - left_budget
+    left[1].text = trunc_cells(left[1].text, math.max(4, cell_len(left[1].text) - excess))
+  end
+  while block_width(left) > left_budget and #left > 0 do
+    local last = left[#left]
+    local target = cell_len(last.text) - (block_width(left) - left_budget)
+    if target <= 0 then
+      table.remove(left)
+    else
+      last.text = trunc_cells(last.text, target)
+      break
+    end
+  end
+  right_w = block_width(right)
+  local right_x = math.max(0, w - right_w)
+
+  -- Compose a segment block into text + byte-offset spans. The powerline
+  -- separator between segments uses the color transition of its neighbors.
+  local function compose_block(list)
+    local text, spans = "", {}
+    for i, s in ipairs(list) do
+      if i > 1 then
+        local at = #text
+        text = text .. "\u{E0B0}"
+        spans[#spans + 1] = { start = at, len = 3, fg = list[i - 1].bg, bg = s.bg, bold = true }
+      end
+      local at = #text
+      text = text .. s.text
+      spans[#spans + 1] = { start = at, len = #s.text, fg = s.fg, bg = s.bg, bold = s.bold }
+    end
+    return text, spans
+  end
+
+  -- Row 1: segmented bar (file + cursor left, diagnostics/git/LSP right).
+  local row1_text, row1_spans = "", {}
+  local ltext, lspans = compose_block(left)
+  row1_text = row1_text .. ltext
+  for _, sp in ipairs(lspans) do
+    row1_spans[#row1_spans + 1] = sp
+  end
+  local lw = cell_len(ltext)
+  if lw < right_x then
+    local at = #row1_text
+    local pad = string.rep(" ", right_x - lw)
+    row1_text = row1_text .. pad
+    row1_spans[#row1_spans + 1] = { start = at, len = #pad, fg = status_fg, bg = status_bg }
+  end
+  if right_w > 0 then
+    local rtext, rspans = compose_block(right)
+    local base = #row1_text
+    for _, sp in ipairs(rspans) do
+      row1_spans[#row1_spans + 1] =
+          { start = base + sp.start, len = sp.len, fg = sp.fg, bg = sp.bg, bold = sp.bold }
+    end
+    row1_text = row1_text .. rtext
+  end
+  local rw1 = cell_len(row1_text)
+  if rw1 < w then
+    local at = #row1_text
+    local pad = string.rep(" ", w - rw1)
+    row1_text = row1_text .. pad
+    row1_spans[#row1_spans + 1] = { start = at, len = #pad, fg = status_fg, bg = status_bg }
+  end
+  table.insert(row1_spans, 1, { start = 0, len = 65535, fg = status_fg, bg = status_bg })
+
+  -- Row 2: transient message (bold) or the workspace context label (muted).
+  local has_message = p.message and p.message ~= ""
+  local row2_text = trunc_cells(has_message and "  " .. p.message or (p.context or ""),
+                                math.max(0, w))
+  local row2_spans = {
+    { start = 0, len = 65535, fg = status_fg, bg = status_bg },
+    { start = 0, len = #row2_text, fg = has_message and message_fg or muted_fg, bg = status_bg,
+      bold = has_message },
+  }
+
+  local body = { trunc_cells(row1_text, w), row2_text }
+  for i = 1, h do
+    body[i] = pad_cells(body[i] or "", w)
+  end
+
+  -- Reuse the existing strip buffer/float across frames; only create once.
+  local s = surfaces["status_line"]
+  local buf, win
+  if s then
+    buf, win = s.buf, s.win
+    jot.ui.float.configure(win, {
+      col = p.x or 0,
+      row = p.y or 0,
+      width = w,
+      height = h,
+      relative = "editor",
+      anchor = "NW",
+      border = "none",
+      strip = true,
+      fg = status_fg,
+      bg = status_bg,
+    })
+  else
+    buf = jot.ui.buffer.create(false, true)
+    win = jot.ui.float.open(buf, {
+      col = p.x or 0,
+      row = p.y or 0,
+      width = w,
+      height = h,
+      relative = "editor",
+      anchor = "NW",
+      border = "none",
+      focusable = false,
+      mouse = false,
+      hide = false,
+      strip = true,
+      fg = status_fg,
+      bg = status_bg,
+    })
+    if not win or win == 0 then
+      jot.ui.buffer.delete(buf)
+      return false
+    end
+    surfaces["status_line"] = { win = win, buf = buf }
+  end
+  jot.ui.buffer.set_lines(buf, 0, -1, true, body)
+  jot.ui.float.set_spans(win, 1, row1_spans)
+  jot.ui.float.set_spans(win, 2, row2_spans)
+  return true
+end
+
+-- ---------------------------------------------------------------------------
 -- Context menu
 -- ---------------------------------------------------------------------------
 
@@ -1326,12 +1530,14 @@ jot.ui.handler("context_menu", context_menu)
 jot.ui.handler("menu_dropdown", menu_dropdown)
 jot.ui.handler("search_panel", search_panel)
 jot.ui.handler("home_screen", home_screen)
+jot.ui.handler("status_line", status_line)
 
 -- Exposed for tests / reuse; the loader ignores the return value.
 return {
   close = close,
   present_panel = present_panel,
   match_spans = match_spans,
+  status_line = status_line,
   command_palette = command_palette,
   quick_pick = quick_pick,
   popup = popup,

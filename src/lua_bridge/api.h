@@ -259,6 +259,26 @@ struct SearchView
   std::string count; // "3/12" or "0/0"
 };
 
+struct StatusSegmentView
+{
+  std::string text; // fully composed (icon + label + trailing space)
+  int fg = 0, bg = 0;
+  bool bold = false;
+  bool optional = false;
+  int priority = 100;
+  std::string side; // "left" or "right"
+};
+
+struct StatusView
+{
+  int x = 0, y = 0, w = 0, h = 0; // full strip geometry (h == status_height)
+  std::string message;            // transient message (may be empty)
+  std::string context;            // workspace label used when no message
+  std::vector<StatusSegmentView> segments;
+  bool has_selection = false;
+  int sel_lines = 0, sel_cols = 0;
+};
+
 struct LuaFloatWindow
 {
   int handle = 0;
@@ -272,6 +292,8 @@ struct LuaFloatWindow
   bool mouse = false;
   bool hide = false;
   bool style_minimal = false;
+  bool strip = false; // strips into the status area (bottom rows) instead of
+                      // being clamped above it — used by the status line UI
   int fg = 7, bg = 0;
   int border_fg = -1; // -1 = fall back to fg
   int title_fg = -1;  // -1 = fall back to fg
@@ -488,6 +510,7 @@ public:
   bool emit_menu_dropdown(const MenuDropdownView &view);
   bool emit_search(const SearchView &view);
   bool emit_home(const HomeView &view);
+  bool emit_status(const StatusView &view);
 
   // Terminal-cursor control from Lua (friend access to editor->ui).
   void ui_set_cursor(int x, int y);

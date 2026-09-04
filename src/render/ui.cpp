@@ -1024,6 +1024,42 @@ void Editor::render_status_line()
     }
   }
 
+  // Message / context row content (used by both the Lua handler and the
+  // native fallback so the second status line always matches).
+  std::string status_context_label = "  " + status_workspace_label(root_dir);
+
+  // Hand the raw model to a Lua UI handler when one is registered; it owns
+  // layout, drop-to-fit and painting. Native fallback below keeps the exact
+  // same behavior when Lua is disabled or no handler exists.
+  if (lua_api && lua_api->has_lua_ui_handler("status_line"))
+  {
+    StatusView view;
+    view.x = content_x;
+    view.y = y;
+    view.w = content_w;
+    view.h = status_height;
+    view.message = message;
+    view.context = status_context_label;
+    view.has_selection = (!show_home_menu && active_buf && active_buf->selection.active);
+    if (view.has_selection)
+    {
+      view.sel_lines = std::abs(active_buf->selection.end.y - active_buf->selection.start.y) + 1;
+      view.sel_cols = std::abs(active_buf->selection.end.x - active_buf->selection.start.x);
+    }
+    for (const auto &s : left_segments)
+    {
+      view.segments.push_back({s.text, s.fg, s.bg, s.bold, s.optional, s.priority, "left"});
+    }
+    for (const auto &s : right_segments)
+    {
+      view.segments.push_back({s.text, s.fg, s.bg, s.bold, s.optional, s.priority, "right"});
+    }
+    if (lua_api->emit_status(view))
+    {
+      return;
+    }
+  }
+
   const int min_gap = content_w >= 40 ? 2 : 1;
   status_drop_optional_to_fit(right_segments, std::max(0, content_w / 2));
   int right_w = status_layout_width(right_segments);
@@ -1097,12 +1133,11 @@ void Editor::render_status_line()
   }
   else
   {
-    std::string context = "  " + status_workspace_label(root_dir);
     status_draw_clipped(ui,
                         content_x,
                         y + 1,
                         content_w,
-                        ui_truncate_cells(context, std::max(0, content_w)),
+                        ui_truncate_cells(status_context_label, std::max(0, content_w)),
                         theme.fg_status_muted,
                         theme.bg_status);
   }

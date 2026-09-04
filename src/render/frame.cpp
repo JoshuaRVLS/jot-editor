@@ -287,6 +287,10 @@ void Editor::render()
     {
       render_image_viewer();
       render_status_line();
+      if (lua_api)
+      {
+        lua_api->render_floats();
+      }
       ui->hide_cursor();
       ui->render();
       needs_redraw = false;

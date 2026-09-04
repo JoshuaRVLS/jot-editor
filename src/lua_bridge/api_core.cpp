@@ -1570,6 +1570,7 @@ bool LuaAPI::configure_float(int id, lua_State *L, int ti)
   f.mouse = table_bool(L, ti, "mouse", f.mouse);
   f.hide = table_bool(L, ti, "hide", f.hide);
   f.style_minimal = table_bool(L, ti, "style_minimal", f.style_minimal);
+  f.strip = table_bool(L, ti, "strip", f.strip);
   f.title = table_string(L, ti, "title", f.title);
   f.footer = table_string(L, ti, "footer", f.footer);
   f.fg = table_int(L, ti, "fg", f.fg);
@@ -1856,7 +1857,10 @@ void LuaAPI::render_floats()
     if (f->anchor.find('E') != std::string::npos)
       x -= f->w;
     x = std::clamp(x, 0, std::max(0, rw - f->w));
-    y = std::clamp(y, 0, std::max(0, rh - f->h));
+    // A strip float may occupy the status rows at the screen bottom; all
+    // other floats stay above the status line.
+    const int max_y = f->strip ? (editor->ui->get_height() - f->h) : (rh - f->h);
+    y = std::clamp(y, 0, std::max(0, max_y));
     f->x = x;
     f->y = y;
     UIRect r{x, y, std::min(f->w, rw - x), std::min(f->h, rh - y)};
@@ -4876,6 +4880,16 @@ void LuaAPI::push_ui_colors(lua_State *L, int t)
   lua_set_int_field(L, c, "sidebar_sel_bg", th.bg_sidebar_selected);
   lua_set_int_field(L, c, "status_fg", th.fg_status);
   lua_set_int_field(L, c, "status_bg", th.bg_status);
+  lua_set_int_field(L, c, "status_file_fg", th.fg_status_file);
+  lua_set_int_field(L, c, "status_file_bg", th.bg_status_file);
+  lua_set_int_field(L, c, "status_message", th.fg_status_message);
+  lua_set_int_field(L, c, "status_muted_fg", th.fg_status_muted);
+  lua_set_int_field(L, c, "status_muted_bg", th.bg_status_muted);
+  lua_set_int_field(L, c, "status_logo_fg", th.fg_status_logo);
+  lua_set_int_field(L, c, "status_logo_bg", th.bg_status_logo);
+  lua_set_int_field(L, c, "status_info_bg", th.bg_status_info);
+  lua_set_int_field(L, c, "status_warning_bg", th.bg_status_warning);
+  lua_set_int_field(L, c, "status_error_bg", th.bg_status_error);
   lua_set_int_field(L, c, "panel_bg", th.bg_panel_border);
   lua_set_int_field(L, c, "border", th.fg_panel_border);
   lua_set_int_field(L, c, "selection_fg", th.fg_selection);
@@ -5320,6 +5334,41 @@ bool LuaAPI::emit_search(const SearchView &view)
                        lua_set_bool_field(L, t, "whole_word", view.whole_word);
                        lua_set_bool_field(L, t, "regex", view.regex);
                        lua_set_bool_field(L, t, "scoped_to_selection", view.scoped_to_selection);
+                       push_ui_colors(L, t);
+                     });
+}
+
+bool LuaAPI::emit_status(const StatusView &view)
+{
+  return emit_lua_ui("status_line",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_set_str_field(L, t, "message", view.message);
+                       lua_set_str_field(L, t, "context", view.context);
+                       lua_set_bool_field(L, t, "has_selection", view.has_selection);
+                       lua_set_int_field(L, t, "sel_lines", view.sel_lines);
+                       lua_set_int_field(L, t, "sel_cols", view.sel_cols);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.segments.size(); i++)
+                       {
+                         const StatusSegmentView &s = view.segments[i];
+                         lua_newtable(L);
+                         const int si = lua_gettop(L);
+                         lua_set_str_field(L, si, "text", s.text);
+                         lua_set_int_field(L, si, "fg", s.fg);
+                         lua_set_int_field(L, si, "bg", s.bg);
+                         lua_set_bool_field(L, si, "bold", s.bold);
+                         lua_set_bool_field(L, si, "optional", s.optional);
+                         lua_set_int_field(L, si, "priority", s.priority);
+                         lua_set_str_field(L, si, "side", s.side);
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "segments");
                        push_ui_colors(L, t);
                      });
 }

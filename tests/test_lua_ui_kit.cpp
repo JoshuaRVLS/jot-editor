@@ -17,7 +17,7 @@ namespace
   struct StubState
   {
     int handler_count = 0;
-    std::string handlers[16];
+    std::string handlers[24];
     int open_count = 0;
     int close_count = 0;
     int delete_count = 0;
@@ -44,7 +44,7 @@ namespace
   int stub_handler(lua_State *L)
   {
     const char *name = luaL_checkstring(L, 1);
-    if (g.handler_count < 16)
+    if (g.handler_count < 24)
     {
       g.handlers[g.handler_count++] = name;
     }
@@ -126,6 +126,21 @@ namespace
     return 0;
   }
 
+  int stub_float_configure(lua_State *L)
+  {
+    luaL_checktype(L, 2, LUA_TTABLE);
+    lua_getfield(L, 2, "width");
+    g.last_width = (int)lua_tointeger(L, -1);
+    lua_pop(L, 1);
+    lua_getfield(L, 2, "height");
+    g.last_height = (int)lua_tointeger(L, -1);
+    lua_pop(L, 1);
+    lua_getfield(L, 2, "border");
+    g.last_border = lua_isnil(L, -1) ? "" : lua_tostring(L, -1);
+    lua_pop(L, 1);
+    return 1;
+  }
+
   int stub_ui_set_cursor(lua_State *L)
   {
     g.set_cursor_count++;
@@ -178,6 +193,8 @@ namespace
     lua_setfield(L, -2, "open");
     lua_pushcfunction(L, stub_float_close);
     lua_setfield(L, -2, "close");
+    lua_pushcfunction(L, stub_float_configure);
+    lua_setfield(L, -2, "configure");
     lua_pushcfunction(L, stub_float_set_spans);
     lua_setfield(L, -2, "set_spans");
     lua_setfield(L, -2, "float");
@@ -237,12 +254,12 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
   REQUIRE(lua_istable(L, 1));
-  REQUIRE(g.handler_count == 13);
+  REQUIRE(g.handler_count == 14);
   bool has_palette = false, has_quick_pick = false, has_popup = false;
   bool has_save = false, has_quit = false, has_ts = false;
   bool has_lsp = false, has_telescope = false;
   bool has_completion = false, has_context = false, has_menu = false;
-  bool has_search = false, has_home = false;
+  bool has_search = false, has_home = false, has_status = false;
   for (int i = 0; i < g.handler_count; i++)
   {
     has_palette = has_palette || g.handlers[i] == "command_palette";
@@ -258,6 +275,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
     has_menu = has_menu || g.handlers[i] == "menu_dropdown";
     has_search = has_search || g.handlers[i] == "search_panel";
     has_home = has_home || g.handlers[i] == "home_screen";
+    has_status = has_status || g.handlers[i] == "status_line";
   }
   REQUIRE(has_palette);
   REQUIRE(has_quick_pick);
@@ -272,6 +290,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(has_menu);
   REQUIRE(has_search);
   REQUIRE(has_home);
+  REQUIRE(has_status);
 
   // --- command palette ---
   push_module_field(L, 1, "command_palette");
@@ -824,6 +843,51 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(g.last_height == 30);
   REQUIRE(g.last_border == "none");
   push_module_field(L, 1, "home_screen");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+
+  // --- status line ---
+  push_module_field(L, 1, "status_line");
+  push_box(L, 0, 30, 120, 2);
+  lua_pushstring(L, "saved 3 files");
+  lua_setfield(L, -2, "message");
+  lua_pushstring(L, "  workspace");
+  lua_setfield(L, -2, "context");
+  lua_newtable(L); // segments
+  const char *texts[] = {" file.cpp ", " 12:34 ", " 2L ", " 2 ", " main ", " 1 "};
+  const int fgs[] = {15, 7, 0, 0, 0, 7};
+  const int bgs[] = {4, 0, 6, 6, 6, 0};
+  const char *sides[] = {"left", "left", "left", "right", "right", "right"};
+  const bool optionals[] = {false, false, true, true, false, false};
+  const int priorities[] = {100, 100, 90, 80, 70, 60};
+  for (int i = 1; i <= 6; i++)
+  {
+    lua_newtable(L);
+    lua_pushstring(L, texts[i - 1]);
+    lua_setfield(L, -2, "text");
+    lua_pushinteger(L, fgs[i - 1]);
+    lua_setfield(L, -2, "fg");
+    lua_pushinteger(L, bgs[i - 1]);
+    lua_setfield(L, -2, "bg");
+    lua_pushboolean(L, optionals[i - 1]);
+    lua_setfield(L, -2, "optional");
+    lua_pushinteger(L, priorities[i - 1]);
+    lua_setfield(L, -2, "priority");
+    lua_pushstring(L, sides[i - 1]);
+    lua_setfield(L, -2, "side");
+    lua_rawseti(L, -2, i);
+  }
+  lua_setfield(L, -2, "segments");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.last_width == 120);
+  REQUIRE(g.last_height == 2);
+  REQUIRE(g.last_border == "none");
+  REQUIRE(g.lines_count == 2); // strip rows
+  REQUIRE(g.set_spans_count > 0);
+  push_module_field(L, 1, "status_line");
   lua_pushnil(L);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);
