@@ -1647,12 +1647,12 @@ local function sidebar(p)
   local htxt = (p.header and p.header ~= "")
       and trunc_cells(p.header, math.max(1, content_w))
       or ""
-  -- Leading padding drawn over the top border reads as a notch in the
-  -- frame right after the corner; drop stray leading blanks so the label
-  -- (icon first) sits flush against the dash run.
-  htxt = htxt:gsub("^ +", "")
+  -- The label (icon first) is baked into the border dash run. Reserve a
+  -- couple of cells of dash after the corner so a leading icon never butts
+  -- against the frame; hand-written headers with their own leading space
+  -- are fine (blank cells here read as intentional padding, not a notch).
   local hcells = cell_len(htxt)
-  local lead = math.min(hcol - 1, w - 2)
+  local lead = math.min(math.max(hcol - 1, 2), w - 2)
   local tail = math.max(0, (w - 2) - lead - hcells)
   local top = "╭" .. string.rep("─", lead) .. htxt .. string.rep("─", tail) .. "╮"
   body[1] = pad_cells(top, w)
