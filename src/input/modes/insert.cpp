@@ -247,6 +247,7 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt
     case '/':
     case '?':
     case 31:
+    case '_': // terminals report Ctrl+/ as byte 0x1f, decoded as Ctrl+_
       toggle_comment();
       return;
     case 'h':

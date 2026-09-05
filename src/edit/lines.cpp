@@ -55,6 +55,52 @@ namespace
     }
     return EditorFeatures::should_auto_indent(line);
   }
+
+  // Comment prefix/suffix for a buffer's file type. Block comments
+  // (html/xml) are toggled per line: prefix + suffix around the code.
+  struct CommentStyle
+  {
+    std::string prefix;
+    std::string suffix; // empty for line comments
+  };
+  CommentStyle comment_style_for(const std::string &ext)
+  {
+    if (ext == ".py" || ext == ".rb" || ext == ".lua" || ext == ".sh" || ext == ".bash"
+        || ext == ".zsh" || ext == ".fish" || ext == ".yaml" || ext == ".yml"
+        || ext == ".toml" || ext == ".ini" || ext == ".cfg" || ext == ".conf"
+        || ext == ".dockerfile" || ext == ".cmake" || ext == ".make" || ext == ".r"
+        || ext == ".ps1")
+    {
+      return {"#", ""};
+    }
+    if (ext == ".html" || ext == ".xml" || ext == ".vue" || ext == ".svelte" || ext == ".svg")
+    {
+      return {"<!--", "-->"};
+    }
+    if (ext == ".sql" || ext == ".hs" || ext == ".ada" || ext == ".vhdl" || ext == ".f"
+        || ext == ".f90")
+    {
+      return {"--", ""};
+    }
+    if (ext == ".m" || ext == ".mm" || ext == ".tex")
+    {
+      return {"%", ""};
+    }
+    // .c/.h/.cc/.cpp/.hpp/.java/.js/.jsx/.ts/.tsx/.go/.rs/.swift/.kt/.cs/.php/...
+    return {"//", ""};
+  }
+  std::string line_indent(const std::string &s)
+  {
+    size_t n = 0;
+    while (n < s.size() && (s[n] == ' ' || s[n] == '\t'))
+      n++;
+    return s.substr(0, n);
+  }
+  bool line_is_commented(const std::string &s, const CommentStyle &style)
+  {
+    const std::string body = s.substr(line_indent(s).size());
+    return body.compare(0, style.prefix.size(), style.prefix) == 0;
+  }
 } // namespace
 
 void Editor::duplicate_line()
@@ -222,22 +268,20 @@ void Editor::toggle_comment()
   auto &buf = get_buffer();
   if (buf.is_lazy())
     buf.materialize();
-  std::string ext = get_file_extension(buf.filepath);
-  std::string comment = "//";
-  if (ext == ".py")
-    comment = "#";
-  else if (ext == ".html" || ext == ".xml")
-    comment = "<!--";
+  const CommentStyle style = comment_style_for(get_file_extension(buf.filepath));
 
-  bool all_commented = true;
   int start_y =
       buf.selection.active ? std::min(buf.selection.start.y, buf.selection.end.y) : buf.cursor.y;
   int end_y =
       buf.selection.active ? std::max(buf.selection.start.y, buf.selection.end.y) : buf.cursor.y;
 
+  // Comment on the line's own indentation level (right after the leading
+  // whitespace), matching what an editor with smart comment toggling does for
+  // nested code instead of always anchoring at column 0.
+  bool all_commented = true;
   for (int i = start_y; i <= end_y; i++)
   {
-    if (buf.lines[i].substr(0, comment.length()) != comment)
+    if (!line_is_commented(buf.lines[i], style))
     {
       all_commented = false;
       break;
@@ -246,21 +290,36 @@ void Editor::toggle_comment()
 
   for (int i = start_y; i <= end_y; i++)
   {
+    const std::string indent = line_indent(buf.lines[i]);
+    const std::string body = buf.lines[i].substr(indent.size());
     if (all_commented)
     {
-      if (buf.lines[i].substr(0, comment.length()) == comment)
+      if (line_is_commented(buf.lines[i], style))
       {
-        buf.lines[i] = buf.lines[i].substr(comment.length());
+        const size_t after = indent.size() + style.prefix.size();
+        std::string rest = buf.lines[i].substr(after);
+        if (!style.suffix.empty() && rest.size() >= style.suffix.size()
+            && rest.compare(rest.size() - style.suffix.size(), style.suffix.size(), style.suffix)
+                   == 0)
+        {
+          rest.erase(rest.size() - style.suffix.size());
+        }
+        buf.lines[i] = indent + rest;
       }
     }
     else
     {
-      buf.lines[i] = comment + buf.lines[i];
+      buf.lines[i] = indent + style.prefix + body;
+      if (!style.suffix.empty())
+      {
+        buf.lines[i] += style.suffix;
+      }
     }
   }
 
   buf.modified = true;
   needs_redraw = true;
+  clamp_cursor(get_pane().buffer_id);
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
 }

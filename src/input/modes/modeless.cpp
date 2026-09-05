@@ -272,6 +272,7 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
     case '/':
     case '?':
     case 31:
+    case '_': // terminals report Ctrl+/ as byte 0x1f, decoded as Ctrl+_
       toggle_comment();
       return;
     case 'h':
@@ -332,7 +333,7 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
     return;
   }
   if (ch == 31)
-  {
+  { // Ctrl+/ arriving as a raw control byte (no modifier flag)
     hide_lsp_completion();
     toggle_comment();
     return;
