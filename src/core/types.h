@@ -498,6 +498,18 @@ struct FileBuffer
   std::vector<Diagnostic> diagnostics;
   std::vector<FoldRange> fold_ranges;
   bool folds_dirty = true;
+  // Incremental absolute bracket-depth prefix used by the rainbow-bracket
+  // renderer. bracket_depth_prefix[i] holds the bracket depth at the start
+  // of buffer line i (the floored raw +/- walk over lines [0, i)); entry i
+  // is valid for i <= bracket_depth_prefix_upto (when non-empty the vector
+  // has size upto + 1, with entry 0 == 0). mark_edited(anchor) drops every
+  // entry past the edited line, so the next render re-extends lazily only
+  // over the affected region. Without this cache the renderer reseeded depth
+  // from a sliding ~500-line window starting at depth 0, so every bracket's
+  // color shifted as enclosing brackets entered or left that window while
+  // scrolling.
+  std::vector<int> bracket_depth_prefix;
+  int bracket_depth_prefix_upto = 0;
   // Lazy prefix sums of line sizes (+1 for each newline), used to resolve the
   // start byte of a line in O(1) for tree-sitter byte-range queries. Cleared
   // on every edit (see mark_edited) and rebuilt incrementally on demand.
@@ -508,12 +520,29 @@ struct FileBuffer
   SyntaxEngine syntax_engine = SYNTAX_ENGINE_UNKNOWN;
   std::string syntax_language_label;
 
-  // Called after any content mutation: fold ranges and tree-sitter byte
-  // offsets become stale and must be rebuilt lazily on next use.
-  void mark_edited()
+  // Called after any content mutation: fold ranges, tree-sitter byte
+  // offsets and the bracket-depth prefix become stale and must be rebuilt
+  // lazily on next use. `anchor_line` is the first buffer line whose
+  // content changed (cursor/selection line for edits, replace start for
+  // bulk replacements, 0 when unknown). Depth entries at/after it are
+  // dropped; entries before it stay valid because depth at the start of a
+  // line only depends on earlier lines.
+  void mark_edited(int anchor_line = 0)
   {
     folds_dirty = true;
     ts_line_offsets.clear();
+    if (anchor_line < 0)
+    {
+      anchor_line = 0;
+    }
+    if (anchor_line < bracket_depth_prefix_upto)
+    {
+      bracket_depth_prefix_upto = anchor_line;
+      if ((int)bracket_depth_prefix.size() > bracket_depth_prefix_upto + 1)
+      {
+        bracket_depth_prefix.resize((size_t)bracket_depth_prefix_upto + 1);
+      }
+    }
   }
 
 #ifdef JOT_TREESITTER
@@ -596,7 +625,7 @@ struct FileBuffer
 
   void replace_lines(int start, int count, const std::vector<std::string> &new_lines)
   {
-    mark_edited();
+    mark_edited(start);
     if (lazy_provider)
     {
       lazy_provider->replace_lines(start, count, new_lines);

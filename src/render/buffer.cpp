@@ -123,6 +123,46 @@ namespace
     }
   }
 
+  // Absolute bracket depth at the start of buffer `line`: the same floored
+  // raw +/- walk the renderer uses, accumulated from line 0 instead of from
+  // a scroll-dependent window. Served from FileBuffer's incremental prefix
+  // cache, so the value is a pure function of the line index. That is what
+  // keeps rainbow bracket colors stable while scrolling -- the previous
+  // implementation reseeded depth from a sliding ~500-line window starting
+  // at depth 0, so every bracket's color shifted whenever an enclosing
+  // bracket entered or left that window. The caller falls back to the
+  // bounded backscan for lazy (disk-backed) buffers, where filling the
+  // prefix would demand-load every preceding line.
+  int bracket_depth_at_line_start(FileBuffer &buf, int line)
+  {
+    const int count = (int)buf.line_count();
+    if (count <= 0 || line <= 0)
+    {
+      return 0;
+    }
+    const int target = std::min(line, count - 1);
+    auto &prefix = buf.bracket_depth_prefix;
+    int &upto = buf.bracket_depth_prefix_upto;
+    if (prefix.empty())
+    {
+      prefix.push_back(0); // depth at the start of line 0
+    }
+    while (upto < target)
+    {
+      // Walking line `upto` turns the depth at the start of line `upto`
+      // into the depth at the start of line `upto + 1`.
+      int value = prefix[upto];
+      const std::string &ln = buf.line(upto);
+      for (char c : ln)
+      {
+        apply_bracket_depth_delta(c, value);
+      }
+      prefix.push_back(value);
+      upto++;
+    }
+    return prefix[target];
+  }
+
   bool bracket_chars(char c, char &open, char &close, bool &is_open)
   {
     switch (c)
@@ -444,24 +484,36 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
 
   int line_num_width = 8;
   ActiveBracketGuide bracket_guide = build_active_bracket_guide(buf, tab_size);
+  // Seed the rainbow depth at the viewport top. In-memory buffers use the
+  // absolute per-line depth prefix (stable under scrolling); lazy buffers
+  // keep the bounded backscan so the cache never demand-loads the whole
+  // file.
   int bracket_depth = 0;
-  const int scan_start = std::max(0, buf.scroll_offset - kBracketDepthScanLimitLines);
-  // Also cap the backscan by bytes: for files made of giant single lines this
-  // would otherwise walk megabytes every frame just to seed bracket depth.
-  constexpr std::size_t kBracketDepthScanMaxBytes = 1u << 20;
-  std::size_t scanned_bytes = 0;
-  for (int scan_line = scan_start; scan_line < std::min(buf.scroll_offset, (int)buf.line_count());
-       scan_line++)
+  if (!buf.is_lazy())
   {
-    const std::string &line = buf.line(scan_line);
-    if (scanned_bytes + line.size() > kBracketDepthScanMaxBytes)
+    bracket_depth = bracket_depth_at_line_start(buf, buf.scroll_offset);
+  }
+  else
+  {
+    const int scan_start = std::max(0, buf.scroll_offset - kBracketDepthScanLimitLines);
+    // Also cap the backscan by bytes: for files made of giant single lines
+    // this would otherwise walk megabytes every frame just to seed bracket
+    // depth.
+    constexpr std::size_t kBracketDepthScanMaxBytes = 1u << 20;
+    std::size_t scanned_bytes = 0;
+    for (int scan_line = scan_start;
+         scan_line < std::min(buf.scroll_offset, (int)buf.line_count()); scan_line++)
     {
-      break;
-    }
-    scanned_bytes += line.size();
-    for (char c : line)
-    {
-      apply_bracket_depth_delta(c, bracket_depth);
+      const std::string &scan_line_text = buf.line(scan_line);
+      if (scanned_bytes + scan_line_text.size() > kBracketDepthScanMaxBytes)
+      {
+        break;
+      }
+      scanned_bytes += scan_line_text.size();
+      for (char c : scan_line_text)
+      {
+        apply_bracket_depth_delta(c, bracket_depth);
+      }
     }
   }
 

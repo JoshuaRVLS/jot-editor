@@ -184,7 +184,16 @@ void Editor::save_state()
   search_result_index = -1;
 
   auto &buf = get_buffer();
-  buf.mark_edited();
+  // Anchor the bracket-depth prefix invalidation at the first line the
+  // pending command can touch (cursor, or the selection span when one is
+  // active). Prefix entries below this stay valid, so typing deep in a file
+  // only re-scans the affected tail instead of the whole prefix.
+  int edit_anchor = buf.cursor.y;
+  if (buf.selection.active)
+  {
+    edit_anchor = std::min(edit_anchor, std::min(buf.selection.start.y, buf.selection.end.y));
+  }
+  buf.mark_edited(edit_anchor);
 
   // Keep the tree-sitter tree alive across edits and reparse incrementally on
   // the next paint: deleting it here forced a whole-file parse per keystroke.
@@ -235,9 +244,11 @@ void Editor::undo()
 #endif
   apply_state(buf, prev);
   // Full-snapshot restores replace buf.lines directly and would otherwise skip
-  // mark_edited (stale fold ranges / tree-sitter line offsets); incremental
-  // undo/redo reparse needs offsets rebuilt lazily from the restored text.
-  buf.mark_edited();
+  // mark_edited (stale fold ranges / tree-sitter line offsets / bracket-depth
+  // prefix); incremental undo/redo restores went through replace_lines,
+  // which already anchors at prev.start_line. Anchoring at 0 here is safe:
+  // undo is discrete, so the prefix re-extends once on the next render.
+  buf.mark_edited(prev.full_snapshot ? 0 : prev.start_line);
 
   if (lua_api)
   {
@@ -271,7 +282,7 @@ void Editor::redo()
   ts_begin_edit(buf);
 #endif
   apply_state(buf, next);
-  buf.mark_edited();
+  buf.mark_edited(next.full_snapshot ? 0 : next.start_line);
 
   if (lua_api)
   {

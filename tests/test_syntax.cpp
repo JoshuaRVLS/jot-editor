@@ -374,3 +374,49 @@ TEST_CASE("Tree Sitter Reload Reattempts Parser And Query", "[jot]")
   }
 }
 #endif
+
+// The bracket-depth prefix cache (types.h FileBuffer) keeps absolute depth
+// entries valid up to bracket_depth_prefix_upto and mark_edited(anchor)
+// must drop only the entries at/after the edited line: entries before an
+// edit stay valid because depth at the start of a line depends only on
+// earlier lines. If truncation over- or under-shoots, rainbow bracket
+// colors drift or go stale after edits.
+TEST_CASE("FileBuffer bracket depth prefix truncates at the edit anchor", "[jot]")
+{
+  FileBuffer buf;
+  // Simulate a prefix built for a 6-line buffer: entry i is the depth at
+  // the start of line i, valid for i <= upto (vector size == upto + 1).
+  buf.bracket_depth_prefix = {0, 1, 2, 3, 4, 5, 6};
+  buf.bracket_depth_prefix_upto = 6;
+
+  // Edit at line 2: entries 0..2 stay valid, 3.. are dropped.
+  buf.mark_edited(2);
+  REQUIRE(buf.bracket_depth_prefix_upto == 2);
+  REQUIRE(buf.bracket_depth_prefix.size() == 3);
+  REQUIRE(buf.bracket_depth_prefix[0] == 0);
+  REQUIRE(buf.bracket_depth_prefix[1] == 1);
+  REQUIRE(buf.bracket_depth_prefix[2] == 2);
+
+  // Edit at line 2 again (prefix only covers lines 0..2): nothing drops.
+  buf.mark_edited(2);
+  REQUIRE(buf.bracket_depth_prefix_upto == 2);
+  REQUIRE(buf.bracket_depth_prefix.size() == 3);
+
+  // Edit at line 5 (below the built prefix): still nothing to drop.
+  buf.mark_edited(5);
+  REQUIRE(buf.bracket_depth_prefix_upto == 2);
+  REQUIRE(buf.bracket_depth_prefix.size() == 3);
+
+  // Unknown anchor (0): full truncation back to the always-valid entry 0.
+  buf.mark_edited(0);
+  REQUIRE(buf.bracket_depth_prefix_upto == 0);
+  REQUIRE(buf.bracket_depth_prefix.size() == 1);
+  REQUIRE(buf.bracket_depth_prefix[0] == 0);
+
+  // replace_lines anchors at its start line.
+  buf.bracket_depth_prefix = {0, 1, 2, 3, 4, 5, 6};
+  buf.bracket_depth_prefix_upto = 6;
+  buf.replace_lines(3, 1, {"int replaced;"});
+  REQUIRE(buf.bracket_depth_prefix_upto == 3);
+  REQUIRE(buf.bracket_depth_prefix.size() == 4);
+}
