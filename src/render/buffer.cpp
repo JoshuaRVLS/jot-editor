@@ -514,6 +514,16 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
 
   int line_num_width = 8;
   ActiveBracketGuide bracket_guide = build_active_bracket_guide(buf, tab_size);
+
+  refresh_folds(buf);
+  // Clamp before any depth math: scroll_offset can arrive stale (left over
+  // from a previous cursor/scroll state for a smaller viewport or folded
+  // region), and the seed below must describe the rows that are actually
+  // about to be drawn. Seeding from the unclamped value painted the whole
+  // viewport at the wrong absolute depth until the next frame.
+  buf.scroll_offset =
+      Folding::clamp_scroll_offset(buf.fold_ranges, buf.scroll_offset, h, (int)buf.line_count());
+
   // Seed the rainbow depth at the viewport top. In-memory buffers use the
   // absolute per-line depth prefix (stable under scrolling); lazy buffers
   // keep the bounded backscan so the cache never demand-loads the whole
@@ -549,14 +559,23 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
 
   std::vector<int> visual_cols;
 
-  refresh_folds(buf);
-  buf.scroll_offset =
-      Folding::clamp_scroll_offset(buf.fold_ranges, buf.scroll_offset, h, (int)buf.line_count());
-
+  int prev_line_idx = buf.scroll_offset - 1;
   for (int i = 0; i < h; i++)
   {
     int line_idx = Folding::buffer_line_for_visible_offset(
         buf.fold_ranges, buf.scroll_offset, i, (int)buf.line_count());
+    // The per-row walk normally carries depth across consecutive visible
+    // lines (row N+1 = row N + 1 exactly when nothing is folded). Whenever
+    // that continuity breaks -- folded/hidden lines collapse a range, or a
+    // stale scroll_offset snapped the viewport -- re-anchor the depth to
+    // the absolute prefix value for the line actually being drawn, so a
+    // bracket's color is always a pure function of its file position.
+    if (!buf.is_lazy() && line_idx >= 0 && line_idx < (int)buf.line_count()
+        && line_idx != prev_line_idx + 1)
+    {
+      bracket_depth = bracket_depth_at_line_start(buf, line_idx);
+    }
+    prev_line_idx = line_idx;
     int draw_y = y + i;
 
     if (line_idx >= 0 && line_idx < (int)buf.line_count()
