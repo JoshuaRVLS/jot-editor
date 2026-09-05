@@ -105,6 +105,7 @@ void Config::load_defaults()
   settings["relative_line_numbers"] = "false";
   settings["word_wrap"] = "false";
   settings["cursor_style"] = "block";
+  settings["highlight_cursor_line"] = "true";
   settings["render_fps"] = "120";
   settings["idle_fps"] = "60";
   settings["lsp_change_debounce_ms"] = "120";

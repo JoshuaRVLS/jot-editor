@@ -157,6 +157,10 @@ struct Theme
   int bg_line_num = 0;
   int fg_cursor = 0;
   int bg_cursor = 7;
+  int fg_cursor_line_num = 15; // Active line number (cursorline row)
+  int bg_cursor_line = 8;      // Soft row tint behind the active line
+  int fg_search_current = 0;   // Active (jump-to) search match
+  int bg_search_current = 11;
   int fg_status = 7;
   int bg_status = 0; // Clean status bar
   int fg_status_message = 7;

@@ -2191,6 +2191,8 @@ void LuaAPI::push_theme_palette(lua_State *L)
   color("selection", t.fg_selection, t.bg_selection);
   color("line_num", t.fg_line_num, t.bg_line_num);
   color("cursor", t.fg_cursor, t.bg_cursor);
+  color("cursor_line_num", t.fg_cursor_line_num, -1);
+  color("cursor_line", -1, t.bg_cursor_line);
   color("status", t.fg_status, t.bg_status);
   color("status_message", t.fg_status_message, -1);
   color("status_logo", t.fg_status_logo, t.bg_status_logo);
@@ -2201,6 +2203,7 @@ void LuaAPI::push_theme_palette(lua_State *L)
   color("status_muted", t.fg_status_muted, t.bg_status_muted);
   color("command", t.fg_command, t.bg_command);
   color("search_match", t.fg_search_match, t.bg_search_match);
+  color("search_current", t.fg_search_current, t.bg_search_current);
   color("minimap", t.fg_minimap, t.bg_minimap);
   color("sidebar", t.fg_sidebar, t.bg_sidebar);
   color("sidebar_directory", t.fg_sidebar_directory, -1);

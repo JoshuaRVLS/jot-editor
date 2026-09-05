@@ -130,7 +130,8 @@ default given); `get_number` and `get_bool` return typed values.
 `jot.config.set(key, value)` accepts a string, number, or boolean, persists
 it immediately, and **live-applies** every setting that maps to editor state
 (no restart needed): `tab_size`, `show_indent_guides`,
-`relative_line_numbers`, `auto_indent`, `smart_paste_indent`, `auto_save`,
+`relative_line_numbers`, `highlight_cursor_line`, `auto_indent`,
+`smart_paste_indent`, `auto_save`,
 `auto_save_interval_ms`, `render_fps`, `idle_fps`, `lsp_change_debounce_ms`,
 `terminal_height`, `debugger_height`, `right_panel_width`,
 `image_viewer_backend`, the `treesitter_*` paths, and `color_scheme`

@@ -149,8 +149,11 @@ void LuaAPI::set_theme_color(std::string name, int fg, int bg)
       {"Function", "function"},
       {"Type", "type"},
       {"Cursor", "cursor"},
+      {"CursorLine", "cursor_line"},
+      {"CursorLineNr", "cursor_line_num"},
       {"Visual", "selection"},
       {"Search", "search_match"},
+      {"CurSearch", "search_current"},
       {"StatusLine", "status"},
       {"StatusLineMsg", "status_message"},
       {"StatusLineLogo", "status_logo"},
@@ -382,6 +385,19 @@ void LuaAPI::set_theme_color(std::string name, int fg, int bg)
   {
     set_pair(theme.fg_cursor, theme.bg_cursor);
   }
+  else if (name == "cursor_line" || name == "cursorline" || name == "bg_cursor_line")
+  {
+    // CursorLine carries a background tint (and optionally a foreground when
+    // a theme sets both, e.g. bold/bright text on the active row).
+    if (bg != -1)
+      theme.bg_cursor_line = bg;
+    if (fg != -1)
+      theme.fg_cursor_line_num = fg;
+  }
+  else if (name == "cursor_line_num" || name == "cursorlinenr" || name == "fg_cursor_line_num")
+  {
+    set_fg(theme.fg_cursor_line_num);
+  }
   else if (name == "status" || name == "status_bar" || name == "bg_status_bar"
            || name == "fg_status_bar" || name == "bg_status" || name == "fg_status")
   {
@@ -429,6 +445,11 @@ void LuaAPI::set_theme_color(std::string name, int fg, int bg)
            || name == "fg_search_match" || name == "bg_search_match")
   {
     set_pair(theme.fg_search_match, theme.bg_search_match);
+  }
+  else if (name == "search_current" || name == "cursearch" || name == "current_search"
+           || name == "fg_search_current" || name == "bg_search_current")
+  {
+    set_pair(theme.fg_search_current, theme.bg_search_current);
   }
   else if (name == "minimap")
   {

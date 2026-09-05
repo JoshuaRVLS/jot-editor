@@ -127,7 +127,17 @@
     "fg": 188,
     "bg": 60
   },
+  "CursorLine": {
+    "bg": 60
+  },
+  "CursorLineNr": {
+    "fg": 110
+  },
   "Search": {
+    "fg": 234,
+    "bg": 179
+  },
+  "CurSearch": {
     "fg": 234,
     "bg": 179
   },

@@ -72,7 +72,8 @@ one explicitly in a theme overrides the fallback.
 ### UI slots
 
 `Normal`, `NormalFloat`, `LineNr`, `Comment`, `Keyword`, `String`, `Number`,
-`Function`, `Type`, `Cursor`, `Visual`, `Search`, `StatusLine`,
+`Function`, `Type`, `Cursor`, `CursorLine`, `CursorLineNr`, `Visual`,
+`Search`, `CurSearch`, `StatusLine`,
 `StatusLineMsg`, `StatusLineLogo`, `StatusLineFile`, `StatusLineInfo`,
 `StatusLineWarn`, `StatusLineError`, `StatusLineMuted`, `FloatBorder`,
 `WinSeparator`, `WinActiveBorder`, `TabLine`, `TabLineSel`, `TabLineFill`,
@@ -82,6 +83,14 @@ one explicitly in a theme overrides the fallback.
 `TelescopeSelection`, `TelescopePreviewNormal`, `Terminal`, `TerminalTab`,
 `TerminalTabActive`, `TerminalTabFocused`, `TerminalTabClose`,
 `TerminalTabPlus`, `TerminalTabSeparator`.
+
+`CursorLine` tints the row under the text cursor (`bg` only is enough) and
+`CursorLineNr` colors its line number; `CurSearch` is the highlight of the
+search result the cursor currently sits on (the next/previous match when
+stepping), which reads brighter than the plain `Search` hits so the current
+target never blends into the rest. The cursor-row tint can be turned off with
+the `highlight_cursor_line` setting (`false`), and both `CurSearch` and
+`CursorLine` fall back to sensible defaults when a theme omits them.
 
 Git status colors for file rows (git view), file tabs, and the diff panel use
 `git_modified`, `git_added`, `git_untracked`, `git_deleted`, `git_renamed`,

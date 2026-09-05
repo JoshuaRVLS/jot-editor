@@ -127,9 +127,19 @@
     "fg": 234,
     "bg": 237
   },
+  "CursorLine": {
+    "bg": 237
+  },
+  "CursorLineNr": {
+    "fg": 110
+  },
   "Search": {
     "fg": 234,
     "bg": 237
+  },
+  "CurSearch": {
+    "fg": 234,
+    "bg": 179
   },
   "StatusLine": {
     "fg": 153,

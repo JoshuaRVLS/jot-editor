@@ -180,6 +180,7 @@ struct EditorState
   int tab_size;
   bool show_indent_guides;
   bool relative_line_numbers;
+  bool highlight_cursor_line;
   int tab_scroll_index;
   int preview_buffer_index;
   long long last_sidebar_click_ms;

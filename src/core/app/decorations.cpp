@@ -41,6 +41,8 @@ namespace
         {"diagnostic_hint", {&Theme::fg_diagnostic_hint, nullptr}},
         {"search_match", {&Theme::fg_search_match, &Theme::bg_search_match}},
         {"selection", {&Theme::fg_selection, &Theme::bg_selection}},
+        {"cursor_line", {&Theme::fg_cursor_line_num, &Theme::bg_cursor_line}},
+        {"search_current", {&Theme::fg_search_current, &Theme::bg_search_current}},
         {"bracket_match", {&Theme::fg_bracket_match, &Theme::bg_bracket_match}},
         {"status", {&Theme::fg_status, &Theme::bg_status}},
         {"status_error", {&Theme::fg_status_error, nullptr}},

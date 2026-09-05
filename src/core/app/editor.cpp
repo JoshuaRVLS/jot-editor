@@ -70,6 +70,7 @@ void Editor::apply_config_live()
   tab_size = std::clamp(config.get_int("tab_size", 2), 1, 16);
   show_indent_guides = config.get_bool("show_indent_guides", false);
   relative_line_numbers = config.get_bool("relative_line_numbers", false);
+  highlight_cursor_line = config.get_bool("highlight_cursor_line", true);
   auto_indent = config.get_bool("auto_indent", true);
   smart_paste_indent = config.get_bool("smart_paste_indent", true);
   set_auto_save(config.get_bool("auto_save", false), false);
@@ -206,6 +207,7 @@ void Editor::initialize_state_defaults()
   tab_size = config.get_int("tab_size", 2);
   show_indent_guides = config.get_bool("show_indent_guides", false);
   relative_line_numbers = config.get_bool("relative_line_numbers", false);
+  highlight_cursor_line = config.get_bool("highlight_cursor_line", true);
   tab_scroll_index = 0;
   preview_buffer_index = -1;
   last_sidebar_click_ms = 0;

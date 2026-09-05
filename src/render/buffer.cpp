@@ -656,16 +656,25 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
     if (line_idx >= 0 && line_idx < (int)buf.line_count()
         && !Folding::is_line_hidden(buf.fold_ranges, line_idx))
     {
+      // The cursor row carries a soft tint (like an IDE cursor line) so the
+      // active row reads at a glance while typing. The tint only replaces the
+      // *default* cell background -- selection, search hits, strings and
+      // decorations still draw on top with their own colors. Computed before
+      // the gutter draws so breakpoint/severity markers sit on the tint too.
+      const bool row_is_cursor_line =
+          highlight_cursor_line && line_idx == buf.cursor.y && pane.active;
+      const int row_bg = row_is_cursor_line ? theme.bg_cursor_line : theme.bg_default;
+
       int line_diag_severity = line_diagnostic_severity(buf, line_idx);
       int diag_fg = line_diag_severity > 0 ? diagnostic_severity_color(theme, line_diag_severity)
                                            : theme.fg_line_num;
       if (!buf.filepath.empty() && has_debugger_breakpoint(buf.filepath, line_idx))
       {
-        ui->draw_text(x + 1, draw_y, "●", theme.fg_status_error, theme.bg_default, true);
+        ui->draw_text(x + 1, draw_y, "●", theme.fg_status_error, row_bg, true);
       }
       else if (!buf.filepath.empty() && is_debugger_breakpoint_hover(pane.buffer_id, line_idx))
       {
-        ui->draw_text(x + 1, draw_y, "●", theme.fg_comment, theme.bg_default);
+        ui->draw_text(x + 1, draw_y, "●", theme.fg_comment, row_bg);
       }
       else if (line_diag_severity > 0)
       {
@@ -674,7 +683,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       }
       else
       {
-        ui->draw_text(x + 1, draw_y, " ", theme.fg_line_num, theme.bg_default);
+        ui->draw_text(x + 1, draw_y, " ", theme.fg_line_num, row_bg);
       }
 
       char num_buf[16];
@@ -684,11 +693,11 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
         display_line_number = std::abs(line_idx - buf.cursor.y);
       }
       snprintf(num_buf, sizeof(num_buf), "%4d ", display_line_number);
-      int ln_bg = theme.bg_line_num;
+      int ln_bg = row_is_cursor_line ? theme.bg_cursor_line : theme.bg_line_num;
       int ln_fg = theme.fg_line_num;
       if (line_idx == buf.cursor.y)
       {
-        ln_fg = theme.fg_default;
+        ln_fg = theme.fg_cursor_line_num;
       }
       else if (line_diag_severity > 0)
       {
@@ -701,7 +710,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
           folded_header || Folding::fold_starting_at_line(buf.fold_ranges, line_idx) >= 0;
       if (foldable_header)
       {
-        ui->draw_text(x + 2, draw_y, folded_header ? "▸" : "▾", theme.fg_comment, theme.bg_default);
+        ui->draw_text(x + 2, draw_y, folded_header ? "▸" : "▾", theme.fg_comment, row_bg);
       }
 
       const std::string &line = buf.line(line_idx);
@@ -715,7 +724,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
         int suffix_x = current_x + std::max(0, visible_len - (int)suffix.size());
         if (suffix_x > current_x)
         {
-          ui->draw_text(suffix_x, draw_y, suffix, theme.fg_comment, theme.bg_default);
+          ui->draw_text(suffix_x, draw_y, suffix, theme.fg_comment, row_bg);
           visible_len = std::max(0, suffix_x - current_x - 1);
         }
       }
@@ -903,7 +912,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             int char_w = std::max(1, visual_cols[next_idx] - visual_cols[char_idx]);
 
             int fg = color;
-            int bg = theme.bg_default;
+            int bg = row_bg;
 
             bool in_sel = is_in_selection(char_idx);
             if (in_sel)
@@ -929,8 +938,11 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
                     && search_hits[next_search_hit].col == active_search_match.col;
                 if (is_active_match)
                 {
-                  bg = theme.bg_selection;
-                  fg = theme.fg_selection;
+                  // The match the cursor will jump to reads as the "current
+                  // target": bright/contrasting instead of the plain
+                  // search-hit tint so it never blends with the rest.
+                  bg = theme.bg_search_current;
+                  fg = theme.fg_search_current;
                 }
                 else
                 {
@@ -1226,7 +1238,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             }
             if (vbg == -1)
             {
-              vbg = theme.bg_default;
+              vbg = row_bg;
             }
             int line_vis_end = visible_len;
             if ((int)line.size() < (int)visual_cols.size())
@@ -1298,7 +1310,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
         if (guide_vis_idx >= 0 && guide_vis_idx < visible_len)
         {
           ui->draw_text(
-              current_x + guide_vis_idx, draw_y, "│", theme.fg_bracket_match, theme.bg_default);
+              current_x + guide_vis_idx, draw_y, "│", theme.fg_bracket_match, row_bg);
         }
       }
     }
