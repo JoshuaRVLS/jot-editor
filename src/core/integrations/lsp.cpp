@@ -501,6 +501,100 @@ namespace
     return false;
   }
 
+  const char *diag_severity_hover_label(int severity)
+  {
+    switch (severity)
+    {
+      case 1:
+        return "Error";
+      case 2:
+        return "Warning";
+      case 3:
+        return "Info";
+      case 4:
+        return "Hint";
+      default:
+        return "Diagnostic";
+    }
+  }
+
+  // VSCode-style: the diagnostics whose range covers (line, col) lead the
+  // hover popup, so hovering a squiggle shows the error message even when
+  // the LSP server has no hover content at that spot. Renders up to 4
+  // diagnostics, then a "… and N more" tail.
+  std::string diagnostics_at_position_text(const std::vector<FileBuffer> &buffers,
+                                           const std::string &filepath,
+                                           int line,
+                                           int col)
+  {
+    if (filepath.empty())
+    {
+      return {};
+    }
+    const FileBuffer *buf = nullptr;
+    for (const auto &b : buffers)
+    {
+      if (same_path(b.filepath, filepath))
+      {
+        buf = &b;
+        break;
+      }
+    }
+    if (!buf)
+    {
+      return {};
+    }
+    std::string out;
+    int shown = 0;
+    int total = 0;
+    for (const auto &d : buf->diagnostics)
+    {
+      bool covers = false;
+      if (line >= d.line && line <= d.end_line)
+      {
+        if (line == d.line && line == d.end_line)
+        {
+          covers = col >= d.col && col <= d.end_col;
+        }
+        else if (line == d.line)
+        {
+          covers = col >= d.col;
+        }
+        else if (line == d.end_line)
+        {
+          covers = col <= d.end_col;
+        }
+        else
+        {
+          covers = true;
+        }
+      }
+      if (!covers)
+      {
+        continue;
+      }
+      total++;
+      if (shown < 4)
+      {
+        if (shown > 0)
+        {
+          out += "\n";
+        }
+        out += std::string(diag_severity_hover_label(d.severity)) + ": " + d.message;
+        shown++;
+      }
+    }
+    if (total > shown)
+    {
+      if (shown > 0)
+      {
+        out += "\n";
+      }
+      out += "… and " + std::to_string(total - shown) + " more";
+    }
+    return out;
+  }
+
   std::string compact_lsp_popup_text(const std::string &text, int max_lines, int max_cols)
   {
     std::string out;
@@ -2036,10 +2130,25 @@ void Editor::handle_lsp_hover_result(const LSPHoverResult &hover)
   {
     return;
   }
+  // VSCode-style: diagnostics covering the hover position lead the popup, so
+  // hovering the squiggle shows the error message even when the server has
+  // no hover content. The merged text flows to the Lua hover UI and the
+  // native popup alike.
+  const std::string diag_text = diagnostics_at_position_text(
+      buffers, hover.origin_filepath, hover.origin_line, hover.origin_character);
+  std::string contents = hover.contents;
+  if (!diag_text.empty())
+  {
+    contents = diag_text;
+    if (!hover.contents.empty())
+    {
+      contents += "\n\n" + hover.contents;
+    }
+  }
   if (lsp_mouse_hover_buffer >= 0 && same_path(hover.origin_filepath, lsp_mouse_hover_filepath)
       && hover.origin_line == lsp_mouse_hover_line && hover.origin_character == lsp_mouse_hover_col)
   {
-    if (hover.contents.empty())
+    if (contents.empty())
     {
       lsp_mouse_hover_visible = false;
       close_lua_hover_ui();
@@ -2052,7 +2161,7 @@ void Editor::handle_lsp_hover_result(const LSPHoverResult &hover)
     // native popup only shows when no handler consumed the result. The Lua
     // float clamps itself to the screen, so raw anchor coordinates are used.
     if (lua_api && lua_api->has_lsp_hover_ui()
-        && lua_api->present_lsp_hover(hover.contents,
+        && lua_api->present_lsp_hover(contents,
                                       hover.origin_filepath,
                                       hover.origin_line,
                                       hover.origin_character,
@@ -2064,7 +2173,7 @@ void Editor::handle_lsp_hover_result(const LSPHoverResult &hover)
       needs_redraw = true;
       return;
     }
-    std::string text = compact_lsp_popup_text(hover.contents, 14, 96);
+    std::string text = compact_lsp_popup_text(contents, 14, 96);
     if (ui)
     {
       auto [popup_w, popup_h] = lsp_popup_size(text);
@@ -2093,7 +2202,7 @@ void Editor::handle_lsp_hover_result(const LSPHoverResult &hover)
   {
     return;
   }
-  if (hover.contents.empty())
+  if (contents.empty())
   {
     set_message("No hover information");
     return;
@@ -2108,7 +2217,7 @@ void Editor::handle_lsp_hover_result(const LSPHoverResult &hover)
       pane.x + 1 + line_num_width + std::max(0, hover.origin_character - buf.scroll_x) + 2;
   // Lua hover UI: same hook as the mouse path, anchored at the cursor line.
   if (lua_api && lua_api->has_lsp_hover_ui()
-      && lua_api->present_lsp_hover(hover.contents,
+      && lua_api->present_lsp_hover(contents,
                                     hover.origin_filepath,
                                     hover.origin_line,
                                     hover.origin_character,
@@ -2119,7 +2228,7 @@ void Editor::handle_lsp_hover_result(const LSPHoverResult &hover)
     needs_redraw = true;
     return;
   }
-  std::string text = compact_lsp_popup_text(hover.contents, 14, 96);
+  std::string text = compact_lsp_popup_text(contents, 14, 96);
   if (ui)
   {
     auto [popup_w, popup_h] = lsp_popup_size(text);

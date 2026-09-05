@@ -82,7 +82,12 @@ bool LuaAPI::emit_lua_ui(const std::string &name,
   {
     lua_pushnil(L); // surface closed
   }
+  // Tag floats opened by this handler with the surface name (render_floats
+  // keeps the surface's own float out of the modal scrim).
+  const std::string prev_surface = std::move(current_emit_surface_);
+  current_emit_surface_ = name;
   const int ok = lua_pcall(L, 1, 1, 0);
+  current_emit_surface_ = std::move(prev_surface);
   bool consumed = false;
   if (ok != LUA_OK)
   {

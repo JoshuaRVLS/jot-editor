@@ -1952,9 +1952,12 @@ bool LuaAPI::init()
   load_hover_ui_runtime(L);
   load_ui_kit_runtime(L);
   // Bundled feature: inline diagnostics as anchored decorations (see
-  // lua/features/decorations.lua). Loaded after the API tables and before
-  // user plugins so the autocmd is registered before any diagnostic arrives.
-  jot_lua::load_bundled_lua_file(L, "features/decorations.lua", "Decorations");
+  // lua/features/decorations.lua). Loaded after user plugins: load_plugins()
+  // resets the autocmd table for plugin reloads, so registering before it
+  // would be wiped before any diagnostic arrives. The handler re-checks
+  // decorations_inline_diagnostics on every event, so config.lua can still
+  // disable it.
   load_plugins();
+  jot_lua::load_bundled_lua_file(L, "features/decorations.lua", "Decorations");
   return true;
 }

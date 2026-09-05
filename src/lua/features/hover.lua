@@ -123,8 +123,12 @@ local function clean_line(ln, code)
   if code then
     return ln
   end
-  -- Strip inline markers; keep the text between them.
+  -- Strip inline markers; keep the text between them. Underscores between
+  -- word characters (snake_case identifiers in diagnostics) are protected
+  -- first so plain-text messages survive the markdown-italic strip intact.
+  ln = ln:gsub("(%w)_(%w)", "%1\1%2")
   ln = ln:gsub("`", ""):gsub("%*%*", ""):gsub("%*", ""):gsub("_", "")
+  ln = ln:gsub("\1", "_")
   -- Headings and list bullets are kept but unmarked for a cleaner look.
   ln = ln:gsub("^#+%s*", "")
   ln = ln:gsub("^[-*]%s+", "")

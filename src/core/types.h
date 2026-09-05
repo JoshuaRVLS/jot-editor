@@ -18,6 +18,7 @@
 #ifdef JOT_TREESITTER
 struct TSParser;
 struct TSTree;
+struct TSQuery;
 #endif
 
 namespace
@@ -603,6 +604,21 @@ struct FileBuffer
 #ifdef JOT_TREESITTER
   TSParser *ts_parser = nullptr;
   TSTree *ts_tree = nullptr;
+  // The highlight query the per-line syntax cache was computed with. The
+  // deferred boot-time query compile installs a (possibly different) query
+  // shortly after first paint, so the cache must re-run when this pointer
+  // changes — otherwise stale colors stick until the next cache invalidation
+  // (edit or save).
+  TSQuery *syntax_query = nullptr;
+  // True while an initial whole-file parse runs on the background worker
+  // (large files only). While pending the buffer has no parser/tree, so the
+  // renderer shows plain text and edits simply leave the pending result to be
+  // discarded or repaired at install time (see install_finished_parses).
+  bool ts_parse_pending = false;
+  // Set when a background parse failed to load a parser; subsequent inits
+  // take the synchronous path (which handles a missing parser gracefully)
+  // instead of re-queuing forever. Cleared once a sync parse succeeds.
+  bool ts_async_parse_failed = false;
   std::string ts_language_id;
   // Incremental-parse bookkeeping. ts_tree matches the buffer text exactly
   // while ts_tree_in_sync is true. On an edit (save_state/undo/redo) the text

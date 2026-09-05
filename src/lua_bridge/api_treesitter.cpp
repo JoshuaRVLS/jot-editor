@@ -349,6 +349,13 @@ bool LuaAPI::reload_treesitter_runtime()
 
 bool LuaAPI::flush_deferred_treesitter_queries()
 {
+  if (treesitter_queries_flushed_)
+  {
+    // Already recorded at boot (see Editor::initialize_lua_runtime); the
+    // event-loop poller only needs to tick the background compile now.
+    return true;
+  }
+  treesitter_queries_flushed_ = true;
   if (!lua_state)
     return false;
   tree_sitter_manager().set_deferred_compile_mode(true);
@@ -387,6 +394,14 @@ bool LuaAPI::tick_deferred_treesitter_compile()
 
   std::vector<std::string> failures = manager.finish_deferred_compile();
   manager.set_deferred_compile_mode(false);
+  // The freshly installed queries may differ from the ones the first paint
+  // compiled synchronously (e.g. a stale runtime query package vs the bundled
+  // one); repaint so the per-line syntax cache re-runs against them right
+  // away instead of waiting for the next edit or save.
+  if (editor)
+  {
+    editor->needs_redraw = true;
+  }
   if (!failures.empty())
   {
     // Surface the failures exactly like a synchronous boot load would, so the
@@ -413,4 +428,16 @@ bool LuaAPI::tick_deferred_treesitter_compile()
     lua_settop(L, top);
   }
   return false;
+}
+
+void LuaAPI::tick_deferred_treesitter_parses()
+{
+#ifdef JOT_TREESITTER
+  if (editor)
+  {
+    editor->install_finished_parses();
+  }
+#else
+  (void)0;
+#endif
 }

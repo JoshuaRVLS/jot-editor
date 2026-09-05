@@ -318,6 +318,12 @@ void Editor::initialize_lua_runtime()
   host_api = std::make_unique<EditorHostAPI>(*this);
   lua_api->init();
 
+  // Record the bundled tree-sitter query sources now (cheap file reads) so
+  // the first paint compiles against them instead of falling back to a
+  // possibly stale runtime query package; the parser dlopen and query
+  // compiles still happen on the background worker started here.
+  lua_api->flush_deferred_treesitter_queries();
+
   load_recent_files();
   load_recent_workspaces();
 

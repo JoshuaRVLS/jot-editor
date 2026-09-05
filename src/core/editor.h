@@ -319,6 +319,10 @@ private:
   // Called just before a text mutation while the tree-sitter tree is in sync:
   // snapshots the current text so the next rebuild can reparse incrementally.
   void ts_begin_edit(FileBuffer &buf);
+  // Drains finished background parses and installs them into their buffers
+  // (main thread only; see init_ts_for_buffer for the queue side).
+  void install_finished_parses();
+  int buffer_index_of(const FileBuffer &buf) const;
 #endif
 
   void handle_input(int ch,

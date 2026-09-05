@@ -929,28 +929,31 @@ void Editor::run()
   event_loop_.set_timer(render_ms, true, [this] { render_frame(); });
   event_loop_.set_timer(50, true, [this] { maybe_fire_lsp_mouse_hover(); });
 
-  // Tree-sitter bundled highlight queries are deferred off the synchronous
-  // boot path (compiling one dlopens the installed parser, which costs tens
-  // of milliseconds per language for large grammars). The Lua load records
-  // the sources on this timer's first fire and a background thread does the
-  // actual compiles; each tick installs finished results, so startup and the
-  // first frames never block on grammar-sized query compiles.
-  EventLoop::TimerId ts_deferred_timer = 0;
-  ts_deferred_timer = event_loop_.set_timer(24,
-                                            true,
-                                            [this, &ts_deferred_timer]
-                                            {
-                                              if (!lua_api)
-                                              {
-                                                event_loop_.cancel_timer(ts_deferred_timer);
-                                                return;
-                                              }
-                                              lua_api->flush_deferred_treesitter_queries();
-                                              if (!lua_api->tick_deferred_treesitter_compile())
-                                              {
-                                                event_loop_.cancel_timer(ts_deferred_timer);
-                                              }
-                                            });
+  // Tree-sitter background work, polled on a repeating timer:
+  //  - Bundled highlight queries are compiled off the synchronous boot path
+  //    (compiling one dlopens the installed parser, which costs tens of
+  //    milliseconds per language for large grammars); the Lua load records
+  //    the sources on this timer's first fire and a background thread does
+  //    the actual compiles.
+  //  - Whole-file parses for large buffers run on a background worker so the
+  //    first frame paints immediately; finished trees are installed here.
+  // Each tick installs finished results and requests a repaint, so startup
+  // and the first frames never block on grammar-sized work. The timer stays
+  // alive for the editor's lifetime: ticks are cheap state checks when idle,
+  // and keeping it permanent means parses queued mid-session (e.g. opening a
+  // big file later) get picked up without restart plumbing.
+  event_loop_.set_timer(24,
+                        true,
+                        [this]
+                        {
+                          if (!lua_api)
+                          {
+                            return;
+                          }
+                          lua_api->flush_deferred_treesitter_queries();
+                          lua_api->tick_deferred_treesitter_compile();
+                          lua_api->tick_deferred_treesitter_parses();
+                        });
 
   // JOT_SAFE_MODE disables every non-essential background timer so
   // we can isolate native crashes from periodic work. The editor

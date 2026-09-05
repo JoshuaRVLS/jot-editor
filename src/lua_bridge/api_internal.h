@@ -158,13 +158,15 @@ namespace jot_lua
   // config dir -> install data dir -> developer source dir) wins so edits never
   // need a recompile; otherwise the copy embedded into the binary runs straight
   // from memory (no disk writes needed). Shared by the hover / ui-kit runtimes.
+  // jot_lua_resolve_path() refreshes stale materialized copies (marker-based)
+  // so bundled-lua updates reach existing installs without losing hand edits.
   inline bool load_bundled_lua_file(lua_State *L, const char *rel_path, const char *label)
   {
-    const auto candidates = jot_lua_candidate_paths(rel_path);
-    if (!candidates.empty())
+    const std::filesystem::path resolved = jot_lua_resolve_path(rel_path);
+    if (!resolved.empty())
     {
       const int top = lua_gettop(L);
-      if (luaL_loadfile(L, candidates.front().string().c_str()) || lua_pcall(L, 0, 0, 0))
+      if (luaL_loadfile(L, resolved.string().c_str()) || lua_pcall(L, 0, 0, 0))
       {
         std::cerr << label << " Lua runtime failed: "
                   << (lua_tostring(L, -1) ? lua_tostring(L, -1) : "unknown") << "\n";

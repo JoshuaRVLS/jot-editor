@@ -239,8 +239,20 @@ void Editor::reparse_tree(FileBuffer &buf)
   buf.ts_tree_in_sync = true;
 }
 
+// Open-time whole-file parses that would stall the first paint (e.g. ~460ms
+// for a 38k-line file) run on the background worker instead; smaller files
+// parse synchronously because the cost is imperceptible and the syntax
+// colors are then present from the very first frame.
+static const int kAsyncParseThresholdLines = 1500;
+
 void Editor::init_ts_for_buffer(FileBuffer &buf)
 {
+  if (buf.ts_parse_pending)
+  {
+    // The initial parse is running on the background worker; nothing to do
+    // until install_finished_parses hands the tree back.
+    return;
+  }
   std::string ext = tree_sitter_extension_for_buffer(buf);
   std::string language_id = ts_manager_.language_id_for_extension(ext);
   if (language_id.empty())
@@ -293,10 +305,115 @@ void Editor::init_ts_for_buffer(FileBuffer &buf)
   {
     return;
   }
+  if (buf.line_count() > kAsyncParseThresholdLines && !buf.ts_async_parse_failed)
+  {
+    // Large file: parse off the main thread so the first frame paints
+    // immediately; install_finished_parses (polled by the event loop) swaps
+    // the tree in and repaints when the worker finishes.
+    TreeSitterManager::AsyncParseJob job;
+    job.buffer_index = buffer_index_of(buf);
+    job.extension = ext;
+    job.language_id = language_id;
+    job.text = get_buffer_text(buf);
+    const TSLanguageEntry *entry = ts_manager_.get_language(ext);
+    if (entry)
+    {
+      job.symbol = entry->symbol;
+      job.library_names = entry->library_names;
+    }
+    job.library_paths = ts_manager_.runtime_library_paths();
+    buf.ts_parser = nullptr;
+    buf.ts_language_id = language_id;
+    buf.syntax_cache.clear();
+    buf.ts_tree_in_sync = false;
+    buf.ts_parse_pending = true;
+    ts_manager_.queue_async_parse(std::move(job));
+    return;
+  }
+
   buf.ts_parser = parser;
   buf.ts_language_id = language_id;
   buf.syntax_cache.clear();
+  buf.ts_async_parse_failed = false;
   reparse_tree(buf);
+}
+
+int Editor::buffer_index_of(const FileBuffer &buf) const
+{
+  const FileBuffer *base = buffers.data();
+  const FileBuffer *p = &buf;
+  if (p < base || p >= base + buffers.size())
+  {
+    return -1;
+  }
+  return static_cast<int>(p - base);
+}
+
+void Editor::install_finished_parses()
+{
+  std::vector<TreeSitterManager::AsyncParseResult> results =
+      ts_manager_.take_finished_parses();
+  if (results.empty())
+  {
+    return;
+  }
+  bool repaint = false;
+  for (auto &result : results)
+  {
+    FileBuffer *buf = nullptr;
+    if (result.buffer_index >= 0 && result.buffer_index < (int)buffers.size())
+    {
+      buf = &buffers[(size_t)result.buffer_index];
+    }
+    // The pending flag doubles as identity: if the buffer was closed and a
+    // new one took over the slot, its flag is false, so the stale result is
+    // dropped. A language change while parsing drops it too.
+    if (!buf || !buf->ts_parse_pending || buf->ts_language_id != result.language_id)
+    {
+      if (result.parser)
+      {
+        ts_parser_delete(result.parser);
+      }
+      if (result.tree)
+      {
+        ts_tree_delete(result.tree);
+      }
+      continue;
+    }
+    if (!result.parser || !result.tree)
+    {
+      // The worker could not load a parser (e.g. not installed yet): fall
+      // back to the synchronous path, but only once - the failed flag keeps
+      // later inits from re-queuing forever.
+      buf->ts_parse_pending = false;
+      buf->ts_async_parse_failed = true;
+      continue;
+    }
+    buf->ts_parser = result.parser;
+    buf->ts_tree = result.tree;
+    buf->ts_parse_pending = false;
+    if (get_buffer_text(*buf) != result.parsed_text)
+    {
+      // The buffer was edited while the parse ran. The tree still describes
+      // parsed_text, so hand it to the incremental repair path instead of
+      // discarding: reparse_tree diffs parsed_text against the current text
+      // and applies one bounded ts_tree_edit (cheap, tracks the edited
+      // region).
+      buf->ts_edit_base = std::move(result.parsed_text);
+      buf->ts_edit_base_valid = true;
+      buf->ts_tree_in_sync = false;
+    }
+    else
+    {
+      buf->ts_tree_in_sync = true;
+    }
+    buf->syntax_cache.clear();
+    repaint = true;
+  }
+  if (repaint)
+  {
+    needs_redraw = true;
+  }
 }
 
 std::string Editor::tree_sitter_extension_for_buffer(const FileBuffer &buf)
@@ -359,6 +476,30 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit)
   }
 #endif
 
+  bool retry_tree_sitter = false;
+#ifdef JOT_TREESITTER
+  TSQuery *query = (tree_sitter_candidate && buf.ts_tree)
+                       ? ts_manager_.get_highlight_query(ts_extension)
+                       : nullptr;
+  // The per-line cache holds colors keyed on line content; when the query
+  // itself was replaced (e.g. the deferred boot-time compile installed the
+  // bundled query after first paint compiled a fallback), every cached entry
+  // is stale regardless of line content, so invalidate the whole cache once
+  // (before the per-line entry reference is taken below) instead of leaving
+  // old lines colored by the previous query.
+  if (query && buf.ts_tree && buf.syntax_query != query && !buf.syntax_cache.empty())
+  {
+    buf.syntax_cache.clear();
+    buf.syntax_cache_line_count = buf.line_count();
+  }
+  // Re-run the tree-sitter pass not only when the engine is not TS yet, but
+  // also when the query changed since the cache was built (e.g. the deferred
+  // boot-time compile installed a different query after first paint).
+  retry_tree_sitter = query != nullptr && buf.ts_tree
+                      && (buf.syntax_engine != SYNTAX_ENGINE_TREESITTER
+                          || buf.syntax_query != query);
+#endif
+
   const std::string &line = buf.line(line_idx);
   SyntaxLineCache &cache = buf.syntax_cache[line_idx];
   // Normal lines are highlighted whole once and cached for good: requests with
@@ -370,11 +511,6 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit)
   const int limit =
       std::clamp(line_len <= kFullHighlightLineBytes ? line_len : byte_limit, 0, line_len);
 
-  bool retry_tree_sitter = false;
-#ifdef JOT_TREESITTER
-  retry_tree_sitter =
-      tree_sitter_candidate && buf.ts_tree && buf.syntax_engine != SYNTAX_ENGINE_TREESITTER;
-#endif
   // Compare lengths first so cache hits on huge single lines don't pay for a
   // full-line hash every frame; only hash when the length matches.
   if (!retry_tree_sitter && cache.valid && cache.line_length == line.length()
@@ -386,21 +522,19 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit)
   const std::size_t line_hash = std::hash<std::string>{}(line);
 
 #ifdef JOT_TREESITTER
-  if (tree_sitter_candidate && buf.ts_tree)
+  if (query)
   {
-    TSQuery *query = ts_manager_.get_highlight_query(ts_extension);
-    if (query)
-    {
-      cache.colors = query_ts_highlights(buf, line_idx, query, buf.ts_tree, limit);
-      cache.line_hash = line_hash;
-      cache.line_length = line.length();
-      cache.colors_upto = (std::size_t)limit;
-      cache.valid = true;
-      buf.syntax_engine = SYNTAX_ENGINE_TREESITTER;
-      buf.syntax_language_label = ts_manager_.language_id_for_extension(ts_extension);
-      return cache.colors;
-    }
+    cache.colors = query_ts_highlights(buf, line_idx, query, buf.ts_tree, limit);
+    cache.line_hash = line_hash;
+    cache.line_length = line.length();
+    cache.colors_upto = (std::size_t)limit;
+    cache.valid = true;
+    buf.syntax_engine = SYNTAX_ENGINE_TREESITTER;
+    buf.syntax_query = query;
+    buf.syntax_language_label = ts_manager_.language_id_for_extension(ts_extension);
+    return cache.colors;
   }
+  buf.syntax_query = nullptr;
 #endif
 
   highlighter.set_language(raw_extension);
@@ -429,5 +563,8 @@ void Editor::invalidate_syntax_cache(FileBuffer &buf)
   buf.syntax_cache_line_count = 0;
   buf.syntax_cache.clear();
   buf.syntax_engine = SYNTAX_ENGINE_UNKNOWN;
+#ifdef JOT_TREESITTER
+  buf.syntax_query = nullptr;
+#endif
   buf.syntax_language_label.clear();
 }

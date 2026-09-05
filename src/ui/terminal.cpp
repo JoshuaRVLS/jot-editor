@@ -1235,13 +1235,32 @@ void Terminal::render_capture_marker(const std::string &label, int rows_rendered
     return;
   render_capture_seq_++;
   int bytes = last_flush_bytes_;
-  fprintf(render_capture_,
-          "\n--MARKER %d: %s bytes=%d w=%d h=%d rows=%d--\n",
-          render_capture_seq_,
-          label.c_str(),
-          bytes,
-          width,
-          height,
-          rows_rendered);
+  const char *ms_env = getenv("JOT_RENDER_CAPTURE_MS");
+  if (ms_env && ms_env[0] == '1')
+  {
+    long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+    fprintf(render_capture_,
+            "\n--MARKER %d: %s bytes=%d w=%d h=%d rows=%d ms=%lld--\n",
+            render_capture_seq_,
+            label.c_str(),
+            bytes,
+            width,
+            height,
+            rows_rendered,
+            now_ms);
+  }
+  else
+  {
+    fprintf(render_capture_,
+            "\n--MARKER %d: %s bytes=%d w=%d h=%d rows=%d--\n",
+            render_capture_seq_,
+            label.c_str(),
+            bytes,
+            width,
+            height,
+            rows_rendered);
+  }
   fflush(render_capture_);
 }

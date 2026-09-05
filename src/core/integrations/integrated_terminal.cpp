@@ -42,6 +42,7 @@ void Editor::create_integrated_terminal()
 void Editor::create_integrated_terminal(const std::string &label, const std::string &cwd)
 {
   show_home_menu = false;
+  
   auto term = std::make_unique<IntegratedTerminal>();
   term->set_label(label);
   if (!term->open_shell(cwd))
@@ -58,7 +59,6 @@ void Editor::create_integrated_terminal(const std::string &label, const std::str
   {
     existing->set_focused(false);
   }
-
   integrated_terminals.push_back(std::move(term));
   current_integrated_terminal = (int)integrated_terminals.size() - 1;
   watch_integrated_terminal_fd(get_integrated_terminal(current_integrated_terminal));

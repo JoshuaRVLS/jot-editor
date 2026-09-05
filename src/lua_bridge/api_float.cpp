@@ -224,6 +224,7 @@ int LuaAPI::open_float(int buffer, bool enter, lua_State *L, int ti)
   f.handle = next_float_window++;
   f.buffer = buffer;
   f.enter = enter;
+  f.surface = current_emit_surface_;
   f.creation_order = next_float_order++;
   float_windows.emplace(f.handle, f);
   if (!configure_float(f.handle, L, ti))
@@ -369,6 +370,27 @@ void LuaAPI::render_floats()
 {
   if (!editor || !editor->ui)
     return;
+  // Modal scrim: the native modal surfaces (command palette, quick pick,
+  // modal popups, TS-status / LSP manager / telescope) dim the whole grid
+  // with UI::dim_rect *before* this pass runs. Every cell a float repaints
+  // is written with dim=false, so a background float (sidebar, status line,
+  // side panel) would silently wipe the scrim over its own region every
+  // frame. Re-apply the dim over every float except the modal surface's own
+  // panel (its handler is running under emit_lua_ui with that surface name,
+  // and it draws on top of the dim like the native modal panels do).
+  const bool modal_dim_active = editor->show_command_palette || editor->show_quick_pick
+      || (editor->popup.visible && editor->popup.presentation == POPUP_MODAL)
+      || editor->show_tree_sitter_status_modal || editor->show_lsp_manager_modal
+      || editor->telescope.is_active();
+  const auto modal_surface_open = [&](const std::string &s) -> bool
+  {
+    return (s == "command_palette" && editor->show_command_palette)
+        || (s == "quick_pick" && editor->show_quick_pick)
+        || (s == "popup" && editor->popup.visible && editor->popup.presentation == POPUP_MODAL)
+        || (s == "tree_sitter_status" && editor->show_tree_sitter_status_modal)
+        || (s == "lsp_manager" && editor->show_lsp_manager_modal)
+        || (s == "telescope" && editor->telescope.is_active());
+  };
   int rw = editor->ui->get_render_width(),
       rh = std::max(1, editor->ui->get_height() - editor->status_height);
   std::vector<LuaFloatWindow *> fs;
@@ -458,9 +480,13 @@ void LuaAPI::render_floats()
         continue;
       }
       auto spans = sit->second;
-      std::sort(spans.begin(),
-                spans.end(),
-                [](const FloatSpan &a, const FloatSpan &b) { return a.start < b.start; });
+      // The compositor (ui.lua) emits row backgrounds first and text glyphs
+      // after, so when a background fill and a glyph share a start byte the
+      // fill must paint first and the glyph overdraw it. A stable sort keeps
+      // that order for equal starts; only the start key is compared.
+      std::stable_sort(spans.begin(),
+                       spans.end(),
+                       [](const FloatSpan &a, const FloatSpan &b) { return a.start < b.start; });
       // A full-line span (start 0, covers the clipped line) paints the row's
       // background, like a selection highlight. Its own text is still drawn
       // below so narrower spans can overdraw it.
@@ -496,7 +522,13 @@ void LuaAPI::render_floats()
           editor->ui->draw_text(
               ix + cell_col(pos), iy + i, clipped.substr(pos, s - pos), f->fg, line_bg);
         editor->ui->draw_text(ix + cell_col(s), iy + i, clipped.substr(s, e - s), sp.fg, span_bg);
-        pos = e;
+        // Never rewind: glyph spans that start inside an already-painted
+        // background fill overdraw their own extent, but the bytes between
+        // them and the next span must keep the fill's background. Rewinding
+        // made the next glyph's `s > pos` gap redraw paint over the fill
+        // (e.g. the row background of a git-modified file in the explorer
+        // vanished between the file name and its M badge).
+        pos = std::max(pos, e);
       }
       if (pos < (int)clipped.size())
         editor->ui->draw_text(ix + cell_col(pos), iy + i, clipped.substr(pos), f->fg, line_bg);
@@ -513,6 +545,10 @@ void LuaAPI::render_floats()
       const std::string footer_text =
           ui_truncate_cells(" " + f->footer + " ", std::max(0, r.w - 2));
       editor->ui->draw_text(x + 1, y + r.h - 1, footer_text, footer_fg, f->bg);
+    }
+    if (modal_dim_active && !modal_surface_open(f->surface))
+    {
+      editor->ui->dim_rect(r);
     }
   }
 }

@@ -632,7 +632,6 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       }
     }
   }
-
   std::vector<int> visual_cols;
 
   int prev_line_idx = buf.scroll_offset - 1;
@@ -1380,8 +1379,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             }
           }
           ui->draw_text(inline_x, inline_y, inline_text, theme.fg_comment, theme.bg_default);
-        }
-      }
+        }      }
     }
   }
-}
+ }

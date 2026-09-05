@@ -174,6 +174,15 @@ void LuaAPI::load_plugins()
 void LuaAPI::reload_plugins()
 {
   load_plugins();
+  // Re-register the bundled inline-diagnostics autocmd, which
+  // clear_runtime_state() inside load_plugins() wipes (same reason it is
+  // loaded after load_plugins() at boot).
+  if (lua_initialized)
+  {
+    jot_lua::load_bundled_lua_file(static_cast<lua_State *>(lua_state),
+                                   "features/decorations.lua",
+                                   "Decorations");
+  }
   fire_autocmd("PluginReload");
   if (editor)
     editor->set_message("Reloaded " + std::to_string(plugin_load_status.size())

@@ -24,6 +24,20 @@ namespace
 TreeSitterManager::QuerySource
 TreeSitterManager::load_query_source(const std::string &language_name) const
 {
+  // Bundled Lua queries are the curated source; runtime query packages (from
+  // :tsinstall or user query paths) are the fallback for languages whose
+  // bundled query does not match the installed parser's grammar version.
+  // Runtime-first here would let an older query package shadow a newer
+  // bundled query on every cache miss (the deferred boot compile installs the
+  // bundled one, but the next cache miss re-loads the stale runtime file).
+  auto entry_it = languages_.find(language_name);
+  if (entry_it != languages_.end() && !entry_it->second.highlight_query_source.empty())
+  {
+    QuerySource query;
+    query.source = entry_it->second.highlight_query_source;
+    query.stored = true;
+    return query;
+  }
   for (const auto &root : runtime_query_paths_)
   {
     fs::path base(root);
@@ -43,14 +57,6 @@ TreeSitterManager::load_query_source(const std::string &language_name) const
       }
     }
   }
-  auto entry_it = languages_.find(language_name);
-  if (entry_it != languages_.end() && !entry_it->second.highlight_query_source.empty())
-  {
-    QuerySource query;
-    query.source = entry_it->second.highlight_query_source;
-    query.stored = true;
-    return query;
-  }
   QuerySource query;
   query.source.clear();
   query.runtime = false;
@@ -66,7 +72,9 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension)
   const std::string &language_id = ext_it->second;
   auto cached = query_cache_.find(language_id);
   if (cached != query_cache_.end())
+  {
     return cached->second;
+  }
 
   TSParser *parser = create_parser(extension);
   if (!parser)
@@ -82,50 +90,82 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension)
     return nullptr;
   }
 
-  auto compile_query =
-      [&](const std::string &source, uint32_t &error_offset, TSQueryError &error_type)
+  // Candidate query sources in priority order. The bundled Lua query is the
+  // curated source; runtime query packages (from :tsinstall or user query
+  // paths) are the fallback for languages whose bundled query predates the
+  // installed parser's grammar. Runtime-first here would let an older query
+  // package shadow a newer bundled query on every cache miss.
+  std::vector<QuerySource> candidates;
   {
-    return ts_query_new(lang, source.c_str(), (uint32_t)source.size(), &error_offset, &error_type);
-  };
-
-  QuerySource source = load_query_source(language_id);
-  if (source.source.empty())
+    auto entry_it = languages_.find(language_id);
+    if (entry_it != languages_.end() && !entry_it->second.highlight_query_source.empty())
+    {
+      QuerySource stored;
+      stored.source = entry_it->second.highlight_query_source;
+      stored.stored = true;
+      candidates.push_back(std::move(stored));
+    }
+    for (const auto &root : runtime_query_paths_)
+    {
+      fs::path base(root);
+      for (const auto &candidate : {
+               base / language_id / "highlights.scm",
+               base / (language_id + ".scm"),
+           })
+      {
+        if (fs::exists(candidate))
+        {
+          QuerySource runtime;
+          runtime.source = read_file(candidate);
+          runtime.path = candidate.string();
+          runtime.runtime = true;
+          candidates.push_back(std::move(runtime));
+        }
+      }
+    }
+  }
+  if (candidates.empty())
   {
     query_diagnostics_[language_id] = "query unavailable; Lua policy not loaded";
     return nullptr;
   }
-  uint32_t error_offset = 0;
-  TSQueryError error_type = TSQueryErrorNone;
-  TSQuery *query = compile_query(source.source, error_offset, error_type);
-  runtime_query_used_[language_id] = source.runtime && query != nullptr;
-  builtin_query_used_[language_id] = source.stored && query != nullptr;
-  if (query)
-  {
-    query_cache_[language_id] = query;
-    query_diagnostics_[language_id] =
-        source.runtime ? ("runtime query loaded: " + source.path) : "Lua query loaded";
-    return query;
-  }
 
-  const std::string final_query_error = "query failed: error " + std::to_string((int)error_type)
-                                        + " at offset " + std::to_string(error_offset);
+  std::string first_failure; // diagnostics for the highest-priority source
+  for (const QuerySource &source : candidates)
+  {
+    uint32_t error_offset = 0;
+    TSQueryError error_type = TSQueryErrorNone;
+    TSQuery *query = ts_query_new(
+        lang, source.source.c_str(), static_cast<uint32_t>(source.source.size()),
+        &error_offset, &error_type);
+    if (query)
+    {
+      query_cache_[language_id] = query;
+      runtime_query_used_[language_id] = source.runtime;
+      builtin_query_used_[language_id] = source.stored;
+      query_diagnostics_[language_id] =
+          source.runtime ? ("runtime query loaded: " + source.path) : "Lua query loaded";
+      return query;
+    }
+    const std::string error =
+        "query failed: error " + std::to_string((int)error_type) + " at offset "
+        + std::to_string(error_offset);
+    std::string message;
+    if (source.runtime)
+    {
+      message = "runtime query failed: " + source.path + "; ";
+    }
+    else if (source.stored)
+    {
+      message = "Lua query failed; ";
+    }
+    message += error;
+    if (first_failure.empty())
+      first_failure = message;
+  }
   runtime_query_used_[language_id] = false;
   builtin_query_used_[language_id] = false;
-  std::string message;
-  if (source.runtime)
-  {
-    message = "runtime query failed: " + source.path + "; ";
-  }
-  else if (source.stored)
-  {
-    message = "Lua query failed; ";
-  }
-  else
-  {
-    message = "query unavailable; ";
-  }
-  message += final_query_error;
-  query_diagnostics_[language_id] = message;
+  query_diagnostics_[language_id] = first_failure;
   return nullptr;
 }
 #endif

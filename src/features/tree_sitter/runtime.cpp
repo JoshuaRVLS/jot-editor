@@ -379,6 +379,11 @@ bool TreeSitterManager::deferred_compile_mode() const
   return deferred_compile_mode_;
 }
 
+const std::vector<std::string> &TreeSitterManager::runtime_library_paths() const
+{
+  return runtime_library_paths_;
+}
+
 TreeSitterManager::DeferredCompileState TreeSitterManager::deferred_compile_state() const
 {
   return deferred_compile_state_;
@@ -393,6 +398,15 @@ void TreeSitterManager::start_deferred_compile()
 std::vector<std::string> TreeSitterManager::finish_deferred_compile()
 {
   deferred_compile_state_ = DeferredCompileState::Idle;
+  return {};
+}
+
+void TreeSitterManager::queue_async_parse(AsyncParseJob)
+{
+}
+
+std::vector<TreeSitterManager::AsyncParseResult> TreeSitterManager::take_finished_parses()
+{
   return {};
 }
 #else
@@ -554,5 +568,96 @@ std::vector<std::string> TreeSitterManager::finish_deferred_compile()
     query_diagnostics_[result.language_id] = "Lua query loaded";
   }
   return failures;
+}
+
+void TreeSitterManager::queue_async_parse(AsyncParseJob job)
+{
+  // One parse job per buffer is enough; a second queue for the same buffer
+  // would race the first for install rights (the buffer flags the first as
+  // pending, so the second would be discarded anyway).
+  std::thread(&TreeSitterManager::async_parse_worker, this, std::move(job)).detach();
+}
+
+void TreeSitterManager::async_parse_worker(AsyncParseJob job)
+{
+  AsyncParseResult result;
+  result.buffer_index = job.buffer_index;
+  result.language_id = job.language_id;
+  result.parsed_text = job.text;
+
+  // Mirror load_language's candidate search from the job snapshot, exactly
+  // like deferred_query_compile_worker: the worker never touches the shared
+  // manager maps, so no lock is needed around the dlopen.
+  std::vector<fs::path> candidates;
+  for (const auto &name : job.library_names)
+  {
+    candidates.emplace_back(name);
+  }
+  for (const auto &root : job.library_paths)
+  {
+    for (const auto &name : job.library_names)
+    {
+      candidates.emplace_back(fs::path(root) / name);
+    }
+  }
+
+  std::string last_error;
+  void *handle = nullptr;
+  const TSLanguage *lang = nullptr;
+  for (const auto &candidate : candidates)
+  {
+    void *h = open_library(candidate, last_error);
+    if (!h)
+    {
+      continue;
+    }
+    LanguageLookupResult lookup = language_from_handle(h, job.symbol);
+    if (!lookup.language)
+    {
+      last_error = candidate.string() + ": " + lookup.message;
+      close_library(h);
+      continue;
+    }
+    handle = h;
+    lang = lookup.language;
+    break;
+  }
+
+  if (lang)
+  {
+    TSParser *parser = ts_parser_new();
+    if (parser && ts_parser_set_language(parser, lang))
+    {
+      result.parser = parser;
+      result.tree = ts_parser_parse_string(
+          parser, nullptr, job.text.data(), static_cast<uint32_t>(job.text.size()));
+      if (!result.tree)
+      {
+        ts_parser_delete(parser);
+        result.parser = nullptr;
+      }
+    }
+    else if (parser)
+    {
+      ts_parser_delete(parser);
+    }
+  }
+  if (handle)
+  {
+    close_library(handle);
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(deferred_mutex_);
+    async_parse_results_.push_back(std::move(result));
+  }
+}
+
+std::vector<TreeSitterManager::AsyncParseResult> TreeSitterManager::take_finished_parses()
+{
+  std::lock_guard<std::mutex> lock(deferred_mutex_);
+  std::vector<AsyncParseResult> out;
+  out.swap(async_parse_results_);
+  return out;
 }
 #endif

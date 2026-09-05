@@ -348,6 +348,11 @@ struct LuaFloatWindow
 {
   int handle = 0;
   int buffer = 0;
+  // jot.ui.handler surface name that opened this float ("sidebar",
+  // "command_palette", ...); empty for floats opened outside a surface emit
+  // (e.g. hover popups, user floats). render_floats() uses it to keep the
+  // modal surface's own float out of the modal scrim.
+  std::string surface;
   int x = 0, y = 0, w = 1, h = 1;
   int row = 0, col = 0;
   int zindex = 50;
@@ -483,6 +488,12 @@ private:
   // Surface name -> registered handler (jot.ui.handler). Values are registry
   // refs; -1 entries are removed lazily on next emit.
   std::map<std::string, int> lua_ui_handlers_;
+  // Surface whose Lua handler is currently running (set around the handler
+  // call in emit_lua_ui). Floats opened during the call are tagged with it,
+  // so render_floats() can tell modal-content floats (e.g. a command palette
+  // panel) from background floats (sidebar / status line) that must stay
+  // under the modal scrim.
+  std::string current_emit_surface_;
   // One-shot LSP result sinks: when non-empty (a "lsp.*" key into
   // lua_callbacks), the next matching native result is delivered to Lua and
   // skipped by the native handler instead.
@@ -530,6 +541,10 @@ private:
 
   void *lua_state; // lua_State* (opaque in public header)
   bool lua_initialized;
+  // True once the boot-time treesitter query load recorded its sources (see
+  // flush_deferred_treesitter_queries); makes the load idempotent so the
+  // event-loop poller can call it without re-queueing compile jobs.
+  bool treesitter_queries_flushed_ = false;
 
 public:
   int next_scratch_buffer = 1;
@@ -588,6 +603,9 @@ public:
   // worker is done. Returns false once there is nothing left to do, so the
   // caller can stop polling.
   bool tick_deferred_treesitter_compile();
+  // Installs background whole-file parses that finished since the last tick
+  // (see TreeSitterManager::queue_async_parse).
+  void tick_deferred_treesitter_parses();
   // Bundled feature modules (lua/features/*), loaded after the API tables so
   // they can register handlers against them (see load_treesitter_runtime).
   bool load_hover_ui_runtime(lua_State *L);

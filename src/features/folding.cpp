@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <limits>
 #include <set>
 #include <sstream>
 #include <stack>
@@ -193,6 +194,117 @@ namespace
   {
     return range.collapsed && line > range.start_line && line <= range.end_line;
   }
+
+  // Merged, sorted map of the lines a set of fold ranges actually hides. A
+  // collapsed range [s, e] hides lines s+1..e; overlapping/nested collapsed
+  // ranges are merged into disjoint inclusive spans with a prefix sum so
+  // visibility math is O(log collapsed) instead of O(lines * ranges) per
+  // frame (the old code walked every line against every range on every paint,
+  // which froze scrolling on large files with auto-detected folds).
+  struct HiddenIndex
+  {
+    std::vector<std::pair<int, int>> spans; // inclusive [lo, hi] of hidden lines
+    std::vector<int> prefix;                // prefix[i+1] = prefix[i] + span length
+
+    explicit HiddenIndex(const std::vector<FoldRange> &ranges)
+    {
+      std::vector<std::pair<int, int>> raw;
+      raw.reserve(ranges.size());
+      for (const auto &range : ranges)
+      {
+        if (range.collapsed && range.end_line > range.start_line)
+        {
+          raw.emplace_back(range.start_line + 1, range.end_line);
+        }
+      }
+      if (raw.empty())
+      {
+        return;
+      }
+      std::sort(raw.begin(), raw.end());
+      for (const auto &span : raw)
+      {
+        if (spans.empty() || span.first > spans.back().second + 1)
+        {
+          spans.push_back(span);
+        }
+        else
+        {
+          spans.back().second = std::max(spans.back().second, span.second);
+        }
+      }
+      prefix.resize(spans.size() + 1);
+      for (size_t i = 0; i < spans.size(); i++)
+      {
+        prefix[i + 1] = prefix[i] + (spans[i].second - spans[i].first + 1);
+      }
+    }
+
+    bool empty() const
+    {
+      return spans.empty();
+    }
+
+    // True when `line` is inside a hidden span.
+    bool hidden(int line) const
+    {
+      if (spans.empty() || line < spans.front().first)
+      {
+        return false;
+      }
+      auto it = std::upper_bound(spans.begin(),
+                                 spans.end(),
+                                 std::make_pair(line, std::numeric_limits<int>::max()));
+      if (it == spans.begin())
+      {
+        return false;
+      }
+      --it;
+      return line <= it->second;
+    }
+
+    // Number of hidden lines with index < x.
+    int hidden_before(int x) const
+    {
+      if (x <= 0 || spans.empty())
+      {
+        return 0;
+      }
+      auto it = std::lower_bound(spans.begin(),
+                                 spans.end(),
+                                 std::make_pair(x, std::numeric_limits<int>::min()));
+      size_t idx = (size_t)(it - spans.begin());
+      if (idx == 0)
+      {
+        return 0;
+      }
+      int total = prefix[idx];
+      const auto &last = spans[idx - 1];
+      if (last.second >= x)
+      {
+        total -= last.second - x + 1;
+      }
+      return total;
+    }
+
+    // Buffer line whose visible rank (0-based, counting non-hidden lines from
+    // line 0) equals `rank`, or -1 when rank is out of range.
+    int line_at_visible_rank(int rank) const
+    {
+      int cursor = 0;
+      for (const auto &span : spans)
+      {
+        int gap_visible = span.first - cursor; // lines cursor..span.first-1
+        if (rank < gap_visible)
+        {
+          return cursor + rank;
+        }
+        rank -= gap_visible;
+        cursor = span.second + 1;
+      }
+      return -1; // remaining tail handled by callers with line_count
+    }
+  };
 } // namespace
 
 namespace Folding
@@ -379,18 +491,21 @@ namespace Folding
 
   int next_visible_line(const std::vector<FoldRange> &ranges, int line, int line_count)
   {
-    int next = std::min(line + 1, std::max(0, line_count - 1));
-    while (next < line_count && is_line_hidden(ranges, next))
+    const HiddenIndex idx(ranges);
+    int last = std::max(0, line_count - 1);
+    int next = std::min(line + 1, last);
+    while (next < line_count && idx.hidden(next))
     {
       next++;
     }
-    return std::min(next, std::max(0, line_count - 1));
+    return std::min(next, last);
   }
 
   int previous_visible_line(const std::vector<FoldRange> &ranges, int line)
   {
+    const HiddenIndex idx(ranges);
     int prev = std::max(0, line - 1);
-    while (prev > 0 && is_line_hidden(ranges, prev))
+    while (prev > 0 && idx.hidden(prev))
     {
       prev--;
     }
@@ -419,15 +534,12 @@ namespace Folding
 
   int visible_line_count(const std::vector<FoldRange> &ranges, int line_count)
   {
-    int visible = 0;
-    for (int line = 0; line < line_count; line++)
+    const HiddenIndex idx(ranges);
+    if (idx.empty())
     {
-      if (!is_line_hidden(ranges, line))
-      {
-        visible++;
-      }
+      return std::max(1, line_count);
     }
-    return std::max(1, visible);
+    return std::max(1, line_count - idx.hidden_before(line_count));
   }
 
   int buffer_line_for_visible_index(const std::vector<FoldRange> &ranges,
@@ -435,17 +547,19 @@ namespace Folding
                                     int line_count)
   {
     int target = std::max(0, visible_index);
-    for (int line = 0; line < line_count; line++)
+    const HiddenIndex idx(ranges);
+    int line = idx.empty() ? -1 : idx.line_at_visible_rank(target);
+    if (line >= 0)
     {
-      if (is_line_hidden(ranges, line))
-      {
-        continue;
-      }
-      if (target == 0)
-      {
-        return line;
-      }
-      target--;
+      return line;
+    }
+    // Past the last span: walk the tail of the file normally. When there are
+    // no collapsed ranges every line is visible, so rank == buffer line.
+    int cursor = idx.empty() ? 0 : (idx.spans.empty() ? 0 : idx.spans.back().second + 1);
+    int tail_visible = std::max(0, line_count - cursor);
+    if (target < tail_visible)
+    {
+      return cursor + target;
     }
     return std::max(0, line_count - 1);
   }
@@ -456,13 +570,18 @@ namespace Folding
                            int visible_rows,
                            int line_count)
   {
-    if (line_count <= 0 || visible_rows <= 0 || target_line < 0 || target_line >= line_count
-        || is_line_hidden(ranges, target_line))
+    if (line_count <= 0 || visible_rows <= 0 || target_line < 0 || target_line >= line_count)
     {
       return -1;
     }
-    int current = std::clamp(first_line, 0, std::max(0, line_count - 1));
-    while (current < line_count && is_line_hidden(ranges, current))
+    const HiddenIndex idx(ranges);
+    if (idx.hidden(target_line))
+    {
+      return -1;
+    }
+    int last = std::max(0, line_count - 1);
+    int current = std::clamp(first_line, 0, last);
+    while (current < line_count && idx.hidden(current))
     {
       current++;
     }
@@ -476,7 +595,12 @@ namespace Folding
       {
         return row;
       }
-      int next = next_visible_line(ranges, current, line_count);
+      int next = std::min(current + 1, last);
+      while (next < line_count && idx.hidden(next))
+      {
+        next++;
+      }
+      next = std::min(next, last);
       if (next == current)
       {
         break;
@@ -495,8 +619,10 @@ namespace Folding
     {
       return -1;
     }
-    int current = std::clamp(first_line, 0, std::max(0, line_count - 1));
-    while (current < line_count && is_line_hidden(ranges, current))
+    const HiddenIndex idx(ranges);
+    int last = std::max(0, line_count - 1);
+    int current = std::clamp(first_line, 0, last);
+    while (current < line_count && idx.hidden(current))
     {
       current++;
     }
@@ -510,11 +636,17 @@ namespace Folding
       {
         return -1;
       }
-      current = next_visible_line(ranges, current, line_count);
-      if (current >= line_count || is_line_hidden(ranges, current))
+      int next = std::min(current + 1, last);
+      while (next < line_count && idx.hidden(next))
+      {
+        next++;
+      }
+      next = std::min(next, last);
+      if (next >= line_count || idx.hidden(next))
       {
         return -1;
       }
+      current = next;
     }
     return current;
   }
@@ -528,38 +660,36 @@ namespace Folding
     {
       return 0;
     }
-    int clamped = std::clamp(scroll, 0, line_count - 1);
-    while (clamped > 0 && is_line_hidden(ranges, clamped))
+    const HiddenIndex idx(ranges);
+    int last = std::max(0, line_count - 1);
+    int clamped = std::clamp(scroll, 0, last);
+    while (clamped > 0 && idx.hidden(clamped))
     {
       clamped--;
     }
-    int visible_total = visible_line_count(ranges, line_count);
+    int visible_total = idx.empty()
+                            ? line_count
+                            : std::max(1, line_count - idx.hidden_before(line_count));
     int max_visible_start = std::max(0, visible_total - std::max(1, visible_rows));
-    int visible_index = 0;
-    for (int line = 0; line < line_count && line < clamped; line++)
-    {
-      if (!is_line_hidden(ranges, line))
-      {
-        visible_index++;
-      }
-    }
-    if (visible_index <= max_visible_start)
+    int visible_before_clamped = idx.empty() ? clamped : clamped - idx.hidden_before(clamped);
+    if (visible_before_clamped <= max_visible_start)
     {
       return clamped;
     }
-    int target_visible = max_visible_start;
-    for (int line = 0; line < line_count; line++)
+    // Viewport would start below the last visible row: anchor it at the line
+    // whose visible rank is max_visible_start (the highest allowed start).
+    int cursor = 0;
+    int rank = max_visible_start;
+    for (const auto &span : idx.spans)
     {
-      if (is_line_hidden(ranges, line))
+      int gap_visible = span.first - cursor;
+      if (rank < gap_visible)
       {
-        continue;
+        return cursor + rank;
       }
-      if (target_visible == 0)
-      {
-        return line;
-      }
-      target_visible--;
+      rank -= gap_visible;
+      cursor = span.second + 1;
     }
-    return 0;
+    return cursor + rank; // tail of the file is fully visible
   }
 } // namespace Folding

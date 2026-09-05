@@ -142,6 +142,40 @@ public:
   void start_deferred_compile();
   std::vector<std::string> finish_deferred_compile();
 
+  // Background whole-file parse for large buffers, so opening a big file
+  // paints the first frame immediately (plain text) and the syntax colors pop
+  // in when the parse finishes instead of blocking the main thread for the
+  // duration of the parse. queue_async_parse (main thread only) snapshots the
+  // text and the language lookup info; a spawned worker dlopens its own
+  // parser copy (never touching the shared manager maps, same as the deferred
+  // query worker) and parses the snapshot; take_finished_parses (main thread
+  // only) drains the results. Ownership of the parser and tree transfers to
+  // the caller on drain; results whose buffer went away must be deleted by
+  // the caller.
+  struct AsyncParseJob
+  {
+    int buffer_index = -1;
+    std::string extension;
+    std::string language_id;
+    std::string text; // text snapshot the tree must be parsed from
+    std::string symbol;
+    std::vector<std::string> library_names;
+    std::vector<std::string> library_paths; // runtime_library_paths_ snapshot
+  };
+  struct AsyncParseResult
+  {
+    int buffer_index = -1;
+    std::string language_id;
+    std::string parsed_text; // matches the text the tree describes
+    TSParser *parser = nullptr;
+    TSTree *tree = nullptr;
+  };
+  void queue_async_parse(AsyncParseJob job);
+  std::vector<AsyncParseResult> take_finished_parses();
+  // Installed parser-library search roots (main thread only; used to build
+  // AsyncParseJob::library_paths snapshots for the background worker).
+  const std::vector<std::string> &runtime_library_paths() const;
+
   // Lua-facing operations. Handles are opaque and valid only while this
   // manager is alive; all ownership remains native.
   bool register_language(const std::string &language_id,
@@ -221,6 +255,7 @@ private:
   };
 
   void deferred_query_compile_worker();
+  void async_parse_worker(AsyncParseJob job);
 #endif
 
 
@@ -243,6 +278,9 @@ private:
   std::vector<std::string> deferred_compile_roots_;
   std::vector<DeferredCompileResult> deferred_compile_results_;
   std::thread deferred_compile_thread_;
+  // Finished background parses waiting for the main thread to install them
+  // (see the AsyncParseResult doc above). Protected by deferred_mutex_.
+  std::vector<AsyncParseResult> async_parse_results_;
   std::atomic<bool> deferred_cancel_{false};
 #endif
 #ifdef JOT_TREESITTER
