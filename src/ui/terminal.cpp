@@ -8,6 +8,7 @@
 #include <fcntl.h>
 
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <poll.h>
 #include <sys/ioctl.h>
@@ -69,27 +70,41 @@ static bool get_terminal_size(int &width, int &height)
   return false;
 }
 
-static bool cursor_probe_size(int &width, int &height)
+static bool cursor_probe_size(int &width, int &height, int budget_ms = 200)
 {
   // Move cursor to (999, 999) — most terminals clamp to the bottom-right
   // corner — then ask for the cursor position with DSR (CSI 6 n). The
   // terminal replies `\x1b[<rows>;<cols>R` which gives us the real
   // viewport size even when ioctl and $COLUMNS/$LINES are stale.
   //
-  // Use a short poll() timeout so we don't block forever if the terminal
-  // doesn't reply (e.g. piped stdin, some embedded consoles).
+  // Wait on a strict total deadline (budget_ms) spread across the bytes of
+  // the reply so a terminal that never answers -- piped stdin, CI ptys,
+  // some tmux/SSH and embedded consoles that suppress DSR -- costs at most
+  // budget_ms instead of blocking startup. Terminals that do answer reply
+  // within a few milliseconds, well inside even the small confirmatory
+  // budget.
   ::write(STDOUT_FILENO, "\x1b[999;999H", 10);
   ::write(STDOUT_FILENO, "\x1b[6n", 4);
 
+  const auto deadline = std::chrono::steady_clock::now()
+                        + std::chrono::milliseconds(budget_ms);
   char buf[32] = {};
   int i = 0;
   while (i < 31)
   {
+    const auto now = std::chrono::steady_clock::now();
+    if (now >= deadline)
+    {
+      break;
+    }
+    const int remain = (int)std::chrono::duration_cast<std::chrono::milliseconds>(
+                           deadline - now)
+                           .count();
     struct pollfd pfd;
     pfd.fd = STDIN_FILENO;
     pfd.events = POLLIN;
     pfd.revents = 0;
-    int ready = poll(&pfd, 1, 200); // 200ms total budget
+    int ready = poll(&pfd, 1, std::max(1, remain));
     if (ready <= 0 || !(pfd.revents & POLLIN))
     {
       break;
@@ -478,7 +493,13 @@ bool Terminal::refresh_size(bool force_probe)
   {
     int probe_w = new_width;
     int probe_h = new_height;
-    if (cursor_probe_size(probe_w, probe_h))
+    // When ioctl/env already produced a usable size this probe only
+    // confirms or corrects it, so a terminal that never answers DSR must
+    // not stall startup for the full budget -- terminals that do answer
+    // reply within a few milliseconds. Only when the probe is the sole
+    // source of a size (ioctl/env failed) keep the generous budget.
+    const int probe_budget = got ? 30 : 200;
+    if (cursor_probe_size(probe_w, probe_h, probe_budget))
     {
       if (probe_w > 0)
         new_width = probe_w;
