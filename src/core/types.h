@@ -496,6 +496,21 @@ struct FileBuffer
   std::unordered_map<std::string, std::string> lua_vars;
   std::map<char, Cursor> marks; // buffer-local marks ('a'-'z')
   std::vector<Diagnostic> diagnostics;
+  // Per-line worst diagnostic severity (0 = none, 1 = error .. 4 = hint)
+  // built lazily by the renderer over buf.diagnostics. The gutter asks for
+  // the severity of every visible row on every frame; a dense per-line
+  // array answers in O(1) where scanning the diagnostic list would cost
+  // O(diagnostics) per row. diag_severity_by_line covers lines up to
+  // diag_severity_built_upto; diag_wide_spans holds the indices of
+  // diagnostics whose range is too wide to expand densely, checked
+  // directly on lookup. diag_severity_dirty is set whenever the list is
+  // replaced (LSP publish, reload); mark_edited does not set it because
+  // the diagnostic set is intentionally not re-offset on local edits, so
+  // the cached answers stay exactly as accurate as the list they index.
+  std::vector<unsigned char> diag_severity_by_line;
+  int diag_severity_built_upto = -1;
+  bool diag_severity_dirty = true;
+  std::vector<int> diag_wide_spans;
   std::vector<FoldRange> fold_ranges;
   bool folds_dirty = true;
   // Incremental absolute bracket-depth prefix used by the rainbow-bracket

@@ -469,6 +469,7 @@ void Editor::set_diagnostics(const std::string &filepath,
     if (match)
     {
       buf.diagnostics = diagnostics;
+      buf.diag_severity_dirty = true; // per-line gutter index is stale now
       invalidate_sidebar_diagnostics_cache();
       needs_redraw = true;
       // Continue to check other buffers in case of duplicates
@@ -508,6 +509,7 @@ void Editor::add_diagnostic(const std::string &filepath, const Diagnostic &diagn
     if (match)
     {
       buf.diagnostics.push_back(diagnostic);
+      buf.diag_severity_dirty = true; // per-line gutter index is stale now
       invalidate_sidebar_diagnostics_cache();
       needs_redraw = true;
       // Continue search

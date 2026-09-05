@@ -287,18 +287,86 @@ namespace
     return best;
   }
 
-  int line_diagnostic_severity(const FileBuffer &buf, int line)
+  // Diagnostics spanning more lines than this are not expanded into the
+  // dense per-line severity array; they are kept in a short separate list
+  // and checked on lookup. Keeps the worst-case build cost bounded even
+  // when a file carries thousands of wide-range diagnostics.
+  constexpr int kDiagDenseSpanLimit = 64;
+
+  // Lazily (re)build the per-line severity index for `buf` up to `to_line`.
+  // Called with lines in roughly ascending order (the row walk), so the
+  // dense array only ever covers the region rendering actually touches.
+  void extend_diag_severity(FileBuffer &buf, int to_line)
   {
-    int best = 0;
+    if (buf.diag_severity_dirty)
+    {
+      buf.diag_severity_by_line.clear();
+      buf.diag_severity_built_upto = -1;
+      buf.diag_wide_spans.clear();
+      for (int i = 0; i < (int)buf.diagnostics.size(); i++)
+      {
+        const Diagnostic &d = buf.diagnostics[i];
+        if (d.end_line - d.line + 1 > kDiagDenseSpanLimit)
+        {
+          buf.diag_wide_spans.push_back(i);
+        }
+      }
+      buf.diag_severity_dirty = false;
+    }
+    if (to_line <= buf.diag_severity_built_upto)
+    {
+      return;
+    }
+    const int built = buf.diag_severity_built_upto;
+    if ((int)buf.diag_severity_by_line.size() <= to_line)
+    {
+      buf.diag_severity_by_line.resize((size_t)to_line + 1, 0);
+    }
     for (const auto &diag : buf.diagnostics)
     {
-      if (!diagnostic_covers_line(diag, line))
+      const int span = diag.end_line - diag.line + 1;
+      if (span > kDiagDenseSpanLimit || span <= 0)
+      {
+        continue; // wide spans are answered on lookup; malformed ones ignored
+      }
+      const int from = std::max(diag.line, built + 1);
+      const int to = std::min(diag.end_line, to_line);
+      if (from > to)
       {
         continue;
       }
-      if (best == 0 || diag.severity < best)
+      const unsigned char sev = (unsigned char)std::clamp(diag.severity, 1, 4);
+      for (int line = from; line <= to; line++)
       {
-        best = diag.severity;
+        unsigned char &cell = buf.diag_severity_by_line[(size_t)line];
+        if (cell == 0 || sev < cell)
+        {
+          cell = sev;
+        }
+      }
+    }
+    buf.diag_severity_built_upto = to_line;
+  }
+
+  int line_diagnostic_severity(FileBuffer &buf, int line)
+  {
+    if (line < 0)
+    {
+      return 0;
+    }
+    extend_diag_severity(buf, line);
+    int best = (line < (int)buf.diag_severity_by_line.size())
+                   ? buf.diag_severity_by_line[(size_t)line]
+                   : 0;
+    for (int wide : buf.diag_wide_spans)
+    {
+      const Diagnostic &d = buf.diagnostics[(size_t)wide];
+      if (d.line <= line && line <= d.end_line)
+      {
+        if (best == 0 || d.severity < best)
+        {
+          best = d.severity;
+        }
       }
     }
     return best;

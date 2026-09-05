@@ -1142,6 +1142,7 @@ void Editor::close_buffer_at(int index)
     buf.redo_stack = std::stack<State>();
     buf.bookmarks.clear();
     buf.diagnostics.clear();
+    buf.diag_severity_dirty = true;
     buf.fold_ranges.clear();
     invalidate_sidebar_diagnostics_cache();
 #ifdef JOT_TREESITTER
