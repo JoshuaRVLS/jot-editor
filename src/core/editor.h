@@ -299,6 +299,10 @@ private:
   const std::vector<std::pair<int, int>> &
   get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit = 0x7fffffff);
   void invalidate_syntax_cache(FileBuffer &buf);
+  // Absolute token-aware bracket depth at the start of `line` (see
+  // render/buffer.cpp). Uses the same skip rule as the visible-row walk, so
+  // rainbow bracket colors depend only on file position.
+  int bracket_depth_at_line_start(FileBuffer &buf, int line);
 
 #ifdef JOT_TREESITTER
   void reparse_tree(FileBuffer &buf);

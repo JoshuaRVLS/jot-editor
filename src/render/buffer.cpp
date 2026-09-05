@@ -123,46 +123,6 @@ namespace
     }
   }
 
-  // Absolute bracket depth at the start of buffer `line`: the same floored
-  // raw +/- walk the renderer uses, accumulated from line 0 instead of from
-  // a scroll-dependent window. Served from FileBuffer's incremental prefix
-  // cache, so the value is a pure function of the line index. That is what
-  // keeps rainbow bracket colors stable while scrolling -- the previous
-  // implementation reseeded depth from a sliding ~500-line window starting
-  // at depth 0, so every bracket's color shifted whenever an enclosing
-  // bracket entered or left that window. The caller falls back to the
-  // bounded backscan for lazy (disk-backed) buffers, where filling the
-  // prefix would demand-load every preceding line.
-  int bracket_depth_at_line_start(FileBuffer &buf, int line)
-  {
-    const int count = (int)buf.line_count();
-    if (count <= 0 || line <= 0)
-    {
-      return 0;
-    }
-    const int target = std::min(line, count - 1);
-    auto &prefix = buf.bracket_depth_prefix;
-    int &upto = buf.bracket_depth_prefix_upto;
-    if (prefix.empty())
-    {
-      prefix.push_back(0); // depth at the start of line 0
-    }
-    while (upto < target)
-    {
-      // Walking line `upto` turns the depth at the start of line `upto`
-      // into the depth at the start of line `upto + 1`.
-      int value = prefix[upto];
-      const std::string &ln = buf.line(upto);
-      for (char c : ln)
-      {
-        apply_bracket_depth_delta(c, value);
-      }
-      prefix.push_back(value);
-      upto++;
-    }
-    return prefix[target];
-  }
-
   bool bracket_chars(char c, char &open, char &close, bool &is_open)
   {
     switch (c)
@@ -438,6 +398,76 @@ namespace
     return guide;
   }
 } // namespace
+
+// Absolute bracket depth at the start of buffer `line`: the same floored
+// +/- walk the renderer uses, accumulated from line 0 instead of from a
+// scroll-dependent window. Served from FileBuffer's incremental prefix
+// cache, so the value is a pure function of the line index. That is what
+// keeps rainbow bracket colors stable while scrolling -- the previous
+// implementation reseeded depth from a sliding ~500-line window starting
+// at depth 0, so every bracket's color shifted whenever an enclosing
+// bracket entered or left that window.
+//
+// The walk skips brackets inside string/comment tokens exactly like the
+// visible-row walk below, so a line's color is the same whether the
+// string/comment lies above the viewport or inside it. A raw count here
+// would make colors flip every time a string/comment containing brackets
+// crossed the viewport top. The caller falls back to the bounded
+// backscan for lazy (disk-backed) buffers, where filling the prefix would
+// demand-load every preceding line.
+int Editor::bracket_depth_at_line_start(FileBuffer &buf, int line)
+{
+  const int count = (int)buf.line_count();
+  if (count <= 0 || line <= 0)
+  {
+    return 0;
+  }
+  const int target = std::min(line, count - 1);
+  auto &prefix = buf.bracket_depth_prefix;
+  int &upto = buf.bracket_depth_prefix_upto;
+  if (prefix.empty())
+  {
+    prefix.push_back(0); // depth at the start of line 0
+  }
+  // Lines above this keep the raw walk: syntax colors for huge single
+  // lines are windowed (see get_line_syntax_colors), so token info for
+  // the whole line is not available without tokenizing megabytes.
+  constexpr std::size_t kTokenAwareLineBytes = 4096;
+  while (upto < target)
+  {
+    // Walking line `upto` turns the depth at the start of line `upto`
+    // into the depth at the start of line `upto + 1`.
+    int value = prefix[upto];
+    const std::string &ln = buf.line(upto);
+    if (ln.size() > kTokenAwareLineBytes)
+    {
+      for (char c : ln)
+      {
+        apply_bracket_depth_delta(c, value);
+      }
+    }
+    else
+    {
+      // Same token-aware skip as the visible-row walk: brackets inside
+      // strings/comments neither count toward depth nor get rainbow
+      // colors. The per-line token cache makes this O(1) on re-visits.
+      const auto &colors = get_line_syntax_colors(buf, upto);
+      for (int i = 0; i < (int)ln.size(); i++)
+      {
+        const bool tokenized = i < (int)colors.size() && colors[i].first == 1;
+        const int type = tokenized ? colors[i].second : 0;
+        if (type == TS_TOKEN_STRING || type == TS_TOKEN_COMMENT)
+        {
+          continue;
+        }
+        apply_bracket_depth_delta(ln[i], value);
+      }
+    }
+    prefix.push_back(value);
+    upto++;
+  }
+  return prefix[target];
+}
 
 void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
 {
@@ -727,7 +757,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             char c = line[char_idx];
             const bool tokenized = char_idx < (int)colors.size() && colors[char_idx].first == 1;
             const int token_type = tokenized ? colors[char_idx].second : 0;
-            const bool skip_bracket_logic = (token_type == 2 || token_type == 3);
+            const bool skip_bracket_logic =
+                (token_type == TS_TOKEN_STRING || token_type == TS_TOKEN_COMMENT);
             int bracket_color = -1;
             if (!skip_bracket_logic && is_open_bracket(c))
             {
