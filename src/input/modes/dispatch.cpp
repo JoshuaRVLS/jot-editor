@@ -68,6 +68,12 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     return;
   }
 
+  if (show_lsp_status_modal)
+  {
+    handle_lsp_status_input(ch);
+    return;
+  }
+
   if (show_quick_pick)
   {
     handle_quick_pick_input(ch);

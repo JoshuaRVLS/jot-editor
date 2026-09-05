@@ -326,6 +326,34 @@ bool LuaAPI::emit_tree_sitter_status(const TsStatusView &view)
                      });
 }
 
+bool LuaAPI::emit_lsp_status(const TsStatusView &view)
+{
+  return emit_lua_ui("lsp_status",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_int_field(L, t, "scroll", view.scroll);
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.rows.size(); i++)
+                       {
+                         const TsStatusRowView &row = view.rows[i];
+                         lua_newtable(L);
+                         const int it = lua_gettop(L);
+                         lua_set_bool_field(L, it, "section", row.section);
+                         lua_set_str_field(L, it, "label", row.label);
+                         lua_set_str_field(L, it, "detail", row.detail);
+                         lua_set_int_field(L, it, "color", row.color);
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "rows");
+                       push_ui_colors(L, t);
+                     });
+}
+
 bool LuaAPI::emit_telescope(const TelescopeView &view)
 {
   return emit_lua_ui("telescope",

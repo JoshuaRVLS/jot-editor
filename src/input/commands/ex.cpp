@@ -1005,6 +1005,10 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     show_tree_sitter_status();
   }
+  else if (lcmd == "lspstatus")
+  {
+    show_lsp_status();
+  }
   else if (lcmd == "tsreload" || lcmd == "treesitterreload")
   {
     reload_tree_sitter();

@@ -630,6 +630,7 @@ public:
   bool emit_popup(const PopupView &view);
   bool emit_prompt(const std::string &name, const PromptView &view);
   bool emit_tree_sitter_status(const TsStatusView &view);
+  bool emit_lsp_status(const TsStatusView &view);
   bool emit_telescope(const TelescopeView &view);
   bool emit_lsp_completion(const CompletionView &view);
   bool emit_context_menu(const ContextMenuView &view);

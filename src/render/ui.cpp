@@ -1,6 +1,7 @@
 #include "editor.h"
 #include "core/keybind_catalog.h"
 #include "lua_bridge/api.h"
+#include "tools/lsp/install.h"
 #include "tree_sitter/manager.h"
 #include "ui/components.h"
 #include "ui/text.h"
@@ -644,6 +645,197 @@ void Editor::render_tree_sitter_status_modal()
   }
   ui_draw_footer(
       *ui, rect, ui_truncate_cells(footer, w - 2), theme.fg_comment, panel_theme.bg_command);
+}
+
+void Editor::render_lsp_status_modal()
+{
+  if (!show_lsp_status_modal)
+  {
+    return;
+  }
+
+  std::vector<TreeSitterStatusRenderRow> running_rows;
+  std::vector<TreeSitterStatusRenderRow> starting_rows;
+  std::set<std::string> attached_languages;
+  for (const auto &client : lsp_clients)
+  {
+    if (!client)
+    {
+      continue;
+    }
+    const std::string language = client->get_language();
+    if (language.empty())
+    {
+      continue;
+    }
+    attached_languages.insert(language);
+    if (!client->is_running())
+    {
+      std::string why = client->get_last_error();
+      starting_rows.push_back({"",
+                               language,
+                               why.empty() ? "starting…" : why,
+                               theme.fg_status_warning});
+      continue;
+    }
+    int errs = 0, warns = 0, infos = 0, hints = 0;
+    lsp_server_diagnostic_counts(language, &errs, &warns, &infos, &hints);
+    std::string detail;
+    if (errs > 0)
+      detail += " E" + std::to_string(errs);
+    if (warns > 0)
+      detail += " W" + std::to_string(warns);
+    if (infos > 0)
+      detail += " I" + std::to_string(infos);
+    if (hints > 0)
+      detail += " H" + std::to_string(hints);
+    if (detail.empty())
+      detail = " connected";
+    else
+      detail = detail.substr(1) + " problem(s)";
+    const std::string root = client->get_root_path();
+    if (!root.empty())
+    {
+      std::filesystem::path p(root);
+      const std::string base = p.filename().string();
+      detail += " · " + (base.empty() ? root : base);
+    }
+    running_rows.push_back({"", language, detail, theme.fg_status_info});
+  }
+
+  std::vector<TreeSitterStatusRenderRow> install_rows;
+  for (const auto &job : lsp_install_jobs)
+  {
+    if (job.running)
+    {
+      install_rows.push_back({"",
+                              job.server,
+                              (job.removing ? "removing — " : "installing — ")
+                                  + (job.progress.empty() ? "running" : job.progress),
+                              theme.fg_status_info});
+    }
+    else if (job.failed)
+    {
+      install_rows.push_back({"",
+                              job.server,
+                              job.progress.empty() ? "failed" : job.progress,
+                              theme.fg_status_error});
+    }
+  }
+
+  std::vector<TreeSitterStatusRenderRow> installed_rows;
+  for (const std::string &id : LspInstall::installed_ids())
+  {
+    if (attached_languages.find(id) != attached_languages.end())
+    {
+      continue;
+    }
+    installed_rows.push_back({"", id, "installed", theme.fg_command});
+  }
+
+  std::vector<TreeSitterStatusRenderRow> rows;
+  ts_add_section(rows, "Running", (int)running_rows.size());
+  rows.insert(rows.end(), running_rows.begin(), running_rows.end());
+  ts_add_section(rows, "Starting", (int)starting_rows.size());
+  rows.insert(rows.end(), starting_rows.begin(), starting_rows.end());
+  ts_add_section(rows, "Installing", (int)install_rows.size());
+  rows.insert(rows.end(), install_rows.begin(), install_rows.end());
+  ts_add_section(rows, "Installed", (int)installed_rows.size());
+  rows.insert(rows.end(), installed_rows.begin(), installed_rows.end());
+
+  int screen_w = ui->get_render_width();
+  int screen_h = ui->get_height();
+  int w = std::min(std::max(48, screen_w - 8), 92);
+  int h = std::min(std::max(12, screen_h - 6), 28);
+  if (screen_w < 54)
+  {
+    w = std::max(20, screen_w - 2);
+  }
+  if (screen_h < 16)
+  {
+    h = std::max(8, screen_h - 2);
+  }
+  int x = std::max(0, (screen_w - w) / 2);
+  int y = std::max(1, (screen_h - h) / 2);
+
+  ui->dim_rect({0, 0, screen_w, screen_h});
+
+  if (lua_api && lua_api->has_lua_ui_handler("lsp_status"))
+  {
+    TsStatusView view;
+    view.scroll = lsp_status_scroll;
+    view.x = x;
+    view.y = y;
+    view.w = w;
+    view.h = h;
+    view.rows.reserve(rows.size());
+    for (const auto &row : rows)
+    {
+      TsStatusRowView v;
+      v.section = !row.section.empty();
+      v.label = v.section ? row.section : row.language;
+      v.detail = row.detail;
+      v.color = row.color;
+      view.rows.push_back(std::move(v));
+    }
+    if (lua_api->emit_lsp_status(view))
+    {
+      return;
+    }
+  }
+
+  const Theme panel_theme = [&]()
+  {
+    Theme t = theme;
+    t.bg_command = theme.bg_panel_border;
+    return t;
+  }();
+
+  UIRect rect = {x, y, w, h};
+  ui_draw_panel(*ui,
+                rect,
+                {theme.fg_command, panel_theme.bg_command, theme.fg_panel_border,
+                 panel_theme.bg_command});
+  ui_draw_panel_title(*ui, rect, " LSP", theme.fg_command, panel_theme.bg_command);
+
+  int list_h = std::max(0, h - 4);
+  int max_scroll = std::max(0, (int)rows.size() - list_h);
+  lsp_status_scroll = std::clamp(lsp_status_scroll, 0, max_scroll);
+
+  int lang_w = std::max(12, std::min(24, w / 3));
+  for (int i = 0; i < list_h; i++)
+  {
+    int idx = lsp_status_scroll + i;
+    if (idx < 0 || idx >= (int)rows.size())
+    {
+      break;
+    }
+    const auto &row = rows[idx];
+    int row_y = y + 2 + i;
+    if (!row.section.empty())
+    {
+      std::string title = row.section + " (" + row.detail + ")";
+      ui->draw_text(x + 1,
+                    row_y,
+                    ui_truncate_cells(title, w - 2),
+                    theme.fg_comment,
+                    panel_theme.bg_command,
+                    true);
+      continue;
+    }
+    std::string lang = ui_truncate_cells(row.language, lang_w);
+    std::string detail = ui_truncate_cells(row.detail, w - lang_w - 5);
+    int name_fg = row.color != 0 ? row.color : theme.fg_command;
+    ui->draw_text(x + 2, row_y, lang, name_fg, panel_theme.bg_command, true);
+    ui->draw_text(x + 2 + lang_w, row_y, detail, theme.fg_comment, panel_theme.bg_command);
+  }
+
+  std::string footer = "Esc close  Up/Down scroll";
+  if (max_scroll > 0)
+  {
+    footer += "  " + std::to_string(lsp_status_scroll + 1) + "/" + std::to_string(max_scroll + 1);
+  }
+  ui_draw_footer(*ui, rect, ui_truncate_cells(footer, w - 2), theme.fg_comment, panel_theme.bg_command);
 }
 
 void Editor::render_status_line()
@@ -1795,6 +1987,7 @@ std::vector<Editor::MenuBarMenu> Editor::build_menu_bar_model() const
         {"Install Language Server...", MENU_ACTION_COMMAND, ":lspinstall "},
         {"Remove Language Server...", MENU_ACTION_COMMAND, ":lspremove "},
         {"Tree-sitter Status", MENU_ACTION_COMMAND, ":tsstatus"},
+        {"LSP Status", MENU_ACTION_COMMAND, ":lspstatus"},
         {"Git Status", MENU_ACTION_COMMAND, ":gitstatus"}}},
   };
 }
@@ -2068,6 +2261,7 @@ void Editor::sync_lua_ui_surfaces()
   sync(show_save_prompt, lua_ui_prev_save_prompt, "save_prompt");
   sync(show_quit_prompt, lua_ui_prev_quit_prompt, "quit_prompt");
   sync(show_tree_sitter_status_modal, lua_ui_prev_tree_sitter_status, "tree_sitter_status");
+  sync(show_lsp_status_modal, lua_ui_prev_lsp_status, "lsp_status");
   sync(telescope.is_active(), lua_ui_prev_telescope, "telescope");
   sync(lsp_completion_visible && !lsp_completion_items.empty(),
        lua_ui_prev_lsp_completion,

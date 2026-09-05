@@ -753,6 +753,13 @@ bool Editor::close_active_floating_ui()
     return true;
   }
 
+  if (show_lsp_status_modal)
+  {
+    show_lsp_status_modal = false;
+    needs_redraw = true;
+    return true;
+  }
+
   if (show_quick_pick)
   {
     close_quick_pick();

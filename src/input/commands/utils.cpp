@@ -191,6 +191,7 @@ namespace CommandLineUtils
                                                       "resizedown",
                                                       "lspinstall",
                                                       "lspremove",
+                                                      "lspstatus",
                                                       "diagnostics",
                                                       "problems",
                                                       "diagnext",

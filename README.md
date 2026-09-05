@@ -540,7 +540,9 @@ Open the command palette with `Ctrl+P` and run ex-style commands.
 
 ### LSP
 
-- `:lspmanager` for install, update, remove, and per-workspace enable/disable
+- `:lspinstall <server>` installs a language server (silently, with receipts)
+- `:lspremove <server>` removes one
+- `:lspstatus` shows attached servers, diagnostics, and install progress
 - `:hover`, `:lsphover`
 - `:definition`, `:lspdefinition`, `:lspdef`, `:gd`
 - `:lspback`

@@ -1,5 +1,6 @@
 #include "tools/lsp/install.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
@@ -104,6 +105,31 @@ namespace LspInstall
       return false;
     std::error_code ec;
     return fs::is_regular_file(data_root() / id / "receipt", ec);
+  }
+
+  std::vector<std::string> installed_ids()
+  {
+    std::vector<std::string> out;
+    std::error_code ec;
+    const fs::path root = data_root();
+    if (!fs::is_directory(root, ec))
+    {
+      return out;
+    }
+    for (const auto &entry : fs::directory_iterator(root, ec))
+    {
+      if (!entry.is_directory(ec))
+      {
+        continue;
+      }
+      const std::string id = entry.path().filename().string();
+      if (!id.empty() && is_installed(id))
+      {
+        out.push_back(id);
+      }
+    }
+    std::sort(out.begin(), out.end());
+    return out;
   }
 
   std::string wrap_script(const std::string &server, const std::string &body)

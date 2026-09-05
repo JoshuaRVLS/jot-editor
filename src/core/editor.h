@@ -259,6 +259,16 @@ private:
   void reload_tree_sitter();
   void poll_tree_sitter_installs();
   bool handle_tree_sitter_status_input(int ch);
+  void show_lsp_status();
+  void render_lsp_status_modal();
+  bool handle_lsp_status_input(int ch);
+  // Live diagnostic totals for one attached language, summed over open buffers
+  // (severity 1=Error 2=Warning 3=Info 4=Hint).
+  void lsp_server_diagnostic_counts(const std::string &language,
+                                    int *errors,
+                                    int *warnings,
+                                    int *infos,
+                                    int *hints) const;
   bool handle_quick_pick_input(int ch);
   void open_quick_pick(QuickPickKind kind,
                        const std::string &title,

@@ -2,6 +2,7 @@
 #define LSP_INSTALL_H
 
 #include <string>
+#include <vector>
 
 namespace LspInstall
 {
@@ -24,6 +25,8 @@ namespace LspInstall
   std::string resolve_managed_bin(const std::string &bin_name);
   // True when the package dir carries a receipt (a completed install).
   bool is_installed(const std::string &id);
+  // Ids of every server with a receipt under the install root, sorted.
+  std::vector<std::string> installed_ids();
   // Wraps a raw install/remove script body with the start/success/failed
   // marker protocol and returns the full shell command line to run.
   std::string wrap_script(const std::string &server, const std::string &body);

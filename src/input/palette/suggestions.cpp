@@ -130,6 +130,7 @@ namespace
         {"goto", "Navigation", "Go to line[:column]", 75},
         {"lspinstall", "LSP", "Install a language server", 75},
         {"lspremove", "LSP", "Remove a language server", 75},
+        {"lspstatus", "LSP", "Show language server status", 75},
         {"hover", "LSP", "Show hover information", 68},
         {"lsphover", "LSP", "Show hover information", 64},
         {"definition", "LSP", "Go to definition", 72},

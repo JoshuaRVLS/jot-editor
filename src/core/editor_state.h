@@ -101,6 +101,7 @@ struct EditorState
   bool lua_ui_prev_save_prompt = false;
   bool lua_ui_prev_quit_prompt = false;
   bool lua_ui_prev_tree_sitter_status = false;
+  bool lua_ui_prev_lsp_status = false;
   bool lua_ui_prev_telescope = false;
   bool lua_ui_prev_lsp_completion = false;
   bool lua_ui_prev_context_menu = false;
@@ -160,6 +161,9 @@ struct EditorState
   bool show_tree_sitter_status_modal;
   int tree_sitter_status_scroll;
   std::vector<TreeSitterInstallJob> tree_sitter_install_jobs;
+
+  bool show_lsp_status_modal;
+  int lsp_status_scroll;
 
   EventLoop event_loop_;
   std::unique_ptr<TaskQueue> task_queue_;

@@ -657,8 +657,9 @@ void Editor::handle_terminal_event(const Event &ev)
       const bool modal_open =
           lsp_completion_visible || (popup.visible && popup.presentation == POPUP_MODAL)
                               || show_menu_bar_dropdown || show_context_menu
-                              || show_tree_sitter_status_modal || show_command_palette
-                              || show_search || telescope.is_active() || show_quick_pick;
+                              || show_tree_sitter_status_modal || show_lsp_status_modal
+                              || show_command_palette || show_search || telescope.is_active()
+                              || show_quick_pick;
       if (modal_open)
       {
         return;
@@ -702,6 +703,10 @@ void Editor::handle_terminal_event(const Event &ev)
     else if (show_tree_sitter_status_modal)
     {
       handle_tree_sitter_status_input(ch);
+    }
+    else if (show_lsp_status_modal)
+    {
+      handle_lsp_status_input(ch);
     }
     else if (show_command_palette)
     {
