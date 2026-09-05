@@ -31,6 +31,39 @@ variables), `jot.diagnostics.get`, `jot.marks.*` (named marks),
 (custom status bar segments). `BufChange` autocmd callbacks now receive the
 editing buffer's `buffer`, `line`, and `column` fields.
 
+### Keymap groups (which-key helper)
+
+`register_keymap` keys may be multi-chord **sequences** written with spaces;
+pressing the prefix chord automatically pops up a which-key style helper above
+the status line listing the possible next keys:
+
+```lua
+register_keymap("Ctrl+T N", function() jot.file.new() end, "New file")
+register_keymap("Ctrl+T D", function() jot.file.close() end, "Close file")
+-- Subgroups nest: Ctrl+T then W then L runs this.
+register_keymap("Ctrl+T W L", function() show_message("layout!") end, "Toggle layout")
+-- Optional: give the group a title with a bare keymap carrying only a detail.
+register_keymap("Ctrl+T", "", "Tabs")
+```
+
+Press `Ctrl+T`: since it prefixes longer bindings, the helper opens above the
+status line with `N — New file`, `D — Close file`, and `W ▸` (a subgroup).
+Pressing the next chord runs the action (`N`/`D`) or descends (`W`, then `L`).
+`Esc` closes, `Backspace` steps back up a level, and arrow keys move a
+selection that `Enter` runs.
+
+Rules:
+
+- Single-chord keymaps behave exactly as before: a chord that *is* a binding
+  runs instantly — the helper only appears when the chord is a prefix of
+  longer sequences.
+- A bare keymap with an action wins over using the same chord as a group
+  prefix (registering `"Ctrl+T"` with a callback shadows a `"Ctrl+T …"`
+  group). To label a group instead, register the bare key with no callback,
+  only a detail, as above.
+- The helper is shown/used in the editor and applies to `global`- and
+  `editor`-mode keymaps.
+
 Callbacks receive a string. Autocmd callbacks receive `event\nfile\nbuffer`.
 Picker and panel callbacks return a Lua array of strings.
 

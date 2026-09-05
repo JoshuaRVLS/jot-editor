@@ -522,21 +522,132 @@ bool LuaAPI::run_plugin_command(const std::string &n, const std::string &a)
 bool LuaAPI::run_plugin_keymap(const std::string &k, const std::string &m)
 {
   for (auto &x : plugin_keymaps)
-    if (x.key == key_name(k) && (x.mode == "global" || x.mode == m))
+  {
+    if (x.key != key_name(k) || (x.mode != "global" && x.mode != m))
+      continue;
+    // A keymap registered with neither a callback nor a command has no
+    // action (e.g. a which-key group header carrying only a detail/title):
+    // it must not consume the keystroke, or the group it labels would never
+    // open. Keep scanning so a real action on the same key still wins.
+    if (x.callback.empty() && x.command.empty())
+      continue;
+    if (!x.command.empty() && editor)
     {
-      if (!x.command.empty() && editor)
-      {
-        if (!x.command.empty() && x.command[0] == ':')
-          editor->execute_ex_command(x.command);
-        else if (editor->host_api)
-          editor->host_api->io.execute_command(x.command);
-      }
-      else
-        call_callback_string(x.callback, "");
-      return true;
+      if (x.command[0] == ':')
+        editor->execute_ex_command(x.command);
+      else if (editor->host_api)
+        editor->host_api->io.execute_command(x.command);
     }
+    else
+      call_callback_string(x.callback, "");
+    return true;
+  }
   return false;
 }
+
+namespace
+{
+  // Splits a canonical keymap key into its chord steps, e.g.
+  // "Ctrl+T N" -> {"Ctrl+T", "N"}. Keys without a space are a single step.
+  std::vector<std::string> keymap_steps(const std::string &key)
+  {
+    std::vector<std::string> steps;
+    size_t start = 0;
+    while (start <= key.size())
+    {
+      const size_t sp = key.find(' ', start);
+      const size_t end = (sp == std::string::npos) ? key.size() : sp;
+      if (end > start)
+      {
+        steps.push_back(key.substr(start, end - start));
+      }
+      start = end + 1;
+    }
+    return steps;
+  }
+} // namespace
+
+bool LuaAPI::plugin_keymap_is_prefix(const std::string &chord, const std::string &m)
+{
+  const auto prefix = keymap_steps(chord);
+  if (prefix.empty())
+    return false;
+  for (const auto &x : plugin_keymaps)
+  {
+    if (x.mode != "global" && x.mode != m)
+      continue;
+    const auto steps = keymap_steps(x.key);
+    if (steps.size() <= prefix.size())
+      continue;
+    bool match = true;
+    for (size_t i = 0; i < prefix.size(); i++)
+    {
+      if (steps[i] != prefix[i])
+      {
+        match = false;
+        break;
+      }
+    }
+    if (match)
+      return true;
+  }
+  return false;
+}
+
+std::vector<PluginKeymapChild>
+LuaAPI::plugin_keymap_children(const std::string &chord_path, const std::string &m)
+{
+  const auto prefix = keymap_steps(chord_path);
+  std::vector<PluginKeymapChild> out;
+  for (const auto &x : plugin_keymaps)
+  {
+    if (x.mode != "global" && x.mode != m)
+      continue;
+    const auto steps = keymap_steps(x.key);
+    if (steps.size() <= prefix.size())
+      continue;
+    bool match = true;
+    for (size_t i = 0; i < prefix.size(); i++)
+    {
+      if (steps[i] != prefix[i])
+      {
+        match = false;
+        break;
+      }
+    }
+    if (!match)
+      continue;
+    const std::string &next = steps[prefix.size()];
+    const bool deeper = steps.size() > prefix.size() + 1;
+    auto it = std::find_if(out.begin(), out.end(), [&next](const PluginKeymapChild &c)
+                           { return c.key == next; });
+    if (it != out.end())
+    {
+      it->group = it->group || deeper;
+    }
+    else
+    {
+      out.push_back({next, x.detail, deeper});
+    }
+  }
+  std::sort(out.begin(), out.end(),
+            [](const PluginKeymapChild &a, const PluginKeymapChild &b)
+            { return a.key < b.key; });
+  return out;
+}
+
+std::string LuaAPI::plugin_keymap_group_title(const std::string &chord, const std::string &m)
+{
+  for (const auto &x : plugin_keymaps)
+  {
+    if (x.mode != "global" && x.mode != m)
+      continue;
+    if (keymap_steps(x.key).size() == 1 && x.key == chord && !x.detail.empty())
+      return x.detail;
+  }
+  return "";
+}
+
 bool LuaAPI::is_rapid_autocmd(const std::string &event)
 {
   // Events that can fire many times within a single event-loop drain (once

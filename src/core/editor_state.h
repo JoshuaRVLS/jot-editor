@@ -80,6 +80,16 @@ struct EditorState
   std::string save_prompt_input;
   bool show_quit_prompt;
 
+  // Which-key style keybind helper. It appears automatically when the user
+  // presses a chord that is a prefix of longer plugin keymap sequences (e.g.
+  // "Ctrl+T" when "Ctrl+T N" / "Ctrl+T D" exist) and lists the next chord
+  // options above the status line. which_key_path holds the canonical chords
+  // pressed so far (e.g. {"Ctrl+T", "N"}) — never empty while open.
+  bool show_which_key = false;
+  std::vector<std::string> which_key_path;
+  int which_key_selected = 0;
+  std::vector<std::string> which_key_prev_paths; // breadcrumbs for Backspace
+
   // Lua UI surface close-tracking: remembered visibility from the previous
   // frame so render() can notify handlers (fn(nil)) when a surface closes.
   bool lua_ui_prev_command_palette = false;

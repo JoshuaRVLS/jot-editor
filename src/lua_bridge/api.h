@@ -398,6 +398,16 @@ struct PluginKeymap
   std::string mode;
 };
 
+// One row of the which-key helper: a possible next chord under the current
+// prefix. `group` is true when pressing the key descends into another level
+// instead of running an action.
+struct PluginKeymapChild
+{
+  std::string key;
+  std::string detail;
+  bool group;
+};
+
 struct PluginAutocmd
 {
   std::string event;
@@ -683,6 +693,15 @@ public:
   void load_config_file();
   bool run_plugin_command(const std::string &name, const std::string &arg);
   bool run_plugin_keymap(const std::string &key, const std::string &mode = "global");
+  // Whether any keymap sequence ("Ctrl+T N") starts with the given chord
+  // ("Ctrl+T") — i.e. pressing the chord should reveal the which-key helper.
+  bool plugin_keymap_is_prefix(const std::string &chord, const std::string &mode);
+  // Rows shown by the helper under a prefix path (chords joined with a space,
+  // e.g. "Ctrl+T" or "Ctrl+T N").
+  std::vector<PluginKeymapChild>
+  plugin_keymap_children(const std::string &chord_path, const std::string &mode);
+  // Optional title for a group: the detail registered on the bare prefix key.
+  std::string plugin_keymap_group_title(const std::string &chord, const std::string &mode);
   void fire_autocmd(const std::string &event, const std::string &filepath = "", int buffer = -1);
   // Delivers coalesced rapid autocmds (BufChange, CursorMoved) to Lua; the
   // event loop calls this once per drain, just before a frame renders.

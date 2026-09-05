@@ -16,6 +16,7 @@ add_executable(jot_tests
   test_ui_text.cpp
   test_lua_float.cpp
   test_lua_hover_ui.cpp
+  test_lua_keybind_helper.cpp
   test_lua_ui_kit.cpp
   test_lua_ui_telescope_alignment.cpp
   test_tree_sitter_lua.cpp

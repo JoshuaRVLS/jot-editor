@@ -690,6 +690,18 @@ void Editor::handle_terminal_event(const Event &ev)
     }
     else
     {
+      if (lua_api && show_which_key)
+      {
+        // A multi-chord keymap group is active: the pressed key picks the next
+        // chord. handle_which_key_input returns false (after closing the
+        // helper) when the key is not a valid next step, so it falls through
+        // to normal plugin/built-in handling below (e.g. types text).
+        if (handle_which_key_input(ch, is_ctrl, is_shift, is_alt, original_ch))
+        {
+          needs_redraw = true;
+          return;
+        }
+      }
       if (lua_api)
       {
         auto candidates = plugin_key_candidates(ch, is_ctrl, is_shift, is_alt, original_ch);
@@ -698,6 +710,14 @@ void Editor::handle_terminal_event(const Event &ev)
         {
           if (lua_api->run_plugin_keymap(candidate, "editor"))
           {
+            needs_redraw = true;
+            return;
+          }
+          // Pressing a chord that is a prefix of longer keymap sequences
+          // (e.g. "Ctrl+T" for "Ctrl+T N") reveals the which-key helper.
+          if (lua_api->plugin_keymap_is_prefix(candidate, "editor"))
+          {
+            open_which_key(candidate);
             needs_redraw = true;
             return;
           }
@@ -712,6 +732,12 @@ void Editor::handle_terminal_event(const Event &ev)
   {
     int button = ev.mouse.button;
     bool is_wheel = (button >= 64 && button <= 67);
+
+    // A click outside the helper dismisses it (like Esc).
+    if (show_which_key && ev.mouse.pressed && button != 64 && button != 65)
+    {
+      close_which_key();
+    }
 
     if (lua_api
         && lua_api->float_mouse(ev.mouse.x,
@@ -1044,4 +1070,123 @@ void Editor::run()
 #ifndef _WIN32
   fcntl(stdin_fd, F_SETFL, stdin_flags);
 #endif
+}
+
+void Editor::open_which_key(const std::string &chord)
+{
+  if (!lua_api || chord.empty())
+  {
+    return;
+  }
+  which_key_path = {chord};
+  which_key_selected = 0;
+  show_which_key = true;
+}
+
+void Editor::close_which_key()
+{
+  show_which_key = false;
+  which_key_path.clear();
+  which_key_selected = 0;
+}
+
+bool Editor::handle_which_key_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int original_ch)
+{
+  (void)is_ctrl;
+  (void)is_shift;
+  (void)is_alt;
+  if (!show_which_key || !lua_api || which_key_path.empty())
+  {
+    close_which_key();
+    return true;
+  }
+
+  if (ch == 27)
+  {
+    close_which_key();
+    return true;
+  }
+  // Backspace steps up a level; at the top level it closes the helper.
+  if (ch == 8 || ch == 127)
+  {
+    if (which_key_path.size() > 1)
+    {
+      which_key_path.pop_back();
+      which_key_selected = 0;
+    }
+    else
+    {
+      close_which_key();
+    }
+    return true;
+  }
+
+  // Recompute the rows for the current path every key so newly registered
+  // keymaps show up immediately (configs can add keymaps from within a
+  // keymap action).
+  std::string path;
+  for (size_t i = 0; i < which_key_path.size(); i++)
+  {
+    if (i > 0)
+    {
+      path += ' ';
+    }
+    path += which_key_path[i];
+  }
+  auto children = lua_api->plugin_keymap_children(path, "editor");
+  if (children.empty())
+  {
+    close_which_key();
+    return true;
+  }
+
+  if (ch == 1008)
+  { // Up
+    which_key_selected = std::max(0, which_key_selected - 1);
+    return true;
+  }
+  if (ch == 1009)
+  { // Down
+    which_key_selected = std::min((int)children.size() - 1, which_key_selected + 1);
+    return true;
+  }
+
+  auto pick = [&](const PluginKeymapChild &child) -> bool
+  {
+    const std::string next_path = path + " " + child.key;
+    const bool deeper = !lua_api->plugin_keymap_children(next_path, "editor").empty();
+    if (deeper)
+    {
+      which_key_path.push_back(child.key);
+      which_key_selected = 0;
+      return true;
+    }
+    close_which_key();
+    lua_api->run_plugin_keymap(next_path, "editor");
+    return true;
+  };
+
+  auto candidates = plugin_key_candidates(ch, is_ctrl, is_shift, is_alt, original_ch);
+  for (const auto &candidate : candidates)
+  {
+    for (const auto &child : children)
+    {
+      if (child.key == candidate)
+      {
+        return pick(child);
+      }
+    }
+  }
+
+  // Enter runs the currently highlighted row.
+  if (ch == '\n' || ch == 13)
+  {
+    const int sel = std::clamp(which_key_selected, 0, (int)children.size() - 1);
+    return pick(children[(size_t)sel]);
+  }
+
+  // Unmatched key: dismiss the helper and let the normal editor path handle
+  // the key (plugin/built-in chord or plain text insertion).
+  close_which_key();
+  return false;
 }

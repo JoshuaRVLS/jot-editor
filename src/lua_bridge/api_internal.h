@@ -73,10 +73,23 @@ namespace jot_lua
 
   inline std::string key_name(const std::string &s)
   {
+    // Canonical chord form: "Ctrl+T", "Alt+Shift+P", ... Multi-key sequences
+    // are written as space-separated chords ("Ctrl+T N") and keep a single
+    // space between steps; stray padding is trimmed/collapsed.
     std::string out;
+    bool last_was_space = true;
     for (char c : s)
-      if (!std::isspace((unsigned char)c))
-        out += c;
+    {
+      if (std::isspace((unsigned char)c))
+      {
+        last_was_space = true;
+        continue;
+      }
+      if (last_was_space && !out.empty())
+        out += ' ';
+      out += c;
+      last_was_space = false;
+    }
     return out;
   }
 

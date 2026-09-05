@@ -50,6 +50,24 @@ jot.marks        set, get, jump, del, list
 jot.status       register, unregister
 ```
 
+### Keymap groups (which-key)
+
+`register_keymap` (and `jot.keymap.set`) accepts **multi-chord sequences**:
+write the chords space-separated, and pressing the prefix automatically opens
+a which-key helper above the status line that lists the next options. Run an
+action by pressing its next chord; subgroups nest (`"Ctrl+T W L"` →
+`Ctrl+T`, then `W`, then `L`). `Esc` closes, `Backspace` goes up a level.
+
+```lua
+register_keymap("Ctrl+T N", function() jot.file.new() end, "New file")
+register_keymap("Ctrl+T D", function() jot.file.close() end, "Close file")
+register_keymap("Ctrl+T", "", "Tabs") -- bare key + detail only = group title
+```
+
+Single-chord bindings run instantly and are unchanged; a chord only opens the
+helper when it prefixes a longer sequence. A bare keymap that has a callback
+wins over using the same chord as a group prefix.
+
 ## Runtime Actions
 
 Action namespaces call the same command registry used by the editor. They are

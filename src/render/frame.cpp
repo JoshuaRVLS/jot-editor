@@ -323,6 +323,7 @@ void Editor::render()
     render_status_line();
     render_command_palette();
     render_quick_pick();
+    render_which_key_panel();
     render_search_panel();
     render_tree_sitter_status_modal();
     render_context_menu();
