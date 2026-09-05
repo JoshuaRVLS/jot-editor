@@ -17,29 +17,6 @@ namespace fs = std::filesystem;
 
 namespace
 {
-  struct LspServerSpec
-  {
-    const char *id;
-    const char *label;
-    const char *detail;
-    bool managed;
-  };
-
-  const std::vector<LspServerSpec> &lsp_server_specs()
-  {
-    static const std::vector<LspServerSpec> specs = {
-        {"python", "Python", "pylsp", true},
-        {"typescript", "TypeScript", "JS, JSX, TS, TSX", true},
-        {"cpp", "C / C++", "clangd - package manager", false},
-        {"rust", "Rust", "rust-analyzer - package manager", false},
-        {"go", "Go", "gopls - package manager", false},
-        {"lua", "Lua", "lua-language-server - package manager", false},
-        {"bash", "Bash", "bash-language-server", true},
-        {"html", "HTML", "vscode-html-language-server", true},
-    };
-    return specs;
-  }
-
   std::string to_lower_copy(std::string s)
   {
     std::transform(
@@ -82,6 +59,24 @@ namespace
       return "bash";
     if (ends_with(lower, ".html") || ends_with(lower, ".htm"))
       return "html";
+    if (lower.size() >= 5 && lower.substr(lower.size() - 5) == ".json")
+      return "json";
+    if (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".css")
+      return "css";
+    if (lower.size() >= 5 && lower.substr(lower.size() - 5) == ".yaml")
+      return "yaml";
+    if (ends_with(lower, ".yml"))
+      return "yaml";
+    if (lower.size() >= 11 && lower.substr(lower.size() - 11) == ".dockerfile")
+      return "dockerfile";
+    if (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".vue")
+      return "vue";
+    if (lower.size() >= 3 && lower.substr(lower.size() - 3) == ".md")
+      return "markdown";
+    if (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".sql")
+      return "sql";
+    if (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".php")
+      return "php";
     return "";
   }
 
@@ -150,6 +145,10 @@ namespace
     return ec ? "." : current.string();
   }
 
+  // Defined later in this namespace (near the managed-bin helpers).
+  std::string resolve_lsp_bin(const std::string &bin);
+  std::string lsp_server_usage_hint(LuaAPI *api);
+
   std::vector<std::string> command_for_language(const std::string &language)
   {
     if (language == "python")
@@ -175,35 +174,66 @@ namespace
         }
       }
 #endif
-      return {"pylsp"};
+      return {resolve_lsp_bin("pylsp")};
+    }
+    if (language == "pyright")
+    {
+      return {resolve_lsp_bin("pyright-langserver"), "--stdio"};
     }
     if (language == "typescript")
     {
-      return {"typescript-language-server", "--stdio"};
+      return {resolve_lsp_bin("typescript-language-server"), "--stdio"};
     }
     if (language == "cpp")
     {
-      return {"clangd"};
+      return {resolve_lsp_bin("clangd")};
     }
     if (language == "rust")
     {
-      return {"rust-analyzer"};
+      return {resolve_lsp_bin("rust-analyzer")};
     }
     if (language == "go")
     {
-      return {"gopls"};
+      return {resolve_lsp_bin("gopls")};
     }
     if (language == "lua")
     {
-      return {"lua-language-server"};
+      return {resolve_lsp_bin("lua-language-server")};
     }
     if (language == "bash")
     {
-      return {"bash-language-server", "start"};
+      return {resolve_lsp_bin("bash-language-server"), "start"};
     }
-    if (language == "html")
+    if (language == "html" || language == "json" || language == "css")
     {
-      return {"vscode-html-language-server", "--stdio"};
+      const char *bin = language == "html"    ? "vscode-html-language-server"
+                        : language == "json"  ? "vscode-json-language-server"
+                                               : "vscode-css-language-server";
+      return {resolve_lsp_bin(bin), "--stdio"};
+    }
+    if (language == "yaml")
+    {
+      return {resolve_lsp_bin("yaml-language-server"), "--stdio"};
+    }
+    if (language == "dockerfile")
+    {
+      return {resolve_lsp_bin("docker-langserver"), "--stdio"};
+    }
+    if (language == "vue")
+    {
+      return {resolve_lsp_bin("vue-language-server"), "--stdio"};
+    }
+    if (language == "markdown")
+    {
+      return {resolve_lsp_bin("markdown-language-server"), "--stdio"};
+    }
+    if (language == "sql")
+    {
+      return {resolve_lsp_bin("sql-language-server"), "up", "--method", "stream"};
+    }
+    if (language == "php")
+    {
+      return {resolve_lsp_bin("intelephense"), "--stdio"};
     }
     return {};
   }
@@ -676,120 +706,32 @@ namespace
     return {x, y};
   }
 
-  bool command_exists(const std::string &name)
+  // "id1|id2|..." hint for the unknown-server message, from the Lua registry.
+  std::string lsp_server_usage_hint(LuaAPI *api)
   {
-    if (name.empty())
+    std::vector<LspServerSpec> servers;
+    if (api)
     {
-      return false;
+      api->lsp_install_list(&servers);
     }
-#ifdef _WIN32
-    std::string cmd = "where " + name + " >NUL 2>NUL";
-#else
-    std::string cmd = "command -v " + name + " >/dev/null 2>&1";
-#endif
-    return std::system(cmd.c_str()) == 0;
+    std::string out;
+    for (const auto &spec : servers)
+    {
+      if (!out.empty())
+      {
+        out += "|";
+      }
+      out += spec.id;
+    }
+    return out.empty() ? "see :help lspinstall" : out;
   }
 
-  std::string normalize_lsp_server_name(const std::string &raw)
+  // Full path to a binary the installer manages (installed under
+  // <data>/lsp/bin), or the bare name so PATH is consulted.
+  std::string resolve_lsp_bin(const std::string &bin)
   {
-    std::string n = to_lower_copy(raw);
-    if (n == "py" || n == "pylsp")
-    {
-      return "python";
-    }
-    if (n == "ts" || n == "js" || n == "javascript" || n == "jsx" || n == "tsx"
-        || n == "typescript-language-server")
-    {
-      return "typescript";
-    }
-    if (n == "c" || n == "c++" || n == "clangd")
-    {
-      return "cpp";
-    }
-    if (n == "rs" || n == "rust" || n == "rust-analyzer")
-    {
-      return "rust";
-    }
-    if (n == "golang" || n == "go" || n == "gopls")
-    {
-      return "go";
-    }
-    if (n == "lua" || n == "lua_ls" || n == "lua-language-server")
-    {
-      return "lua";
-    }
-    if (n == "sh" || n == "shell" || n == "bash" || n == "bashls" || n == "bash-language-server")
-    {
-      return "bash";
-    }
-    if (n == "python" || n == "typescript" || n == "cpp" || n == "rust" || n == "go" || n == "lua"
-        || n == "bash")
-    {
-      return n;
-    }
-    if (n == "html" || n == "htm" || n == "vscode-html-language-server")
-    {
-      return "html";
-    }
-    return "";
-  }
-
-  bool is_lsp_server_installed(const std::string &server)
-  {
-    if (server == "python")
-    {
-#ifdef _WIN32
-      const char *app_data = std::getenv("APPDATA");
-      if (app_data)
-      {
-        fs::path local = fs::path(app_data) / "jot" / "venv" / "Scripts" / "pylsp.exe";
-        if (fs::exists(local))
-        {
-          return true;
-        }
-      }
-#else
-      const char *home = std::getenv("HOME");
-      if (home)
-      {
-        fs::path local = fs::path(home) / ".config" / "jot" / "venv" / "bin" / "pylsp";
-        if (fs::exists(local))
-        {
-          return true;
-        }
-      }
-#endif
-      return command_exists("pylsp");
-    }
-    if (server == "typescript")
-    {
-      return command_exists("typescript-language-server");
-    }
-    if (server == "cpp")
-    {
-      return command_exists("clangd");
-    }
-    if (server == "rust")
-    {
-      return command_exists("rust-analyzer");
-    }
-    if (server == "go")
-    {
-      return command_exists("gopls");
-    }
-    if (server == "lua")
-    {
-      return command_exists("lua-language-server");
-    }
-    if (server == "bash")
-    {
-      return command_exists("bash-language-server");
-    }
-    if (server == "html")
-    {
-      return command_exists("vscode-html-language-server");
-    }
-    return false;
+    const std::string managed = LspInstall::resolve_managed_bin(bin);
+    return managed.empty() ? bin : managed;
   }
 
   bool is_html_filepath(const std::string &filepath)
@@ -1095,10 +1037,8 @@ void Editor::poll_lsp_installs()
       changed = true;
     }
   }
-  if (changed || show_lsp_manager_modal)
+  if (changed)
   {
-    if (show_lsp_manager_modal)
-      refresh_lsp_manager();
     needs_redraw = true;
   }
 }
@@ -1397,56 +1337,6 @@ void Editor::restart_all_lsp_clients()
   set_message("LSP restarted: " + std::to_string(restarted) + " client(s)");
 }
 
-void Editor::show_lsp_manager()
-{
-  close_context_menu();
-  hide_popup();
-  show_lsp_manager_modal = true;
-  lsp_manager_selected = 0;
-  lsp_manager_scroll = 0;
-  lsp_manager_action_selected = 0;
-  refresh_lsp_manager();
-  needs_redraw = true;
-}
-
-void Editor::refresh_lsp_manager()
-{
-  lsp_manager_rows.clear();
-  for (const auto &spec : lsp_server_specs())
-  {
-    LspManagerRow row;
-    row.server = spec.id;
-    row.label = spec.label;
-    row.detail = spec.detail;
-    row.installed = is_lsp_server_installed(row.server);
-    row.enabled = !lsp_disabled_servers.count(row.server);
-    row.managed = spec.managed;
-    for (const auto &job : lsp_install_jobs)
-    {
-      if (job.server == row.server && job.running)
-      {
-        row.busy = true;
-        row.detail = job.progress;
-      }
-    }
-    int active = 0;
-    for (const auto &client : lsp_clients)
-    {
-      if (client && client->get_language() == row.server && client->is_running())
-      {
-        active++;
-      }
-    }
-    if (active > 0 && !row.busy)
-    {
-      row.detail += " - " + std::to_string(active) + " active";
-    }
-    lsp_manager_rows.push_back(std::move(row));
-  }
-  lsp_manager_selected =
-      std::clamp(lsp_manager_selected, 0, std::max(0, (int)lsp_manager_rows.size() - 1));
-}
-
 void Editor::set_lsp_server_enabled(const std::string &server, bool enabled)
 {
   if (enabled)
@@ -1479,165 +1369,31 @@ void Editor::set_lsp_server_enabled(const std::string &server, bool enabled)
     }
     invalidate_sidebar_diagnostics_cache();
   }
-  refresh_lsp_manager();
   save_workspace_session();
   needs_redraw = true;
 }
 
-void Editor::activate_lsp_manager_action(const std::string &server, const std::string &action)
+std::string Editor::lsp_install_usage_hint() const
 {
-  if (action == "enable")
-  {
-    set_lsp_server_enabled(server, true);
-  }
-  else if (action == "disable")
-  {
-    set_lsp_server_enabled(server, false);
-  }
-  else if (action == "install" || action == "update")
-  {
-    install_lsp_server(server);
-  }
-  else if (action == "remove")
-  {
-    remove_lsp_server(server);
-  }
-  else if (action == "terminal")
-  {
-    for (const auto &job : lsp_install_jobs)
-    {
-      if (job.server == server && job.running && job.terminal_index >= 0)
-      {
-        show_integrated_terminal = true;
-        activate_integrated_terminal(job.terminal_index, false);
-        break;
-      }
-    }
-  }
-  refresh_lsp_manager();
-  needs_redraw = true;
-}
-
-bool Editor::handle_lsp_manager_input(int ch)
-{
-  if (!show_lsp_manager_modal)
-    return false;
-  if (ch == 27 || ch == 'q' || ch == 'Q')
-  {
-    show_lsp_manager_modal = false;
-    needs_redraw = true;
-    return true;
-  }
-  if (ch == 1008 || ch == 'k' || ch == 'K')
-  {
-    lsp_manager_selected = std::max(0, lsp_manager_selected - 1);
-    lsp_manager_action_selected = 0;
-  }
-  else if (ch == 1009 || ch == 'j' || ch == 'J')
-  {
-    lsp_manager_selected =
-        std::min(std::max(0, (int)lsp_manager_rows.size() - 1), lsp_manager_selected + 1);
-    lsp_manager_action_selected = 0;
-  }
-  else if (ch == '\t')
-  {
-    lsp_manager_action_selected = (lsp_manager_action_selected + 1) % 3;
-  }
-  else if (lsp_manager_rows.empty())
-  {
-    return true;
-  }
-  else
-  {
-    const auto &row = lsp_manager_rows[lsp_manager_selected];
-    if (ch == 'e' || ch == 'E')
-    {
-      activate_lsp_manager_action(row.server, row.enabled ? "disable" : "enable");
-      return true;
-    }
-    if (ch == '\n' || ch == 13)
-    {
-      if (row.busy)
-      {
-        activate_lsp_manager_action(row.server, "terminal");
-      }
-      else if (!row.enabled)
-      {
-        activate_lsp_manager_action(row.server, "enable");
-      }
-      else if (lsp_manager_action_selected == 1 && row.installed && row.managed)
-      {
-        activate_lsp_manager_action(row.server, "remove");
-      }
-      else if (lsp_manager_action_selected == 2 && row.installed)
-      {
-        activate_lsp_manager_action(row.server, "disable");
-      }
-      else if (row.managed)
-      {
-        activate_lsp_manager_action(row.server, row.installed ? "update" : "install");
-      }
-      else
-      {
-        set_message(row.label + " requires your package manager");
-      }
-      return true;
-    }
-  }
-  needs_redraw = true;
-  return true;
-}
-
-bool Editor::handle_lsp_manager_mouse(
-    int x, int y, bool is_click, bool is_scroll_up, bool is_scroll_down)
-{
-  if (!show_lsp_manager_modal)
-    return false;
-  if (is_scroll_up || is_scroll_down)
-  {
-    lsp_manager_scroll = std::max(0, lsp_manager_scroll + (is_scroll_down ? 3 : -3));
-    needs_redraw = true;
-    return true;
-  }
-  if (!is_click)
-    return true;
-
-  const bool inside = x >= lsp_manager_x && x < lsp_manager_x + lsp_manager_w && y >= lsp_manager_y
-                      && y < lsp_manager_y + lsp_manager_h;
-  if (!inside)
-  {
-    show_lsp_manager_modal = false;
-    needs_redraw = true;
-    return true;
-  }
-  const int index = lsp_manager_scroll + (y - lsp_manager_y - 1);
-  if (index < 0 || index >= (int)lsp_manager_rows.size())
-    return true;
-  lsp_manager_selected = index;
-  const auto &row = lsp_manager_rows[index];
-  for (const auto &button : lsp_manager_buttons)
-  {
-    if (button.server != row.server)
-      continue;
-    const bool hit =
-        x >= button.x && x < button.x + button.w && y >= button.y && y < button.y + button.h;
-    if (hit)
-    {
-      activate_lsp_manager_action(button.server, button.action);
-      return true;
-    }
-  }
-  needs_redraw = true;
-  return true;
+  return lsp_server_usage_hint(lua_api);
 }
 
 bool Editor::install_lsp_server(const std::string &name)
 {
-  const std::string server = normalize_lsp_server_name(name);
-  if (server.empty())
+  // The Lua installer registry owns server resolution (ids + aliases) and
+  // the per-manager install scripts; the native side only reports progress
+  // through the background-job poll loop.
+  std::string server, script, message;
+  const bool known = lua_api && lua_api->lsp_install_plan(name, &server, &script, &message);
+  if (!known || server.empty())
   {
-    set_message("Unknown LSP server: " + name
-                + " (use python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html)");
+    set_message("Unknown LSP server: " + name + " (use " + lsp_server_usage_hint(lua_api) + ")");
+    return false;
+  }
+  if (script.empty())
+  {
+    set_message(message);
+    needs_redraw = true;
     return false;
   }
 
@@ -1658,34 +1414,6 @@ bool Editor::install_lsp_server(const std::string &name)
                                         { return job.server == server && !job.running; }),
                          lsp_install_jobs.end());
 
-  if (server == "cpp")
-  {
-    set_message("Install clangd using your OS package manager");
-    return false;
-  }
-  else if (server == "rust")
-  {
-    set_message("Install rust-analyzer using install.sh or your OS package manager");
-    return false;
-  }
-  else if (server == "go")
-  {
-    set_message("Install gopls using install.sh or `go install ...`");
-    return false;
-  }
-  else if (server == "lua")
-  {
-    set_message("Install lua-language-server using install.sh or your OS package manager");
-    return false;
-  }
-
-  LspInstall::Command install = LspInstall::command_for_server(server);
-  if (!install.supported)
-  {
-    set_message("LSP install failed: " + server);
-    return false;
-  }
-
   LspInstallJob job;
   job.server = server;
   job.removing = false;
@@ -1695,13 +1423,13 @@ bool Editor::install_lsp_server(const std::string &name)
   // output streams into a log file and the poll loop reports progress.
   job.output_path = process_job::make_install_log_path("lsp-" + server);
 #ifndef _WIN32
-  job.pid =
-      process_job::spawn_background_shell(LspInstall::terminal_command(install), job.output_path);
+  job.pid = process_job::spawn_background_shell(LspInstall::wrap_script(server, script),
+                                                job.output_path);
 #endif
   if (job.pid >= 0)
   {
     lsp_install_jobs.push_back(std::move(job));
-    set_message(install.message);
+    set_message(message);
     needs_redraw = true;
     return true;
   }
@@ -1725,19 +1453,25 @@ bool Editor::install_lsp_server(const std::string &name)
   activate_integrated_terminal(terminal_index, false);
   job.terminal_index = terminal_index;
   lsp_install_jobs.push_back(std::move(job));
-  term->send_text(LspInstall::terminal_command(install) + "\r");
-  set_message(install.message + " (terminal " + std::to_string(terminal_index + 1) + ")");
+  term->send_text(LspInstall::wrap_script(server, script) + "\r");
+  set_message(message + " (terminal " + std::to_string(terminal_index + 1) + ")");
   needs_redraw = true;
   return true;
 }
 
 bool Editor::remove_lsp_server(const std::string &name)
 {
-  const std::string server = normalize_lsp_server_name(name);
-  if (server.empty())
+  std::string server, script, message;
+  const bool known = lua_api && lua_api->lsp_remove_plan(name, &server, &script, &message);
+  if (!known || server.empty())
   {
-    set_message("Unknown LSP server: " + name
-                + " (use python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html)");
+    set_message("Unknown LSP server: " + name + " (use " + lsp_server_usage_hint(lua_api) + ")");
+    return false;
+  }
+  if (script.empty())
+  {
+    set_message(message);
+    needs_redraw = true;
     return false;
   }
 
@@ -1758,13 +1492,6 @@ bool Editor::remove_lsp_server(const std::string &name)
                                         { return job.server == server && !job.running; }),
                          lsp_install_jobs.end());
 
-  LspInstall::Command remove = LspInstall::remove_command_for_server(server);
-  if (!remove.supported)
-  {
-    set_message("Remove " + server + " with your package manager");
-    return false;
-  }
-
   set_lsp_server_enabled(server, false);
 
   LspInstallJob job;
@@ -1775,13 +1502,13 @@ bool Editor::remove_lsp_server(const std::string &name)
   // Preferred path: a silent background job - no terminal panel opens.
   job.output_path = process_job::make_install_log_path("lsp-" + server);
 #ifndef _WIN32
-  job.pid =
-      process_job::spawn_background_shell(LspInstall::terminal_command(remove), job.output_path);
+  job.pid = process_job::spawn_background_shell(LspInstall::wrap_script(server, script),
+                                                job.output_path);
 #endif
   if (job.pid >= 0)
   {
     lsp_install_jobs.push_back(std::move(job));
-    set_message(remove.message);
+    set_message(message);
     needs_redraw = true;
     return true;
   }
@@ -1804,9 +1531,8 @@ bool Editor::remove_lsp_server(const std::string &name)
   activate_integrated_terminal(terminal_index, false);
   job.terminal_index = terminal_index;
   lsp_install_jobs.push_back(std::move(job));
-  term->send_text(LspInstall::terminal_command(remove) + "\r");
-  set_message(remove.message + " (terminal " + std::to_string(terminal_index + 1) + ")");
-  refresh_lsp_manager();
+  term->send_text(LspInstall::wrap_script(server, script) + "\r");
+  set_message(message + " (terminal " + std::to_string(terminal_index + 1) + ")");
   needs_redraw = true;
   return true;
 }

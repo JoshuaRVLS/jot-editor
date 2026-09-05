@@ -1,27 +1,15 @@
 #include "lsp/install.h"
 #include <catch2/catch_test_macros.hpp>
 
-TEST_CASE("LSP install command mapping", "[lsp]")
+TEST_CASE("LSP install wrapper emits lifecycle markers", "[lsp]")
 {
-  const auto python = LspInstall::command_for_server("python");
-  REQUIRE(python.supported);
-  REQUIRE(python.command.find("python-lsp-server") != std::string::npos);
-
-  const auto typescript = LspInstall::command_for_server("typescript");
-  REQUIRE(typescript.supported);
-  REQUIRE(typescript.command.find("typescript-language-server") != std::string::npos);
-
-  REQUIRE_FALSE(LspInstall::command_for_server("rust").supported);
-}
-
-TEST_CASE("LSP install terminal command emits lifecycle markers", "[lsp]")
-{
-  const auto install = LspInstall::command_for_server("bash");
-  const std::string command = LspInstall::terminal_command(install);
+  const std::string command = LspInstall::wrap_script("bash", "echo installing");
 
   REQUIRE(command.find("[jot:lsp] start bash") != std::string::npos);
   REQUIRE(command.find("[jot:lsp] success bash exit=%s") != std::string::npos);
   REQUIRE(command.find("[jot:lsp] failed bash exit=%s") != std::string::npos);
+  // Runs through the shell so the background-job poll loop can stream output.
+  REQUIRE(command.find("/bin/sh -lc") != std::string::npos);
 }
 
 TEST_CASE("LSP install marker parser reads terminal status", "[lsp]")
@@ -37,4 +25,19 @@ TEST_CASE("LSP install marker parser reads terminal status", "[lsp]")
   REQUIRE(marker.server == "html");
   REQUIRE(marker.exit_code == 23);
   REQUIRE_FALSE(LspInstall::parse_marker("no marker", marker));
+}
+
+TEST_CASE("LSP install platform tag is known", "[lsp]")
+{
+  const std::string tag = LspInstall::platform_tag();
+  REQUIRE((tag == "linux" || tag == "mac" || tag == "win"));
+}
+
+TEST_CASE("LSP managed-bin and receipt lookups are non-mutating", "[lsp]")
+{
+  // Nothing is installed in the test environment; both lookups must be false
+  // and must not create any state on disk.
+  REQUIRE(LspInstall::resolve_managed_bin("no-such-server-bin").empty());
+  REQUIRE_FALSE(LspInstall::is_installed(""));
+  REQUIRE_FALSE(LspInstall::is_installed("no-such-server"));
 }

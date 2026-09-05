@@ -2,6 +2,9 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 namespace
 {
@@ -39,81 +42,81 @@ namespace
     return value.substr(start, end - start);
   }
 
+  fs::path data_root()
+  {
+#ifdef _WIN32
+    const char *local = getenv("LOCALAPPDATA");
+    if (local && *local)
+      return fs::path(local) / "jot" / "lsp";
+    const char *app_data = getenv("APPDATA");
+    if (app_data && *app_data)
+      return fs::path(app_data) / "jot" / "lsp";
+    const char *home = getenv("USERPROFILE");
+#else
+    const char *xdg = getenv("XDG_DATA_HOME");
+    if (xdg && *xdg)
+      return fs::path(xdg) / "jot" / "lsp";
+    const char *home = getenv("HOME");
+#endif
+    return home ? fs::path(home) / ".local" / "share" / "jot" / "lsp" : fs::path();
+  }
+
 } // namespace
 
 namespace LspInstall
 {
 
-  Command command_for_server(const std::string &server)
+  std::string install_root()
   {
-    Command install;
-    install.server = server;
-    if (server == "python")
-    {
-      install.command = "python3 -m pip install --user -U python-lsp-server";
-    }
-    else if (server == "typescript")
-    {
-      install.command = "npm install -g typescript typescript-language-server";
-    }
-    else if (server == "bash")
-    {
-      install.command = "npm install -g bash-language-server";
-    }
-    else if (server == "html")
-    {
-      install.command = "npm install -g vscode-langservers-extracted";
-    }
-    install.supported = !install.command.empty();
-    if (install.supported)
-    {
-      install.message = "LSP install started: " + server;
-    }
-    return install;
+    return data_root().string();
   }
 
-  Command remove_command_for_server(const std::string &server)
+  std::string bin_dir()
   {
-    Command remove;
-    remove.server = server;
-    if (server == "python")
-    {
-      remove.command = "python3 -m pip uninstall -y python-lsp-server";
-    }
-    else if (server == "typescript")
-    {
-      remove.command = "npm uninstall -g typescript typescript-language-server";
-    }
-    else if (server == "bash")
-    {
-      remove.command = "npm uninstall -g bash-language-server";
-    }
-    else if (server == "html")
-    {
-      remove.command = "npm uninstall -g vscode-langservers-extracted";
-    }
-    remove.supported = !remove.command.empty();
-    if (remove.supported)
-    {
-      remove.message = "LSP remove started: " + server;
-    }
-    return remove;
+    return (data_root() / "bin").string();
   }
 
-  std::string terminal_command(const Command &install)
+  std::string platform_tag()
   {
-    if (!install.supported)
+#ifdef _WIN32
+    return "win";
+#elif defined(__APPLE__)
+    return "mac";
+#else
+    return "linux";
+#endif
+  }
+
+  std::string resolve_managed_bin(const std::string &bin_name)
+  {
+    fs::path candidate = data_root() / "bin" / bin_name;
+    std::error_code ec;
+    if (fs::is_regular_file(candidate, ec) || fs::is_symlink(candidate, ec))
     {
-      return "";
+      return candidate.string();
     }
-    const std::string script = "printf '[jot:lsp] start " + install.server + "\\n'; "
-                               + install.command
-                               + "; rc=$?; if [ \"$rc\" -eq 0 ]; then "
+    return "";
+  }
+
+  bool is_installed(const std::string &id)
+  {
+    if (id.empty())
+      return false;
+    std::error_code ec;
+    return fs::is_regular_file(data_root() / id / "receipt", ec);
+  }
+
+  std::string wrap_script(const std::string &server, const std::string &body)
+  {
+    // The body may carry its own `set -e` (fail-fast installs): run it in a
+    // subshell so a failed step can never swallow the completion marker.
+    const std::string script = "printf '[jot:lsp] start " + server + "\\n'; ( "
+                               + body + " ); rc=$?; if [ \"$rc\" -eq 0 ]; then "
                                  "printf '[jot:lsp] success "
-                               + install.server
+                               + server
                                + " exit=%s\\n' \"$rc\"; "
                                  "else printf '[jot:lsp] failed "
-                               + install.server + " exit=%s\\n' \"$rc\"; fi";
+                               + server + " exit=%s\\n' \"$rc\"; fi";
     return "/bin/sh -lc " + shell_quote(script);
   }
 

@@ -940,24 +940,15 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   };
 
   int parsed_line = 0, parsed_col = 1;
-  if (lcmd == "lspinstall")
+  if (lcmd == "lspinstall" || lcmd == "lspremove")
   {
     if (arg.empty())
     {
-      set_message("Usage: :lspinstall "
-                  "<python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>");
+      set_message("Usage: :" + lcmd + " <" + lsp_install_usage_hint() + ">");
     }
-    else
+    else if (lcmd == "lspinstall")
     {
       install_lsp_server(arg);
-    }
-  }
-  else if (lcmd == "lspremove")
-  {
-    if (arg.empty())
-    {
-      set_message("Usage: :lspremove "
-                  "<python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>");
     }
     else
     {

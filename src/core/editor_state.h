@@ -101,7 +101,6 @@ struct EditorState
   bool lua_ui_prev_save_prompt = false;
   bool lua_ui_prev_quit_prompt = false;
   bool lua_ui_prev_tree_sitter_status = false;
-  bool lua_ui_prev_lsp_manager = false;
   bool lua_ui_prev_telescope = false;
   bool lua_ui_prev_lsp_completion = false;
   bool lua_ui_prev_context_menu = false;
@@ -148,16 +147,6 @@ struct EditorState
   std::unordered_map<std::string, long long> lsp_pending_changes;
   std::vector<LspInstallJob> lsp_install_jobs;
   std::set<std::string> lsp_disabled_servers;
-  bool show_lsp_manager_modal = false;
-  int lsp_manager_selected = 0;
-  int lsp_manager_scroll = 0;
-  int lsp_manager_x = 0;
-  int lsp_manager_y = 0;
-  int lsp_manager_w = 0;
-  int lsp_manager_h = 0;
-  std::vector<LspManagerRow> lsp_manager_rows;
-  std::vector<LspManagerButton> lsp_manager_buttons;
-  int lsp_manager_action_selected = 0;
   int current_integrated_terminal;
   std::vector<TerminalTask> terminal_tasks;
   std::string last_terminal_task_name;

@@ -1068,11 +1068,6 @@ void Editor::handle_mouse(void *event_ptr)
     return;
   }
 
-  if (show_lsp_manager_modal)
-  {
-    return;
-  }
-
   if (show_context_menu && (is_click || is_motion))
   {
     if (handle_context_menu_mouse(event->x, event->y, is_click))

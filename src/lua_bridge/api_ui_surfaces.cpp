@@ -326,56 +326,6 @@ bool LuaAPI::emit_tree_sitter_status(const TsStatusView &view)
                      });
 }
 
-bool LuaAPI::emit_lsp_manager(const LspManagerView &view)
-{
-  return emit_lua_ui("lsp_manager",
-                     [&](lua_State *L, int t)
-                     {
-                       lua_set_int_field(L, t, "selected", view.selected);
-                       lua_set_int_field(L, t, "scroll", view.scroll);
-                       lua_set_int_field(L, t, "x", view.x);
-                       lua_set_int_field(L, t, "y", view.y);
-                       lua_set_int_field(L, t, "w", view.w);
-                       lua_set_int_field(L, t, "h", view.h);
-                       lua_set_int_field(L, t, "label_w", view.label_w);
-                       lua_set_int_field(L, t, "state_x", view.state_x);
-                       lua_set_int_field(L, t, "action_x", view.action_x);
-                       lua_newtable(L);
-                       const int arr = lua_gettop(L);
-                       for (size_t i = 0; i < view.rows.size(); i++)
-                       {
-                         const LspManagerRowView &row = view.rows[i];
-                         lua_newtable(L);
-                         const int it = lua_gettop(L);
-                         lua_set_str_field(L, it, "server", row.server);
-                         lua_set_str_field(L, it, "label", row.label);
-                         lua_set_str_field(L, it, "state", row.state);
-                         lua_set_int_field(L, it, "state_color", row.state_color);
-                         lua_newtable(L);
-                         const int act = lua_gettop(L);
-                         for (size_t k = 0; k < row.actions.size(); k++)
-                         {
-                           const LspActionView &a = row.actions[k];
-                           lua_newtable(L);
-                           const int ai = lua_gettop(L);
-                           lua_set_str_field(L, ai, "action", a.action);
-                           lua_set_str_field(L, ai, "label", a.label);
-                           lua_set_str_field(L, ai, "variant", a.variant);
-                           lua_set_bool_field(L, ai, "enabled", a.enabled);
-                           lua_set_bool_field(L, ai, "focused", a.focused);
-                           lua_set_int_field(L, ai, "x", a.x);
-                           lua_set_int_field(L, ai, "y", a.y);
-                           lua_set_int_field(L, ai, "w", a.w);
-                           lua_rawseti(L, act, (lua_Integer)k + 1);
-                         }
-                         lua_setfield(L, it, "actions");
-                         lua_rawseti(L, arr, (lua_Integer)i + 1);
-                       }
-                       lua_setfield(L, t, "rows");
-                       push_ui_colors(L, t);
-                     });
-}
-
 bool LuaAPI::emit_telescope(const TelescopeView &view)
 {
   return emit_lua_ui("telescope",

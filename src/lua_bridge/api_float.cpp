@@ -380,15 +380,13 @@ void LuaAPI::render_floats()
   // and it draws on top of the dim like the native modal panels do).
   const bool modal_dim_active = editor->show_command_palette || editor->show_quick_pick
       || (editor->popup.visible && editor->popup.presentation == POPUP_MODAL)
-      || editor->show_tree_sitter_status_modal || editor->show_lsp_manager_modal
-      || editor->telescope.is_active();
+      || editor->show_tree_sitter_status_modal || editor->telescope.is_active();
   const auto modal_surface_open = [&](const std::string &s) -> bool
   {
     return (s == "command_palette" && editor->show_command_palette)
         || (s == "quick_pick" && editor->show_quick_pick)
         || (s == "popup" && editor->popup.visible && editor->popup.presentation == POPUP_MODAL)
         || (s == "tree_sitter_status" && editor->show_tree_sitter_status_modal)
-        || (s == "lsp_manager" && editor->show_lsp_manager_modal)
         || (s == "telescope" && editor->telescope.is_active());
   };
   int rw = editor->ui->get_render_width(),

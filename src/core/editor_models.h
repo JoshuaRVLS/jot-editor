@@ -219,27 +219,6 @@ struct LspInstallJob
   std::string progress;
 };
 
-struct LspManagerRow
-{
-  std::string server;
-  std::string label;
-  std::string detail;
-  bool installed = false;
-  bool enabled = true;
-  bool managed = false;
-  bool busy = false;
-};
-
-struct LspManagerButton
-{
-  std::string server;
-  std::string action;
-  int x = 0;
-  int y = 0;
-  int w = 0;
-  int h = 1;
-};
-
 enum MouseSelectionMode
 {
   MOUSE_SELECT_CHAR,

@@ -273,7 +273,7 @@ void Editor::render()
     {
       lua_api->render_floats();
     }
-    if (show_lsp_manager_modal || telescope.focus() != TelescopeFocus::Query)
+    if (telescope.focus() != TelescopeFocus::Query)
     {
       ui->hide_cursor();
     }
@@ -332,12 +332,6 @@ void Editor::render()
       render_menu_dropdown();
     }
 
-    if (show_lsp_manager_modal)
-    {
-      ui->dim_rect({0, 0, ui->get_render_width(), ui->get_height()});
-      render_lsp_manager();
-    }
-
     if (easter_egg_timer > 0)
     {
       render_easter_egg();
@@ -361,9 +355,8 @@ void Editor::render()
 
     // Set cursor state BEFORE ui->render() so the full-row paint emits the
     // correct cursor at the end of the frame.
-    if (show_lsp_manager_modal || (popup.visible && popup.presentation == POPUP_MODAL)
-        || show_menu_bar_dropdown || show_context_menu || show_quick_pick
-        || show_tree_sitter_status_modal)
+    if ((popup.visible && popup.presentation == POPUP_MODAL) || show_menu_bar_dropdown
+        || show_context_menu || show_quick_pick || show_tree_sitter_status_modal)
     {
       ui->hide_cursor();
     }

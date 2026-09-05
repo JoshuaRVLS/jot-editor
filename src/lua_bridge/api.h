@@ -99,35 +99,6 @@ struct TsStatusView
   int x = 0, y = 0, w = 0, h = 0;
 };
 
-struct LspActionView
-{
-  std::string action;
-  std::string label;
-  std::string variant; // primary | secondary | danger | muted
-  bool enabled = true;
-  bool focused = false;
-  int x = 0, y = 0, w = 0; // screen rect of the button
-};
-
-struct LspManagerRowView
-{
-  std::string server;
-  std::string label;
-  std::string state;
-  int state_color = 0;
-  std::vector<LspActionView> actions;
-};
-
-struct LspManagerView
-{
-  std::vector<LspManagerRowView> rows;
-  int selected = 0;
-  int scroll = 0;
-  int x = 0, y = 0, w = 0, h = 0;
-  int label_w = 0;
-  int state_x = 0;
-  int action_x = 0;
-};
 
 struct TelescopeResultView
 {
@@ -483,6 +454,15 @@ struct LuaEditDelta
   bool multiline = false;
 };
 
+// A server in the Lua installer registry (src/lua/lsp/registry.lua). The
+// native side consumes this list for completions and error messages.
+struct LspServerSpec
+{
+  std::string id;
+  std::string display;
+  std::string detail;
+};
+
 class LuaAPI
 {
 private:
@@ -621,6 +601,20 @@ public:
   bool load_hover_ui_runtime(lua_State *L);
   bool load_ui_kit_runtime(lua_State *L);
 
+  // LSP installer host half (see api_lsp_install.cpp): loads the Lua
+  // installer module (src/lua/lsp/install.lua, mason-style registry +
+  // per-manager scripts) and bridges install/remove plans and the server
+  // list between Lua and the native install machinery.
+  bool load_lsp_installer(lua_State *L);
+  void register_lsp_install_api(lua_State *L);
+  // Lua plan lookups. Returns false for unknown servers. On success fills
+  // the canonical registry id, the shell script body ("" when the server is
+  // not supported on this platform; message then explains why) and a human
+  // message.
+  bool lsp_install_plan(const std::string &name, std::string *id, std::string *script, std::string *message);
+  bool lsp_remove_plan(const std::string &name, std::string *id, std::string *script, std::string *message);
+  bool lsp_install_list(std::vector<LspServerSpec> *out);
+
   // Lua UI surfaces: a handler registered through jot.ui.handler(name, fn)
   // takes over rendering of a native surface. Native state is pushed as a
   // payload table; returning true suppresses the native render. The handler is
@@ -636,7 +630,6 @@ public:
   bool emit_popup(const PopupView &view);
   bool emit_prompt(const std::string &name, const PromptView &view);
   bool emit_tree_sitter_status(const TsStatusView &view);
-  bool emit_lsp_manager(const LspManagerView &view);
   bool emit_telescope(const TelescopeView &view);
   bool emit_lsp_completion(const CompletionView &view);
   bool emit_context_menu(const ContextMenuView &view);

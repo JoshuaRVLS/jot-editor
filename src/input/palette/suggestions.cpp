@@ -509,20 +509,15 @@ void Editor::refresh_command_palette()
     }
     else if (lcmd == "lspinstall" || lcmd == "lspremove")
     {
-      static const char *kLspServers[] = {"python",
-                                          "typescript",
-                                          "javascript",
-                                          "jsx",
-                                          "tsx",
-                                          "cpp",
-                                          "rust",
-                                          "go",
-                                          "lua",
-                                          "bash",
-                                          "html"};
-      for (const char *server : kLspServers)
+      // Server list is owned by the Lua installer registry.
+      std::vector<LspServerSpec> servers;
+      if (lua_api)
       {
-        add_arg(server, "LSP", "Language server", 110);
+        lua_api->lsp_install_list(&servers);
+      }
+      for (const auto &spec : servers)
+      {
+        add_arg(spec.id, "LSP", spec.detail.empty() ? "Language server" : spec.detail, 110);
       }
     }
     else if (lcmd == "gitdiff" || lcmd == "gitdiffstaged" || lcmd == "gitstage"

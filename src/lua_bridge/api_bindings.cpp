@@ -1951,6 +1951,11 @@ bool LuaAPI::init()
   load_treesitter_runtime(L);
   load_hover_ui_runtime(L);
   load_ui_kit_runtime(L);
+  // LSP installer: mason-style registry + per-manager install scripts (see
+  // src/lua/lsp/install.lua). Pure data + pure functions; loading it only
+  // registers the plan/list callbacks the native host uses.
+  register_lsp_install_api(L);
+  load_lsp_installer(L);
   // Bundled feature: inline diagnostics as anchored decorations (see
   // lua/features/decorations.lua). Loaded after user plugins: load_plugins()
   // resets the autocmd table for plugin reloads, so registering before it

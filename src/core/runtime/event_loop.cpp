@@ -654,8 +654,8 @@ void Editor::handle_terminal_event(const Event &ev)
     // 1022 = Ctrl released. While a modal surface owns input they are inert.
     if (ch == 1021 || ch == 1022)
     {
-      const bool modal_open = lsp_completion_visible || show_lsp_manager_modal
-                              || (popup.visible && popup.presentation == POPUP_MODAL)
+      const bool modal_open =
+          lsp_completion_visible || (popup.visible && popup.presentation == POPUP_MODAL)
                               || show_menu_bar_dropdown || show_context_menu
                               || show_tree_sitter_status_modal || show_command_palette
                               || show_search || telescope.is_active() || show_quick_pick;
@@ -685,11 +685,6 @@ void Editor::handle_terminal_event(const Event &ev)
       return;
     }
 
-    if (show_lsp_manager_modal)
-    {
-      handle_lsp_manager_input(ch);
-      return;
-    }
     if (popup.visible && popup.presentation == POPUP_MODAL)
     {
       handle_popup_input(ch);
@@ -790,14 +785,6 @@ void Editor::handle_terminal_event(const Event &ev)
       return;
     }
 
-    if (show_lsp_manager_modal)
-    {
-      const bool is_click = ev.mouse.pressed && ((button & 0x03) == 0);
-      if (handle_lsp_manager_mouse(ev.mouse.x, ev.mouse.y, is_click, button == 64, button == 65))
-      {
-        return;
-      }
-    }
 
     if (telescope.is_active())
     {
