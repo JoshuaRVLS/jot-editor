@@ -664,6 +664,18 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       const bool row_is_cursor_line =
           highlight_cursor_line && line_idx == buf.cursor.y && pane.active;
       const int row_bg = row_is_cursor_line ? theme.bg_cursor_line : theme.bg_default;
+      // Tint the line-number gutter too, so the cursor row is one continuous
+      // band: the gutter cell, fold column, number and number-right spaces
+      // are otherwise left in the plain pane background and read as seams on
+      // the highlighted row.
+      if (row_is_cursor_line)
+      {
+        int gutter_end = std::min(x + 1 + line_num_width, x + w); // exclusive
+        for (int fill_c = x + 1; fill_c < gutter_end; fill_c++)
+        {
+          ui->draw_text(fill_c, draw_y, " ", theme.fg_default, row_bg);
+        }
+      }
 
       int line_diag_severity = line_diagnostic_severity(buf, line_idx);
       int diag_fg = line_diag_severity > 0 ? diagnostic_severity_color(theme, line_diag_severity)
@@ -1260,6 +1272,27 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
           }
         }
         bracket_depth = line_bracket_depth;
+        // The cursor-row tint must run the full code width, not just up to
+        // the text end: paint the remaining cells (past the end of the line
+        // content, and past trailing whitespace when the line has no syntax
+        // tokens to draw) in the tint so the row reads as one continuous
+        // band instead of a stub that stops at the last visible character.
+        if (row_is_cursor_line)
+        {
+          int text_end_cell = visible_len;
+          if ((int)line.size() < (int)visual_cols.size())
+          {
+            text_end_cell = std::max(0, visual_cols[line.size()] - start_visual);
+          }
+          if (text_end_cell < visible_len)
+          {
+            int fill_x = current_x + std::max(0, text_end_cell);
+            for (int fill_c = fill_x; fill_c < current_x + visible_len; fill_c++)
+            {
+              ui->draw_text(fill_c, draw_y, " ", theme.fg_default, row_bg);
+            }
+          }
+        }
       }
       else
       {
