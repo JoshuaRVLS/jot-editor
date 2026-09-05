@@ -1647,6 +1647,10 @@ local function sidebar(p)
   local htxt = (p.header and p.header ~= "")
       and trunc_cells(p.header, math.max(1, content_w))
       or ""
+  -- Leading padding drawn over the top border reads as a notch in the
+  -- frame right after the corner; drop stray leading blanks so the label
+  -- (icon first) sits flush against the dash run.
+  htxt = htxt:gsub("^ +", "")
   local hcells = cell_len(htxt)
   local lead = math.min(hcol - 1, w - 2)
   local tail = math.max(0, (w - 2) - lead - hcells)

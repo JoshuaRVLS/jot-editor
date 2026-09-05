@@ -651,7 +651,7 @@ void Editor::render_sidebar()
     // footer moves up to y + h - 2.
     int list_h = std::max(0, h - 3);
 
-    std::string header_label = has_git_repo() ? "  " + git_branch : "  Git";
+    std::string header_label = has_git_repo() ? " " + git_branch : " Git";
     if (has_git_repo())
     {
       if (git_staged_count > 0)
@@ -796,7 +796,10 @@ void Editor::render_sidebar()
     return;
   }
 
-  std::string header_label = "  " + sidebar_render_cache_.root_label + " ";
+  std::string header_label = ""
+                   + (sidebar_render_cache_.root_label.empty()
+                          ? ""
+                          : " " + sidebar_render_cache_.root_label);
   int header_w = std::min(std::max(6, cell_count(header_label) + 2), std::max(1, content_w - 1));
   if (header_w > 2)
   {
