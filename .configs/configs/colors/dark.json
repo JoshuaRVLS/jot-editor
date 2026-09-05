@@ -128,10 +128,10 @@
     "bg": 60
   },
   "CursorLine": {
-    "bg": 60
+    "bg": 236
   },
   "CursorLineNr": {
-    "fg": 110
+    "fg": 117
   },
   "Search": {
     "fg": 234,
