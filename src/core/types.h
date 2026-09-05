@@ -527,6 +527,12 @@ struct FileBuffer
   std::stack<State> undo_stack;
   std::stack<State> redo_stack;
   std::set<int> bookmarks;
+  // Range of the last multi-line comment toggle (both comment and uncomment
+  // directions). A no-selection Ctrl+/ with the cursor inside this range
+  // re-toggles the same lines, so select -> Ctrl+/ -> Ctrl+/ still cycles
+  // after the selection is cleared.
+  int last_comment_start = -1;
+  int last_comment_end = -1;
   std::unordered_map<std::string, std::string> lua_vars;
   std::map<char, Cursor> marks; // buffer-local marks ('a'-'z')
   // Anchored decorations, sorted by (row, col, priority desc, id). The

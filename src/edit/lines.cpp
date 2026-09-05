@@ -56,38 +56,45 @@ namespace
     return EditorFeatures::should_auto_indent(line);
   }
 
-  // Comment prefix/suffix for a buffer's file type. Block comments
-  // (html/xml) are toggled per line: prefix + suffix around the code.
+  // Comment markers for a buffer's file type. `block_open`/`block_close`
+  // are non-empty when the language has a true block-comment form; a
+  // multi-line selection then wraps in one pair instead of commenting each
+  // line separately.
   struct CommentStyle
   {
-    std::string prefix;
-    std::string suffix; // empty for line comments
+    std::string prefix;        // line comment prefix ("//", "#", "--", "%")
+    std::string suffix;        // per-line closer for pseudo-block langs (html "-->")
+    std::string block_open;    // block opener, or empty when none exists
+    std::string block_close;   // block closer, or empty when none exists
   };
   CommentStyle comment_style_for(const std::string &ext)
   {
+    if (ext == ".html" || ext == ".xml" || ext == ".vue" || ext == ".svelte" || ext == ".svg")
+    {
+      // HTML has no line comments; block-only, and per-line toggles wrap
+      // single lines in one <!-- ... --> pair.
+      return {"<!--", "-->", "<!--", "-->"};
+    }
     if (ext == ".py" || ext == ".rb" || ext == ".lua" || ext == ".sh" || ext == ".bash"
         || ext == ".zsh" || ext == ".fish" || ext == ".yaml" || ext == ".yml"
         || ext == ".toml" || ext == ".ini" || ext == ".cfg" || ext == ".conf"
         || ext == ".dockerfile" || ext == ".cmake" || ext == ".make" || ext == ".r"
         || ext == ".ps1")
     {
-      return {"#", ""};
-    }
-    if (ext == ".html" || ext == ".xml" || ext == ".vue" || ext == ".svelte" || ext == ".svg")
-    {
-      return {"<!--", "-->"};
+      // No block-comment syntax in the language; # per line is the only form.
+      return {"#", "", "", ""};
     }
     if (ext == ".sql" || ext == ".hs" || ext == ".ada" || ext == ".vhdl" || ext == ".f"
         || ext == ".f90")
     {
-      return {"--", ""};
+      return {"--", "", "", ""};
     }
     if (ext == ".m" || ext == ".mm" || ext == ".tex")
     {
-      return {"%", ""};
+      return {"%", "", "", ""};
     }
     // .c/.h/.cc/.cpp/.hpp/.java/.js/.jsx/.ts/.tsx/.go/.rs/.swift/.kt/.cs/.php/...
-    return {"//", ""};
+    return {"//", "", "/*", "*/"};
   }
   std::string line_indent(const std::string &s)
   {
@@ -100,6 +107,26 @@ namespace
   {
     const std::string body = s.substr(line_indent(s).size());
     return body.compare(0, style.prefix.size(), style.prefix) == 0;
+  }
+  // True when the whole [start,end] range is wrapped in one block comment:
+  // the opener sits on the first line and the closer on the last.
+  bool range_is_block_commented(const std::vector<std::string> &lines,
+                                int start,
+                                int end,
+                                const CommentStyle &style)
+  {
+    if (style.block_open.empty() || start > end)
+    {
+      return false;
+    }
+    const std::string &first_body = lines[start].substr(line_indent(lines[start]).size());
+    const std::string &last_body = lines[end].substr(line_indent(lines[end]).size());
+    return first_body.compare(0, style.block_open.size(), style.block_open) == 0
+           && last_body.size() >= style.block_close.size()
+           && last_body.compare(last_body.size() - style.block_close.size(),
+                                style.block_close.size(),
+                                style.block_close)
+                  == 0;
   }
 } // namespace
 
@@ -270,55 +297,250 @@ void Editor::toggle_comment()
     buf.materialize();
   const CommentStyle style = comment_style_for(get_file_extension(buf.filepath));
 
+  const bool multi_line = buf.selection.active
+                          && buf.selection.start.y != buf.selection.end.y;
   int start_y =
       buf.selection.active ? std::min(buf.selection.start.y, buf.selection.end.y) : buf.cursor.y;
   int end_y =
       buf.selection.active ? std::max(buf.selection.start.y, buf.selection.end.y) : buf.cursor.y;
 
-  // Comment on the line's own indentation level (right after the leading
-  // whitespace), matching what an editor with smart comment toggling does for
-  // nested code instead of always anchoring at column 0.
-  bool all_commented = true;
-  for (int i = start_y; i <= end_y; i++)
+  // Re-toggle support: a no-selection toggle with the cursor inside the
+  // range of the last multi-line toggle applies to that same range again, so
+  // select -> Ctrl+/ -> Ctrl+/ still cycles after the selection is cleared.
+  const bool used_selection = buf.selection.active;
+  const bool used_memory = !used_selection && buf.last_comment_start >= 0
+                           && buf.cursor.y >= buf.last_comment_start
+                           && buf.cursor.y <= buf.last_comment_end;
+  bool block_boundary = used_memory;
+  if (used_memory)
   {
-    if (!line_is_commented(buf.lines[i], style))
+    start_y = buf.last_comment_start;
+    end_y = buf.last_comment_end;
+  }
+
+  // Without a selection, the cursor may still sit on a block boundary (the
+  // opener or closer of a /* ... */ or <!-- ... --> pair). Treat the whole
+  // enclosing block as the toggle range so a second Ctrl+/ after a block
+  // wrap unwraps it from either edge.
+  if (!buf.selection.active && !used_memory && !style.block_open.empty()
+      && !style.block_close.empty())
+  {
+    const std::string cur_body =
+        buf.lines[start_y].substr(line_indent(buf.lines[start_y]).size());
+    if (cur_body.compare(0, style.block_open.size(), style.block_open) == 0)
     {
-      all_commented = false;
-      break;
+      // Opener on the cursor line: scan forward for the matching closer.
+      for (int i = start_y; i < (int)buf.lines.size(); i++)
+      {
+        const std::string body = buf.lines[i].substr(line_indent(buf.lines[i]).size());
+        if (body.size() >= style.block_close.size()
+            && body.compare(body.size() - style.block_close.size(),
+                            style.block_close.size(),
+                            style.block_close)
+                   == 0)
+        {
+          end_y = i;
+          block_boundary = true;
+          break;
+        }
+      }
+    }
+    else if (cur_body.size() >= style.block_close.size()
+             && cur_body.compare(cur_body.size() - style.block_close.size(),
+                                 style.block_close.size(),
+                                 style.block_close)
+                    == 0)
+    {
+      // Closer on the cursor line: scan backward for the opener.
+      for (int i = start_y; i >= 0; i--)
+      {
+        const std::string body = buf.lines[i].substr(line_indent(buf.lines[i]).size());
+        if (body.compare(0, style.block_open.size(), style.block_open) == 0)
+        {
+          start_y = i;
+          block_boundary = true;
+          break;
+        }
+      }
     }
   }
+
+  // Unwrapping takes one of two shapes: the whole range sits in a single
+  // block pair (/* ... */, or <!-- ... --> around one line), or every line
+  // carries its own line comment (//, #, ...). Block-style languages wrap a
+  // clean multi-line selection in one pair; a mixed selection (some lines
+  // already line-commented) is finished with per-line markers instead so a
+  // block is never nested inside existing comments.
+  // A block-only style (html/xml: <!-- -->) is one where every line comment
+  // is itself a single-line block wrap.
+  const bool block_only_style = !style.block_open.empty() && style.prefix == style.block_open;
+  const bool wrapped_in_block =
+      !style.block_open.empty()
+      && (multi_line || block_only_style || block_boundary)
+      && range_is_block_commented(buf.lines, start_y, end_y, style);
+  const bool all_line_commented = [&]
+  {
+    for (int i = start_y; i <= end_y; i++)
+    {
+      if (!line_is_commented(buf.lines[i], style))
+      {
+        return false;
+      }
+    }
+    return true;
+  }();
+  const bool some_line_commented = [&]
+  {
+    for (int i = start_y; i <= end_y; i++)
+    {
+      if (line_is_commented(buf.lines[i], style))
+      {
+        return true;
+      }
+    }
+    return false;
+  }();
+  const bool do_block_wrap =
+      !wrapped_in_block && !all_line_commented && multi_line
+      && !style.block_open.empty() && !some_line_commented;
+  const bool uncomment = wrapped_in_block || all_line_commented;
 
   for (int i = start_y; i <= end_y; i++)
   {
     const std::string indent = line_indent(buf.lines[i]);
     const std::string body = buf.lines[i].substr(indent.size());
-    if (all_commented)
+    const bool line_commented = line_is_commented(buf.lines[i], style);
+
+    // Middle lines of a wrapped block are already commented by the wrapper;
+    // only the boundary lines carry the markers to remove.
+    if (uncomment && wrapped_in_block && i != start_y && i != end_y)
     {
-      if (line_is_commented(buf.lines[i], style))
+      continue;
+    }
+    if (uncomment && i == start_y && wrapped_in_block)
+    {
+      // Remove the opener on the range's first line (may also carry line
+      // comment on the same line, e.g. /*// code).
+      std::string rest = body;
+      const bool has_open = style.block_open.empty()
+                                ? false
+                                : rest.compare(0, style.block_open.size(), style.block_open) == 0;
+      if (has_open)
       {
-        const size_t after = indent.size() + style.prefix.size();
-        std::string rest = buf.lines[i].substr(after);
-        if (!style.suffix.empty() && rest.size() >= style.suffix.size()
-            && rest.compare(rest.size() - style.suffix.size(), style.suffix.size(), style.suffix)
-                   == 0)
+        rest = rest.substr(style.block_open.size());
+      }
+      // Only strip a separate line-comment marker (C: ///* ...). For block
+      // styles whose line form is the same token (html: <!--), the opener
+      // removal above already consumed it.
+      if (has_open && style.prefix != style.block_open && line_commented
+          && rest.compare(0, style.prefix.size(), style.prefix) == 0)
+      {
+        rest = rest.substr(style.prefix.size());
+      }
+      if (!rest.empty() && rest[0] == ' ')
+      {
+        rest.erase(0, 1); // undo the "/* " separator
+      }
+      buf.lines[i] = indent + rest;
+    }
+    else if (uncomment && i == end_y && wrapped_in_block)
+    {
+      // Remove the closer on the range's last line.
+      std::string rest = body;
+      if (!style.block_close.empty() && rest.size() >= style.block_close.size()
+          && rest.compare(rest.size() - style.block_close.size(),
+                          style.block_close.size(),
+                          style.block_close)
+                 == 0)
+      {
+        rest.erase(rest.size() - style.block_close.size());
+      }
+      if (line_commented && style.prefix != style.block_open
+          && rest.compare(0, style.prefix.size(), style.prefix) == 0)
+      {
+        rest = rest.substr(style.prefix.size());
+      }
+      size_t end_nonspace = rest.find_last_not_of(' ');
+      if (end_nonspace != std::string::npos && end_nonspace + 1 < rest.size())
+      {
+        rest.erase(end_nonspace + 1); // undo the " */" separator
+      }
+      buf.lines[i] = indent + rest;
+    }
+    else if (uncomment && line_commented)
+    {
+      // Strip this line's own comment marker (prefix and, for per-line
+      // block style, its trailing suffix).
+      const size_t after = indent.size() + style.prefix.size();
+      std::string rest = buf.lines[i].substr(after);
+      if (!style.suffix.empty() && rest.size() >= style.suffix.size()
+          && rest.compare(rest.size() - style.suffix.size(), style.suffix.size(), style.suffix)
+                 == 0)
+      {
+        rest.erase(rest.size() - style.suffix.size());
+      }
+      buf.lines[i] = indent + rest;
+    }
+    else if (do_block_wrap)
+    {
+      // Clean multi-line selection in a language with real block comments:
+      // wrap the whole range in one /* ... */ pair (aligned to the shallowest
+      // line) instead of stamping // in front of every line.
+      std::string pad = indent;
+      for (int j = start_y + 1; j <= end_y; j++)
+      {
+        if (line_indent(buf.lines[j]).size() < pad.size())
         {
-          rest.erase(rest.size() - style.suffix.size());
+          pad = line_indent(buf.lines[j]);
         }
-        buf.lines[i] = indent + rest;
+      }
+      if (i == start_y)
+      {
+        buf.lines[i] = pad + style.block_open + " " + body;
+      }
+      else if (i == end_y)
+      {
+        std::string text = indent + body;
+        if (!text.empty() && text.back() == ' ')
+        {
+          text.pop_back();
+        }
+        buf.lines[i] = text + " " + style.block_close;
       }
     }
     else
     {
-      buf.lines[i] = indent + style.prefix + body;
-      if (!style.suffix.empty())
+      // Single line (or a language with no block form, or a mixed selection
+      // being finished with markers): comment the line unless it is already
+      // commented. A line already carrying a marker is left alone.
+      if (!line_commented)
       {
-        buf.lines[i] += style.suffix;
+        buf.lines[i] = indent + style.prefix + body;
+        if (!style.suffix.empty())
+        {
+          buf.lines[i] += style.suffix;
+        }
       }
     }
   }
 
   buf.modified = true;
   needs_redraw = true;
+  // The toggle consumes the selection. Leaving it armed is a footgun: the
+  // next keystroke (e.g. ':' to save) replaces the freshly wrapped range
+  // instead of typing normally. The re-toggle memory above keeps double-tap
+  // cycling working without the armed selection.
+  buf.selection.active = false;
+  if (used_selection || used_memory || block_boundary)
+  {
+    buf.last_comment_start = start_y;
+    buf.last_comment_end = end_y;
+  }
+  else
+  {
+    buf.last_comment_start = -1;
+    buf.last_comment_end = -1;
+  }
   clamp_cursor(get_pane().buffer_id);
   if (!buf.filepath.empty())
     notify_lsp_change(buf.filepath);
