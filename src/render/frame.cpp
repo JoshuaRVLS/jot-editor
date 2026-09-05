@@ -798,8 +798,33 @@ void Editor::render_pane(const SplitPane &pane)
   // active tab marker instead of a loud border).
   ui->draw_border(rect, theme.fg_panel_border, theme.bg_panel_border);
 
-  // Pane-local file tabs are useful once a group has multiple buffers.
-  if (pane.tab_buffer_ids.size() > 1)
+  // Pane-local file tabs name the pane's open buffers. The strip stays up
+  // even when only one file is open so the top row always carries the
+  // buffer's tab header; untouched placeholder buffers keep the plain border
+  // instead of an empty strip.
+  const auto is_real_tab_buffer = [&](int id) -> bool
+  {
+    return id >= 0 && id < (int)buffers.size()
+           && !(buffers[id].is_placeholder && !buffers[id].modified
+                && buffers[id].filepath.empty());
+  };
+  bool has_tabs = false;
+  if (!pane.tab_buffer_ids.empty())
+  {
+    for (int id : pane.tab_buffer_ids)
+    {
+      if (is_real_tab_buffer(id))
+      {
+        has_tabs = true;
+        break;
+      }
+    }
+  }
+  else
+  {
+    has_tabs = is_real_tab_buffer(pane.buffer_id);
+  }
+  if (has_tabs)
   {
     FileTabLayout tabs = build_file_tab_layout(pane, draw_w);
 
