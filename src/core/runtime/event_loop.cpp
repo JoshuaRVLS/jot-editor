@@ -843,6 +843,13 @@ void Editor::render_frame()
     if (lua_api)
       lua_api->fire_autocmd("UIResize", "", -1);
   }
+  // Deliver autocmds coalesced during this drain (BufChange, CursorMoved)
+  // before the frame paints, so Lua handlers see the edits and their UI
+  // effects land in the same frame.
+  if (lua_api)
+  {
+    lua_api->flush_pending_autocmds();
+  }
   if (needs_redraw || ui->cursor_needs_flush())
   {
     render();

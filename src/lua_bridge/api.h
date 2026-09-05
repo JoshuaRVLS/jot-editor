@@ -505,6 +505,22 @@ private:
   // registered) so edit deltas can be computed without touching call sites.
   std::unordered_map<std::string, std::string> edit_snapshots_;
   LuaEditDelta last_edit_;
+  // Rapid events (BufChange, CursorMoved) fired several times inside one
+  // event-loop drain are coalesced into a single Lua dispatch per event
+  // name at the next flush (right before a frame renders). Fast typists and
+  // multi-key paste would otherwise pay a full Lua round-trip per key.
+  // last_edit_ is captured per entry so a deferred BufChange still carries
+  // the delta of the edit that produced it.
+  struct PendingAutocmd
+  {
+    std::string event;
+    std::string filepath;
+    int buffer = -1;
+    LuaEditDelta delta;
+  };
+  std::vector<PendingAutocmd> pending_autocmds_;
+  bool flushing_autocmds_ = false;
+  static bool is_rapid_autocmd(const std::string &event);
   // Native timers with Lua callbacks (jot.timer).
   std::unordered_map<uint64_t, LuaTimerEntry> timer_entries_;
   // Last observed debugger state signature (dedupes debugger.state_changed).
@@ -534,7 +550,8 @@ private:
   bool call_callback_event(const std::string &callback,
                            const std::string &event,
                            const std::string &filepath,
-                           int buffer);
+                           int buffer,
+                           const LuaEditDelta *edit = nullptr);
   // Resolves the optional buffer argument (1-based index or filepath, or the
   // current buffer when omitted) to a 0-based buffer index, or -1.
   int resolve_buffer_arg(lua_State *L, int arg_index);
@@ -626,6 +643,13 @@ public:
   bool run_plugin_command(const std::string &name, const std::string &arg);
   bool run_plugin_keymap(const std::string &key, const std::string &mode = "global");
   void fire_autocmd(const std::string &event, const std::string &filepath = "", int buffer = -1);
+  // Delivers coalesced rapid autocmds (BufChange, CursorMoved) to Lua; the
+  // event loop calls this once per drain, just before a frame renders.
+  void flush_pending_autocmds();
+  void dispatch_autocmd(const std::string &event,
+                        const std::string &filepath,
+                        int buffer,
+                        const LuaEditDelta *edit);
   std::vector<std::string> plugin_panel_lines(const std::string &name);
   std::vector<std::string> plugin_picker_items(const std::string &callback);
   bool run_plugin_callback(const std::string &callback, const std::string &arg = "");

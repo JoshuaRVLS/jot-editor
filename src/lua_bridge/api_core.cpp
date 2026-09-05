@@ -201,7 +201,8 @@ bool LuaAPI::call_callback_string(const std::string &id, const std::string &arg)
 bool LuaAPI::call_callback_event(const std::string &id,
                                  const std::string &event,
                                  const std::string &filepath,
-                                 int buffer)
+                                 int buffer,
+                                 const LuaEditDelta *edit)
 {
   if (!lua_initialized || !editor || !editor->event_loop_.is_main_thread())
     return false;
@@ -229,21 +230,21 @@ bool LuaAPI::call_callback_event(const std::string &id,
     lua_pushinteger(L, pos.x + 1);
     lua_setfield(L, -2, "column");
   }
-  if (event == "BufChange" && last_edit_.valid)
+  if (event == "BufChange" && edit && edit->valid)
   {
-    lua_pushinteger(L, last_edit_.start_line);
+    lua_pushinteger(L, edit->start_line);
     lua_setfield(L, -2, "edit_start_line");
-    lua_pushinteger(L, last_edit_.start_col);
+    lua_pushinteger(L, edit->start_col);
     lua_setfield(L, -2, "edit_start_col");
-    lua_pushinteger(L, last_edit_.end_line);
+    lua_pushinteger(L, edit->end_line);
     lua_setfield(L, -2, "edit_end_line");
-    lua_pushinteger(L, last_edit_.end_col);
+    lua_pushinteger(L, edit->end_col);
     lua_setfield(L, -2, "edit_end_col");
-    lua_pushstring(L, last_edit_.inserted.c_str());
+    lua_pushstring(L, edit->inserted.c_str());
     lua_setfield(L, -2, "edit_inserted");
-    lua_pushstring(L, last_edit_.removed.c_str());
+    lua_pushstring(L, edit->removed.c_str());
     lua_setfield(L, -2, "edit_removed");
-    lua_pushboolean(L, last_edit_.multiline);
+    lua_pushboolean(L, edit->multiline);
     lua_setfield(L, -2, "edit_multiline");
   }
   if (lua_pcall(L, 1, 0, 0) != LUA_OK)
@@ -527,11 +528,76 @@ bool LuaAPI::run_plugin_keymap(const std::string &k, const std::string &m)
     }
   return false;
 }
+bool LuaAPI::is_rapid_autocmd(const std::string &event)
+{
+  // Events that can fire many times within a single event-loop drain (once
+  // per keystroke) and whose Lua handlers only need the latest state.
+  return event == "BufChange" || event == "CursorMoved";
+}
+
 void LuaAPI::fire_autocmd(const std::string &e, const std::string &f, int b)
 {
+  if (is_rapid_autocmd(e) && !flushing_autocmds_)
+  {
+    // Coalesce: keep the newest payload for this event name and dispatch
+    // once at the next flush. The edit delta is captured now because
+    // on_buffer_change resets last_edit_ immediately after firing.
+    for (auto &pending : pending_autocmds_)
+    {
+      if (pending.event == e)
+      {
+        pending.filepath = f;
+        pending.buffer = b;
+        if (e == "BufChange")
+        {
+          pending.delta = last_edit_;
+        }
+        return;
+      }
+    }
+    PendingAutocmd pending;
+    pending.event = e;
+    pending.filepath = f;
+    pending.buffer = b;
+    if (e == "BufChange")
+    {
+      pending.delta = last_edit_;
+    }
+    pending_autocmds_.push_back(std::move(pending));
+    return;
+  }
+  // Non-rapid events must not jump ahead of coalesced ones, so drain the
+  // queue first, then dispatch immediately (which also covers events fired
+  // from inside a Lua callback while the queue is being flushed).
+  flush_pending_autocmds();
   for (auto &x : plugin_autocmds)
     if (x.event == e)
-      call_callback_event(x.callback, e, f, b);
+      call_callback_event(x.callback, e, f, b, e == "BufChange" ? &last_edit_ : nullptr);
+}
+
+void LuaAPI::flush_pending_autocmds()
+{
+  if (pending_autocmds_.empty() || flushing_autocmds_)
+  {
+    return;
+  }
+  flushing_autocmds_ = true;
+  std::vector<PendingAutocmd> queue = std::move(pending_autocmds_);
+  for (const auto &pending : queue)
+  {
+    for (auto &x : plugin_autocmds)
+    {
+      if (x.event == pending.event)
+      {
+        call_callback_event(x.callback,
+                            pending.event,
+                            pending.filepath,
+                            pending.buffer,
+                            pending.event == "BufChange" ? &pending.delta : nullptr);
+      }
+    }
+  }
+  flushing_autocmds_ = false;
 }
 void LuaAPI::register_keymap(const std::string &k,
                              const std::string &c,
