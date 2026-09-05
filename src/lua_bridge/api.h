@@ -552,11 +552,22 @@ private:
                            const std::string &filepath,
                            int buffer,
                            const LuaEditDelta *edit = nullptr);
+public:
   // Resolves the optional buffer argument (1-based index or filepath, or the
   // current buffer when omitted) to a 0-based buffer index, or -1.
   int resolve_buffer_arg(lua_State *L, int arg_index);
+  // Anchored decorations (extmark-style, see core/app/decorations.cpp).
+  // buffer_idx is the 0-based buffer index from resolve_buffer_arg; set
+  // parses the opts table at opts_index (1-based row/col, byte width, hl
+  // group, explicit fg/bg, priority, right_gravity, optional id to update)
+  // and creates or updates the decoration, returning the decoration's id
+  // (0 on failure).
+  std::uint64_t decoration_set(int buffer_idx, lua_State *L, int opts_index);
+  bool decoration_delete(int buffer_idx, std::uint64_t id);
+  void decoration_clear(int buffer_idx);
+  // Pushes the buffer's decorations as a Lua array of option tables.
+  void decoration_list(int buffer_idx, lua_State *L);
 
-public:
   LuaAPI(Editor *ed);
   ~LuaAPI();
   EditorHostAPI &host();

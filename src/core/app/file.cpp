@@ -1143,6 +1143,13 @@ void Editor::close_buffer_at(int index)
     buf.bookmarks.clear();
     buf.diagnostics.clear();
     buf.diag_severity_dirty = true;
+    // Content is replaced wholesale: decoration positions are meaningless
+    // against the new text, so drop them (consumers re-apply on their own
+    // events, e.g. DiagnosticChanged after the reload).
+    buf.decorations.clear();
+    buf.decoration_base.clear();
+    buf.decoration_base_valid = false;
+    buf.decoration_dirty = false;
     buf.fold_ranges.clear();
     invalidate_sidebar_diagnostics_cache();
 #ifdef JOT_TREESITTER

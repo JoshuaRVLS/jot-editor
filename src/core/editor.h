@@ -296,6 +296,14 @@ private:
   void accept_telescope_selection();
   void render_lsp_completion();
   std::string get_buffer_text(const FileBuffer &buf) const;
+  // Anchored decorations (see core/app/decorations.cpp): rebase_begin runs
+  // before every edit (snapshot + mark dirty), ensure_* lazily shifts the
+  // decorations through the pending edit window once, on the next render.
+  void decoration_rebase_begin(FileBuffer &buf);
+  void ensure_decorations_anchored(FileBuffer &buf);
+  // Resolves a theme group name ("DiagnosticError", "@keyword", "status")
+  // to the theme's current fg/bg; returns false when unknown.
+  bool theme_group_color(const std::string &name, int &fg, int &bg) const;
   const std::vector<std::pair<int, int>> &
   get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit = 0x7fffffff);
   void invalidate_syntax_cache(FileBuffer &buf);

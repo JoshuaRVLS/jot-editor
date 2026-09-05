@@ -1,5 +1,6 @@
 set(JOT_CORE_SOURCES
   core/app/bookmarks.cpp
+  core/app/decorations.cpp
   core/app/editor.cpp
   core/app/file.cpp
   core/app/folding.cpp

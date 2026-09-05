@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <iostream>
@@ -689,6 +690,59 @@ namespace
         chunk_token = token;
       }
     }
+    return 1;
+  }
+
+  int l_decoration_set(lua_State *L)
+  {
+    auto &a = api(L);
+    const int idx = a.resolve_buffer_arg(L, 1);
+    luaL_checktype(L, 2, LUA_TTABLE);
+    const std::uint64_t id = idx >= 0 ? a.decoration_set(idx, L, 2) : 0;
+    if (id != 0)
+    {
+      a.host().render.request_redraw();
+    }
+    if (id != 0)
+    {
+      lua_pushinteger(L, (lua_Integer)id);
+    }
+    else
+    {
+      lua_pushboolean(L, 0);
+    }
+    return 1;
+  }
+  int l_decoration_delete(lua_State *L)
+  {
+    auto &a = api(L);
+    const int idx = a.resolve_buffer_arg(L, 1);
+    const std::uint64_t id = (std::uint64_t)luaL_checkinteger(L, 2);
+    const bool ok = idx >= 0 && a.decoration_delete(idx, id);
+    if (ok)
+    {
+      a.host().render.request_redraw();
+    }
+    lua_pushboolean(L, ok);
+    return 1;
+  }
+  int l_decoration_clear(lua_State *L)
+  {
+    auto &a = api(L);
+    const int idx = a.resolve_buffer_arg(L, 1);
+    if (idx >= 0)
+    {
+      a.decoration_clear(idx);
+      a.host().render.request_redraw();
+    }
+    lua_pushboolean(L, idx >= 0);
+    return 1;
+  }
+  int l_decoration_list(lua_State *L)
+  {
+    auto &a = api(L);
+    const int idx = a.resolve_buffer_arg(L, 1);
+    a.decoration_list(idx, L);
     return 1;
   }
 
@@ -1506,6 +1560,12 @@ bool LuaAPI::init()
   lua_newtable(L);
   field(L, "highlight", l_syntax_highlight);
   lua_setfield(L, -2, "syntax");
+  lua_newtable(L);
+  field(L, "set", l_decoration_set);
+  field(L, "delete", l_decoration_delete);
+  field(L, "clear", l_decoration_clear);
+  field(L, "list", l_decoration_list);
+  lua_setfield(L, -2, "decoration");
   lua_getglobal(L, "show_message");
   lua_setfield(L, -2, "notify");
   lua_getglobal(L, "command");
@@ -1891,6 +1951,10 @@ bool LuaAPI::init()
   load_treesitter_runtime(L);
   load_hover_ui_runtime(L);
   load_ui_kit_runtime(L);
+  // Bundled feature: inline diagnostics as anchored decorations (see
+  // lua/features/decorations.lua). Loaded after the API tables and before
+  // user plugins so the autocmd is registered before any diagnostic arrives.
+  jot_lua::load_bundled_lua_file(L, "features/decorations.lua", "Decorations");
   load_plugins();
   return true;
 }

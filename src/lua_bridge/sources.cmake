@@ -2,6 +2,7 @@ set(JOT_LUA_BRIDGE_SOURCES
   lua_bridge/api_bindings.cpp
   lua_bridge/api_config.cpp
   lua_bridge/api_core.cpp
+  lua_bridge/api_decorations.cpp
   lua_bridge/api_git.cpp
   lua_bridge/api_events.cpp
   lua_bridge/api_float.cpp

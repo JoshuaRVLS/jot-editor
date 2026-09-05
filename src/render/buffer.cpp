@@ -2,6 +2,7 @@
 #include "editor.h"
 #include "folding.h"
 #include "tree_sitter/manager.h"
+#include "ui/text.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -592,6 +593,13 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
   buf.scroll_offset =
       Folding::clamp_scroll_offset(buf.fold_ranges, buf.scroll_offset, h, (int)buf.line_count());
 
+  // Re-anchor decorations through the pending edit (if any) once, before any
+  // row reads their positions. Between edits this is a flag check only.
+  if (buf.decoration_dirty)
+  {
+    ensure_decorations_anchored(buf);
+  }
+
   // Seed the rainbow depth at the viewport top. In-memory buffers use the
   // absolute per-line depth prefix (stable under scrolling); lazy buffers
   // keep the bounded backscan so the cache never demand-loads the whole
@@ -732,6 +740,33 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
         return bracket_guide.active && line_idx > bracket_guide.start_line
                && line_idx < bracket_guide.end_line;
       };
+
+      // Decorations on this row, found by binary search over the buffer's
+      // (row, col, priority, id)-sorted vector. Rows without decorations pay
+      // a single branch per frame; rows with them pay one scan per visible
+      // character (bounded by the row's decoration count).
+      int row_deco_lo = 0;
+      int row_deco_hi = 0;
+      {
+        auto it = std::lower_bound(buf.decorations.begin(),
+                                   buf.decorations.end(),
+                                   line_idx,
+                                   [](const Decoration &d, int row)
+                                   {
+                                     return d.row < row;
+                                   });
+        row_deco_lo = (int)(it - buf.decorations.begin());
+        row_deco_hi = row_deco_lo;
+        while (row_deco_hi < (int)buf.decorations.size()
+               && buf.decorations[row_deco_hi].row == line_idx)
+        {
+          row_deco_hi++;
+        }
+      }
+      // Walk cursor over the row's decoration slice: advances past spans that
+      // end as the character walk moves right, so each decoration is examined
+      // at most once per row.
+      size_t deco_cursor = (size_t)row_deco_lo;
 
       auto is_in_selection = [&](int char_idx)
       {
@@ -940,6 +975,51 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
               fg = bracket_color;
             }
 
+            // Anchored decoration overlay: spans draw over syntax and brackets
+            // but under selection and search matches. Among the spans covering
+            // this character the highest priority wins; deco_cursor skips spans
+            // that already ended as the walk moved right.
+            int deco_fg = -1;
+            int deco_bg = -1;
+            if (row_deco_lo < row_deco_hi)
+            {
+              int best = -1;
+              for (size_t di = deco_cursor; di < (size_t)row_deco_hi
+                                            && buf.decorations[di].col <= char_idx;
+                   di++)
+              {
+                const Decoration &d = buf.decorations[di];
+                if (d.width > 0 && char_idx < d.col + d.width)
+                {
+                  if (d.priority > best)
+                  {
+                    best = d.priority;
+                    deco_fg = d.fg;
+                    deco_bg = d.bg;
+                    if (!d.hl.empty())
+                    {
+                      theme_group_color(d.hl, deco_fg, deco_bg);
+                    }
+                  }
+                }
+                else if (char_idx >= d.col + d.width)
+                {
+                  deco_cursor = di + 1;
+                }
+              }
+            }
+            if ((deco_fg != -1 || deco_bg != -1) && !in_sel)
+            {
+              if (deco_fg != -1)
+              {
+                fg = deco_fg;
+              }
+              if (deco_bg != -1)
+              {
+                bg = deco_bg;
+              }
+            }
+
             if (c == '\t')
             {
               for (int fill = 0; fill < char_w && vis_idx + fill < visible_len; fill++)
@@ -1090,6 +1170,54 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             i = next_i > i ? next_i : i + 1;
           }
         }
+
+        // End-of-line virtual text from anchored decorations (inline
+        // diagnostics, etc.). Drawn after the content so it hugs the line's
+        // text end; the first decoration with virtual text wins (highest
+        // priority in the row's sort order). Folded headers keep their
+        // "… N lines" suffix instead.
+        if (row_deco_lo < row_deco_hi && !folded_header)
+        {
+          for (int di = row_deco_lo; di < row_deco_hi; di++)
+          {
+            const Decoration &d = buf.decorations[di];
+            if (d.virt_text.empty())
+            {
+              continue;
+            }
+            int vfg = d.virt_fg;
+            int vbg = d.virt_bg;
+            if (!d.virt_hl.empty())
+            {
+              theme_group_color(d.virt_hl, vfg, vbg);
+            }
+            if (vfg == -1)
+            {
+              vfg = theme.fg_comment;
+            }
+            if (vbg == -1)
+            {
+              vbg = theme.bg_default;
+            }
+            int line_vis_end = visible_len;
+            if ((int)line.size() < (int)visual_cols.size())
+            {
+              line_vis_end = std::max(0, visual_cols[line.size()] - start_visual);
+            }
+            int avail = visible_len - line_vis_end;
+            if (avail <= 0)
+            {
+              break;
+            }
+            std::string txt = ui_truncate_cells(d.virt_text, avail);
+            if (txt.empty())
+            {
+              break;
+            }
+            ui->draw_text(current_x + line_vis_end, draw_y, txt, vfg, vbg);
+            break;
+          }
+        }
         bracket_depth = line_bracket_depth;
       }
       else
@@ -1155,7 +1283,14 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
   {
     int cursor_visible_row = visible_row_for_line(
         buf.fold_ranges, buf.scroll_offset, buf.cursor.y, h, (int)buf.line_count());
-    const Diagnostic *active_diag = find_line_diagnostic(buf, buf.cursor.y, buf.cursor.x);
+    // The bundled Lua feature lua/features/decorations.lua renders inline
+    // diagnostics as anchored decorations (spans + end-of-line virtual text)
+    // while this config key is enabled; the native cursor-line popup would
+    // duplicate it, so it is suppressed then.
+    const Diagnostic *active_diag =
+        !config.get_bool("decorations_inline_diagnostics", true)
+            ? find_line_diagnostic(buf, buf.cursor.y, buf.cursor.x)
+            : nullptr;
     if (active_diag && diagnostic_covers_line(*active_diag, buf.cursor.y)
         && cursor_visible_row >= 0)
     {

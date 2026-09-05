@@ -200,6 +200,7 @@ void Editor::save_state()
 #ifdef JOT_TREESITTER
   ts_begin_edit(buf);
 #endif
+  decoration_rebase_begin(buf);
 
   if (buf.is_preview)
   {
@@ -242,6 +243,7 @@ void Editor::undo()
 #ifdef JOT_TREESITTER
   ts_begin_edit(buf);
 #endif
+  decoration_rebase_begin(buf);
   apply_state(buf, prev);
   // Full-snapshot restores replace buf.lines directly and would otherwise skip
   // mark_edited (stale fold ranges / tree-sitter line offsets / bracket-depth
@@ -281,6 +283,7 @@ void Editor::redo()
 #ifdef JOT_TREESITTER
   ts_begin_edit(buf);
 #endif
+  decoration_rebase_begin(buf);
   apply_state(buf, next);
   buf.mark_edited(next.full_snapshot ? 0 : next.start_line);
 

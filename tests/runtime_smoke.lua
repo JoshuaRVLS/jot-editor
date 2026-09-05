@@ -121,6 +121,65 @@ check("lsp.diagnostics", function() return jot.lsp.diagnostics() end)
 check("lsp.completions", function() return jot.lsp.completions() end)
 check("lsp.results", function() return jot.lsp.results() end)
 
+-- ---------------------------------------------------------- decorations
+present("decoration.set", jot.decoration and jot.decoration.set)
+check("decoration.set_roundtrip", function()
+  local id = jot.decoration.set(jot.buffer.current(),
+                                { row = 1, col = 1, width = 3, hl = "DiagnosticError" })
+  if not id then
+    return "set-failed"
+  end
+  local list = jot.decoration.list(jot.buffer.current()) or {}
+  local found = false
+  for _, d in ipairs(list) do
+    if d.id == id and d.hl == "DiagnosticError" and d.width == 3 then
+      found = true
+    end
+  end
+  jot.decoration.delete(jot.buffer.current(), id)
+  for _, d in ipairs(jot.decoration.list(jot.buffer.current()) or {}) do
+    if d.id == id then
+      return "still-present"
+    end
+  end
+  return found and "ok" or "not-found"
+end)
+check("decoration.update_in_place", function()
+  local id = jot.decoration.set(jot.buffer.current(), { row = 1, col = 1, width = 1 })
+  jot.decoration.set(jot.buffer.current(), { id = id, row = 1, col = 2, width = 4 })
+  local list = jot.decoration.list(jot.buffer.current()) or {}
+  local matches = 0
+  for _, d in ipairs(list) do
+    if d.id == id and d.col == 2 and d.width == 4 then
+      matches = matches + 1
+    end
+  end
+  jot.decoration.delete(jot.buffer.current(), id)
+  return matches == 1 and "ok" or "bad"
+end)
+check("decoration.virt_text", function()
+  local id = jot.decoration.set(jot.buffer.current(),
+                                { row = 1, col = 1, virt_text = " ⚠ smoke", virt_hl = "diagnostic_warning" })
+  local list = jot.decoration.list(jot.buffer.current()) or {}
+  local got = nil
+  for _, d in ipairs(list) do
+    if d.id == id then
+      got = d.virt_text
+    end
+  end
+  jot.decoration.delete(jot.buffer.current(), id)
+  return got or "missing"
+end)
+check("decoration.clear", function()
+  jot.decoration.set(jot.buffer.current(), { row = 1, col = 1, width = 2 })
+  jot.decoration.set(jot.buffer.current(), { row = 1, col = 1, virt_text = "x" })
+  jot.decoration.clear(jot.buffer.current())
+  local list = jot.decoration.list(jot.buffer.current()) or {}
+  local n = 0
+  for _ in ipairs(list) do n = n + 1 end
+  return n == 0 and "ok" or ("left=" .. n)
+end)
+
 -- ------------------------------------------------------------ async/job
 present("job.capture", jot.job and jot.job.capture)
 present("lsp.request_hover", jot.lsp and jot.lsp.request_hover)

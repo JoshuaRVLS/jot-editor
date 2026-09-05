@@ -476,6 +476,29 @@ struct FoldRange
   bool collapsed = false;
 };
 
+// Anchored decoration: a highlight span and/or end-of-line virtual text that
+// stays glued to its buffer position across edits (the same anchoring idea as
+// extmarks). Positions are byte offsets within a line. Every content mutation
+// goes through decoration_rebase_begin / ensure_decorations_anchored, which
+// diff the pre-edit text snapshot against the current text and shift each
+// decoration through the single edit window, honoring right/left gravity.
+struct Decoration
+{
+  std::uint64_t id = 0;
+  int row = 0;
+  int col = 0; // byte offset within the line
+  bool right_gravity = true; // true: insert at (row,col) keeps the mark after
+  int fg = -1; // span foreground (-1 = unset)
+  int bg = -1; // span background (-1 = unset)
+  std::string hl; // theme group name, resolved at render time (e.g. "DiagnosticError")
+  int width = 0; // span length in bytes (0 = point mark, no span)
+  int priority = 0; // higher draws over lower and over syntax colors
+  std::string virt_text; // end-of-line virtual text (empty = none)
+  int virt_fg = -1;
+  int virt_bg = -1;
+  std::string virt_hl; // theme group for the virtual text
+};
+
 struct FileBuffer
 {
   std::vector<std::string> lines;
@@ -495,6 +518,17 @@ struct FileBuffer
   std::set<int> bookmarks;
   std::unordered_map<std::string, std::string> lua_vars;
   std::map<char, Cursor> marks; // buffer-local marks ('a'-'z')
+  // Anchored decorations, sorted by (row, col, priority desc, id). The
+  // rebase machinery snapshots the full text before every edit and lazily
+  // shifts decorations through the single pending edit window (see
+  // decorations.cpp); decoration_dirty tracks whether a pending edit exists
+  // so the renderer pays nothing between edits. decoration_base_valid goes
+  // false when the text is replaced wholesale (file load): decorations are
+  // then cleared and consumers re-apply them (e.g. on DiagnosticChanged).
+  std::vector<Decoration> decorations;
+  std::string decoration_base;
+  bool decoration_base_valid = false;
+  bool decoration_dirty = false;
   std::vector<Diagnostic> diagnostics;
   // Per-line worst diagnostic severity (0 = none, 1 = error .. 4 = hint)
   // built lazily by the renderer over buf.diagnostics. The gutter asks for
