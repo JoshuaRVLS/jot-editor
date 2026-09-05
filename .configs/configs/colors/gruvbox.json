@@ -140,23 +140,23 @@
     "bg": 237
   },
   "StatusLineLogo": {
-    "fg": 237,
+    "fg": 235,
     "bg": 237
   },
   "StatusLineFile": {
-    "fg": 237,
+    "fg": 187,
     "bg": 237
   },
   "StatusLineInfo": {
-    "fg": 237,
+    "fg": 108,
     "bg": 237
   },
   "StatusLineWarn": {
-    "fg": 237,
+    "fg": 214,
     "bg": 237
   },
   "StatusLineError": {
-    "fg": 237,
+    "fg": 203,
     "bg": 237
   },
   "StatusLineMuted": {
