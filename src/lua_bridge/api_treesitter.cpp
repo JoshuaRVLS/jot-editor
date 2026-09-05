@@ -343,3 +343,21 @@ bool LuaAPI::reload_treesitter_runtime()
   lua_settop(L, top);
   return ok;
 }
+
+bool LuaAPI::flush_deferred_treesitter_queries()
+{
+  if (!lua_state)
+    return false;
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  int top = lua_gettop(L);
+  lua_getglobal(L, "jot");
+  lua_getfield(L, -1, "treesitter");
+  lua_getfield(L, -1, "load_queries");
+  bool ok = lua_isfunction(L, -1) && lua_pcall(L, 0, 0, 0) == LUA_OK;
+  if (!ok && lua_gettop(L) > top && lua_isstring(L, -1))
+  {
+    std::cerr << "Tree-sitter deferred query load failed: " << lua_tostring(L, -1) << "\n";
+  }
+  lua_settop(L, top);
+  return ok;
+}

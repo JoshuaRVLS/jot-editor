@@ -28,10 +28,6 @@ local function report_query_failures(query_errors)
   end
 end
 
-local query_ok, query_errors = queries.load_all(native, root, registry)
-if not query_ok then
-  report_query_failures(query_errors)
-end
 highlight.configure(native)
 
 local M = {}
@@ -46,12 +42,36 @@ M.captures = native.captures
 M.set_query = native.set_query
 M.set_capture_color = native.set_capture_color
 M.install_command = native.install_command
+
+-- The bundled highlight queries are NOT loaded at boot. Loading one means
+-- dlopening its parser (when installed) and compiling the query, which for
+-- large grammars costs tens of milliseconds per language, all before the
+-- first frame. Everything above -- language registration, extension mapping,
+-- module surface -- is cheap and stays on the boot path so plugins can rely
+-- on it. The native host calls load_queries() once shortly after the first
+-- frame paints; a language highlighted before that falls back to runtime /
+-- regex highlighting and upgrades itself on the next request. Explicit
+-- reloads (:tsreload, post-:tsinstall verification) still load synchronously
+-- so their results and errors are immediate. The call is idempotent.
+function M.load_queries()
+  if M._queries_loaded then
+    return true
+  end
+  M._queries_loaded = true
+  local ok, query_errors = queries.load_all(native, root, registry)
+  if not ok then
+    report_query_failures(query_errors)
+  end
+  return ok
+end
+
 M.reload = function()
   native.reload()
   registry = dofile(root .. "/registry.lua")
   queries = dofile(root .. "/queries.lua")
   highlight = dofile(root .. "/highlight.lua")
   registry.register(native)
+  M._queries_loaded = false
   local query_ok, query_errors = queries.load_all(native, root, registry)
   if not query_ok then
     report_query_failures(query_errors)

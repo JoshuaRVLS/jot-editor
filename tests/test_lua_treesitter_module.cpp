@@ -119,12 +119,16 @@ TEST_CASE("Bundled Lua Tree-sitter startup keeps every registry language enabled
 
   std::string script = "local f,e=loadfile('" JOT_LUA_SOURCE_DIR "/treesitter/init.lua"
                        "'); "
-                       "assert(f,e); assert(f())";
+                       "assert(f,e); assert(f()); "
+                       "assert(jot.treesitter.load_queries, 'missing load_queries'); "
+                       "jot.treesitter.load_queries()";
   int result = luaL_dostring(L, script.c_str());
   INFO(lua_tostring(L, -1));
   REQUIRE(result == LUA_OK);
 
-  // Regression: registry.lua used to set query_file with a "queries/" prefix
+  // The query load is deferred off the boot path (see init.lua load_queries),
+  // so the test invokes it explicitly above. Regression: registry.lua used to
+  // set query_file with a "queries/" prefix
   // while queries.lua prepends the queries dir again, so every bundled query
   // file failed to resolve and disable_language() wiped the whole registry at
   // startup - making :tsstatus report nothing installed and installed parsers

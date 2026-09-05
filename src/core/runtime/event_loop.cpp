@@ -929,6 +929,18 @@ void Editor::run()
   event_loop_.set_timer(render_ms, true, [this] { render_frame(); });
   event_loop_.set_timer(50, true, [this] { maybe_fire_lsp_mouse_hover(); });
 
+  // Tree-sitter bundled highlight queries are deferred off the synchronous
+  // boot path (compiling one dlopens the installed parser, which costs tens
+  // of milliseconds per language for large grammars). Run that load a few
+  // frames after the first paint so startup stays snappy while the queries
+  // are still ready before the user opens anything.
+  event_loop_.set_timeout(24,
+                          [this]
+                          {
+                            if (lua_api)
+                              lua_api->flush_deferred_treesitter_queries();
+                          });
+
   // JOT_SAFE_MODE disables every non-essential background timer so
   // we can isolate native crashes from periodic work. The editor
   // stays usable for input, rendering, and undo; only git status,
