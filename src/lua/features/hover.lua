@@ -268,7 +268,15 @@ local function present(info)
   -- binding (config is argument #2); focusable=false keeps it display-only.
   win = jot.ui.float.open(buf, {
     col = info.anchor_x or 0,
-    row = info.anchor_y or 0,
+    -- Open one row below the anchor line (the hovered code line / cursor
+    -- row) instead of on it: starting the frame on the hovered row cuts that
+    -- line mid-text and, when the server echoes the declaration it was asked
+    -- about (header files), the same code appears again directly beneath -
+    -- reading as a duplicated line. Keeping the anchor row fully visible
+    -- above the frame makes the box read as a tooltip. When it does not fit
+    -- below, the float compositor shifts the whole frame up to the editor
+    -- bottom (whole rows only, never a mid-row cut).
+    row = (info.anchor_y or -1) + 1,
     width = w,
     height = h,
     relative = "editor",

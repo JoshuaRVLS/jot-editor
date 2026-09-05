@@ -317,7 +317,10 @@ TEST_CASE("Bundled Lua hover UI renders and dismisses a float")
   REQUIRE(g.last_fg == 250);
   REQUIRE(g.last_bg == 237);
   REQUIRE(g.last_col == "40");
-  REQUIRE(g.last_row == "15");
+  // The float opens one row below the anchor line (never on it), so the
+  // hovered code row stays fully visible above the frame instead of being
+  // cut mid-text by the box.
+  REQUIRE(g.last_row == "16");
   REQUIRE((g.last_height >= 3 && g.last_height <= 16));
 
   // Theme colors: border/footer use their own slots (footer falls back to
