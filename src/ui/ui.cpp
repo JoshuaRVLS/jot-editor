@@ -70,14 +70,23 @@ UI::UI(Terminal *t)
       cursor_shape(UICursorShape::Block), cursor_hidden(true)
 {
   grid.resize(height);
+  last_grid.resize(height);
   for (int y = 0; y < height; y++)
   {
     grid[y].resize(width);
+    last_grid[y].resize(width);
     for (int x = 0; x < width; x++)
     {
       grid[y][x] = {" ", default_fg, default_bg, false, false, false};
+      last_grid[y][x] = {" ", default_fg, default_bg, false, false, false};
     }
   }
+  mark_all_rows_dirty();
+}
+
+void UI::mark_all_rows_dirty()
+{
+  row_dirty.assign(height, (unsigned char)1);
 }
 
 void UI::resize(int w, int h)
@@ -93,22 +102,22 @@ void UI::resize(int w, int h)
   cursor_hidden = true;
   cursor_dirty = true;
   grid.resize(height);
+  last_grid.resize(height);
   for (int y = 0; y < height; y++)
   {
     grid[y].resize(width);
+    last_grid[y].resize(width);
     for (int x = 0; x < width; x++)
     {
       grid[y][x] = {" ", default_fg, default_bg, false, false, false};
+      last_grid[y][x] = {" ", default_fg, default_bg, false, false, false};
     }
   }
+  // The grid was just blanked, so the next frame must repaint every row.
+  mark_all_rows_dirty();
   // Only invalidate (which calls term->clear()) when the dimensions actually
-  // changed. The constructor's UI(Terminal*) already fills last_grid with
-  // the force-redraw sentinel, so the first resize() right after
-  // construction is a no-op from the diff renderer's point of view; the
-  // only side effect of calling invalidate() here is one extra ESC[2J
-  // when the Editor constructor and Editor::run() each call resize() at
-  // startup. Skipping it on dimension-stable resizes removes the duplicate
-  // clear and the duplicate full-redraw pass.
+  // changed, to avoid an extra ESC[2J when the Editor constructor and
+  // Editor::run() each call resize() at startup.
   if (dim_changed)
   {
     invalidate();
@@ -123,6 +132,8 @@ void UI::invalidate()
   cursor_hidden = true;
   cursor_dirty = true;
   term->clear();
+  // The physical screen was cleared; the next frame must repaint every row.
+  mark_all_rows_dirty();
 }
 
 void UI::clear()
@@ -134,6 +145,7 @@ void UI::clear()
       cell = {" ", default_fg, default_bg, false, false, false};
     }
   }
+  mark_all_rows_dirty();
 }
 
 void UI::set_default_colors(int fg, int bg)
@@ -154,6 +166,7 @@ void UI::dim_rect(const UIRect &rect)
     {
       grid[y][x].dim = true;
     }
+    row_dirty[y] = 1;
   }
 }
 
@@ -162,6 +175,7 @@ void UI::set_cell(int x, int y, const UICell &cell)
   if (x >= 0 && x < width && y >= 0 && y < height)
   {
     grid[y][x] = cell;
+    row_dirty[y] = 1;
   }
 }
 
@@ -176,16 +190,40 @@ const UICell *UI::cell_at(int x, int y) const
 
 void UI::render()
 {
-  // Full-row paint renderer. Every row is written from column 0 with
-  // explicit colors and padded so stale terminal content is always
-  // overwritten. No diff against last_grid. Autowrap is disabled for the
-  // entire frame; one final flush at the end.
+  // Row-diffing full-paint renderer. The draw layer repaints the whole
+  // grid every frame (immediate mode), so render() compares each row
+  // against last_grid -- the frame that was actually written to the
+  // terminal -- and only emits rows whose content genuinely changed.
+  // A typical typing frame then writes the 1-3 edited rows instead of
+  // the whole screen, cutting per-frame terminal output by ~90% on big
+  // buffers. That output volume is what makes typing/scrolling feel laggy
+  // on I/O-bound terminals: thousands of SGR sequences must be parsed by
+  // the terminal emulator for every keystroke.
   //
-  // When JOT_RENDER_CAPTURE_RAW=1, run coalescing is disabled and every
-  // cell is written one at a time so the capture log is unambiguous.
+  // Skipping is safe because a skipped row is byte-identical to what the
+  // terminal already shows: nothing wrote to it since it was painted (it
+  // is compared cell-by-cell against the retained copy), and every paint
+  // pads the row to full width and erases its right margin, so no stale
+  // content can linger. Capture modes (JOT_RENDER_CAPTURE*) force a full
+  // paint of every row so their logs stay unambiguous; capture raw also
+  // disables run coalescing so every cell is written one at a time.
 
   bool capture_on = term->render_capture_enabled();
   bool capture_raw = term->render_capture_raw();
+
+  // Capture logs must stay unambiguous frame-to-frame, so capture mode
+  // always paints every row (identical to the legacy always-full
+  // renderer).
+  const bool force_full = capture_on || capture_raw;
+
+  // Terminals can occasionally drop or garble a row's bytes mid-frame.
+  // With row-skipping a corrupted-but-unchanged row would otherwise stay
+  // corrupted forever, so every kSelfHealFrames rendered frames is a full
+  // repaint. At 60fps that is ~1.5s. Frame counting (not wall time) keeps
+  // the behaviour deterministic and only "active" frames count: idle
+  // frames rarely reach render() at all.
+  constexpr int kSelfHealFrames = 90;
+  const bool self_heal = renders_since_full_paint_ >= kSelfHealFrames;
 
   // Keep intermediate row cursor moves invisible. Only the final cursor
   // state below should reach the terminal as visible state.
@@ -201,6 +239,15 @@ void UI::render()
   // is fixed so full-width borders do not leave an oversized right gap.
   const int margin = term->render_margin();
   const int row_width = std::max(0, width - margin);
+  const bool paint_all = force_full || self_heal;
+  if (paint_all)
+  {
+    renders_since_full_paint_ = 0;
+  }
+  else
+  {
+    renders_since_full_paint_++;
+  }
   for (int y = 0; y < height; y++)
   {
     if (row_width <= 0)
@@ -213,8 +260,39 @@ void UI::render()
       {
         term->clear_to_end();
       }
+      row_dirty[y] = 0;
       continue;
     }
+
+    if (!paint_all)
+    {
+      if (!row_dirty[y])
+      {
+        // Nothing in this row was even drawn to this frame.
+        continue;
+      }
+      // Redrawn this frame, but cell-for-cell identical to the frame the
+      // terminal already shows: no output needed. The per-row dirty flag
+      // alone cannot decide this -- immediate-mode drawing rewrites every
+      // row every frame -- so compare against the retained last_grid.
+      const auto &cur = grid[y];
+      const auto &prev = last_grid[y];
+      bool same = true;
+      for (int x = 0; x < row_width; x++)
+      {
+        if (cur[x] != prev[x])
+        {
+          same = false;
+          break;
+        }
+      }
+      if (same)
+      {
+        row_dirty[y] = 0;
+        continue;
+      }
+    }
+    row_dirty[y] = 0;
 
     term->move_cursor(0, y);
 
@@ -336,6 +414,10 @@ void UI::render()
     // Move past the painted cells before erasing the untouched margin.
     term->move_cursor(row_width, y);
     term->clear_to_end();
+
+    // Retain this row as the new baseline for next frame's diff. Rows that
+    // were skipped above keep their previous (still-accurate) baseline.
+    last_grid[y] = grid[y];
   }
 
   term->reset_color();

@@ -43,6 +43,29 @@ class UI
 private:
   Terminal *term;
   std::vector<std::vector<UICell>> grid;
+  // Per-row dirty flags: set whenever a cell in the row is modified between
+  // frames, cleared when render() processes the row. A dirty row is only a
+  // candidate -- render() still compares it against last_grid (below)
+  // before emitting anything. All grid writes go through
+  // set_cell()/dim_rect(), which maintain this vector; bulk operations
+  // (constructor, resize, clear, invalidate) mark every row dirty so the
+  // next frame is a full repaint.
+  std::vector<unsigned char> row_dirty;
+  // Retained copy of the last frame actually written to the terminal.
+  // The draw layer rewrites the whole grid every frame (immediate mode),
+  // so per-row dirty flags alone would mark every row dirty. render()
+  // instead compares each dirty row against last_grid and skips the row's
+  // terminal write when the content is identical -- typing/scrolling then
+  // emits only the rows that genuinely changed instead of the whole
+  // screen.
+  std::vector<std::vector<UICell>> last_grid;
+  // Renders since the last full-screen paint. Terminals can occasionally
+  // drop or garble a row's bytes mid-frame; since an unchanged row is now
+  // left untouched, a periodic full repaint bounds any such artifact's
+  // lifetime. Initialised to the threshold so the very first frame is a
+  // full paint (the terminal may show stale content from whatever ran
+  // before the editor).
+  int renders_since_full_paint_ = 90;
   int width, height;
   int cursor_x, cursor_y;
   UICursorShape cursor_shape;
@@ -52,6 +75,7 @@ private:
   int default_bg = 0;
 
   void set_cell(int x, int y, const UICell &cell);
+  void mark_all_rows_dirty();
 
 public:
   UI(Terminal *t);
