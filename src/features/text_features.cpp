@@ -221,6 +221,71 @@ bool EditorFeatures::should_python_dedent(const std::string &line)
          || starts_with_keyword(trimmed, "case");
 }
 
+bool EditorFeatures::should_lua_auto_indent(const std::string &line)
+{
+  std::string trimmed = trim_left(line);
+  if (trimmed.empty())
+    return false;
+
+  trimmed = trim_right_ws(trimmed);
+  // Strip -- comments (a "--" inside a string is ignored by this heuristic).
+  const size_t comment_pos = trimmed.find("--");
+  if (comment_pos != std::string::npos)
+  {
+    trimmed = trim_right_ws(trimmed.substr(0, comment_pos));
+  }
+  if (trimmed.empty())
+    return false;
+
+  // Table constructors and wrapped argument lists.
+  if (trimmed.back() == '{' || trimmed.back() == '(' || trimmed.back() == '[')
+    return true;
+
+  // Blocks opened by the first word: function foo(), local function, if ...
+  static const std::vector<std::string> starters = {"function",
+                                                    "local function",
+                                                    "if",
+                                                    "for",
+                                                    "while",
+                                                    "repeat",
+                                                    "do",
+                                                    "else",
+                                                    "elseif"};
+  for (const auto &kw : starters)
+  {
+    if (starts_with_keyword(trimmed, kw))
+      return true;
+  }
+
+  // Blocks opened by the last word: `if x then`, `while x do`, `repeat`.
+  static const std::vector<std::string> enders = {"then", "do", "repeat", "else", "elseif"};
+  const size_t last_space = trimmed.find_last_of(" \t");
+  const std::string last_word =
+      last_space == std::string::npos ? trimmed : trimmed.substr(last_space + 1);
+  for (const auto &kw : enders)
+  {
+    if (last_word == kw)
+      return true;
+  }
+
+  return false;
+}
+
+bool EditorFeatures::should_lua_dedent(const std::string &line)
+{
+  const std::string trimmed = trim_left(line);
+  if (trimmed.empty())
+    return false;
+
+  static const std::vector<std::string> dedents = {"end", "else", "elseif", "until"};
+  for (const auto &kw : dedents)
+  {
+    if (starts_with_keyword(trimmed, kw))
+      return true;
+  }
+  return false;
+}
+
 int EditorFeatures::find_matching_bracket(
     const std::vector<std::string> &lines, int line, int col, char open, char close)
 {

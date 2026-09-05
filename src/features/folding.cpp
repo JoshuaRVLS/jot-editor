@@ -1,3 +1,4 @@
+#include "features/language.h"
 #include "folding.h"
 
 #include <algorithm>
@@ -9,21 +10,6 @@
 
 namespace
 {
-  std::string lower_copy(std::string value)
-  {
-    std::transform(value.begin(),
-                   value.end(),
-                   value.begin(),
-                   [](unsigned char c) { return (char)std::tolower(c); });
-    return value;
-  }
-
-  bool indentation_language(const std::string &extension)
-  {
-    std::string ext = lower_copy(extension);
-    return ext == ".py" || ext == ".yaml" || ext == ".yml" || ext == ".md" || ext == ".markdown";
-  }
-
   int indent_level(const std::string &line)
   {
     int indent = 0;
@@ -316,7 +302,7 @@ namespace Folding
     {
       return {};
     }
-    if (indentation_language(extension))
+    if (Language::is_indentation_language(extension))
     {
       return detect_indent_ranges(lines);
     }

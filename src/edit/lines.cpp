@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "features/language.h"
 #include "lua_bridge/api.h"
 #include "text_features.h"
 #include <algorithm>
@@ -34,24 +35,15 @@ namespace
     return removed;
   }
 
-  bool has_python_extension(const std::string &path)
-  {
-    if (path.size() < 3)
-      return false;
-    const size_t dot = path.find_last_of('.');
-    if (dot == std::string::npos)
-      return false;
-    std::string ext = path.substr(dot);
-    std::transform(
-        ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-    return ext == ".py";
-  }
-
   bool should_indent_after_line(const FileBuffer &buf, const std::string &line)
   {
-    if (has_python_extension(buf.filepath))
+    if (Language::is_python_file(buf.filepath))
     {
       return EditorFeatures::should_python_auto_indent(line);
+    }
+    if (Language::is_lua_file(buf.filepath))
+    {
+      return EditorFeatures::should_lua_auto_indent(line);
     }
     return EditorFeatures::should_auto_indent(line);
   }

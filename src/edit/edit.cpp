@@ -1,5 +1,6 @@
 #include "autoclose.h"
 #include "editor.h"
+#include "features/language.h"
 #include "html.h"
 #include "lua_bridge/api.h"
 #include "text_features.h"
@@ -50,22 +51,14 @@ namespace
     return std::isalnum(c) || c == '_';
   }
 
-  bool has_python_extension(const std::string &path)
-  {
-    if (path.size() < 3)
-      return false;
-    const size_t dot = path.find_last_of('.');
-    if (dot == std::string::npos)
-      return false;
-    std::string ext = path.substr(dot);
-    std::transform(
-        ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-    return ext == ".py";
-  }
-
   bool is_python_buffer(const FileBuffer &buf)
   {
-    return has_python_extension(buf.filepath);
+    return Language::is_python_file(buf.filepath);
+  }
+
+  bool is_lua_buffer(const FileBuffer &buf)
+  {
+    return Language::is_lua_file(buf.filepath);
   }
 
   bool should_indent_after_line(const FileBuffer &buf, const std::string &line)
@@ -73,6 +66,10 @@ namespace
     if (is_python_buffer(buf))
     {
       return EditorFeatures::should_python_auto_indent(line);
+    }
+    if (is_lua_buffer(buf))
+    {
+      return EditorFeatures::should_lua_auto_indent(line);
     }
     return EditorFeatures::should_auto_indent(line);
   }
@@ -203,6 +200,18 @@ bool Editor::insert_char(char c)
     if (auto_indent && c == ':' && is_python_buffer(buf))
     {
       if (EditorFeatures::should_python_dedent(buf.line_mut(buf.cursor.y)))
+      {
+        dedent_current_line_one_level(buf, tab_size);
+      }
+    }
+
+    // Lua blocks close with a word (`end`, `else`, `elseif`, `until`) instead
+    // of a bracket, so dedent the moment the typed word completes at the
+    // start of the line. Reserved words cannot be identifiers, so the match
+    // can only be the block closer itself.
+    if (auto_indent && is_lua_buffer(buf) && std::isalnum(static_cast<unsigned char>(c)))
+    {
+      if (EditorFeatures::should_lua_dedent(buf.line_mut(buf.cursor.y)))
       {
         dedent_current_line_one_level(buf, tab_size);
       }
@@ -564,7 +573,8 @@ void Editor::new_line()
       new_line_str = EditorFeatures::get_indent_string(indent, tab_size);
     }
 
-    if (EditorFeatures::should_dedent(remaining))
+    if (EditorFeatures::should_dedent(remaining)
+        || (is_lua_buffer(buf) && EditorFeatures::should_lua_dedent(remaining)))
     {
       size_t content_start = remaining.find_first_not_of(" \t");
       std::string trimmed_remaining =
