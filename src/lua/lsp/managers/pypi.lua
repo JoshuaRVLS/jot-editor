@@ -8,17 +8,26 @@ local function sh_quote(v)
 end
 
 ---@param entry table registry entry (manager = "pypi")
----@param dirs table { root, dir, bin_dir }
----@return string[] install script lines (POSIX sh)
+---@param dirs table { root, dir, bin_dir, dl_dir }
 function M.install_lines(entry, dirs)
-  local lines = {
-    "python3 -m pip install --target " .. sh_quote(dirs.dir) .. " " .. sh_quote(entry.pkg),
-  }
-  for _, b in ipairs(entry.bin) do
-    lines[#lines + 1] = "ln -sf " .. sh_quote(dirs.dir .. "/bin/" .. b) .. " "
-      .. sh_quote(dirs.bin_dir .. "/" .. b)
+  local spec = entry.pkg
+  local extra = (entry.extras or {}).extra
+  if extra and extra ~= "" then
+    spec = spec .. "[" .. extra .. "]"
   end
-  return lines
+  if entry.version and entry.version ~= "" then
+    spec = spec .. "==" .. entry.version
+  end
+  local line = "python3 -m pip install --quiet --disable-pip-version-check --target "
+    .. sh_quote(dirs.dir) .. " " .. sh_quote(spec)
+  local runs = entry.runs or {}
+  for _, b in ipairs(entry.bin or {}) do
+    if not runs[b] then
+      runs[b] = { kind = "", hint = "bin/" .. b }
+    end
+  end
+  entry.runs = runs
+  return { line }
 end
 
 return M

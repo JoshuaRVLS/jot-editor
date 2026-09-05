@@ -1,5 +1,6 @@
--- npm manager: installs a package into the isolated package dir and links
--- its .bin entries into <root>/bin (mason.nvim's npm manager, simplified).
+-- npm manager: installs a package into the isolated package dir with pinned
+-- version (mason registry pins CI-verified releases) and optional extra
+-- packages.
 
 local M = {}
 
@@ -8,17 +9,27 @@ local function sh_quote(v)
 end
 
 ---@param entry table registry entry (manager = "npm")
----@param dirs table { root, dir, bin_dir }
----@return string[] install script lines (POSIX sh)
+---@param dirs table { root, dir, bin_dir, dl_dir }
 function M.install_lines(entry, dirs)
-  local lines = {
-    "npm install --prefix " .. sh_quote(dirs.dir) .. " " .. sh_quote(entry.pkg) .. "@latest",
-  }
-  for _, b in ipairs(entry.bin) do
-    lines[#lines + 1] = "ln -sf " .. sh_quote(dirs.dir .. "/node_modules/.bin/" .. b) .. " "
-      .. sh_quote(dirs.bin_dir .. "/" .. b)
+  local spec = entry.pkg
+  if entry.version and entry.version ~= "" then
+    spec = spec .. "@" .. entry.version
+  else
+    spec = spec .. "@latest"
   end
-  return lines
+  local line = "npm install --prefix " .. sh_quote(dirs.dir) .. " " .. sh_quote(spec)
+  for _, extra in ipairs(entry.extra_pkgs or {}) do
+    line = line .. " " .. sh_quote(extra)
+  end
+  -- Public bins live under node_modules/.bin inside the isolated prefix.
+  local runs = entry.runs or {}
+  for _, b in ipairs(entry.bin or {}) do
+    if not runs[b] then
+      runs[b] = { kind = "", hint = "node_modules/.bin/" .. b }
+    end
+  end
+  entry.runs = runs
+  return { line }
 end
 
 return M

@@ -1,5 +1,6 @@
 #include "core/app/process_job.h"
 #include "editor.h"
+#include "lsp_attach_data.h"
 #include "lsp/client.h"
 #include "lsp/install.h"
 #include "lua_bridge/api.h"
@@ -7,6 +8,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -29,6 +31,8 @@ namespace
     return s.size() >= suffix.size()
            && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
   }
+
+  std::string attach_server_for_file(const std::string &lower); // generated table
 
   std::string detect_lsp_language(const std::string &filepath)
   {
@@ -77,7 +81,9 @@ namespace
       return "sql";
     if (lower.size() >= 4 && lower.substr(lower.size() - 4) == ".php")
       return "php";
-    return "";
+    // Everything past the hand-tuned rules above comes from the generated
+    // mason-registry catalog (see tools/mason_import.py).
+    return attach_server_for_file(lower);
   }
 
   std::vector<std::string> workspace_markers_for(const std::string &language)
@@ -148,6 +154,70 @@ namespace
   // Defined later in this namespace (near the managed-bin helpers).
   std::string resolve_lsp_bin(const std::string &bin);
   std::string lsp_server_usage_hint(LuaAPI *api);
+
+  bool lower_ends_with_dot_ext(const std::string &lower, const std::string &ext)
+  {
+    if (ext.empty() || lower.size() <= ext.size())
+      return false;
+    const size_t pos = lower.size() - ext.size();
+    return lower.compare(pos, ext.size(), ext) == 0 && lower[pos - 1] == '.';
+  }
+
+  // Extension table from tools/mason_import.py: (ext -> server). Applies only
+  // when none of the hand-tuned canonical rules matched.
+  std::string attach_server_for_file(const std::string &lower)
+  {
+    for (const auto &e : kLspAttachTable)
+    {
+      if (lower_ends_with_dot_ext(lower, e.ext))
+        return e.server;
+    }
+    // Dotless filenames such as `Dockerfile` / `meson.build`-style names.
+    for (const auto &e : kLspAttachTable)
+    {
+      if (lower == e.ext)
+        return e.server;
+    }
+    return "";
+  }
+
+  // True when the server's managed bin exists, or the bare name is on PATH.
+  bool lsp_bin_available(const std::string &bin)
+  {
+    if (bin.empty())
+      return false;
+    if (!LspInstall::resolve_managed_bin(bin).empty())
+      return true;
+    const char *env = std::getenv("PATH");
+    if (!env || !*env)
+      return false;
+    std::error_code ec;
+    std::istringstream paths(env);
+    std::string dir;
+    while (std::getline(paths, dir, ':'))
+    {
+      if (dir.empty())
+        continue;
+#ifdef _WIN32
+      const std::filesystem::path cand = std::filesystem::path(dir) / (bin + ".exe");
+#else
+      const std::filesystem::path cand = std::filesystem::path(dir) / bin;
+#endif
+      if (std::filesystem::is_regular_file(cand, ec))
+        return true;
+    }
+    return false;
+  }
+
+  std::string language_id_for_attach(const std::string &lower)
+  {
+    for (const auto &e : kLspLangIdTable)
+    {
+      if (lower_ends_with_dot_ext(lower, e.ext))
+        return e.langid;
+    }
+    return "";
+  }
 
   std::vector<std::string> command_for_language(const std::string &language)
   {
@@ -235,6 +305,32 @@ namespace
     {
       return {resolve_lsp_bin("intelephense"), "--stdio"};
     }
+    // Servers from the generated catalog: launch their primary bin when it is
+    // actually installed; args come from the well-known stdio table when the
+    // server's launch contract is recorded there (bare otherwise).
+    for (const auto &entry : kLspBinTable)
+    {
+      if (entry.server == language)
+      {
+        if (!lsp_bin_available(entry.bin))
+          return {};
+        std::vector<std::string> command = {resolve_lsp_bin(entry.bin)};
+        for (const auto &args : kLspKnownArgs)
+        {
+          if (args.server == language)
+          {
+            std::istringstream iss(args.args);
+            std::string token;
+            while (iss >> token)
+            {
+              command.push_back(token);
+            }
+            break;
+          }
+        }
+        return command;
+      }
+    }
     return {};
   }
 
@@ -275,6 +371,13 @@ namespace
     if (language == "html")
     {
       return "html";
+    }
+    std::string lower = filepath;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    const std::string attach_id = language_id_for_attach(lower);
+    if (!attach_id.empty())
+    {
+      return attach_id;
     }
     return language;
   }

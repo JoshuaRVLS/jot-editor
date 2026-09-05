@@ -78,21 +78,24 @@ std::vector<std::filesystem::path> jot_lua_override_dirs()
   {
     out.push_back(user);
   }
+#ifdef JOT_LUA_SOURCE_DIR
+  // Developer source dir outranks an installed copy: iteration never needs a
+  // rebuild to see bundled-Lua edits, and a stale install copy cannot shadow
+  // the current source.
+  {
+    const std::filesystem::path dev = std::filesystem::path(JOT_LUA_SOURCE_DIR);
+    if (std::filesystem::is_directory(dev))
+    {
+      out.push_back(dev);
+    }
+  }
+#endif
 #ifdef JOT_DEFAULT_DATA_DIR
   {
     const std::filesystem::path inst = std::filesystem::path(JOT_DEFAULT_DATA_DIR) / "lua";
     if (std::filesystem::is_directory(inst))
     {
       out.push_back(inst);
-    }
-  }
-#endif
-#ifdef JOT_LUA_SOURCE_DIR
-  {
-    const std::filesystem::path dev = std::filesystem::path(JOT_LUA_SOURCE_DIR);
-    if (std::filesystem::is_directory(dev))
-    {
-      out.push_back(dev);
     }
   }
 #endif
@@ -199,6 +202,28 @@ std::filesystem::path jot_lua_resolve_path(const std::string &rel_path)
     return true;
   };
 
+  // When a dev source dir is present, a copy there is the developer's working
+  // file: it outranks a jot-materialized cache copy that no longer matches
+  // (avoids stale cache shadowing edits to src/lua without a rebuild).
+  auto dev_diverge_path = [&]() -> std::filesystem::path
+  {
+#ifdef JOT_LUA_SOURCE_DIR
+    const std::filesystem::path dev_root(JOT_LUA_SOURCE_DIR);
+    if (dev_root.empty())
+      return {};
+    const std::string dev_prefix = dev_root.string();
+    for (size_t i = 1; i < candidates.size(); i++)
+    {
+      if (candidates[i].string().rfind(dev_prefix, 0) == 0
+          && read_file(candidates[i]) != embedded)
+      {
+        return candidates[i];
+      }
+    }
+#endif
+    return {};
+  };
+
   // Hand-written overrides in the user dir (no marker) are kept verbatim and
   // win over everything: that is the documented community-edit escape hatch.
   const bool in_user_dir =
@@ -222,6 +247,11 @@ std::filesystem::path jot_lua_resolve_path(const std::string &rel_path)
           return first;
         }
       }
+      const std::filesystem::path dev_div = dev_diverge_path();
+      if (!dev_div.empty())
+      {
+        return dev_div;
+      }
       return first;
     }
 
@@ -241,17 +271,15 @@ std::filesystem::path jot_lua_resolve_path(const std::string &rel_path)
       }
     }
 
-    // The user copy matches the embedded content, but a lower dir differs
-    // (e.g. an unrebuilt edit in the source dir): prefer the newer copy so
-    // dev iteration on src/lua is not shadowed by stale cache.
+    // The user copy matches the embedded content, but the dev source dir
+    // differs (an in-progress edit): prefer the dev working copy so
+    // iteration on src/lua is not shadowed by stale cache.
     if (on_disk == embedded)
     {
-      for (size_t i = 1; i < candidates.size(); i++)
+      const std::filesystem::path dev_div = dev_diverge_path();
+      if (!dev_div.empty())
       {
-        if (read_file(candidates[i]) != embedded)
-        {
-          return candidates[i];
-        }
+        return dev_div;
       }
     }
 
@@ -264,13 +292,23 @@ std::filesystem::path jot_lua_resolve_path(const std::string &rel_path)
   // `make install` snapshots track the bundled lua, while the dev source
   // dir stays the developer's working copy and is never overwritten.
   {
+    const bool first_is_dev = [&]()
+    {
+#ifdef JOT_LUA_SOURCE_DIR
+      const std::filesystem::path dev_root(JOT_LUA_SOURCE_DIR);
+      return !dev_root.empty() && first.string().rfind(dev_root.string(), 0) == 0;
+#else
+      return false;
+#endif
+    }();
     const bool marker_ok = std::filesystem::is_regular_file(marker_path(first));
     const std::string on_disk = read_file(first);
 
     if (marker_ok)
     {
       // jot wrote this file: refresh when the binary's bundled lua moved on.
-      if (!embedded.empty() && on_disk != embedded)
+      // The dev source dir is the developer's working copy - never touched.
+      if (!first_is_dev && !embedded.empty() && on_disk != embedded)
       {
         if (refresh_with_embedded(first))
         {
@@ -284,7 +322,7 @@ std::filesystem::path jot_lua_resolve_path(const std::string &rel_path)
     // when a lower-precedence copy (the dev source dir) carries the current
     // content. The dev source itself never matches this branch (no lower
     // dirs left), so in-progress edits there are always kept.
-    if (!embedded.empty() && on_disk != embedded)
+    if (!first_is_dev && !embedded.empty() && on_disk != embedded)
     {
       for (size_t i = 1; i < candidates.size(); i++)
       {
@@ -296,17 +334,15 @@ std::filesystem::path jot_lua_resolve_path(const std::string &rel_path)
       }
     }
 
-    // Installed copy matches the embedded content but a lower dir differs
-    // (e.g. an unrebuilt edit in the source dir): prefer the newer copy so
-    // dev iteration on src/lua is not shadowed by a stale install.
+    // Installed copy matches the embedded content but the dev source dir
+    // differs (an in-progress edit): prefer the dev working copy so
+    // iteration on src/lua is not shadowed by a stale install.
     if (on_disk == embedded)
     {
-      for (size_t i = 1; i < candidates.size(); i++)
+      const std::filesystem::path dev_div = dev_diverge_path();
+      if (!dev_div.empty())
       {
-        if (read_file(candidates[i]) != embedded)
-        {
-          return candidates[i];
-        }
+        return dev_div;
       }
     }
 
