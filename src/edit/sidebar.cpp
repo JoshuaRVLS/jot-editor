@@ -539,6 +539,11 @@ void Editor::render_sidebar()
   view.rail_w = rail_w;
   view.rail_explorer_row = kExplorerOnly ? -1 : 1;
   view.rail_git_row = kExplorerOnly ? -1 : 3;
+  // Content geometry: the Lua handler truncates the baked-in header/footer
+  // against content_w, so it must be populated before emit (defaults to 0
+  // otherwise, silently clipping the header to nothing).
+  view.content_x = std::max(1, rail_w);
+  view.content_w = std::max(0, w - view.content_x - 1);
 
   auto emit_sidebar_view = [&]() -> bool
   {
@@ -613,9 +618,10 @@ void Editor::render_sidebar()
   }
 
   // Content lives inside the frame: at least column 1 (the left border)
-  // plus the activity rail when present.
-  const int content_x = std::max(1, rail_w);
-  const int content_w = std::max(0, w - content_x - 1);
+  // plus the activity rail when present. Geometry mirrors view.content_x /
+  // view.content_w set above so the Lua handler and native paint agree.
+  const int content_x = view.content_x;
+  const int content_w = view.content_w;
   if (content_w < 2)
   {
     if (emit_sidebar_view())
