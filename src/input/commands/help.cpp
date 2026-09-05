@@ -22,7 +22,7 @@ void Editor::show_command_help(const std::string &topic_text)
                 ":uniquelines :shufflelines :joinlines :dupe :copypath :copyname "
                 ":datetime :stats :replace :replacei :replaceword :replacere "
                 ":surround :unsurround :fold :unfold :togglefold :foldall "
-                ":unfoldall :incnum :decnum :lspmanager "
+                ":unfoldall :incnum :decnum :lspinstall <server> :lspremove <server> "
                 ":tsinstall <language> :tsstatus :tsreload "
                 ":reload :reloadconfig :reloadplugins "
                 ":task [name] :tasknew <name> :taskrerun "

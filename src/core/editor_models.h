@@ -186,6 +186,12 @@ struct TerminalTask
 struct TreeSitterInstallJob
 {
   std::string language;
+  // Silent background job (pid >= 0) writes its output to output_path and is
+  // polled via read_appended(); terminal_index is the fallback used when a
+  // background job could not be started.
+  int pid = -1;
+  std::string output_path;
+  size_t output_offset = 0;
   int terminal_index = -1;
   bool running = true;
   bool succeeded = false;
@@ -200,6 +206,12 @@ struct LspInstallJob
 {
   std::string server;
   bool removing = false;
+  // Silent background job (pid >= 0) writes its output to output_path and is
+  // polled via read_appended(); terminal_index is the fallback used when a
+  // background job could not be started.
+  int pid = -1;
+  std::string output_path;
+  size_t output_offset = 0;
   int terminal_index = -1;
   bool running = true;
   bool succeeded = false;

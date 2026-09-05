@@ -1980,7 +1980,8 @@ std::vector<Editor::MenuBarMenu> Editor::build_menu_bar_model() const
         {"Rerun Last Task", MENU_ACTION_RERUN_TASK}}},
       {"Help",
        {{"Help", MENU_ACTION_HELP},
-        {"LSP Manager", MENU_ACTION_COMMAND, ":lspmanager"},
+        {"Install Language Server...", MENU_ACTION_COMMAND, ":lspinstall "},
+        {"Remove Language Server...", MENU_ACTION_COMMAND, ":lspremove "},
         {"Tree-sitter Status", MENU_ACTION_COMMAND, ":tsstatus"},
         {"Git Status", MENU_ACTION_COMMAND, ":gitstatus"}}},
   };

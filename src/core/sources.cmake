@@ -5,6 +5,7 @@ set(JOT_CORE_SOURCES
   core/app/file.cpp
   core/app/folding.cpp
   core/app/panes.cpp
+  core/app/process_job.cpp
   core/app/undo.cpp
   core/app/utils.cpp
   core/integrations/debugger.cpp

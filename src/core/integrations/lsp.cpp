@@ -1,3 +1,4 @@
+#include "core/app/process_job.h"
 #include "editor.h"
 #include "lsp/client.h"
 #include "lsp/install.h"
@@ -994,17 +995,52 @@ void Editor::poll_lsp_installs()
     {
       continue;
     }
-    IntegratedTerminal *term = get_integrated_terminal(job.terminal_index);
-    if (!term)
+
+    // Gather new output lines from the active transport: the silent job's log
+    // file when a background process is running, otherwise the fallback
+    // integrated terminal.
+    std::vector<std::string> lines;
+    bool transport_dead = false;
+    if (job.pid >= 0)
     {
-      job.running = false;
-      job.failed = true;
-      job.progress = "terminal closed";
-      changed = true;
-      continue;
+      std::string text;
+      job.output_offset = process_job::read_appended(job.output_path, job.output_offset, text);
+      if (!text.empty())
+      {
+        // Only complete rows are parsed; a trailing unterminated line is not
+        // yielded by getline and arrives on a later poll.
+        std::istringstream stream(text);
+        std::string line;
+        while (std::getline(stream, line))
+        {
+          lines.push_back(line);
+        }
+      }
+      if (process_job::reap_child(job.pid) >= 0)
+      {
+        transport_dead = true;
+      }
+    }
+    else
+    {
+      IntegratedTerminal *term = get_integrated_terminal(job.terminal_index);
+      if (!term)
+      {
+        job.running = false;
+        job.failed = true;
+        job.progress = "terminal closed";
+        changed = true;
+        continue;
+      }
+      lines = term->get_recent_lines(80);
+      if (!term->is_active())
+      {
+        transport_dead = true;
+      }
     }
 
-    for (const auto &line : term->get_recent_lines(80))
+    bool resolved = false;
+    for (const auto &line : lines)
     {
       LspInstall::Marker marker;
       if (!LspInstall::parse_marker(line, marker) || marker.server != job.server)
@@ -1013,7 +1049,13 @@ void Editor::poll_lsp_installs()
       }
       if (marker.phase == "start")
       {
-        job.progress = job.removing ? "removing" : "downloading";
+        const std::string next = job.removing ? "removing" : "downloading";
+        if (job.progress != next)
+        {
+          job.progress = next;
+          set_message("LSP " + std::string(job.removing ? "remove started: " : "install started: ")
+                      + job.server);
+        }
       }
       else if (marker.phase == "success" && marker.exit_code == 0)
       {
@@ -1021,6 +1063,7 @@ void Editor::poll_lsp_installs()
         job.running = false;
         job.succeeded = true;
         job.failed = false;
+        resolved = true;
         set_message("LSP " + std::string(job.removing ? "remove OK: " : "install OK: ")
                     + job.server);
       }
@@ -1032,18 +1075,23 @@ void Editor::poll_lsp_installs()
         job.running = false;
         job.succeeded = false;
         job.failed = true;
+        resolved = true;
         set_message("LSP " + std::string(job.removing ? "remove failed: " : "install failed: ")
                     + job.server);
       }
       changed = true;
     }
 
-    if (job.running && !term->is_active())
+    // The transport ended without the script reporting start/success/failure:
+    // treat the job as failed (a successful script always prints a marker).
+    if (job.running && transport_dead && !resolved)
     {
       job.running = false;
       job.succeeded = false;
       job.failed = true;
-      job.progress = "terminal exited";
+      job.progress = "process exited";
+      set_message("LSP " + std::string(job.removing ? "remove failed: " : "install failed: ")
+                  + job.server);
       changed = true;
     }
   }
@@ -1599,12 +1647,7 @@ bool Editor::install_lsp_server(const std::string &name)
                    [&](const LspInstallJob &job) { return job.server == server && job.running; });
   if (active_install != lsp_install_jobs.end())
   {
-    if (active_install->terminal_index >= 0)
-    {
-      activate_integrated_terminal(active_install->terminal_index, false);
-      show_integrated_terminal = true;
-    }
-    set_message("LSP install already running: " + server);
+    set_message("LSP install/remove already running: " + server);
     needs_redraw = true;
     return true;
   }
@@ -1643,6 +1686,28 @@ bool Editor::install_lsp_server(const std::string &name)
     return false;
   }
 
+  LspInstallJob job;
+  job.server = server;
+  job.removing = false;
+  job.progress = "starting";
+
+  // Preferred path: a silent background job - no terminal panel opens, the
+  // output streams into a log file and the poll loop reports progress.
+  job.output_path = process_job::make_install_log_path("lsp-" + server);
+#ifndef _WIN32
+  job.pid =
+      process_job::spawn_background_shell(LspInstall::terminal_command(install), job.output_path);
+#endif
+  if (job.pid >= 0)
+  {
+    lsp_install_jobs.push_back(std::move(job));
+    set_message(install.message);
+    needs_redraw = true;
+    return true;
+  }
+
+  // Fallback (background spawn unavailable): run in an integrated terminal so
+  // installs still work even where a detached process cannot be started.
   const size_t terminal_count = integrated_terminals.size();
   create_integrated_terminal("lspinstall:" + server);
   if (integrated_terminals.size() == terminal_count)
@@ -1658,28 +1723,8 @@ bool Editor::install_lsp_server(const std::string &name)
     return false;
   }
   activate_integrated_terminal(terminal_index, false);
-
-  auto existing =
-      std::find_if(lsp_install_jobs.begin(),
-                   lsp_install_jobs.end(),
-                   [&](const LspInstallJob &job) { return job.server == server && job.running; });
-  if (existing != lsp_install_jobs.end())
-  {
-    existing->terminal_index = terminal_index;
-    existing->progress = "starting";
-    existing->failed = false;
-    existing->succeeded = false;
-  }
-  else
-  {
-    LspInstallJob job;
-    job.server = server;
-    job.removing = false;
-    job.terminal_index = terminal_index;
-    job.progress = "starting";
-    lsp_install_jobs.push_back(std::move(job));
-  }
-
+  job.terminal_index = terminal_index;
+  lsp_install_jobs.push_back(std::move(job));
   term->send_text(LspInstall::terminal_command(install) + "\r");
   set_message(install.message + " (terminal " + std::to_string(terminal_index + 1) + ")");
   needs_redraw = true;
@@ -1696,6 +1741,23 @@ bool Editor::remove_lsp_server(const std::string &name)
     return false;
   }
 
+  auto active_remove =
+      std::find_if(lsp_install_jobs.begin(),
+                   lsp_install_jobs.end(),
+                   [&](const LspInstallJob &job) { return job.server == server && job.running; });
+  if (active_remove != lsp_install_jobs.end())
+  {
+    set_message("LSP install/remove already running: " + server);
+    needs_redraw = true;
+    return true;
+  }
+
+  lsp_install_jobs.erase(std::remove_if(lsp_install_jobs.begin(),
+                                        lsp_install_jobs.end(),
+                                        [&](const LspInstallJob &job)
+                                        { return job.server == server && !job.running; }),
+                         lsp_install_jobs.end());
+
   LspInstall::Command remove = LspInstall::remove_command_for_server(server);
   if (!remove.supported)
   {
@@ -1704,6 +1766,27 @@ bool Editor::remove_lsp_server(const std::string &name)
   }
 
   set_lsp_server_enabled(server, false);
+
+  LspInstallJob job;
+  job.server = server;
+  job.removing = true;
+  job.progress = "starting";
+
+  // Preferred path: a silent background job - no terminal panel opens.
+  job.output_path = process_job::make_install_log_path("lsp-" + server);
+#ifndef _WIN32
+  job.pid =
+      process_job::spawn_background_shell(LspInstall::terminal_command(remove), job.output_path);
+#endif
+  if (job.pid >= 0)
+  {
+    lsp_install_jobs.push_back(std::move(job));
+    set_message(remove.message);
+    needs_redraw = true;
+    return true;
+  }
+
+  // Fallback (background spawn unavailable): run in an integrated terminal.
   const size_t terminal_count = integrated_terminals.size();
   create_integrated_terminal("lspremove:" + server);
   if (integrated_terminals.size() == terminal_count)
@@ -1719,11 +1802,7 @@ bool Editor::remove_lsp_server(const std::string &name)
     return false;
   }
   activate_integrated_terminal(terminal_index, false);
-  LspInstallJob job;
-  job.server = server;
-  job.removing = true;
   job.terminal_index = terminal_index;
-  job.progress = "starting";
   lsp_install_jobs.push_back(std::move(job));
   term->send_text(LspInstall::terminal_command(remove) + "\r");
   set_message(remove.message + " (terminal " + std::to_string(terminal_index + 1) + ")");

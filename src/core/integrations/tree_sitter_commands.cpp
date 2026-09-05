@@ -1,9 +1,11 @@
+#include "core/app/process_job.h"
 #include "editor.h"
 #include "lua_bridge/api.h"
 #include "tree_sitter/install.h"
 
 #include <algorithm>
 #include <cctype>
+#include <sstream>
 
 namespace
 {
@@ -63,38 +65,65 @@ bool Editor::install_tree_sitter_language(const std::string &language)
     return false;
   }
 
+  // Open the status modal immediately; it shows the job's live progress
+  // (cloning → building → … → installed) as the background job reports it.
   show_tree_sitter_status_modal = true;
   tree_sitter_status_scroll = 0;
+
+  auto running = std::find_if(tree_sitter_install_jobs.begin(),
+                              tree_sitter_install_jobs.end(),
+                              [&](const TreeSitterInstallJob &job)
+                              { return job.language == install.language && job.running; });
+  if (running != tree_sitter_install_jobs.end())
+  {
+    set_message("Tree-sitter install already running: " + install.language);
+    needs_redraw = true;
+    return true;
+  }
+
+  TreeSitterInstallJob job;
+  job.language = install.language;
+  job.progress = "starting";
+
+  // Preferred path: a silent background job with its output streamed into a
+  // log file the poll loop reads for markers - no terminal panel is opened.
+  job.output_path = process_job::make_install_log_path("ts-" + install.language);
+#ifndef _WIN32
+  job.pid = process_job::spawn_background_shell(install.command, job.output_path);
+#endif
+  if (job.pid >= 0)
+  {
+    tree_sitter_install_jobs.erase(
+        std::remove_if(tree_sitter_install_jobs.begin(),
+                       tree_sitter_install_jobs.end(),
+                       [&](const TreeSitterInstallJob &old)
+                       { return old.language == install.language; }),
+        tree_sitter_install_jobs.end());
+    tree_sitter_install_jobs.push_back(std::move(job));
+    set_message(install.message);
+    needs_redraw = true;
+    return true;
+  }
+
+  // Fallback (background spawn unavailable): run in an integrated terminal so
+  // installs still work even where a detached process cannot be started.
   create_integrated_terminal("tsinstall:" + install.language);
-  int terminal_index = current_integrated_terminal;
+  const int terminal_index = current_integrated_terminal;
   IntegratedTerminal *term = get_integrated_terminal(terminal_index);
   if (!term || !term->is_active())
   {
     set_message("Failed to open Tree-sitter install terminal");
     return false;
   }
-
   activate_integrated_terminal(terminal_index, false);
-  auto existing = std::find_if(tree_sitter_install_jobs.begin(),
-                               tree_sitter_install_jobs.end(),
-                               [&](const TreeSitterInstallJob &job)
-                               { return job.language == install.language && job.running; });
-  if (existing != tree_sitter_install_jobs.end())
-  {
-    existing->terminal_index = terminal_index;
-    existing->progress = "starting";
-    existing->failed = false;
-    existing->succeeded = false;
-  }
-  else
-  {
-    TreeSitterInstallJob job;
-    job.language = install.language;
-    job.terminal_index = terminal_index;
-    job.progress = "starting";
-    tree_sitter_install_jobs.push_back(std::move(job));
-  }
-
+  job.terminal_index = terminal_index;
+  tree_sitter_install_jobs.erase(
+      std::remove_if(tree_sitter_install_jobs.begin(),
+                     tree_sitter_install_jobs.end(),
+                     [&](const TreeSitterInstallJob &old)
+                     { return old.language == install.language; }),
+      tree_sitter_install_jobs.end());
+  tree_sitter_install_jobs.push_back(std::move(job));
   term->send_text(install.command + "\r");
   set_message(install.message);
   needs_redraw = true;
@@ -198,17 +227,50 @@ void Editor::poll_tree_sitter_installs()
     {
       continue;
     }
-    IntegratedTerminal *term = get_integrated_terminal(job.terminal_index);
-    if (!term)
+
+    // Gather new output lines from the active transport: the silent job's log
+    // file when a background process is running, otherwise the fallback
+    // integrated terminal.
+    std::vector<std::string> lines;
+    bool transport_dead = false;
+    if (job.pid >= 0)
     {
-      job.running = false;
-      job.failed = true;
-      job.progress = "terminal closed";
-      changed = true;
-      continue;
+      std::string text;
+      job.output_offset = process_job::read_appended(job.output_path, job.output_offset, text);
+      if (!text.empty())
+      {
+        // Only complete rows are parsed; a trailing unterminated line is not
+        // yielded by getline and arrives on a later poll.
+        std::istringstream stream(text);
+        std::string line;
+        while (std::getline(stream, line))
+        {
+          lines.push_back(line);
+        }
+      }
+      if (process_job::reap_child(job.pid) >= 0)
+      {
+        transport_dead = true;
+      }
+    }
+    else
+    {
+      IntegratedTerminal *term = get_integrated_terminal(job.terminal_index);
+      if (!term)
+      {
+        job.running = false;
+        job.failed = true;
+        job.progress = "terminal closed";
+        changed = true;
+        continue;
+      }
+      lines = term->get_recent_lines(200);
+      if (!term->is_active())
+      {
+        transport_dead = true;
+      }
     }
 
-    std::vector<std::string> lines = term->get_recent_lines(200);
     bool saw_success = false;
     bool saw_failed = false;
     for (const auto &line : lines)
@@ -332,7 +394,10 @@ void Editor::poll_tree_sitter_installs()
       changed = true;
     }
 
-    if (job.running && !term->is_active())
+    // The transport ended without the script reporting a result: treat the
+    // install as failed (success leaves the job verifying for a few polls, so
+    // it is exempt here).
+    if (job.running && transport_dead && !saw_success)
     {
       job.running = false;
       if (!job.succeeded)

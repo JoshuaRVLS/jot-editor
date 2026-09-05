@@ -223,7 +223,7 @@ namespace TreeSitterInstall
 #else
     result.supported = true;
     result.command = source_build_command(*entry, prefix);
-    result.message = "Installing Tree-sitter " + result.language + " in terminal";
+    result.message = "Installing Tree-sitter " + result.language + "…";
     return result;
 #endif
   }

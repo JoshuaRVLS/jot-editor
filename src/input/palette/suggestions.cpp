@@ -128,7 +128,8 @@ namespace
         {"stats", "Info", "Show buffer statistics", 55},
         {"line", "Navigation", "Go to line[:column]", 80},
         {"goto", "Navigation", "Go to line[:column]", 75},
-        {"lspmanager", "LSP", "Manage language servers", 75},
+        {"lspinstall", "LSP", "Install a language server", 75},
+        {"lspremove", "LSP", "Remove a language server", 75},
         {"hover", "LSP", "Show hover information", 68},
         {"lsphover", "LSP", "Show hover information", 64},
         {"definition", "LSP", "Go to definition", 72},
@@ -504,6 +505,24 @@ void Editor::refresh_command_palette()
       for (const auto &opt : TreeSitterInstall::supported_languages())
       {
         add_arg(opt, "Tree-sitter", "Grammar language", 110);
+      }
+    }
+    else if (lcmd == "lspinstall" || lcmd == "lspremove")
+    {
+      static const char *kLspServers[] = {"python",
+                                          "typescript",
+                                          "javascript",
+                                          "jsx",
+                                          "tsx",
+                                          "cpp",
+                                          "rust",
+                                          "go",
+                                          "lua",
+                                          "bash",
+                                          "html"};
+      for (const char *server : kLspServers)
+      {
+        add_arg(server, "LSP", "Language server", 110);
       }
     }
     else if (lcmd == "gitdiff" || lcmd == "gitdiffstaged" || lcmd == "gitstage"

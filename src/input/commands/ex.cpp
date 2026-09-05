@@ -940,9 +940,29 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   };
 
   int parsed_line = 0, parsed_col = 1;
-  if (lcmd == "lspmanager")
+  if (lcmd == "lspinstall")
   {
-    show_lsp_manager();
+    if (arg.empty())
+    {
+      set_message("Usage: :lspinstall "
+                  "<python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>");
+    }
+    else
+    {
+      install_lsp_server(arg);
+    }
+  }
+  else if (lcmd == "lspremove")
+  {
+    if (arg.empty())
+    {
+      set_message("Usage: :lspremove "
+                  "<python|typescript|javascript|jsx|tsx|cpp|rust|go|lua|bash|html>");
+    }
+    else
+    {
+      remove_lsp_server(arg);
+    }
   }
   else if (lcmd == "hover" || lcmd == "lsphover")
   {
