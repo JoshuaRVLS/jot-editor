@@ -532,9 +532,39 @@ void Editor::render_tree_sitter_status_modal()
 #endif
   }
 
+  // Filetypes open in buffers that are known but have no grammar or rules
+  // (catalog languages such as .astro, or a registered grammar whose parser
+  // is not installed and which is not otherwise listed).
+  std::vector<TreeSitterStatusRenderRow> detected_rows;
+  {
+    std::set<std::string> manager_names(ts_manager_.language_names().begin(),
+                                        ts_manager_.language_names().end());
+    std::set<std::string> seen;
+    for (const auto &buf : buffers)
+    {
+      if (buf.syntax_engine != SYNTAX_ENGINE_NONE || buf.syntax_language_label.empty()
+          || seen.find(buf.syntax_language_label) != seen.end())
+      {
+        continue;
+      }
+      if (manager_names.find(buf.syntax_language_label) != manager_names.end())
+      {
+        continue; // already listed under Installed / Uninstalled above
+      }
+      seen.insert(buf.syntax_language_label);
+      detected_rows.push_back(
+          {"",
+           ts_display_name(buf.syntax_language_label),
+           "known filetype — no parser or rules",
+           theme.fg_status_warning});
+    }
+  }
+
   std::vector<TreeSitterStatusRenderRow> rows;
   ts_add_section(rows, "Active", (int)active_rows.size());
   rows.insert(rows.end(), active_rows.begin(), active_rows.end());
+  ts_add_section(rows, "Detected", (int)detected_rows.size());
+  rows.insert(rows.end(), detected_rows.begin(), detected_rows.end());
   ts_add_section(rows, "Installing", (int)installing_rows.size());
   rows.insert(rows.end(), installing_rows.begin(), installing_rows.end());
   ts_add_section(rows, "Installed", (int)installed_rows.size());

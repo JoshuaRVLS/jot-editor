@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "lsp_attach_data.h"
 #include "tree_sitter/manager.h"
 #include <algorithm>
 #include <filesystem>
@@ -13,6 +14,61 @@ namespace
   // Lines no longer than this are highlighted whole and cached; only longer
   // lines use windowed highlighting bounded by the visible width.
   constexpr int kFullHighlightLineBytes = 4096;
+
+  bool ext_ends_with(const std::string &s, const std::string &suffix)
+  {
+    return s.size() >= suffix.size()
+           && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+  }
+
+  // Best-effort human label for a filetype the LSP catalog knows but that has
+  // no tree-sitter grammar or regex rules (e.g. .astro, .tfvars). Kept next to
+  // the generated attach tables so detection stays in sync with the catalog:
+  // language ids first, then the attach server with its "-language-server" /
+  // "-lsp" style suffixes dropped for display.
+  std::string catalog_filetype_label(const std::string &raw_extension)
+  {
+    if (raw_extension.empty() || raw_extension[0] != '.')
+    {
+      return "";
+    }
+    const std::string key = raw_extension.substr(1);
+    for (const auto &entry : kLspLangIdTable)
+    {
+      if (key == entry.ext)
+      {
+        return entry.langid;
+      }
+    }
+    for (const auto &entry : kLspAttachTable)
+    {
+      if (key != entry.ext)
+      {
+        continue;
+      }
+      std::string name = entry.server;
+      static const char *const suffixes[] = {"-language-server", "-langserver", "-language-lsp",
+                                              "-lsp", "-ls"};
+      bool stripped = true;
+      while (stripped)
+      {
+        stripped = false;
+        for (const char *suffix : suffixes)
+        {
+          if (ext_ends_with(name, suffix))
+          {
+            name.resize(name.size() - std::string(suffix).size());
+            stripped = true;
+          }
+        }
+      }
+      if (!name.empty())
+      {
+        return name;
+      }
+    }
+    return "";
+  }
 
 #ifdef JOT_TREESITTER
   bool contains_any(const std::string &text, const std::vector<std::string> &needles)
@@ -547,7 +603,19 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit)
   else
   {
     buf.syntax_engine = SYNTAX_ENGINE_NONE;
-    buf.syntax_language_label.clear();
+    // No engine could color this file, but when the filetype is still known
+    // (a tree-sitter grammar exists for it without the parser installed, or
+    // the LSP catalog maps the extension) keep a language label so status /
+    // filetype views identify it instead of reporting a blank file.
+    std::string label;
+#ifdef JOT_TREESITTER
+    label = ts_manager_.language_id_for_extension(ts_extension);
+#endif
+    if (label.empty())
+    {
+      label = catalog_filetype_label(raw_extension);
+    }
+    buf.syntax_language_label = label;
   }
   cache.line_hash = line_hash;
   cache.line_length = line.length();

@@ -1085,11 +1085,18 @@ void Editor::poll_lsp_installs()
     }
 
     bool resolved = false;
+    std::string tail_line;
     for (const auto &line : lines)
     {
       LspInstall::Marker marker;
       if (!LspInstall::parse_marker(line, marker) || marker.server != job.server)
       {
+        // Not a completion marker: remember the newest tool output row so the
+        // status view can show live progress while the script runs.
+        if (job.running)
+        {
+          tail_line = line;
+        }
         continue;
       }
       if (marker.phase == "start")
@@ -1125,6 +1132,56 @@ void Editor::poll_lsp_installs()
                     + job.server);
       }
       changed = true;
+    }
+
+    // Live progress: mirror the newest tool output row into the job state so
+    // the status view moves while the script is still running.
+    if (job.running && !tail_line.empty())
+    {
+      std::string clean = tail_line;
+      auto strip = [](std::string &s)
+      {
+        // Drop ANSI escapes and carriage returns (curl progress rewrites rows).
+        std::string out;
+        out.reserve(s.size());
+        for (size_t i = 0; i < s.size();)
+        {
+          if (s[i] == '\x1b')
+          {
+            i++;
+            if (i < s.size() && s[i] == '[')
+            {
+              i++;
+              while (i < s.size() && !(s[i] >= '@' && s[i] <= '~'))
+                i++;
+              if (i < s.size())
+                i++;
+            }
+            continue;
+          }
+          if (s[i] != '\r')
+          {
+            out.push_back(s[i]);
+          }
+          i++;
+        }
+        s = out;
+        while (!s.empty() && (s.back() == ' ' || s.back() == '\t'))
+          s.pop_back();
+        while (!s.empty() && (s.front() == ' ' || s.front() == '\t'))
+          s.erase(s.begin());
+        if (s.size() > 60)
+        {
+          s.resize(60);
+          s += "…";
+        }
+      };
+      strip(clean);
+      if (!clean.empty() && clean != job.progress)
+      {
+        job.progress = std::move(clean);
+        changed = true;
+      }
     }
 
     // The transport ended without the script reporting start/success/failure:
@@ -1515,6 +1572,13 @@ void Editor::lsp_server_diagnostic_counts(const std::string &language,
   }
 }
 
+void Editor::open_lsp_status_modal()
+{
+  show_lsp_status_modal = true;
+  lsp_status_scroll = 0;
+  needs_redraw = true;
+}
+
 void Editor::show_lsp_status()
 {
   int running_clients = 0;
@@ -1567,9 +1631,7 @@ void Editor::show_lsp_status()
     }
   }
   set_message(message);
-  show_lsp_status_modal = true;
-  lsp_status_scroll = 0;
-  needs_redraw = true;
+  open_lsp_status_modal();
 }
 
 bool Editor::handle_lsp_status_input(int ch)
@@ -1644,7 +1706,7 @@ bool Editor::install_lsp_server(const std::string &name)
   if (active_install != lsp_install_jobs.end())
   {
     set_message("LSP install/remove already running: " + server);
-    needs_redraw = true;
+    open_lsp_status_modal();
     return true;
   }
 
@@ -1670,7 +1732,7 @@ bool Editor::install_lsp_server(const std::string &name)
   {
     lsp_install_jobs.push_back(std::move(job));
     set_message(message);
-    needs_redraw = true;
+    open_lsp_status_modal();
     return true;
   }
 
@@ -1695,7 +1757,7 @@ bool Editor::install_lsp_server(const std::string &name)
   lsp_install_jobs.push_back(std::move(job));
   term->send_text(LspInstall::wrap_script(server, script) + "\r");
   set_message(message + " (terminal " + std::to_string(terminal_index + 1) + ")");
-  needs_redraw = true;
+  open_lsp_status_modal();
   return true;
 }
 
@@ -1722,7 +1784,7 @@ bool Editor::remove_lsp_server(const std::string &name)
   if (active_remove != lsp_install_jobs.end())
   {
     set_message("LSP install/remove already running: " + server);
-    needs_redraw = true;
+    open_lsp_status_modal();
     return true;
   }
 
@@ -1749,7 +1811,7 @@ bool Editor::remove_lsp_server(const std::string &name)
   {
     lsp_install_jobs.push_back(std::move(job));
     set_message(message);
-    needs_redraw = true;
+    open_lsp_status_modal();
     return true;
   }
 
@@ -1773,7 +1835,7 @@ bool Editor::remove_lsp_server(const std::string &name)
   lsp_install_jobs.push_back(std::move(job));
   term->send_text(LspInstall::wrap_script(server, script) + "\r");
   set_message(message + " (terminal " + std::to_string(terminal_index + 1) + ")");
-  needs_redraw = true;
+  open_lsp_status_modal();
   return true;
 }
 

@@ -260,6 +260,7 @@ private:
   void poll_tree_sitter_installs();
   bool handle_tree_sitter_status_input(int ch);
   void show_lsp_status();
+  void open_lsp_status_modal();
   void render_lsp_status_modal();
   bool handle_lsp_status_input(int ch);
   // Live diagnostic totals for one attached language, summed over open buffers

@@ -184,7 +184,17 @@ void Editor::show_tree_sitter_status()
   }
   else
   {
-    set_message("Tree-sitter inactive: Syntax off");
+    if (!buf.syntax_language_label.empty())
+    {
+      // A filetype that is known (tree-sitter grammar without the parser
+      // installed, or a catalog language) but has no active engine.
+      set_message("Tree-sitter inactive: " + buf.syntax_language_label
+                  + " (no parser or rules installed)");
+    }
+    else
+    {
+      set_message("Tree-sitter inactive: Syntax off");
+    }
   }
   show_tree_sitter_status_modal = true;
   tree_sitter_status_scroll = 0;
