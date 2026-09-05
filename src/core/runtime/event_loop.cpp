@@ -649,6 +649,42 @@ void Editor::handle_terminal_event(const Event &ev)
       ch = ch + 96;
     }
 
+    // Bare-modifier events (Windows Terminal reports Ctrl press/release as
+    // synthetic codes when no other key is involved): 1021 = Ctrl held down,
+    // 1022 = Ctrl released. While a modal surface owns input they are inert.
+    if (ch == 1021 || ch == 1022)
+    {
+      const bool modal_open = lsp_completion_visible || show_lsp_manager_modal
+                              || (popup.visible && popup.presentation == POPUP_MODAL)
+                              || show_menu_bar_dropdown || show_context_menu
+                              || show_tree_sitter_status_modal || show_command_palette
+                              || show_search || telescope.is_active() || show_quick_pick;
+      if (modal_open)
+      {
+        return;
+      }
+      if (ch == 1021)
+      {
+        if (!show_which_key)
+        {
+          open_which_key_modifier("Ctrl");
+          needs_redraw = true;
+        }
+      }
+      else if (ch == 1022)
+      {
+        // Release: dismiss the held-modifier view. A prefix group that was
+        // opened from it ("Ctrl+T") stays open — the user navigates it with
+        // plain keys after releasing Ctrl.
+        if (show_which_key && !which_key_modifier.empty())
+        {
+          close_which_key();
+          needs_redraw = true;
+        }
+      }
+      return;
+    }
+
     if (show_lsp_manager_modal)
     {
       handle_lsp_manager_input(ch);
@@ -1080,6 +1116,19 @@ void Editor::open_which_key(const std::string &chord)
   }
   which_key_path = {chord};
   which_key_selected = 0;
+  which_key_modifier.clear();
+  show_which_key = true;
+}
+
+void Editor::open_which_key_modifier(const std::string &mod)
+{
+  if (mod.empty())
+  {
+    return;
+  }
+  which_key_modifier = mod;
+  which_key_path.clear();
+  which_key_selected = 0;
   show_which_key = true;
 }
 
@@ -1088,6 +1137,7 @@ void Editor::close_which_key()
   show_which_key = false;
   which_key_path.clear();
   which_key_selected = 0;
+  which_key_modifier.clear();
 }
 
 bool Editor::handle_which_key_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int original_ch)
@@ -1095,7 +1145,37 @@ bool Editor::handle_which_key_input(int ch, bool is_ctrl, bool is_shift, bool is
   (void)is_ctrl;
   (void)is_shift;
   (void)is_alt;
-  if (!show_which_key || !lua_api || which_key_path.empty())
+  if (!show_which_key)
+  {
+    return false;
+  }
+
+  // Held-modifier view: Ctrl was pressed alone. Release (1022), Esc or any
+  // real key dismisses it; the key then runs through normal dispatch below
+  // (so Ctrl+letter chords still execute instantly). Arrow keys just move the
+  // highlight. Repeated Ctrl-down (1021) is ignored.
+  if (!which_key_modifier.empty())
+  {
+    if (ch == 1021)
+    {
+      return true;
+    }
+    if (ch == 1008)
+    {
+      which_key_selected = std::max(0, which_key_selected - 1);
+      return true;
+    }
+    if (ch == 1009)
+    {
+      which_key_selected++;
+      return true;
+    }
+    close_which_key();
+    // The pressed key (e.g. Ctrl+S) still executes normally.
+    return (ch == 1022 || ch == 27) ? true : false;
+  }
+
+  if (!lua_api || which_key_path.empty())
   {
     close_which_key();
     return true;
@@ -1104,6 +1184,12 @@ bool Editor::handle_which_key_input(int ch, bool is_ctrl, bool is_shift, bool is
   if (ch == 27)
   {
     close_which_key();
+    return true;
+  }
+  // Modifier press/release while a group is open: release keeps the group
+  // (the user may press plain letters next); press is ignored.
+  if (ch == 1021 || ch == 1022)
+  {
     return true;
   }
   // Backspace steps up a level; at the top level it closes the helper.
@@ -1167,11 +1253,26 @@ bool Editor::handle_which_key_input(int ch, bool is_ctrl, bool is_shift, bool is
   };
 
   auto candidates = plugin_key_candidates(ch, is_ctrl, is_shift, is_alt, original_ch);
+  // A child token is matched by its bare key. When the user keeps Ctrl held
+  // while pressing the next chord (e.g. holds Ctrl through "Ctrl+T" then
+  // presses "N"), the chord arrives as "Ctrl+N" — match the letter part too.
+  std::vector<std::string> match_forms = candidates;
   for (const auto &candidate : candidates)
+  {
+    for (const char *mod : {"Ctrl+", "Alt+", "Shift+"})
+    {
+      const size_t len = std::strlen(mod);
+      if (candidate.size() > len && candidate.compare(0, len, mod) == 0)
+      {
+        match_forms.push_back(candidate.substr(len));
+      }
+    }
+  }
+  for (const auto &form : match_forms)
   {
     for (const auto &child : children)
     {
-      if (child.key == candidate)
+      if (child.key == form)
       {
         return pick(child);
       }

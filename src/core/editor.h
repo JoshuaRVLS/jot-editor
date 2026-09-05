@@ -205,6 +205,9 @@ private:
   // handle_which_key_input advances/runs/closes, and the panel renders above
   // the status line (see ui.cpp / event_loop.cpp).
   void open_which_key(const std::string &chord);
+  // Held-modifier view: mod is "Ctrl". Opened when the terminal reports the
+  // bare modifier pressed (Windows Terminal), closed on release / any key.
+  void open_which_key_modifier(const std::string &mod);
   void close_which_key();
   bool handle_which_key_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int original_ch);
   void render_which_key_panel();

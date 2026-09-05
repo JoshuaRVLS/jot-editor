@@ -64,6 +64,17 @@ Rules:
 - The helper is shown/used in the editor and applies to `global`- and
   `editor`-mode keymaps.
 
+### Held Ctrl (Windows Terminal)
+
+Most terminals cannot tell when you merely *hold* Ctrl, because pressing a
+modifier alone sends no bytes. Windows Terminal (and the classic Windows
+console) does report bare modifier presses, so when jot runs there, **holding
+Ctrl alone opens the helper listing every Ctrl+ binding** — the built-in ones
+plus your Lua keymaps — and releasing Ctrl dismisses it. Pressing a letter
+while holding Ctrl runs that binding as usual. In terminals that cannot
+report modifier-only keys, prefix chords (the previous section) are the way
+to reach multi-step keymaps.
+
 Callbacks receive a string. Autocmd callbacks receive `event\nfile\nbuffer`.
 Picker and panel callbacks return a Lua array of strings.
 

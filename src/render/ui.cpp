@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "core/keybind_catalog.h"
 #include "lua_bridge/api.h"
 #include "tree_sitter/manager.h"
 #include "ui/components.h"
@@ -1512,29 +1513,67 @@ void Editor::render_quick_pick()
 
 void Editor::render_which_key_panel()
 {
-  // Which-key style helper for multi-chord plugin keymaps ("Ctrl+T N"). It is
-  // opened automatically by the input dispatcher when a pressed chord is a
-  // prefix of longer keymap sequences, and paints a compact panel docked just
-  // above the status line listing the next-chord options.
-  if (!show_which_key || !lua_api || which_key_path.empty())
+  // Which-key style helper docked just above the status line. Two modes:
+  //   - prefix groups: a pressed chord ("Ctrl+T") prefixes longer Lua keymap
+  //     sequences ("Ctrl+T N") — the panel lists the next-chord options;
+  //   - held modifier (Windows Terminal): Ctrl is pressed alone — the panel
+  //     lists every Ctrl+… binding (built-ins plus Lua overrides/groups).
+  if (!show_which_key)
   {
     return;
   }
+
+  const bool modifier_view = !which_key_modifier.empty();
+  std::string crumb; // breadcrumb shown in the title ("Ctrl+T" / "Ctrl")
   std::string path;
-  for (size_t i = 0; i < which_key_path.size(); i++)
+  std::vector<PluginKeymapChild> children;
+  if (modifier_view)
   {
-    if (i > 0)
+    crumb = which_key_modifier;
+    std::vector<jot::KeymapRef> refs;
+    if (lua_api)
     {
-      path += ' ';
+      for (const auto &km : lua_api->keymaps())
+      {
+        if (km.mode != "global" && km.mode != "editor")
+        {
+          continue;
+        }
+        refs.push_back({km.key, km.detail, !km.callback.empty() || !km.command.empty()});
+      }
     }
-    path += which_key_path[i];
+    for (const auto &row : jot::compose_ctrl_rows(refs))
+    {
+      PluginKeymapChild c;
+      c.key = row.key;
+      c.detail = row.detail;
+      c.group = row.group;
+      children.push_back(std::move(c));
+    }
   }
-  auto children = lua_api->plugin_keymap_children(path, "editor");
-  if (children.empty())
+  else
   {
-    // Keymaps were reloaded/cleared while the helper was open.
-    close_which_key();
-    return;
+    if (!lua_api || which_key_path.empty())
+    {
+      close_which_key();
+      return;
+    }
+    for (size_t i = 0; i < which_key_path.size(); i++)
+    {
+      if (i > 0)
+      {
+        path += ' ';
+      }
+      path += which_key_path[i];
+    }
+    crumb = path;
+    children = lua_api->plugin_keymap_children(path, "editor");
+    if (children.empty())
+    {
+      // Keymaps were reloaded/cleared while the helper was open.
+      close_which_key();
+      return;
+    }
   }
 
   const int screen_w = ui->get_render_width();
@@ -1564,28 +1603,25 @@ void Editor::render_which_key_panel()
                 {theme.fg_command, panel_theme.bg_command, theme.fg_panel_border,
                  panel_theme.bg_command});
 
-  // Title: breadcrumb path ("Ctrl+T") plus the optional group title.
-  std::string title = " ";
-  for (size_t i = 0; i < which_key_path.size(); i++)
+  // Title: breadcrumb path ("Ctrl+T" / "Ctrl") plus the optional group title.
+  std::string title = " " + crumb;
+  if (!modifier_view && lua_api)
   {
-    if (i > 0)
+    const std::string group_title =
+        lua_api->plugin_keymap_group_title(which_key_path.back(), "editor");
+    if (!group_title.empty())
     {
-      title += " ";
+      title += "  ·  " + group_title;
     }
-    title += which_key_path[i];
-  }
-  const std::string group_title =
-      lua_api->plugin_keymap_group_title(which_key_path.back(), "editor");
-  if (!group_title.empty())
-  {
-    title += "  ·  " + group_title;
   }
   ui_draw_panel_title(*ui, rect, ui_truncate_cells(title, w - 2), theme.fg_command,
                       panel_theme.bg_command);
 
   // Hint on the right of the title row.
-  std::string hint = children.size() > 1 ? std::to_string(children.size()) + " keys"
-                                         : "1 key";
+  const char *unit = modifier_view ? "binding" : "key";
+  std::string hint = children.size() > 1
+                         ? std::to_string(children.size()) + " " + unit + "s"
+                         : "1 " + std::string(unit);
   ui->draw_text(std::max(x + 1, x + w - (int)hint.size() - 1),
                 y,
                 hint,
@@ -1599,8 +1635,9 @@ void Editor::render_which_key_panel()
   int key_w = 0;
   for (const auto &child : children)
   {
+    const std::string display = child.key == " " ? "Space" : child.key;
     int cells = 0;
-    for (unsigned char c : child.key)
+    for (unsigned char c : display)
     {
       cells += c < 128 ? 1 : 2;
     }
@@ -1637,7 +1674,8 @@ void Editor::render_which_key_panel()
     }
 
     // Key in the accent color, detail beside it; subgroups get a marker.
-    std::string key_text = child.group ? "▸ " + child.key : child.key;
+    std::string key_text = child.key == " " ? "Space" : child.key;
+    key_text = child.group ? "▸ " + key_text : key_text;
     ui->draw_text(x + 3 + (is_selected ? 1 : 0), row_y, ui_truncate_cells(key_text, key_w),
                   child.group ? theme.fg_keyword : fg, bg, !child.group);
     std::string detail = child.detail;
@@ -1646,10 +1684,18 @@ void Editor::render_which_key_panel()
                   child.group ? theme.fg_comment : fg, bg);
   }
 
-  std::string footer = "Esc close · Backspace up · arrow keys to move";
-  if (which_key_path.size() > 1)
+  std::string footer;
+  if (modifier_view)
+  {
+    footer = "press a letter to run · release Ctrl to close";
+  }
+  else if (which_key_path.size() > 1)
   {
     footer = "Esc close · Backspace up · Enter run";
+  }
+  else
+  {
+    footer = "Esc close · Backspace up · arrow keys to move";
   }
   ui_draw_footer(
       *ui, rect, ui_truncate_cells(footer, w - 2), theme.fg_comment, panel_theme.bg_command);

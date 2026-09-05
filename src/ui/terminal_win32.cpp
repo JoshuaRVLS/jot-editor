@@ -890,6 +890,32 @@ Event Terminal::read_event()
     }
     log_input_record(record, "queued");
 
+    if (record.EventType == KEY_EVENT)
+    {
+      const KEY_EVENT_RECORD &mod_key = record.Event.KeyEvent;
+      // Bare modifier press/release (Windows Terminal relays these as
+      // VK_CONTROL records with no character): surface them as synthetic key
+      // events so the editor can show the held-modifier ("hold Ctrl") which-
+      // key helper while the key is down and dismiss it on release. Chords
+      // arrive as the letter's own record with dwControlKeyState set, so they
+      // never reach this branch.
+      if (mod_key.uChar.UnicodeChar == 0
+          && (mod_key.wVirtualKeyCode == VK_CONTROL || mod_key.wVirtualKeyCode == VK_SHIFT
+              || mod_key.wVirtualKeyCode == VK_MENU))
+      {
+        if (mod_key.wVirtualKeyCode == VK_CONTROL)
+        {
+          ev.type = EVENT_KEY;
+          ev.key.key = mod_key.bKeyDown ? 1021 : 1022;
+          ev.key.ctrl = false;
+          ev.key.shift = false;
+          ev.key.alt = false;
+          return ev;
+        }
+        // Shift / Alt bare events: not surfaced yet.
+        continue;
+      }
+    }
     if (record.EventType == KEY_EVENT && record.Event.KeyEvent.bKeyDown)
     {
       const KEY_EVENT_RECORD &key = record.Event.KeyEvent;
