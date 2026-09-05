@@ -330,6 +330,9 @@ bool LuaAPI::reload_treesitter_runtime()
 {
   if (!lua_state)
     return false;
+  // An explicit reload compiles synchronously so its results and errors are
+  // immediate; never let it feed the background queue.
+  tree_sitter_manager().set_deferred_compile_mode(false);
   lua_State *L = static_cast<lua_State *>(lua_state);
   int top = lua_gettop(L);
   lua_getglobal(L, "jot");
@@ -348,6 +351,7 @@ bool LuaAPI::flush_deferred_treesitter_queries()
 {
   if (!lua_state)
     return false;
+  tree_sitter_manager().set_deferred_compile_mode(true);
   lua_State *L = static_cast<lua_State *>(lua_state);
   int top = lua_gettop(L);
   lua_getglobal(L, "jot");
@@ -359,5 +363,54 @@ bool LuaAPI::flush_deferred_treesitter_queries()
     std::cerr << "Tree-sitter deferred query load failed: " << lua_tostring(L, -1) << "\n";
   }
   lua_settop(L, top);
+  tree_sitter_manager().start_deferred_compile();
   return ok;
+}
+
+bool LuaAPI::tick_deferred_treesitter_compile()
+{
+  if (!lua_state)
+    return false;
+  TreeSitterManager &manager = tree_sitter_manager();
+  switch (manager.deferred_compile_state())
+  {
+    case TreeSitterManager::DeferredCompileState::Compiling:
+      return true; // worker still busy; keep polling
+    case TreeSitterManager::DeferredCompileState::Idle:
+      // Nothing queued (or the load never ran); stop the poller and make sure
+      // deferred mode cannot swallow later set_query calls.
+      manager.set_deferred_compile_mode(false);
+      return false;
+    case TreeSitterManager::DeferredCompileState::Done:
+      break;
+  }
+
+  std::vector<std::string> failures = manager.finish_deferred_compile();
+  manager.set_deferred_compile_mode(false);
+  if (!failures.empty())
+  {
+    // Surface the failures exactly like a synchronous boot load would, so the
+    // message line / stderr warning still appear (just after first paint).
+    lua_State *L = static_cast<lua_State *>(lua_state);
+    int top = lua_gettop(L);
+    lua_getglobal(L, "jot");
+    lua_getfield(L, -1, "treesitter");
+    lua_getfield(L, -1, "report_query_failures");
+    if (lua_isfunction(L, -1))
+    {
+      lua_newtable(L);
+      int index = 1;
+      for (const auto &failure : failures)
+      {
+        lua_pushstring(L, failure.c_str());
+        lua_rawseti(L, -2, index++);
+      }
+      if (lua_pcall(L, 1, 0, 0) != LUA_OK && lua_isstring(L, -1))
+      {
+        std::cerr << "Tree-sitter query failure report failed: " << lua_tostring(L, -1) << "\n";
+      }
+    }
+    lua_settop(L, top);
+  }
+  return false;
 }

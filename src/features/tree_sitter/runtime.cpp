@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <thread>
 
 #ifdef JOT_TREESITTER
 #ifdef _WIN32
@@ -365,5 +366,193 @@ TreeSitterManager::parse_handle(TreeSitterHandle, const std::string &, TreeSitte
 bool TreeSitterManager::delete_tree_handle(TreeSitterHandle)
 {
   return false;
+}
+#endif
+
+void TreeSitterManager::set_deferred_compile_mode(bool on)
+{
+  deferred_compile_mode_ = on;
+}
+
+bool TreeSitterManager::deferred_compile_mode() const
+{
+  return deferred_compile_mode_;
+}
+
+TreeSitterManager::DeferredCompileState TreeSitterManager::deferred_compile_state() const
+{
+  return deferred_compile_state_;
+}
+
+#ifndef JOT_TREESITTER
+void TreeSitterManager::start_deferred_compile()
+{
+  deferred_compile_state_ = DeferredCompileState::Done;
+}
+
+std::vector<std::string> TreeSitterManager::finish_deferred_compile()
+{
+  deferred_compile_state_ = DeferredCompileState::Idle;
+  return {};
+}
+#else
+void TreeSitterManager::start_deferred_compile()
+{
+  if (!deferred_compile_mode_)
+    return;
+  {
+    std::lock_guard<std::mutex> lock(deferred_mutex_);
+    if (deferred_compile_state_ != DeferredCompileState::Idle)
+      return;
+    deferred_compile_roots_ = runtime_library_paths_;
+    deferred_cancel_.store(false);
+    if (deferred_query_jobs_.empty())
+    {
+      deferred_compile_state_ = DeferredCompileState::Done;
+      return;
+    }
+    deferred_compile_state_ = DeferredCompileState::Compiling;
+  }
+  deferred_compile_thread_ = std::thread(&TreeSitterManager::deferred_query_compile_worker, this);
+}
+
+void TreeSitterManager::deferred_query_compile_worker()
+{
+  std::vector<DeferredQueryJob> jobs;
+  {
+    std::lock_guard<std::mutex> lock(deferred_mutex_);
+    jobs = std::move(deferred_query_jobs_);
+  }
+  const std::vector<std::string> roots = deferred_compile_roots_;
+
+  std::vector<DeferredCompileResult> results;
+  results.reserve(jobs.size());
+  for (auto &job : jobs)
+  {
+    if (deferred_cancel_.load())
+    {
+      break;
+    }
+    DeferredCompileResult result;
+    result.language_id = job.language_id;
+    result.source = job.source;
+
+    // Mirror load_language's candidate search, but purely from the job
+    // snapshot: the worker never touches the shared manager maps.
+    std::vector<fs::path> candidates;
+    for (const auto &name : job.library_names)
+    {
+      candidates.emplace_back(name);
+    }
+    for (const auto &root : roots)
+      for (const auto &name : job.library_names)
+        candidates.emplace_back(fs::path(root) / name);
+
+    std::string last_error;
+    for (const auto &candidate : candidates)
+    {
+      void *handle = open_library(candidate, last_error);
+      if (!handle)
+      {
+        continue;
+      }
+      LanguageLookupResult lookup = language_from_handle(handle, job.symbol);
+      if (!lookup.language)
+      {
+        last_error = candidate.string() + ": " + lookup.message;
+        close_library(handle);
+        continue;
+      }
+      result.handle = handle;
+      result.language = lookup.language;
+      break;
+    }
+    if (!result.language)
+    {
+      // No installed parser: the source is stored and stays available for a
+      // later :tsinstall - exactly like the synchronous path, this is not a
+      // failure to report.
+      result.parser_absent = true;
+      results.push_back(std::move(result));
+      continue;
+    }
+
+    uint32_t offset = 0;
+    TSQueryError query_error = TSQueryErrorNone;
+    TSQuery *query = ts_query_new(
+        result.language, result.source.c_str(),
+        static_cast<uint32_t>(result.source.size()), &offset, &query_error);
+    if (!query)
+    {
+      result.error = tree_sitter_query_compile_error(offset, query_error, result.source);
+      close_library(result.handle);
+      result.handle = nullptr;
+      results.push_back(std::move(result));
+      continue;
+    }
+    result.query = query;
+    results.push_back(std::move(result));
+  }
+
+  std::lock_guard<std::mutex> lock(deferred_mutex_);
+  deferred_compile_results_ = std::move(results);
+  deferred_compile_state_ = DeferredCompileState::Done;
+}
+
+std::vector<std::string> TreeSitterManager::finish_deferred_compile()
+{
+  if (deferred_compile_thread_.joinable())
+  {
+    deferred_compile_thread_.join();
+  }
+  std::vector<DeferredCompileResult> results;
+  {
+    std::lock_guard<std::mutex> lock(deferred_mutex_);
+    results = std::move(deferred_compile_results_);
+    deferred_compile_state_ = DeferredCompileState::Idle;
+  }
+
+  std::vector<std::string> failures;
+  for (auto &result : results)
+  {
+    // The source may have been replaced since the job was queued (e.g. an
+    // explicit :tsreload during the compile); a newer source was then
+    // compiled synchronously, so discard the stale worker result.
+    auto entry_it = languages_.find(result.language_id);
+    if (entry_it == languages_.end() || entry_it->second.highlight_query_source != result.source)
+    {
+      if (result.query)
+        ts_query_delete(result.query);
+      if (result.handle)
+        close_library(result.handle);
+      continue;
+    }
+    if (result.parser_absent)
+    {
+      query_diagnostics_[result.language_id] = "Lua query stored (parser not installed yet)";
+      runtime_query_used_[result.language_id] = false;
+      builtin_query_used_[result.language_id] = false;
+      continue;
+    }
+    if (!result.error.empty())
+    {
+      failures.push_back(result.language_id + ": " + result.error);
+      query_diagnostics_[result.language_id] = result.error;
+      runtime_query_used_[result.language_id] = false;
+      builtin_query_used_[result.language_id] = false;
+      continue;
+    }
+    auto cached = query_cache_.find(result.language_id);
+    if (cached != query_cache_.end() && cached->second)
+      ts_query_delete(cached->second);
+    library_handles_[result.language_id] = result.handle;
+    parser_languages_[result.language_id] = result.language;
+    parser_diagnostics_[result.language_id] = "parser loaded";
+    query_cache_[result.language_id] = result.query;
+    runtime_query_used_[result.language_id] = false;
+    builtin_query_used_[result.language_id] = true;
+    query_diagnostics_[result.language_id] = "Lua query loaded";
+  }
+  return failures;
 }
 #endif

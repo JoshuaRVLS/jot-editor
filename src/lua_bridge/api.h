@@ -566,10 +566,17 @@ public:
   bool load_treesitter_runtime(lua_State *L);
   bool reload_treesitter_runtime();
   // Runs the bundled tree-sitter highlight-query load that boot deferred to
-  // after the first frame (see treesitter/init.lua load_queries). Idempotent;
-  // safe to call any time on the main thread. Returns false when the runtime
-  // is missing or the deferred load raised.
+  // after the first frame (see treesitter/init.lua load_queries). The load
+  // itself only records sources; the parser dlopen and query compiles happen
+  // on a background thread started here. Idempotent; safe to call any time on
+  // the main thread. Returns false when the runtime is missing or the load
+  // raised.
   bool flush_deferred_treesitter_queries();
+  // Advances the background query compile: starts it on first call, installs
+  // finished results and reports failures through the Lua policy when the
+  // worker is done. Returns false once there is nothing left to do, so the
+  // caller can stop polling.
+  bool tick_deferred_treesitter_compile();
   // Bundled feature modules (lua/features/*), loaded after the API tables so
   // they can register handlers against them (see load_treesitter_runtime).
   bool load_hover_ui_runtime(lua_State *L);

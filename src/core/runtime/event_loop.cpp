@@ -931,15 +931,26 @@ void Editor::run()
 
   // Tree-sitter bundled highlight queries are deferred off the synchronous
   // boot path (compiling one dlopens the installed parser, which costs tens
-  // of milliseconds per language for large grammars). Run that load a few
-  // frames after the first paint so startup stays snappy while the queries
-  // are still ready before the user opens anything.
-  event_loop_.set_timeout(24,
-                          [this]
-                          {
-                            if (lua_api)
-                              lua_api->flush_deferred_treesitter_queries();
-                          });
+  // of milliseconds per language for large grammars). The Lua load records
+  // the sources on this timer's first fire and a background thread does the
+  // actual compiles; each tick installs finished results, so startup and the
+  // first frames never block on grammar-sized query compiles.
+  EventLoop::TimerId ts_deferred_timer = 0;
+  ts_deferred_timer = event_loop_.set_timer(24,
+                                            true,
+                                            [this, &ts_deferred_timer]
+                                            {
+                                              if (!lua_api)
+                                              {
+                                                event_loop_.cancel_timer(ts_deferred_timer);
+                                                return;
+                                              }
+                                              lua_api->flush_deferred_treesitter_queries();
+                                              if (!lua_api->tick_deferred_treesitter_compile())
+                                              {
+                                                event_loop_.cancel_timer(ts_deferred_timer);
+                                              }
+                                            });
 
   // JOT_SAFE_MODE disables every non-essential background timer so
   // we can isolate native crashes from periodic work. The editor

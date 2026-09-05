@@ -49,10 +49,12 @@ M.install_command = native.install_command
 -- first frame. Everything above -- language registration, extension mapping,
 -- module surface -- is cheap and stays on the boot path so plugins can rely
 -- on it. The native host calls load_queries() once shortly after the first
--- frame paints; a language highlighted before that falls back to runtime /
--- regex highlighting and upgrades itself on the next request. Explicit
--- reloads (:tsreload, post-:tsinstall verification) still load synchronously
--- so their results and errors are immediate. The call is idempotent.
+-- frame paints; the compiles themselves run on a background thread, so
+-- startup and rendering never block on grammar-sized query compiles. A
+-- language highlighted before a query lands falls back to runtime / regex
+-- highlighting and upgrades itself on the next request. Explicit reloads
+-- (:tsreload, post-:tsinstall verification) still load synchronously so their
+-- results and errors are immediate. The call is idempotent.
 function M.load_queries()
   if M._queries_loaded then
     return true
@@ -63,6 +65,14 @@ function M.load_queries()
     report_query_failures(query_errors)
   end
   return ok
+end
+
+-- Called by the native host when an asynchronously compiled query failed, so
+-- the boot warning (and :tsstatus diagnostics) still surface exactly as they
+-- did when compilation ran synchronously. `query_errors` is a list of
+-- "<language>: <reason>" strings, the same shape load_all produces.
+M.report_query_failures = function(query_errors)
+  report_query_failures(query_errors)
 end
 
 M.reload = function()

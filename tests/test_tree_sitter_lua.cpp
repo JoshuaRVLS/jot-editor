@@ -2,7 +2,9 @@
 #include "tree_sitter/manager.h"
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <string>
+#include <thread>
 #include <vector>
 
 extern "C"
@@ -261,4 +263,53 @@ TEST_CASE("Lua query source is accepted before a parser is installed")
   REQUIRE(manager.status(".cpp").language_id == "cpp");
   REQUIRE_FALSE(manager.set_query_source(".unknown", "(identifier) @variable", error));
   REQUIRE_FALSE(error.empty());
+}
+
+TEST_CASE("Deferred query compile installs results off the main thread")
+{
+  TreeSitterManager manager;
+#ifdef JOT_TREESITTER
+  REQUIRE(manager.register_language(
+      "cpp",
+      {".cpp"},
+      "",
+      "https://example.invalid/tree-sitter-cpp",
+      "",
+      "tree_sitter_cpp",
+      {"libtree-sitter-cpp.so", "libtree-sitter-cpp.dylib", "tree-sitter-cpp.dll",
+       "libtree-sitter-cpp.dll", "libtree_sitter_cpp.so", "libtree_sitter_cpp.dylib",
+       "tree_sitter_cpp.dll", "libtree_sitter_cpp.dll", "tree-sitter-cpp.so",
+       "tree-sitter-cpp.dylib"},
+      ""));
+  if (!manager.status("cpp").parser_loaded)
+  {
+    SUCCEED(); // needs an installed cpp parser; CI/parser-less machines skip
+    return;
+  }
+  std::string error;
+  manager.set_deferred_compile_mode(true);
+  REQUIRE(manager.set_query_source(".cpp", "(identifier) @variable", error));
+  REQUIRE(manager.deferred_compile_state() == TreeSitterManager::DeferredCompileState::Idle);
+  // Deferred mode must not compile synchronously.
+  REQUIRE_FALSE(manager.status(".cpp").query_loaded);
+
+  manager.start_deferred_compile();
+  REQUIRE(manager.deferred_compile_state() == TreeSitterManager::DeferredCompileState::Compiling);
+  for (int i = 0; i < 500
+                  && manager.deferred_compile_state()
+                         == TreeSitterManager::DeferredCompileState::Compiling;
+       ++i)
+  {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  REQUIRE(manager.deferred_compile_state() == TreeSitterManager::DeferredCompileState::Done);
+  REQUIRE(manager.finish_deferred_compile().empty());
+
+  REQUIRE(manager.status(".cpp").query_loaded);
+  REQUIRE(manager.status(".cpp").used_builtin_query);
+  REQUIRE_FALSE(manager.status(".cpp").used_runtime_query);
+  REQUIRE(manager.get_highlight_query(".cpp") != nullptr);
+#else
+  SUCCEED();
+#endif
 }

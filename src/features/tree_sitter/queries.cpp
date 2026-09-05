@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 
 namespace
@@ -201,6 +202,49 @@ TreeSitterManager::captures_for_handles(TreeSitterHandle query_handle,
   return result;
 }
 
+std::string tree_sitter_query_compile_error(uint32_t offset,
+                                             TSQueryError query_error,
+                                             const std::string &source)
+{
+  const char *kind = "invalid query";
+  switch (query_error)
+  {
+    case TSQueryErrorSyntax:
+      kind = "syntax error";
+      break;
+    case TSQueryErrorNodeType:
+      kind = "unknown node type";
+      break;
+    case TSQueryErrorField:
+      kind = "unknown field";
+      break;
+    case TSQueryErrorCapture:
+      kind = "unknown capture";
+      break;
+    case TSQueryErrorStructure:
+      kind = "invalid structure";
+      break;
+    case TSQueryErrorLanguage:
+      kind = "language mismatch";
+      break;
+    default:
+      break;
+  }
+  std::string message = std::string("query compilation failed (") + kind + " at byte "
+                        + std::to_string(offset);
+  if (offset < source.size())
+  {
+    std::string near = source.substr(
+        offset, std::min<std::string::size_type>(48, source.size() - offset));
+    const auto newline = near.find('\n');
+    if (newline != std::string::npos)
+      near.erase(newline);
+    message += " near \"" + near + "\"";
+  }
+  message += ")";
+  return message;
+}
+
 bool TreeSitterManager::set_query_source(const std::string &extension,
                                          const std::string &source,
                                          std::string &error)
@@ -222,6 +266,19 @@ bool TreeSitterManager::set_query_source(const std::string &extension,
   entry_it->second.highlight_query_source = source;
 
 #ifdef JOT_TREESITTER
+  if (deferred_compile_mode_ && deferred_compile_state_ == DeferredCompileState::Idle)
+  {
+    // Boot-time deferred mode: record the job for the background compile and
+    // return success immediately. The worker compiles it (or records the
+    // precise failure) off the main thread.
+    std::lock_guard<std::mutex> lock(deferred_mutex_);
+    deferred_query_jobs_.push_back({language_id,
+                                    entry_it->second.symbol,
+                                    entry_it->second.library_names,
+                                    source});
+    return true;
+  }
+
   const TSLanguage *language = load_language(language_id);
   if (!language)
   {
@@ -237,45 +294,7 @@ bool TreeSitterManager::set_query_source(const std::string &extension,
       language, source.c_str(), static_cast<uint32_t>(source.size()), &offset, &query_error);
   if (!query)
   {
-    // Name the actual construct that failed so bundled-query / grammar version
-    // mismatches are self-explanatory instead of a generic message.
-    const char *kind = "invalid query";
-    switch (query_error)
-    {
-      case TSQueryErrorSyntax:
-        kind = "syntax error";
-        break;
-      case TSQueryErrorNodeType:
-        kind = "unknown node type";
-        break;
-      case TSQueryErrorField:
-        kind = "unknown field";
-        break;
-      case TSQueryErrorCapture:
-        kind = "unknown capture";
-        break;
-      case TSQueryErrorStructure:
-        kind = "invalid structure";
-        break;
-      case TSQueryErrorLanguage:
-        kind = "language mismatch";
-        break;
-      default:
-        break;
-    }
-    std::string near;
-    if (offset < source.size())
-    {
-      near = source.substr(offset, std::min<std::string::size_type>(48, source.size() - offset));
-      const auto newline = near.find('\n');
-      if (newline != std::string::npos)
-        near.erase(newline);
-    }
-    error = std::string("query compilation failed (") + kind + " at byte "
-            + std::to_string(offset);
-    if (!near.empty())
-      error += " near \"" + near + "\"";
-    error += ")";
+    error = tree_sitter_query_compile_error(offset, query_error, source);
     query_diagnostics_[language_id] = error;
     runtime_query_used_[language_id] = false;
     builtin_query_used_[language_id] = false;

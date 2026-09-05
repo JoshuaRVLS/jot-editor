@@ -128,6 +128,24 @@ TreeSitterManager::TreeSitterManager()
 TreeSitterManager::~TreeSitterManager()
 {
 #ifdef JOT_TREESITTER
+  // Stop a background query compile still in flight and release anything it
+  // produced but that was never installed into the caches.
+  deferred_cancel_.store(true);
+  if (deferred_compile_thread_.joinable())
+  {
+    deferred_compile_thread_.join();
+  }
+  {
+    std::lock_guard<std::mutex> lock(deferred_mutex_);
+    for (auto &result : deferred_compile_results_)
+    {
+      if (result.query)
+        ts_query_delete(result.query);
+      if (result.handle)
+        close_library_handle(result.handle);
+    }
+    deferred_compile_results_.clear();
+  }
   for (auto &entry : lua_parsers_)
     ts_parser_delete(entry.second);
   for (auto &entry : lua_trees_)

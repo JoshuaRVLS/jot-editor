@@ -1,8 +1,11 @@
 #ifndef TREE_SITTER_MANAGER_H
 #define TREE_SITTER_MANAGER_H
 
+#include <atomic>
 #include <cstdint>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -52,6 +55,14 @@ int tree_sitter_capture_color_for_name(const std::string &name);
 int tree_sitter_capture_token_for_name(const std::string &name);
 int tree_sitter_capture_priority_for_name(const std::string &name);
 void tree_sitter_set_capture_color(const std::string &name, int color);
+
+#ifdef JOT_TREESITTER
+// Precise compile-failure wording shared by the synchronous and the
+// background query-compile paths, so both report identical messages.
+std::string tree_sitter_query_compile_error(uint32_t offset,
+                                             TSQueryError error,
+                                             const std::string &source);
+#endif
 
 struct TSLanguageEntry
 {
@@ -111,6 +122,26 @@ public:
                            const std::vector<std::string> &language_overrides);
   void reload();
 
+  // Deferred (background) query compilation. While deferred mode is on,
+  // set_query_source records the source and queues the language instead of
+  // compiling on the caller's thread; start_deferred_compile spawns a worker
+  // that dlopens installed parsers and compiles the queued queries off the
+  // main thread, and finish_deferred_compile (main thread only) installs the
+  // finished queries into the caches, returning per-language failure messages
+  // for the Lua policy to report. Skipped languages keep working through the
+  // normal synchronous path.
+  enum class DeferredCompileState
+  {
+    Idle,
+    Compiling,
+    Done
+  };
+  void set_deferred_compile_mode(bool on);
+  bool deferred_compile_mode() const;
+  DeferredCompileState deferred_compile_state() const;
+  void start_deferred_compile();
+  std::vector<std::string> finish_deferred_compile();
+
   // Lua-facing operations. Handles are opaque and valid only while this
   // manager is alive; all ownership remains native.
   bool register_language(const std::string &language_id,
@@ -169,11 +200,51 @@ private:
 
   QuerySource load_query_source(const std::string &language_name) const;
 
+#ifdef JOT_TREESITTER
+  struct DeferredQueryJob
+  {
+    std::string language_id;
+    std::string symbol;
+    std::vector<std::string> library_names;
+    std::string source;
+  };
+
+  struct DeferredCompileResult
+  {
+    std::string language_id;
+    std::string source;
+    std::string error; // empty on success
+    bool parser_absent = false; // no installed parser: stored, not a failure
+    void *handle = nullptr;
+    const TSLanguage *language = nullptr;
+    TSQuery *query = nullptr;
+  };
+
+  void deferred_query_compile_worker();
+#endif
+
+
   std::unordered_map<std::string, std::string> ext_to_lang_;
   std::unordered_set<std::string> language_override_extensions_;
   std::unordered_map<std::string, TSLanguageEntry> languages_;
   std::vector<std::string> runtime_library_paths_;
   std::vector<std::string> runtime_query_paths_;
+
+  // Deferred-compile state (see the public API above). The queue is filled on
+  // the main thread during the boot Lua load, snapshotted once by the worker,
+  // and results are installed back on the main thread, so the mutex only
+  // guards hand-off points. The mode and state flags exist in every build;
+  // the queue and worker types are tree-sitter-only.
+  bool deferred_compile_mode_ = false;
+  DeferredCompileState deferred_compile_state_ = DeferredCompileState::Idle;
+#ifdef JOT_TREESITTER
+  std::mutex deferred_mutex_;
+  std::vector<DeferredQueryJob> deferred_query_jobs_;
+  std::vector<std::string> deferred_compile_roots_;
+  std::vector<DeferredCompileResult> deferred_compile_results_;
+  std::thread deferred_compile_thread_;
+  std::atomic<bool> deferred_cancel_{false};
+#endif
 #ifdef JOT_TREESITTER
   mutable std::unordered_map<std::string, const TSLanguage *> parser_languages_;
   mutable std::unordered_map<std::string, void *> library_handles_;
