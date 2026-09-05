@@ -20,11 +20,16 @@ struct UICell
   bool italic = false;
   bool reverse = false;
   bool dim = false;
+  // Underline style: 0 = none, 1 = straight, 2 = wavy. underline_fg is the
+  // underline color (SGR 58, -1 = inherit the text color).
+  int underline = 0;
+  int underline_fg = -1;
 
   bool operator==(const UICell &other) const
   {
     return ch == other.ch && fg == other.fg && bg == other.bg && bold == other.bold
-           && italic == other.italic && reverse == other.reverse && dim == other.dim;
+           && italic == other.italic && reverse == other.reverse && dim == other.dim
+           && underline == other.underline && underline_fg == other.underline_fg;
   }
   bool operator!=(const UICell &other) const
   {
@@ -94,7 +99,9 @@ public:
                  int fg = 7,
                  int bg = -1,
                  bool bold = false,
-                 bool italic = false);
+                 bool italic = false,
+                 int underline = 0,
+                 int underline_fg = -1);
   void draw_rect(const UIRect &rect, int fg, int bg);
   void draw_border(const UIRect &rect, int fg, int bg);
   void fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg);

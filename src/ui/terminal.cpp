@@ -1131,6 +1131,36 @@ void Terminal::set_reverse(bool on)
   }
 }
 
+void Terminal::set_underline(int style)
+{
+  if (style == 1)
+  {
+    buffer += "\x1b[4m";
+  }
+  else if (style == 2)
+  {
+    buffer += "\x1b[4:3m";
+  }
+  else
+  {
+    buffer += "\x1b[24m";
+  }
+}
+
+void Terminal::set_underline_color(int fg)
+{
+  if (fg < 0)
+  {
+    buffer += "\x1b[59m";
+  }
+  else
+  {
+    char buf[24];
+    snprintf(buf, sizeof(buf), "\x1b[58;5;%dm", fg);
+    buffer += buf;
+  }
+}
+
 void Terminal::write(const std::string &str)
 {
   buffer += str;

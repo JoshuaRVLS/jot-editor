@@ -168,6 +168,12 @@ public:
   void set_italic(bool on);
   void set_dim(bool on);
   void set_reverse(bool on);
+  // Underline style: 0 = off, 1 = straight, 2 = wavy (CSI 4:3, ECMA-48
+  // colon subparameter; supported by kitty/wezterm/Windows Terminal/etc.,
+  // older terminals fall back to no underline or straight).
+  void set_underline(int style);
+  // Underline color via SGR 58 (256-color). -1 resets to the text color.
+  void set_underline_color(int fg);
 
   void write(const std::string &str);
   void write_char(char c);

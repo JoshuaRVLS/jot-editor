@@ -157,6 +157,33 @@ check("decoration.update_in_place", function()
   jot.decoration.delete(jot.buffer.current(), id)
   return matches == 1 and "ok" or "bad"
 end)
+check("decoration.underline", function()
+  local id = jot.decoration.set(jot.buffer.current(), {
+    row = 1,
+    col = 1,
+    width = 4,
+    underline = 2,
+    underline_hl = "diagnostic_warning",
+  })
+  if not id then
+    return "set-failed"
+  end
+  local list = jot.decoration.list(jot.buffer.current()) or {}
+  local got = nil
+  for _, d in ipairs(list) do
+    if d.id == id then
+      got = d
+    end
+  end
+  jot.decoration.delete(jot.buffer.current(), id)
+  if not got then
+    return "missing"
+  end
+  if got.underline ~= 2 or got.underline_hl ~= "diagnostic_warning" then
+    return "bad-fields"
+  end
+  return "ok"
+end)
 check("decoration.virt_text", function()
   local id = jot.decoration.set(jot.buffer.current(),
                                 { row = 1, col = 1, virt_text = " ⚠ smoke", virt_hl = "diagnostic_warning" })

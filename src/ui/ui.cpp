@@ -310,6 +310,10 @@ void UI::render()
           term->set_dim(true);
         if (cell.reverse)
           term->set_reverse(true);
+        if (cell.underline)
+          term->set_underline(cell.underline);
+        if (cell.underline_fg != -1)
+          term->set_underline_color(cell.underline_fg);
         term->set_color(cell.fg, cell.bg);
         write_cell_for_remaining_width(term, cell.ch, row_width - x);
         x += std::min(rendered_cell_width(cell.ch), row_width - x);
@@ -323,6 +327,8 @@ void UI::render()
       bool run_italic = false;
       bool run_dim = false;
       bool run_reverse = false;
+      int run_underline = 0;
+      int run_underline_fg = -1;
       int written = 0;
 
       std::string body;
@@ -333,7 +339,8 @@ void UI::render()
         const auto &cell = grid[y][x];
 
         if (x == 0 || cell.fg != run_fg || cell.bg != run_bg || cell.bold != run_bold
-            || cell.italic != run_italic || cell.dim != run_dim || cell.reverse != run_reverse)
+            || cell.italic != run_italic || cell.dim != run_dim || cell.reverse != run_reverse
+            || cell.underline != run_underline || cell.underline_fg != run_underline_fg)
         {
           // Optimization: skip ESC[0m (full reset) when only the
           // fg/bg have changed and the bold/italic/reverse bits are
@@ -344,7 +351,8 @@ void UI::render()
           // set them in place.
           const bool attrs_unchanged =
               (x != 0) && cell.bold == run_bold && cell.italic == run_italic && cell.dim == run_dim
-              && cell.reverse == run_reverse && (run_fg != -1 || run_bg != -1);
+              && cell.reverse == run_reverse && cell.underline == run_underline
+              && cell.underline_fg == run_underline_fg && (run_fg != -1 || run_bg != -1);
           if (!attrs_unchanged)
           {
             term->reset_color();
@@ -356,6 +364,10 @@ void UI::render()
               term->set_dim(true);
             if (cell.reverse)
               term->set_reverse(true);
+            if (cell.underline)
+              term->set_underline(cell.underline);
+            if (cell.underline_fg != -1)
+              term->set_underline_color(cell.underline_fg);
           }
           else
           {
@@ -371,6 +383,10 @@ void UI::render()
               term->set_dim(cell.dim);
             if (cell.reverse != run_reverse)
               term->set_reverse(cell.reverse);
+            if (cell.underline != run_underline)
+              term->set_underline(cell.underline);
+            if (cell.underline_fg != run_underline_fg)
+              term->set_underline_color(cell.underline_fg);
           }
           term->set_color(cell.fg, cell.bg);
           run_fg = cell.fg;
@@ -379,6 +395,8 @@ void UI::render()
           run_italic = cell.italic;
           run_dim = cell.dim;
           run_reverse = cell.reverse;
+          run_underline = cell.underline;
+          run_underline_fg = cell.underline_fg;
         }
 
         body.clear();
@@ -386,7 +404,9 @@ void UI::render()
         int run_start = x;
         while (x < row_width && grid[y][x].fg == run_fg && grid[y][x].bg == run_bg
                && grid[y][x].bold == run_bold && grid[y][x].italic == run_italic
-               && grid[y][x].dim == run_dim && grid[y][x].reverse == run_reverse)
+               && grid[y][x].dim == run_dim && grid[y][x].reverse == run_reverse
+               && grid[y][x].underline == run_underline
+               && grid[y][x].underline_fg == run_underline_fg)
         {
           int cell_w = std::min(rendered_cell_width(grid[y][x].ch), row_width - x);
           append_cell_for_remaining_width(body, grid[y][x].ch, row_width - x);
@@ -535,7 +555,15 @@ void UI::emit_raw_after_frame(const std::string &bytes)
   cursor_dirty = true;
 }
 
-void UI::draw_text(int x, int y, const std::string &text, int fg, int bg, bool bold, bool italic)
+void UI::draw_text(int x,
+                   int y,
+                   const std::string &text,
+                   int fg,
+                   int bg,
+                   bool bold,
+                   bool italic,
+                   int underline,
+                   int underline_fg)
 {
   // Guard against invisible normal text: if the caller used the default-bg
   // path (bg < 0) and the requested foreground would match the background,
@@ -564,6 +592,8 @@ void UI::draw_text(int x, int y, const std::string &text, int fg, int bg, bool b
       bad.bold = bold;
       bad.italic = italic;
       bad.reverse = false;
+      bad.underline = underline;
+      bad.underline_fg = underline_fg;
       set_cell(x + cell_offset, y, bad);
       i += 1;
       cell_offset++;
@@ -581,6 +611,8 @@ void UI::draw_text(int x, int y, const std::string &text, int fg, int bg, bool b
     cell.bold = bold;
     cell.italic = italic;
     cell.reverse = false;
+    cell.underline = underline;
+    cell.underline_fg = underline_fg;
     set_cell(x + cell_offset, y, cell);
 
     int cell_width = rendered_cell_width(cell.ch);

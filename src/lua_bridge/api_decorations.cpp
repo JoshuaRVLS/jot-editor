@@ -43,6 +43,9 @@ std::uint64_t LuaAPI::decoration_set(int buffer_idx, lua_State *L, int opts_inde
   d.fg = jot_lua::table_int(L, opts_index, "fg", -1);
   d.bg = jot_lua::table_int(L, opts_index, "bg", -1);
   d.hl = jot_lua::table_string(L, opts_index, "hl", "");
+  d.underline = std::clamp(jot_lua::table_int(L, opts_index, "underline", 0), 0, 2);
+  d.underline_fg = jot_lua::table_int(L, opts_index, "underline_fg", -1);
+  d.underline_hl = jot_lua::table_string(L, opts_index, "underline_hl", "");
   d.right_gravity = jot_lua::table_bool(L, opts_index, "right_gravity", true);
   d.virt_text = jot_lua::table_string(L, opts_index, "virt_text", "");
   d.virt_fg = jot_lua::table_int(L, opts_index, "virt_fg", -1);
@@ -130,6 +133,21 @@ void LuaAPI::decoration_list(int buffer_idx, lua_State *L)
     {
       lua_pushstring(L, d.hl.c_str());
       lua_setfield(L, -2, "hl");
+    }
+    if (d.underline != 0)
+    {
+      lua_pushinteger(L, d.underline);
+      lua_setfield(L, -2, "underline");
+    }
+    if (d.underline_fg != -1)
+    {
+      lua_pushinteger(L, d.underline_fg);
+      lua_setfield(L, -2, "underline_fg");
+    }
+    if (!d.underline_hl.empty())
+    {
+      lua_pushstring(L, d.underline_hl.c_str());
+      lua_setfield(L, -2, "underline_hl");
     }
     if (!d.virt_text.empty())
     {

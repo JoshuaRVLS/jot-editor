@@ -981,6 +981,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             // that already ended as the walk moved right.
             int deco_fg = -1;
             int deco_bg = -1;
+            int deco_underline = 0;
+            int deco_underline_fg = -1;
             if (row_deco_lo < row_deco_hi)
             {
               int best = -1;
@@ -999,6 +1001,19 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
                     if (!d.hl.empty())
                     {
                       theme_group_color(d.hl, deco_fg, deco_bg);
+                    }
+                    deco_underline = d.underline;
+                    deco_underline_fg = d.underline_fg;
+                    if (d.underline != 0 && deco_underline_fg == -1 && !d.underline_hl.empty())
+                    {
+                      int ufg = -1;
+                      int ubg = -1;
+                      theme_group_color(d.underline_hl, ufg, ubg);
+                      deco_underline_fg = ufg;
+                    }
+                    if (deco_underline != 0 && deco_underline_fg == -1 && d.fg != -1)
+                    {
+                      deco_underline_fg = d.fg;
                     }
                   }
                 }
@@ -1024,13 +1039,28 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             {
               for (int fill = 0; fill < char_w && vis_idx + fill < visible_len; fill++)
               {
-                ui->draw_text(current_x + vis_idx + fill, draw_y, " ", fg, bg);
+                ui->draw_text(current_x + vis_idx + fill,
+                              draw_y,
+                              " ",
+                              fg,
+                              bg,
+                              false,
+                              false,
+                              deco_underline,
+                              deco_underline_fg);
               }
             }
             else
             {
-              ui->draw_text(
-                  current_x + vis_idx, draw_y, line.substr(char_idx, next_idx - char_idx), fg, bg);
+              ui->draw_text(current_x + vis_idx,
+                            draw_y,
+                            line.substr(char_idx, next_idx - char_idx),
+                            fg,
+                            bg,
+                            false,
+                            false,
+                            deco_underline,
+                            deco_underline_fg);
             }
             char_idx = next_idx;
           }

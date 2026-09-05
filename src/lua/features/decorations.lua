@@ -1,9 +1,9 @@
 -- Inline diagnostics via anchored decorations (extmark-style).
 --
--- Listens for DiagnosticChanged and re-applies two decorations per
--- diagnostic using the jot.decoration.* API:
---   * a low-priority span over the reported range (severity color),
---   * end-of-line virtual text ("⚠ message") in the severity color.
+-- Listens for DiagnosticChanged and re-applies one decoration per
+-- diagnostic using the jot.decoration.* API: a wavy underline over the
+-- reported range in the severity color (VSCode-style squiggle — the text
+-- itself keeps its syntax colors; only the underline is colored).
 --
 -- Decorations are anchored: they follow the text across edits, so inline
 -- diagnostics stay glued to the code they describe. The native renderer
@@ -23,23 +23,8 @@ local SEVERITY_HL = {
   [4] = "diagnostic_hint",
 }
 
-local SEVERITY_GLYPH = {
-  [1] = "⚠",
-  [2] = "⚠",
-  [3] = "ℹ",
-  [4] = "…",
-}
-
 local function enabled()
   return jot.config.get(ENABLED_KEY, "true") ~= "false"
-end
-
-local function truncate(s, max)
-  s = tostring(s or "")
-  if #s <= max then
-    return s
-  end
-  return s:sub(1, max - 3) .. "..."
 end
 
 local function apply_diagnostics(info)
@@ -54,24 +39,19 @@ local function apply_diagnostics(info)
   local diagnostics = jot.diagnostics.get(buffer) or {}
   for _, d in ipairs(diagnostics) do
     local hl = SEVERITY_HL[d.severity] or "diagnostic_info"
-    -- Span over the reported range (byte columns, 1-based like the API).
+    -- Wavy underline over the reported range (byte columns, 1-based).
+    -- underline=1 would be a straight underline; 2 is the wavy squiggle.
     local width = math.max(0, (d.end_col or (d.col + 1)) - d.col)
-    jot.decoration.set(buffer, {
-      row = d.line,
-      col = d.col,
-      width = width,
-      hl = hl,
-      priority = 10,
-    })
-    -- End-of-line virtual text on the diagnostic's start line.
-    local msg = truncate(d.message, 60)
-    jot.decoration.set(buffer, {
-      row = d.line,
-      col = 1,
-      virt_text = " " .. (SEVERITY_GLYPH[d.severity] or "•") .. " " .. msg,
-      virt_hl = hl,
-      priority = 20,
-    })
+    if width > 0 then
+      jot.decoration.set(buffer, {
+        row = d.line,
+        col = d.col,
+        width = width,
+        underline = 2,
+        underline_hl = hl,
+        priority = 10,
+      })
+    end
   end
 end
 

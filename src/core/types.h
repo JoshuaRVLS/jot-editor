@@ -493,6 +493,12 @@ struct Decoration
   std::string hl; // theme group name, resolved at render time (e.g. "DiagnosticError")
   int width = 0; // span length in bytes (0 = point mark, no span)
   int priority = 0; // higher draws over lower and over syntax colors
+  // Underline over the span: 0 = none, 1 = straight, 2 = wavy. Unlike fg/bg,
+  // the underline does NOT recolor the text — the decoration color only
+  // reaches the underline itself (VSCode-style squiggle).
+  int underline = 0;
+  int underline_fg = -1; // raw underline color (-1 = fall back to hl, then fg)
+  std::string underline_hl; // theme group for the underline color
   std::string virt_text; // end-of-line virtual text (empty = none)
   int virt_fg = -1;
   int virt_bg = -1;
