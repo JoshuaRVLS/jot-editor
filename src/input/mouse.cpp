@@ -515,10 +515,7 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up, 
     {
       if (pane_index != current_pane)
       {
-        panes[current_pane].active = false;
-        current_pane = pane_index;
-        panes[current_pane].active = true;
-        current_buffer = panes[current_pane].buffer_id;
+        activate_pane(pane_index);
       }
       auto &pane = get_pane(current_pane);
       int draw_w = std::max(1, pane.w);
@@ -607,10 +604,7 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up, 
 
   if (is_click && pane_index != current_pane)
   {
-    panes[current_pane].active = false;
-    current_pane = pane_index;
-    panes[current_pane].active = true;
-    current_buffer = panes[current_pane].buffer_id;
+    activate_pane(pane_index);
   }
 
   auto &pane = get_pane(current_pane);
@@ -889,10 +883,7 @@ bool Editor::open_context_menu_for_mouse(int x, int y)
 
   if (pane_index != current_pane)
   {
-    panes[current_pane].active = false;
-    current_pane = pane_index;
-    panes[current_pane].active = true;
-    current_buffer = panes[current_pane].buffer_id;
+    activate_pane(pane_index);
   }
   auto &pane = get_pane(current_pane);
   auto &buf = get_buffer(pane.buffer_id);
@@ -1347,10 +1338,7 @@ void Editor::handle_mouse(void *event_ptr)
 
   if ((is_click || is_middle_click) && target_pane != current_pane)
   {
-    panes[current_pane].active = false;
-    current_pane = target_pane;
-    panes[current_pane].active = true;
-    current_buffer = panes[current_pane].buffer_id;
+    activate_pane(target_pane);
   }
 
   auto &pane = get_pane(current_pane);

@@ -621,6 +621,12 @@ private:
   {
     return pane_zoom_active;
   }
+  // Per-pane views: each pane keeps its own cursor/scroll/selection for the
+  // buffer it shows, so two panes can display one buffer independently.
+  void capture_pane_view(int pane_index);
+  void restore_pane_view(int pane_index);
+  void activate_pane(int pane_index);
+  void pane_show_buffer(int buffer_index);
   bool resize_current_pane(int delta);
   bool resize_current_pane_direction(char dir, int delta);
   int pane_split_at_position(int x, int y) const;

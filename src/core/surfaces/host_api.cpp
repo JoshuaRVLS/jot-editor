@@ -47,7 +47,9 @@ bool HostCoreAPI::switch_buffer(int index)
   if (!editor.panes.empty())
   {
     auto &pane = editor.get_pane();
+    editor.capture_pane_view(editor.current_pane);
     pane.buffer_id = index;
+    editor.restore_pane_view(editor.current_pane);
     if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(), index)
         == pane.tab_buffer_ids.end())
     {

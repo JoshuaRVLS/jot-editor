@@ -743,8 +743,10 @@ bool Editor::switch_to_local_tab(int target_index)
   {
     return false;
   }
+  capture_pane_view(current_pane);
   pane.buffer_id = buffer_id;
   current_buffer = buffer_id;
+  restore_pane_view(current_pane);
   focus_state = FOCUS_EDITOR;
   clamp_cursor(buffer_id);
   ensure_cursor_visible();
@@ -785,6 +787,34 @@ void Editor::render_pane(const SplitPane &pane)
   int draw_w = std::max(1, pane.w);
   if (pane.h <= 0)
     return;
+
+  // An inactive pane draws from its own remembered view (cursor, scroll,
+  // selection) so two panes sharing one buffer can be scrolled and edited at
+  // independent positions. The live buffer fields belong to the active pane;
+  // they are swapped out for this pane's view for the duration of the draw
+  // and restored afterwards.
+  FileBuffer *view_override = nullptr;
+  Cursor save_cursor{0, 0};
+  int save_preferred_x = 0;
+  Selection save_selection{{0, 0}, {0, 0}, false};
+  int save_scroll_offset = 0;
+  int save_scroll_x = 0;
+  if (!pane.active && pane.view_buffer_id == pane.buffer_id && pane.buffer_id >= 0
+      && pane.buffer_id < (int)buffers.size())
+  {
+    FileBuffer &buf = buffers[(size_t)pane.buffer_id];
+    view_override = &buf;
+    save_cursor = buf.cursor;
+    save_preferred_x = buf.preferred_x;
+    save_selection = buf.selection;
+    save_scroll_offset = buf.scroll_offset;
+    save_scroll_x = buf.scroll_x;
+    buf.cursor = pane.view_cursor;
+    buf.preferred_x = pane.view_preferred_x;
+    buf.selection = pane.view_selection;
+    buf.scroll_offset = pane.view_scroll_offset;
+    buf.scroll_x = pane.view_scroll_x;
+  }
 
   if (show_minimap && draw_w > 20)
   {
@@ -867,5 +897,14 @@ void Editor::render_pane(const SplitPane &pane)
       ui->draw_text(
           tabs.overflow_x, tabs.y, tabs.overflow_label, theme.fg_comment, theme.bg_status);
     }
+  }
+
+  if (view_override != nullptr)
+  {
+    view_override->cursor = save_cursor;
+    view_override->preferred_x = save_preferred_x;
+    view_override->selection = save_selection;
+    view_override->scroll_offset = save_scroll_offset;
+    view_override->scroll_x = save_scroll_x;
   }
 }

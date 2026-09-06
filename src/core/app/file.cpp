@@ -630,7 +630,9 @@ void Editor::open_file(const std::string &path, bool preview)
   {
     current_buffer = existing_index;
     auto &pane = get_pane();
+    capture_pane_view(current_pane);
     pane.buffer_id = existing_index;
+    restore_pane_view(current_pane);
     pane.tab_buffer_ids.erase(std::remove_if(pane.tab_buffer_ids.begin(),
                                              pane.tab_buffer_ids.end(),
                                              [this](int id)
@@ -762,6 +764,7 @@ void Editor::finish_open_file(FileBuffer fb, const std::string &path_to_open, bo
   buffers.push_back(std::move(fb));
   current_buffer = buffers.size() - 1;
   auto &pane = get_pane();
+  capture_pane_view(current_pane);
   pane.buffer_id = current_buffer;
   pane.tab_buffer_ids.erase(std::remove_if(pane.tab_buffer_ids.begin(),
                                            pane.tab_buffer_ids.end(),
@@ -831,6 +834,7 @@ void Editor::create_new_buffer()
   buffers.push_back(std::move(fb));
   current_buffer = buffers.size() - 1;
   auto &pane = get_pane();
+  capture_pane_view(current_pane);
   pane.buffer_id = current_buffer;
   pane.tab_buffer_ids.erase(std::remove_if(pane.tab_buffer_ids.begin(),
                                            pane.tab_buffer_ids.end(),
@@ -1260,7 +1264,9 @@ void Editor::close_buffer_at(int index)
   if (!panes.empty())
   {
     auto &pane = get_pane();
+    capture_pane_view(current_pane);
     pane.buffer_id = current_buffer;
+    restore_pane_view(current_pane);
     if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(), current_buffer)
         == pane.tab_buffer_ids.end())
     {
@@ -1316,7 +1322,9 @@ void Editor::reopen_last_closed_buffer()
   tab_scroll_index = std::min(tab_scroll_index, current_buffer);
   preview_buffer_index = -1;
   auto &pane = get_pane();
+  capture_pane_view(current_pane);
   pane.buffer_id = current_buffer;
+  restore_pane_view(current_pane);
   if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(), current_buffer)
       == pane.tab_buffer_ids.end())
   {

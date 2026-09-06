@@ -770,6 +770,17 @@ struct SplitPane
   bool active;
   int tab_scroll_index = 0;
   std::vector<int> tab_buffer_ids;
+  // Per-pane view of the buffer it shows. Two panes can display the same
+  // buffer with independent cursor/scroll/selection (window-style views); the
+  // live FileBuffer fields always mirror the *active* pane's view and these
+  // fields hold each inactive pane's own view. view_buffer_id is the buffer
+  // the stored view belongs to (-1 when the pane has never captured one).
+  int view_buffer_id = -1;
+  Cursor view_cursor{0, 0};
+  int view_preferred_x = 0;
+  Selection view_selection{{0, 0}, {0, 0}, false};
+  int view_scroll_offset = 0;
+  int view_scroll_x = 0;
 };
 
 enum PaneLayoutMode

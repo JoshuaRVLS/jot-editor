@@ -272,6 +272,107 @@ void Editor::update_pane_layout()
   }
 }
 
+// Copy the live buffer fields (cursor/scroll/selection) into the pane's view
+// slot. Called whenever a pane stops being the one being edited, so its
+// position is remembered even when another pane shows the same buffer.
+void Editor::capture_pane_view(int pane_index)
+{
+  if (pane_index < 0 || pane_index >= (int)panes.size())
+  {
+    return;
+  }
+  SplitPane &pane = panes[(size_t)pane_index];
+  if (pane.buffer_id < 0 || pane.buffer_id >= (int)buffers.size())
+  {
+    return;
+  }
+  FileBuffer &buf = buffers[(size_t)pane.buffer_id];
+  pane.view_buffer_id = pane.buffer_id;
+  pane.view_cursor = buf.cursor;
+  pane.view_preferred_x = buf.preferred_x;
+  pane.view_selection = buf.selection;
+  pane.view_scroll_offset = buf.scroll_offset;
+  pane.view_scroll_x = buf.scroll_x;
+}
+
+// Push a pane's remembered view back into the buffer it shows. When the pane
+// has no view for that buffer yet (never shown it, or switched away and back
+// through the buffer list), the buffer's own current position becomes the
+// pane's starting view instead.
+void Editor::restore_pane_view(int pane_index)
+{
+  if (pane_index < 0 || pane_index >= (int)panes.size())
+  {
+    return;
+  }
+  SplitPane &pane = panes[(size_t)pane_index];
+  if (pane.buffer_id < 0 || pane.buffer_id >= (int)buffers.size())
+  {
+    return;
+  }
+  FileBuffer &buf = buffers[(size_t)pane.buffer_id];
+  if (pane.view_buffer_id != pane.buffer_id)
+  {
+    pane.view_buffer_id = pane.buffer_id;
+    pane.view_cursor = buf.cursor;
+    pane.view_preferred_x = buf.preferred_x;
+    pane.view_selection = buf.selection;
+    pane.view_scroll_offset = buf.scroll_offset;
+    pane.view_scroll_x = buf.scroll_x;
+    return;
+  }
+  buf.cursor = pane.view_cursor;
+  buf.preferred_x = pane.view_preferred_x;
+  buf.selection = pane.view_selection;
+  buf.scroll_offset = pane.view_scroll_offset;
+  buf.scroll_x = pane.view_scroll_x;
+  // The shared content may have been edited while this pane was inactive, so
+  // the remembered position must be re-validated against the current text.
+  clamp_cursor(pane.buffer_id);
+  const int line_count = (int)buf.line_count();
+  buf.scroll_offset = std::clamp(buf.scroll_offset, 0, std::max(0, line_count - 1));
+  buf.scroll_x = std::max(0, buf.scroll_x);
+}
+
+// The single place focus moves between panes: remembers the outgoing pane's
+// view, marks the incoming one active and restores its view. Buffer contents
+// are shared; only the cursor/scroll/selection travel per pane.
+void Editor::activate_pane(int pane_index)
+{
+  if (panes.empty() || pane_index < 0 || pane_index >= (int)panes.size())
+  {
+    return;
+  }
+  if (pane_index == current_pane)
+  {
+    current_buffer = panes[(size_t)pane_index].buffer_id;
+    return;
+  }
+  capture_pane_view(current_pane);
+  panes[(size_t)current_pane].active = false;
+  current_pane = pane_index;
+  panes[(size_t)current_pane].active = true;
+  restore_pane_view(current_pane);
+  current_buffer = panes[(size_t)current_pane].buffer_id;
+  needs_redraw = true;
+}
+
+// The active pane adopts a different buffer. The outgoing buffer's view is
+// remembered on the pane first, then the incoming buffer is bound.
+void Editor::pane_show_buffer(int buffer_index)
+{
+  if (panes.empty() || buffer_index < 0 || buffer_index >= (int)buffers.size())
+  {
+    return;
+  }
+  capture_pane_view(current_pane);
+  SplitPane &pane = panes[(size_t)current_pane];
+  pane.buffer_id = buffer_index;
+  current_buffer = buffer_index;
+  restore_pane_view(current_pane);
+  needs_redraw = true;
+}
+
 void Editor::split_pane_horizontal()
 {
   split_pane_down();
@@ -415,12 +516,16 @@ void Editor::split_pane_direction(int dx, int dy)
     node.second = new_leaf_id;
   }
 
+  // The new pane starts on the same view as the pane it was cut from; from
+  // here on both panes track their own cursor/scroll/selection.
+  capture_pane_view(current_pane);
   for (auto &pane : panes)
   {
     pane.active = false;
   }
   current_pane = new_pane_index;
   panes[current_pane].active = true;
+  restore_pane_view(current_pane);
   current_buffer = panes[current_pane].buffer_id;
 
   pane_layout_mode = node.vertical ? PANE_LAYOUT_VERTICAL : PANE_LAYOUT_HORIZONTAL;
@@ -578,12 +683,12 @@ void Editor::close_pane()
     next = 0;
   }
 
+  current_pane = std::clamp(next, 0, std::max(0, (int)panes.size() - 1));
+  restore_pane_view(current_pane);
   for (auto &pane : panes)
   {
     pane.active = false;
   }
-
-  current_pane = std::clamp(next, 0, std::max(0, (int)panes.size() - 1));
   panes[current_pane].active = true;
   current_buffer = panes[current_pane].buffer_id;
 
@@ -832,15 +937,10 @@ void Editor::swap_panes()
 
   std::swap(pane_tree[(size_t)leaf_a].pane_index, pane_tree[(size_t)leaf_b].pane_index);
 
-  // Focus stays on the window position, which now shows the swapped content.
+  // Focus stays on the window position, which now shows the swapped content;
+  // the swap hands focus to the pane that arrived at this location.
   const int now_at_focused_location = pane_tree[(size_t)leaf_a].pane_index;
-  for (auto &pane : panes)
-  {
-    pane.active = false;
-  }
-  current_pane = std::clamp(now_at_focused_location, 0, (int)panes.size() - 1);
-  panes[(size_t)current_pane].active = true;
-  current_buffer = panes[(size_t)current_pane].buffer_id;
+  activate_pane(std::clamp(now_at_focused_location, 0, (int)panes.size() - 1));
   update_pane_layout();
   message = "Panes swapped";
   needs_redraw = true;
@@ -1196,10 +1296,7 @@ void Editor::next_pane()
   }
   if (panes.size() > 1)
   {
-    panes[current_pane].active = false;
-    current_pane = (current_pane + 1) % (int)panes.size();
-    panes[current_pane].active = true;
-    current_buffer = panes[current_pane].buffer_id;
+    activate_pane((current_pane + 1) % (int)panes.size());
     message = "Switched pane";
     needs_redraw = true;
   }
@@ -1215,10 +1312,7 @@ void Editor::prev_pane()
   }
   if (panes.size() > 1)
   {
-    panes[current_pane].active = false;
-    current_pane = (current_pane - 1 + (int)panes.size()) % (int)panes.size();
-    panes[current_pane].active = true;
-    current_buffer = panes[current_pane].buffer_id;
+    activate_pane((current_pane - 1 + (int)panes.size()) % (int)panes.size());
     message = "Switched pane";
     needs_redraw = true;
   }
@@ -1320,10 +1414,7 @@ bool Editor::focus_pane_direction(char dir)
     return false;
   }
 
-  panes[current_pane].active = false;
-  current_pane = best;
-  panes[current_pane].active = true;
-  current_buffer = panes[current_pane].buffer_id;
+  activate_pane(best);
   focus_state = FOCUS_EDITOR;
   message = "Focused pane";
   needs_redraw = true;
