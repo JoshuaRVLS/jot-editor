@@ -13,14 +13,79 @@ fi
 
 INSTALL_PREFIX="${DEFAULT_HOME}/.local"
 BUILD_TYPE="Release"
-RUN_TESTS=1
+RUN_TESTS=0
 USE_SUDO=0
-INSTALL_LSP=0
-INSTALL_TOOLS=0
 INSTALL_TREESITTER=1
 JOBS="2"
 PREFIX_EXPLICIT=0
 BUILD_DIR_EXPLICIT=0
+# Comma-separated list of optional LSP / formatter components to install.
+# Empty means "ask interactively when attached to a terminal, else install
+# nothing". --with-lsp / --with-tools fill this in.
+SELECTED_COMPONENTS=""
+ASK_COMPONENTS=1
+
+# --- component catalog (optional LSP servers + formatters) ------------------
+# Order here drives the interactive picker and the list installed by
+# --with-lsp / --with-tools.  Every entry has:  label | function | check-cmd.
+# The check-cmd decides whether the tool already exists (so the picker can
+# show it as installed and the installer can skip it).
+FORMATTER_COMPONENTS="prettier"
+LSP_COMPONENTS="clangd python typescript html bash rust_analyzer gopls lua_ls"
+
+component_present() {
+  local comp="$1"
+  case "$comp" in
+    clangd)          command -v clangd >/dev/null 2>&1 ;;
+    python)          command -v pylsp >/dev/null 2>&1 ;;
+    typescript)      command -v typescript-language-server >/dev/null 2>&1 ;;
+    html)            command -v vscode-html-language-server >/dev/null 2>&1 ;;
+    bash)            command -v bash-language-server >/dev/null 2>&1 ;;
+    rust_analyzer)   command -v rust-analyzer >/dev/null 2>&1 ;;
+    gopls)           command -v gopls >/dev/null 2>&1 ;;
+    lua_ls)          command -v lua-language-server >/dev/null 2>&1 ;;
+    prettier)        command -v prettier >/dev/null 2>&1 ;;
+    *) return 1 ;;
+  esac
+}
+
+component_install() {
+  local comp="$1"
+  if component_present "$comp"; then
+    log_ok "${comp} already installed"
+    return 0
+  fi
+  case "$comp" in
+    clangd)        install_clangd ;;
+    python)        install_python_lsp ;;
+    typescript)    install_typescript_lsp ;;
+    html)          install_html_lsp ;;
+    bash)          install_bash_lsp ;;
+    rust_analyzer) install_rust_analyzer ;;
+    gopls)         install_gopls ;;
+    lua_ls)        install_lua_ls ;;
+    prettier)      install_prettier ;;
+    *) log_warn "Unknown component: ${comp}" ;;
+  esac
+}
+
+component_label() {
+  local comp="$1"
+  case "$comp" in
+    clangd)        echo "clangd (C/C++)" ;;
+    python)        echo "python-lsp-server (Python)" ;;
+    typescript)    echo "typescript-language-server (TS/JS)" ;;
+    html)          echo "vscode-html-language-server (HTML)" ;;
+    bash)          echo "bash-language-server (bash)" ;;
+    rust_analyzer) echo "rust-analyzer (Rust)" ;;
+    gopls)         echo "gopls (Go)" ;;
+    lua_ls)        echo "lua-language-server (Lua)" ;;
+    prettier)      echo "prettier (formatter)" ;;
+    *) echo "$comp" ;;
+  esac
+}
+
+ALL_COMPONENTS="${LSP_COMPONENTS} ${FORMATTER_COMPONENTS}"
 
 # --- logging helpers ---------------------------------------------------------
 # Colors are used only when attached to a terminal (and NO_COLOR is unset),
@@ -53,30 +118,170 @@ Usage: ./install.sh [options]
 
 Build and install jot using CMake.
 
+Run without options for an interactive installer that asks which optional
+LSP servers and formatters to install.
+
 Options:
   --prefix <path>       Install prefix (default: $HOME/.local)
   --build-dir <path>    Build directory (default: ./build)
   --debug               Build with Debug configuration
   --release             Build with Release configuration (default)
-  --run-tests           Run CTest after building (default)
-  --skip-tests          Skip CTest after building
-  --with-tools          Install optional formatter tooling (prettier)
-  --with-lsp            Install optional built-in LSP servers
+  --run-tests           Build the test suite and run CTest (dev builds only)
+  --skip-tests          Skip the test suite entirely (default)
+  --with-tools          Install prettier without prompting
+  --with-lsp            Install the built-in LSP servers without prompting
+  --component <name>    Install one component without prompting; repeatable,
+                        e.g. --component clangd --component lua_ls. Run
+                        ./install.sh --list-components for the full list.
+  --list-components     Print known component names and exit
+  --no-components       Never prompt; install only the jot binary (default
+                        when stdin is not a terminal)
   --with-treesitter     Install Tree-sitter runtime package (default)
   --skip-treesitter     Skip Tree-sitter dependency install attempt
-  --skip-lsp            Deprecated alias; LSP installs are skipped by default
   --sudo                Run install step with sudo
   -j, --jobs <N>        Parallel build jobs (default: 2)
   -h, --help            Show this help message
 
 Examples:
-  ./install.sh
-  ./install.sh --prefix /usr/local --sudo
-  ./install.sh --skip-tests
-  ./install.sh --skip-treesitter
-  ./install.sh --with-tools --with-lsp
-  ./install.sh --build-dir ./build_release --release -j 4
+  ./install.sh                          # interactive picker for extras
+  ./install.sh --component clangd --component prettier
+  ./install.sh --skip-tests --with-lsp
 USAGE
+}
+
+print_component_list() {
+  printf '%s\n' "Known optional components:"
+  local comp
+  for comp in ${ALL_COMPONENTS}; do
+    printf '  %-14s %s\n' "${comp}" "$(component_label "${comp}")"
+  done
+}
+
+# Interactive picker for the optional tooling.  Presents a numbered list,
+# accepts a comma/space separated list (or a single number to toggle a row),
+# then prints the chosen component names as a single line to stdout.  Rows for
+# tools that are already installed are pre-checked and installing them later is
+# a no-op.
+pick_components() {
+  local comp
+  local n=0
+  local total=0
+  chosen=""
+  for comp in ${ALL_COMPONENTS}; do
+    total=$((total + 1))
+    if component_present "${comp}"; then
+      chosen="${chosen} ${comp}"
+    fi
+  done
+
+  name_at() {  # $1 = 1-based row -> component name (prints nothing if OOB)
+    local idx=0
+    local c
+    for c in ${ALL_COMPONENTS}; do
+      idx=$((idx + 1))
+      if [[ "$1" -eq "${idx}" ]]; then
+        printf '%s' "${c}"
+        return 0
+      fi
+    done
+    return 1
+  }
+
+  # All menu rendering goes to stderr (the terminal): the caller captures
+  # stdout as the selection result, so anything printed to stdout would be
+  # swallowed instead of shown.
+  draw_menu() {
+    n=0
+    for comp in ${ALL_COMPONENTS}; do
+      n=$((n + 1))
+      local mark=" "
+      case " ${chosen} " in
+        *" ${comp} "*) mark="x" ;;
+      esac
+      printf '  [%s] %2d) %s\n' "${mark}" "${n}" "$(component_label "${comp}")" >&2
+    done
+  }
+
+  local prompt_lines=6   # blank + title + 3 hints + blank before the list
+
+  clear_block() {  # move up over the whole checklist block and wipe it
+    local lines=$((total + prompt_lines + 1))  # list rows + prompt line
+    local i
+    for ((i = 0; i < lines; i++)); do
+      printf '\033[1A\033[K' >&2
+    done
+  }
+
+  print_block() {
+    printf '\n' >&2
+    printf '%s\n' "${C_BOLD}Optional tooling${C_RESET}" >&2
+    printf '%s\n' "Numbers toggle a row; \"all\" selects everything; Enter installs what is [x]." >&2
+    printf '%s\n' "Already-installed tools are pre-checked and will simply be skipped." >&2
+    printf '%s\n' "Any of the 100+ LSP servers can also be installed later from inside jot with :lspinstall." >&2
+    printf '\n' >&2
+    draw_menu
+    printf '%s' 'Numbers (Enter when done): ' >&2
+  }
+
+  print_block
+
+  local done=0
+  while [[ "${done}" -eq 0 ]]; do
+    local reply=""
+    IFS= read -r reply || reply=""
+    # The tty echoes the typed line; clear it plus the block before redraw.
+    clear_block
+    if [[ -z "${reply}" ]]; then
+      done=1
+      break
+    fi
+    case "${reply}" in
+      all|ALL|a)
+        chosen=" ${ALL_COMPONENTS} "
+        done=1
+        break
+        ;;
+    esac
+    local tok
+    local parsed=0
+    IFS=', ' read -r -a nums <<< "${reply}"
+    for tok in "${nums[@]:-}"; do
+      [[ -z "${tok}" ]] && continue
+      if [[ "${tok}" =~ ^[0-9]+$ ]] && ((tok >= 1)) && ((tok <= total)); then
+        local name
+        name="$(name_at "${tok}")" || continue
+        if [[ -n "${name}" ]]; then
+          if [[ " ${chosen} " == *" ${name} "* ]]; then
+            chosen="${chosen// ${name}/ }"
+          else
+            chosen="${chosen} ${name}"
+          fi
+          parsed=1
+        fi
+      fi
+    done
+    if [[ "${parsed}" -eq 0 ]]; then
+      case "${reply}" in
+        done|0|q) done=1 ;;
+      esac
+    fi
+    if [[ "${done}" -eq 0 ]]; then
+      print_block
+    fi
+  done
+  printf '\n' >&2
+
+  # Normalize and print the final selection as a single line (stdout -> the
+  # caller's SELECTED_COMPONENTS variable).
+  local out=""
+  local seen=" "
+  for comp in ${chosen}; do
+    case "${seen}" in
+      *" ${comp} "*) ;;
+      *) seen="${seen}${comp} "; out="${out} ${comp}" ;;
+    esac
+  done
+  printf '%s\n' "${out# }"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -110,12 +315,28 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --with-tools)
-      INSTALL_TOOLS=1
+      SELECTED_COMPONENTS="${SELECTED_COMPONENTS} prettier"
+      ASK_COMPONENTS=0
       shift
       ;;
     --with-lsp)
-      INSTALL_LSP=1
+      SELECTED_COMPONENTS="${SELECTED_COMPONENTS} ${LSP_COMPONENTS}"
+      ASK_COMPONENTS=0
       shift
+      ;;
+    --component)
+      [[ $# -ge 2 ]] || { log_error "Missing value for --component"; exit 1; }
+      SELECTED_COMPONENTS="${SELECTED_COMPONENTS} $2"
+      ASK_COMPONENTS=0
+      shift 2
+      ;;
+    --no-components)
+      ASK_COMPONENTS=0
+      shift
+      ;;
+    --list-components)
+      print_component_list
+      exit 0
       ;;
     --with-treesitter)
       INSTALL_TREESITTER=1
@@ -126,7 +347,10 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --skip-lsp)
-      INSTALL_LSP=0
+      # Deprecated alias kept for compatibility: explicit component selection
+      # is empty by default, so this is a no-op now.
+      SELECTED_COMPONENTS=""
+      ASK_COMPONENTS=0
       shift
       ;;
     --sudo)
@@ -149,6 +373,22 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Validate any explicitly requested component names early.
+for want in ${SELECTED_COMPONENTS}; do
+  case " ${ALL_COMPONENTS} " in
+    *" ${want} "*) ;;
+    *) log_error "Unknown component: ${want}"; print_component_list; exit 1 ;;
+  esac
+done
+
+# The interactive picker runs after the build (see below) so a failed build
+# does not waste the user's choices. Explicit flags skip it entirely; when
+# stdin/stdout are not terminals (CI, scripts) nothing is prompted.
+INTERACTIVE_TTY=0
+if [[ -t 0 ]]; then
+  INTERACTIVE_TTY=1
+fi
 
 if ! [[ "${JOBS}" =~ ^[1-9][0-9]*$ ]]; then
   log_error "--jobs must be a positive number"
@@ -239,14 +479,22 @@ ensure_valid_built_jot() {
   fi
 }
 
-# Runs a command silently; only reports when it fails.
+# Runs a command capturing its output; on failure the captured output is
+# printed so the user sees why, on success only a short ✓ line is shown.
 attempt_cmd() {
   local desc="$1"
   shift
-  if "$@"; then
+  local log_file
+  log_file="$(mktemp)"
+  if "$@" >"${log_file}" 2>&1; then
+    rm -f "${log_file}"
     return 0
   fi
   log_warn "Failed: ${desc}"
+  if [[ -s "${log_file}" ]]; then
+    sed 's/^/    /' "${log_file}" | tail -n 15
+  fi
+  rm -f "${log_file}"
   return 1
 }
 
@@ -386,7 +634,7 @@ install_rust_analyzer() {
   fi
   if command -v brew >/dev/null 2>&1; then
     attempt_cmd "Installing rust-analyzer via brew" \
-      brew install rust-analyzer && return 0
+      env HOMEBREW_NO_AUTO_UPDATE=1 brew install --quiet rust-analyzer && return 0
   fi
 
   log_warn "Unable to install rust-analyzer automatically"
@@ -421,7 +669,7 @@ install_gopls() {
   fi
   if command -v brew >/dev/null 2>&1; then
     attempt_cmd "Installing gopls via brew" \
-      brew install gopls && return 0
+      env HOMEBREW_NO_AUTO_UPDATE=1 brew install --quiet gopls && return 0
   fi
 
   log_warn "Unable to install gopls automatically"
@@ -460,7 +708,7 @@ install_lua_ls() {
   fi
   if command -v brew >/dev/null 2>&1; then
     attempt_cmd "Installing lua-language-server via brew" \
-      brew install lua-language-server && return 0
+      env HOMEBREW_NO_AUTO_UPDATE=1 brew install --quiet lua-language-server && return 0
   fi
 
   if command -v lua_ls >/dev/null 2>&1; then
@@ -505,7 +753,7 @@ install_clangd() {
 
   if command -v brew >/dev/null 2>&1; then
     attempt_cmd "Installing llvm via brew (contains clangd)" \
-      brew install llvm && return 0
+      env HOMEBREW_NO_AUTO_UPDATE=1 brew install --quiet llvm && return 0
   fi
 
   log_warn "Unable to install clangd automatically"
@@ -609,7 +857,7 @@ install_treesitter_deps() {
       run_maybe_sudo zypper --non-interactive install tree-sitter-devel || failures=$((failures + 1))
   elif command -v brew >/dev/null 2>&1; then
     attempt_cmd "Installing Tree-sitter runtime via brew" \
-      brew install tree-sitter || failures=$((failures + 1))
+      env HOMEBREW_NO_AUTO_UPDATE=1 brew install --quiet tree-sitter || failures=$((failures + 1))
   else
     log_warn "No supported package manager found for Tree-sitter"
     failures=$((failures + 1))
@@ -719,26 +967,6 @@ install_required_native_deps() {
   return 1
 }
 
-install_builtin_lsps() {
-  log_step "LSP servers (python/typescript/js/jsx/tsx/html/cpp/rust/go/lua/bash)"
-  local failures=0
-
-  install_python_lsp || failures=$((failures + 1))
-  install_typescript_lsp || failures=$((failures + 1))
-  install_html_lsp || failures=$((failures + 1))
-  install_clangd || failures=$((failures + 1))
-  install_rust_analyzer || failures=$((failures + 1))
-  install_gopls || failures=$((failures + 1))
-  install_lua_ls || failures=$((failures + 1))
-  install_bash_lsp || failures=$((failures + 1))
-
-  if [[ "${failures}" -gt 0 ]]; then
-    log_warn "${failures} LSP server(s) could not be installed automatically; install them manually"
-  else
-    log_ok "All built-in LSP servers installed"
-  fi
-}
-
 choose_build_dir() {
   local default_relocate="${XDG_CACHE_HOME:-${HOME}/.cache}/jot/build"
   if [[ "${BUILD_DIR_EXPLICIT}" -eq 1 ]]; then
@@ -812,6 +1040,15 @@ CMAKE_ARGS=(
 
 BUILD_ARGS=(--build "${BUILD_DIR}" --parallel "${JOBS}")
 
+if [[ "${RUN_TESTS}" -eq 0 ]]; then
+  # Production installs skip the test target entirely: it pulls a Catch2
+  # dependency and doubles the build time. --run-tests turns it back on for
+  # developers and CI.
+  CMAKE_ARGS+=(-DBUILD_TESTING=OFF)
+else
+  CMAKE_ARGS+=(-DBUILD_TESTING=ON)
+fi
+
 log_step "Configuring (${BUILD_TYPE})"
 cmake "${CMAKE_ARGS[@]}"
 
@@ -825,23 +1062,39 @@ if [[ "${RUN_TESTS}" -eq 1 ]]; then
 fi
 
 log_step "Installing to ${INSTALL_PREFIX}"
+# cmake --install prints one line per copied Lua file; collapse that to a
+# single summary line unless the install itself fails.
 if [[ "${USE_SUDO}" -eq 1 ]]; then
-  sudo cmake --install "${BUILD_DIR}"
+  INSTALL_OUTPUT="$(sudo cmake --install "${BUILD_DIR}" 2>&1)" || { printf '%s\n' "${INSTALL_OUTPUT}"; exit 1; }
 else
-  cmake --install "${BUILD_DIR}"
+  INSTALL_OUTPUT="$(cmake --install "${BUILD_DIR}" 2>&1)" || { printf '%s\n' "${INSTALL_OUTPUT}"; exit 1; }
+fi
+log_ok "Installed jot (binary, configs, themes and bundled language files) into ${INSTALL_PREFIX}"
+
+# Now that jot is on disk, offer the optional tooling. Interactive runs prompt
+# with a checklist; explicit flags (--component / --with-lsp / --with-tools)
+# install exactly what was requested; everything else installs nothing.
+if [[ "${ASK_COMPONENTS}" -eq 1 ]] && [[ "${INTERACTIVE_TTY}" -eq 1 ]]; then
+  SELECTED_COMPONENTS="$(pick_components)"
 fi
 
-if [[ "${INSTALL_TOOLS}" -eq 1 ]]; then
-  log_step "Formatter tooling (prettier)"
-  install_prettier || true
-else
-  log_info "Skipped optional formatter tooling (--with-tools to enable)"
+if [[ -n "${SELECTED_COMPONENTS// /}" ]]; then
+  log_step "Optional tooling"
+  seen=" "
+  for comp in ${SELECTED_COMPONENTS}; do
+    case "${seen}" in
+      *" ${comp} "*) continue ;;
+    esac
+    seen="${seen}${comp} "
+    log_info "Installing ${comp} ($(component_label "${comp}"))"
+    component_install "${comp}" || true
+  done
 fi
 
-if [[ "${INSTALL_LSP}" -eq 1 ]]; then
-  install_builtin_lsps
-else
-  log_info "Skipped optional LSP server install (--with-lsp to enable)"
+if [[ -z "${SELECTED_COMPONENTS// /}" ]]; then
+  log_info "No optional LSP servers or formatters selected."
+  log_info "Install them later from inside jot with :lspinstall, or rerun:"
+  log_info "  ${PROJECT_ROOT}/install.sh --component clangd --component prettier"
 fi
 
 EXPECTED_BIN="${INSTALL_PREFIX}/bin/jot"
