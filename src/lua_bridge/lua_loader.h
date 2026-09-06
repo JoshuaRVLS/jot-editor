@@ -1,29 +1,38 @@
-// Runtime loading of the bundled Lua sources (lua/*.lua). Resolution order
-// is always:
+// Runtime loading of the bundled runtime files (lua/*.lua plus the
+// tree-sitter .scm queries). Resolution order is always:
 //   1. the user config dir  ($JOT_CONFIG_HOME / ~/.config/jot / %APPDATA%/jot)
-//   2. the install data dir (JOT_DEFAULT_DATA_DIR)
-//   3. the developer source dir (JOT_LUA_SOURCE_DIR — where the repo lives)
-//   4. the copy embedded into the binary at build time
+//   2. the developer source dir (JOT_LUA_SOURCE_DIR — where the repo lives)
+//   3. the install data dir (JOT_DEFAULT_DATA_DIR, plus a Windows fallback)
+//   4. the cache dir, auto-extracted from the binary's embedded bytes
+//      (JOT_CACHE_HOME / ~/.cache/jot / %LOCALAPPDATA%\jot\cache)
 //
-// That keeps the developer's edit-without-recompile loop (source dir beats
-// the embedded default), lets users/community override via their config dir,
-// and guarantees a shipped binary always carries a working copy of the Lua
-// UI / features even when no lua/ directory exists on the machine.
+// The config dir is user territory: jot never writes there, so any file that
+// exists is a hand-written override and is respected verbatim (a legacy
+// `.embedded` marker still marks copies jot itself materialized in the
+// pre-cache era — those are refreshed when the bundled runtime moves on).
+// The cache dir is disposable and kept in sync with the embedded bytes, so
+// a shipped binary always carries a working copy of the runtime even when
+// no lua/ directory exists on the machine.
 #pragma once
 
 #include <filesystem>
 #include <string>
 #include <vector>
 
-// Dirs that may hold an override of the bundled Lua files, most specific
-// first. Only existing directories are returned.
+// Dirs that may hold an override of the bundled runtime files, most
+// specific first. Only existing directories are returned.
 std::vector<std::filesystem::path> jot_lua_override_dirs();
 
 // Full candidate paths for a bundled file (relative like "features/ui.lua"),
 // most specific first, restricted to directories that actually exist.
 std::vector<std::filesystem::path> jot_lua_candidate_paths(const std::string &rel_path);
 
-// Resolves a bundled Lua file to a real path on disk (user/install/source),
-// or falls back to extracting the embedded copy into the user config dir.
-// Returns an empty path when nothing is available.
+// Ensures the embedded copy of a bundled file exists in the cache dir
+// (extracting or refreshing it), returning its path, or an empty path when
+// the file is not embedded. Never consults or writes the user config dir.
+std::filesystem::path jot_lua_cache_path(const std::string &rel_path);
+
+// Resolves a bundled file to a real path on disk: the first override copy
+// (user/dev/install) wins; otherwise the embedded bytes are extracted into
+// the cache dir and that path is returned. Empty when nothing is available.
 std::filesystem::path jot_lua_resolve_path(const std::string &rel_path);

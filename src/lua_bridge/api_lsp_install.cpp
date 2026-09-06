@@ -294,9 +294,10 @@ bool LuaAPI::load_lsp_installer(lua_State *L)
 {
   if (!L)
     return false;
-  // User config dir -> install data dir -> developer source dir, then the
-  // embedded copy materialized into the user config dir. The installer Lua
-  // dofiles its siblings relative to its own directory.
+  // User config dir -> developer source dir -> install data dir, then the
+  // embedded copy materialized into the disposable cache dir. The installer
+  // Lua dofiles its siblings relative to its own directory, so it needs real
+  // files on disk.
   const std::filesystem::path path = jot_lua_resolve_path("lsp/install.lua");
   if (path.empty())
     return false;

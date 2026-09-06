@@ -168,11 +168,11 @@ namespace jot_lua
   }
 
   // Loads a bundled Lua feature file. The first candidate path on disk (user
-  // config dir -> install data dir -> developer source dir) wins so edits never
+  // config dir -> developer source dir -> install data dir) wins so edits never
   // need a recompile; otherwise the copy embedded into the binary runs straight
   // from memory (no disk writes needed). Shared by the hover / ui-kit runtimes.
-  // jot_lua_resolve_path() refreshes stale materialized copies (marker-based)
-  // so bundled-lua updates reach existing installs without losing hand edits.
+  // jot_lua_resolve_path() never writes into the user config dir; embedded
+  // fallback materializes only into the disposable cache dir.
   inline bool load_bundled_lua_file(lua_State *L, const char *rel_path, const char *label)
   {
     const std::filesystem::path resolved = jot_lua_resolve_path(rel_path);

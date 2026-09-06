@@ -305,9 +305,10 @@ void LuaAPI::register_treesitter_api(lua_State *L)
 bool LuaAPI::load_treesitter_runtime(lua_State *L)
 {
   register_treesitter_api(L);
-  // User config dir -> install data dir -> developer source dir, then the
-  // embedded copy materialized into the user config dir. The treesitter Lua
-  // uses dofile relative to runtime_path, so it needs real files on disk.
+  // User config dir -> developer source dir -> install data dir, then the
+  // embedded copy materialized into the disposable cache dir. The treesitter
+  // Lua uses dofile relative to runtime_path and reads .scm queries from
+  // disk, so it needs real files on disk.
   const fs::path path = jot_lua_resolve_path("treesitter/init.lua");
   if (path.empty())
     return false;

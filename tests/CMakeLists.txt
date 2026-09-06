@@ -24,6 +24,7 @@ add_executable(jot_tests
   test_tree_sitter_incremental.cpp
   test_decorations.cpp
   test_lua_decorations.cpp
+  test_lua_loader.cpp
   test_win_probe.cpp
 )
 

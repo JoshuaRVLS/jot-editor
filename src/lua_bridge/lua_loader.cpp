@@ -28,6 +28,32 @@ namespace
     return {};
   }
 
+  // Disposable cache for runtime files that need to exist on disk (the
+  // tree-sitter and lsp-installer Lua dofile their siblings, and queries are
+  // .scm files). Unlike the config dir this is ours alone: contents are
+  // refreshed from the embedded bytes whenever they differ, and deleting the
+  // whole directory is always safe.
+  std::filesystem::path user_cache_root()
+  {
+    namespace fs = std::filesystem;
+    const char *cache = std::getenv("JOT_CACHE_HOME");
+    if (cache && *cache)
+      return fs::path(cache);
+    const char *xdg = std::getenv("XDG_CACHE_HOME");
+    if (xdg && *xdg)
+      return fs::path(xdg) / "jot";
+#ifdef _WIN32
+    const char *local = std::getenv("LOCALAPPDATA");
+    if (local && *local)
+      return fs::path(local) / "jot" / "cache";
+#else
+    const char *home = std::getenv("HOME");
+    if (home && *home)
+      return fs::path(home) / ".cache" / "jot";
+#endif
+    return {};
+  }
+
   std::string read_file(const std::filesystem::path &p)
   {
     std::ifstream in(p, std::ios::binary);
@@ -36,8 +62,17 @@ namespace
     return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
   }
 
-  // FNV-1a 64-bit; used to fingerprint embedded content so materialized
-  // copies can be refreshed when the binary's bundled lua changes.
+  bool write_file(const std::filesystem::path &p, const std::string &content)
+  {
+    std::ofstream out(p, std::ios::binary | std::ios::trunc);
+    if (!out)
+      return false;
+    out.write(content.data(), static_cast<std::streamsize>(content.size()));
+    return static_cast<bool>(out);
+  }
+
+  // FNV-1a 64-bit; fingerprints embedded content so cached / materialized
+  // copies can be refreshed when the binary's bundled runtime changes.
   std::string content_hash(const unsigned char *data, size_t size)
   {
     uint64_t h = 1469598103934665603ULL;
@@ -51,13 +86,20 @@ namespace
     return buf;
   }
 
-  // Marker path for a materialized copy: `lua/<rel>.embedded` holds the hash
-  // of the embedded content the copy was materialized from. Presence of the
-  // marker means "jot wrote this file" (refreshable cache); absence means the
-  // user wrote it by hand (override, never touched).
+  // Marker path for a legacy materialized copy: `lua/<rel>.embedded` holds
+  // the hash of the embedded content the copy was materialized from. Presence
+  // of the marker means "jot wrote this file" (safe to refresh); absence
+  // means the user wrote it by hand (override, never touched).
   std::filesystem::path marker_path(const std::filesystem::path &copy)
   {
     return copy.string() + ".embedded";
+  }
+
+  std::string embedded_source(const std::string &rel_path)
+  {
+    size_t size = 0;
+    const unsigned char *data = jot_embedded::find(rel_path.c_str(), &size);
+    return (data && size > 0) ? std::string((const char *)data, size) : "";
   }
 
   bool write_marker(const std::filesystem::path &copy, const std::string &hash)
@@ -133,219 +175,111 @@ std::vector<std::filesystem::path> jot_lua_candidate_paths(const std::string &re
   return out;
 }
 
+std::filesystem::path jot_lua_cache_path(const std::string &rel_path)
+{
+  const std::string embedded = embedded_source(rel_path);
+  if (embedded.empty())
+  {
+    return {};
+  }
+  std::filesystem::path root = user_cache_root();
+  if (root.empty())
+  {
+    return {};
+  }
+  std::error_code ec;
+  const std::filesystem::path target = root / rel_path;
+  std::filesystem::create_directories(target.parent_path(), ec);
+  if (ec)
+  {
+    return {};
+  }
+  // The cache is disposable: extract (or refresh) whenever the on-disk copy
+  // differs from the embedded bytes. Never treats the cache as an override.
+  if (!std::filesystem::is_regular_file(target) || read_file(target) != embedded)
+  {
+    if (!write_file(target, embedded))
+    {
+      return {};
+    }
+  }
+  return target;
+}
+
 std::filesystem::path jot_lua_resolve_path(const std::string &rel_path)
 {
   const auto candidates = jot_lua_candidate_paths(rel_path);
-
-  size_t size = 0;
-  const unsigned char *data = jot_embedded::find(rel_path.c_str(), &size);
-  const std::string embedded = (data && size > 0) ? std::string((const char *)data, size) : "";
-  const std::string hash = (data && size > 0) ? content_hash(data, size) : "";
-
-  // No copy anywhere: materialize the embedded file into the user config dir
-  // (with a marker so future embedded updates refresh it) and return it.
-  if (candidates.empty())
+  if (!candidates.empty())
   {
-    if (embedded.empty())
-    {
-      return {};
-    }
-    std::filesystem::path root = user_config_root();
-    if (root.empty())
-    {
-      return {};
-    }
-    std::error_code ec;
-    const std::filesystem::path target = root / "lua" / rel_path;
-    std::filesystem::create_directories(target.parent_path(), ec);
-    if (ec)
-    {
-      return {};
-    }
-    std::ofstream out(target, std::ios::binary | std::ios::trunc);
-    if (!out)
-    {
-      return {};
-    }
-    out.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(size));
-    if (!out)
-    {
-      return {};
-    }
-    write_marker(target, hash);
-    return target;
-  }
+    const std::filesystem::path first = candidates.front();
 
-  const std::filesystem::path user_root = user_config_root();
-  const std::filesystem::path first = candidates.front();
-
-  // Overwrite `path` with the embedded content and (re)stamp its marker.
-  // Returns true when the refresh succeeded; false leaves the file alone
-  // (e.g. a read-only system install) and the caller keeps the copy as-is.
-  auto refresh_with_embedded = [&](const std::filesystem::path &path)
-  {
-    if (embedded.empty())
-    {
-      return false;
-    }
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    if (!out)
-    {
-      return false;
-    }
-    out.write(embedded.data(), static_cast<std::streamsize>(embedded.size()));
-    if (!out)
-    {
-      return false;
-    }
-    write_marker(path, hash);
-    return true;
-  };
-
-  // When a dev source dir is present, a copy there is the developer's working
-  // file: it outranks a jot-materialized cache copy that no longer matches
-  // (avoids stale cache shadowing edits to src/lua without a rebuild).
-  auto dev_diverge_path = [&]() -> std::filesystem::path
-  {
-#ifdef JOT_LUA_SOURCE_DIR
-    const std::filesystem::path dev_root(JOT_LUA_SOURCE_DIR);
-    if (dev_root.empty())
-      return {};
-    const std::string dev_prefix = dev_root.string();
-    for (size_t i = 1; i < candidates.size(); i++)
-    {
-      if (candidates[i].string().rfind(dev_prefix, 0) == 0
-          && read_file(candidates[i]) != embedded)
-      {
-        return candidates[i];
-      }
-    }
-#endif
-    return {};
-  };
-
-  // Hand-written overrides in the user dir (no marker) are kept verbatim and
-  // win over everything: that is the documented community-edit escape hatch.
-  const bool in_user_dir =
-      !user_root.empty() && first.string().rfind(user_root.string(), 0) == 0;
-
-  // Case A: the winning candidate is the user-dir copy.
-  if (in_user_dir)
-  {
-    const bool marker_ok = std::filesystem::is_regular_file(marker_path(first));
-    const std::string on_disk = read_file(first);
-
-    if (marker_ok)
-    {
-      // We materialized this file. Keep it when it still matches the
-      // embedded content; refresh it (and the marker) when the binary's
-      // bundled lua moved on. Never applies to hand-written files.
-      if (!embedded.empty() && on_disk != embedded)
-      {
-        if (refresh_with_embedded(first))
-        {
-          return first;
-        }
-      }
-      const std::filesystem::path dev_div = dev_diverge_path();
-      if (!dev_div.empty())
-      {
-        return dev_div;
-      }
-      return first;
-    }
-
-    // Unmarked file: could be a hand edit (keep) or a pre-marker
-    // materialization (refresh). If a lower-precedence dir (installed or
-    // source) carries a copy that matches the embedded content while this
-    // one differs, this is stale cache: refresh it and mark it.
-    if (!embedded.empty() && on_disk != embedded)
-    {
-      for (size_t i = 1; i < candidates.size(); i++)
-      {
-        if (read_file(candidates[i]) == embedded)
-        {
-          refresh_with_embedded(first);
-          return first;
-        }
-      }
-    }
-
-    // The user copy matches the embedded content, but the dev source dir
-    // differs (an in-progress edit): prefer the dev working copy so
-    // iteration on src/lua is not shadowed by stale cache.
-    if (on_disk == embedded)
-    {
-      const std::filesystem::path dev_div = dev_diverge_path();
-      if (!dev_div.empty())
-      {
-        return dev_div;
-      }
-    }
-
-    return first;
-  }
-
-  // Case B: no user-dir copy; an installed (or dev-source) copy wins.
-  // Installed copies are jot's own payload, not user edits: refresh them
-  // when they lag the embedded content (marked or pre-marker stale) so
-  // `make install` snapshots track the bundled lua, while the dev source
-  // dir stays the developer's working copy and is never overwritten.
-  {
-    const bool first_is_dev = [&]()
+    // The developer source dir is the developer's working file: always win,
+    // never refresh, never look past it.
+    const auto is_dev_dir = [](const std::filesystem::path &p)
     {
 #ifdef JOT_LUA_SOURCE_DIR
-      const std::filesystem::path dev_root(JOT_LUA_SOURCE_DIR);
-      return !dev_root.empty() && first.string().rfind(dev_root.string(), 0) == 0;
+      return p.string().rfind(std::filesystem::path(JOT_LUA_SOURCE_DIR).string(), 0) == 0;
 #else
+      (void)p;
       return false;
 #endif
-    }();
-    const bool marker_ok = std::filesystem::is_regular_file(marker_path(first));
-    const std::string on_disk = read_file(first);
-
-    if (marker_ok)
+    };
+    if (is_dev_dir(first))
     {
-      // jot wrote this file: refresh when the binary's bundled lua moved on.
-      // The dev source dir is the developer's working copy - never touched.
-      if (!first_is_dev && !embedded.empty() && on_disk != embedded)
-      {
-        if (refresh_with_embedded(first))
-        {
-          return first;
-        }
-      }
       return first;
     }
 
-    // Unmarked: keep hand edits, but refresh a stale pre-marker install
-    // when a lower-precedence copy (the dev source dir) carries the current
-    // content. The dev source itself never matches this branch (no lower
-    // dirs left), so in-progress edits there are always kept.
-    if (!first_is_dev && !embedded.empty() && on_disk != embedded)
+    const std::string embedded = embedded_source(rel_path);
+    const std::string on_disk = read_file(first);
+
+    // Legacy migration: a marked copy is one jot materialized in the user
+    // config dir (pre-cache era). Refresh it in place when the binary's
+    // bundled runtime moved on, so old installs stay in sync. Unmarked files
+    // are hand-written overrides and are never touched.
+    if (!embedded.empty() && on_disk != embedded
+        && std::filesystem::is_regular_file(marker_path(first)))
     {
-      for (size_t i = 1; i < candidates.size(); i++)
+      size_t size = 0;
+      const unsigned char *data = jot_embedded::find(rel_path.c_str(), &size);
+      if (write_file(first, embedded))
       {
-        if (read_file(candidates[i]) == embedded)
-        {
-          refresh_with_embedded(first);
-          return first;
-        }
+        write_marker(first, (data && size > 0) ? content_hash(data, size) : "");
+        return first;
       }
     }
 
-    // Installed copy matches the embedded content but the dev source dir
-    // differs (an in-progress edit): prefer the dev working copy so
-    // iteration on src/lua is not shadowed by a stale install.
-    if (on_disk == embedded)
+    // The winning copy matches the embedded content but the dev source dir
+    // carries an in-progress edit: prefer the dev working copy so iteration
+    // on src/lua is not shadowed by a stale user/install copy.
+    if (!embedded.empty() && on_disk == embedded)
     {
-      const std::filesystem::path dev_div = dev_diverge_path();
-      if (!dev_div.empty())
+      for (size_t i = 1; i < candidates.size(); i++)
       {
-        return dev_div;
+        if (is_dev_dir(candidates[i]) && read_file(candidates[i]) != embedded)
+        {
+          return candidates[i];
+        }
       }
     }
 
     return first;
   }
+
+  // Nothing on disk anywhere: fall back to the cache dir, extracting the
+  // embedded subtree (runtimes like tree-sitter and the lsp installer
+  // dofile sibling files and read .scm queries, so they need real files).
+  const std::string top = [&]()
+  {
+    const size_t slash = rel_path.find('/');
+    return slash == std::string::npos ? rel_path : rel_path.substr(0, slash);
+  }();
+  const auto top_prefix = top + "/";
+  for (const auto &name : jot_embedded::list_files())
+  {
+    if (name == top || name.rfind(top_prefix, 0) == 0)
+    {
+      jot_lua_cache_path(name);
+    }
+  }
+  return jot_lua_cache_path(rel_path);
 }
