@@ -700,9 +700,9 @@ void Editor::handle_terminal_event(const Event &ev)
     {
       handle_context_menu_input(ch);
     }
-    else if (show_tree_sitter_status_modal)
+    else if (show_tree_sitter_status_modal && handle_tree_sitter_status_input(ch))
     {
-      handle_tree_sitter_status_input(ch);
+      // consumed by the tree-sitter status panel
     }
     else if (show_lsp_status_modal)
     {

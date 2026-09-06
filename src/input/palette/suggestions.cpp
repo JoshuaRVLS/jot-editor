@@ -503,6 +503,8 @@ void Editor::refresh_command_palette()
     }
     else if (lcmd == "tsinstall" || lcmd == "treesitterinstall")
     {
+      add_arg("web", "Tree-sitter", "Web toolkit preset (JS/TS/TSX/HTML/CSS/JSON parsers)", 110);
+      add_arg("fullstack", "Tree-sitter", "Web toolkit preset (JS/TS/TSX/HTML/CSS/JSON parsers)", 110);
       for (const auto &opt : TreeSitterInstall::supported_languages())
       {
         add_arg(opt, "Tree-sitter", "Grammar language", 110);
@@ -510,6 +512,8 @@ void Editor::refresh_command_palette()
     }
     else if (lcmd == "lspinstall" || lcmd == "lspremove")
     {
+      add_arg("web", "LSP", "Web toolkit preset (typescript/html/css/json + parsers)", 110);
+      add_arg("fullstack", "LSP", "Web toolkit preset (typescript/html/css/json + parsers)", 110);
       // Server list is owned by the Lua installer registry.
       std::vector<LspServerSpec> servers;
       if (lua_api)

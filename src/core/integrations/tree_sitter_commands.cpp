@@ -437,6 +437,18 @@ bool Editor::handle_tree_sitter_status_input(int ch)
     needs_redraw = true;
     return true;
   }
+  // The panel only blocks input while an install is actually running. Once
+  // every job has finished (success or failure) it is purely informational:
+  // regular keys pass through to the editor so it never feels locked after
+  // :tsinstall completes (only q/Esc still dismisses the panel).
+  const bool install_running = std::any_of(tree_sitter_install_jobs.begin(),
+                                           tree_sitter_install_jobs.end(),
+                                           [](const TreeSitterInstallJob &job)
+                                           { return job.running; });
+  if (!install_running)
+  {
+    return false;
+  }
   int delta = 0;
   if (ch == 1008 || ch == 'k' || ch == 'K')
   {

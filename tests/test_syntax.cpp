@@ -1,8 +1,23 @@
+#include "lua_bridge/embedded_lua.h"
 #include "tree_sitter/manager.h"
 #include "types.h"
 #include <catch2/catch_test_macros.hpp>
 #include <set>
 #include <string>
+
+namespace
+{
+  std::string embedded_query(const char *rel_path)
+  {
+    size_t size = 0;
+    const unsigned char *data = jot_embedded::find(rel_path, &size);
+    if (!data || size == 0)
+    {
+      return {};
+    }
+    return std::string(reinterpret_cast<const char *>(data), size);
+  }
+} // namespace
 
 namespace
 {
@@ -210,6 +225,33 @@ TEST_CASE("Tree Sitter Built In Queries Expose Rich Captures", "[jot]")
   REQUIRE(tsx->highlight_query_source.find("(jsx_attribute (jsx_namespace_name) @tag.attribute)")
           != std::string::npos);
   REQUIRE(tsx->highlight_query_source.find("@type.builtin") != std::string::npos);
+}
+
+TEST_CASE("Bundled JSX Queries Cover React Elements And Stay Compilable", "[jot]")
+{
+  // The real bundled queries (not the fixtures above) drive .tsx/.jsx files.
+  // Their JSX section must stay complete, and must not reference grammar
+  // tokens that the current tree-sitter-typescript / tree-sitter-javascript
+  // grammars turned into named nodes (a stray anonymous token makes the whole
+  // query fail to compile and silently disables highlighting for the file).
+  const std::string tsx = embedded_query("treesitter/queries/tsx/highlights.scm");
+  REQUIRE_FALSE(tsx.empty());
+  REQUIRE(tsx.find("(jsx_opening_element name: (_) @tag)") != std::string::npos);
+  REQUIRE(tsx.find("(jsx_text) @string") != std::string::npos);
+  REQUIRE(tsx.find("(jsx_expression") != std::string::npos);
+  REQUIRE(tsx.find("\"<\" @punctuation.bracket") != std::string::npos);
+  REQUIRE(tsx.find("\"</\" @punctuation.bracket") != std::string::npos);
+  // "this" is a named node in the current tsx grammar; an anonymous "this"
+  // token would fail query compilation against freshly installed parsers.
+  REQUIRE(tsx.find("\"this\"") == std::string::npos);
+  REQUIRE(tsx.find("(this) @keyword") != std::string::npos);
+
+  const std::string javascript = embedded_query("treesitter/queries/javascript/highlights.scm");
+  REQUIRE_FALSE(javascript.empty());
+  REQUIRE(javascript.find("(jsx_opening_element name: (_) @tag)") != std::string::npos);
+  REQUIRE(javascript.find("(jsx_text) @string") != std::string::npos);
+  REQUIRE(javascript.find("\"this\"") == std::string::npos);
+  REQUIRE(javascript.find("(this) @keyword") != std::string::npos);
 }
 
 TEST_CASE("Theme Syntax Palette Falls Back To Readable Theme Colors", "[jot]")

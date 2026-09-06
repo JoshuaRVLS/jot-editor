@@ -62,9 +62,8 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     return;
   }
 
-  if (show_tree_sitter_status_modal)
+  if (show_tree_sitter_status_modal && handle_tree_sitter_status_input(ch))
   {
-    handle_tree_sitter_status_input(ch);
     return;
   }
 
