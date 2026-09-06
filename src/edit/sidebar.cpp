@@ -314,6 +314,15 @@ void Editor::rebuild_sidebar_tree_cache()
     std::string indent(node.depth * 2, ' ');
     std::string chevron = node.is_dir ? (node.expanded ? " " : " ") : "  ";
     row.label = indent + chevron + get_file_icon(node) + node.name;
+    if (!node.is_dir)
+    {
+      // Per-language icon glyph + brand color for file rows (the shared map
+      // already drives the status line and home screen). Directories keep
+      // their folder glyph in the theme's directory color.
+      const jot_icons::FileTypeIcon fti = jot_icons::file_type_icon(node.name);
+      row.icon = fti.glyph;
+      row.icon_fg = fti.color;
+    }
     row.footer_label = workspace_relative_display(node.path, root_dir);
 
     if (!row.normalized_path.empty())
@@ -873,7 +882,41 @@ void Editor::render_sidebar()
     const int label_max = show_badges ? std::max(0, diag_x - (content_x + 1) - 1)
                                       : std::max(0, border_x - (content_x + 1));
 
-    ui->draw_text(content_x + 1, tree_y + i, truncate_cells(row.label, label_max), row_fg, row_bg);
+    // File rows split the label into three visual pieces: blank indent +
+    // chevron region (the row background), the per-language icon glyph in
+    // its own brand color, then the file name. Directories keep their
+    // folder glyph baked into the label (theme directory color).
+    const bool colored_icon = !row.is_dir && !row.icon.empty() && row.icon_fg >= 0;
+    std::string row_label = truncate_cells(row.label, label_max);
+    std::string row_name;
+    std::string row_icon;
+    int row_icon_fg = -1;
+    int row_icon_col = -1;
+    int row_name_col = content_x + 1;
+    if (colored_icon)
+    {
+      // label layout for files: [depth*2 indent]["  " chevron][glyph][" "][name]
+      const int prefix_cells = row.depth * 2 + 2;
+      row_icon = row.icon;
+      row_icon_fg = row.icon_fg;
+      row_icon_col = content_x + 1 + prefix_cells;
+      const int glyph_cells = cell_count(row.icon);
+      row_name_col = row_icon_col + glyph_cells + 1;
+      const int name_budget = std::max(0, label_max - prefix_cells - glyph_cells - 1);
+      row_name = truncate_cells(row.name, name_budget);
+    }
+    else
+    {
+      ui->draw_text(content_x + 1, tree_y + i, row_label, row_fg, row_bg);
+    }
+    if (colored_icon)
+    {
+      ui->draw_text(row_icon_col, tree_y + i, row_icon, row_icon_fg, row_bg);
+      if (!row_name.empty())
+      {
+        ui->draw_text(row_name_col, tree_y + i, row_name, row_fg, row_bg);
+      }
+    }
 
     SidebarPanelRowView r;
     r.x = content_x + 1;
@@ -886,8 +929,14 @@ void Editor::render_sidebar()
     }
     r.fg = row_fg;
     r.bg = row_bg;
-    r.text = truncate_cells(row.label, label_max);
-    r.text_x = content_x + 1;
+    r.text = colored_icon ? row_name : row_label;
+    r.text_x = colored_icon ? row_name_col : content_x + 1;
+    if (colored_icon)
+    {
+      r.icon = row_icon;
+      r.icon_x = row_icon_col;
+      r.icon_fg = row_icon_fg;
+    }
     if (is_active_file)
     {
       r.symbol = "▌";

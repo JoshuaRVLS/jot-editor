@@ -39,6 +39,9 @@ namespace
     std::string last_footer;
     int lines_count = 0;
     int spans_total = 0; // sum of span lens across set_spans calls
+    // Every fg passed through set_spans in order (used to verify that a
+    // row's per-language icon glyph is colored with its own brand color).
+    std::vector<int> spans_fg;
     int set_cursor_count = 0;
     int last_cursor_x = -1;
     int last_cursor_y = -1;
@@ -170,6 +173,12 @@ namespace
         if ((int)lua_tointeger(L, -1) == 1)
         {
           g.spans_total++;
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "fg");
+        if (lua_isnumber(L, -1))
+        {
+          g.spans_fg.push_back((int)lua_tointeger(L, -1));
         }
         lua_pop(L, 1);
       }
@@ -965,10 +974,19 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
       lua_setfield(L, -2, "badge_x");
       lua_pushinteger(L, 15);
       lua_setfield(L, -2, "badge_fg");
+      // File rows carry a per-language icon glyph in its own brand color
+      // (like the status line); the painter must color just the glyph.
+      lua_pushstring(L, "\uE61D");
+      lua_setfield(L, -2, "icon");
+      lua_pushinteger(L, 6);
+      lua_setfield(L, -2, "icon_x");
+      lua_pushinteger(L, 67);
+      lua_setfield(L, -2, "icon_fg");
     }
     lua_rawseti(L, -2, i);
   }
   lua_setfield(L, -2, "rows");
+  g.spans_fg.clear(); // only measure this sidebar frame
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
@@ -977,6 +995,14 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(g.last_border == "none");
   REQUIRE(g.lines_count == 10);     // full panel height
   REQUIRE(g.set_spans_count >= 10); // every row gets at least one span
+  // The file-type icon glyph must be drawn with its brand color (67), not
+  // the row foreground, mirroring the status line's colored file icon.
+  bool saw_icon_fg = false;
+  for (int fg : g.spans_fg)
+  {
+    saw_icon_fg = saw_icon_fg || fg == 67;
+  }
+  REQUIRE(saw_icon_fg);
   push_module_field(L, 1, "sidebar");
   lua_pushnil(L);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);

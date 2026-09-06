@@ -677,6 +677,9 @@ bool LuaAPI::emit_sidebar(const SidebarPanelView &view)
                          lua_set_int_field(L, ri, "symbol_x", r.symbol_x);
                          lua_set_int_field(L, ri, "symbol_fg", r.symbol_fg);
                          lua_set_bool_field(L, ri, "symbol_bold", r.symbol_bold);
+                         lua_set_str_field(L, ri, "icon", r.icon);
+                         lua_set_int_field(L, ri, "icon_x", r.icon_x);
+                         lua_set_int_field(L, ri, "icon_fg", r.icon_fg);
                          lua_set_int_field(L, ri, "fg", r.fg);
                          lua_set_int_field(L, ri, "bg", r.bg);
                          lua_set_bool_field(L, ri, "bold", r.bold);

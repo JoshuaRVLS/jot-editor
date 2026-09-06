@@ -99,6 +99,11 @@ local function sidebar(p)
       if r.symbol and r.symbol ~= "" and r.symbol_x and r.symbol_x >= 0 then
         place(r.symbol_x, r.y, r.symbol, r.symbol_fg or r.fg, r.bg or bg, r.symbol_bold)
       end
+      if r.icon and r.icon ~= "" and r.icon_x and r.icon_x >= 0 then
+        -- Per-language file glyph in its brand color (like the status line),
+        -- placed ahead of the label at the column C++ computed.
+        place(r.icon_x, r.y, r.icon, r.icon_fg or r.fg, r.bg or bg, false)
+      end
       place(r.text_x or (r.x + 1), r.y, r.text or "", r.fg or fg, r.bg or bg, r.bold)
       if r.badge and r.badge ~= "" and r.badge_x and r.badge_x >= 0 then
         place(r.badge_x, r.y, r.badge, r.badge_fg or r.fg, r.bg or bg, true)

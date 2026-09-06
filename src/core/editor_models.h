@@ -318,6 +318,10 @@ struct SidebarRenderRow
   int depth = 0;
   int diagnostic_severity = 0;
   std::string git_status;
+  // Per-language icon for files (empty for directories). Painted ahead of
+  // the label in its brand color, like the status line.
+  std::string icon;
+  int icon_fg = -1; // -1 = use the row foreground
 };
 
 struct SidebarRenderCache
