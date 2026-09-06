@@ -1310,7 +1310,16 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
         }
         else if (selected_span.full_line)
         {
-          selected_end_visual = start_visual + visible_len;
+          // A row selected end-to-end highlights its code, not the whole
+          // window: cap the fill at the end of the line text (like the
+          // cursor-row tint) instead of running it to the right edge. Lines
+          // longer than the viewport still cover the full width.
+          int line_end_cell = visible_len;
+          if ((int)line.size() < (int)visual_cols.size())
+          {
+            line_end_cell = std::max(0, visual_cols[line.size()] - start_visual);
+          }
+          selected_end_visual = std::max(tail_start, std::min(line_end_cell, visible_len));
         }
         if (!selected_span.full_line && !select_empty_cell)
         {
