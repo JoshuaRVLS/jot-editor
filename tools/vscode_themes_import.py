@@ -389,6 +389,42 @@ def scope_color(scopes, token_map):
     return None
 
 
+def _luminance(rgb):
+    def chan(c):
+        c = c / 255.0
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = (chan(x) for x in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _contrast(a, b):
+    la, lb = _luminance(a), _luminance(b)
+    if la < lb:
+        la, lb = lb, la
+    return (la + 0.05) / (lb + 0.05)
+
+
+def fix_fg_contrast(rgb, bg, anchor, min_keep=2.0, min_target=3.2):
+    """Some pack themes (aurora-borealis, akari-dawn, ...) paint generic
+    scopes with a color that equals the editor background, which makes whole
+    classes of tokens invisible in jot (its tree-sitter uses broad scopes like
+    plain 'variable'). If a resolved foreground is essentially unreadable on
+    its background, blend it toward the theme's own readable foreground until
+    it clears a contrast floor, preserving the author's colors everywhere
+    else."""
+    if rgb is None or bg is None or _contrast(rgb, bg) >= min_keep:
+        return rgb
+    if _contrast(anchor, bg) < min_target:
+        lum = _luminance(bg)
+        anchor = (15, 15, 15) if lum > 0.5 else (240, 240, 240)
+    cur = list(rgb)
+    for _ in range(14):
+        cur = [int(a + (b - a) * 0.5) for a, b in zip(cur, anchor)]
+        if _contrast(tuple(cur), bg) >= min_target:
+            break
+    return tuple(cur)
+
+
 def convert(theme, src_name):
     light = theme_is_light(theme)
     colors = theme.get("colors") or {}
@@ -412,14 +448,18 @@ def convert(theme, src_name):
     def bg_ansi(rgb):
         return rgb_to_ansi256(*rgb) if rgb else -1
 
-    out = {}
+    # Collect raw (fg_rgb, bg_rgb) pairs first; a contrast pass then repairs
+    # any foreground the source theme made unreadable against its background
+    # (generic scopes painted with the background color are common in the pack
+    # and leave plain tree-sitter tokens invisible).
+    raw = {}
 
     # syntax groups
     for group, cands in SYNTAX_SCOPES.items():
         rgb = scope_color(cands, token_map)
         if rgb is None:
-            rgb = _mix(bg, fg, light, 0.75)  # unthemed text keeps contrast
-        out[group] = {"fg": fg_ansi(rgb), "bg": bg_ansi(bg)}
+            rgb = fg  # unthemed scope: default text, never washed towards bg
+        raw[group] = (rgb, bg)
 
     # chrome groups
     for group, fg_key, bg_key, fg_fb, bg_fb in CHROME:
@@ -429,12 +469,24 @@ def convert(theme, src_name):
             rgb_fg = fg_fb(bg, fg, light)
         if rgb_bg is None and bg_fb is not None:
             rgb_bg = bg_fb(bg, fg, light)
-        out[group] = {"fg": fg_ansi(rgb_fg), "bg": bg_ansi(rgb_bg)}
+        raw[group] = (rgb_fg, rgb_bg)
 
     # git gutter
     for group, (rgb_fg, rgb_bg) in GIT_GROUPS.items():
-        out[group] = {"fg": fg_ansi(rgb_fg), "bg": bg_ansi(rgb_bg)}
+        raw[group] = (rgb_fg, rgb_bg)
 
+    # The block cursor inverts the default pair (dark block, light glyph on
+    # dark themes; light block, dark glyph on light themes) like the bundled
+    # schemes, so it never disappears into the editor background.
+    raw["Cursor"] = (bg, fg)
+
+    out = {}
+    for group, (rgb_fg, rgb_bg) in raw.items():
+        # contrast is judged against the group's own background; groups that
+        # carry none fall back to the editor background.
+        ref_bg = rgb_bg if rgb_bg is not None else bg
+        rgb_fg = fix_fg_contrast(rgb_fg, ref_bg, fg)
+        out[group] = {"fg": fg_ansi(rgb_fg), "bg": bg_ansi(rgb_bg)}
     return out
 
 
