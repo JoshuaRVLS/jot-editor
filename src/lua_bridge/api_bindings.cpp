@@ -1594,7 +1594,7 @@ bool LuaAPI::init()
   lua_setglobal(L, "jot");
   if (luaL_dostring(L,
                     "jot.notify=show_message; jot.notify_transient=show_transient_message; jot.command=command; jot.autocmd=autocmd; "
-                    "jot.execute=execute; jot.open_file=open; jot.save=save; "
+                    "jot.execute=execute; jot.open_file=open_file; jot.save=save; "
                     "jot.buffer={get_text=get_current_buffer,set_text=set_current_buffer,"
                     "get_selection=get_selection,replace_selection=replace_selection,"
                     "insert_text=insert_text,cursor=cursor,set_cursor=set_cursor,"

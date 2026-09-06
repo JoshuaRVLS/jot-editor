@@ -1845,7 +1845,28 @@ bool Editor::remove_lsp_server(const std::string &name)
                                         { return job.server == server && !job.running; }),
                          lsp_install_jobs.end());
 
-  set_lsp_server_enabled(server, false);
+  // Stop any running client so the uninstall never leaves a live process
+  // behind, but do NOT mark the language disabled: that flag is persisted
+  // as workspace state and would silently block re-attach forever after a
+  // reinstall (the server is disabled only when the user says so).
+  for (auto &client : lsp_clients)
+  {
+    if (client && client->get_language() == server)
+    {
+      unwatch_lsp_client_fds(client.get());
+      client->stop();
+    }
+  }
+  for (auto &buf : buffers)
+  {
+    if (detect_lsp_language(buf.filepath) == server)
+    {
+      buf.diagnostics.clear();
+      lsp_pending_changes.erase(buf.filepath);
+    }
+  }
+  invalidate_sidebar_diagnostics_cache();
+  needs_redraw = true;
 
   LspInstallJob job;
   job.server = server;

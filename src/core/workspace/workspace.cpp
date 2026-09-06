@@ -655,10 +655,6 @@ void Editor::save_workspace_session()
   out << "sidebar_view\t" << (active_sidebar_view == SIDEBAR_VIEW_GIT ? "git" : "explorer") << "\n";
   out << "right_panel_width\t" << right_panel_width << "\n";
   out << "sidebar_show_hidden\t" << (sidebar_show_hidden ? 1 : 0) << "\n";
-  for (const auto &server : lsp_disabled_servers)
-  {
-    out << "lsp_disabled\t" << escape_field(server) << "\n";
-  }
 
   std::string current_file;
   if (current_buffer >= 0 && current_buffer < (int)buffers.size())
@@ -719,7 +715,6 @@ bool Editor::restore_workspace_session()
   int restored_right_panel_width = right_panel_width;
   std::string target_current_file;
   std::vector<Entry> entries;
-  std::set<std::string> restored_lsp_disabled;
   auto clamp_restored_right_panel_width = [&]()
   {
     int max_w = max_right_panel_width();
@@ -776,10 +771,6 @@ bool Editor::restore_workspace_session()
     {
       target_current_file = unescape_field(parts[1]);
     }
-    else if (key == "lsp_disabled" && parts.size() >= 2)
-    {
-      restored_lsp_disabled.insert(unescape_field(parts[1]));
-    }
     else if (key == "file" && parts.size() >= 7)
     {
       Entry e;
@@ -803,8 +794,6 @@ bool Editor::restore_workspace_session()
       }
     }
   }
-
-  lsp_disabled_servers = std::move(restored_lsp_disabled);
 
   if (entries.empty())
   {
