@@ -1992,6 +1992,49 @@ void Editor::hide_lsp_signature()
   lsp_signature_result = {};
 }
 
+void Editor::refresh_lsp_signature_if_in_call()
+{
+  auto &buf = get_buffer();
+  if (buf.is_lazy() || buf.filepath.empty() || lsp_signature_visible)
+  {
+    return; // an active popup is already tracking its call
+  }
+  if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.line_count())
+  {
+    return;
+  }
+  // Only auto-show inside a call's argument list, and not while the user is
+  // still typing the callee name right before the '(' — require the caret to
+  // sit past the open paren with the call text already behind it.
+  const int open_col = innermost_open_paren_col(buf, buf.cursor.x);
+  if (open_col < 0)
+  {
+    return;
+  }
+  const std::string &line = buf.line(buf.cursor.y);
+  const int text_before = buf.cursor.x - (open_col + 1);
+  if (text_before < 1)
+  {
+    // Directly after '(' with nothing typed yet: the explicit '(' trigger
+    // already fired, so leave it alone rather than pester the server.
+    return;
+  }
+  bool has_arg_char = false;
+  for (int i = open_col + 1; i < buf.cursor.x && i < (int)line.size(); i++)
+  {
+    if (line[i] != ' ' && line[i] != '\t')
+    {
+      has_arg_char = true;
+      break;
+    }
+  }
+  if (!has_arg_char)
+  {
+    return;
+  }
+  request_lsp_signature_help();
+}
+
 void Editor::request_lsp_signature_help(char trigger_character)
 {
   auto &buf = get_buffer();

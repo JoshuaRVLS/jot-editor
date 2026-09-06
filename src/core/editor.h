@@ -293,6 +293,11 @@ private:
   std::vector<QuickPickItem> fallback_symbol_items();
   void request_lsp_completion(bool manual, char trigger_character = '\0');
   void request_lsp_signature_help(char trigger_character = '\0');
+  // Re-fires signature help when the caret sits inside an open call's argument
+  // list, even when the popup is not up yet (e.g. auto-close already inserted
+  // the closing ')' and the user is typing the first argument). No-op when the
+  // caret is outside any open call.
+  void refresh_lsp_signature_if_in_call();
   void hide_lsp_signature();
   void request_lsp_hover();
   void request_lsp_hover_at(int pane_index,

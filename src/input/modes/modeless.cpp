@@ -639,6 +639,11 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
         refresh_lsp_completion_filter();
       }
       request_lsp_completion(false, typed);
+      // Typing the first argument of a call the editor auto-closed (or the
+      // caret was moved back into an existing '(' ... ')') has no '(' or ','
+      // keystroke left to trigger on — surface the popup from the argument
+      // text itself when the caret is inside an open call.
+      refresh_lsp_signature_if_in_call();
     }
     else
     {
@@ -654,7 +659,7 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
       {
         hide_lsp_signature();
       }
-      else if (typed == ',' && lsp_signature_visible)
+      else if (typed == ',')
       {
         request_lsp_signature_help(',');
       }
