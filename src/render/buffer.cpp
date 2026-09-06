@@ -857,6 +857,12 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       {
         // Colors only matter up to the visible window; huge single lines are
         // highlighted per-window instead of per-line.
+        int trailing_ws_start = (int)line.size();
+        while (trailing_ws_start > 0
+               && (line[trailing_ws_start - 1] == ' ' || line[trailing_ws_start - 1] == '\t'))
+        {
+          trailing_ws_start--;
+        }
         const auto &colors = get_line_syntax_colors(buf, line_idx, render_limit);
         int line_bracket_depth = bracket_depth;
         std::vector<Editor::SearchMatch> search_hits;
@@ -925,6 +931,13 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
 
             int fg = color;
             int bg = row_bg;
+            // The cursor-row tint is a soft band around the code itself, not
+            // the full row: trailing whitespace stays in the plain pane
+            // background so the highlight width follows the code length.
+            if (row_is_cursor_line && char_idx >= trailing_ws_start)
+            {
+              bg = theme.bg_default;
+            }
 
             bool in_sel = is_in_selection(char_idx);
             if (in_sel)
@@ -1272,27 +1285,6 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
           }
         }
         bracket_depth = line_bracket_depth;
-        // The cursor-row tint must run the full code width, not just up to
-        // the text end: paint the remaining cells (past the end of the line
-        // content, and past trailing whitespace when the line has no syntax
-        // tokens to draw) in the tint so the row reads as one continuous
-        // band instead of a stub that stops at the last visible character.
-        if (row_is_cursor_line)
-        {
-          int text_end_cell = visible_len;
-          if ((int)line.size() < (int)visual_cols.size())
-          {
-            text_end_cell = std::max(0, visual_cols[line.size()] - start_visual);
-          }
-          if (text_end_cell < visible_len)
-          {
-            int fill_x = current_x + std::max(0, text_end_cell);
-            for (int fill_c = fill_x; fill_c < current_x + visible_len; fill_c++)
-            {
-              ui->draw_text(fill_c, draw_y, " ", theme.fg_default, row_bg);
-            }
-          }
-        }
       }
       else
       {
