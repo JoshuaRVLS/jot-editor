@@ -15,6 +15,8 @@
 #include <string>
 #include <vector>
 
+#include "lua_bridge/api_internal.h"
+
 extern "C"
 {
 #include <lauxlib.h>
@@ -227,6 +229,7 @@ TEST_CASE("Telescope Lua render: straight separator, bounded rows, byte-aligned 
   lua_State *L = luaL_newstate();
   luaL_openlibs(L);
   push_stub_jot(L);
+  REQUIRE(jot_lua::load_ui_kit_modules(L));
   const std::string path = std::string(JOT_LUA_SOURCE_DIR) + "/features/ui.lua";
   REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);

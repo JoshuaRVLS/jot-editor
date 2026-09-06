@@ -7,7 +7,7 @@ add_compile_definitions(JOT_LUA_SOURCE_DIR="${PROJECT_SOURCE_DIR}/src/lua")
 # config dir and the developer source dir first; the embedded bytes are the
 # final fallback (served from memory, or extracted into the cache dir for
 # runtimes that need real files on disk).
-file(GLOB_RECURSE JOT_LUA_BUNDLED "${PROJECT_SOURCE_DIR}/src/lua/*.lua" "${PROJECT_SOURCE_DIR}/src/lua/*.scm")
+file(GLOB_RECURSE JOT_LUA_BUNDLED CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/src/lua/*.lua" "${PROJECT_SOURCE_DIR}/src/lua/*.scm")
 set(JOT_LUA_EMBED_CPP "${CMAKE_CURRENT_BINARY_DIR}/embedded_lua.cpp")
 add_custom_command(
   OUTPUT "${JOT_LUA_EMBED_CPP}"

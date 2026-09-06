@@ -7,6 +7,7 @@
 #include <fstream>
 #include <string>
 
+#include "lua_bridge/api_internal.h"
 #include "lua_bridge/embedded_lua.h"
 
 extern "C"
@@ -254,6 +255,9 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   luaL_openlibs(L);
   push_stub_jot(L);
 
+  // The kit is split into per-surface modules: pre-load them the same way the
+  // app boot does (helpers first), then run the orchestrator ui.lua.
+  REQUIRE(jot_lua::load_ui_kit_modules(L));
   const std::string path = std::string(JOT_LUA_SOURCE_DIR) + "/features/ui.lua";
   REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
@@ -887,8 +891,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
     lua_pushstring(L, sides[i - 1]);
     lua_setfield(L, -2, "side");
     lua_rawseti(L, -2, i);
-  }
-  lua_setfield(L, -2, "segments");
+  }    lua_setfield(L, -2, "segments");
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
@@ -1045,22 +1048,35 @@ TEST_CASE("Embedded Lua UI kit registers every handler from the binary copy")
   push_stub_jot(L);
 
   // The generated embedded_lua.cpp must carry a byte-identical copy of the
-  // source ui.lua. This guards generator staleness: editing the .lua without
-  // regenerating (or generating from the wrong dir) would silently ship an
-  // outdated UI in the binary.
+  // source ui.lua and every split module under features/ui/. This guards
+  // generator staleness: editing the .lua without regenerating (or generating
+  // from the wrong dir) would silently ship an outdated UI in the binary.
   size_t emb_size = 0;
   const unsigned char *emb = jot_embedded::find("features/ui.lua", &emb_size);
   REQUIRE(emb != nullptr);
   REQUIRE(emb_size > 0);
 
-  const std::string path = std::string(JOT_LUA_SOURCE_DIR) + "/features/ui.lua";
-  std::ifstream in(path, std::ios::binary);
-  REQUIRE(in.good());
-  const std::string src((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-  REQUIRE(src.size() == emb_size);
-  REQUIRE(std::memcmp(src.data(), emb, emb_size) == 0);
+  for (const std::string &rel : jot_embedded::list_files())
+  {
+    if (rel.rfind("features/ui/", 0) != 0)
+    {
+      continue;
+    }
+    size_t m_size = 0;
+    const unsigned char *m_emb = jot_embedded::find(rel.c_str(), &m_size);
+    REQUIRE(m_emb != nullptr);
+    REQUIRE(m_size > 0);
+    const std::string m_path = std::string(JOT_LUA_SOURCE_DIR) + "/" + rel;
+    std::ifstream m_in(m_path, std::ios::binary);
+    REQUIRE(m_in.good());
+    const std::string m_src((std::istreambuf_iterator<char>(m_in)), std::istreambuf_iterator<char>());
+    REQUIRE(m_src.size() == m_size);
+    REQUIRE(std::memcmp(m_src.data(), m_emb, m_size) == 0);
+  }
 
-  // The embedded bytes alone (no disk, no loader) must boot the full UI kit.
+  // The embedded bytes (no disk, no loader) must boot the full UI kit through
+  // the same module wiring the app uses.
+  REQUIRE(jot_lua::load_ui_kit_modules(L));
   REQUIRE(luaL_loadbuffer(L, reinterpret_cast<const char *>(emb), emb_size, "embedded ui.lua")
           == LUA_OK);
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);

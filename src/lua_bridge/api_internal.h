@@ -206,6 +206,97 @@ namespace jot_lua
     return true;
   }
 
+  // Loads a bundled Lua *module* — a file whose chunk returns a table — and
+  // registers it in package.loaded["<ns>.<name>"] so other bundled files can
+  // require() it by name. Resolution matches load_bundled_lua_file (user
+  // override -> dev source dir -> install data dir -> embedded memory). This
+  // is how the split UI kit (features/ui/*.lua) bootstraps itself: the C++
+  // side pre-loads every module, then features/ui.lua requires them.
+  inline bool load_bundled_lua_module(lua_State *L, const char *rel_path, const char *ns)
+  {
+    const int top = lua_gettop(L);
+    const std::filesystem::path resolved = jot_lua_resolve_path(rel_path);
+    int rc;
+    if (!resolved.empty())
+    {
+      rc = luaL_loadfile(L, resolved.string().c_str());
+    }
+    else
+    {
+      size_t size = 0;
+      const unsigned char *data = jot_embedded::find(rel_path, &size);
+      if (!data || size == 0)
+      {
+        std::cerr << "Bundled Lua module " << rel_path << " not found\n";
+        return false;
+      }
+      rc = luaL_loadbuffer(L, reinterpret_cast<const char *>(data), size, rel_path);
+    }
+    if (rc != LUA_OK)
+    {
+      std::cerr << "UI module " << rel_path << " failed to load: "
+                << (lua_tostring(L, -1) ? lua_tostring(L, -1) : "unknown") << "\n";
+      lua_settop(L, top);
+      return false;
+    }
+    if (lua_pcall(L, 0, 1, 0) != LUA_OK)
+    {
+      std::cerr << "UI module " << rel_path << " runtime error: "
+                << (lua_tostring(L, -1) ? lua_tostring(L, -1) : "unknown") << "\n";
+      lua_settop(L, top);
+      return false;
+    }
+    // Module name: basename without the .lua extension, namespaced by ns.
+    std::string base(rel_path);
+    const size_t slash = base.find_last_of("/\\");
+    if (slash != std::string::npos)
+    {
+      base.erase(0, slash + 1);
+    }
+    if (base.size() >= 4 && base.compare(base.size() - 4, 4, ".lua") == 0)
+    {
+      base.erase(base.size() - 4);
+    }
+    const std::string name = std::string(ns) + "." + base;
+    // Stack: [module]. Register it as package.loaded[name].
+    lua_getglobal(L, "package");      // [module, package]
+    lua_getfield(L, -1, "loaded");    // [module, package, loaded]
+    lua_pushvalue(L, -3);             // [module, package, loaded, module]
+    lua_setfield(L, -2, name.c_str()); // [module, package, loaded]
+    lua_settop(L, top);
+    return true;
+  }
+
+  // Loads every module of the split UI kit (features/ui/*.lua) into
+  // package.loaded["jot_ui.<name>"], helpers first so the surface modules can
+  // require() it. Returns false on any failure.
+  inline bool load_ui_kit_modules(lua_State *L)
+  {
+    static const char *kModules[] = {
+        "features/ui/helpers.lua",
+        "features/ui/command_palette.lua",
+        "features/ui/quick_pick.lua",
+        "features/ui/popup.lua",
+        "features/ui/tree_sitter.lua",
+        "features/ui/lsp.lua",
+        "features/ui/telescope.lua",
+        "features/ui/home.lua",
+        "features/ui/search.lua",
+        "features/ui/statusline.lua",
+        "features/ui/sidebar.lua",
+        "features/ui/side_panel.lua",
+        "features/ui/menu.lua",
+    };
+    for (const char *rel : kModules)
+    {
+      if (!load_bundled_lua_module(L, rel, "jot_ui"))
+      {
+        return false;
+      }
+    }
+    return true;
+  }
+
   // Reads an integer / boolean / string field off a Lua table, falling back to
   // a default when the field is absent or has the wrong type.
   inline int table_int(lua_State *L, int i, const char *k, int d)

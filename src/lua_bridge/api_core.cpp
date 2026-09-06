@@ -2023,6 +2023,13 @@ void LuaAPI::push_buffer_tokens(lua_State *L)
 
 bool LuaAPI::load_ui_kit_runtime(lua_State *L)
 {
+  // The kit is split into per-surface modules (features/ui/*.lua): load them
+  // first into package.loaded["jot_ui.*"], then run the orchestrator file
+  // features/ui.lua which requires them and registers the handlers.
+  if (!jot_lua::load_ui_kit_modules(L))
+  {
+    return false;
+  }
   return load_bundled_lua_file(L, "features/ui.lua", "UI kit");
 }
 

@@ -1,0 +1,267 @@
+-- Telescope — part of the Lua UI kit.
+-- Split out of features/ui.lua so each surface stays small and
+-- focused; features/ui.lua is the orchestrator that requires
+-- every module and registers the handlers.
+local h = require("jot_ui.helpers")
+local close = h.close
+local rune_len = h.rune_len
+local cell_len = h.cell_len
+local trunc_cells = h.trunc_cells
+local pad_cells = h.pad_cells
+local truncate = h.truncate
+local present_panel = h.present_panel
+local function tail_runes(s, n)
+  local starts = {}
+  for pos in utf8.codes(s) do
+    starts[#starts + 1] = pos
+  end
+  if #starts <= n then
+    return s
+  end
+  return s:sub(starts[#starts - n + 1])
+end
+
+local function left_clip(s, w)
+  if rune_len(s) <= w then
+    return s
+  end
+  return "…" .. truncate(tail_runes(s, w - 1), w - 1)
+end
+
+local function telescope(p)
+  if not p then
+    close("telescope")
+    return true
+  end
+  local colors = p.colors or {}
+  local t_fg = colors.t_fg or colors.fg or 7
+  local t_bg = colors.t_bg or colors.bg or 0
+  local t_sel_fg = colors.t_sel_fg or colors.selection_fg or 0
+  local t_sel_bg = colors.t_sel_bg or colors.selection_bg or 6
+  local t_prev_fg = colors.t_prev_fg or t_fg
+  local t_prev_bg = colors.t_prev_bg or t_bg
+  local border = colors.border or t_fg
+  local comment = colors.comment or 8
+  local accent = colors.accent or 6
+
+  local inner_w = math.max(1, p.w - 2)
+  local inner_h = math.max(1, p.h - 2)
+  local body = {}
+  local spans = {}
+
+  local function bof(abs_row)
+    return abs_row - (p.y or 0)
+  end
+
+  local function span(b, col, len, fg, bg)
+    if b < 1 or b > inner_h or len <= 0 then
+      return
+    end
+    spans[b] = spans[b] or {}
+    spans[b][#spans[b] + 1] = { start = col, len = len, fg = fg, bg = bg }
+  end
+
+  -- Appends text at a *cell* column and returns the *byte* offset where it
+  -- was placed (or -1 when dropped). Callers that build derived spans (e.g.
+  -- syntax highlighting inside the appended text) must use this byte offset
+  -- as their origin -- columns and bytes diverge once a row contains a
+  -- multibyte glyph like the list/preview separator.
+  local function put(b, col, text, fg, bg)
+    if b < 1 or b > inner_h then
+      return -1
+    end
+    if col < 0 then
+      -- Left of the float's interior: the border owns those cells and a
+      -- partial slice would cut a UTF-8 glyph in half, so drop it.
+      return -1
+    end
+    if text == "" then
+      return -1
+    end
+    body[b] = body[b] or ""
+    -- Pad by *cells* (wide glyphs count 2) so content lands at the exact
+    -- column and vertical lines stay straight across rows; wide glyphs are
+    -- dropped only when they would overshoot.
+    local cur = cell_len(body[b])
+    if cur < col then
+      body[b] = body[b] .. string.rep(" ", col - cur)
+    end
+    -- Span offsets are bytes and must match the actual append position.
+    local start = #body[b]
+    span(b, start, #text, fg, bg)
+    body[b] = body[b] .. text
+    return start
+  end
+
+  local function fill_row(b, row_bg, row_fg)
+    if b < 1 or b > inner_h then
+      return
+    end
+    body[b] = body[b] or ""
+    span(b, 0, 65535, row_fg, row_bg)
+  end
+
+  -- Root line + query row.
+  local root_row = bof(p.inner_y or 0)
+  put(root_row, 1, left_clip(p.root or "", math.max(1, inner_w - 2)), comment, t_bg)
+  local query_row = bof(p.query_y or 0)
+  local query = p.query or ""
+  local query_text = "  > " .. query
+  if query == "" then
+    query_text = query_text .. "type to filter files"
+  end
+  local query_focus = (p.focus or "results") == "query"
+  local query_bg = query_focus and (colors.selection_bg or 6)
+    or colors.bg_command or colors.bg or 0
+  fill_row(query_row, query_bg, t_fg)
+  put(query_row,
+      (p.query_x or 0) - (p.x or 0) - 1,
+      truncate(query_text, math.max(1, inner_w - 1)),
+      t_fg,
+      query_bg)
+  if query_focus and jot.ui.set_cursor then
+    local caret = (p.query_x or 0) + math.min(math.max(0, (p.query_w or 1) - 1),
+                                             math.max(0, #("  > " .. query)))
+    jot.ui.set_cursor(caret, p.query_y or 0)
+  end
+
+  -- Result list.
+  local list_row0 = bof(p.list_y or 0)
+  local list_col = (p.list_x or 0) - (p.x or 0) - 1
+  local list_w = math.max(1, p.list_w or 1)
+  local results = p.results or {}
+  if #results == 0 then
+    local empty = p.scan_pending and "Scanning files..."
+      or (query == "" and "No files found in this workspace."
+          or "No files match the current query.")
+    put(list_row0 + math.max(0, math.floor((p.list_h or 0) / 2)),
+        list_col,
+        trunc_cells(empty, list_w),
+        comment,
+        t_bg)
+  end
+  for i, r in ipairs(results) do
+    local b = list_row0 + i - 1
+    local is_selected = (p.selected or -1) == (p.list_scroll or 0) + i - 1
+    local icon = r.is_directory and "[D] " or "[F] "
+    local parent = (r.parent_path or "") == "." and "" or r.parent_path or ""
+    local parent_w = parent == ""
+        and 0
+        or math.min(cell_len(parent), math.max(0, math.floor(list_w / 2)))
+    -- Reserve a 1-cell gap between the name and a right-aligned parent so a
+    -- long name never glues onto the dimmed path (which reads as a broken,
+    -- ragged layout even when the separator column itself is straight).
+    local gap = parent_w > 0 and 1 or 0
+    local name_budget = math.max(1, list_w - cell_len(icon) - parent_w - gap)
+    local raw_name = r.name or ""
+    local name = trunc_cells(raw_name, name_budget)
+    if parent_w > 0 and cell_len(raw_name) > name_budget and name_budget >= 2 then
+      -- Signal truncation with an ellipsis inside the budget.
+      name = trunc_cells(raw_name, name_budget - 1) .. "…"
+    end
+    if is_selected then
+      fill_row(b, t_sel_bg, t_sel_fg)
+    end
+    put(b, list_col, icon .. name, is_selected and t_sel_fg or t_fg,
+        is_selected and t_sel_bg or t_bg)
+    if parent_w > 0 and r.parent_path then
+      put(b,
+          list_col + math.max(0, list_w - parent_w),
+          trunc_cells(left_clip(r.parent_path, parent_w), parent_w),
+          comment,
+          is_selected and t_sel_bg or t_bg)
+    end
+  end
+
+  -- Preview pane.
+  if p.show_preview then
+    local sep_col = (p.preview_x or 0) - 2 - (p.x or 0) - 1
+    for ar = p.body_y or 0, (p.body_y or 0) + (p.body_h or 0) - 1 do
+      put(bof(ar), sep_col, "│", border, t_bg)
+    end
+    local prev_row = bof(p.preview_y or 0)
+    local prev_col = (p.preview_x or 0) - (p.x or 0) - 1
+    local prev_inner_w = math.max(1, (p.preview_w or 1))
+    local preview = p.preview or {}
+    local prev_focus = (p.focus or "") == "preview"
+    put(prev_row,
+        prev_col,
+        "Preview",
+        prev_focus and (colors.t_sel_fg or accent) or t_fg,
+        t_bg)
+    local title = preview.title or ""
+    put(prev_row + 1, prev_col, trunc_cells(left_clip(title, prev_inner_w), prev_inner_w), t_prev_fg,
+        t_prev_bg)
+    if preview.detail and preview.detail ~= "" then
+      put(prev_row + 2, prev_col, trunc_cells(preview.detail, prev_inner_w), comment, t_prev_bg)
+    end
+    local code_row = prev_row + 3
+    local line_no = preview.start_line or 0
+    local ext = preview.extension or ""
+    local plain = preview.is_directory or preview.skipped or ext == ""
+    for _, ln in ipairs(preview.lines or {}) do
+      local b = code_row
+      code_row = code_row + 1
+      local row_bg = t_prev_bg
+      local row_fg = plain and comment or t_prev_fg
+      if not plain then
+        put(b, prev_col, string.format("%3d ", line_no + 1), comment, t_prev_bg)
+        local text_col = prev_col + 4
+        local clipped = trunc_cells(ln, math.max(1, prev_inner_w - 4))
+        local code_start = put(b, text_col, clipped, t_prev_fg, t_prev_bg)
+        if jot.syntax and jot.syntax.highlight then
+          local ok, caps = pcall(jot.syntax.highlight, ext, clipped)
+          if ok and type(caps) == "table" then
+            for _, cap in ipairs(caps) do
+              local cap_fg = colors[cap.kind]
+              if cap_fg and code_start >= 0 then
+                -- cap.start is a byte offset into clipped; the row origin is
+                -- where clipped was actually appended (code_start), which is
+                -- NOT the same as the cell column once the separator or any
+                -- wide glyph precedes it.
+                span(b, code_start + (cap.start or 0), cap.len or 0, cap_fg, t_prev_bg)
+              end
+            end
+          end
+        end
+      else
+        put(b, prev_col, trunc_cells(ln, prev_inner_w), row_fg, t_prev_bg)
+      end
+      line_no = line_no + 1
+    end
+  end
+
+  -- Footer: selected path on the bottom border row (native geometry).
+  local footer = p.scan_pending and "Searching"
+    or (#results == 0 and "No selection" or "")
+  -- Native shows the selected relative path; approximate with first result.
+  if footer == "" then
+    footer = "Enter open   Esc close   Tab cycle   Up/Down move"
+  end
+  local footer_b = bof(p.footer_y or 0)
+  if footer_b >= 1 and footer_b <= inner_h then
+    put(footer_b, 1, truncate(footer, math.max(1, inner_w - 2)), comment, t_bg)
+  end
+
+  local body_list = {}
+  for i = 1, inner_h do
+    body_list[i] = pad_cells(body[i] or "", inner_w)
+  end
+  return present_panel("telescope",
+                       p,
+                       {},
+                       {
+                         border = "single",
+                         title = p.title or " ",
+                         title_fg = t_fg,
+                       },
+                       body_list,
+                       spans)
+end
+
+
+return {
+  telescope = telescope,
+  tail_runes = tail_runes,
+  left_clip = left_clip,
+}
