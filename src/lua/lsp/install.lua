@@ -60,13 +60,22 @@ _jot_bin() {
   fi
   chmod +x "$_found" 2>/dev/null || true
   case "$_kind" in
-    jar) printf '#!/bin/sh\nexec java -jar "$_found" "$@"\n' > "$BIN/$_name" ;;
-    node) printf '#!/bin/sh\nexec node "$_found" "$@"\n' > "$BIN/$_name" ;;
-    python) printf '#!/bin/sh\nexec python3 "$_found" "$@"\n' > "$BIN/$_name" ;;
-    php) printf '#!/bin/sh\nexec php "$_found" "$@"\n' > "$BIN/$_name" ;;
-    ruby) printf '#!/bin/sh\nexec ruby "$_found" "$@"\n' > "$BIN/$_name" ;;
-    dotnet) printf '#!/bin/sh\nexec dotnet "$_found" "$@"\n' > "$BIN/$_name" ;;
-    gem) printf '#!/bin/sh\nexec env GEM_HOME=%%s GEM_PATH=%%s "$_found" "$@"\n' "$PDIR" "$PDIR" > "$BIN/$_name" ;;
+    # Wrappers bake the concrete path at write time: the generated file is a
+    # standalone launcher, so install-script variables are out of scope later.
+    jar) printf '#!/bin/sh\nexec java -jar "%%s" "$@"\n' "$_found" > "$BIN/$_name" ;;
+    node) printf '#!/bin/sh\nexec node "%%s" "$@"\n' "$_found" > "$BIN/$_name" ;;
+    python) printf '#!/bin/sh\nexec python3 "%%s" "$@"\n' "$_found" > "$BIN/$_name" ;;
+    php) printf '#!/bin/sh\nexec php "%%s" "$@"\n' "$_found" > "$BIN/$_name" ;;
+    ruby) printf '#!/bin/sh\nexec ruby "%%s" "$@"\n' "$_found" > "$BIN/$_name" ;;
+    dotnet) printf '#!/bin/sh\nexec dotnet "%%s" "$@"\n' "$_found" > "$BIN/$_name" ;;
+    gem) printf '#!/bin/sh\nexec env GEM_HOME=%%s GEM_PATH=%%s "%%s" "$@"\n' "$PDIR" "$PDIR" "$_found" > "$BIN/$_name" ;;
+    pypi) if [ -f "$PDIR/bin/$_name" ]; then
+      # pip --target console script: needs the package dir importable.
+      printf '#!/bin/sh\nexec env PYTHONPATH=%%s python3 "%%s" "$@"\n' "$PDIR" "$PDIR/bin/$_name" > "$BIN/$_name"
+    else
+      # Compiled/data-file wheel (no console script): link it directly.
+      ln -sfn "$_found" "$BIN/$_name"
+    fi ;;
     *) ln -sfn "$_found" "$BIN/$_name" ;;
   esac
   chmod +x "$BIN/$_name" 2>/dev/null || true

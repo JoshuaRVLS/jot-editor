@@ -1,5 +1,8 @@
 -- pypi manager: pip installs into the isolated package dir (console scripts
 -- land in <dir>/bin) and those entries are linked into <root>/bin.
+-- Console scripts are wrapped to run with PYTHONPATH=$PDIR: pip --target
+-- scripts cannot import their own package otherwise. Wheels that ship a
+-- compiled binary instead (no <dir>/bin/<name>) fall back to a plain link.
 
 local M = {}
 
@@ -22,8 +25,9 @@ function M.install_lines(entry, dirs)
     .. sh_quote(dirs.dir) .. " " .. sh_quote(spec)
   local runs = entry.runs or {}
   for _, b in ipairs(entry.bin or {}) do
-    if not runs[b] then
-      runs[b] = { kind = "", hint = "bin/" .. b }
+    local existing = runs[b]
+    if not existing or existing.kind == "" then
+      runs[b] = { kind = "pypi", hint = "bin/" .. b }
     end
   end
   entry.runs = runs
