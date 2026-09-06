@@ -42,6 +42,7 @@ jot.ui.handler("quit_prompt", popup.quit_prompt)
 jot.ui.handler("tree_sitter_status", tree_sitter.tree_sitter_status)
 jot.ui.handler("lsp_status", lsp.lsp_status)
 jot.ui.handler("lsp_manager", lsp.lsp_manager)
+jot.ui.handler("lsp_signature", lsp.lsp_signature)
 jot.ui.handler("telescope", telescope.telescope)
 jot.ui.handler("lsp_completion", lsp.lsp_completion)
 jot.ui.handler("context_menu", menu.context_menu)
@@ -68,6 +69,7 @@ return {
   tree_sitter_status = tree_sitter.tree_sitter_status,
   lsp_status = lsp.lsp_status,
   lsp_manager = lsp.lsp_manager,
+  lsp_signature = lsp.lsp_signature,
   telescope = telescope.telescope,
   lsp_completion = lsp.lsp_completion,
   context_menu = menu.context_menu,

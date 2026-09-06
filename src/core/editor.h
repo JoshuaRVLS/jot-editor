@@ -292,6 +292,8 @@ private:
   void handle_document_symbols_result(const LSPDocumentSymbolResult &result);
   std::vector<QuickPickItem> fallback_symbol_items();
   void request_lsp_completion(bool manual, char trigger_character = '\0');
+  void request_lsp_signature_help(char trigger_character = '\0');
+  void hide_lsp_signature();
   void request_lsp_hover();
   void request_lsp_hover_at(int pane_index,
                             int buffer_id,
@@ -307,6 +309,7 @@ private:
   void close_lua_hover_ui();
   void request_lsp_definition();
   void handle_lsp_hover_result(const LSPHoverResult &hover);
+  void handle_lsp_signature_result(const LSPSignatureHelpResult &signature_help);
   void handle_lsp_definition_result(const LSPDefinitionResult &definition);
   bool apply_pending_lsp_definition_jump();
   bool apply_pending_lsp_back_jump();
@@ -316,6 +319,7 @@ private:
   bool apply_selected_lsp_completion();
   void accept_telescope_selection();
   void render_lsp_completion();
+  void render_lsp_signature();
   std::string get_buffer_text(const FileBuffer &buf) const;
   // Anchored decorations (see core/app/decorations.cpp): rebase_begin runs
   // before every edit (snapshot + mark dirty), ensure_* lazily shifts the

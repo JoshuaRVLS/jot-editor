@@ -168,6 +168,26 @@ struct CompletionView
   std::vector<CompletionItemView> items; // windowed to max_items rows
 };
 
+struct SignatureLineView
+{
+  std::string text;
+  // 0 = signature label, 1 = documentation, 2 = footer hint.
+  int role = 0;
+};
+
+struct SignatureView
+{
+  // Content-box geometry; the Lua render wraps it in a bordered float.
+  int x = 0, y = 0, w = 0, h = 0;
+  // 0-based index of the signature shown (footer "overload i/n"), plus its
+  // active-parameter highlight inside the label row (byte offsets, -1 none).
+  int active_signature = 0;
+  int signature_total = 1;
+  int label_hl_start = -1;
+  int label_hl_len = -1;
+  std::vector<SignatureLineView> lines;
+};
+
 struct ContextMenuItemView
 {
   std::string label;
@@ -633,6 +653,7 @@ public:
   bool emit_lsp_status(const TsStatusView &view);
   bool emit_telescope(const TelescopeView &view);
   bool emit_lsp_completion(const CompletionView &view);
+  bool emit_lsp_signature(const SignatureView &view);
   bool emit_context_menu(const ContextMenuView &view);
   bool emit_menu_dropdown(const MenuDropdownView &view);
   bool emit_search(const SearchView &view);

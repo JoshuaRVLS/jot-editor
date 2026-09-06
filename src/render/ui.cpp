@@ -2269,6 +2269,7 @@ void Editor::sync_lua_ui_surfaces()
     lua_ui_prev_tree_sitter_status = false;
     lua_ui_prev_telescope = false;
     lua_ui_prev_lsp_completion = false;
+    lua_ui_prev_lsp_signature = false;
     lua_ui_prev_context_menu = false;
     lua_ui_prev_menu_dropdown = false;
     lua_ui_prev_search = false;
@@ -2296,6 +2297,9 @@ void Editor::sync_lua_ui_surfaces()
   sync(lsp_completion_visible && !lsp_completion_items.empty(),
        lua_ui_prev_lsp_completion,
        "lsp_completion");
+  sync(lsp_signature_visible && !lsp_signature_result.signatures.empty(),
+       lua_ui_prev_lsp_signature,
+       "lsp_signature");
   sync(show_context_menu, lua_ui_prev_context_menu, "context_menu");
   sync(show_menu_bar_dropdown, lua_ui_prev_menu_dropdown, "menu_dropdown");
   sync(show_search, lua_ui_prev_search, "search_panel");

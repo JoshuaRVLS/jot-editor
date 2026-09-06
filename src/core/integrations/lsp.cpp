@@ -425,6 +425,41 @@ namespace
     return line.substr((size_t)prefix_start, (size_t)(cursor - prefix_start));
   }
 
+  // Column of the innermost '(' still open just before `before_x` on the
+  // buffer's cursor line, or -1 when the caret is not inside a call's
+  // argument list. Nested calls resolve to their innermost open paren so a
+  // signature popup tracks the call actually being typed.
+  int innermost_open_paren_col(const FileBuffer &buf, int before_x)
+  {
+    if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.line_count())
+    {
+      return -1;
+    }
+    const std::string &line = buf.line(buf.cursor.y);
+    int limit = std::clamp(before_x, 0, (int)line.size());
+    int depth = 0;
+    for (int i = limit - 1; i >= 0; i--)
+    {
+      const char c = line[i];
+      if (c == ')')
+      {
+        depth++;
+      }
+      else if (c == '(')
+      {
+        if (depth > 0)
+        {
+          depth--;
+        }
+        else
+        {
+          return i;
+        }
+      }
+    }
+    return -1;
+  }
+
   bool is_subsequence_case_insensitive(const std::string &needle, const std::string &haystack)
   {
     if (needle.empty())
@@ -1012,6 +1047,12 @@ void Editor::poll_lsp_clients()
       if (lua_api)
         lua_api->emit_lsp_hover(hover);
       handle_lsp_hover_result(hover);
+    }
+
+    auto signature_results = client->consume_signature_results();
+    for (const auto &signature_help : signature_results)
+    {
+      handle_lsp_signature_result(signature_help);
     }
 
     auto definitions = client->consume_definition_results();
@@ -1936,6 +1977,97 @@ void Editor::hide_lsp_completion()
   lsp_completion_all_items.clear();
   lsp_completion_filepath.clear();
   lsp_completion_prefix.clear();
+}
+
+void Editor::hide_lsp_signature()
+{
+  if (!lsp_signature_visible && lsp_signature_filepath.empty())
+  {
+    return;
+  }
+  lsp_signature_visible = false;
+  lsp_signature_open_paren_line = -1;
+  lsp_signature_open_paren_col = 0;
+  lsp_signature_filepath.clear();
+  lsp_signature_result = {};
+}
+
+void Editor::request_lsp_signature_help(char trigger_character)
+{
+  auto &buf = get_buffer();
+  if (buf.is_lazy() || buf.filepath.empty())
+  {
+    return;
+  }
+  // Only useful while the caret sits inside a call's argument list (right
+  // after an unmatched '(' on the current line).
+  const int open_col = innermost_open_paren_col(buf, buf.cursor.x);
+  if (open_col < 0)
+  {
+    hide_lsp_signature();
+    return;
+  }
+  LSPClient *client = ensure_lsp_for_file(buf.filepath);
+  if (!client)
+  {
+    return;
+  }
+  lsp_pending_changes.erase(buf.filepath);
+  client->did_change(buf.filepath, get_buffer_text(buf));
+  if (!client->request_signature_help(buf.filepath, buf.cursor.y, buf.cursor.x, trigger_character))
+  {
+    return;
+  }
+  // Keep whatever is on screen until a fresh answer lands (or the caret moves
+  // out of the call), so retyping an argument does not make the popup blink.
+  lsp_signature_visible = true;
+  lsp_signature_open_paren_line = buf.cursor.y;
+  lsp_signature_open_paren_col = open_col;
+  lsp_signature_filepath = buf.filepath;
+  needs_redraw = true;
+}
+
+void Editor::handle_lsp_signature_result(const LSPSignatureHelpResult &signature_help)
+{
+  if (buffers.empty() || current_buffer < 0 || current_buffer >= (int)buffers.size())
+  {
+    return;
+  }
+  if (lsp_signature_filepath.empty())
+  {
+    return; // no outstanding request: the popup was already dismissed
+  }
+  auto &buf = get_buffer();
+  if (!same_path(buf.filepath, signature_help.origin_filepath))
+  {
+    return;
+  }
+  // Only adopt the answer when the caret is still inside the call that asked
+  // for it (past the recorded open paren, same line).
+  if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.line_count())
+  {
+    return;
+  }
+  if (buf.cursor.y != lsp_signature_open_paren_line)
+  {
+    hide_lsp_signature();
+    return;
+  }
+  const std::string &line = buf.line(buf.cursor.y);
+  if (lsp_signature_open_paren_col >= (int)line.size()
+      || line[(size_t)lsp_signature_open_paren_col] != '(' || buf.cursor.x <= lsp_signature_open_paren_col)
+  {
+    hide_lsp_signature();
+    return;
+  }
+  if (signature_help.signatures.empty())
+  {
+    hide_lsp_signature();
+    return;
+  }
+  lsp_signature_result = signature_help;
+  lsp_signature_visible = true;
+  needs_redraw = true;
 }
 
 bool Editor::refresh_lsp_completion_filter()

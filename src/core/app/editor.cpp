@@ -303,6 +303,11 @@ void Editor::initialize_state_defaults()
   lsp_completion_prefix.clear();
   lsp_completion_all_items.clear();
   lsp_completion_items.clear();
+  lsp_signature_visible = false;
+  lsp_signature_open_paren_line = -1;
+  lsp_signature_open_paren_col = 0;
+  lsp_signature_filepath.clear();
+  lsp_signature_result = {};
   lsp_jump_stack.clear();
   lsp_definition_jump_pending = false;
   lsp_definition_pending_location = {};

@@ -456,8 +456,36 @@ bool LuaAPI::emit_lsp_completion(const CompletionView &view)
                          lua_set_str_field(L, ii, "detail", it.detail);
                          lua_set_str_field(L, ii, "documentation", it.documentation);
                          lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }                         lua_setfield(L, t, "items");
+                       push_ui_colors(L, t);
+                     });
+}
+
+bool LuaAPI::emit_lsp_signature(const SignatureView &view)
+{
+  return emit_lua_ui("lsp_signature",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_set_int_field(L, t, "active_signature", view.active_signature);
+                       lua_set_int_field(L, t, "signature_total", view.signature_total);
+                       lua_set_int_field(L, t, "label_hl_start", view.label_hl_start);
+                       lua_set_int_field(L, t, "label_hl_len", view.label_hl_len);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.lines.size(); i++)
+                       {
+                         const SignatureLineView &ln = view.lines[i];
+                         lua_newtable(L);
+                         const int li = lua_gettop(L);
+                         lua_set_str_field(L, li, "text", ln.text);
+                         lua_set_int_field(L, li, "role", ln.role);
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
                        }
-                       lua_setfield(L, t, "items");
+                       lua_setfield(L, t, "lines");
                        push_ui_colors(L, t);
                      });
 }

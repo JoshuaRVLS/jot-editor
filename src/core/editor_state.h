@@ -107,6 +107,7 @@ struct EditorState
   bool lua_ui_prev_lsp_status = false;
   bool lua_ui_prev_telescope = false;
   bool lua_ui_prev_lsp_completion = false;
+  bool lua_ui_prev_lsp_signature = false;
   bool lua_ui_prev_context_menu = false;
   bool lua_ui_prev_menu_dropdown = false;
   bool lua_ui_prev_search = false;
@@ -265,6 +266,14 @@ struct EditorState
   std::string lsp_completion_prefix;
   std::vector<LSPCompletionItem> lsp_completion_all_items;
   std::vector<LSPCompletionItem> lsp_completion_items;
+  bool lsp_signature_visible;
+  // Position of the '(' that opened the call shown by the signature popup.
+  // While the caret stays past this paren on the same line the popup keeps
+  // tracking the call.
+  int lsp_signature_open_paren_line;
+  int lsp_signature_open_paren_col;
+  std::string lsp_signature_filepath;
+  LSPSignatureHelpResult lsp_signature_result;
   std::vector<LSPJumpLocation> lsp_jump_stack;
   bool lsp_definition_jump_pending;
   LSPLocation lsp_definition_pending_location;

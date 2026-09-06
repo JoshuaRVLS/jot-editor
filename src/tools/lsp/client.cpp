@@ -889,6 +889,91 @@ namespace
     return hover_content_from_json(*contents);
   }
 
+  // SignatureHelp documentation is a plain string or a MarkupContent object
+  // ({kind, value}); both collapse to text.
+  std::string signature_doc_from_json(const JsonValue *doc)
+  {
+    if (!doc)
+    {
+      return "";
+    }
+    if (doc->type == JsonValue::String)
+    {
+      return doc->string_value;
+    }
+    if (doc->type == JsonValue::Object)
+    {
+      return json_string_or_empty(json_object_get(*doc, "value"));
+    }
+    return "";
+  }
+
+  LSPSignatureHelpResult signature_help_from_result(const JsonValue &result)
+  {
+    LSPSignatureHelpResult parsed;
+    if (result.type != JsonValue::Object)
+    {
+      return parsed;
+    }
+    const JsonValue *signatures = json_object_get(result, "signatures");
+    if (!signatures || signatures->type != JsonValue::Array)
+    {
+      return parsed;
+    }
+    parsed.active_signature = json_int_or_default(json_object_get(result, "activeSignature"), 0);
+    for (const auto &sig : signatures->array_value)
+    {
+      if (sig.type != JsonValue::Object)
+      {
+        continue;
+      }
+      LSPSignature parsed_sig;
+      parsed_sig.label = json_string_or_empty(json_object_get(sig, "label"));
+      parsed_sig.documentation = signature_doc_from_json(json_object_get(sig, "documentation"));
+      parsed_sig.active_parameter =
+          json_int_or_default(json_object_get(sig, "activeParameter"), -1);
+      const JsonValue *parameters = json_object_get(sig, "parameters");
+      if (parameters && parameters->type == JsonValue::Array)
+      {
+        for (const auto &param : parameters->array_value)
+        {
+          if (param.type != JsonValue::Object)
+          {
+            continue;
+          }
+          LSPSignatureParameter parsed_param;
+          const JsonValue *label = json_object_get(param, "label");
+          if (label && label->type == JsonValue::Array && label->array_value.size() == 2
+              && label->array_value[0].type == JsonValue::Number
+              && label->array_value[1].type == JsonValue::Number)
+          {
+            // Offsets into the signature label: [start, end).
+            parsed_param.label_start = (int)label->array_value[0].number_value;
+            parsed_param.label_end = (int)label->array_value[1].number_value;
+            const size_t s = (size_t)std::max(0, parsed_param.label_start);
+            const size_t e = (size_t)std::min((int)parsed_sig.label.size(),
+                                              std::max(parsed_param.label_start, parsed_param.label_end));
+            if (e > s)
+            {
+              parsed_param.label = parsed_sig.label.substr(s, e - s);
+            }
+          }
+          else
+          {
+            parsed_param.label = label && label->type == JsonValue::String
+                                     ? label->string_value
+                                     : "";
+          }
+          parsed_param.documentation =
+              signature_doc_from_json(json_object_get(param, "documentation"));
+          parsed_sig.parameters.push_back(std::move(parsed_param));
+        }
+      }
+      parsed.signatures.push_back(std::move(parsed_sig));
+    }
+    return parsed;
+  }
+
   bool location_from_json(const JsonValue &item, LSPLocation &out)
   {
     if (item.type != JsonValue::Object)
@@ -1636,10 +1721,12 @@ bool LSPClient::start()
   document_texts.clear();
   pending_completion_requests.clear();
   pending_hover_requests.clear();
+  pending_signature_requests.clear();
   pending_definition_requests.clear();
   pending_document_symbol_requests.clear();
   pending_completions.clear();
   pending_hovers.clear();
+  pending_signatures.clear();
   pending_definitions.clear();
   pending_document_symbols.clear();
   stdout_buffer.clear();
@@ -1787,10 +1874,12 @@ void LSPClient::stop()
   document_texts.clear();
   pending_completion_requests.clear();
   pending_hover_requests.clear();
+  pending_signature_requests.clear();
   pending_definition_requests.clear();
   pending_document_symbol_requests.clear();
   pending_completions.clear();
   pending_hovers.clear();
+  pending_signatures.clear();
   pending_definitions.clear();
   pending_document_symbols.clear();
   outbound_buffer.clear();
@@ -2032,6 +2121,32 @@ void LSPClient::handle_stdout_data(const std::string &data)
       }
       pending_hovers.push_back(std::move(hover));
       pending_hover_requests.erase(hover_it);
+      continue;
+    }
+
+    auto signature_it = pending_signature_requests.find(request_id);
+    if (signature_it != pending_signature_requests.end())
+    {
+      const auto current_version = file_versions.find(signature_it->second.filepath);
+      if (current_version == file_versions.end()
+          || current_version->second != signature_it->second.version)
+      {
+        pending_signature_requests.erase(signature_it);
+        continue;
+      }
+      LSPSignatureHelpResult signature_help;
+      signature_help.origin_filepath = signature_it->second.filepath;
+      signature_help.origin_line = signature_it->second.line;
+      signature_help.origin_character = signature_it->second.character;
+      if (result)
+      {
+        signature_help = signature_help_from_result(*result);
+        signature_help.origin_filepath = signature_it->second.filepath;
+        signature_help.origin_line = signature_it->second.line;
+        signature_help.origin_character = signature_it->second.character;
+      }
+      pending_signatures.push_back(std::move(signature_help));
+      pending_signature_requests.erase(signature_it);
       continue;
     }
 
@@ -2392,6 +2507,56 @@ bool LSPClient::request_hover(const std::string &filepath, int line, int charact
   return true;
 }
 
+bool LSPClient::request_signature_help(const std::string &filepath,
+                                       int line,
+                                       int character,
+                                       char trigger_character)
+{
+  if (!running)
+  {
+    return false;
+  }
+
+  std::string abs_path = fs::absolute(filepath).string();
+  if (pending_signature_requests.size() >= 32)
+  {
+    return false;
+  }
+  int request_id = next_request_id++;
+  pending_signature_requests[request_id] = PendingPositionRequest{
+      abs_path, std::max(0, line), std::max(0, character), file_versions[abs_path]};
+
+  std::ostringstream json;
+  json << "{"
+       << "\"jsonrpc\":\"2.0\","
+       << "\"id\":" << request_id << ","
+       << "\"method\":\"textDocument/signatureHelp\","
+       << "\"params\":{"
+       << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path)) << "\"},"
+       << "\"position\":{\"line\":" << std::max(0, line)
+       << ",\"character\":" << lsp_character(abs_path, line, character) << "}";
+
+  if (trigger_character != '\0')
+  {
+    json << ",\"context\":{\"triggerKind\":2,\"triggerCharacter\":\""
+         << json_escape(std::string(1, trigger_character)) << "\"}";
+  }
+  else
+  {
+    json << ",\"context\":{\"triggerKind\":1}";
+  }
+
+  json << "}"
+       << "}";
+
+  if (!send_message(json.str()))
+  {
+    pending_signature_requests.erase(request_id);
+    return false;
+  }
+  return true;
+}
+
 bool LSPClient::request_definition(const std::string &filepath, int line, int character)
 {
   if (!running)
@@ -2489,6 +2654,13 @@ std::vector<LSPHoverResult> LSPClient::consume_hover_results()
   {
     last_hover_ = out.back();
   }
+  return out;
+}
+
+std::vector<LSPSignatureHelpResult> LSPClient::consume_signature_results()
+{
+  auto out = std::move(pending_signatures);
+  pending_signatures.clear();
   return out;
 }
 

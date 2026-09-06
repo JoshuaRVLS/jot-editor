@@ -564,6 +564,7 @@ void Editor::open_file(const std::string &path, bool preview)
 {
   show_home_menu = false;
   hide_lsp_completion();
+  hide_lsp_signature();
 
   const std::string clean_path = sanitize_input_path(path);
   if (clean_path.empty())
@@ -815,6 +816,7 @@ void Editor::create_new_buffer()
 {
   show_home_menu = false;
   hide_lsp_completion();
+  hide_lsp_signature();
 
   FileBuffer fb;
   fb.lines.push_back("");

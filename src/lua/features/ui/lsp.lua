@@ -319,10 +319,57 @@ local function lsp_completion(p)
 end
 
 
+-- Signature help popup: shows the active function's parameters while typing
+-- a call, with the parameter being filled highlighted. The native side owns
+-- request timing and geometry (anchored above the caret); this handler only
+-- paints the rows it is given: the signature label (with a highlight span
+-- over the active parameter), the documentation lines and a footer.
+local function lsp_signature(p)
+  if not p then
+    close("lsp_signature")
+    return true
+  end
+  local colors = p.colors or {}
+  local accent = colors.accent or 6
+  local f = {
+    x = p.x - 1,
+    y = p.y - 1,
+    w = p.w + 2,
+    h = p.h + 2,
+    colors = p.colors,
+  }
+  local content_w = math.max(1, p.w or 2)
+  local body = {}
+  local spans = {}
+  local lines = p.lines or {}
+  local hl_start = p.label_hl_start or -1
+  local hl_len = p.label_hl_len or -1
+  for i, ln in ipairs(lines) do
+    local text = ln.text or ""
+    if cell_len(text) > content_w then
+      text = trunc_cells(text, content_w)
+    end
+    body[i] = text
+    local row_spans = {}
+    -- Only the signature label (first row) carries the active-parameter
+    -- highlight; spans are byte offsets into the row text, exactly like the
+    -- match highlights in the palette / quick-pick rows.
+    if i == 1 and hl_start >= 0 and hl_len > 0 and hl_start < #text then
+      local kept = math.min(hl_len, #text - hl_start)
+      if kept > 0 then
+        row_spans[#row_spans + 1] = { start = hl_start, len = kept, fg = accent }
+      end
+    end
+    spans[i] = row_spans
+  end
+  return present_panel("lsp_signature", f, nil, { border = "single" }, body, spans)
+end
+
 return {
   lsp_status = lsp_status,
   lsp_manager = lsp_manager,
   lsp_completion = lsp_completion,
+  lsp_signature = lsp_signature,
   completion_kind_color = completion_kind_color,
   add_part = add_part,
 }

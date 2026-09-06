@@ -29,6 +29,7 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
     if (ch == 27)
     {
       hide_lsp_completion();
+      hide_lsp_signature();
       return;
     }
   }
@@ -306,6 +307,7 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
   if (ch == 27)
   {
     hide_lsp_completion();
+    hide_lsp_signature();
     auto &buf = get_buffer();
     if (buf.selection.active)
     {
@@ -554,6 +556,12 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
     bool had_completion = lsp_completion_visible;
     delete_char(false);
     needs_redraw = true;
+    // Deleting inside the argument list can move the caret to a different
+    // parameter: re-ask so the popup keeps the right one highlighted.
+    if (lsp_signature_visible)
+    {
+      request_lsp_signature_help();
+    }
     if (had_completion && refresh_lsp_completion_filter())
     {
       request_lsp_completion(false, '_');
@@ -635,6 +643,21 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
     else
     {
       hide_lsp_completion();
+      // Signature help rides along the call syntax: an open paren starts a
+      // call, each comma advances the highlighted parameter, and the closing
+      // paren dismisses the popup.
+      if (typed == '(')
+      {
+        request_lsp_signature_help('(');
+      }
+      else if (typed == ')')
+      {
+        hide_lsp_signature();
+      }
+      else if (typed == ',' && lsp_signature_visible)
+      {
+        request_lsp_signature_help(',');
+      }
     }
     needs_redraw = true;
     return;

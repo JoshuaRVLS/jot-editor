@@ -44,6 +44,34 @@ struct LSPHoverResult
   std::string contents;
 };
 
+struct LSPSignatureParameter
+{
+  std::string label;
+  // When the server addressed the parameter as [start, end) byte offsets into
+  // the signature label these are set (>= 0); otherwise -1 and callers can
+  // fall back to locating `label` inside the signature text.
+  int label_start = -1;
+  int label_end = -1;
+  std::string documentation;
+};
+
+struct LSPSignature
+{
+  std::string label;
+  std::string documentation;
+  std::vector<LSPSignatureParameter> parameters;
+  int active_parameter = -1;
+};
+
+struct LSPSignatureHelpResult
+{
+  std::string origin_filepath;
+  int origin_line = 0;
+  int origin_character = 0;
+  std::vector<LSPSignature> signatures;
+  int active_signature = 0;
+};
+
 struct LSPDefinitionResult
 {
   std::string origin_filepath;
@@ -124,10 +152,12 @@ private:
   std::vector<LSPDocumentSymbolResult> last_symbols_;
   std::map<int, PendingDocumentRequest> pending_completion_requests;
   std::map<int, PendingPositionRequest> pending_hover_requests;
+  std::map<int, PendingPositionRequest> pending_signature_requests;
   std::map<int, PendingPositionRequest> pending_definition_requests;
   std::map<int, PendingDocumentRequest> pending_document_symbol_requests;
   std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>> pending_completions;
   std::vector<LSPHoverResult> pending_hovers;
+  std::vector<LSPSignatureHelpResult> pending_signatures;
   std::vector<LSPDefinitionResult> pending_definitions;
   std::vector<LSPDocumentSymbolResult> pending_document_symbols;
 
@@ -167,11 +197,16 @@ public:
                           int character,
                           char trigger_character = '\0');
   bool request_hover(const std::string &filepath, int line, int character);
+  bool request_signature_help(const std::string &filepath,
+                              int line,
+                              int character,
+                              char trigger_character = '\0');
   bool request_definition(const std::string &filepath, int line, int character);
   bool request_document_symbols(const std::string &filepath);
   std::vector<std::pair<std::string, std::vector<Diagnostic>>> consume_published_diagnostics();
   std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>> consume_completion_items();
   std::vector<LSPHoverResult> consume_hover_results();
+  std::vector<LSPSignatureHelpResult> consume_signature_results();
   std::vector<LSPDefinitionResult> consume_definition_results();
   std::vector<LSPDocumentSymbolResult> consume_document_symbol_results();
 
