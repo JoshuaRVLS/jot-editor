@@ -244,6 +244,10 @@ private:
   void render_frame();
   LSPClient *ensure_lsp_for_file(const std::string &filepath);
   void notify_lsp_open(const std::string &filepath);
+  // Attaches any already-open buffers whose language matches `language` to a
+  // freshly available server (e.g. right after an install completes), so a
+  // file that was open before the server existed does not wait for a reopen.
+  void heal_lsp_attach_for(const std::string &language);
   void notify_lsp_change(const std::string &filepath);
   void notify_lsp_save(const std::string &filepath);
   void notify_lsp_close(const std::string &filepath);

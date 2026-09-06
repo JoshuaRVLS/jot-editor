@@ -1118,6 +1118,13 @@ void Editor::poll_lsp_installs()
         resolved = true;
         set_message("LSP " + std::string(job.removing ? "remove OK: " : "install OK: ")
                     + job.server);
+        if (!job.removing)
+        {
+          // A server that was installed while its files were already open
+          // never got notified (attach only fires on open/restart/enable):
+          // attach those buffers now so "installed but inactive" heals itself.
+          heal_lsp_attach_for(job.server);
+        }
       }
       else if (marker.phase == "failed")
       {
@@ -1302,16 +1309,30 @@ LSPClient *Editor::ensure_lsp_for_file(const std::string &filepath)
     return nullptr;
   }
 
-  std::string root = find_workspace_root(filepath, language);
-  if (LSPClient *existing = find_lsp_client(language, root))
+  const std::string root = find_workspace_root(filepath, language);
+  size_t existing_index = lsp_clients.size();
+  for (size_t i = 0; i < lsp_clients.size(); i++)
   {
-    if (!existing->is_running())
+    if (lsp_clients[i] && lsp_clients[i]->get_language() == language
+        && lsp_clients[i]->get_root_path() == root)
     {
-      unwatch_lsp_client_fds(existing);
-      existing->restart();
-      watch_lsp_client_fds(existing);
+      existing_index = i;
+      break;
     }
-    return existing;
+  }
+  if (existing_index < lsp_clients.size())
+  {
+    LSPClient *existing = lsp_clients[existing_index].get();
+    if (existing->is_running())
+    {
+      return existing;
+    }
+    // A dead client may hold a stale command from when the server binary was
+    // not yet installed (bare name or vanished path). Restarting it would just
+    // fail again, so drop it and rebuild below with a freshly resolved command.
+    unwatch_lsp_client_fds(existing);
+    existing->stop();
+    lsp_clients.erase(lsp_clients.begin() + (long)existing_index);
   }
 
   std::vector<std::string> command = command_for_language(language);
@@ -1380,6 +1401,36 @@ void Editor::notify_lsp_open(const std::string &filepath)
           filepath, language_id_for(client->get_language(), filepath), get_buffer_text(buf));
       break;
     }
+  }
+}
+
+void Editor::heal_lsp_attach_for(const std::string &language)
+{
+  if (language.empty())
+  {
+    return;
+  }
+  for (auto &buf : buffers)
+  {
+    if (buf.filepath.empty() || buf.is_lazy())
+    {
+      continue;
+    }
+    if (detect_lsp_language(buf.filepath) != language)
+    {
+      continue;
+    }
+    LSPClient *client = ensure_lsp_for_file(buf.filepath);
+    if (!client)
+    {
+      continue;
+    }
+    // Safe when the document is already open on this client: LSPClient turns
+    // a duplicate did_open into a full-text didChange, and after a restart
+    // its version table is empty so this sends a real didOpen.
+    client->did_open(
+        buf.filepath, language_id_for(client->get_language(), buf.filepath), get_buffer_text(buf));
+    set_diagnostics(buf.filepath, {});
   }
 }
 
