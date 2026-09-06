@@ -48,7 +48,7 @@ void Editor::create_integrated_terminal(const std::string &label, const std::str
   if (!term->open_shell(cwd))
   {
 #ifdef _WIN32
-    set_message("Integrated terminal: ConPTY backend not implemented yet");
+    set_message("Failed to open integrated terminal: ConPTY unavailable (Windows 10 1809+ required)");
 #else
     set_message("Failed to open integrated terminal: check $SHELL or PTY support");
 #endif
@@ -157,7 +157,7 @@ void Editor::toggle_integrated_terminal()
     if (!term->open_shell())
     {
 #ifdef _WIN32
-      set_message("Integrated terminal: ConPTY backend not implemented yet");
+      set_message("Failed to open integrated terminal: ConPTY unavailable (Windows 10 1809+ required)");
 #else
       set_message("Failed to restart terminal: check $SHELL or PTY support");
 #endif
@@ -212,7 +212,7 @@ void Editor::handle_integrated_terminal_input(int ch, bool is_ctrl, bool is_shif
     if (!term->open_shell())
     {
 #ifdef _WIN32
-      set_message("Integrated terminal: ConPTY backend not implemented yet");
+      set_message("Failed to open integrated terminal: ConPTY unavailable (Windows 10 1809+ required)");
 #else
       set_message("Failed to restart terminal: check $SHELL or PTY support");
 #endif
@@ -325,7 +325,7 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y)
     else
     {
 #ifdef _WIN32
-      set_message("Integrated terminal: ConPTY backend not implemented yet");
+      set_message("Failed to open integrated terminal: ConPTY unavailable (Windows 10 1809+ required)");
 #else
       set_message("Failed to restart terminal: check $SHELL or PTY support");
 #endif

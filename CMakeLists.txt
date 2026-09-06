@@ -3,6 +3,9 @@ project(jot LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 
+# Bundled third-party dependencies (built before the engine subdirectory).
+add_subdirectory(third_party/libvterm)
+
 # Use a clean, portable install RPATH that points to the same prefix's lib dir.
 # Do NOT use CMAKE_INSTALL_RPATH_USE_LINK_PATH: it bakes build-time link
 # search paths (e.g. ~/.local/lib) into the installed binary, which breaks

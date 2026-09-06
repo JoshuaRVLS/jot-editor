@@ -46,8 +46,11 @@ Notes:
   Linux/macOS editor UI and integrated terminal.
 - Linux and other non-Apple Unix builds link `libutil` for PTY support.
 - macOS uses native system PTY APIs without a `libutil` link.
-- Windows uses a Win32 console backend for the main editor UI. Integrated
-  terminal ConPTY support and Tree-sitter source installation are still pending.
+- Windows uses a Win32 console backend for the main editor UI and a ConPTY
+  backend for the integrated terminal (Windows 10 1809+; the API is loaded
+  dynamically so older systems fail gracefully instead of crashing).
+- The terminal emulator (libvterm) is bundled in `third_party/libvterm`, so
+  POSIX and Windows build the same renderer with no platform dependency.
 
 ## Install
 
@@ -705,7 +708,8 @@ Notes:
 - The UI uses raw terminal handling, not ncurses.
 - Editor keyboard input is decoded with libtermkey for reliable modifier and
   advanced shortcut handling.
-- The integrated terminal uses PTY support and libvterm.
+- The integrated terminal uses PTY support (`forkpty` on POSIX, ConPTY on
+  Windows) and the bundled libvterm emulator.
 - Async editor I/O, timers, child process pipes, and file-tree notifications use
   libuv.
 - Tree-sitter runtime support is optional at build time but recommended.
@@ -762,7 +766,7 @@ Build graph highlights:
   not intended to be a complete replacement for a mature standalone terminal
   emulator.
 - Lua globals are injected for plugins; no package import is required.
-- Windows is not supported yet.
+- Windows support is experimental; Linux/macOS is the primary target.
 
 ## License
 

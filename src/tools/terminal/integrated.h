@@ -3,8 +3,11 @@
 
 #include <algorithm>
 #include <deque>
+#include <memory>
 #include <string>
 #include <vector>
+
+#include "tools/terminal/terminal_session.h"
 
 typedef struct VTerm VTerm;
 typedef struct VTermScreen VTermScreen;
@@ -35,6 +38,7 @@ public:
   };
 
 private:
+  std::unique_ptr<TerminalSession> session_;
   int master_fd;
   int child_pid;
   bool active;

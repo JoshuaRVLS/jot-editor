@@ -2,27 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cerrno>
-#include <chrono>
 #include <cstdint>
-#include <cstdlib>
-#include <cstring>
-#include <fcntl.h>
-#include <signal.h>
 #include <string>
-#include <sys/ioctl.h>
-#include <sys/wait.h>
-#include <termios.h>
-#include <thread>
-#include <unistd.h>
 #include <vterm.h>
-
-#if defined(__APPLE__)
-#include <util.h>
-#elif defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)    \
-    || defined(__DragonFly__)
-#include <pty.h>
-#endif
 
 namespace
 {
@@ -31,44 +13,6 @@ namespace
   constexpr int kMaxScrollbackLines = 2000;
   constexpr int kPollReadLimit = 16;
   constexpr size_t kPollByteLimit = 64 * 1024;
-
-  size_t write_available(int fd, const char *data, size_t size)
-  {
-    while (true)
-    {
-      const ssize_t written = write(fd, data, size);
-      if (written > 0)
-        return (size_t)written;
-      if (written < 0 && errno == EINTR)
-        continue;
-      return 0;
-    }
-  }
-
-  termios build_shell_termios()
-  {
-    termios tio{};
-    tio.c_iflag = BRKINT | ICRNL | IXON | IMAXBEL;
-    tio.c_oflag = OPOST | ONLCR;
-    tio.c_cflag = CREAD | CS8;
-    tio.c_lflag = ISIG | ICANON | IEXTEN | ECHO | ECHOE | ECHOK;
-
-#ifdef ECHOCTL
-    tio.c_lflag |= ECHOCTL;
-#endif
-#ifdef ECHOKE
-    tio.c_lflag |= ECHOKE;
-#endif
-
-    tio.c_cc[VINTR] = 3;
-    tio.c_cc[VQUIT] = 28;
-    tio.c_cc[VERASE] = 127;
-    tio.c_cc[VKILL] = 21;
-    tio.c_cc[VEOF] = 4;
-    tio.c_cc[VMIN] = 1;
-    tio.c_cc[VTIME] = 0;
-    return tio;
-  }
 
   std::string utf8_from_codepoint(uint32_t cp)
   {
@@ -184,15 +128,8 @@ namespace
   {
     return 1;
   }
-  int screen_movecursor(VTermPos pos, VTermPos, int, void *user)
+  int screen_movecursor(VTermPos, VTermPos, int, void *)
   {
-    auto *term = static_cast<IntegratedTerminal *>(user);
-    if (term)
-    {
-      // Public resize/render code reads cursor via accessors; use the screen query
-      // as source of truth after libvterm has processed input.
-      (void)pos;
-    }
     return 1;
   }
   int screen_settermprop(VTermProp, VTermValue *, void *)
@@ -224,9 +161,10 @@ namespace
 } // namespace
 
 IntegratedTerminal::IntegratedTerminal()
-    : master_fd(-1), child_pid(-1), active(false), focused(false), label(""), vterm(nullptr),
-      screen(nullptr), rows(kDefaultRows), cols(kDefaultCols), cursor_row(0), cursor_col(0),
-      cursor_position_valid(false), scroll_offset(0)
+    : session_(make_terminal_session()), master_fd(-1), child_pid(-1), active(false),
+      focused(false), label(""), vterm(nullptr), screen(nullptr), rows(kDefaultRows),
+      cols(kDefaultCols), cursor_row(0), cursor_col(0), cursor_position_valid(false),
+      scroll_offset(0)
 {
 }
 
@@ -335,10 +273,10 @@ void IntegratedTerminal::vterm_output_callback(const char *s, size_t len, void *
 
 bool IntegratedTerminal::write_output_buffer()
 {
-  if (!active || master_fd < 0 || output_buffer.empty())
+  if (!active || !session_ || output_buffer.empty())
   {
     output_buffer.clear();
-    return active && master_fd >= 0;
+    return active && session_;
   }
   const bool queued = queue_input(output_buffer.data(), output_buffer.size());
   output_buffer.clear();
@@ -348,7 +286,7 @@ bool IntegratedTerminal::write_output_buffer()
 bool IntegratedTerminal::queue_input(const char *data, size_t size)
 {
   constexpr size_t kMaxPendingInputBytes = 1024 * 1024;
-  if (!active || master_fd < 0 || (!data && size != 0)
+  if (!active || !session_ || (!data && size != 0)
       || size > kMaxPendingInputBytes - pending_input.size())
   {
     return false;
@@ -360,9 +298,9 @@ bool IntegratedTerminal::queue_input(const char *data, size_t size)
 
 void IntegratedTerminal::flush_pending_input()
 {
-  if (!active || master_fd < 0 || pending_input.empty())
+  if (!active || !session_ || pending_input.empty())
     return;
-  const size_t written = write_available(master_fd, pending_input.data(), pending_input.size());
+  const size_t written = session_->write(pending_input.data(), pending_input.size());
   if (written > 0)
     pending_input.erase(0, written);
 }
@@ -408,42 +346,13 @@ bool IntegratedTerminal::open_shell(const std::string &cwd)
     focused = true;
     return true;
   }
-
-  termios shell_termios = build_shell_termios();
-  winsize shell_ws{};
-  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &shell_ws) != 0)
-  {
-    shell_ws.ws_col = (unsigned short)cols;
-    shell_ws.ws_row = (unsigned short)rows;
-  }
-
-  int fd = -1;
-  pid_t pid = forkpty(&fd, nullptr, &shell_termios, &shell_ws);
-  if (pid < 0)
+  if (!session_ || !session_->open(cwd, rows, cols))
   {
     return false;
   }
 
-  if (pid == 0)
-  {
-    const char *shell = getenv("SHELL");
-    setenv("TERM", "xterm-256color", 1);
-    if (!cwd.empty())
-    {
-      int rc = chdir(cwd.c_str());
-      (void)rc;
-    }
-    if (shell && *shell)
-    {
-      execlp(shell, shell, "-i", nullptr);
-    }
-    execlp("/bin/bash", "bash", "-i", nullptr);
-    execlp("/bin/sh", "sh", "-i", nullptr);
-    _exit(127);
-  }
-
-  master_fd = fd;
-  child_pid = pid;
+  master_fd = session_->input_fd();
+  child_pid = 1;
   active = true;
   focused = true;
   scroll_offset = 0;
@@ -451,35 +360,14 @@ bool IntegratedTerminal::open_shell(const std::string &cwd)
   scrollback.clear();
   ensure_vterm(rows, cols);
   vterm_screen_reset(screen, 1);
-
-  int flags = fcntl(master_fd, F_GETFL, 0);
-  if (flags >= 0)
-  {
-    fcntl(master_fd, F_SETFL, flags | O_NONBLOCK);
-  }
   return true;
 }
 
 void IntegratedTerminal::close_shell()
 {
-  if (child_pid > 0)
+  if (session_)
   {
-    kill(child_pid, SIGTERM);
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
-    int status = 0;
-    while (waitpid(child_pid, &status, WNOHANG) == 0 && std::chrono::steady_clock::now() < deadline)
-    {
-      std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    }
-    if (waitpid(child_pid, &status, WNOHANG) == 0)
-    {
-      kill(child_pid, SIGKILL);
-      waitpid(child_pid, &status, 0);
-    }
-  }
-  if (master_fd >= 0)
-  {
-    close(master_fd);
+    session_->close();
   }
   master_fd = -1;
   child_pid = -1;
@@ -491,7 +379,7 @@ void IntegratedTerminal::close_shell()
 
 bool IntegratedTerminal::poll_output()
 {
-  if (!active || master_fd < 0)
+  if (!active || !session_)
   {
     return false;
   }
@@ -500,20 +388,16 @@ bool IntegratedTerminal::poll_output()
   flush_pending_input();
 
   bool changed = false;
-  char buf[4096];
+  std::string bytes;
   int reads = 0;
   size_t bytes_read = 0;
-  while (reads < kPollReadLimit && bytes_read < kPollByteLimit)
+  while (reads < kPollReadLimit && bytes_read < kPollByteLimit
+         && session_->read_available(bytes, std::min(kPollByteLimit - bytes_read, size_t(4096))))
   {
-    ssize_t n = read(master_fd, buf, sizeof(buf));
-    if (n <= 0)
-    {
-      break;
-    }
     changed = true;
     reads++;
-    bytes_read += (size_t)n;
-    vterm_input_write(vterm, buf, (size_t)n);
+    bytes_read += bytes.size();
+    vterm_input_write(vterm, bytes.data(), bytes.size());
   }
 
   if (changed)
@@ -522,30 +406,22 @@ bool IntegratedTerminal::poll_output()
     refresh_current_line();
   }
 
-  int status = 0;
-  if (child_pid > 0)
+  if (session_->process_exited())
   {
-    pid_t result = waitpid(child_pid, &status, WNOHANG);
-    if (result == child_pid)
+    session_->close_after_exit();
+    active = false;
+    focused = false;
+    master_fd = -1;
+    child_pid = -1;
+    std::vector<StyledCell> row;
+    const std::string exited = "[terminal exited]";
+    row.reserve(exited.size());
+    for (char ch : exited)
     {
-      if (master_fd >= 0)
-      {
-        close(master_fd);
-      }
-      active = false;
-      focused = false;
-      master_fd = -1;
-      child_pid = -1;
-      std::vector<StyledCell> row;
-      const std::string exited = "[terminal exited]";
-      row.reserve(exited.size());
-      for (char ch : exited)
-      {
-        row.push_back({std::string(1, ch), 7, 0});
-      }
-      scrollback.push_back(std::move(row));
-      changed = true;
+      row.push_back({std::string(1, ch), 7, 0});
     }
+    scrollback.push_back(std::move(row));
+    changed = true;
   }
 
   return changed;
@@ -561,19 +437,16 @@ void IntegratedTerminal::resize(int new_rows, int new_cols)
   }
   ensure_vterm(new_rows, new_cols);
 
-  if (master_fd >= 0)
+  if (session_)
   {
-    winsize ws{};
-    ws.ws_row = (unsigned short)new_rows;
-    ws.ws_col = (unsigned short)new_cols;
-    ioctl(master_fd, TIOCSWINSZ, &ws);
+    session_->resize(new_rows, new_cols);
   }
   refresh_current_line();
 }
 
 bool IntegratedTerminal::send_key(int ch, bool is_ctrl, bool is_shift, bool is_alt)
 {
-  if (!active || master_fd < 0)
+  if (!active || !session_)
   {
     return false;
   }
@@ -666,7 +539,7 @@ bool IntegratedTerminal::send_key(int ch, bool is_ctrl, bool is_shift, bool is_a
 
 bool IntegratedTerminal::send_text(const std::string &text)
 {
-  if (!active || master_fd < 0)
+  if (!active || !session_)
   {
     return false;
   }
