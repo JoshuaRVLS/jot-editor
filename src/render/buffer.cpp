@@ -656,24 +656,22 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
     if (line_idx >= 0 && line_idx < (int)buf.line_count()
         && !Folding::is_line_hidden(buf.fold_ranges, line_idx))
     {
-      // The cursor row carries a soft tint (like an IDE cursor line) so the
-      // active row reads at a glance while typing. The tint only replaces the
-      // *default* cell background -- selection, search hits, strings and
-      // decorations still draw on top with their own colors. Computed before
-      // the gutter draws so breakpoint/severity markers sit on the tint too.
+      // The cursor row tints only the line-number gutter so the active row
+      // reads at a glance without washing out the code itself. The code area
+      // keeps the plain pane background -- selection, search hits, syntax
+      // colors and decorations are never fought by a row tint.
       const bool row_is_cursor_line =
           highlight_cursor_line && line_idx == buf.cursor.y && pane.active;
-      const int row_bg = row_is_cursor_line ? theme.bg_cursor_line : theme.bg_default;
-      // Tint the line-number gutter too, so the cursor row is one continuous
-      // band: the gutter cell, fold column, number and number-right spaces
-      // are otherwise left in the plain pane background and read as seams on
-      // the highlighted row.
+      const int gutter_bg = row_is_cursor_line ? theme.bg_cursor_line : theme.bg_default;
+      // Paint the whole gutter band (fold column, number and number-right
+      // spacing) in one pass so breakpoint/severity markers and the number
+      // drawn next sit on a seamless tint.
       if (row_is_cursor_line)
       {
         int gutter_end = std::min(x + 1 + line_num_width, x + w); // exclusive
         for (int fill_c = x + 1; fill_c < gutter_end; fill_c++)
         {
-          ui->draw_text(fill_c, draw_y, " ", theme.fg_default, row_bg);
+          ui->draw_text(fill_c, draw_y, " ", theme.fg_default, gutter_bg);
         }
       }
 
@@ -682,11 +680,11 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
                                            : theme.fg_line_num;
       if (!buf.filepath.empty() && has_debugger_breakpoint(buf.filepath, line_idx))
       {
-        ui->draw_text(x + 1, draw_y, "●", theme.fg_status_error, row_bg, true);
+        ui->draw_text(x + 1, draw_y, "●", theme.fg_status_error, gutter_bg, true);
       }
       else if (!buf.filepath.empty() && is_debugger_breakpoint_hover(pane.buffer_id, line_idx))
       {
-        ui->draw_text(x + 1, draw_y, "●", theme.fg_comment, row_bg);
+        ui->draw_text(x + 1, draw_y, "●", theme.fg_comment, gutter_bg);
       }
       else if (line_diag_severity > 0)
       {
@@ -695,7 +693,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       }
       else
       {
-        ui->draw_text(x + 1, draw_y, " ", theme.fg_line_num, row_bg);
+        ui->draw_text(x + 1, draw_y, " ", theme.fg_line_num, gutter_bg);
       }
 
       char num_buf[16];
@@ -722,7 +720,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
           folded_header || Folding::fold_starting_at_line(buf.fold_ranges, line_idx) >= 0;
       if (foldable_header)
       {
-        ui->draw_text(x + 2, draw_y, folded_header ? "▸" : "▾", theme.fg_comment, row_bg);
+        ui->draw_text(x + 2, draw_y, folded_header ? "▸" : "▾", theme.fg_comment, gutter_bg);
       }
 
       const std::string &line = buf.line(line_idx);
@@ -736,7 +734,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
         int suffix_x = current_x + std::max(0, visible_len - (int)suffix.size());
         if (suffix_x > current_x)
         {
-          ui->draw_text(suffix_x, draw_y, suffix, theme.fg_comment, row_bg);
+          ui->draw_text(suffix_x, draw_y, suffix, theme.fg_comment, theme.bg_default);
           visible_len = std::max(0, suffix_x - current_x - 1);
         }
       }
@@ -857,12 +855,6 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       {
         // Colors only matter up to the visible window; huge single lines are
         // highlighted per-window instead of per-line.
-        int trailing_ws_start = (int)line.size();
-        while (trailing_ws_start > 0
-               && (line[trailing_ws_start - 1] == ' ' || line[trailing_ws_start - 1] == '\t'))
-        {
-          trailing_ws_start--;
-        }
         const auto &colors = get_line_syntax_colors(buf, line_idx, render_limit);
         int line_bracket_depth = bracket_depth;
         std::vector<Editor::SearchMatch> search_hits;
@@ -930,14 +922,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             int char_w = std::max(1, visual_cols[next_idx] - visual_cols[char_idx]);
 
             int fg = color;
-            int bg = row_bg;
-            // The cursor-row tint is a soft band around the code itself, not
-            // the full row: trailing whitespace stays in the plain pane
-            // background so the highlight width follows the code length.
-            if (row_is_cursor_line && char_idx >= trailing_ws_start)
-            {
-              bg = theme.bg_default;
-            }
+            int bg = theme.bg_default;
 
             bool in_sel = is_in_selection(char_idx);
             if (in_sel)
@@ -1263,7 +1248,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             }
             if (vbg == -1)
             {
-              vbg = row_bg;
+              vbg = theme.bg_default;
             }
             int line_vis_end = visible_len;
             if ((int)line.size() < (int)visual_cols.size())
@@ -1344,7 +1329,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
         if (guide_vis_idx >= 0 && guide_vis_idx < visible_len)
         {
           ui->draw_text(
-              current_x + guide_vis_idx, draw_y, "│", theme.fg_bracket_match, row_bg);
+              current_x + guide_vis_idx, draw_y, "│", theme.fg_bracket_match, theme.bg_default);
         }
       }
     }
