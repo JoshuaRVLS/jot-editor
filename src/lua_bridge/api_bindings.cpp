@@ -1996,6 +1996,9 @@ bool LuaAPI::init()
   // registers the plan/list callbacks the native host uses.
   register_lsp_install_api(L);
   load_lsp_installer(L);
+  // Web attach policy + toolkit presets (lsp/policy.lua). Runs after the
+  // installer so jot.lsp.installed() is bound for presence checks.
+  load_lsp_policy(L);
   // Bundled feature: inline diagnostics as anchored decorations (see
   // lua/features/decorations.lua). Loaded after user plugins: load_plugins()
   // resets the autocmd table for plugin reloads, so registering before it

@@ -288,9 +288,7 @@ void LuaAPI::register_lsp_install_api(lua_State *L)
   bind(L, this, "installed", l_lsp_installed);
   bind(L, this, "root", l_lsp_root);
   lua_pop(L, 2);
-}
-
-bool LuaAPI::load_lsp_installer(lua_State *L)
+}bool LuaAPI::load_lsp_installer(lua_State *L)
 {
   if (!L)
     return false;
@@ -314,5 +312,187 @@ bool LuaAPI::load_lsp_installer(lua_State *L)
     lua_settop(L, top);
     return false;
   }
+  return true;
+}
+
+bool LuaAPI::load_lsp_policy(lua_State *L)
+{
+  if (!L)
+    return false;
+  // Attach policy + toolkit presets (src/lua/lsp/policy.lua). Loaded after
+  // the installer so jot.lsp.installed is available for presence checks.
+  const std::filesystem::path path = jot_lua_resolve_path("lsp/policy.lua");
+  if (path.empty())
+    return false;
+  const int top = lua_gettop(L);
+  if (luaL_loadfile(L, path.string().c_str()) || lua_pcall(L, 0, 0, 0))
+  {
+    std::cerr << "LSP policy runtime failed: " << lua_tostring(L, -1) << "\n";
+    lua_settop(L, top);
+    return false;
+  }
+  return true;
+}
+
+bool LuaAPI::lsp_policy_extras(const std::string &language,
+                                const std::string &filepath,
+                                std::vector<LspPolicyExtra> *out)
+{
+  out->clear();
+  if (!lua_state)
+  {
+    return false;
+  }
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  const int base = lua_gettop(L);
+  lua_getglobal(L, "jot");
+  if (lua_isnil(L, -1))
+  {
+    lua_settop(L, base);
+    return false;
+  }
+  lua_getfield(L, -1, "lsp");
+  if (lua_isnil(L, -1))
+  {
+    lua_settop(L, base);
+    return false;
+  }
+  lua_getfield(L, -1, "policy");
+  if (lua_isnil(L, -1))
+  {
+    lua_settop(L, base);
+    return false;
+  }
+  lua_getfield(L, -1, "extra_servers");
+  lua_remove(L, -2); // policy
+  lua_remove(L, -2); // lsp
+  lua_remove(L, -2); // jot
+  if (!lua_isfunction(L, -1))
+  {
+    lua_settop(L, base);
+    return false;
+  }
+  lua_pushlstring(L, language.data(), language.size());
+  lua_pushlstring(L, filepath.data(), filepath.size());
+  if (lua_pcall(L, 2, 1, 0) != LUA_OK)
+  {
+    std::cerr << "[lsp-policy] extra_servers failed: " << lua_tostring(L, -1) << "\n";
+    lua_settop(L, base);
+    return false;
+  }
+  if (!lua_istable(L, -1))
+  {
+    lua_settop(L, base);
+    return true; // policy ran, decided "nothing extra"
+  }
+  lua_pushnil(L);
+  while (lua_next(L, -2) != 0)
+  {
+    if (lua_type(L, -2) == LUA_TNUMBER && lua_istable(L, -1))
+    {
+      LspPolicyExtra extra;
+      lua_getfield(L, -1, "server");
+      if (lua_isstring(L, -1))
+        extra.server = lua_tostring(L, -1);
+      lua_pop(L, 1);
+      lua_getfield(L, -1, "bin");
+      if (lua_isstring(L, -1))
+        extra.bin = lua_tostring(L, -1);
+      lua_pop(L, 1);
+      lua_getfield(L, -1, "args");
+      if (lua_istable(L, -1))
+      {
+        lua_pushnil(L);
+        while (lua_next(L, -2) != 0)
+        {
+          if (lua_isstring(L, -1))
+          {
+            extra.args.push_back(lua_tostring(L, -1));
+          }
+          lua_pop(L, 1);
+        }
+      }
+      lua_pop(L, 1);
+      if (!extra.server.empty())
+      {
+        out->push_back(std::move(extra));
+      }
+    }
+    lua_pop(L, 1);
+  }
+  lua_settop(L, base);
+  return true;
+}
+
+bool LuaAPI::lsp_policy_preset(const std::string &name, std::vector<LspPolicyTool> *out)
+{
+  out->clear();
+  if (!lua_state)
+  {
+    return false;
+  }
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  const int base = lua_gettop(L);
+  lua_getglobal(L, "jot");
+  if (lua_isnil(L, -1))
+  {
+    lua_settop(L, base);
+    return false;
+  }
+  lua_getfield(L, -1, "lsp");
+  if (lua_isnil(L, -1))
+  {
+    lua_settop(L, base);
+    return false;
+  }
+  lua_getfield(L, -1, "policy");
+  if (lua_isnil(L, -1))
+  {
+    lua_settop(L, base);
+    return false;
+  }
+  lua_getfield(L, -1, "preset");
+  lua_remove(L, -2); // policy
+  lua_remove(L, -2); // lsp
+  lua_remove(L, -2); // jot
+  if (!lua_isfunction(L, -1))
+  {
+    lua_settop(L, base);
+    return false;
+  }
+  lua_pushlstring(L, name.data(), name.size());
+  if (lua_pcall(L, 1, 1, 0) != LUA_OK)
+  {
+    std::cerr << "[lsp-policy] preset failed: " << lua_tostring(L, -1) << "\n";
+    lua_settop(L, base);
+    return false;
+  }
+  if (!lua_istable(L, -1))
+  {
+    lua_settop(L, base);
+    return true;
+  }
+  lua_pushnil(L);
+  while (lua_next(L, -2) != 0)
+  {
+    if (lua_type(L, -2) == LUA_TNUMBER && lua_istable(L, -1))
+    {
+      LspPolicyTool tool;
+      lua_getfield(L, -1, "kind");
+      if (lua_isstring(L, -1))
+        tool.kind = lua_tostring(L, -1);
+      lua_pop(L, 1);
+      lua_getfield(L, -1, "name");
+      if (lua_isstring(L, -1))
+        tool.name = lua_tostring(L, -1);
+      lua_pop(L, 1);
+      if (!tool.name.empty())
+      {
+        out->push_back(std::move(tool));
+      }
+    }
+    lua_pop(L, 1);
+  }
+  lua_settop(L, base);
   return true;
 }

@@ -488,6 +488,21 @@ struct LspServerSpec
   std::string detail;
 };
 
+// Extra server an attach-policy entry wants launched next to the primary one.
+struct LspPolicyExtra
+{
+  std::string server; // canonical registry id (client key / status label)
+  std::string bin;    // binary name under the managed install root / PATH
+  std::vector<std::string> args;
+};
+
+// One item of a one-shot toolkit preset ("web").
+struct LspPolicyTool
+{
+  std::string kind; // "lsp" or "parser"
+  std::string name;
+};
+
 class LuaAPI
 {
 private:
@@ -639,6 +654,16 @@ public:
   bool lsp_install_plan(const std::string &name, std::string *id, std::string *script, std::string *message);
   bool lsp_remove_plan(const std::string &name, std::string *id, std::string *script, std::string *message);
   bool lsp_install_list(std::vector<LspServerSpec> *out);
+  bool load_lsp_policy(lua_State *L);
+  // Extra servers the Lua attach policy wants for `filepath` on top of its
+  // primary `language` server (web stacks: tailwind/eslint next to
+  // typescript). Each entry names the registry server id plus the binary to
+  // launch and its stdio args. Returns false when no policy is registered.
+  bool lsp_policy_extras(const std::string &language,
+                         const std::string &filepath,
+                         std::vector<LspPolicyExtra> *out);
+  // One-shot toolkit presets ("web") as {kind="lsp"|"parser", name=...} items.
+  bool lsp_policy_preset(const std::string &name, std::vector<LspPolicyTool> *out);
 
   // Lua UI surfaces: a handler registered through jot.ui.handler(name, fn)
   // takes over rendering of a native surface. Native state is pushed as a

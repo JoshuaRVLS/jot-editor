@@ -1224,6 +1224,37 @@ namespace
     }
     return symbols;
   }
+
+  // textDocument/formatting returns an array of TextEdit objects
+  // ({range:{start,end}, newText}). Positions are returned in the negotiated
+  // encoding (usually UTF-16); character offsets stay raw here and the caller
+  // converts them to editor columns so a per-document text map is available.
+  void format_edits_from_result(const JsonValue &result, std::vector<LSPTextEdit> &out)
+  {
+    if (result.type != JsonValue::Array)
+    {
+      return;
+    }
+    for (const auto &item : result.array_value)
+    {
+      if (item.type != JsonValue::Object)
+      {
+        continue;
+      }
+      LSPTextEdit edit;
+      const JsonValue *range = json_object_get(item, "range");
+      if (!parse_range_start(range,
+                             edit.start_line,
+                             edit.start_char,
+                             edit.end_line,
+                             edit.end_char))
+      {
+        continue;
+      }
+      edit.new_text = json_string_or_empty(json_object_get(item, "newText"));
+      out.push_back(std::move(edit));
+    }
+  }
 } // namespace
 
 std::string LSPClient::file_uri_from_path(const std::string &path)
@@ -1724,11 +1755,13 @@ bool LSPClient::start()
   pending_signature_requests.clear();
   pending_definition_requests.clear();
   pending_document_symbol_requests.clear();
+  pending_format_requests.clear();
   pending_completions.clear();
   pending_hovers.clear();
   pending_signatures.clear();
   pending_definitions.clear();
   pending_document_symbols.clear();
+  pending_formats.clear();
   stdout_buffer.clear();
   stderr_buffer.clear();
   outbound_buffer.clear();
@@ -1877,11 +1910,13 @@ void LSPClient::stop()
   pending_signature_requests.clear();
   pending_definition_requests.clear();
   pending_document_symbol_requests.clear();
+  pending_format_requests.clear();
   pending_completions.clear();
   pending_hovers.clear();
   pending_signatures.clear();
   pending_definitions.clear();
   pending_document_symbols.clear();
+  pending_formats.clear();
   outbound_buffer.clear();
   deferred_messages.clear();
 }
@@ -2198,6 +2233,33 @@ void LSPClient::handle_stdout_data(const std::string &data)
       }
       pending_document_symbols.push_back(std::move(symbols));
       pending_document_symbol_requests.erase(symbol_it);
+      continue;
+    }
+
+    auto format_it = pending_format_requests.find(request_id);
+    if (format_it != pending_format_requests.end())
+    {
+      const auto current_version = file_versions.find(format_it->second.filepath);
+      if (current_version == file_versions.end()
+          || current_version->second != format_it->second.version)
+      {
+        pending_format_requests.erase(format_it);
+        continue;
+      }
+      std::vector<LSPTextEdit> edits;
+      if (result)
+      {
+        format_edits_from_result(*result, edits);
+        for (auto &edit : edits)
+        {
+          edit.start_char = editor_character(
+              format_it->second.filepath, edit.start_line, edit.start_char);
+          edit.end_char = editor_character(
+              format_it->second.filepath, edit.end_line, edit.end_char);
+        }
+      }
+      pending_formats.push_back({format_it->second.filepath, std::move(edits)});
+      pending_format_requests.erase(format_it);
       continue;
     }
   }
@@ -2684,6 +2746,59 @@ std::vector<LSPDocumentSymbolResult> LSPClient::consume_document_symbol_results(
     last_symbols_ = out;
   }
   return out;
+}
+
+bool LSPClient::request_format(const std::string &filepath, int tab_size)
+{
+  if (!running || !initialized)
+  {
+    return false;
+  }
+
+  std::string abs_path = fs::absolute(filepath).string();
+  if (pending_format_requests.size() >= 64)
+  {
+    last_error = "too many pending LSP format requests";
+    return false;
+  }
+  int request_id = next_request_id++;
+  pending_format_requests[request_id] =
+      PendingDocumentRequest{abs_path, file_versions[abs_path]};
+
+  std::ostringstream json;
+  json << "{"
+       << "\"jsonrpc\":\"2.0\","
+       << "\"id\":" << request_id << ","
+       << "\"method\":\"textDocument/formatting\","
+       << "\"params\":{"
+       << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path)) << "\"},"
+       << "\"options\":{\"tabSize\":" << std::max(1, tab_size)
+       << ",\"insertSpaces\":true}"
+       << "}"
+       << "}";
+
+  if (!send_message(json.str()))
+  {
+    pending_format_requests.erase(request_id);
+    return false;
+  }
+  return true;
+}
+
+std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> LSPClient::consume_format_results()
+{
+  auto out = std::move(pending_formats);
+  pending_formats.clear();
+  return out;
+}
+
+bool LSPClient::has_open_document(const std::string &filepath) const
+{
+  if (filepath.empty())
+  {
+    return false;
+  }
+  return file_versions.find(fs::absolute(filepath).string()) != file_versions.end();
 }
 
 std::string LSPClient::describe() const

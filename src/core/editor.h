@@ -242,6 +242,29 @@ private:
 
   void handle_terminal_event(const Event &ev);
   void render_frame();
+  // Starts (or reuses) a single client process for one server id at a root;
+  // shared by the primary attach and the extra policy servers.
+  LSPClient *ensure_lsp_client_process(const std::string &server,
+                                       const std::string &root_path,
+                                       const std::vector<std::string> &command,
+                                       const std::vector<std::string> &library_dirs);
+  // All live clients that should receive document notifications for a file:
+  // the primary server plus policy extras attached at the same workspace
+  // root. Root is returned for callers that need it.
+  std::vector<LSPClient *> attached_lsp_clients_for(const std::string &filepath,
+                                                    std::string *root_out,
+                                                    std::string *primary_out);
+  // Merges the per-server diagnostic slices for one file into the buffer.
+  void refresh_lsp_diagnostics_for(const std::string &filepath);
+  // Drops one server's slices and refreshes the affected files (client died,
+  // server removed, …).
+  void drop_lsp_diagnostics_for_client(const std::string &server, const std::string &root);
+  // Routes :format through the attached LSP server (textDocument/formatting)
+  // when one is ready; returns false so the caller falls back to re-indent.
+  bool lsp_format_active_buffer();
+  // Applies server text edits (format results) to the buffer in place.
+  void apply_lsp_text_edits(const std::string &filepath,
+                            const std::vector<LSPTextEdit> &edits);
   LSPClient *ensure_lsp_for_file(const std::string &filepath);
   void notify_lsp_open(const std::string &filepath);
   // Attaches any already-open buffers whose language matches `language` to a
@@ -256,6 +279,9 @@ private:
   void set_lsp_server_enabled(const std::string &server, bool enabled);
   bool install_lsp_server(const std::string &name);
   bool remove_lsp_server(const std::string &name);
+  // One-shot toolkit presets from the Lua policy (currently "web": the
+  // typescript/html/css/json servers plus their tree-sitter parsers).
+  void install_web_toolchain();
   // Registry-owned "id1|id2|..." list for usage messages / completions.
   std::string lsp_install_usage_hint() const;
   bool install_tree_sitter_language(const std::string &language);

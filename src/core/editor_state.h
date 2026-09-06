@@ -152,6 +152,9 @@ struct EditorState
   std::unordered_map<std::string, long long> lsp_pending_changes;
   std::vector<LspInstallJob> lsp_install_jobs;
   std::set<std::string> lsp_disabled_servers;
+  // LSP published diagnostics kept per (server|root -> filepath) so several
+  // servers attached to one buffer merge instead of clobbering each other.
+  std::map<std::string, std::map<std::string, std::vector<Diagnostic>>> lsp_diag_slices_;
   int current_integrated_terminal;
   std::vector<TerminalTask> terminal_tasks;
   std::string last_terminal_task_name;

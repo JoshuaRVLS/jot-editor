@@ -10,6 +10,7 @@ add_executable(jot_tests
   test_terminal.cpp
   test_lsp.cpp
   test_lsp_install.cpp
+  test_lsp_policy.cpp
   test_popup.cpp
   test_tree_sitter_install.cpp
   test_telescope.cpp

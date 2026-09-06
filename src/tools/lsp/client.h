@@ -98,6 +98,15 @@ struct LSPDocumentSymbolResult
   std::vector<LSPSymbol> symbols;
 };
 
+struct LSPTextEdit
+{
+  int start_line = 0;
+  int start_char = 0;
+  int end_line = 0;
+  int end_char = 0;
+  std::string new_text;
+};
+
 class LSPClient
 {
 private:
@@ -155,11 +164,13 @@ private:
   std::map<int, PendingPositionRequest> pending_signature_requests;
   std::map<int, PendingPositionRequest> pending_definition_requests;
   std::map<int, PendingDocumentRequest> pending_document_symbol_requests;
+  std::map<int, PendingDocumentRequest> pending_format_requests;
   std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>> pending_completions;
   std::vector<LSPHoverResult> pending_hovers;
   std::vector<LSPSignatureHelpResult> pending_signatures;
   std::vector<LSPDefinitionResult> pending_definitions;
   std::vector<LSPDocumentSymbolResult> pending_document_symbols;
+  std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> pending_formats;
 
   bool send_message(const std::string &json, bool allow_during_initialization = false);
   bool flush_pending_writes();
@@ -203,12 +214,20 @@ public:
                               char trigger_character = '\0');
   bool request_definition(const std::string &filepath, int line, int character);
   bool request_document_symbols(const std::string &filepath);
+  // Asks the server to format the whole document. Character offsets in the
+  // returned edits are converted to editor (UTF-8 byte) columns before they
+  // are handed back through consume_format_results().
+  bool request_format(const std::string &filepath, int tab_size);
   std::vector<std::pair<std::string, std::vector<Diagnostic>>> consume_published_diagnostics();
   std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>> consume_completion_items();
   std::vector<LSPHoverResult> consume_hover_results();
   std::vector<LSPSignatureHelpResult> consume_signature_results();
   std::vector<LSPDefinitionResult> consume_definition_results();
   std::vector<LSPDocumentSymbolResult> consume_document_symbol_results();
+  std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> consume_format_results();
+  // True when this client has a document (didOpen without didClose). Used to
+  // route close/change notifications to every server attached to a file.
+  bool has_open_document(const std::string &filepath) const;
 
   bool is_running() const
   {

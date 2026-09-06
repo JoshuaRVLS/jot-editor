@@ -949,19 +949,25 @@ void Editor::poll_lsp_clients()
   for (const auto &filepath : ready_changes)
   {
     lsp_pending_changes.erase(filepath);
-    LSPClient *client = ensure_lsp_for_file(filepath);
-    if (!client)
+    // Attach the primary server (and any policy extras) before broadcasting.
+    if (!ensure_lsp_for_file(filepath))
     {
       continue;
     }
-
+    std::string root;
+    std::string primary;
+    const auto clients = attached_lsp_clients_for(filepath, &root, &primary);
     for (const auto &buf : buffers)
     {
-      if (buf.filepath == filepath)
+      if (buf.filepath != filepath)
+      {
+        continue;
+      }
+      for (LSPClient *client : clients)
       {
         client->did_change(filepath, get_buffer_text(buf));
-        break;
       }
+      break;
     }
   }
 
@@ -984,10 +990,24 @@ void Editor::poll_lsp_clients()
     {
       continue;
     }
+    // Diagnostics are stored per (server, file) and merged on refresh so two
+    // servers attached to one buffer never clobber each other's findings.
     auto published = client->consume_published_diagnostics();
-    for (auto &entry : published)
+    if (!published.empty())
     {
-      set_diagnostics(entry.first, entry.second);
+      const std::string client_key =
+          client->get_language() + "|" + client->get_root_path();
+      for (auto &entry : published)
+      {
+        lsp_diag_slices_[client_key][entry.first] = std::move(entry.second);
+        refresh_lsp_diagnostics_for(entry.first);
+      }
+    }
+
+    auto formats = client->consume_format_results();
+    for (auto &entry : formats)
+    {
+      apply_lsp_text_edits(entry.first, entry.second);
     }
 
     auto completions = client->consume_completion_items();
@@ -1334,6 +1354,53 @@ LSPClient *Editor::find_lsp_client(const std::string &language, const std::strin
   return nullptr;
 }
 
+LSPClient *Editor::ensure_lsp_client_process(const std::string &server,
+                                             const std::string &root_path,
+                                             const std::vector<std::string> &command,
+                                             const std::vector<std::string> &library_dirs)
+{
+  size_t existing_index = lsp_clients.size();
+  for (size_t i = 0; i < lsp_clients.size(); i++)
+  {
+    if (lsp_clients[i] && lsp_clients[i]->get_language() == server
+        && lsp_clients[i]->get_root_path() == root_path)
+    {
+      existing_index = i;
+      break;
+    }
+  }
+  if (existing_index < lsp_clients.size())
+  {
+    LSPClient *existing = lsp_clients[existing_index].get();
+    if (existing->is_running())
+    {
+      return existing;
+    }
+    // A dead client may hold a stale command from when the server binary was
+    // not yet installed (bare name or vanished path). Restarting it would just
+    // fail again, so drop it and rebuild below with a freshly resolved command.
+    drop_lsp_diagnostics_for_client(server, root_path);
+    unwatch_lsp_client_fds(existing);
+    existing->stop();
+    lsp_clients.erase(lsp_clients.begin() + (long)existing_index);
+  }
+
+  if (command.empty())
+  {
+    return nullptr;
+  }
+  auto client = std::make_unique<LSPClient>(server, root_path, command, library_dirs);
+  if (!client->start())
+  {
+    set_message("LSP start failed for " + server + ": " + client->get_last_error());
+    return nullptr;
+  }
+
+  lsp_clients.push_back(std::move(client));
+  watch_lsp_client_fds(lsp_clients.back().get());
+  return lsp_clients.back().get();
+}
+
 LSPClient *Editor::ensure_lsp_for_file(const std::string &filepath)
 {
   if (filepath.empty())
@@ -1352,36 +1419,7 @@ LSPClient *Editor::ensure_lsp_for_file(const std::string &filepath)
   }
 
   const std::string root = find_workspace_root(filepath, language);
-  size_t existing_index = lsp_clients.size();
-  for (size_t i = 0; i < lsp_clients.size(); i++)
-  {
-    if (lsp_clients[i] && lsp_clients[i]->get_language() == language
-        && lsp_clients[i]->get_root_path() == root)
-    {
-      existing_index = i;
-      break;
-    }
-  }
-  if (existing_index < lsp_clients.size())
-  {
-    LSPClient *existing = lsp_clients[existing_index].get();
-    if (existing->is_running())
-    {
-      return existing;
-    }
-    // A dead client may hold a stale command from when the server binary was
-    // not yet installed (bare name or vanished path). Restarting it would just
-    // fail again, so drop it and rebuild below with a freshly resolved command.
-    unwatch_lsp_client_fds(existing);
-    existing->stop();
-    lsp_clients.erase(lsp_clients.begin() + (long)existing_index);
-  }
-
   std::vector<std::string> command = command_for_language(language);
-  if (command.empty())
-  {
-    return nullptr;
-  }
 
   // For lua, register the bundled jot API stub (EmmyLua annotations) as a
   // server library so user scripts get completions for the whole jot.*
@@ -1397,16 +1435,98 @@ LSPClient *Editor::ensure_lsp_for_file(const std::string &filepath)
     }
   }
 
-  auto client = std::make_unique<LSPClient>(language, root, command, library_dirs);
-  if (!client->start())
+  LSPClient *primary = ensure_lsp_client_process(language, root, command, library_dirs);
+  if (!primary)
   {
-    set_message("LSP start failed for " + language + ": " + client->get_last_error());
     return nullptr;
   }
 
-  lsp_clients.push_back(std::move(client));
-  watch_lsp_client_fds(lsp_clients.back().get());
-  return lsp_clients.back().get();
+  // Extra servers the Lua policy wants next to the primary one (web stacks:
+  // tailwind / eslint beside typescript, …). One file can therefore be served
+  // by several LSP clients at once; document notifications broadcast to all of
+  // them (see attached_lsp_clients_for) and diagnostics merge per buffer.
+  std::vector<LspPolicyExtra> extras;
+  if (lua_api && lua_api->lsp_policy_extras(language, filepath, &extras))
+  {
+    for (const auto &extra : extras)
+    {
+      if (extra.server.empty() || lsp_disabled_servers.count(extra.server))
+      {
+        continue;
+      }
+      if (extra.bin.empty() || !lsp_bin_available(extra.bin))
+      {
+        continue;
+      }
+      std::vector<std::string> extra_command = {resolve_lsp_bin(extra.bin)};
+      for (const auto &arg : extra.args)
+      {
+        if (!arg.empty())
+        {
+          extra_command.push_back(arg);
+        }
+      }
+      ensure_lsp_client_process(extra.server, root, extra_command, {});
+    }
+  }
+  return primary;
+}
+
+std::vector<LSPClient *> Editor::attached_lsp_clients_for(const std::string &filepath,
+                                                          std::string *root_out,
+                                                          std::string *primary_out)
+{
+  std::vector<LSPClient *> out;
+  if (filepath.empty())
+  {
+    return out;
+  }
+  const std::string primary = detect_lsp_language(filepath);
+  if (primary.empty())
+  {
+    return out;
+  }
+  const std::string root = find_workspace_root(filepath, primary);
+  if (root_out)
+  {
+    *root_out = root;
+  }
+  if (primary_out)
+  {
+    *primary_out = primary;
+  }
+
+  std::vector<std::string> extra_servers;
+  std::vector<LspPolicyExtra> extras;
+  if (lua_api && lua_api->lsp_policy_extras(primary, filepath, &extras))
+  {
+    for (const auto &extra : extras)
+    {
+      extra_servers.push_back(extra.server);
+    }
+  }
+
+  auto covers = [&](const LSPClient *client)
+  {
+    if (!client || !client->is_running() || client->get_root_path() != root)
+    {
+      return false;
+    }
+    if (client->get_language() == primary)
+    {
+      return true;
+    }
+    return std::find(extra_servers.begin(), extra_servers.end(), client->get_language())
+           != extra_servers.end();
+  };
+  for (auto &client : lsp_clients)
+  {
+    if (covers(client.get()))
+    {
+      out.push_back(client.get());
+    }
+  }
+  return out;
 }
 
 std::string Editor::get_buffer_text(const FileBuffer &buf) const
@@ -1434,27 +1554,240 @@ std::string Editor::get_buffer_text(const FileBuffer &buf) const
   return text;
 }
 
+void Editor::refresh_lsp_diagnostics_for(const std::string &filepath)
+{
+  if (filepath.empty())
+  {
+    return;
+  }
+  std::vector<Diagnostic> merged;
+  for (const auto &by_client : lsp_diag_slices_)
+  {
+    const auto it = by_client.second.find(filepath);
+    if (it == by_client.second.end())
+    {
+      continue;
+    }
+    for (const auto &diag : it->second)
+    {
+      merged.push_back(diag);
+    }
+  }
+  // set_diagnostics normalizes the path, dedupes buffer hits, bumps the
+  // sidebar cache and fires DiagnosticChanged exactly once per refresh.
+  set_diagnostics(filepath, merged);
+}
+
+void Editor::drop_lsp_diagnostics_for_client(const std::string &server,
+                                             const std::string &root)
+{
+  const std::string client_key = server + "|" + root;
+  auto it = lsp_diag_slices_.find(client_key);
+  if (it == lsp_diag_slices_.end())
+  {
+    return;
+  }
+  std::vector<std::string> affected;
+  affected.reserve(it->second.size());
+  for (const auto &entry : it->second)
+  {
+    affected.push_back(entry.first);
+  }
+  lsp_diag_slices_.erase(it);
+  for (const auto &filepath : affected)
+  {
+    refresh_lsp_diagnostics_for(filepath);
+  }
+}
+
+bool Editor::lsp_format_active_buffer()
+{
+  auto &buf = get_buffer();
+  if (buf.filepath.empty() || buf.is_lazy())
+  {
+    return false;
+  }
+  LSPClient *client = ensure_lsp_for_file(buf.filepath);
+  if (!client || !client->is_running() || !client->is_initialized()
+      || !client->has_open_document(buf.filepath))
+  {
+    return false;
+  }
+  if (!client->request_format(buf.filepath, std::max(1, tab_size)))
+  {
+    return false;
+  }
+  set_message("Formatting via " + client->describe());
+  needs_redraw = true;
+  return true;
+}
+
+void Editor::apply_lsp_text_edits(const std::string &filepath,
+                                  const std::vector<LSPTextEdit> &edits)
+{
+  if (edits.empty())
+  {
+    return;
+  }
+  FileBuffer *target = nullptr;
+  for (auto &buf : buffers)
+  {
+    if (buf.filepath == filepath && !buf.is_lazy())
+    {
+      target = &buf;
+      break;
+    }
+  }
+  if (!target)
+  {
+    return;
+  }
+
+  // Apply highest-first so earlier positions stay valid.
+  std::vector<LSPTextEdit> sorted = edits;
+  std::sort(sorted.begin(),
+            sorted.end(),
+            [](const LSPTextEdit &a, const LSPTextEdit &b)
+            {
+              if (a.start_line != b.start_line)
+              {
+                return a.start_line > b.start_line;
+              }
+              return a.start_char > b.start_char;
+            });
+
+  bool applied_any = false;
+  for (const auto &edit : sorted)
+  {
+    const int line_count = (int)target->lines.size();
+    const int sl = std::clamp(edit.start_line, 0, std::max(0, line_count - 1));
+    const int el = std::clamp(edit.end_line, 0, std::max(0, line_count - 1));
+    if (sl > el)
+    {
+      continue;
+    }
+    int sc = std::clamp(edit.start_char, 0, (int)target->lines[(size_t)sl].size());
+    int ec = std::clamp(edit.end_char, 0, (int)target->lines[(size_t)el].size());
+    if (sl == el && sc > ec)
+    {
+      std::swap(sc, ec); // degenerate reversed range on one line
+    }
+    if (sl == el && sc == ec && edit.new_text.empty())
+    {
+      continue; // empty no-op edit
+    }
+
+    if (!applied_any)
+    {
+      save_state();
+      applied_any = true;
+    }
+
+    // Rebuild the row list for the edited span. Row sl keeps its head up to
+    // sc, row el keeps its tail from ec; the replacement text is spliced
+    // between them (its own newlines become new rows).
+    const std::string head = target->lines[(size_t)sl].substr(0, (size_t)sc);
+    const std::string tail = target->lines[(size_t)el].substr((size_t)ec);
+
+    std::vector<std::string> parts; // newText split on '\n'
+    {
+      size_t pos = 0;
+      while (pos <= edit.new_text.size())
+      {
+        const size_t nl = edit.new_text.find('\n', pos);
+        if (nl == std::string::npos)
+        {
+          parts.push_back(edit.new_text.substr(pos));
+          break;
+        }
+        parts.push_back(edit.new_text.substr(pos, nl - pos));
+        pos = nl + 1;
+      }
+      if (parts.empty())
+      {
+        parts.push_back("");
+      }
+    }
+
+    std::vector<std::string> out;
+    out.reserve(target->lines.size() + parts.size());
+    for (int i = 0; i < sl; i++)
+    {
+      out.push_back(target->lines[(size_t)i]);
+    }
+    const size_t last = parts.size() - 1;
+    for (size_t j = 0; j < parts.size(); j++)
+    {
+      std::string row = (j == 0 ? head : "");
+      row += parts[j];
+      if (j == last)
+      {
+        row += tail;
+      }
+      out.push_back(std::move(row));
+    }
+    for (int i = el + 1; i < line_count; i++)
+    {
+      out.push_back(target->lines[(size_t)i]);
+    }
+    target->lines = std::move(out);
+  }
+
+  if (applied_any)
+  {
+    target->modified = true;
+    invalidate_syntax_cache(*target);
+    if (target->cursor.y >= (int)target->lines.size())
+    {
+      target->cursor.y = std::max(0, (int)target->lines.size() - 1);
+    }
+    target->cursor.x =
+        std::clamp(target->cursor.x, 0, (int)target->lines[(size_t)target->cursor.y].size());
+    needs_redraw = true;
+    if (!target->filepath.empty())
+    {
+      notify_lsp_change(target->filepath);
+    }
+  }
+}
+
 void Editor::notify_lsp_open(const std::string &filepath)
 {
   if (filepath.empty())
   {
     return;
   }
-  set_diagnostics(filepath, {});
-  LSPClient *client = ensure_lsp_for_file(filepath);
-  if (!client)
+  // A fresh open re-derives diagnostics: clear every server's slices for this
+  // file so a publish from one server never re-mixes stale ones.
+  for (auto &by_client : lsp_diag_slices_)
+  {
+    by_client.second.erase(filepath);
+  }
+  refresh_lsp_diagnostics_for(filepath);
+
+  if (!ensure_lsp_for_file(filepath))
   {
     return;
   }
 
+  std::string root;
+  std::string primary;
+  const auto clients = attached_lsp_clients_for(filepath, &root, &primary);
+  if (clients.empty())
+  {
+    return;
+  }
+  const std::string language_id = language_id_for(primary, filepath);
   for (const auto &buf : buffers)
   {
     if (buf.filepath == filepath)
     {
       if (buf.is_lazy())
         return;
-      client->did_open(
-          filepath, language_id_for(client->get_language(), filepath), get_buffer_text(buf));
+      for (LSPClient *client : clients)
+      {
+        client->did_open(filepath, language_id, get_buffer_text(buf));
+      }
       break;
     }
   }
@@ -1476,17 +1809,21 @@ void Editor::heal_lsp_attach_for(const std::string &language)
     {
       continue;
     }
-    LSPClient *client = ensure_lsp_for_file(buf.filepath);
-    if (!client)
+    if (!ensure_lsp_for_file(buf.filepath))
     {
       continue;
     }
-    // Safe when the document is already open on this client: LSPClient turns
-    // a duplicate did_open into a full-text didChange, and after a restart
-    // its version table is empty so this sends a real didOpen.
-    client->did_open(
-        buf.filepath, language_id_for(client->get_language(), buf.filepath), get_buffer_text(buf));
-    set_diagnostics(buf.filepath, {});
+    std::string root;
+    std::string primary;
+    const auto clients = attached_lsp_clients_for(buf.filepath, &root, &primary);
+    const std::string language_id = language_id_for(primary, buf.filepath);
+    for (LSPClient *client : clients)
+    {
+      // Safe when the document is already open on this client: LSPClient turns
+      // a duplicate did_open into a full-text didChange, and after a restart
+      // its version table is empty so this sends a real didOpen.
+      client->did_open(buf.filepath, language_id, get_buffer_text(buf));
+    }
   }
 }
 
@@ -1506,17 +1843,21 @@ void Editor::notify_lsp_save(const std::string &filepath)
     return;
   }
   lsp_pending_changes.erase(filepath);
-  LSPClient *client = ensure_lsp_for_file(filepath);
-  if (!client)
+  if (!ensure_lsp_for_file(filepath))
   {
     return;
   }
-
+  std::string root;
+  std::string primary;
+  const auto clients = attached_lsp_clients_for(filepath, &root, &primary);
   for (const auto &buf : buffers)
   {
     if (buf.filepath == filepath)
     {
-      client->did_save(filepath, get_buffer_text(buf));
+      for (LSPClient *client : clients)
+      {
+        client->did_save(filepath, get_buffer_text(buf));
+      }
       break;
     }
   }
@@ -1529,15 +1870,18 @@ void Editor::notify_lsp_close(const std::string &filepath)
     return;
   }
   lsp_pending_changes.erase(filepath);
-  const std::string language = detect_lsp_language(filepath);
-  if (language.empty())
+  // Tell every server that still has the document open, then forget our
+  // diagnostic slices for it.
+  for (auto &client : lsp_clients)
   {
-    return;
+    if (client && client->has_open_document(filepath))
+    {
+      client->did_close(filepath);
+    }
   }
-  const std::string root = find_workspace_root(filepath, language);
-  if (LSPClient *client = find_lsp_client(language, root))
+  for (auto &by_client : lsp_diag_slices_)
   {
-    client->did_close(filepath);
+    by_client.second.erase(filepath);
   }
 }
 
@@ -1545,6 +1889,7 @@ void Editor::stop_all_lsp_clients()
 {
   int stopped = 0;
   lsp_pending_changes.clear();
+  lsp_diag_slices_.clear();
   for (auto &buf : buffers)
   {
     if (!buf.filepath.empty())
@@ -1572,6 +1917,9 @@ void Editor::stop_all_lsp_clients()
 void Editor::restart_all_lsp_clients()
 {
   lsp_pending_changes.clear();
+  // Old diagnostics belong to the pre-restart documents; refresh re-opens
+  // every file below and servers re-publish fresh ones.
+  lsp_diag_slices_.clear();
   for (auto &buf : buffers)
   {
     if (!buf.filepath.empty())
@@ -1622,6 +1970,7 @@ void Editor::set_lsp_server_enabled(const std::string &server, bool enabled)
     {
       if (client && client->get_language() == server)
       {
+        drop_lsp_diagnostics_for_client(server, client->get_root_path());
         unwatch_lsp_client_fds(client.get());
         client->stop();
       }
@@ -1787,6 +2136,39 @@ bool Editor::handle_lsp_status_input(int ch)
   return true;
 }
 
+void Editor::install_web_toolchain()
+{
+  std::vector<LspPolicyTool> tools;
+  if (!lua_api || !lua_api->lsp_policy_preset("web", &tools))
+  {
+    set_message("Web toolkit preset unavailable (Lua policy not loaded)");
+    needs_redraw = true;
+    return;
+  }
+  int servers = 0;
+  int parsers = 0;
+  for (const auto &tool : tools)
+  {
+    if (tool.kind == "lsp")
+    {
+      if (install_lsp_server(tool.name))
+      {
+        servers++;
+      }
+    }
+    else if (tool.kind == "parser")
+    {
+      if (install_tree_sitter_language(tool.name))
+      {
+        parsers++;
+      }
+    }
+  }
+  set_message("Web toolkit queued: " + std::to_string(servers) + " LSP server(s) + "
+              + std::to_string(parsers) + " parser(s)");
+  needs_redraw = true;
+}
+
 bool Editor::install_lsp_server(const std::string &name)
 {
   // The Lua installer registry owns server resolution (ids + aliases) and
@@ -1909,6 +2291,7 @@ bool Editor::remove_lsp_server(const std::string &name)
   {
     if (client && client->get_language() == server)
     {
+      drop_lsp_diagnostics_for_client(server, client->get_root_path());
       unwatch_lsp_client_fds(client.get());
       client->stop();
     }

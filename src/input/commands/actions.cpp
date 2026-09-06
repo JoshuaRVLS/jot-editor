@@ -4,6 +4,17 @@
 void Editor::format_document()
 {
   auto &buf = get_buffer();
+  if (!buf.filepath.empty())
+  {
+    // When a language server is attached to the buffer, :format asks the
+    // server for a proper textDocument/formatting pass (ts-ls, css/html/json
+    // langservers, …) instead of re-indenting. Results arrive asynchronously
+    // through the LSP poll and are applied in place.
+    if (lsp_format_active_buffer())
+    {
+      return;
+    }
+  }
   save_state();
   for (size_t i = 0; i < buf.line_count(); i++)
   {

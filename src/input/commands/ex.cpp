@@ -978,6 +978,10 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
     {
       set_message("Usage: :" + lcmd + " <" + lsp_install_usage_hint() + ">");
     }
+    else if (lcmd == "lspinstall" && (arg == "web" || arg == "fullstack"))
+    {
+      install_web_toolchain();
+    }
     else if (lcmd == "lspinstall")
     {
       install_lsp_server(arg);
@@ -1027,6 +1031,10 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
     if (arg.empty())
     {
       set_message("Usage: :tsinstall <language>");
+    }
+    else if (arg == "web" || arg == "fullstack")
+    {
+      install_web_toolchain();
     }
     else
     {
