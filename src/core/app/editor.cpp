@@ -255,6 +255,8 @@ void Editor::initialize_state_defaults()
   pane_resize_vertical = false;
   pane_resize_start_pos = 0;
   pane_resize_start_ratio = 0.5f;
+  pane_zoom_active = false;
+  pane_zoom_pane = -1;
   sidebar_resize_dragging = false;
   sidebar_resize_opening = false;
   sidebar_resize_start_x = 0;

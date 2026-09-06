@@ -250,6 +250,23 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
       split_pane_right();
       return;
     }
+    // Pane operations: equalize, zoom, swap. Kept on Ctrl+Alt like the
+    // splits above so the whole pane vocabulary shares one modifier family.
+    if (ch == 'e' || ch == 'E' || original_ch == 'e' || original_ch == 'E')
+    {
+      equalize_panes();
+      return;
+    }
+    if (ch == 'z' || ch == 'Z' || original_ch == 'z' || original_ch == 'Z')
+    {
+      toggle_pane_zoom();
+      return;
+    }
+    if (ch == 'x' || ch == 'X' || original_ch == 'x' || original_ch == 'X')
+    {
+      swap_panes();
+      return;
+    }
   }
 
   if (is_alt)

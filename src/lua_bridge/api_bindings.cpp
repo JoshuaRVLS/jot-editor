@@ -405,6 +405,29 @@ namespace
     lua_pushboolean(L, api(L).host().render.resize_focused_pane((int)luaL_checkinteger(L, 1)));
     return 1;
   }
+  int l_resize_direction(lua_State *L)
+  {
+    const std::string dir = luaL_checkstring(L, 1);
+    const char d = dir.empty() ? '\0' : (char)std::tolower((unsigned char)dir[0]);
+    const int step = (int)luaL_optinteger(L, 2, 1);
+    lua_pushboolean(L, api(L).host().render.resize_focused_pane_direction(d, step));
+    return 1;
+  }
+  int l_equalize(lua_State *L)
+  {
+    api(L).host().render.equalize_panes();
+    return 0;
+  }
+  int l_zoom(lua_State *L)
+  {
+    api(L).host().render.toggle_pane_zoom();
+    return 0;
+  }
+  int l_swap(lua_State *L)
+  {
+    api(L).host().render.swap_panes();
+    return 0;
+  }
   int l_redraw(lua_State *L)
   {
     api(L).host().render.request_redraw();
@@ -1527,6 +1550,10 @@ bool LuaAPI::init()
   field(L, "focus_next", l_focus_next);
   field(L, "focus_previous", l_focus_prev);
   field(L, "resize", l_resize);
+  field(L, "resize_direction", l_resize_direction);
+  field(L, "equalize", l_equalize);
+  field(L, "zoom", l_zoom);
+  field(L, "swap", l_swap);
   field(L, "redraw", l_redraw);
   lua_setfield(L, -2, "pane");
   lua_newtable(L);
@@ -1700,6 +1727,10 @@ bool LuaAPI::init()
   field(L, "focus_next", l_focus_next);
   field(L, "focus_previous", l_focus_prev);
   field(L, "resize", l_resize);
+  field(L, "resize_direction", l_resize_direction);
+  field(L, "equalize", l_equalize);
+  field(L, "zoom", l_zoom);
+  field(L, "swap", l_swap);
   command_field(L, this, "close", "Close Pane");
   lua_setfield(L, -2, "pane");
   lua_getglobal(L, "jot");

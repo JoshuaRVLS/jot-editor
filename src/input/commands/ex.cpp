@@ -457,6 +457,18 @@ bool Editor::execute_ex_command(const std::string &input_line)
       set_message("No pane below");
     }
   }
+  else if (lcmd == "equalizepanes" || lcmd == "eqp" || lcmd == "wq")
+  {
+    equalize_panes();
+  }
+  else if (lcmd == "panezoom" || lcmd == "zoom" || lcmd == "wz")
+  {
+    toggle_pane_zoom();
+  }
+  else if (lcmd == "swappanes" || lcmd == "wsw")
+  {
+    swap_panes();
+  }
   else if (lcmd == "wincmd")
   {
     std::string dir = to_lower_copy(trim_copy(arg));
@@ -477,9 +489,29 @@ bool Editor::execute_ex_command(const std::string &input_line)
     {
       focus_dir = 'l';
     }
+    else if (dir == "=")
+    {
+      equalize_panes();
+      return true;
+    }
+    else if (dir == "z")
+    {
+      toggle_pane_zoom();
+      return true;
+    }
+    else if (dir == "x")
+    {
+      swap_panes();
+      return true;
+    }
+    else if (dir == "q")
+    {
+      close_pane();
+      return true;
+    }
     if (focus_dir == '\0')
     {
-      set_message("Usage: :wincmd h|j|k|l");
+      set_message("Usage: :wincmd h|j|k|l|=|z|x|q");
     }
     else if (!focus_pane_direction(focus_dir))
     {

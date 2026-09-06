@@ -422,11 +422,20 @@ void Editor::render()
 
 void Editor::render_panes()
 {
-  for (const auto &pane : panes)
+  for (size_t i = 0; i < panes.size(); i++)
   {
-    render_pane(pane);
+    // While a pane is zoomed only it is drawn; the hidden panes stay parked
+    // off-screen until the zoom is toggled off.
+    if (pane_zoom_active && (int)i != current_pane)
+    {
+      continue;
+    }
+    render_pane(panes[i]);
   }
-  render_pane_resize_guides();
+  if (!pane_zoom_active)
+  {
+    render_pane_resize_guides();
+  }
 }
 
 void Editor::render_pane_resize_guides()

@@ -179,6 +179,33 @@ void Editor::update_pane_layout()
   int available_w = std::max(1, total_w - origin_x - right_w);
   int origin_y = menu_h;
 
+  if (pane_zoom_active && panes.size() > 1 && current_pane >= 0
+      && current_pane < (int)panes.size())
+  {
+    // Zoomed: the active pane owns the whole pane region; every other pane
+    // is parked off-screen (w/h 1) and skipped by the renderer until the
+    // zoom is toggled off, at which point the ratios restore the layout.
+    for (size_t i = 0; i < panes.size(); i++)
+    {
+      if ((int)i == current_pane)
+      {
+        panes[i].x = origin_x;
+        panes[i].y = origin_y;
+        panes[i].w = available_w;
+        panes[i].h = total_h;
+      }
+      else
+      {
+        panes[i].x = origin_x + available_w;
+        panes[i].y = origin_y;
+        panes[i].w = 1;
+        panes[i].h = 1;
+      }
+    }
+    pane_layout_mode = PANE_LAYOUT_SINGLE;
+    return;
+  }
+
   std::function<void(int, int, int, int, int)> layout_node =
       [&](int node_index, int x, int y, int w, int h)
   {
@@ -277,6 +304,13 @@ void Editor::split_pane_down()
 
 void Editor::split_pane_direction(int dx, int dy)
 {
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+    update_pane_layout();
+  }
+
   if (panes.empty())
   {
     create_pane(0, 0, ui->get_render_width(), ui->get_height() - status_height, current_buffer);
@@ -413,6 +447,13 @@ void Editor::split_pane_direction(int dx, int dy)
 
 void Editor::close_pane()
 {
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+    update_pane_layout();
+  }
+
   if (panes.size() <= 1)
   {
     message = "Can't close the last pane";
@@ -558,6 +599,13 @@ bool Editor::resize_current_pane(int delta)
     return false;
   }
 
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+    update_pane_layout();
+  }
+
   std::function<int(int, int)> find_leaf = [&](int node_index, int pane_index) -> int
   {
     if (node_index < 0 || node_index >= (int)pane_tree.size())
@@ -599,22 +647,205 @@ bool Editor::resize_current_pane_direction(char dir, int delta)
     return false;
   }
 
-  const SplitPane &pane = panes[(size_t)current_pane];
-  int x = (d == 'h') ? pane.x : (d == 'l') ? pane.x + pane.w - 1 : pane.x + pane.w / 2;
-  int y = (d == 'k') ? pane.y : (d == 'j') ? pane.y + pane.h - 1 : pane.y + pane.h / 2;
-  int node = pane_split_at_position(x, y);
-  if (node < 0)
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+    update_pane_layout();
+  }
+
+  // Directional resize is defined on the split tree, not on pixel probes:
+  // the divider that borders the current pane in the pressed direction is
+  // pushed one step that way (growing the current pane). If the pane already
+  // touches the outer edge in that direction, the divider on its opposite
+  // side is pushed the same way instead, which shrinks it -- so every press
+  // predictably changes the active pane's size.
+  std::function<int(int, int)> find_leaf = [&](int node_index, int pane_index) -> int
+  {
+    if (node_index < 0 || node_index >= (int)pane_tree.size())
+    {
+      return -1;
+    }
+    const PaneTreeNode &node = pane_tree[node_index];
+    if (node.leaf)
+    {
+      return node.pane_index == pane_index ? node_index : -1;
+    }
+    int first = find_leaf(node.first, pane_index);
+    return first >= 0 ? first : find_leaf(node.second, pane_index);
+  };
+
+  int leaf = find_leaf(pane_root, current_pane);
+  if (leaf < 0)
   {
     return false;
   }
 
-  int signed_delta = std::max(1, std::abs(delta));
-  if (d == 'h' || d == 'k')
+  std::function<bool(int, int)> subtree_holds = [&](int child, int target_leaf) -> bool
   {
-    signed_delta = -signed_delta;
+    if (child < 0 || child >= (int)pane_tree.size())
+    {
+      return false;
+    }
+    const PaneTreeNode &node = pane_tree[child];
+    if (node.leaf)
+    {
+      return child == target_leaf;
+    }
+    return subtree_holds(node.first, target_leaf) || subtree_holds(node.second, target_leaf);
+  };
+
+  // Horizontal keys move a vertical divider (node.vertical), vertical keys a
+  // horizontal one. 'l'/'j' push the divider away from the first child,
+  // 'h'/'k' toward it.
+  const bool vertical_axis = (d == 'h' || d == 'l');
+  const int sign = (d == 'l' || d == 'j') ? 1 : -1;
+  const int step = std::max(1, std::abs(delta));
+
+  // Climb from the current leaf: the lowest ancestor split along this axis
+  // where the pane sits on the pushed-away side owns the divider we want;
+  // the lowest one where it sits on the other side is the fallback when the
+  // pane reaches the outer edge.
+  int preferred = -1;
+  int fallback = -1;
+  int node = pane_tree[leaf].parent;
+  while (node >= 0 && node < (int)pane_tree.size())
+  {
+    const PaneTreeNode &n = pane_tree[node];
+    if (!n.leaf && n.vertical == vertical_axis)
+    {
+      const bool current_in_first = subtree_holds(n.first, leaf);
+      const bool push_side_is_first = (d == 'l' || d == 'j');
+      if (current_in_first == push_side_is_first)
+      {
+        if (preferred < 0)
+        {
+          preferred = node; // nearest such divider
+        }
+      }
+      else if (fallback < 0)
+      {
+        fallback = node;
+      }
+    }
+    node = n.parent;
   }
-  return adjust_pane_split_ratio(node, signed_delta);
+
+  int target = preferred >= 0 ? preferred : fallback;
+  if (target < 0)
+  {
+    return false; // no split along this axis anywhere near the pane
+  }
+  // clamp_only keeps boundary presses (already at min/max) quiet no-ops
+  // instead of reporting an error, like the mouse drag path.
+  return adjust_pane_split_ratio(target, sign * step, true);
 }
+
+void Editor::equalize_panes()
+{
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+  }
+  if (panes.size() < 2)
+  {
+    message = "No panes to equalize";
+    needs_redraw = true;
+    return;
+  }
+  for (auto &node : pane_tree)
+  {
+    if (!node.leaf)
+    {
+      node.ratio = 0.5f;
+    }
+  }
+  update_pane_layout();
+  message = "Panes equalized";
+  needs_redraw = true;
+}
+
+void Editor::toggle_pane_zoom()
+{
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+    message = "Pane zoomed out";
+  }
+  else
+  {
+    if (panes.size() < 2)
+    {
+      message = "No other pane to zoom over";
+      needs_redraw = true;
+      return;
+    }
+    pane_zoom_active = true;
+    pane_zoom_pane = current_pane;
+    message = "Pane zoomed";
+  }
+  update_pane_layout();
+  needs_redraw = true;
+}
+
+void Editor::swap_panes()
+{
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+    update_pane_layout();
+  }
+  if (panes.size() < 2)
+  {
+    message = "No other pane to swap with";
+    needs_redraw = true;
+    return;
+  }
+
+  std::function<int(int, int)> find_leaf = [&](int node_index, int pane_index) -> int
+  {
+    if (node_index < 0 || node_index >= (int)pane_tree.size())
+    {
+      return -1;
+    }
+    const PaneTreeNode &node = pane_tree[node_index];
+    if (node.leaf)
+    {
+      return node.pane_index == pane_index ? node_index : -1;
+    }
+    int first = find_leaf(node.first, pane_index);
+    return first >= 0 ? first : find_leaf(node.second, pane_index);
+  };
+
+  const int target = (current_pane + 1) % (int)panes.size();
+  int leaf_a = find_leaf(pane_root, current_pane);
+  int leaf_b = find_leaf(pane_root, target);
+  if (leaf_a < 0 || leaf_b < 0)
+  {
+    message = "Pane swap failed: invalid pane tree";
+    needs_redraw = true;
+    return;
+  }
+
+  std::swap(pane_tree[(size_t)leaf_a].pane_index, pane_tree[(size_t)leaf_b].pane_index);
+
+  // Focus stays on the window position, which now shows the swapped content.
+  const int now_at_focused_location = pane_tree[(size_t)leaf_a].pane_index;
+  for (auto &pane : panes)
+  {
+    pane.active = false;
+  }
+  current_pane = std::clamp(now_at_focused_location, 0, (int)panes.size() - 1);
+  panes[(size_t)current_pane].active = true;
+  current_buffer = panes[(size_t)current_pane].buffer_id;
+  update_pane_layout();
+  message = "Panes swapped";
+  needs_redraw = true;
+}
+
 
 int Editor::pane_split_at_position(int x, int y) const
 {
@@ -957,6 +1188,12 @@ void Editor::end_pane_resize_drag()
 
 void Editor::next_pane()
 {
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+    update_pane_layout();
+  }
   if (panes.size() > 1)
   {
     panes[current_pane].active = false;
@@ -970,6 +1207,12 @@ void Editor::next_pane()
 
 void Editor::prev_pane()
 {
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+    update_pane_layout();
+  }
   if (panes.size() > 1)
   {
     panes[current_pane].active = false;
@@ -986,6 +1229,13 @@ bool Editor::focus_pane_direction(char dir)
   if (panes.size() < 2 || current_pane < 0 || current_pane >= (int)panes.size())
   {
     return false;
+  }
+
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+    update_pane_layout();
   }
 
   char d = (char)std::tolower((unsigned char)dir);

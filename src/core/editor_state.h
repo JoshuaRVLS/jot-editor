@@ -213,6 +213,8 @@ struct EditorState
   bool pane_resize_vertical;
   int pane_resize_start_pos;
   float pane_resize_start_ratio;
+  bool pane_zoom_active; // true while one pane is expanded over the others
+  int pane_zoom_pane;    // pane index expanded while zoomed (-1 when off)
   bool sidebar_resize_dragging;
   bool sidebar_resize_opening;
   int sidebar_resize_start_x;

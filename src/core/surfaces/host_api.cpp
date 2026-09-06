@@ -321,6 +321,26 @@ bool HostRenderAPI::resize_focused_pane(int delta)
   return editor.resize_current_pane(delta);
 }
 
+bool HostRenderAPI::resize_focused_pane_direction(char dir, int step)
+{
+  return editor.resize_current_pane_direction(dir, step);
+}
+
+void HostRenderAPI::equalize_panes()
+{
+  editor.equalize_panes();
+}
+
+void HostRenderAPI::toggle_pane_zoom()
+{
+  editor.toggle_pane_zoom();
+}
+
+void HostRenderAPI::swap_panes()
+{
+  editor.swap_panes();
+}
+
 void HostRenderAPI::request_redraw()
 {
   editor.needs_redraw = true;

@@ -614,6 +614,13 @@ private:
   void next_pane();
   void prev_pane();
   bool focus_pane_direction(char dir);
+  void equalize_panes();
+  void toggle_pane_zoom();
+  void swap_panes();
+  bool pane_zoomed() const
+  {
+    return pane_zoom_active;
+  }
   bool resize_current_pane(int delta);
   bool resize_current_pane_direction(char dir, int delta);
   int pane_split_at_position(int x, int y) const;

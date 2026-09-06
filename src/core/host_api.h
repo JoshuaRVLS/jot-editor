@@ -75,6 +75,10 @@ public:
   void focus_next_pane();
   void focus_prev_pane();
   bool resize_focused_pane(int delta);
+  bool resize_focused_pane_direction(char dir, int step);
+  void equalize_panes();
+  void toggle_pane_zoom();
+  void swap_panes();
   void request_redraw();
 
 private:
