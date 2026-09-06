@@ -77,6 +77,12 @@ namespace
     api(L).show_message(luaL_optstring(L, 1, ""));
     return 0;
   }
+  int l_show_transient_message(lua_State *L)
+  {
+    api(L).show_transient_message(luaL_optstring(L, 1, ""),
+                                  (int)luaL_optinteger(L, 2, 5000));
+    return 0;
+  }
   int l_register_command(lua_State *L)
   {
     auto &a = api(L);
@@ -1442,6 +1448,7 @@ bool LuaAPI::init()
   lua_state = L;
   lua_initialized = true;
   inject(L, this, "show_message", l_show_message);
+  inject(L, this, "show_transient_message", l_show_transient_message);
   inject(L, this, "command", l_register_command);
   inject(L, this, "autocmd", l_register_autocmd);
   inject(L,
@@ -1568,6 +1575,8 @@ bool LuaAPI::init()
   lua_setfield(L, -2, "decoration");
   lua_getglobal(L, "show_message");
   lua_setfield(L, -2, "notify");
+  lua_getglobal(L, "show_transient_message");
+  lua_setfield(L, -2, "notify_transient");
   lua_getglobal(L, "command");
   lua_setfield(L, -2, "command");
   lua_getglobal(L, "autocmd");
@@ -1584,7 +1593,7 @@ bool LuaAPI::init()
   lua_setglobal(L, "vim");
   lua_setglobal(L, "jot");
   if (luaL_dostring(L,
-                    "jot.notify=show_message; jot.command=command; jot.autocmd=autocmd; "
+                    "jot.notify=show_message; jot.notify_transient=show_transient_message; jot.command=command; jot.autocmd=autocmd; "
                     "jot.execute=execute; jot.open_file=open; jot.save=save; "
                     "jot.buffer={get_text=get_current_buffer,set_text=set_current_buffer,"
                     "get_selection=get_selection,replace_selection=replace_selection,"

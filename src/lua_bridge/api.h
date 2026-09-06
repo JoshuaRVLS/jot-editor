@@ -670,6 +670,7 @@ public:
 
   // Lua API functions used by the embedded runtime.
   void show_message(const std::string &msg);
+  void show_transient_message(const std::string &msg, int duration_ms = 5000);
   // Takes the group name by value: nvim-style names ("StatusLineInfo") are
   // translated to jot slot names inside.
   void set_theme_color(std::string name, int fg, int bg);

@@ -422,8 +422,42 @@ Editor::~Editor()
 
 void Editor::set_message(const std::string &msg)
 {
+  if (transient_message_timer != 0)
+  {
+    event_loop_.cancel_timer(transient_message_timer);
+    transient_message_timer = 0;
+  }
+  ++message_generation;
   message = msg;
   needs_redraw = true;
+}
+
+void Editor::set_transient_message(const std::string &msg, int duration_ms)
+{
+  if (transient_message_timer != 0)
+  {
+    event_loop_.cancel_timer(transient_message_timer);
+    transient_message_timer = 0;
+  }
+  const std::uint64_t generation = ++message_generation;
+  message = msg;
+  needs_redraw = true;
+  if (duration_ms <= 0 || !event_loop_.is_main_thread())
+  {
+    return;
+  }
+  transient_message_timer = event_loop_.set_timeout(
+      duration_ms,
+      [this, generation]
+      {
+        if (message_generation != generation)
+        {
+          return;
+        }
+        transient_message_timer = 0;
+        message.clear();
+        needs_redraw = true;
+      });
 }
 
 void Editor::set_home_menu_visible(bool visible)

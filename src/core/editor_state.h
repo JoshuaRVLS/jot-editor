@@ -2,6 +2,7 @@
 #define EDITOR_STATE_H
 
 #include <atomic>
+#include <cstdint>
 
 #include "config.h"
 #include "discord_rpc.h"
@@ -39,6 +40,8 @@ struct EditorState
 
   bool running;
   std::string message;
+  std::uint64_t transient_message_timer = 0;
+  std::uint64_t message_generation = 0;
   std::string clipboard;
 
   bool show_command_palette;

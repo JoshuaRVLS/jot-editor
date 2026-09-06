@@ -29,6 +29,14 @@ namespace
   {
     return 0;
   }
+  int record_transient_message(lua_State *L)
+  {
+    lua_pushvalue(L, 1);
+    lua_setglobal(L, "jot_transient_message");
+    lua_pushvalue(L, 2);
+    lua_setglobal(L, "jot_transient_duration");
+    return 0;
+  }
   void native(lua_State *L, const char *field, lua_CFunction fn)
   {
     lua_pushcfunction(L, fn);
@@ -93,6 +101,8 @@ TEST_CASE("Bundled Lua Tree-sitter startup keeps every registry language enabled
   lua_newtable(L); // jot.treesitter
   lua_newtable(L); // disabled log (global so init.lua cannot clobber it)
   lua_setglobal(L, "jot_ts_disabled");
+  lua_pushcfunction(L, record_transient_message);
+  lua_setglobal(L, "show_transient_message");
   native(L, "register_language", ok);
   native(L, "language_for_extension", name);
   native(L, "disable_language", record_disable);
@@ -149,6 +159,18 @@ TEST_CASE("Bundled Lua Tree-sitter startup keeps every registry language enabled
     INFO("disabled languages: " << names);
   }
   REQUIRE(disabled_count == 0);
+
+  int report_result = luaL_dostring(
+      L,
+      "jot.treesitter.report_query_failures({'lua: bad query', 'cpp: bad query'})");
+  REQUIRE(report_result == LUA_OK);
+  lua_getglobal(L, "jot_transient_message");
+  REQUIRE(std::string(lua_tostring(L, -1))
+          == "Tree-sitter: 2 bundled highlight queries skipped (lua, cpp); run :tsstatus for details");
+  lua_pop(L, 1);
+  lua_getglobal(L, "jot_transient_duration");
+  REQUIRE(lua_tointeger(L, -1) == 6000);
+  lua_pop(L, 1);
   lua_close(L);
 }
 

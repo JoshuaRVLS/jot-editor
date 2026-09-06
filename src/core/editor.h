@@ -681,6 +681,7 @@ private:
   void split_pane_direction(int dx, int dy);
   void refresh_command_palette();
   void set_message(const std::string &msg);
+  void set_transient_message(const std::string &msg, int duration_ms = 5000);
   bool close_active_floating_ui();
 
 public:

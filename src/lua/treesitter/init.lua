@@ -15,7 +15,7 @@ local function report_query_failures(query_errors)
     io.stderr:write("Tree-sitter bundled query skipped (" .. reason
       .. "); runtime queries or regex will be used\n")
   end
-  local notify = show_message
+  local notify = show_transient_message or show_message
   if notify and query_errors[1] then
     local names = {}
     for _, reason in ipairs(query_errors) do
@@ -24,7 +24,7 @@ local function report_query_failures(query_errors)
     end
     local word = #query_errors == 1 and "query" or "queries"
     pcall(notify, "Tree-sitter: " .. #query_errors .. " bundled highlight " .. word
-      .. " skipped (" .. table.concat(names, ", ") .. "); run :tsstatus for details")
+      .. " skipped (" .. table.concat(names, ", ") .. "); run :tsstatus for details", 6000)
   end
 end
 

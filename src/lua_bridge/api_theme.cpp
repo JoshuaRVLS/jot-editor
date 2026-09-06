@@ -71,6 +71,12 @@ void LuaAPI::show_message(const std::string &msg)
     editor->set_message(msg);
 }
 
+void LuaAPI::show_transient_message(const std::string &msg, int duration_ms)
+{
+  if (editor)
+    editor->set_transient_message(msg, duration_ms);
+}
+
 bool LuaAPI::apply_theme_file(const std::string &name, std::vector<std::string> &stack)
 {
   for (const auto &dir : theme_dirs())
