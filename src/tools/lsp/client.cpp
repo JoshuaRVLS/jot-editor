@@ -1283,17 +1283,36 @@ int LSPClient::editor_character(const std::string &filepath, int line, int chara
 
 LSPClient::LSPClient(const std::string &language_name,
                      const std::string &workspace_root,
-                     const std::vector<std::string> &argv)
-    : language(language_name), root_path(workspace_root), command(argv), stdin_fd(-1),
-      stdout_fd(-1), stderr_fd(-1), child_pid(-1), running(false), initialized(false),
-      uses_utf8_positions(false), shutdown_complete(false), next_request_id(1),
-      initialize_request_id(0), shutdown_request_id(0)
+                     const std::vector<std::string> &argv,
+                     const std::vector<std::string> &library_dirs_arg)
+    : language(language_name), root_path(workspace_root), command(argv),
+      library_dirs(library_dirs_arg), stdin_fd(-1), stdout_fd(-1), stderr_fd(-1),
+      child_pid(-1), running(false), initialized(false), uses_utf8_positions(false),
+      shutdown_complete(false), next_request_id(1), initialize_request_id(0),
+      shutdown_request_id(0)
 {
 }
 
 LSPClient::~LSPClient()
 {
   stop();
+}
+
+std::string LSPClient::lua_settings_json() const
+{
+  std::ostringstream out;
+  out << "{\"workspace\":{\"library\":[";
+  for (size_t i = 0; i < library_dirs.size(); i++)
+  {
+    if (i > 0)
+    {
+      out << ",";
+    }
+    out << "\"" << json_escape(library_dirs[i]) << "\"";
+  }
+  out << "]},\"diagnostics\":{\"globals\":[\"jot\"]},"
+      << "\"completion\":{\"enable\":true}}";
+  return out.str();
 }
 
 std::string LSPClient::json_escape(const std::string &value) const
@@ -1666,9 +1685,9 @@ bool LSPClient::start()
        << "\"linkSupport\":true},"
        << "\"documentSymbol\":{\"dynamicRegistration\":false,"
        << "\"hierarchicalDocumentSymbolSupport\":true,"
-       << "\"symbolKind\":{\"valueSet\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,"
-          "16,17,18,19,20,21,22,23,24,25,26]}}"
-       << "}"
+       << "\"symbolKind\":{\"valueSet\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,"               "16,17,18,19,20,21,22,23,24,25,26]}}"
+       << "},"
+       << "\"workspace\":{\"configuration\":true}"
        << "},"
        << "\"workspaceFolders\":[{\"uri\":\"" << json_escape(to_file_uri(root_path))
        << "\",\"name\":\"" << json_escape(fs::path(root_path).filename().string()) << "\"}]"
@@ -1892,7 +1911,21 @@ void LSPClient::handle_stdout_data(const std::string &data)
       continue;
     }
 
+    // Server -> client request: answer workspace/configuration pulls so
+    // servers that support it (lua-language-server) receive our client-side
+    // defaults (e.g. the bundled jot API stub registered as a Lua library).
     const JsonValue *id = json_object_get(root, "id");
+    if (method && method->type == JsonValue::String && id && id->type == JsonValue::Number
+        && method->string_value == "workspace/configuration")
+    {
+      std::ostringstream cfg;
+      cfg << "{\"jsonrpc\":\"2.0\",\"id\":" << (int)id->number_value << ",\"result\":[";
+      cfg << (library_dirs.empty() ? "null" : lua_settings_json());
+      cfg << ",null,null,null,null]}";
+      send_message(cfg.str(), true);
+      continue;
+    }
+
     if (!id || id->type != JsonValue::Number)
     {
       continue;
@@ -1916,6 +1949,17 @@ void LSPClient::handle_stdout_data(const std::string &data)
           encoding && encoding->type == JsonValue::String && encoding->string_value == "utf-8";
       initialized = true;
       send_message("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{}}", true);
+      // Hand the server our client-side defaults (lowest config priority, so
+      // a workspace .luarc.json still wins). For lua this registers the
+      // bundled jot API stub as a library, declares the jot global, and
+      // enables completion, so user scripts get the whole jot.* surface
+      // without "undefined global" warnings.
+      if (!library_dirs.empty())
+      {
+        send_message("{\"jsonrpc\":\"2.0\",\"method\":\"workspace/didChangeConfiguration\","
+                         "\"params\":{\"settings\":{\"Lua\":" + lua_settings_json() + "}}}",
+                     true);
+      }
       auto queued = std::move(deferred_messages);
       deferred_messages.clear();
       for (const auto &message : queued)

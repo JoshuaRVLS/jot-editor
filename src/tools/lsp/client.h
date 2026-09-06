@@ -90,6 +90,9 @@ private:
   std::string language;
   std::string root_path;
   std::vector<std::string> command;
+  // Extra Lua workspace.library dirs (e.g. the bundled jot API stub) sent to
+  // the server via workspace/didChangeConfiguration after initialize.
+  std::vector<std::string> library_dirs;
   int stdin_fd;
   int stdout_fd;
   int stderr_fd;
@@ -131,6 +134,9 @@ private:
   bool send_message(const std::string &json, bool allow_during_initialization = false);
   bool flush_pending_writes();
   std::string json_escape(const std::string &value) const;
+  // Lua server settings handed to the client (workspace library, globals,
+  // completion), as the inner object under settings.Lua (no wrapper).
+  std::string lua_settings_json() const;
   void append_log_line(const std::string &prefix, const std::string &line);
   void handle_stdout_data(const std::string &data);
   void handle_stderr_data(const std::string &data);
@@ -142,7 +148,8 @@ private:
 public:
   LSPClient(const std::string &language_name,
             const std::string &workspace_root,
-            const std::vector<std::string> &argv);
+            const std::vector<std::string> &argv,
+            const std::vector<std::string> &library_dirs = {});
   ~LSPClient();
 
   bool start();

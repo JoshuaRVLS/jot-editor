@@ -4,6 +4,7 @@
 #include "lsp/client.h"
 #include "lsp/install.h"
 #include "lua_bridge/api.h"
+#include "lua_bridge/lua_loader.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <cctype>
@@ -1341,7 +1342,21 @@ LSPClient *Editor::ensure_lsp_for_file(const std::string &filepath)
     return nullptr;
   }
 
-  auto client = std::make_unique<LSPClient>(language, root, command);
+  // For lua, register the bundled jot API stub (EmmyLua annotations) as a
+  // server library so user scripts get completions for the whole jot.*
+  // surface instead of "undefined global" warnings. The stub ships with the
+  // runtime, so it resolves to the source dir, an override, or the cache.
+  std::vector<std::string> library_dirs;
+  if (language == "lua")
+  {
+    const std::filesystem::path stub = jot_lua_resolve_path("luals/jot_api.lua");
+    if (!stub.empty() && !stub.parent_path().empty())
+    {
+      library_dirs.push_back(stub.parent_path().string());
+    }
+  }
+
+  auto client = std::make_unique<LSPClient>(language, root, command, library_dirs);
   if (!client->start())
   {
     set_message("LSP start failed for " + language + ": " + client->get_last_error());
