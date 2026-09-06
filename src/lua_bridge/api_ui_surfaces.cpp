@@ -626,6 +626,8 @@ bool LuaAPI::emit_status(const StatusView &view)
                          lua_set_bool_field(L, si, "optional", s.optional);
                          lua_set_int_field(L, si, "priority", s.priority);
                          lua_set_str_field(L, si, "side", s.side);
+                         lua_set_str_field(L, si, "symbol", s.symbol);
+                         lua_set_int_field(L, si, "symbol_fg", s.symbol_fg);
                          lua_rawseti(L, arr, (lua_Integer)i + 1);
                        }
                        lua_setfield(L, t, "segments");

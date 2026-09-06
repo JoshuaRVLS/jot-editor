@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "core/file_icons.h"
 #include "lua_bridge/api.h"
 #include <algorithm>
 #include <cctype>
@@ -9,12 +10,6 @@
 #include <unordered_map>
 #include <vector>
 
-static std::string lower_copy(std::string s)
-{
-  std::transform(
-      s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-  return s;
-}
 
 static int utf8_cell_len(const std::string &text, size_t i)
 {
@@ -158,26 +153,11 @@ static std::string get_file_icon(const FileNode &node)
   {
     return node.expanded ? " " : " ";
   }
-
-  static const std::unordered_map<std::string, std::string> ext_icons = {
-      {".cpp", " "},  {".cc", " "},   {".cxx", " "},  {".c", " "},    {".h", " "},
-      {".hpp", " "},  {".py", " "},   {".js", " "},   {".ts", " "},   {".jsx", " "},
-      {".tsx", " "},  {".json", " "}, {".md", " "},   {".toml", " "}, {".yaml", " "},
-      {".yml", " "},  {".html", " "}, {".css", " "},  {".scss", " "}, {".sh", " "},
-      {".go", " "},   {".rs", " "},   {".java", " "}, {".php", " "},  {".rb", " "},
-      {".xml", "󰗀 "}, {".txt", "󰈙 "}, {".lock", "󰌾 "}};
-
-  std::string name = lower_copy(node.name);
-  size_t dot = name.find_last_of('.');
-  if (dot != std::string::npos)
-  {
-    std::string ext = name.substr(dot);
-    auto it = ext_icons.find(ext);
-    if (it != ext_icons.end())
-      return it->second;
-  }
-  return "󰈔 ";
+  // Shared per-extension glyph map (core/file_icons.h) so the explorer, the
+  // home screen and the status line all agree on what a file looks like.
+  return std::string(jot_icons::file_type_icon(node.name).glyph) + " ";
 }
+
 
 static int sidebar_severity_rank(int severity)
 {

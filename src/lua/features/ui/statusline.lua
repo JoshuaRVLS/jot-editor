@@ -35,6 +35,10 @@ local function status_line(p)
       bold = s.bold or false,
       optional = s.optional or false,
       priority = s.priority or 100,
+      -- Leading glyph (file-type icon / git mark) painted with its own
+      -- color; kept out of `text` so truncation never eats it.
+      symbol = s.symbol or "",
+      symbol_fg = s.symbol_fg or s.fg or status_fg,
     }
     if s.side == "left" then
       left[#left + 1] = seg
@@ -46,7 +50,7 @@ local function status_line(p)
   local function block_width(list)
     local n = 0
     for i, s in ipairs(list) do
-      n = n + cell_len(s.text)
+      n = n + cell_len(s.symbol) + cell_len(s.text)
       if i > 1 then
         n = n + 1 -- powerline separator
       end
@@ -101,6 +105,7 @@ local function status_line(p)
 
   -- Compose a segment block into text + byte-offset spans. The powerline
   -- separator between segments uses the color transition of its neighbors.
+  -- A segment's `symbol` (glyph, own color) is emitted before its label.
   local function compose_block(list)
     local text, spans = "", {}
     for i, s in ipairs(list) do
@@ -110,8 +115,14 @@ local function status_line(p)
         spans[#spans + 1] = { start = at, len = 3, fg = list[i - 1].bg, bg = s.bg, bold = true }
       end
       local at = #text
-      text = text .. s.text
-      spans[#spans + 1] = { start = at, len = #s.text, fg = s.fg, bg = s.bg, bold = s.bold }
+      local prefix = s.symbol ~= "" and s.symbol or ""
+      text = text .. prefix .. s.text
+      if prefix ~= "" then
+        spans[#spans + 1] =
+          { start = at, len = #prefix, fg = s.symbol_fg, bg = s.bg, bold = s.bold }
+      end
+      spans[#spans + 1] =
+        { start = at + #prefix, len = #s.text, fg = s.fg, bg = s.bg, bold = s.bold }
     end
     return text, spans
   end

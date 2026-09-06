@@ -252,12 +252,14 @@ struct SearchView
 
 struct StatusSegmentView
 {
-  std::string text; // fully composed (icon + label + trailing space)
-  int fg = 0, bg = 0;
+  std::string text;   // label (icon kept separate so it never truncates)
+  int fg = 0, bg = 0; // label color / chip background
   bool bold = false;
   bool optional = false;
   int priority = 100;
   std::string side; // "left" or "right"
+  std::string symbol; // leading glyph drawn with its own color
+  int symbol_fg = -1; // -1 = draw with `fg`
 };
 
 struct StatusView

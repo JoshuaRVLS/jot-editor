@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "core/file_icons.h"
 #include "core/keybind_catalog.h"
 #include "lua_bridge/api.h"
 #include "tools/lsp/install.h"
@@ -44,7 +45,25 @@ namespace
     bool bold = false;
     bool optional = false;
     int priority = 0;
+    // Optional leading glyph (file-type icon, git mark) rendered with its
+    // own color in front of `text`; -1 color means use `fg`. Kept separate
+    // from `text` so truncation can never eat the icon.
+    std::string symbol;
+    int symbol_fg = -1;
   };
+
+  int status_layout_width(const std::vector<StatusSegment> &segments)
+  {
+    if (segments.empty())
+      return 0;
+    int width = 0;
+    for (const auto &segment : segments)
+    {
+      width += ui_cell_count(segment.symbol) + ui_cell_count(segment.text);
+    }
+    width += std::max(0, (int)segments.size() - 1);
+    return width;
+  }
 
   struct PaletteLayout
   {
@@ -315,19 +334,6 @@ namespace
     }
   }
 
-  int status_layout_width(const std::vector<StatusSegment> &segments)
-  {
-    if (segments.empty())
-      return 0;
-    int width = 0;
-    for (const auto &segment : segments)
-    {
-      width += ui_cell_count(segment.text);
-    }
-    width += std::max(0, (int)segments.size() - 1);
-    return width;
-  }
-
   int status_draw_segmented_at(
       UI *ui, int x, int y, int w, const std::vector<StatusSegment> &segments)
   {
@@ -337,9 +343,20 @@ namespace
     {
       const auto &segment = segments[i];
       const int remaining = end - pos;
-      std::string text = ui_take_cells(segment.text, remaining);
-      ui->draw_text(pos, y, text, segment.fg, segment.bg, segment.bold);
-      pos += ui_cell_count(text);
+      // Symbol first (own color, survives truncation), then the label.
+      if (!segment.symbol.empty() && pos < end)
+      {
+        std::string symbol = ui_take_cells(segment.symbol, remaining);
+        int sf = segment.symbol_fg >= 0 ? segment.symbol_fg : segment.fg;
+        ui->draw_text(pos, y, symbol, sf, segment.bg, segment.bold);
+        pos += ui_cell_count(symbol);
+      }
+      if (pos < end)
+      {
+        std::string text = ui_take_cells(segment.text, end - pos);
+        ui->draw_text(pos, y, text, segment.fg, segment.bg, segment.bold);
+        pos += ui_cell_count(text);
+      }
 
       if (pos < end && i + 1 < segments.size())
       {
@@ -893,20 +910,35 @@ void Editor::render_status_line()
   }
 
   std::string file_label = "Home";
-  std::string file_icon = "󰋜";
+  std::string file_symbol = "󰋜";
+  int file_symbol_fg = -1; // -1: use the segment fg (home icon stays flat)
   bool modified = false;
   if (!show_home_menu && active_buf)
   {
     file_label = status_path_basename(active_buf->filepath, "[No Name]");
     modified = active_buf->modified;
-    file_icon = active_buf->filepath.empty() ? "󰈔" : "󰈙";
+    if (active_buf->filepath.empty())
+    {
+      file_symbol = "󰈔"; // unsaved buffer: keep the flat file glyph
+    }
+    else
+    {
+      // Per-language glyph + brand color (cpp/py/...), shared with the
+      // file explorer; unknown types fall back to a neutral file icon.
+      const jot_icons::FileTypeIcon type_icon =
+          jot_icons::file_type_icon(active_buf->filepath);
+      file_symbol = type_icon.glyph;
+      file_symbol_fg = type_icon.color;
+    }
   }
-  left_segments.push_back({" " + file_icon + " " + file_label + (modified ? " +" : "") + " ",
+  left_segments.push_back({" " + file_label + (modified ? " +" : "") + " ",
                            theme.fg_status_file,
                            theme.bg_status_file,
                            true,
                            false,
-                           100});
+                           100,
+                           " " + file_symbol,
+                           file_symbol_fg});
 
   std::string cursor_label = " Ready ";
   if (!show_home_menu && active_buf)
@@ -978,7 +1010,11 @@ void Editor::render_status_line()
 
   if (has_git_repo())
   {
-    std::string git = "  " + ui_truncate_cells(git_branch, 18);
+    // Branch chip: the git glyph is drawn in a warm accent (visible on both
+    // dark and light status bars), the branch + change counts keep the
+    // status-info tone. Symbols survive width truncation, the branch text
+    // is the part that shortens first.
+    std::string git = " " + ui_truncate_cells(git_branch, 18);
     if (git_staged_count > 0)
     {
       git += " +" + std::to_string(git_staged_count);
@@ -996,7 +1032,14 @@ void Editor::render_status_line()
       git += " !" + std::to_string(git_conflict_count);
     }
     git += " ";
-    right_segments.push_back({git, theme.fg_status_info, theme.bg_status_info, true, true, 70});
+    right_segments.push_back({git,
+                              theme.fg_status_info,
+                              theme.bg_status_info,
+                              true,
+                              true,
+                              70,
+                              " ",
+                              208});
   }
 
   if (!lsp_clients.empty())
@@ -1083,11 +1126,13 @@ void Editor::render_status_line()
     }
     for (const auto &s : left_segments)
     {
-      view.segments.push_back({s.text, s.fg, s.bg, s.bold, s.optional, s.priority, "left"});
+      view.segments.push_back(
+          {s.text, s.fg, s.bg, s.bold, s.optional, s.priority, "left", s.symbol, s.symbol_fg});
     }
     for (const auto &s : right_segments)
     {
-      view.segments.push_back({s.text, s.fg, s.bg, s.bold, s.optional, s.priority, "right"});
+      view.segments.push_back(
+          {s.text, s.fg, s.bg, s.bold, s.optional, s.priority, "right", s.symbol, s.symbol_fg});
     }
     if (lua_api->emit_status(view))
     {
