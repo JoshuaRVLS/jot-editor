@@ -642,7 +642,14 @@ void TreeSitterManager::async_parse_worker(AsyncParseJob job)
       ts_parser_delete(parser);
     }
   }
-  if (handle)
+  if (result.parser)
+  {
+    // Keep the dlopen handle alive: result.parser's language pointer lives
+    // inside this library. Ownership transfers to the main thread via the
+    // result (see retain_parser_library); only failures close it here.
+    result.library_handle = handle;
+  }
+  else if (handle)
   {
     close_library(handle);
   }

@@ -554,8 +554,12 @@ void Editor::render_tree_sitter_status_modal()
   // is not installed and which is not otherwise listed).
   std::vector<TreeSitterStatusRenderRow> detected_rows;
   {
-    std::set<std::string> manager_names(ts_manager_.language_names().begin(),
-                                        ts_manager_.language_names().end());
+    // Materialize once: calling language_names() for begin() and end() would
+    // pair iterators from two different temporaries (iterating one buffer
+    // toward the other's end is UB and used to crash here).
+    const std::vector<std::string> manager_language_names = ts_manager_.language_names();
+    std::set<std::string> manager_names(manager_language_names.begin(),
+                                        manager_language_names.end());
     std::set<std::string> seen;
     for (const auto &buf : buffers)
     {

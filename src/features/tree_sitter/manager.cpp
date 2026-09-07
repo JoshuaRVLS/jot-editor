@@ -169,6 +169,23 @@ TreeSitterManager::~TreeSitterManager()
 #endif
 }
 
+#ifdef JOT_TREESITTER
+void TreeSitterManager::retain_parser_library(const std::string &language_id, void *handle)
+{
+  if (!handle)
+  {
+    return;
+  }
+  // First handle per language wins; a duplicate for an already-retained
+  // language (another worker loaded the same library) is closed right away.
+  auto [it, inserted] = library_handles_.emplace(language_id, handle);
+  if (!inserted)
+  {
+    close_library_handle(handle);
+  }
+}
+#endif
+
 bool TreeSitterManager::register_language(const std::string &language_id,
                                           const std::vector<std::string> &extensions,
                                           const std::string &query_source,

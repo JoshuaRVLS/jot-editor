@@ -265,6 +265,67 @@ TEST_CASE("Lua query source is accepted before a parser is installed")
   REQUIRE_FALSE(error.empty());
 }
 
+TEST_CASE("Async parse worker keeps the parser library mapped")
+{
+  TreeSitterManager manager;
+#ifdef JOT_TREESITTER
+  REQUIRE(manager.register_language(
+      "cpp",
+      {".cpp"},
+      "",
+      "https://example.invalid/tree-sitter-cpp",
+      "",
+      "tree_sitter_cpp",
+      {"libtree-sitter-cpp.so", "libtree-sitter-cpp.dylib", "tree-sitter-cpp.dll",
+       "libtree-sitter-cpp.dll", "libtree_sitter_cpp.so", "libtree_sitter_cpp.dylib",
+       "tree_sitter_cpp.dll", "libtree_sitter_cpp.dll", "tree-sitter-cpp.so",
+       "tree-sitter-cpp.dylib"},
+      ""));
+  if (!manager.status("cpp").parser_loaded)
+  {
+    SUCCEED(); // needs an installed cpp parser; CI/parser-less machines skip
+    return;
+  }
+
+  TreeSitterManager::AsyncParseJob job;
+  job.buffer_index = 0;
+  job.extension = ".cpp";
+  job.language_id = "cpp";
+  job.text = "int answer = 42;\n";
+  job.symbol = "tree_sitter_cpp";
+  job.library_names = {"libtree-sitter-cpp.so", "libtree-sitter-cpp.dylib"};
+  job.library_paths = manager.runtime_library_paths();
+  manager.queue_async_parse(std::move(job));
+
+  std::vector<TreeSitterManager::AsyncParseResult> results;
+  for (int i = 0; i < 500 && results.empty(); ++i)
+  {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    results = manager.take_finished_parses();
+  }
+  REQUIRE_FALSE(results.empty());
+  auto &result = results.front();
+  REQUIRE(result.parser != nullptr);
+  REQUIRE(result.tree != nullptr);
+
+  // Retaining a null handle must not disturb the real one (covers the stale-
+  // result drop path that used to be the only cleanup site).
+  manager.retain_parser_library("cpp", nullptr);
+  // The library must still be mapped: parse through the transferred parser.
+  // Before the fix the worker closed the dlopen handle, so on machines where
+  // the worker was the first loader this pointer hit unmapped memory.
+  TSTree *second = ts_parser_parse_string(
+      result.parser, nullptr, result.parsed_text.data(),
+      (uint32_t)result.parsed_text.size());
+  REQUIRE(second != nullptr);
+  ts_tree_delete(second);
+  ts_tree_delete(result.tree);
+  ts_parser_delete(result.parser);
+#else
+  SUCCEED();
+#endif
+}
+
 TEST_CASE("Deferred query compile installs results off the main thread")
 {
   TreeSitterManager manager;

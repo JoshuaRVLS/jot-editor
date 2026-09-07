@@ -416,6 +416,12 @@ void Editor::install_finished_parses()
   bool repaint = false;
   for (auto &result : results)
   {
+    // Take ownership of the worker's dlopen handle up front: the language
+    // pointer behind result.parser lives inside that library, so it must
+    // stay mapped no matter which path the result takes below (retaining is
+    // a no-op when the handle is null, e.g. a failed parse).
+    ts_manager_.retain_parser_library(result.language_id, result.library_handle);
+
     FileBuffer *buf = nullptr;
     if (result.buffer_index >= 0 && result.buffer_index < (int)buffers.size())
     {

@@ -169,9 +169,18 @@ public:
     std::string parsed_text; // matches the text the tree describes
     TSParser *parser = nullptr;
     TSTree *tree = nullptr;
+    // Worker-owned dlopen handle for the parser library. The TSLanguage*
+    // behind parser points into this library, so it must stay mapped for as
+    // long as the parser lives: the main thread retains it via
+    // retain_parser_library() instead of the worker closing it, otherwise a
+    // freshly :tsinstall'ed library gets unmapped while still in use.
+    void *library_handle = nullptr;
   };
   void queue_async_parse(AsyncParseJob job);
   std::vector<AsyncParseResult> take_finished_parses();
+  // Keeps the worker's dlopen handle alive for language_id (the first handle
+  // wins; later duplicates are closed). Main thread only.
+  void retain_parser_library(const std::string &language_id, void *handle);
   // Installed parser-library search roots (main thread only; used to build
   // AsyncParseJob::library_paths snapshots for the background worker).
   const std::vector<std::string> &runtime_library_paths() const;
