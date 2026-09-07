@@ -6,13 +6,25 @@
 
 using namespace CommandLineUtils;
 
-void Editor::handle_command_palette(int ch)
+void Editor::handle_command_palette(int ch, bool is_ctrl, bool is_shift, bool is_alt)
 {
   auto reset_completion_state = [&]()
   {
     command_palette_theme_mode = false;
     command_palette_theme_original.clear();
     command_palette_selected = 0;
+  };
+
+  auto close_palette = [&]()
+  {
+    // Remember what the user left in the box so the next Ctrl+P resumes it;
+    // closing with an empty box clears the memory for a fresh start.
+    command_palette_last_query = command_palette_query;
+    show_command_palette = false;
+    command_palette_query.clear();
+    command_palette_results.clear();
+    reset_completion_state();
+    needs_redraw = true;
   };
 
   auto apply_selected_completion = [&]()
@@ -105,14 +117,7 @@ void Editor::handle_command_palette(int ch)
 
   if (ch == 27)
   {
-    // Remember what the user left in the box so the next Ctrl+P resumes it;
-    // closing with an empty box clears the memory for a fresh start.
-    command_palette_last_query = command_palette_query;
-    show_command_palette = false;
-    command_palette_query.clear();
-    command_palette_results.clear();
-    reset_completion_state();
-    needs_redraw = true;
+    close_palette();
   }
   else if (ch == 1008)
   { // Up
@@ -235,11 +240,23 @@ void Editor::handle_command_palette(int ch)
       needs_redraw = true;
     }
   }
-  else if (ch >= 32 && ch < 127)
+  // Plain (or Shift-uppercased) printable: insert into the query. Modified
+  // printables never reach this branch — a lone Esc that the terminal merged
+  // with the next keystroke arrives as Alt+<char>, and Ctrl+<char> has no
+  // meaning in the palette.
+  else if (ch >= 32 && ch < 127 && !is_alt && !is_ctrl)
   {
     command_palette_query += ch;
     reset_completion_state();
     refresh_command_palette();
     needs_redraw = true;
+  }
+  else if (is_alt && ch >= 32 && ch < 127)
+  {
+    // Alt+<char> is either a real Alt chord (nothing in the palette uses it)
+    // or a lone Esc that arrived merged with the next keystroke. Both mean
+    // "cancel", so dismiss just like Esc — typing a letter right after Esc
+    // closes the palette instead of inserting that letter.
+    close_palette();
   }
 }

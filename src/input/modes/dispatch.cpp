@@ -393,7 +393,7 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
 
   if (show_command_palette)
   {
-    handle_command_palette(ch);
+    handle_command_palette(ch, is_ctrl, is_shift, is_alt);
     return;
   }
 

@@ -548,6 +548,14 @@ void Editor::handle_terminal_event(const Event &ev)
         || ch == 17 || original_ch == 17;
     if (ctrl_q_shortcut)
     {
+      if (show_command_palette)
+      {
+        // While the palette is open, Ctrl+Q dismisses it instead of closing
+        // a pane or quitting the editor underneath it.
+        handle_command_palette(27, is_ctrl, is_shift, is_alt);
+        needs_redraw = true;
+        return;
+      }
       handle_input('q', is_ctrl, is_shift, is_alt, original_ch);
       return;
     }
@@ -634,7 +642,7 @@ void Editor::handle_terminal_event(const Event &ev)
     }
     else if (show_command_palette)
     {
-      handle_command_palette(ch);
+      handle_command_palette(ch, is_ctrl, is_shift, is_alt);
     }
     else if (show_search)
     {

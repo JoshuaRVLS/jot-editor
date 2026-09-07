@@ -390,7 +390,7 @@ private:
 
   void handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
 
-  void handle_command_palette(int ch);
+  void handle_command_palette(int ch, bool is_ctrl, bool is_shift, bool is_alt);
   bool execute_ex_command(const std::string &line);
   bool
   execute_ex_command_tail(const std::string &lcmd, const std::string &arg, const std::string &line);

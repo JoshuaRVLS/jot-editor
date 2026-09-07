@@ -28,7 +28,7 @@ void Editor::execute_command(const std::string &cmd)
     command_palette_selected = 0;
     command_palette_theme_mode = false;
     command_palette_theme_original.clear();
-    handle_command_palette('\n');
+    handle_command_palette('\n', false, false, false);
     return;
   }
 
