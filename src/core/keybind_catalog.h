@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -166,6 +167,77 @@ namespace jot
       }
       out += base;
       return out;
+    }
+
+    // Decodes a kitty keyboard-protocol sequence (CSI u) captured in `bytes`
+    // (e.g. "\x1b[13;5u" = Ctrl+Enter). Returns the internal key code with
+    // modifier flags (0x20000 Ctrl / 0x40000 Alt / 0x80000 Shift) or -1 when
+    // the bytes are not a valid CSI-u key report. The protocol encodes the
+    // modifier as bitmask + 1 (Shift=2, Alt=3, Ctrl=5, Ctrl+Shift=6,
+    // Alt+Ctrl=7), NOT the raw bitmask: a naive "5 = Shift+Ctrl" mapping
+    // turns Ctrl+Enter into Ctrl+Shift+Enter. The optional leading type
+    // field ("CSI 1;code;mod u") is accepted too.
+    inline int decode_csi_u_key(const std::string &bytes)
+    {
+      if (bytes.size() < 4 || bytes[0] != '\x1b' || bytes[1] != '[' || bytes.back() != 'u')
+      {
+        return -1;
+      }
+      const std::string body = bytes.substr(2, bytes.size() - 3); // drop ESC [ and u
+      std::vector<std::string> parts;
+      size_t start = 0;
+      while (start <= body.size())
+      {
+        const size_t sep = body.find(';', start);
+        const size_t end = (sep == std::string::npos) ? body.size() : sep;
+        if (end > start)
+        {
+          parts.push_back(body.substr(start, end - start));
+        }
+        start = end + 1;
+      }
+      if (parts.empty())
+      {
+        return -1;
+      }
+      // Optional leading type field: "CSI 1;code;mod u" vs "CSI code;mod u".
+      size_t code_pos = 0;
+      if (parts.size() >= 3 && parts[0] == "1")
+      {
+        code_pos = 1;
+      }
+      char *end = nullptr;
+      const long code = std::strtol(parts[code_pos].c_str(), &end, 10);
+      if (!end || *end != '\0' || code < 1 || code > 0xFFFF)
+      {
+        return -1;
+      }
+      int flags = 0;
+      if (code_pos + 1 < parts.size())
+      {
+        const long mod = std::strtol(parts[code_pos + 1].c_str(), &end, 10);
+        if (!end || *end != '\0' || mod < 1)
+        {
+          return -1;
+        }
+        const long bits = mod - 1; // protocol: 1 + bitmask
+        if (bits & 1)
+          flags |= 0x80000; // Shift
+        if (bits & 2)
+          flags |= 0x40000; // Alt
+        if (bits & 4)
+          flags |= 0x20000; // Ctrl
+      }
+      // Map the code to the editor's key encoding. Codes >= 0x20 are plain
+      // unicode codepoints; control keys keep their raw value. Uppercase
+      // letters follow the shift convention used by the rest of the input
+      // path.
+      int key = (int)code;
+      if (key >= 'a' && key <= 'z')
+      {
+        key = std::toupper(key);
+      }
+      return key | flags;
     }
 
     inline std::vector<std::string> split_steps(const std::string &key)

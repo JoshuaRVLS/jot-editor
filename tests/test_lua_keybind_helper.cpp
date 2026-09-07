@@ -180,6 +180,32 @@ TEST_CASE("Chord naming keeps named keys distinct under Ctrl")
   REQUIRE(chord_name(1008, true, false, false, 1008) == "Ctrl+Up");
 }
 
+TEST_CASE("CSI-u decode follows the kitty bitmask+1 modifier convention")
+{
+  using jot::keybind_detail::decode_csi_u_key;
+  // Protocol modifier = raw bitmask + 1: Ctrl=5, Ctrl+Shift=6. A naive
+  // "5 = Shift+Ctrl" mapping turns Ctrl+Enter into Ctrl+Shift+Enter, which
+  // is exactly the bug that made the VSCode-style line keys misfire.
+  constexpr int kCtrl = 0x20000;
+  constexpr int kShift = 0x80000;
+  REQUIRE((decode_csi_u_key("\x1b[13;5u") & 0xFFFF) == 13);
+  REQUIRE((decode_csi_u_key("\x1b[13;5u") & (kCtrl | kShift)) == kCtrl);
+  REQUIRE((decode_csi_u_key("\x1b[13;6u") & (kCtrl | kShift)) == (kCtrl | kShift));
+  REQUIRE((decode_csi_u_key("\x1b[13;6u") & 0xFFFF) == 13);
+  // Plain 13;1u stays unmodified Enter; alt and shift-only stay distinct.
+  REQUIRE(decode_csi_u_key("\x1b[13;1u") == 13);
+  REQUIRE((decode_csi_u_key("\x1b[13;3u") & 0x40000) != 0);
+  REQUIRE((decode_csi_u_key("\x1b[13;2u") & kShift) != 0);
+  // Letters come out uppercase, matching the chord canonical form.
+  REQUIRE((decode_csi_u_key("\x1b[115;5u") & 0xFFFF) == 'S');
+  // Non-CSI-u input and malformed bodies are rejected.
+  REQUIRE(decode_csi_u_key("abc") == -1);
+  REQUIRE(decode_csi_u_key("\x1b[13") == -1);
+  // Empty modifier field means "no modifier" (protocol default of 1).
+  REQUIRE(decode_csi_u_key("\x1b[13;u") == 13);
+  REQUIRE(decode_csi_u_key("\x1b[abc;5u") == -1);
+}
+
 TEST_CASE("Key registration canonicalizes sequence keys but keeps steps apart")
 {
   LuaAPI api(nullptr);

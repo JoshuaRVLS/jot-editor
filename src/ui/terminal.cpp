@@ -1,4 +1,6 @@
 #include "terminal.h"
+#include "core/keybind_catalog.h"
+
 #include <cctype>
 #include <cerrno>
 #include <csignal>
@@ -316,96 +318,6 @@ static int translate_termkey_key(const TermKeyKey &key)
   default:
     return -1;
   }
-}
-
-// Decodes a kitty keyboard-protocol sequence (CSI u) captured in `bytes`
-// (e.g. "\x1b[13;5u" = Enter with Shift+Ctrl, "\x1b[97;4u" = 'a' with
-// Ctrl). Returns the internal key code with modifier flags (0x20000 Ctrl /
-// 0x40000 Alt / 0x80000 Shift) or -1 when the sequence is not a valid CSI-u
-// key report. Modifier numbering follows the kitty spec: 1 shift, 2 alt,
-// 4 ctrl, 8 meta; the optional leading type field (1 = keycode) is skipped.
-static int decode_csi_u_key(const std::string &bytes)
-{
-  if (bytes.size() < 4 || bytes[0] != '\x1b' || bytes[1] != '[' || bytes.back() != 'u')
-  {
-    return -1;
-  }
-  const std::string body = bytes.substr(2, bytes.size() - 3); // drop ESC [ and u
-  std::vector<std::string> parts;
-  size_t start = 0;
-  while (start <= body.size())
-  {
-    const size_t sep = body.find(';', start);
-    const size_t end = (sep == std::string::npos) ? body.size() : sep;
-    if (end > start)
-    {
-      parts.push_back(body.substr(start, end - start));
-    }
-    start = end + 1;
-  }
-  if (parts.empty())
-  {
-    return -1;
-  }
-  // Optional leading type field: "CSI 1;code;mod u" vs "CSI code;mod u".
-  size_t code_pos = 0;
-  if (parts.size() >= 3 && parts[0] == "1")
-  {
-    code_pos = 1;
-  }
-  char *end = nullptr;
-  const long code = std::strtol(parts[code_pos].c_str(), &end, 10);
-  if (!end || *end != '\0' || code < 1 || code > 0xFFFF)
-  {
-    return -1;
-  }
-  int flags = 0;
-  if (code_pos + 1 < parts.size())
-  {
-    const long mod = std::strtol(parts[code_pos + 1].c_str(), &end, 10);
-    if (!end || *end != '\0')
-    {
-      return -1;
-    }
-    if (mod & 1)
-      flags |= 0x80000; // Shift
-    if (mod & 2)
-      flags |= 0x40000; // Alt
-    if (mod & 4)
-      flags |= 0x20000; // Ctrl
-    // Meta (8) has no internal representation; ignored.
-  }
-  // Map the CSI-u code to the editor's key encoding. Codes >= 0x20 are
-  // plain unicode codepoints; the rest are control keys that must be
-  // translated so they do not fall through the switch in
-  // translate_termkey_key. Uppercase keeps the shift convention used by
-  // the rest of the input path.
-  int key = (int)code;
-  if (key >= 'a' && key <= 'z')
-  {
-    key = std::toupper(key);
-  }
-  else if (key == 13)
-  {
-    key = 13; // Enter
-  }
-  else if (key == 9)
-  {
-    key = '\t';
-  }
-  else if (key == 27)
-  {
-    key = 27; // Esc
-  }
-  else if (key == 8 || key == 127)
-  {
-    key = 127; // Backspace
-  }
-  else if (key == 32)
-  {
-    key = ' ';
-  }
-  return key | flags;
 }
 
 static void append_mouse_reset(std::string &buffer)
@@ -750,7 +662,7 @@ int Terminal::read_key()
           // Kitty keyboard protocol (CSI u): decode here so modified keys
           // such as Ctrl+Enter stay distinguishable (libtermkey 0.22 does
           // not understand CSI-u and mangles them into Ctrl+letter).
-          const int csi_u_key = decode_csi_u_key(bytes);
+          const int csi_u_key = jot::keybind_detail::decode_csi_u_key(bytes);
           if (csi_u_key >= 0)
           {
             return csi_u_key;
