@@ -41,36 +41,86 @@ namespace
     term->write(ui_is_valid_utf8_sequence(text) ? text : "?");
   }
 
-  // Dims an xterm-256 palette index toward black so a dimmed cell reads as a
-  // darker *background*, not just darker text (SGR 2 alone only affects the
-  // foreground on most terminals). Default (-1) background becomes black;
-  // default foreground is left to the SGR dim attribute so dimmed text on a
-  // dimmed background stays readable.
+  // Dims an xterm-256 palette index by scaling its RGB toward a fraction of
+  // itself (keeping the hue) instead of hard-stepping channels, so the scrim
+  // reads as a subtle darker backdrop rather than blacking the theme out.
+  // SGR 2 alone only affects the foreground on most terminals, so the
+  // background color is really darkened here. The default background (-1) is
+  // mapped to a dark gray, not black, so the theme doesn't collapse; the
+  // default foreground is left to the SGR dim attribute for readability.
   int ui_dim_color(int idx, bool is_bg)
   {
+    auto palette_rgb = [](int i, int rgb[3])
+    {
+      if (i < 0)
+      {
+        rgb[0] = rgb[1] = rgb[2] = 0;
+        return;
+      }
+      if (i < 16)
+      {
+        static const int base[8][3] = {
+            {0, 0, 0}, {128, 0, 0}, {0, 128, 0}, {128, 128, 0},
+            {0, 0, 128}, {128, 0, 128}, {0, 128, 128}, {192, 192, 192}};
+        rgb[0] = base[i & 7][0];
+        rgb[1] = base[i & 7][1];
+        rgb[2] = base[i & 7][2];
+        if (i >= 8)
+        {
+          rgb[0] += 64;
+          rgb[1] += 64;
+          rgb[2] += 64;
+        }
+        return;
+      }
+      if (i >= 232)
+      {
+        const int g = 8 + (i - 232) * 10;
+        rgb[0] = rgb[1] = rgb[2] = g;
+        return;
+      }
+      const int v = i - 16;
+      static const int levels[6] = {0, 95, 135, 175, 215, 255};
+      rgb[0] = levels[v / 36];
+      rgb[1] = levels[(v % 36) / 6];
+      rgb[2] = levels[v % 6];
+    };
+    auto nearest_index = [&palette_rgb](int r, int g, int b)
+    {
+      int best = 0;
+      long long best_d = (long long)1 << 62;
+      for (int i = 0; i < 256; i++)
+      {
+        int rgb[3];
+        palette_rgb(i, rgb);
+        const long long dr = (long long)r - rgb[0];
+        const long long dg = (long long)g - rgb[1];
+        const long long db = (long long)b - rgb[2];
+        const long long d = dr * dr + dg * dg + db * db;
+        if (d < best_d)
+        {
+          best_d = d;
+          best = i;
+        }
+      }
+      return best;
+    };
     if (idx < 0)
     {
-      return is_bg ? 0 : idx;
+      if (!is_bg)
+      {
+        return idx;
+      }
+      // Default background: a muted dark gray, not black, so the theme frame
+      // stays visible behind the scrim.
+      return 233;
     }
-    if (idx < 16)
-    {
-      return idx & 7; // bright (8..15) -> base dark (0..7); base stays
-    }
-    if (idx >= 232)
-    {
-      return std::max(232, idx - 24); // gray ramp
-    }
-    const int v = idx - 16;
-    int r = v / 36;
-    int g = (v % 36) / 6;
-    int b = v % 6;
-    if (r > 0)
-      r -= 1;
-    if (g > 0)
-      g -= 1;
-    if (b > 0)
-      b -= 1;
-    return 16 + 36 * r + 6 * g + b;
+    int rgb[3];
+    palette_rgb(idx, rgb);
+    const int r = (int)(((long long)rgb[0] * 55) / 100);
+    const int g = (int)(((long long)rgb[1] * 55) / 100);
+    const int b = (int)(((long long)rgb[2] * 55) / 100);
+    return nearest_index(r, g, b);
   }
 
   void append_cell_for_remaining_width(std::string &out, const std::string &text, int remaining)
