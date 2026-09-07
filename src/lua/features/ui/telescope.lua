@@ -106,7 +106,7 @@ local function telescope(p)
   put(root_row, 1, left_clip(p.root or "", math.max(1, inner_w - 2)), comment, t_bg)
   local query_row = bof(p.query_y or 0)
   local query = p.query or ""
-  local query_text = "  > " .. query
+  local query_text = "  → " .. query
   if query == "" then
     query_text = query_text .. "type to filter files"
   end
@@ -114,14 +114,19 @@ local function telescope(p)
   local query_bg = query_focus and (colors.selection_bg or 6)
     or colors.bg_command or colors.bg or 0
   fill_row(query_row, query_bg, t_fg)
-  put(query_row,
-      (p.query_x or 0) - (p.x or 0) - 1,
-      truncate(query_text, math.max(1, inner_w - 1)),
-      t_fg,
-      query_bg)
+  local q_off = put(query_row,
+                    (p.query_x or 0) - (p.x or 0) - 1,
+                    truncate(query_text, math.max(1, inner_w - 1)),
+                    t_fg,
+                    query_bg)
+  -- Accent the prompt arrow (3-byte rune starting at byte offset 2 of
+  -- "  → …") without shifting any later column.
+  if q_off >= 0 then
+    span(query_row, q_off + 2, 3, accent, query_bg)
+  end
   if query_focus and jot.ui.set_cursor then
     local caret = (p.query_x or 0) + math.min(math.max(0, (p.query_w or 1) - 1),
-                                             math.max(0, #("  > " .. query)))
+                                             math.max(0, #("  → " .. query)))
     jot.ui.set_cursor(caret, p.query_y or 0)
   end
 
@@ -143,7 +148,8 @@ local function telescope(p)
   for i, r in ipairs(results) do
     local b = list_row0 + i - 1
     local is_selected = (p.selected or -1) == (p.list_scroll or 0) + i - 1
-    local icon = r.is_directory and "[D] " or "[F] "
+    local icon = r.is_directory and "▸ " or "  "
+    local icon_fg = r.is_directory and (colors.sidebar_directory or accent) or t_fg
     local parent = (r.parent_path or "") == "." and "" or r.parent_path or ""
     local parent_w = parent == ""
         and 0
@@ -162,8 +168,13 @@ local function telescope(p)
     if is_selected then
       fill_row(b, t_sel_bg, t_sel_fg)
     end
-    put(b, list_col, icon .. name, is_selected and t_sel_fg or t_fg,
-        is_selected and t_sel_bg or t_bg)
+    local row_off = put(b, list_col, icon .. name, is_selected and t_sel_fg or t_fg,
+                        is_selected and t_sel_bg or t_bg)
+    -- Re-tint the icon on the selected row so it stays readable against the
+    -- highlight; row_off is the byte offset where the icon was appended.
+    if is_selected and row_off >= 0 then
+      span(b, row_off, cell_len(icon), t_sel_fg, t_sel_bg)
+    end
     if parent_w > 0 and r.parent_path then
       put(b,
           list_col + math.max(0, list_w - parent_w),
@@ -234,13 +245,32 @@ local function telescope(p)
   -- Footer: selected path on the bottom border row (native geometry).
   local footer = p.scan_pending and "Searching"
     or (#results == 0 and "No selection" or "")
-  -- Native shows the selected relative path; approximate with first result.
+  -- Key hints with accent-highlighted bindings (built with byte offsets so
+  -- the spans survive any wide glyphs elsewhere in the row).
+  local keys_accent = nil
   if footer == "" then
-    footer = "Enter open   Esc close   Tab cycle   Up/Down move"
+    local parts = { "Enter", "Esc", "Tab", "↑/↓" }
+    footer = ""
+    local acc = 0
+    keys_accent = {}
+    for i, k in ipairs(parts) do
+      if i > 1 then
+        footer = footer .. "  "
+        acc = acc + 2
+      end
+      keys_accent[i] = { start = acc, len = #k }
+      footer = footer .. k
+      acc = acc + #k
+    end
   end
   local footer_b = bof(p.footer_y or 0)
   if footer_b >= 1 and footer_b <= inner_h then
-    put(footer_b, 1, truncate(footer, math.max(1, inner_w - 2)), comment, t_bg)
+    local f_off = put(footer_b, 1, truncate(footer, math.max(1, inner_w - 2)), comment, t_bg)
+    if f_off >= 0 and keys_accent then
+      for _, k in ipairs(keys_accent) do
+        span(footer_b, f_off + k.start, k.len, accent, t_bg)
+      end
+    end
   end
 
   local body_list = {}
@@ -251,7 +281,7 @@ local function telescope(p)
                        p,
                        {},
                        {
-                         border = "single",
+                         border = "rounded",
                          title = p.title or " ",
                          title_fg = t_fg,
                        },
