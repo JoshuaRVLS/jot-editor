@@ -541,12 +541,14 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
   if (ch == 1015)
   {
     hide_lsp_completion();
+    hide_lsp_signature();
     move_cursor(0, -10, is_shift);
     return;
   }
   if (ch == 1016)
   {
     hide_lsp_completion();
+    hide_lsp_signature();
     move_cursor(0, 10, is_shift);
     return;
   }

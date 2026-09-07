@@ -296,6 +296,13 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up, 
   if (is_click || is_scroll_up || is_scroll_down)
   {
     clear_debugger_breakpoint_hover();
+    // Scroll repaints the viewport under the cursor; a stale LSP popup
+    // anchored to the old spot would linger. Match what cursor movement
+    // does: drop the hover, signature and completion popups the same way
+    // the keyboard path cancels them.
+    cancel_lsp_mouse_hover();
+    hide_lsp_signature();
+    hide_lsp_completion();
   }
 
   if (is_click && handle_menu_bar_mouse(x, y, true, false))
@@ -1426,6 +1433,9 @@ void Editor::handle_mouse(void *event_ptr)
           int max_scroll_offset = std::max(0, total_lines - h);
           target_visible = std::clamp(target_visible, 0, max_scroll_offset);
           buf.scroll_offset = buffer_line_for_visible_index(buf, target_visible);
+          cancel_lsp_mouse_hover();
+          hide_lsp_signature();
+          hide_lsp_completion();
           needs_redraw = true;
           return;
         }
