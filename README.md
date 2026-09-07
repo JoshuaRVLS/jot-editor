@@ -1,72 +1,73 @@
 # jot
 
-`jot` is a modern terminal code editor written in C++17. It is built around a
-modeless editing workflow with direct typing, standard editor shortcuts, mouse
-selection, and terminal-native power commands. Keep multiple files open, split
-panes, browse a workspace tree, search across a project, run terminal tasks,
-debug programs, and use native LSP features without leaving the terminal.
+**jot** is a modern terminal code editor written in C++17. It skips the modal
+editing baggage: you type and text appears, selections work with the mouse or
+`Shift+Arrow`, and the usual Ctrl/Alt shortcuts do the familiar things. Keep
+many files open, split the window into panes, browse a project tree, search
+across the whole workspace, run shell tasks, debug programs, and use language
+servers — all without leaving your terminal.
 
-![jot editor screenshot](assets/screenshot.png)
+The installed binary is called `jot`.
 
-The installed binary name is `jot`.
+## What makes jot different
 
-## Highlights
+- **Modeless by default.** No insert/normal mode juggling — just type. Mouse
+  selection, tabs, split panes, a minimap, a command palette, and a workspace
+  sidebar are all there out of the box.
+- **A native C++ core.** Buffers, panes, syntax highlighting, LSP, debugging,
+  Git, terminal emulation, and workspace state all run in the core — no
+  runtime scripting dependency drives the editor itself.
+- **Tree-sitter highlighting** with on-demand grammar installation, status and
+  reload commands, fallback queries, and rich theme slots for semantic tokens.
+- **Native LSP** for diagnostics, completion, hover, go-to-definition, document
+  symbols, and full server lifecycle management (including lightweight
+  install/remove helpers).
+- **An integrated terminal** with multiple shell tabs and a task runner for
+  local and project-level commands.
+- **A debugger panel** speaking the Debug Adapter Protocol — GDB and LLDB
+  launch/attach flows, breakpoints, threads, stack, variables, memory,
+  disassembly, and output.
+- **Git workflows** for status, diffs, staging, unstaging, committing, log,
+  blame, and refresh — all from inside the editor.
+- **Lua plugins and JSON colorschemes** for customization, with behavior owned
+  by the C++ core.
 
-- Modeless editor UX with mouse support, selections, tabs, split panes, minimap,
-  status bar, command palette, and a workspace sidebar.
-- Native C++ core for buffers, panes, syntax, LSP, debugging, Git, terminal
-  emulation, and workspace state.
-- Tree-sitter syntax highlighting with runtime grammar installation, status,
-  reload, fallback queries, and richer theme slots for semantic captures.
-- Native LSP support for diagnostics, completion, hover, definition jumps,
-  document symbols, server lifecycle, and lightweight server install/remove
-  helpers.
-- Integrated terminal panel with multiple shell tabs plus local/global task
-  runner support.
-- GDB/LLDB Debug Adapter Protocol panel with launch/config/attach flows,
-  breakpoints, threads, stack, variables, memory, disassembly, and output.
-- Git workflow commands for status, diffs, staging, unstaging, committing, log,
-  blame, and refresh.
-- Lua-backed plugins and JSON colorschemes; editor behavior is owned by the C++ core.
+## Platforms
 
-## Platform Support
-
-Officially supported platforms:
+Officially supported:
 
 - Linux x86_64 / arm64
 - macOS Intel / Apple Silicon
 
-Experimental platform target:
+Experimental:
 
 - Windows 10/11 with MSVC and Windows Terminal
 
-Notes:
+A few platform notes:
 
-- `jot` relies on POSIX terminal APIs (`termios`, `poll`, PTY/forkpty) for the
-  Linux/macOS editor UI and integrated terminal.
-- Linux and other non-Apple Unix builds link `libutil` for PTY support.
-- macOS uses native system PTY APIs without a `libutil` link.
-- Windows uses a Win32 console backend for the main editor UI and a ConPTY
-  backend for the integrated terminal (Windows 10 1809+; the API is loaded
-  dynamically so older systems fail gracefully instead of crashing).
-- The terminal emulator (libvterm) is bundled in `third_party/libvterm`, so
-  POSIX and Windows build the same renderer with no platform dependency.
+- The Linux/macOS UI and integrated terminal rely on POSIX terminal APIs
+  (`termios`, `poll`, PTY/`forkpty`); Linux links `libutil` for PTY support,
+  macOS uses its native PTY APIs.
+- Windows uses a Win32 console backend for the editor UI and a ConPTY backend
+  for the integrated terminal (Windows 10 1809+). ConPTY is loaded
+  dynamically, so older systems fail gracefully rather than crash.
+- The terminal emulator (libvterm) is bundled under `third_party/libvterm`, so
+  POSIX and Windows share the same renderer with no platform dependency.
 
-## Install
+## Installation
 
-For a user-local install:
+The quickest way — a user-local install:
 
 ```bash
 ./install.sh
 ```
 
-By default, the installer configures, builds, and installs to `$HOME/.local`.
-It also runs CTest and attempts Tree-sitter runtime setup unless
-`--skip-tests` or `--skip-treesitter` is passed.
-Use `./install.sh --help` for prefix, build type, test, Tree-sitter, formatter,
-and LSP tooling options.
+This configures, builds, and installs to `$HOME/.local` by default, runs the
+test suite, and attempts Tree-sitter runtime setup (pass `--skip-tests` or
+`--skip-treesitter` to skip either). Run `./install.sh --help` for prefix,
+build type, and tooling options.
 
-Manual CMake install:
+Or build with CMake manually:
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -74,191 +75,120 @@ cmake --build build -j
 cmake --install build --prefix "$HOME/.local"
 ```
 
-Experimental Windows/MSVC build:
+### Windows / MSVC (experimental)
 
 ```bat
 cmake --preset windows-msvc-vs2026-vcpkg
 cmake --build --preset windows-msvc-vs2026-vcpkg-debug
 ```
 
-The generated solution is `build\vs2026-x64\jot.sln`. You can open it directly
-in Visual Studio after configure, or open the folder and select the preset.
-If VS Code CMake Tools keeps configuring `build` with `-A win32`, run
-`CMake: Delete Cache and Reconfigure`, then select the
-`windows-msvc-vs2026` configure preset.
+The generated solution lands at `build\vs2026-x64\jot.sln` — open it directly
+or open the folder and pick the preset. Use 64-bit MSVC; the Windows target
+does not support `-A win32`. Lua is fetched at a pinned version when missing,
+and `libuv`/`utf8proc` are fetched automatically unless you provide them via
+vcpkg (set `JOT_FETCH_DEPS=OFF` to opt out).
 
-Use 64-bit MSVC. The experimental Windows target does not support `-A win32`.
-Lua is fetched at a pinned version when unavailable. `libuv` and
-`utf8proc` are fetched automatically when CMake packages are unavailable; set
-`JOT_FETCH_DEPS=OFF` if you want to provide them through vcpkg or another package
-manager. Tree-sitter runtime support can be enabled after installing a compatible
-`tree-sitter` package and parser DLLs.
-
-Installed files include:
+Installed files:
 
 - `$prefix/bin/jot`
 - `$prefix/share/jot/lua/`
 - `$prefix/share/jot/configs/`
 
-## Run
+## Running jot
 
 ```bash
-jot
-jot path/to/file.cpp
-jot path/to/project
+jot                 # resume your last workspace, or show the home menu
+jot file.cpp        # open a single file
+jot path/to/project # open a folder as the workspace root
 ```
 
-Launch behavior:
+Workspace sessions are stored under `~/.config/jot/workspaces/`, so jot can
+pick up where you left off.
 
-- no argument: resume the most recent valid workspace session, or show the home
-  menu when no session exists
-- file argument: open that file in an editor session
-- directory argument: change into that directory, use it as the workspace root,
-  load the file tree, open the sidebar, and restore that workspace session
-
-Workspace sessions are stored under:
-
-```text
-~/.config/jot/workspaces/
-```
-
-## Feature Set
+## Feature tour
 
 ### Editing
 
-- Modeless text entry with direct typing by default.
+- Modeless text entry — typing edits immediately.
 - Undo/redo, copy/cut/paste, select all, mouse selection, double-click word
-  selection, and triple-click line selection.
-- Multi-line paste with optional smart indentation rebased to the cursor
-  context.
-- Auto-indent, optional indent detection, tab insertion, selection indent, and
-  selection outdent.
-- Auto-closing brackets, bracket matching, bracket jump, rainbow bracket colors,
-  and active bracket guide rendering.
-- Duplicate/delete current line, move current line or selection up/down, join
-  lines, trim trailing whitespace, and trim blank lines in a selection.
-- Uppercase/lowercase transforms for the selection or current word.
-- Sort, sort descending, reverse, deduplicate, and shuffle selected lines.
-- Replace commands for case-sensitive, case-insensitive, whole-word, and regex
-  replacement.
-- Surround/unsurround selection or current word.
-- Increment/decrement number at cursor.
-- Format document command.
-- Word-wise deletion, smart line-start movement, file start/end movement, and
-  page movement.
-- Buffer statistics and current date/time insertion.
+  selection, triple-click line selection.
+- Smart multi-line paste that re-indents to the cursor.
+- Auto-indent, auto-closing brackets, bracket matching and jumping, rainbow
+  bracket colors, and an active bracket guide.
+- Line helpers: duplicate, delete, move up/down, join; trim trailing
+  whitespace or blank lines; uppercase/lowercase; sort/reverse/deduplicate/
+  shuffle selected lines.
+- Case-sensitive, whole-word, and regex replace; surround/unsurround;
+  increment/decrement the number under the cursor; format document; word-wise
+  deletion; smart line-start movement; file/page movement.
 
-### Buffers, Tabs, And Panes
+### Buffers, tabs, and panes
 
-- Multiple open buffers, including saved files and unsaved buffers.
-- Pane-local file tabs with click-to-switch and close buttons.
-- Reopen last closed tab.
-- Split panes left/right/up/down.
-- Directional pane focus and pane resize by keyboard or mouse drag.
-- Close current pane without necessarily closing the underlying buffer.
-- Open, save, save-as, save-and-quit, close buffer, quit, and force quit
-  commands.
-- Autosave on/off/toggle/status plus configurable autosave interval.
+- Any number of open buffers, saved or unsaved.
+- Pane-local file tabs with click-to-switch and close buttons, plus reopen of
+  the last closed tab.
+- Split panes in any direction; move focus or resize with keyboard or mouse.
+- Open, save, save-as, close, quit (with force variants), and autosave with a
+  configurable interval.
 
-### Workspace And Sidebar
+### Workspace and sidebar
 
-- Workspace root from the current directory or a launched folder.
-- Sidebar file explorer with folders before files, hidden-file toggle, expand
-  all, collapse all, refresh, and parent-folder workspace navigation.
-- Keyboard and mouse navigation for the sidebar.
-- Create file, create folder, rename, and delete file/folder workflows.
-- Recent files and recent workspace resume.
-- Home menu with recent entries, new file, command palette, theme chooser, and
-  recent prompt entry points.
-- C++ helper commands for creating matching header/source pairs and generating
-  missing source implementations from declarations.
+- The workspace root is the folder you launched (or your current directory).
+- A sidebar file explorer: folders before files, a hidden-file toggle, expand/
+  collapse all, refresh, and parent-folder navigation.
+- Create, rename, and delete files and folders from the tree.
+- Recent files and workspace resume, plus a home menu for recent entries and
+  quick actions.
+- C++ assist: create matching header/source pairs, or generate missing source
+  implementations from declarations.
 
-### Search And Navigation
+### Search and navigation
 
-- Buffer-local search panel with next/previous match navigation.
-- Search options for case sensitivity, whole-word matching, and regex mode.
-- Replace panel with replace current and replace all actions.
-- Selection-scoped replace from `Ctrl+Shift+F`, with replacements limited to
-  the highlighted code.
-- Go to line or line:column.
-- Bookmarks.
-- Telescope file finder with mouse selection/scrolling and syntax-highlighted
-  previews.
-- Project-wide text search picker.
-- Diagnostics picker and next/previous diagnostic navigation.
-- Symbols/outline: a persistent outline panel for the current file (`:outline`,
-  j/k to select, Enter to jump) plus a symbol picker (`Ctrl+Shift+O`, `:symbols`)
-  using LSP symbols when available and a regex fallback for supported buffers.
+- Per-buffer search with case/whole-word/regex options, and a replace panel
+  (current match or all).
+- Selection-scoped replace via `Ctrl+Shift+F` — or project-wide search when
+  nothing is selected.
+- Go to line, bookmarks, and a fuzzy file finder (telescope) with mouse
+  support and syntax-highlighted previews.
+- Picker for project-wide text search, diagnostics, and document symbols, plus
+  a persistent outline panel (`:outline`).
 
-### Syntax Highlighting And Folding
+### Syntax highlighting and folding
 
-- Tree-sitter parser-based highlighting when the runtime and grammar are
-  available.
-- Built-in regex fallback highlighting for common file types.
-- Runtime Tree-sitter commands to install grammars, inspect status, and reload
-  parser/query caches.
-- Built-in and minimal query fallback paths for C++ so highlighting remains
-  Tree-sitter-backed when runtime queries are incompatible.
-- Rich Tree-sitter capture mapping for variables, parameters, fields, constants,
-  builtins, operators, punctuation, control/storage/preprocessor keywords,
-  methods, constructors, builtin types, macro constants, string escapes, tags,
-  attributes, namespaces, and modules.
-- Theme slots for both classic syntax colors and richer Tree-sitter captures.
-- Code folding with gutter indicators, toggle/collapse/expand commands, fold
-  all, unfold all, mouse toggling, and persisted collapsed ranges.
+- Tree-sitter highlighting when the runtime and grammars are available, with a
+  regex fallback for common file types.
+- Commands to install grammars, inspect status, and reload parser/query caches.
+- Rich token mapping (variables, parameters, types, functions, keywords,
+  operators, etc.) with theme slots for both classic and Tree-sitter captures.
+- Code folding with toggle/collapse/expand, mouse toggling, and persisted
+  collapsed ranges.
 
-Built-in fallback syntax rules cover common file types including:
-
-- C / C++: `.c`, `.cpp`, `.h`, `.hpp`
-- Python: `.py`
-- JavaScript / JSX / TypeScript / TSX: `.js`, `.jsx`, `.mjs`, `.cjs`,
-  `.ts`, `.tsx`, `.mts`, `.cts`
-- HTML / XML: `.html`, `.xml`
-- Rust: `.rs`
-- CSS: `.css`
-- Java: `.java`
-- Go: `.go`
-- Markdown: `.md`
-- JSON: `.json`
-- Shell: `.sh`, `.bash`, `.zsh`
-- Ruby: `.rb`
-- PHP: `.php`
+The built-in fallback covers the usual suspects: C/C++, Python, JavaScript/
+TypeScript (incl. JSX/TSX), HTML/XML, Rust, CSS, Java, Go, Markdown, JSON,
+Shell, Ruby, and PHP.
 
 ### LSP
 
-- Native C++ LSP client ownership; Python is not used to drive editor behavior.
-- One LSP client per language and workspace root.
-- File open/change/save notifications with debounced document sync.
-- Diagnostics overlay, diagnostics picker, and next/previous diagnostic jumps.
-- Completion dropdown with fuzzy filtering, `textEdit` support, and plain-text
-  snippet degradation.
-- Manual and trigger-character completion requests.
-- Hover popup by command or debounced mouse hover.
-- Go to definition, preview/cross-file open, Ctrl-click definition requests when
-  terminal mouse modifiers are available, and `:lspback` return stack.
-- Document symbols from LSP with regex fallback, exposed both as a picker and
-  as a persistent outline panel.
-- LSP status, start, stop, restart, manager, install, and remove commands.
+- One language server per language per workspace root, driven natively from
+  C++ (no Python glue).
+- Debounced file sync, diagnostics overlay, and next/previous diagnostic
+  jumps.
+- Completion with fuzzy filtering and `textEdit` support; hover on demand or
+  on mouse hover; go-to-definition with a return stack (`:lspback`).
+- Document symbols via LSP with regex fallback — as a picker or a persistent
+  outline.
+- Status, start/stop/restart, a manager, and install/remove helpers.
 
-Default language server commands:
+Default servers: `pylsp` (Python), `typescript-language-server --stdio`
+(JS/TS), `vscode-html-language-server --stdio` (HTML), `clangd` (C/C++).
+Install helpers also cover Rust, Go, Lua, and Bash.
 
-- Python: `pylsp`
-- JavaScript / JSX / TypeScript / TSX:
-  `typescript-language-server --stdio`
-- HTML: `vscode-html-language-server --stdio`
-- C / C++: `clangd`
+### Integrated terminal and tasks
 
-The LSP manager/install/remove helpers expose language entries for Python,
-JavaScript/JSX/TypeScript/TSX, HTML, C++, Rust, Go, Lua, and Bash.
-
-### Integrated Terminal And Tasks
-
-- Bottom terminal panel backed by PTY and libvterm.
-- Native shell launch using `$SHELL` when available, with fallback shell paths.
-- Multiple terminal tabs.
-- Mouse terminal tab switching, closing, and `+` tab creation.
-- Terminal instances remain alive while hidden.
-- `Esc` releases terminal focus back to the editor.
+- A bottom terminal panel backed by a real PTY, with multiple tabs that stay
+  alive while hidden.
+- `Esc` returns focus to the editor; the mouse switches/closes tabs or opens
+  new ones.
 - Local and global task files:
 
 ```text
@@ -266,43 +196,27 @@ JavaScript/JSX/TypeScript/TSX, HTML, C++, Rust, Go, Lua, and Bash.
 ~/.config/jot/configs/tasks.json
 ```
 
-Task schema:
-
 ```json
 { "tasks": { "build": "cmake --build build -j" } }
 ```
 
-Local tasks override global tasks with the same name. `:task` lists tasks,
-`:task <name>` runs or reuses a task tab, `:tasknew <name>` starts a fresh task
-tab, and `:taskrerun` reruns the last task.
+Local tasks override global ones of the same name. `:task` lists them,
+`:task <name>` runs (or reuses) a tab, `:tasknew` starts a fresh one, and
+`:taskrerun` reruns the last.
 
-### Image Viewer
+### Image viewer
 
-- Opens common image files in a right-side viewer.
-- Uses real terminal graphics when available: Kitty graphics first, Sixel
-  through `img2sixel` second, then the 256-color cell preview fallback.
-- Configure with `image_viewer_backend = auto`; supported values are `auto`,
-  `kitty`, `sixel`, `cell`, and `off`.
+Open image files in a right-side viewer that uses real terminal graphics when
+available — Kitty graphics first, Sixel (`img2sixel`) second, and a 256-color
+cell preview as the fallback. Configure with `image_viewer_backend = auto`
+(`kitty`, `sixel`, `cell`, or `off`).
 
 ### Debugger
 
-- Native Debug Adapter Protocol client integration.
-- GDB and LLDB launch commands.
-- `debug.json` configured sessions from the workspace or global config.
-- Attach-to-PID command.
-- Toggle breakpoints by clicking the editor gutter marker column.
-- Continue, pause, restart, stop, step into, step over, and step out commands.
-- Threads, stack, variables, memory, disassembly, breakpoints, and output views
-  in the debugger panel.
-
-Debug config locations:
-
-```text
-<workspace>/.jot/debug.json
-~/.config/jot/configs/debug.json
-```
-
-Debug config shape:
+- Native Debug Adapter Protocol client with GDB/LLDB launch commands and
+  attach-to-PID.
+- Session configs from `<workspace>/.jot/debug.json` or
+  `~/.config/jot/configs/debug.json`:
 
 ```json
 {
@@ -318,27 +232,23 @@ Debug config shape:
 }
 ```
 
+- Click the gutter to toggle breakpoints; step, continue, pause, restart, and
+  inspect threads, stack, variables, memory, disassembly, breakpoints, and
+  output — all in the debugger panel.
+
 ### Git
 
-- Git status summary in the editor state/status surfaces.
-- Popup commands for `status`, unstaged diff, staged diff, recent log, and blame
-  for the current line.
-- Stage/unstage current or specified file.
-- Stage all and unstage all.
-- Commit staged changes with an explicit message.
-- Refresh repository state.
-
-Git operations are local only; push, pull, fetch, reset, checkout, and discard
-are intentionally not exposed as editor commands.
+Status summaries, diffs (staged and unstaged), recent log, and line blame are
+one command away, as are staging/unstaging individual files or everything and
+committing with a message. Git operations are intentionally local-only:
+push/pull/fetch/reset/checkout are not exposed as editor commands.
 
 ### Themes
 
-- Embedded Lua runtime for plugin callbacks and native JSON colorscheme application.
-- Bundled and user theme directories.
-- `vim` compatibility alias for existing theme files.
-- Highlight group mapping for classic groups and Tree-sitter
-  captures.
-- Theme chooser, `:theme`, and `:colorscheme` commands.
+- JSON colorschemes applied live via an embedded Lua runtime; both bundled and
+  user theme directories are supported, with vim-style aliases for existing
+  files.
+- Use the theme chooser, `:theme`, or `:colorscheme`.
 
 User theme paths:
 
@@ -347,275 +257,153 @@ User theme paths:
 ~/.config/jot/themes/
 ```
 
-See [docs/THEMES.md](docs/THEMES.md) for theme authoring.
-See [docs/LUA_API.md](docs/LUA_API.md) for runtime scripting and extension APIs.
+See [docs/THEMES.md](docs/THEMES.md) for authoring themes and
+[docs/LUA_API.md](docs/LUA_API.md) for the scripting API.
 
-### UI And Mouse
+### UI and mouse
 
-- Top application/menu chrome, pane file tabs, editor panes, optional sidebar,
-  optional minimap, optional right-side tool dock, bottom terminal/debugger
-  panels, and two-row status/message area.
-- Mouse click to place cursor, drag to select, edge auto-scroll while dragging,
-  double-click word selection, and triple-click line selection.
-- Mouse tab switching and close buttons.
-- Mouse split resizing.
-- Mouse minimap viewport jump.
-- Mouse sidebar navigation.
-- Mouse debugger breakpoint toggles.
-- Context menus and menu-bar actions route to existing editor commands.
+The chrome is yours to arrange: menu bar, pane tabs, editor panes, optional
+sidebar, optional minimap, a right-side tool dock, bottom terminal/debugger
+panels, and a two-row status/message area. The mouse is wired throughout —
+click to place the cursor, drag to select (with edge auto-scroll), double/
+triple-click for word/line selection, click tabs, drag split dividers, jump
+the minimap viewport, navigate the sidebar, and toggle breakpoints.
 
 ## Keybindings
 
-### Core Editing
+### Core editing
 
-- Modeless text entry: typing inserts at the cursor immediately.
-- `Esc`: clear selection or release/close the active floating surface.
-- `Ctrl+Z` / `Ctrl+Y`: undo / redo
-- `Ctrl+A`: select all
-- `Ctrl+C` / `Ctrl+X` / `Ctrl+V`: copy / cut / paste
-- `Ctrl+D`: duplicate current line
-- `Ctrl+K`: delete current line
-- `Ctrl+/`: toggle comment
-- `Ctrl+Backspace`: delete previous word
-- `Ctrl+Delete`: delete next word
-- `Ctrl+Enter`: insert a new line below without splitting the current line
-- `Ctrl+Shift+Enter`: insert a new line above without splitting the current line
-- `Alt+Enter` / `Alt+Shift+Enter`: terminal fallback for line below / above
-- `Ctrl+Space`: request LSP completion
-- `Ctrl+Shift+L`: select current line
-- `Ctrl+Shift+U`: uppercase selection or word
-- `Ctrl+Shift+N`: lowercase selection or word
+| Shortcut | Action |
+| --- | --- |
+| Typing | Insert text at the cursor |
+| `Esc` | Clear selection / close the active floating surface |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
+| `Ctrl+A` | Select all |
+| `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / cut / paste |
+| `Ctrl+D` | Duplicate current line |
+| `Ctrl+K` | Delete current line |
+| `Ctrl+/` | Toggle comment |
+| `Ctrl+Backspace` / `Ctrl+Delete` | Delete previous / next word |
+| `Ctrl+Enter` / `Ctrl+Shift+Enter` | Insert line below / above |
+| `Alt+Enter` / `Alt+Shift+Enter` | Terminal fallback: line below / above |
+| `Ctrl+Space` | LSP completion |
+| `Ctrl+Shift+L` | Select current line |
+| `Ctrl+Shift+U` / `Ctrl+Shift+N` | Uppercase / lowercase selection or word |
 
 ### Navigation
 
-- `Arrow keys`: move cursor
-- `Shift+Arrow keys`: extend selection
-- `Home` / `End`: smart line start / line end
-- `Page Up` / `Page Down`: move by 10 lines
-- `Alt+I` / `Alt+A`: smart line start / line end
-- `Alt+G` / `Alt+Shift+G`: file start / file end
-- `Alt+H` / `Alt+L`: previous / next word
-- `Alt+Up` / `Alt+Down`: move current line or selection up/down
-- `Tab`: indent selection or insert indentation
-- `Shift+Tab`: outdent selection
+| Shortcut | Action |
+| --- | --- |
+| Arrow keys | Move cursor |
+| `Shift+Arrow` | Extend selection |
+| `Home` / `End` | Smart line start / end |
+| `Page Up` / `Page Down` | Move by 10 lines |
+| `Alt+I` / `Alt+A` | Smart line start / end |
+| `Alt+G` / `Alt+Shift+G` | File start / end |
+| `Alt+H` / `Alt+L` | Previous / next word |
+| `Alt+Up` / `Alt+Down` | Move line or selection up / down |
+| `Tab` / `Shift+Tab` | Indent / outdent selection |
 
-### Buffers, Tabs, Panes, And Tools
+### Buffers, tabs, panes, and tools
 
-- `Ctrl+Tab` / `Ctrl+Shift+Tab`: next / previous pane-local tab
-- `Alt+,` / `Alt+.`: previous / next pane-local tab
-- `Alt+1..9` / `Alt+0`: switch to tab 1..9 / last tab
-- `Alt+W`: close current file tab
-- `Alt+N`: new buffer
-- `Alt+S`: save
-- `Ctrl+B` or `Alt+B`: toggle sidebar
-- `Ctrl+F` or `Alt+F`: search panel
-- `Ctrl+G`: go-to-line prompt
-- `Ctrl+P` or `Alt+P`: command palette
-- `Ctrl+E`: Telescope file finder
-- `Ctrl+R`: recent-file prompt
-- `Ctrl+Shift+T`: reopen last closed tab
-- `Ctrl+Shift+F`: replace inside selected text, or project-wide search when no
-  text is selected
-- `Ctrl+Shift+M`: diagnostics picker
-- `Ctrl+Shift+O`: document symbol picker
-- `:outline`: persistent symbols/outline panel for the current file
-- `Ctrl+M` or `Alt+M`: toggle minimap
-- `Ctrl+T` or `Alt+T`: theme chooser
-- `Ctrl+\``: open, focus, or hide terminal panel
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous pane-local tab |
+| `Alt+,` / `Alt+.` | Previous / next tab |
+| `Alt+1..9` / `Alt+0` | Switch to tab 1..9 / last tab |
+| `Alt+W` | Close current file tab |
+| `Alt+N` | New buffer |
+| `Alt+S` | Save |
+| `Ctrl+B` or `Alt+B` | Toggle sidebar |
+| `Ctrl+F` or `Alt+F` | Search panel |
+| `Ctrl+G` | Go-to-line prompt |
+| `Ctrl+P` or `Alt+P` | Command palette |
+| `Ctrl+E` | File finder (telescope) |
+| `Ctrl+R` | Recent-file prompt |
+| `Ctrl+Shift+T` | Reopen last closed tab |
+| `Ctrl+Shift+F` | Replace in selection, or project-wide search |
+| `Ctrl+Shift+M` | Diagnostics picker |
+| `Ctrl+Shift+O` | Document symbol picker |
+| `:outline` | Persistent outline panel |
+| `Ctrl+M` or `Alt+M` | Toggle minimap |
+| `Ctrl+T` or `Alt+T` | Theme chooser |
+| `` Ctrl+` `` | Open / focus / hide terminal panel |
 
-### Pane Layout
+### Pane layout
 
-- `Alt+H/J/K/L`: focus pane or explorer left/down/up/right
-- `Alt+Shift+H/J/K/L`: split left/down/up/right
-- `Ctrl+Alt+Arrow`: focus pane in that direction
-- `Alt+Shift+Q` or `Ctrl+Q`: close current pane
-- `Ctrl+Shift+H/J/K/L`: resize pane
-- `Ctrl+Arrow`: resize pane
+| Shortcut | Action |
+| --- | --- |
+| `Alt+H/J/K/L` | Focus pane (or explorer) left/down/up/right |
+| `Alt+Shift+H/J/K/L` | Split left/down/up/right |
+| `Ctrl+Alt+Arrow` | Focus pane in that direction |
+| `Alt+Shift+Q` or `Ctrl+Q` | Close current pane |
+| `Ctrl+Shift+H/J/K/L` | Resize pane |
+| `Ctrl+Arrow` | Resize pane |
 
-### Search Panel
+### Search panel
 
-- `Enter`, `Arrow Down`, or `Ctrl+F`: next match
-- `Arrow Up`: previous match
-- `Tab`: toggle case-sensitive search, or switch fields when replace is open
-- `Ctrl+H`: show/hide replace field
-- `Ctrl+R`: replace current match
-- `Ctrl+Shift+R`: replace all matches
-- `Ctrl+W`: toggle whole-word search
-- `Ctrl+E`: toggle regex search
-- `Esc`: close search
+`Enter` / `↓` / `Ctrl+F` next match · `↑` previous · `Tab` case-sensitivity or
+replace field · `Ctrl+H` show/hide replace · `Ctrl+R` replace current ·
+`Ctrl+Shift+R` replace all · `Ctrl+W` whole-word · `Ctrl+E` regex · `Esc` close
 
-### Sidebar Explorer
+### Sidebar explorer
 
-- `Arrow Up` / `k`: move up
-- `Arrow Down` / `j`: move down
-- `Page Up` / `Page Down`: fast scroll
-- `Home` / `End`: first / last node
-- `Arrow Right` / `l` / `Enter`: expand folder or open file
-- `Arrow Left` / `h`: collapse folder or move to parent node
-- `r`: refresh tree
-- `a`: create file in selected folder
-- `A`: create folder in selected folder
-- `i`: generate missing C++ implementations
-- `C`: create matching C++ header/source pair
-- `d`, then `d` again: delete selected file or folder
-- `.`: show/hide dotfiles
-- `*`: expand all recursively
-- `z`: collapse all
-- `Backspace`: open parent folder as workspace root
-- `Esc`: return focus to editor
+`↑`/`k` up · `↓`/`j` down · `PgUp`/`PgDn` fast scroll · `Home`/`End` first/last
+· `→`/`l`/`Enter` expand or open · `←`/`h` collapse or parent · `r` refresh ·
+`a` create file · `A` create folder · `i` generate C++ implementations ·
+`C` create header/source pair · `d d` delete · `.` toggle dotfiles ·
+`*` expand all · `z` collapse all · `Backspace` open parent as root · `Esc` back
+to editor
 
-### Quick Pick And Completion
+### Picker and completion
 
-- Quick pick: type to filter, `Up/Down` to move, `Home/End` to jump,
-  `Enter` to accept, `Backspace` to edit, `Esc` to close
-- LSP completion: `Up/Down` to select, `Enter` or `Tab` to apply, `Esc` to close
+Type to filter, `↑`/`↓` to move, `Home`/`End` to jump, `Enter` to accept,
+`Backspace` to edit, `Esc` to close. In LSP completion, `Enter` or `Tab`
+applies and `Esc` closes.
 
-### Integrated Terminal
+## Command reference
 
-- `Ctrl+\``: show, hide, or focus terminal panel
-- `Ctrl+Shift+T`: create a new terminal tab while terminal focus is active
-- `Esc`: release terminal focus
-- Mouse click terminal tab: focus tab
-- Mouse click `+`: create tab
-- Mouse click tab close button: close tab
+Open the palette with `Ctrl+P` and type an ex-style command.
 
-## Command Reference
+**Files & sessions:** `:q` `:w` `:wq` `:x` `:e` `:new` `:bd` `:home`
+`:resume` `:recent` `:reopen` `:autosave`
 
-Open the command palette with `Ctrl+P` and run ex-style commands.
+**Panes & UI:** `:sp` `:vsp` `:splitleft|right|up|down` `:bn` `:bp`
+`:focusleft|right|up|down` `:wincmd` `:resize*` `:minimap` `:theme`
+`:colorscheme` `:help`
 
-### File, Session, And Buffers
+**Workspace:** `:find` / `:ff [dir]` `:mkfile` `:mkdir` `:rename` `:rm`
+`:cpppair` `:cppimpl`
 
-- `:q`, `:quit`, `:q!`, `:quit!`
-- `:w`, `:write`, `:wq`, `:x`, `:xit`
-- `:e <file>`, `:edit <file>`, `:open <file>`
-- `:new`, `:enew`
-- `:bd`, `:bdelete`, `:close`
-- `:home`, `:resume`
-- `:recent`, `:openrecent [index|query]`
-- `:reopen`, `:reopenlast`
-- `:autosave [on|off|toggle|status|<ms>]`
+**Search & edit:** `:search` `:grep` `:diagnostics` `:diagnext` `:symbols`
+`:outline` `:line` `:goto` `:format` `:trim` `:upper` `:lower`
+`:sortlines|desc|reverselines|uniquelines|shufflelines|joinlines` `:dupe`
+`:replace*` `:surround` `:fold*` `:incnum` `:decnum` `:copypath` `:copyname`
+`:datetime` `:stats`
 
-### Panes And UI
+**LSP:** `:lspinstall` `:lspremove` `:lspstatus` `:hover` `:definition`
+`:gd` `:lspback`
 
-- `:sp`, `:split`, `:splith`
-- `:vsp`, `:splitv`
-- `:splitleft`, `:splitright`, `:splitup`, `:splitdown`
-- `:spleft`, `:spright`, `:spup`, `:spdown`
-- `:bn`, `:nextpane`, `:bp`, `:prevpane`
-- `:focusleft`, `:focusright`, `:focusup`, `:focusdown`
-- `:wincmd h|j|k|l`
-- `:resizeleft`, `:resizeright`, `:resizeup`, `:resizedown`
-- `:minimap`
-- `:theme <name>`, `:colorscheme <name>`, `:colo <name>`
-- `:help [topic]`, `:h [topic]`
+**Tree-sitter:** `:tsinstall <lang>` (e.g. `:tsinstall javascript` or
+`:tsinstall jsx`) `:tsstatus` `:tsreload`
 
-### Workspace
+**Terminal & tasks:** `:term` `:termnew` `:task [name]` `:tasknew <name>`
+`:taskrerun`
 
-- `:find [dir]`, `:ff [dir]`
-- `:mkfile <path>`
-- `:mkdir <path>`
-- `:rename <old_path> <new_path>`
-- `:rm <path>`
-- `:cpppair <path>`
-- `:cppimpl [header-or-source]`
+**Debugger:** `:debug <program>` `:debuggdb` `:debuglldb` `:debugconfig`
+`:debugattach <pid>` `:debugpanel` `:debugstop|restart|continue|pause`
+`:debugstep|next|out` `:debugthreads` `:debugmemory` `:debugdisasm`
 
-### Search, Navigation, And Editing
-
-- `:search`
-- `:grep <text>`, `:projectsearch <text>`, `:searchall <text>`
-- `:diagnostics`, `:problems`
-- `:diagnext`, `:diagnosticnext`, `:diagprev`
-- `:symbols` (picker), `:outline` (panel)
-- `:line <line>[:col]`, `:goto <line>[:col]`
-- `:format`, `:trim`, `:trimblank`
-- `:upper`, `:lower`
-- `:sortlines`, `:sortdesc`, `:reverselines`, `:uniquelines`,
-  `:shufflelines`, `:joinlines`
-- `:dupe`
-- `:replace <from> <to>`, `:replacei <from> <to>`,
-  `:replaceword <from> <to>`, `:replacere <pattern> <replacement>`
-- `:surround <left> [right]`, `:unsurround`
-- `:fold`, `:collapse`, `:unfold`, `:expand`, `:togglefold`, `:foldall`,
-  `:unfoldall`
-- `:incnum`, `:decnum`
-- `:copypath`, `:copyname`
-- `:datetime`, `:stats`
-
-### LSP
-
-- `:lspinstall <server>` installs a language server (silently, with receipts)
-- `:lspremove <server>` removes one
-- `:lspstatus` shows attached servers, diagnostics, and install progress
-- `:hover`, `:lsphover`
-- `:definition`, `:lspdefinition`, `:lspdef`, `:gd`
-- `:lspback`
-
-### Tree-sitter
-
-- `:tsinstall <language>`, `:treesitterinstall <language>`
-- JavaScript / JSX: `:tsinstall javascript` or `:tsinstall jsx`
-- TypeScript / TSX: `:tsinstall typescript` and `:tsinstall tsx`
-- `:tsstatus`
-- `:tsreload`, `:treesitterreload`
-
-Tree-sitter language metadata and query policy are Lua-owned. Bundled queries use
-`src/lua/treesitter/queries/<language>/highlights.scm`; parser libraries install under
-`${XDG_DATA_HOME:-$HOME/.local/share}/jot/treesitter/parsers` on POSIX or
-`%LOCALAPPDATA%/jot/treesitter/parsers` on Windows. Set
-`JOT_TREESITTER_PREFIX` only when selecting another writable root. Failed Lua
-metadata or queries disable that language and preserve regex highlighting.
-
-### Terminal And Tasks
-
-- `:term`, `:terminal`
-- `:termnew`, `:terminalnew`
-- `:task [name]`
-- `:tasknew <name>`
-- `:taskrerun`
-
-### Debugger
-
-- `:debug <program> [args...]`
-- `:debuggdb <program> [args...]`
-- `:debuglldb <program> [args...]`
-- `:debugconfig [name]`
-- `:debugattach <pid>`
-- `:debugpanel`
-- `:debugstop`, `:debugrestart`
-- `:debugcontinue`, `:debugpause`
-- `:debugstep`, `:debugnext`, `:debugout`
-- `:debugthreads`
-- `:debugmemory <expr|addr>`
-- `:debugdisasm [expr|addr]`
-
-### Git
-
-- `:gitstatus`
-- `:gitdiff [file]`
-- `:gitdiffstaged [file]`
-- `:gitstage [file]`
-- `:gitunstage [file]`
-- `:gitstageall`
-- `:gitunstageall`
-- `:gitcommit <message>`
-- `:gitlog`
-- `:gitblame`
-- `:gitrefresh`
+**Git:** `:gitstatus` `:gitdiff` `:gitdiffstaged` `:gitstage` `:gitunstage`
+`:gitstageall` `:gitunstageall` `:gitcommit <msg>` `:gitlog` `:gitblame`
+`:gitrefresh`
 
 ## Configuration
 
-User config lives in:
-
-```text
-~/.config/jot/
-```
-
-Configuration is **Lua-first**: settings are defined in `config.lua`
-(loaded before `init.lua` and plugins) and applied **live** — no restart
-needed. `configs/settings.conf` is just the runtime-save overlay written by
-`jot.config.set` from Lua.
-
-Current layout:
+User config lives in `~/.config/jot/` and is **Lua-first** — `config.lua`
+defines settings (loaded before `init.lua` and plugins) and applies them
+**live**, no restart needed. `configs/settings.conf` is just the runtime-save
+overlay written by `jot.config.set` from Lua.
 
 ```text
 ~/.config/jot/
@@ -626,7 +414,7 @@ Current layout:
     settings.conf   # runtime-save overlay for jot.config.set
     colors/
       my_theme.json
-  themes/      # legacy colorscheme path
+  themes/       # legacy colorscheme path
 ```
 
 Example `config.lua`:
@@ -639,87 +427,38 @@ jot.config.set("auto_save", true)
 jot.config.set("auto_save_interval_ms", 5000)
 ```
 
-`jot.config.set` persists and live-applies every setting that maps to editor
-state; `:reload` re-reads `settings.conf`, re-runs `config.lua`, live-applies
-it, and reloads Lua plugins and tree-sitter. `:reloadconfig` is the
-config-only variant.
+`:reload` re-reads `settings.conf`, re-runs `config.lua`, live-applies it, and
+reloads Lua plugins and Tree-sitter; `:reloadconfig` is the config-only
+variant. A bundled starter config lives in `.configs/configs/`.
 
-Bundled starter config in this repo:
+Built-in defaults include `explorer_width=25`, `minimap_width=15`,
+`tab_size=2`, `show_line_numbers=true`, `relative_line_numbers=true`,
+`cursor_style=block`, `render_fps=120`, `idle_fps=60`, `auto_save=false`,
+`auto_save_interval_ms=2000`, `lsp_change_debounce_ms=120`,
+`terminal_height=10`, and `debugger_height=12`.
 
-```text
-.configs/configs/
-```
+## Building from source
 
-Built-in defaults include:
-
-- `explorer_width=25`
-- `minimap_width=15`
-- `show_explorer=true`
-- `show_minimap=true`
-- `tab_size=2`
-- `show_indent_guides=false`
-- `auto_indent=true`
-- `smart_paste_indent=true`
-- `auto_save=false`
-- `auto_save_interval_ms=2000`
-- `auto_detect_indent=false`
-- `show_line_numbers=true`
-- `relative_line_numbers=true`
-- `word_wrap=false`
-- `cursor_style=block`
-- `render_fps=120`
-- `idle_fps=60`
-- `lsp_change_debounce_ms=120`
-- `terminal_height=10`
-- `debugger_height=12`
-
-Example `settings.conf`:
-
-```ini
-tab_size=2
-show_indent_guides=false
-auto_indent=true
-smart_paste_indent=true
-auto_save=false
-auto_save_interval_ms=2000
-auto_detect_indent=true
-relative_line_numbers=true
-render_fps=120
-idle_fps=60
-terminal_height=12
-debugger_height=12
-minimap_width=18
-explorer_width=30
-lsp_change_debounce_ms=120
-```
-
-## Build Requirements
+Requirements:
 
 - CMake 3.16+
-- C++17 compiler
-- Lua 5.3+ development headers (or allow CMake to fetch Lua 5.4.7)
-- libvterm development headers (`vterm` pkg-config package)
-- libtermkey development headers (`termkey` pkg-config package)
-- libuv development headers (`libuv` pkg-config package)
-- Unix-like environment with POSIX terminal APIs
+- A C++17 compiler
+- Lua 5.3+ development headers (or let CMake fetch Lua 5.4.7)
+- `vterm`, `termkey`, and `libuv` development packages
+- A Unix-like environment with POSIX terminal APIs
 
-Notes:
-
-- The UI uses raw terminal handling, not ncurses.
-- Editor keyboard input is decoded with libtermkey for reliable modifier and
-  advanced shortcut handling.
-- The integrated terminal uses PTY support (`forkpty` on POSIX, ConPTY on
-  Windows) and the bundled libvterm emulator.
-- Async editor I/O, timers, child process pipes, and file-tree notifications use
-  libuv.
-- Tree-sitter runtime support is optional at build time but recommended.
+Notes: the UI talks to the raw terminal (no ncurses); libtermkey decodes
+keyboard input so modifiers and advanced shortcuts are reliable; the
+integrated terminal uses PTY support (`forkpty` on POSIX, ConPTY on Windows)
+with the bundled libvterm; libuv powers async I/O, timers, child-process
+pipes, and file-tree notifications; Tree-sitter runtime support is optional
+but recommended.
 
 ## Benchmarks
 
-The benchmark suite is opt-in and separate from CTest so normal builds stay
-fast and deterministic. It exercises non-interactive helper paths such as line
-providers, folding, UI text measurement, symbol extraction, and workspace
-search.
+The benchmark suite is opt-in and separate from the tests, so normal builds
+stay fast. It exercises non-interactive paths like line providers, folding,
+text measurement, symbol extraction, and workspace search.
 
 ```bash
 cmake -S . -B build -DJOT_BUILD_BENCHMARKS=ON
@@ -727,14 +466,14 @@ cmake --build build --target jot_benchmarks -j
 ./build/benchmarks/jot_benchmarks
 ```
 
-Benchmark output reports per-case iteration counts plus min/average/max runtime
-in milliseconds. Use the same build type and machine when comparing runs.
+Output reports per-case iteration counts and min/average/max runtimes in
+milliseconds. Compare runs on the same build type and machine.
 
-## Project Layout
+## Project layout
 
 ```text
 apps/jot/        CLI entrypoint and executable target
-benchmarks/      opt-in non-interactive performance benchmark suite
+benchmarks/      opt-in performance benchmark suite
 cmake/           reusable CMake modules
 include/jot/     public C++ API headers
 src/core/        editor state, buffers, panes, workspace, LSP, debugger, terminal
@@ -743,29 +482,24 @@ src/features/    syntax, folding, config, bracket helpers, C++ assist
 src/input/       keyboard, mouse, command palette, command dispatch
 src/render/      buffer drawing, minimap, overlays, panels, UI views
 src/tools/       integrated terminal, DAP client, LSP client, search helpers
-  src/lua_bridge/
-                  C++ bridge for embedded Lua plugin/theme API
+src/lua_bridge/  C++ bridge for the embedded Lua plugin/theme API
 src/ui/          raw terminal and UI abstraction
 docs/            user-facing documentation
-tests/           unit test scaffolding
+tests/           unit tests
 ```
 
-Build graph highlights:
+Build graph highlights: `jot_engine` is the aggregated static engine target;
+`jot_core`, `jot_edit`, `jot_features`, `jot_input`, `jot_render`,
+`jot_tools`, `jot_lua_bridge`, and `jot_ui` are the module libraries behind it.
 
-- `jot_engine`: aggregated static engine target for the app
-- `jot_core`, `jot_edit`, `jot_features`, `jot_input`, `jot_render`,
-  `jot_tools`, `jot_lua_bridge`, `jot_ui`: module libraries for ownership
-  boundaries and reuse
+## Notes and limitations
 
-## Notes And Limitations
-
-- The user-facing workflow is modeless. Typing edits text directly, selection is
-  handled by mouse or Shift+Arrow extension, and common editing commands use
-  standard Ctrl/Alt shortcuts.
-- The integrated terminal is useful for normal shell/task workflows, but it is
-  not intended to be a complete replacement for a mature standalone terminal
-  emulator.
-- Lua globals are injected for plugins; no package import is required.
+- The workflow is modeless by design — typing edits text directly, selection is
+  mouse- or `Shift+Arrow`-driven, and common commands use standard Ctrl/Alt
+  shortcuts.
+- The integrated terminal suits normal shell/task workflows but is not meant
+  to replace a full standalone terminal emulator.
+- Lua globals are injected for plugins; no `require` ceremony needed.
 - Windows support is experimental; Linux/macOS is the primary target.
 
 ## License
