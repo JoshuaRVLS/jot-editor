@@ -130,8 +130,16 @@ local function layout_toast(t)
 
   t.wrapped = wrap_text(t.message, math.max(8, max_w - 4))
   t.width = math.min(max_w, math.max(20, ww - margin * 2))
-  local inner_rows = 1 + #t.wrapped -- title row + message rows
-  t.height = math.max(3, math.min(wh - margin, inner_rows + 2)) -- + border
+  -- Without a title the first wrapped line becomes the title row, so the
+  -- painted rows are max(1, #wrapped); with a title they are 1 + #wrapped.
+  -- Add the two border rows on top.
+  local content_rows
+  if t.title ~= "" then
+    content_rows = 1 + #t.wrapped
+  else
+    content_rows = math.max(1, #t.wrapped)
+  end
+  t.height = math.max(3, math.min(wh - margin, content_rows + 2))
   t.col = math.max(0, ww - t.width - margin - 1)
 
   local row = margin
@@ -177,21 +185,21 @@ local function paint_toast(t)
   local title_text
   local first_body
   if t.title ~= "" then
-    title_text = " " .. t.icon .. " " .. shorten(t.title, math.max(1, inner - 4))
+    title_text = " " .. t.icon .. "  " .. shorten(t.title, math.max(1, inner - 5))
     first_body = 1
   else
-    title_text = " " .. t.icon .. " " .. shorten(t.wrapped[1], math.max(1, inner - 4))
+    title_text = " " .. t.icon .. "  " .. shorten(t.wrapped[1], math.max(1, inner - 5))
     first_body = 2
   end
   n = n + 1
   rows[n] = title_text
-  -- Byte offsets are 0-based: row = [0]=space [1..n]=icon [n+1]=space [n+2..]=text.
-  -- Color the icon accent, leave the separating space neutral, and start the
-  -- text span exactly at the first character (n+2) so the first letter isn't
-  -- left in the default foreground.
+  -- Byte offsets are 0-based: row = [0]=space [1..n]=icon [n+1..n+2]=gap
+  -- [n+3..]=text. Color only the icon accent, keep the two-space gap neutral,
+  -- and start the text span at the first character (n+3) so the first letter
+  -- is not left in the default foreground.
   spans[n] = {
-    { start = 1, len = #t.icon, fg = t.accent, bg = -1 },        -- icon
-    { start = #t.icon + 2, len = 65535, fg = colors.title, bg = -1 }, -- text
+    { start = 1, len = #t.icon, fg = t.accent, bg = -1 },            -- icon
+    { start = #t.icon + 3, len = 65535, fg = colors.title, bg = -1 }, -- text
   }
 
   -- Body rows.

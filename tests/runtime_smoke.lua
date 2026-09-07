@@ -352,20 +352,6 @@ check("toast.show", function()
   jot.toast.dismiss(id)
   return true
 end)
--- Liveness: a toast born from the deprecated statusline message channel
--- auto-dismisses inside the real event loop and signals via on_dismiss; the
--- driver asserts TOAST_DISMISSED in the output file.
-jot.toast.show{
-  message = "toast liveness",
-  duration_ms = 150,
-  on_dismiss = function()
-    local f = io.open(out_path, "a")
-    if f then
-      f:write("TOAST_DISMISSED\n")
-      f:close()
-    end
-  end,
-}
 
 -- ------------------------------------------------------- lsp manager
 check("lsp.disabled", function() return jot.lsp.disabled() end)

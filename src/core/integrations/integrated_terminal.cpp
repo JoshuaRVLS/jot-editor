@@ -157,9 +157,9 @@ void Editor::toggle_integrated_terminal()
     if (!term->open_shell())
     {
 #ifdef _WIN32
-      set_message("Failed to open integrated terminal: ConPTY unavailable (Windows 10 1809+ required)");
+      set_message("Failed to open integrated terminal: ConPTY unavailable (Windows 10 1809+ required)", false);
 #else
-      set_message("Failed to restart terminal: check $SHELL or PTY support");
+      set_message("Failed to restart terminal: check $SHELL or PTY support", false);
 #endif
       needs_redraw = true;
       return;
@@ -168,7 +168,7 @@ void Editor::toggle_integrated_terminal()
     show_integrated_terminal = true;
     activate_integrated_terminal(current_integrated_terminal, true);
     term->poll_output();
-    set_message("Integrated terminal restarted");
+    set_message("Integrated terminal restarted", false);
     needs_redraw = true;
     return;
   }
@@ -178,7 +178,7 @@ void Editor::toggle_integrated_terminal()
     show_integrated_terminal = true;
     activate_integrated_terminal(current_integrated_terminal, true);
     term->poll_output();
-    set_message("Integrated terminal opened");
+    set_message("Integrated terminal opened", false);
     needs_redraw = true;
     return;
   }
@@ -187,14 +187,14 @@ void Editor::toggle_integrated_terminal()
   {
     activate_integrated_terminal(current_integrated_terminal, false);
     show_integrated_terminal = false;
-    set_message("Integrated terminal hidden");
+    set_message("Integrated terminal hidden", false);
   }
   else
   {
     show_integrated_terminal = true;
     activate_integrated_terminal(current_integrated_terminal, true);
     term->poll_output();
-    set_message("Integrated terminal focused");
+    set_message("Integrated terminal focused", false);
   }
   needs_redraw = true;
 }

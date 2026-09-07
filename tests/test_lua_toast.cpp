@@ -542,7 +542,7 @@ TEST_CASE("Bundled toast module shows, stacks, and auto-dismisses")
   REQUIRE(g.open_count == 1);
   REQUIRE(g.last_border == "rounded");
   REQUIRE(g.last_width == 56);
-  REQUIRE(g.last_height == 4); // title + 1 body row + 2 borders
+  REQUIRE(g.last_height == 3); // single-line message becomes the title row, + 2 borders
   REQUIRE(g.last_col == 62);   // 120 - 56 - margin(1) - 1
   REQUIRE(g.last_row == 4);    // final row 1 + entry slide of 3
   REQUIRE(g.last_fg == 250);
@@ -573,9 +573,9 @@ TEST_CASE("Bundled toast module shows, stacks, and auto-dismisses")
   const int second = call_show(L, 1, "another message here", 400);
   REQUIRE(second > 0);
   REQUIRE(g.open_count == 2);
-  // First toast: height 4, gap 1 -> second final row = margin 1 + 4 + 1 = 6,
+  // First toast: height 3, gap 1 -> second final row = margin 1 + 3 + 1 = 5,
   // then the +3 entry offset.
-  REQUIRE(g.last_row == 9);
+  REQUIRE(g.last_row == 8);
 
   // --- dismissing the first restacks the second up into its slot ---
   REQUIRE(call_info_count(L, 1) == 2);
