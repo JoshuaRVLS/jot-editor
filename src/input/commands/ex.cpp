@@ -518,6 +518,14 @@ bool Editor::execute_ex_command(const std::string &input_line)
       set_message("No pane in that direction");
     }
   }
+  else if (lcmd == "newlinebelow" || lcmd == "nlbelow")
+  {
+    insert_line_below();
+  }
+  else if (lcmd == "newlineabove" || lcmd == "nlabove")
+  {
+    insert_line_above();
+  }
   else if (lcmd == "minimap")
   {
     toggle_minimap();

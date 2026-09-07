@@ -164,6 +164,22 @@ TEST_CASE("Sequence keymaps resolve into which-key prefix groups")
   }
 }
 
+TEST_CASE("Chord naming keeps named keys distinct under Ctrl")
+{
+  using jot::keybind_detail::chord_name;
+  // Ctrl+Enter must stay "Ctrl+Enter" (regression: it used to collapse to
+  // "Ctrl+M" via the ^M -> letter translation, breaking Lua keymaps).
+  REQUIRE(chord_name(13, true, false, false, 13) == "Ctrl+Enter");
+  REQUIRE(chord_name(13, true, true, false, 13) == "Ctrl+Shift+Enter");
+  REQUIRE(chord_name('\t', true, false, false, '\t') == "Ctrl+Tab");
+  REQUIRE(chord_name(27, true, false, false, 27) == "Ctrl+Esc");
+  REQUIRE(chord_name(127, true, false, false, 127) == "Ctrl+Backspace");
+  // Plain control letters still map to their letter form.
+  REQUIRE(chord_name(19, true, false, false, 19) == "Ctrl+S");
+  REQUIRE(chord_name('s', true, true, false, 's') == "Ctrl+Shift+S");
+  REQUIRE(chord_name(1008, true, false, false, 1008) == "Ctrl+Up");
+}
+
 TEST_CASE("Key registration canonicalizes sequence keys but keeps steps apart")
 {
   LuaAPI api(nullptr);

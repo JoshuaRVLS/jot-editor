@@ -7,6 +7,8 @@
 // Kept free of Editor/Lua types so it is unit-testable and cheap to include:
 // callers translate live plugin keymaps into KeymapRef entries first.
 
+#include "ui/terminal.h"
+
 #include <algorithm>
 #include <cctype>
 #include <string>
@@ -69,6 +71,103 @@ namespace jot
 
   namespace keybind_detail
   {
+    // Canonical chord name for a decoded key, e.g. "Ctrl+Enter", "Alt+S",
+    // "Ctrl+Shift+Enter". The editor dispatches plugin keymaps by this name,
+    // so naming must be exact: named keys (Enter/Tab/Esc/Backspace/Space)
+    // keep their name under modifiers, while plain ^A..^Z control codes
+    // become their letter form ("Ctrl+S"). `original_ch` is the raw key
+    // before ctrl-to-letter translation (when distinct from `ch`).
+    inline std::string chord_name(int ch, bool is_ctrl, bool is_shift, bool is_alt, int original_ch)
+    {
+      int key = original_ch ? original_ch : ch;
+      // Named keys keep their name even under Ctrl (e.g. Ctrl+Enter must not
+      // become "Ctrl+M"): only control codes that are plain letters (^A..^Z)
+      // translate to their letter form. Tab/Esc/Enter/Backspace/Space are
+      // excluded from the letter range here and matched by name below.
+      const bool named_ctrl_key =
+          is_ctrl && key <= 26 && (key == 9 || key == 13 || key == 27 || key == 8 || key == 32);
+      if (is_ctrl && key >= 1 && key <= 26 && !named_ctrl_key)
+      {
+        key += 96;
+      }
+      if ((key & 0x8000) != 0)
+      {
+        key &= 0x7FFF;
+        is_shift = true;
+      }
+
+      std::string base;
+      switch (key)
+      {
+      case 13:
+      case '\n':
+        base = "Enter";
+        break;
+      case 27:
+        base = "Esc";
+        break;
+      case '\t':
+        base = "Tab";
+        break;
+      case 127:
+      case 8:
+        base = "Backspace";
+        break;
+      case 1001:
+        base = "Delete";
+        break;
+      case 1008:
+        base = "Up";
+        break;
+      case 1009:
+        base = "Down";
+        break;
+      case 1010:
+        base = "Right";
+        break;
+      case 1011:
+        base = "Left";
+        break;
+      case 1012:
+        base = "Home";
+        break;
+      case 1013:
+        base = "End";
+        break;
+      default:
+        if ((key & KeyCode::FunctionMarker) != 0)
+        {
+          base = "F" + std::to_string((key & 0xFFFF) - KeyCode::FunctionBase);
+          break;
+        }
+        if (key >= 32 && key < 127)
+        {
+          base = std::string(1, (char)std::toupper((unsigned char)key));
+        }
+        else
+        {
+          base = std::to_string(key);
+        }
+        break;
+      }
+
+      std::string out;
+      if (is_ctrl)
+      {
+        out += "Ctrl+";
+      }
+      if (is_alt)
+      {
+        out += "Alt+";
+      }
+      if (is_shift)
+      {
+        out += "Shift+";
+      }
+      out += base;
+      return out;
+    }
+
     inline std::vector<std::string> split_steps(const std::string &key)
     {
       std::vector<std::string> steps;

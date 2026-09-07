@@ -16,6 +16,7 @@
 #include <unistd.h>
 #endif
 
+#include "core/keybind_catalog.h"
 #include "editor.h"
 #include "lua_bridge/api.h"
 
@@ -23,87 +24,10 @@ namespace
 {
   std::string plugin_key_name(int ch, bool is_ctrl, bool is_shift, bool is_alt, int original_ch)
   {
-    int key = original_ch ? original_ch : ch;
-    if (is_ctrl && key >= 1 && key <= 26)
-    {
-      key += 96;
-    }
-    if ((key & 0x8000) != 0)
-    {
-      key &= 0x7FFF;
-      is_shift = true;
-    }
-
-    std::string base;
-    switch (key)
-    {
-    case 13:
-    case '\n':
-      base = "Enter";
-      break;
-    case 27:
-      base = "Esc";
-      break;
-    case '\t':
-      base = "Tab";
-      break;
-    case 127:
-    case 8:
-      base = "Backspace";
-      break;
-    case 1001:
-      base = "Delete";
-      break;
-    case 1008:
-      base = "Up";
-      break;
-    case 1009:
-      base = "Down";
-      break;
-    case 1010:
-      base = "Right";
-      break;
-    case 1011:
-      base = "Left";
-      break;
-    case 1012:
-      base = "Home";
-      break;
-    case 1013:
-      base = "End";
-      break;
-    default:
-      if ((key & KeyCode::FunctionMarker) != 0)
-      {
-        base = "F" + std::to_string((key & 0xFFFF) - KeyCode::FunctionBase);
-        break;
-      }
-      if (key >= 32 && key < 127)
-      {
-        base = std::string(1, (char)std::toupper((unsigned char)key));
-      }
-      else
-      {
-        base = std::to_string(key);
-      }
-      break;
-    }
-
-    std::string out;
-    if (is_ctrl)
-    {
-      out += "Ctrl+";
-    }
-    if (is_alt)
-    {
-      out += "Alt+";
-    }
-    if (is_shift)
-    {
-      out += "Shift+";
-    }
-    out += base;
-    return out;
+    // Shared with the which-key helper: see keybind_catalog.h. Named keys
+    // (Enter/Tab/Esc/Backspace/Space) keep their name under Ctrl instead of
+    // collapsing into a Ctrl+letter chord.
+    return jot::keybind_detail::chord_name(ch, is_ctrl, is_shift, is_alt, original_ch);
   }
 
   std::vector<std::string>

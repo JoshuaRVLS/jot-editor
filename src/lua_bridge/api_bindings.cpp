@@ -1673,6 +1673,8 @@ bool LuaAPI::init()
   command_field(L, this, "undo", ":undo");
   command_field(L, this, "redo", ":redo");
   command_field(L, this, "insert_newline", ":newline");
+  command_field(L, this, "insert_line_below", ":newlinebelow");
+  command_field(L, this, "insert_line_above", ":newlineabove");
   command_field(L, this, "delete", ":delete");
   command_field(L, this, "indent", ":indent");
   command_field(L, this, "outdent", ":outdent");
@@ -2007,5 +2009,9 @@ bool LuaAPI::init()
   // disable it.
   load_plugins();
   jot_lua::load_bundled_lua_file(L, "features/decorations.lua", "Decorations");
+  // Built-in editor keybinds (features/keymaps.lua). Loaded after plugins so
+  // user keymaps registered first take precedence; the Lua registrations
+  // shadow the matching hardcoded fallbacks in the modeless input path.
+  jot_lua::load_bundled_lua_file(L, "features/keymaps.lua", "Built-in keymaps");
   return true;
 }
