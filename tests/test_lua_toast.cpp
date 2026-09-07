@@ -542,19 +542,19 @@ TEST_CASE("Bundled toast module shows, stacks, and auto-dismisses")
   REQUIRE(g.open_count == 1);
   REQUIRE(g.last_border == "rounded");
   REQUIRE(g.last_width == 56);
-  REQUIRE(g.last_height == 4); // title + 1 body row + progress + 2 borders
+  REQUIRE(g.last_height == 4); // title + 1 body row + 2 borders
   REQUIRE(g.last_col == 62);   // 120 - 56 - margin(1) - 1
   REQUIRE(g.last_row == 4);    // final row 1 + entry slide of 3
   REQUIRE(g.last_fg == 250);
   REQUIRE(g.last_bg == 235);
-  REQUIRE(g.last_border_fg == 240);
+  REQUIRE(g.last_border_fg == 215); // level accent frames the toast
   REQUIRE(g.last_title_fg == 251);
   REQUIRE(g.last_mouse == 1);  // click-to-dismiss
   REQUIRE(g.last_zindex == 100000);
-  REQUIRE(g.lines_count == 2); // title + progress rows (message folded into title)
-  REQUIRE(g.span_lens.size() >= 3);
-  // Progress span starts fully filled (56 - 2 inner cells).
-  REQUIRE(g.span_lens.back() == 54);
+  REQUIRE(g.lines_count == 1); // title row only (message folded in, no progress)
+  // Icon span carries the level accent; title text uses the title color.
+  REQUIRE(g.span_lens.size() == 2);
+  REQUIRE(g.span_fgs[0] == 215);
   // Timer registered at the 50 ms tick resolution.
   REQUIRE(g.last_event_interval_ms == 50);
 

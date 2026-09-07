@@ -1,25 +1,20 @@
 -- Toast notifications: the modern replacement for the statusline message
 -- channel (set_message / set_transient_message stay intact but are deprecated;
--- they forward to this module through the "toast.message" event bus) and the
--- primary surface for jot.toast.show / jot.notify.
+-- they forward to this module through the native bridge) and the primary
+-- surface for jot.toast.show / jot.notify.
 --
 -- Toasts render as small rounded frames stacked from the top-right corner of
--- the window, newest on top. Each toast slides in, shows a shrinking progress
--- bar for its remaining lifetime, and auto-dismisses (or dismisses on click).
--- All logic lives here; the C++ side only stores this module table
--- (jot.toast.register) and forwards native calls to it.
---
--- Config (all optional, read with defaults):
---   toast.duration_ms 3000 · toast.max_visible 5 · toast.max_width 56
---   toast.margin 1 · toast.gap 1 · toast.forward_messages true
---   toast.color_bg/fg/border/title and toast.color_info/success/warning/error
+-- the window, newest on top. Each toast slides in, its icon and border take
+-- the level accent color from the active theme, and it auto-dismisses (or
+-- dismisses on click). All logic lives here; the C++ side only stores this
+-- module table (jot.toast.register) and forwards native calls to it.
 
 local toast = {}
 
 local toasts = {} -- ordered list, toasts[1] is the oldest (bottom)
 local next_id = 1
 
-local TICK_MS = 50 -- animation/progress resolution
+local TICK_MS = 50 -- slide/dismiss resolution
 
 local LEVELS = {
   info = { icon = "ℹ" },
@@ -38,23 +33,35 @@ local function cfg_num(key, def)
   end
   return def
 end
-local function cfg_bool(key, def)
-  local ok, v = pcall(function() return jot.config.get_bool(key, def) end)
-  if ok and type(v) == "boolean" then
-    return v
-  end
-  return def
-end
+
+-- Palette: active theme slots with toast.color_* overrides first, then
+-- theme-derived colors, then fixed ANSI fallbacks.
 local function palette()
+  local theme = {}
+  local ok = pcall(function() theme = jot.theme.palette() or {} end)
+  if not ok or type(theme) ~= "table" then
+    theme = {}
+  end
+  local function pick(cfg_key, slot, field, fallback)
+    local c = cfg_num(cfg_key, -1)
+    if c >= 0 then
+      return c
+    end
+    local s = type(theme[slot]) == "table" and theme[slot][field]
+    if type(s) == "number" then
+      return s
+    end
+    return fallback
+  end
   return {
-    bg = cfg_num("toast.color_bg", 235),
-    fg = cfg_num("toast.color_fg", 250),
-    border = cfg_num("toast.color_border", 240),
-    title = cfg_num("toast.color_title", 251),
-    info = cfg_num("toast.color_info", 215),
-    success = cfg_num("toast.color_success", 108),
-    warning = cfg_num("toast.color_warning", 178),
-    error = cfg_num("toast.color_error", 167),
+    bg = pick("toast.color_bg", "default", "bg", 235),
+    fg = pick("toast.color_fg", "default", "fg", 250),
+    border = pick("toast.color_border", "panel_border", "fg", 240),
+    title = pick("toast.color_title", "status_info", "fg", 251),
+    info = pick("toast.color_info", "status_info", "fg", 215),
+    success = pick("toast.color_success", "diagnostic_hint", "fg", 108),
+    warning = pick("toast.color_warning", "diagnostic_warning", "fg", 178),
+    error = pick("toast.color_error", "diagnostic_error", "fg", 167),
   }
 end
 
@@ -123,7 +130,8 @@ local function layout_toast(t)
 
   t.wrapped = wrap_text(t.message, math.max(8, max_w - 4))
   t.width = math.min(max_w, math.max(20, ww - margin * 2))
-  t.height = math.max(3, math.min(wh - margin, 3 + #t.wrapped)) -- title + body + progress
+  local inner_rows = 1 + #t.wrapped -- title row + message rows
+  t.height = math.max(3, math.min(wh - margin, inner_rows + 2)) -- + border
   t.col = math.max(0, ww - t.width - margin - 1)
 
   local row = margin
@@ -149,20 +157,6 @@ local function tick_toast(t)
     end
     request_redraw()
   end
-
-  -- Shrinking progress bar: constant block row, only the accent span shrinks.
-  local frac = math.max(0, 1 - t.ticks / t.limit)
-  local inner = t.width - 2
-  local filled = math.max(0, math.floor(inner * frac))
-  if filled <= 0 then
-    pcall(jot.ui.float.set_spans, t.win, t.progress_row, {})
-  else
-    pcall(jot.ui.float.set_spans,
-          t.win,
-          t.progress_row,
-          { { start = 0, len = filled, fg = t.accent, bg = -1 } })
-  end
-  request_redraw()
 
   if t.ticks >= t.limit then
     toast.dismiss(t.id)
@@ -203,12 +197,6 @@ local function paint_toast(t)
     spans[n] = { { start = 0, len = 65535, fg = colors.fg, bg = -1 } }
   end
 
-  -- Progress row: full-width blocks, the accent span marks the remainder.
-  n = n + 1
-  rows[n] = string.rep("█", inner)
-  spans[n] = { { start = 0, len = inner, fg = colors.fg, bg = -1 } }
-  t.progress_row = n
-
   local buf = jot.ui.buffer.create(false, true)
   local ok, err = pcall(jot.ui.buffer.set_lines, buf, 0, -1, true, rows)
   if not ok then
@@ -231,7 +219,7 @@ local function paint_toast(t)
     zindex = 100000,
     fg = colors.fg,
     bg = colors.bg,
-    border_fg = colors.border,
+    border_fg = t.accent, -- level accent frames the toast (modern edge)
     title_fg = colors.title,
     on_mouse = function() request_dismiss(t) end,
   })

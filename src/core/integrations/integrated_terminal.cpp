@@ -48,9 +48,9 @@ void Editor::create_integrated_terminal(const std::string &label, const std::str
   if (!term->open_shell(cwd))
   {
 #ifdef _WIN32
-    set_message("Failed to open integrated terminal: ConPTY unavailable (Windows 10 1809+ required)");
+    set_message("Failed to open integrated terminal: ConPTY unavailable (Windows 10 1809+ required)", false);
 #else
-    set_message("Failed to open integrated terminal: check $SHELL or PTY support");
+    set_message("Failed to open integrated terminal: check $SHELL or PTY support", false);
 #endif
     return;
   }
@@ -70,11 +70,11 @@ void Editor::create_integrated_terminal(const std::string &label, const std::str
   }
   if (label.empty())
   {
-    set_message("Opened terminal " + std::to_string(current_integrated_terminal + 1));
+    set_message("Opened terminal " + std::to_string(current_integrated_terminal + 1), false);
   }
   else
   {
-    set_message("Opened " + label);
+    set_message("Opened " + label, false);
   }
   needs_redraw = true;
 }
@@ -112,7 +112,7 @@ void Editor::close_integrated_terminal(int index)
   {
     current_integrated_terminal = -1;
     show_integrated_terminal = false;
-    set_message("Closed terminal");
+    set_message("Closed terminal", false);
     needs_redraw = true;
     return;
   }
@@ -127,7 +127,7 @@ void Editor::close_integrated_terminal(int index)
   }
 
   activate_integrated_terminal(current_integrated_terminal, show_integrated_terminal);
-  set_message("Closed terminal");
+  set_message("Closed terminal", false);
   needs_redraw = true;
 }
 
