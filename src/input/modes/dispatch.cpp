@@ -232,22 +232,26 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
       }
       return;
     }
-    if (ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H')
+    if (ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H' || ch == 8
+        || original_ch == 8)
     {
       split_pane_left();
       return;
     }
-    if (ch == 'j' || ch == 'J' || original_ch == 'j' || original_ch == 'J')
+    if (ch == 'j' || ch == 'J' || original_ch == 'j' || original_ch == 'J' || ch == 10
+        || original_ch == 10)
     {
       split_pane_down();
       return;
     }
-    if (ch == 'k' || ch == 'K' || original_ch == 'k' || original_ch == 'K')
+    if (ch == 'k' || ch == 'K' || original_ch == 'k' || original_ch == 'K' || ch == 11
+        || original_ch == 11)
     {
       split_pane_up();
       return;
     }
-    if (ch == 'l' || ch == 'L' || original_ch == 'l' || original_ch == 'L')
+    if (ch == 'l' || ch == 'L' || original_ch == 'l' || original_ch == 'L' || ch == 12
+        || original_ch == 12)
     {
       split_pane_right();
       return;
