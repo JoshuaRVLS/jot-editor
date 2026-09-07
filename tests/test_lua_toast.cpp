@@ -51,6 +51,9 @@ namespace
     int last_zindex = 0;
     std::string last_border;
     int lines_count = 0;
+    int last_cfg_fg = -1;
+    int last_cfg_bg = -1;
+    int last_cfg_border_fg = -1;
     std::vector<int> configure_rows;
     std::vector<int> span_lens; // last span len per set_spans call
     std::vector<int> span_fgs;
@@ -146,6 +149,15 @@ namespace
     luaL_checktype(L, 2, LUA_TTABLE);
     lua_getfield(L, 2, "row");
     g.configure_rows.push_back((int)lua_tointeger(L, -1));
+    lua_pop(L, 1);
+    lua_getfield(L, 2, "fg");
+    g.last_cfg_fg = lua_isnil(L, -1) ? -1 : (int)lua_tointeger(L, -1);
+    lua_pop(L, 1);
+    lua_getfield(L, 2, "bg");
+    g.last_cfg_bg = lua_isnil(L, -1) ? -1 : (int)lua_tointeger(L, -1);
+    lua_pop(L, 1);
+    lua_getfield(L, 2, "border_fg");
+    g.last_cfg_border_fg = lua_isnil(L, -1) ? -1 : (int)lua_tointeger(L, -1);
     lua_pop(L, 1);
     g.configure_count++;
     return 1;
@@ -316,13 +328,22 @@ namespace
   }
 
   // Calls toast.show{...} on the ui.kit module table and returns the toast id.
-  int call_show(lua_State *L, int module_index, const char *msg, int duration_ms)
+  int call_show(lua_State *L,
+                int module_index,
+                const char *msg,
+                int duration_ms,
+                const char *title = nullptr)
   {
     lua_getfield(L, module_index, "toast");
     lua_getfield(L, -1, "show");
     lua_newtable(L);
     lua_pushstring(L, msg);
     lua_setfield(L, -2, "message");
+    if (title)
+    {
+      lua_pushstring(L, title);
+      lua_setfield(L, -2, "title");
+    }
     lua_pushinteger(L, duration_ms);
     lua_setfield(L, -2, "duration_ms");
     lua_pushcfunction(L, stub_on_dismiss);
@@ -464,9 +485,15 @@ TEST_CASE("jot.toast C++ forwarder marshals calls to the Lua module")
   REQUIRE(id > 0);
   lua_pop(L, 1);
 
-  // jot.toast.dismiss(id) -> forwarder -> module.dismiss -> float closed.
+  // jot.toast.dismiss(id) -> forwarder -> module.dismiss -> fade-out
+  // starts: the float stays open while the colors dissolve, then closes.
   lua_pushinteger(L, id);
   api.toast_dismiss_from_lua(L); // consumes the id from the stack
+  REQUIRE(g.close_count == 0);
+  for (int i = 0; i < 5; i++)
+  {
+    fire_interval(L, 1); // 250 ms fade ticks (toast.fade_ms default)
+  }
   REQUIRE(g.close_count == 1);
 
   // jot.toast.info() -> forwarder -> module.info -> count table.
@@ -568,30 +595,56 @@ TEST_CASE("Bundled toast module shows, stacks, and auto-dismisses")
   REQUIRE(g.configure_rows[2] == 1);
 
   // --- stacking: show a second toast before the first expires so they
-  // overlap; it parks below the first one ---
+  // overlap; it parks below the first one (gap default is now 0) ---
   fire_interval(L, 1); // tick 4 (not yet expired)
   const int second = call_show(L, 1, "another message here", 400);
   REQUIRE(second > 0);
   REQUIRE(g.open_count == 2);
-  // First toast: height 3, gap 1 -> second final row = margin 1 + 3 + 1 = 5,
+  // First toast: height 3, gap 0 -> second final row = margin 1 + 3 = 4,
   // then the +3 entry offset.
-  REQUIRE(g.last_row == 8);
+  REQUIRE(g.last_row == 7);
 
-  // --- dismissing the first restacks the second up into its slot ---
+  // --- dismissing the first fades it out (5 ticks at 250 ms fade), then
+  // the second drifts up into the freed slot ---
   REQUIRE(call_info_count(L, 1) == 2);
   lua_getfield(L, 1, "toast");
   lua_getfield(L, -1, "dismiss");
   lua_pushinteger(L, first);
   REQUIRE(lua_pcall(L, 1, 0, 0) == LUA_OK);
   lua_pop(L, 1); // toast table
+  // Dismiss starts the fade: the float stays open and colors dissolve.
+  REQUIRE(g.close_count == 0);
+  REQUIRE(call_info_count(L, 1) == 2);
+  const size_t spans_before_fade = g.span_fgs.size();
+  for (int i = 0; i < 5; i++)
+  {
+    fire_interval(L, 1); // fade ticks for the first toast
+  }
   REQUIRE(g.close_count == 1);
+  REQUIRE(g.delete_count == 1);
+  REQUIRE(g.on_dismiss_count == 1);
   REQUIRE(call_info_count(L, 1) == 1);
+  // The fade re-painted the spans with colors blended toward the toast
+  // background (235): the accent icon color (215) and title color (251)
+  // both moved.
+  REQUIRE(g.span_fgs.size() > spans_before_fade + 2);
+  REQUIRE(g.span_fgs[g.span_fgs.size() - 2] != 215);
+  REQUIRE(g.span_fgs.back() != 251);
+  REQUIRE(g.last_cfg_border_fg >= 0);
+  REQUIRE(g.last_cfg_border_fg != 215);
+
+  // The second toast (parked at row 7) drifts up to the top slot (row 1).
+  for (int i = 0; i < 6; i++)
+  {
+    fire_interval(L, 2);
+  }
   REQUIRE(g.configure_rows.back() == 1); // restacked to the top slot
 
-  // --- auto-dismiss of the second after 400 ms / 50 ms = 8 ticks ---
-  for (int i = 0; i < 8; i++)
+  // --- auto-dismiss of the second: 400 ms / 50 ms = 8 ticks to begin the
+  // fade, then 5 more fade ticks until it is removed ---
+  for (int i = 0; i < 7; i++)
   {
-    fire_interval(L, 2); // second toast's interval handle
+    fire_interval(L, 2);
   }
   REQUIRE(g.close_count == 2);
   REQUIRE(g.delete_count == 2);
@@ -608,6 +661,56 @@ TEST_CASE("Bundled toast module shows, stacks, and auto-dismisses")
   REQUIRE(call_info_count(L, 1) == 5); // max_visible default
   call_show(L, 1, "overflow", 300);    // pushes the oldest out
   REQUIRE(call_info_count(L, 1) == 5);
+
+  for (int ref : g.interval_refs)
+  {
+    luaL_unref(L, LUA_REGISTRYINDEX, ref);
+  }
+  if (g.event_cb_ref >= 0)
+  {
+    luaL_unref(L, LUA_REGISTRYINDEX, g.event_cb_ref);
+  }
+  lua_close(L);
+}
+
+TEST_CASE("Bundled toast wraps long messages without utf8.sub")
+{
+  g = StubState{};
+  lua_State *L = luaL_newstate();
+  REQUIRE(L != nullptr);
+  luaL_openlibs(L);
+  push_stub_jot(L);
+
+  REQUIRE(jot_lua::load_ui_kit_modules(L));
+  const std::string path = std::string(JOT_LUA_SOURCE_DIR) + "/features/ui.lua";
+  REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
+  REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  REQUIRE(lua_istable(L, 1));
+
+  // No title: the first wrapped line becomes the title row and gets
+  // truncated -- the path that used to crash with "attempt to call a nil
+  // value (field 'sub')" because the embedded Lua has no utf8.sub. The
+  // long token also exercises the hard-slice branch of wrap_text.
+  const int id = call_show(
+      L, 1,
+      "Tree-sitter bundled query skipped (c: query compilation failed near "
+      "\"preproc_endif) @keyword.directive\")); runtime queries or regex "
+      "will be used and this message keeps going to force both wrapping and "
+      "truncation paths",
+      250);
+  REQUIRE(id > 0);
+  REQUIRE(g.open_count == 1);
+  // Wrapped into several body rows: buffer rows = wrapped lines (title row
+  // folds the first line), float height adds the two border rows.
+  REQUIRE(g.lines_count >= 4);
+  REQUIRE(g.last_height == g.lines_count + 2);
+
+  // A long title hits shorten() on the title row too.
+  call_show(L, 1, "short body", 250, "a very long title that definitely "
+                                       "exceeds the inner width of the toast "
+                                       "box and must be truncated");
+  REQUIRE(g.open_count == 2);
+  REQUIRE(g.last_height >= 3);
 
   for (int ref : g.interval_refs)
   {
