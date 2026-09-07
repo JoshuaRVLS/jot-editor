@@ -471,8 +471,10 @@ void UI::render()
             if (cell.underline_fg != run_underline_fg)
               term->set_underline_color(cell.underline_fg);
           }
-          term->set_color(run_dim ? ui_dim_color(run_fg, false) : run_fg,
-                          run_dim ? ui_dim_color(run_bg, true) : run_bg);
+          // `cell.*` hold the values that just changed; `run_*` still hold the
+          // previous run's colors here, so emit from the cell.
+          term->set_color(cell.dim ? ui_dim_color(cell.fg, false) : cell.fg,
+                          cell.dim ? ui_dim_color(cell.bg, true) : cell.bg);
           run_fg = cell.fg;
           run_bg = cell.bg;
           run_bold = cell.bold;
