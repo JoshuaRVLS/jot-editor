@@ -65,6 +65,45 @@ void LuaAPI::register_toast_module(lua_State *L)
   toast_module_ref_ = luaL_ref(L, LUA_REGISTRYINDEX);
 }
 
+int LuaAPI::emit_toast_direct(lua_State *L, const std::string &message, int duration_ms)
+{
+  if (!L || toast_module_ref_ < 0)
+  {
+    return 0;
+  }
+  // Called from plain C++ (set_message), so the Lua stack may already hold
+  // arbitrary frames. Save the base and restore it afterwards.
+  const int base = lua_gettop(L);
+  lua_newtable(L); // opts
+  lua_pushstring(L, message.c_str());
+  lua_setfield(L, -2, "message");
+  lua_pushinteger(L, duration_ms);
+  lua_setfield(L, -2, "duration_ms");
+  lua_rawgeti(L, LUA_REGISTRYINDEX, toast_module_ref_); // opts, module
+  if (!lua_istable(L, -1))
+  {
+    lua_settop(L, base);
+    return 0;
+  }
+  lua_getfield(L, -1, "show"); // opts, module, fn
+  if (!lua_isfunction(L, -1))
+  {
+    lua_settop(L, base);
+    return 0;
+  }
+  lua_remove(L, -2);      // opts, fn
+  lua_insert(L, base + 1); // fn, opts
+  if (lua_pcall(L, 1, 1, 0) != LUA_OK)
+  {
+    std::cerr << "toast API error (show): " << lua_tostring(L, -1) << "\n";
+    lua_settop(L, base);
+    return 0;
+  }
+  const int id = (int)lua_tointeger(L, -1);
+  lua_settop(L, base); // restore the caller's frame
+  return id;
+}
+
 void LuaAPI::toast_show_from_lua(lua_State *L)
 {
   // (opts) -> toast id, or 0 when no module is registered.

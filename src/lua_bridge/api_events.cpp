@@ -119,6 +119,20 @@ void LuaAPI::emit_theme_switched(const std::string &name)
 
 void LuaAPI::emit_toast_event(const std::string &message, int duration_ms)
 {
+  if (message.empty())
+  {
+    // The empty clear message is not a toast.
+    return;
+  }
+  // Deliver directly to the registered toast module on this instance — the
+  // same code path jot.toast.show uses — so a statusline message is guaranteed
+  // to surface as a toast regardless of event-bus subscription timing. The
+  // event bus remains a fallback when no module is registered.
+  if (lua_state && toast_module_ref_ >= 0)
+  {
+    emit_toast_direct(static_cast<lua_State *>(lua_state), message, duration_ms);
+    return;
+  }
   if (!has_event_subscribers("toast.message"))
     return;
   emit_event_bus("toast.message",

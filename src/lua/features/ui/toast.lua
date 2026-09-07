@@ -380,18 +380,16 @@ function toast.info()
   return { count = #toasts, visible = #toasts }
 end
 
--- Subscribes to the "toast.message" event bus so the deprecated statusline
--- message channel (set_message / set_transient_message) surfaces as toasts.
--- Called from ui.lua; guarded so stub / test environments stay quiet.
+-- Subscribes to the "toast.message" event bus so other producers can surface
+-- toasts too. The deprecated statusline channel (set_message) delivers
+-- directly to this module via the native bridge, so it carries no payload
+-- duplication.
 function toast.attach()
   local ok = pcall(function()
     if not jot.events or not jot.events.subscribe then
       return
     end
     jot.events.subscribe("toast.message", function(payload)
-      if not cfg_bool("toast.forward_messages", true) then
-        return
-      end
       if type(payload) ~= "table" or payload.message == nil then
         return
       end

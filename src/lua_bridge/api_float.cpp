@@ -9,6 +9,8 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -366,6 +368,11 @@ bool LuaAPI::float_mouse(int x,
   }
   return false;
 }
+void LuaAPI::attach_test_ui(UI *ui)
+{
+  editor->ui = ui;
+}
+
 void LuaAPI::render_floats()
 {
   if (!editor || !editor->ui)
@@ -462,6 +469,12 @@ void LuaAPI::render_floats()
       }
     }
     auto bi = scratch_buffers.find(f->buffer);
+    if (const char *dbg = getenv("JOT_FLOAT_DEBUG"); dbg && *dbg)
+    {
+      std::cerr << "JOT_FLOAT_DEBUG win=" << f->handle << " buffer=" << f->buffer
+                << " found=" << (bi != scratch_buffers.end())
+                << " scratches=" << scratch_buffers.size() << "\n";
+    }
     if (bi == scratch_buffers.end())
       continue;
     const int inset = (f->border == "none" ? 0 : 1);

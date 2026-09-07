@@ -453,6 +453,8 @@ class Editor;
 class EditorHostAPI;
 class TreeSitterManager;
 struct lua_State;
+struct EditorState;
+class UI;
 
 // Timer API (jot.timer): native event-loop timers with Lua callbacks. Entries
 // are keyed by the native EventLoop::TimerId (uint64_t); the callback ref is
@@ -698,6 +700,9 @@ public:
   // Terminal-cursor control from Lua (friend access to editor->ui).
   void ui_set_cursor(int x, int y);
   void ui_hide_cursor();
+  // Test hook: point the Lua float renderer at a headless UI grid so
+  // render_floats() can be exercised without a live terminal.
+  void attach_test_ui(UI *ui);
 
   // LSP hover UI: a Lua handler registered through jot.lsp.hover_ui renders
   // hover results with floats instead of the native popup. When the handler is
@@ -933,6 +938,10 @@ public:
   // message channel so every set_message / set_transient_message also surfaces
   // as a toast. duration_ms <= 0 means "use the toast default".
   void emit_toast_event(const std::string &message, int duration_ms);
+  // Direct delivery to the registered toast module (same LuaAPI instance that
+  // holds the module reference — the same path jot.toast.show uses). Returns
+  // the toast id, or 0 when no module is registered.
+  int emit_toast_direct(lua_State *L, const std::string &message, int duration_ms);
   // jot.toast: store a reference to the Lua toast module table and forward
   // show/dismiss/clear/info calls to it (the module keeps all the logic).
   void register_toast_module(lua_State *L);

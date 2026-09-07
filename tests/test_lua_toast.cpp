@@ -6,13 +6,18 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <execinfo.h>
+#include <signal.h>
 #include <string>
 #include <vector>
+#include <unistd.h>
 
+#include "core/editor.h"
 #include "lua_bridge/api.h"
 #include "lua_bridge/api_internal.h"
+#include "ui/ui.h"
 
 extern "C"
 {
@@ -345,6 +350,75 @@ namespace
     lua_pop(L, 3);
     return count;
   }
+TEST_CASE("Lua float rendering paints buffer lines into the editor grid")
+{
+  struct sigaction sa {};
+  sa.sa_handler = [](int) {
+    void *frames[32];
+    int n = backtrace(frames, 32);
+    backtrace_symbols_fd(frames, n, 2);
+    _exit(1);
+  };
+  sigaction(SIGSEGV, &sa, nullptr);
+
+  // A pristine config home so the Editor constructor's config bootstrap
+  // doesn't load the real user config (which would call into an unhosted
+  // Lua state).
+  char cfgdir[] = "/tmp/jot_render_test_XXXXXX";
+  mkdtemp(cfgdir);
+  setenv("JOT_CONFIG_HOME", cfgdir, 1);
+  setenv("JOT_CACHE_HOME", cfgdir, 1);
+  // A minimal Editor with a UI grid exercises the real render_floats() path:
+  // the frame/border/title are painted, and the scratch-buffer lines (the
+  // toast body) must be painted inside the inset — this is the path the user
+  // reported as missing (empty toast box).
+  Terminal term; // inert until init(); safe to render into
+  UI *ui = new UI(&term); // Editor's destructor deletes its ui
+  Editor e;
+  LuaAPI api(&e);
+  api.attach_test_ui(ui);
+  ui->resize(120, 40);
+
+  const int buf = api.create_scratch_buffer(false, true);
+  REQUIRE(buf > 0);
+  REQUIRE(api.set_scratch_lines(buf, 0, -1, true, {"TOAST-PROBE-BODY", "SECOND"}));
+
+  lua_State *L = luaL_newstate();
+  REQUIRE(L != nullptr);
+  lua_newtable(L); // opts
+  lua_pushinteger(L, 60);
+  lua_setfield(L, -2, "col");
+  lua_pushinteger(L, 1);
+  lua_setfield(L, -2, "row");
+  lua_pushinteger(L, 14);
+  lua_setfield(L, -2, "width");
+  lua_pushinteger(L, 4);
+  lua_setfield(L, -2, "height");
+  lua_pushstring(L, "rounded");
+  lua_setfield(L, -2, "border");
+  lua_pushstring(L, "TTITLE");
+  lua_setfield(L, -2, "title");
+  lua_pushinteger(L, 100000);
+  lua_setfield(L, -2, "zindex");
+  const int win = api.open_float(buf, false, L, lua_gettop(L));
+  REQUIRE(win > 0);
+
+  api.render_floats();
+
+  auto cell = [&](int x, int y) { return ui->cell_at(x, y); };
+  // Rounded corner at the topleft.
+  REQUIRE(cell(60, 1)->ch == "\u256d"); // ╭
+  // Title painted on the border row.
+  REQUIRE(cell(62, 1)->ch == "T");
+  // Body lines painted inside the inset (col+1,row+1).
+  REQUIRE(cell(61, 2)->ch == "T");
+  REQUIRE(cell(62, 2)->ch == "O");
+  REQUIRE(cell(70, 2)->ch == "B"); // 9th char of TOAST-PROBE-BODY
+  REQUIRE(cell(61, 3)->ch == "S"); // SECOND line
+
+  lua_close(L);
+}
+
 TEST_CASE("jot.toast C++ forwarder marshals calls to the Lua module")
 {
   g = StubState{};
@@ -400,6 +474,16 @@ TEST_CASE("jot.toast C++ forwarder marshals calls to the Lua module")
   REQUIRE(lua_istable(L, -1));
   lua_getfield(L, -1, "count");
   REQUIRE((int)lua_tointeger(L, -1) == 0);
+  lua_pop(L, 2);
+
+  // The deprecated message channel delivers directly through the same path
+  // jot.toast.show uses (no event-bus round trip).
+  api.emit_toast_direct(L, "direct message", 80);
+  REQUIRE(g.open_count == 2);
+  api.toast_info_from_lua(L); // one direct toast remains
+  REQUIRE(lua_istable(L, -1));
+  lua_getfield(L, -1, "count");
+  REQUIRE((int)lua_tointeger(L, -1) == 1);
   lua_pop(L, 2);
 
   for (int ref : g.interval_refs)
