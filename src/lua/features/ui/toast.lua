@@ -185,9 +185,13 @@ local function paint_toast(t)
   end
   n = n + 1
   rows[n] = title_text
+  -- Byte offsets are 0-based: row = [0]=space [1..n]=icon [n+1]=space [n+2..]=text.
+  -- Color the icon accent, leave the separating space neutral, and start the
+  -- text span exactly at the first character (n+2) so the first letter isn't
+  -- left in the default foreground.
   spans[n] = {
-    { start = 1, len = #t.icon + 1, fg = t.accent, bg = -1 }, -- icon + trailing space
-    { start = #t.icon + 3, len = 65535, fg = colors.title, bg = -1 },
+    { start = 1, len = #t.icon, fg = t.accent, bg = -1 },        -- icon
+    { start = #t.icon + 2, len = 65535, fg = colors.title, bg = -1 }, -- text
   }
 
   -- Body rows.
