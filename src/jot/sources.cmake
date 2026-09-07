@@ -6,6 +6,7 @@ set(JOT_ENGINE_SOURCES
   jot/app/folding.cpp
   jot/app/panes.cpp
   jot/app/process_job.cpp
+  jot/app/relaunch.cpp
   jot/app/undo.cpp
   jot/app/utils.cpp
   jot/integrations/debugger.cpp

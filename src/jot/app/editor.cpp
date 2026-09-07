@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "host_api.h"
+#include "jot/app/relaunch.h"
 #include "jot/lua/api.h"
 #include <algorithm>
 #include <filesystem>
@@ -650,4 +651,28 @@ void Editor::poll_discord_rpc(long long now_ms)
     discord_rpc_last_state = state;
     discord_rpc.update_presence(details, state);
   }
+}
+
+bool Editor::restart_editor(bool force)
+{
+  // The new process boots from disk: any unsaved edits would be lost, so the
+  // restart waits until the user saved (or forces past the check).
+  for (const auto &b : buffers)
+  {
+    if (b.modified && !force)
+    {
+      set_message("Restart skipped: unsaved changes. Save buffers and try again.",
+                  false);
+      return false;
+    }
+  }
+  if (!relaunch::restart_self())
+  {
+    set_message("Could not restart jot (failed to relaunch the executable).", false);
+    return false;
+  }
+  // POSIX replaced this process in place and never returned here; on Windows a
+  // new instance is running, so stop the event loop and exit cleanly.
+  running = false;
+  return true;
 }

@@ -536,6 +536,10 @@ bool LuaAPI::run_update_command(const std::string &arg)
 {
   return call_callback_string("update.cmd", arg);
 }
+bool LuaAPI::restart_editor(bool force)
+{
+  return editor && editor->restart_editor(force);
+}
 bool LuaAPI::run_plugin_keymap(const std::string &k, const std::string &m)
 {
   for (auto &x : plugin_keymaps)

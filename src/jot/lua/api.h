@@ -752,6 +752,10 @@ public:
   // jot.register_update_handler (stored under the "update.cmd" callback id).
   void set_update_handler_ref(int lua_ref);
   bool run_update_command(const std::string &arg);
+  // Replaces the running process with a fresh jot (POSIX exec in place /
+  // Windows spawn) so a rebuilt binary loads immediately. False when unsaved
+  // buffers block it (unless force) or the relaunch failed.
+  bool restart_editor(bool force = false);
   // Removes every Lua keymap whose canonical key matches (any mode when
   // `mode` is empty). Frees the stored callback refs. Used by features that
   // register a keymap only while some condition holds (e.g. the :update

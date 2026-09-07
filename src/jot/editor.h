@@ -276,6 +276,10 @@ private:
   void notify_lsp_close(const std::string &filepath);
   void stop_all_lsp_clients();
   void restart_all_lsp_clients();
+  // Replaces this process with a fresh jot so a freshly rebuilt binary loads
+  // immediately (used by the Lua :update run flow). Refuses while any buffer
+  // has unsaved changes unless `force`. Returns whether a restart started.
+  bool restart_editor(bool force = false);
   void set_lsp_server_enabled(const std::string &server, bool enabled);
   bool install_lsp_server(const std::string &name);
   bool remove_lsp_server(const std::string &name);

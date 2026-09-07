@@ -911,6 +911,12 @@ namespace
     api(L).remove_keymap(luaL_checkstring(L, 1), luaL_optstring(L, 2, ""));
     return 0;
   }
+  int l_editor_restart(lua_State *L)
+  {
+    const bool force = lua_toboolean(L, 1) != 0;
+    lua_pushboolean(L, api(L).restart_editor(force) ? 1 : 0);
+    return 1;
+  }
   int l_status_unregister(lua_State *L)
   {
     api(L).unregister_status_segment(L);
@@ -2066,6 +2072,10 @@ bool LuaAPI::init()
   // Native :update dispatches here (features/update.lua registers the fn).
   lua_pushcfunction(L, l_register_update_handler);
   lua_setfield(L, -2, "register_update_handler");
+  // Self-restart: replays the original launch args so the fresh binary boots
+  // the same file/workspace. Returns false when unsaved buffers block it.
+  lua_pushcfunction(L, l_editor_restart);
+  lua_setfield(L, -2, "restart");
   lua_pop(L, 1);
   // Bundled feature: inline diagnostics as anchored decorations (see
   // lua/features/decorations.lua). Loaded after user plugins: load_plugins()

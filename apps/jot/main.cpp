@@ -1,3 +1,4 @@
+#include "jot/app/relaunch.h"
 #include "jot/editor.hpp"
 
 #include <cstdio>
@@ -97,6 +98,9 @@ namespace
 int main(int argc, char *argv[])
 {
   route_stderr_away_from_terminal();
+  // Remember how jot was launched so a later :update restart can replay the
+  // same executable + file/workspace arguments (self-restart support).
+  relaunch::capture_startup(argc, argv);
   Editor editor;
   if (argc > 1)
   {

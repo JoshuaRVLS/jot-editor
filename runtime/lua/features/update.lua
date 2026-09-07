@@ -555,8 +555,18 @@ local function run_update()
     if res.exit_code == 0 then
       local sha = trim(out:match("([^\n]*)$") or "")
       show_result("success", "Updated to " .. sha,
-                  "Pull, rebuild and install finished. Restart jot to load it.",
-                  "click to dismiss")
+                  "Restarting with the new build…", "restarting")
+      -- Give the success state a moment to paint, then swap in the fresh
+      -- binary (self-restart replays the launch args, so the same files or
+      -- workspace reopen automatically).
+      pcall(jot.timer.set_timeout, 900, function()
+        local okr, started = pcall(jot.restart)
+        if not okr or not started then
+          show_result("error", "Auto-restart skipped",
+                      "Update applied — relaunch jot manually to load it.",
+                      "click to dismiss")
+        end
+      end)
     elseif res.exit_code == 3 then
       show_result("error", "No build tree found",
                   "Nothing in the clone matches a configured CMake build dir. "
