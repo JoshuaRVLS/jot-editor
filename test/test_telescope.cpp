@@ -99,6 +99,43 @@ TEST_CASE("Telescope Selection And List Scroll Clamp", "[jot]")
   REQUIRE(telescope.get_list_scroll_offset() == 0);
 }
 
+TEST_CASE("Telescope Caches Entries And Refilters Queries Instantly", "[jot]")
+{
+  Telescope telescope;
+  std::vector<FileMatch> entries;
+  entries.push_back({"/repo/src/tools/telescope.cpp",
+                     "telescope.cpp",
+                     "src/tools/telescope.cpp",
+                     "src/tools",
+                     0,
+                     false});
+  entries.push_back({"/repo/src/render.cpp", "render.cpp", "src/render.cpp", "src", 0, false});
+  entries.push_back({"/repo/notes.md", "notes.md", "notes.md", ".", 0, false});
+  telescope.apply_results(entries);
+
+  // Once the candidate list is cached (apply_results / a finished scan), a
+  // set_query filters purely in memory — it must never touch the filesystem
+  // or change the candidate pool.
+  telescope.set_query("tel");
+  REQUIRE(telescope.get_result_count() == 1);
+  REQUIRE(telescope.get_selected_path() == "/repo/src/tools/telescope.cpp");
+
+  telescope.set_query("render");
+  REQUIRE(telescope.get_result_count() == 1);
+  REQUIRE(telescope.get_selected_path() == "/repo/src/render.cpp");
+
+  // Path-aware subsequence match still works through the cache.
+  telescope.set_query("tools/te");
+  REQUIRE(telescope.get_result_count() == 1);
+
+  telescope.set_query("zzzz");
+  REQUIRE(telescope.get_result_count() == 0);
+
+  // Clearing the query returns to browse mode over the cached candidates.
+  telescope.set_query("");
+  REQUIRE(telescope.get_result_count() == 3);
+}
+
 TEST_CASE("Telescope Preview Scroll Clamp", "[jot]")
 {
   Telescope telescope;

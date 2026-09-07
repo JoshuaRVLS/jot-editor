@@ -244,6 +244,8 @@ void Telescope::open(const std::string &root)
   list_scroll_offset = 0;
   preview_scroll_offset = 0;
   results.clear();
+  all_entries_.clear();
+  entries_valid_ = false;
   scan_pending_ = false;
   focus_ = TelescopeFocus::Query;
   invalidate_preview_cache();
@@ -255,6 +257,8 @@ void Telescope::close()
   active = false;
   query.clear();
   results.clear();
+  all_entries_.clear();
+  entries_valid_ = false;
   selected_index = 0;
   list_scroll_offset = 0;
   preview_scroll_offset = 0;
@@ -264,24 +268,35 @@ void Telescope::close()
 
 void Telescope::update_results()
 {
-  results.clear();
+  // Synchronous full rescan (no TaskQueue available): walk the tree into the
+  // cache, then publish. The cache stays valid so later keystrokes filter
+  // instantly instead of re-walking.
+  all_entries_.clear();
   scan_directory(root_dir, 0);
+  entries_valid_ = true;
+  publish_filtered();
+}
+
+void Telescope::publish_filtered()
+{
+  results.clear();
+  if (!entries_valid_)
+  {
+    return;
+  }
 
   const std::string query_lc = lower_copy(query);
   std::vector<FileMatch> filtered;
-  filtered.reserve(results.size());
+  filtered.reserve(all_entries_.size());
 
-  for (auto match : results)
+  for (auto match : all_entries_)
   {
-    fs::path p(match.path);
-    std::string rel = display_relative_path(p, root_dir);
-    match.relative_path = rel;
-    match.parent_path = parent_display_path(rel);
-    if (!query_lc.empty() && !fuzzy_match(match.name, query_lc) && !fuzzy_match(rel, query_lc))
+    if (!query_lc.empty() && !fuzzy_match(match.name, query_lc)
+        && !fuzzy_match(match.relative_path, query_lc))
     {
       continue;
     }
-    match.score = rank_score(match.name, rel, query_lc, match.is_directory);
+    match.score = rank_score(match.name, match.relative_path, query_lc, match.is_directory);
     filtered.push_back(std::move(match));
   }
 
@@ -391,9 +406,9 @@ void Telescope::scan_directory(const fs::path &dir, int depth)
     match.parent_path = parent_display_path(match.relative_path);
     match.is_directory = is_dir;
     match.score = 0;
-    results.push_back(std::move(match));
+    all_entries_.push_back(std::move(match));
 
-    if ((int)results.size() >= kMaxCandidates)
+    if ((int)all_entries_.size() >= kMaxCandidates)
     {
       return;
     }
@@ -401,7 +416,7 @@ void Telescope::scan_directory(const fs::path &dir, int depth)
     if (is_dir && depth < kMaxDepth)
     {
       scan_directory(entry.path(), depth + 1);
-      if ((int)results.size() >= kMaxCandidates)
+      if ((int)all_entries_.size() >= kMaxCandidates)
       {
         return;
       }
@@ -485,6 +500,8 @@ void Telescope::select()
       selected_index = 0;
       list_scroll_offset = 0;
       preview_scroll_offset = 0;
+      all_entries_.clear();
+      entries_valid_ = false;
       invalidate_preview_cache();
     }
   }
@@ -499,8 +516,20 @@ void Telescope::go_parent()
     selected_index = 0;
     list_scroll_offset = 0;
     preview_scroll_offset = 0;
+    all_entries_.clear();
+    entries_valid_ = false;
     invalidate_preview_cache();
   }
+}
+
+void Telescope::invalidate_cache()
+{
+  all_entries_.clear();
+  entries_valid_ = false;
+  results.clear();
+  selected_index = 0;
+  list_scroll_offset = 0;
+  invalidate_preview_cache();
 }
 
 void Telescope::scroll_preview(int delta, int visible_rows)
@@ -801,7 +830,11 @@ void Telescope::cancel_scan()
 
 void Telescope::apply_results(std::vector<FileMatch> new_results)
 {
+  // Injection point (tests / programmatic callers). The given entries also
+  // become the candidate cache so a later set_query filters them instantly.
   results = std::move(new_results);
+  all_entries_ = results;
+  entries_valid_ = true;
   scan_pending_ = false;
   if (selected_index >= (int)results.size())
     selected_index = std::max(0, (int)results.size() - 1);

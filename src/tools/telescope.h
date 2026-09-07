@@ -92,6 +92,10 @@ public:
   void scan_async(TaskQueue *tq, std::function<void()> on_update = {});
   void cancel_scan();
   void apply_results(std::vector<FileMatch> new_results);
+  // Drops the cached candidate list; the next set_query / scan_async re-walks
+  // the directory tree so newly created files show up (Ctrl+R inside the
+  // picker). Filtering between cache drops is always instant.
+  void invalidate_cache();
 
   void move_up();
   void move_down();
@@ -185,7 +189,15 @@ private:
   mutable std::string preview_cache_path;
   mutable TelescopePreview preview_cache;
 
+  // Raw file listing collected once per open / root change. Query edits never
+  // re-walk the tree: they run publish_filtered() over this cache, which is
+  // what makes typing feel instant (fzf-style) on large projects.
+  std::vector<FileMatch> all_entries_;
+  bool entries_valid_ = false;
+
   void scan_directory(const fs::path &dir, int depth = 0);
+  // results <- fuzzy-filter(all_entries_, query), sorted + capped. No I/O.
+  void publish_filtered();
   void invalidate_preview_cache();
   TelescopePreview load_preview(const FileMatch &match) const;
 };

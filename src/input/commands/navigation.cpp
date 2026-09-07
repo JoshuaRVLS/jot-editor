@@ -172,6 +172,14 @@ void Editor::handle_telescope(int ch)
     return;
   }
 
+  if (ch == 18)
+  { // Ctrl+R: re-scan the tree so new/changed files show up
+    telescope.invalidate_cache();
+    telescope.scan_async(scan_tq, [this] { needs_redraw = true; });
+    needs_redraw = true;
+    return;
+  }
+
   if (ch >= 32 && ch < 127)
   {
     telescope.set_focus(TelescopeFocus::Query);

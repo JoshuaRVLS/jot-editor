@@ -7,16 +7,7 @@
 namespace
 {
   constexpr int kMaxDepth = 4;
-  constexpr int kMaxResults = 2000;
   constexpr int kMaxCandidates = 20000;
-
-  std::string lower_copy(const std::string &s)
-  {
-    std::string out = s;
-    std::transform(
-        out.begin(), out.end(), out.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-    return out;
-  }
 
   std::string display_relative_path(const fs::path &path, const fs::path &root)
   {
@@ -45,16 +36,32 @@ void Telescope::set_query(const std::string &q, TaskQueue *tq, std::function<voi
   list_scroll_offset = 0;
   preview_scroll_offset = 0;
   invalidate_preview_cache();
-  results.clear();
-  scan_pending_ = true;
+
+  // Instant path: the tree was already scanned (cache valid), so typing
+  // filters purely in memory — no directory walk, no task hop. This is what
+  // makes the picker feel like fzf on large projects.
+  if (entries_valid_)
+  {
+    publish_filtered();
+    if (on_update)
+      on_update();
+    return;
+  }
+
+  // No cache yet (first open, scan still running). Never re-walk per key: make
+  // sure exactly one scan is in flight; when it lands it filters against the
+  // latest query.
+  if (scan_pending_)
+  {
+    return;
+  }
   if (tq)
   {
-    cancel_scan();
     scan_async(tq, std::move(on_update));
   }
   else
   {
-    update_results();
+    update_results(); // sync walk, fills the cache
     if (on_update)
       on_update();
   }
@@ -71,14 +78,10 @@ void Telescope::scan_async(TaskQueue *tq, std::function<void()> on_update)
   int scan_id = scan_id_.fetch_add(1) + 1;
   const auto generation = scan_generation_;
   const int scan_generation = generation->fetch_add(1) + 1;
-  std::string scan_query = query;
   fs::path scan_root = root_dir;
 
   tq->submit_val<std::vector<FileMatch>>(
-      [scan_root = std::move(scan_root),
-       scan_query = std::move(scan_query),
-       generation,
-       scan_generation]() -> std::vector<FileMatch>
+      [scan_root = std::move(scan_root), generation, scan_generation]() -> std::vector<FileMatch>
       {
         std::vector<FileMatch> raw;
 
@@ -144,66 +147,21 @@ void Telescope::scan_async(TaskQueue *tq, std::function<void()> on_update)
           }
         };
 
-        scan_dir(scan_root, 0);
-
-        const std::string query_lc = lower_copy(scan_query);
-        std::vector<FileMatch> filtered;
-        filtered.reserve(raw.size());
-
-        for (auto &match : raw)
-        {
-          fs::path p(match.path);
-          std::string rel = match.relative_path.empty() ? display_relative_path(p, scan_root)
-                                                        : match.relative_path;
-          match.relative_path = rel;
-          match.parent_path = parent_display_path(rel);
-          if (!query_lc.empty() && !fuzzy_match(match.name, query_lc)
-              && !fuzzy_match(rel, query_lc))
-          {
-            continue;
-          }
-          match.score = Telescope::rank_score(match.name, rel, query_lc, match.is_directory);
-          filtered.push_back(std::move(match));
-        }
-
-        std::sort(filtered.begin(),
-                  filtered.end(),
-                  [&](const FileMatch &a, const FileMatch &b)
-                  {
-                    if (query_lc.empty())
-                    {
-                      if (a.is_directory != b.is_directory)
-                      {
-                        return a.is_directory;
-                      }
-                      return lower_copy(a.name) < lower_copy(b.name);
-                    }
-                    if (a.score != b.score)
-                    {
-                      return a.score > b.score;
-                    }
-                    if (a.is_directory != b.is_directory)
-                    {
-                      return !a.is_directory;
-                    }
-                    return lower_copy(a.name) < lower_copy(b.name);
-                  });
-
-        if ((int)filtered.size() > kMaxResults)
-        {
-          filtered.resize(kMaxResults);
-        }
-
-        return filtered;
+        return raw;
       },
       [this, scan_id, generation, scan_generation, on_update = std::move(on_update)](
-          std::vector<FileMatch> filtered)
+          std::vector<FileMatch> raw)
       {
         if (!active || scan_id != scan_id_.load() || generation->load() != scan_generation)
         {
           return;
         }
-        apply_results(std::move(filtered));
+        // Scan landed: cache the raw listing once, then filter against the
+        // latest query. Future keystrokes never re-walk the directory tree.
+        scan_pending_ = false;
+        all_entries_ = std::move(raw);
+        entries_valid_ = true;
+        publish_filtered();
         if (on_update)
           on_update();
       });
