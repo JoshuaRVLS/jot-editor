@@ -6,6 +6,7 @@
 #endif
 
 #include "terminal.h"
+#include "core/keybind_catalog.h"
 
 #include <windows.h>
 
@@ -495,6 +496,25 @@ namespace
       default:
         return kVtDrop;
       }
+    }
+    else if (final == 'u')
+    {
+      // Kitty keyboard protocol (CSI u): Windows Terminal reports modified
+      // keys such as Ctrl+Enter as "ESC [ code;mod u" once the protocol is
+      // pushed. Reuse the shared decoder (bitmask+1 modifiers: Ctrl=5,
+      // Ctrl+Shift=6) so these stay distinguishable from plain Enter.
+      const int decoded = jot::keybind_detail::decode_csi_u_key(
+          std::string("\x1b[") + params + "u");
+      if (decoded < 0)
+      {
+        return kVtDrop;
+      }
+      out.type = EVENT_KEY;
+      out.key.key = decoded & 0xFFFF;
+      out.key.ctrl = (decoded & 0x20000) != 0;
+      out.key.alt = (decoded & 0x40000) != 0;
+      out.key.shift = (decoded & 0x80000) != 0;
+      return kVtEvent;
     }
     else
     {
