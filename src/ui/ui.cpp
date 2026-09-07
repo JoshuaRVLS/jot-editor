@@ -41,6 +41,38 @@ namespace
     term->write(ui_is_valid_utf8_sequence(text) ? text : "?");
   }
 
+  // Dims an xterm-256 palette index toward black so a dimmed cell reads as a
+  // darker *background*, not just darker text (SGR 2 alone only affects the
+  // foreground on most terminals). Default (-1) background becomes black;
+  // default foreground is left to the SGR dim attribute so dimmed text on a
+  // dimmed background stays readable.
+  int ui_dim_color(int idx, bool is_bg)
+  {
+    if (idx < 0)
+    {
+      return is_bg ? 0 : idx;
+    }
+    if (idx < 16)
+    {
+      return idx & 7; // bright (8..15) -> base dark (0..7); base stays
+    }
+    if (idx >= 232)
+    {
+      return std::max(232, idx - 24); // gray ramp
+    }
+    const int v = idx - 16;
+    int r = v / 36;
+    int g = (v % 36) / 6;
+    int b = v % 6;
+    if (r > 0)
+      r -= 1;
+    if (g > 0)
+      g -= 1;
+    if (b > 0)
+      b -= 1;
+    return 16 + 36 * r + 6 * g + b;
+  }
+
   void append_cell_for_remaining_width(std::string &out, const std::string &text, int remaining)
   {
     int width = rendered_cell_width(text);
@@ -314,7 +346,8 @@ void UI::render()
           term->set_underline(cell.underline);
         if (cell.underline_fg != -1)
           term->set_underline_color(cell.underline_fg);
-        term->set_color(cell.fg, cell.bg);
+        term->set_color(cell.dim ? ui_dim_color(cell.fg, false) : cell.fg,
+                        cell.dim ? ui_dim_color(cell.bg, true) : cell.bg);
         write_cell_for_remaining_width(term, cell.ch, row_width - x);
         x += std::min(rendered_cell_width(cell.ch), row_width - x);
       }
@@ -388,7 +421,8 @@ void UI::render()
             if (cell.underline_fg != run_underline_fg)
               term->set_underline_color(cell.underline_fg);
           }
-          term->set_color(cell.fg, cell.bg);
+          term->set_color(run_dim ? ui_dim_color(run_fg, false) : run_fg,
+                          run_dim ? ui_dim_color(run_bg, true) : run_bg);
           run_fg = cell.fg;
           run_bg = cell.bg;
           run_bold = cell.bold;
