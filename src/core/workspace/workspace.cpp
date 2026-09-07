@@ -423,6 +423,48 @@ void Editor::load_file_tree(const std::string &path)
   refresh_file_tree_watch_baseline();
 }
 
+std::string Editor::telescope_launch_root() const
+{
+  // A real workspace root always wins.
+  if (!root_dir.empty() && root_dir != ".")
+  {
+    return root_dir;
+  }
+  // No workspace: prefer the detected git root when this session is inside a
+  // repository (the git status refresh already computed it).
+  if (!git_root.empty())
+  {
+    return git_root;
+  }
+  // Single file opened outside a repo (or before git status ran): walk up
+  // from the current file's directory looking for a project marker.
+  std::error_code ec;
+  const std::string file = buffers.empty() ? std::string() : buffers[current_buffer].filepath;
+  fs::path dir = file.empty() ? fs::current_path(ec) : fs::path(file).parent_path();
+  if (ec || dir.empty())
+  {
+    dir = fs::current_path();
+  }
+  for (;;)
+  {
+    for (const char *marker : {".git", ".hg", ".svn"})
+    {
+      const fs::path probe = dir / marker;
+      if (fs::exists(probe, ec))
+      {
+        return dir.lexically_normal().string();
+      }
+    }
+    const fs::path parent = dir.parent_path();
+    if (parent == dir)
+    {
+      break;
+    }
+    dir = parent;
+  }
+  return dir.lexically_normal().string();
+}
+
 void Editor::build_tree(const std::string &path, std::vector<FileNode> &nodes, int depth)
 {
   try

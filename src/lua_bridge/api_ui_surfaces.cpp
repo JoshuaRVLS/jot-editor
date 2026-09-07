@@ -160,6 +160,8 @@ void LuaAPI::push_ui_colors(lua_State *L, int t)
   lua_set_int_field(L, c, "t_sel_bg", th.bg_telescope_selected);
   lua_set_int_field(L, c, "t_prev_fg", th.fg_telescope_preview);
   lua_set_int_field(L, c, "t_prev_bg", th.bg_telescope_preview);
+  lua_set_int_field(L, c, "t_query_fg", th.fg_telescope_query);
+  lua_set_int_field(L, c, "t_query_bg", th.bg_telescope_query);
   // Syntax colors (token kind name -> theme color), matching the hover payload
   // so code previews highlight with the same colors as the editor.
   lua_set_int_field(L, c, "keyword", th.fg_keyword);

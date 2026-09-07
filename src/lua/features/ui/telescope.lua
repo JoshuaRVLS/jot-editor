@@ -40,6 +40,10 @@ local function telescope(p)
   local t_sel_bg = colors.t_sel_bg or colors.selection_bg or 6
   local t_prev_fg = colors.t_prev_fg or t_fg
   local t_prev_bg = colors.t_prev_bg or t_bg
+  -- Query row colors: a calm input background (command-bar style) rather than
+  -- the loud selection highlight, so typed text stays readable on every theme.
+  local t_query_fg = colors.t_query_fg or colors.fg_command or t_fg
+  local t_query_bg = colors.t_query_bg or colors.bg_command or t_bg
   local border = colors.border or t_fg
   local comment = colors.comment or 8
   local accent = colors.accent or 6
@@ -93,12 +97,58 @@ local function telescope(p)
     return start
   end
 
-  local function fill_row(b, row_bg, row_fg)
+  -- Full-row background: emits a start==0 span that the float renderer
+  -- treats as the row's background across the whole interior width. Used for
+  -- the input bar. Does not touch body text, so put() after it still lands
+  -- at the requested column.
+  local function fill_row_span(b, row_fg, row_bg)
     if b < 1 or b > inner_h then
       return
     end
-    body[b] = body[b] or ""
     span(b, 0, 65535, row_fg, row_bg)
+  end
+
+  -- Bounded background over the results-list band of one row: from cell
+  -- column `col0` for `width` cells. Spans use byte offsets, so the band
+  -- edges are mapped from cells to bytes by walking the row (wide glyphs
+  -- make cells and bytes diverge). Must run AFTER the row text is placed
+  -- (padding before put would push the text past its column). The span
+  -- starts at col0 > 0, so the float renderer treats it as a segment
+  -- background, not the whole-row background (which it infers only from
+  -- start==0 spans) — the selection highlight therefore stays inside the
+  -- results column and never floods under the separator or preview pane.
+  local function fill_col(b, col0, width, row_fg, row_bg)
+    if b < 1 or b > inner_h or width <= 0 then
+      return
+    end
+    body[b] = body[b] or ""
+    -- Ensure the row is at least col0+width cells so the walk below finds a
+    -- full band of spaces when the text is shorter.
+    local cur = cell_len(body[b])
+    if cur < col0 + width then
+      body[b] = body[b] .. string.rep(" ", col0 + width - cur)
+    end
+    local function cell_to_byte(row, col)
+      local byte = 0
+      local cell = 0
+      for _, cp in utf8.codes(row) do
+        if cell >= col then
+          break
+        end
+        local w = h.rune_width(cp)
+        if cell + w > col then
+          break
+        end
+        byte = byte + utf8.len(utf8.char(cp))
+        cell = cell + w
+      end
+      return byte
+    end
+    local s = cell_to_byte(body[b], col0)
+    local e = cell_to_byte(body[b], col0 + width)
+    if e > s then
+      span(b, s, e - s, row_fg, row_bg)
+    end
   end
 
   -- Root line + query row.
@@ -111,13 +161,13 @@ local function telescope(p)
     query_text = query_text .. "type to filter files"
   end
   local query_focus = (p.focus or "results") == "query"
-  local query_bg = query_focus and (colors.selection_bg or 6)
-    or colors.bg_command or colors.bg or 0
-  fill_row(query_row, query_bg, t_fg)
+  local query_bg = query_focus and t_query_bg or t_bg
+  local query_fg = query_focus and t_query_fg or comment
+  fill_row_span(query_row, query_fg, query_bg)
   local q_off = put(query_row,
                     (p.query_x or 0) - (p.x or 0) - 1,
                     truncate(query_text, math.max(1, inner_w - 1)),
-                    t_fg,
+                    query_fg,
                     query_bg)
   -- Accent the prompt arrow (3-byte rune starting at byte offset 2 of
   -- "  → …") without shifting any later column.
@@ -125,8 +175,14 @@ local function telescope(p)
     span(query_row, q_off + 2, 3, accent, query_bg)
   end
   if query_focus and jot.ui.set_cursor then
-    local caret = (p.query_x or 0) + math.min(math.max(0, (p.query_w or 1) - 1),
-                                             math.max(0, #("  → " .. query)))
+    -- "  → " is 4 cells (2 spaces + arrow + 1 space); the caret column is the
+    -- prompt plus the typed query in *cells* (wide glyphs count 2), clamped
+    -- to the query box. #() counts bytes — the 3-byte arrow alone would push
+    -- the cursor 2 columns past where the next character lands, and wide
+    -- query text drifts further.
+    local caret_col = cell_len("  → " .. query)
+    local caret = (p.query_x or 0)
+                  + math.min(math.max(0, (p.query_w or 1) - 1), math.max(0, caret_col))
     jot.ui.set_cursor(caret, p.query_y or 0)
   end
 
@@ -148,8 +204,12 @@ local function telescope(p)
   for i, r in ipairs(results) do
     local b = list_row0 + i - 1
     local is_selected = (p.selected or -1) == (p.list_scroll or 0) + i - 1
-    local icon = r.is_directory and "▸ " or "  "
-    local icon_fg = r.is_directory and (colors.sidebar_directory or accent) or t_fg
+    -- ASCII-safe directory marker: "▸" (U+25B8) is missing from several
+    -- terminal fonts and renders as "??", so use ">" which is universally
+    -- present. Files keep a two-space indent so names still align.
+    local icon = r.is_directory and "> " or "  "
+    local icon_fg = is_selected and t_sel_fg
+      or (r.is_directory and (colors.sidebar_directory or accent) or t_fg)
     local parent = (r.parent_path or "") == "." and "" or r.parent_path or ""
     local parent_w = parent == ""
         and 0
@@ -165,22 +225,30 @@ local function telescope(p)
       -- Signal truncation with an ellipsis inside the budget.
       name = trunc_cells(raw_name, name_budget - 1) .. "…"
     end
-    if is_selected then
-      fill_row(b, t_sel_bg, t_sel_fg)
-    end
-    local row_off = put(b, list_col, icon .. name, is_selected and t_sel_fg or t_fg,
-                        is_selected and t_sel_bg or t_bg)
+    local row_fg = is_selected and t_sel_fg or t_fg
+    local row_bg = is_selected and t_sel_bg or t_bg
+    local row_off = put(b, list_col, icon .. name, row_fg, row_bg)
     -- Re-tint the icon on the selected row so it stays readable against the
     -- highlight; row_off is the byte offset where the icon was appended.
     if is_selected and row_off >= 0 then
-      span(b, row_off, cell_len(icon), t_sel_fg, t_sel_bg)
+      span(b, row_off, #icon, icon_fg, row_bg)
     end
     if parent_w > 0 and r.parent_path then
       put(b,
           list_col + math.max(0, list_w - parent_w),
           trunc_cells(left_clip(r.parent_path, parent_w), parent_w),
-          comment,
-          is_selected and t_sel_bg or t_bg)
+          -- On the selected row the dimmed location must still read against
+          -- the highlight: reuse the selection fg (usually a dark-on-light
+          -- pair) rather than the grey comment color.
+          is_selected and t_sel_fg or comment,
+          row_bg)
+    end
+    -- Selection highlight: bounded to the results-list band so it never
+    -- paints over the separator gutter or the preview pane. Runs after the
+    -- text is placed (fill_col must not pad the row before put, or the text
+    -- would be pushed past its column).
+    if is_selected then
+      fill_col(b, list_col, list_w, row_fg, row_bg)
     end
   end
 

@@ -42,6 +42,60 @@ namespace
     return name.empty() || name[0] == '.';
   }
 
+  // True when a filename looks like a generated duplicate / copy that should
+  // rank below the clean original: "foo (1).c", "foo - Copy.c", "foo copy.c",
+  // "foo_copy.c", "foo (copy).c". Only the basename (no extension) is
+  // inspected so a real directory literally named "foo (1)" is not affected.
+  bool name_looks_generated_duplicate(const std::string &name)
+  {
+    std::string s = lower_copy(name);
+    const size_t dot = s.rfind('.');
+    if (dot != std::string::npos && dot > 0)
+    {
+      s = s.substr(0, dot);
+    }
+    // OS download/collision copies: "name (1)", "name (42)", "name[1]".
+    if (s.size() > 3 && s.back() == ')')
+    {
+      const size_t open = s.rfind(" (");
+      if (open != std::string::npos
+          && s.find_first_not_of("0123456789", open + 2) == s.size() - 1)
+      {
+        return true;
+      }
+    }
+    if (s.size() > 3 && s.back() == ']')
+    {
+      const size_t open = s.rfind('[');
+      if (open != std::string::npos
+          && s.find_first_not_of("0123456789", open + 1) == s.size() - 1)
+      {
+        return true;
+      }
+    }
+    // Explicit copy markers.
+    return s.find("copy") != std::string::npos || s.find("-dup") != std::string::npos
+           || s.find(" duplicate") != std::string::npos;
+  }
+
+  // Known source/code extensions that get a small ranking boost so real code
+  // surfaces above data/asset/random files on near-ties.
+  bool is_source_extension(const std::string &name)
+  {
+    const size_t dot = name.rfind('.');
+    if (dot == std::string::npos || dot + 1 >= name.size())
+    {
+      return false;
+    }
+    static const std::unordered_set<std::string> kSourceExts = {
+        "c",  "h",    "cpp", "hpp", "cc",  "cxx", "hh", "py", "pyw", "rs",  "go",   "java",
+        "kt", "kts",  "js",  "jsx", "ts",  "tsx", "m",  "mm", "lua",  "sh",  "bash", "zsh",
+        "rb", "php",  "swift", "cs", "scala", "clj", "ex", "exs", "erl",  "hs",   "ml",
+        "fs", "fsx",  "vue", "svelte", "dart", "zig", "nim", "r",   "sql", "toml", "json",
+        "yaml", "yml", "cmake", "mk", "proto", "tex", "md", "rst"};
+    return kSourceExts.find(lower_copy(name.substr(dot + 1))) != kSourceExts.end();
+  }
+
   bool file_looks_binary(const std::string &path)
   {
     std::ifstream file(path, std::ios::binary);
@@ -227,26 +281,7 @@ void Telescope::update_results()
     {
       continue;
     }
-
-    int score_name = fuzzy_score(match.name, query_lc);
-    int score_path = fuzzy_score(rel, query_lc);
-    int bonus = 0;
-    std::string name_lc = lower_copy(match.name);
-    std::string rel_lc = lower_copy(rel);
-    if (!query_lc.empty() && name_lc.find(query_lc) != std::string::npos)
-    {
-      bonus += 30;
-    }
-    if (!query_lc.empty() && rel_lc.find("/" + query_lc) != std::string::npos)
-    {
-      bonus += 12;
-    }
-    if (match.is_directory)
-    {
-      bonus -= 6;
-    }
-
-    match.score = score_name * 2 + score_path + bonus;
+    match.score = rank_score(match.name, rel, query_lc, match.is_directory);
     filtered.push_back(std::move(match));
   }
 
@@ -709,6 +744,52 @@ int Telescope::fuzzy_score(const std::string &text, const std::string &pattern)
     return 0;
   }
   return score;
+}
+
+int Telescope::rank_score(const std::string &name,
+                          const std::string &relative_path,
+                          const std::string &query_lc,
+                          bool is_directory)
+{
+  int score_name = fuzzy_score(name, query_lc);
+  int score_path = fuzzy_score(relative_path, query_lc);
+  // No match anywhere: score 0 (callers also filter before ranking, but the
+  // method must be self-consistent so boosts never apply to non-matches).
+  // An empty query is browse mode: every entry is a candidate, so nothing
+  // is zeroed (the empty-query sort ignores scores anyway).
+  if (!query_lc.empty() && score_name == 0 && score_path == 0)
+  {
+    return 0;
+  }
+  int bonus = 0;
+  std::string name_lc = lower_copy(name);
+  std::string rel_lc = lower_copy(relative_path);
+  if (!query_lc.empty() && name_lc.find(query_lc) != std::string::npos)
+  {
+    bonus += 30;
+  }
+  if (!query_lc.empty() && rel_lc.find("/" + query_lc) != std::string::npos)
+  {
+    bonus += 12;
+  }
+  if (is_directory)
+  {
+    bonus -= 6;
+  }
+  else
+  {
+    // Real code files surface above assets/data/random files on near-ties.
+    if (is_source_extension(name))
+    {
+      bonus += 15;
+    }
+    // Generated duplicates/copies rank below the clean original.
+    if (name_looks_generated_duplicate(name))
+    {
+      bonus -= 40;
+    }
+  }
+  return score_name * 2 + score_path + bonus;
 }
 
 void Telescope::cancel_scan()

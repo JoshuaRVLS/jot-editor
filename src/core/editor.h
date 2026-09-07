@@ -620,6 +620,10 @@ private:
   void clear_search_scope();
   bool replace_current_search_match();
   bool replace_all_search_matches();
+  // Root used when launching the telescope file finder: the workspace root
+  // when one is open, otherwise the git/project root detected from the
+  // current file's directory (falling back to the process cwd).
+  std::string telescope_launch_root() const;
   void refresh_folds(FileBuffer &buf);
   bool toggle_fold_at_line(FileBuffer &buf, int line);
   bool fold_at_cursor();

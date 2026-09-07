@@ -629,7 +629,7 @@ bool Editor::execute_ex_command(const std::string &input_line)
     std::string target = trim_copy(arg);
     if (target.empty())
     {
-      target = root_dir.empty() ? "." : root_dir;
+      target = telescope_launch_root();
     }
     telescope.open(target);
     telescope.scan_async(task_queue_.get(), [this] { needs_redraw = true; });

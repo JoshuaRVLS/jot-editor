@@ -162,26 +162,7 @@ void Telescope::scan_async(TaskQueue *tq, std::function<void()> on_update)
           {
             continue;
           }
-
-          int score_name = fuzzy_score(match.name, query_lc);
-          int score_path = fuzzy_score(rel, query_lc);
-          int bonus = 0;
-          std::string name_lc = lower_copy(match.name);
-          std::string rel_lc = lower_copy(rel);
-          if (!query_lc.empty() && name_lc.find(query_lc) != std::string::npos)
-          {
-            bonus += 30;
-          }
-          if (!query_lc.empty() && rel_lc.find("/" + query_lc) != std::string::npos)
-          {
-            bonus += 12;
-          }
-          if (match.is_directory)
-          {
-            bonus -= 6;
-          }
-
-          match.score = score_name * 2 + score_path + bonus;
+          match.score = Telescope::rank_score(match.name, rel, query_lc, match.is_directory);
           filtered.push_back(std::move(match));
         }
 

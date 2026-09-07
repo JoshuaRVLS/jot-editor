@@ -159,6 +159,14 @@ public:
 
   static bool fuzzy_match(const std::string &text, const std::string &pattern);
   static int fuzzy_score(const std::string &text, const std::string &pattern);
+  // Composite ranking used by both the sync and async result builders:
+  // name*2 + path + bonuses, minus a penalty for duplicate/generated-looking
+  // names ("foo (1).c", "foo - Copy.c") and plus a boost for real source
+  // extensions so clean code files outrank numbered copies and assets.
+  static int rank_score(const std::string &name,
+                        const std::string &relative_path,
+                        const std::string &query_lc,
+                        bool is_directory);
 
 private:
   bool active;

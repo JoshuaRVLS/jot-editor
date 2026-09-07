@@ -150,7 +150,7 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift, bool /*is_a
     {
     case 'f':
     case 'F':
-      telescope.open(root_dir.empty() ? "." : root_dir);
+      telescope.open(telescope_launch_root());
       telescope.scan_async(task_queue_.get(), [this] { needs_redraw = true; });
       needs_redraw = true;
       return;

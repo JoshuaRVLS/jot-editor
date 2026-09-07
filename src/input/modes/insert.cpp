@@ -189,7 +189,7 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt
       return;
     case 'e':
     case 'E':
-      telescope.open(root_dir.empty() ? "." : root_dir);
+      telescope.open(telescope_launch_root());
       telescope.scan_async(task_queue_.get(), [this] { needs_redraw = true; });
       leader_key_pending = false;
       needs_redraw = true;

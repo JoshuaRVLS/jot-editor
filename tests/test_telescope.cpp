@@ -21,6 +21,29 @@ TEST_CASE("Telescope Fuzzy Score Ranking", "[jot]")
   REQUIRE(Telescope::fuzzy_score("README.md", "xyz") == 0);
 }
 
+TEST_CASE("Telescope Rank Score Prefers Real Source Over Duplicates", "[jot]")
+{
+  // Query "foo": the clean source file must outrank the numbered copy and
+  // the " - Copy" duplicate, even though both contain "foo".
+  const std::string q = "foo";
+  int clean = Telescope::rank_score("foo.c", "foo.c", q, false);
+  int numbered = Telescope::rank_score("foo (1).c", "foo (1).c", q, false);
+  int copy = Telescope::rank_score("foo - Copy.c", "foo - Copy.c", q, false);
+  int copy_underscore = Telescope::rank_score("foo_copy.c", "foo_copy.c", q, false);
+
+  REQUIRE(clean > numbered);
+  REQUIRE(clean > copy);
+  REQUIRE(clean > copy_underscore);
+
+  // A source file outranks a same-name non-code asset on a near tie.
+  int source = Telescope::rank_score("main.c", "main.c", "main", false);
+  int asset = Telescope::rank_score("main.png", "main.png", "main", false);
+  REQUIRE(source > asset);
+
+  // Non-matching query scores 0.
+  REQUIRE(Telescope::rank_score("foo.c", "foo.c", "zzz", false) == 0);
+}
+
 TEST_CASE("Telescope Apply Results Selection And Display", "[jot]")
 {
   Telescope telescope;
