@@ -14,7 +14,7 @@ namespace LspInstall
     int exit_code = -1;
   };
 
-  // Host half of the Lua-driven installer (src/lua/lsp/install.lua). The Lua
+  // Host half of the Lua-driven installer (runtime/lua/lsp/install.lua). The Lua
   // side owns the package registry and the per-manager install scripts; this
   // side owns the install root on disk, the [jot:lsp] marker protocol that
   // the background-job poll loop parses, and receipt/binary lookups.

@@ -1,5 +1,5 @@
 #include "terminal.h"
-#include "core/keybind_catalog.h"
+#include "jot/keybind_catalog.h"
 
 #include <cctype>
 #include <cerrno>

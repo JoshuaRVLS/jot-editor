@@ -2,7 +2,7 @@
 #include "column_utils.h"
 #include "editor.h"
 #include "folding.h"
-#include "lua_bridge/api.h"
+#include "jot/lua/api.h"
 #include "ui/text.h"
 #include <cctype>
 #include <cstdio>

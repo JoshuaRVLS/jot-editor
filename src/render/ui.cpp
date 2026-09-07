@@ -1,7 +1,7 @@
 #include "editor.h"
-#include "core/file_icons.h"
-#include "core/keybind_catalog.h"
-#include "lua_bridge/api.h"
+#include "jot/file_icons.h"
+#include "jot/keybind_catalog.h"
+#include "jot/lua/api.h"
 #include "tools/lsp/install.h"
 #include "tree_sitter/manager.h"
 #include "ui/components.h"
@@ -1205,7 +1205,7 @@ void Editor::render_status_line()
 
   // Message / context row.
   // DEPRECATED: statusline messages are kept for compatibility; they are no
-  // longer the primary message surface — toasts (src/lua/features/ui/toast.lua)
+  // longer the primary message surface — toasts (runtime/lua/features/ui/toast.lua)
   // handle that now.
   if (!message.empty())
   {

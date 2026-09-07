@@ -424,16 +424,16 @@ apps/jot/        CLI entrypoint and executable target
 benchmarks/      opt-in performance benchmark suite
 cmake/           reusable CMake modules
 include/jot/     public C++ API headers
-src/core/        editor state, buffers, panes, workspace, LSP, debugger, terminal
+src/jot/        editor state, buffers, panes, workspace, LSP, debugger, terminal
 src/edit/        text editing, cursor movement, selection, clipboard, search
 src/features/    syntax, folding, config, bracket helpers, C++ assist
 src/input/       keyboard, mouse, command palette, command dispatch
 src/render/      buffer drawing, minimap, overlays, panels, UI views
 src/tools/       integrated terminal, DAP client, LSP client, search helpers
-src/lua_bridge/  C++ bridge for the embedded Lua plugin/theme API
+src/jot/lua/  C++ bridge for the embedded Lua plugin/theme API
 src/ui/          raw terminal and UI abstraction
 docs/            user-facing documentation
-tests/           unit tests
+test/           unit tests
 ```
 
 Build graph highlights: `jot_engine` is the aggregated static engine target;

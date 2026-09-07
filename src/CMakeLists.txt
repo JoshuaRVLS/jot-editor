@@ -1,18 +1,18 @@
 add_compile_definitions(JOT_DEFAULT_DATA_DIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/jot")
-add_compile_definitions(JOT_LUA_SOURCE_DIR="${PROJECT_SOURCE_DIR}/src/lua")
+add_compile_definitions(JOT_LUA_SOURCE_DIR="${PROJECT_SOURCE_DIR}/runtime/lua")
 
-# Embed the bundled runtime files (src/lua/*.lua + tree-sitter queries)
+# Embed the bundled runtime files (runtime/lua/*.lua + tree-sitter queries)
 # into the binary so it always carries a working copy of the Lua UI /
 # features, regenerated whenever they change. Runtime loaders try the user
 # config dir and the developer source dir first; the embedded bytes are the
 # final fallback (served from memory, or extracted into the cache dir for
 # runtimes that need real files on disk).
-file(GLOB_RECURSE JOT_LUA_BUNDLED CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/src/lua/*.lua" "${PROJECT_SOURCE_DIR}/src/lua/*.scm")
+file(GLOB_RECURSE JOT_LUA_BUNDLED CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/runtime/lua/*.lua" "${PROJECT_SOURCE_DIR}/runtime/lua/*.scm")
 set(JOT_LUA_EMBED_CPP "${CMAKE_CURRENT_BINARY_DIR}/embedded_lua.cpp")
 add_custom_command(
   OUTPUT "${JOT_LUA_EMBED_CPP}"
   COMMAND ${CMAKE_COMMAND}
-    -DLUA_DIR=${PROJECT_SOURCE_DIR}/src/lua
+    -DLUA_DIR=${PROJECT_SOURCE_DIR}/runtime/lua
     -DOUTPUT=${JOT_LUA_EMBED_CPP}
     -P ${PROJECT_SOURCE_DIR}/cmake/embed_lua.cmake
   DEPENDS ${JOT_LUA_BUNDLED} "${PROJECT_SOURCE_DIR}/cmake/embed_lua.cmake"
@@ -23,13 +23,13 @@ function(jot_configure_object_target target_name)
   target_include_directories(${target_name} PRIVATE
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/src
-    ${PROJECT_SOURCE_DIR}/src/core
+    ${PROJECT_SOURCE_DIR}/src/jot
     ${PROJECT_SOURCE_DIR}/src/input
     ${PROJECT_SOURCE_DIR}/src/render
     ${PROJECT_SOURCE_DIR}/src/edit
     ${PROJECT_SOURCE_DIR}/src/features
     ${PROJECT_SOURCE_DIR}/src/ui
-    ${PROJECT_SOURCE_DIR}/src/lua_bridge
+    ${PROJECT_SOURCE_DIR}/src/jot/lua
     ${PROJECT_SOURCE_DIR}/src/tools
   )
 
@@ -203,7 +203,7 @@ function(jot_expose_module_api target_name)
   target_include_directories(${target_name} PUBLIC
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/src
-    ${PROJECT_SOURCE_DIR}/src/core
+    ${PROJECT_SOURCE_DIR}/src/jot
     ${PROJECT_SOURCE_DIR}/src/input
     ${PROJECT_SOURCE_DIR}/src/render
     ${PROJECT_SOURCE_DIR}/src/edit
@@ -214,20 +214,20 @@ function(jot_expose_module_api target_name)
   )
 endfunction()
 
-include(core/sources.cmake)
+include(jot/sources.cmake)
 include(edit/sources.cmake)
 include(features/sources.cmake)
 include(input/sources.cmake)
 include(render/sources.cmake)
 include(tools/sources.cmake)
-include(lua_bridge/sources.cmake)
+include(jot/lua/sources.cmake)
 include(ui/sources.cmake)
 
 # Module object libraries
-add_library(jot_core_obj OBJECT ${JOT_CORE_SOURCES})
-jot_configure_object_target(jot_core_obj)
-target_include_directories(jot_core_obj SYSTEM PRIVATE ${LIBUV_INCLUDE_DIRS})
-target_compile_options(jot_core_obj PRIVATE ${LIBUV_CFLAGS_OTHER})
+add_library(jot_engine_obj OBJECT ${JOT_ENGINE_SOURCES})
+jot_configure_object_target(jot_engine_obj)
+target_include_directories(jot_engine_obj SYSTEM PRIVATE ${LIBUV_INCLUDE_DIRS})
+target_compile_options(jot_engine_obj PRIVATE ${LIBUV_CFLAGS_OTHER})
 
 add_library(jot_edit_obj OBJECT ${JOT_EDIT_SOURCES})
 jot_configure_object_target(jot_edit_obj)
@@ -264,10 +264,10 @@ jot_configure_object_target(jot_tools_obj)
 target_include_directories(jot_tools_obj SYSTEM PRIVATE
   ${PROJECT_SOURCE_DIR}/third_party/libvterm/include)
 
-add_library(jot_lua_bridge_obj OBJECT ${JOT_LUA_BRIDGE_SOURCES} "${JOT_LUA_EMBED_CPP}")
-target_include_directories(jot_lua_bridge_obj PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
-jot_configure_object_target(jot_lua_bridge_obj)
-target_include_directories(jot_lua_bridge_obj SYSTEM PRIVATE ${LUA_INCLUDE_DIRS})
+add_library(jot_lua_api_obj OBJECT ${JOT_LUA_SOURCES} "${JOT_LUA_EMBED_CPP}")
+target_include_directories(jot_lua_api_obj PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+jot_configure_object_target(jot_lua_api_obj)
+target_include_directories(jot_lua_api_obj SYSTEM PRIVATE ${LUA_INCLUDE_DIRS})
 
 add_library(jot_ui_obj OBJECT ${JOT_UI_SOURCES})
 if(WIN32)
@@ -289,14 +289,14 @@ endif()
 jot_configure_object_target(jot_ui_obj)
 
 # Module static libraries (for larger-project style ownership and reuse)
-add_library(jot_core STATIC $<TARGET_OBJECTS:jot_core_obj>)
+add_library(jot_core STATIC $<TARGET_OBJECTS:jot_engine_obj>)
 add_library(jot_edit STATIC $<TARGET_OBJECTS:jot_edit_obj>)
 add_library(jot_features STATIC $<TARGET_OBJECTS:jot_features_obj>)
 add_library(jot_input STATIC $<TARGET_OBJECTS:jot_input_obj>)
 add_library(jot_render STATIC $<TARGET_OBJECTS:jot_render_obj>)
 add_library(jot_tools STATIC $<TARGET_OBJECTS:jot_tools_obj>)
-add_library(jot_lua_bridge STATIC $<TARGET_OBJECTS:jot_lua_bridge_obj>)
-target_link_libraries(jot_lua_bridge PUBLIC ${LUA_LIBRARIES})
+add_library(jot_lua_api STATIC $<TARGET_OBJECTS:jot_lua_api_obj>)
+target_link_libraries(jot_lua_api PUBLIC ${LUA_LIBRARIES})
 add_library(jot_ui STATIC $<TARGET_OBJECTS:jot_ui_obj>)
 
 jot_expose_module_api(jot_core)
@@ -305,29 +305,29 @@ jot_expose_module_api(jot_features)
 jot_expose_module_api(jot_input)
 jot_expose_module_api(jot_render)
 jot_expose_module_api(jot_tools)
-jot_expose_module_api(jot_lua_bridge)
+jot_expose_module_api(jot_lua_api)
 jot_expose_module_api(jot_ui)
 
 # Aggregated engine library consumed by the app target.
 # Built from the same object libraries to avoid duplicate compilation.
 add_library(jot_engine STATIC
-  $<TARGET_OBJECTS:jot_core_obj>
+  $<TARGET_OBJECTS:jot_engine_obj>
   $<TARGET_OBJECTS:jot_edit_obj>
   $<TARGET_OBJECTS:jot_features_obj>
   $<TARGET_OBJECTS:jot_input_obj>
   $<TARGET_OBJECTS:jot_render_obj>
   $<TARGET_OBJECTS:jot_tools_obj>
-  $<TARGET_OBJECTS:jot_lua_bridge_obj>
+  $<TARGET_OBJECTS:jot_lua_api_obj>
   $<TARGET_OBJECTS:jot_ui_obj>
 )
 target_link_libraries(jot_engine PUBLIC ${LUA_LIBRARIES})
 
 jot_expose_module_api(jot_engine)
 if(JOT_TREESITTER_ENABLED)
-  foreach(target_name IN ITEMS jot_core_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_bridge_obj jot_tools_obj jot_ui_obj jot_core jot_edit jot_features jot_input jot_render jot_tools jot_lua_bridge jot_ui jot_engine)
+  foreach(target_name IN ITEMS jot_engine_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj jot_core jot_edit jot_features jot_input jot_render jot_tools jot_lua_api jot_ui jot_engine)
     target_compile_definitions(${target_name} PUBLIC JOT_TREESITTER=1)
   endforeach()
-  foreach(target_name IN ITEMS jot_core_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_bridge_obj jot_tools_obj jot_ui_obj)
+  foreach(target_name IN ITEMS jot_engine_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj)
     target_include_directories(${target_name} SYSTEM PRIVATE ${TREE_SITTER_INCLUDE_DIRS})
   endforeach()
   target_link_libraries(jot_features PUBLIC

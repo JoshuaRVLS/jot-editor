@@ -1,9 +1,9 @@
 #include "bracket.h"
 #include "column_utils.h"
-#include "core/file_icons.h"
+#include "jot/file_icons.h"
 #include "editor.h"
 #include "folding.h"
-#include "lua_bridge/api.h"
+#include "jot/lua/api.h"
 #include "ui/text.h"
 #include <cstdio>
 #include <filesystem>

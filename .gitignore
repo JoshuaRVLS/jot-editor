@@ -65,8 +65,7 @@ build_no_ts/CTestTestfile.cmake
 build_no_ts/DartConfiguration.tcl
 build_no_ts/apps/jot/jot
 build_no_ts/Testing/Temporary/CTestCostData.txt
-build_no_ts/tests/CTestTestfile.cmake
-build_no_ts/tests/jot_tests
+build_no_ts/test/CTestTestfile.cmake
+build_no_ts/test/jot_tests
 index.html
 .tokensave/
-src/core/app/editor.cpp

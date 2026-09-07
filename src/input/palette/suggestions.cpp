@@ -1,7 +1,7 @@
 #include "commands/utils.h"
 #include "cpp_assist.h"
 #include "editor.h"
-#include "lua_bridge/api.h"
+#include "jot/lua/api.h"
 #include "tree_sitter/install.h"
 #include <algorithm>
 #include <cctype>

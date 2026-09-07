@@ -95,7 +95,7 @@ if(BUILD_TESTING)
   )
   FetchContent_MakeAvailable(Catch2)
   list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
-  add_subdirectory(tests)
+  add_subdirectory(test)
 endif()
 if(JOT_BUILD_BENCHMARKS)
   add_subdirectory(benchmarks)
@@ -120,7 +120,7 @@ install(DIRECTORY .configs/configs
   DESTINATION ${CMAKE_INSTALL_DATADIR}/jot
 )
 
-install(DIRECTORY src/lua
+install(DIRECTORY runtime/lua
   DESTINATION ${CMAKE_INSTALL_DATADIR}/jot
 )
 

@@ -1,0 +1,17 @@
+set(JOT_LUA_SOURCES
+  jot/lua/api_bindings.cpp
+  jot/lua/api_config.cpp
+  jot/lua/api_core.cpp
+  jot/lua/api_decorations.cpp
+  jot/lua/api_git.cpp
+  jot/lua/api_events.cpp
+  jot/lua/api_float.cpp
+  jot/lua/api_lsp_bridge.cpp
+  jot/lua/api_lsp_install.cpp
+  jot/lua/api_viewport.cpp
+  jot/lua/api_theme.cpp
+  jot/lua/api_toast.cpp
+  jot/lua/api_ui_surfaces.cpp
+  jot/lua/api_treesitter.cpp
+  jot/lua/lua_loader.cpp
+)

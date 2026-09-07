@@ -1,0 +1,28 @@
+set(JOT_ENGINE_SOURCES
+  jot/app/bookmarks.cpp
+  jot/app/decorations.cpp
+  jot/app/editor.cpp
+  jot/app/file.cpp
+  jot/app/folding.cpp
+  jot/app/panes.cpp
+  jot/app/process_job.cpp
+  jot/app/undo.cpp
+  jot/app/utils.cpp
+  jot/integrations/debugger.cpp
+  jot/integrations/integrated_terminal.cpp
+  jot/integrations/lsp.cpp
+  jot/integrations/syntax.cpp
+  jot/integrations/tree_sitter_commands.cpp
+  jot/event/event_loop.cpp
+  jot/event/in_memory_line_provider.cpp
+  jot/event/lazy_line_provider.cpp
+  jot/event/task_queue.cpp
+  jot/surfaces/home.cpp
+  jot/surfaces/host_api.cpp
+  jot/surfaces/popup.cpp
+  jot/surfaces/quick_pick.cpp
+  jot/surfaces/theme.cpp
+  jot/workspace/git.cpp
+  jot/workspace/tasks.cpp
+  jot/workspace/workspace.cpp
+)

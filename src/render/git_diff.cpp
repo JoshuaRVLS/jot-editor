@@ -1,5 +1,5 @@
 #include "editor.h"
-#include "lua_bridge/api.h"
+#include "jot/lua/api.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <filesystem>

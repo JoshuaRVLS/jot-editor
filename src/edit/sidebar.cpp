@@ -1,6 +1,6 @@
 #include "editor.h"
-#include "core/file_icons.h"
-#include "lua_bridge/api.h"
+#include "jot/file_icons.h"
+#include "jot/lua/api.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
