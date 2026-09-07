@@ -426,9 +426,9 @@ See [docs/LUA_API.md](docs/LUA_API.md) for runtime scripting and extension APIs.
 ### Pane Layout
 
 - `Alt+H/J/K/L`: focus pane or explorer left/down/up/right
-- `Ctrl+Alt+H/J/K/L`: split left/down/up/right
+- `Alt+Shift+H/J/K/L`: split left/down/up/right
 - `Ctrl+Alt+Arrow`: focus pane in that direction
-- `Ctrl+Alt+Q`: close current pane
+- `Alt+Shift+Q` or `Ctrl+Q`: close current pane
 - `Ctrl+Shift+H/J/K/L`: resize pane
 - `Ctrl+Arrow`: resize pane
 

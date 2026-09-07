@@ -199,11 +199,19 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     return;
   }
 
-  // Split:
-  // - Ctrl+Alt+H/J/K/L
-  if (is_ctrl && is_alt)
+  // Split and pane operations:
+  // - Alt+Shift+H/J/K/L (split left/down/up/right)
+  // - Alt+Shift+Q (close pane / quit), Alt+Shift+E (equalize),
+  //   Alt+Shift+Z (zoom), Alt+Shift+X (swap)
+  // Alt+letter is pane focus (handled below); Shift distinguishes split from
+  // focus. Alt+Shift was chosen over Ctrl+Alt because Ctrl+Alt+letter is not
+  // delivered at all on Alacritty for Windows (winit drops the text for
+  // Ctrl+Alt+[a-z]), while Alt+Shift+letter is plain ESC + uppercase and
+  // works everywhere. Alt+Shift always decodes to an uppercase letter, so
+  // only the uppercase forms are matched.
+  if (is_alt && is_shift)
   {
-    if (ch == 'q' || ch == 'Q' || original_ch == 'q' || original_ch == 'Q')
+    if (ch == 'Q' || original_ch == 'Q')
     {
       if (panes.size() > 1)
       {
@@ -232,43 +240,39 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
       }
       return;
     }
-    if (ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H' || ch == 8
-        || original_ch == 8)
+    if (ch == 'H' || original_ch == 'H')
     {
       split_pane_left();
       return;
     }
-    if (ch == 'j' || ch == 'J' || original_ch == 'j' || original_ch == 'J' || ch == 10
-        || original_ch == 10)
+    if (ch == 'J' || original_ch == 'J')
     {
       split_pane_down();
       return;
     }
-    if (ch == 'k' || ch == 'K' || original_ch == 'k' || original_ch == 'K' || ch == 11
-        || original_ch == 11)
+    if (ch == 'K' || original_ch == 'K')
     {
       split_pane_up();
       return;
     }
-    if (ch == 'l' || ch == 'L' || original_ch == 'l' || original_ch == 'L' || ch == 12
-        || original_ch == 12)
+    if (ch == 'L' || original_ch == 'L')
     {
       split_pane_right();
       return;
     }
-    // Pane operations: equalize, zoom, swap. Kept on Ctrl+Alt like the
+    // Pane operations: equalize, zoom, swap. Kept on Alt+Shift like the
     // splits above so the whole pane vocabulary shares one modifier family.
-    if (ch == 'e' || ch == 'E' || original_ch == 'e' || original_ch == 'E')
+    if (ch == 'E' || original_ch == 'E')
     {
       equalize_panes();
       return;
     }
-    if (ch == 'z' || ch == 'Z' || original_ch == 'z' || original_ch == 'Z')
+    if (ch == 'Z' || original_ch == 'Z')
     {
       toggle_pane_zoom();
       return;
     }
-    if (ch == 'x' || ch == 'X' || original_ch == 'x' || original_ch == 'X')
+    if (ch == 'X' || original_ch == 'X')
     {
       swap_panes();
       return;
