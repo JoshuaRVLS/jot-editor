@@ -283,3 +283,31 @@ std::filesystem::path jot_lua_resolve_path(const std::string &rel_path)
   }
   return jot_lua_cache_path(rel_path);
 }
+std::filesystem::path jot_lua_repo_root()
+{
+  // Explicit override: point an installed binary at a source clone.
+  if (const char *env = std::getenv("JOT_SOURCE_DIR"))
+  {
+    const std::filesystem::path p(env);
+    if (std::filesystem::is_directory(p / ".git"))
+    {
+      return p;
+    }
+  }
+#ifdef JOT_LUA_SOURCE_DIR
+  // Developer builds embed the runtime source dir (<repo>/runtime/lua);
+  // walk up to the enclosing git checkout.
+  {
+    std::filesystem::path p(JOT_LUA_SOURCE_DIR);
+    for (int i = 0; i < 6 && !p.empty(); i++)
+    {
+      if (std::filesystem::is_directory(p / ".git"))
+      {
+        return p;
+      }
+      p = p.parent_path();
+    }
+  }
+#endif
+  return {};
+}

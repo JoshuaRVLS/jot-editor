@@ -519,6 +519,23 @@ bool LuaAPI::run_plugin_command(const std::string &n, const std::string &a)
     }
   return false;
 }
+void LuaAPI::set_update_handler_ref(int ref)
+{
+  auto it = lua_callbacks.find("update.cmd");
+  if (it != lua_callbacks.end())
+  {
+    if (lua_state)
+    {
+      luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, it->second);
+    }
+    lua_callbacks.erase(it);
+  }
+  lua_callbacks["update.cmd"] = ref;
+}
+bool LuaAPI::run_update_command(const std::string &arg)
+{
+  return call_callback_string("update.cmd", arg);
+}
 bool LuaAPI::run_plugin_keymap(const std::string &k, const std::string &m)
 {
   for (auto &x : plugin_keymaps)

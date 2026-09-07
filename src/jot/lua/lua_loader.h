@@ -36,3 +36,10 @@ std::filesystem::path jot_lua_cache_path(const std::string &rel_path);
 // (user/dev/install) wins; otherwise the embedded bytes are extracted into
 // the cache dir and that path is returned. Empty when nothing is available.
 std::filesystem::path jot_lua_resolve_path(const std::string &rel_path);
+
+// Git checkout this binary was built from, when one can be located: an
+// explicit $JOT_SOURCE_DIR override wins, then the developer source dir the
+// build embedded (JOT_LUA_SOURCE_DIR, <repo>/runtime/lua) is walked up to
+// its repo root. Empty for plain installed binaries. Powers the Lua :update
+// feature (fetch/compare/rebuild against the source clone).
+std::filesystem::path jot_lua_repo_root();

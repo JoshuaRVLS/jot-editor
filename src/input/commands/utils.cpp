@@ -204,6 +204,7 @@ namespace CommandLineUtils
                                                       "tsstatus",
                                                       "tsreload",
                                                       "treesitterreload",
+                                                      "update",
                                                       "gitstatus",
                                                       "gitdiff",
                                                       "gitdiffclose",

@@ -747,6 +747,11 @@ public:
   void load_config_file();
   bool run_plugin_command(const std::string &name, const std::string &arg);
   bool run_plugin_keymap(const std::string &key, const std::string &mode = "global");
+  // Update feature bridge: the native :update ex command dispatches into
+  // features/update.lua through a handler registered with
+  // jot.register_update_handler (stored under the "update.cmd" callback id).
+  void set_update_handler_ref(int lua_ref);
+  bool run_update_command(const std::string &arg);
   // Whether any keymap sequence ("Ctrl+T N") starts with the given chord
   // ("Ctrl+T") — i.e. pressing the chord should reveal the which-key helper.
   bool plugin_keymap_is_prefix(const std::string &chord, const std::string &mode);

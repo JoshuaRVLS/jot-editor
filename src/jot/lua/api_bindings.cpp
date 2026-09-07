@@ -96,6 +96,17 @@ namespace
     a.register_command(name, id, detail);
     return 0;
   }
+  // Handler for the native :update command. Stored under the reserved
+  // "update.cmd" callback id (see LuaAPI::run_update_command).
+  int l_register_update_handler(lua_State *L)
+  {
+    auto &a = api(L);
+    luaL_checktype(L, 1, LUA_TFUNCTION);
+    lua_pushvalue(L, 1);
+    int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    a.set_update_handler_ref(ref);
+    return 0;
+  }
   int l_register_keymap(lua_State *L)
   {
     auto &a = api(L);
@@ -2034,6 +2045,16 @@ bool LuaAPI::init()
   // Web attach policy + toolkit presets (lsp/policy.lua). Runs after the
   // installer so jot.lsp.installed() is bound for presence checks.
   load_lsp_policy(L);
+  // Update feature metadata: expose the git checkout this binary was built
+  // from (empty for plain installed binaries) so features/update.lua can
+  // fetch/compare/rebuild against the source clone without hardcoding paths.
+  lua_getglobal(L, "jot");
+  lua_pushstring(L, jot_lua_repo_root().string().c_str());
+  lua_setfield(L, -2, "source_dir");
+  // Native :update dispatches here (features/update.lua registers the fn).
+  lua_pushcfunction(L, l_register_update_handler);
+  lua_setfield(L, -2, "register_update_handler");
+  lua_pop(L, 1);
   // Bundled feature: inline diagnostics as anchored decorations (see
   // lua/features/decorations.lua). Loaded after user plugins: load_plugins()
   // resets the autocmd table for plugin reloads, so registering before it
@@ -2046,5 +2067,8 @@ bool LuaAPI::init()
   // user keymaps registered first take precedence; the Lua registrations
   // shadow the matching hardcoded fallbacks in the modeless input path.
   jot_lua::load_bundled_lua_file(L, "features/keymaps.lua", "Built-in keymaps");
+  // Self-update (:update + silent startup check, features/update.lua). Loaded
+  // last so user config can tune update.* settings before the module boots.
+  jot_lua::load_bundled_lua_file(L, "features/update.lua", "Update");
   return true;
 }

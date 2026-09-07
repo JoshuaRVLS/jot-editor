@@ -1633,6 +1633,20 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     show_command_help(arg);
   }
+  else if (lcmd == "update")
+  {
+    // Self-update (:update / :update run). The logic lives in Lua
+    // (features/update.lua): this branch only forwards the typed command so
+    // it reaches the Lua module like any native command.
+    if (lua_api && lua_api->run_update_command(arg))
+    {
+      needs_redraw = true;
+    }
+    else
+    {
+      set_message("Update runtime unavailable (features/update.lua not loaded)");
+    }
+  }
   else if (lua_api && lua_api->run_plugin_command(lcmd, arg))
   {
     needs_redraw = true;
