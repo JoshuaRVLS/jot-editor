@@ -10,6 +10,7 @@ set(JOT_LUA_BRIDGE_SOURCES
   lua_bridge/api_lsp_install.cpp
   lua_bridge/api_viewport.cpp
   lua_bridge/api_theme.cpp
+  lua_bridge/api_toast.cpp
   lua_bridge/api_ui_surfaces.cpp
   lua_bridge/api_treesitter.cpp
   lua_bridge/lua_loader.cpp

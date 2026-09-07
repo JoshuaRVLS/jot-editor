@@ -246,7 +246,8 @@ namespace
         "filetree",    "pane",   "file",      "ui",        "keymap",     "job",     "edit",
         "search",      "folds",  "bookmarks", "workspace", "terminal",   "tasks",   "theme",
         "config",      "lsp",    "debugger",  "git",       "treesitter", "symbols", "image",
-        "diagnostics", "marks",  "status",    "timer",     "motion",     "sidebar"};
+        "diagnostics", "marks",  "status",    "timer",     "motion",     "sidebar",
+        "toast"};
     for (const char *name : names)
     {
       lua_pushboolean(L, 1);
@@ -1379,6 +1380,31 @@ namespace
     api(L).sidebar_set_view_from_lua(L);
     return 0;
   }
+  int l_toast_register(lua_State *L)
+  {
+    api(L).register_toast_module(L);
+    return 0;
+  }
+  int l_toast_show(lua_State *L)
+  {
+    api(L).toast_show_from_lua(L);
+    return 1;
+  }
+  int l_toast_dismiss(lua_State *L)
+  {
+    api(L).toast_dismiss_from_lua(L);
+    return 0;
+  }
+  int l_toast_clear(lua_State *L)
+  {
+    api(L).toast_clear_from_lua(L);
+    return 0;
+  }
+  int l_toast_info(lua_State *L)
+  {
+    api(L).toast_info_from_lua(L);
+    return 1;
+  }
   int l_lsp_disabled(lua_State *L)
   {
     api(L).push_lsp_disabled(L);
@@ -1910,6 +1936,13 @@ bool LuaAPI::init()
   field(L, "info", l_sidebar_info);
   field(L, "set_view", l_sidebar_set_view);
   lua_setfield(L, -2, "sidebar");
+  lua_newtable(L);
+  field(L, "register", l_toast_register);
+  field(L, "show", l_toast_show);
+  field(L, "dismiss", l_toast_dismiss);
+  field(L, "clear", l_toast_clear);
+  field(L, "info", l_toast_info);
+  lua_setfield(L, -2, "toast");
   lua_newtable(L);
   field(L, "info", l_viewport_info);
   field(L, "line_at", l_viewport_line_at);

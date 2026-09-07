@@ -429,6 +429,9 @@ Editor::~Editor()
 
 void Editor::set_message(const std::string &msg)
 {
+  // DEPRECATED: the statusline message channel is kept for compatibility but
+  // is no longer the primary surface — toasts (src/lua/features/ui/toast.lua)
+  // are the message channel now and this function feeds them below.
   if (transient_message_timer != 0)
   {
     event_loop_.cancel_timer(transient_message_timer);
@@ -437,10 +440,18 @@ void Editor::set_message(const std::string &msg)
   ++message_generation;
   message = msg;
   needs_redraw = true;
+  // Forward to the toast UI (skip the empty clear message). The event bus
+  // no-ops safely when no Lua UI kit is attached.
+  if (!msg.empty() && lua_api)
+  {
+    lua_api->emit_toast_event(msg, 0);
+  }
 }
 
 void Editor::set_transient_message(const std::string &msg, int duration_ms)
 {
+  // DEPRECATED: same channel as set_message — kept for compatibility, toasts
+  // are the message surface now.
   if (transient_message_timer != 0)
   {
     event_loop_.cancel_timer(transient_message_timer);
@@ -449,6 +460,10 @@ void Editor::set_transient_message(const std::string &msg, int duration_ms)
   const std::uint64_t generation = ++message_generation;
   message = msg;
   needs_redraw = true;
+  if (!msg.empty() && lua_api)
+  {
+    lua_api->emit_toast_event(msg, duration_ms);
+  }
   if (duration_ms <= 0 || !event_loop_.is_main_thread())
   {
     return;

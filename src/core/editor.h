@@ -732,6 +732,9 @@ private:
   void update_pane_layout();
   void split_pane_direction(int dx, int dy);
   void refresh_command_palette();
+  // DEPRECATED: statusline message channel. Kept for compatibility; toasts
+  // (src/lua/features/ui/toast.lua) are the message surface now — these still
+  // feed them via the event bus.
   void set_message(const std::string &msg);
   void set_transient_message(const std::string &msg, int duration_ms = 5000);
   bool close_active_floating_ui();

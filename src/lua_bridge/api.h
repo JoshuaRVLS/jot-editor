@@ -581,6 +581,9 @@ public:
   int next_float_window = 1;
   int next_float_order = 1;
   int current_float_window = 0;
+  // Registry reference (LUA_NOREF == -1) to the Lua toast module table;
+  // set by jot.toast.register and cleared on shutdown.
+  int toast_module_ref_ = -1;
   std::map<int, LuaScratchBuffer> scratch_buffers;
   std::map<int, LuaFloatWindow> float_windows;
 
@@ -926,6 +929,17 @@ public:
   void emit_buffer_event(const std::string &event, const std::string &path);
   void emit_diagnostics_changed(const std::string &path, const std::vector<Diagnostic> &items);
   void emit_theme_switched(const std::string &name);
+  // Toasts (src/lua/features/ui/toast.lua): fired by the deprecated statusline
+  // message channel so every set_message / set_transient_message also surfaces
+  // as a toast. duration_ms <= 0 means "use the toast default".
+  void emit_toast_event(const std::string &message, int duration_ms);
+  // jot.toast: store a reference to the Lua toast module table and forward
+  // show/dismiss/clear/info calls to it (the module keeps all the logic).
+  void register_toast_module(lua_State *L);
+  void toast_show_from_lua(lua_State *L);
+  void toast_dismiss_from_lua(lua_State *L);
+  void toast_clear_from_lua(lua_State *L);
+  void toast_info_from_lua(lua_State *L);
   // Emits "debugger.state_changed" when any session's observable state
   // changed since the last poll (deduped by an internal signature).
   void emit_debugger_state_changed();

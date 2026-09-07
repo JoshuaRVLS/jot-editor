@@ -342,6 +342,31 @@ check("sidebar.set_view", function()
   return true
 end)
 
+-- ---------------------------------------------------------------- toast
+check("toast.info", function() return jot.toast.info() end)
+check("toast.show", function()
+  local id = jot.toast.show{ message = "smoke toast", title = "jot", duration_ms = 200 }
+  if not id or id == 0 then
+    return false
+  end
+  jot.toast.dismiss(id)
+  return true
+end)
+-- Liveness: a toast born from the deprecated statusline message channel
+-- auto-dismisses inside the real event loop and signals via on_dismiss; the
+-- driver asserts TOAST_DISMISSED in the output file.
+jot.toast.show{
+  message = "toast liveness",
+  duration_ms = 150,
+  on_dismiss = function()
+    local f = io.open(out_path, "a")
+    if f then
+      f:write("TOAST_DISMISSED\n")
+      f:close()
+    end
+  end,
+}
+
 -- ------------------------------------------------------- lsp manager
 check("lsp.disabled", function() return jot.lsp.disabled() end)
 check("lsp.set_enabled", function()

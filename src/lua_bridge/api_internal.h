@@ -286,6 +286,7 @@ namespace jot_lua
         "features/ui/sidebar.lua",
         "features/ui/side_panel.lua",
         "features/ui/menu.lua",
+        "features/ui/toast.lua",
     };
     for (const char *rel : kModules)
     {

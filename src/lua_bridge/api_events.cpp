@@ -117,6 +117,18 @@ void LuaAPI::emit_theme_switched(const std::string &name)
   emit_event_bus("theme.switched", [&](lua_State *L) { lua_push_str_field(L, "name", name); });
 }
 
+void LuaAPI::emit_toast_event(const std::string &message, int duration_ms)
+{
+  if (!has_event_subscribers("toast.message"))
+    return;
+  emit_event_bus("toast.message",
+                 [&](lua_State *L)
+                 {
+                   lua_push_str_field(L, "message", message);
+                   lua_push_int_field(L, "duration_ms", duration_ms);
+                 });
+}
+
 void LuaAPI::timer_set_from_lua(lua_State *L, bool repeat)
 {
   const int ms = (int)luaL_checkinteger(L, 1);

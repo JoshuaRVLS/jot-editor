@@ -1204,6 +1204,9 @@ void Editor::render_status_line()
   }
 
   // Message / context row.
+  // DEPRECATED: statusline messages are kept for compatibility; they are no
+  // longer the primary message surface — toasts (src/lua/features/ui/toast.lua)
+  // handle that now.
   if (!message.empty())
   {
     status_draw_clipped(ui,

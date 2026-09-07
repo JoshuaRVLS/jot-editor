@@ -33,6 +33,7 @@ local statusline = require("jot_ui.statusline")
 local sidebar = require("jot_ui.sidebar")
 local side_panel = require("jot_ui.side_panel")
 local menu = require("jot_ui.menu")
+local toast = require("jot_ui.toast")
 
 jot.ui.handler("command_palette", command_palette.command_palette)
 jot.ui.handler("quick_pick", quick_pick.quick_pick)
@@ -53,11 +54,18 @@ jot.ui.handler("status_line", statusline.status_line)
 jot.ui.handler("sidebar", sidebar.sidebar)
 jot.ui.handler("side_panel", side_panel.side_panel)
 
+-- Toasts are self-managing floats (not a per-frame surface); expose the module
+-- and bridge it to the native jot.toast show/dismiss/clear API. Both steps are
+-- guarded so stub test environments stay quiet.
+pcall(function() jot.toast.register(toast) end)
+pcall(toast.attach)
+
 -- Exposed for tests / reuse; the loader ignores the return value.
 return {
   close = helpers.close,
   present_panel = helpers.present_panel,
   match_spans = helpers.match_spans,
+  toast = toast,
   status_line = statusline.status_line,
   sidebar = sidebar.sidebar,
   side_panel = side_panel.side_panel,
