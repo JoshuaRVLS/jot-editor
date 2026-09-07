@@ -158,7 +158,10 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
   // Resize:
   // - Ctrl+Shift+H/J/K/L
   // - Ctrl+Arrow
-  if (is_ctrl
+  // Alt is deliberately excluded: Ctrl+Alt+H/J/K/L are the split keys below,
+  // and on kitty-protocol terminals they decode to the uppercase letters,
+  // which would otherwise be swallowed here as a resize.
+  if (is_ctrl && !is_alt
       && (((is_shift || std::isupper((unsigned char)ch))
            && (ch == 'h' || ch == 'H' || ch == 'j' || ch == 'J' || ch == 'k' || ch == 'K'
                || ch == 'l' || ch == 'L'))
