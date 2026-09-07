@@ -69,3 +69,4 @@ build_no_ts/tests/CTestTestfile.cmake
 build_no_ts/tests/jot_tests
 index.html
 .tokensave/
+src/core/app/editor.cpp
