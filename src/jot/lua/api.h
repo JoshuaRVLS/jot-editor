@@ -752,6 +752,11 @@ public:
   // jot.register_update_handler (stored under the "update.cmd" callback id).
   void set_update_handler_ref(int lua_ref);
   bool run_update_command(const std::string &arg);
+  // Removes every Lua keymap whose canonical key matches (any mode when
+  // `mode` is empty). Frees the stored callback refs. Used by features that
+  // register a keymap only while some condition holds (e.g. the :update
+  // Ctrl+U shortcut while updates are available).
+  void remove_keymap(const std::string &key, const std::string &mode = "");
   // Whether any keymap sequence ("Ctrl+T N") starts with the given chord
   // ("Ctrl+T") — i.e. pressing the chord should reveal the which-key helper.
   bool plugin_keymap_is_prefix(const std::string &chord, const std::string &mode);

@@ -181,6 +181,52 @@ local function repaint()
   request_redraw()
 end
 
+-- Availability indicator ---------------------------------------------------
+-- While the repo is behind origin we surface it twice outside the panel:
+--   * a statusline chip (" ↑N" in the warning color, right side);
+--   * a which-key / held-modifier entry: Ctrl+U runs `:update run` directly.
+-- Both appear only when updates are actually available and disappear as soon
+-- as the repo is up to date again (check, or a finished :update run).
+local ind = { status = false, keymap = false }
+
+local function update_indicator()
+  local on = (panel.behind or 0) > 0 and not panel.busy
+  if on and not ind.status then
+    local colors = palette()
+    local fg = colors.warning
+    local n = panel.behind
+    local ok = pcall(jot.status.register, "update", {
+      side = "right",
+      priority = 90,
+      fg = fg,
+      text = function()
+        local b = panel.behind or 0
+        return b > 0 and (" ↑" .. b) or ""
+      end,
+    })
+    ind.status = ok
+    local ok2 = pcall(function()
+      jot.keymap.set("Ctrl+U", ":update run", "Update jot to latest (pull & rebuild)")
+    end)
+    ind.keymap = ok2
+    if ok or ok2 then
+      request_redraw()
+    end
+    return
+  end
+  if not on and (ind.status or ind.keymap) then
+    if ind.status then
+      pcall(jot.status.unregister, "update")
+      ind.status = false
+    end
+    if ind.keymap then
+      pcall(jot.keymap.remove, "Ctrl+U")
+      ind.keymap = false
+    end
+    request_redraw()
+  end
+end
+
 local function clear_timers()
   if panel.timer and panel.timer ~= 0 then
     pcall(jot.timer.clear, panel.timer)
@@ -298,6 +344,7 @@ local function show_result(level, primary, detail, hint)
   panel.primary = primary
   panel.detail = one_line(detail)
   panel.hint = hint or "click to dismiss"
+  update_indicator()
   if not panel.open then
     notify_result(level, primary, detail)
     return
@@ -330,6 +377,7 @@ end
 local function check_chain(silent)
   local function quiet()
     panel.busy = false
+    update_indicator()
     if panel.open then
       close_panel()
     end
@@ -471,6 +519,7 @@ local function run_update()
   end
   panel.behind = 0
   panel.ahead = 0
+  update_indicator()
 
   -- Prefer the configured build dir; otherwise scan the common ones for an
   -- existing CMake tree so the rebuild never reconfigures from scratch.

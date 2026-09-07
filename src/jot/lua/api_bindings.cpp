@@ -906,6 +906,11 @@ namespace
     api(L).register_status_segment(L);
     return 0;
   }
+  int l_keymap_remove(lua_State *L)
+  {
+    api(L).remove_keymap(luaL_checkstring(L, 1), luaL_optstring(L, 2, ""));
+    return 0;
+  }
   int l_status_unregister(lua_State *L)
   {
     api(L).unregister_status_segment(L);
@@ -1698,6 +1703,13 @@ bool LuaAPI::init()
   lua_getglobal(L, "jot");
   lua_getfield(L, -1, "job");
   field(L, "capture", l_job_capture);
+  lua_pop(L, 2);
+  // Same for jot.keymap: the compatibility alias replaced the richer table,
+  // so re-attach the full documented surface (register/remove).
+  lua_getglobal(L, "jot");
+  lua_getfield(L, -1, "keymap");
+  field(L, "register", l_register_keymap);
+  field(L, "remove", l_keymap_remove);
   lua_pop(L, 2);
 
   // Complete stable runtime surface after compatibility aliases are installed.

@@ -744,6 +744,31 @@ void LuaAPI::register_keymap(const std::string &k,
 {
   plugin_keymaps.push_back({key_name(k), c, cmd, d, m});
 }
+void LuaAPI::remove_keymap(const std::string &key, const std::string &mode)
+{
+  const std::string k = key_name(key);
+  for (auto it = plugin_keymaps.begin(); it != plugin_keymaps.end();)
+  {
+    if (it->key != k || (!mode.empty() && it->mode != mode))
+    {
+      ++it;
+      continue;
+    }
+    if (!it->callback.empty())
+    {
+      auto cb = lua_callbacks.find(it->callback);
+      if (cb != lua_callbacks.end())
+      {
+        if (lua_state)
+        {
+          luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, cb->second);
+        }
+        lua_callbacks.erase(cb);
+      }
+    }
+    it = plugin_keymaps.erase(it);
+  }
+}
 void LuaAPI::register_autocmd(const std::string &e, const std::string &c)
 {
   plugin_autocmds.push_back({e, c});
