@@ -640,17 +640,6 @@ int Terminal::read_key()
             return 1014;
           }
 
-          if (third == '2')
-          {
-            char a = 0, b = 0, tilde = 0;
-            if (read_char_with_timeout(a, 5) && a == '0' && read_char_with_timeout(b, 5) && b == '0'
-                && read_char_with_timeout(tilde, 5) && tilde == '~')
-            {
-              if (read_paste_until_end(paste_event_buffer))
-                return 1020;
-            }
-          }
-
           while (third < 0x40 || third > 0x7e)
           {
             if (!read_char_with_timeout(third, 5))
@@ -658,6 +647,21 @@ int Terminal::read_key()
               break;
             }
             bytes.push_back(third);
+          }
+
+          // Bracketed paste start: ESC [ 200 ~. Detect it on the assembled
+          // sequence rather than with a destructive lookahead: the old
+          // "third == '2', read a/b/tilde" peek consumed the '7' of a CSI-u
+          // report such as ESC [ 27 u — how a kitty-protocol terminal
+          // (Alacritty, WezTerm, …) encodes the Escape key — turning a
+          // plain Esc press into control code 2 (Ctrl+B), which the command
+          // palette typed as "b" and normal mode used to toggle the sidebar.
+          if (bytes.size() >= 6 && bytes.compare(0, 6, "\x1b[200~") == 0)
+          {
+            if (read_paste_until_end(paste_event_buffer))
+            {
+              return 1020;
+            }
           }
           // Kitty keyboard protocol (CSI u): decode here so modified keys
           // such as Ctrl+Enter stay distinguishable (libtermkey 0.22 does
