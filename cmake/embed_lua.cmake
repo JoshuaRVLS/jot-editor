@@ -33,11 +33,20 @@ set(TOTAL_BYTES 0)
 foreach(f ${LUA_FILES})
   file(READ "${LUA_DIR}/${f}" CONTENT HEX)
   string(LENGTH "${CONTENT}" HEX_LEN)
-  math(EXPR TOTAL_BYTES "${TOTAL_BYTES} + ${HEX_LEN} / 2")
+  math(EXPR SIZE "${HEX_LEN} / 2")
+  if(SIZE EQUAL 0)
+    # A zero-byte module is useless to embed, and MSVC rejects zero-length
+    # arrays (C2466) — skip rather than emit `= { }`.
+    message(STATUS "embedded_lua: skipping empty file ${f}")
+    continue()
+  endif()
+  math(EXPR TOTAL_BYTES "${TOTAL_BYTES} + ${SIZE}")
   string(REGEX REPLACE "(..)" "0x\\1, " BYTES "${CONTENT}")
   string(MAKE_C_IDENTIFIER "${f}" VAR)
   string(APPEND DECLS "static const unsigned char k_${VAR}[] = { ${BYTES} };\n")
-  string(APPEND ENTRIES "  {\"${f}\", k_${VAR}, sizeof(k_${VAR})},\n")
+  # Size comes from the measured byte count, not sizeof(k_var): the entry
+  # stays accurate even if a future guard ever pads the array.
+  string(APPEND ENTRIES "  {\"${f}\", k_${VAR}, ${SIZE}},\n")
 endforeach()
 list(LENGTH LUA_FILES FILE_COUNT)
 
