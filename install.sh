@@ -148,239 +148,239 @@ Examples:
   ./install.sh --skip-tests --with-lsp
 USAGE
 }
-
-print_component_list() {
-  printf '%s\n' "Known optional components:"
-  local comp
-  for comp in ${ALL_COMPONENTS}; do
-    printf '  %-14s %s\n' "${comp}" "$(component_label "${comp}")"
-  done
-}
-
+#
+#print_component_list() {
+  #printf '%s\n' "Known optional components:"
+  #local comp
+  #for comp in ${ALL_COMPONENTS}; do
+    #printf '  %-14s %s\n' "${comp}" "$(component_label "${comp}")"
+  #done
+#}
+#
 # Interactive picker for the optional tooling.  Presents a numbered list,
 # accepts a comma/space separated list (or a single number to toggle a row),
 # then prints the chosen component names as a single line to stdout.  Rows for
 # tools that are already installed are pre-checked and installing them later is
 # a no-op.
-pick_components() {
-  local comp
-  local n=0
-  local total=0
-  chosen=""
-  for comp in ${ALL_COMPONENTS}; do
-    total=$((total + 1))
-    if component_present "${comp}"; then
-      chosen="${chosen} ${comp}"
-    fi
-  done
-
-  name_at() {  # $1 = 1-based row -> component name (prints nothing if OOB)
-    local idx=0
-    local c
-    for c in ${ALL_COMPONENTS}; do
-      idx=$((idx + 1))
-      if [[ "$1" -eq "${idx}" ]]; then
-        printf '%s' "${c}"
-        return 0
-      fi
-    done
-    return 1
-  }
-
+#pick_components() {
+  #local comp
+  #local n=0
+  #local total=0
+  #chosen=""
+  #for comp in ${ALL_COMPONENTS}; do
+    #total=$((total + 1))
+    #if component_present "${comp}"; then
+      #chosen="${chosen} ${comp}"
+    #fi
+  #done
+#
+  #name_at() {  # $1 = 1-based row -> component name (prints nothing if OOB)
+    #local idx=0
+    #local c
+    #for c in ${ALL_COMPONENTS}; do
+      #idx=$((idx + 1))
+      #if [[ "$1" -eq "${idx}" ]]; then
+        #printf '%s' "${c}"
+        #return 0
+      #fi
+    #done
+    #return 1
+  #}
+#
   # All menu rendering goes to stderr (the terminal): the caller captures
   # stdout as the selection result, so anything printed to stdout would be
   # swallowed instead of shown.
-  draw_menu() {
-    n=0
-    for comp in ${ALL_COMPONENTS}; do
-      n=$((n + 1))
-      local mark=" "
-      case " ${chosen} " in
-        *" ${comp} "*) mark="x" ;;
-      esac
-      printf '  [%s] %2d) %s\n' "${mark}" "${n}" "$(component_label "${comp}")" >&2
-    done
-  }
-
-  local prompt_lines=6   # blank + title + 3 hints + blank before the list
-
-  clear_block() {  # move up over the whole checklist block and wipe it
-    local lines=$((total + prompt_lines + 1))  # list rows + prompt line
-    local i
-    for ((i = 0; i < lines; i++)); do
-      printf '\033[1A\033[K' >&2
-    done
-  }
-
-  print_block() {
-    printf '\n' >&2
-    printf '%s\n' "${C_BOLD}Optional tooling${C_RESET}" >&2
-    printf '%s\n' "Numbers toggle a row; \"all\" selects everything; Enter installs what is [x]." >&2
-    printf '%s\n' "Already-installed tools are pre-checked and will simply be skipped." >&2
-    printf '%s\n' "Any of the 100+ LSP servers can also be installed later from inside jot with :lspinstall." >&2
-    printf '\n' >&2
-    draw_menu
-    printf '%s' 'Numbers (Enter when done): ' >&2
-  }
-
-  print_block
-
-  local done=0
-  while [[ "${done}" -eq 0 ]]; do
-    local reply=""
-    IFS= read -r reply || reply=""
+  #draw_menu() {
+    #n=0
+    #for comp in ${ALL_COMPONENTS}; do
+      #n=$((n + 1))
+      #local mark=" "
+      #case " ${chosen} " in
+        #*" ${comp} "*) mark="x" ;;
+      #esac
+      #printf '  [%s] %2d) %s\n' "${mark}" "${n}" "$(component_label "${comp}")" >&2
+    #done
+  #}
+#
+  #local prompt_lines=6   # blank + title + 3 hints + blank before the list
+#
+  #clear_block() {  # move up over the whole checklist block and wipe it
+    #local lines=$((total + prompt_lines + 1))  # list rows + prompt line
+    #local i
+    #for ((i = 0; i < lines; i++)); do
+      #printf '\033[1A\033[K' >&2
+    #done
+  #}
+#
+  #print_block() {
+    #printf '\n' >&2
+    #printf '%s\n' "${C_BOLD}Optional tooling${C_RESET}" >&2
+    #printf '%s\n' "Numbers toggle a row; \"all\" selects everything; Enter installs what is [x]." >&2
+    #printf '%s\n' "Already-installed tools are pre-checked and will simply be skipped." >&2
+    #printf '%s\n' "Any of the 100+ LSP servers can also be installed later from inside jot with :lspinstall." >&2
+    #printf '\n' >&2
+    #draw_menu
+    #printf '%s' 'Numbers (Enter when done): ' >&2
+  #}
+#
+  #print_block
+#
+  #local done=0
+  #while [[ "${done}" -eq 0 ]]; do
+    #local reply=""
+    #IFS= read -r reply || reply=""
     # The tty echoes the typed line; clear it plus the block before redraw.
-    clear_block
-    if [[ -z "${reply}" ]]; then
-      done=1
-      break
-    fi
-    case "${reply}" in
-      all|ALL|a)
-        chosen=" ${ALL_COMPONENTS} "
-        done=1
-        break
-        ;;
-    esac
-    local tok
-    local parsed=0
-    IFS=', ' read -r -a nums <<< "${reply}"
-    for tok in "${nums[@]:-}"; do
-      [[ -z "${tok}" ]] && continue
-      if [[ "${tok}" =~ ^[0-9]+$ ]] && ((tok >= 1)) && ((tok <= total)); then
-        local name
-        name="$(name_at "${tok}")" || continue
-        if [[ -n "${name}" ]]; then
-          if [[ " ${chosen} " == *" ${name} "* ]]; then
-            chosen="${chosen// ${name}/ }"
-          else
-            chosen="${chosen} ${name}"
-          fi
-          parsed=1
-        fi
-      fi
-    done
-    if [[ "${parsed}" -eq 0 ]]; then
-      case "${reply}" in
-        done|0|q) done=1 ;;
-      esac
-    fi
-    if [[ "${done}" -eq 0 ]]; then
-      print_block
-    fi
-  done
-  printf '\n' >&2
-
+    #clear_block
+    #if [[ -z "${reply}" ]]; then
+      #done=1
+      #break
+    #fi
+    #case "${reply}" in
+      #all|ALL|a)
+        #chosen=" ${ALL_COMPONENTS} "
+        #done=1
+        #break
+        #;;
+    #esac
+    #local tok
+    #local parsed=0
+    #IFS=', ' read -r -a nums <<< "${reply}"
+    #for tok in "${nums[@]:-}"; do
+      #[[ -z "${tok}" ]] && continue
+      #if [[ "${tok}" =~ ^[0-9]+$ ]] && ((tok >= 1)) && ((tok <= total)); then
+        #local name
+        #name="$(name_at "${tok}")" || continue
+        #if [[ -n "${name}" ]]; then
+          #if [[ " ${chosen} " == *" ${name} "* ]]; then
+            #chosen="${chosen// ${name}/ }"
+          #else
+            #chosen="${chosen} ${name}"
+          #fi
+          #parsed=1
+        #fi
+      #fi
+    #done
+    #if [[ "${parsed}" -eq 0 ]]; then
+      #case "${reply}" in
+        #done|0|q) done=1 ;;
+      #esac
+    #fi
+    #if [[ "${done}" -eq 0 ]]; then
+      #print_block
+    #fi
+  #done
+  #printf '\n' >&2
+#
   # Normalize and print the final selection as a single line (stdout -> the
   # caller's SELECTED_COMPONENTS variable).
-  local out=""
-  local seen=" "
-  for comp in ${chosen}; do
-    case "${seen}" in
-      *" ${comp} "*) ;;
-      *) seen="${seen}${comp} "; out="${out} ${comp}" ;;
-    esac
-  done
-  printf '%s\n' "${out# }"
-}
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --prefix)
-      [[ $# -ge 2 ]] || { log_error "Missing value for --prefix"; exit 1; }
-      INSTALL_PREFIX="$2"
-      PREFIX_EXPLICIT=1
-      shift 2
-      ;;
-    --build-dir)
-      [[ $# -ge 2 ]] || { log_error "Missing value for --build-dir"; exit 1; }
-      BUILD_DIR="$2"
-      BUILD_DIR_EXPLICIT=1
-      shift 2
-      ;;
-    --debug)
-      BUILD_TYPE="Debug"
-      shift
-      ;;
-    --release)
-      BUILD_TYPE="Release"
-      shift
-      ;;
-    --run-tests)
-      RUN_TESTS=1
-      shift
-      ;;
-    --skip-tests)
-      RUN_TESTS=0
-      shift
-      ;;
-    --with-tools)
-      SELECTED_COMPONENTS="${SELECTED_COMPONENTS} prettier"
-      ASK_COMPONENTS=0
-      shift
-      ;;
-    --with-lsp)
-      SELECTED_COMPONENTS="${SELECTED_COMPONENTS} ${LSP_COMPONENTS}"
-      ASK_COMPONENTS=0
-      shift
-      ;;
-    --component)
-      [[ $# -ge 2 ]] || { log_error "Missing value for --component"; exit 1; }
-      SELECTED_COMPONENTS="${SELECTED_COMPONENTS} $2"
-      ASK_COMPONENTS=0
-      shift 2
-      ;;
-    --no-components)
-      ASK_COMPONENTS=0
-      shift
-      ;;
-    --list-components)
-      print_component_list
-      exit 0
-      ;;
-    --with-treesitter)
-      INSTALL_TREESITTER=1
-      shift
-      ;;
-    --skip-treesitter)
-      INSTALL_TREESITTER=0
-      shift
-      ;;
-    --skip-lsp)
+  #local out=""
+  #local seen=" "
+  #for comp in ${chosen}; do
+    #case "${seen}" in
+      #*" ${comp} "*) ;;
+      #*) seen="${seen}${comp} "; out="${out} ${comp}" ;;
+    #esac
+  #done
+  #printf '%s\n' "${out# }"
+#}
+#
+#while [[ $# -gt 0 ]]; do
+  #case "$1" in
+    #--prefix)
+      #[[ $# -ge 2 ]] || { log_error "Missing value for --prefix"; exit 1; }
+      #INSTALL_PREFIX="$2"
+      #PREFIX_EXPLICIT=1
+      #shift 2
+      #;;
+    #--build-dir)
+      #[[ $# -ge 2 ]] || { log_error "Missing value for --build-dir"; exit 1; }
+      #BUILD_DIR="$2"
+      #BUILD_DIR_EXPLICIT=1
+      #shift 2
+      #;;
+    #--debug)
+      #BUILD_TYPE="Debug"
+      #shift
+      #;;
+    #--release)
+      #BUILD_TYPE="Release"
+      #shift
+      #;;
+    #--run-tests)
+      #RUN_TESTS=1
+      #shift
+      #;;
+    #--skip-tests)
+      #RUN_TESTS=0
+      #shift
+      #;;
+    #--with-tools)
+      #SELECTED_COMPONENTS="${SELECTED_COMPONENTS} prettier"
+      #ASK_COMPONENTS=0
+      #shift
+      #;;
+    #--with-lsp)
+      #SELECTED_COMPONENTS="${SELECTED_COMPONENTS} ${LSP_COMPONENTS}"
+      #ASK_COMPONENTS=0
+      #shift
+      #;;
+    #--component)
+      #[[ $# -ge 2 ]] || { log_error "Missing value for --component"; exit 1; }
+      #SELECTED_COMPONENTS="${SELECTED_COMPONENTS} $2"
+      #ASK_COMPONENTS=0
+      #shift 2
+      #;;
+    #--no-components)
+      #ASK_COMPONENTS=0
+      #shift
+      #;;
+    #--list-components)
+      #print_component_list
+      #exit 0
+      #;;
+    #--with-treesitter)
+      #INSTALL_TREESITTER=1
+      #shift
+      #;;
+    #--skip-treesitter)
+      #INSTALL_TREESITTER=0
+      #shift
+      #;;
+    #--skip-lsp)
       # Deprecated alias kept for compatibility: explicit component selection
       # is empty by default, so this is a no-op now.
-      SELECTED_COMPONENTS=""
-      ASK_COMPONENTS=0
-      shift
-      ;;
-    --sudo)
-      USE_SUDO=1
-      shift
-      ;;
-    -j|--jobs)
-      [[ $# -ge 2 ]] || { log_error "Missing value for $1"; exit 1; }
-      JOBS="$2"
-      shift 2
-      ;;
-    -h|--help)
-      print_help
-      exit 0
-      ;;
-    *)
-      log_error "Unknown option: $1"
-      print_help
-      exit 1
-      ;;
-  esac
-done
-
+      #SELECTED_COMPONENTS=""
+      #ASK_COMPONENTS=0
+      #shift
+      #;;
+    #--sudo)
+      #USE_SUDO=1
+      #shift
+      #;;
+    #-j|--jobs)
+      #[[ $# -ge 2 ]] || { log_error "Missing value for $1"; exit 1; }
+      #JOBS="$2"
+      #shift 2
+      #;;
+    #-h|--help)
+      #print_help
+      #exit 0
+      #;;
+    #*)
+      #log_error "Unknown option: $1"
+      #print_help
+      #exit 1
+      #;;
+  #esac
+#done
+#
 # Validate any explicitly requested component names early.
-for want in ${SELECTED_COMPONENTS}; do
-  case " ${ALL_COMPONENTS} " in
-    *" ${want} "*) ;;
-    *) log_error "Unknown component: ${want}"; print_component_list; exit 1 ;;
-  esac
-done
+#for want in ${SELECTED_COMPONENTS}; do
+  #case " ${ALL_COMPONENTS} " in
+    #*" ${want} "*) ;;
+    #*) log_error "Unknown component: ${want}"; print_component_list; exit 1 ;;
+  #esac
+#done
 
 # The interactive picker runs after the build (see below) so a failed build
 # does not waste the user's choices. Explicit flags skip it entirely; when
@@ -1070,32 +1070,6 @@ else
   INSTALL_OUTPUT="$(cmake --install "${BUILD_DIR}" 2>&1)" || { printf '%s\n' "${INSTALL_OUTPUT}"; exit 1; }
 fi
 log_ok "Installed jot (binary, configs, themes and bundled language files) into ${INSTALL_PREFIX}"
-
-# Now that jot is on disk, offer the optional tooling. Interactive runs prompt
-# with a checklist; explicit flags (--component / --with-lsp / --with-tools)
-# install exactly what was requested; everything else installs nothing.
-if [[ "${ASK_COMPONENTS}" -eq 1 ]] && [[ "${INTERACTIVE_TTY}" -eq 1 ]]; then
-  SELECTED_COMPONENTS="$(pick_components)"
-fi
-
-if [[ -n "${SELECTED_COMPONENTS// /}" ]]; then
-  log_step "Optional tooling"
-  seen=" "
-  for comp in ${SELECTED_COMPONENTS}; do
-    case "${seen}" in
-      *" ${comp} "*) continue ;;
-    esac
-    seen="${seen}${comp} "
-    log_info "Installing ${comp} ($(component_label "${comp}"))"
-    component_install "${comp}" || true
-  done
-fi
-
-if [[ -z "${SELECTED_COMPONENTS// /}" ]]; then
-  log_info "No optional LSP servers or formatters selected."
-  log_info "Install them later from inside jot with :lspinstall, or rerun:"
-  log_info "  ${PROJECT_ROOT}/install.sh --component clangd --component prettier"
-fi
 
 EXPECTED_BIN="${INSTALL_PREFIX}/bin/jot"
 ACTIVE_JOT="$(command -v jot 2>/dev/null || true)"
