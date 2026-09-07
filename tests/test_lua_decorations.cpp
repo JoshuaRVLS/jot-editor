@@ -43,6 +43,22 @@ namespace
     return 1;
   }
 
+  int stub_config_get_straight(lua_State *L)
+  {
+    // Same, but reports the straight-underline style so the module picks
+    // underline=1 over the wavy 2.
+    const char *key = luaL_checkstring(L, 1);
+    if (std::string(key) == "decorations_underline_style")
+    {
+      lua_pushstring(L, "straight");
+    }
+    else
+    {
+      lua_pushvalue(L, 2);
+    }
+    return 1;
+  }
+
   int stub_autocmd(lua_State *L)
   {
     // jot.autocmd(event, fn): only DiagnosticChanged is used by the module.
@@ -130,11 +146,11 @@ namespace
     return 1;
   }
 
-  void push_stub_jot(lua_State *L)
+  void push_stub_jot(lua_State *L, lua_CFunction config_get = stub_config_get)
   {
     lua_newtable(L); // jot
     lua_newtable(L);
-    lua_pushcfunction(L, stub_config_get);
+    lua_pushcfunction(L, config_get);
     lua_setfield(L, -2, "get");
     lua_setfield(L, -2, "config"); // jot.config
     lua_pushcfunction(L, stub_autocmd);
@@ -162,6 +178,29 @@ namespace
     REQUIRE(lua_pcall(L, 1, 0, 0) == LUA_OK);
   }
 } // namespace
+
+TEST_CASE("Bundled decorations straight-underline style falls back for old terminals")
+{
+  g = StubState{};
+  lua_State *L = luaL_newstate();
+  REQUIRE(L != nullptr);
+  luaL_openlibs(L);
+  push_stub_jot(L, stub_config_get_straight);
+
+  const std::string path = std::string(JOT_LUA_SOURCE_DIR) + "/features/decorations.lua";
+  REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
+  REQUIRE(lua_pcall(L, 0, 0, 0) == LUA_OK);
+
+  invoke_handler(L);
+
+  REQUIRE(g.spans.size() == 2);
+  REQUIRE(g.spans[0].underline == 1); // straight, not wavy
+  REQUIRE(g.spans[0].underline_hl == "diagnostic_error");
+  REQUIRE(g.spans[1].underline == 1);
+  REQUIRE(g.spans[1].underline_hl == "diagnostic_warning");
+
+  lua_close(L);
+}
 
 TEST_CASE("Bundled decorations feature applies wavy underlines per diagnostic")
 {
