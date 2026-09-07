@@ -351,6 +351,11 @@ struct FileTabSegment
   int close_x = 0;
   int end_x = 0;
   std::string label;
+  // Per-language file glyph painted ahead of the label in its brand color
+  // (shared with the status line / explorer); empty for directories and
+  // unnamed buffers, -1 color = use the tab foreground.
+  std::string icon;
+  int icon_fg = -1;
   bool active = false;
   bool modified = false;
   bool preview = false;

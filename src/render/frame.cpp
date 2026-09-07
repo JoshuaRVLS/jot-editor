@@ -1,5 +1,6 @@
 #include "bracket.h"
 #include "column_utils.h"
+#include "core/file_icons.h"
 #include "editor.h"
 #include "folding.h"
 #include "lua_bridge/api.h"
@@ -607,12 +608,24 @@ Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane, int d
 
     std::string marker = buffers[id].modified ? " ●" : "";
     std::string label_text = name + marker;
-    int max_label_w = std::max(5, std::min(24, available - 3));
-    int max_name_w = std::max(1, max_label_w - 2);
+    // Per-language icon in the tab header (same glyph + brand color as the
+    // status line and file explorer); unnamed buffers stay icon-less.
+    std::string icon;
+    int icon_fg = -1;
+    if (!buffers[id].filepath.empty())
+    {
+      const jot_icons::FileTypeIcon type_icon =
+          jot_icons::file_type_icon(buffers[id].filepath);
+      icon = type_icon.glyph;
+      icon_fg = type_icon.color;
+    }
+    const int icon_cells = ui_cell_count(icon);
+    const int max_label_w = std::max(5, std::min(24, available - 3 - icon_cells));
+    const int max_name_w = std::max(1, max_label_w - 2 - icon_cells);
     std::string text = " " + ellipsize_right(label_text, max_name_w) + " ";
 
-    int text_w = ui_cell_count(text);
-    int need = text_w + 3; // leading edge + close control + trailing edge
+    const int text_w = ui_cell_count(text);
+    const int need = text_w + icon_cells + 3; // leading edge + icon + close control + trailing edge
     if (tab_x + need > hard_end)
     {
       layout.hidden_after = remaining_valid;
@@ -623,7 +636,9 @@ Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane, int d
     segment.buffer_id = id;
     segment.tab_index = valid_index;
     segment.x = tab_x;
-    segment.label_x = tab_x + 1;
+    segment.label_x = tab_x + 1 + icon_cells;
+    segment.icon = icon;
+    segment.icon_fg = icon_fg;
     segment.label = text;
     segment.close_x = segment.label_x + text_w;
     segment.end_x = segment.close_x + 2;
@@ -886,6 +901,15 @@ void Editor::render_pane(const SplitPane &pane)
                     tab.active ? theme.fg_active_border : theme.fg_tab_separator,
                     bg,
                     tab.active);
+      // File-type glyph in its brand color (see file_icons.h), like the
+      // status line and explorer; the label follows right after it.
+      if (!tab.icon.empty())
+      {
+        // Brand color even on the active tab (matches the status line and
+        // explorer) so the glyph keeps its identity across tab states.
+        const int icon_fg = tab.icon_fg >= 0 ? tab.icon_fg : fg;
+        ui->draw_text(tab.x + 1, tabs.y, tab.icon, icon_fg, bg, tab.active, tab.preview);
+      }
       ui->draw_text(tab.label_x, tabs.y, tab.label, fg, bg, tab.active, tab.preview);
       ui->draw_text(
           tab.close_x, tabs.y, "×", tab.active ? theme.fg_tab_close : theme.fg_comment, bg);
