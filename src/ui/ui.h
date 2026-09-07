@@ -60,8 +60,10 @@ private:
   // The draw layer rewrites the whole grid every frame (immediate mode),
   // so per-row dirty flags alone would mark every row dirty. render()
   // instead compares each dirty row against last_grid and skips the row's
-  // terminal write when the content is identical -- typing/scrolling then
-  // emits only the rows that genuinely changed instead of the whole
+  // terminal write when the content is identical; rows that did change
+  // are diffed at cell granularity (emit_row_diff) so only the changed
+  // runs reach the terminal. A typical typing frame then writes a few
+  // short cursor moves + SGR runs instead of whole rows or the whole
   // screen.
   std::vector<std::vector<UICell>> last_grid;
   // Renders since the last full-screen paint. Terminals can occasionally
@@ -81,6 +83,18 @@ private:
 
   void set_cell(int x, int y, const UICell &cell);
   void mark_all_rows_dirty();
+  // Paints one row in full: cursor to (0, y), then style-coalesced runs
+  // covering the whole paintable width, padded to the right margin. Used
+  // for full repaints (capture mode, periodic self-heal) where the
+  // terminal state cannot be assumed.
+  void emit_full_row(int y, int row_width);
+  // Cell-level diff emitter for a row already known to differ from
+  // last_grid: writes only the changed runs (merging tiny gaps), moving
+  // the cursor per run, and leaves unchanged cells untouched. Unchanged
+  // cells are byte-identical to what the terminal shows, so skipping
+  // them is safe and cuts per-frame output to a few short writes on a
+  // typical typing frame.
+  void emit_row_diff(int y, int row_width);
 
 public:
   UI(Terminal *t);

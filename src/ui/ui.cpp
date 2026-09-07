@@ -272,23 +272,26 @@ const UICell *UI::cell_at(int x, int y) const
 
 void UI::render()
 {
-  // Row-diffing full-paint renderer. The draw layer repaints the whole
-  // grid every frame (immediate mode), so render() compares each row
-  // against last_grid -- the frame that was actually written to the
-  // terminal -- and only emits rows whose content genuinely changed.
-  // A typical typing frame then writes the 1-3 edited rows instead of
-  // the whole screen, cutting per-frame terminal output by ~90% on big
-  // buffers. That output volume is what makes typing/scrolling feel laggy
-  // on I/O-bound terminals: thousands of SGR sequences must be parsed by
-  // the terminal emulator for every keystroke.
+  // Cell-diffing renderer. The draw layer repaints the whole grid every
+  // frame (immediate mode), so render() compares each row against
+  // last_grid -- the frame that was actually written to the terminal.
+  // Rows whose content is unchanged are skipped entirely; rows that did
+  // change are diffed at cell granularity (emit_row_diff) and only the
+  // changed runs are written, with a cheap cursor move per run. A
+  // typical typing frame then writes a few short SGR runs instead of
+  // whole rows, cutting per-frame terminal output by 90-99% on big
+  // buffers. That output volume is what makes typing/scrolling feel
+  // laggy on I/O-bound terminals: thousands of SGR sequences must be
+  // parsed by the terminal emulator for every keystroke.
   //
-  // Skipping is safe because a skipped row is byte-identical to what the
-  // terminal already shows: nothing wrote to it since it was painted (it
-  // is compared cell-by-cell against the retained copy), and every paint
-  // pads the row to full width and erases its right margin, so no stale
-  // content can linger. Capture modes (JOT_RENDER_CAPTURE*) force a full
-  // paint of every row so their logs stay unambiguous; capture raw also
-  // disables run coalescing so every cell is written one at a time.
+  // Skipping is safe because a skipped cell is byte-identical to what
+  // the terminal already shows: nothing wrote to it since it was
+  // painted (it is compared cell-by-cell against the retained copy), and
+  // every full paint pads the row to full width and erases its right
+  // margin, so no stale content can linger. Capture modes
+  // (JOT_RENDER_CAPTURE*) force a full paint of every row so their logs
+  // stay unambiguous; capture raw also disables run coalescing so every
+  // cell is written one at a time.
 
   bool capture_on = term->render_capture_enabled();
   bool capture_raw = term->render_capture_raw();
@@ -376,10 +379,11 @@ void UI::render()
     }
     row_dirty[y] = 0;
 
-    term->move_cursor(0, y);
-
+    // Full-row painters position the cursor themselves at row start;
+    // emit_row_diff() moves the cursor per changed run.
     if (capture_raw)
     {
+      term->move_cursor(0, y);
       for (int x = 0; x < row_width;)
       {
         const auto &cell = grid[y][x];
@@ -402,112 +406,17 @@ void UI::render()
         x += std::min(rendered_cell_width(cell.ch), row_width - x);
       }
     }
+    else if (paint_all)
+    {
+      // Full repaint (capture mode / periodic self-heal): the terminal
+      // state cannot be assumed, so the row is written out completely.
+      emit_full_row(y, row_width);
+    }
     else
     {
-      int run_fg = -1;
-      int run_bg = -1;
-      bool run_bold = false;
-      bool run_italic = false;
-      bool run_dim = false;
-      bool run_reverse = false;
-      int run_underline = 0;
-      int run_underline_fg = -1;
-      int written = 0;
-
-      std::string body;
-      body.reserve((size_t)row_width);
-
-      for (int x = 0; x < row_width;)
-      {
-        const auto &cell = grid[y][x];
-
-        if (x == 0 || cell.fg != run_fg || cell.bg != run_bg || cell.bold != run_bold
-            || cell.italic != run_italic || cell.dim != run_dim || cell.reverse != run_reverse
-            || cell.underline != run_underline || cell.underline_fg != run_underline_fg)
-        {
-          // Optimization: skip ESC[0m (full reset) when only the
-          // fg/bg have changed and the bold/italic/reverse bits are
-          // still correct. A full reset costs ~5 bytes and reverts
-          // background to terminal default, which can flash on
-          // terminals with delayed SGR processing. SGR 38;5; and
-          // 48;5; are independent of bold/italic/reverse so we can
-          // set them in place.
-          const bool attrs_unchanged =
-              (x != 0) && cell.bold == run_bold && cell.italic == run_italic && cell.dim == run_dim
-              && cell.reverse == run_reverse && cell.underline == run_underline
-              && cell.underline_fg == run_underline_fg && (run_fg != -1 || run_bg != -1);
-          if (!attrs_unchanged)
-          {
-            term->reset_color();
-            if (cell.bold)
-              term->set_bold(true);
-            if (cell.italic)
-              term->set_italic(true);
-            if (cell.dim)
-              term->set_dim(true);
-            if (cell.reverse)
-              term->set_reverse(true);
-            if (cell.underline)
-              term->set_underline(cell.underline);
-            if (cell.underline_fg != -1)
-              term->set_underline_color(cell.underline_fg);
-          }
-          else
-          {
-            // Only fg/bg changed within the same attribute set.
-            // reset_color() is still needed only when transitioning
-            // *out* of bold/italic/reverse; otherwise just emit the
-            // new fg/bg in place.
-            if (cell.bold != run_bold)
-              term->set_bold(cell.bold);
-            if (cell.italic != run_italic)
-              term->set_italic(cell.italic);
-            if (cell.dim != run_dim)
-              term->set_dim(cell.dim);
-            if (cell.reverse != run_reverse)
-              term->set_reverse(cell.reverse);
-            if (cell.underline != run_underline)
-              term->set_underline(cell.underline);
-            if (cell.underline_fg != run_underline_fg)
-              term->set_underline_color(cell.underline_fg);
-          }
-          // `cell.*` hold the values that just changed; `run_*` still hold the
-          // previous run's colors here, so emit from the cell.
-          term->set_color(cell.dim ? ui_dim_color(cell.fg, false) : cell.fg,
-                          cell.dim ? ui_dim_color(cell.bg, true) : cell.bg);
-          run_fg = cell.fg;
-          run_bg = cell.bg;
-          run_bold = cell.bold;
-          run_italic = cell.italic;
-          run_dim = cell.dim;
-          run_reverse = cell.reverse;
-          run_underline = cell.underline;
-          run_underline_fg = cell.underline_fg;
-        }
-
-        body.clear();
-
-        int run_start = x;
-        while (x < row_width && grid[y][x].fg == run_fg && grid[y][x].bg == run_bg
-               && grid[y][x].bold == run_bold && grid[y][x].italic == run_italic
-               && grid[y][x].dim == run_dim && grid[y][x].reverse == run_reverse
-               && grid[y][x].underline == run_underline
-               && grid[y][x].underline_fg == run_underline_fg)
-        {
-          int cell_w = std::min(rendered_cell_width(grid[y][x].ch), row_width - x);
-          append_cell_for_remaining_width(body, grid[y][x].ch, row_width - x);
-          x += cell_w;
-        }
-
-        term->write(body);
-        written += (x - run_start);
-      }
-
-      while (written < row_width)
-      {
-        term->write(" ");
-        written++;
-      }
+      // Normal frame: the row differs from last_grid but only in a few
+      // runs -- emit exactly those instead of the whole row.
+      emit_row_diff(y, row_width);
     }
 
     // Erase any leftover content from the previous frame that might
@@ -518,8 +427,14 @@ void UI::render()
     // disabled, the cursor stays at the end of the written text and
     // the erase is bounded to the current row.
     // Move past the painted cells before erasing the untouched margin.
-    term->move_cursor(row_width, y);
-    term->clear_to_end();
+    // Full-row paints only: a diff row leaves the unchanged tail (and
+    // the never-painted margin) exactly as the terminal already shows
+    // them, so erasing would be redundant work.
+    if (capture_raw || paint_all)
+    {
+      term->move_cursor(row_width, y);
+      term->clear_to_end();
+    }
 
     // Retain this row as the new baseline for next frame's diff. Rows that
     // were skipped above keep their previous (still-accurate) baseline.
@@ -562,6 +477,334 @@ void UI::render()
     char label[64];
     snprintf(label, sizeof(label), "FRAME w=%d h=%d", width, height);
     term->render_capture_marker(label, height);
+  }
+}
+
+void UI::emit_full_row(int y, int row_width)
+{
+  term->move_cursor(0, y);
+
+  int run_fg = -1;
+  int run_bg = -1;
+  bool run_bold = false;
+  bool run_italic = false;
+  bool run_dim = false;
+  bool run_reverse = false;
+  int run_underline = 0;
+  int run_underline_fg = -1;
+  int written = 0;
+
+  std::string body;
+  body.reserve((size_t)row_width);
+
+  for (int x = 0; x < row_width;)
+  {
+    const auto &cell = grid[y][x];
+
+    if (x == 0 || cell.fg != run_fg || cell.bg != run_bg || cell.bold != run_bold
+        || cell.italic != run_italic || cell.dim != run_dim || cell.reverse != run_reverse
+        || cell.underline != run_underline || cell.underline_fg != run_underline_fg)
+    {
+      // Optimization: skip ESC[0m (full reset) when only the
+      // fg/bg have changed and the bold/italic/reverse bits are
+      // still correct. A full reset costs ~5 bytes and reverts
+      // background to terminal default, which can flash on
+      // terminals with delayed SGR processing. SGR 38;5; and
+      // 48;5; are independent of bold/italic/reverse so we can
+      // set them in place.
+      const bool attrs_unchanged =
+          (x != 0) && cell.bold == run_bold && cell.italic == run_italic && cell.dim == run_dim
+          && cell.reverse == run_reverse && cell.underline == run_underline
+          && cell.underline_fg == run_underline_fg && (run_fg != -1 || run_bg != -1);
+      if (!attrs_unchanged)
+      {
+        term->reset_color();
+        if (cell.bold)
+          term->set_bold(true);
+        if (cell.italic)
+          term->set_italic(true);
+        if (cell.dim)
+          term->set_dim(true);
+        if (cell.reverse)
+          term->set_reverse(true);
+        if (cell.underline)
+          term->set_underline(cell.underline);
+        if (cell.underline_fg != -1)
+          term->set_underline_color(cell.underline_fg);
+      }
+      else
+      {
+        // Only fg/bg changed within the same attribute set.
+        // reset_color() is still needed only when transitioning
+        // *out* of bold/italic/reverse; otherwise just emit the
+        // new fg/bg in place.
+        if (cell.bold != run_bold)
+          term->set_bold(cell.bold);
+        if (cell.italic != run_italic)
+          term->set_italic(cell.italic);
+        if (cell.dim != run_dim)
+          term->set_dim(cell.dim);
+        if (cell.reverse != run_reverse)
+          term->set_reverse(cell.reverse);
+        if (cell.underline != run_underline)
+          term->set_underline(cell.underline);
+        if (cell.underline_fg != run_underline_fg)
+          term->set_underline_color(cell.underline_fg);
+      }
+      // `cell.*` hold the values that just changed; `run_*` still hold the
+      // previous run's colors here, so emit from the cell.
+      term->set_color(cell.dim ? ui_dim_color(cell.fg, false) : cell.fg,
+                      cell.dim ? ui_dim_color(cell.bg, true) : cell.bg);
+      run_fg = cell.fg;
+      run_bg = cell.bg;
+      run_bold = cell.bold;
+      run_italic = cell.italic;
+      run_dim = cell.dim;
+      run_reverse = cell.reverse;
+      run_underline = cell.underline;
+      run_underline_fg = cell.underline_fg;
+    }
+
+    body.clear();
+
+    int run_start = x;
+    while (x < row_width && grid[y][x].fg == run_fg && grid[y][x].bg == run_bg
+           && grid[y][x].bold == run_bold && grid[y][x].italic == run_italic
+           && grid[y][x].dim == run_dim && grid[y][x].reverse == run_reverse
+           && grid[y][x].underline == run_underline
+           && grid[y][x].underline_fg == run_underline_fg)
+    {
+      int cell_w = std::min(rendered_cell_width(grid[y][x].ch), row_width - x);
+      append_cell_for_remaining_width(body, grid[y][x].ch, row_width - x);
+      x += cell_w;
+    }
+
+    term->write(body);
+    written += (x - run_start);
+  }
+
+  while (written < row_width)
+  {
+    term->write(" ");
+    written++;
+  }
+}
+
+void UI::emit_row_diff(int y, int row_width)
+{
+  const auto &cur = grid[y];
+  const auto &prev = last_grid[y];
+
+  // Collect the columns whose cells differ from the frame the terminal
+  // already shows.
+  std::vector<int> changed;
+  changed.reserve(32);
+  for (int x = 0; x < row_width; x++)
+  {
+    if (cur[x] != prev[x])
+      changed.push_back(x);
+  }
+  if (changed.empty())
+    return;
+
+  // Merge changed columns into runs: unchanged gaps of up to kMergeGap
+  // cells are absorbed into the surrounding run -- cheaper to rewrite a
+  // few identical cells than to pay a cursor move + SGR for a separate
+  // run.
+  constexpr int kMergeGap = 4;
+  struct Run
+  {
+    int start;
+    int end;
+  };
+  std::vector<Run> runs;
+  runs.reserve(changed.size());
+  int run_start = changed[0];
+  int run_end = changed[0] + 1;
+  for (size_t i = 1; i < changed.size(); i++)
+  {
+    const int c = changed[i];
+    if (c <= run_end + kMergeGap)
+      run_end = c + 1;
+    else
+    {
+      runs.push_back({run_start, run_end});
+      run_start = c;
+      run_end = c + 1;
+    }
+  }
+  runs.push_back({run_start, run_end});
+
+  // Wide-char fixups: never start a run on a continuation cell (include
+  // its lead), never end a run right before a continuation cell (lead and
+  // continuation are written as one unit), then collapse overlaps between
+  // adjacent runs after the fixups.
+  for (auto &r : runs)
+  {
+    while (r.start > 0 && cur[r.start].ch.empty())
+      r.start--;
+    while (r.end < row_width && cur[r.end].ch.empty())
+      r.end++;
+  }
+  std::vector<Run> merged;
+  merged.reserve(runs.size());
+  for (const auto &r : runs)
+  {
+    if (!merged.empty() && r.start <= merged.back().end)
+      merged.back().end = std::max(merged.back().end, r.end);
+    else
+      merged.push_back(r);
+  }
+
+  // Style of the last emitted group in this row. The first group of the
+  // row always issues a full reset -- after the previous row the
+  // terminal's SGR state is unknown -- and later groups skip the reset
+  // when only the colors changed, mirroring emit_full_row().
+  int run_fg = -1;
+  int run_bg = -1;
+  bool run_bold = false;
+  bool run_italic = false;
+  bool run_dim = false;
+  bool run_reverse = false;
+  int run_underline = 0;
+  int run_underline_fg = -1;
+  // Terminal column the cursor sits at after the previous emit in this
+  // row; used to skip or shorten cursor moves between runs.
+  int last_x = 0;
+  bool first_run = true;
+
+  for (const auto &r : merged)
+  {
+    // Position the cursor. The first run of every row needs an absolute
+    // move; later runs are reached with a cheap relative move when the
+    // gap is small.
+    if (first_run)
+    {
+      term->move_cursor(r.start, y);
+    }
+    else if (r.start == last_x)
+    {
+      // The previous write already left the cursor here.
+    }
+    else if (r.start > last_x && r.start - last_x <= 64)
+    {
+      term->write("\x1b[" + std::to_string(r.start - last_x) + "C");
+    }
+    else if (r.start < last_x && last_x - r.start <= 64)
+    {
+      term->write("\x1b[" + std::to_string(last_x - r.start) + "D");
+    }
+    else
+    {
+      term->move_cursor(r.start, y);
+    }
+    // `first_run` is cleared below by the first style group's SGR emit;
+    // positioning only consults it to force an absolute move for the
+    // row's first run.
+
+    // The merged run may span several styles (adjacent changed cells
+    // with different colors); break it into style-homogeneous groups,
+    // emitting SGR only at group boundaries.
+    int x = r.start;
+    while (x < r.end)
+    {
+      const auto &cell = cur[x];
+
+      if (first_run)
+      {
+        // First group of the row: the terminal's SGR state after the
+        // previous row is unknown, so always start from a clean slate.
+        term->reset_color();
+        if (cell.bold)
+          term->set_bold(true);
+        if (cell.italic)
+          term->set_italic(true);
+        if (cell.dim)
+          term->set_dim(true);
+        if (cell.reverse)
+          term->set_reverse(true);
+        if (cell.underline)
+          term->set_underline(cell.underline);
+        if (cell.underline_fg != -1)
+          term->set_underline_color(cell.underline_fg);
+        term->set_color(cell.dim ? ui_dim_color(cell.fg, false) : cell.fg,
+                        cell.dim ? ui_dim_color(cell.bg, true) : cell.bg);
+        first_run = false;
+      }
+      else
+      {
+        const bool attrs_same = cell.bold == run_bold && cell.italic == run_italic
+                                && cell.dim == run_dim && cell.reverse == run_reverse
+                                && cell.underline == run_underline
+                                && cell.underline_fg == run_underline_fg;
+        if (attrs_same && cell.fg == run_fg && cell.bg == run_bg)
+        {
+          // Same style as the previous group: no SGR needed, the
+          // terminal state already matches.
+        }
+        else if (attrs_same && (run_fg != -1 || run_bg != -1))
+        {
+          // Only fg/bg changed: set them in place without a full reset
+          // (a reset costs bytes and can flash the background).
+          term->set_color(cell.dim ? ui_dim_color(cell.fg, false) : cell.fg,
+                          cell.dim ? ui_dim_color(cell.bg, true) : cell.bg);
+        }
+        else
+        {
+          term->reset_color();
+          if (cell.bold)
+            term->set_bold(true);
+          if (cell.italic)
+            term->set_italic(true);
+          if (cell.dim)
+            term->set_dim(true);
+          if (cell.reverse)
+            term->set_reverse(true);
+          if (cell.underline)
+            term->set_underline(cell.underline);
+          if (cell.underline_fg != -1)
+            term->set_underline_color(cell.underline_fg);
+          term->set_color(cell.dim ? ui_dim_color(cell.fg, false) : cell.fg,
+                          cell.dim ? ui_dim_color(cell.bg, true) : cell.bg);
+        }
+      }
+      run_fg = cell.fg;
+      run_bg = cell.bg;
+      run_bold = cell.bold;
+      run_italic = cell.italic;
+      run_dim = cell.dim;
+      run_reverse = cell.reverse;
+      run_underline = cell.underline;
+      run_underline_fg = cell.underline_fg;
+
+      std::string body;
+      body.reserve((size_t)(r.end - x));
+      while (x < r.end)
+      {
+        const auto &c = cur[x];
+        if (c.fg != cell.fg || c.bg != cell.bg || c.bold != cell.bold
+            || c.italic != cell.italic || c.dim != cell.dim || c.reverse != cell.reverse
+            || c.underline != cell.underline || c.underline_fg != cell.underline_fg)
+        {
+          break;
+        }
+        const std::string &ch = c.ch;
+        if (ch.empty())
+        {
+          // Defensive: an isolated continuation cell (its lead was not
+          // part of this run) is rewritten as a blank column so the
+          // cursor position stays exact.
+          body.push_back(' ');
+          x += 1;
+          continue;
+        }
+        const int cell_w = std::min(rendered_cell_width(ch), r.end - x);
+        append_cell_for_remaining_width(body, ch, r.end - x);
+        x += cell_w;
+      }
+      term->write(body);
+    }
+    last_x = x;
   }
 }
 
