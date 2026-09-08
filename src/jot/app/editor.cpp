@@ -3,6 +3,7 @@
 #include "jot/app/relaunch.h"
 #include "jot/lua/api.h"
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 
 namespace
@@ -280,6 +281,10 @@ void Editor::initialize_state_defaults()
   idle_fps = std::clamp(config.get_int("idle_fps", 60), 5, 240);
   lsp_change_debounce_ms = std::clamp(config.get_int("lsp_change_debounce_ms", 120), 25, 1000);
   last_cursor_shape = -1;
+  caret_blink_anchor_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now().time_since_epoch())
+                              .count();
+  caret_blink_on = true;
   show_context_menu = false;
   context_menu_surface = CONTEXT_MENU_NONE;
   context_menu_items.clear();

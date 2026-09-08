@@ -1,7 +1,9 @@
 #include "editor.h"
+#include "jot/lua/api.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 
 namespace
 {
@@ -83,9 +85,229 @@ bool Editor::multicursor_active()
   return !get_buffer().extra_carets.empty();
 }
 
+void Editor::restart_caret_blink()
+{
+  caret_blink_anchor_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now().time_since_epoch())
+                             .count();
+  caret_blink_on = true;
+}
+
+// Deletes at every caret, bottom-up so earlier row shifts never invalidate
+// later spans: the main cursor (as a one-grapheme point when no primary
+// selection), every active extra-caret span, and every inactive (Alt+click)
+// point caret. Overlapping spans (e.g. the caret that shares its cell with
+// the main cursor right after an Alt+click) are applied once.
+bool Editor::delete_at_all_carets(bool forward)
+{
+  auto &buf = get_buffer();
+  if (buf.is_lazy())
+    buf.materialize();
+  if (!buf.selection.active && buf.extra_carets.empty())
+    return false;
+
+  struct Span
+  {
+    int start_y, end_y, start_x, end_x;
+  };
+  auto normalize = [&](const Selection &sel, Span &out) {
+    out.start_y = std::min(sel.start.y, sel.end.y);
+    out.end_y = std::max(sel.start.y, sel.end.y);
+    out.start_x = sel.start.y < sel.end.y
+                      ? sel.start.x
+                      : (sel.start.y == sel.end.y ? std::min(sel.start.x, sel.end.x)
+                                                  : sel.end.x);
+    out.end_x = sel.start.y < sel.end.y
+                    ? sel.end.x
+                    : (sel.start.y == sel.end.y ? std::max(sel.start.x, sel.end.x)
+                                                : sel.start.x);
+  };
+  // One grapheme around a point caret; line joins when it sits on a boundary.
+  auto point_span = [&](const Cursor &p, Span &out) {
+    const std::string &line = buf.line(p.y);
+    const int x = ui_clamp_to_utf8_boundary(line, std::clamp(p.x, 0, (int)line.size()));
+    if (forward)
+    {
+      if (x < (int)line.size())
+      {
+        out = {p.y, p.y, x, ui_next_grapheme_boundary(line, x)};
+      }
+      else if (p.y < (int)buf.line_count() - 1)
+      {
+        out = {p.y, p.y + 1, x, 0};
+      }
+      else
+      {
+        out = {p.y, p.y, x, x};
+      }
+    }
+    else if (x > 0)
+    {
+      out = {p.y, p.y, ui_prev_grapheme_boundary(line, x), x};
+    }
+    else if (p.y > 0)
+    {
+      out = {p.y - 1, p.y, (int)buf.line(p.y - 1).size(), 0};
+    }
+    else
+    {
+      out = {p.y, p.y, x, x};
+    }
+  };
+
+  struct SpanEdit
+  {
+    Span span;
+    bool is_primary;
+    size_t extra_idx;
+  };
+  std::vector<SpanEdit> ordered;
+  {
+    Span s{};
+    if (buf.selection.active)
+    {
+      normalize(buf.selection, s);
+    }
+    else
+    {
+      point_span(buf.cursor, s);
+    }
+    ordered.push_back({s, true, 0});
+  }
+  for (size_t i = 0; i < buf.extra_carets.size(); i++)
+  {
+    const Selection &c = buf.extra_carets[i];
+    Span s{};
+    if (c.active)
+    {
+      normalize(c, s);
+    }
+    else
+    {
+      point_span(c.end, s);
+    }
+    ordered.push_back({s, false, i});
+  }
+  // Bottom-up; ties (caret sharing its cell with the main cursor) go to the
+  // primary so its cursor always lands on its own span start.
+  std::sort(ordered.begin(), ordered.end(), [](const SpanEdit &a, const SpanEdit &b) {
+    if (a.span.start_y != b.span.start_y)
+      return a.span.start_y > b.span.start_y;
+    if (a.span.start_x != b.span.start_x)
+      return a.span.start_x > b.span.start_x;
+    return a.is_primary && !b.is_primary;
+  });
+
+  // Dedupe: a span fully covered by an earlier-applied (lower) span is a
+  // duplicate of that deletion and would double-erase the same cells.
+  // Spans are half-open intervals in (row, col) lexicographic order, so a
+  // point span on row 0 never "overlaps" a join span that starts further
+  // right on the same row just because the join spans two rows.
+  std::vector<Span> applied;
+  auto overlaps_applied = [&](const Span &s) {
+    auto lex_less = [](int y1, int x1, int y2, int x2) {
+      return y1 < y2 || (y1 == y2 && x1 < x2);
+    };
+    for (const auto &k : applied)
+    {
+      if (lex_less(s.start_y, s.start_x, k.end_y, k.end_x)
+          && lex_less(k.start_y, k.start_x, s.end_y, s.end_x))
+      {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  save_state();
+  for (const auto &item : ordered)
+  {
+    const Span &s = item.span;
+    if (s.start_x == s.end_x && s.start_y == s.end_y)
+    {
+      // Nothing to delete (buffer edge): normalize the caret to a point.
+      if (!item.is_primary)
+      {
+        auto &caret = buf.extra_carets[item.extra_idx];
+        caret.start = {s.start_x, s.start_y};
+        caret.end = caret.start;
+        caret.active = false;
+      }
+      continue;
+    }
+    const Span *covering = nullptr;
+    for (const auto &k : applied)
+    {
+      if (k.start_y > s.end_y || (k.start_y == s.end_y && k.start_x >= s.end_x))
+        continue;
+      if (s.start_y > k.end_y || (s.start_y == k.end_y && s.start_x >= k.end_x))
+        continue;
+      covering = &k;
+      break;
+    }
+    if (covering)
+    {
+      // A duplicate of an applied delete (e.g. the caret sharing its cell
+      // with the main cursor after an Alt+click): instead of double-erasing,
+      // snap the caret to where the covering deletion left its content.
+      if (!item.is_primary)
+      {
+        auto &caret = buf.extra_carets[item.extra_idx];
+        caret.start = {ui_clamp_to_utf8_boundary(buf.line(covering->start_y), covering->start_x),
+                       covering->start_y};
+        caret.end = caret.start;
+        caret.active = false;
+      }
+      continue;
+    }
+    applied.push_back(s);
+    const int start_x = ui_clamp_to_utf8_boundary(buf.line(s.start_y), s.start_x);
+    const int end_x = ui_clamp_to_utf8_boundary(buf.line(s.end_y), s.end_x);
+    if (s.start_y == s.end_y)
+    {
+      buf.line_mut(s.start_y).erase(start_x, end_x - start_x);
+    }
+    else
+    {
+      buf.line_mut(s.start_y) =
+          buf.line_mut(s.start_y).substr(0, start_x) + buf.line_mut(s.end_y).substr(end_x);
+      buf.lines.erase(buf.lines.begin() + s.start_y + 1, buf.lines.begin() + s.end_y + 1);
+    }
+    if (item.is_primary)
+    {
+      buf.cursor.y = s.start_y;
+      buf.cursor.x = start_x;
+      buf.preferred_x = start_x;
+    }
+    else
+    {
+      auto &caret = buf.extra_carets[item.extra_idx];
+      caret.start = {start_x, s.start_y};
+      caret.end = caret.start;
+      caret.active = false;
+    }
+  }
+
+  buf.selection.active = false;
+  buf.modified = true;
+  clamp_cursor(get_pane().buffer_id);
+  ensure_cursor_visible();
+  needs_redraw = true;
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
+  return true;
+}
+
 void Editor::delete_selection_for_test()
 {
   delete_selection();
+}
+
+void Editor::delete_char_for_test(bool forward)
+{
+  delete_char(forward);
 }
 
 void Editor::insert_string_for_test(const std::string &str)
@@ -118,6 +340,7 @@ bool Editor::add_caret_at(int line_y, int x)
   buf.extra_carets.push_back(candidate);
   buf.cursor = pos;
   buf.preferred_x = pos.x;
+  restart_caret_blink();
   ensure_cursor_visible();
   needs_redraw = true;
   return true;
@@ -199,6 +422,7 @@ bool Editor::select_next_occurrence()
           buf.selection.active = true;
           buf.cursor = candidate.end;
           buf.preferred_x = buf.cursor.x;
+          restart_caret_blink();
           ensure_cursor_visible();
           needs_redraw = true;
           return true;

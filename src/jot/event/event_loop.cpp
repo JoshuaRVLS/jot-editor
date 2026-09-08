@@ -808,6 +808,33 @@ void Editor::render_frame()
   {
     lua_api->flush_pending_autocmds();
   }
+  // Extra-caret software blink: caret cells are painted (not terminal
+  // cursors), so while any buffer carries carets we repaint on each blink
+  // phase flip (~2 Hz) instead of only on demand.
+  {
+    bool any_carets = false;
+    for (const auto &pane : panes)
+    {
+      if (pane.buffer_id >= 0 && pane.buffer_id < (int)buffers.size()
+          && !buffers[(size_t)pane.buffer_id].extra_carets.empty())
+      {
+        any_carets = true;
+        break;
+      }
+    }
+    if (any_carets)
+    {
+      const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now().time_since_epoch())
+                              .count();
+      const bool phase = ((now_ms - caret_blink_anchor_ms) / 500) % 2 == 0;
+      if (phase != caret_blink_on)
+      {
+        caret_blink_on = phase;
+        needs_redraw = true;
+      }
+    }
+  }
   if (needs_redraw || ui->cursor_needs_flush())
   {
     render();

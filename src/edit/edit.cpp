@@ -346,16 +346,19 @@ void Editor::insert_string(const std::string &str)
 
 void Editor::delete_char(bool forward)
 {
-  save_state();
   auto &buf = get_buffer();
   if (buf.is_lazy())
     buf.materialize();
   if (buf.selection.active || !buf.extra_carets.empty())
   {
-    delete_selection();
+    // Every caret deletes: active spans are erased wholesale, point carets
+    // (Alt+click) erase one grapheme around themselves, and the main cursor
+    // participates even when it shares its cell with a caret.
+    delete_at_all_carets(forward);
     needs_redraw = true;
     return;
   }
+  save_state();
 
   if (forward)
   {

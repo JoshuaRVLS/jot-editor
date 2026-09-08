@@ -1365,15 +1365,34 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
                                              ? compute_visual_column(line, buf.cursor.x, tab_size)
                                                    - start_visual
                                              : -1;
+          // Extra carets blink in software (they are painted cells, not
+          // terminal cursors): during the hidden half of the phase the
+          // point-caret highlight drops back to the normal text colors.
+          std::vector<int> point_caret_visuals;
+          if (!caret_blink_on)
+          {
+            for (const auto &caret : buf.extra_carets)
+            {
+              if (!caret.active && caret.end.y == line_idx)
+              {
+                point_caret_visuals.push_back(
+                    compute_visual_column(line, caret.end.x, tab_size) - start_visual);
+              }
+            }
+          }
           for (int fill = 0; fill < draw_cells; fill++)
           {
+            const int cell_visual = (tail_start - start_visual) + fill;
             const bool cursor_cell = block_cursor && pane.active
-                                     && (tail_start - start_visual) + fill == cursor_cell_visual;
+                                     && cell_visual == cursor_cell_visual;
+            const bool blink_hidden =
+                std::find(point_caret_visuals.begin(), point_caret_visuals.end(), cell_visual)
+                != point_caret_visuals.end();
             ui->draw_text(tail_x + fill,
                           draw_y,
                           " ",
-                          cursor_cell ? theme.fg_default : theme.fg_selection,
-                          cursor_cell ? theme.bg_default : theme.bg_selection);
+                          (cursor_cell || blink_hidden) ? theme.fg_default : theme.fg_selection,
+                          (cursor_cell || blink_hidden) ? theme.bg_default : theme.bg_selection);
           }
         }
       }

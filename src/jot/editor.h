@@ -418,6 +418,13 @@ private:
   bool insert_char(char c);
   void insert_string(const std::string &str);
   void delete_char(bool forward = true);
+  // Deletes at every caret: the main cursor (point when no primary
+  // selection), every active extra-caret span, and every inactive point
+  // caret. Backs the delete/backspace keys while multi-cursor is active.
+  bool delete_at_all_carets(bool forward);
+  // Restarts the extra-caret blink phase (carets added right before a
+  // blink-off window start visible instead of hidden).
+  void restart_caret_blink();
   void delete_word_backward();
   void delete_word_forward();
   void delete_selection();
@@ -753,6 +760,7 @@ public:
   bool add_caret_at(int line_y, int x);
   bool select_next_occurrence();
   void delete_selection_for_test();
+  void delete_char_for_test(bool forward);
   void insert_string_for_test(const std::string &str);
   void load_file(const std::string &fname);
   void run();

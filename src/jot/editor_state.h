@@ -240,6 +240,12 @@ struct EditorState
   bool smart_paste_indent;
   long long keyboard_press_count;
 
+  // Software blink for extra carets (painted cells, unlike the terminal
+  // cursor): anchor of the blink phase in steady-clock ms and the current
+  // on/off state. Only advanced while extra carets exist.
+  long long caret_blink_anchor_ms;
+  bool caret_blink_on;
+
   bool show_context_menu;
   ContextMenuSurface context_menu_surface;
   std::vector<ContextMenuItem> context_menu_items;
