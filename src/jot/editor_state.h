@@ -233,9 +233,6 @@ struct EditorState
   Cursor last_left_click_pos;
   int last_left_click_count;
 
-  int idle_frame_count;
-  int cursor_blink_frame;
-  bool cursor_visible;
   int render_fps;
   int idle_fps;
   int lsp_change_debounce_ms;

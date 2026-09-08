@@ -506,7 +506,7 @@ void UI::render()
     term->show_cursor();
   }
 
-  term->write(cursor_shape == UICursorShape::Bar ? "\033[5 q" : "\033[1 q");
+  term->write(cursor_shape_sequence(cursor_shape));
   term->flush();
   cursor_dirty = false;
 
@@ -897,6 +897,32 @@ void UI::reset_cursor_state()
   cursor_dirty = true;
 }
 
+// Restart the terminal's blink phase on the next emission. Terminals keep
+// their current blink phase for a plain re-emitted DECSCUSR (the cursor can
+// be mid-blink-hidden when a click arrives), so the reset frame sends the
+// show-cursor sequence and a blink->steady->blink shape transition: the
+// DECTCEM show wakes the caret and the shape change restarts the blink
+// timer from the visible phase. The steady code is only one frame; the
+// following emission returns to the normal (blinking) shape.
+void UI::reset_cursor_animation()
+{
+  cursor_reset_animation_ = true;
+  cursor_dirty = true;
+}
+
+std::string UI::cursor_shape_sequence(UICursorShape shape)
+{
+  const bool reset = cursor_reset_animation_;
+  cursor_reset_animation_ = false;
+  if (shape == UICursorShape::Bar)
+  {
+    // Blinking bar (normal) vs steady bar (single reset frame).
+    return reset ? "\033[?25h\033[3 q" : "\033[5 q";
+  }
+  // Blinking block (normal) vs steady block (single reset frame).
+  return reset ? "\033[?25h\033[2 q" : "\033[1 q";
+}
+
 // Emit only the current cursor state to the terminal buffer and flush.
 // Used by the !needs_redraw path in Editor::render() when the frame's
 // grid is unchanged and the only thing that needs updating is the
@@ -927,7 +953,7 @@ void UI::flush_cursor()
     term->move_cursor(cx, cy);
     term->show_cursor();
   }
-  term->write(cursor_shape == UICursorShape::Bar ? "\033[5 q" : "\033[1 q");
+  term->write(cursor_shape_sequence(cursor_shape));
   term->flush();
   cursor_dirty = false;
 

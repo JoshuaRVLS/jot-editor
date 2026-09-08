@@ -276,9 +276,6 @@ void Editor::initialize_state_defaults()
   last_left_click_ms = 0;
   last_left_click_pos = {-1, -1};
   last_left_click_count = 0;
-  idle_frame_count = 0;
-  cursor_blink_frame = 0;
-  cursor_visible = true;
   render_fps = std::clamp(config.get_int("render_fps", 120), 30, 240);
   idle_fps = std::clamp(config.get_int("idle_fps", 60), 5, 240);
   lsp_change_debounce_ms = std::clamp(config.get_int("lsp_change_debounce_ms", 120), 25, 1000);

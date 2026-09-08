@@ -4,6 +4,7 @@
 #include "tree_sitter/manager.h"
 #include "ui/text.h"
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <sstream>
@@ -548,6 +549,18 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
   if (h <= 0)
     return;
 
+  // Terminals draw a block-style cursor by reversing the cell's own colors.
+  // Over a selection-colored cell (extra caret, active selection) that
+  // renders a block the same color as the selection background -- invisible
+  // on dark themes. The cursor cell is therefore painted with the default
+  // pair so the caret reads as a normal high-contrast block while parked on
+  // a caret/selection.
+  std::string cursor_style_raw = config.get("cursor_style", "bar");
+  std::transform(
+      cursor_style_raw.begin(), cursor_style_raw.end(), cursor_style_raw.begin(), ::tolower);
+  const bool block_cursor = cursor_style_raw == "block" || cursor_style_raw == "steady_block"
+                            || cursor_style_raw == "steadyblock";
+
   UIRect pane_rect = {x, y, w, h};
   ui->fill_rect(pane_rect, " ", theme.fg_default, theme.bg_default);
 
@@ -936,6 +949,14 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             {
               bg = theme.bg_selection;
               fg = theme.fg_selection;
+              // See block_cursor above: keep the block visible on the
+              // main-cursor cell instead of blending into the selection.
+              if (block_cursor && pane.active && line_idx == buf.cursor.y
+                  && char_idx == buf.cursor.x)
+              {
+                bg = theme.bg_default;
+                fg = theme.fg_default;
+              }
             }
 
             if (!search_hits.empty())
@@ -1338,9 +1359,21 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
           int tail_x = current_x + (tail_start - start_visual);
           int max_tail = std::max(0, visible_len - (tail_start - start_visual));
           int draw_cells = std::min(tail_cells, max_tail);
+          // The main-cursor cell keeps the default colors so the block
+          // cursor stays visible on a bare caret (see block_cursor above).
+          const int cursor_cell_visual = (line_idx == buf.cursor.y)
+                                             ? compute_visual_column(line, buf.cursor.x, tab_size)
+                                                   - start_visual
+                                             : -1;
           for (int fill = 0; fill < draw_cells; fill++)
           {
-            ui->draw_text(tail_x + fill, draw_y, " ", theme.fg_selection, theme.bg_selection);
+            const bool cursor_cell = block_cursor && pane.active
+                                     && (tail_start - start_visual) + fill == cursor_cell_visual;
+            ui->draw_text(tail_x + fill,
+                          draw_y,
+                          " ",
+                          cursor_cell ? theme.fg_default : theme.fg_selection,
+                          cursor_cell ? theme.bg_default : theme.bg_selection);
           }
         }
       }

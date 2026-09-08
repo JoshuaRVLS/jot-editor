@@ -4,9 +4,6 @@
 
 void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int original_ch)
 {
-  idle_frame_count = 0;
-  cursor_visible = true;
-  cursor_blink_frame = 0;
   clear_debugger_breakpoint_hover();
 
   // Terminals encode Ctrl+` inconsistently. Accept common variants:

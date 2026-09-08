@@ -74,3 +74,19 @@ TEST_CASE("UI cursor changes request an idle refresh", "[jot]")
   ui.hide_cursor();
   REQUIRE(ui.cursor_needs_flush());
 }
+
+TEST_CASE("UI cursor animation reset forces a flush and is single-shot", "[jot][ui]")
+{
+  Terminal term;
+  UI ui(&term);
+  // A click while the terminal is mid-blink must produce a cursor flush on
+  // the next frame even when the cursor position/shape did not change.
+  ui.set_cursor(2, 2);
+  ui.reset_cursor_animation();
+  REQUIRE(ui.cursor_needs_flush());
+  // The flag is consumed by one emission: a second query without another
+  // reset must not keep requesting flushes forever (idle frames would
+  // otherwise keep writing cursor bytes every frame).
+  ui.flush_cursor();
+  REQUIRE_FALSE(ui.cursor_needs_flush());
+}

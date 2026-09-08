@@ -44,9 +44,14 @@ local panel = {
 }
 
 -- Safe config reads (evaluated inside pcall: args evaluate before pcall).
+-- Note: an explicit `and v or def` would mis-return `def` for `v=false`
+-- (false is falsy), so the boolean must be branched on explicitly.
 local function cfg_bool(key, def)
   local ok, v = pcall(function() return jot.config.get_bool(key, def) end)
-  return (ok and type(v) == "boolean") and v or def
+  if ok and type(v) == "boolean" then
+    return v
+  end
+  return def
 end
 
 local function cfg_str(key, def)
