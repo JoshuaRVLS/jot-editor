@@ -4,6 +4,9 @@
 
 void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int original_ch)
 {
+  // Keep the cursor solid while typing: restart the blink clock and
+  // suspend blinking briefly on every keypress.
+  restart_blink();
   clear_debugger_breakpoint_hover();
 
   // Terminals encode Ctrl+` inconsistently. Accept common variants:

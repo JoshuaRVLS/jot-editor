@@ -1399,7 +1399,7 @@ void Editor::handle_mouse(void *event_ptr)
           needs_redraw = true;
         }
         focus_state = FOCUS_EDITOR;
-        ui->reset_cursor_animation();
+        restart_blink();
         return;
       }
       if (tabs.scroll_right_x >= 0 && event->x >= tabs.scroll_right_x
@@ -1410,7 +1410,7 @@ void Editor::handle_mouse(void *event_ptr)
           needs_redraw = true;
         }
         focus_state = FOCUS_EDITOR;
-        ui->reset_cursor_animation();
+        restart_blink();
         return;
       }
       for (const auto &tab : tabs.segments)
@@ -1419,7 +1419,7 @@ void Editor::handle_mouse(void *event_ptr)
         {
           close_buffer_at(tab.buffer_id);
           focus_state = FOCUS_EDITOR;
-          ui->reset_cursor_animation();
+          restart_blink();
           needs_redraw = true;
           return;
         }
@@ -1428,7 +1428,7 @@ void Editor::handle_mouse(void *event_ptr)
         {
           close_buffer_at(tab.buffer_id);
           focus_state = FOCUS_EDITOR;
-          ui->reset_cursor_animation();
+          restart_blink();
           needs_redraw = true;
           return;
         }
@@ -1437,7 +1437,7 @@ void Editor::handle_mouse(void *event_ptr)
         {
           switch_to_local_tab(tab.tab_index);
           focus_state = FOCUS_EDITOR;
-          ui->reset_cursor_animation();
+          restart_blink();
           needs_redraw = true;
           return;
         }
@@ -1467,7 +1467,7 @@ void Editor::handle_mouse(void *event_ptr)
           cancel_lsp_mouse_hover();
           hide_lsp_signature();
           hide_lsp_completion();
-          ui->reset_cursor_animation();
+          restart_blink();
           needs_redraw = true;
           return;
         }
@@ -1580,7 +1580,7 @@ void Editor::handle_mouse(void *event_ptr)
     add_caret_at(click_y, click_x);
     mouse_selecting = false;
     mouse_drag_started = false;
-    ui->reset_cursor_animation();
+    restart_blink();
     needs_redraw = true;
     return;
   }
@@ -1803,7 +1803,7 @@ void Editor::handle_mouse(void *event_ptr)
       mouse_selecting = false;
       mouse_drag_started = false;
       request_lsp_definition();
-      ui->reset_cursor_animation();
+      restart_blink();
       needs_redraw = true;
       return;
     }
@@ -1812,7 +1812,7 @@ void Editor::handle_mouse(void *event_ptr)
   if (bstate == 1)
   {
     focus_state = FOCUS_EDITOR;
-    ui->reset_cursor_animation();
+    restart_blink();
     hide_lsp_completion();
     auto now = std::chrono::steady_clock::now();
     long long now_ms =
@@ -1923,7 +1923,7 @@ void Editor::handle_mouse(void *event_ptr)
   }
   else if (bstate == 2)
   {
-    ui->reset_cursor_animation();
+    restart_blink();
     hide_lsp_completion();
 
     if (mouse_selecting)
@@ -1986,7 +1986,7 @@ void Editor::handle_mouse(void *event_ptr)
   }
   else if (bstate == 32)
   {
-    ui->reset_cursor_animation();
+    restart_blink();
     hide_lsp_completion();
     if (mouse_selecting)
     {

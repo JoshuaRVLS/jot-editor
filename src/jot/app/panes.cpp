@@ -354,7 +354,7 @@ void Editor::activate_pane(int pane_index)
   panes[(size_t)current_pane].active = true;
   restore_pane_view(current_pane);
   current_buffer = panes[(size_t)current_pane].buffer_id;
-  ui->reset_cursor_animation();
+  restart_blink();
   needs_redraw = true;
 }
 

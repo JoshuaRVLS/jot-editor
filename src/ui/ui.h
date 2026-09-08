@@ -78,12 +78,11 @@ private:
   UICursorShape cursor_shape;
   bool cursor_hidden;
   bool cursor_dirty = true;
-  // Single-shot: the next cursor shape emission restarts the terminal's
-  // blink phase (show cursor + a DECSCUSR change) so the caret appears
-  // immediately after a click even if it was mid-blink-hidden.
-  bool cursor_reset_animation_ = false;
-  // Builds the DECSCUSR sequence for `shape`, consuming the reset flag
-  // (emits the show-cursor sequence plus the shape code on reset frames).
+  // Software blink visibility for the terminal cursor (set by the editor's
+  // unified blink clock each frame): visible emits a steady DECSCUSR plus
+  // the show-cursor sequence, hidden emits the hide-cursor sequence.
+  bool cursor_blink_visible = true;
+  // Builds the DECSCUSR sequence for `shape` honoring cursor_blink_visible.
   std::string cursor_shape_sequence(UICursorShape shape);
   int default_fg = 7;
   int default_bg = 0;
@@ -133,14 +132,21 @@ public:
   void set_cursor(int x, int y, UICursorShape shape = UICursorShape::Block);
   void hide_cursor();
   void reset_cursor_state();
-  // Restart the terminal's cursor blink phase on the next emission so the
-  // caret shows immediately (used on clicks; the terminal otherwise keeps
-  // its current blink phase and can stay hidden for up to a blink period).
-  void reset_cursor_animation();
+  // Applies the current software-blink visibility to the terminal cursor.
+  // Only marks the cursor dirty when the state actually changed, so idle
+  // frames never re-emit cursor bytes.
+  void set_cursor_blink_visible(bool visible);
   void flush_cursor();
   bool cursor_needs_flush() const
   {
     return cursor_dirty;
+  }
+  // Whether the last frame left the terminal cursor hidden (palette open,
+  // popup covering the editor, etc.) — used to skip blink repaints when
+  // nothing visible would blink anyway.
+  bool cursor_is_hidden() const
+  {
+    return cursor_hidden;
   }
 
   int get_width() const

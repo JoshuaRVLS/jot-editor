@@ -221,6 +221,7 @@ void Editor::render()
       {
         ui->hide_cursor();
       }
+      ui->set_cursor_blink_visible(blink_visible);
       ui->flush_cursor();
     }
     return;
@@ -417,6 +418,7 @@ void Editor::render()
       }
     }
 
+    ui->set_cursor_blink_visible(blink_visible);
     ui->render();
     if (image_viewer.is_active() || image_viewer.has_pending_graphics_output())
     {

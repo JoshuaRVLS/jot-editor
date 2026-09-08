@@ -85,12 +85,15 @@ bool Editor::multicursor_active()
   return !get_buffer().extra_carets.empty();
 }
 
-void Editor::restart_caret_blink()
+void Editor::restart_blink()
 {
-  caret_blink_anchor_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                             std::chrono::steady_clock::now().time_since_epoch())
-                             .count();
-  caret_blink_on = true;
+  const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          std::chrono::steady_clock::now().time_since_epoch())
+                          .count();
+  blink_anchor_ms = now_ms;
+  blink_suspend_until_ms = now_ms + 1200;
+  blink_visible = true;
+  needs_redraw = true;
 }
 
 // Deletes at every caret, bottom-up so earlier row shifts never invalidate
@@ -340,7 +343,7 @@ bool Editor::add_caret_at(int line_y, int x)
   buf.extra_carets.push_back(candidate);
   buf.cursor = pos;
   buf.preferred_x = pos.x;
-  restart_caret_blink();
+  restart_blink();
   ensure_cursor_visible();
   needs_redraw = true;
   return true;
@@ -422,7 +425,7 @@ bool Editor::select_next_occurrence()
           buf.selection.active = true;
           buf.cursor = candidate.end;
           buf.preferred_x = buf.cursor.x;
-          restart_caret_blink();
+          restart_blink();
           ensure_cursor_visible();
           needs_redraw = true;
           return true;

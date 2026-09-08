@@ -240,11 +240,13 @@ struct EditorState
   bool smart_paste_indent;
   long long keyboard_press_count;
 
-  // Software blink for extra carets (painted cells, unlike the terminal
-  // cursor): anchor of the blink phase in steady-clock ms and the current
-  // on/off state. Only advanced while extra carets exist.
-  long long caret_blink_anchor_ms;
-  bool caret_blink_on;
+  // One software blink clock for the terminal cursor and the extra-caret
+  // highlights: anchor in steady-clock ms, a suspension window (input keeps
+  // the cursor solid for a moment), and the effective visibility applied to
+  // both the cursor and the caret paint.
+  long long blink_anchor_ms;
+  long long blink_suspend_until_ms;
+  bool blink_visible;
 
   bool show_context_menu;
   ContextMenuSurface context_menu_surface;

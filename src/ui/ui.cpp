@@ -503,7 +503,6 @@ void UI::render()
     if (cy < 0)
       cy = 0;
     term->move_cursor(cx, cy);
-    term->show_cursor();
   }
 
   term->write(cursor_shape_sequence(cursor_shape));
@@ -897,30 +896,33 @@ void UI::reset_cursor_state()
   cursor_dirty = true;
 }
 
-// Restart the terminal's blink phase on the next emission. Terminals keep
-// their current blink phase for a plain re-emitted DECSCUSR (the cursor can
-// be mid-blink-hidden when a click arrives), so the reset frame sends the
-// show-cursor sequence and a blink->steady->blink shape transition: the
-// DECTCEM show wakes the caret and the shape change restarts the blink
-// timer from the visible phase. The steady code is only one frame; the
-// following emission returns to the normal (blinking) shape.
-void UI::reset_cursor_animation()
+// Applies the current software-blink visibility to the terminal cursor.
+// The editor drives one blink clock for the terminal cursor and the
+// extra-caret highlights, so everything blinks in phase instead of the
+// terminal's own unsynchronized blink timer.
+void UI::set_cursor_blink_visible(bool visible)
 {
-  cursor_reset_animation_ = true;
-  cursor_dirty = true;
+  if (visible != cursor_blink_visible)
+  {
+    cursor_blink_visible = visible;
+    cursor_dirty = true;
+  }
 }
 
 std::string UI::cursor_shape_sequence(UICursorShape shape)
 {
-  const bool reset = cursor_reset_animation_;
-  cursor_reset_animation_ = false;
+  if (!cursor_blink_visible)
+  {
+    return "\033[?25l";
+  }
+  // Always the steady DECSCUSR: blinking is done in software (DECTCEM
+  // show/hide on the blink clock), so the terminal's own blink phase can
+  // never drift out of sync with the extra-caret highlights.
   if (shape == UICursorShape::Bar)
   {
-    // Blinking bar (normal) vs steady bar (single reset frame).
-    return reset ? "\033[?25h\033[3 q" : "\033[5 q";
+    return "\033[?25h\033[3 q";
   }
-  // Blinking block (normal) vs steady block (single reset frame).
-  return reset ? "\033[?25h\033[2 q" : "\033[1 q";
+  return "\033[?25h\033[2 q";
 }
 
 // Emit only the current cursor state to the terminal buffer and flush.
@@ -951,7 +953,6 @@ void UI::flush_cursor()
     if (cy < 0)
       cy = 0;
     term->move_cursor(cx, cy);
-    term->show_cursor();
   }
   term->write(cursor_shape_sequence(cursor_shape));
   term->flush();

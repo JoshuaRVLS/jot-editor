@@ -808,9 +808,11 @@ void Editor::render_frame()
   {
     lua_api->flush_pending_autocmds();
   }
-  // Extra-caret software blink: caret cells are painted (not terminal
-  // cursors), so while any buffer carries carets we repaint on each blink
-  // phase flip (~2 Hz) instead of only on demand.
+  // One software blink clock drives the terminal cursor and the
+  // extra-caret highlights (steady DECSCUSR + DECTCEM show/hide instead of
+  // the terminal's own unsynchronized blink phase). Repaints happen only on
+  // phase flips, and only when something visible actually blinks (the
+  // editor cursor is shown, or a buffer carries carets).
   {
     bool any_carets = false;
     for (const auto &pane : panes)
@@ -822,15 +824,19 @@ void Editor::render_frame()
         break;
       }
     }
-    if (any_carets)
+    const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch())
+                            .count();
+    const std::string style = config.get("cursor_style", "bar");
+    const bool steady = style == "steady_block" || style == "steadyblock";
+    const bool phase = ((now_ms - blink_anchor_ms) / 530) % 2 == 0;
+    const bool suspended = now_ms < blink_suspend_until_ms;
+    const bool visible = steady || phase || suspended;
+    if (visible != blink_visible)
     {
-      const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                              std::chrono::steady_clock::now().time_since_epoch())
-                              .count();
-      const bool phase = ((now_ms - caret_blink_anchor_ms) / 500) % 2 == 0;
-      if (phase != caret_blink_on)
+      blink_visible = visible;
+      if (!ui->cursor_is_hidden() || any_carets)
       {
-        caret_blink_on = phase;
         needs_redraw = true;
       }
     }

@@ -75,18 +75,22 @@ TEST_CASE("UI cursor changes request an idle refresh", "[jot]")
   REQUIRE(ui.cursor_needs_flush());
 }
 
-TEST_CASE("UI cursor animation reset forces a flush and is single-shot", "[jot][ui]")
+TEST_CASE("UI cursor blink visibility forces a flush only on change", "[jot][ui]")
 {
   Terminal term;
   UI ui(&term);
-  // A click while the terminal is mid-blink must produce a cursor flush on
-  // the next frame even when the cursor position/shape did not change.
+  // The blink clock flips visibility: the cursor must flush so the
+  // terminal gets the show/hide sequence even when position did not move.
   ui.set_cursor(2, 2);
-  ui.reset_cursor_animation();
+  ui.set_cursor_blink_visible(false);
   REQUIRE(ui.cursor_needs_flush());
-  // The flag is consumed by one emission: a second query without another
-  // reset must not keep requesting flushes forever (idle frames would
-  // otherwise keep writing cursor bytes every frame).
   ui.flush_cursor();
+  // Idle frames with the same visibility never re-emit cursor bytes.
   REQUIRE_FALSE(ui.cursor_needs_flush());
+  ui.set_cursor_blink_visible(false);
+  REQUIRE_FALSE(ui.cursor_needs_flush());
+  // Back to visible: flush again, and the emitted sequence shows the
+  // steady shape (blinking is software-side now).
+  ui.set_cursor_blink_visible(true);
+  REQUIRE(ui.cursor_needs_flush());
 }

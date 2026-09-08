@@ -422,9 +422,10 @@ private:
   // selection), every active extra-caret span, and every inactive point
   // caret. Backs the delete/backspace keys while multi-cursor is active.
   bool delete_at_all_carets(bool forward);
-  // Restarts the extra-caret blink phase (carets added right before a
-  // blink-off window start visible instead of hidden).
-  void restart_caret_blink();
+  // Restarts the blink clock (cursor and carets show immediately) and
+  // suspends blinking for a short window, so the cursor stays solid right
+  // after any input instead of blinking mid-keystroke.
+  void restart_blink();
   void delete_word_backward();
   void delete_word_forward();
   void delete_selection();

@@ -1369,7 +1369,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
           // terminal cursors): during the hidden half of the phase the
           // point-caret highlight drops back to the normal text colors.
           std::vector<int> point_caret_visuals;
-          if (!caret_blink_on)
+          if (!blink_visible)
           {
             for (const auto &caret : buf.extra_carets)
             {
