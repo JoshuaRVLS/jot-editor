@@ -181,7 +181,8 @@ The chrome is yours to arrange: menu bar, pane tabs, editor panes, optional
 sidebar, optional minimap, a right-side tool dock, bottom terminal/debugger
 panels, and a two-row status/message area. The mouse is wired throughout —
 click to place the cursor, drag to select (with edge auto-scroll), double/
-triple-click for word/line selection, click tabs, drag split dividers, jump
+triple-click for word/line selection (double-click stops at `.`, so `ext`
+in `ext.begin()` selects just `ext`), click tabs, drag split dividers, jump
 the minimap viewport, navigate the sidebar, and toggle breakpoints.
 
 ## Keybindings
@@ -348,7 +349,7 @@ variant. A bundled starter config lives in `.configs/configs/`.
 
 Built-in defaults include `explorer_width=25`, `minimap_width=15`,
 `tab_size=2`, `show_line_numbers=true`, `relative_line_numbers=true`,
-`cursor_style=block`, `render_fps=120`, `idle_fps=60`, `auto_save=false`,
+`cursor_style=bar`, `render_fps=120`, `idle_fps=60`, `auto_save=false`,
 `auto_save_interval_ms=2000`, `lsp_change_debounce_ms=120`,
 `terminal_height=10`, and `debugger_height=12`.
 

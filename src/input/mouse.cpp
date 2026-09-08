@@ -220,6 +220,32 @@ static bool find_smart_token_span(const std::string &line, int x, int &start, in
   return true;
 }
 
+static bool find_plain_word_span(const std::string &line, int x, int &start, int &end)
+{
+  if (line.empty())
+    return false;
+  int pivot = std::clamp(x, 0, (int)line.size() - 1);
+  if (std::isspace((unsigned char)line[pivot]))
+  {
+    start = pivot;
+    end = pivot + 1;
+    while (start > 0 && std::isspace((unsigned char)line[start - 1]))
+      start--;
+    while (end < (int)line.size() && std::isspace((unsigned char)line[end]))
+      end++;
+    return true;
+  }
+  if (!is_word_char((unsigned char)line[pivot]))
+    return false;
+  start = pivot;
+  end = pivot + 1;
+  while (start > 0 && is_word_char((unsigned char)line[start - 1]))
+    start--;
+  while (end < (int)line.size() && is_word_char((unsigned char)line[end]))
+    end++;
+  return start < end;
+}
+
 static bool bracket_pair(char c, char &open, char &close, bool &is_open)
 {
   switch (c)
@@ -1551,7 +1577,8 @@ void Editor::handle_mouse(void *event_ptr)
     {
       int start = 0;
       int end = 0;
-      if (find_smart_token_span(line, current_pos.x, start, end))
+      if (find_plain_word_span(line, current_pos.x, start, end)
+          || find_smart_token_span(line, current_pos.x, start, end))
       {
         current_start = {start, current_pos.y};
         current_end = {end, current_pos.y};
@@ -1604,20 +1631,26 @@ void Editor::handle_mouse(void *event_ptr)
       return false;
 
     int pivot = std::clamp(x, 0, (int)line.size() - 1);
+    if (find_plain_word_span(line, pivot, start, end))
+      return true;
+    if (pivot + 1 < (int)line.size() && find_plain_word_span(line, pivot + 1, start, end))
+      return true;
+    if (pivot - 1 >= 0 && find_plain_word_span(line, pivot - 1, start, end))
+      return true;
     if (find_smart_token_span(line, pivot, start, end))
-      return true;
-    if (pivot + 1 < (int)line.size() && find_smart_token_span(line, pivot + 1, start, end))
-      return true;
-    if (pivot - 1 >= 0 && find_smart_token_span(line, pivot - 1, start, end))
       return true;
 
     for (int d = 2; d < (int)line.size(); d++)
     {
       int right = pivot + d;
       int left = pivot - d;
-      if (right < (int)line.size() && find_smart_token_span(line, right, start, end))
+      if (right < (int)line.size()
+          && (find_plain_word_span(line, right, start, end)
+              || find_smart_token_span(line, right, start, end)))
         return true;
-      if (left >= 0 && find_smart_token_span(line, left, start, end))
+      if (left >= 0
+          && (find_plain_word_span(line, left, start, end)
+              || find_smart_token_span(line, left, start, end)))
         return true;
       if (right >= (int)line.size() && left < 0)
         break;

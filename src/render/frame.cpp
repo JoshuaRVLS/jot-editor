@@ -5,6 +5,7 @@
 #include "folding.h"
 #include "jot/lua/api.h"
 #include "ui/text.h"
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <functional>
@@ -124,8 +125,12 @@ namespace
     return found_row;
   }
 
-  UICursorShape editor_cursor_shape()
+  UICursorShape editor_cursor_shape(const std::string &style_raw)
   {
+    std::string style = style_raw;
+    std::transform(style.begin(), style.end(), style.begin(), ::tolower);
+    if (style == "block" || style == "steady_block" || style == "steadyblock")
+      return UICursorShape::Block;
     return UICursorShape::Bar;
   }
 } // namespace
@@ -210,7 +215,7 @@ void Editor::render()
       if (compute_code_cursor_screen_pos(
               pane, buf, show_minimap, minimap_width, tab_size, tab_height, display_x, display_y))
       {
-        ui->set_cursor(display_x, display_y, editor_cursor_shape());
+        ui->set_cursor(display_x, display_y, editor_cursor_shape(config.get("cursor_style", "bar")));
       }
       else
       {
@@ -403,7 +408,7 @@ void Editor::render()
         if (compute_code_cursor_screen_pos(
                 pane, buf, show_minimap, minimap_width, tab_size, tab_height, display_x, display_y))
         {
-          ui->set_cursor(display_x, display_y, editor_cursor_shape());
+          ui->set_cursor(display_x, display_y, editor_cursor_shape(config.get("cursor_style", "bar")));
         }
         else
         {

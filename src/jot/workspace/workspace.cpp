@@ -226,6 +226,7 @@ void Editor::toggle_sidebar()
   {
     focus_state = FOCUS_EDITOR;
   }
+  update_pane_layout();
   needs_redraw = true;
 }
 
