@@ -221,6 +221,7 @@ Telescope::Telescope()
 
 void Telescope::open(const std::string &root)
 {
+  cancel_scan();
   active = true;
   std::error_code ec;
   if (!root.empty())
@@ -247,6 +248,7 @@ void Telescope::open(const std::string &root)
   all_entries_.clear();
   entries_valid_ = false;
   scan_pending_ = false;
+  scan_error_.clear();
   focus_ = TelescopeFocus::Query;
   invalidate_preview_cache();
 }
@@ -263,6 +265,7 @@ void Telescope::close()
   list_scroll_offset = 0;
   preview_scroll_offset = 0;
   scan_pending_ = false;
+  scan_error_.clear();
   invalidate_preview_cache();
 }
 
@@ -270,11 +273,24 @@ void Telescope::update_results()
 {
   // Synchronous full rescan (no TaskQueue available): walk the tree into the
   // cache, then publish. The cache stays valid so later keystrokes filter
-  // instantly instead of re-walking.
+  // instantly instead of re-walking. A failed root walk records scan_error_
+  // and leaves the cache invalid so the picker can say so.
   all_entries_.clear();
+  entries_valid_ = false;
   scan_directory(root_dir, 0);
-  entries_valid_ = true;
-  publish_filtered();
+  if (scan_error_.empty())
+  {
+    entries_valid_ = true;
+    publish_filtered();
+  }
+  else
+  {
+    results.clear();
+    selected_index = 0;
+    list_scroll_offset = 0;
+    preview_scroll_offset = 0;
+    invalidate_preview_cache();
+  }
 }
 
 void Telescope::publish_filtered()
@@ -350,6 +366,19 @@ void Telescope::scan_directory(const fs::path &dir, int depth)
   }
 
   std::error_code ec;
+  // Fail loudly on the scan root itself: a missing/permission-denied root is
+  // a caller bug, and silently caching an empty listing makes the picker
+  // report "No files found" for a root that simply does not exist.
+  if (depth == 0)
+  {
+    std::error_code root_ec;
+    if (!fs::is_directory(dir, root_ec) || root_ec)
+    {
+      scan_error_ = "cannot scan " + dir.string();
+      return;
+    }
+    scan_error_.clear();
+  }
   std::vector<fs::directory_entry> entries;
   for (auto it = fs::directory_iterator(dir, ec); !ec && it != fs::end(it); it.increment(ec))
   {

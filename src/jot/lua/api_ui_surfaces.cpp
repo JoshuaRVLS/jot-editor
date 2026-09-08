@@ -391,6 +391,7 @@ bool LuaAPI::emit_telescope(const TelescopeView &view)
                        lua_set_int_field(L, t, "list_scroll", view.list_scroll);
                        lua_set_int_field(L, t, "result_count", view.result_count);
                        lua_set_bool_field(L, t, "scan_pending", view.scan_pending);
+                       lua_set_str_field(L, t, "scan_error", view.scan_error);
                        lua_set_str_field(L, t, "focus", view.focus);
                        lua_newtable(L);
                        const int arr = lua_gettop(L);

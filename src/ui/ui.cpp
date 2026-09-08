@@ -44,13 +44,19 @@ namespace
   // Dims an xterm-256 palette index by scaling its RGB toward a fraction of
   // itself (keeping the hue) instead of hard-stepping channels, so the scrim
   // reads as a subtle darker backdrop rather than blacking the theme out.
-  // SGR 2 alone only affects the foreground on most terminals, so the
-  // background color is really darkened here. The default background (-1) is
-  // mapped to a dark gray, not black, so the theme doesn't collapse; the
-  // default foreground is left to the SGR dim attribute for readability.
-  int ui_dim_color(int idx, bool is_bg)
+  // The background darkening is what actually carries the effect: SGR 2 only
+  // affects the foreground on most terminals, and Windows Terminal's conpty
+  // path drops the faint attribute entirely. Foreground dimming borrows the
+  // background scale — with a very dark result the renderer can skip SGR 2.
+  // The default background (-1) is mapped to a dark gray, not black, so the
+  // theme doesn't collapse.
+  constexpr int ui_dim_rgb_scale_pct = 55;
+
+  // xterm-256 index → RGB. Named (not a lambda) so both ui_dim_color and the
+  // darkness probe below can use it.
+  struct XtermPalette
   {
-    auto palette_rgb = [](int i, int rgb[3])
+    static void decode(int i, int rgb[3])
     {
       if (i < 0)
       {
@@ -84,15 +90,19 @@ namespace
       rgb[0] = levels[v / 36];
       rgb[1] = levels[(v % 36) / 6];
       rgb[2] = levels[v % 6];
-    };
-    auto nearest_index = [&palette_rgb](int r, int g, int b)
+    }
+  };
+
+  int ui_dim_color(int idx, bool is_bg)
+  {
+    auto nearest_index = [](int r, int g, int b)
     {
       int best = 0;
       long long best_d = (long long)1 << 62;
       for (int i = 0; i < 256; i++)
       {
         int rgb[3];
-        palette_rgb(i, rgb);
+        XtermPalette::decode(i, rgb);
         const long long dr = (long long)r - rgb[0];
         const long long dg = (long long)g - rgb[1];
         const long long db = (long long)b - rgb[2];
@@ -116,11 +126,31 @@ namespace
       return 233;
     }
     int rgb[3];
-    palette_rgb(idx, rgb);
-    const int r = (int)(((long long)rgb[0] * 55) / 100);
-    const int g = (int)(((long long)rgb[1] * 55) / 100);
-    const int b = (int)(((long long)rgb[2] * 55) / 100);
+    XtermPalette::decode(idx, rgb);
+    const int r = (int)(((long long)rgb[0] * ui_dim_rgb_scale_pct) / 100);
+    const int g = (int)(((long long)rgb[1] * ui_dim_rgb_scale_pct) / 100);
+    const int b = (int)(((long long)rgb[2] * ui_dim_rgb_scale_pct) / 100);
     return nearest_index(r, g, b);
+  }
+
+  // Whether a dimmed cell looks dimmed from its colors alone, without the
+  // SGR 2 faint attribute. Used so the modal scrim still reads on terminals
+  // whose conpty path drops faint (Windows Terminal): if the dimmed
+  // background is still relatively bright, SGR 2 is needed for the
+  // foreground; if the scrim is already very dark, the background carries
+  // the effect and SGR 2 can stay off (it is optional in most terminals and
+  // ignored in conpty entirely).
+  bool ui_dim_reads_dark(int dimmed_bg_idx)
+  {
+    if (dimmed_bg_idx == 233 || dimmed_bg_idx == 232 || dimmed_bg_idx == 16
+        || dimmed_bg_idx == 0)
+    {
+      return true;
+    }
+    int rgb[3] = {0, 0, 0};
+    XtermPalette::decode(dimmed_bg_idx, rgb);
+    const int lum = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000;
+    return lum < 40;
   }
 
   void append_cell_for_remaining_width(std::string &out, const std::string &text, int remaining)
@@ -392,8 +422,16 @@ void UI::render()
           term->set_bold(true);
         if (cell.italic)
           term->set_italic(true);
-        if (cell.dim)
+        // SGR 2 (faint) is optional in most terminals and dropped by
+        // Windows Terminal's conpty path: when the dimmed background alone
+        // already reads dark, the scrim carries the effect and faint is not
+        // needed for the foreground. Emit it only when the colors alone
+        // would not look dimmed.
+        if (cell.dim
+            && !ui_dim_reads_dark(ui_dim_color(cell.bg, true)))
+        {
           term->set_dim(true);
+        }
         if (cell.reverse)
           term->set_reverse(true);
         if (cell.underline)
@@ -523,8 +561,13 @@ void UI::emit_full_row(int y, int row_width)
           term->set_bold(true);
         if (cell.italic)
           term->set_italic(true);
-        if (cell.dim)
+        // As above: skip SGR 2 when the dimmed background alone already
+        // reads dark (conpty drops faint anyway).
+        if (cell.dim
+            && !ui_dim_reads_dark(ui_dim_color(cell.bg, true)))
+        {
           term->set_dim(true);
+        }
         if (cell.reverse)
           term->set_reverse(true);
         if (cell.underline)
@@ -543,7 +586,16 @@ void UI::emit_full_row(int y, int row_width)
         if (cell.italic != run_italic)
           term->set_italic(cell.italic);
         if (cell.dim != run_dim)
-          term->set_dim(cell.dim);
+        {
+          if (cell.dim && !ui_dim_reads_dark(ui_dim_color(cell.bg, true)))
+          {
+            term->set_dim(true);
+          }
+          else
+          {
+            term->set_dim(cell.dim);
+          }
+        }
         if (cell.reverse != run_reverse)
           term->set_reverse(cell.reverse);
         if (cell.underline != run_underline)
@@ -719,8 +771,13 @@ void UI::emit_row_diff(int y, int row_width)
           term->set_bold(true);
         if (cell.italic)
           term->set_italic(true);
-        if (cell.dim)
+        // As above: skip SGR 2 when the dimmed background alone already
+        // reads dark (conpty drops faint anyway).
+        if (cell.dim
+            && !ui_dim_reads_dark(ui_dim_color(cell.bg, true)))
+        {
           term->set_dim(true);
+        }
         if (cell.reverse)
           term->set_reverse(true);
         if (cell.underline)
@@ -756,8 +813,13 @@ void UI::emit_row_diff(int y, int row_width)
             term->set_bold(true);
           if (cell.italic)
             term->set_italic(true);
-          if (cell.dim)
+          // As above: skip SGR 2 when the dimmed background alone already
+          // reads dark (conpty drops faint anyway).
+          if (cell.dim
+              && !ui_dim_reads_dark(ui_dim_color(cell.bg, true)))
+          {
             term->set_dim(true);
+          }
           if (cell.reverse)
             term->set_reverse(true);
           if (cell.underline)

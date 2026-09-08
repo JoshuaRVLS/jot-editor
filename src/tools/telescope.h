@@ -152,6 +152,13 @@ public:
   {
     return scan_pending_;
   }
+  // Last scan failure, if any (e.g. a scan root that is not a directory).
+  // Lets the picker tell "nothing matched" apart from "the tree was never
+  // readable". Cleared on a successful root scan.
+  const std::string &scan_error() const
+  {
+    return scan_error_;
+  }
   bool can_accept_selection() const
   {
     return !scan_pending_ && !results.empty();
@@ -182,6 +189,11 @@ private:
   bool scan_pending_ = false;
   TelescopeFocus focus_ = TelescopeFocus::Query;
   fs::path root_dir;
+
+  // Last scan failure, if any (e.g. a scan root that is not a directory).
+  // Kept so the picker can tell "nothing matched" apart from "the tree was
+  // never readable". Cleared on a successful root scan.
+  std::string scan_error_;
 
   std::atomic<int> scan_id_{0};
   std::shared_ptr<std::atomic<int>> scan_generation_ = std::make_shared<std::atomic<int>>(0);

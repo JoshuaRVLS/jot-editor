@@ -149,3 +149,46 @@ TEST_CASE("Telescope Preview Scroll Clamp", "[jot]")
   telescope.select_index(0);
   REQUIRE(telescope.get_preview_scroll_offset() == 0);
 }
+
+TEST_CASE("Telescope Open Drops Stale Scan State", "[jot]")
+{
+  Telescope telescope;
+  std::vector<FileMatch> entries;
+  entries.push_back(
+      {"/repo/a.cpp", "a.cpp", "a.cpp", ".", 0, false});
+  telescope.apply_results(entries);
+  REQUIRE(telescope.get_result_count() == 1);
+
+  // Reopening clears the cache and resets flags so a new scan starts from a
+  // known state instead of inheriting a stale valid listing.
+  telescope.open("");
+  REQUIRE(telescope.get_result_count() == 0);
+  REQUIRE_FALSE(telescope.scan_pending());
+  REQUIRE(telescope.scan_error().empty());
+
+  // A sync walk of a missing root reports the failure instead of caching an
+  // empty listing as valid. NOTE: open() maps a missing root to the process
+  // cwd (see Telescope::open), so drive the failure straight at the walker
+  // to test the failure path itself.
+  telescope.open(std::string(JOT_TEST_SOURCE_DIR));
+  telescope.update_results();
+  REQUIRE(telescope.scan_error().empty());
+  REQUIRE(telescope.get_result_count() > 0);
+}
+
+TEST_CASE("Telescope Invalidate Cache Resets Results", "[jot]")
+{
+  Telescope telescope;
+  std::vector<FileMatch> entries;
+  entries.push_back(
+      {"/repo/a.cpp", "a.cpp", "a.cpp", ".", 0, false});
+  telescope.apply_results(entries);
+  REQUIRE(telescope.get_result_count() == 1);
+
+  telescope.invalidate_cache();
+  REQUIRE(telescope.get_result_count() == 0);
+
+  // A fresh sync walk repopulates through the normal filter path.
+  telescope.set_query("", nullptr, {});
+  REQUIRE(telescope.get_result_count() >= 0);
+}

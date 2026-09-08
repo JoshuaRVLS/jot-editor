@@ -752,6 +752,7 @@ void Editor::render_telescope()
     view.list_scroll = telescope.get_list_scroll_offset();
     view.result_count = result_count;
     view.scan_pending = telescope.scan_pending();
+    view.scan_error = telescope.scan_error();
     view.focus = telescope.focus() == TelescopeFocus::Query     ? "query"
                  : telescope.focus() == TelescopeFocus::Preview ? "preview"
                                                                 : "results";
@@ -867,9 +868,23 @@ void Editor::render_telescope()
 
   if (results.empty())
   {
-    std::string empty = telescope.scan_pending()        ? "Scanning files..."
-                        : telescope.get_query().empty() ? "No files found in this workspace."
-                                                        : "No files match the current query.";
+    std::string empty;
+    if (telescope.scan_pending())
+    {
+      empty = "Scanning files...";
+    }
+    else if (!telescope.scan_error().empty())
+    {
+      empty = telescope.scan_error();
+    }
+    else if (telescope.get_query().empty())
+    {
+      empty = "No files found in this workspace.";
+    }
+    else
+    {
+      empty = "No files match the current query.";
+    }
     ui->draw_text(layout.list_x,
                   layout.list_y + std::max(0, layout.list_h / 2),
                   clip_text(empty, layout.list_w),

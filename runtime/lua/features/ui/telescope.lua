@@ -192,9 +192,11 @@ local function telescope(p)
   local list_w = math.max(1, p.list_w or 1)
   local results = p.results or {}
   if #results == 0 then
+    local scan_error = p.scan_error or ""
     local empty = p.scan_pending and "Scanning files..."
-      or (query == "" and "No files found in this workspace."
-          or "No files match the current query.")
+      or (scan_error ~= "" and scan_error
+          or (query == "" and "No files found in this workspace."
+              or "No files match the current query."))
     put(list_row0 + math.max(0, math.floor((p.list_h or 0) / 2)),
         list_col,
         trunc_cells(empty, list_w),

@@ -137,7 +137,8 @@ struct TelescopeView
   int list_scroll = 0;
   int result_count = 0;
   bool scan_pending = false;
-  std::string focus;                        // query | results | preview
+  std::string scan_error; // non-empty when the tree walk failed (bad root)
+  std::string focus;      // query | results | preview
   std::vector<TelescopeResultView> results; // windowed to visible rows
   TelescopePreviewView preview;
 };

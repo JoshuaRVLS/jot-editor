@@ -91,10 +91,6 @@ struct EditorState
   bool show_which_key = false;
   std::vector<std::string> which_key_path;
   int which_key_selected = 0;
-  // Held-modifier view ("Ctrl"), shown while the user holds the modifier
-  // alone (Windows Terminal delivers bare modifier key events). When set,
-  // which_key_path is empty and the panel lists every Ctrl+… binding.
-  std::string which_key_modifier;
 
   // Lua UI surface close-tracking: remembered visibility from the previous
   // frame so render() can notify handlers (fn(nil)) when a surface closes.

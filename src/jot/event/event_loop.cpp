@@ -581,40 +581,12 @@ void Editor::handle_terminal_event(const Event &ev)
       ch = ch + 96;
     }
 
-    // Bare-modifier events (Windows Terminal reports Ctrl press/release as
-    // synthetic codes when no other key is involved): 1021 = Ctrl held down,
-    // 1022 = Ctrl released. While a modal surface owns input they are inert.
+    // Bare-modifier synthetic codes (1021 = Ctrl held down, 1022 = Ctrl
+    // released) are a Windows-Terminal-only delivery and have no equivalent
+    // on POSIX/kitty-protocol terminals, so the hold-Ctrl helper view they
+    // drove has been removed. They are inert here on every platform.
     if (ch == 1021 || ch == 1022)
     {
-      const bool modal_open =
-          lsp_completion_visible || (popup.visible && popup.presentation == POPUP_MODAL)
-                              || show_menu_bar_dropdown || show_context_menu
-                              || show_tree_sitter_status_modal || show_lsp_status_modal
-                              || show_command_palette || show_search || telescope.is_active()
-                              || show_quick_pick;
-      if (modal_open)
-      {
-        return;
-      }
-      if (ch == 1021)
-      {
-        if (!show_which_key)
-        {
-          open_which_key_modifier("Ctrl");
-          needs_redraw = true;
-        }
-      }
-      else if (ch == 1022)
-      {
-        // Release: dismiss the held-modifier view. A prefix group that was
-        // opened from it ("Ctrl+T") stays open — the user navigates it with
-        // plain keys after releasing Ctrl.
-        if (show_which_key && !which_key_modifier.empty())
-        {
-          close_which_key();
-          needs_redraw = true;
-        }
-      }
       return;
     }
 
@@ -1040,19 +1012,6 @@ void Editor::open_which_key(const std::string &chord)
   }
   which_key_path = {chord};
   which_key_selected = 0;
-  which_key_modifier.clear();
-  show_which_key = true;
-}
-
-void Editor::open_which_key_modifier(const std::string &mod)
-{
-  if (mod.empty())
-  {
-    return;
-  }
-  which_key_modifier = mod;
-  which_key_path.clear();
-  which_key_selected = 0;
   show_which_key = true;
 }
 
@@ -1061,7 +1020,6 @@ void Editor::close_which_key()
   show_which_key = false;
   which_key_path.clear();
   which_key_selected = 0;
-  which_key_modifier.clear();
 }
 
 bool Editor::handle_which_key_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int original_ch)
@@ -1074,29 +1032,11 @@ bool Editor::handle_which_key_input(int ch, bool is_ctrl, bool is_shift, bool is
     return false;
   }
 
-  // Held-modifier view: Ctrl was pressed alone. Release (1022), Esc or any
-  // real key dismisses it; the key then runs through normal dispatch below
-  // (so Ctrl+letter chords still execute instantly). Arrow keys just move the
-  // highlight. Repeated Ctrl-down (1021) is ignored.
-  if (!which_key_modifier.empty())
+  // Prefix-group view: a pressed chord ("Ctrl+T") prefixes longer Lua keymap
+  // sequences ("Ctrl+T N") — the panel lists the next-chord options.
+  if (!show_which_key)
   {
-    if (ch == 1021)
-    {
-      return true;
-    }
-    if (ch == 1008)
-    {
-      which_key_selected = std::max(0, which_key_selected - 1);
-      return true;
-    }
-    if (ch == 1009)
-    {
-      which_key_selected++;
-      return true;
-    }
-    close_which_key();
-    // The pressed key (e.g. Ctrl+S) still executes normally.
-    return (ch == 1022 || ch == 27) ? true : false;
+    return false;
   }
 
   if (!lua_api || which_key_path.empty())
@@ -1110,8 +1050,8 @@ bool Editor::handle_which_key_input(int ch, bool is_ctrl, bool is_shift, bool is
     close_which_key();
     return true;
   }
-  // Modifier press/release while a group is open: release keeps the group
-  // (the user may press plain letters next); press is ignored.
+  // Bare-modifier synthetic codes are inert here (see handle_terminal_event);
+  // while a group is open they are simply consumed.
   if (ch == 1021 || ch == 1022)
   {
     return true;
