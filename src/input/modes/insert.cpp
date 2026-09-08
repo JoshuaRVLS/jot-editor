@@ -86,6 +86,11 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt
     show_project_search();
     return;
   }
+  if (is_ctrl && is_shift && (ch == 'd' || ch == 'D'))
+  {
+    duplicate_line();
+    return;
+  }
   if (is_ctrl && is_shift && (ch == 'm' || ch == 'M'))
   {
     hide_lsp_completion();
@@ -239,7 +244,7 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt
       return;
     case 'd':
     case 'D':
-      duplicate_line();
+      select_next_occurrence();
       return;
     case 'k':
     case 'K':

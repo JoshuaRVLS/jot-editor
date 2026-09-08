@@ -30,18 +30,28 @@ namespace
     {
       s.full_snapshot = false;
       int start, end;
+      int lo = buf.cursor.y;
+      int hi = buf.cursor.y;
       if (buf.selection.active)
       {
-        int sel_lo = std::min(buf.selection.start.y, buf.selection.end.y);
-        int sel_hi = std::max(buf.selection.start.y, buf.selection.end.y);
-        start = std::max(0, sel_lo - kDeltaWindowHalfSize);
-        end = std::min(total, sel_hi + kDeltaWindowHalfSize + 1);
+        lo = std::min(buf.selection.start.y, buf.selection.end.y);
+        hi = std::max(buf.selection.start.y, buf.selection.end.y);
       }
-      else
+      for (const auto &caret : buf.extra_carets)
       {
-        start = std::max(0, buf.cursor.y - kDeltaWindowHalfSize);
-        end = std::min(total, buf.cursor.y + kDeltaWindowHalfSize + 1);
+        if (caret.active)
+        {
+          lo = std::min(lo, std::min(caret.start.y, caret.end.y));
+          hi = std::max(hi, std::max(caret.start.y, caret.end.y));
+        }
+        else
+        {
+          lo = std::min(lo, caret.start.y);
+          hi = std::max(hi, caret.start.y);
+        }
       }
+      start = std::max(0, lo - kDeltaWindowHalfSize);
+      end = std::min(total, hi + kDeltaWindowHalfSize + 1);
       if (end <= start)
       {
         start = std::max(0, buf.cursor.y);
@@ -59,6 +69,7 @@ namespace
     s.cursor = buf.cursor;
     s.preferred_x = buf.preferred_x;
     s.selection = buf.selection;
+    s.extra_carets = buf.extra_carets;
     s.scroll_offset = buf.scroll_offset;
     s.scroll_x = buf.scroll_x;
     s.modified = buf.modified;
@@ -70,11 +81,20 @@ namespace
   {
     if (!(a.cursor == b.cursor) || a.preferred_x != b.preferred_x
         || !(a.selection.start == b.selection.start) || !(a.selection.end == b.selection.end)
-        || a.selection.active != b.selection.active || a.scroll_offset != b.scroll_offset
-        || a.scroll_x != b.scroll_x || a.modified != b.modified
-        || a.is_placeholder != b.is_placeholder)
+        || a.selection.active != b.selection.active || a.extra_carets.size() != b.extra_carets.size()
+        || a.scroll_offset != b.scroll_offset || a.scroll_x != b.scroll_x
+        || a.modified != b.modified || a.is_placeholder != b.is_placeholder)
     {
       return false;
+    }
+    for (size_t i = 0; i < a.extra_carets.size(); i++)
+    {
+      if (!(a.extra_carets[i].start == b.extra_carets[i].start)
+          || !(a.extra_carets[i].end == b.extra_carets[i].end)
+          || a.extra_carets[i].active != b.extra_carets[i].active)
+      {
+        return false;
+      }
     }
     if (a.full_snapshot != b.full_snapshot)
     {
@@ -171,6 +191,7 @@ namespace
     buf.cursor = prev.cursor;
     buf.preferred_x = prev.preferred_x;
     buf.selection = prev.selection;
+    buf.extra_carets = prev.extra_carets;
     buf.scroll_offset = std::max(0, prev.scroll_offset);
     buf.scroll_x = std::max(0, prev.scroll_x);
     buf.modified = prev.modified;
@@ -192,6 +213,10 @@ void Editor::save_state()
   if (buf.selection.active)
   {
     edit_anchor = std::min(edit_anchor, std::min(buf.selection.start.y, buf.selection.end.y));
+  }
+  for (const auto &caret : buf.extra_carets)
+  {
+    edit_anchor = std::min(edit_anchor, caret.active ? std::min(caret.start.y, caret.end.y) : caret.start.y);
   }
   buf.mark_edited(edit_anchor);
 

@@ -150,6 +150,7 @@ void HostCoreAPI::set_buffer_content(const std::string &text)
   buf.cursor = {0, 0};
   buf.preferred_x = 0;
   buf.selection = {{0, 0}, {0, 0}, false};
+  buf.extra_carets.clear();
   buf.scroll_offset = 0;
   buf.scroll_x = 0;
   buf.modified = true;
@@ -176,9 +177,37 @@ std::string HostCoreAPI::selected_text() const
   {
     return "";
   }
+  return selected_text_for(buf.selection);
+}
 
-  Cursor start = buf.selection.start;
-  Cursor end = buf.selection.end;
+size_t HostCoreAPI::extra_caret_count() const
+{
+  if (editor.buffers.empty())
+  {
+    return 0;
+  }
+  return editor.get_buffer().extra_carets.size();
+}
+
+std::string HostCoreAPI::extra_caret_text(size_t index) const
+{
+  if (editor.buffers.empty())
+  {
+    return "";
+  }
+  const auto &carets = editor.get_buffer().extra_carets;
+  if (index >= carets.size() || !carets[index].active)
+  {
+    return "";
+  }
+  return selected_text_for(carets[index]);
+}
+
+std::string HostCoreAPI::selected_text_for(const Selection &sel) const
+{
+  const FileBuffer &buf = editor.get_buffer();
+  Cursor start = sel.start;
+  Cursor end = sel.end;
   if (start.y > end.y || (start.y == end.y && start.x > end.x))
   {
     std::swap(start, end);
@@ -210,7 +239,7 @@ void HostCoreAPI::replace_selection(const std::string &text)
   }
 
   FileBuffer &buf = editor.get_buffer();
-  if (!buf.selection.active)
+  if (!buf.selection.active && buf.extra_carets.empty())
   {
     insert_text(text);
     return;
@@ -227,8 +256,46 @@ void HostCoreAPI::insert_text(const std::string &text)
   {
     return;
   }
-  editor.save_state();
   editor.insert_string(text);
+}
+
+void HostCoreAPI::insert_char_at_carets(char c)
+{
+  if (editor.buffers.empty())
+  {
+    return;
+  }
+  editor.insert_char(c);
+}
+
+void HostCoreAPI::undo()
+{
+  editor.undo();
+}
+
+void HostCoreAPI::redo()
+{
+  editor.redo();
+}
+
+bool HostCoreAPI::multicursor_active()
+{
+  return editor.multicursor_active();
+}
+
+void HostCoreAPI::clear_extra_carets()
+{
+  editor.clear_extra_carets();
+}
+
+bool HostCoreAPI::add_caret_at(int line, int col)
+{
+  return editor.add_caret_at(line, col);
+}
+
+bool HostCoreAPI::select_next_occurrence()
+{
+  return editor.select_next_occurrence();
 }
 
 std::pair<int, int> HostCoreAPI::cursor() const

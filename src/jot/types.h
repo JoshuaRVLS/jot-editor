@@ -461,6 +461,7 @@ struct State
   Cursor cursor;
   int preferred_x;
   Selection selection;
+  std::vector<Selection> extra_carets;
   int scroll_offset;
   int scroll_x;
   bool modified;
@@ -523,6 +524,7 @@ struct FileBuffer
   Cursor cursor;
   int preferred_x; // desired column for vertical movement
   Selection selection;
+  std::vector<Selection> extra_carets;
   int scroll_offset;
   int scroll_x;
   std::string filepath;

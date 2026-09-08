@@ -5,6 +5,7 @@
 #include <vector>
 
 class Editor;
+struct Selection;
 
 struct HostBufferInfo
 {
@@ -52,8 +53,18 @@ public:
   std::string buffer_content() const;
   void set_buffer_content(const std::string &text);
   std::string selected_text() const;
+  size_t extra_caret_count() const;
+  std::string extra_caret_text(size_t index) const;
+  std::string selected_text_for(const Selection &sel) const;
   void replace_selection(const std::string &text);
   void insert_text(const std::string &text);
+  void insert_char_at_carets(char c);
+  void undo();
+  void redo();
+  bool multicursor_active();
+  void clear_extra_carets();
+  bool add_caret_at(int line, int col);
+  bool select_next_occurrence();
   std::pair<int, int> cursor() const;
   void set_cursor(int line, int col);
 

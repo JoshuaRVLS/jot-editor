@@ -379,7 +379,7 @@ void Editor::paste()
   auto &buf = get_buffer();
   if (buf.is_lazy())
     buf.materialize();
-  if (buf.selection.active)
+  if (buf.selection.active || !buf.extra_carets.empty())
   {
     delete_selection();
   }
@@ -391,6 +391,35 @@ void Editor::paste()
           : source_clipboard;
 
   std::vector<std::string> paste_lines = split_paste_lines(paste_text);
+  if (!buf.extra_carets.empty() && paste_lines.size() == 1)
+  {
+    std::vector<Cursor> points = {buf.cursor};
+    for (const auto &c : buf.extra_carets)
+      points.push_back(c.end);
+    std::sort(points.begin(), points.end(), [](const Cursor &a, const Cursor &b) {
+      return a.y > b.y || (a.y == b.y && a.x > b.x);
+    });
+    for (const auto &p : points)
+    {
+      std::string &line_ref = buf.line_mut(p.y);
+      const int insert_x = std::clamp(p.x, 0, (int)line_ref.size());
+      line_ref.insert(insert_x, paste_lines[0]);
+    }
+    buf.cursor.x += (int)paste_lines[0].length();
+    for (auto &c : buf.extra_carets)
+    {
+      c.end.x += (int)paste_lines[0].length();
+      c.start = c.end;
+    }
+    buf.modified = true;
+    needs_redraw = true;
+    if (lua_api)
+      lua_api->on_buffer_change(buf.filepath, "");
+    if (!buf.filepath.empty())
+      notify_lsp_change(buf.filepath);
+    return;
+  }
+
   if (paste_lines.size() == 1)
   {
     std::string &line_ref = buf.line_mut(buf.cursor.y);

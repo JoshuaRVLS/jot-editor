@@ -100,16 +100,21 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
     show_project_search();
     return;
   }
-  if (is_ctrl && is_shift && (ch == 'm' || ch == 'M'))
+  if (is_ctrl && is_shift && (ch == 'd' || ch == 'D'))
   {
-    hide_lsp_completion();
-    show_diagnostics_picker();
+    duplicate_line();
     return;
   }
   if (is_ctrl && is_shift && (ch == 'o' || ch == 'O'))
   {
     hide_lsp_completion();
     show_symbol_picker();
+    return;
+  }
+  if (is_ctrl && is_shift && (ch == 'm' || ch == 'M'))
+  {
+    hide_lsp_completion();
+    show_diagnostics_picker();
     return;
   }
   // Ctrl+Tab / Ctrl+Shift+Tab: cycle pane-local tabs.
@@ -264,7 +269,7 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
       return;
     case 'd':
     case 'D':
-      duplicate_line();
+      select_next_occurrence();
       return;
     case 'k':
     case 'K':
@@ -309,6 +314,11 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
     hide_lsp_completion();
     hide_lsp_signature();
     auto &buf = get_buffer();
+    if (!buf.extra_carets.empty())
+    {
+      clear_extra_carets();
+      return;
+    }
     if (buf.selection.active)
     {
       clear_selection();

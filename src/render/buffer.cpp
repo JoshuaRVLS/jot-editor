@@ -788,24 +788,32 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
 
       auto is_in_selection = [&](int char_idx)
       {
-        if (!buf.selection.active)
-          return false;
-
         Cursor p = {char_idx, line_idx};
-        Cursor s = buf.selection.start;
-        Cursor e = buf.selection.end;
-
-        if (s.y > e.y || (s.y == e.y && s.x > e.x))
-          std::swap(s, e);
-
-        if (p.y > s.y && p.y < e.y)
+        auto in_range = [&](const Selection &sel)
+        {
+          if (!sel.active)
+            return false;
+          Cursor s = sel.start;
+          Cursor e = sel.end;
+          if (s.y > e.y || (s.y == e.y && s.x > e.x))
+            std::swap(s, e);
+          if (p.y > s.y && p.y < e.y)
+            return true;
+          if (p.y == s.y && p.y == e.y)
+            return (p.x >= s.x && p.x < e.x);
+          if (p.y == s.y)
+            return (p.x >= s.x);
+          if (p.y == e.y)
+            return (p.x < e.x);
+          return false;
+        };
+        if (in_range(buf.selection))
           return true;
-        if (p.y == s.y && p.y == e.y)
-          return (p.x >= s.x && p.x < e.x);
-        if (p.y == s.y)
-          return (p.x >= s.x);
-        if (p.y == e.y)
-          return (p.x < e.x);
+        for (const auto &c : buf.extra_carets)
+        {
+          if (in_range(c))
+            return true;
+        }
         return false;
       };
 
@@ -819,35 +827,34 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       auto selection_row_span = [&]()
       {
         SelectionRowSpan span;
-        if (!buf.selection.active)
+        auto span_for = [&](const Selection &sel, SelectionRowSpan &out) {
+          if (!sel.active)
+            return false;
+          Cursor s = sel.start;
+          Cursor e = sel.end;
+          if (s.y > e.y || (s.y == e.y && s.x > e.x))
+            std::swap(s, e);
+          if (line_idx < s.y || line_idx > e.y)
+            return false;
+          int start_x = 0;
+          int end_x = (int)line.size();
+          if (line_idx == s.y)
+            start_x = std::clamp(s.x, 0, (int)line.size());
+          if (line_idx == e.y)
+            end_x = std::clamp(e.x, 0, (int)line.size());
+          if (start_x > end_x)
+            std::swap(start_x, end_x);
+          out.start = out.active ? std::min(out.start, start_x) : start_x;
+          out.end = out.active ? std::max(out.end, end_x) : end_x;
+          out.active = true;
+          return true;
+        };
+        span_for(buf.selection, span);
+        for (const auto &c : buf.extra_carets)
+          span_for(c, span);
+        if (!span.active)
           return span;
-
-        Cursor s = buf.selection.start;
-        Cursor e = buf.selection.end;
-        if (s.y > e.y || (s.y == e.y && s.x > e.x))
-          std::swap(s, e);
-
-        if (line_idx < s.y || line_idx > e.y)
-          return span;
-
-        span.active = true;
-        int start_x = 0;
-        int end_x = (int)line.size();
-        if (line_idx == s.y)
-          start_x = std::clamp(s.x, 0, (int)line.size());
-        if (line_idx == e.y)
-          end_x = std::clamp(e.x, 0, (int)line.size());
-        if (line_idx > s.y && line_idx < e.y)
-        {
-          start_x = 0;
-          end_x = (int)line.size();
-        }
-        if (start_x > end_x)
-          std::swap(start_x, end_x);
-        span.start = start_x;
-        span.end = end_x;
-        span.full_line =
-            (line_idx > s.y && line_idx < e.y) || (span.start == 0 && span.end == (int)line.size());
+        span.full_line = (span.start == 0 && span.end == (int)line.size());
         return span;
       };
 
@@ -1280,6 +1287,21 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       }
 
       auto selected_span = selection_row_span();
+      for (const auto &caret : buf.extra_carets)
+      {
+        if (!caret.active && caret.start.y == line_idx)
+        {
+          SelectionRowSpan bare;
+          bare.active = true;
+          bare.full_line = false;
+          bare.start = std::clamp(caret.start.x, 0, (int)line.size());
+          bare.end = bare.start;
+          if (!selected_span.active)
+          {
+            selected_span = bare;
+          }
+        }
+      }
       if (selected_span.active)
       {
         int selected_start_visual = compute_visual_column(line, selected_span.start, tab_size);

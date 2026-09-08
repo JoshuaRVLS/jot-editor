@@ -106,5 +106,7 @@ void Editor::select_current_line()
 
 void Editor::clear_selection()
 {
-  get_buffer().selection.active = false;
+  auto &buf = get_buffer();
+  buf.selection.active = false;
+  buf.extra_carets.clear();
 }

@@ -1567,6 +1567,17 @@ void Editor::handle_mouse(void *event_ptr)
   int click_x = visual_to_logical_column(clicked_line, click_visual, tab_size);
   click_x = std::clamp(click_x, 0, line_len);
 
+  if (is_click && event->alt && inside_pane && event->y >= content_top && event->y < content_bottom
+      && event->x >= code_start_x)
+  {
+    focus_state = FOCUS_EDITOR;
+    add_caret_at(click_y, click_x);
+    mouse_selecting = false;
+    mouse_drag_started = false;
+    needs_redraw = true;
+    return;
+  }
+
   auto set_word_selection =
       [&](const Cursor &anchor_start, const Cursor &anchor_end, const Cursor &current_pos)
   {

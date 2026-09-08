@@ -182,7 +182,9 @@ sidebar, optional minimap, a right-side tool dock, bottom terminal/debugger
 panels, and a two-row status/message area. The mouse is wired throughout —
 click to place the cursor, drag to select (with edge auto-scroll), double/
 triple-click for word/line selection (double-click stops at `.`, so `ext`
-in `ext.begin()` selects just `ext`), click tabs, drag split dividers, jump
+in `ext.begin()` selects just `ext`), `Ctrl+D` to select the next occurrence
+(`Alt+Click` adds a caret, `Esc` clears extra carets), click tabs, drag split
+dividers, jump
 the minimap viewport, navigate the sidebar, and toggle breakpoints.
 
 ## Keybindings
@@ -196,7 +198,8 @@ the minimap viewport, navigate the sidebar, and toggle breakpoints.
 | `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
 | `Ctrl+A` | Select all |
 | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / cut / paste |
-| `Ctrl+D` | Duplicate current line |
+| `Ctrl+D` | Select next occurrence (multi-cursor) |
+| `Ctrl+Shift+D` | Duplicate current line |
 | `Ctrl+K` | Delete current line |
 | `Ctrl+/` | Toggle comment |
 | `Ctrl+Backspace` / `Ctrl+Delete` | Delete previous / next word |

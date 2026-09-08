@@ -748,6 +748,12 @@ private:
 public:
   Editor();
   ~Editor();
+  bool multicursor_active();
+  void clear_extra_carets();
+  bool add_caret_at(int line_y, int x);
+  bool select_next_occurrence();
+  void delete_selection_for_test();
+  void insert_string_for_test(const std::string &str);
   void load_file(const std::string &fname);
   void run();
   // Reloads configuration from disk (settings.conf overlay + config.lua) and

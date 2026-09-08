@@ -34,6 +34,10 @@ void Editor::move_cursor(int dx, int dy, bool extend_selection)
   {
     clear_selection();
   }
+  if (!extend_selection && !buf.extra_carets.empty())
+  {
+    buf.extra_carets.clear();
+  }
 
   if (extend_selection && !buf.selection.active)
   {
