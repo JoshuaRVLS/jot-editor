@@ -377,6 +377,19 @@ void LuaAPI::render_floats()
 {
   if (!editor || !editor->ui)
     return;
+  // GUI overlays: before any float paints, snapshot the float-free grid so
+  // the GUI frontend can render floats as a fixed overlay on top of the
+  // sliding content (they would otherwise move with the scroll animation).
+  // The overlay rects are collected below; the terminal backend ignores
+  // both.
+  editor->ui->float_overlays.clear();
+  {
+    bool any_visible = false;
+    for (const auto &x : float_windows)
+      if (!x.second.hide)
+        any_visible = true;
+    editor->ui->before_float_render(any_visible);
+  }
   // Modal scrim: the native modal surfaces (command palette, quick pick,
   // modal popups, TS-status / LSP manager / telescope) dim the whole grid
   // with UI::dim_rect *before* this pass runs. Every cell a float repaints
@@ -443,6 +456,10 @@ void LuaAPI::render_floats()
     // screen height; every other float stays above the status line.
     const int max_h = f->strip ? editor->ui->get_height() : rh;
     UIRect r{x, y, std::min(f->w, rw - x), std::min(f->h, max_h - y)};
+    editor->ui->float_overlays.push_back(
+        {f->handle, r.x, r.y, r.w, r.h, f->relative == "editor", f->surface});
+    const size_t overlay_idx = editor->ui->float_overlays.size() - 1;
+    const bool capture_cells = editor->ui->wants_float_cells();
     editor->ui->fill_rect(r, " ", f->fg, f->bg);
     const int border_fg = f->border_fg >= 0 ? f->border_fg : f->fg;
     if (f->border != "none")
@@ -563,6 +580,27 @@ void LuaAPI::render_floats()
     if (modal_dim_active && !modal_surface_open(f->surface))
     {
       editor->ui->dim_rect(r);
+    }
+    // GUI backends repaint floats from per-float captures (the shared grid
+    // lets later floats overwrite earlier ones where they overlap, so the
+    // final grid no longer holds this float's pixels). Capture right after
+    // this float finished painting -- before the next float's fill covers
+    // the region -- so the capture holds exactly this float's cells.
+    if (capture_cells && r.w > 0 && r.h > 0)
+    {
+      auto &ov = editor->ui->float_overlays[overlay_idx];
+      ov.cells.assign((size_t)r.h, std::vector<UICell>((size_t)r.w));
+      for (int rr = 0; rr < r.h; rr++)
+      {
+        auto &dst = ov.cells[(size_t)rr];
+        for (int cc = 0; cc < r.w; cc++)
+        {
+          if (const UICell *cell = editor->ui->cell_at(r.x + cc, r.y + rr))
+          {
+            dst[(size_t)cc] = *cell;
+          }
+        }
+      }
     }
   }
 }

@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 struct SDL_Window;
@@ -54,6 +55,11 @@ public:
 
   void render() override;
   // No terminal to clear: the next render() repaints everything anyway.
+  bool wants_float_cells() const override
+  {
+    return true;
+  }
+
   void invalidate() override;
   // Cursor painting happens inside render(); no terminal escapes to emit.
   void flush_cursor() override;
@@ -62,6 +68,14 @@ public:
   // many visible rows it scrolled since the last frame. The pane's content
   // is rendered shifted by the animated offset (points) until it settles.
   void notify_pane_scroll(int pane_id, int x, int y, int w, int h, int delta_rows) override;
+
+  // Snapshot the float-free grid so floats render as a fixed overlay that
+  // never moves with the scroll; see paint_float_overlays.
+  void before_float_render(bool has_visible) override;
+
+  // Modal scrim: records the dim (the grid paint is skipped in GUI mode)
+  // so render() can draw a smoothly-fading scrim overlay instead.
+  void dim_rect(const UIRect &rect) override;
 
   // True while a scroll or cursor animation is in flight; the editor pump
   // keeps repainting so the animation advances at the monitor's refresh.
@@ -137,6 +151,23 @@ private:
   void paint_sprite(const GuiScrollAnim &anim, const std::vector<std::vector<UICell>> *rows,
                     float dy);
   void paint_plain();
+  // Fixed-overlay pass: paints every Lua float (toasts, hover, user
+  // popups) from the live grid at its absolute position, eased to the
+  // pixel level so Lua's row-stepped animations read as smooth glides.
+  // Floats are not part of the sliding content (see before_float_render),
+  // so they never move with the scroll. Colors are eased the same way:
+  // each float keeps a resolved-RGB copy of its cells that eases toward
+  // the live grid's colors at frame rate, so Lua's 50ms fade steps render
+  // as a continuous dissolve. While any float is mid-transition
+  // needs_repaint() keeps the pump rendering at the monitor's refresh.
+  void paint_float_overlays(float dt);
+  // Paints one float from its captured cells + resolved RGB (see
+  // GuiFloatColors) at the layout position translated by (dx_px, dy_px),
+  // with quad alpha (enter/exit fades).
+  void paint_float_cells(int x, int y, int w, int h, float dx_px, float dy_px,
+                         const std::vector<std::vector<UICell>> &cells,
+                         const std::vector<float> &rgb,
+                         float alpha = 1.0f);
   void paint_cursor();
   // Push the bg/glyph/underline quads of one row slice. `src` holds the
   // row's cells (a grid row or a retained pane row); draws columns
@@ -154,6 +185,9 @@ private:
   // Resolves a cell's effective fg/bg (honoring reverse), dimmed.
   void cell_colors(const UICell &cell, float &fr, float &fg_, float &fb, float &br,
                    float &bg_, float &bb) const;
+  // Same as cell_colors, but also resolves the underline color, writing
+  // all three into out[0..8]: fg.r,g,b, bg.r,g,b, underline.r,g,b.
+  static void resolve_cell_rgb(const UICell &cell, float *out);
 
   SDL_Window *window_ = nullptr;
   // Opaque SDL_GLContext (struct SDL_GLContextState *): kept as void* so
@@ -187,6 +221,103 @@ private:
   float ascent_ = 0.0f;
   int font_px_ = 16;
 
+  // --- Float overlay state -------------------------------------------------
+  // Snapshot of the grid taken before Lua floats paint (see
+  // before_float_render). The slide sprites and the plain pass read from
+  // here whenever floats are visible, so float cells never appear inside
+  // the sliding content; paint_float_overlays draws them on top instead.
+  // Empty = no floats visible = paint from the live grid as usual.
+  std::vector<std::vector<UICell>> pre_float_grid_;
+  // Key for a float's animation state: the handler surface name when the
+  // float was opened by a UI handler (those re-emit every frame with a
+  // fresh handle, so the handle is useless as a key), or "h:<handle>" for
+  // standalone floats (toasts, user floats) whose handle is stable.
+  // Per-surface/per-float animation state: eased pixel position (Lua moves
+  // floats in whole-cell steps -- toast drift, restack, fade -- and this
+  // glides between them at frame rate), plus the open/close transition.
+  // Surfaces (sidebar, quick pick, modals, ...) animate in when they
+  // appear (slide from the window edge / fade + rise) and out when they
+  // close (fade/slide toward the same edge, painted from a retained
+  // capture because the live grid no longer holds them). Snaps on
+  // teleports (window resize, far jumps).
+  enum class GuiFloatKind
+  {
+    kCenter, // fade in + rise; modals, pickers, menus
+    kLeft,   // slide in from the left edge (sidebar)
+    kRight,  // slide in from the right edge (side panel)
+    kBottom, // fade only (status-line strips)
+  };
+  // Key for a float's animation state: the handler surface name when the
+  // float was opened by a UI handler (those re-emit every frame with a
+  // fresh handle, so the handle is useless as a key), or "h:<handle>" for
+  // standalone floats (toasts, user floats) whose handle is stable.
+  static std::string float_key(const std::string &surface, int handle);
+  // Slide/fade style for a float: surfaces choose by name (sidebar slides
+  // from the left, side panel from the right, status-line strips fade),
+  // standalone floats by screen position (against an edge = slide from it,
+  // else center fade + rise).
+  static GuiFloatKind float_kind_for(const std::string &surface, int x, int w, int width);
+
+  struct GuiFloatAnim
+  {
+    float x_px = 0.0f, y_px = 0.0f;
+    bool seen = false;
+    // Entrance progress 0..1 (1 = fully in) and exit progress 0..1
+    // (0 = just closed, 1 = done, erased). Exiting floats are painted
+    // from exit_cells/exit_rgb with alpha (1 - ease(exit_t)) sliding
+    // toward their edge.
+    float enter_t = 1.0f;
+    float exit_t = 0.0f;
+    bool exiting = false;
+    GuiFloatKind kind = GuiFloatKind::kCenter;
+    int exit_x = 0, exit_y = 0, exit_w = 0, exit_h = 0;
+    std::vector<std::vector<UICell>> exit_cells;
+    std::vector<float> exit_rgb;
+  };
+  std::unordered_map<std::string, GuiFloatAnim> float_anims_;
+
+  // Per-float smoothed color state. `cells` is the float's captured
+  // content (glyphs/attrs come from here); `rgb` holds the resolved
+  // RGB of each cell -- 9 floats: fg.r,g,b then bg.r,g,b then
+  // underline.r,g,b -- eased toward the live grid's colors each frame
+  // (the fade's color steps land every 50ms from Lua, and this spreads
+  // each step over ~2 ticks at frame rate). Snaps when the content
+  // itself changes or a float appears/teleports. Only toasts (surface
+  // empty) color-ease; handler surfaces re-paint their content every
+  // frame (typing in a picker must not cross-fade) so they snap.
+  struct GuiFloatColors
+  {
+    std::vector<std::vector<UICell>> cells;
+    std::vector<float> rgb;
+    bool settled = true;
+  };
+  std::unordered_map<std::string, GuiFloatColors> float_colors_;
+  // Keys present in last frame's overlay list; used to detect surface
+  // open (new key) and close (vanished key) transitions.
+  std::unordered_set<std::string> last_float_keys_;
+  // Set by paint_float_overlays each frame: true while any float's eased
+  // position/colors or an enter/exit transition is still running.
+  // needs_repaint() reads these so the pump keeps rendering until
+  // everything settles.
+  bool float_anims_transitioning_ = false;
+  bool float_colors_transitioning_ = false;
+  // Color easing time constant: with ~50ms between Lua fade steps, ~30ms
+  // leaves the previous transition ~80% converged when the next step
+  // lands, so consecutive steps overlap into one continuous glide.
+  static constexpr float kFloatColorTau = 0.030f;
+  // Open/close transition durations.
+  static constexpr float kFloatEnterSecs = 0.16f;
+  static constexpr float kFloatExitSecs = 0.14f;
+
+  // Modal scrim: dim_rect() records the dim (GUI mode) instead of baking
+  // it into the grid, and render() draws a full-window black quad whose
+  // alpha eases toward kDimAlpha while any modal is up. Matches the
+  // terminal backend's dim factor (cell colors multiplied by 0.55).
+  bool dim_active_ = false;
+  float dim_alpha_ = 0.0f;
+  bool scrim_transitioning_ = false;
+  static constexpr float kDimAlpha = 0.45f;
+
   // Window size in points (cell math) and pixels (GL viewport).
   int window_w_ = 0;
   int window_h_ = 0;
@@ -215,6 +346,11 @@ private:
   // and `frames` clears, so the next chain starts from the settled
   // viewport. Jumps bigger than a pane snap (offset/total reset, frames
   // cleared, recaptured next frame).
+  // The grid the current frame's content passes paint from: the pre-float
+  // snapshot when floats are visible, the live grid otherwise. Set at the
+  // top of render(); never null inside render().
+  const std::vector<std::vector<UICell>> *content_grid_ = nullptr;
+
   // One retained copy of a pane body: the viewport at `top_row` rows from
   // the current chain start. Frames with the same top replace each other,
   // so `frames` holds one copy per distinct viewport the chain visited.

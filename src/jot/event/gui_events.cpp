@@ -7,6 +7,8 @@
 #include "editor.h"
 #include "ui/gui/gui.h"
 
+#include <chrono>
+
 void Editor::pump_gui_events()
 {
   UIGui *gui = static_cast<UIGui *>(ui);

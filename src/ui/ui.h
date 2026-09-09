@@ -11,6 +11,36 @@ struct UIRect
   int x, y, w, h;
 };
 
+struct UICell;
+
+// One Lua float-window's screen rect (grid cells), as laid out by
+// LuaAPI::render_floats() each frame. The GUI frontend reads this list to
+// paint floats as a fixed overlay on top of the sliding content instead of
+// leaving them in the grid (where they would move with the scroll).
+struct FloatOverlay
+{
+  int handle = 0;
+  int x = 0, y = 0, w = 0, h = 0;
+  // True when the float is fixed to the window (relative = "editor"): the
+  // GUI eases its position at frame rate so Lua's row-stepped drift reads
+  // as a smooth glide. Tracking floats (cursor/win-relative) snap instead
+  // so they never lag the cursor.
+  bool animate = true;
+  // The jot.ui.handler surface that opened this float ("sidebar",
+  // "quick_pick", ...), or empty for standalone floats (toasts, user
+  // floats). Surfaces re-emit every frame with a fresh handle, so the GUI
+  // keys its animation state by this name; standalone floats key by handle.
+  std::string surface;
+  // The float's own cells, captured by render_floats right after painting
+  // it into the grid (h * w, row-major). Floats overlap in the shared grid
+  // (a modal covers toasts, the telescope covers the sidebar), so reading
+  // the final grid would mix other floats' pixels into this float's
+  // capture; capturing before the next float paints keeps each float's
+  // pixels exact. Empty for the terminal backend, which paints floats
+  // directly into the grid and never re-reads them.
+  std::vector<std::vector<UICell>> cells;
+};
+
 struct UICell
 {
   std::string ch = " ";
@@ -138,7 +168,10 @@ public:
   void draw_rect(const UIRect &rect, int fg, int bg);
   void draw_border(const UIRect &rect, int fg, int bg);
   void fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg);
-  void dim_rect(const UIRect &rect);
+  // Dims a region of the grid (modal scrim). GUI backends override this to
+  // skip the grid paint and draw their own eased scrim overlay instead, so
+  // the dim fades in/out smoothly.
+  virtual void dim_rect(const UIRect &rect);
 
   // GUI smooth-scroll hook: the editor reports each pane's body region
   // (grid cells, border columns excluded) and how many visible rows the
@@ -158,6 +191,28 @@ public:
     (void)h;
     (void)delta_rows;
   }
+
+  // Called right before Lua floats paint into the grid. GUI backends
+  // snapshot the float-free grid here so they can render floats as a fixed
+  // overlay (see float_overlays) instead of letting them slide with the
+  // content during scroll animations; the terminal backend ignores it.
+  // `has_visible` says whether any float is about to be painted.
+  virtual void before_float_render(bool /*has_visible*/)
+  {
+  }
+
+  // Whether the backend needs render_floats to publish each float's own
+  // cells (see FloatOverlay::cells). The terminal paints floats into the
+  // grid directly; the GUI overlay pass repaints them from the captures.
+  virtual bool wants_float_cells() const
+  {
+    return false;
+  }
+
+  // Screen rects (grid cells) of every visible float, newest layout from
+  // LuaAPI::render_floats(), ordered back-to-front (zindex). Filled every
+  // frame; empty when no floats are visible.
+  std::vector<FloatOverlay> float_overlays;
 
   // Store cursor position/visibility, no terminal writes. render() emits
   // the cursor at frame-end; flush_cursor() emits it for idle frames.

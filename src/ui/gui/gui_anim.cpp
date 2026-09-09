@@ -93,6 +93,14 @@ bool UIGui::needs_repaint() const
       return true;
     }
   }
+  // Float overlays: while a surface's entrance/exit transition, eased
+  // position, colors, or the modal scrim are still converging (sidebar
+  // slide, toast drift, fade dissolve), keep repainting so the easing
+  // advances at the monitor's refresh instead of only on Lua's 50ms ticks.
+  if (float_anims_transitioning_ || float_colors_transitioning_ || scrim_transitioning_)
+  {
+    return true;
+  }
   return false;
 }
 
