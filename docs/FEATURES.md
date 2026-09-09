@@ -257,7 +257,7 @@ API.
 | `Ctrl+D` | Select next occurrence (multi-cursor) |
 | `Ctrl+Shift+D` | Duplicate current line |
 | `Ctrl+K` | Delete current line |
-| `Ctrl+/` | Toggle comment |
+| `Ctrl+/` | Toggle comment (138 languages, per-extension comment markers) |
 | `Ctrl+Backspace` / `Ctrl+Delete` | Delete previous / next word |
 | `Ctrl+Enter` / `Ctrl+Shift+Enter` | Insert line below / above |
 | `Alt+Enter` / `Alt+Shift+Enter` | Terminal fallback: line below / above |
