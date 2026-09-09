@@ -620,6 +620,16 @@ int Terminal::read_key()
         if (read_char_with_timeout(third, 5))
         {
           bytes.push_back(third);
+          // Focus reporting (DECSET 1004): CSI I = focus-in, CSI O =
+          // focus-out. Single-char finals, no parameters.
+          if (third == 'I')
+          {
+            return 1021;
+          }
+          if (third == 'O')
+          {
+            return 1022;
+          }
           if (third == '<')
           {
             mouse_event_buffer.clear();
@@ -849,6 +859,18 @@ Event Terminal::read_event()
   {
     ev.type = EVENT_PASTE;
     ev.paste.text = paste_event_buffer.c_str();
+    return ev;
+  }
+
+  if (ch == 1021)
+  {
+    ev.type = EVENT_FOCUS_IN;
+    return ev;
+  }
+
+  if (ch == 1022)
+  {
+    ev.type = EVENT_FOCUS_OUT;
     return ev;
   }
 
@@ -1219,6 +1241,24 @@ void Terminal::disable_mouse_hover()
   buffer += "\x1b[?1002h";
   buffer += "\x1b[?1006h";
   flush();
+}
+
+void Terminal::enable_focus_reporting()
+{
+  buffer += "\x1b[?1004h";
+  flush();
+}
+
+void Terminal::disable_focus_reporting()
+{
+  // NOTE: ?1004l is deliberately NOT emitted here. On some terminals
+  // (kitty, foot) disabling focus reporting while unfocused races with the
+  // compositor's surface teardown: the mode-reset can discard the
+  // already-queued repaint, leaving the window blank until the next input.
+  // The mode is per-application and dies with the PTY anyway, and
+  // restore_terminal() leaves the host shell untouched either way.
+  // Kept as a no-op for API symmetry; see disable_mouse() for the modes
+  // that genuinely must be reset.
 }
 
 void Terminal::save_cursor()

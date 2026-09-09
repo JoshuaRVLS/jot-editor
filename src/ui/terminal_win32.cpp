@@ -1189,6 +1189,18 @@ void Terminal::disable_mouse_hover()
   flush();
 }
 
+void Terminal::enable_focus_reporting()
+{
+  buffer += "\x1b[?1004h";
+  flush();
+}
+
+void Terminal::disable_focus_reporting()
+{
+  // Deliberately a no-op; see the POSIX backend for the rationale (mode
+  // reset racing compositor surface teardown on focus change).
+}
+
 void Terminal::save_cursor()
 {
   buffer += "\x1b[s";

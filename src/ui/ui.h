@@ -106,6 +106,13 @@ public:
   UI(Terminal *t);
   void resize(int w, int h);
   void invalidate();
+  // Forget what was last written to the terminal: the next render() must
+  // repaint every row from scratch instead of diffing against last_grid.
+  // Used when the terminal surface may have changed without us (window
+  // refocus under a compositor, VT redraw after suspend) — the model is
+  // still correct, only the physical screen is stale, so unlike
+  // invalidate() this emits no clear and touches no cursor state.
+  void forget_last_frame();
 
   void clear();
   void render();

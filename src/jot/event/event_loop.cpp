@@ -523,6 +523,47 @@ void Editor::handle_terminal_event(const Event &ev)
     return;
   }
 
+  // Window focus reporting (DECSET 1004): while unfocused the compositor
+  // may repaint our surface from a stale buffer (transparency/blur mixes
+  // whatever is behind the window into the cached frame), and the
+  // cell-diff renderer then skips repainting rows it believes are already
+  // correct. Forgetting the last written frame forces every row back out
+  // on top of whatever is (or isn't) there — no ESC[2J clear, which races
+  // compositor surface teardown and blanks the window instead of fixing
+  // it. The repaint is spread over three passes (~50ms apart): kitty with
+  // dynamic opacity + Hyprland transparency needs more than one frame for
+  // the surface opacity to settle after refocus; a single repaint lands
+  // while the surface is still recompositing and the gaps keep the stale
+  // background. Focus-out needs no repaint; it only marks state for a
+  // future focus-in.
+  if (ev.type == EVENT_FOCUS_IN)
+  {
+    ui->forget_last_frame();
+    needs_redraw = true;
+    // Second and third repaints after the surface settles: each re-forgets
+    // so the full-row pass really re-emits (a plain needs_redraw would be
+    // a no-op once the model matches the baseline again). One-shot timers;
+    // render() consumes needs_redraw, the timer only re-arms it.
+    event_loop_.set_timeout(60,
+                            [this]
+                            {
+                              ui->forget_last_frame();
+                              needs_redraw = true;
+                            });
+    event_loop_.set_timeout(150,
+                            [this]
+                            {
+                              ui->forget_last_frame();
+                              needs_redraw = true;
+                            });
+    return;
+  }
+
+  if (ev.type == EVENT_FOCUS_OUT)
+  {
+    return;
+  }
+
   if (ev.type == EVENT_KEY)
   {
     keyboard_press_count++;
@@ -895,6 +936,7 @@ void Editor::run()
     update_pane_layout();
   }
   terminal.enable_mouse_hover();
+  terminal.enable_focus_reporting();
   lsp_mouse_hover_enabled = true;
 
   needs_redraw = true;

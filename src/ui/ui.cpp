@@ -201,6 +201,26 @@ void UI::mark_all_rows_dirty()
   row_dirty.assign(height, (unsigned char)1);
 }
 
+void UI::forget_last_frame()
+{
+  // Poison the baseline so every row fails the identical-check and gets
+  // repainted, without emitting ESC[2J and without touching cursor state.
+  // last_grid keeps its dimensions; only the contents are invalidated.
+  for (int y = 0; y < height; y++)
+  {
+    if (y >= (int)last_grid.size())
+    {
+      break;
+    }
+    for (int x = 0; x < width && x < (int)last_grid[y].size(); x++)
+    {
+      last_grid[y][x].ch = "\x1b invalidated";
+    }
+  }
+  renders_since_full_paint_ = 0;
+  mark_all_rows_dirty();
+}
+
 void UI::resize(int w, int h)
 {
   int new_w = std::max(1, w);
@@ -449,8 +469,10 @@ void UI::render()
     }
     else if (paint_all)
     {
-      // Full repaint (capture mode / periodic self-heal): the terminal
-      // state cannot be assumed, so the row is written out completely.
+      // Full repaint (capture mode / periodic self-heal / post-refocus):
+      // the terminal state cannot be assumed, so the row is written out
+      // completely. No trailing clear-to-end here (see below): only the
+      // row's own cells are written.
       emit_full_row(y, row_width);
     }
     else
@@ -468,10 +490,16 @@ void UI::render()
     // disabled, the cursor stays at the end of the written text and
     // the erase is bounded to the current row.
     // Move past the painted cells before erasing the untouched margin.
-    // Full-row paints only: a diff row leaves the unchanged tail (and
-    // the never-painted margin) exactly as the terminal already shows
-    // them, so erasing would be redundant work.
-    if (capture_raw || paint_all)
+    // Full-row paints below skip this: on transparent compositor
+    // surfaces EL erases to the terminal's default background, which
+    // fights the composited transparency and leaves default-bg bands
+    // (stale inter-code gaps, broken empty-line backgrounds) after a
+    // refocus repaint. Diff rows leave the unchanged tail (and the
+    // never-painted margin) exactly as the terminal already shows
+    // them, so erasing would be redundant work there too.
+    // Only capture_raw keeps the erase, so capture logs stay
+    // unambiguous row-to-row.
+    if (capture_raw)
     {
       term->move_cursor(row_width, y);
       term->clear_to_end();

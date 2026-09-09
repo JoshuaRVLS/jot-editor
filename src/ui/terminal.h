@@ -17,7 +17,9 @@ enum EventType
   EVENT_MOUSE,
   EVENT_RESIZE,
   EVENT_REDRAW,
-  EVENT_PASTE
+  EVENT_PASTE,
+  EVENT_FOCUS_IN,
+  EVENT_FOCUS_OUT
 };
 
 namespace KeyCode
@@ -193,6 +195,12 @@ public:
   void disable_mouse();
   void enable_mouse_hover();
   void disable_mouse_hover();
+  // Focus reporting (DECSET 1004): the terminal sends CSI I on window
+  // focus-in and CSI O on focus-out. Used to force a full repaint when
+  // the window regains focus (compositors may repaint the surface from a
+  // stale buffer while the app was unfocused).
+  void enable_focus_reporting();
+  void disable_focus_reporting();
 
   void save_cursor();
   void restore_cursor();
