@@ -34,6 +34,7 @@ add_executable(jot_tests
   test_inlay_hints.cpp
   test_commenting.cpp
   test_sidebar_guides.cpp
+  test_blank_guides.cpp
 )
 
 target_link_libraries(jot_tests PRIVATE

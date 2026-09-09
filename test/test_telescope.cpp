@@ -192,3 +192,26 @@ TEST_CASE("Telescope Invalidate Cache Resets Results", "[jot]")
   telescope.set_query("", nullptr, {});
   REQUIRE(telescope.get_result_count() >= 0);
 }
+
+TEST_CASE("Telescope Fuzzy Match Positions Highlight The Consumed Characters", "[jot]")
+{
+  // "telescope.cpp": t@0, s@4, p@7 (greedy left-to-right like fuzzy_match).
+  REQUIRE(Telescope::fuzzy_match_positions("telescope.cpp", "tsp")
+          == std::vector<int>{0, 4, 7});
+  // Case-insensitive: "ro" lands on the first r and the first later o.
+  REQUIRE(Telescope::fuzzy_match_positions("RenderOverlay", "ro")
+          == std::vector<int>{0, 6});
+  // Consecutive query characters highlight consecutively.
+  REQUIRE(Telescope::fuzzy_match_positions("RenderOverlay", "Re")
+          == std::vector<int>{0, 1});
+  // No match (or empty query) -> no highlight offsets.
+  REQUIRE(Telescope::fuzzy_match_positions("README.md", "xyz").empty());
+  REQUIRE(Telescope::fuzzy_match_positions("README.md", "").empty());
+  // Multibyte text: ASCII queries only ever match ASCII bytes, and a
+  // multibyte query byte-matches its own rune (both bytes of é), so the
+  // highlight spans cover the whole glyph.
+  REQUIRE(Telescope::fuzzy_match_positions("café.txt", "caf")
+          == std::vector<int>{0, 1, 2});
+  REQUIRE(Telescope::fuzzy_match_positions("café.txt", "é")
+          == std::vector<int>{3, 4});
+}

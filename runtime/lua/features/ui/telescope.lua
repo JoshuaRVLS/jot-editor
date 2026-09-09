@@ -208,10 +208,13 @@ local function telescope(p)
     local is_selected = (p.selected or -1) == (p.list_scroll or 0) + i - 1
     -- ASCII-safe directory marker: "▸" (U+25B8) is missing from several
     -- terminal fonts and renders as "??", so use ">" which is universally
-    -- present. Files keep a two-space indent so names still align.
-    local icon = r.is_directory and "> " or "  "
+    -- present. Files carry their per-language glyph in the brand color
+    -- (like the sidebar) and keep a trailing space so names still align.
+    local icon = r.is_directory and "> "
+      or (r.icon ~= nil and r.icon ~= "" and (r.icon .. " ") or "  ")
     local icon_fg = is_selected and t_sel_fg
-      or (r.is_directory and (colors.sidebar_directory or accent) or t_fg)
+      or (r.is_directory and (colors.sidebar_directory or accent)
+          or (r.icon_fg ~= nil and r.icon_fg >= 0 and r.icon_fg or t_fg))
     local parent = (r.parent_path or "") == "." and "" or r.parent_path or ""
     local parent_w = parent == ""
         and 0
@@ -223,17 +226,32 @@ local function telescope(p)
     local name_budget = math.max(1, list_w - cell_len(icon) - parent_w - gap)
     local raw_name = r.name or ""
     local name = trunc_cells(raw_name, name_budget)
+    local ellipsis_bytes = 0
     if parent_w > 0 and cell_len(raw_name) > name_budget and name_budget >= 2 then
       -- Signal truncation with an ellipsis inside the budget.
       name = trunc_cells(raw_name, name_budget - 1) .. "…"
+      ellipsis_bytes = 3
     end
     local row_fg = is_selected and t_sel_fg or t_fg
     local row_bg = is_selected and t_sel_bg or t_bg
     local row_off = put(b, list_col, icon .. name, row_fg, row_bg)
-    -- Re-tint the icon on the selected row so it stays readable against the
-    -- highlight; row_off is the byte offset where the icon was appended.
-    if is_selected and row_off >= 0 then
+    -- Paint the icon in its own color (brand color for files, directory
+    -- color for folders, selection fg when selected so it stays readable
+    -- against the highlight); row_off is the byte offset of the icon.
+    if row_off >= 0 then
       span(b, row_off, #icon, icon_fg, row_bg)
+    end
+    -- Highlight the characters the query consumed in the name (telescope's
+    -- TelescopeMatching). r.match holds byte offsets into the raw name; the
+    -- rendered name is a prefix of it, so offsets beyond the rendered text
+    -- (or inside the trailing ellipsis) are dropped.
+    if row_off >= 0 and r.match and #r.match > 0 then
+      local match_fg = is_selected and t_sel_fg or accent
+      for _, m in ipairs(r.match) do
+        if m >= 0 and m + 1 <= #name - ellipsis_bytes then
+          span(b, row_off + #icon + m, 1, match_fg, row_bg)
+        end
+      end
     end
     if parent_w > 0 and r.parent_path then
       put(b,

@@ -82,7 +82,8 @@ pick up where you left off.
 - Selection-scoped replace via `Ctrl+Shift+F` — or project-wide search when
   nothing is selected.
 - Go to line, bookmarks, and a fuzzy file finder (telescope) with mouse
-  support and syntax-highlighted previews.
+  support, syntax-highlighted previews, matched-character highlighting and
+  per-language colored file icons in the results.
 - Picker for project-wide text search, diagnostics, and document symbols, plus
   a persistent outline panel (`:outline`).
 

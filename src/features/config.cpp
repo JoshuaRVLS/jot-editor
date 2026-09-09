@@ -83,7 +83,7 @@ void Config::load_defaults()
   settings["show_explorer"] = "true";
   settings["show_minimap"] = "true";
   settings["tab_size"] = "2";
-  settings["show_indent_guides"] = "false";
+  settings["show_indent_guides"] = "true";
   settings["auto_indent"] = "true";
   settings["smart_paste_indent"] = "true";
   settings["auto_save"] = "false";

@@ -403,6 +403,16 @@ bool LuaAPI::emit_telescope(const TelescopeView &view)
                          lua_set_str_field(L, it, "name", r.name);
                          lua_set_str_field(L, it, "parent_path", r.parent_path);
                          lua_set_bool_field(L, it, "is_directory", r.is_directory);
+                         lua_set_str_field(L, it, "icon", r.icon);
+                         lua_set_int_field(L, it, "icon_fg", r.icon_fg);
+                         lua_newtable(L);
+                         const int m = lua_gettop(L);
+                         for (size_t k = 0; k < r.match.size(); k++)
+                         {
+                           lua_pushinteger(L, r.match[k]);
+                           lua_rawseti(L, m, (lua_Integer)k + 1);
+                         }
+                         lua_setfield(L, it, "match");
                          lua_rawseti(L, arr, (lua_Integer)i + 1);
                        }
                        lua_setfield(L, t, "results");

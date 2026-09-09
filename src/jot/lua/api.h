@@ -106,6 +106,9 @@ struct TelescopeResultView
   std::string name;
   std::string parent_path;
   bool is_directory = false;
+  std::vector<int> match; // byte offsets into name matched by the query
+  std::string icon;       // per-language file glyph (empty for directories)
+  int icon_fg = -1;       // brand color index, -1 = use the row foreground
 };
 
 struct TelescopePreviewView

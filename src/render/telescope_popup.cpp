@@ -3,6 +3,7 @@
 #include "column_utils.h"
 #include "editor.h"
 #include "folding.h"
+#include "jot/file_icons.h"
 #include "jot/lua/api.h"
 #include "render/overlay_internal.h"
 #include "ui/text.h"
@@ -84,6 +85,15 @@ void Editor::render_telescope()
       rv.name = results[(size_t)i].name;
       rv.parent_path = results[(size_t)i].parent_path;
       rv.is_directory = results[(size_t)i].is_directory;
+      rv.match = results[(size_t)i].match;
+      if (!results[(size_t)i].is_directory)
+      {
+        // Per-language file glyph in its brand color, like the sidebar.
+        const jot_icons::FileTypeIcon fti =
+            jot_icons::file_type_icon(results[(size_t)i].name);
+        rv.icon = std::string(fti.glyph);
+        rv.icon_fg = fti.color;
+      }
       view.results.push_back(std::move(rv));
     }
     if (layout.show_preview && selected >= 0 && selected < (int)results.size())
@@ -226,16 +236,33 @@ void Editor::render_telescope()
     }
 
     std::string icon = telescope_icon(results[i].is_directory, use_nerd_icons);
+    int icon_fg = -1;
+    if (!results[i].is_directory)
+    {
+      const jot_icons::FileTypeIcon fti = jot_icons::file_type_icon(results[i].name);
+      if (fti.glyph && fti.glyph[0])
+      {
+        icon = std::string(fti.glyph) + " ";
+        icon_fg = fti.color;
+      }
+    }
+    const int icon_cells = ui_cell_count(icon);
     std::string name = results[i].name;
     std::string parent = results[i].parent_path == "." ? "" : "  " + results[i].parent_path;
     int parent_w = std::min(ui_cell_count(parent), std::max(0, layout.list_w / 2));
-    int name_w = std::max(1, layout.list_w - ui_cell_count(icon) - parent_w);
-    std::string row = icon + clip_text(name, name_w);
+    int name_w = std::max(1, layout.list_w - icon_cells - parent_w);
+    std::string rest = clip_text(name, name_w);
     if (parent_w > 0)
     {
-      row += clip_path_left(parent, parent_w);
+      rest += clip_path_left(parent, parent_w);
     }
-    ui->draw_text(layout.list_x, row_y, clip_text(row, layout.list_w), fg, bg, i == selected);
+    ui->draw_text(layout.list_x, row_y, icon, icon_fg >= 0 ? icon_fg : fg, bg);
+    ui->draw_text(layout.list_x + icon_cells,
+                  row_y,
+                  clip_text(rest, std::max(0, layout.list_w - icon_cells)),
+                  fg,
+                  bg,
+                  i == selected);
   }
 
   if (layout.show_preview)

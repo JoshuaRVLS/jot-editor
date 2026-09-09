@@ -1,6 +1,7 @@
 // Buffer content rendering: the main viewport paint pass plus the small
 // indent-column and fold-row helpers it uses. Bracket and diagnostic helpers
 // live in bracket.cpp and diagnostics.cpp.
+#include "blank_guides.h"
 #include "column_utils.h"
 #include "editor.h"
 #include "folding.h"
@@ -1101,6 +1102,48 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
         {
           ui->draw_text(
               current_x + guide_vis_idx, draw_y, "│", theme.fg_bracket_match, theme.bg_default);
+        }
+      }
+
+      // Blank lines inherit the next non-blank line's indent guides
+      // (indent-blankline's blankline rule) so the guide column stays a
+      // continuous vertical line across empty rows. Trailing blanks at
+      // EOF draw nothing, and a blank run just before a closer (`}`, `)`,
+      // `]`, `end`) keeps the previous indent level instead. The same
+      // tab-stop rule as the character walk; the bracket-match column is
+      // skipped since the pass above already painted it.
+      if (show_indent_guides && tab_size > 0 && line.empty())
+      {
+        const int src_idx = blank_guides::guide_source_line(
+            (int)buf.line_count(), [&](int i) -> const std::string & { return buf.line(i); },
+            line_idx);
+        if (src_idx >= 0)
+        {
+          const std::string &src_line = buf.line(src_idx);
+          const int src_ws_end = blank_guides::leading_ws(src_line);
+          if (src_ws_end > 0)
+          {
+            const std::vector<int> src_visual =
+                build_visual_columns(src_line, tab_size, src_ws_end);
+            for (int col = start_visual; col < src_visual[src_ws_end]; col++)
+            {
+              if (col % tab_size != 0)
+              {
+                continue;
+              }
+              if (active_guide_on_row() && col == bracket_guide.visual_column)
+              {
+                continue;
+              }
+              const int vis_idx = col - start_visual;
+              if (vis_idx >= visible_len)
+              {
+                break;
+              }
+              ui->draw_text(
+                  current_x + vis_idx, draw_y, "│", theme.fg_line_num, theme.bg_default);
+            }
+          }
         }
       }
     }

@@ -19,6 +19,10 @@ struct FileMatch
   std::string parent_path;
   int score;
   bool is_directory;
+  // 0-based byte offsets into `name` of the characters the query consumed,
+  // or empty when the query did not match the name (or matching was unsafe).
+  // The picker highlights these like telescope's TelescopeMatching group.
+  std::vector<int> match;
 };
 
 struct TelescopePreview
@@ -170,6 +174,12 @@ public:
 
   static bool fuzzy_match(const std::string &text, const std::string &pattern);
   static int fuzzy_score(const std::string &text, const std::string &pattern);
+  // Greedy match positions mirroring fuzzy_match: byte offsets into `text`
+  // of the characters the query consumed (empty when there is no match or
+  // when case folding changes the byte length, which would make offsets
+  // unsafe).
+  static std::vector<int> fuzzy_match_positions(const std::string &text,
+                                                const std::string &pattern);
   // Composite ranking used by both the sync and async result builders:
   // name*2 + path + bonuses, minus a penalty for duplicate/generated-looking
   // names ("foo (1).c", "foo - Copy.c") and plus a boost for real source

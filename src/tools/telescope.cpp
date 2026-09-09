@@ -305,6 +305,13 @@ void Telescope::publish_filtered()
     {
       continue;
     }
+    // Highlight the characters the query consumed in the displayed name
+    // (only when the name itself matched; a path-only match highlights
+    // nothing rather than pointing at the wrong glyphs).
+    if (!query_lc.empty() && fuzzy_match(match.name, query_lc))
+    {
+      match.match = fuzzy_match_positions(match.name, query_lc);
+    }
     match.score = rank_score(match.name, match.relative_path, query_lc, match.is_directory);
     filtered.push_back(std::move(match));
   }
@@ -743,6 +750,45 @@ bool Telescope::fuzzy_match(const std::string &text, const std::string &pattern)
     }
   }
   return pattern_idx == pattern_lower.length();
+}
+
+std::vector<int> Telescope::fuzzy_match_positions(const std::string &text,
+                                                  const std::string &pattern)
+{
+  std::vector<int> positions;
+  if (pattern.empty() || text.empty())
+  {
+    return positions;
+  }
+  const std::string text_lower = string_util::lower_copy(text);
+  const std::string pattern_lower = string_util::lower_copy(pattern);
+  if (text_lower.size() != text.size())
+  {
+    // Case folding changed the byte length, so offsets into `text` would be
+    // wrong; skip highlighting rather than paint the wrong characters.
+    return positions;
+  }
+  size_t pos = 0;
+  for (char qc : pattern_lower)
+  {
+    bool found = false;
+    for (; pos < text_lower.size(); pos++)
+    {
+      if (text_lower[pos] == qc)
+      {
+        positions.push_back((int)pos);
+        pos++;
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+    {
+      positions.clear();
+      return positions;
+    }
+  }
+  return positions;
 }
 
 int Telescope::fuzzy_score(const std::string &text, const std::string &pattern)
