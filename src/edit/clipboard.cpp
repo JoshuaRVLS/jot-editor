@@ -20,19 +20,6 @@
 #include <windows.h>
 #endif
 
-bool command_exists(const char *cmd)
-{
-#ifdef _WIN32
-  (void)cmd;
-  return false;
-#else
-  std::string check = "command -v ";
-  check += cmd;
-  check += " >/dev/null 2>&1";
-  return std::system(check.c_str()) == 0;
-#endif
-}
-
 #ifndef _WIN32
 bool wayland_session()
 {
@@ -42,7 +29,7 @@ bool wayland_session()
 
 bool write_wl_clipboard(const std::string &text)
 {
-  if (!command_exists("wl-copy"))
+  if (!shell_util::command_exists("wl-copy"))
     return false;
   FILE *pipe = shell_util::open_command_pipe("wl-copy", "w");
   if (!pipe)
@@ -53,7 +40,7 @@ bool write_wl_clipboard(const std::string &text)
 
 bool write_xclip_selection(const std::string &text)
 {
-  if (!command_exists("xclip"))
+  if (!shell_util::command_exists("xclip"))
     return false;
   FILE *pipe = shell_util::open_command_pipe("xclip -selection clipboard -in", "w");
   if (!pipe)
@@ -64,7 +51,7 @@ bool write_xclip_selection(const std::string &text)
 
 bool read_wl_clipboard(std::string &candidate)
 {
-  if (!command_exists("wl-paste"))
+  if (!shell_util::command_exists("wl-paste"))
     return false;
   FILE *pipe = shell_util::open_command_pipe("wl-paste --no-newline 2>/dev/null", "r");
   if (!pipe)
@@ -82,7 +69,7 @@ bool read_wl_clipboard(std::string &candidate)
 
 bool read_xclip_selection(std::string &candidate)
 {
-  if (!command_exists("xclip"))
+  if (!shell_util::command_exists("xclip"))
     return false;
   FILE *pipe = shell_util::open_command_pipe("xclip -selection clipboard -out 2>/dev/null", "r");
   if (!pipe)

@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "lsp_attach_data.h"
+#include "tools/string_util.h"
 #include "tree_sitter/manager.h"
 #include <algorithm>
 #include <filesystem>
@@ -14,12 +15,6 @@ namespace
   // Lines no longer than this are highlighted whole and cached; only longer
   // lines use windowed highlighting bounded by the visible width.
   constexpr int kFullHighlightLineBytes = 4096;
-
-  bool ext_ends_with(const std::string &s, const std::string &suffix)
-  {
-    return s.size() >= suffix.size()
-           && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
-  }
 
   // Best-effort human label for a filetype the LSP catalog knows but that has
   // no tree-sitter grammar or regex rules (e.g. .astro, .tfvars). Kept next to
@@ -55,7 +50,7 @@ namespace
         stripped = false;
         for (const char *suffix : suffixes)
         {
-          if (ext_ends_with(name, suffix))
+          if (string_util::ends_with(name, suffix))
           {
             name.resize(name.size() - std::string(suffix).size());
             stripped = true;

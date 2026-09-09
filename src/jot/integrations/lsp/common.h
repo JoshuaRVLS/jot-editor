@@ -30,8 +30,7 @@ namespace lsp_internal
 
   inline bool ends_with(const std::string &s, const std::string &suffix)
   {
-    return s.size() >= suffix.size()
-           && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+    return string_util::ends_with(s, suffix);
   }
 
   inline bool lower_ends_with_dot_ext(const std::string &lower, const std::string &ext)

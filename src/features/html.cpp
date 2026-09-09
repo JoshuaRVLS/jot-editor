@@ -1,4 +1,5 @@
 #include "html.h"
+#include "tools/string_util.h"
 #include <algorithm>
 #include <cctype>
 #include <set>
@@ -6,19 +7,6 @@
 
 namespace
 {
-  std::string lower(std::string s)
-  {
-    std::transform(
-        s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-    return s;
-  }
-
-  bool ends_with(const std::string &s, const std::string &suffix)
-  {
-    return s.size() >= suffix.size()
-           && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
-  }
-
   bool name_char(char c)
   {
     return std::isalnum((unsigned char)c) || c == '-' || c == '_' || c == ':' || c == '.';
@@ -40,7 +28,7 @@ namespace
                                                "source",
                                                "track",
                                                "wbr"};
-    return tags.count(lower(tag)) != 0;
+    return tags.count(string_util::lower_copy(tag)) != 0;
   }
 
   bool can_start_markup_tag(const std::string &line, int lt)
@@ -69,7 +57,7 @@ namespace
     {
       i--;
     }
-    std::string word = lower(line.substr(i + 1, word_end - (i + 1)));
+    std::string word = string_util::lower_copy(line.substr(i + 1, word_end - (i + 1)));
     return word == "return";
   }
 } // namespace
@@ -78,14 +66,14 @@ namespace HtmlFeatures
 {
   bool is_html_extension(const std::string &path)
   {
-    std::string p = lower(path);
-    return ends_with(p, ".html") || ends_with(p, ".htm");
+    std::string p = string_util::lower_copy(path);
+    return string_util::ends_with(p, ".html") || string_util::ends_with(p, ".htm");
   }
 
   bool is_jsx_extension(const std::string &path)
   {
-    std::string p = lower(path);
-    return ends_with(p, ".jsx") || ends_with(p, ".tsx");
+    std::string p = string_util::lower_copy(path);
+    return string_util::ends_with(p, ".jsx") || string_util::ends_with(p, ".tsx");
   }
 
   bool is_markup_tag_extension(const std::string &path)

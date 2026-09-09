@@ -105,6 +105,17 @@ namespace shell_util
     return 1;
 #endif
   }
+
+  // True when the named program is on PATH (where / command -v).
+  inline bool command_exists(const std::string &name)
+  {
+#ifdef _WIN32
+    const std::string check = "where " + name + " >NUL 2>NUL";
+#else
+    const std::string check = "command -v " + name + " >/dev/null 2>&1";
+#endif
+    return std::system(check.c_str()) == 0;
+  }
 } // namespace shell_util
 
 #endif // SHELL_UTIL_H

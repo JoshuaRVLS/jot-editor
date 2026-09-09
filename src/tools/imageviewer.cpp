@@ -34,18 +34,6 @@ namespace
 #endif
   }
 
-  bool command_exists(const char *cmd)
-  {
-#ifdef _WIN32
-    std::string check = "where ";
-    check += cmd;
-    check += " >NUL 2>NUL";
-#else
-    std::string check = std::string("command -v ") + cmd + " >/dev/null 2>&1";
-#endif
-    return std::system(check.c_str()) == 0;
-  }
-
   bool env_present(const char *name)
   {
     const char *value = std::getenv(name);
@@ -297,7 +285,7 @@ bool ImageViewer::helper_available(const std::string &cmd)
 {
   if (cmd.empty())
     return false;
-  return command_exists(cmd.c_str());
+  return shell_util::command_exists(cmd);
 }
 
 std::string ImageViewer::base64_encode(const std::string &input)
@@ -472,7 +460,7 @@ std::string ImageViewer::get_image_info(const std::string &path)
     std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
     std::string dims;
-    if (command_exists("identify"))
+    if (shell_util::command_exists("identify"))
     {
       std::string cmd = "identify -format '%wx%h' " + shell_util::shell_quote(path) + shell_util::null_redirect();
       FILE *pipe = shell_util::open_command_pipe(cmd, "r");
@@ -524,7 +512,7 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
   ascii_preview.push_back(info);
   ascii_preview.push_back("");
 
-  if (command_exists("convert"))
+  if (shell_util::command_exists("convert"))
   {
     const int target_w = 56;
     const int target_h = 24;
@@ -571,7 +559,7 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
   }
 
   // Best quality terminal preview path.
-  if (command_exists("chafa"))
+  if (shell_util::command_exists("chafa"))
   {
     const int target_w = 56;
     const int target_h = 24;
@@ -608,7 +596,7 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
   }
 
   bool rendered_ascii = false;
-  if (command_exists("convert"))
+  if (shell_util::command_exists("convert"))
   {
     const int target_w = 56;
     const int target_h = 24;

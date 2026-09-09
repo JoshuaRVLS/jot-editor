@@ -52,25 +52,16 @@ namespace
 #endif
   }
 
-  bool command_exists(const std::string &name)
-  {
-#ifdef _WIN32
-    return std::system(("where " + name + command_silence_redirect()).c_str()) == 0;
-#else
-    return std::system(("command -v " + name + command_silence_redirect()).c_str()) == 0;
-#endif
-  }
-
   std::string detect_prettier_runner()
   {
     static int mode = -1; // -1 unknown, 0 unavailable, 1 prettier, 2 npx
     if (mode == -1)
     {
-      if (command_exists("prettier"))
+      if (shell_util::command_exists("prettier"))
       {
         mode = 1;
       }
-      else if (command_exists("npx"))
+      else if (shell_util::command_exists("npx"))
       {
         mode = 2;
       }
@@ -95,7 +86,7 @@ namespace
     static int mode = -1; // -1 unknown, 0 unavailable, 1 clang-format
     if (mode == -1)
     {
-      mode = command_exists("clang-format") ? 1 : 0;
+      mode = shell_util::command_exists("clang-format") ? 1 : 0;
     }
     return mode == 1 ? "clang-format" : "";
   }

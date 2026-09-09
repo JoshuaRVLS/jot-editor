@@ -64,6 +64,36 @@ namespace string_util
     }
     return text.substr(0, end);
   }
+
+  // True when `s` ends with `suffix`.
+  inline bool ends_with(const std::string &s, const std::string &suffix)
+  {
+    return s.size() >= suffix.size()
+           && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+  }
+
+  // True when `value` starts with `prefix`.
+  inline bool starts_with(const std::string &value, const std::string &prefix)
+  {
+    return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
+  }
+
+  // True when `value` starts with `prefix`, ignoring ASCII case.
+  inline bool starts_with_icase(const std::string &value, const std::string &prefix)
+  {
+    if (prefix.size() > value.size())
+    {
+      return false;
+    }
+    for (size_t i = 0; i < prefix.size(); i++)
+    {
+      if (std::tolower((unsigned char)value[i]) != std::tolower((unsigned char)prefix[i]))
+      {
+        return false;
+      }
+    }
+    return true;
+  }
 } // namespace string_util
 
 #endif // STRING_UTIL_H

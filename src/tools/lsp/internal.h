@@ -38,7 +38,6 @@ namespace lsp_detail
   // --- URI / language conversions (protocol.cpp) ---
   std::string to_file_uri(const std::string &path);
   std::string from_file_uri(const std::string &uri);
-  bool ends_with(const std::string &s, const std::string &suffix);
   std::string language_id_for(const std::string &language, const std::string &filepath);
   bool extract_content_length(const std::string &headers, size_t &length_out);
 

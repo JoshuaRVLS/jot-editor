@@ -1,6 +1,7 @@
 #include "editor.h"
 #include "jot/lua/api.h"
 #include "jot/workspace/git_run.h"
+#include "tools/string_util.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -24,11 +25,6 @@ namespace
       p = fs::path(path);
     }
     return p.lexically_normal().string();
-  }
-
-  bool starts_with_prefix(const std::string &value, const std::string &prefix)
-  {
-    return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
   }
 
   std::string parse_branch_name(const std::string &line)
@@ -254,7 +250,7 @@ bool Editor::open_git_diff_panel(const std::string &path, bool staged)
   fs::path input(target);
   std::string rel = input.is_absolute() ? to_git_relative_path(target) : input.generic_string();
 
-  if (rel.empty() || rel[0] == '/' || starts_with_prefix(rel, "../"))
+  if (rel.empty() || rel[0] == '/' || string_util::starts_with(rel, "../"))
   {
     set_message("Git diff: path outside repo");
     return false;
@@ -356,7 +352,7 @@ std::string Editor::to_git_relative_path(const std::string &path) const
   fs::path root = fs::path(git_root);
   fs::path rel = abs_path.lexically_relative(root);
   std::string rel_s = rel.generic_string();
-  if (rel_s.empty() || rel_s == "." || starts_with_prefix(rel_s, "../"))
+  if (rel_s.empty() || rel_s == "." || string_util::starts_with(rel_s, "../"))
   {
     return abs_path.generic_string();
   }
@@ -371,7 +367,7 @@ bool Editor::git_stage_path(const std::string &path)
   }
   fs::path input(path);
   std::string rel = input.is_absolute() ? to_git_relative_path(path) : input.generic_string();
-  if (rel.empty() || rel[0] == '/' || starts_with_prefix(rel, "../"))
+  if (rel.empty() || rel[0] == '/' || string_util::starts_with(rel, "../"))
   {
     return false;
   }
@@ -392,7 +388,7 @@ bool Editor::git_unstage_path(const std::string &path)
   }
   fs::path input(path);
   std::string rel = input.is_absolute() ? to_git_relative_path(path) : input.generic_string();
-  if (rel.empty() || rel[0] == '/' || starts_with_prefix(rel, "../"))
+  if (rel.empty() || rel[0] == '/' || string_util::starts_with(rel, "../"))
   {
     return false;
   }

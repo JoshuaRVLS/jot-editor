@@ -231,18 +231,7 @@ namespace CommandLineUtils
 
   bool starts_with_icase(const std::string &value, const std::string &prefix)
   {
-    if (prefix.size() > value.size())
-    {
-      return false;
-    }
-    for (size_t i = 0; i < prefix.size(); i++)
-    {
-      if (std::tolower((unsigned char)value[i]) != std::tolower((unsigned char)prefix[i]))
-      {
-        return false;
-      }
-    }
-    return true;
+    return string_util::starts_with_icase(value, prefix);
   }
 
   bool command_takes_argument(const std::string &cmd)
