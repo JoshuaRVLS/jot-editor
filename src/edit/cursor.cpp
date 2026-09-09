@@ -159,7 +159,12 @@ void Editor::ensure_cursor_visible(bool adjust_horizontal)
     if (buf.cursor.y >= 0 && buf.cursor.y < (int)buf.line_count())
     {
       const std::string &line = buf.line(buf.cursor.y);
-      int cursor_visual = compute_visual_column(line, buf.cursor.x, tab_size);
+      // The caret sits after any inlay hints inserted before it, so the
+      // viewport comparison runs in rendered (hint-shifted) coordinates:
+      // scroll_x is the anchor and stays unshifted, matching the renderer.
+      int cursor_visual = compute_visual_column(line, buf.cursor.x, tab_size)
+                          + lsp_inlay_hint_cells_before(
+                              buf.filepath, buf.cursor.y, buf.cursor.x, line);
       int scroll_visual = compute_visual_column(line, buf.scroll_x, tab_size);
       if (cursor_visual < scroll_visual)
       {
@@ -168,19 +173,16 @@ void Editor::ensure_cursor_visible(bool adjust_horizontal)
       else if (cursor_visual >= scroll_visual + viewport_w)
       {
         int cur = buf.scroll_x;
-        int cur_visual = scroll_visual;
         while (cur < (int)line.size())
         {
           int next = ui_next_grapheme_boundary(line, cur);
           if (next <= cur)
             next = cur + 1;
-          int cell_width = (line[cur] == '\t')
-                               ? tab_advance(cur_visual, tab_size)
-                               : std::max(1, ui_cell_count(line.substr(cur, next - cur)));
-          int next_visual = cur_visual + cell_width;
+          int next_visual = compute_visual_column(line, next, tab_size)
+                            + lsp_inlay_hint_cells_before(
+                                buf.filepath, buf.cursor.y, next, line);
           if (next_visual > cursor_visual - viewport_w + 1)
             break;
-          cur_visual = next_visual;
           cur = next;
         }
         buf.scroll_x = cur;

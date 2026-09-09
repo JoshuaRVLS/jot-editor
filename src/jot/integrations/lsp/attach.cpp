@@ -40,7 +40,8 @@ std::string Editor::get_buffer_text(const FileBuffer &buf) const
 LSPClient *Editor::ensure_lsp_client_process(const std::string &server,
                                              const std::string &root_path,
                                              const std::vector<std::string> &command,
-                                             const std::vector<std::string> &library_dirs)
+                                             const std::vector<std::string> &library_dirs,
+                                             const std::string &initialization_options)
 {
   size_t existing_index = lsp_clients.size();
   for (size_t i = 0; i < lsp_clients.size(); i++)
@@ -72,7 +73,8 @@ LSPClient *Editor::ensure_lsp_client_process(const std::string &server,
   {
     return nullptr;
   }
-  auto client = std::make_unique<LSPClient>(server, root_path, command, library_dirs);
+  auto client =
+      std::make_unique<LSPClient>(server, root_path, command, library_dirs, initialization_options);
   if (!client->start())
   {
     set_message("LSP start failed for " + server + ": " + client->get_last_error());
@@ -118,7 +120,22 @@ LSPClient *Editor::ensure_lsp_for_file(const std::string &filepath)
     }
   }
 
-  LSPClient *primary = ensure_lsp_client_process(language, root, command, library_dirs);
+  // clangd keeps deduced-type inlay hints off unless the client enables them
+  // explicitly (the VS Code extension sends the same settings). Parameter
+  // hints are on by default there; both follow the editor's config keys.
+  std::string initialization_options;
+  if (language == "cpp")
+  {
+    const bool parameter_hints = config.get_bool("lsp_inlay_hints", true);
+    const bool type_hints = config.get_bool("lsp_inlay_type_hints", true);
+    initialization_options = "\"inlayHints\":{\"parameterNames\":"
+                             + std::string(parameter_hints ? "true" : "false")
+                             + ",\"deducedTypes\":"
+                             + std::string(type_hints ? "true" : "false") + "}";
+  }
+
+  LSPClient *primary =
+      ensure_lsp_client_process(language, root, command, library_dirs, initialization_options);
   if (!primary)
   {
     return nullptr;

@@ -165,6 +165,10 @@ private:
   // Extra Lua workspace.library dirs (e.g. the bundled jot API stub) sent to
   // the server via workspace/didChangeConfiguration after initialize.
   std::vector<std::string> library_dirs;
+  // Server-specific settings injected as the initialize request's
+  // initializationOptions (raw JSON object body, no braces). clangd keeps
+  // deduced-type inlay hints off by default, so the editor sends them here.
+  std::string initialization_options;
   int stdin_fd;
   int stdout_fd;
   int stderr_fd;
@@ -227,7 +231,8 @@ public:
   LSPClient(const std::string &language_name,
             const std::string &workspace_root,
             const std::vector<std::string> &argv,
-            const std::vector<std::string> &library_dirs = {});
+            const std::vector<std::string> &library_dirs = {},
+            const std::string &initialization_options = {});
   ~LSPClient();
 
   bool start();

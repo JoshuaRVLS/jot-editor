@@ -230,7 +230,8 @@ void Editor::render()
                                          tab_height,
                                          lsp_inlay_hint_cells_before(buf.filepath,
                                                                      buf.cursor.y,
-                                                                     buf.cursor.x),
+                                                                     buf.cursor.x,
+                                                                     buf.line(buf.cursor.y)),
                                          display_x,
                                          display_y))
       {
@@ -444,7 +445,8 @@ void Editor::render()
                                            tab_height,
                                            lsp_inlay_hint_cells_before(buf.filepath,
                                                                        buf.cursor.y,
-                                                                       buf.cursor.x),
+                                                                       buf.cursor.x,
+                                                                       buf.line(buf.cursor.y)),
                                            display_x,
                                            display_y))
         {

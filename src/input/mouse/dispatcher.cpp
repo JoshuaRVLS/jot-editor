@@ -820,10 +820,14 @@ void Editor::handle_mouse(void *event_ptr)
   }
   int click_visual = start_visual + rel_x;
   // Inlay hints insert cells on screen; subtract them so the click lands on
-  // the logical column the user actually sees.
+  // the logical column the user actually sees. Compare against the ORIGINAL
+  // click column: the hint positions live in rendered space, and mutating
+  // click_visual mid-loop would skip hints whose shifted column now sits
+  // above the shrunken value, shoving the cursor right by their widths.
+  const int raw_click_visual = click_visual;
   for (const auto &hw : lsp_inlay_hints_visual(buf.filepath, click_y, clicked_line, tab_size))
   {
-    if (hw.first <= click_visual)
+    if (hw.first <= raw_click_visual)
     {
       click_visual -= hw.second;
     }

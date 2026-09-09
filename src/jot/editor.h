@@ -231,7 +231,10 @@ private:
   void refresh_lsp_inlay_hints_if_needed();
   // Hint cells inserted before `byte_col` on `line` (text shift amount), for
   // caret placement, popup anchoring, and mouse mapping.
-  int lsp_inlay_hint_cells_before(const std::string &filepath, int line, int byte_col);
+  int lsp_inlay_hint_cells_before(const std::string &filepath,
+                                  int line,
+                                  int byte_col,
+                                  const std::string &line_text);
   // (shifted screen column, cell width) pairs for every hint on `line`,
   // mirroring the renderer's layout (used to un-shift mouse clicks).
   std::vector<std::pair<int, int>>
@@ -262,7 +265,8 @@ private:
   LSPClient *ensure_lsp_client_process(const std::string &server,
                                        const std::string &root_path,
                                        const std::vector<std::string> &command,
-                                       const std::vector<std::string> &library_dirs);
+                                       const std::vector<std::string> &library_dirs,
+                                       const std::string &initialization_options = {});
   // All live clients that should receive document notifications for a file:
   // the primary server plus policy extras attached at the same workspace
   // root. Root is returned for callers that need it.

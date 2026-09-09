@@ -22,16 +22,21 @@ static constexpr int kInlayHintMarginLines = 100;
 // the text at that position is shifted right on screen. Shared by the buffer
 // renderer's overlays, the hardware caret placement, and the mouse mapping
 // so every coordinate agrees on where hints sit.
+//
+// Stale hints stay visible while a refresh is in flight (dirty): hiding them
+// on every keystroke makes the caret snap left and right as the server
+// answers, which is far worse than a few hundred ms of slightly stale labels.
 int Editor::lsp_inlay_hint_cells_before(const std::string &filepath,
                                         int line,
-                                        int byte_col)
+                                        int byte_col,
+                                        const std::string &line_text)
 {
   if (!config.get_bool("lsp_inlay_hints", true))
   {
     return 0;
   }
   auto it = lsp_inlay_hint_caches.find(filepath);
-  if (it == lsp_inlay_hint_caches.end() || it->second.dirty)
+  if (it == lsp_inlay_hint_caches.end())
   {
     return 0;
   }
@@ -42,7 +47,8 @@ int Editor::lsp_inlay_hint_cells_before(const std::string &filepath,
     const bool is_param = h.kind == 2;
     const bool is_type = h.kind == 1;
     if ((!is_param && !is_type) || (is_type && !type_hints_enabled) || h.label.empty()
-        || h.character < 0 || h.character > byte_col)
+        || h.line != line || h.character < 0 || h.character > byte_col
+        || h.character > (int)line_text.size())
     {
       continue;
     }
@@ -73,7 +79,7 @@ std::vector<std::pair<int, int>> Editor::lsp_inlay_hints_visual(const std::strin
     return out;
   }
   auto it = lsp_inlay_hint_caches.find(filepath);
-  if (it == lsp_inlay_hint_caches.end() || it->second.dirty)
+  if (it == lsp_inlay_hint_caches.end())
   {
     return out;
   }
@@ -84,7 +90,7 @@ std::vector<std::pair<int, int>> Editor::lsp_inlay_hints_visual(const std::strin
     const bool is_param = h.kind == 2;
     const bool is_type = h.kind == 1;
     if ((!is_param && !is_type) || (is_type && !type_hints_enabled) || h.label.empty()
-        || h.character < 0 || h.character > (int)line_text.size())
+        || h.line != line || h.character < 0 || h.character > (int)line_text.size())
     {
       continue;
     }
@@ -129,6 +135,19 @@ void Editor::handle_lsp_inlay_hints_result(const LSPInlayHintResult &result)
   cache.in_flight = false;
   cache.dirty = false;
   cache.hints = result.hints;
+  // Servers return hints in document order, but the renderer and the
+  // coordinate helpers both assume position-sorted hints (early-break
+  // scans), so normalize defensively on ingest.
+  std::sort(cache.hints.begin(),
+            cache.hints.end(),
+            [](const LSPInlayHint &a, const LSPInlayHint &b)
+            {
+              if (a.line != b.line)
+              {
+                return a.line < b.line;
+              }
+              return a.character < b.character;
+            });
   needs_redraw = true;
 }
 

@@ -293,8 +293,10 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       std::vector<RowHint> row_hints;
       if (inlay_hints_enabled && !folded_header)
       {
+        // Stale hints stay drawn while a refresh is in flight; only a
+        // missing cache (no server answer yet) suppresses them.
         auto cache_it = lsp_inlay_hint_caches.find(buf.filepath);
-        if (cache_it != lsp_inlay_hint_caches.end() && !cache_it->second.dirty)
+        if (cache_it != lsp_inlay_hint_caches.end())
         {
           int inserted_cells = 0;
           for (const auto &hint : cache_it->second.hints)

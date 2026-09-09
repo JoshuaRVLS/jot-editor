@@ -204,9 +204,11 @@ namespace
 LSPClient::LSPClient(const std::string &language_name,
                      const std::string &workspace_root,
                      const std::vector<std::string> &argv,
-                     const std::vector<std::string> &library_dirs_arg)
+                     const std::vector<std::string> &library_dirs_arg,
+                     const std::string &initialization_options_arg)
     : language(language_name), root_path(workspace_root), command(argv),
-      library_dirs(library_dirs_arg), stdin_fd(-1), stdout_fd(-1), stderr_fd(-1),
+      library_dirs(library_dirs_arg), initialization_options(initialization_options_arg),
+      stdin_fd(-1), stdout_fd(-1), stderr_fd(-1),
       child_pid(-1), running(false), initialized(false), uses_utf8_positions(false),
       shutdown_complete(false), next_request_id(1), initialize_request_id(0),
       shutdown_request_id(0)
@@ -558,6 +560,9 @@ bool LSPClient::start()
        << "},"
        << "\"workspaceFolders\":[{\"uri\":\"" << json_escape(to_file_uri(root_path))
        << "\",\"name\":\"" << json_escape(fs::path(root_path).filename().string()) << "\"}]"
+       << (initialization_options.empty()
+               ? ""
+               : ",\"initializationOptions\":{" + initialization_options + "}")
        << "}"
        << "}";
   if (!send_message(init.str(), true))

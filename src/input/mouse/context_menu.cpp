@@ -236,6 +236,17 @@ bool Editor::open_context_menu_for_mouse(int x, int y)
       int rel_visual_x = std::max(0, x - code_start_x);
       int start_visual = compute_visual_column(clicked_line, buf.scroll_x, tab_size);
       int click_visual = start_visual + rel_visual_x;
+      // Inlay hints insert cells on screen; subtract them so the click lands
+      // on the logical column the user actually sees. Compare against the
+      // ORIGINAL click column (hint positions live in rendered space).
+      const int raw_click_visual = click_visual;
+      for (const auto &hw : lsp_inlay_hints_visual(buf.filepath, click_y, clicked_line, tab_size))
+      {
+        if (hw.first <= raw_click_visual)
+        {
+          click_visual -= hw.second;
+        }
+      }
       int click_x = visual_to_logical_column(clicked_line, click_visual, tab_size);
       click_x = std::clamp(click_x, 0, (int)clicked_line.length());
       Cursor clicked = {click_x, click_y};
