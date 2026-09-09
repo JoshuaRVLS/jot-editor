@@ -35,6 +35,7 @@ add_executable(jot_tests
   test_commenting.cpp
   test_sidebar_guides.cpp
   test_blank_guides.cpp
+  test_completion_matching.cpp
 )
 
 target_link_libraries(jot_tests PRIVATE

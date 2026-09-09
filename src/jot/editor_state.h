@@ -287,6 +287,9 @@ struct EditorState
   Cursor lsp_completion_replace_start;
   std::string lsp_completion_filepath;
   std::string lsp_completion_prefix;
+  // nvim-cmp-style ghost text: the selected item's insert text minus the
+  // typed prefix, previewed dimmed at the cursor while the popup is open.
+  std::string lsp_completion_ghost_text;
   std::vector<LSPCompletionItem> lsp_completion_all_items;
   std::vector<LSPCompletionItem> lsp_completion_items;
   bool lsp_signature_visible;

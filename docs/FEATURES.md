@@ -338,11 +338,17 @@ to editor
 
 Type to filter, `↑`/`↓` to move, `Home`/`End` to jump, `Enter` to accept,
 `Backspace` to edit, `Esc` to close. In LSP completion, `Enter` or `Tab`
-applies and `Esc` closes.
+applies and `Esc` closes. The typed characters light up in each item's
+label (nvim-cmp's abbr-match highlight), and the selected item's remaining
+insert text previews dimmed at the caret as ghost text
+(`lsp_completion_ghost_text` to disable).
 
 ## Command reference
 
-Open the palette with `Ctrl+P` and type an ex-style command.
+Open the palette with `Ctrl+P` and type an ex-style command. The prompt
+lives in the statusline row at the bottom of the screen, like Neovim's
+cmdline, with the fuzzy command/argument completion list popping up above
+it -- the buffer stays fully visible while you type.
 
 **Files & sessions:** `:q` `:w` `:wq` `:x` `:e` `:new` `:bd` `:home`
 `:resume` `:recent` `:reopen` `:autosave`

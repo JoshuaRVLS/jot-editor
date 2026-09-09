@@ -277,7 +277,19 @@ local function lsp_completion(p)
     local name = trunc_cells((it.label or ""), math.max(1, label_w - cell_len(icon) - 1))
     parts[#parts + 1] = " "
     add_part(parts, offsets, icon, completion_kind_color(it.kind_name, colors))
+    local name_off = #table.concat(parts)
     add_part(parts, offsets, name, it.deprecated and comment or row_fg)
+    -- nvim-cmp's CmpItemAbbrMatch: highlight the characters the typed
+    -- prefix consumed in the label (offsets are bytes into the raw label;
+    -- the rendered name is a prefix of it, so out-of-range offsets drop).
+    if not it.deprecated and it.match and #it.match > 0 then
+      local match_fg = sel and selection_fg or (colors.accent or 6)
+      for _, m in ipairs(it.match) do
+        if m >= 0 and m + 1 <= #name then
+          offsets[#offsets + 1] = { start = name_off + m, len = 1, fg = match_fg }
+        end
+      end
+    end
     local meta = it.kind_name or ""
     if it.deprecated then
       meta = meta == "" and "deprecated" or (meta .. " deprecated")

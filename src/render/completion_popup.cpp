@@ -3,6 +3,7 @@
 #include "column_utils.h"
 #include "editor.h"
 #include "folding.h"
+#include "jot/integrations/lsp/matching.h"
 #include "jot/lua/api.h"
 #include "render/overlay_internal.h"
 #include "ui/text.h"
@@ -142,8 +143,38 @@ void Editor::render_lsp_completion()
   const bool use_nerd_icons = config.get_bool("lsp_completion_nerd_icons", true);
   int visible_h = std::max(1, pane.h - tab_height - 1);
   int visible_w = std::max(12, draw_w - 2 - line_num_width);
+
+  // Caret screen row: the popup placement is decided from the space below
+  // and above it, so this must be known before sizing the box.
+  int cursor_row = 0;
+  const int viewport_h = std::max(1, pane.h - tab_height - 1);
+  for (int row = 0; row < viewport_h; row++)
+  {
+    int line = Folding::buffer_line_for_visible_offset(
+        buf.fold_ranges, buf.scroll_offset, row, (int)buf.line_count());
+    if (line >= 0 && line == buf.cursor.y && !Folding::is_line_hidden(buf.fold_ranges, line))
+    {
+      cursor_row = row;
+      break;
+    }
+  }
+  const int cursor_y = pane.y + tab_height + cursor_row;
+  const int space_below = (pane.y + visible_h - 1) - cursor_y;
+  const int space_above = cursor_y - (pane.y + tab_height);
+
   const int max_items_cfg = std::clamp(config.get_int("lsp_completion_max_items", 8), 3, 20);
   int max_items = std::min(max_items_cfg, (int)lsp_completion_items.size());
+  const int footer_h = 1;
+  // The bordered box needs max_items + footer + 2 rows. When neither the
+  // space below nor above the caret fits the full window, shrink the visible
+  // rows so the popup never covers the caret -- the line being typed stays
+  // readable even at the very bottom of the screen.
+  int need_h = max_items + footer_h + 2;
+  if (space_below < need_h && space_above < need_h)
+  {
+    max_items = std::max(3, std::min(max_items, std::max(space_below, space_above) - footer_h - 2));
+    need_h = max_items + footer_h + 2;
+  }
   int selected = std::clamp(lsp_completion_selected, 0, (int)lsp_completion_items.size() - 1);
   int start_idx = std::max(0, selected - max_items + 1);
   if (selected < start_idx)
@@ -177,7 +208,6 @@ void Editor::render_lsp_completion()
   }
 
   int box_w = std::clamp(longest_label + longest_meta + 8, 28, std::min(visible_w, 82));
-  int footer_h = 1;
   int box_h = max_items + footer_h;
 
   int safe_cursor_y = std::clamp(buf.cursor.y, 0, (int)buf.line_count() - 1);
@@ -187,19 +217,6 @@ void Editor::render_lsp_completion()
   int cursor_x =
       pane.x + 1 + line_num_width + (cursor_visual - scroll_visual)
       + lsp_inlay_hint_cells_before(buf.filepath, buf.cursor.y, buf.cursor.x, line);
-  int cursor_row = 0;
-  const int viewport_h = std::max(1, pane.h - tab_height - 1);
-  for (int row = 0; row < viewport_h; row++)
-  {
-    int line = Folding::buffer_line_for_visible_offset(
-        buf.fold_ranges, buf.scroll_offset, row, (int)buf.line_count());
-    if (line >= 0 && line == buf.cursor.y && !Folding::is_line_hidden(buf.fold_ranges, line))
-    {
-      cursor_row = row;
-      break;
-    }
-  }
-  int cursor_y = pane.y + tab_height + cursor_row;
 
   int min_x = pane.x + 1 + line_num_width;
   int max_x = pane.x + draw_w - box_w - 1;
@@ -217,41 +234,28 @@ void Editor::render_lsp_completion()
 
   auto clamp_box_x = [&](int x) { return std::clamp(x, min_x, max_x); };
   auto clamp_box_y = [&](int y) { return std::clamp(y, min_y, max_y); };
-  auto border_hits_cursor = [&](int x, int y)
-  {
-    int left = x - 1;
-    int right = x + box_w;
-    int top = y - 1;
-    int bottom = y + box_h;
-    return cursor_x >= left && cursor_x <= right && cursor_y >= top && cursor_y <= bottom;
-  };
 
-  // Try multiple placements and pick the first where full bordered popup
-  // doesn't touch the cursor cell.
-  std::vector<std::pair<int, int>> candidates = {
-      {cursor_x + 2, cursor_y + 2},
-      {cursor_x + 2, cursor_y - box_h - 2},
-      {cursor_x - box_w - 2, cursor_y + 2},
-      {cursor_x - box_w - 2, cursor_y - box_h - 2},
-      {cursor_x + 2, cursor_y},
-      {cursor_x - box_w - 2, cursor_y},
-      {cursor_x, cursor_y + 2},
-      {cursor_x, cursor_y - box_h - 2},
-  };
-
-  int box_x = clamp_box_x(cursor_x + 2);
-  int box_y = clamp_box_y(cursor_y + 2);
-  for (const auto &cand : candidates)
+  // Vertical side: below the caret by default (typing flows downward); flip
+  // above when the bottom clips. After the shrink above, the box fits the
+  // chosen side whenever any side fits at all.
+  bool place_below;
+  if (space_below >= need_h)
   {
-    int cx = clamp_box_x(cand.first);
-    int cy = clamp_box_y(cand.second);
-    if (!border_hits_cursor(cx, cy))
-    {
-      box_x = cx;
-      box_y = cy;
-      break;
-    }
+    place_below = true;
   }
+  else if (space_above >= need_h)
+  {
+    place_below = false;
+  }
+  else
+  {
+    place_below = space_below >= space_above; // last resort: larger side
+  }
+  // Horizontal: extend right of the caret when the pane has room, else left.
+  const bool place_right = cursor_x + 2 + box_w + 2 <= pane.x + draw_w;
+
+  int box_x = clamp_box_x(place_right ? cursor_x + 2 : cursor_x - box_w - 2);
+  int box_y = clamp_box_y(place_below ? cursor_y + 2 : cursor_y - box_h - 2);
 
   // A registered Lua UI handler paints the completion popup from this state;
   // the box geometry stays native (placement is cursor-avoidance logic the
@@ -286,6 +290,7 @@ void Editor::render_lsp_completion()
       iv.deprecated = item.deprecated;
       iv.detail = one_line_text(item.detail);
       iv.documentation = one_line_text(item.documentation);
+      iv.match = completion_matching::match_positions(lsp_completion_prefix, item.label);
       view.items.push_back(std::move(iv));
     }
     if (lua_api->emit_lsp_completion(view))

@@ -34,6 +34,7 @@ bool write_wl_clipboard(const std::string &text)
   FILE *pipe = shell_util::open_command_pipe("wl-copy", "w");
   if (!pipe)
     return false;
+    
   fwrite(text.data(), 1, text.size(), pipe);
   return shell_util::close_command_pipe(pipe) == 0;
 }

@@ -468,6 +468,14 @@ bool LuaAPI::emit_lsp_completion(const CompletionView &view)
                          lua_set_bool_field(L, ii, "deprecated", it.deprecated);
                          lua_set_str_field(L, ii, "detail", it.detail);
                          lua_set_str_field(L, ii, "documentation", it.documentation);
+                         lua_newtable(L);
+                         const int mi = lua_gettop(L);
+                         for (size_t k = 0; k < it.match.size(); k++)
+                         {
+                           lua_pushinteger(L, it.match[k]);
+                           lua_rawseti(L, mi, (lua_Integer)k + 1);
+                         }
+                         lua_setfield(L, ii, "match");
                          lua_rawseti(L, arr, (lua_Integer)i + 1);
                        }                         lua_setfield(L, t, "items");
                        push_ui_colors(L, t);

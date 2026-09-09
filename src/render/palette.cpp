@@ -20,19 +20,18 @@ namespace
     int h = 0;
   };
 
-  // Shared geometry for the command palette panel, so the renderer and the
-  // terminal-cursor placement always agree on where the input row is.
+  // Shared geometry for the command palette, so the renderer and the
+  // terminal-cursor placement always agree on where the prompt row is.
+  // Integrated into the statusline like Neovim's cmdline: no popup box --
+  // the prompt row IS the statusline row at the very bottom of the screen
+  // (the palette paints over the statusline while open), and the match
+  // list floats directly above it on the plain buffer background.
   PaletteLayout command_palette_layout(int screen_w, int screen_h, size_t result_count)
   {
     const int max_items = std::min(8, (int)result_count);
-    int w = std::min(std::max(64, screen_w - 12), 116);
-    int h = 5 + max_items;
-    if (screen_w < 66)
-    {
-      w = std::max(36, screen_w - 2);
-    }
-    h = std::clamp(h, 7, std::max(7, screen_h - 4));
-    return {std::max(0, (screen_w - w) / 2), std::max(1, (screen_h - h) / 3), w, h};
+    const int w = std::max(40, screen_w);
+    const int h = std::clamp(max_items + 1, 2, std::max(2, screen_h - 1));
+    return {0, screen_h - h, w, h};
   }
 
 } // namespace
@@ -45,12 +44,8 @@ void Editor::render_command_palette()
   const int screen_w = ui->get_render_width();
   const int screen_h = ui->get_height();
 
-  // Modal overlay: dim the editor underneath, matching the popup / LSP
-  // manager / telescope treatment, then draw the panel on top.
-  ui->dim_rect({0, 0, screen_w, screen_h});
-
-  // Layout mirrors quick-pick: a centered floating panel instead of a
-  // bottom-docked strip.
+  // No modal dim: the palette is a compact bottom-left panel (cmdline-
+  // style), so the buffer behind stays fully readable while typing.
   const PaletteLayout layout =
       command_palette_layout(screen_w, screen_h, command_palette_results.size());
   const int w = layout.w;
@@ -88,34 +83,11 @@ void Editor::render_command_palette()
     }
   }
 
-  // Panel surface uses the theme's panel-background slot (bg_panel_border),
-  // the same convention as the popup and LSP manager.
-  const Theme panel_theme = [&]()
-  {
-    Theme t = theme;
-    t.bg_command = theme.bg_panel_border;
-    return t;
-  }();
-
-  UIRect rect = {x, y, w, h};
-  ui_draw_panel(
-      *ui,
-      rect,
-      {theme.fg_command, panel_theme.bg_command, theme.fg_panel_border, panel_theme.bg_command});
-  ui_draw_panel_title(*ui, rect, " Command Palette", theme.fg_command, panel_theme.bg_command);
-
-  std::string count = std::to_string(command_palette_results.size())
-                      + (command_palette_results.size() == 1 ? " result" : " results");
-  ui->draw_text(std::max(x + 1, x + w - (int)count.size() - 1),
-                y,
-                count,
-                theme.fg_comment,
-                panel_theme.bg_command);
-
-  // Input row.
-  int input_y = y + 1;
-  UIRect input_rect = {x + 1, input_y, std::max(1, w - 2), 1};
-  ui->fill_rect(input_rect, " ", theme.fg_selection, theme.bg_selection);
+  // The prompt row IS the statusline row (the palette renders after the
+  // statusline, so it paints over it while open). Full-width, inverted,
+  // no box around it.
+  const int input_y = y + h - 1;
+  ui->fill_rect({x, input_y, w, 1}, " ", theme.fg_selection, theme.bg_selection);
   std::string query = command_palette_query;
   if (query.empty() || query[0] != ':')
   {
@@ -128,13 +100,12 @@ void Editor::render_command_palette()
                 theme.bg_selection,
                 true);
 
-  // Divider between the input and the list.
-  int div_y = y + 2;
-  ui->fill_rect(
-      {x + 1, div_y, std::max(1, w - 2), 1}, "─", theme.fg_panel_border, panel_theme.bg_command);
-
-  const int max_items = std::min(8, (int)command_palette_results.size());
-  int list_y = y + 3;
+  // Match list above the prompt, on the plain buffer background: only the
+  // selected row gets a highlight, so the palette reads as part of the UI
+  // instead of a box.
+  int max_items = std::min(8, (int)command_palette_results.size());
+  max_items = std::max(0, std::min(max_items, h - 1));
+  const int list_y = y;
   if (!command_palette_results.empty())
   {
     int selected = std::clamp(command_palette_selected, 0, (int)command_palette_results.size() - 1);
@@ -151,13 +122,11 @@ void Editor::render_command_palette()
       {
         break;
       }
-      int row_y = list_y + row;
-      bool is_selected = (idx == selected);
-      int fg = is_selected ? theme.fg_selection : theme.fg_command;
-      int bg = is_selected ? theme.bg_selection : panel_theme.bg_command;
-
-      UIRect row_rect = {x + 1, row_y, std::max(1, w - 2), 1};
-      ui->fill_rect(row_rect, " ", fg, bg);
+      const int row_y = list_y + row;
+      const bool is_selected = (idx == selected);
+      const int fg = is_selected ? theme.fg_selection : theme.fg_command;
+      const int bg = is_selected ? theme.bg_selection : theme.bg_default;
+      ui->fill_rect({x, row_y, w, 1}, " ", fg, bg);
 
       // Accent bar on the selected row.
       if (is_selected)
@@ -211,15 +180,8 @@ void Editor::render_command_palette()
                             ? "Type a command or search..."
                             : "No matches for \"" + command_palette_query + "\"";
     ui->draw_text(
-        x + 2, list_y, ui_truncate_cells(empty, w - 4), theme.fg_comment, panel_theme.bg_command);
+        x + 2, list_y, ui_truncate_cells(empty, w - 4), theme.fg_comment, theme.bg_default);
   }
-
-  ui_draw_footer(*ui,
-                 rect,
-                 "Enter run   Tab complete   Esc close   Up/Down move   "
-                 "PgUp/PgDn page",
-                 theme.fg_comment,
-                 panel_theme.bg_command);
 }
 
 void Editor::place_command_palette_cursor()
@@ -239,6 +201,11 @@ void Editor::place_command_palette_cursor()
     query = ":" + query;
   }
   const std::string drawn = ui_truncate_cells(query, std::max(0, layout.w - 3));
-  ui->set_cursor(layout.x + 1 + ui_cell_count(drawn), layout.y + 1);
+  // The Lua float draws its content at col = layout.x (borderless); the
+  // native renderer indents one cell. Match whichever path is active so the
+  // caret sits exactly after the typed text.
+  const bool lua_renders = lua_api && lua_api->has_lua_ui_handler("command_palette");
+  const int text_x = layout.x + (lua_renders ? 0 : 1);
+  ui->set_cursor(text_x + ui_cell_count(drawn), layout.y + layout.h - 1);
 }
 

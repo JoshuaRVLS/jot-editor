@@ -147,7 +147,10 @@ local function present_panel(name, p, rows, opts, body_override, spans_override)
   local comment = colors.comment or 8
   local accent = colors.accent or 6
 
-  local inner_h = math.max(1, p.h - 2)
+  -- Borderless floats (e.g. the statusline-integrated command palette) have
+  -- no chrome rows, so content fills the whole surface instead of h-2 / w-2.
+  local has_border = (opts.border or "rounded") ~= "none"
+  local inner_h = has_border and math.max(1, p.h - 2) or math.max(1, p.h)
   local body
   local spans_by_line
   local shown
@@ -180,7 +183,7 @@ local function present_panel(name, p, rows, opts, body_override, spans_override)
   -- Pad every row to the panel width in cells so the renderer never clips a
   -- line (its clip would append ".." and split long runs of text).
   for i = 1, shown do
-    body[i] = pad_cells(body[i] or "", p.w - 2)
+    body[i] = pad_cells(body[i] or "", has_border and (p.w - 2) or p.w)
   end
 
   local buf = jot.ui.buffer.create(false, true)
@@ -193,6 +196,10 @@ local function present_panel(name, p, rows, opts, body_override, spans_override)
     relative = "editor",
     anchor = "NW",
     border = opts.border or "rounded",
+    -- Strip floats may occupy the statusline rows at the screen bottom
+    -- (the statusline itself is one); the command palette needs this to
+    -- sit its prompt row on the statusline slot.
+    strip = opts.strip or false,
     focusable = false,
     mouse = false,
     hide = false,

@@ -359,12 +359,12 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(g.open_count == 1);
   REQUIRE(g.last_width == 60);
   REQUIRE(g.last_height == 12);
-  REQUIRE(g.last_border == "rounded");
+  REQUIRE(g.last_border == "none"); // statusline-integrated: no popup box
   REQUIRE(g.last_fg == 250);
   REQUIRE(g.last_bg == 235);
   REQUIRE(g.last_border_fg == 240);
   REQUIRE(g.last_title_fg == 215); // accent
-  REQUIRE(g.lines_count == 6);     // input + divider + 3 items + pad row
+  REQUIRE(g.lines_count == 4);     // 3 items + cmdline prompt row
   // match spans: 3 items x 3 matched chars each
   REQUIRE(g.set_spans_count >= 1);
   REQUIRE(g.spans_total == 9);

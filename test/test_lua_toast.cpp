@@ -569,7 +569,7 @@ TEST_CASE("Bundled toast module shows, stacks, and auto-dismisses")
   REQUIRE(g.open_count == 1);
   REQUIRE(g.last_border == "rounded");
   REQUIRE(g.last_width == 56);
-  REQUIRE(g.last_height == 3); // single-line message becomes the title row, + 2 borders
+  REQUIRE(g.last_height == 4); // header row + message row + 2 borders
   REQUIRE(g.last_col == 62);   // 120 - 56 - margin(1) - 1
   REQUIRE(g.last_row == 4);    // final row 1 + entry slide of 3
   REQUIRE(g.last_fg == 250);
@@ -578,10 +578,10 @@ TEST_CASE("Bundled toast module shows, stacks, and auto-dismisses")
   REQUIRE(g.last_title_fg == 251);
   REQUIRE(g.last_mouse == 1);  // click-to-dismiss
   REQUIRE(g.last_zindex == 100000);
-  REQUIRE(g.lines_count == 1); // title row only (message folded in, no progress)
-  // Icon span carries the level accent; title text uses the title color.
-  REQUIRE(g.span_lens.size() == 2);
-  REQUIRE(g.span_fgs[0] == 215);
+  REQUIRE(g.lines_count == 2); // header row (logo + level + time) + message row
+  // Spans: logo accent, heading, right-aligned time, then the message row.
+  REQUIRE(g.span_lens.size() == 4);
+  REQUIRE(g.span_fgs[0] == 215); // logo carries the level accent
   // Timer registered at the 50 ms tick resolution.
   REQUIRE(g.last_event_interval_ms == 50);
 
@@ -600,9 +600,9 @@ TEST_CASE("Bundled toast module shows, stacks, and auto-dismisses")
   const int second = call_show(L, 1, "another message here", 400);
   REQUIRE(second > 0);
   REQUIRE(g.open_count == 2);
-  // First toast: height 3, gap 0 -> second final row = margin 1 + 3 = 4,
+  // First toast: height 4, gap 0 -> second final row = margin 1 + 4 = 5,
   // then the +3 entry offset.
-  REQUIRE(g.last_row == 7);
+  REQUIRE(g.last_row == 8);
 
   // --- dismissing the first fades it out (5 ticks at 250 ms fade), then
   // the second drifts up into the freed slot ---
@@ -633,16 +633,18 @@ TEST_CASE("Bundled toast module shows, stacks, and auto-dismisses")
   REQUIRE(g.last_cfg_border_fg >= 0);
   REQUIRE(g.last_cfg_border_fg != 215);
 
-  // The second toast (parked at row 7) drifts up to the top slot (row 1).
-  for (int i = 0; i < 6; i++)
+  // The second toast (parked at row 8) drifts up to the top slot (row 1).
+  for (int i = 0; i < 7; i++)
   {
     fire_interval(L, 2);
   }
   REQUIRE(g.configure_rows.back() == 1); // restacked to the top slot
 
   // --- auto-dismiss of the second: 400 ms / 50 ms = 8 ticks to begin the
-  // fade, then 5 more fade ticks until it is removed ---
-  for (int i = 0; i < 7; i++)
+  // fade, then 5 more fade ticks until it is removed. 7 drift ticks above +
+  // 6 here = 13, exactly when the fade completes (the stub timer stays
+  // callable after clear, so an extra tick would double-dismiss) ---
+  for (int i = 0; i < 6; i++)
   {
     fire_interval(L, 2);
   }

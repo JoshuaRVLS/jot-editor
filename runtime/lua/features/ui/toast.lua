@@ -25,6 +25,15 @@ local LEVELS = {
   error = { icon = "✕" },
 }
 
+-- Level label shown in the toast header when no title was given, so the
+-- three (four with success) toast types read at a glance.
+local LEVEL_NAMES = {
+  info = "Info",
+  success = "Success",
+  warning = "Warning",
+  error = "Error",
+}
+
 -- Safe config helpers: the stubbed test environment has no real jot.config,
 -- and the access itself must be inside the pcall (arguments are evaluated
 -- before pcall runs).
@@ -60,6 +69,7 @@ local function palette()
     fg = pick("toast.color_fg", "default", "fg", 250),
     border = pick("toast.color_border", "panel_border", "fg", 240),
     title = pick("toast.color_title", "status_info", "fg", 251),
+    time = pick("toast.color_time", "comment", "fg", 244),
     info = pick("toast.color_info", "status_info", "fg", 215),
     success = pick("toast.color_success", "diagnostic_hint", "fg", 108),
     warning = pick("toast.color_warning", "diagnostic_warning", "fg", 178),
@@ -220,15 +230,10 @@ local function layout_toast(t)
 
   t.wrapped = wrap_text(t.message, math.max(8, max_w - 4))
   t.width = math.min(max_w, math.max(20, math.min(right_edge, ww) - margin * 2))
-  -- Without a title the first wrapped line becomes the title row, so the
-  -- painted rows are max(1, #wrapped); with a title they are 1 + #wrapped.
-  -- Add the two border rows on top.
-  local content_rows
-  if t.title ~= "" then
-    content_rows = 1 + #t.wrapped
-  else
-    content_rows = math.max(1, #t.wrapped)
-  end
+  -- One header row (logo + level/title + time) plus one row per wrapped
+  -- message line -- the logo never shares a row with the message -- plus
+  -- the two border rows.
+  local content_rows = 1 + #t.wrapped
   t.height = math.max(3, math.min(wh - margin, content_rows + 2))
   t.col = math.max(margin, right_edge - t.width - margin - 1)
 
@@ -249,30 +254,32 @@ local function content_rows_spans(t, colors)
   local spans = {}
   local n = 0
 
-  -- Title row: icon (accent) + title (or the first message line). The lead
-  -- space is folded into the accent span, title text gets its own color.
-  local title_text
-  local first_body
-  if t.title ~= "" then
-    title_text = " " .. t.icon .. "  " .. take_codepoints(t.title, math.max(1, inner - 5))
-    first_body = 1
-  else
-    title_text = " " .. t.icon .. "  " .. take_codepoints(t.wrapped[1], math.max(1, inner - 5))
-    first_body = 2
+  -- Header row: the logo inside a bracketed badge (like [✕]) in the level
+  -- accent, then the level/title one space later (no wide gap), with the
+  -- time right-aligned on the same row. Byte offsets are 0-based:
+  -- row = [0]=space [1]=badge ([ + icon + ]) [n+1]=gap [n+2..]=heading.
+  -- The message starts on its own row below -- the logo never shares a row
+  -- with the message text.
+  local badge = "[" .. t.icon .. "]"
+  local heading =
+      take_codepoints(t.heading, math.max(1, inner - 6 - utf8.len(t.time or "")))
+  local head = " " .. badge .. " " .. heading
+  if t.time ~= "" then
+    local pad_cells = math.max(1, inner - utf8.len(head) - utf8.len(t.time))
+    head = head .. string.rep(" ", pad_cells) .. t.time
   end
   n = n + 1
-  rows[n] = title_text
-  -- Byte offsets are 0-based: row = [0]=space [1..n]=icon [n+1..n+2]=gap
-  -- [n+3..]=text. Color only the icon accent, keep the two-space gap neutral,
-  -- and start the text span at the first character (n+3) so the first letter
-  -- is not left in the default foreground.
+  rows[n] = head
   spans[n] = {
-    { start = 1, len = #t.icon, fg = accent, bg = -1 },            -- icon
-    { start = #t.icon + 3, len = 65535, fg = colors.title, bg = -1 }, -- text
+    { start = 1, len = #badge, fg = accent, bg = -1 },            -- bracketed logo badge
+    { start = #badge + 2, len = #heading, fg = colors.title, bg = -1 }, -- heading
   }
+  if t.time ~= "" then
+    spans[n][#spans[n] + 1] = { start = #head - #t.time, len = #t.time, fg = colors.time, bg = -1 }
+  end
 
-  -- Body rows.
-  for i = first_body, #t.wrapped do
+  -- Body rows: the message owns its rows.
+  for i = 1, #t.wrapped do
     n = n + 1
     rows[n] = " " .. t.wrapped[i] .. " "
     spans[n] = { { start = 0, len = 65535, fg = colors.fg, bg = -1 } }
@@ -476,10 +483,21 @@ function toast.show(opts)
     dismiss_internal(toasts[1])
   end
 
+  -- Header heading: the caller's title, or the level name so the toast type
+  -- (Info / Warning / Error) is always visible.
+  local heading = tostring(opts.title or "")
+  if heading == "" then
+    heading = LEVEL_NAMES[level] or "Info"
+  end
+  -- Time stamp shown at the top right of the header row.
+  local ok_time, now = pcall(os.date, "%H:%M")
+
   local t = {
     id = next_id,
     message = message,
     title = tostring(opts.title or ""),
+    heading = heading,
+    time = ok_time and type(now) == "string" and now or "",
     level = level,
     icon = LEVELS[level].icon,
     duration_ms = duration,

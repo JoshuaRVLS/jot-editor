@@ -312,6 +312,7 @@ void Editor::initialize_state_defaults()
   lsp_completion_replace_start = {0, 0};
   lsp_completion_filepath.clear();
   lsp_completion_prefix.clear();
+  lsp_completion_ghost_text.clear();
   lsp_completion_all_items.clear();
   lsp_completion_items.clear();
   lsp_signature_visible = false;

@@ -385,14 +385,15 @@ void LuaAPI::render_floats()
   // frame. Re-apply the dim over every float except the modal surface's own
   // panel (its handler is running under emit_lua_ui with that surface name,
   // and it draws on top of the dim like the native modal panels do).
-  const bool modal_dim_active = editor->show_command_palette || editor->show_quick_pick
+  // The command palette is integrated into the statusline (no modal scrim);
+  // the remaining modal surfaces dim the grid.
+  const bool modal_dim_active = editor->show_quick_pick
       || (editor->popup.visible && editor->popup.presentation == POPUP_MODAL)
       || editor->show_tree_sitter_status_modal || editor->show_lsp_status_modal
       || editor->telescope.is_active();
   const auto modal_surface_open = [&](const std::string &s) -> bool
   {
-    return (s == "command_palette" && editor->show_command_palette)
-        || (s == "quick_pick" && editor->show_quick_pick)
+    return (s == "quick_pick" && editor->show_quick_pick)
         || (s == "popup" && editor->popup.visible && editor->popup.presentation == POPUP_MODAL)
         || (s == "tree_sitter_status" && editor->show_tree_sitter_status_modal)
         || (s == "lsp_status" && editor->show_lsp_status_modal)

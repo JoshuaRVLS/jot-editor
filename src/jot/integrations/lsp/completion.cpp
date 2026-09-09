@@ -239,6 +239,66 @@ namespace
     }
     return expansion;
   }
+
+  char fold_ascii_char(char c)
+  {
+    return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
+  }
+
+  size_t utf8_char_count(const std::string &s)
+  {
+    size_t n = 0;
+    for (size_t i = 0; i < s.size(); i++)
+    {
+      if (((unsigned char)s[i] & 0xC0) != 0x80)
+      {
+        n++;
+      }
+    }
+    return n;
+  }
+
+  // Drops the first `count` UTF-8 characters from `s`.
+  std::string utf8_drop_prefix(const std::string &s, size_t count)
+  {
+    size_t i = 0;
+    while (i < s.size() && count > 0)
+    {
+      if (((unsigned char)s[i] & 0xC0) != 0x80)
+      {
+        count--;
+      }
+      i++;
+    }
+    return s.substr(i);
+  }
+
+  // nvim-cmp ghost text: the insert text minus the already-typed prefix.
+  // The prefix is dropped only when it actually leads the text (case-
+  // insensitive), so mismatched prefixes keep the full preview.
+  std::string ghost_text_for(const LSPCompletionItem &item, const std::string &prefix)
+  {
+    std::string text = item.insert_text.empty() ? item.label : item.insert_text;
+    if (item.insert_text_format == 2) // snippet: preview the expanded plain text
+    {
+      text = expand_lsp_snippet(text).text;
+    }
+    if (text.empty() || prefix.empty())
+    {
+      return text;
+    }
+    size_t i = 0;
+    while (i < prefix.size() && i < text.size()
+           && fold_ascii_char(prefix[i]) == fold_ascii_char(text[i]))
+    {
+      i++;
+    }
+    if (i == prefix.size())
+    {
+      text = utf8_drop_prefix(text, utf8_char_count(prefix));
+    }
+    return text;
+  }
 } // namespace
 
 void Editor::hide_lsp_completion()
@@ -251,6 +311,7 @@ void Editor::hide_lsp_completion()
   lsp_completion_all_items.clear();
   lsp_completion_filepath.clear();
   lsp_completion_prefix.clear();
+  lsp_completion_ghost_text.clear();
 }
 
 bool Editor::refresh_lsp_completion_filter()
@@ -331,6 +392,15 @@ bool Editor::refresh_lsp_completion_filter()
     }
   }
   lsp_completion_visible = !lsp_completion_items.empty();
+
+  // nvim-cmp ghost text: the selected item's insert text minus the typed
+  // prefix, drawn dimmed at the cursor while the popup stays open.
+  lsp_completion_ghost_text.clear();
+  if (lsp_completion_selected >= 0 && lsp_completion_selected < (int)lsp_completion_items.size())
+  {
+    lsp_completion_ghost_text =
+        ghost_text_for(lsp_completion_items[lsp_completion_selected], lsp_completion_prefix);
+  }
   return lsp_completion_visible;
 }
 

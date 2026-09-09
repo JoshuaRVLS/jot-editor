@@ -1146,6 +1146,41 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
           }
         }
       }
+
+      // nvim-cmp-style ghost text: the selected completion's remaining
+      // insert text previewed dimmed (italic, like inlay hints) while the
+      // popup is open. With a thin caret (bar/line/underline) at the end
+      // of the line the caret cell is empty -- only the caret glyph -- so
+      // starting one cell right would leave a visible gap (`std::co| ut`);
+      // the ghost hugs the caret cell instead. A block caret fills its
+      // cell, so the ghost still starts right of it.
+      if (line_idx == buf.cursor.y && !lsp_completion_ghost_text.empty()
+          && config.get_bool("lsp_completion_ghost_text", true))
+      {
+        const int ghost_vis =
+            compute_visual_column(line, buf.cursor.x, tab_size)
+            - compute_visual_column(line, buf.scroll_x, tab_size)
+            + lsp_inlay_hint_cells_before(buf.filepath, buf.cursor.y, buf.cursor.x, line);
+        const bool caret_cell_blank =
+            buf.cursor.x >= (int)line.size()
+            || (buf.cursor.x >= 0 && line[buf.cursor.x] == ' ');
+        const int ghost_off = (caret_cell_blank && !block_cursor) ? 0 : 1;
+        if (ghost_vis >= 0 && ghost_vis + ghost_off < visible_len)
+        {
+          const std::string txt =
+              ui_truncate_cells(lsp_completion_ghost_text, visible_len - ghost_vis - ghost_off);
+          if (!txt.empty())
+          {
+            ui->draw_text(current_x + ghost_vis + ghost_off,
+                          draw_y,
+                          txt,
+                          theme.fg_comment,
+                          theme.bg_default,
+                          false,
+                          true);
+          }
+        }
+      }
     }
     else
     {

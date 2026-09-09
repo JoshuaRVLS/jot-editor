@@ -156,6 +156,7 @@ struct CompletionItemView
   bool deprecated = false;
   std::string detail;
   std::string documentation;
+  std::vector<int> match; // byte offsets into label matched by the query
 };
 
 struct CompletionView
