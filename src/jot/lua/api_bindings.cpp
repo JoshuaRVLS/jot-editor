@@ -234,6 +234,11 @@ namespace
     api(L).host().io.toggle_sidebar();
     return 0;
   }
+  int l_toggle_zen(lua_State *L)
+  {
+    lua_pushboolean(L, api(L).host().io.toggle_zen());
+    return 1;
+  }
   int l_toggle_terminal(lua_State *L)
   {
     api(L).host().io.toggle_terminal();
@@ -1795,6 +1800,7 @@ bool LuaAPI::init()
   lua_setfield(L, -2, "file");
   lua_newtable(L);
   field(L, "toggle_sidebar", l_toggle_sidebar);
+  field(L, "toggle_zen", l_toggle_zen);
   field(L, "toggle_terminal", l_toggle_terminal);
   field(L, "request_redraw", l_editor_redraw);
   lua_setfield(L, -2, "ui");
@@ -2123,6 +2129,9 @@ bool LuaAPI::init()
   // user keymaps registered first take precedence; the Lua registrations
   // shadow the matching hardcoded fallbacks in the modeless input path.
   jot_lua::load_bundled_lua_file(L, "features/keymaps.lua", "Built-in keymaps");
+  // Zen focus mode (features/zen.lua): F12 toggles the centered, chrome-free
+  // layout. Loaded after keymaps so it can reuse the jot.keymap API.
+  jot_lua::load_bundled_lua_file(L, "features/zen.lua", "Zen mode");
   // Self-update (:update + silent startup check, features/update.lua). Loaded
   // last so user config can tune update.* settings before the module boots.
   jot_lua::load_bundled_lua_file(L, "features/update.lua", "Update");

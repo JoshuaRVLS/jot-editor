@@ -111,6 +111,16 @@ editor state rather than routing through the command registry, so data-heavy
 features (status lines, git panels, custom task runners, symbol pickers) can
 be written entirely in Lua.
 
+### Zen mode
+
+`jot.ui.toggle_zen()` flips zen focus mode and returns the new state
+(`true` = on): the sidebar and right panel hide, the status line
+suppresses, and the pane area narrows to the `zen_content_width` config
+(default 100 columns) and centers. Leaving zen restores the layout from
+before. The built-in `F12` binding (features/zen.lua) calls this and shows
+a toast; the viewport info exposes the current state as
+`jot.viewport.info().zen`.
+
 ### Process
 
 `jot.process.memory()` returns the editor process's current resident memory

@@ -119,6 +119,9 @@ check("search.matches", function() return jot.search.matches() end)
 check("lsp.clients", function() return jot.lsp.clients() end)
 check("lsp.diagnostics", function() return jot.lsp.diagnostics() end)
 check("lsp.completions", function() return jot.lsp.completions() end)
+check("ui.toggle_zen", function()
+  return type(jot.ui.toggle_zen) == "function"
+end)
 check("process.memory", function()
   local bytes = jot.process.memory()
   -- Positive, sane RSS figure (a few MB to a few GB), stable across calls.

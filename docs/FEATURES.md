@@ -187,6 +187,13 @@ in `ext.begin()` selects just `ext`), `Ctrl+D` to select the next occurrence
 dividers, jump
 the minimap viewport, navigate the sidebar, and toggle breakpoints.
 
+**Zen focus mode** (`F12` or `:zen`) strips the chrome: sidebar, right
+panel, and status line hide, and the pane area narrows to the
+`zen_content_width` config (default 100 columns) and centers — a
+distraction-free editing column. Toggling back restores the exact layout
+from before, and the F12 binding is rebindable via the usual `jot.keymap`
+API.
+
 ## Keybindings
 
 ### Core editing
@@ -247,6 +254,7 @@ the minimap viewport, navigate the sidebar, and toggle breakpoints.
 | `Ctrl+M` or `Alt+M` | Toggle minimap |
 | `Ctrl+T` or `Alt+T` | Theme chooser |
 | `` Ctrl+` `` | Open / focus / hide terminal panel |
+| `F12` | Toggle zen focus mode (hide chrome, center buffer) |
 
 ### Pane layout
 
@@ -289,7 +297,7 @@ Open the palette with `Ctrl+P` and type an ex-style command.
 
 **Panes & UI:** `:sp` `:vsp` `:splitleft|right|up|down` `:bn` `:bp`
 `:focusleft|right|up|down` `:wincmd` `:resize*` `:minimap` `:theme`
-`:colorscheme` `:help`
+`:colorscheme` `:zen` `:help`
 
 **Workspace:** `:find` / `:ff [dir]` `:mkfile` `:mkdir` `:rename` `:rm`
 `:cpppair` `:cppimpl`

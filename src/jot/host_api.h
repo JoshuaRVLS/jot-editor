@@ -109,6 +109,8 @@ public:
   void open_workspace(const std::string &path);
   void open_command_palette(const std::string &query);
   void toggle_sidebar();
+  // Zen focus mode; returns true when zen is now active.
+  bool toggle_zen();
   void toggle_terminal();
   void execute_command(const std::string &command);
   void run_job(const std::string &command, const std::string &cwd, const std::string &label);

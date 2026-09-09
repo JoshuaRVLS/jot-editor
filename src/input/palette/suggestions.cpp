@@ -84,6 +84,7 @@ namespace
         {"debugconfig", "Debugger", "Launch a debug.json session", 82},
         {"debugattach", "Debugger", "Attach debugger to PID", 80},
         {"debugpanel", "Debugger", "Toggle debugger panel", 78},
+        {"zen", "View", "Toggle zen focus mode", 76},
         {"debugstop", "Debugger", "Stop active debug session", 78},
         {"debugrestart", "Debugger", "Restart active debug session", 76},
         {"debugcontinue", "Debugger", "Continue active debug session", 78},

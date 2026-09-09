@@ -332,6 +332,14 @@ struct EditorState
   std::vector<HomeMenuEntry> home_menu_entries;
 
   bool show_sidebar;
+  // Zen focus mode: sidebar + right panel hidden, status line suppressed and
+  // the pane area narrowed to zen_content_width and centered. Sidebar / panel
+  // / status-height values are remembered on entry so leaving zen restores
+  // the exact pre-zen layout.
+  bool zen_mode = false;
+  bool zen_saved_sidebar_ = true;
+  bool zen_saved_panel_ = false;
+  int zen_saved_status_height_ = 2;
   SidebarView active_sidebar_view;
   int sidebar_width;
   std::string root_dir;

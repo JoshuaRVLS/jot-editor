@@ -568,6 +568,17 @@ bool Editor::execute_ex_command(const std::string &input_line)
   {
     toggle_debugger_panel();
   }
+  else if (lcmd == "zen")
+  {
+    if (toggle_zen_mode())
+    {
+      set_message("Zen mode: on (F12 to exit)");
+    }
+    else
+    {
+      set_message("Zen mode: off");
+    }
+  }
   else if (lcmd == "debug" || lcmd == "debuggdb")
   {
     start_debugger_command("gdb", arg);

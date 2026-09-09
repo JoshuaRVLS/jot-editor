@@ -891,6 +891,17 @@ void Editor::render_lsp_status_modal()
 
 void Editor::render_status_line()
 {
+  // Zen focus mode suppresses the status line entirely (rows reclaimed by the
+  // pane area via status_height = 0); drop the Lua statusline float too so it
+  // does not linger over the last pane row.
+  if (zen_mode)
+  {
+    if (lua_api)
+    {
+      lua_api->emit_lua_ui_close("status_line");
+    }
+    return;
+  }
   int y = ui->get_height() - status_height;
   int w = ui->get_render_width();
 

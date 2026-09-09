@@ -444,6 +444,11 @@ void HostIOAPI::toggle_sidebar()
   editor.toggle_sidebar();
 }
 
+bool HostIOAPI::toggle_zen()
+{
+  return editor.toggle_zen_mode();
+}
+
 void HostIOAPI::toggle_terminal()
 {
   editor.toggle_integrated_terminal();

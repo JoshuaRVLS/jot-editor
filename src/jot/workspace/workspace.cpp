@@ -230,6 +230,39 @@ void Editor::toggle_sidebar()
   needs_redraw = true;
 }
 
+bool Editor::toggle_zen_mode()
+{
+  zen_mode = !zen_mode;
+  if (zen_mode)
+  {
+    zen_saved_sidebar_ = show_sidebar;
+    zen_saved_panel_ = show_right_panel;
+    zen_saved_status_height_ = status_height;
+    show_sidebar = false;
+    show_right_panel = false;
+    if (focus_state == FOCUS_SIDEBAR)
+    {
+      focus_state = FOCUS_EDITOR;
+    }
+    status_height = 0;
+  }
+  else
+  {
+    show_sidebar = zen_saved_sidebar_;
+    show_right_panel = zen_saved_panel_;
+    status_height = zen_saved_status_height_;
+  }
+  // The side panel float is keyed off show_right_panel; drop it explicitly so
+  // it does not linger over the centered pane area.
+  if (lua_api)
+  {
+    lua_api->emit_lua_ui_close("side_panel");
+  }
+  update_pane_layout();
+  needs_redraw = true;
+  return zen_mode;
+}
+
 void Editor::open_workspace(const std::string &path, bool restore_session)
 {
   std::error_code ec;

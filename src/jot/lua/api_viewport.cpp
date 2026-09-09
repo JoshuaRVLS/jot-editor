@@ -46,6 +46,7 @@ void LuaAPI::push_viewport_info(lua_State *L)
   lua_push_bool_field(L, "visible", editor->show_right_panel);
   lua_push_int_field(L, "width", editor->right_panel_width);
   lua_setfield(L, -2, "right_panel");
+  lua_push_bool_field(L, "zen", editor->zen_mode);
   if (!editor->panes.empty())
   {
     const SplitPane &pane = editor->get_pane();

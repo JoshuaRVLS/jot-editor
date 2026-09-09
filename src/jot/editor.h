@@ -482,6 +482,25 @@ private:
 
 public:
   void toggle_sidebar();
+  bool zen_active() const
+  {
+    return zen_mode;
+  }
+  bool right_panel_visible() const
+  {
+    return show_right_panel;
+  }
+  int status_line_height() const
+  {
+    return status_height;
+  }
+  // Zen focus mode: hides the sidebar and right panel, suppresses the status
+  // line and centers the pane area at zen_content_width. Returns the new
+  // state (true = zen on). Layout-affecting; safe with no panes / no ui.
+  bool toggle_zen_mode();
+  // Left/right margin that centers the pane area at zen_content_width while
+  // zen mode is active (0 otherwise or when the area is narrower).
+  int zen_content_margin(int available_w);
   void load_file_tree(const std::string &path);
   void open_workspace(const std::string &path, bool restore_session = true);
   bool resume_last_workspace_session();

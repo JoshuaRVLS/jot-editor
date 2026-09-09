@@ -141,6 +141,7 @@ namespace CommandLineUtils
                                                       "debugthreads",
                                                       "debugmemory",
                                                       "debugdisasm",
+                                                      "zen",
                                                       "find",
                                                       "ff",
                                                       "grep",

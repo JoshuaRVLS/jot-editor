@@ -70,9 +70,20 @@ int Editor::max_right_panel_width() const
   return std::max(0, total_w - left_w - kMinPaneWidth);
 }
 
+int Editor::zen_content_margin(int available_w)
+{
+  if (!zen_mode)
+  {
+    return 0;
+  }
+  const int zen_w =
+      std::clamp(config.get_int("zen_content_width", 100), 40, 240);
+  return std::max(0, (available_w - zen_w) / 2);
+}
+
 bool Editor::collapsed_sidebar_handle_hit_test(int x, int y) const
 {
-  if (show_sidebar || show_home_menu || !ui || panes.empty())
+  if (zen_mode || show_sidebar || show_home_menu || !ui || panes.empty())
   {
     return false;
   }
@@ -177,6 +188,10 @@ void Editor::update_pane_layout()
   int origin_x = show_sidebar ? effective_sidebar_width() : 0;
   int right_w = effective_right_panel_width();
   int available_w = std::max(1, total_w - origin_x - right_w);
+  // Zen focus mode: narrow the pane area to zen_content_width and center it.
+  const int zen_margin = zen_content_margin(available_w);
+  origin_x += zen_margin;
+  available_w = std::max(1, available_w - zen_margin * 2);
   int origin_y = menu_h;
 
   if (pane_zoom_active && panes.size() > 1 && current_pane >= 0
