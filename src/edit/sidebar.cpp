@@ -1,6 +1,7 @@
 #include "editor.h"
 #include "jot/file_icons.h"
 #include "jot/lua/api.h"
+#include "sidebar_guides.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -301,13 +302,14 @@ void Editor::rebuild_sidebar_tree_cache()
   sidebar_render_cache_.root_label = root_display_name(root_dir);
 
   sidebar_render_cache_.rows.reserve(file_tree.size());
-  // Tree indent guides (neo-tree style): each ancestor level consumes two
-  // cells — "│ " while that ancestor's sibling run continues, "  " after its
-  // last sibling — and the node's own level ends in its expander chevron
-  // (directories) or an ├─/└─ elbow (files). The row width matches the old
-  // indent + chevron layout exactly: 2 cells per level.
+  // Tree indent guides (neo-tree style): every level owns a two-cell marker
+  // column — directories show their expander chevron, files a bare "│ " bar
+  // or "└ " foot. Deeper rows reserve the level-0 column, then one slot per
+  // ancestor. The connector under an expanded folder comes from the
+  // children's own markers, so it never disappears. Row widths match the old
+  // indent + chevron layout: 2 cells per level.
   std::function<void(const FileNode &, const std::string &, bool)> append_row =
-      [&](const FileNode &node, const std::string &parent_guide, bool is_last)
+      [&](const FileNode &node, const std::string &ancestor_guide, bool is_last)
   {
     SidebarRenderRow row;
     row.path = node.path;
@@ -317,17 +319,8 @@ void Editor::rebuild_sidebar_tree_cache()
     row.expanded = node.expanded;
     row.depth = node.depth;
 
-    std::string guide = parent_guide;
-    if (node.is_dir)
-    {
-      guide += node.expanded ? " " : " ";
-    }
-    else
-    {
-      // Two-cell elbows keep the row exactly as wide as the old indent +
-      // chevron slot; the file icon (glyph + space) follows right after.
-      guide += is_last ? "└─" : "├─";
-    }
+    const std::string guide =
+        sidebar_guides::row_guide(node.is_dir, node.expanded, is_last, node.depth, ancestor_guide);
     row.guide = guide;
     row.guide_cells = cell_count(guide);
     row.label = guide + get_file_icon(node) + node.name;
@@ -351,7 +344,11 @@ void Editor::rebuild_sidebar_tree_cache()
 
     if (node.is_dir && node.expanded)
     {
-      const std::string child_guide = parent_guide + (is_last ? "  " : "│ ");
+      // Children continue the parent's own marker column only below the top
+      // level (the level-0 column never continues, matching neo-tree).
+      const std::string child_guide = node.depth >= 1
+                                          ? sidebar_guides::children_guide(is_last, ancestor_guide)
+                                          : ancestor_guide;
       const std::vector<FileNode> &children = node.children;
       for (size_t i = 0; i < children.size(); i++)
       {
