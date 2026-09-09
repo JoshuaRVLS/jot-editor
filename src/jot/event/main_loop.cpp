@@ -16,7 +16,35 @@ void Editor::render_frame()
     handle_terminal_event(ev);
   }
 #endif
-  Event rsz = terminal.check_resize_event();
+  // Terminal size is authoritative in terminal mode. In GUI mode the SDL
+  // window (polled by the GUI pump, including its defensive re-sync) owns
+  // the grid, so the hosting terminal's SIGWINCH must not resize it.
+  Event rsz;
+  if (!gui_mode)
+  {
+    rsz = terminal.check_resize_event();
+    if (rsz.type == EVENT_REDRAW)
+    {
+      // Slow DSR force-probe fallback: ioctl can report a stale size that
+      // never changes (alternate-screen/multiplexer quirks), so the
+      // per-frame probe above never fires. Re-probe with the cursor
+      // position query every couple of seconds to catch it.
+      const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now().time_since_epoch())
+                              .count();
+      static int64_t last_force_probe_ms = 0;
+      if (now_ms - last_force_probe_ms >= 2000)
+      {
+        last_force_probe_ms = now_ms;
+        if (terminal.refresh_size(/*force_probe=*/true))
+        {
+          rsz.type = EVENT_RESIZE;
+          rsz.resize.width = terminal.get_width();
+          rsz.resize.height = terminal.get_height();
+        }
+      }
+    }
+  }
   if (rsz.type == EVENT_RESIZE)
   {
     ui->invalidate();
