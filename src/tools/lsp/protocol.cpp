@@ -5,6 +5,7 @@
 // messages.cpp.
 #include "tools/lsp/internal.h"
 #include "tools/lsp/client.h"
+#include "tools/string_util.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -312,16 +313,7 @@ namespace lsp_detail
 
   std::string trim_copy(std::string value)
   {
-    value.erase(value.begin(),
-                std::find_if(value.begin(),
-                             value.end(),
-                             [](unsigned char ch) { return !std::isspace(ch); }));
-    value.erase(std::find_if(value.rbegin(),
-                             value.rend(),
-                             [](unsigned char ch) { return !std::isspace(ch); })
-                    .base(),
-                value.end());
-    return value;
+    return string_util::trim_copy(value);
   }
 
   std::string normalize_hover_text(std::string text)

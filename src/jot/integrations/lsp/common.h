@@ -7,6 +7,7 @@
 #include "jot/integrations/lsp_attach_data.h"
 #include "lsp/client.h"
 #include "lsp/install.h"
+#include "tools/string_util.h"
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -24,9 +25,7 @@ namespace lsp_internal
   namespace fs = std::filesystem;
   inline std::string to_lower_copy(std::string s)
   {
-    std::transform(
-        s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-    return s;
+    return string_util::lower_copy(std::move(s));
   }
 
   inline bool ends_with(const std::string &s, const std::string &suffix)

@@ -1,5 +1,6 @@
 #include "tools/lsp/install.h"
 #include "tools/shell_util.h"
+#include "tools/string_util.h"
 
 #include <algorithm>
 #include <cctype>
@@ -10,21 +11,6 @@ namespace fs = std::filesystem;
 
 namespace
 {
-
-  std::string trim_copy(const std::string &value)
-  {
-    size_t start = 0;
-    while (start < value.size() && std::isspace((unsigned char)value[start]))
-    {
-      start++;
-    }
-    size_t end = value.size();
-    while (end > start && std::isspace((unsigned char)value[end - 1]))
-    {
-      end--;
-    }
-    return value.substr(start, end - start);
-  }
 
   fs::path data_root()
   {
@@ -138,20 +124,20 @@ namespace LspInstall
       return false;
     }
 
-    const std::string rest = trim_copy(line.substr(marker_pos + prefix.size()));
+    const std::string rest = string_util::trim_copy(line.substr(marker_pos + prefix.size()));
     const size_t first_space = rest.find(' ');
     if (first_space == std::string::npos)
     {
       return false;
     }
     marker.phase = rest.substr(0, first_space);
-    const std::string details = trim_copy(rest.substr(first_space + 1));
+    const std::string details = string_util::trim_copy(rest.substr(first_space + 1));
     const size_t exit_pos = details.find(" exit=");
     marker.server = exit_pos == std::string::npos ? details : details.substr(0, exit_pos);
     marker.exit_code = -1;
     if (exit_pos != std::string::npos)
     {
-      const std::string exit_value = trim_copy(details.substr(exit_pos + 6));
+      const std::string exit_value = string_util::trim_copy(details.substr(exit_pos + 6));
       if (!exit_value.empty())
       {
         marker.exit_code = std::atoi(exit_value.c_str());

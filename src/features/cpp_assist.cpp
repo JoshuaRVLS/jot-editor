@@ -1,4 +1,5 @@
 #include "cpp_assist.h"
+#include "tools/string_util.h"
 
 #include <algorithm>
 #include <cctype>
@@ -10,24 +11,6 @@ namespace CppAssist
 {
   namespace
   {
-    std::string lower_copy(std::string s)
-    {
-      std::transform(
-          s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-      return s;
-    }
-
-    std::string trim_copy(const std::string &s)
-    {
-      size_t start = s.find_first_not_of(" \t\r\n");
-      if (start == std::string::npos)
-      {
-        return "";
-      }
-      size_t end = s.find_last_not_of(" \t\r\n");
-      return s.substr(start, end - start + 1);
-    }
-
     std::string collapse_spaces(const std::string &s)
     {
       std::string out;
@@ -48,7 +31,7 @@ namespace CppAssist
           in_space = false;
         }
       }
-      return trim_copy(out);
+      return string_util::trim_copy(out);
     }
 
     bool contains_word(const std::string &s, const std::string &word)
@@ -200,13 +183,13 @@ namespace CppAssist
 
   bool is_header_path(const fs::path &path)
   {
-    const std::string ext = lower_copy(path.extension().string());
+    const std::string ext = string_util::lower_copy(path.extension().string());
     return ext == ".h" || ext == ".hh" || ext == ".hpp" || ext == ".hxx";
   }
 
   bool is_source_path(const fs::path &path)
   {
-    const std::string ext = lower_copy(path.extension().string());
+    const std::string ext = string_util::lower_copy(path.extension().string());
     return ext == ".c" || ext == ".cc" || ext == ".cpp" || ext == ".cxx";
   }
 
@@ -267,7 +250,7 @@ namespace CppAssist
 
     while (std::getline(ss, raw_line))
     {
-      std::string line = trim_copy(raw_line);
+      std::string line = string_util::trim_copy(raw_line);
       std::smatch match;
       if (line == "public:" || line == "private:" || line == "protected:")
       {

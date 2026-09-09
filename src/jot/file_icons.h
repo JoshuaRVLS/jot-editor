@@ -10,7 +10,7 @@
 // here means the status line (which had only a generic file glyph before)
 // now shows the same per-language icon as the sidebar, colored.
 
-#include <cctype>
+#include "tools/string_util.h"
 #include <string>
 
 namespace jot_icons
@@ -25,11 +25,7 @@ namespace jot_icons
   {
     inline std::string lower_copy(std::string s)
     {
-      for (char &c : s)
-      {
-        c = (char)std::tolower((unsigned char)c);
-      }
-      return s;
+      return string_util::lower_copy(std::move(s));
     }
   } // namespace detail
 

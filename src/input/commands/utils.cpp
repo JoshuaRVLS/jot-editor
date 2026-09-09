@@ -1,5 +1,6 @@
 #include "commands/utils.h"
 #include "tools/shell_util.h"
+#include "tools/string_util.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -11,8 +12,7 @@ namespace CommandLineUtils
 
   std::string to_lower_copy(std::string s)
   {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
-    return s;
+    return string_util::lower_copy(std::move(s));
   }
 
   std::string shell_quote(const std::string &value)
@@ -22,12 +22,7 @@ namespace CommandLineUtils
 
   std::string first_line_copy(const std::string &text)
   {
-    size_t end = text.find_first_of("\r\n");
-    if (end == std::string::npos)
-    {
-      return text;
-    }
-    return text.substr(0, end);
+    return string_util::first_line_copy(text);
   }
 
   std::string limit_lines(const std::string &text, int max_lines)
@@ -299,11 +294,7 @@ namespace CommandLineUtils
 
   std::string trim_copy(const std::string &s)
   {
-    const size_t start = s.find_first_not_of(" \t");
-    if (start == std::string::npos)
-      return "";
-    const size_t end = s.find_last_not_of(" \t");
-    return s.substr(start, end - start + 1);
+    return string_util::trim_copy(s);
   }
 
   std::vector<std::string> complete_path_argument(const std::string &arg)

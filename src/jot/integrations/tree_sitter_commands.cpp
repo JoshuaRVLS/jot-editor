@@ -1,6 +1,7 @@
 #include "jot/app/process_job.h"
 #include "editor.h"
 #include "jot/lua/api.h"
+#include "tools/string_util.h"
 #include "tree_sitter/install.h"
 
 #include <algorithm>
@@ -9,21 +10,6 @@
 
 namespace
 {
-  std::string trim_copy(const std::string &s)
-  {
-    size_t a = 0;
-    while (a < s.size() && std::isspace((unsigned char)s[a]))
-    {
-      ++a;
-    }
-    size_t b = s.size();
-    while (b > a && std::isspace((unsigned char)s[b - 1]))
-    {
-      --b;
-    }
-    return s.substr(a, b - a);
-  }
-
   bool parse_tree_sitter_marker(const std::string &line, std::string &phase, std::string &language)
   {
     const std::string marker = "[jot:treesitter] ";
@@ -37,7 +23,7 @@ namespace
     {
       return false;
     }
-    std::string rest = trim_copy(line.substr(first + marker.size()));
+    std::string rest = string_util::trim_copy(line.substr(first + marker.size()));
     size_t space = rest.find(' ');
     if (space == std::string::npos)
     {
@@ -46,7 +32,7 @@ namespace
       return true;
     }
     phase = rest.substr(0, space);
-    language = trim_copy(rest.substr(space + 1));
+    language = string_util::trim_copy(rest.substr(space + 1));
     size_t exit_pos = language.find(" exit=");
     if (exit_pos != std::string::npos)
     {

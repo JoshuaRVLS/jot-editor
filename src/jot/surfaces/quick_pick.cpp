@@ -1,6 +1,7 @@
 #include "editor.h"
 #include "jot/lua/api.h"
 #include "tools/symbols/index.h"
+#include "tools/string_util.h"
 #include "tools/workspace/search.h"
 
 #include <algorithm>
@@ -12,13 +13,6 @@ namespace fs = std::filesystem;
 
 namespace
 {
-  std::string lower_copy(std::string s)
-  {
-    std::transform(
-        s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-    return s;
-  }
-
   std::string trim_preview(std::string s)
   {
     for (char &c : s)
@@ -96,8 +90,8 @@ int Editor::quick_pick_match_score(const std::string &query, const QuickPickItem
   {
     return 1;
   }
-  const std::string needle = lower_copy(query);
-  const std::string hay = lower_copy(item.label + " " + item.detail + " " + item.preview);
+  const std::string needle = string_util::lower_copy(query);
+  const std::string hay = string_util::lower_copy(item.label + " " + item.detail + " " + item.preview);
   size_t exact = hay.find(needle);
   if (exact != std::string::npos)
   {

@@ -1,4 +1,5 @@
 #include "telescope.h"
+#include "tools/string_util.h"
 #include <algorithm>
 #include <cctype>
 #include <fstream>
@@ -13,14 +14,6 @@ namespace
   constexpr int kMaxPreviewLines = 120;
   constexpr int kMaxPreviewLineLength = 240;
   constexpr std::uintmax_t kMaxPreviewFileBytes = 1024 * 1024; // 1MB
-
-  std::string lower_copy(const std::string &s)
-  {
-    std::string out = s;
-    std::transform(
-        out.begin(), out.end(), out.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-    return out;
-  }
 
   bool should_skip_dir_name(const std::string &name)
   {
@@ -48,7 +41,7 @@ namespace
   // inspected so a real directory literally named "foo (1)" is not affected.
   bool name_looks_generated_duplicate(const std::string &name)
   {
-    std::string s = lower_copy(name);
+    std::string s = string_util::lower_copy(name);
     const size_t dot = s.rfind('.');
     if (dot != std::string::npos && dot > 0)
     {
@@ -93,7 +86,7 @@ namespace
         "rb", "php",  "swift", "cs", "scala", "clj", "ex", "exs", "erl",  "hs",   "ml",
         "fs", "fsx",  "vue", "svelte", "dart", "zig", "nim", "r",   "sql", "toml", "json",
         "yaml", "yml", "cmake", "mk", "proto", "tex", "md", "rst"};
-    return kSourceExts.find(lower_copy(name.substr(dot + 1))) != kSourceExts.end();
+    return kSourceExts.find(string_util::lower_copy(name.substr(dot + 1))) != kSourceExts.end();
   }
 
   bool file_looks_binary(const std::string &path)
@@ -301,7 +294,7 @@ void Telescope::publish_filtered()
     return;
   }
 
-  const std::string query_lc = lower_copy(query);
+  const std::string query_lc = string_util::lower_copy(query);
   std::vector<FileMatch> filtered;
   filtered.reserve(all_entries_.size());
 
@@ -326,7 +319,7 @@ void Telescope::publish_filtered()
                 {
                   return a.is_directory;
                 }
-                return lower_copy(a.name) < lower_copy(b.name);
+                return string_util::lower_copy(a.name) < string_util::lower_copy(b.name);
               }
               if (a.score != b.score)
               {
@@ -336,7 +329,7 @@ void Telescope::publish_filtered()
               {
                 return !a.is_directory;
               }
-              return lower_copy(a.name) < lower_copy(b.name);
+              return string_util::lower_copy(a.name) < string_util::lower_copy(b.name);
             });
 
   if ((int)filtered.size() > kMaxResults)
@@ -402,8 +395,8 @@ void Telescope::scan_directory(const fs::path &dir, int depth)
               {
                 return ad;
               }
-              std::string an = lower_copy(a.path().filename().string());
-              std::string bn = lower_copy(b.path().filename().string());
+              std::string an = string_util::lower_copy(a.path().filename().string());
+              std::string bn = string_util::lower_copy(b.path().filename().string());
               return an < bn;
             });
 
@@ -738,8 +731,8 @@ bool Telescope::fuzzy_match(const std::string &text, const std::string &pattern)
   if (pattern.empty())
     return true;
 
-  std::string text_lower = lower_copy(text);
-  std::string pattern_lower = lower_copy(pattern);
+  std::string text_lower = string_util::lower_copy(text);
+  std::string pattern_lower = string_util::lower_copy(pattern);
 
   size_t pattern_idx = 0;
   for (size_t i = 0; i < text_lower.length() && pattern_idx < pattern_lower.length(); i++)
@@ -757,8 +750,8 @@ int Telescope::fuzzy_score(const std::string &text, const std::string &pattern)
   if (pattern.empty())
     return 0;
 
-  std::string text_lower = lower_copy(text);
-  std::string pattern_lower = lower_copy(pattern);
+  std::string text_lower = string_util::lower_copy(text);
+  std::string pattern_lower = string_util::lower_copy(pattern);
   if (text_lower.empty())
   {
     return 0;
@@ -820,8 +813,8 @@ int Telescope::rank_score(const std::string &name,
     return 0;
   }
   int bonus = 0;
-  std::string name_lc = lower_copy(name);
-  std::string rel_lc = lower_copy(relative_path);
+  std::string name_lc = string_util::lower_copy(name);
+  std::string rel_lc = string_util::lower_copy(relative_path);
   if (!query_lc.empty() && name_lc.find(query_lc) != std::string::npos)
   {
     bonus += 30;

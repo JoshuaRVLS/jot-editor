@@ -1,5 +1,6 @@
 #include "imageviewer.h"
 #include "tools/shell_util.h"
+#include "tools/string_util.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -24,15 +25,6 @@ namespace fs = std::filesystem;
 
 namespace
 {
-  std::string lower_copy(std::string value)
-  {
-    std::transform(value.begin(),
-                   value.end(),
-                   value.begin(),
-                   [](unsigned char c) { return (char)std::tolower(c); });
-    return value;
-  }
-
   long long process_id()
   {
 #ifdef _WIN32
@@ -246,7 +238,7 @@ ImageViewer::ImageViewer()
 
 ImageViewer::Backend ImageViewer::parse_backend(const std::string &name)
 {
-  std::string n = lower_copy(name);
+  std::string n = string_util::lower_copy(name);
   if (n == "kitty")
     return Backend::Kitty;
   if (n == "sixel")
@@ -280,14 +272,14 @@ bool ImageViewer::terminal_supports_kitty()
 {
   if (env_present("KITTY_WINDOW_ID"))
     return true;
-  std::string term = lower_copy(getenv_string("TERM"));
+  std::string term = string_util::lower_copy(getenv_string("TERM"));
   return term.find("kitty") != std::string::npos;
 }
 
 bool ImageViewer::terminal_may_support_sixel()
 {
-  std::string term = lower_copy(getenv_string("TERM"));
-  std::string program = lower_copy(getenv_string("TERM_PROGRAM"));
+  std::string term = string_util::lower_copy(getenv_string("TERM"));
+  std::string program = string_util::lower_copy(getenv_string("TERM_PROGRAM"));
   if (term.find("sixel") != std::string::npos)
     return true;
   if (program.find("wezterm") != std::string::npos)
@@ -402,7 +394,7 @@ std::string ImageViewer::prepare_kitty_graphics_file()
     return "";
 
   std::string ext = fs::path(current_image).extension().string();
-  ext = lower_copy(ext);
+  ext = string_util::lower_copy(ext);
   if (ext == ".png")
   {
     graphics_file = current_image;

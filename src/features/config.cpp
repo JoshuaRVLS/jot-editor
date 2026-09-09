@@ -1,4 +1,5 @@
 #include "config.h"
+#include "tools/string_util.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -36,17 +37,6 @@ namespace
     }
 #endif
     return {};
-  }
-
-  std::string trim_copy(const std::string &s)
-  {
-    size_t start = s.find_first_not_of(" \t");
-    if (start == std::string::npos)
-    {
-      return "";
-    }
-    size_t end = s.find_last_not_of(" \t");
-    return s.substr(start, end - start + 1);
   }
 
   std::string strip_inline_comment(const std::string &line)
@@ -124,7 +114,7 @@ void Config::load_defaults()
 void Config::parse_line(const std::string &line)
 {
   std::string normalized = strip_inline_comment(line);
-  normalized = trim_copy(normalized);
+  normalized = string_util::trim_copy(normalized);
   if (normalized.empty())
   {
     return;
@@ -134,8 +124,8 @@ void Config::parse_line(const std::string &line)
   if (eq == std::string::npos)
     return;
 
-  std::string key = trim_copy(normalized.substr(0, eq));
-  std::string value = trim_copy(normalized.substr(eq + 1));
+  std::string key = string_util::trim_copy(normalized.substr(0, eq));
+  std::string value = string_util::trim_copy(normalized.substr(eq + 1));
 
   if (value.size() >= 2
       && ((value.front() == '"' && value.back() == '"')
@@ -284,7 +274,7 @@ std::vector<std::string> Config::get_list(const std::string &key, char delimiter
   {
     if (trim_items)
     {
-      item = trim_copy(item);
+      item = string_util::trim_copy(item);
     }
     if (!item.empty())
     {

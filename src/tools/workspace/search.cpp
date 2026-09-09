@@ -1,4 +1,5 @@
 #include "tools/workspace/search.h"
+#include "tools/string_util.h"
 
 #include <algorithm>
 #include <cctype>
@@ -11,12 +12,6 @@ namespace fs = std::filesystem;
 
 namespace
 {
-  std::string lower_copy(std::string s)
-  {
-    std::transform(
-        s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-    return s;
-  }
 
   std::string trim_line_preview(std::string line)
   {
@@ -82,7 +77,7 @@ namespace WorkspaceSearch
                                             int max_results)
   {
     std::vector<WorkspaceSearchResult> out;
-    std::string needle = lower_copy(query);
+    std::string needle = string_util::lower_copy(query);
     if (needle.empty() || max_results <= 0)
     {
       return out;
@@ -139,11 +134,11 @@ namespace WorkspaceSearch
       std::string line;
       int line_no = 0;
       std::string rel = relative_display(entry.path(), root_path);
-      std::string rel_lower = lower_copy(rel);
+      std::string rel_lower = string_util::lower_copy(rel);
       while (std::getline(lines, line) && (int)out.size() < max_results)
       {
         line_no++;
-        std::string lower = lower_copy(line);
+        std::string lower = string_util::lower_copy(line);
         size_t pos = lower.find(needle);
         if (pos == std::string::npos)
         {

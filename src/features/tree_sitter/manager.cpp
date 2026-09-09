@@ -1,5 +1,6 @@
 #include "tree_sitter/manager.h"
 #include "tree_sitter/install.h"
+#include "tools/string_util.h"
 
 #include <algorithm>
 #include <cctype>
@@ -26,15 +27,6 @@ namespace
 {
   namespace fs = std::filesystem;
 
-  std::string trim_copy(const std::string &s)
-  {
-    size_t start = s.find_first_not_of(" \t\r\n");
-    if (start == std::string::npos)
-      return "";
-    size_t end = s.find_last_not_of(" \t\r\n");
-    return s.substr(start, end - start + 1);
-  }
-
   char path_list_separator()
   {
 #ifdef _WIN32
@@ -52,7 +44,7 @@ namespace
     std::string item;
     while (std::getline(ss, item, delimiter))
     {
-      item = trim_copy(item);
+      item = string_util::trim_copy(item);
       if (!item.empty())
         out.push_back(item);
     }
@@ -467,8 +459,8 @@ void TreeSitterManager::set_runtime_options(const std::vector<std::string> &libr
     {
       continue;
     }
-    std::string ext = trim_copy(raw.substr(0, sep));
-    std::string lang = trim_copy(raw.substr(sep + 1));
+    std::string ext = string_util::trim_copy(raw.substr(0, sep));
+    std::string lang = string_util::trim_copy(raw.substr(sep + 1));
     std::transform(lang.begin(),
                    lang.end(),
                    lang.begin(),

@@ -1,19 +1,11 @@
 #include "editor.h"
 #include "jot/lua/api.h"
+#include "tools/string_util.h"
 #include <algorithm>
 #include <cctype>
 
 namespace
 {
-  std::string ltrim_copy(const std::string &s)
-  {
-    size_t i = 0;
-    while (i < s.size() && std::isspace((unsigned char)s[i]))
-    {
-      i++;
-    }
-    return s.substr(i);
-  }
 } // namespace
 
 void Editor::join_lines_selection_or_current()
@@ -48,7 +40,7 @@ void Editor::join_lines_selection_or_current()
   for (int y = start_y; y < end_y && y + 1 < (int)buf.lines.size();)
   {
     std::string left = buf.lines[y];
-    std::string right = ltrim_copy(buf.lines[y + 1]);
+    std::string right = string_util::ltrim_copy(buf.lines[y + 1]);
     if (!left.empty() && !right.empty() && !std::isspace((unsigned char)left.back()))
     {
       left.push_back(' ');

@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "jot/lua/api.h"
+#include "tools/string_util.h"
 #include <algorithm>
 #include <cctype>
 #include <regex>
@@ -10,13 +11,6 @@ namespace
   {
     unsigned char uc = (unsigned char)c;
     return std::isalnum(uc) || c == '_';
-  }
-
-  std::string to_lower_copy(std::string s)
-  {
-    std::transform(
-        s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-    return s;
   }
 
   int replace_in_line(std::string &line,
@@ -32,7 +26,7 @@ namespace
 
     int count = 0;
     size_t pos = 0;
-    const std::string needle_cmp = case_sensitive ? needle : to_lower_copy(needle);
+    const std::string needle_cmp = case_sensitive ? needle : string_util::lower_copy(needle);
     while (pos <= line.size())
     {
       size_t found = std::string::npos;
@@ -42,7 +36,7 @@ namespace
       }
       else
       {
-        std::string line_lc = to_lower_copy(line);
+        std::string line_lc = string_util::lower_copy(line);
         found = line_lc.find(needle_cmp, pos);
       }
       if (found == std::string::npos)

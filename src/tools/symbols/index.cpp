@@ -1,4 +1,5 @@
 #include "tools/symbols/index.h"
+#include "tools/string_util.h"
 
 #include <algorithm>
 #include <cctype>
@@ -15,17 +16,6 @@ namespace
     return ext;
   }
 
-  std::string trim_copy(const std::string &s)
-  {
-    size_t start = s.find_first_not_of(" \t");
-    if (start == std::string::npos)
-    {
-      return "";
-    }
-    size_t end = s.find_last_not_of(" \t");
-    return s.substr(start, end - start + 1);
-  }
-
   void add_match(std::vector<SymbolMatch> &out,
                  const std::smatch &m,
                  const std::string &line,
@@ -40,7 +30,7 @@ namespace
     SymbolMatch symbol;
     symbol.name = m[(size_t)group].str();
     symbol.kind = kind;
-    symbol.detail = trim_copy(line);
+    symbol.detail = string_util::trim_copy(line);
     symbol.line = line_idx;
     symbol.column = (int)m.position((size_t)group);
     out.push_back(std::move(symbol));

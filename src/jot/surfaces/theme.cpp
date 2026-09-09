@@ -1,27 +1,11 @@
 #include "editor.h"
 #include "jot/lua/api.h"
+#include "tools/string_util.h"
 #include <algorithm>
 #include <cctype>
 
 namespace
 {
-  std::string to_lower_copy(std::string s)
-  {
-    std::transform(
-        s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-    return s;
-  }
-
-  std::string trim_copy(const std::string &s)
-  {
-    const size_t start = s.find_first_not_of(" \t");
-    if (start == std::string::npos)
-    {
-      return "";
-    }
-    const size_t end = s.find_last_not_of(" \t");
-    return s.substr(start, end - start + 1);
-  }
 } // namespace
 
 std::vector<std::string> Editor::list_available_themes()
@@ -41,19 +25,19 @@ std::vector<std::string> Editor::list_available_themes()
   std::sort(themes.begin(),
             themes.end(),
             [](const std::string &a, const std::string &b)
-            { return to_lower_copy(a) < to_lower_copy(b); });
+            { return string_util::lower_copy(a) < string_util::lower_copy(b); });
 
   auto unique_end = std::unique(themes.begin(),
                                 themes.end(),
                                 [](const std::string &a, const std::string &b)
-                                { return to_lower_copy(a) == to_lower_copy(b); });
+                                { return string_util::lower_copy(a) == string_util::lower_copy(b); });
   themes.erase(unique_end, themes.end());
   return themes;
 }
 
 bool Editor::apply_theme(const std::string &name, bool persist, bool announce)
 {
-  const std::string requested = trim_copy(name);
+  const std::string requested = string_util::trim_copy(name);
   if (requested.empty())
   {
     set_message("Theme name is empty");
@@ -61,11 +45,11 @@ bool Editor::apply_theme(const std::string &name, bool persist, bool announce)
   }
 
   std::string resolved = requested;
-  const std::string needle = to_lower_copy(requested);
+  const std::string needle = string_util::lower_copy(requested);
   const auto themes = list_available_themes();
   for (const auto &theme_name : themes)
   {
-    if (to_lower_copy(theme_name) == needle)
+    if (string_util::lower_copy(theme_name) == needle)
     {
       resolved = theme_name;
       break;
