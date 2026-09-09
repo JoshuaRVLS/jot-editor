@@ -119,6 +119,11 @@ check("search.matches", function() return jot.search.matches() end)
 check("lsp.clients", function() return jot.lsp.clients() end)
 check("lsp.diagnostics", function() return jot.lsp.diagnostics() end)
 check("lsp.completions", function() return jot.lsp.completions() end)
+check("process.memory", function()
+  local bytes = jot.process.memory()
+  -- Positive, sane RSS figure (a few MB to a few GB), stable across calls.
+  return type(bytes) == "number" and bytes > 1024 * 1024 and bytes < 1024 * 1024 * 1024 * 64
+end)
 check("lsp.results", function() return jot.lsp.results() end)
 
 -- ---------------------------------------------------------- decorations

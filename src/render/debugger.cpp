@@ -120,7 +120,8 @@ void Editor::render_debugger_panel()
                                       ":debugconfig <name>",
                                       ":debugattach <pid>",
                                       "",
-                                      "Breakpoints: click gutter"};
+                                      "Breakpoints: click gutter (F9 at cursor)",
+                                      "Keys: F5 cont  F6 thr  F7/F8 frame  F10 over  F11 in"};
     int row = 0;
     for (const auto &line : lines)
     {
@@ -134,6 +135,7 @@ void Editor::render_debugger_panel()
       r.fg = fg;
       r.bg = theme.bg_terminal;
       r.bold = row == 0;
+      r.kind = row == 0 ? "empty" : "";
       view.rows.push_back(std::move(r));
       ui->draw_text(
           content_x, content_y + row, clip(line, content_w), fg, theme.bg_terminal, row == 0);
@@ -146,6 +148,7 @@ void Editor::render_debugger_panel()
       r.fg = theme.fg_status_info;
       r.bg = theme.bg_terminal;
       r.bold = true;
+      r.kind = "section";
       view.rows.push_back(std::move(r));
       ui->draw_text(
           content_x, content_y + row, "Configs", theme.fg_status_info, theme.bg_terminal, true);
@@ -160,6 +163,7 @@ void Editor::render_debugger_panel()
         rc.text = clip("  " + cfg.name, content_w);
         rc.fg = theme.fg_terminal;
         rc.bg = theme.bg_terminal;
+        rc.kind = "config";
         view.rows.push_back(std::move(rc));
         ui->draw_text(content_x,
                       content_y + row,
@@ -185,13 +189,18 @@ void Editor::render_debugger_panel()
   int col3_w = content_w;
   int col4_w = content_w;
 
-  const auto &state = debugger_session_state[current_debugger_session];
+  // Non-const: the render clamps output_scroll against the visible window.
+  auto &state = debugger_session_state[current_debugger_session];
+  // Session summary line (adapter + program), consumed by the Lua side panel;
+  // the native fallback paint does not draw it.
+  view.header = state.adapter + "  " + state.program;
   {
     SidePanelRowView r;
     r.text = "Threads / Stack";
     r.fg = theme.fg_status_info;
     r.bg = theme.bg_terminal;
     r.bold = true;
+    r.kind = "section";
     view.rows.push_back(std::move(r));
   }
   ui->draw_text(x1, content_y, "Threads / Stack", theme.fg_status_info, theme.bg_terminal, true);
@@ -209,6 +218,8 @@ void Editor::render_debugger_panel()
       r.text = clip(prefix + "T" + std::to_string(thread.id) + " " + thread.name, col1_w);
       r.fg = theme.fg_terminal;
       r.bg = theme.bg_terminal;
+      r.bold = thread.id == state.active_thread_id;
+      r.kind = thread.id == state.active_thread_id ? "thread_active" : "thread";
       view.rows.push_back(std::move(r));
     }
     ui->draw_text(x1,
@@ -223,18 +234,25 @@ void Editor::render_debugger_panel()
       {
         break;
       }
+      const bool active_frame = frame.id == state.active_frame_id;
       std::string loc = frame.filepath.empty()
                             ? frame.name
                             : get_filename(frame.filepath) + ":" + std::to_string(frame.line + 1);
       {
         SidePanelRowView r;
         r.text = clip("  #" + loc, col1_w);
-        r.fg = theme.fg_comment;
+        r.fg = active_frame ? theme.fg_terminal : theme.fg_comment;
         r.bg = theme.bg_terminal;
+        r.bold = active_frame;
+        r.kind = active_frame ? "frame_active" : "frame";
         view.rows.push_back(std::move(r));
       }
-      ui->draw_text(
-          x1, content_y + row, clip("  #" + loc, col1_w), theme.fg_comment, theme.bg_terminal);
+      ui->draw_text(x1,
+                    content_y + row,
+                    clip("  #" + loc, col1_w),
+                    active_frame ? theme.fg_terminal : theme.fg_comment,
+                    theme.bg_terminal,
+                    active_frame);
       row++;
     }
   }
@@ -251,6 +269,7 @@ void Editor::render_debugger_panel()
       r.fg = theme.fg_status_info;
       r.bg = theme.bg_terminal;
       r.bold = true;
+      r.kind = "section";
       view.rows.push_back(std::move(r));
     }
     ui->draw_text(x2, content_y + row, "Variables", theme.fg_status_info, theme.bg_terminal, true);
@@ -272,6 +291,7 @@ void Editor::render_debugger_panel()
       r.text = clip(text, col2_w);
       r.fg = theme.fg_terminal;
       r.bg = theme.bg_terminal;
+      r.kind = "var";
       view.rows.push_back(std::move(r));
     }
     ui->draw_text(x2, content_y + row, clip(text, col2_w), theme.fg_terminal, theme.bg_terminal);
@@ -290,6 +310,7 @@ void Editor::render_debugger_panel()
       r.fg = theme.fg_status_info;
       r.bg = theme.bg_terminal;
       r.bold = true;
+      r.kind = "section";
       view.rows.push_back(std::move(r));
     }
     ui->draw_text(x3, content_y + row, "Memory", theme.fg_status_info, theme.bg_terminal, true);
@@ -306,6 +327,7 @@ void Editor::render_debugger_panel()
       r.text = clip(mem.address + "  " + mem.bytes + "  " + mem.ascii, col3_w);
       r.fg = theme.fg_terminal;
       r.bg = theme.bg_terminal;
+      r.kind = "memory";
       view.rows.push_back(std::move(r));
     }
     ui->draw_text(x3,
@@ -328,6 +350,7 @@ void Editor::render_debugger_panel()
       r.fg = theme.fg_status_info;
       r.bg = theme.bg_terminal;
       r.bold = true;
+      r.kind = "section";
       view.rows.push_back(std::move(r));
     }
     ui->draw_text(
@@ -345,6 +368,7 @@ void Editor::render_debugger_panel()
       r.text = clip(inst.address + "  " + inst.instruction, col4_w);
       r.fg = theme.fg_terminal;
       r.bg = theme.bg_terminal;
+      r.kind = "instruction";
       view.rows.push_back(std::move(r));
     }
     ui->draw_text(x4,
@@ -357,18 +381,24 @@ void Editor::render_debugger_panel()
 
   if (row < content_h)
   {
-    auto lines = split_lines(state.output, content_h - row);
-    for (const auto &line : lines)
+    // Output history window: scroll back with the wheel / Ctrl+PageUp/Down.
+    // `output_scroll` is lines from the end; 0 = newest output pinned at the
+    // bottom of the visible window.
+    const int visible = content_h - row;
+    const auto all_lines = split_lines(state.output, 100000);
+    const int max_scroll = std::max(0, (int)all_lines.size() - visible);
+    const int scroll = std::clamp(state.output_scroll, 0, max_scroll);
+    state.output_scroll = scroll;
+    const int start = std::max(0, (int)all_lines.size() - visible - scroll);
+    for (int i = start; i < (int)all_lines.size() && row < content_h; i++)
     {
-      if (row >= content_h)
-      {
-        break;
-      }
+      const auto &line = all_lines[(size_t)i];
       {
         SidePanelRowView r;
         r.text = clip(line, col4_w);
         r.fg = theme.fg_comment;
         r.bg = theme.bg_terminal;
+        r.kind = "output";
         view.rows.push_back(std::move(r));
       }
       ui->draw_text(x4, content_y + row, clip(line, col4_w), theme.fg_comment, theme.bg_terminal);

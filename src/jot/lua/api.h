@@ -5,6 +5,7 @@
 #include "tools/debugger/client.h"
 #include "tools/lsp/client.h"
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -320,6 +321,11 @@ struct SidePanelRowView
   int fg = 0, bg = 0;
   bool bold = false;
   bool selected = false; // full-row selection background
+  // Row category for richer Lua styling (the Lua side_panel kit restyles by
+  // kind; native fallback renders all rows identically). Empty = generic.
+  // Debugger kinds: "section", "thread", "frame", "var", "memory",
+  // "instruction", "output", "empty", "config".
+  std::string kind;
 };
 
 struct SidePanelTabView
@@ -569,6 +575,10 @@ private:
   std::unordered_map<uint64_t, LuaTimerEntry> timer_entries_;
   // Last observed debugger state signature (dedupes debugger.state_changed).
   std::string last_debugger_sig_;
+  // Process memory cache: resident set size is re-read at most once per
+  // second (the status line polls it every frame).
+  long long cached_process_memory_bytes_ = -1;
+  std::chrono::steady_clock::time_point last_process_memory_read_{};
 
   void push_ui_colors(lua_State *L, int payload_index);
 
@@ -903,6 +913,9 @@ public:
   void sidebar_set_view_from_lua(lua_State *L);
   // LSP manager actions (jot.lsp): disabled set + server enable/install/remove.
   void push_lsp_disabled(lua_State *L);
+  // Current resident memory of the editor process in bytes (jot.process
+  // .memory), cached ~1 s. -1 when the platform could not be queried.
+  long long process_memory_bytes();
   void lsp_set_enabled_from_lua(lua_State *L);
   void lsp_install_from_lua(lua_State *L);
   void lsp_remove_from_lua(lua_State *L);
@@ -935,6 +948,13 @@ public:
   // first expandable scope's variables (sink stays pending for the Variables
   // event). Returns true when the chain advanced.
   bool debugger_chain_variables(int session, const std::vector<DebuggerVariable> &scopes);
+  // Debugger panel navigation (jot.debugger.scroll_output / cycle_thread /
+  // cycle_frame): scroll the output history, switch the active thread, or
+  // walk the active thread's stack frames. Each returns true when the action
+  // moved something.
+  void debugger_scroll_output_from_lua(lua_State *L);
+  void debugger_cycle_thread_from_lua(lua_State *L);
+  void debugger_cycle_frame_from_lua(lua_State *L);
   // Theme palette readback (jot.theme.palette): full current slot table.
   void push_theme_palette(lua_State *L);
   // Buffer lines (jot.buffer.lines) and clipboard text (jot.clipboard.get).

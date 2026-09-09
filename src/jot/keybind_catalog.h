@@ -95,6 +95,12 @@ namespace jot
       case 1013:
         base = "End";
         break;
+      case 1015:
+        base = "PageUp";
+        break;
+      case 1016:
+        base = "PageDown";
+        break;
       default:
         if ((key & KeyCode::FunctionMarker) != 0)
         {

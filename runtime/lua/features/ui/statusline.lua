@@ -47,6 +47,34 @@ local function status_line(p)
     end
   end
 
+  -- Editor process memory usage (Lua-owned segment). The value comes from
+  -- a tiny native bridge (jot.process.memory, cached ~1 s in C++); the
+  -- formatting, placement and drop priority all live here. Marked optional
+  -- with the lowest priority so it is the first segment to yield when the
+  -- bar fills up.
+  local ok_mem, mem_bytes = pcall(function() return jot.process.memory() end)
+  if ok_mem and type(mem_bytes) == "number" and mem_bytes > 0 then
+    local mb = mem_bytes / (1024 * 1024)
+    local value
+    if mb >= 1024 then
+      value = string.format("%.1fG", mb / 1024)
+    elseif mb >= 100 then
+      value = string.format("%.0fM", mb)
+    else
+      value = string.format("%.1fM", mb)
+    end
+    right[#right + 1] = {
+      text = " mem " .. value .. " ",
+      fg = muted_fg,
+      bg = status_bg,
+      bold = false,
+      optional = true,
+      priority = 5,
+      symbol = "",
+      symbol_fg = muted_fg,
+    }
+  end
+
   local function block_width(list)
     local n = 0
     for i, s in ipairs(list) do

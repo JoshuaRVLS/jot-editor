@@ -81,6 +81,10 @@ TEST_CASE("Chord naming keeps named keys distinct under Ctrl")
   REQUIRE(chord_name(19, true, false, false, 19) == "Ctrl+S");
   REQUIRE(chord_name('s', true, true, false, 's') == "Ctrl+Shift+S");
   REQUIRE(chord_name(1008, true, false, false, 1008) == "Ctrl+Up");
+  // PageUp/PageDown keep their names so Lua keymaps can bind them
+  // (debugger output scrollback uses Ctrl+PageUp / Ctrl+PageDown).
+  REQUIRE(chord_name(1015, false, false, false, 1015) == "PageUp");
+  REQUIRE(chord_name(1016, true, false, false, 1016) == "Ctrl+PageDown");
 }
 
 TEST_CASE("CSI-u decode follows the kitty bitmask+1 modifier convention")

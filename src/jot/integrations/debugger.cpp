@@ -138,7 +138,7 @@ namespace
     return p.lexically_normal().string();
   }
 
-  std::string compact_output(std::string text, size_t max_size = 4000)
+  std::string compact_output(std::string text, size_t max_size = 64000)
   {
     if (text.size() <= max_size)
     {
@@ -176,7 +176,11 @@ void Editor::toggle_debugger_panel()
   needs_redraw = true;
 }
 
-bool Editor::handle_debugger_mouse(int x, int y, bool activate)
+bool Editor::handle_debugger_mouse(int x,
+                                   int y,
+                                   bool activate,
+                                   bool wheel_up,
+                                   bool wheel_down)
 {
   if (!show_right_panel || active_right_panel_tab != RIGHT_PANEL_DEBUG || !ui)
   {
@@ -190,6 +194,14 @@ bool Editor::handle_debugger_mouse(int x, int y, bool activate)
       || y >= panel_y + panel_h)
   {
     return false;
+  }
+  // Wheel over the panel scrolls the output history (the only scrollable
+  // section); the render clamps the offset to the visible window.
+  if (wheel_up || wheel_down)
+  {
+    debugger_scroll_output(wheel_up ? 3 : -3);
+    needs_redraw = true;
+    return true;
   }
   if (!activate)
   {
@@ -214,6 +226,133 @@ bool Editor::handle_debugger_mouse(int x, int y, bool activate)
   }
   needs_redraw = true;
   return true;
+}
+
+void Editor::debugger_scroll_output(int delta_lines)
+{
+  if (current_debugger_session < 0
+      || current_debugger_session >= (int)debugger_session_state.size())
+  {
+    return;
+  }
+  auto &state = debugger_session_state[current_debugger_session];
+  // Rough clamp here; the renderer re-clamps against the visible rows.
+  state.output_scroll = std::max(0, state.output_scroll + delta_lines);
+  needs_redraw = true;
+}
+
+void Editor::debugger_cycle_thread(int delta)
+{
+  DebuggerClient *client = get_debugger_session();
+  if (!client)
+  {
+    set_message("Debugger: no active session");
+    return;
+  }
+  auto &state = debugger_session_state[current_debugger_session];
+  if (!state.stopped)
+  {
+    set_message("Debugger: not stopped");
+    return;
+  }
+  if (state.threads.empty())
+  {
+    set_message("Debugger: no threads");
+    return;
+  }
+  int index = 0;
+  for (size_t i = 0; i < state.threads.size(); i++)
+  {
+    if (state.threads[i].id == state.active_thread_id)
+    {
+      index = (int)i;
+      break;
+    }
+  }
+  index = (index + delta + (int)state.threads.size()) % (int)state.threads.size();
+  const int new_thread = state.threads[(size_t)index].id;
+  state.active_thread_id = new_thread;
+  show_debugger_panel = true;
+  show_right_panel = true;
+  active_right_panel_tab = RIGHT_PANEL_DEBUG;
+  update_pane_layout();
+  // The stack-trace response refreshes frames, jumps to the new top frame
+  // and re-requests its variables.
+  client->stack_trace(new_thread);
+  set_message("Thread " + std::to_string(new_thread) + " "
+              + state.threads[(size_t)index].name);
+  needs_redraw = true;
+}
+
+void Editor::debugger_cycle_frame(int delta)
+{
+  DebuggerClient *client = get_debugger_session();
+  if (!client)
+  {
+    set_message("Debugger: no active session");
+    return;
+  }
+  auto &state = debugger_session_state[current_debugger_session];
+  if (!state.stopped)
+  {
+    set_message("Debugger: not stopped");
+    return;
+  }
+  DebuggerThread *thread = nullptr;
+  for (auto &t : state.threads)
+  {
+    if (t.id == state.active_thread_id)
+    {
+      thread = &t;
+      break;
+    }
+  }
+  if (!thread || thread->frames.empty())
+  {
+    set_message("Debugger: no stack frames");
+    return;
+  }
+  int index = 0;
+  for (size_t i = 0; i < thread->frames.size(); i++)
+  {
+    if (thread->frames[i].id == state.active_frame_id)
+    {
+      index = (int)i;
+      break;
+    }
+  }
+  index = std::clamp(index + delta, 0, (int)thread->frames.size() - 1);
+  const DebuggerFrame &frame = thread->frames[(size_t)index];
+  state.active_frame_id = frame.id;
+  jump_to_debugger_frame(frame);
+  show_debugger_panel = true;
+  show_right_panel = true;
+  active_right_panel_tab = RIGHT_PANEL_DEBUG;
+  update_pane_layout();
+  // Refresh the variable list for the frame we landed on.
+  client->scopes(frame.id);
+  std::string loc = frame.filepath.empty()
+                        ? frame.name
+                        : get_filename(frame.filepath) + ":" + std::to_string(frame.line + 1);
+  set_message("Frame " + std::to_string(index + 1) + "/"
+              + std::to_string(thread->frames.size()) + "  " + loc);
+  needs_redraw = true;
+}
+
+void Editor::jump_to_debugger_frame(const DebuggerFrame &frame)
+{
+  if (frame.filepath.empty())
+  {
+    return;
+  }
+  open_file(frame.filepath, true);
+  if (current_buffer >= 0 && current_buffer < (int)buffers.size())
+  {
+    auto &buf = get_buffer();
+    buf.cursor.y = std::clamp(frame.line, 0, std::max(0, (int)buf.line_count() - 1));
+    buf.cursor.x = std::clamp(frame.column, 0, (int)buf.line(buf.cursor.y).size());
+    ensure_cursor_visible();
+  }
 }
 
 bool Editor::start_debugger_session(DebuggerSessionConfig config)
@@ -538,7 +677,17 @@ void Editor::request_debugger_memory(const std::string &expression, int bytes)
   {
     ref = "$pc";
   }
-  client->read_memory(ref, 0, std::clamp(bytes, 1, 1024));
+  // Literal addresses go straight to readMemory; anything else (a variable,
+  // $register, &expr, ...) is evaluated first so the adapter can hand back
+  // an address (GDB only accepts literals in readMemory).
+  if (Dap::looks_like_address(ref))
+  {
+    client->read_memory(ref, 0, std::clamp(bytes, 1, 1024));
+  }
+  else
+  {
+    client->evaluate_and_read_memory(ref, std::clamp(bytes, 1, 1024));
+  }
   show_debugger_panel = true;
   show_right_panel = true;
   active_right_panel_tab = RIGHT_PANEL_DEBUG;
@@ -765,6 +914,11 @@ void Editor::poll_debugger_sessions()
         {
           client->stack_trace(state.active_thread_id);
         }
+        // Surface the panel so the paused state is actually visible.
+        show_right_panel = true;
+        show_debugger_panel = true;
+        active_right_panel_tab = RIGHT_PANEL_DEBUG;
+        update_pane_layout();
         set_message("Debugger stopped: " + event.message);
         break;
       case DebuggerEvent::Continued:
@@ -782,8 +936,20 @@ void Editor::poll_debugger_sessions()
         set_message("Debugger exited");
         break;
       case DebuggerEvent::Output:
+      {
+        // Keep the scroll position anchored when the user is scrolled up;
+        // pinned-to-bottom output just stays pinned.
+        const int old_lines =
+            (int)std::count(state.output.begin(), state.output.end(), '\n');
         state.output = compact_output(state.output + event.message);
+        const int new_lines =
+            (int)std::count(state.output.begin(), state.output.end(), '\n');
+        if (state.output_scroll > 0)
+        {
+          state.output_scroll += new_lines - old_lines;
+        }
         break;
+      }
       case DebuggerEvent::Threads:
         state.threads = event.threads;
         if (lua_api)
@@ -816,19 +982,7 @@ void Editor::poll_debugger_sessions()
               state.active_frame_id = event.frames.front().id;
               if (!lua_took)
               {
-                if (!event.frames.front().filepath.empty())
-                {
-                  open_file(event.frames.front().filepath, true);
-                  if (current_buffer >= 0 && current_buffer < (int)buffers.size())
-                  {
-                    auto &buf = get_buffer();
-                    buf.cursor.y = std::clamp(
-                        event.frames.front().line, 0, std::max(0, (int)buf.line_count() - 1));
-                    buf.cursor.x = std::clamp(
-                        event.frames.front().column, 0, (int)buf.line(buf.cursor.y).size());
-                    ensure_cursor_visible();
-                  }
-                }
+                jump_to_debugger_frame(event.frames.front());
                 client->scopes(state.active_frame_id);
               }
             }

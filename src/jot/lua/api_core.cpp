@@ -13,14 +13,28 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <thread>
 
 #ifndef _WIN32
+#include <sys/resource.h>
 #include <sys/wait.h>
+#include <unistd.h>
+#else
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <psapi.h>
+#pragma comment(lib, "psapi.lib")
 #endif
 
 extern "C"
@@ -1443,6 +1457,56 @@ std::vector<std::string> LuaAPI::plugin_picker_items(const std::string &callback
 // on live Editor state directly, so Lua plugins get first-class access to the
 // same native capabilities the UI uses — no C++ rebuild needed for features.
 
+long long LuaAPI::process_memory_bytes()
+{
+  // The status line polls this every frame; re-read at most once a second.
+  const auto now = std::chrono::steady_clock::now();
+  if (cached_process_memory_bytes_ >= 0
+      && now - last_process_memory_read_ < std::chrono::seconds(1))
+  {
+    return cached_process_memory_bytes_;
+  }
+
+  long long resident = -1;
+#ifdef _WIN32
+  PROCESS_MEMORY_COUNTERS counters{};
+  if (GetProcessMemoryInfo(GetCurrentProcess(), &counters, sizeof(counters)))
+  {
+    resident = (long long)counters.WorkingSetSize;
+  }
+#else
+  // Linux /proc/self/statm: "size resident shared text lib data dt" — the
+  // second field is the resident set in pages.
+  std::ifstream statm("/proc/self/statm");
+  if (statm)
+  {
+    long long total_pages = 0;
+    long long resident_pages = 0;
+    statm >> total_pages >> resident_pages;
+    const long page_size = sysconf(_SC_PAGESIZE);
+    if (resident_pages > 0 && page_size > 0)
+    {
+      resident = resident_pages * (long long)page_size;
+    }
+  }
+  if (resident < 0)
+  {
+    // Fallback: peak RSS (KB on Linux/macOS) — close enough when statm is
+    // unavailable (some sandboxes hide /proc).
+    struct rusage usage
+    {
+    };
+    if (getrusage(RUSAGE_SELF, &usage) == 0 && usage.ru_maxrss > 0)
+    {
+      resident = (long long)usage.ru_maxrss * 1024;
+    }
+  }
+#endif
+  cached_process_memory_bytes_ = resident;
+  last_process_memory_read_ = now;
+  return resident;
+}
+
 void LuaAPI::push_task_list(lua_State *L)
 {
   lua_newtable(L);
@@ -2192,6 +2256,70 @@ void LuaAPI::debugger_has_breakpoint_from_lua(lua_State *L)
   const std::string path = luaL_checkstring(L, 1);
   const int line = (int)luaL_checkinteger(L, 2) - 1;
   lua_pushboolean(L, line >= 0 && editor->has_debugger_breakpoint(path, line));
+}
+
+void LuaAPI::debugger_scroll_output_from_lua(lua_State *L)
+{
+  if (!editor)
+  {
+    lua_pushboolean(L, 0);
+    return;
+  }
+  const int delta = (int)luaL_checkinteger(L, 1);
+  const int before = editor->current_debugger_session >= 0
+                         && editor->current_debugger_session
+                                < (int)editor->debugger_session_state.size()
+                     ? editor->debugger_session_state[editor->current_debugger_session].output_scroll
+                     : 0;
+  editor->debugger_scroll_output(delta);
+  const int after = editor->current_debugger_session >= 0
+                        && editor->current_debugger_session
+                               < (int)editor->debugger_session_state.size()
+                    ? editor->debugger_session_state[editor->current_debugger_session].output_scroll
+                    : 0;
+  lua_pushboolean(L, after != before);
+}
+
+void LuaAPI::debugger_cycle_thread_from_lua(lua_State *L)
+{
+  if (!editor)
+  {
+    lua_pushboolean(L, 0);
+    return;
+  }
+  const int delta = (int)luaL_checkinteger(L, 1);
+  const int session = editor->current_debugger_session;
+  const int before =
+      session >= 0 && session < (int)editor->debugger_session_state.size()
+          ? editor->debugger_session_state[session].active_thread_id
+          : 0;
+  editor->debugger_cycle_thread(delta);
+  const int after =
+      session >= 0 && session < (int)editor->debugger_session_state.size()
+          ? editor->debugger_session_state[session].active_thread_id
+          : 0;
+  lua_pushboolean(L, after != before);
+}
+
+void LuaAPI::debugger_cycle_frame_from_lua(lua_State *L)
+{
+  if (!editor)
+  {
+    lua_pushboolean(L, 0);
+    return;
+  }
+  const int delta = (int)luaL_checkinteger(L, 1);
+  const int session = editor->current_debugger_session;
+  const int before =
+      session >= 0 && session < (int)editor->debugger_session_state.size()
+          ? editor->debugger_session_state[session].active_frame_id
+          : 0;
+  editor->debugger_cycle_frame(delta);
+  const int after =
+      session >= 0 && session < (int)editor->debugger_session_state.size()
+          ? editor->debugger_session_state[session].active_frame_id
+          : 0;
+  lua_pushboolean(L, after != before);
 }
 
 void LuaAPI::push_theme_palette(lua_State *L)

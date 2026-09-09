@@ -33,6 +33,13 @@ namespace Dap
   int int_or_default(const Value *value, int fallback);
   bool bool_or_default(const Value *value, bool fallback);
   bool extract_content_length(const std::string &headers, size_t &length_out);
+  // Decodes standard base64 (the encoding DAP uses for readMemory body.data
+  // and other binary payloads) into raw bytes. Returns false on padding or
+  // alphabet errors; partial output is discarded.
+  bool decode_base64(const std::string &text, std::string &out);
+  // True when `text` is a literal address ("0x404028" or decimal), i.e.
+  // something readMemory accepts without evaluation.
+  bool looks_like_address(const std::string &text);
 
 } // namespace Dap
 
@@ -151,6 +158,14 @@ public:
   bool scopes(int frame_id);
   bool variables(int variables_reference);
   bool read_memory(const std::string &memory_reference, int offset, int count);
+  // Memory-view convenience: evaluates `expression` and, when the adapter
+  // reports an address for it (memoryReference field, or a literal address
+  // as the evaluated result), immediately issues readMemory for `count`
+  // bytes. GDB only accepts literal addresses in readMemory, so this is the
+  // path for everything that is not already an address (":debugmemory $pc",
+  // ":debugmemory &buf", ...). Errors surface as DebuggerEvent::Error.
+  bool evaluate_and_read_memory(const std::string &expression, int count);
+  bool evaluate(const std::string &expression);
   bool
   disassemble(const std::string &memory_reference, int offset, int instruction_offset, int count);
   bool set_breakpoints(const std::string &source_path, const std::vector<int> &zero_based_lines);
@@ -219,6 +234,9 @@ private:
   std::string last_error;
   std::map<int, std::string> pending_requests;
   std::vector<DebuggerEvent> pending_events;
+  // When >= 0, the next evaluate response is followed by a readMemory of
+  // this many bytes at the evaluated address (evaluate_and_read_memory).
+  int pending_memory_read_count = -1;
   bool supports_read_memory_ = false;
   bool supports_disassemble_ = false;
 

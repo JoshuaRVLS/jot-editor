@@ -98,6 +98,7 @@ jot.treesitter   register_language, language_for_extension, status, parser,
                   disable_language, install_command, reload
 jot.image        execute, open
 jot.job          run, capture
+jot.process      memory
 ```
 
 Every command-backed namespace also provides `execute(command)`. This keeps
@@ -109,6 +110,14 @@ The following functions are real native bridges — they read or act on live
 editor state rather than routing through the command registry, so data-heavy
 features (status lines, git panels, custom task runners, symbol pickers) can
 be written entirely in Lua.
+
+### Process
+
+`jot.process.memory()` returns the editor process's current resident memory
+usage in bytes (e.g. `134217728` for 128 MiB), or `nil` when the platform
+could not be queried. The native side caches the reading for ~1 second, so
+polling it every status-line frame is cheap. The built-in status line uses
+it for its `mem` segment.
 
 ### Config (Lua-first, live-applied)
 

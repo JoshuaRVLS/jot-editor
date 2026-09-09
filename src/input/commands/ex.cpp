@@ -618,7 +618,27 @@ bool Editor::execute_ex_command(const std::string &input_line)
   }
   else if (lcmd == "debugmemory")
   {
-    request_debugger_memory(arg, 128);
+    // :debugmemory [expr] [bytes] — a trailing integer is the read size.
+    std::string expr = trim_copy(arg);
+    int bytes = 128;
+    size_t split = expr.find_last_of(" \t");
+    if (split != std::string::npos)
+    {
+      std::string tail = trim_copy(expr.substr(split + 1));
+      if (!tail.empty())
+      {
+        try
+        {
+          bytes = std::stoi(tail);
+          expr = trim_copy(expr.substr(0, split));
+        }
+        catch (...)
+        {
+          bytes = 128;
+        }
+      }
+    }
+    request_debugger_memory(expr, bytes);
   }
   else if (lcmd == "debugdisasm")
   {

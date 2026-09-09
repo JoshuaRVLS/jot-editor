@@ -416,7 +416,20 @@ private:
   bool handle_menu_bar_mouse(int x, int y, bool is_click, bool is_motion);
   bool handle_integrated_terminal_mouse(int x, int y);
   bool handle_integrated_terminal_scroll(int x, int y, bool is_scroll_up, bool is_scroll_down);
-  bool handle_debugger_mouse(int x, int y, bool activate = true);
+  bool handle_debugger_mouse(int x,
+                             int y,
+                             bool activate = true,
+                             bool wheel_up = false,
+                             bool wheel_down = false);
+  // Debugger panel navigation: scrolls the output history, cycles the active
+  // thread / frame of the current session. No-ops with a status message when
+  // there is no stopped session to act on.
+  void debugger_scroll_output(int delta_lines);
+  void debugger_cycle_thread(int delta);
+  void debugger_cycle_frame(int delta);
+  // Opens the frame's source at the paused location (used by the stack-trace
+  // handler and frame navigation).
+  void jump_to_debugger_frame(const DebuggerFrame &frame);
   void place_integrated_terminal_cursor();
   void handle_mouse(void *event);
 

@@ -92,7 +92,7 @@ namespace
         {"debugnext", "Debugger", "Step over", 76},
         {"debugout", "Debugger", "Step out", 76},
         {"debugthreads", "Debugger", "Refresh threads and stack", 74},
-        {"debugmemory", "Debugger", "Read memory", 72},
+        {"debugmemory", "Debugger", "Read memory (expr [bytes])", 72},
         {"debugdisasm", "Debugger", "Disassemble instructions", 72},
         {"search", "Edit", "Open search panel", 75},
         {"format", "Edit", "Format document", 75},

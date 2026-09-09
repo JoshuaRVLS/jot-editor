@@ -641,30 +641,18 @@ namespace
     return instructions;
   }
 
-  std::vector<DebuggerMemoryRow> memory_from_body(const Dap::Value &body)
+  // Formats a raw byte buffer into 16-byte hexdump rows starting at `addr`.
+  // Shared by memory_from_body so the presentation is exactly one place.
+  std::vector<DebuggerMemoryRow> format_memory_rows(unsigned long long addr,
+                                                    const std::string &data)
   {
     std::vector<DebuggerMemoryRow> rows;
-    std::string address = Dap::string_or_empty(Dap::object_get(body, "address"));
-    std::string data = Dap::string_or_empty(Dap::object_get(body, "data"));
-    if (data.empty())
-    {
-      return rows;
-    }
-    int addr = 0;
-    try
-    {
-      addr = address.empty() ? 0 : std::stoi(address, nullptr, 0);
-    }
-    catch (...)
-    {
-      addr = 0;
-    }
     for (size_t i = 0; i < data.size(); i += 16)
     {
       std::string chunk = data.substr(i, 16);
       DebuggerMemoryRow row;
       std::ostringstream addr_stream;
-      addr_stream << "0x" << std::hex << std::setw(8) << std::setfill('0') << (addr + (int)i);
+      addr_stream << "0x" << std::hex << std::setw(16) << std::setfill('0') << (addr + i);
       row.address = addr_stream.str();
       for (unsigned char c : chunk)
       {
@@ -680,6 +668,36 @@ namespace
       rows.push_back(std::move(row));
     }
     return rows;
+  }
+
+  // DAP readMemory response: body.data is a base64-encoded byte string (NOT a
+  // hex dump), body.address is the absolute start address of the buffer as a
+  // decimal or hex string. Decoding it as text produced garbage rows, so the
+  // payload is decoded here before the hexdump pass.
+  std::vector<DebuggerMemoryRow> memory_from_body(const Dap::Value &body)
+  {
+    std::vector<DebuggerMemoryRow> rows;
+    const std::string address = Dap::string_or_empty(Dap::object_get(body, "address"));
+    const std::string data = Dap::string_or_empty(Dap::object_get(body, "data"));
+    if (data.empty())
+    {
+      return rows;
+    }
+    std::string bytes;
+    if (!Dap::decode_base64(data, bytes))
+    {
+      return rows;
+    }
+    unsigned long long addr = 0;
+    try
+    {
+      addr = address.empty() ? 0 : std::strtoull(address.c_str(), nullptr, 0);
+    }
+    catch (...)
+    {
+      addr = 0;
+    }
+    return format_memory_rows(addr, bytes);
   }
 
   std::vector<DebuggerBreakpoint> breakpoints_from_body(const Dap::Value &body,
@@ -705,6 +723,7 @@ namespace
     }
     return out;
   }
+
 } // namespace
 
 namespace Dap
@@ -805,6 +824,74 @@ namespace Dap
       return true;
     }
     return false;
+  }
+
+  bool decode_base64(const std::string &text, std::string &out)
+  {
+    static const char *const alphabet =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string decoded;
+    decoded.reserve(text.size() * 3 / 4);
+    unsigned int accumulator = 0;
+    int bits = 0;
+    for (char c : text)
+    {
+      if (c == '=')
+      {
+        break; // padding terminates the stream; trailing junk ignored
+      }
+      if (c == '\n' || c == '\r' || c == ' ' || c == '\t')
+      {
+        continue;
+      }
+      const char *pos = strchr(alphabet, c);
+      if (!pos)
+      {
+        return false;
+      }
+      accumulator = (accumulator << 6) | (unsigned int)(pos - alphabet);
+      bits += 6;
+      if (bits >= 8)
+      {
+        bits -= 8;
+        decoded.push_back((char)((accumulator >> bits) & 0xFF));
+      }
+    }
+    out = std::move(decoded);
+    return true;
+  }
+
+  bool looks_like_address(const std::string &text)
+  {
+    if (text.empty())
+    {
+      return false;
+    }
+    size_t pos = 0;
+    if (text.size() > 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X'))
+    {
+      pos = 2;
+      if (pos >= text.size())
+      {
+        return false;
+      }
+      for (; pos < text.size(); pos++)
+      {
+        if (!std::isxdigit((unsigned char)text[pos]))
+        {
+          return false;
+        }
+      }
+      return true;
+    }
+    for (; pos < text.size(); pos++)
+    {
+      if (!std::isdigit((unsigned char)text[pos]))
+      {
+        return false;
+      }
+    }
+    return true;
   }
 } // namespace Dap
 
@@ -1221,6 +1308,18 @@ bool DebuggerClient::read_memory(const std::string &memory_reference, int offset
                           + ",\"count\":" + std::to_string(std::max(1, count)) + "}");
 }
 
+bool DebuggerClient::evaluate_and_read_memory(const std::string &expression, int count)
+{
+  pending_memory_read_count = std::clamp(count, 1, 1024);
+  return evaluate(expression);
+}
+
+bool DebuggerClient::evaluate(const std::string &expression)
+{
+  return send_request("evaluate",
+                      "{\"expression\":\"" + Dap::json_escape(expression) + "\"}");
+}
+
 bool DebuggerClient::disassemble(const std::string &memory_reference,
                                  int offset,
                                  int instruction_offset,
@@ -1423,6 +1522,38 @@ void DebuggerClient::handle_response(const Dap::Value &root)
   {
     ev.type = DebuggerEvent::Memory;
     ev.memory_rows = memory_from_body(*body);
+  }
+  else if (command_name == "evaluate")
+  {
+    // Evaluate-then-read chain (evaluate_and_read_memory): once the adapter
+    // resolves the expression to an address (memoryReference field, or a
+    // literal address as the evaluated result — GDB reports "0x…" for $pc
+    // and &var), issue the readMemory right here. Errors surface as Error
+    // events via the response handler below.
+    const int count = pending_memory_read_count;
+    pending_memory_read_count = -1;
+    if (count > 0)
+    {
+      std::string ref = Dap::string_or_empty(Dap::object_get(*body, "memoryReference"));
+      if (ref.empty())
+      {
+        const std::string result = Dap::string_or_empty(Dap::object_get(*body, "result"));
+        if (Dap::looks_like_address(result))
+        {
+          ref = result;
+        }
+      }
+      if (ref.empty())
+      {
+        push_error("Memory view: expression does not resolve to an address");
+      }
+      else
+      {
+        read_memory(ref, 0, count);
+      }
+      return;
+    }
+    return;
   }
   else if (command_name == "disassemble")
   {

@@ -258,7 +258,7 @@ namespace
         "search",      "folds",  "bookmarks", "workspace", "terminal",   "tasks",   "theme",
         "config",      "lsp",    "debugger",  "git",       "treesitter", "symbols", "image",
         "diagnostics", "marks",  "status",    "timer",     "motion",     "sidebar",
-        "toast"};
+        "toast",      "process"};
     for (const char *name : names)
     {
       lua_pushboolean(L, 1);
@@ -1342,6 +1342,34 @@ namespace
     api(L).debugger_request_from_lua(L, 2);
     return 0;
   }
+  int l_dbg_scroll_output(lua_State *L)
+  {
+    api(L).debugger_scroll_output_from_lua(L);
+    return 1;
+  }
+  int l_dbg_cycle_thread(lua_State *L)
+  {
+    api(L).debugger_cycle_thread_from_lua(L);
+    return 1;
+  }
+  int l_dbg_cycle_frame(lua_State *L)
+  {
+    api(L).debugger_cycle_frame_from_lua(L);
+    return 1;
+  }
+  int l_process_memory(lua_State *L)
+  {
+    const long long bytes = api(L).process_memory_bytes();
+    if (bytes < 0)
+    {
+      lua_pushnil(L);
+    }
+    else
+    {
+      lua_pushinteger(L, bytes);
+    }
+    return 1;
+  }
   int l_theme_palette(lua_State *L)
   {
     api(L).push_theme_palette(L);
@@ -1790,6 +1818,9 @@ bool LuaAPI::init()
   field(L, "swap", l_swap);
   command_field(L, this, "close", "Close Pane");
   lua_setfield(L, -2, "pane");
+  lua_newtable(L);
+  field(L, "memory", l_process_memory);
+  lua_setfield(L, -2, "process");
   lua_getglobal(L, "jot");
   lua_getfield(L, -1, "ui");
   field(L, "show_message", l_show_message);
@@ -1881,6 +1912,9 @@ bool LuaAPI::init()
   field(L, "request_stack", l_dbg_request_stack);
   field(L, "request_variables", l_dbg_request_variables);
   field(L, "request_threads", l_dbg_request_threads);
+  field(L, "scroll_output", l_dbg_scroll_output);
+  field(L, "cycle_thread", l_dbg_cycle_thread);
+  field(L, "cycle_frame", l_dbg_cycle_frame);
   command_field(L, this, "continue", "Debug Continue");
   command_field(L, this, "pause", "Debug Pause");
   command_field(L, this, "step_in", "Debug Step In");

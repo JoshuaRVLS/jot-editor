@@ -527,7 +527,7 @@ void Editor::handle_mouse_input(int x,
     }
   }
 
-  if (handle_debugger_mouse(x, y, is_click))
+  if (handle_debugger_mouse(x, y, is_click, is_scroll_up, is_scroll_down))
   {
     return;
   }

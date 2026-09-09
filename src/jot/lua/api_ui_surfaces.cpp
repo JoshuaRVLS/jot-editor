@@ -739,6 +739,7 @@ bool LuaAPI::emit_side_panel(const SidePanelView &view)
                          lua_set_int_field(L, ri, "bg", r.bg);
                          lua_set_bool_field(L, ri, "bold", r.bold);
                          lua_set_bool_field(L, ri, "selected", r.selected);
+                         lua_set_str_field(L, ri, "kind", r.kind);
                          lua_rawseti(L, arr, (lua_Integer)i + 1);
                        }
                        lua_setfield(L, t, "rows");

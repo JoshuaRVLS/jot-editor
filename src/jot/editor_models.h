@@ -171,6 +171,9 @@ struct DebuggerSessionState
   std::vector<DebuggerMemoryRow> memory_rows;
   std::vector<DebuggerInstruction> instructions;
   std::string output;
+  // Lines scrolled up from the end of `output` (0 = pinned to the bottom,
+  // i.e. newest output visible). Clamped against the visible rows at render.
+  int output_scroll = 0;
   std::string last_error;
 };
 

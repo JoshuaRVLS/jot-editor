@@ -39,6 +39,12 @@ target_link_libraries(jot_tests PRIVATE
 target_include_directories(jot_tests PRIVATE
   ${PROJECT_SOURCE_DIR}/test
 )
+# test_syntax.cpp includes tree_sitter/api.h directly; the fetched/system
+# tree-sitter include dirs are only wired onto the engine objects, so mirror
+# them here when the parser runtime is enabled.
+if(JOT_TREESITTER_ENABLED)
+  target_include_directories(jot_tests SYSTEM PRIVATE ${TREE_SITTER_INCLUDE_DIRS})
+endif()
 target_compile_definitions(jot_tests PRIVATE
   JOT_LUA_SOURCE_DIR="${PROJECT_SOURCE_DIR}/runtime/lua"
   JOT_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}/test"
