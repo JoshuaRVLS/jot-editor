@@ -107,11 +107,13 @@ Shell, Ruby, and PHP.
   jumps.
 - Completion with fuzzy filtering and `textEdit` support; hover on demand or
   on mouse hover; go-to-definition with a return stack (`:lspback`).
-- Signature help popup, plus clangd-style parameter inlay hints: parameter
-  names (`a: 1, b: 2`) render as dimmed virtual text on already-written
-  calls, shifting the line's text right as in VS Code. Hints refresh after
-  edits and follow scrolling; disable with
-  `jot.config.set("lsp_inlay_hints", false)`.
+- Signature help popup, plus clangd-style inlay hints on already-written
+  code: parameter names (`a: 1, b: 2`) before arguments and type hints after
+  variable declarations (`auto x = 5` shows `x: int`), both as dimmed
+  virtual text that shifts the line right as in VS Code. Hints refresh after
+  edits and follow scrolling; disable all hints with
+  `jot.config.set("lsp_inlay_hints", false)` or just the type hints with
+  `jot.config.set("lsp_inlay_type_hints", false)`.
 - Document symbols via LSP with regex fallback — as a picker or a persistent
   outline.
 - Status, start/stop/restart, a manager, and install/remove helpers.
@@ -408,7 +410,8 @@ Built-in defaults include `explorer_width=25`, `minimap_width=15`,
 `tab_size=2`, `show_line_numbers=true`, `relative_line_numbers=true`,
 `cursor_style=bar`, `render_fps=120`, `idle_fps=60`, `auto_save=false`,
 `auto_save_interval_ms=2000`, `lsp_change_debounce_ms=120`,
-`lsp_inlay_hints=true`, `terminal_height=10`, and `debugger_height=12`.
+`lsp_inlay_hints=true`, `lsp_inlay_type_hints=true`, `terminal_height=10`, and
+`debugger_height=12`.
 
 See [THEMES.md](THEMES.md) for authoring colorschemes and
 [LUA_API.md](LUA_API.md) for the scripting API.

@@ -70,6 +70,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
   const bool block_cursor = cursor_style_raw == "block" || cursor_style_raw == "steady_block"
                             || cursor_style_raw == "steadyblock";
   const bool inlay_hints_enabled = config.get_bool("lsp_inlay_hints", true);
+  const bool inlay_type_hints_enabled = config.get_bool("lsp_inlay_type_hints", true);
 
   UIRect pane_rect = {x, y, w, h};
   ui->fill_rect(pane_rect, " ", theme.fg_default, theme.bg_default);
@@ -298,7 +299,10 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
           int inserted_cells = 0;
           for (const auto &hint : cache_it->second.hints)
           {
-            if (hint.line != line_idx || hint.kind != 2 || hint.label.empty()
+            const bool is_param = hint.kind == 2;
+            const bool is_type = hint.kind == 1;
+            if (hint.line != line_idx || (!is_param && !is_type)
+                || (is_type && !inlay_type_hints_enabled) || hint.label.empty()
                 || hint.character < 0 || hint.character > (int)line.size())
             {
               continue;

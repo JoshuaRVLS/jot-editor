@@ -35,11 +35,14 @@ int Editor::lsp_inlay_hint_cells_before(const std::string &filepath,
   {
     return 0;
   }
+  const bool type_hints_enabled = config.get_bool("lsp_inlay_type_hints", true);
   int cells = 0;
   for (const auto &h : it->second.hints)
   {
-    if (h.line != line || h.kind != 2 || h.label.empty() || h.character < 0
-        || h.character > byte_col)
+    const bool is_param = h.kind == 2;
+    const bool is_type = h.kind == 1;
+    if ((!is_param && !is_type) || (is_type && !type_hints_enabled) || h.label.empty()
+        || h.character < 0 || h.character > byte_col)
     {
       continue;
     }
@@ -74,11 +77,14 @@ std::vector<std::pair<int, int>> Editor::lsp_inlay_hints_visual(const std::strin
   {
     return out;
   }
+  const bool type_hints_enabled = config.get_bool("lsp_inlay_type_hints", true);
   int inserted = 0;
   for (const auto &h : it->second.hints)
   {
-    if (h.line != line || h.kind != 2 || h.label.empty() || h.character < 0
-        || h.character > (int)line_text.size())
+    const bool is_param = h.kind == 2;
+    const bool is_type = h.kind == 1;
+    if ((!is_param && !is_type) || (is_type && !type_hints_enabled) || h.label.empty()
+        || h.character < 0 || h.character > (int)line_text.size())
     {
       continue;
     }
