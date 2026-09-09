@@ -835,8 +835,9 @@ install_treesitter_deps() {
   }
 
   if ! can_use_package_manager; then
-    log_info "Skipped system Tree-sitter package install (requires root); the bundled build works and"
-    log_info "per-user parsers install later with :tsinstall <language>."
+    log_info "Skipped system Tree-sitter package install (requires root); CMake will build"
+    log_info "the bundled tree-sitter runtime from source instead, and per-user parsers"
+    log_info "install later with :tsinstall <language>."
     return 0
   fi
 
@@ -864,7 +865,7 @@ install_treesitter_deps() {
   fi
 
   if [[ "${failures}" -gt 0 ]]; then
-    log_warn "Tree-sitter install had warnings; highlighting may fall back to regex"
+    log_warn "Tree-sitter install had warnings; CMake falls back to building the bundled runtime"
   else
     log_ok "Tree-sitter runtime ready"
   fi

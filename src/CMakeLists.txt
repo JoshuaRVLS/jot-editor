@@ -190,6 +190,31 @@ if(JOT_TREESITTER)
   else()
     pkg_check_modules(TREE_SITTER tree-sitter)
   endif()
+  if(NOT TREE_SITTER_FOUND AND JOT_FETCH_DEPS)
+    # No system tree-sitter (Arch/CachyOS split the lib into a separate
+    # package that install.sh may not have been allowed to install): build
+    # the amalgamated runtime from source instead of giving up and falling
+    # back to regex highlighting. NOTE: the top-level tree-sitter repo has
+    # no CMake project — the build lives in lib/, so add that directly.
+    include(FetchContent)
+    FetchContent_Declare(tree_sitter_runtime
+      GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter.git
+      GIT_TAG v0.25.3
+      GIT_SHALLOW TRUE
+      SOURCE_SUBDIR lib
+    )
+    FetchContent_MakeAvailable(tree_sitter_runtime)
+    if(TARGET tree-sitter)
+      set(TREE_SITTER_FOUND TRUE)
+      set(TREE_SITTER_LIBRARIES tree-sitter)
+      set(TREE_SITTER_INCLUDE_DIRS "${tree_sitter_runtime_SOURCE_DIR}/lib/include")
+      # Upstream marks its includes PRIVATE; expose them to our targets.
+      target_include_directories(tree-sitter PUBLIC
+        "$<BUILD_INTERFACE:${tree_sitter_runtime_SOURCE_DIR}/lib/include>")
+      set(TREE_SITTER_LIBRARY_DIRS "")
+      set(TREE_SITTER_CFLAGS_OTHER "")
+    endif()
+  endif()
   if(TREE_SITTER_FOUND)
     set(JOT_TREESITTER_ENABLED TRUE)
     message(STATUS "Tree-sitter runtime found; parser grammars will be loaded at runtime")
