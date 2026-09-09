@@ -90,7 +90,11 @@ namespace
         break;
       }
     }
-    display_y = (found_row ? visible_row : 0) + pane.y + tab_height;
+    // When the cursor scrolled out of view, park the terminal caret on the
+    // last row of the pane (not row 0) and report not-found so the caller
+    // hides it: row 0 would yank the eye to the top on every wheel tick,
+    // while the bottom edge reads as "following the scroll".
+    display_y = (found_row ? visible_row : viewport_h - 1) + pane.y + tab_height;
 
     int logical_cursor_x = buf.cursor.x;
     int logical_scroll_x = buf.scroll_x;
@@ -212,6 +216,10 @@ void Editor::render()
       auto &buf = get_buffer(pane.buffer_id);
       int display_x = 0;
       int display_y = 0;
+      // While wheel-scrolling (cursor off-screen) keep the caret parked on
+      // the last code row instead of hiding it: hiding flips DECTCEM every
+      // wheel tick and some terminals (kitty) reset the DECSCUSR shape on
+      // hide/show, which reads as a bar->block flicker while scrolling.
       if (compute_code_cursor_screen_pos(
               pane, buf, show_minimap, minimap_width, tab_size, tab_height, display_x, display_y))
       {
@@ -219,7 +227,13 @@ void Editor::render()
       }
       else
       {
-        ui->hide_cursor();
+        auto &pane_ref = get_pane();
+        int draw_w = std::max(1, pane_ref.w);
+        if (show_minimap && draw_w > 20)
+          draw_w = std::max(1, draw_w - minimap_width);
+        ui->set_cursor(pane_ref.x + 1 + kLineNumberGutterWidth,
+                       display_y,
+                       editor_cursor_shape(config.get("cursor_style", "bar")));
       }
       ui->set_cursor_blink_visible(blink_visible);
       ui->flush_cursor();
@@ -406,6 +420,9 @@ void Editor::render()
         auto &buf = get_buffer(pane.buffer_id);
         int display_x = 0;
         int display_y = 0;
+        // Same off-screen policy as the idle path above: park on the last
+        // code row, never hide, so wheel scrolling can't flicker the
+        // caret shape via DECTCEM toggles.
         if (compute_code_cursor_screen_pos(
                 pane, buf, show_minimap, minimap_width, tab_size, tab_height, display_x, display_y))
         {
@@ -413,7 +430,9 @@ void Editor::render()
         }
         else
         {
-          ui->hide_cursor();
+          ui->set_cursor(pane.x + 1 + kLineNumberGutterWidth,
+                         display_y,
+                         editor_cursor_shape(config.get("cursor_style", "bar")));
         }
       }
     }
