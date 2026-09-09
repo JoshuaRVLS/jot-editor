@@ -211,6 +211,29 @@ if(JOT_TREESITTER)
       # Upstream marks its includes PRIVATE; expose them to our targets.
       target_include_directories(tree-sitter PUBLIC
         "$<BUILD_INTERFACE:${tree_sitter_runtime_SOURCE_DIR}/lib/include>")
+      # Install the bundled runtime alongside jot so later reconfigures
+      # find it via pkg-config instead of re-fetching: the .pc advertises
+      # the same prefix jot installs to.
+      install(TARGETS tree-sitter
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+      install(DIRECTORY "${tree_sitter_runtime_SOURCE_DIR}/lib/include/"
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+      set(TREE_SITTER_PC "${CMAKE_CURRENT_BINARY_DIR}/tree-sitter.pc")
+      file(WRITE "${TREE_SITTER_PC}"
+        "prefix=${CMAKE_INSTALL_PREFIX}\n"
+        "libdir=\${prefix}/${CMAKE_INSTALL_LIBDIR}\n"
+        "includedir=\${prefix}/${CMAKE_INSTALL_INCLUDEDIR}\n"
+        "\n"
+        "Name: tree-sitter\n"
+        "Description: An incremental parsing system for programming tools\n"
+        "URL: https://tree-sitter.github.io/tree-sitter/\n"
+        "Version: 0.25.3\n"
+        "Libs: -L\${libdir} -ltree-sitter\n"
+        "Cflags: -I\${includedir}\n")
+      install(FILES "${TREE_SITTER_PC}"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
       set(TREE_SITTER_LIBRARY_DIRS "")
       set(TREE_SITTER_CFLAGS_OTHER "")
     endif()
