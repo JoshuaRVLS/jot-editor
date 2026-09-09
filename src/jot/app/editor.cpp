@@ -252,6 +252,11 @@ void Editor::initialize_state_defaults()
   lsp_mouse_hover_screen_x = -1;
   lsp_mouse_hover_screen_y = -1;
   lsp_mouse_hover_filepath.clear();
+  ctrl_hover_active = false;
+  ctrl_hover_buffer = -1;
+  ctrl_hover_line = -1;
+  ctrl_hover_start = -1;
+  ctrl_hover_end = -1;
   pane_resize_dragging = false;
   pane_resize_node = -1;
   pane_resize_vertical = false;

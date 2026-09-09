@@ -207,6 +207,17 @@ struct EditorState
   int lsp_mouse_hover_screen_x;
   int lsp_mouse_hover_screen_y;
   std::string lsp_mouse_hover_filepath;
+  // VSCode-style Ctrl+hover goto-definition affordance: while Ctrl is held
+  // and the mouse rests on a word, the token under the cursor is underlined
+  // (straight underline in the definition-link color) to signal that
+  // Ctrl+click will jump to its definition. Cleared on any motion without
+  // Ctrl, click, keypress or scroll. Buffer id + token range so stale
+  // state never paints after buffer switches.
+  bool ctrl_hover_active = false;
+  int ctrl_hover_buffer = -1;
+  int ctrl_hover_line = -1;
+  int ctrl_hover_start = -1;
+  int ctrl_hover_end = -1;
   bool pane_resize_dragging;
   int pane_resize_node;
   bool pane_resize_vertical;

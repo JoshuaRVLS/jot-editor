@@ -568,6 +568,15 @@ void Editor::handle_terminal_event(const Event &ev)
   {
     keyboard_press_count++;
     cancel_lsp_mouse_hover();
+    if (ctrl_hover_active)
+    {
+      ctrl_hover_active = false;
+      ctrl_hover_buffer = -1;
+      ctrl_hover_line = -1;
+      ctrl_hover_start = -1;
+      ctrl_hover_end = -1;
+      needs_redraw = true;
+    }
     // A key can arrive before a delayed mouse release. Preserve the current
     // selection, but prevent that release from restoring an obsolete cursor.
     mouse_selecting = false;

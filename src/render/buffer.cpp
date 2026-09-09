@@ -1083,6 +1083,30 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
                 bg = deco_bg;
               }
             }
+            // VSCode-style Ctrl+hover goto-definition underline: straight
+            // underline in the function color over the tracked token. Applies
+            // under decorations (they win when present) but over plain
+            // syntax, and never inside an active selection.
+            int ctrl_underline = 0;
+            int ctrl_underline_fg = -1;
+            if (ctrl_hover_active && ctrl_hover_buffer == buffer_id && !in_sel && pane.active
+                && line_idx == ctrl_hover_line && char_idx >= ctrl_hover_start
+                && char_idx < ctrl_hover_end)
+            {
+              ctrl_underline = 1;
+              ctrl_underline_fg = theme.fg_function;
+            }
+            if (ctrl_underline != 0)
+            {
+              if (deco_underline == 0)
+              {
+                deco_underline = ctrl_underline;
+                if (deco_underline_fg == -1)
+                {
+                  deco_underline_fg = ctrl_underline_fg;
+                }
+              }
+            }
 
             if (c == '\t')
             {

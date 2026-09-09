@@ -140,7 +140,9 @@ bool LuaAPI::present_lsp_hover(const std::string &contents,
   // Theme colors mirror the native hover popup: command text on the panel
   // background, panel border for the frame. The `colors` table maps syntax
   // token kind names to their theme colors so the Lua UI can highlight code
-  // fences the same way the editor does.
+  // fences the same way the editor does. The `ui` table carries extra
+  // chrome colors (title, separators, diagnostics, kinds) for a richer
+  // VSCode-style popup.
   int fg = 7, bg = 0, border = 8;
   if (editor)
   {
@@ -153,6 +155,23 @@ bool LuaAPI::present_lsp_hover(const std::string &contents,
   lua_push_int_field(L, "bg", bg);
   lua_push_int_field(L, "border_fg", border);
   lua_push_int_field(L, "border", border); // legacy alias
+  if (editor)
+  {
+    const Theme &t = editor->get_theme();
+    lua_newtable(L);
+    lua_push_int_field(L, "title", t.fg_status_file >= 0 ? t.fg_status_file : fg);
+    lua_push_int_field(L, "title_bg", t.bg_status_file >= 0 ? t.bg_status_file : bg);
+    lua_push_int_field(L, "separator", t.fg_panel_border >= 0 ? t.fg_panel_border : border);
+    lua_push_int_field(L, "doc", t.fg_command >= 0 ? t.fg_command : fg);
+    lua_push_int_field(L, "code_bg", t.bg_command >= 0 ? t.bg_command : bg);
+    lua_push_int_field(L, "error", t.fg_diagnostic_error);
+    lua_push_int_field(L, "warning", t.fg_diagnostic_warning);
+    lua_push_int_field(L, "info", t.fg_diagnostic_info);
+    lua_push_int_field(L, "hint", t.fg_diagnostic_hint);
+    lua_push_int_field(L, "selection_bg", t.bg_selection);
+    lua_push_int_field(L, "selection_fg", t.fg_selection);
+    lua_setfield(L, -2, "ui");
+  }
   lua_newtable(L);
   const Theme &t = editor ? editor->get_theme() : Theme{};
   lua_push_int_field(L, "keyword", t.fg_keyword);

@@ -16,7 +16,21 @@ local jot = jot
 -- Tune these to restyle the hover popup.
 local HOVER_MAX_WIDTH = 96  -- wrap width for content
 local HOVER_MAX_ROWS = 14   -- rows shown before the footer counter kicks in
-local HOVER_BORDER = "single"
+local HOVER_BORDER = "rounded"
+
+-- Nerd-font icon per hover section. Kept in one table so themes/users can
+-- swap the whole set without touching the layout code below.
+local ICONS = {
+  signature = "󰊕", -- function signature / declaration line
+  doc = "󰋼",       -- documentation prose
+  code = "",       -- fenced code block
+  diagnostic = "󰋽", -- diagnostics lead section
+  error = "",
+  warning = "",
+  info = "",
+  hint = "",
+  footer = "󰎔",
+}
 
 local win = nil -- current float handle (0 when none)
 local buf = nil -- current scratch buffer handle
@@ -207,6 +221,67 @@ local function build_lines(contents)
   return lines
 end
 
+-- VSCode-style sectioning: splits logical lines into
+--   { kind = "signature"|"doc"|"code"|"diagnostic"|"blank", text, code, ext }
+-- The first fenced-free block is the signature (declaration servers echo),
+-- diagnostics-looking lines (error/warning/error codes) lead their own
+-- section, code fences keep their language for highlighting.
+local SEVERITY_ICON = { error = "error", warning = "warning", info = "info", hint = "hint" }
+
+local function looks_diagnostic(text)
+  local low = text:lower()
+  if low:match("^error") or low:match("^e%d+") or low:match("%[e%d+%]") then
+    return "error"
+  end
+  if low:match("^warning") or low:match("^w%d+") or low:match("%[w%d+%]") then
+    return "warning"
+  end
+  if low:match("^info") or low:match("^note") or low:match("^help") then
+    return "info"
+  end
+  if low:match("^hint") then
+    return "hint"
+  end
+  return nil
+end
+
+local function build_sections(contents)
+  local sections = {}
+  local seen_code = false
+  local seen_text = false
+  for _, logical in ipairs(split_logical(contents)) do
+    if logical.text == "" then
+      sections[#sections + 1] = { kind = "blank", text = "", code = false, ext = "" }
+    elseif logical.code then
+      seen_code = true
+      sections[#sections + 1] =
+        { kind = "code", text = logical.text, code = true, ext = logical.ext }
+    else
+      local sev = looks_diagnostic(logical.text)
+      if sev then
+        sections[#sections + 1] =
+          { kind = "diagnostic", severity = sev, text = logical.text, code = false, ext = "" }
+      elseif not seen_text and not seen_code then
+        seen_text = true
+        sections[#sections + 1] =
+          { kind = "signature", text = logical.text, code = false, ext = "" }
+      else
+        seen_text = true
+        sections[#sections + 1] =
+          { kind = "doc", text = logical.text, code = false, ext = "" }
+      end
+    end
+  end
+  -- Collapse leading/trailing blanks; keep single blanks between sections.
+  while #sections > 0 and sections[1].kind == "blank" do
+    table.remove(sections, 1)
+  end
+  while #sections > 0 and sections[#sections].kind == "blank" do
+    sections[#sections] = nil
+  end
+  return sections
+end
+
 -- Like build_lines but also returns per-line syntax spans:
 --   lines, spans = build_display(contents, colors)
 -- spans[line] = {{start=, len=, fg=}, ...} (byte offsets, 1-based lines).
@@ -232,13 +307,114 @@ local function build_display(contents, colors)
   return lines, spans
 end
 
+-- Sectioned display: like build_display but keeps the VSCode-style section
+-- layout (signature line, doc prose, code fences, diagnostics) and returns
+-- per-line spans PLUS per-line section headers:
+--   lines, spans, kinds = build_sectioned(contents, colors)
+-- kinds[line] = "signature"|"doc"|"code"|"diagnostic"|"blank". Section icon
+-- prefixes ("  CODE ") are folded into the line text; kinds lets present()
+-- paint the icon span in the section accent color.
+local function build_sectioned(contents, colors)
+  local lines = {}
+  local spans = {}
+  local kinds = {}
+  for _, sec in ipairs(build_sections(contents)) do
+    if sec.kind == "blank" then
+      local idx = #lines + 1
+      lines[idx] = ""
+      kinds[idx] = "blank"
+    else
+      local icon = ICONS[sec.kind] or ICONS[SEVERITY_ICON[sec.severity or ""] or "doc"]
+      if sec.kind == "diagnostic" then
+        icon = ICONS[sec.severity] or ICONS.diagnostic
+      end
+      local prefix = icon .. " "
+      local wrapped = wrap_line(sec.text, HOVER_MAX_WIDTH - visual_len(prefix))
+      for wi, wl in ipairs(wrapped) do
+        local idx = #lines + 1
+        if wi == 1 then
+          lines[idx] = prefix .. wl
+          kinds[idx] = sec.kind
+          -- Icon span covers the icon + trailing space (byte offsets: the
+          -- icons above are 3 bytes in UTF-8, +1 for the space).
+          spans[idx] = { { start = 0, len = 4, fg = -2 } }
+        else
+          lines[idx] = string.rep(" ", visual_len(prefix)) .. wl
+          kinds[idx] = sec.kind
+        end
+        if sec.code then
+          local s = highlight_line(wl, sec.ext, colors)
+          for _, sp in ipairs(s) do
+            spans[idx] = spans[idx] or {}
+            -- highlight_line returns byte offsets into wl; shift past the
+            -- indent so spans line up with lines[idx]. Continuation lines
+            -- are indented with spaces (1 byte each); first lines carry the
+            -- 3-byte icon + 1 space.
+            local pad = wi == 1 and 4 or visual_len(prefix)
+            spans[idx][#spans[idx] + 1] = { start = sp.start + pad, len = sp.len, fg = sp.fg }
+          end
+        end
+      end
+    end
+  end
+  if #lines == 0 then
+    lines[1] = ""
+    kinds[1] = "blank"
+  end
+  return lines, spans, kinds
+end
+
 local function present(info)
   close_float()
   if not info or not info.contents or info.contents == "" then
     return false
   end
 
-  local lines, spans = build_display(info.contents, info.colors)
+  local ui = info.ui or {}
+  local lines, spans, kinds = build_sectioned(info.contents, info.colors)
+  -- Resolve the -2 placeholder on icon spans to the section accent color.
+  local accent = {
+    signature = (info.colors and info.colors.type) or ui.title or info.fg or 7,
+    doc = ui.doc or info.fg or 7,
+    code = (info.colors and info.colors["function"]) or ui.title or info.fg or 7,
+    diagnostic = ui.warning or info.fg or 7,
+    blank = info.fg or 7,
+  }
+  local sev_accent = {
+    error = ui.error,
+    warning = ui.warning,
+    info = ui.info,
+    hint = ui.hint,
+  }
+  -- Re-derive severity per line for diagnostic accent (cheap: kinds only).
+  local line_sev = {}
+  do
+    local secs = build_sections(info.contents)
+    local li = 1
+    for _, sec in ipairs(secs) do
+      if sec.kind == "blank" then
+        li = li + 1
+      else
+        local wrapped = wrap_line(sec.text, HOVER_MAX_WIDTH - 2)
+        for _ in ipairs(wrapped) do
+          line_sev[li] = sec.severity
+          li = li + 1
+        end
+      end
+    end
+  end
+  for line_idx, s in pairs(spans) do
+    local kind = kinds[line_idx]
+    local fg = accent[kind] or info.fg or 7
+    if kind == "diagnostic" then
+      fg = sev_accent[line_sev[line_idx] or ""] or fg
+    end
+    for _, sp in ipairs(s) do
+      if sp.fg == -2 then
+        sp.fg = fg
+      end
+    end
+  end
   local width = 0
   for _, ln in ipairs(lines) do
     local w = visual_len(ln)
@@ -316,6 +492,8 @@ end)
 return {
   build_lines = build_lines,
   build_display = build_display,
+  build_sections = build_sections,
+  build_sectioned = build_sectioned,
   wrap_line = wrap_line,
   clean_line = clean_line,
   lang_to_ext = lang_to_ext,

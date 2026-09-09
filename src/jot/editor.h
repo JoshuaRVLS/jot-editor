@@ -772,6 +772,7 @@ public:
   // Headless mouse driver for tests: feeds a synthetic mouse event through
   // the real handle_mouse path (pane hit-test, selection, edge-panning).
   void mouse_event_for_test(int x, int y, int bstate);
+  void mouse_event_for_test(int x, int y, int bstate, bool ctrl);
   void create_new_buffer_for_test();
   void move_to_line_start_for_test();
   void render_for_test();

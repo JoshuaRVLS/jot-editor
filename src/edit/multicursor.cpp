@@ -320,11 +320,16 @@ void Editor::insert_string_for_test(const std::string &str)
 
 void Editor::mouse_event_for_test(int x, int y, int bstate)
 {
+  mouse_event_for_test(x, y, bstate, false);
+}
+
+void Editor::mouse_event_for_test(int x, int y, int bstate, bool ctrl)
+{
   struct TestMouseEvent
   {
     int x, y, bstate;
     bool ctrl, shift, alt;
-  } ev{x, y, bstate, false, false, false};
+  } ev{x, y, bstate, ctrl, false, false};
   handle_mouse(&ev);
 }
 

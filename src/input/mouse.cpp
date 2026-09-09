@@ -1141,6 +1141,15 @@ void Editor::handle_mouse(void *event_ptr)
     if (!is_motion || mouse_selecting || mouse_drag_started)
     {
       cancel_lsp_mouse_hover();
+      if (ctrl_hover_active)
+      {
+        ctrl_hover_active = false;
+        ctrl_hover_buffer = -1;
+        ctrl_hover_line = -1;
+        ctrl_hover_start = -1;
+        ctrl_hover_end = -1;
+        needs_redraw = true;
+      }
     }
     if (!is_motion || mouse_selecting || mouse_drag_started)
     {
@@ -1647,6 +1656,14 @@ void Editor::handle_mouse(void *event_ptr)
     click_x = std::max(0, click_x);
   }
 
+  // VSCode-style Ctrl+hover: holding Ctrl while the mouse rests on a word
+  // underlines the token (goto-definition affordance). word_span_at_exact
+  // is defined below, so this block only records the event position; the
+  // actual tracking runs after click_x/click_y are computed.
+  const bool ctrl_held_now = event->ctrl;
+  const int ctrl_ev_x = event->x;
+  const int ctrl_ev_y = event->y;
+
   if (is_click && event->alt && inside_pane && event->y >= content_top && event->y < content_bottom
       && event->x >= code_start_x)
   {
@@ -1839,25 +1856,63 @@ void Editor::handle_mouse(void *event_ptr)
     return false;
   };
 
-  int hover_token_start = -1;
-  int hover_token_end = -1;
-  if (is_motion && !mouse_selecting && !mouse_drag_started && inside_pane && event->y >= content_top
-      && event->y < content_bottom && event->x >= code_start_x
-      && word_span_at_exact(click_y, click_x, hover_token_start, hover_token_end))
-  {
-    request_lsp_hover_at(current_pane,
-                         pane.buffer_id,
-                         {click_x, click_y},
-                         hover_token_start,
-                         hover_token_end,
-                         event->x,
-                         event->y);
+  int second_click_y = buffer_line_for_visible_row(buf, buf.scroll_offset, rel_y);
+  if (second_click_y < 0)
+    second_click_y = 0;
+  if (second_click_y >= (int)buf.line_count())
+    second_click_y = buf.line_count() - 1;
+  if (second_click_y < 0)
     return;
+  click_y = second_click_y;
+  if (is_motion && !mouse_selecting && !mouse_drag_started)
+  {
+    if (inside_pane && event->y >= content_top && event->y < content_bottom && event->x == pane.x + 1
+        && !buf.filepath.empty())
+    {
+      update_debugger_breakpoint_hover(current_pane, pane.buffer_id, click_y);
+      cancel_lsp_mouse_hover();
+      return;
+    }
+    // NOTE: no early return here — plain motion must fall through so the
+    // Ctrl+hover tracking below runs on every motion event.
   }
-  else if (is_motion && !mouse_selecting && !mouse_drag_started)
+
+  // VSCode-style Ctrl+hover goto-definition underline. Runs here (after
+  // word_span_at_exact is defined and click_x/click_y are final) on every
+  // motion/click event: holding Ctrl over a word underlines the token,
+  // releasing Ctrl or moving off clears it.
   {
-    cancel_lsp_mouse_hover();
-    return;
+    bool found = false;
+    int tok_start = -1, tok_end = -1;
+    if ((is_motion || is_click) && ctrl_held_now && !mouse_selecting && !mouse_drag_started
+        && inside_pane && ctrl_ev_y >= content_top && ctrl_ev_y < content_bottom
+        && ctrl_ev_x >= code_start_x
+        && word_span_at_exact(click_y, click_x, tok_start, tok_end))
+    {
+      found = true;
+    }
+    if (found)
+    {
+      if (!ctrl_hover_active || ctrl_hover_buffer != pane.buffer_id || ctrl_hover_line != click_y
+          || ctrl_hover_start != tok_start || ctrl_hover_end != tok_end)
+      {
+        ctrl_hover_active = true;
+        ctrl_hover_buffer = pane.buffer_id;
+        ctrl_hover_line = click_y;
+        ctrl_hover_start = tok_start;
+        ctrl_hover_end = tok_end;
+        needs_redraw = true;
+      }
+    }
+    else if (ctrl_hover_active)
+    {
+      ctrl_hover_active = false;
+      ctrl_hover_buffer = -1;
+      ctrl_hover_line = -1;
+      ctrl_hover_start = -1;
+      ctrl_hover_end = -1;
+      needs_redraw = true;
+    }
   }
 
   if (is_click && event->ctrl && inside_pane && event->y >= content_top && event->y < content_bottom
