@@ -318,6 +318,25 @@ void Editor::insert_string_for_test(const std::string &str)
   insert_string(str);
 }
 
+void Editor::set_inlay_hints_for_test(const std::string &filepath,
+                                      std::vector<LSPInlayHint> hints)
+{
+  auto &cache = lsp_inlay_hint_caches[filepath];
+  cache.hints = std::move(hints);
+  // Same normalization the real result path applies (renderer and the
+  // coordinate helpers assume position-sorted hints).
+  std::sort(cache.hints.begin(),
+            cache.hints.end(),
+            [](const LSPInlayHint &a, const LSPInlayHint &b)
+            {
+              if (a.line != b.line)
+              {
+                return a.line < b.line;
+              }
+              return a.character < b.character;
+            });
+}
+
 void Editor::mouse_event_for_test(int x, int y, int bstate)
 {
   mouse_event_for_test(x, y, bstate, false);

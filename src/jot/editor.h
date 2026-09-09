@@ -229,19 +229,6 @@ private:
   // Requests inlay hints for the current buffer's visible range when the
   // cache is stale or scrolled past; called from poll_lsp_clients.
   void refresh_lsp_inlay_hints_if_needed();
-  // Hint cells inserted before `byte_col` on `line` (text shift amount), for
-  // caret placement, popup anchoring, and mouse mapping.
-  int lsp_inlay_hint_cells_before(const std::string &filepath,
-                                  int line,
-                                  int byte_col,
-                                  const std::string &line_text);
-  // (shifted screen column, cell width) pairs for every hint on `line`,
-  // mirroring the renderer's layout (used to un-shift mouse clicks).
-  std::vector<std::pair<int, int>>
-  lsp_inlay_hints_visual(const std::string &filepath,
-                         int line,
-                         const std::string &line_text,
-                         int tab_size);
   void poll_lsp_installs();
   void poll_debugger_sessions();
   void watch_lsp_client_fds(LSPClient *client);
@@ -503,6 +490,20 @@ private:
   void add_diagnostic(const std::string &filepath, const Diagnostic &diagnostic);
 
 public:
+  // Hint cells inserted before `byte_col` on `line` (text shift amount), for
+  // caret placement, popup anchoring, and mouse mapping. Pure query helpers
+  // shared with the renderer and input layers (and the test suite).
+  int lsp_inlay_hint_cells_before(const std::string &filepath,
+                                  int line,
+                                  int byte_col,
+                                  const std::string &line_text);
+  // (shifted screen column, cell width) pairs for every hint on `line`,
+  // mirroring the renderer's layout (used to un-shift mouse clicks).
+  std::vector<std::pair<int, int>>
+  lsp_inlay_hints_visual(const std::string &filepath,
+                         int line,
+                         const std::string &line_text,
+                         int tab_size);
   void toggle_sidebar();
   bool zen_active() const
   {
@@ -852,6 +853,10 @@ public:
   void delete_selection_for_test();
   void delete_char_for_test(bool forward);
   void insert_string_for_test(const std::string &str);
+  // Seeds the per-file inlay-hint cache directly (sorted on ingest like a
+  // real server answer), so coordinate helpers can be unit-tested headless.
+  void set_inlay_hints_for_test(const std::string &filepath,
+                                std::vector<LSPInlayHint> hints);
   // Headless mouse driver for tests: feeds a synthetic mouse event through
   // the real handle_mouse path (pane hit-test, selection, edge-panning).
   void mouse_event_for_test(int x, int y, int bstate);

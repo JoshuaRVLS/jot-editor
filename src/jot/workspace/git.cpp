@@ -1,153 +1,15 @@
 #include "editor.h"
 #include "jot/lua/api.h"
+#include "jot/workspace/git_run.h"
 #include <algorithm>
-#include <array>
 #include <chrono>
-#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <sstream>
 
-#ifndef _WIN32
-#include <sys/wait.h>
-#endif
-
 namespace
 {
   namespace fs = std::filesystem;
-
-  std::string trim_right_newlines(std::string s)
-  {
-    while (!s.empty() && (s.back() == '\n' || s.back() == '\r'))
-    {
-      s.pop_back();
-    }
-    return s;
-  }
-
-  std::string shell_quote(const std::string &value)
-  {
-#ifdef _WIN32
-    std::string out = "\"";
-    out.reserve(value.size() + 8);
-    for (char c : value)
-    {
-      if (c == '"')
-      {
-        out += "\"\"";
-      }
-      else
-      {
-        out.push_back(c);
-      }
-    }
-    out.push_back('"');
-    return out;
-#else
-    std::string out = "'";
-    out.reserve(value.size() + 8);
-    for (char c : value)
-    {
-      if (c == '\'')
-      {
-        out += "'\\''";
-      }
-      else
-      {
-        out.push_back(c);
-      }
-    }
-    out.push_back('\'');
-    return out;
-#endif
-  }
-
-  std::string null_redirect()
-  {
-#ifdef _WIN32
-    return " 2>NUL";
-#else
-    return " 2>/dev/null";
-#endif
-  }
-
-  FILE *open_command_pipe(const std::string &command, const char *mode)
-  {
-#ifdef _WIN32
-    return _popen(command.c_str(), mode);
-#else
-    return popen(command.c_str(), mode);
-#endif
-  }
-
-  int close_command_pipe(FILE *pipe)
-  {
-#ifdef _WIN32
-    return _pclose(pipe);
-#else
-    return pclose(pipe);
-#endif
-  }
-
-  int command_exit_code(int status)
-  {
-#ifdef _WIN32
-    return status;
-#else
-    if (status != -1 && WIFEXITED(status))
-    {
-      return WEXITSTATUS(status);
-    }
-    return 1;
-#endif
-  }
-
-  std::string capture_command_output(const std::string &command)
-  {
-    std::array<char, 512> buf{};
-    std::string out;
-    FILE *pipe = open_command_pipe(command, "r");
-    if (!pipe)
-    {
-      return "";
-    }
-    while (fgets(buf.data(), (int)buf.size(), pipe) != nullptr)
-    {
-      out += buf.data();
-    }
-    close_command_pipe(pipe);
-    return out;
-  }
-
-  struct GitCommandResult
-  {
-    std::string output;
-    int exit_code = 1;
-
-    bool ok() const
-    {
-      return exit_code == 0;
-    }
-  };
-
-  GitCommandResult capture_command_status(const std::string &command)
-  {
-    std::array<char, 512> buf{};
-    GitCommandResult result;
-    FILE *pipe = open_command_pipe(command + " 2>&1", "r");
-    if (!pipe)
-    {
-      return result;
-    }
-    while (fgets(buf.data(), (int)buf.size(), pipe) != nullptr)
-    {
-      result.output += buf.data();
-    }
-    int status = close_command_pipe(pipe);
-    result.exit_code = command_exit_code(status);
-    result.output = trim_right_newlines(result.output);
-    return result;
-  }
 
   std::string normalize_path(const std::string &path)
   {
@@ -225,8 +87,7 @@ namespace
   {
     GitStatusResult result;
 
-    const std::string top = trim_right_newlines(capture_command_output(
-        "git -C " + shell_quote(repo_hint) + " rev-parse --show-toplevel" + null_redirect()));
+    const std::string top = jot_git::capture(repo_hint, "rev-parse --show-toplevel");
     if (top.empty())
     {
       return result;
@@ -235,20 +96,17 @@ namespace
     result.root = normalize_path(top);
     result.success = true;
 
-    result.branch = trim_right_newlines(capture_command_output(
-        "git -C " + shell_quote(result.root) + " symbolic-ref --short HEAD" + null_redirect()));
+    result.branch = jot_git::capture(result.root, "symbolic-ref --short HEAD");
     if (result.branch.empty())
     {
-      result.branch = trim_right_newlines(capture_command_output(
-          "git -C " + shell_quote(result.root) + " rev-parse --short HEAD" + null_redirect()));
+      result.branch = jot_git::capture(result.root, "rev-parse --short HEAD");
     }
     if (result.branch.empty())
     {
       result.branch = "(detached)";
     }
 
-    const std::string status_text = capture_command_output(
-        "git -C " + shell_quote(result.root) + " status --porcelain=v1 --branch" + null_redirect());
+    const std::string status_text = jot_git::capture(result.root, "status --porcelain=v1 --branch");
     std::istringstream iss(status_text);
     std::string line;
     while (std::getline(iss, line))
@@ -364,8 +222,7 @@ std::string Editor::run_git_capture(const std::string &args) const
   {
     return "";
   }
-  const std::string command = "git -C " + shell_quote(git_root) + " " + args + null_redirect();
-  return trim_right_newlines(capture_command_output(command));
+  return jot_git::capture(git_root, args);
 }
 
 bool Editor::open_git_diff_panel(const std::string &path, bool staged)
@@ -404,9 +261,9 @@ bool Editor::open_git_diff_panel(const std::string &path, bool staged)
   }
 
   std::string args = staged ? "diff --staged -- " : "diff -- ";
-  std::string diff = run_git_capture(args + shell_quote(rel));
+  std::string diff = run_git_capture(args + jot_git::shell_quote(rel));
 
-  if (trim_right_newlines(diff).empty())
+  if (diff.empty())
   {
     set_message(staged ? "Git diff: no staged changes for " + rel
                        : "Git Diff: No unstaged changes for " + rel);
@@ -518,8 +375,8 @@ bool Editor::git_stage_path(const std::string &path)
   {
     return false;
   }
-  GitCommandResult result =
-      capture_command_status("git -C " + shell_quote(git_root) + " add -A -- " + shell_quote(rel));
+  jot_git::Captured result =
+      jot_git::capture_errors(git_root, "add -A -- " + jot_git::shell_quote(rel));
   if (result.ok())
   {
     refresh_git_status(true);
@@ -539,8 +396,8 @@ bool Editor::git_unstage_path(const std::string &path)
   {
     return false;
   }
-  GitCommandResult result = capture_command_status("git -C " + shell_quote(git_root)
-                                                   + " restore --staged -- " + shell_quote(rel));
+  jot_git::Captured result =
+      jot_git::capture_errors(git_root, "restore --staged -- " + jot_git::shell_quote(rel));
   if (result.ok())
   {
     refresh_git_status(true);
@@ -554,7 +411,7 @@ bool Editor::git_stage_all()
   {
     return false;
   }
-  GitCommandResult result = capture_command_status("git -C " + shell_quote(git_root) + " add -A");
+  jot_git::Captured result = jot_git::capture_errors(git_root, "add -A");
   if (result.ok())
   {
     refresh_git_status(true);
@@ -568,8 +425,7 @@ bool Editor::git_unstage_all()
   {
     return false;
   }
-  GitCommandResult result =
-      capture_command_status("git -C " + shell_quote(git_root) + " restore --staged .");
+  jot_git::Captured result = jot_git::capture_errors(git_root, "restore --staged .");
   if (result.ok())
   {
     refresh_git_status(true);
@@ -589,19 +445,18 @@ std::string Editor::git_commit_message(const std::string &message)
   {
     return "empty message";
   }
-  const std::string base = "git -C " + shell_quote(git_root);
-
   // Smart commit: when the index is empty, stage everything first (tracked
   // and untracked) so `c` in the git panel works right after editing files —
   // the same flow as `a` (stage all) then commit. A deliberate staged
   // selection is committed as-is.
-  GitCommandResult cached = capture_command_status(base + " diff --cached --quiet");
+  jot_git::Captured cached = jot_git::capture_errors(git_root, "diff --cached --quiet");
   if (cached.ok())
   {
-    capture_command_status(base + " add -A");
+    jot_git::capture_errors(git_root, "add -A");
   }
 
-  GitCommandResult result = capture_command_status(base + " commit -m " + shell_quote(message));
+  jot_git::Captured result =
+      jot_git::capture_errors(git_root, "commit -m " + jot_git::shell_quote(message));
   if (result.ok())
   {
     refresh_git_status(true);

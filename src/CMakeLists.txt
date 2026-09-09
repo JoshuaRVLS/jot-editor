@@ -348,6 +348,12 @@ add_library(jot_render STATIC $<TARGET_OBJECTS:jot_render_obj>)
 add_library(jot_tools STATIC $<TARGET_OBJECTS:jot_tools_obj>)
 add_library(jot_lua_api STATIC $<TARGET_OBJECTS:jot_lua_api_obj>)
 target_link_libraries(jot_lua_api PUBLIC ${LUA_LIBRARIES})
+# The bridge objects compile against the resolved Lua headers above; make
+# the include dirs PUBLIC so consumers that pull in the bridge's headers
+# (which include lua.h/lualib.h) see the same headers they link against,
+# instead of whatever the default include path happens to provide (a newer
+# Lua on the system breaks the build with incompatible declarations).
+target_include_directories(jot_lua_api SYSTEM PUBLIC ${LUA_INCLUDE_DIRS})
 add_library(jot_ui STATIC $<TARGET_OBJECTS:jot_ui_obj>)
 
 jot_expose_module_api(jot_core)
@@ -372,6 +378,10 @@ add_library(jot_engine STATIC
   $<TARGET_OBJECTS:jot_ui_obj>
 )
 target_link_libraries(jot_engine PUBLIC ${LUA_LIBRARIES})
+# Same header/lib consistency for the aggregated engine and its consumers
+# (the app, the test suite): the linked Lua's headers must be on the
+# include path, not whatever /usr/include happens to contain.
+target_include_directories(jot_engine SYSTEM PUBLIC ${LUA_INCLUDE_DIRS})
 
 jot_expose_module_api(jot_engine)
 if(JOT_TREESITTER_ENABLED)

@@ -31,6 +31,7 @@ add_executable(jot_tests
   test_multicursor.cpp
   test_zen_mode.cpp
   test_win_probe.cpp
+  test_inlay_hints.cpp
 )
 
 target_link_libraries(jot_tests PRIVATE
