@@ -1915,6 +1915,33 @@ void Editor::handle_mouse(void *event_ptr)
     }
   }
 
+  // Plain dwell hover (no Ctrl): arm the debounced LSP hover request for
+  // the token under the cursor. maybe_fire_lsp_mouse_hover() fires it
+  // after the dwell delay. Skipped while Ctrl is held — Ctrl+motion drives
+  // the underline above, and arming both would fight over the popup.
+  {
+    int hover_token_start = -1;
+    int hover_token_end = -1;
+    if (is_motion && !mouse_selecting && !mouse_drag_started && !ctrl_held_now && inside_pane
+        && event->y >= content_top && event->y < content_bottom && event->x >= code_start_x
+        && word_span_at_exact(click_y, click_x, hover_token_start, hover_token_end))
+    {
+      request_lsp_hover_at(current_pane,
+                           pane.buffer_id,
+                           {click_x, click_y},
+                           hover_token_start,
+                           hover_token_end,
+                           event->x,
+                           event->y);
+      return;
+    }
+    else if (is_motion && !mouse_selecting && !mouse_drag_started && !ctrl_held_now)
+    {
+      cancel_lsp_mouse_hover();
+      return;
+    }
+  }
+
   if (is_click && event->ctrl && inside_pane && event->y >= content_top && event->y < content_bottom
       && event->x >= code_start_x)
   {
