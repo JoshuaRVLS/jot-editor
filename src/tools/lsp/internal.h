@@ -53,6 +53,10 @@ namespace lsp_detail
   // ({kind, value}); both collapse to text.
   std::string signature_doc_from_json(const JsonValue *doc);
   LSPSignatureHelpResult signature_help_from_result(const JsonValue &result);
+  // Parses a textDocument/inlayHint response. Positions are left in the
+  // server's negotiated encoding (usually UTF-16); the caller converts
+  // characters to byte offsets.
+  std::vector<LSPInlayHint> inlay_hints_from_result(const JsonValue &result);
   bool location_from_json(const JsonValue &item, LSPLocation &out);
   std::vector<LSPLocation> definition_locations_from_result(const JsonValue &result);
   std::vector<LSPSymbol> document_symbols_from_result(const JsonValue &result,

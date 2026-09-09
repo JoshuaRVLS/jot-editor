@@ -69,6 +69,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       cursor_style_raw.begin(), cursor_style_raw.end(), cursor_style_raw.begin(), ::tolower);
   const bool block_cursor = cursor_style_raw == "block" || cursor_style_raw == "steady_block"
                             || cursor_style_raw == "steadyblock";
+  const bool inlay_hints_enabled = config.get_bool("lsp_inlay_hints", true);
 
   UIRect pane_rect = {x, y, w, h};
   ui->fill_rect(pane_rect, " ", theme.fg_default, theme.bg_default);
@@ -275,6 +276,103 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       {
         leading_ws_end++;
       }
+
+      // Inlay hints on this row (parameter-name virtual text on existing
+      // code, clangd-style). Each hint inserts label cells before its byte
+      // column, shifting the rest of the line right. `visual_col` is the
+      // already-shifted screen column; the byte/visual helpers below answer
+      // "how many hint cells sit before position p" for the glyph walk and
+      // the selection/guide overlays.
+      struct RowHint
+      {
+        int byte_col = 0;
+        int visual_col = 0;
+        int width = 0;
+      };
+      std::vector<RowHint> row_hints;
+      if (inlay_hints_enabled && !folded_header)
+      {
+        auto cache_it = lsp_inlay_hint_caches.find(buf.filepath);
+        if (cache_it != lsp_inlay_hint_caches.end() && !cache_it->second.dirty)
+        {
+          int inserted_cells = 0;
+          for (const auto &hint : cache_it->second.hints)
+          {
+            if (hint.line != line_idx || hint.kind != 2 || hint.label.empty()
+                || hint.character < 0 || hint.character > (int)line.size())
+            {
+              continue;
+            }
+            RowHint rh;
+            rh.byte_col = hint.character;
+            rh.visual_col = compute_visual_column(line, hint.character, tab_size) + inserted_cells;
+            std::string label = hint.label;
+            if (hint.padding_left)
+            {
+              label = " " + label;
+            }
+            if (hint.padding_right)
+            {
+              label += " ";
+            }
+            rh.width = ui_cell_count(label);
+            // Draw the label at its (shifted) column, truncated to the pane.
+            const int label_vis = rh.visual_col - start_visual;
+            if (label_vis >= 0 && label_vis < visible_len && rh.width > 0)
+            {
+              const std::string txt = ui_truncate_cells(label, visible_len - label_vis);
+              if (!txt.empty())
+              {
+                ui->draw_text(current_x + label_vis,
+                              draw_y,
+                              txt,
+                              theme.fg_comment,
+                              theme.bg_default,
+                              false,
+                              true); // italic, like an editor's dimmed hints
+              }
+            }
+            row_hints.push_back(std::move(rh));
+            inserted_cells += rh.width;
+          }
+        }
+      }
+      // Hint cells inserted before byte column `b` (glyph at `b` starts
+      // after them, so hints AT the column count too).
+      auto hint_cells_at_byte = [&](int b)
+      {
+        int n = 0;
+        for (const auto &rh : row_hints)
+        {
+          if (rh.byte_col <= b)
+          {
+            n += rh.width;
+          }
+          else
+          {
+            break;
+          }
+        }
+        return n;
+      };
+      // Hint cells whose shifted column lies at or before visual `v` (for
+      // visual-positioned overlays like the bracket guide).
+      auto hint_cells_before_visual = [&](int v)
+      {
+        int n = 0;
+        for (const auto &rh : row_hints)
+        {
+          if (rh.visual_col <= v)
+          {
+            n += rh.width;
+          }
+          else
+          {
+            break;
+          }
+        }
+        return n;
+      };
       auto active_guide_on_row = [&]()
       {
         return bracket_guide.active && line_idx > bracket_guide.start_line
@@ -414,9 +512,24 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
               ui_clamp_to_utf8_boundary(line, std::min((int)line.size(), start_idx + len));
           int char_idx =
               ui_clamp_to_utf8_boundary(line, std::clamp(start_idx, 0, (int)line.size()));
+          // Hint cells inserted before the chunk's first character (the
+          // walk below advances hint_cursor monotonically, so each chunk
+          // seeds its own offset and no hint is counted twice).
+          int hint_offset = 0;
+          size_t hint_cursor = 0;
+          while (hint_cursor < row_hints.size() && row_hints[hint_cursor].byte_col <= char_idx)
+          {
+            hint_offset += row_hints[hint_cursor].width;
+            hint_cursor++;
+          }
 
           while (char_idx < chunk_end)
           {
+            while (hint_cursor < row_hints.size() && row_hints[hint_cursor].byte_col <= char_idx)
+            {
+              hint_offset += row_hints[hint_cursor].width;
+              hint_cursor++;
+            }
             if (char_idx < 0 || char_idx >= (int)line.size())
               break;
             int next_idx = ui_next_grapheme_boundary(line, char_idx);
@@ -446,7 +559,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
               continue;
             }
             int vis_idx = visual_cols[char_idx] - start_visual;
-            if (vis_idx >= visible_len)
+            if (vis_idx + hint_offset >= visible_len)
               break;
             int char_w = std::max(1, visual_cols[next_idx] - visual_cols[char_idx]);
 
@@ -504,7 +617,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             {
               int guide_fg = in_sel ? theme.fg_selection : theme.fg_line_num;
               int char_visual = visual_cols[char_idx];
-              for (int fill = 0; fill < char_w && vis_idx + fill < visible_len; fill++)
+              for (int fill = 0; fill < char_w && vis_idx + hint_offset + fill < visible_len; fill++)
               {
                 int cell_visual = char_visual + fill;
                 const bool active_guide =
@@ -518,7 +631,11 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
                 {
                   guide = "│";
                 }
-                ui->draw_text(current_x + vis_idx + fill, draw_y, guide, cell_guide_fg, bg);
+                ui->draw_text(current_x + vis_idx + hint_offset + fill,
+                              draw_y,
+                              guide,
+                              cell_guide_fg,
+                              bg);
               }
               char_idx = next_idx;
               continue;
@@ -619,9 +736,9 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
 
             if (c == '\t')
             {
-              for (int fill = 0; fill < char_w && vis_idx + fill < visible_len; fill++)
+              for (int fill = 0; fill < char_w && vis_idx + hint_offset + fill < visible_len; fill++)
               {
-                ui->draw_text(current_x + vis_idx + fill,
+                ui->draw_text(current_x + vis_idx + hint_offset + fill,
                               draw_y,
                               " ",
                               fg,
@@ -634,7 +751,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             }
             else
             {
-              ui->draw_text(current_x + vis_idx,
+              ui->draw_text(current_x + vis_idx + hint_offset,
                             draw_y,
                             line.substr(char_idx, next_idx - char_idx),
                             fg,
@@ -816,6 +933,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             {
               line_vis_end = std::max(0, visual_cols[line.size()] - start_visual);
             }
+            line_vis_end += hint_cells_at_byte((int)line.size());
             int avail = visible_len - line_vis_end;
             if (avail <= 0)
             {
@@ -858,8 +976,14 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
       }
       if (selected_span.active)
       {
-        int selected_start_visual = compute_visual_column(line, selected_span.start, tab_size);
-        int selected_end_visual = compute_visual_column(line, selected_span.end, tab_size);
+        // Selection spans are byte ranges; hints shift everything at or past
+        // each end, so the highlight follows the shifted text.
+        const int sel_start_offset = hint_cells_at_byte(selected_span.start);
+        const int sel_end_offset = hint_cells_at_byte(selected_span.end);
+        int selected_start_visual =
+            compute_visual_column(line, selected_span.start, tab_size) + sel_start_offset;
+        int selected_end_visual =
+            compute_visual_column(line, selected_span.end, tab_size) + sel_end_offset;
         int tail_start = selected_span.full_line ? std::max(selected_end_visual, start_visual)
                                                  : std::max(selected_start_visual, start_visual);
         bool select_empty_cell =
@@ -880,6 +1004,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
           {
             line_end_cell = std::max(0, visual_cols[line.size()] - start_visual);
           }
+          line_end_cell += hint_cells_at_byte((int)line.size());
           selected_end_visual = std::max(tail_start, std::min(line_end_cell, visible_len));
         }
         if (!selected_span.full_line && !select_empty_cell)
@@ -900,9 +1025,10 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
           //
           // The main-cursor cell keeps the default colors so the block
           // cursor stays visible on a bare caret (see block_cursor above).
-          const int cursor_cell_visual = (line_idx == buf.cursor.y)
-                                             ? compute_visual_column(line, buf.cursor.x, tab_size)
-                                                   - start_visual
+          const int cursor_cell_visual =
+              (line_idx == buf.cursor.y)
+                  ? compute_visual_column(line, buf.cursor.x, tab_size)
+                        + hint_cells_at_byte(buf.cursor.x) - start_visual
                                              : -1;
           // Extra carets blink in software (they are painted cells, not
           // terminal cursors): during the hidden half of the phase the
@@ -915,7 +1041,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
               if (!caret.active && caret.end.y == line_idx)
               {
                 point_caret_visuals.push_back(
-                    compute_visual_column(line, caret.end.x, tab_size) - start_visual);
+                    compute_visual_column(line, caret.end.x, tab_size)
+                    + hint_cells_at_byte(caret.end.x) - start_visual);
               }
             }
           }
@@ -961,7 +1088,9 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
 
       if (show_indent_guides && active_guide_on_row() && leading_ws_end == (int)line.size())
       {
-        int guide_vis_idx = bracket_guide.visual_column - start_visual;
+        int guide_vis_idx =
+            bracket_guide.visual_column - start_visual
+            + hint_cells_before_visual(bracket_guide.visual_column);
         if (guide_vis_idx >= 0 && guide_vis_idx < visible_len)
         {
           ui->draw_text(

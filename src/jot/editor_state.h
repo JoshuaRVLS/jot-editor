@@ -294,6 +294,19 @@ struct EditorState
   int lsp_signature_open_paren_col;
   std::string lsp_signature_filepath;
   LSPSignatureHelpResult lsp_signature_result;
+  // Per-file cache of textDocument/inlayHint results (parameter-name virtual
+  // text on existing code). start_line/end_line are the requested range;
+  // dirty means the file changed since the last answer; in_flight guards
+  // against stacking requests for the same file.
+  struct LspInlayHintCache
+  {
+    int start_line = -1;
+    int end_line = -1;
+    bool in_flight = false;
+    bool dirty = true;
+    std::vector<LSPInlayHint> hints;
+  };
+  std::map<std::string, LspInlayHintCache> lsp_inlay_hint_caches;
   std::vector<LSPJumpLocation> lsp_jump_stack;
   bool lsp_definition_jump_pending;
   LSPLocation lsp_definition_pending_location;

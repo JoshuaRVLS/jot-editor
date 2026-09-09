@@ -222,6 +222,23 @@ private:
   void render_home_menu();
   void render_buffer_content(const SplitPane &pane, int buffer_id);
   void poll_lsp_clients();
+  // Marks the per-file inlay-hint cache stale (after a did_change flush).
+  void mark_lsp_inlay_hints_dirty(const std::string &filepath);
+  // Stores a fresh inlay-hint answer for its file.
+  void handle_lsp_inlay_hints_result(const LSPInlayHintResult &result);
+  // Requests inlay hints for the current buffer's visible range when the
+  // cache is stale or scrolled past; called from poll_lsp_clients.
+  void refresh_lsp_inlay_hints_if_needed();
+  // Hint cells inserted before `byte_col` on `line` (text shift amount), for
+  // caret placement, popup anchoring, and mouse mapping.
+  int lsp_inlay_hint_cells_before(const std::string &filepath, int line, int byte_col);
+  // (shifted screen column, cell width) pairs for every hint on `line`,
+  // mirroring the renderer's layout (used to un-shift mouse clicks).
+  std::vector<std::pair<int, int>>
+  lsp_inlay_hints_visual(const std::string &filepath,
+                         int line,
+                         const std::string &line_text,
+                         int tab_size);
   void poll_lsp_installs();
   void poll_debugger_sessions();
   void watch_lsp_client_fds(LSPClient *client);

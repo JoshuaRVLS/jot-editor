@@ -37,7 +37,6 @@ void Editor::render_plugin_panel()
   int content_y = panel_y + 2;
   int content_w = std::max(1, panel_w - 2);
   int content_h = std::max(0, panel_h - 3);
-
   // Hand the model to a Lua UI handler when one is registered; it owns the
   // paint. Native fallback below stays byte-identical.
   SidePanelView view;

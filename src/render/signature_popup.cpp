@@ -158,7 +158,9 @@ void Editor::render_lsp_signature()
   const std::string &line = buf.line(safe_cursor_y);
   int cursor_visual = compute_visual_column(line, buf.cursor.x, tab_size);
   int scroll_visual = compute_visual_column(line, buf.scroll_x, tab_size);
-  int cursor_x = pane.x + 1 + line_num_width + (cursor_visual - scroll_visual);
+  int cursor_x =
+      pane.x + 1 + line_num_width + (cursor_visual - scroll_visual)
+      + lsp_inlay_hint_cells_before(buf.filepath, buf.cursor.y, buf.cursor.x);
   int cursor_row = 0;
   const int viewport_h = std::max(1, pane.h - tab_height - 1);
   for (int row = 0; row < viewport_h; row++)

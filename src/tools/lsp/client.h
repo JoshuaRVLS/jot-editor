@@ -72,6 +72,31 @@ struct LSPSignatureHelpResult
   int active_signature = 0;
 };
 
+// One textDocument/inlayHint item. character is a byte offset into the line
+// (converted from the server's UTF-16 position); the label is the virtual
+// text rendered before that position.
+struct LSPInlayHint
+{
+  int line = 0;
+  int character = 0;
+  std::string label;
+  int kind = 0; // 1 = Type, 2 = Parameter
+  bool padding_left = false;
+  bool padding_right = false;
+};
+
+struct LSPInlayHintResult
+{
+  std::string origin_filepath;
+  // The range the request covered (used to know when a scroll leaves it).
+  int start_line = 0;
+  int start_character = 0;
+  int end_line = 0;
+  int end_character = 0;
+  int version = 0;
+  std::vector<LSPInlayHint> hints;
+};
+
 struct LSPDefinitionResult
 {
   std::string origin_filepath;
@@ -124,6 +149,16 @@ private:
     int version = 0;
   };
 
+  struct PendingInlayRequest
+  {
+    std::string filepath;
+    int start_line = 0;
+    int start_character = 0;
+    int end_line = 0;
+    int end_character = 0;
+    int version = 0;
+  };
+
   std::string language;
   std::string root_path;
   std::vector<std::string> command;
@@ -165,9 +200,11 @@ private:
   std::map<int, PendingPositionRequest> pending_definition_requests;
   std::map<int, PendingDocumentRequest> pending_document_symbol_requests;
   std::map<int, PendingDocumentRequest> pending_format_requests;
+  std::map<int, PendingInlayRequest> pending_inlay_hint_requests;
   std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>> pending_completions;
   std::vector<LSPHoverResult> pending_hovers;
   std::vector<LSPSignatureHelpResult> pending_signatures;
+  std::vector<LSPInlayHintResult> pending_inlay_hints;
   std::vector<LSPDefinitionResult> pending_definitions;
   std::vector<LSPDocumentSymbolResult> pending_document_symbols;
   std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> pending_formats;
@@ -222,6 +259,14 @@ public:
   std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>> consume_completion_items();
   std::vector<LSPHoverResult> consume_hover_results();
   std::vector<LSPSignatureHelpResult> consume_signature_results();
+  // Requests parameter/type inlay hints covering the given line range (byte
+  // offsets). Results arrive via consume_inlay_hint_results().
+  bool request_inlay_hints(const std::string &filepath,
+                           int start_line,
+                           int start_character,
+                           int end_line,
+                           int end_character);
+  std::vector<LSPInlayHintResult> consume_inlay_hint_results();
   std::vector<LSPDefinitionResult> consume_definition_results();
   std::vector<LSPDocumentSymbolResult> consume_document_symbol_results();
   std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> consume_format_results();

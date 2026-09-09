@@ -265,6 +265,55 @@ bool LSPClient::request_signature_help(const std::string &filepath,
   return true;
 }
 
+bool LSPClient::request_inlay_hints(const std::string &filepath,
+                                    int start_line,
+                                    int start_character,
+                                    int end_line,
+                                    int end_character)
+{
+  if (!running)
+  {
+    return false;
+  }
+
+  std::string abs_path = fs::absolute(filepath).string();
+  if (pending_inlay_hint_requests.size() >= 16)
+  {
+    return false;
+  }
+  int request_id = next_request_id++;
+  pending_inlay_hint_requests[request_id] = PendingInlayRequest{
+      abs_path,
+      std::max(0, start_line),
+      std::max(0, start_character),
+      std::max(0, end_line),
+      std::max(0, end_character),
+      file_versions[abs_path]};
+
+  std::ostringstream json;
+  json << "{"
+       << "\"jsonrpc\":\"2.0\","
+       << "\"id\":" << request_id << ","
+       << "\"method\":\"textDocument/inlayHint\","
+       << "\"params\":{"
+       << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path)) << "\"},"
+       << "\"range\":{"
+       << "\"start\":{\"line\":" << std::max(0, start_line) << ",\"character\":"
+       << lsp_character(abs_path, start_line, start_character) << "},"
+       << "\"end\":{\"line\":" << std::max(0, end_line) << ",\"character\":"
+       << lsp_character(abs_path, end_line, end_character) << "}"
+       << "}"
+       << "}"
+       << "}";
+
+  if (!send_message(json.str()))
+  {
+    pending_inlay_hint_requests.erase(request_id);
+    return false;
+  }
+  return true;
+}
+
 bool LSPClient::request_definition(const std::string &filepath, int line, int character)
 {
   if (!running)
@@ -369,6 +418,13 @@ std::vector<LSPSignatureHelpResult> LSPClient::consume_signature_results()
 {
   auto out = std::move(pending_signatures);
   pending_signatures.clear();
+  return out;
+}
+
+std::vector<LSPInlayHintResult> LSPClient::consume_inlay_hint_results()
+{
+  auto out = std::move(pending_inlay_hints);
+  pending_inlay_hints.clear();
   return out;
 }
 

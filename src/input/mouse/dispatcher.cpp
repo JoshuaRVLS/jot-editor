@@ -819,6 +819,15 @@ void Editor::handle_mouse(void *event_ptr)
     rel_x = std::max(0, rel_x);
   }
   int click_visual = start_visual + rel_x;
+  // Inlay hints insert cells on screen; subtract them so the click lands on
+  // the logical column the user actually sees.
+  for (const auto &hw : lsp_inlay_hints_visual(buf.filepath, click_y, clicked_line, tab_size))
+  {
+    if (hw.first <= click_visual)
+    {
+      click_visual -= hw.second;
+    }
+  }
   int click_x = visual_to_logical_column(clicked_line, click_visual, tab_size);
   // Past end-of-line: pin to the line end on the left edge, but allow the
   // cursor to ride past it on the right edge while panning so the

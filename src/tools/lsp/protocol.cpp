@@ -464,6 +464,61 @@ namespace lsp_detail
     return parsed;
   }
 
+  std::vector<LSPInlayHint> inlay_hints_from_result(const JsonValue &result)
+  {
+    std::vector<LSPInlayHint> hints;
+    if (result.type != JsonValue::Array)
+    {
+      return hints;
+    }
+    for (const auto &item : result.array_value)
+    {
+      if (item.type != JsonValue::Object)
+      {
+        continue;
+      }
+      const JsonValue *position = json_object_get(item, "position");
+      if (!position || position->type != JsonValue::Object)
+      {
+        continue;
+      }
+      LSPInlayHint hint;
+      hint.line = json_int_or_default(json_object_get(*position, "line"), 0);
+      hint.character = json_int_or_default(json_object_get(*position, "character"), 0);
+      hint.kind = json_int_or_default(json_object_get(item, "kind"), 0);
+      hint.padding_left =
+          json_object_get(item, "paddingLeft")
+              && json_object_get(item, "paddingLeft")->type == JsonValue::Bool
+              && json_object_get(item, "paddingLeft")->bool_value;
+      hint.padding_right =
+          json_object_get(item, "paddingRight")
+              && json_object_get(item, "paddingRight")->type == JsonValue::Bool
+              && json_object_get(item, "paddingRight")->bool_value;
+      const JsonValue *label = json_object_get(item, "label");
+      if (label && label->type == JsonValue::String)
+      {
+        hint.label = label->string_value;
+      }
+      else if (label && label->type == JsonValue::Array)
+      {
+        // InlayHintLabelPart list: concatenate the rendered values.
+        for (const auto &part : label->array_value)
+        {
+          if (part.type != JsonValue::Object)
+          {
+            continue;
+          }
+          hint.label += json_string_or_empty(json_object_get(part, "value"));
+        }
+      }
+      if (!hint.label.empty())
+      {
+        hints.push_back(std::move(hint));
+      }
+    }
+    return hints;
+  }
+
   bool location_from_json(const JsonValue &item, LSPLocation &out)
   {
     if (item.type != JsonValue::Object)

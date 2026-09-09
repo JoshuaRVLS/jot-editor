@@ -258,6 +258,43 @@ void LSPClient::handle_stdout_data(const std::string &data)
       continue;
     }
 
+    auto inlay_it = pending_inlay_hint_requests.find(request_id);
+    if (inlay_it != pending_inlay_hint_requests.end())
+    {
+      const auto current_version = file_versions.find(inlay_it->second.filepath);
+      if (current_version == file_versions.end()
+          || current_version->second != inlay_it->second.version)
+      {
+        pending_inlay_hint_requests.erase(inlay_it);
+        continue;
+      }
+      LSPInlayHintResult inlay;
+      inlay.origin_filepath = inlay_it->second.filepath;
+      inlay.start_line = inlay_it->second.start_line;
+      inlay.start_character = inlay_it->second.start_character;
+      inlay.end_line = inlay_it->second.end_line;
+      inlay.end_character = inlay_it->second.end_character;
+      inlay.version = inlay_it->second.version;
+      if (result)
+      {
+        inlay.hints = inlay_hints_from_result(*result);
+        // The server answered in the negotiated encoding (UTF-16 unless it
+        // picked UTF-8): convert hint characters to byte offsets so the
+        // editor can anchor them against the buffer text.
+        if (!uses_utf8_positions)
+        {
+          for (auto &hint : inlay.hints)
+          {
+            hint.character = utf8_offset_from_utf16(document_line(inlay.origin_filepath, hint.line),
+                                                    hint.character);
+          }
+        }
+      }
+      pending_inlay_hints.push_back(std::move(inlay));
+      pending_inlay_hint_requests.erase(inlay_it);
+      continue;
+    }
+
     auto definition_it = pending_definition_requests.find(request_id);
     if (definition_it != pending_definition_requests.end())
     {

@@ -62,6 +62,7 @@ namespace
                                       int minimap_width,
                                       int tab_size,
                                       int tab_height,
+                                      int hint_cells,
                                       int &display_x,
                                       int &display_y)
   {
@@ -103,7 +104,8 @@ namespace
       const std::string &line = buf.line(buf.cursor.y);
       int cursor_visual = compute_visual_column(line, logical_cursor_x, tab_size);
       int scroll_visual = compute_visual_column(line, logical_scroll_x, tab_size);
-      display_x = code_start_x + (cursor_visual - scroll_visual);
+      // Inlay hints before the caret shift the caret right with the text.
+      display_x = code_start_x + (cursor_visual - scroll_visual) + hint_cells;
     }
     else
     {
@@ -220,8 +222,17 @@ void Editor::render()
       // the last code row instead of hiding it: hiding flips DECTCEM every
       // wheel tick and some terminals (kitty) reset the DECSCUSR shape on
       // hide/show, which reads as a bar->block flicker while scrolling.
-      if (compute_code_cursor_screen_pos(
-              pane, buf, show_minimap, minimap_width, tab_size, tab_height, display_x, display_y))
+      if (compute_code_cursor_screen_pos(pane,
+                                         buf,
+                                         show_minimap,
+                                         minimap_width,
+                                         tab_size,
+                                         tab_height,
+                                         lsp_inlay_hint_cells_before(buf.filepath,
+                                                                     buf.cursor.y,
+                                                                     buf.cursor.x),
+                                         display_x,
+                                         display_y))
       {
         ui->set_cursor(display_x, display_y, editor_cursor_shape(config.get("cursor_style", "bar")));
       }
@@ -425,8 +436,17 @@ void Editor::render()
         // Same off-screen policy as the idle path above: park on the last
         // code row, never hide, so wheel scrolling can't flicker the
         // caret shape via DECTCEM toggles.
-        if (compute_code_cursor_screen_pos(
-                pane, buf, show_minimap, minimap_width, tab_size, tab_height, display_x, display_y))
+        if (compute_code_cursor_screen_pos(pane,
+                                           buf,
+                                           show_minimap,
+                                           minimap_width,
+                                           tab_size,
+                                           tab_height,
+                                           lsp_inlay_hint_cells_before(buf.filepath,
+                                                                       buf.cursor.y,
+                                                                       buf.cursor.x),
+                                           display_x,
+                                           display_y))
         {
           ui->set_cursor(display_x, display_y, editor_cursor_shape(config.get("cursor_style", "bar")));
         }

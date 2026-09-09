@@ -44,6 +44,7 @@ void Editor::poll_lsp_clients()
       {
         client->did_change(filepath, get_buffer_text(buf));
       }
+      mark_lsp_inlay_hints_dirty(filepath);
       break;
     }
   }
@@ -152,6 +153,12 @@ void Editor::poll_lsp_clients()
       handle_lsp_signature_result(signature_help);
     }
 
+    auto inlay_hints = client->consume_inlay_hint_results();
+    for (const auto &result : inlay_hints)
+    {
+      handle_lsp_inlay_hints_result(result);
+    }
+
     auto definitions = client->consume_definition_results();
     for (const auto &definition : definitions)
     {
@@ -168,6 +175,7 @@ void Editor::poll_lsp_clients()
       handle_document_symbols_result(symbols);
     }
   }
+  refresh_lsp_inlay_hints_if_needed();
 }
 
 void Editor::watch_lsp_client_fds(LSPClient *client)
