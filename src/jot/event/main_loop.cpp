@@ -93,13 +93,16 @@ void Editor::run()
   // already covers (set in the constructor). Either way, we never call
   // ui->invalidate() here unconditionally — that would emit a second
   // ESC[2J and a second full-redraw pass on top of the resize path.
-  if (terminal.refresh_size())
+  if (!gui_mode)
   {
-    ui->resize(terminal.get_width(), terminal.get_height());
-    update_pane_layout();
+    if (terminal.refresh_size())
+    {
+      ui->resize(terminal.get_width(), terminal.get_height());
+      update_pane_layout();
+    }
+    terminal.enable_mouse_hover();
+    terminal.enable_focus_reporting();
   }
-  terminal.enable_mouse_hover();
-  terminal.enable_focus_reporting();
   lsp_mouse_hover_enabled = true;
 
   needs_redraw = true;
@@ -122,30 +125,42 @@ void Editor::run()
 #endif
 
 #ifndef _WIN32
-  int stdin_fd = terminal.get_input_fd();
+  int stdin_fd = -1;
+  int stdin_flags = 0;
+  if (!gui_mode)
+  {
+    stdin_fd = terminal.get_input_fd();
 
-  int stdin_flags = fcntl(stdin_fd, F_GETFL, 0);
-  fcntl(stdin_fd, F_SETFL, stdin_flags | O_NONBLOCK);
+    stdin_flags = fcntl(stdin_fd, F_GETFL, 0);
+    fcntl(stdin_fd, F_SETFL, stdin_flags | O_NONBLOCK);
 
-  event_loop_.watch_fd(stdin_fd,
-                       true,
-                       false,
-                       [this]
-                       {
-                         constexpr int kMaxDrainPerWake = 256;
-                         int drained = 0;
-                         for (;;)
+    event_loop_.watch_fd(stdin_fd,
+                         true,
+                         false,
+                         [this]
                          {
-                           Event ev = terminal.read_event();
-                           if (ev.type == EVENT_REDRAW)
-                             break;
-                           handle_terminal_event(ev);
-                           if (++drained >= kMaxDrainPerWake)
-                             break;
-                         }
-                         render_frame();
-                       });
+                           constexpr int kMaxDrainPerWake = 256;
+                           int drained = 0;
+                           for (;;)
+                           {
+                             Event ev = terminal.read_event();
+                             if (ev.type == EVENT_REDRAW)
+                               break;
+                             handle_terminal_event(ev);
+                             if (++drained >= kMaxDrainPerWake)
+                               break;
+                           }
+                           render_frame();
+                         });
+  }
 #endif
+
+  // GUI frontend: SDL drives input through a high-frequency pump (input-
+  // to-paint latency is a few ms; the vsync'd swap paces presentation).
+  if (gui_mode)
+  {
+    event_loop_.set_timer(4, true, [this] { pump_gui_events(); });
+  }
 
   int render_ms = std::max(1, 1000 / std::max(1, render_fps));
   event_loop_.set_timer(render_ms, true, [this] { render_frame(); });
@@ -264,6 +279,9 @@ void Editor::run()
   event_loop_.run();
 
 #ifndef _WIN32
-  fcntl(stdin_fd, F_SETFL, stdin_flags);
+  if (!gui_mode)
+  {
+    fcntl(stdin_fd, F_SETFL, stdin_flags);
+  }
 #endif
 }

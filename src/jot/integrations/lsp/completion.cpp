@@ -392,16 +392,22 @@ bool Editor::refresh_lsp_completion_filter()
     }
   }
   lsp_completion_visible = !lsp_completion_items.empty();
+  update_lsp_completion_ghost();
+  return lsp_completion_visible;
+}
 
-  // nvim-cmp ghost text: the selected item's insert text minus the typed
-  // prefix, drawn dimmed at the cursor while the popup stays open.
+// nvim-cmp ghost text: the selected item's insert text minus the typed
+// prefix, drawn dimmed at the cursor while the popup stays open. Recomputed
+// on every filter refresh AND on direct selection moves (Up/Down), so the
+// preview never lags a frame behind the highlighted row.
+void Editor::update_lsp_completion_ghost()
+{
   lsp_completion_ghost_text.clear();
   if (lsp_completion_selected >= 0 && lsp_completion_selected < (int)lsp_completion_items.size())
   {
     lsp_completion_ghost_text =
         ghost_text_for(lsp_completion_items[lsp_completion_selected], lsp_completion_prefix);
   }
-  return lsp_completion_visible;
 }
 
 void Editor::request_lsp_completion(bool manual, char trigger_character)

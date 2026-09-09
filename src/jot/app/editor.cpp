@@ -2,6 +2,7 @@
 #include "host_api.h"
 #include "jot/app/relaunch.h"
 #include "jot/lua/api.h"
+#include "ui/gui/gui.h"
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
@@ -390,13 +391,36 @@ void Editor::initialize_placeholder_buffer()
   panes[0].buffer_id = 0;
 }
 
-Editor::Editor()
+Editor::Editor(bool gui_mode)
 {
+  this->gui_mode = gui_mode;
   load_runtime_config();
   initialize_state_defaults();
-  initialize_terminal_ui();
+  if (gui_mode)
+  {
+    initialize_gui_ui();
+  }
+  else
+  {
+    initialize_terminal_ui();
+  }
   initialize_placeholder_buffer();
   initialize_lua_runtime();
+}
+
+void Editor::initialize_gui_ui()
+{
+  // The GUI frontend sizes its window from the requested cell grid (80x24
+  // starter; the first resize event re-fits the real window). No terminal
+  // is touched: raw mode, alternate screen and the ANSI diff renderer are
+  // all skipped, and UIGui::render() paints the same cell grid with GL.
+  ui = new UIGui(80, 24, theme.fg_default, theme.bg_default,
+                 std::clamp(config.get_int("gui_font_size", 16), 8, 40));
+  ui->set_default_colors(theme.fg_default, theme.bg_default);
+
+  int h = ui->get_height();
+  int w = ui->get_render_width();
+  create_pane(0, 0, w - minimap_width, h - status_height, -1);
 }
 
 EditorHostAPI &Editor::host()

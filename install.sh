@@ -1070,7 +1070,11 @@ if [[ "${USE_SUDO}" -eq 1 ]]; then
 else
   INSTALL_OUTPUT="$(cmake --install "${BUILD_DIR}" 2>&1)" || { printf '%s\n' "${INSTALL_OUTPUT}"; exit 1; }
 fi
-log_ok "Installed jot (binary, configs, themes and bundled language files) into ${INSTALL_PREFIX}"
+if grep -q "JOT_GUI_ENABLED:INTERNAL=TRUE" "${BUILD_DIR}/CMakeCache.txt" 2>/dev/null; then
+  log_ok "Installed jot (GUI frontend via 'jot --gui', binary/configs/themes/bundled files) into ${INSTALL_PREFIX}"
+else
+  log_ok "Installed jot (binary, configs, themes and bundled language files) into ${INSTALL_PREFIX}"
+fi
 
 EXPECTED_BIN="${INSTALL_PREFIX}/bin/jot"
 ACTIVE_JOT="$(command -v jot 2>/dev/null || true)"

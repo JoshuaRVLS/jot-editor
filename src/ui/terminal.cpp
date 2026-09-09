@@ -913,29 +913,43 @@ Event Terminal::read_event()
   }
 
   ev.type = EVENT_KEY;
-
-  bool mod_shift = (ch & 0x80000) != 0;
-  bool mod_alt = (ch & 0x40000) != 0;
-  bool mod_ctrl = (ch & 0x20000) != 0;
-
-  const bool function_key = (ch & KeyCode::FunctionMarker) != 0;
-  int base_key = ch & 0xFFFF;
-
-  ev.key.key = function_key ? (ch & (KeyCode::FunctionMarker | 0xFFFF)) : base_key;
-  ev.key.ctrl = mod_ctrl || (base_key >= 1 && base_key <= 26 && base_key != 13 && base_key != 9);
-  ev.key.shift = mod_shift || (base_key >= 2008 && base_key <= 2011) || (base_key & 0x8000);
-  ev.key.alt = mod_alt;
-
-  if (ev.key.shift && (base_key >= 2008 && base_key <= 2011))
-  {
-    ev.key.key = base_key - 1000;
-  }
-  else if (ev.key.shift && (base_key & 0x8000))
-  {
-    ev.key.key = base_key & 0x7FFF;
-  }
-
+  ev.key = decode_key_event(ch);
   return ev;
+}
+
+KeyEvent decode_key_event(int raw_ch)
+{
+  KeyEvent out;
+
+  const bool mod_shift = (raw_ch & 0x80000) != 0;
+  const bool mod_alt = (raw_ch & 0x40000) != 0;
+  const bool mod_ctrl = (raw_ch & 0x20000) != 0;
+
+  const bool function_key = (raw_ch & KeyCode::FunctionMarker) != 0;
+  int base_key = raw_ch & 0xFFFF;
+
+  // The 0x8000 bit marks shifted letters (termkey's 'S' vs 's' encoding).
+  // Only treat it as such for the A-Z range: high codepoints (CJK in
+  // U+8000-U+9FFF, nerd icons in U+E000-U+F8FF) naturally have that bit
+  // set and must pass through unchanged.
+  const bool upper_bit = (base_key & 0x8000) != 0 && (base_key & 0x7FFF) >= 'A'
+                         && (base_key & 0x7FFF) <= 'Z';
+
+  out.key = function_key ? (raw_ch & (KeyCode::FunctionMarker | 0xFFFF)) : base_key;
+  out.ctrl = mod_ctrl || (base_key >= 1 && base_key <= 26 && base_key != 13 && base_key != 9);
+  out.shift = mod_shift || (base_key >= 2008 && base_key <= 2011) || upper_bit;
+  out.alt = mod_alt;
+
+  if (out.shift && (base_key >= 2008 && base_key <= 2011))
+  {
+    out.key = base_key - 1000;
+  }
+  else if (upper_bit)
+  {
+    out.key = base_key & 0x7FFF;
+  }
+
+  return out;
 }
 
 void Terminal::set_poll_timeout_ms(int timeout_ms)

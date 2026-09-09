@@ -96,6 +96,7 @@ void Config::load_defaults()
   settings["word_wrap"] = "false";
   settings["cursor_style"] = "bar";
   settings["cursor_blink_ms"] = "300";
+  settings["gui_font_size"] = "16";
   settings["highlight_cursor_line"] = "true";
   settings["render_fps"] = "120";
   settings["idle_fps"] = "60";

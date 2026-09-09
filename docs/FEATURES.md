@@ -37,6 +37,22 @@ jot path/to/project # open a folder as the workspace root
 Workspace sessions are stored under `~/.config/jot/workspaces/`, so jot can
 pick up where you left off.
 
+### GUI frontend (`jot --gui`)
+
+```bash
+jot --gui           # same editor, but in a GPU window
+jot --gui file.cpp
+```
+
+The SDL2/OpenGL frontend renders the exact same cell grid as the terminal
+backend, but with a GPU and vsync'd to the monitor refresh, so typing is
+smooth at any refresh rate (60/120/144Hz...). It uses the same editor core,
+keybindings, LSP, panes and Lua UI — only the screen differs. Rendering is
+direct OpenGL 3.3 core with a FreeType glyph atlas (Nerd Font icons
+included; set `JOT_GUI_FONT` to override the font). The GUI frontend is
+optional: it compiles in when SDL2 + FreeType are available (`JOT_GUI=OFF`
+to disable) and the terminal build is unaffected.
+
 ## Feature tour
 
 ### Editing

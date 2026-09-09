@@ -45,7 +45,9 @@ enum class UICursorShape
 
 class UI
 {
-private:
+protected:
+  // Protected so alternate backends (the GUI frontend) can paint the same
+  // immediate-mode cell grid their own way.
   Terminal *term;
   std::vector<std::vector<UICell>> grid;
   // Per-row dirty flags: set whenever a cell in the row is modified between
@@ -104,8 +106,10 @@ private:
 
 public:
   UI(Terminal *t);
+  virtual ~UI();
   void resize(int w, int h);
-  void invalidate();
+  // Virtual so GUI backends can repaint without clearing a terminal.
+  virtual void invalidate();
   // Forget what was last written to the terminal: the next render() must
   // repaint every row from scratch instead of diffing against last_grid.
   // Used when the terminal surface may have changed without us (window
@@ -115,7 +119,9 @@ public:
   void forget_last_frame();
 
   void clear();
-  void render();
+  // Paint the retained grid. The base implementation emits the terminal
+  // diff; GUI backends override this to draw the same cells with a GPU.
+  virtual void render();
   void emit_raw_after_frame(const std::string &bytes);
 
   void set_default_colors(int fg, int bg);
@@ -134,6 +140,25 @@ public:
   void fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg);
   void dim_rect(const UIRect &rect);
 
+  // GUI smooth-scroll hook: the editor reports each pane's body region
+  // (grid cells, border columns excluded) and how many visible rows the
+  // pane scrolled since the previous frame (positive = content moved up).
+  // GUI backends animate the shift; the terminal backend ignores it.
+  virtual void notify_pane_scroll(int pane_id,
+                                  int x,
+                                  int y,
+                                  int w,
+                                  int h,
+                                  int delta_rows)
+  {
+    (void)pane_id;
+    (void)x;
+    (void)y;
+    (void)w;
+    (void)h;
+    (void)delta_rows;
+  }
+
   // Store cursor position/visibility, no terminal writes. render() emits
   // the cursor at frame-end; flush_cursor() emits it for idle frames.
   void set_cursor(int x, int y, UICursorShape shape = UICursorShape::Block);
@@ -143,7 +168,10 @@ public:
   // Only marks the cursor dirty when the state actually changed, so idle
   // frames never re-emit cursor bytes.
   void set_cursor_blink_visible(bool visible);
-  void flush_cursor();
+  // Emits the pending cursor to the physical screen. The base
+  // implementation writes terminal escapes; GUI backends override this to
+  // a no-op (their render() paints the cursor from the same state).
+  virtual void flush_cursor();
   bool cursor_needs_flush() const
   {
     return cursor_dirty;

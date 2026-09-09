@@ -15,6 +15,7 @@ class EditorHostAPI;
 class HostCoreAPI;
 class HostRenderAPI;
 class HostIOAPI;
+class UIGui;
 
 class Editor : private EditorState
 {
@@ -168,7 +169,7 @@ private:
   void render_panes();
   void render_pane_resize_guides();
   void render_easter_egg();
-  void render_pane(const SplitPane &pane);
+  void render_pane(const SplitPane &pane, int pane_index);
   FileTabLayout build_file_tab_layout(const SplitPane &pane, int draw_w);
   int find_local_tab_index(const SplitPane &pane, int buffer_id) const;
   void clamp_tab_scroll(SplitPane &pane);
@@ -220,7 +221,11 @@ private:
   void render_quit_prompt();
   void render_popup();
   void render_home_menu();
-  void render_buffer_content(const SplitPane &pane, int buffer_id);
+  void render_buffer_content(const SplitPane &pane, int pane_index, int buffer_id);
+  // GUI smooth-scroll tracking: last reported first-visible line per pane,
+  // so the fold-aware delta for the scroll animation is computed once per
+  // pane per frame (editor side, where the fold ranges live).
+  std::vector<int> gui_pane_top_lines_;
   void poll_lsp_clients();
   // Marks the per-file inlay-hint cache stale (after a did_change flush).
   void mark_lsp_inlay_hints_dirty(const std::string &filepath);
@@ -247,6 +252,10 @@ private:
 
   void handle_terminal_event(const Event &ev);
   void render_frame();
+  // GUI frontend event pump: drains SDL events (translated to the same
+  // Event convention as the terminal) and renders one frame. Backs the
+  // 4ms repeating timer in run() while gui_mode is set.
+  void pump_gui_events();
   // Starts (or reuses) a single client process for one server id at a root;
   // shared by the primary attach and the extra policy servers.
   LSPClient *ensure_lsp_client_process(const std::string &server,
@@ -363,6 +372,7 @@ private:
   void return_from_lsp_definition();
   void hide_lsp_completion();
   bool refresh_lsp_completion_filter();
+  void update_lsp_completion_ghost();
   bool apply_selected_lsp_completion();
   void accept_telescope_selection();
   void render_lsp_completion();
@@ -838,6 +848,9 @@ private:
   void initialize_state_defaults();
   void initialize_lua_runtime();
   void initialize_terminal_ui();
+  // GUI frontend (jot --gui): builds the SDL3/OpenGL UIGui and the initial
+  // pane. Throws std::runtime_error when the display or font is missing.
+  void initialize_gui_ui();
   void initialize_placeholder_buffer();
   // Re-reads every config key that maps to live editor state and applies it
   // immediately (no restart). Idempotent; called after Lua config/plugin load
@@ -857,7 +870,9 @@ private:
   bool close_active_floating_ui();
 
 public:
-  Editor();
+  // gui_mode selects the SDL3/OpenGL frontend (jot --gui) over the terminal
+  // backend; the editor logic is identical either way.
+  Editor(bool gui_mode = false);
   ~Editor();
   bool multicursor_active();
   void clear_extra_carets();

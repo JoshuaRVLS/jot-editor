@@ -160,6 +160,9 @@ struct EditorState
   std::string last_terminal_task_name;
   Terminal terminal;
   UI *ui = nullptr;
+  // True when the SDL3/OpenGL GUI frontend owns the screen instead of the
+  // terminal backend (jot --gui). Skips raw-mode/stdio setup in run().
+  bool gui_mode = false;
   Theme theme;
   std::string current_theme_name;
 

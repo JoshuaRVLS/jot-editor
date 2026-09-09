@@ -43,6 +43,16 @@ struct KeyEvent
   bool alt;
 };
 
+// Normalizes a raw termkey-style key code into the Event convention the
+// input layer dispatches on: modifier bits (0x20000 Ctrl / 0x40000 Alt /
+// 0x80000 Shift) and the 0x8000 uppercase bit are removed from `key` and
+// carried only in the ctrl/shift/alt booleans; control bytes 1-26 (minus
+// Tab/Enter) imply ctrl; shifted arrows 2008-2011 unwrap to 1008-1011;
+// uppercase letters lose 0x8000 (so shift+s -> key 'S', shift=true).
+// Shared by the terminal backend and the GUI frontend so both produce
+// identical events.
+KeyEvent decode_key_event(int raw_ch);
+
 struct MouseEvent
 {
   int x, y;

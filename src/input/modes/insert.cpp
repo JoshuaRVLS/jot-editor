@@ -8,6 +8,7 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt
     if (ch == 1008)
     {
       lsp_completion_selected = std::max(0, lsp_completion_selected - 1);
+      update_lsp_completion_ghost();
       needs_redraw = true;
       return;
     }
@@ -15,6 +16,7 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt
     {
       lsp_completion_selected =
           std::min(std::max(0, (int)lsp_completion_items.size() - 1), lsp_completion_selected + 1);
+      update_lsp_completion_ghost();
       needs_redraw = true;
       return;
     }

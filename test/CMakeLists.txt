@@ -36,6 +36,7 @@ add_executable(jot_tests
   test_sidebar_guides.cpp
   test_blank_guides.cpp
   test_completion_matching.cpp
+  test_key_decode.cpp
 )
 
 target_link_libraries(jot_tests PRIVATE

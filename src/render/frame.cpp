@@ -481,7 +481,7 @@ void Editor::render_panes()
     {
       continue;
     }
-    render_pane(panes[i]);
+    render_pane(panes[i], (int)i);
   }
   if (!pane_zoom_active)
   {
@@ -852,7 +852,7 @@ bool Editor::cycle_local_tab(int delta)
   return switch_to_local_tab(next_idx);
 }
 
-void Editor::render_pane(const SplitPane &pane)
+void Editor::render_pane(const SplitPane &pane, int pane_index)
 {
   int draw_w = std::max(1, pane.w);
   if (pane.h <= 0)
@@ -891,7 +891,7 @@ void Editor::render_pane(const SplitPane &pane)
     draw_w = std::max(1, draw_w - minimap_width);
   }
 
-  render_buffer_content(pane, pane.buffer_id);
+  render_buffer_content(pane, pane_index, pane.buffer_id);
 
   if (show_minimap && pane.w > 20)
   {

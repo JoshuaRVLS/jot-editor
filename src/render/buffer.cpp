@@ -49,7 +49,7 @@ namespace
   }
 } // namespace
 
-void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
+void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int buffer_id)
 {
   auto &buf = get_buffer(buffer_id);
   int x = pane.x;
@@ -117,6 +117,47 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
   // viewport at the wrong absolute depth until the next frame.
   buf.scroll_offset =
       Folding::clamp_scroll_offset(buf.fold_ranges, buf.scroll_offset, h, (int)buf.line_count());
+
+  // GUI smooth-scroll hook: report this pane's viewport every frame so the
+  // GUI backend can animate the content shift (neovide-style). The delta is
+  // measured in visible rows -- the fold-aware walk maps line offsets onto
+  // the rows the pane actually shows, so folded ranges stay exact. Jumps
+  // that don't resolve within the viewport (buffer switches, fold toggles)
+  // report 0 and snap.
+  if (gui_mode && ui)
+  {
+    const int new_top = Folding::buffer_line_for_visible_offset(
+        buf.fold_ranges, buf.scroll_offset, 0, (int)buf.line_count());
+    if ((int)gui_pane_top_lines_.size() <= pane_index)
+    {
+      gui_pane_top_lines_.resize(pane_index + 1, -1);
+    }
+    const int old_top = gui_pane_top_lines_[(size_t)pane_index];
+    int delta = 0;
+    if (old_top >= 0 && new_top >= 0 && old_top != new_top)
+    {
+      if (new_top > old_top)
+      {
+        int r = Folding::visible_row_for_line(
+            buf.fold_ranges, old_top, new_top, h + 1, (int)buf.line_count());
+        delta = r >= 0 ? r : 0;
+      }
+      else
+      {
+        int r = Folding::visible_row_for_line(
+            buf.fold_ranges, new_top, old_top, h + 1, (int)buf.line_count());
+        delta = r >= 0 ? -r : 0;
+      }
+    }
+    gui_pane_top_lines_[(size_t)pane_index] = new_top;
+    // Report every render (delta 0 included): the GUI uses the geometry to
+    // keep a retained copy of each pane body, so even the first scroll of a
+    // session has a previous frame to slide instead of snapping. Body region:
+    // tab-bar and bottom-border rows excluded, border columns excluded --
+    // exactly what scrolls with the content.
+    ui->notify_pane_scroll(
+        pane_index, pane.x + 1, y, std::max(0, pane.w - 2), h, delta);
+  }
 
   // Re-anchor decorations through the pending edit (if any) once, before any
   // row reads their positions. Between edits this is a flag check only.

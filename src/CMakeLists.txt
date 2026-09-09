@@ -274,6 +274,36 @@ include(tools/sources.cmake)
 include(jot/lua/sources.cmake)
 include(ui/sources.cmake)
 
+# SDL2/OpenGL GUI frontend ("jot --gui"). The GUI sources are compiled
+# into the engine so the single jot binary serves both backends; when
+# SDL2/freetype/GL are missing the build simply continues without them.
+# JOT_GUI_ENABLED is recorded in the cache so install.sh can tell whether
+# the installed binary supports --gui.
+set(JOT_GUI_ENABLED FALSE)
+if(JOT_GUI AND NOT WIN32)
+  pkg_check_modules(SDL2 QUIET sdl2)
+  pkg_check_modules(FREETYPE2 QUIET freetype2)
+  pkg_check_modules(GUI_GL QUIET gl)
+  if(SDL2_FOUND AND FREETYPE2_FOUND AND GUI_GL_FOUND)
+    set(JOT_GUI_ENABLED TRUE)
+    set(JOT_GUI_ENABLED TRUE CACHE INTERNAL "GUI frontend compiled into the engine" FORCE)
+    list(APPEND JOT_UI_SOURCES
+         ui/gui/gui_setup.cpp
+         ui/gui/gui_glyphs.cpp
+         ui/gui/gui_batch.cpp
+         ui/gui/gui_colors.cpp
+         ui/gui/gui_utf8.cpp
+         ui/gui/gui_anim.cpp
+         ui/gui/gui_render.cpp
+         ui/gui/gui_cursor.cpp
+         ui/gui/gui_input.cpp)
+    list(APPEND JOT_ENGINE_SOURCES jot/event/gui_events.cpp)
+  else()
+    message(STATUS "JOT_GUI requested but SDL2/freetype2/GL not found; building terminal-only")
+    set(JOT_GUI_ENABLED FALSE CACHE INTERNAL "GUI frontend compiled into the engine" FORCE)
+  endif()
+endif()
+
 # Module object libraries
 add_library(jot_engine_obj OBJECT ${JOT_ENGINE_SOURCES})
 jot_configure_object_target(jot_engine_obj)
@@ -336,6 +366,17 @@ target_link_libraries(jot_ui_obj PRIVATE ${UTF8PROC_LIBRARIES})
 if(NOT WIN32)
   target_include_directories(jot_ui_obj SYSTEM PRIVATE ${TERMKEY_INCLUDE_DIRS})
   target_compile_options(jot_ui_obj PRIVATE ${TERMKEY_CFLAGS_OTHER})
+endif()
+if(JOT_GUI_ENABLED)
+  target_include_directories(jot_ui_obj SYSTEM PRIVATE
+    ${SDL2_INCLUDE_DIRS} ${FREETYPE2_INCLUDE_DIRS} ${GUI_GL_INCLUDE_DIRS}
+  )
+  target_compile_options(jot_ui_obj PRIVATE
+    ${SDL2_CFLAGS_OTHER} ${FREETYPE2_CFLAGS_OTHER} ${GUI_GL_CFLAGS_OTHER}
+  )
+  target_link_libraries(jot_ui_obj PRIVATE
+    ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} ${GUI_GL_LIBRARIES}
+  )
 endif()
 jot_configure_object_target(jot_ui_obj)
 
@@ -418,6 +459,12 @@ target_link_libraries(jot_ui PUBLIC ${UTF8PROC_LIBRARIES})
 target_link_directories(jot_ui PUBLIC ${UTF8PROC_LIBRARY_DIRS})
 target_link_libraries(jot_engine PUBLIC ${UTF8PROC_LIBRARIES})
 target_link_directories(jot_engine PUBLIC ${UTF8PROC_LIBRARY_DIRS})
+if(JOT_GUI_ENABLED)
+  target_link_libraries(jot_ui PUBLIC ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} ${GUI_GL_LIBRARIES})
+  target_link_directories(jot_ui PUBLIC ${SDL2_LIBRARY_DIRS} ${FREETYPE2_LIBRARY_DIRS} ${GUI_GL_LIBRARY_DIRS})
+  target_link_libraries(jot_engine PUBLIC ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} ${GUI_GL_LIBRARIES})
+  target_link_directories(jot_engine PUBLIC ${SDL2_LIBRARY_DIRS} ${FREETYPE2_LIBRARY_DIRS} ${GUI_GL_LIBRARY_DIRS})
+endif()
 target_link_libraries(jot_core PUBLIC ${LIBUV_LIBRARIES})
 target_link_directories(jot_core PUBLIC ${LIBUV_LIBRARY_DIRS})
 target_link_libraries(jot_engine PUBLIC ${LIBUV_LIBRARIES})

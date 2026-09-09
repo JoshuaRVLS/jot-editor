@@ -177,6 +177,8 @@ namespace
   }
 } // namespace
 
+UI::~UI() = default;
+
 UI::UI(Terminal *t)
     : term(t), width(80), height(24), cursor_x(-1), cursor_y(-1),
       cursor_shape(UICursorShape::Block), cursor_hidden(true)

@@ -3,7 +3,9 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
+#include <memory>
 
 #ifdef _WIN32
 #include <fcntl.h>
@@ -97,39 +99,77 @@ namespace
 
 int main(int argc, char *argv[])
 {
-  route_stderr_away_from_terminal();
-  // Remember how jot was launched so a later :update restart can replay the
-  // same executable + file/workspace arguments (self-restart support).
-  relaunch::capture_startup(argc, argv);
-  Editor editor;
-  if (argc > 1)
+  // --gui selects the SDL2/OpenGL frontend (a GPU window, vsync'd to the
+  // monitor refresh) over the terminal backend. The flag can sit anywhere
+  // in the command line; the first non-flag argument is the file or
+  // workspace to open, as usual.
+  bool gui_mode = false;
+  const char *target = nullptr;
+  for (int i = 1; i < argc; i++)
   {
-    editor.set_home_menu_visible(false);
+    if (std::strcmp(argv[i], "--gui") == 0)
+    {
+      gui_mode = true;
+    }
+    else if (target == nullptr)
+    {
+      target = argv[i];
+    }
+  }
+
+  // GUI mode owns no alternate screen: stderr stays on the terminal so
+  // startup errors are visible. Terminal mode routes stderr to a log file
+  // so nothing can corrupt the live screen (see above).
+  if (!gui_mode)
+  {
+    route_stderr_away_from_terminal();
+  }
+  // Remember how jot was launched so a later :update restart can replay the
+  // same executable + file/workspace arguments (self-restart support). The
+  // --gui flag rides along in argv, so a GUI session restarts as a GUI.
+  relaunch::capture_startup(argc, argv);
+
+  std::unique_ptr<Editor> editor;
+  try
+  {
+    // gui_mode: SDL2 window + OpenGL instead of a TTY. The GUI backend
+    // throws std::runtime_error when the display or a font is missing.
+    editor = std::make_unique<Editor>(gui_mode);
+  }
+  catch (const std::exception &ex)
+  {
+    std::fprintf(stderr, "jot: %s\n", ex.what());
+    return 1;
+  }
+
+  if (target)
+  {
+    editor->set_home_menu_visible(false);
   }
   else
   {
-    editor.resume_last_workspace_session();
+    editor->resume_last_workspace_session();
   }
 
-  if (argc > 1)
+  if (target)
   {
-    if (std::filesystem::is_directory(argv[1]))
+    if (std::filesystem::is_directory(target))
     {
       std::error_code ec;
-      std::filesystem::path workspace = std::filesystem::absolute(argv[1], ec);
+      std::filesystem::path workspace = std::filesystem::absolute(target, ec);
       if (!ec)
       {
         std::filesystem::current_path(workspace, ec);
       }
-      editor.open_workspace(!ec ? workspace.string() : argv[1], true);
+      editor->open_workspace(!ec ? workspace.string() : target, true);
     }
     else
     {
-      editor.load_file(argv[1]);
+      editor->load_file(target);
     }
   }
 
-  editor.run();
+  editor->run();
 
   return 0;
 }

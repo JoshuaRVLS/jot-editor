@@ -269,23 +269,34 @@ namespace lsp_detail
         completion.preselect = preselect->bool_value;
       }
 
-      if (completion.insert_text.empty())
+      const JsonValue *text_edit = json_object_get(item, "textEdit");
+      const JsonValue *new_text = text_edit ? json_object_get(*text_edit, "newText") : nullptr;
+      const std::string edit_text = json_string_or_empty(new_text);
+      if (!edit_text.empty())
       {
-        const JsonValue *text_edit = json_object_get(item, "textEdit");
-        const JsonValue *new_text = text_edit ? json_object_get(*text_edit, "newText") : nullptr;
+        // Per the LSP spec the textEdit's newText is authoritative when both
+        // are present (insertText is ignored) -- nvim-cmp behaves the same.
+        // Using it keeps the popup label, ghost preview and apply in sync.
+        completion.insert_text = edit_text;
+      }
+      else if (completion.insert_text.empty())
+      {
         completion.insert_text = json_string_or_empty(new_text);
+      }
 
-        const JsonValue *range = text_edit ? json_object_get(*text_edit, "range") : nullptr;
-        const JsonValue *start = range ? json_object_get(*range, "start") : nullptr;
-        const JsonValue *end = range ? json_object_get(*range, "end") : nullptr;
-        if (start && end)
-        {
-          completion.has_text_edit_range = true;
-          completion.edit_start_line = json_int_or_default(json_object_get(*start, "line"), 0);
-          completion.edit_start_char = json_int_or_default(json_object_get(*start, "character"), 0);
-          completion.edit_end_line = json_int_or_default(json_object_get(*end, "line"), 0);
-          completion.edit_end_char = json_int_or_default(json_object_get(*end, "character"), 0);
-        }
+      // The edit range drives the replaced span in apply, so parse it
+      // whenever the item carries a textEdit (not only when insertText is
+      // absent, as before).
+      const JsonValue *range = text_edit ? json_object_get(*text_edit, "range") : nullptr;
+      const JsonValue *start = range ? json_object_get(*range, "start") : nullptr;
+      const JsonValue *end = range ? json_object_get(*range, "end") : nullptr;
+      if (start && end)
+      {
+        completion.has_text_edit_range = true;
+        completion.edit_start_line = json_int_or_default(json_object_get(*start, "line"), 0);
+        completion.edit_start_char = json_int_or_default(json_object_get(*start, "character"), 0);
+        completion.edit_end_line = json_int_or_default(json_object_get(*end, "line"), 0);
+        completion.edit_end_char = json_int_or_default(json_object_get(*end, "character"), 0);
       }
       if (completion.insert_text.empty())
       {
