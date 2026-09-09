@@ -328,6 +328,10 @@ struct SidebarRenderRow
   // the label in its brand color, like the status line.
   std::string icon;
   int icon_fg = -1; // -1 = use the row foreground
+  // Tree indent guides ("│ ", "├─ ", "└─ " connectors; directories end with
+  // their expander chevron). Empty for flat views.
+  std::string guide;
+  int guide_cells = 0; // cell width of `guide`
 };
 
 struct SidebarRenderCache

@@ -286,6 +286,9 @@ struct SidebarPanelRowView
   std::string icon;        // per-language file glyph drawn with its brand color
   int icon_x = -1;         // absolute column for the icon, -1 = none
   int icon_fg = 0;
+  std::string guide; // tree indent guides (may be empty)
+  int guide_x = -1;  // absolute column for the guides, -1 = none
+  int guide_fg = 0;
   int fg = 0, bg = 0;
   bool bold = false;
   bool active_file = false; // draw the ▌ marker at the left edge

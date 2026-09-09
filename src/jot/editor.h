@@ -532,6 +532,13 @@ public:
   int zen_content_margin(int available_w);
   void load_file_tree(const std::string &path);
   void open_workspace(const std::string &path, bool restore_session = true);
+  // Test seam: the computed explorer/git sidebar rows (rebuilding the cache
+  // on demand so callers never see a stale tree).
+  const SidebarRenderCache &sidebar_render_cache()
+  {
+    ensure_sidebar_render_cache();
+    return sidebar_render_cache_;
+  }
   bool resume_last_workspace_session();
   void set_home_menu_visible(bool visible);
 

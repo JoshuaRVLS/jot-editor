@@ -301,7 +301,13 @@ void Editor::rebuild_sidebar_tree_cache()
   sidebar_render_cache_.root_label = root_display_name(root_dir);
 
   sidebar_render_cache_.rows.reserve(file_tree.size());
-  std::function<void(const FileNode &)> append_row = [&](const FileNode &node)
+  // Tree indent guides (neo-tree style): each ancestor level consumes two
+  // cells — "│ " while that ancestor's sibling run continues, "  " after its
+  // last sibling — and the node's own level ends in its expander chevron
+  // (directories) or an ├─/└─ elbow (files). The row width matches the old
+  // indent + chevron layout exactly: 2 cells per level.
+  std::function<void(const FileNode &, const std::string &, bool)> append_row =
+      [&](const FileNode &node, const std::string &parent_guide, bool is_last)
   {
     SidebarRenderRow row;
     row.path = node.path;
@@ -311,9 +317,20 @@ void Editor::rebuild_sidebar_tree_cache()
     row.expanded = node.expanded;
     row.depth = node.depth;
 
-    std::string indent(node.depth * 2, ' ');
-    std::string chevron = node.is_dir ? (node.expanded ? " " : " ") : "  ";
-    row.label = indent + chevron + get_file_icon(node) + node.name;
+    std::string guide = parent_guide;
+    if (node.is_dir)
+    {
+      guide += node.expanded ? " " : " ";
+    }
+    else
+    {
+      // Two-cell elbows keep the row exactly as wide as the old indent +
+      // chevron slot; the file icon (glyph + space) follows right after.
+      guide += is_last ? "└─" : "├─";
+    }
+    row.guide = guide;
+    row.guide_cells = cell_count(guide);
+    row.label = guide + get_file_icon(node) + node.name;
     if (!node.is_dir)
     {
       // Per-language icon glyph + brand color for file rows (the shared map
@@ -334,16 +351,18 @@ void Editor::rebuild_sidebar_tree_cache()
 
     if (node.is_dir && node.expanded)
     {
-      for (const auto &child : node.children)
+      const std::string child_guide = parent_guide + (is_last ? "  " : "│ ");
+      const std::vector<FileNode> &children = node.children;
+      for (size_t i = 0; i < children.size(); i++)
       {
-        append_row(child);
+        append_row(children[i], child_guide, i + 1 == children.size());
       }
     }
   };
 
-  for (const auto &node : file_tree)
+  for (size_t i = 0; i < file_tree.size(); i++)
   {
-    append_row(node);
+    append_row(file_tree[i], "", i + 1 == file_tree.size());
   }
 
   sidebar_render_cache_.tree_dirty = false;
@@ -882,10 +901,10 @@ void Editor::render_sidebar()
     const int label_max = show_badges ? std::max(0, diag_x - (content_x + 1) - 1)
                                       : std::max(0, border_x - (content_x + 1));
 
-    // File rows split the label into three visual pieces: blank indent +
-    // chevron region (the row background), the per-language icon glyph in
-    // its own brand color, then the file name. Directories keep their
-    // folder glyph baked into the label (theme directory color).
+    // Rows split into tree indent guides (comment color), then the
+    // per-language icon glyph in its own brand color (files), then the name.
+    // Directories keep their folder glyph baked into the label remainder
+    // (theme directory color).
     const bool colored_icon = !row.is_dir && !row.icon.empty() && row.icon_fg >= 0;
     std::string row_label = truncate_cells(row.label, label_max);
     std::string row_name;
@@ -893,21 +912,37 @@ void Editor::render_sidebar()
     int row_icon_fg = -1;
     int row_icon_col = -1;
     int row_name_col = content_x + 1;
+    const int guide_cells = std::max(0, row.guide_cells);
+    if (!row.guide.empty())
+    {
+      ui->draw_text(content_x + 1,
+                    tree_y + i,
+                    truncate_cells(row.guide, std::min(guide_cells, label_max)),
+                    theme.fg_comment,
+                    row_bg);
+    }
     if (colored_icon)
     {
-      // label layout for files: [depth*2 indent]["  " chevron][glyph][" "][name]
-      const int prefix_cells = row.depth * 2 + 2;
+      // label layout for files: [guides][glyph][" "][name]
       row_icon = row.icon;
       row_icon_fg = row.icon_fg;
-      row_icon_col = content_x + 1 + prefix_cells;
+      row_icon_col = content_x + 1 + guide_cells;
       const int glyph_cells = cell_count(row.icon);
       row_name_col = row_icon_col + glyph_cells + 1;
-      const int name_budget = std::max(0, label_max - prefix_cells - glyph_cells - 1);
+      const int name_budget = std::max(0, label_max - guide_cells - glyph_cells - 1);
       row_name = truncate_cells(row.name, name_budget);
     }
     else
     {
-      ui->draw_text(content_x + 1, tree_y + i, row_label, row_fg, row_bg);
+      // Label = guide + folder glyph + name: draw the remainder after the
+      // guides (which were painted above in the comment color).
+      std::string rest = row_label;
+      if (rest.size() >= row.guide.size()
+          && rest.compare(0, row.guide.size(), row.guide) == 0)
+      {
+        rest = rest.substr(row.guide.size());
+      }
+      ui->draw_text(content_x + 1 + guide_cells, tree_y + i, rest, row_fg, row_bg);
     }
     if (colored_icon)
     {
@@ -929,8 +964,20 @@ void Editor::render_sidebar()
     }
     r.fg = row_fg;
     r.bg = row_bg;
-    r.text = colored_icon ? row_name : row_label;
-    r.text_x = colored_icon ? row_name_col : content_x + 1;
+    std::string text_rest = row_label;
+    if (text_rest.size() >= row.guide.size()
+        && text_rest.compare(0, row.guide.size(), row.guide) == 0)
+    {
+      text_rest = text_rest.substr(row.guide.size());
+    }
+    r.text = colored_icon ? row_name : text_rest;
+    r.text_x = colored_icon ? row_name_col : content_x + 1 + guide_cells;
+    if (!row.guide.empty())
+    {
+      r.guide = truncate_cells(row.guide, guide_cells);
+      r.guide_x = content_x + 1;
+      r.guide_fg = theme.fg_comment;
+    }
     if (colored_icon)
     {
       r.icon = row_icon;

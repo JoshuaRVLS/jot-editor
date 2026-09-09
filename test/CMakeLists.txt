@@ -33,6 +33,7 @@ add_executable(jot_tests
   test_win_probe.cpp
   test_inlay_hints.cpp
   test_commenting.cpp
+  test_sidebar_guides.cpp
 )
 
 target_link_libraries(jot_tests PRIVATE

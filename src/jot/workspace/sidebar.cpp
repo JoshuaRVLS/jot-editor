@@ -465,6 +465,84 @@ void Editor::handle_sidebar_input(int ch)
     return;
   }
 
+  if (ch == 'E')
+  {
+    // Reveal the active buffer's file: expand every directory along the
+    // path from the workspace root, then select and scroll to the row.
+    if (current_buffer < 0 || current_buffer >= (int)buffers.size())
+    {
+      return;
+    }
+    const std::string target = normalize_path(buffers[current_buffer].filepath);
+    if (target.empty())
+    {
+      return;
+    }
+    std::error_code ec;
+    fs::path rel = fs::path(target).lexically_relative(fs::path(root_dir));
+    const std::string rel_s = rel.string();
+    if (rel.empty() || rel_s == "." || rel_s == ".." || rel_s.rfind("../", 0) == 0
+        || rel_s.rfind("..\\", 0) == 0)
+    {
+      message = "Not under the workspace root";
+      needs_redraw = true;
+      return;
+    }
+
+    std::vector<FileNode> *level = &file_tree;
+    fs::path walk = fs::path(root_dir);
+    for (const auto &part : rel)
+    {
+      const std::string comp = part.string();
+      walk /= comp;
+      auto it = std::find_if(level->begin(),
+                             level->end(),
+                             [&](const FileNode &n) { return n.name == comp; });
+      if (it == level->end())
+      {
+        message = "Not in the tree (hidden?): " + comp;
+        needs_redraw = true;
+        return;
+      }
+      if (!it->is_dir)
+      {
+        // Found the file: select and reveal it.
+        invalidate_sidebar_tree_cache();
+        std::vector<FileNode *> refreshed;
+        flatten_nodes_mut(file_tree, refreshed);
+        for (int i = 0; i < (int)refreshed.size(); i++)
+        {
+          if (normalize_path(refreshed[i]->path) == target)
+          {
+            file_tree_selected = i;
+            break;
+          }
+        }
+        flat = refreshed;
+        clamp_scroll();
+        if (file_tree_selected < file_tree_scroll)
+        {
+          file_tree_scroll = file_tree_selected;
+        }
+        else if (file_tree_selected >= file_tree_scroll + view_h)
+        {
+          file_tree_scroll = std::max(0, file_tree_selected - view_h + 1);
+          clamp_scroll();
+        }
+        message = "Revealed: " + to_workspace_relative(target);
+        needs_redraw = true;
+        return;
+      }
+      if (!it->expanded)
+      {
+        it->expanded = true;
+        refresh_tree_children(*it);
+      }
+      level = &it->children;
+    }
+    return;
+  }
+
   if (ch == '\n' || ch == 13 || ch == 'l' || ch == 1010)
   {
     flatten_nodes_mut(file_tree, flat);

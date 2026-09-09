@@ -99,6 +99,10 @@ local function sidebar(p)
       if r.symbol and r.symbol ~= "" and r.symbol_x and r.symbol_x >= 0 then
         place(r.symbol_x, r.y, r.symbol, r.symbol_fg or r.fg, r.bg or bg, r.symbol_bold)
       end
+      if r.guide and r.guide ~= "" and r.guide_x and r.guide_x >= 0 then
+        -- Tree indent guides (│ ├─ └─ connectors) in the comment color.
+        place(r.guide_x, r.y, r.guide, r.guide_fg or r.fg, r.bg or bg, false)
+      end
       if r.icon and r.icon ~= "" and r.icon_x and r.icon_x >= 0 then
         -- Per-language file glyph in its brand color (like the status line),
         -- placed ahead of the label at the column C++ computed.

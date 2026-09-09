@@ -66,8 +66,9 @@ pick up where you left off.
 ### Workspace and sidebar
 
 - The workspace root is the folder you launched (or your current directory).
-- A sidebar file explorer: folders before files, a hidden-file toggle, expand/
-  collapse all, refresh, and parent-folder navigation.
+- A sidebar file explorer with tree indent guides: folders before files, a
+  hidden-file toggle, expand/collapse all, reveal the active file (`E`),
+  refresh, and parent-folder navigation.
 - Create, rename, and delete files and folders from the tree.
 - Recent files and workspace resume, plus a home menu for recent entries and
   quick actions.
