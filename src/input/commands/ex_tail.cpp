@@ -135,6 +135,10 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     lsp_rename_symbol(trim_copy(arg));
   }
+  else if (lcmd == "lsprefs" || lcmd == "lspreferences" || lcmd == "refs")
+  {
+    request_lsp_references();
+  }
   else if (lcmd == "diagnostics" || lcmd == "problems")
   {
     show_diagnostics_picker();

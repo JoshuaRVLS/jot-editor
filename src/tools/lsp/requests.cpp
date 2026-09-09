@@ -351,6 +351,44 @@ bool LSPClient::request_definition(const std::string &filepath, int line, int ch
   return true;
 }
 
+bool LSPClient::request_references(const std::string &filepath, int line, int character)
+{
+  if (!running)
+  {
+    return false;
+  }
+
+  std::string abs_path = fs::absolute(filepath).string();
+  if (pending_reference_requests.size() >= 64)
+  {
+    last_error = "too many pending LSP reference requests";
+    return false;
+  }
+  int request_id = next_request_id++;
+  pending_reference_requests[request_id] = PendingPositionRequest{
+      abs_path, std::max(0, line), std::max(0, character), file_versions[abs_path]};
+
+  std::ostringstream json;
+  json << "{"
+       << "\"jsonrpc\":\"2.0\","
+       << "\"id\":" << request_id << ","
+       << "\"method\":\"textDocument/references\","
+       << "\"params\":{"
+       << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path)) << "\"},"
+       << "\"position\":{\"line\":" << std::max(0, line)
+       << ",\"character\":" << lsp_character(abs_path, line, character) << "},"
+       << "\"context\":{\"includeDeclaration\":true}"
+       << "}"
+       << "}";
+
+  if (!send_message(json.str()))
+  {
+    pending_reference_requests.erase(request_id);
+    return false;
+  }
+  return true;
+}
+
 bool LSPClient::request_rename(const std::string &filepath,
                                int line,
                                int character,
@@ -539,6 +577,13 @@ std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> LSPClient::consume
 {
   auto out = std::move(pending_renames);
   pending_renames.clear();
+  return out;
+}
+
+std::vector<LSPDefinitionResult> LSPClient::consume_reference_results()
+{
+  auto out = std::move(pending_references);
+  pending_references.clear();
   return out;
 }
 

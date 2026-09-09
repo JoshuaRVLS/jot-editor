@@ -181,6 +181,7 @@ void Editor::poll_lsp_clients()
       handle_document_symbols_result(symbols);
     }
   }
+  handle_lsp_references_results();
   refresh_lsp_inlay_hints_if_needed();
 }
 

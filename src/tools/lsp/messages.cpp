@@ -325,6 +325,36 @@ void LSPClient::handle_stdout_data(const std::string &data)
       continue;
     }
 
+    auto reference_it = pending_reference_requests.find(request_id);
+    if (reference_it != pending_reference_requests.end())
+    {
+      const auto current_version = file_versions.find(reference_it->second.filepath);
+      if (current_version == file_versions.end()
+          || current_version->second != reference_it->second.version)
+      {
+        pending_reference_requests.erase(reference_it);
+        continue;
+      }
+      LSPDefinitionResult references;
+      references.origin_filepath = reference_it->second.filepath;
+      references.origin_line = reference_it->second.line;
+      references.origin_character = reference_it->second.character;
+      if (result)
+      {
+        references.locations = definition_locations_from_result(*result);
+        for (auto &location : references.locations)
+        {
+          location.character =
+              editor_character(location.filepath, location.line, location.character);
+          location.end_character =
+              editor_character(location.filepath, location.end_line, location.end_character);
+        }
+      }
+      pending_references.push_back(std::move(references));
+      pending_reference_requests.erase(reference_it);
+      continue;
+    }
+
     auto symbol_it = pending_document_symbol_requests.find(request_id);
     if (symbol_it != pending_document_symbol_requests.end())
     {

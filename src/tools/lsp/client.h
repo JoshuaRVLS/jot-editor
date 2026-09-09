@@ -202,6 +202,7 @@ private:
   std::map<int, PendingPositionRequest> pending_hover_requests;
   std::map<int, PendingPositionRequest> pending_signature_requests;
   std::map<int, PendingPositionRequest> pending_definition_requests;
+  std::map<int, PendingPositionRequest> pending_reference_requests;
   std::map<int, PendingDocumentRequest> pending_document_symbol_requests;
   std::map<int, PendingDocumentRequest> pending_format_requests;
   std::map<int, PendingPositionRequest> pending_rename_requests;
@@ -211,6 +212,7 @@ private:
   std::vector<LSPSignatureHelpResult> pending_signatures;
   std::vector<LSPInlayHintResult> pending_inlay_hints;
   std::vector<LSPDefinitionResult> pending_definitions;
+  std::vector<LSPDefinitionResult> pending_references;
   std::vector<LSPDocumentSymbolResult> pending_document_symbols;
   std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> pending_formats;
   std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> pending_renames;
@@ -257,6 +259,7 @@ public:
                               int character,
                               char trigger_character = '\0');
   bool request_definition(const std::string &filepath, int line, int character);
+  bool request_references(const std::string &filepath, int line, int character);
   bool request_document_symbols(const std::string &filepath);
   // Asks the server to rename the symbol at the given position. The returned
   // WorkspaceEdit is expanded into per-file edit lists (UTF-16 characters
@@ -284,6 +287,7 @@ public:
                            int end_character);
   std::vector<LSPInlayHintResult> consume_inlay_hint_results();
   std::vector<LSPDefinitionResult> consume_definition_results();
+  std::vector<LSPDefinitionResult> consume_reference_results();
   std::vector<LSPDocumentSymbolResult> consume_document_symbol_results();
   std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> consume_format_results();
   // True when this client has a document (didOpen without didClose). Used to
