@@ -372,6 +372,35 @@ void LSPClient::handle_stdout_data(const std::string &data)
       pending_format_requests.erase(format_it);
       continue;
     }
+
+    auto rename_it = pending_rename_requests.find(request_id);
+    if (rename_it != pending_rename_requests.end())
+    {
+      const auto current_version = file_versions.find(rename_it->second.filepath);
+      if (current_version == file_versions.end()
+          || current_version->second != rename_it->second.version)
+      {
+        pending_rename_requests.erase(rename_it);
+        continue;
+      }
+      if (result)
+      {
+        std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> changes;
+        workspace_edit_from_result(*result, changes);
+        for (auto &entry : changes)
+        {
+          for (auto &edit : entry.second)
+          {
+            edit.start_char = editor_character(
+                entry.first, edit.start_line, edit.start_char);
+            edit.end_char = editor_character(entry.first, edit.end_line, edit.end_char);
+          }
+          pending_renames.push_back(std::move(entry));
+        }
+      }
+      pending_rename_requests.erase(rename_it);
+      continue;
+    }
   }
 }
 

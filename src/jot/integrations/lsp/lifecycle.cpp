@@ -88,6 +88,12 @@ void Editor::poll_lsp_clients()
       apply_lsp_text_edits(entry.first, entry.second);
     }
 
+    auto renames = client->consume_rename_results();
+    for (auto &entry : renames)
+    {
+      apply_lsp_text_edits(entry.first, entry.second);
+    }
+
     auto completions = client->consume_completion_items();
     for (auto &entry : completions)
     {

@@ -139,6 +139,8 @@ namespace
         {"lspdef", "LSP", "Go to definition", 68},
         {"gd", "LSP", "Go to definition", 70},
         {"lspback", "LSP", "Return from LSP definition jump", 66},
+        {"lsprename", "LSP", "Rename symbol under cursor (LSP)", 74},
+        {"lspren", "LSP", "Rename symbol under cursor (LSP)", 70},
         {"diagnostics", "Navigation", "Open diagnostics picker", 76},
         {"problems", "Navigation", "Open diagnostics picker", 74},
         {"diagnext", "Navigation", "Go to next diagnostic", 74},

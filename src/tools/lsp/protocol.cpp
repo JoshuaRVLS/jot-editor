@@ -757,10 +757,106 @@ namespace lsp_detail
     return symbols;
   }
 
-  // textDocument/formatting returns an array of TextEdit objects
-  // ({range:{start,end}, newText}). Positions are returned in the negotiated
-  // encoding (usually UTF-16); character offsets stay raw here and the caller
-  // converts them to editor columns so a per-document text map is available.
+  // Parses a single TextEdit object ({range:{start,end}, newText}). Positions
+  // are returned in the negotiated encoding (usually UTF-16); character
+  // offsets stay raw here and the caller converts them to editor columns so a
+  // per-document text map is available. Returns false when the object is not
+  // a well-formed TextEdit.
+  bool parse_text_edit(const JsonValue &item, LSPTextEdit &edit)
+  {
+    if (item.type != JsonValue::Object)
+    {
+      return false;
+    }
+    const JsonValue *range = json_object_get(item, "range");
+    if (!parse_range_start(range,
+                           edit.start_line,
+                           edit.start_char,
+                           edit.end_line,
+                           edit.end_char))
+    {
+      return false;
+    }
+    edit.new_text = json_string_or_empty(json_object_get(item, "newText"));
+    return true;
+  }
+
+  // Appends the TextEdits from a WorkspaceEdit result to `out`, keyed by the
+  // file path each edit list belongs to. Handles both the classic
+  // `changes: {uri: [TextEdit]}` map and the v3 `documentChanges:` array of
+  // {textDocument:{uri}, edits:[TextEdit]} entries (the form clangd and
+  // rust-analyzer use for renames).
+  void workspace_edit_from_result(const JsonValue &result,
+                                  std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> &out)
+  {
+    if (result.type != JsonValue::Object)
+    {
+      return;
+    }
+    const JsonValue *changes = json_object_get(result, "changes");
+    if (changes && changes->type == JsonValue::Object)
+    {
+      for (const auto &entry : changes->object_value)
+      {
+        if (entry.second.type != JsonValue::Array)
+        {
+          continue;
+        }
+        const std::string filepath = from_file_uri(entry.first);
+        std::vector<LSPTextEdit> edits;
+        for (const auto &item : entry.second.array_value)
+        {
+          LSPTextEdit edit;
+          if (parse_text_edit(item, edit))
+          {
+            edits.push_back(std::move(edit));
+          }
+        }
+        if (!edits.empty())
+        {
+          out.emplace_back(filepath, std::move(edits));
+        }
+      }
+    }
+    const JsonValue *document_changes = json_object_get(result, "documentChanges");
+    if (document_changes && document_changes->type == JsonValue::Array)
+    {
+      for (const auto &doc : document_changes->array_value)
+      {
+        if (doc.type != JsonValue::Object)
+        {
+          continue;
+        }
+        const JsonValue *text_doc = json_object_get(doc, "textDocument");
+        const JsonValue *uri = text_doc ? json_object_get(*text_doc, "uri") : nullptr;
+        const JsonValue *edits_json = json_object_get(doc, "edits");
+        if (!uri || uri->type != JsonValue::String || !edits_json
+            || edits_json->type != JsonValue::Array)
+        {
+          continue;
+        }
+        const std::string filepath = from_file_uri(uri->string_value);
+        std::vector<LSPTextEdit> edits;
+        for (const auto &item : edits_json->array_value)
+        {
+          LSPTextEdit edit;
+          if (parse_text_edit(item, edit))
+          {
+            edits.push_back(std::move(edit));
+          }
+        }
+        if (!edits.empty())
+        {
+          out.emplace_back(filepath, std::move(edits));
+        }
+      }
+    }
+  }
+
+  // textDocument/formatting returns an array of TextEdit objects. Positions
+  // are returned in the negotiated encoding (usually UTF-16); character
+  // offsets stay raw here and the caller converts them to editor columns so a
+  // per-document text map is available.
   void format_edits_from_result(const JsonValue &result, std::vector<LSPTextEdit> &out)
   {
     if (result.type != JsonValue::Array)
@@ -769,22 +865,11 @@ namespace lsp_detail
     }
     for (const auto &item : result.array_value)
     {
-      if (item.type != JsonValue::Object)
-      {
-        continue;
-      }
       LSPTextEdit edit;
-      const JsonValue *range = json_object_get(item, "range");
-      if (!parse_range_start(range,
-                             edit.start_line,
-                             edit.start_char,
-                             edit.end_line,
-                             edit.end_char))
+      if (parse_text_edit(item, edit))
       {
-        continue;
+        out.push_back(std::move(edit));
       }
-      edit.new_text = json_string_or_empty(json_object_get(item, "newText"));
-      out.push_back(std::move(edit));
     }
   }
 } // namespace lsp_detail

@@ -131,6 +131,10 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     return_from_lsp_definition();
   }
+  else if (lcmd == "lsprename" || lcmd == "lspren")
+  {
+    lsp_rename_symbol(trim_copy(arg));
+  }
   else if (lcmd == "diagnostics" || lcmd == "problems")
   {
     show_diagnostics_picker();

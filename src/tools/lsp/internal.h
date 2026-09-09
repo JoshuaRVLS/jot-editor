@@ -56,6 +56,11 @@ namespace lsp_detail
   // server's negotiated encoding (usually UTF-16); the caller converts
   // characters to byte offsets.
   std::vector<LSPInlayHint> inlay_hints_from_result(const JsonValue &result);
+  // Expands a textDocument/rename WorkspaceEdit into per-file edit lists
+  // ({filepath, edits}). Handles both `changes` and `documentChanges` forms.
+  void workspace_edit_from_result(
+      const JsonValue &result,
+      std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> &out);
   bool location_from_json(const JsonValue &item, LSPLocation &out);
   std::vector<LSPLocation> definition_locations_from_result(const JsonValue &result);
   std::vector<LSPSymbol> document_symbols_from_result(const JsonValue &result,

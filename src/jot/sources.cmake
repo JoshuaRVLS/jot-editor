@@ -28,6 +28,7 @@ set(JOT_ENGINE_SOURCES
   jot/integrations/lsp/inlay_hints.cpp
   jot/integrations/lsp/install.cpp
   jot/integrations/lsp/lifecycle.cpp
+  jot/integrations/lsp/rename.cpp
   jot/integrations/lsp/signature.cpp
   jot/integrations/lsp/status.cpp
   jot/integrations/syntax.cpp

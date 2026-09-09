@@ -106,7 +106,8 @@ Shell, Ruby, and PHP.
 - Debounced file sync, diagnostics overlay, and next/previous diagnostic
   jumps.
 - Completion with fuzzy filtering and `textEdit` support; hover on demand or
-  on mouse hover; go-to-definition with a return stack (`:lspback`).
+  on mouse hover; go-to-definition with a return stack (`:lspback`); LSP
+  rename across all affected files (`:lsprename <new_name>`).
 - Signature help popup, plus clangd-style inlay hints on already-written
   code: parameter names (`a: 1, b: 2`) before arguments and type hints after
   variable declarations (`auto x = 5` shows `x: int`), both as dimmed
@@ -356,7 +357,7 @@ Open the palette with `Ctrl+P` and type an ex-style command.
 `:datetime` `:stats`
 
 **LSP:** `:lspinstall` `:lspremove` `:lspstatus` `:hover` `:definition`
-`:gd` `:lspback`
+`:gd` `:lspback` `:lsprename <name>`
 
 **Tree-sitter:** `:tsinstall <lang>` (e.g. `:tsinstall javascript` or
 `:tsinstall jsx`) `:tsstatus` `:tsreload`

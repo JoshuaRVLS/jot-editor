@@ -349,6 +349,7 @@ private:
   // handler); no-op when the Lua hover UI is not registered.
   void close_lua_hover_ui();
   void request_lsp_definition();
+  void lsp_rename_symbol(const std::string &new_name);
   void handle_lsp_hover_result(const LSPHoverResult &hover);
   void handle_lsp_signature_result(const LSPSignatureHelpResult &signature_help);
   void handle_lsp_definition_result(const LSPDefinitionResult &definition);

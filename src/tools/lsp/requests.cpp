@@ -351,6 +351,47 @@ bool LSPClient::request_definition(const std::string &filepath, int line, int ch
   return true;
 }
 
+bool LSPClient::request_rename(const std::string &filepath,
+                               int line,
+                               int character,
+                               const std::string &new_name)
+{
+  if (!running || !initialized)
+  {
+    return false;
+  }
+
+  std::string abs_path = fs::absolute(filepath).string();
+  if (pending_rename_requests.size() >= 64)
+  {
+    last_error = "too many pending LSP rename requests";
+    return false;
+  }
+  int request_id = next_request_id++;
+  pending_rename_requests[request_id] = PendingPositionRequest{
+      abs_path, std::max(0, line), std::max(0, character), file_versions[abs_path]};
+
+  std::ostringstream json;
+  json << "{"
+       << "\"jsonrpc\":\"2.0\","
+       << "\"id\":" << request_id << ","
+       << "\"method\":\"textDocument/rename\","
+       << "\"params\":{"
+       << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path)) << "\"},"
+       << "\"position\":{\"line\":" << std::max(0, line)
+       << ",\"character\":" << lsp_character(abs_path, line, character) << "},"
+       << "\"newName\":\"" << json_escape(new_name) << "\""
+       << "}"
+       << "}";
+
+  if (!send_message(json.str()))
+  {
+    pending_rename_requests.erase(request_id);
+    return false;
+  }
+  return true;
+}
+
 bool LSPClient::request_document_symbols(const std::string &filepath)
 {
   if (!running)
@@ -491,6 +532,13 @@ std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> LSPClient::consume
 {
   auto out = std::move(pending_formats);
   pending_formats.clear();
+  return out;
+}
+
+std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> LSPClient::consume_rename_results()
+{
+  auto out = std::move(pending_renames);
+  pending_renames.clear();
   return out;
 }
 

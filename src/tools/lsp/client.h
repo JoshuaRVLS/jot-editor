@@ -204,6 +204,7 @@ private:
   std::map<int, PendingPositionRequest> pending_definition_requests;
   std::map<int, PendingDocumentRequest> pending_document_symbol_requests;
   std::map<int, PendingDocumentRequest> pending_format_requests;
+  std::map<int, PendingPositionRequest> pending_rename_requests;
   std::map<int, PendingInlayRequest> pending_inlay_hint_requests;
   std::vector<std::pair<std::string, std::vector<LSPCompletionItem>>> pending_completions;
   std::vector<LSPHoverResult> pending_hovers;
@@ -212,6 +213,7 @@ private:
   std::vector<LSPDefinitionResult> pending_definitions;
   std::vector<LSPDocumentSymbolResult> pending_document_symbols;
   std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> pending_formats;
+  std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> pending_renames;
 
   bool send_message(const std::string &json, bool allow_during_initialization = false);
   bool flush_pending_writes();
@@ -256,6 +258,15 @@ public:
                               char trigger_character = '\0');
   bool request_definition(const std::string &filepath, int line, int character);
   bool request_document_symbols(const std::string &filepath);
+  // Asks the server to rename the symbol at the given position. The returned
+  // WorkspaceEdit is expanded into per-file edit lists (UTF-16 characters
+  // converted to editor columns) and handed back through
+  // consume_rename_results().
+  bool request_rename(const std::string &filepath,
+                      int line,
+                      int character,
+                      const std::string &new_name);
+  std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> consume_rename_results();
   // Asks the server to format the whole document. Character offsets in the
   // returned edits are converted to editor (UTF-8 byte) columns before they
   // are handed back through consume_format_results().
