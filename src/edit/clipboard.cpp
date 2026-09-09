@@ -32,6 +32,72 @@ bool command_exists(const char *cmd)
 #endif
 }
 
+#ifndef _WIN32
+bool wayland_session()
+{
+  const char *display = std::getenv("WAYLAND_DISPLAY");
+  return display != nullptr && display[0] != '\0';
+}
+
+bool write_wl_clipboard(const std::string &text)
+{
+  if (!command_exists("wl-copy"))
+    return false;
+  FILE *pipe = popen("wl-copy", "w");
+  if (!pipe)
+    return false;
+  fwrite(text.data(), 1, text.size(), pipe);
+  return pclose(pipe) == 0;
+}
+
+bool write_xclip_selection(const std::string &text)
+{
+  if (!command_exists("xclip"))
+    return false;
+  FILE *pipe = popen("xclip -selection clipboard -in", "w");
+  if (!pipe)
+    return false;
+  fwrite(text.data(), 1, text.size(), pipe);
+  return pclose(pipe) == 0;
+}
+
+bool read_wl_clipboard(std::string &candidate)
+{
+  if (!command_exists("wl-paste"))
+    return false;
+  FILE *pipe = popen("wl-paste --no-newline 2>/dev/null", "r");
+  if (!pipe)
+    return false;
+  std::array<char, 4096> buffer{};
+  candidate.clear();
+
+  while (size_t n = fread(buffer.data(), 1, buffer.size(), pipe))
+  {
+    candidate.append(buffer.data(), n);
+  }
+
+  return pclose(pipe) == 0 && !candidate.empty();
+}
+
+bool read_xclip_selection(std::string &candidate)
+{
+  if (!command_exists("xclip"))
+    return false;
+  FILE *pipe = popen("xclip -selection clipboard -out 2>/dev/null", "r");
+  if (!pipe)
+    return false;
+  std::array<char, 4096> buffer{};
+  candidate.clear();
+
+  while (size_t n = fread(buffer.data(), 1, buffer.size(), pipe))
+  {
+    candidate.append(buffer.data(), n);
+  }
+
+  return pclose(pipe) == 0 && !candidate.empty();
+}
+#endif
+
 bool write_xclip_clipboard(const std::string &text)
 {
 #ifdef _WIN32
@@ -63,13 +129,15 @@ bool write_xclip_clipboard(const std::string &text)
   CloseClipboard();
   return ok;
 #else
-  if (!command_exists("xclip"))
-    return false;
-  FILE *pipe = popen("xclip -selection clipboard -in", "w");
-  if (!pipe)
-    return false;
-  fwrite(text.data(), 1, text.size(), pipe);
-  return pclose(pipe) == 0;
+  if (wayland_session())
+  {
+    if (write_wl_clipboard(text))
+      return true;
+    return write_xclip_selection(text);
+  }
+  if (write_xclip_selection(text))
+    return true;
+  return write_wl_clipboard(text);
 #endif
 }
 
@@ -108,20 +176,22 @@ bool read_xclip_clipboard(std::string &out)
   out = std::move(result);
   return !out.empty();
 #else
-  if (!command_exists("xclip"))
-    return false;
-  FILE *pipe = popen("xclip -selection clipboard -out 2>/dev/null", "r");
-  if (!pipe)
-    return false;
-  std::array<char, 4096> buffer{};
-  out.clear();
-
-  while (size_t n = fread(buffer.data(), 1, buffer.size(), pipe))
+  std::string candidate;
+  if (wayland_session())
   {
-    out.append(buffer.data(), n);
+    if (read_wl_clipboard(candidate) || read_xclip_selection(candidate))
+    {
+      out = std::move(candidate);
+      return true;
+    }
+    return false;
   }
-
-  return pclose(pipe) == 0 && !out.empty();
+  if (read_xclip_selection(candidate) || read_wl_clipboard(candidate))
+  {
+    out = std::move(candidate);
+    return true;
+  }
+  return false;
 #endif
 }
 

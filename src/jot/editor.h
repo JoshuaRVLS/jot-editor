@@ -387,7 +387,13 @@ private:
                     bool is_shift = false,
                     bool is_alt = false,
                     int original_ch = 0);
-  void handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up, bool is_scroll_down);
+  void handle_mouse_input(int x,
+                            int y,
+                            bool is_click,
+                            bool is_scroll_up,
+                            bool is_scroll_down,
+                            bool is_scroll_left = false,
+                            bool is_scroll_right = false);
 
   void handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
 
@@ -763,6 +769,15 @@ public:
   void delete_selection_for_test();
   void delete_char_for_test(bool forward);
   void insert_string_for_test(const std::string &str);
+  // Headless mouse driver for tests: feeds a synthetic mouse event through
+  // the real handle_mouse path (pane hit-test, selection, edge-panning).
+  void mouse_event_for_test(int x, int y, int bstate);
+  void create_new_buffer_for_test();
+  void move_to_line_start_for_test();
+  void render_for_test();
+  FileBuffer &buffer_for_test(int id = -1);
+  SplitPane &pane_for_test(int id = -1);
+  bool mouse_selecting_for_test() const;
   void load_file(const std::string &fname);
   void run();
   // Reloads configuration from disk (settings.conf overlay + config.lua) and

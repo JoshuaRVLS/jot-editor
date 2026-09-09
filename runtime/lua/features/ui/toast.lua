@@ -268,6 +268,10 @@ local function content_rows_spans(t, colors)
   return rows, spans, accent
 end
 
+local function request_dismiss(t)
+  toast.dismiss(t.id)
+end
+
 local function paint_toast(t)
   local colors = palette()
   t.palette = colors
@@ -395,10 +399,6 @@ local function apply_fade(t)
     pcall(jot.ui.float.set_spans, t.win, i, spans[i])
   end
   request_redraw()
-end
-
-local function request_dismiss(t)
-  toast.dismiss(t.id)
 end
 
 local function tick_toast(t)

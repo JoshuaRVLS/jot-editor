@@ -317,9 +317,15 @@ static void flatten_nodes_for_mouse(std::vector<FileNode> &nodes, std::vector<Fi
   }
 }
 
-void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up, bool is_scroll_down)
+void Editor::handle_mouse_input(int x,
+                                  int y,
+                                  bool is_click,
+                                  bool is_scroll_up,
+                                  bool is_scroll_down,
+                                  bool is_scroll_left,
+                                  bool is_scroll_right)
 {
-  if (is_click || is_scroll_up || is_scroll_down)
+  if (is_click || is_scroll_up || is_scroll_down || is_scroll_left || is_scroll_right)
   {
     clear_debugger_breakpoint_hover();
     // Scroll repaints the viewport under the cursor; a stale LSP popup
@@ -622,6 +628,24 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up, 
     focus_state = FOCUS_EDITOR;
   }
 
+  // Horizontal wheel (SGR buttons 66/67, or Shift+vertical wheel): shift
+  // the viewport sideways. Handled before the pane-hit test so scrolling
+  // works in single-pane and multi-pane alike, even when the cursor sits
+  // on a gutter, border, or dead spot the hit test would reject.
+  int h_step = 0;
+  if (is_scroll_left)
+    h_step = -4;
+  else if (is_scroll_right)
+    h_step = 4;
+  if (h_step != 0)
+  {
+    auto &target_pane = get_pane(current_pane);
+    auto &target_buf = get_buffer(target_pane.buffer_id);
+    target_buf.scroll_x = std::max(0, target_buf.scroll_x + h_step);
+    needs_redraw = true;
+    return;
+  }
+
   int pane_index = -1;
   for (int i = 0; i < (int)panes.size(); i++)
   {
@@ -643,6 +667,7 @@ void Editor::handle_mouse_input(int x, int y, bool is_click, bool is_scroll_up, 
   auto &pane = get_pane(current_pane);
   auto &buf = get_buffer(pane.buffer_id);
   refresh_folds(buf);
+
   int visible_rows = std::max(1, pane.h - tab_height - 1);
   const int wheel_step = std::max(1, std::min(5, visible_rows / 6));
 
@@ -1505,8 +1530,11 @@ void Editor::handle_mouse(void *event_ptr)
   if (event->y >= content_bottom)
     raw_rel_y = content_bottom - content_top;
   rel_y = raw_rel_y;
-  if (rel_visual_x < 0)
-    rel_visual_x = 0;
+  // NOTE: rel_visual_x is intentionally left signed here. The drag path
+  // below decides per-mode whether the pointer may extend past the code
+  // edges (edge-panning selection) or must clamp (gutter clicks); an
+  // unconditional clamp would pin the cursor to column 0/the viewport edge
+  // and defeat horizontal auto-scroll.
   int visible_rows = std::max(1, pane.h - tab_height - 1);
   int max_scroll_offset = std::max(
       0, Folding::visible_line_count(buf.fold_ranges, (int)buf.line_count()) - visible_rows);
@@ -1535,6 +1563,33 @@ void Editor::handle_mouse(void *event_ptr)
   }
 
   rel_y = std::clamp(rel_y, 0, visible_rows - 1);
+
+  // Edge auto-scroll while drag-selecting: mirrors the vertical logic
+  // below, but pans scroll_x so the selection can extend past the left /
+  // right edge of the viewport. Runs before click_x is computed so the
+  // cursor lands in the newly revealed columns on the same event.
+  if (bstate == 32 && mouse_selecting && mouse_drag_started)
+  {
+    // Visible code width mirrors render_buffer_content: pane width minus
+    // the minimap (when shown), the right-edge safety cell, the gutter
+    // band (fold column + line numbers), and the pane border.
+    int code_w = std::max(1, pane.w);
+    if (show_minimap && code_w > 20)
+      code_w = std::max(1, code_w - minimap_width);
+    if (code_w > 3)
+      code_w = std::max(1, code_w - 1);
+    const int code_end_cells = code_start_x + std::max(1, code_w - 2 - line_num_width);
+    if (event->x < code_start_x)
+    {
+      int overshoot = code_start_x - event->x;
+      buf.scroll_x = std::max(0, buf.scroll_x - std::max(1, overshoot));
+    }
+    else if (event->x >= code_end_cells)
+    {
+      int overshoot = event->x - code_end_cells + 1;
+      buf.scroll_x = buf.scroll_x + std::max(1, overshoot);
+    }
+  }
 
   int click_y = buffer_line_for_visible_row(buf, buf.scroll_offset, rel_y);
   if (click_y < 0)
@@ -1569,9 +1624,28 @@ void Editor::handle_mouse(void *event_ptr)
   const std::string &clicked_line = buf.line(click_y);
   int line_len = clicked_line.length();
   int start_visual = compute_visual_column(clicked_line, buf.scroll_x, tab_size);
-  int click_visual = start_visual + rel_visual_x;
+  // During an edge-panning drag the pointer may sit outside the code area:
+  // extend rel_visual_x past the viewport instead of clamping it, so the
+  // selection keeps growing into the newly revealed columns. Note rel_x
+  // is signed here — the clamp below only applied to gutter clicks.
+  int rel_x = event->x - code_start_x;
+  if (!(bstate == 32 && mouse_selecting && mouse_drag_started))
+  {
+    rel_x = std::max(0, rel_x);
+  }
+  int click_visual = start_visual + rel_x;
   int click_x = visual_to_logical_column(clicked_line, click_visual, tab_size);
-  click_x = std::clamp(click_x, 0, line_len);
+  // Past end-of-line: pin to the line end on the left edge, but allow the
+  // cursor to ride past it on the right edge while panning so the
+  // selection visibly extends.
+  if (rel_x < 0 || !(bstate == 32 && mouse_selecting && mouse_drag_started))
+  {
+    click_x = std::clamp(click_x, 0, line_len);
+  }
+  else
+  {
+    click_x = std::max(0, click_x);
+  }
 
   if (is_click && event->alt && inside_pane && event->y >= content_top && event->y < content_bottom
       && event->x >= code_start_x)

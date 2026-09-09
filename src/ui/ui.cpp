@@ -341,7 +341,10 @@ void UI::render()
   const bool self_heal = renders_since_full_paint_ >= kSelfHealFrames;
 
   // Keep intermediate row cursor moves invisible. Only the final cursor
-  // state below should reach the terminal as visible state.
+  // state below should reach the terminal as visible state. Blinking
+  // DECSCUSR shapes are immune to DECTCEM: the blink cycle keeps running
+  // on any compositor while the cursor is hidden, so toggling here can
+  // never stall or desync the blink phase.
   term->hide_cursor();
   term->disable_autowrap();
 
@@ -915,14 +918,15 @@ std::string UI::cursor_shape_sequence(UICursorShape shape)
   {
     return "\033[?25l";
   }
-  // Always the steady DECSCUSR: blinking is done in software (DECTCEM
-  // show/hide on the blink clock), so the terminal's own blink phase can
-  // never drift out of sync with the extra-caret highlights.
+  // Always the blinking DECSCUSR so the TERMINAL owns the blink phase:
+  // bar -> blinking bar (5), block -> blinking block (1). jot never hides
+  // the cursor in software anymore, so there is no second clock to drift
+  // and no show/hide churn on any compositor.
   if (shape == UICursorShape::Bar)
   {
-    return "\033[?25h\033[3 q";
+    return "\033[?25h\033[5 q";
   }
-  return "\033[?25h\033[2 q";
+  return "\033[?25h\033[1 q";
 }
 
 // Emit only the current cursor state to the terminal buffer and flush.

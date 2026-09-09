@@ -1351,7 +1351,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
         }
         if (!selected_span.full_line && !select_empty_cell)
         {
-          selected_end_visual = selected_start_visual;
+          selected_end_visual = std::max(selected_end_visual, tail_start);
         }
         int tail_cells = selected_end_visual - tail_start;
         if (tail_cells > 0)
@@ -1359,6 +1359,12 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
           int tail_x = current_x + (tail_start - start_visual);
           int max_tail = std::max(0, visible_len - (tail_start - start_visual));
           int draw_cells = std::min(tail_cells, max_tail);
+          // The tail repaint only fixes the BACKGROUND of the selected
+          // range: the characters were already painted with selection colors
+          // by the per-character walk above (is_in_selection). Repainting
+          // the glyph as well would draw a blank " " over the code and hide
+          // it behind a solid highlight box.
+          //
           // The main-cursor cell keeps the default colors so the block
           // cursor stays visible on a bare caret (see block_cursor above).
           const int cursor_cell_visual = (line_idx == buf.cursor.y)
@@ -1388,11 +1394,34 @@ void Editor::render_buffer_content(const SplitPane &pane, int buffer_id)
             const bool blink_hidden =
                 std::find(point_caret_visuals.begin(), point_caret_visuals.end(), cell_visual)
                 != point_caret_visuals.end();
-            ui->draw_text(tail_x + fill,
-                          draw_y,
-                          " ",
-                          (cursor_cell || blink_hidden) ? theme.fg_default : theme.fg_selection,
-                          (cursor_cell || blink_hidden) ? theme.bg_default : theme.bg_selection);
+            if (cursor_cell || blink_hidden)
+            {
+              ui->draw_text(tail_x + fill,
+                            draw_y,
+                            " ",
+                            theme.fg_default,
+                            theme.bg_default);
+            }
+            else
+            {
+              // Preserve the glyph painted by the character walk; only
+              // ensure the selection background on this cell. draw_text
+              // with the cell's own character keeps fg/bold/underline from
+              // the syntax pass and just swaps in the selection bg.
+              const UICell *existing = ui->cell_at(tail_x + fill, draw_y);
+              const std::string glyph =
+                  (existing && !existing->ch.empty()) ? existing->ch : " ";
+              const int glyph_fg = existing ? existing->fg : theme.fg_selection;
+              ui->draw_text(tail_x + fill,
+                            draw_y,
+                            glyph,
+                            glyph_fg,
+                            theme.bg_selection,
+                            existing ? existing->bold : false,
+                            existing ? existing->italic : false,
+                            existing ? existing->underline : 0,
+                            existing ? existing->underline_fg : -1);
+            }
           }
         }
       }

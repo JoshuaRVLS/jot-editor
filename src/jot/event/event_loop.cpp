@@ -671,10 +671,21 @@ void Editor::handle_terminal_event(const Event &ev)
   if (ev.type == EVENT_MOUSE)
   {
     int button = ev.mouse.button;
-    bool is_wheel = (button >= 64 && button <= 67);
+    // SGR wheel encoding: low two bits are the wheel axis (0 = vertical,
+    // 1 = horizontal after masking modifiers), bits 2-4 are Shift/Alt/Ctrl.
+    // So shift+wheel-up arrives as 68, shift+wheel-down as 69, etc. Strip
+    // the modifiers (and motion bit) before comparing the base button.
+    const int wheel_base = button & ~0x3C;
+    const bool shift_held = ev.mouse.shift;
+    // Horizontal scroll adjusts scroll_x instead: raw buttons 66/67, or
+    // Shift+vertical wheel (the fallback terminals send with no horizontal
+    // encoding).
+    bool is_h_wheel = (wheel_base == 66 || wheel_base == 67)
+                      || (shift_held && (wheel_base == 64 || wheel_base == 65));
+    bool is_wheel = (wheel_base >= 64 && wheel_base <= 67);
 
     // A click outside the helper dismisses it (like Esc).
-    if (show_which_key && ev.mouse.pressed && button != 64 && button != 65)
+    if (show_which_key && ev.mouse.pressed && wheel_base != 64 && wheel_base != 65)
     {
       close_which_key();
     }
@@ -713,16 +724,26 @@ void Editor::handle_terminal_event(const Event &ev)
         last_telescope_click_x = ev.mouse.x;
         last_telescope_click_y = ev.mouse.y;
       }
-      if (handle_telescope_mouse(
-              ev.mouse.x, ev.mouse.y, is_click, is_double_click, button == 64, button == 65))
+      if (handle_telescope_mouse(ev.mouse.x,
+                                   ev.mouse.y,
+                                   is_click,
+                                   is_double_click,
+                                   wheel_base == 64,
+                                   wheel_base == 65))
       {
         return;
       }
     }
 
-    if (is_wheel && !telescope.is_active() && !show_command_palette && !show_search)
+    if (is_h_wheel && !telescope.is_active() && !show_command_palette && !show_search)
     {
-      handle_mouse_input(ev.mouse.x, ev.mouse.y, false, button == 64, button == 65);
+      bool left = (wheel_base == 66) || (shift_held && wheel_base == 64);
+      bool right = (wheel_base == 67) || (shift_held && wheel_base == 65);
+      handle_mouse_input(ev.mouse.x, ev.mouse.y, false, false, false, left, right);
+    }
+    else if (is_wheel && !telescope.is_active() && !show_command_palette && !show_search)
+    {
+      handle_mouse_input(ev.mouse.x, ev.mouse.y, false, wheel_base == 64, wheel_base == 65);
     }
     else
     {
@@ -808,11 +829,12 @@ void Editor::render_frame()
   {
     lua_api->flush_pending_autocmds();
   }
-  // One software blink clock drives the terminal cursor and the
-  // extra-caret highlights (steady DECSCUSR + DECTCEM show/hide instead of
-  // the terminal's own unsynchronized blink phase). Repaints happen only on
-  // phase flips, and only when something visible actually blinks (the
-  // editor cursor is shown, or a buffer carries carets).
+  // Blinking is owned by the terminal (blinking DECSCUSR), so jot keeps
+  // the cursor visible and lets the frame loop carry visibility through.
+  // Frames that leave the cursor hidden (menus, palettes, popups) pause
+  // the application's notion of visibility too, keeping it in sync with
+  // what is on screen. Repaints happen only when something actually
+  // changes (visibility flip, or extra carets present).
   {
     bool any_carets = false;
     for (const auto &pane : panes)
@@ -829,12 +851,16 @@ void Editor::render_frame()
                             .count();
     const std::string style = config.get("cursor_style", "bar");
     const bool steady = style == "steady_block" || style == "steadyblock";
-    const bool phase = ((now_ms - blink_anchor_ms) / 530) % 2 == 0;
+    // The terminal owns the blink cycle, so there is no wall-clock phase
+    // to compute. Carry visibility forward: visible unless the last frame
+    // hid the cursor (menu/palette/popup covering the editor). Typing and
+    // caret moves force visible through blink_suspend in restart_blink.
     const bool suspended = now_ms < blink_suspend_until_ms;
-    const bool visible = steady || phase || suspended;
-    if (visible != blink_visible)
+    const bool hidden_frame = ui->cursor_is_hidden();
+    const bool want_visible = steady || suspended || !hidden_frame || blink_visible;
+    if (want_visible != blink_visible)
     {
-      blink_visible = visible;
+      blink_visible = want_visible;
       if (!ui->cursor_is_hidden() || any_carets)
       {
         needs_redraw = true;

@@ -318,6 +318,46 @@ void Editor::insert_string_for_test(const std::string &str)
   insert_string(str);
 }
 
+void Editor::mouse_event_for_test(int x, int y, int bstate)
+{
+  struct TestMouseEvent
+  {
+    int x, y, bstate;
+    bool ctrl, shift, alt;
+  } ev{x, y, bstate, false, false, false};
+  handle_mouse(&ev);
+}
+
+void Editor::create_new_buffer_for_test()
+{
+  create_new_buffer();
+}
+
+void Editor::move_to_line_start_for_test()
+{
+  move_to_line_start();
+}
+
+void Editor::render_for_test()
+{
+  render();
+}
+
+FileBuffer &Editor::buffer_for_test(int id)
+{
+  return get_buffer(id);
+}
+
+SplitPane &Editor::pane_for_test(int id)
+{
+  return get_pane(id);
+}
+
+bool Editor::mouse_selecting_for_test() const
+{
+  return mouse_selecting;
+}
+
 void Editor::clear_extra_carets()
 {
   auto &buf = get_buffer();
