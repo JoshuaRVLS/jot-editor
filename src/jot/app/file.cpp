@@ -6,6 +6,7 @@
 #include "jot/lua/api.h"
 #include "cpp_assist.h"
 #include "lazy_line_provider.h"
+#include "tools/shell_util.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -40,41 +41,6 @@ namespace
       out = out.substr(1, out.size() - 2);
     }
     return out;
-  }
-
-  std::string shell_quote(const std::string &s)
-  {
-#ifdef _WIN32
-    std::string out = "\"";
-    for (char c : s)
-    {
-      if (c == '"')
-      {
-        out += "\"\"";
-      }
-      else
-      {
-        out += c;
-      }
-    }
-    out += "\"";
-    return out;
-#else
-    std::string out = "'";
-    for (char c : s)
-    {
-      if (c == '\'')
-      {
-        out += "'\\''";
-      }
-      else
-      {
-        out += c;
-      }
-    }
-    out += "'";
-    return out;
-#endif
   }
 
   std::string command_silence_redirect()
@@ -694,7 +660,8 @@ bool Editor::save_buffer_at(int index, bool announce)
 
   auto run_formatter = [this, &buf](const std::string &runner) -> bool
   {
-    std::string cmd = runner + " --write " + shell_quote(buf.filepath) + command_silence_redirect();
+    std::string cmd =
+        runner + " --write " + shell_util::shell_quote(buf.filepath) + command_silence_redirect();
     if (std::system(cmd.c_str()) != 0)
       return false;
     std::vector<std::string> refreshed_lines;
@@ -727,7 +694,7 @@ bool Editor::save_buffer_at(int index, bool announce)
         [filepath, runner = std::move(runner)]() -> std::vector<std::string>
         {
           std::string cmd =
-              runner + " --write " + shell_quote(filepath) + command_silence_redirect();
+              runner + " --write " + shell_util::shell_quote(filepath) + command_silence_redirect();
           std::vector<std::string> result;
           if (std::system(cmd.c_str()) == 0)
           {

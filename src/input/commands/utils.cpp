@@ -1,4 +1,5 @@
 #include "commands/utils.h"
+#include "tools/shell_util.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -16,21 +17,7 @@ namespace CommandLineUtils
 
   std::string shell_quote(const std::string &value)
   {
-    std::string out = "'";
-    out.reserve(value.size() + 8);
-    for (char c : value)
-    {
-      if (c == '\'')
-      {
-        out += "'\\''";
-      }
-      else
-      {
-        out.push_back(c);
-      }
-    }
-    out.push_back('\'');
-    return out;
+    return shell_util::shell_quote(value);
   }
 
   std::string first_line_copy(const std::string &text)

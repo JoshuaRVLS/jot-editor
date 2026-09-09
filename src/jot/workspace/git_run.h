@@ -5,81 +5,20 @@
 // with stderr merged in for error reporting (git_capture_errors), plus a
 // fire-and-forget exit-status check (git_run_ok). Deliberately free of
 // Editor dependencies so any workspace code can use them; this is the single
-// source of truth for shell quoting and pipe capture used by the git panel,
-// the git status refresh, and the git ex-commands.
+// source of truth for running git commands used by the git panel, the git
+// status refresh, and the git ex-commands. Shell quoting and pipe primitives
+// come from tools/shell_util.h.
 
 #ifndef GIT_RUN_H
 #define GIT_RUN_H
 
-#include <cstdio>
+#include "tools/shell_util.h"
 #include <cstdlib>
 #include <sstream>
 #include <string>
 
-#ifndef _WIN32
-#include <sys/wait.h>
-#endif
-
-#ifdef _WIN32
-#define GIT_RUN_POPEN _popen
-#define GIT_RUN_PCLOSE _pclose
-#else
-#define GIT_RUN_POPEN popen
-#define GIT_RUN_PCLOSE pclose
-#endif
-
 namespace jot_git
 {
-  // Quotes a single command argument for the platform's shell. POSIX wraps
-  // in single quotes ('...' with '\'' escaping); Windows wraps in double
-  // quotes with "" escaping.
-  inline std::string shell_quote(const std::string &value)
-  {
-#ifdef _WIN32
-    std::string out = "\"";
-    out.reserve(value.size() + 8);
-    for (char c : value)
-    {
-      if (c == '"')
-      {
-        out += "\"\"";
-      }
-      else
-      {
-        out.push_back(c);
-      }
-    }
-    out.push_back('"');
-    return out;
-#else
-    std::string out = "'";
-    out.reserve(value.size() + 8);
-    for (char c : value)
-    {
-      if (c == '\'')
-      {
-        out += "'\\''";
-      }
-      else
-      {
-        out.push_back(c);
-      }
-    }
-    out.push_back('\'');
-    return out;
-#endif
-  }
-
-  // Redirect for silencing stderr on the platform's shell.
-  inline std::string null_redirect()
-  {
-#ifdef _WIN32
-    return " 2>NUL";
-#else
-    return " 2>/dev/null";
-#endif
-  }
-
   // Captured stdout plus the command's exit status, so callers can tell a
   // clean empty output (exit 0, e.g. `git status` on a clean tree) apart
   // from a failed command (nonzero exit).
@@ -102,7 +41,9 @@ namespace jot_git
     inline Captured run_pipe(const std::string &cmd, bool merge_stderr)
     {
       Captured result;
-      std::FILE *pipe = GIT_RUN_POPEN((cmd + (merge_stderr ? " 2>&1" : null_redirect())).c_str(), "r");
+      std::FILE *pipe =
+          shell_util::open_command_pipe(cmd + (merge_stderr ? " 2>&1" : shell_util::null_redirect()),
+                                        "r");
       if (!pipe)
       {
         return result;
@@ -113,18 +54,14 @@ namespace jot_git
       {
         out << buf;
       }
-      const int status = GIT_RUN_PCLOSE(pipe);
+      const int status = shell_util::close_command_pipe(pipe);
+      result.exit_code = shell_util::command_exit_code(status);
       result.output = out.str();
       while (!result.output.empty()
              && (result.output.back() == '\n' || result.output.back() == '\r'))
       {
         result.output.pop_back();
       }
-#ifdef _WIN32
-      result.exit_code = status;
-#else
-      result.exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
-#endif
       return result;
     }
   } // namespace detail
@@ -133,14 +70,14 @@ namespace jot_git
   // trailing newlines) plus the exit status. Stderr is silenced.
   inline Captured capture_ex(const std::string &root, const std::string &args)
   {
-    return detail::run_pipe("git -C " + shell_quote(root) + " " + args, false);
+    return detail::run_pipe("git -C " + shell_util::shell_quote(root) + " " + args, false);
   }
 
   // Like capture_ex, but merges stderr into the output (2>&1) so callers can
   // surface git's error message — e.g. why a commit was rejected.
   inline Captured capture_errors(const std::string &root, const std::string &args)
   {
-    return detail::run_pipe("git -C " + shell_quote(root) + " " + args, true);
+    return detail::run_pipe("git -C " + shell_util::shell_quote(root) + " " + args, true);
   }
 
   // Runs `git -C <root> <args...>` and returns captured stdout (trimmed of a
@@ -154,7 +91,7 @@ namespace jot_git
   inline bool run_ok(const std::string &root, const std::string &args)
   {
     const std::string cmd =
-        "git -C " + shell_quote(root) + " " + args + " >/dev/null 2>&1";
+        "git -C " + shell_util::shell_quote(root) + " " + args + " >/dev/null 2>&1";
     const int rc = std::system(cmd.c_str());
     return rc == 0;
   }

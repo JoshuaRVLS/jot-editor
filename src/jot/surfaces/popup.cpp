@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "tools/shell_util.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <cctype>
@@ -53,25 +54,6 @@ namespace
       }
     }
     return nullptr;
-  }
-
-  std::string shell_quote(const std::string &value)
-  {
-    std::string out = "'";
-    out.reserve(value.size() + 8);
-    for (char c : value)
-    {
-      if (c == '\'')
-      {
-        out += "'\\''";
-      }
-      else
-      {
-        out.push_back(c);
-      }
-    }
-    out.push_back('\'');
-    return out;
   }
 
   std::string trim_copy(const std::string &s)
@@ -645,7 +627,7 @@ void Editor::execute_context_menu_item(int index)
     else
     {
       std::string rel = to_git_relative_path(target_path);
-      std::string diff = run_git_capture("diff -- " + shell_quote(rel));
+      std::string diff = run_git_capture("diff -- " + shell_util::shell_quote(rel));
       if (trim_copy(diff).empty())
       {
         set_message("Git diff: no unstaged changes for " + rel);
@@ -665,7 +647,7 @@ void Editor::execute_context_menu_item(int index)
     else
     {
       std::string rel = to_git_relative_path(target_path);
-      std::string diff = run_git_capture("diff --staged -- " + shell_quote(rel));
+      std::string diff = run_git_capture("diff --staged -- " + shell_util::shell_quote(rel));
       if (trim_copy(diff).empty())
       {
         set_message("Git diff: no staged changes for " + rel);

@@ -5,6 +5,7 @@
 #include "folding.h"
 #include "jot/lua/api.h"
 #include "jot/workspace/workspace_internal.h"
+#include "tools/shell_util.h"
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
@@ -100,24 +101,6 @@ void Editor::handle_sidebar_input(int ch)
       return rel_s;
     }
     return abs_path;
-  };
-  auto shell_quote_local = [](const std::string &value)
-  {
-    std::string out = "'";
-    out.reserve(value.size() + 8);
-    for (char c : value)
-    {
-      if (c == '\'')
-      {
-        out += "'\\''";
-      }
-      else
-      {
-        out.push_back(c);
-      }
-    }
-    out.push_back('\'');
-    return out;
   };
   auto limit_lines_local = [](const std::string &text, int max_lines)
   {
@@ -354,7 +337,7 @@ void Editor::handle_sidebar_input(int ch)
       {
         std::string rel = to_git_relative_path(path);
         std::string diff = run_git_capture(std::string(ch == 'D' ? "diff --staged -- " : "diff -- ")
-                                           + shell_quote_local(rel));
+                                           + shell_util::shell_quote(rel));
         if (diff.empty())
         {
           message = ch == 'D' ? "Git diff: no staged changes for " + rel

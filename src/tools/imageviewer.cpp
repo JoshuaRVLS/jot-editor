@@ -1,4 +1,5 @@
 #include "imageviewer.h"
+#include "tools/shell_util.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -30,60 +31,6 @@ namespace
                    value.begin(),
                    [](unsigned char c) { return (char)std::tolower(c); });
     return value;
-  }
-
-  std::string shell_quote(const std::string &s)
-  {
-#ifdef _WIN32
-    std::string out = "\"";
-    for (char c : s)
-    {
-      if (c == '"')
-        out += "\"\"";
-      else
-        out += c;
-    }
-    out += "\"";
-    return out;
-#else
-    std::string out = "'";
-    for (char c : s)
-    {
-      if (c == '\'')
-        out += "'\\''";
-      else
-        out += c;
-    }
-    out += "'";
-    return out;
-#endif
-  }
-
-  std::string null_redirect()
-  {
-#ifdef _WIN32
-    return " 2>NUL";
-#else
-    return " 2>/dev/null";
-#endif
-  }
-
-  FILE *open_command_pipe(const std::string &command, const char *mode)
-  {
-#ifdef _WIN32
-    return _popen(command.c_str(), mode);
-#else
-    return popen(command.c_str(), mode);
-#endif
-  }
-
-  int close_command_pipe(FILE *pipe)
-  {
-#ifdef _WIN32
-    return _pclose(pipe);
-#else
-    return pclose(pipe);
-#endif
   }
 
   long long process_id()
@@ -403,7 +350,7 @@ std::string ImageViewer::build_sixel_command(const std::string &path, int w, int
   int px_w = std::max(1, w * 8);
   int px_h = std::max(1, h * 16);
   return "img2sixel -w " + std::to_string(px_w) + " -h " + std::to_string(px_h) + " "
-         + shell_quote(path) + null_redirect();
+         + shell_util::shell_quote(path) + shell_util::null_redirect();
 }
 
 void ImageViewer::configure_backend(const std::string &backend)
@@ -473,13 +420,13 @@ std::string ImageViewer::prepare_kitty_graphics_file()
   std::string cmd;
   if (helper_available("magick"))
   {
-    cmd = "magick " + shell_quote(current_image) + " -auto-orient " + shell_quote(tmp.string())
-          + null_redirect();
+    cmd = "magick " + shell_util::shell_quote(current_image) + " -auto-orient " + shell_util::shell_quote(tmp.string())
+          + shell_util::null_redirect();
   }
   else
   {
-    cmd = "convert " + shell_quote(current_image) + " -auto-orient " + shell_quote(tmp.string())
-          + null_redirect();
+    cmd = "convert " + shell_util::shell_quote(current_image) + " -auto-orient " + shell_util::shell_quote(tmp.string())
+          + shell_util::null_redirect();
   }
   if (std::system(cmd.c_str()) != 0 || !fs::exists(tmp))
   {
@@ -535,8 +482,8 @@ std::string ImageViewer::get_image_info(const std::string &path)
     std::string dims;
     if (command_exists("identify"))
     {
-      std::string cmd = "identify -format '%wx%h' " + shell_quote(path) + null_redirect();
-      FILE *pipe = open_command_pipe(cmd, "r");
+      std::string cmd = "identify -format '%wx%h' " + shell_util::shell_quote(path) + shell_util::null_redirect();
+      FILE *pipe = shell_util::open_command_pipe(cmd, "r");
       if (pipe)
       {
         char buf[128] = {0};
@@ -549,7 +496,7 @@ std::string ImageViewer::get_image_info(const std::string &path)
             dims.pop_back();
           }
         }
-        close_command_pipe(pipe);
+        shell_util::close_command_pipe(pipe);
       }
     }
 
@@ -589,12 +536,12 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
   {
     const int target_w = 56;
     const int target_h = 24;
-    std::string cmd = "convert " + shell_quote(path)
+    std::string cmd = "convert " + shell_util::shell_quote(path)
                       + " -auto-orient "
                         "-resize "
                       + std::to_string(target_w) + "x" + std::to_string(target_h) + "\\! txt:-"
-                      + null_redirect();
-    FILE *pipe = open_command_pipe(cmd, "r");
+                      + shell_util::null_redirect();
+    FILE *pipe = shell_util::open_command_pipe(cmd, "r");
     if (pipe)
     {
       std::vector<std::vector<int>> colors((size_t)target_h,
@@ -620,7 +567,7 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
         colors[(size_t)py][(size_t)px] = rgb_to_xterm256(r, g, b);
         any = true;
       }
-      close_command_pipe(pipe);
+      shell_util::close_command_pipe(pipe);
       if (any)
       {
         color_preview_bg = std::move(colors);
@@ -637,8 +584,8 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
     const int target_w = 56;
     const int target_h = 24;
     std::string cmd = "chafa --format=symbols --colors=none --size=" + std::to_string(target_w)
-                      + "x" + std::to_string(target_h) + " " + shell_quote(path) + null_redirect();
-    FILE *pipe = open_command_pipe(cmd, "r");
+                      + "x" + std::to_string(target_h) + " " + shell_util::shell_quote(path) + shell_util::null_redirect();
+    FILE *pipe = shell_util::open_command_pipe(cmd, "r");
     if (pipe)
     {
       std::vector<std::string> rows;
@@ -655,7 +602,7 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
           rows.push_back(row);
         }
       }
-      close_command_pipe(pipe);
+      shell_util::close_command_pipe(pipe);
       if (!rows.empty())
       {
         ascii_preview.push_back("Preview:");
@@ -673,12 +620,12 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
   {
     const int target_w = 56;
     const int target_h = 24;
-    std::string cmd = "convert " + shell_quote(path)
+    std::string cmd = "convert " + shell_util::shell_quote(path)
                       + " -auto-orient "
                         "-resize "
                       + std::to_string(target_w) + "x" + std::to_string(target_h)
-                      + "\\! -colorspace Gray -contrast-stretch 1%x10% txt:-" + null_redirect();
-    FILE *pipe = open_command_pipe(cmd, "r");
+                      + "\\! -colorspace Gray -contrast-stretch 1%x10% txt:-" + shell_util::null_redirect();
+    FILE *pipe = shell_util::open_command_pipe(cmd, "r");
     if (pipe)
     {
       std::vector<std::string> rows(target_h, std::string((size_t)target_w, ' '));
@@ -725,7 +672,7 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
             " .'`^\",:;Il!i~+_-?][}{1)(|\\/*tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
         rows[py][px] = ramp[(size_t)grayscale_to_char_index(gray)];
       }
-      close_command_pipe(pipe);
+      shell_util::close_command_pipe(pipe);
 
       ascii_preview.push_back("Preview:");
       for (const auto &row : rows)
@@ -855,7 +802,7 @@ std::string ImageViewer::take_graphics_output()
   if (active_backend == Backend::Sixel)
   {
     std::string cmd = build_sixel_command(current_image, graphics_w, graphics_h);
-    FILE *pipe = open_command_pipe(cmd, "r");
+    FILE *pipe = shell_util::open_command_pipe(cmd, "r");
     if (pipe)
     {
       char buffer[4096];
@@ -863,7 +810,7 @@ std::string ImageViewer::take_graphics_output()
       {
         out += buffer;
       }
-      int rc = close_command_pipe(pipe);
+      int rc = shell_util::close_command_pipe(pipe);
       if (rc == 0 && !out.empty())
       {
         graphics_visible = true;

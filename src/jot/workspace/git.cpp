@@ -261,7 +261,7 @@ bool Editor::open_git_diff_panel(const std::string &path, bool staged)
   }
 
   std::string args = staged ? "diff --staged -- " : "diff -- ";
-  std::string diff = run_git_capture(args + jot_git::shell_quote(rel));
+  std::string diff = run_git_capture(args + shell_util::shell_quote(rel));
 
   if (diff.empty())
   {
@@ -376,7 +376,7 @@ bool Editor::git_stage_path(const std::string &path)
     return false;
   }
   jot_git::Captured result =
-      jot_git::capture_errors(git_root, "add -A -- " + jot_git::shell_quote(rel));
+      jot_git::capture_errors(git_root, "add -A -- " + shell_util::shell_quote(rel));
   if (result.ok())
   {
     refresh_git_status(true);
@@ -397,7 +397,7 @@ bool Editor::git_unstage_path(const std::string &path)
     return false;
   }
   jot_git::Captured result =
-      jot_git::capture_errors(git_root, "restore --staged -- " + jot_git::shell_quote(rel));
+      jot_git::capture_errors(git_root, "restore --staged -- " + shell_util::shell_quote(rel));
   if (result.ok())
   {
     refresh_git_status(true);
@@ -456,7 +456,7 @@ std::string Editor::git_commit_message(const std::string &message)
   }
 
   jot_git::Captured result =
-      jot_git::capture_errors(git_root, "commit -m " + jot_git::shell_quote(message));
+      jot_git::capture_errors(git_root, "commit -m " + shell_util::shell_quote(message));
   if (result.ok())
   {
     refresh_git_status(true);

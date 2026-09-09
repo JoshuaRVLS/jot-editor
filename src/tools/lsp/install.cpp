@@ -1,4 +1,5 @@
 #include "tools/lsp/install.h"
+#include "tools/shell_util.h"
 
 #include <algorithm>
 #include <cctype>
@@ -9,24 +10,6 @@ namespace fs = std::filesystem;
 
 namespace
 {
-
-  std::string shell_quote(const std::string &value)
-  {
-    std::string quoted = "'";
-    for (char ch : value)
-    {
-      if (ch == '\'')
-      {
-        quoted += "'\"'\"'";
-      }
-      else
-      {
-        quoted.push_back(ch);
-      }
-    }
-    quoted.push_back('\'');
-    return quoted;
-  }
 
   std::string trim_copy(const std::string &value)
   {
@@ -143,7 +126,7 @@ namespace LspInstall
                                + " exit=%s\\n' \"$rc\"; "
                                  "else printf '[jot:lsp] failed "
                                + server + " exit=%s\\n' \"$rc\"; fi";
-    return "/bin/sh -lc " + shell_quote(script);
+    return "/bin/sh -lc " + shell_util::shell_quote(script);
   }
 
   bool parse_marker(const std::string &line, Marker &marker)

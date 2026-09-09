@@ -1,6 +1,7 @@
 #include "editor.h"
 #include "jot/lua/api.h"
 #include "text_features.h"
+#include "tools/shell_util.h"
 #include <algorithm>
 #include <array>
 #include <cstdio>
@@ -43,29 +44,29 @@ bool write_wl_clipboard(const std::string &text)
 {
   if (!command_exists("wl-copy"))
     return false;
-  FILE *pipe = popen("wl-copy", "w");
+  FILE *pipe = shell_util::open_command_pipe("wl-copy", "w");
   if (!pipe)
     return false;
   fwrite(text.data(), 1, text.size(), pipe);
-  return pclose(pipe) == 0;
+  return shell_util::close_command_pipe(pipe) == 0;
 }
 
 bool write_xclip_selection(const std::string &text)
 {
   if (!command_exists("xclip"))
     return false;
-  FILE *pipe = popen("xclip -selection clipboard -in", "w");
+  FILE *pipe = shell_util::open_command_pipe("xclip -selection clipboard -in", "w");
   if (!pipe)
     return false;
   fwrite(text.data(), 1, text.size(), pipe);
-  return pclose(pipe) == 0;
+  return shell_util::close_command_pipe(pipe) == 0;
 }
 
 bool read_wl_clipboard(std::string &candidate)
 {
   if (!command_exists("wl-paste"))
     return false;
-  FILE *pipe = popen("wl-paste --no-newline 2>/dev/null", "r");
+  FILE *pipe = shell_util::open_command_pipe("wl-paste --no-newline 2>/dev/null", "r");
   if (!pipe)
     return false;
   std::array<char, 4096> buffer{};
@@ -76,14 +77,14 @@ bool read_wl_clipboard(std::string &candidate)
     candidate.append(buffer.data(), n);
   }
 
-  return pclose(pipe) == 0 && !candidate.empty();
+  return shell_util::close_command_pipe(pipe) == 0 && !candidate.empty();
 }
 
 bool read_xclip_selection(std::string &candidate)
 {
   if (!command_exists("xclip"))
     return false;
-  FILE *pipe = popen("xclip -selection clipboard -out 2>/dev/null", "r");
+  FILE *pipe = shell_util::open_command_pipe("xclip -selection clipboard -out 2>/dev/null", "r");
   if (!pipe)
     return false;
   std::array<char, 4096> buffer{};
@@ -94,7 +95,7 @@ bool read_xclip_selection(std::string &candidate)
     candidate.append(buffer.data(), n);
   }
 
-  return pclose(pipe) == 0 && !candidate.empty();
+  return shell_util::close_command_pipe(pipe) == 0 && !candidate.empty();
 }
 #endif
 

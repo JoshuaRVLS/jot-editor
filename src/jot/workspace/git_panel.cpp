@@ -380,7 +380,7 @@ void Editor::git_panel_primary()
       return;
     }
     const std::string name = git_panel.branches[(size_t)git_panel.selected].name;
-    if (jot_git::run_ok(root, "checkout " + jot_git::shell_quote(name)))
+    if (jot_git::run_ok(root, "checkout " + shell_util::shell_quote(name)))
     {
       set_message("Checked out: " + name);
     }
@@ -397,7 +397,7 @@ void Editor::git_panel_primary()
       return;
     }
     const std::string hash = git_panel.commits[(size_t)git_panel.selected].hash;
-    if (jot_git::run_ok(root, "checkout " + jot_git::shell_quote(hash)))
+    if (jot_git::run_ok(root, "checkout " + shell_util::shell_quote(hash)))
     {
       set_message("Checked out " + hash + " (detached HEAD)");
     }
@@ -414,7 +414,7 @@ void Editor::git_panel_primary()
       return;
     }
     const std::string ref = git_panel.stashes[(size_t)git_panel.selected].ref;
-    if (jot_git::run_ok(root, "stash apply " + jot_git::shell_quote(ref)))
+    if (jot_git::run_ok(root, "stash apply " + shell_util::shell_quote(ref)))
     {
       set_message("Applied " + ref);
     }
@@ -523,7 +523,7 @@ void Editor::git_panel_discard_or_delete()
       set_message("Untracked file — delete it manually (not discarded)");
       return;
     }
-    if (jot_git::run_ok(root, "checkout -- " + jot_git::shell_quote(file->rel_path)))
+    if (jot_git::run_ok(root, "checkout -- " + shell_util::shell_quote(file->rel_path)))
     {
       set_message("Discarded changes: " + file->rel_path);
     }
@@ -545,7 +545,7 @@ void Editor::git_panel_discard_or_delete()
       set_message("Cannot delete the current branch");
       return;
     }
-    if (jot_git::run_ok(root, "branch -d " + jot_git::shell_quote(row.name)))
+    if (jot_git::run_ok(root, "branch -d " + shell_util::shell_quote(row.name)))
     {
       set_message("Deleted branch: " + row.name);
     }
@@ -562,7 +562,7 @@ void Editor::git_panel_discard_or_delete()
       return;
     }
     const std::string ref = git_panel.stashes[(size_t)git_panel.selected].ref;
-    if (jot_git::run_ok(root, "stash drop " + jot_git::shell_quote(ref)))
+    if (jot_git::run_ok(root, "stash drop " + shell_util::shell_quote(ref)))
     {
       set_message("Dropped " + ref);
     }

@@ -6,6 +6,7 @@
 
 #include "jot/lua/embedded_lua.h"
 #include "jot/lua/lua_loader.h"
+#include "tools/shell_util.h"
 
 #include <array>
 #include <cctype>
@@ -14,10 +15,6 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
-
-#ifndef _WIN32
-#include <sys/wait.h>
-#endif
 
 extern "C"
 {
@@ -95,27 +92,7 @@ namespace jot_lua
 
   inline std::string lua_shell_quote(const std::string &value)
   {
-#ifdef _WIN32
-    std::string out = "\"";
-    for (char c : value)
-    {
-      if (c == '"')
-        out += "\"\"";
-      else
-        out.push_back(c);
-    }
-    return out + '"';
-#else
-    std::string out = "'";
-    for (char c : value)
-    {
-      if (c == '\'')
-        out += "'\\''";
-      else
-        out.push_back(c);
-    }
-    return out + "'";
-#endif
+    return shell_util::shell_quote(value);
   }
 
   inline const char *lua_diag_severity_name(int severity)
@@ -141,29 +118,12 @@ namespace jot_lua
   {
     std::array<char, 512> buf{};
     std::string out;
-    FILE *pipe = nullptr;
-#ifdef _WIN32
-    pipe = _popen((command + " 2>&1").c_str(), "r");
-#else
-    pipe = popen((command + " 2>&1").c_str(), "r");
-#endif
+    FILE *pipe = shell_util::open_command_pipe(command + " 2>&1", "r");
     if (!pipe)
       return {std::string(), 1};
     while (fgets(buf.data(), (int)buf.size(), pipe) != nullptr)
       out += buf.data();
-    int status = 0;
-#ifdef _WIN32
-    status = _pclose(pipe);
-#else
-    status = pclose(pipe);
-#endif
-    int code = 1;
-#ifndef _WIN32
-    if (status != -1 && WIFEXITED(status))
-      code = WEXITSTATUS(status);
-#else
-    code = status;
-#endif
+    const int code = shell_util::command_exit_code(shell_util::close_command_pipe(pipe));
     return {std::move(out), code};
   }
 

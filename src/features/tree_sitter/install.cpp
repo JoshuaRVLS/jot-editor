@@ -1,4 +1,5 @@
 #include "tree_sitter/install.h"
+#include "tools/shell_util.h"
 
 #include <algorithm>
 #include <cctype>
@@ -8,27 +9,10 @@
 namespace
 {
   std::unordered_map<std::string, TreeSitterInstallMetadata> metadata;
-  std::string shell_quote(const std::string &s)
-  {
-    std::string out = "'";
-    for (char c : s)
-    {
-      if (c == '\'')
-      {
-        out += "'\\''";
-      }
-      else
-      {
-        out += c;
-      }
-    }
-    out += "'";
-    return out;
-  }
 
   std::string shell_var_quote(const std::string &s)
   {
-    return shell_quote(s);
+    return shell_util::shell_quote(s);
   }
 
   std::string library_stem(const TreeSitterInstallMetadata &entry)
@@ -106,7 +90,7 @@ namespace
         << "\"; exit 1; }; ";
     cmd << "mkdir -p \"$libdir\" \"$querydir\"; ";
     cmd << "echo '[jot:treesitter] clone " << entry.name << "'; ";
-    cmd << "git clone --depth 1 " << shell_quote(entry.url) << " \"$work\"; ";
+    cmd << "git clone --depth 1 " << shell_util::shell_quote(entry.url) << " \"$work\"; ";
     cmd << "src=\"$work";
     if (!entry.source_subdir.empty())
     {

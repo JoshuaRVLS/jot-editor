@@ -367,7 +367,7 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
         {
           set_message("Usage: :gitcheckout -b <new-branch>");
         }
-        else if (jot_git::run_ok(git_root, "checkout -b " + jot_git::shell_quote(name)))
+        else if (jot_git::run_ok(git_root, "checkout -b " + shell_util::shell_quote(name)))
         {
           set_message("Created and checked out: " + name);
         }
@@ -376,7 +376,7 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
           set_message("Branch creation failed");
         }
       }
-      else if (jot_git::run_ok(git_root, cmd + jot_git::shell_quote(a)))
+      else if (jot_git::run_ok(git_root, cmd + shell_util::shell_quote(a)))
       {
         set_message("Checked out: " + a);
       }
@@ -399,7 +399,7 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
     {
       set_message("Git: not a repository");
     }
-    else if (jot_git::run_ok(git_root, "merge --no-edit " + jot_git::shell_quote(a)))
+    else if (jot_git::run_ok(git_root, "merge --no-edit " + shell_util::shell_quote(a)))
     {
       set_message("Merged " + a + " into " + git_branch);
     }
