@@ -389,6 +389,71 @@ bool LSPClient::request_references(const std::string &filepath, int line, int ch
   return true;
 }
 
+bool LSPClient::request_code_actions(const std::string &filepath,
+                                     int line,
+                                     int character,
+                                     const std::vector<Diagnostic> &diagnostics)
+{
+  if (!running || !initialized)
+  {
+    return false;
+  }
+
+  std::string abs_path = fs::absolute(filepath).string();
+  if (pending_code_action_requests.size() >= 64)
+  {
+    last_error = "too many pending LSP code action requests";
+    return false;
+  }
+  int request_id = next_request_id++;
+  pending_code_action_requests[request_id] = PendingPositionRequest{
+      abs_path, std::max(0, line), std::max(0, character), file_versions[abs_path]};
+
+  std::ostringstream json;
+  json << "{"
+       << "\"jsonrpc\":\"2.0\","
+       << "\"id\":" << request_id << ","
+       << "\"method\":\"textDocument/codeAction\","
+       << "\"params\":{"
+       << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path)) << "\"},"
+       << "\"range\":{"
+       << "\"start\":{\"line\":" << std::max(0, line)
+       << ",\"character\":" << lsp_character(abs_path, line, character) << "},"
+       << "\"end\":{\"line\":" << std::max(0, line)
+       << ",\"character\":" << lsp_character(abs_path, line, character) << "}"
+       << "},"
+       << "\"context\":{\"diagnostics\":[";
+  bool first = true;
+  for (const auto &diag : diagnostics)
+  {
+    if (!first)
+    {
+      json << ",";
+    }
+    first = false;
+    json << "{"
+         << "\"range\":{"
+         << "\"start\":{\"line\":" << diag.line
+         << ",\"character\":" << lsp_character(abs_path, diag.line, diag.col) << "},"
+         << "\"end\":{\"line\":" << diag.end_line
+         << ",\"character\":" << lsp_character(abs_path, diag.end_line, diag.end_col) << "}"
+         << "},"
+         << "\"severity\":" << diag.severity << ","
+         << "\"message\":\"" << json_escape(diag.message) << "\""
+         << "}";
+  }
+  json << "]}"
+       << "}"
+       << "}";
+
+  if (!send_message(json.str()))
+  {
+    pending_code_action_requests.erase(request_id);
+    return false;
+  }
+  return true;
+}
+
 bool LSPClient::request_rename(const std::string &filepath,
                                int line,
                                int character,
@@ -584,6 +649,13 @@ std::vector<LSPDefinitionResult> LSPClient::consume_reference_results()
 {
   auto out = std::move(pending_references);
   pending_references.clear();
+  return out;
+}
+
+std::vector<LSPCodeActionResult> LSPClient::consume_code_action_results()
+{
+  auto out = std::move(pending_code_actions);
+  pending_code_actions.clear();
   return out;
 }
 

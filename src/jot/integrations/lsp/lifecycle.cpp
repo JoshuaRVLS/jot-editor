@@ -182,6 +182,7 @@ void Editor::poll_lsp_clients()
     }
   }
   handle_lsp_references_results();
+  handle_lsp_code_action_results();
   refresh_lsp_inlay_hints_if_needed();
 }
 

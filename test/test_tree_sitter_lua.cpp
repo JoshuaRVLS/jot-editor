@@ -153,8 +153,17 @@ TEST_CASE("Real Lua runtime boot keeps every registry language registered")
   INFO("registered languages: " << names.size());
   for (const auto &name : names)
     INFO("  " << name);
-  REQUIRE(names.size() == 62);
+  REQUIRE(names.size() == 180);
   REQUIRE(std::find(names.begin(), names.end(), "cpp") != names.end());
+  // LSP-backed additions: grammar registries must survive startup too.
+  for (const char *lang : {"clojure", "crystal", "elm", "fsharp", "powershell"})
+  {
+    REQUIRE(std::find(names.begin(), names.end(), lang) != names.end());
+    const auto lang_status = manager.runtime_status_for_language(lang);
+    INFO(lang << " parser_message: " << lang_status.parser_message);
+    REQUIRE(lang_status.has_language);
+    REQUIRE(lang_status.parser_message != "unsupported language");
+  }
 
   const auto status = manager.runtime_status_for_language("cpp");
   INFO("cpp parser_message: " << status.parser_message);

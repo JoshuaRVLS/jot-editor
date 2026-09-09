@@ -352,6 +352,9 @@ private:
   void lsp_rename_symbol(const std::string &new_name);
   void request_lsp_references();
   void handle_lsp_references_results();
+  void request_lsp_code_actions();
+  void handle_lsp_code_action_results();
+  bool apply_selected_lsp_code_action();
   void handle_lsp_hover_result(const LSPHoverResult &hover);
   void handle_lsp_signature_result(const LSPSignatureHelpResult &signature_help);
   void handle_lsp_definition_result(const LSPDefinitionResult &definition);

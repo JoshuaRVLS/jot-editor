@@ -12,6 +12,12 @@ fallback. A bundled query that is missing or does not compile against the
 installed parser never disables the language: runtime queries shipped with the
 parser (or regex syntax) are used instead.
 
+The registry covers 180 languages. Beyond the hand-written queries, the
+highlight queries for the bulk of the languages are adapted from
+[nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter)
+(Apache-2.0) and carry an attribution header; every bundled query is verified
+to compile against its grammar's generated parser.
+
 ## Install Layout
 
 Default parser root:

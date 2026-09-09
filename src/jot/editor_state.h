@@ -130,6 +130,9 @@ struct EditorState
   OutlinePanelState outline_panel;
   std::string active_plugin_panel;
   std::string plugin_quick_pick_select_callback;
+  // Actions offered by the last code-action response, indexed by the quick
+  // pick selection; cleared once the selection is applied.
+  std::vector<LSPCodeAction> lsp_code_actions_pending;
 
   SyntaxHighlighter highlighter;
   Config config;

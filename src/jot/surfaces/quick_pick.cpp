@@ -210,6 +210,13 @@ void Editor::accept_quick_pick()
     needs_redraw = true;
     return;
   }
+  if (quick_pick_kind == QUICK_PICK_CODE_ACTIONS)
+  {
+    close_quick_pick();
+    apply_selected_lsp_code_action();
+    needs_redraw = true;
+    return;
+  }
   if (item.filepath.empty())
   {
     return;

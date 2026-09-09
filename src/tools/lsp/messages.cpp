@@ -355,6 +355,41 @@ void LSPClient::handle_stdout_data(const std::string &data)
       continue;
     }
 
+    auto code_action_it = pending_code_action_requests.find(request_id);
+    if (code_action_it != pending_code_action_requests.end())
+    {
+      const auto current_version = file_versions.find(code_action_it->second.filepath);
+      if (current_version == file_versions.end()
+          || current_version->second != code_action_it->second.version)
+      {
+        pending_code_action_requests.erase(code_action_it);
+        continue;
+      }
+      LSPCodeActionResult actions;
+      actions.origin_filepath = code_action_it->second.filepath;
+      actions.origin_line = code_action_it->second.line;
+      actions.origin_character = code_action_it->second.character;
+      if (result)
+      {
+        code_actions_from_result(*result, actions.actions);
+        for (auto &action : actions.actions)
+        {
+          for (auto &entry : action.edits)
+          {
+            for (auto &edit : entry.second)
+            {
+              edit.start_char = editor_character(
+                  entry.first, edit.start_line, edit.start_char);
+              edit.end_char = editor_character(entry.first, edit.end_line, edit.end_char);
+            }
+          }
+        }
+      }
+      pending_code_actions.push_back(std::move(actions));
+      pending_code_action_requests.erase(code_action_it);
+      continue;
+    }
+
     auto symbol_it = pending_document_symbol_requests.find(request_id);
     if (symbol_it != pending_document_symbol_requests.end())
     {

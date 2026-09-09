@@ -139,6 +139,11 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     request_lsp_references();
   }
+  else if (lcmd == "lspactions" || lcmd == "lspaction" || lcmd == "quickfix"
+           || lcmd == "fix")
+  {
+    request_lsp_code_actions();
+  }
   else if (lcmd == "diagnostics" || lcmd == "problems")
   {
     show_diagnostics_picker();

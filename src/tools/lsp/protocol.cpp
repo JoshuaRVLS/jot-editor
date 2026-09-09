@@ -853,6 +853,43 @@ namespace lsp_detail
     }
   }
 
+  // textDocument/codeAction returns an array of CodeAction objects
+  // ({title, kind?, edit?, command?}). Actions whose change is an edit are
+  // kept with the edit expanded into per-file lists via
+  // workspace_edit_from_result; command-only actions (e.g. organize imports)
+  // are dropped because the editor does not execute server commands.
+  void code_actions_from_result(const JsonValue &result, std::vector<LSPCodeAction> &out)
+  {
+    if (result.type != JsonValue::Array)
+    {
+      return;
+    }
+    for (const auto &item : result.array_value)
+    {
+      if (item.type != JsonValue::Object)
+      {
+        continue;
+      }
+      LSPCodeAction action;
+      action.title = json_string_or_empty(json_object_get(item, "title"));
+      if (action.title.empty())
+      {
+        continue;
+      }
+      action.kind = json_string_or_empty(json_object_get(item, "kind"));
+      const JsonValue *edit = json_object_get(item, "edit");
+      if (edit && edit->type == JsonValue::Object)
+      {
+        workspace_edit_from_result(*edit, action.edits);
+      }
+      if (action.edits.empty())
+      {
+        continue; // no applicable edit
+      }
+      out.push_back(std::move(action));
+    }
+  }
+
   // textDocument/formatting returns an array of TextEdit objects. Positions
   // are returned in the negotiated encoding (usually UTF-16); character
   // offsets stay raw here and the caller converts them to editor columns so a

@@ -61,6 +61,9 @@ namespace lsp_detail
   void workspace_edit_from_result(
       const JsonValue &result,
       std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> &out);
+  // Parses a textDocument/codeAction response into actions that carry an
+  // edit (command-only actions are dropped).
+  void code_actions_from_result(const JsonValue &result, std::vector<LSPCodeAction> &out);
   bool location_from_json(const JsonValue &item, LSPLocation &out);
   std::vector<LSPLocation> definition_locations_from_result(const JsonValue &result);
   std::vector<LSPSymbol> document_symbols_from_result(const JsonValue &result,

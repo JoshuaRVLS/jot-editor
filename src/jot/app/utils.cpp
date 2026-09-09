@@ -56,6 +56,36 @@ std::string Editor::get_file_extension(const std::string &path)
   {
     return ".make";
   }
+  // Basename-only files whose tree-sitter grammars are keyed on the full
+  // name (the registry follows the same convention as Dockerfile above).
+  static const struct
+  {
+    const char *name;
+    const char *ext;
+  } kBasenameExts[] = {
+      {"caddyfile", ".caddyfile"},
+      {"earthfile", ".earthfile"},
+      {"go.mod", ".go.mod"},
+      {"go.sum", ".go.sum"},
+      {"gpg.conf", ".gpg.conf"},
+      {"inputrc", ".inputrc"},
+      {"jjdescription", ".jjdescription"},
+      {"kconfig", ".kconfig"},
+      {"kitty.conf", ".kitty.conf"},
+      {"manifest.in", ".manifest.in"},
+      {"requirements.txt", ".requirements.txt"},
+      {"snakefile", ".snakefile"},
+      {"ssh_config", ".ssh_config"},
+      {"xdefaults", ".xdefaults"},
+      {"justfile", ".justfile"},
+  };
+  for (const auto &entry : kBasenameExts)
+  {
+    if (lower_name == entry.name)
+    {
+      return entry.ext;
+    }
+  }
 
   size_t dot = lower_name.find_last_of('.');
   if (dot != std::string::npos)

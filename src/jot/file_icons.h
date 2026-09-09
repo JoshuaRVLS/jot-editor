@@ -64,6 +64,11 @@ namespace jot_icons
         {"hpp", {"\uF0FD", 140}},
         {"hh", {"\uF0FD", 140}},
         {"cs", {"\uE648", 75}},    // nf-dev-csharp
+        {"cr", {"\uE62F", 61}},    // nf-dev-crystal
+        {"clj", {"\uE768", 108}},  // nf-dev-clojure
+        {"cljs", {"\uE768", 108}},
+        {"cljc", {"\uE768", 108}},
+        {"edn", {"\uE768", 108}},
         // Scripting
         {"py", {"\uE606", 61}},    // nf-seti-python
         {"js", {"\uE74E", 221}},   // nf-dev-javascript
@@ -80,6 +85,8 @@ namespace jot_icons
         {"zsh", {"\uE795", 113}},
         {"fish", {"\uE795", 113}},
         {"ps1", {"\uE795", 113}},
+        {"psm1", {"\uE795", 113}},
+        {"psd1", {"\uE795", 113}},
         {"pl", {"\uE769", 75}},
         {"pm", {"\uE769", 75}},
         {"r", {"\uE78F", 68}},
@@ -92,8 +99,12 @@ namespace jot_icons
         {"dart", {"\uE798", 37}},   // nf-dev-dart
         {"ex", {"\uE62D", 60}},     // nf-dev-elixir
         {"exs", {"\uE62D", 60}},
+        {"elm", {"\uE62C", 81}},     // nf-dev-elm
         {"erl", {"\uE7B1", 167}},
         {"hrl", {"\uE7B1", 167}},
+        {"fs", {"\uE7A7", 32}},     // nf-dev-fsharp
+        {"fsx", {"\uE7A7", 32}},
+        {"fsi", {"\uE7A7", 32}},
         {"hs", {"\uE777", 130}},
         {"lhs", {"\uE777", 130}},
         {"zig", {"\uE6A9", 221}},

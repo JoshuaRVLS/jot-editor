@@ -3,8 +3,9 @@
 -- Keeps a source-built jot in sync with its git clone. `:update` checks the
 -- remote for new commits behind a small animated status panel; `:update run`
 -- pulls, rebuilds the existing CMake build tree and reinstalls. A silent
--- check also runs shortly after boot (update.check_on_startup) and surfaces
--- an update notice only when the repo is actually behind.
+-- check also runs shortly after boot (update.check_on_startup) but never
+-- opens a panel: it only arms the statusline " ↑N" chip (plus the Ctrl+U
+-- shortcut) when the repo is actually behind, so startup stays quiet.
 --
 -- Only meaningful for binaries built from a git checkout: the repo root is
 -- resolved natively (jot.source_dir: $JOT_SOURCE_DIR override, then the
@@ -30,6 +31,7 @@ local DEFAULTS = { "build-enabled", "build", "build-release", "build-debug" }
 local panel = {
   open = false,
   busy = false,
+  silent = false, -- boot-time check: statusline chip only, no panel/toast
   win = 0,
   buf = 0,
   timer = 0,
@@ -310,6 +312,7 @@ local function open_panel()
   panel.buf = buf
   panel.open = true
   panel.busy = false
+  panel.silent = false -- an open panel is always interactive
   panel.spin = 0
   panel.primary = ""
   panel.detail = ""
@@ -350,12 +353,18 @@ local function show_result(level, primary, detail, hint)
   panel.detail = one_line(detail)
   panel.hint = hint or "click to dismiss"
   update_indicator()
-  if not panel.open then
-    notify_result(level, primary, detail)
+  if panel.open then
+    repaint()
+    arm_auto_close()
     return
   end
-  repaint()
-  arm_auto_close()
+  if panel.silent then
+    -- Boot-time checks never toast: the statusline chip (and the Ctrl+U
+    -- shortcut it arms) is the whole surface, appearing only when updates
+    -- are actually available.
+    return
+  end
+  notify_result(level, primary, detail)
 end
 
 local function start_job(primary, detail, cmd, cb)
@@ -491,13 +500,20 @@ local function check_update(silent)
     end
     return
   end
+  panel.silent = silent
+  if silent then
+    -- Boot-time check: run the git chain headless; only the statusline
+    -- chip (and the Ctrl+U shortcut) surface the result.
+    check_chain(true)
+    return
+  end
   if not open_panel() then
     return
   end
   panel.primary = "Checking for updates…"
   panel.detail = ""
   panel.hint = ""
-  check_chain(silent)
+  check_chain(false)
 end
 
 local function run_update()

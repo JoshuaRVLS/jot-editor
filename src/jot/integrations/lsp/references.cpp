@@ -106,6 +106,7 @@ void Editor::handle_lsp_references_results()
   }
   std::vector<QuickPickItem> items;
   int total = 0;
+  bool got_response = false;
   std::string root;
   std::string primary;
   const auto clients = attached_lsp_clients_for(buf.filepath, &root, &primary);
@@ -123,6 +124,7 @@ void Editor::handle_lsp_references_results()
       {
         continue;
       }
+      got_response = true;
       for (const auto &location : result.locations)
       {
         QuickPickItem item;
@@ -137,6 +139,13 @@ void Editor::handle_lsp_references_results()
         total++;
       }
     }
+  }
+  // The handler runs on every poll; only report when a request actually
+  // completed (a real response with zero locations), never when nothing was
+  // pending — otherwise the message spams on every poll.
+  if (!got_response)
+  {
+    return;
   }
   if (total == 0)
   {

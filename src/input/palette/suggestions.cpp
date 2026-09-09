@@ -143,6 +143,8 @@ namespace
         {"lspren", "LSP", "Rename symbol under cursor (LSP)", 70},
         {"lsprefs", "LSP", "Find references to symbol under cursor", 74},
         {"lspreferences", "LSP", "Find references to symbol under cursor", 70},
+        {"lspactions", "LSP", "Code actions for symbol under cursor", 74},
+        {"lspaction", "LSP", "Code actions for symbol under cursor", 70},
         {"diagnostics", "Navigation", "Open diagnostics picker", 76},
         {"problems", "Navigation", "Open diagnostics picker", 74},
         {"diagnext", "Navigation", "Go to next diagnostic", 74},
