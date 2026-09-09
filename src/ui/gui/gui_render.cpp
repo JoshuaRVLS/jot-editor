@@ -1053,3 +1053,4 @@ void UIGui::paint_float_cells(int x, int y, int w, int h, float dx_px, float dy_
     end_batch();
   }
 }
+

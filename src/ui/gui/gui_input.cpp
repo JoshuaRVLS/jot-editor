@@ -409,3 +409,24 @@ bool UIGui::poll_event(Event &out)
     return false;
   }
 }
+
+void UIGui::window_size(int &w, int &h) const
+{
+  SDL_GetWindowSize(window_, &w, &h);
+}
+
+void UIGui::drawable_size(int &w, int &h) const
+{
+  SDL_GL_GetDrawableSize(window_, &w, &h);
+}
+
+bool UIGui::note_drawable_size(int w, int h)
+{
+  if (w == pixel_w_ && h == pixel_h_)
+  {
+    return false;
+  }
+  pixel_w_ = w;
+  pixel_h_ = h;
+  return true;
+}

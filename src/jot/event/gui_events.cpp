@@ -70,5 +70,38 @@ void Editor::pump_gui_events()
   {
     needs_redraw = true;
   }
+
+  // Defensive resize re-sync. Compositors can coalesce or drop resize
+  // events (Wayland configure batching, fractional scale changes), which
+  // leaves the grid smaller than the window until the next real event --
+  // the "editor doesn't fill the window until I fullscreen" symptom.
+  // Re-derive the grid from the live window size every frame and re-fit
+  // when it disagrees; when only the drawable (pixel) size changed while
+  // the cell count is unchanged, repaint so the newly exposed strip is
+  // painted instead of stale content.
+  {
+    int w = 0, h = 0;
+    gui->window_size(w, h);
+    const int cols = std::max(1, (int)((float)w / gui->cell_w()));
+    const int rows = std::max(1, (int)((float)h / gui->cell_h()));
+    if (cols != gui->get_width() || rows != gui->get_height())
+    {
+      Event rsz;
+      rsz.type = EVENT_RESIZE;
+      rsz.resize.width = cols;
+      rsz.resize.height = rows;
+      handle_terminal_event(rsz);
+    }
+    else
+    {
+      int dw = 0, dh = 0;
+      gui->drawable_size(dw, dh);
+      if (gui->note_drawable_size(dw, dh))
+      {
+        needs_redraw = true;
+      }
+    }
+  }
+
   render_frame();
 }

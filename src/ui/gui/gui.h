@@ -106,6 +106,32 @@ public:
     return font_px_;
   }
 
+  // Live window size in points (SDL_GetWindowSize): the same source the
+  // resize-event handler grids from, used by the pump's defensive re-sync.
+  void window_size(int &w, int &h) const;
+  // Live drawable size in pixels (SDL_GL_GetDrawableSize).
+  void drawable_size(int &w, int &h) const;
+  // Grid cell size in window points (also the quad unit).
+  float cell_w() const
+  {
+    return cell_w_;
+  }
+  float cell_h() const
+  {
+    return cell_h_;
+  }
+  // Cached drawable size (pixels) from the last resize event / sync.
+  int pixel_w() const
+  {
+    return pixel_w_;
+  }
+  int pixel_h() const
+  {
+    return pixel_h_;
+  }
+  // Re-cache the drawable size; returns true when it actually changed.
+  bool note_drawable_size(int w, int h);
+
 private:
   enum FontStyle
   {
