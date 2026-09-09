@@ -1,8 +1,31 @@
 set(JOT_LUA_SOURCES
   jot/lua/api_bindings.cpp
+  jot/lua/bindings_buffer.cpp
+  jot/lua/bindings_config.cpp
+  jot/lua/bindings_debugger.cpp
+  jot/lua/bindings_editor.cpp
+  jot/lua/bindings_events.cpp
+  jot/lua/bindings_git.cpp
+  jot/lua/bindings_layout.cpp
+  jot/lua/bindings_lsp.cpp
+  jot/lua/bindings_mark.cpp
+  jot/lua/bindings_plugin.cpp
+  jot/lua/bindings_state.cpp
+  jot/lua/bindings_syntax.cpp
+  jot/lua/bindings_task.cpp
+  jot/lua/bindings_ui.cpp
+  jot/lua/bindings_viewport.cpp
+  jot/lua/api_buffer.cpp
   jot/lua/api_config.cpp
-  jot/lua/api_core.cpp
+  jot/lua/api_debugger.cpp
   jot/lua/api_decorations.cpp
+  jot/lua/api_editor.cpp
+  jot/lua/api_mark.cpp
+  jot/lua/api_plugin.cpp
+  jot/lua/api_runtime.cpp
+  jot/lua/api_status.cpp
+  jot/lua/api_task.cpp
+  jot/lua/api_terminal.cpp
   jot/lua/api_git.cpp
   jot/lua/api_events.cpp
   jot/lua/api_float.cpp

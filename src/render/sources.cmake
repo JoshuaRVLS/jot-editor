@@ -1,12 +1,28 @@
 set(JOT_RENDER_SOURCES
+  render/bracket.cpp
   render/buffer.cpp
+  render/diagnostics.cpp
   render/debugger.cpp
   render/easter.cpp
   render/frame.cpp
   render/minimap.cpp
-  render/overlay.cpp
+  render/completion_popup.cpp
+  render/image_viewer.cpp
+  render/overlay_shared.cpp
+  render/signature_popup.cpp
+  render/telescope_popup.cpp
   render/plugin_panel.cpp
-  render/ui.cpp
+  render/menus.cpp
+  render/modals.cpp
+  render/palette.cpp
+  render/popup.cpp
+  render/prompts.cpp
+  render/quick_pick.cpp
+  render/search.cpp
+  render/status_line.cpp
+  render/sync.cpp
+  render/tabs.cpp
+  render/which_key.cpp
   render/git_diff.cpp
   render/git_panel.cpp
   render/outline.cpp

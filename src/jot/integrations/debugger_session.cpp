@@ -1,6 +1,8 @@
+// Debugger session lifecycle: start/attach, fd watching, stepping, thread/frame cycling, output polling.
 #include "commands/utils.h"
 #include "editor.h"
 #include "jot/lua/api.h"
+#include "jot/integrations/debugger_internal.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -10,143 +12,19 @@
 
 namespace fs = std::filesystem;
 using namespace CommandLineUtils;
+using namespace debugger_internal;
 
-namespace
+namespace debugger_internal
 {
-  bool command_exists(const std::string &name)
+std::string compact_output(std::string text, size_t max_size)
+{
+  if (text.size() <= max_size)
   {
-    if (name.empty())
-    {
-      return false;
-    }
-#ifdef _WIN32
-    return std::system(("where " + name + " >NUL 2>NUL").c_str()) == 0;
-#else
-    return std::system(("command -v " + name + " >/dev/null 2>&1").c_str()) == 0;
-#endif
+    return text;
   }
-
-  std::vector<std::string> adapter_command_for(const std::string &adapter)
-  {
-    std::string lower = to_lower_copy(adapter);
-    if (lower == "lldb" || lower == "lldb-dap")
-    {
-      return {"lldb-dap"};
-    }
-    return {"gdb", "--interpreter=dap"};
-  }
-
-  std::string adapter_binary_for(const std::string &adapter)
-  {
-    auto command = adapter_command_for(adapter);
-    return command.empty() ? "" : command.front();
-  }
-
-  std::vector<std::string> split_shell_words(const std::string &text)
-  {
-    std::vector<std::string> out;
-    std::string cur;
-    bool single = false;
-    bool dbl = false;
-    bool esc = false;
-    for (char c : text)
-    {
-      if (esc)
-      {
-        cur.push_back(c);
-        esc = false;
-        continue;
-      }
-      if (c == '\\' && !single)
-      {
-        esc = true;
-        continue;
-      }
-      if (c == '\'' && !dbl)
-      {
-        single = !single;
-        continue;
-      }
-      if (c == '"' && !single)
-      {
-        dbl = !dbl;
-        continue;
-      }
-      if (std::isspace((unsigned char)c) && !single && !dbl)
-      {
-        if (!cur.empty())
-        {
-          out.push_back(cur);
-          cur.clear();
-        }
-        continue;
-      }
-      cur.push_back(c);
-    }
-    if (!cur.empty())
-    {
-      out.push_back(cur);
-    }
-    return out;
-  }
-
-  std::string default_debug_config_path(const std::string &root_dir)
-  {
-    if (!root_dir.empty())
-    {
-      fs::path local = fs::path(root_dir) / ".jot" / "debug.json";
-      std::error_code ec;
-      if (fs::exists(local, ec) && !ec)
-      {
-        return local.string();
-      }
-    }
-    const char *override_home = std::getenv("JOT_CONFIG_HOME");
-    if (override_home && *override_home)
-    {
-      return (fs::path(override_home) / "configs" / "debug.json").string();
-    }
-#ifdef _WIN32
-    const char *app_data = std::getenv("APPDATA");
-    if (app_data && *app_data)
-    {
-      return (fs::path(app_data) / "jot" / "configs" / "debug.json").string();
-    }
-    const char *home = std::getenv("USERPROFILE");
-#else
-    const char *home = std::getenv("HOME");
-#endif
-    if (!home || !*home)
-    {
-      return "";
-    }
-    return (fs::path(home) / ".config" / "jot" / "configs" / "debug.json").string();
-  }
-
-  std::string normalize_path_string(const std::string &path)
-  {
-    if (path.empty())
-    {
-      return "";
-    }
-    std::error_code ec;
-    fs::path p = fs::absolute(path, ec);
-    if (ec)
-    {
-      p = fs::path(path);
-    }
-    return p.lexically_normal().string();
-  }
-
-  std::string compact_output(std::string text, size_t max_size = 64000)
-  {
-    if (text.size() <= max_size)
-    {
-      return text;
-    }
-    return text.substr(text.size() - max_size);
-  }
-} // namespace
+  return text.substr(text.size() - max_size);
+}
+} // namespace debugger_internal
 
 DebuggerClient *Editor::get_debugger_session(int index)
 {
@@ -693,179 +571,6 @@ void Editor::request_debugger_memory(const std::string &expression, int bytes)
   active_right_panel_tab = RIGHT_PANEL_DEBUG;
 }
 
-void Editor::request_debugger_disassembly(const std::string &expression)
-{
-  DebuggerClient *client = get_debugger_session();
-  if (!client)
-  {
-    set_message("Debugger: no active session");
-    return;
-  }
-  if (!client->supports_disassemble())
-  {
-    set_message("Debugger does not support disassembly");
-    return;
-  }
-  std::string ref = trim_copy(expression);
-  if (ref.empty())
-  {
-    ref = "$pc";
-  }
-  client->disassemble(ref, 0, 0, 24);
-  show_debugger_panel = true;
-  show_right_panel = true;
-  active_right_panel_tab = RIGHT_PANEL_DEBUG;
-}
-
-bool Editor::toggle_debugger_breakpoint(const std::string &filepath, int line)
-{
-  std::string path = normalize_path_string(filepath);
-  if (path.empty() || line < 0)
-  {
-    return false;
-  }
-  auto &list = debugger_breakpoints[path];
-  auto it = std::find_if(
-      list.begin(), list.end(), [&](const DebuggerBreakpoint &bp) { return bp.line == line; });
-  if (it == list.end())
-  {
-    list.push_back({path, line, false});
-    std::sort(
-        list.begin(), list.end(), [](const auto &a, const auto &b) { return a.line < b.line; });
-    set_message("Breakpoint added: " + get_filename(path) + ":" + std::to_string(line + 1));
-  }
-  else
-  {
-    list.erase(it);
-    set_message("Breakpoint removed: " + get_filename(path) + ":" + std::to_string(line + 1));
-  }
-
-  std::vector<int> lines;
-  for (const auto &bp : list)
-  {
-    lines.push_back(bp.line);
-  }
-  for (auto &client : debugger_sessions)
-  {
-    if (client)
-    {
-      client->set_breakpoints(path, lines);
-    }
-  }
-  needs_redraw = true;
-  return true;
-}
-
-bool Editor::has_debugger_breakpoint(const std::string &filepath, int line) const
-{
-  std::string path = normalize_path_string(filepath);
-  auto it = debugger_breakpoints.find(path);
-  if (it == debugger_breakpoints.end())
-  {
-    return false;
-  }
-  return std::any_of(it->second.begin(),
-                     it->second.end(),
-                     [&](const DebuggerBreakpoint &bp) { return bp.line == line; });
-}
-
-void Editor::update_debugger_breakpoint_hover(int pane_index, int buffer_id, int line)
-{
-  if (buffer_id < 0 || buffer_id >= (int)buffers.size() || line < 0
-      || line >= (int)buffers[buffer_id].line_count() || buffers[buffer_id].filepath.empty())
-  {
-    clear_debugger_breakpoint_hover();
-    return;
-  }
-
-  if (debugger_breakpoint_hover_visible && debugger_breakpoint_hover_pane == pane_index
-      && debugger_breakpoint_hover_buffer == buffer_id && debugger_breakpoint_hover_line == line)
-  {
-    return;
-  }
-
-  debugger_breakpoint_hover_visible = true;
-  debugger_breakpoint_hover_pane = pane_index;
-  debugger_breakpoint_hover_buffer = buffer_id;
-  debugger_breakpoint_hover_line = line;
-  needs_redraw = true;
-}
-
-void Editor::clear_debugger_breakpoint_hover()
-{
-  if (!debugger_breakpoint_hover_visible)
-  {
-    return;
-  }
-  debugger_breakpoint_hover_visible = false;
-  debugger_breakpoint_hover_pane = -1;
-  debugger_breakpoint_hover_buffer = -1;
-  debugger_breakpoint_hover_line = -1;
-  needs_redraw = true;
-}
-
-bool Editor::is_debugger_breakpoint_hover(int buffer_id, int line) const
-{
-  return debugger_breakpoint_hover_visible && debugger_breakpoint_hover_buffer == buffer_id
-         && debugger_breakpoint_hover_line == line;
-}
-
-void Editor::load_debugger_configs()
-{
-  debugger_configs.clear();
-  std::string path = default_debug_config_path(root_dir);
-  if (path.empty())
-  {
-    return;
-  }
-  std::ifstream in(path);
-  if (!in.is_open())
-  {
-    return;
-  }
-  std::stringstream ss;
-  ss << in.rdbuf();
-  debugger_configs = parse_debugger_config_text(ss.str());
-  for (auto &config : debugger_configs)
-  {
-    if (config.cwd.empty())
-    {
-      config.cwd = root_dir.empty() ? "." : root_dir;
-    }
-  }
-}
-
-std::vector<std::string> Editor::list_debugger_config_names()
-{
-  load_debugger_configs();
-  std::vector<std::string> names;
-  for (const auto &config : debugger_configs)
-  {
-    names.push_back(config.name);
-  }
-  return names;
-}
-
-bool Editor::run_debugger_config(const std::string &name)
-{
-  load_debugger_configs();
-  if (debugger_configs.empty())
-  {
-    set_message("No debug configs found");
-    return false;
-  }
-  std::string needle = to_lower_copy(trim_copy(name));
-  for (auto config : debugger_configs)
-  {
-    if (needle.empty() || to_lower_copy(config.name) == needle)
-    {
-      return start_debugger_session(config);
-    }
-  }
-  set_message("Debug config not found: " + name);
-  return false;
-}
-
 void Editor::poll_debugger_sessions()
 {
   for (int i = 0; i < (int)debugger_sessions.size(); i++)
@@ -1028,4 +733,28 @@ void Editor::poll_debugger_sessions()
   {
     lua_api->emit_debugger_state_changed();
   }
+}
+
+void Editor::request_debugger_disassembly(const std::string &expression)
+{
+  DebuggerClient *client = get_debugger_session();
+  if (!client)
+  {
+    set_message("Debugger: no active session");
+    return;
+  }
+  if (!client->supports_disassemble())
+  {
+    set_message("Debugger does not support disassembly");
+    return;
+  }
+  std::string ref = trim_copy(expression);
+  if (ref.empty())
+  {
+    ref = "$pc";
+  }
+  client->disassemble(ref, 0, 0, 24);
+  show_debugger_panel = true;
+  show_right_panel = true;
+  active_right_panel_tab = RIGHT_PANEL_DEBUG;
 }

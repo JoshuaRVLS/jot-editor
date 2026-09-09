@@ -2,19 +2,39 @@ set(JOT_ENGINE_SOURCES
   jot/app/bookmarks.cpp
   jot/app/decorations.cpp
   jot/app/editor.cpp
+  jot/app/auto_save.cpp
+  jot/app/buffers.cpp
   jot/app/file.cpp
+  jot/app/fold_state.cpp
+  jot/app/recent.cpp
   jot/app/folding.cpp
-  jot/app/panes.cpp
+  jot/app/panes_layout.cpp
+  jot/app/panes_navigate.cpp
+  jot/app/panes_resize.cpp
   jot/app/process_job.cpp
   jot/app/relaunch.cpp
   jot/app/undo.cpp
   jot/app/utils.cpp
-  jot/integrations/debugger.cpp
+  jot/integrations/debugger_adapters.cpp
+  jot/integrations/debugger_breakpoints.cpp
+  jot/integrations/debugger_config.cpp
+  jot/integrations/debugger_session.cpp
   jot/integrations/integrated_terminal.cpp
-  jot/integrations/lsp.cpp
+  jot/integrations/lsp/attach.cpp
+  jot/integrations/lsp/completion.cpp
+  jot/integrations/lsp/diagnostics.cpp
+  jot/integrations/lsp/format.cpp
+  jot/integrations/lsp/hover.cpp
+  jot/integrations/lsp/install.cpp
+  jot/integrations/lsp/lifecycle.cpp
+  jot/integrations/lsp/signature.cpp
+  jot/integrations/lsp/status.cpp
   jot/integrations/syntax.cpp
   jot/integrations/tree_sitter_commands.cpp
   jot/event/event_loop.cpp
+  jot/event/main_loop.cpp
+  jot/event/terminal_events.cpp
+  jot/event/which_key.cpp
   jot/event/in_memory_line_provider.cpp
   jot/event/lazy_line_provider.cpp
   jot/event/task_queue.cpp
@@ -28,4 +48,6 @@ set(JOT_ENGINE_SOURCES
   jot/workspace/git_panel.cpp
   jot/workspace/tasks.cpp
   jot/workspace/workspace.cpp
+  jot/workspace/file_tree.cpp
+  jot/workspace/sidebar.cpp
 )

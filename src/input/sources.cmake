@@ -6,10 +6,15 @@ set(JOT_INPUT_SOURCES
   input/commands/save_prompt.cpp
   input/commands/utils.cpp
   input/commands/ex.cpp
+  input/commands/ex_tail.cpp
   input/menu_bar.cpp
   input/modes/dispatch.cpp
   input/modes/modeless.cpp
-  input/mouse.cpp
+  input/mouse/context_menu.cpp
+  input/mouse/dispatcher.cpp
+  input/mouse/menu_bar.cpp
+  input/mouse/panels.cpp
+  input/mouse/telescope.cpp
   input/palette/input.cpp
   input/palette/palette.cpp
   input/palette/suggestions.cpp

@@ -542,71 +542,106 @@ def main():
 
     rows.sort(key=lambda r: r["id"])
 
-    lines = [
-        "-- LSP / language-tooling package catalog, generated from the mason registry.",
-        "-- Source: https://github.com/mason-org/mason-registry",
-        "-- Regenerate: python3 tools/mason_import.py <mason-registry-checkout>",
-        "",
-        "local M = {}",
-        "",
-        "M.entries = {",
-    ]
-    for row in rows:
-        lines.append("  {")
-        lines.append(f"    id = {lua_str(row['id'])}, display = {lua_str(row['display'])},"
-                     f" detail = {lua_str(row['detail'])}, manager = {lua_str(row['manager'])},"
-                     f" pkg = {lua_str(row.get('pkg', ''))},")
+    # Each row renders to a small Lua table; the catalog is written as
+    # alphabetical shards under lsp/servers/ so no single file gets huge.
+    def render_row(row):
+        out = ["  {"]
+        out.append(f"    id = {lua_str(row['id'])}, display = {lua_str(row['display'])},"
+                   f" detail = {lua_str(row['detail'])}, manager = {lua_str(row['manager'])},"
+                   f" pkg = {lua_str(row.get('pkg', ''))},")
         if row.get("categories"):
-            lines.append(f"    categories = {lua_str_list(row['categories'])},")
+            out.append(f"    categories = {lua_str_list(row['categories'])},")
         if row.get("languages"):
-            lines.append(f"    languages = {lua_str_list(row['languages'])},")
+            out.append(f"    languages = {lua_str_list(row['languages'])},")
         if row.get("aliases"):
-            lines.append(f"    aliases = {lua_str_list(row['aliases'])},")
-        lines.append(f"    bin = {lua_str_list(row.get('bins', []))},")
+            out.append(f"    aliases = {lua_str_list(row['aliases'])},")
+        out.append(f"    bin = {lua_str_list(row.get('bins', []))},")
         mgr = row["manager"]
         if mgr == "github":
-            lines.append(f"    repo = {lua_str(row['repo'])}, asset = {{")
+            out.append(f"    repo = {lua_str(row['repo'])}, asset = {{")
             for plat in ("linux", "mac", "win"):
                 a = row.get("asset", {}).get(plat)
                 if a:
-                    lines.append(f"      {plat} = {{ match = {lua_str(a['match'])},"
+                    out.append(f"      {plat} = {{ match = {lua_str(a['match'])},"
                                  f" archive = {lua_str(a['archive'])} }},")
-            lines.append("    },")
+            out.append("    },")
         elif mgr == "generic":
-            lines.append("    dl = {")
+            out.append("    dl = {")
             for plat in ("linux", "mac", "win"):
                 d = row.get("dl", {}).get(plat)
                 if d:
                     files = ", ".join(f"[{lua_str(k)}] = {lua_str(v)}"
                                       for k, v in d["files"].items())
-                    lines.append(f"      {plat} = {{ files = {{{files}}},"
+                    out.append(f"      {plat} = {{ files = {{{files}}},"
                                  f" bin = {lua_str(d['bin'])} }},")
-            lines.append("    },")
+            out.append("    },")
         elif mgr == "openvsx":
             o = row.get("openvsx", {})
-            lines.append(f"    openvsx = {{ ns = {lua_str(o.get('ns', ''))},"
+            out.append(f"    openvsx = {{ ns = {lua_str(o.get('ns', ''))},"
                          f" ext = {lua_str(o.get('ext', ''))}, version = {lua_str(o.get('version', ''))},"
                          f" file = {lua_str(o.get('file', ''))} }},")
         extras = row.get("extras") or {}
         if extras:
             parts = ", ".join(f"[{lua_str(k)}] = {lua_str(v)}" for k, v in extras.items())
-            lines.append(f"    extras = {{{parts}}},")
+            out.append(f"    extras = {{{parts}}},")
         if row.get("extra_pkgs"):
-            lines.append(f"    extra_pkgs = {lua_str_list(row['extra_pkgs'])},")
+            out.append(f"    extra_pkgs = {lua_str_list(row['extra_pkgs'])},")
         if row.get("version"):
-            lines.append(f"    version = {lua_str(row['version'])}, -- snapshot pin")
+            out.append(f"    version = {lua_str(row['version'])}, -- snapshot pin")
         if row.get("runs"):
-            lines.append("    runs = {")
+            out.append("    runs = {")
             for pub, spec in row["runs"].items():
-                lines.append(f"      [{lua_str(pub)}] = {{ kind = {lua_str(spec['kind'])},"
+                out.append(f"      [{lua_str(pub)}] = {{ kind = {lua_str(spec['kind'])},"
                              f" hint = {lua_str(spec.get('hint', ''))} }},")
-            lines.append("    },")
+            out.append("    },")
         if row.get("win_cmd"):
-            lines.append(f"    win_cmd = {lua_str(row['win_cmd'])},"
+            out.append(f"    win_cmd = {lua_str(row['win_cmd'])},"
                          f" win_remove_cmd = {lua_str(row.get('win_remove_cmd', ''))},")
-        lines.append("  },")
-    lines.append("}")
-    lines += [
+        out.append("  },")
+        out.append("  },")
+        return out
+
+    rendered = [render_row(r) for r in rows]
+
+    shard_dir = os.path.join(os.path.dirname(REGISTRY_OUT), "servers")
+    os.makedirs(shard_dir, exist_ok=True)
+    shard_names = []
+    SHARD_SIZE = 48
+    for i in range(0, len(rendered), SHARD_SIZE):
+        chunk = rendered[i:i + SHARD_SIZE]
+        first = rows[i]["id"]
+        last = rows[min(i + SHARD_SIZE, len(rows)) - 1]["id"]
+        name = f"{first}_{last}"
+        shard_names.append(name)
+        shard_lines = [
+            f"-- LSP / language-tooling package catalog shard: {first} .. {last}.",
+            "-- Generated from the mason registry. Regenerate: python3 tools/mason_import.py",
+            "-- <mason-registry-checkout>",
+            "return {",
+        ]
+        for entry in chunk:
+            shard_lines.extend(entry)
+        shard_lines.append("}")
+        with open(os.path.join(shard_dir, name + ".lua"), "w", encoding="utf-8") as f:
+            f.write("\n".join(shard_lines) + "\n")
+
+    lines = [
+        "-- LSP / language-tooling package catalog, generated from the mason registry.",
+        "-- Source: https://github.com/mason-org/mason-registry",
+        "-- Regenerate: python3 tools/mason_import.py <mason-registry-checkout>",
+        "--",
+        "-- The catalog is split into alphabetical shards under servers/ so each",
+        "-- file stays small; this module loads them and exposes the combined list.",
+        "",
+        "local M = {}",
+        "",
+        "M.entries = {}",
+        "for _, shard in ipairs({" + ", ".join(f'"{s}"' for s in shard_names) + "}) do",
+        '  local part = dofile(_G.jot_lsp_lua_root .. "/servers/" .. shard .. ".lua")',
+        "  for _, e in ipairs(part) do",
+        "    M.entries[#M.entries + 1] = e",
+        "  end",
+        "end",
         "",
         "-- Resolves a user-supplied id or alias to an entry.",
         "function M.resolve(name)",
@@ -631,7 +666,7 @@ def main():
     ]
     with open(REGISTRY_OUT, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
-    print(f"wrote {REGISTRY_OUT}: {len(rows)} entries")
+    print(f"wrote {REGISTRY_OUT}: {len(rows)} entries in {len(shard_names)} shards")
 
     # ---- attach table -----------------------------------------------------
     # Default LSP per extension: canonical ids keep priority; then a language's
