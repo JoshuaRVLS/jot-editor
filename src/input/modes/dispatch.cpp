@@ -88,6 +88,21 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     {
       return;
     }
+    if (show_right_panel)
+    {
+      // Close the right dock (git / debugger / outline / plugin panels)
+      // instead of quitting — Ctrl+Q is the natural close-panel chord and
+      // matches the panel's own q key.
+      show_right_panel = false;
+      active_right_panel_tab = RIGHT_PANEL_DEBUG;
+      active_plugin_panel.clear();
+      git_panel.pending_confirm.clear();
+      git_panel.return_after_diff = false;
+      focus_state = FOCUS_EDITOR;
+      set_message("Right panel closed");
+      needs_redraw = true;
+      return;
+    }
     if (panes.size() > 1)
     {
       close_pane();
@@ -405,6 +420,150 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
   if (show_command_palette)
   {
     handle_command_palette(ch, is_ctrl, is_shift, is_alt);
+    return;
+  }
+
+  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT && !is_ctrl && !is_alt)
+  {
+    const bool shift = is_shift || std::isupper((unsigned char)ch);
+    if (ch == 'q' || ch == 'Q' || ch == 27)
+    {
+      toggle_git_panel();
+      return;
+    }
+    if (ch == 'j' || ch == 'J' || ch == 1009 || ch == 14)
+    {
+      git_panel_move_selection(1);
+      return;
+    }
+    if (ch == 'k' || ch == 'K' || ch == 1008 || ch == 16)
+    {
+      git_panel_move_selection(-1);
+      return;
+    }
+    if (ch == ',')
+    {
+      git_panel_page(-1);
+      return;
+    }
+    if (ch == '.')
+    {
+      git_panel_page(1);
+      return;
+    }
+    if (ch == '<' || ch == 1012)
+    {
+      git_panel_jump_to_end(false);
+      return;
+    }
+    if (ch == '>' || ch == 1013)
+    {
+      git_panel_jump_to_end(true);
+      return;
+    }
+    if (ch == ' ')
+    {
+      git_panel_primary();
+      return;
+    }
+    if (ch == '\n' || ch == 13)
+    {
+      git_panel_open_diff_selected();
+      return;
+    }
+    if (ch == 'a' && !shift)
+    {
+      git_panel_stage_all();
+      return;
+    }
+    if ((ch == 'a' && shift) || ch == 'A')
+    {
+      git_panel_unstage_all();
+      return;
+    }
+    if (ch == 'c')
+    {
+      git_panel_commit_prompt();
+      return;
+    }
+    if (ch == 'd')
+    {
+      git_panel_discard_or_delete();
+      return;
+    }
+    if (ch == 's')
+    {
+      git_panel_stash_push();
+      return;
+    }
+    if (ch == 'g' && !shift)
+    {
+      git_panel_stash_pop();
+      return;
+    }
+    if (ch == 'n')
+    {
+      git_panel_new_branch_prompt();
+      return;
+    }
+    if (ch == 'm')
+    {
+      git_panel_merge_prompt();
+      return;
+    }
+    if (ch == 'f')
+    {
+      git_panel_fetch();
+      return;
+    }
+    if ((ch == 'p' && shift) || ch == 'P')
+    {
+      git_panel_push();
+      return;
+    }
+    if (ch == 'p' && !shift)
+    {
+      git_panel_pull();
+      return;
+    }
+    if (ch == 'r')
+    {
+      refresh_git_status(true);
+      git_panel_refresh();
+      return;
+    }
+    if (ch == 'y')
+    {
+      git_panel_copy();
+      return;
+    }
+    if (ch == '2')
+    {
+      git_panel_switch_view(2);
+      return;
+    }
+    if (ch == '3')
+    {
+      git_panel_switch_view(3);
+      return;
+    }
+    if (ch == '4')
+    {
+      git_panel_switch_view(4);
+      return;
+    }
+    if (ch == '5')
+    {
+      git_panel_switch_view(5);
+      return;
+    }
+    if (ch == '?')
+    {
+      set_message("Git panel: j/k move · space stage/checkout · a/A stage-all · c commit · "
+                  "d discard/delete · s stash · g pop · n new branch · m merge · "
+                  "f fetch · p/P pull/push · y copy · r refresh · 2-5 views");
+      return;
+    }
     return;
   }
 

@@ -155,7 +155,12 @@ void LuaAPI::git_unstage_all_from_lua(lua_State *L)
 
 void LuaAPI::git_commit_from_lua(lua_State *L)
 {
-  lua_pushboolean(L, editor && editor->git_commit_message(luaL_optstring(L, 1, "")));
+  if (!editor)
+  {
+    lua_pushboolean(L, false);
+    return;
+  }
+  lua_pushboolean(L, editor->git_commit_message(luaL_optstring(L, 1, "")).empty());
 }
 
 void LuaAPI::git_refresh_from_lua(lua_State *L)

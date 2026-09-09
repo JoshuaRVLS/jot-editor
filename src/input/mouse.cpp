@@ -532,6 +532,11 @@ void Editor::handle_mouse_input(int x,
     return;
   }
 
+  if (handle_git_panel_mouse(x, y, is_click, false))
+  {
+    return;
+  }
+
   if ((is_scroll_up || is_scroll_down)
       && handle_integrated_terminal_scroll(x, y, is_scroll_up, is_scroll_down))
   {
@@ -1325,6 +1330,11 @@ void Editor::handle_mouse(void *event_ptr)
 
   if ((is_click || is_click_release || is_motion)
       && handle_debugger_mouse(event->x, event->y, is_click))
+  {
+    return;
+  }
+
+  if (handle_git_panel_mouse(event->x, event->y, is_click, false))
   {
     return;
   }

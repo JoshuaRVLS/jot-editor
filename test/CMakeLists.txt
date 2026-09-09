@@ -27,6 +27,7 @@ add_executable(jot_tests
   test_lua_decorations.cpp
   test_lua_loader.cpp
   test_lua_toast.cpp
+  test_git_panel.cpp
   test_multicursor.cpp
   test_zen_mode.cpp
   test_win_probe.cpp

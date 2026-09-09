@@ -710,8 +710,13 @@ bool LuaAPI::emit_side_panel(const SidePanelView &view)
                        lua_set_int_field(L, t, "w", view.w);
                        lua_set_int_field(L, t, "h", view.h);
                        lua_set_str_field(L, t, "title", view.title);
+                       lua_set_str_field(L, t, "mode", view.mode);
                        lua_set_str_field(L, t, "header", view.header);
                        lua_set_int_field(L, t, "header_fg", view.header_fg);
+                       lua_set_str_field(L, t, "header_icon", view.header_icon);
+                       lua_set_int_field(L, t, "header_icon_fg", view.header_icon_fg);
+                       lua_set_str_field(L, t, "header_detail", view.header_detail);
+                       lua_set_int_field(L, t, "header_detail_fg", view.header_detail_fg);
                        lua_set_str_field(L, t, "note", view.note);
                        lua_set_int_field(L, t, "note_fg", view.note_fg);
                        lua_set_str_field(L, t, "error", view.error);
@@ -740,6 +745,10 @@ bool LuaAPI::emit_side_panel(const SidePanelView &view)
                          lua_set_bool_field(L, ri, "bold", r.bold);
                          lua_set_bool_field(L, ri, "selected", r.selected);
                          lua_set_str_field(L, ri, "kind", r.kind);
+                         lua_set_str_field(L, ri, "icon", r.icon);
+                         lua_set_int_field(L, ri, "icon_fg", r.icon_fg);
+                         lua_set_int_field(L, ri, "lead_fg", r.lead_fg);
+                         lua_set_int_field(L, ri, "lead_len", r.lead_len);
                          lua_rawseti(L, arr, (lua_Integer)i + 1);
                        }
                        lua_setfield(L, t, "rows");

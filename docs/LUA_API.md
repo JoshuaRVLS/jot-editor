@@ -381,7 +381,8 @@ panels can match the editor pixel-for-pixel:
 
 - `window` — `width`, `height`, `status_height`, `tab_height`
 - `sidebar` / `minimap` / `terminal` / `right_panel` — `visible` plus
-  `width`/`height` where applicable
+  `width`/`height` where applicable; `right_panel.width` is the rendered
+  (screen-clamped) width, not the configured one
 - `pane` — `x`, `y`, `width`, `height`, `buffer` (1-based), `active`
 - `buffer` — `line_count`, `first_line`/`last_line` (visible range),
   `visible_lines`, `cursor_line`, `cursor_col`, `scroll_x`

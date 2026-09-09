@@ -131,6 +131,7 @@ enum RightPanelTab
 {
   RIGHT_PANEL_DEBUG,
   RIGHT_PANEL_GIT_DIFF,
+  RIGHT_PANEL_GIT,
   RIGHT_PANEL_SYMBOLS,
   RIGHT_PANEL_PLUGIN
 };
@@ -386,7 +387,8 @@ struct FileTabLayout
 enum EditorFocus
 {
   FOCUS_EDITOR,
-  FOCUS_SIDEBAR
+  FOCUS_SIDEBAR,
+  FOCUS_RIGHT_PANEL
 };
 
 #endif

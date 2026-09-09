@@ -6,6 +6,7 @@
 
 #include "config.h"
 #include "discord_rpc.h"
+#include "jot/workspace/git_panel_models.h"
 #include "editor_models.h"
 #include "event_loop.h"
 #include "imageviewer.h"
@@ -180,6 +181,8 @@ struct EditorState
   int tab_scroll_index;
   int preview_buffer_index;
   long long last_sidebar_click_ms;
+  long long last_git_panel_click_ms = 0;
+  int last_git_panel_click_row = -1;
   int last_sidebar_click_row;
   long long last_tab_click_ms;
   int last_tab_clicked_index;
@@ -306,6 +309,8 @@ struct EditorState
   std::map<char, GlobalMark> global_marks; // global marks ('A'-'Z'), cross-file
   std::string git_root;
   std::string git_branch;
+  int git_ahead = 0;  // commits ahead of the upstream branch
+  int git_behind = 0; // commits behind the upstream branch
   int git_dirty_count;
   int git_staged_count;
   int git_unstaged_count;
@@ -316,6 +321,9 @@ struct EditorState
   std::atomic<bool> git_refresh_pending_{false};
   std::unordered_map<std::string, std::string> git_file_status;
   long long git_last_refresh_ms;
+  // Git panel (right dock): lazygit-style files / branches / commits / stash
+  // views. State and row lists live here so render + input share one model.
+  jot_git_panel::State git_panel;
   bool auto_save_enabled;
   int auto_save_interval_ms;
   long long last_auto_save_ms;

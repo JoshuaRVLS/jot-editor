@@ -170,10 +170,49 @@ cell preview as the fallback. Configure with `image_viewer_backend = auto`
 
 ### Git
 
-Status summaries, diffs (staged and unstaged), recent log, and line blame are
-one command away, as are staging/unstaging individual files or everything and
-committing with a message. Git operations are intentionally local-only:
-push/pull/fetch/reset/checkout are not exposed as editor commands.
+**Git panel** (`:gitpanel`) — a native, lazygit-style git client in the
+right dock with four views (switch with `2`/`3`/`4`/`5`, matching lazygit's
+panel numbers):
+
+- **2 Files** — conflicts, staged, unstaged and untracked sections with
+  status-colored rows; `space` stages/unstages the selected file, `a`/`A`
+  stage/unstage everything, `Enter` opens the file's diff (double-click
+  too), `c` opens the commit-message prompt, `d` discards the file's
+  working-tree changes (press twice to confirm), `s` stashes everything
+  (including untracked), `y` copies the path.
+- **3 Branches** — `space` checks out, `n` creates a new branch (prompt),
+  `m` merges the selected branch into the current one, `d` deletes it
+  (twice to confirm).
+- **4 Commits** — recent history with hash/date/subject; `space` checks out
+  a commit (detached HEAD), `y` copies the hash.
+- **5 Stash** — `space` applies, `g` pops, `d` drops (twice to confirm).
+
+Global panel keys: `j`/`k` (or arrows) move, `,`/`.` page, `<`/`>` (or
+Home/End) jump to top/bottom, `f` fetches, `p`/`P` pull/push, `r`
+refreshes, `?` lists the keys, `q`/`Esc` closes. The branch header shows
+upstream drift (`↑1 ↓2`) and change counts; the panel auto-refreshes after
+every action.
+
+The diff view (`Enter` on a file, or `:gitdiff`/`:gitdiffstaged`) shows
+the file's per-language icon and right-aligned change stats in the header
+(`+N -M · L lines`), then the diff body with green/red tinted added and
+deleted lines, accent bold hunk headers, dim meta lines, `j`/`k` scrolling
+and a key-hint footer. Commit messages and branch names are typed in the command
+palette, which the panel opens pre-filled (`:gitcommit <message>`,
+`:gitcheckout -b <name>`, `:gitmerge <branch>`).
+
+Status summaries, diffs (staged and unstaged), recent log, and line blame
+stay one command away (`:gitstatus` `:gitdiff` `:gitdiffstaged` `:gitlog`
+`:gitblame`), as do staging (`:gitstage` `:gitunstage` `:gitstageall`
+`:gitunstageall`) and committing (`:gitcommit <message>`).
+
+For the full lazygit experience on top, `:lazygit` opens the
+[lazygit](https://github.com/jesseduffield/lazygit) TUI in an integrated
+terminal tab rooted at the workspace (or the current file's directory). It
+is an external binary, not bundled — install it with `brew install lazygit`,
+`apt install lazygit`, or the script on lazygit's README. Running `:lazygit`
+again re-focuses the open tab; quit lazygit with `q` to return to the
+editor.
 
 ### UI and mouse
 
@@ -250,6 +289,7 @@ API.
 | `Ctrl+Shift+F` | Replace in selection, or project-wide search |
 | `Ctrl+Shift+M` | Diagnostics picker |
 | `Ctrl+Shift+O` | Document symbol picker |
+| `:gitpanel` | Open the git panel (2-5 switch views) |
 | `:outline` | Persistent outline panel |
 | `Ctrl+M` or `Alt+M` | Toggle minimap |
 | `Ctrl+T` or `Alt+T` | Theme chooser |
@@ -321,7 +361,8 @@ Open the palette with `Ctrl+P` and type an ex-style command.
 `:debugattach <pid>` `:debugpanel` `:debugstop|restart|continue|pause`
 `:debugstep|next|out` `:debugthreads` `:debugmemory` `:debugdisasm`
 
-**Git:** `:gitstatus` `:gitdiff` `:gitdiffstaged` `:gitstage` `:gitunstage`
+**Git:** `:gitpanel` `:gitcheckout` `:gitmerge` `:lazygit` `:gitstatus`
+`:gitdiff` `:gitdiffstaged` `:gitstage` `:gitunstage`
 `:gitstageall` `:gitunstageall` `:gitcommit <msg>` `:gitlog` `:gitblame`
 `:gitrefresh`
 

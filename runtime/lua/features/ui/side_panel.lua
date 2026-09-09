@@ -47,12 +47,15 @@ local function side_panel(p)
     }
   end
 
-  -- Section header: accent bold label with a dim middle-dot filler, e.g.
-  -- "Variables ············".
-  local function section(label)
+  -- Section header: bold label with a dim middle-dot filler, e.g.
+  -- "Variables ············". `fg` defaults to accent; the git panel passes
+  -- per-section colors (conflict red, staged green, unstaged yellow,
+  -- untracked gray) with their icon glyph baked into the label.
+  local function section(label, fg)
+    fg = fg or accent
     local fill = string.rep("\xc2\xb7", math.max(0, inner_w - cell_len(label) - 2))
-    add(label .. " " .. fill, accent, bg, true, {
-      { start = 0, len = 65535, fg = accent, bg = bg, bold = true },
+    add(label .. " " .. fill, fg, bg, true, {
+      { start = 0, len = 65535, fg = fg, bg = bg, bold = true },
       { start = cell_len(label) + 1, len = #fill, fg = comment, bg = bg, bold = false },
     })
   end
@@ -165,10 +168,48 @@ local function side_panel(p)
     end
   end
 
+  local mode = p.mode or ""
+  local is_debugger = mode == "debugger"
+  local is_git = mode == "git"
+  local is_git_diff = mode == "git_diff"
+
   -- Header row: the debugger passes "adapter  program" (adapter accent,
-  -- program dimmed); other panels pass plain header text (bold).
+  -- program dimmed); the git diff panel gets a file icon (brand color) +
+  -- path (status color) with the +N -M stats right-aligned; other panels
+  -- pass plain header text (bold).
   if p.header and p.header ~= "" then
-    if p.tabs and #p.tabs > 0 then
+    if is_git_diff then
+      local icon = p.header_icon or ""
+      local icon_fg = (p.header_icon_fg and p.header_icon_fg >= 0) and p.header_icon_fg
+                      or (p.header_fg or accent)
+      local detail = p.header_detail or ""
+      local detail_w = 0
+      if detail ~= "" then
+        detail_w = math.min(cell_len(detail), math.max(1, inner_w - 6))
+      end
+      local icon_w = 0
+      if icon ~= "" then
+        icon_w = cell_len(icon) + 1
+      end
+      local name_w = math.max(1, inner_w - icon_w - detail_w - 1)
+      local name = trunc_cells(p.header or "", name_w)
+      local gap = math.max(0, inner_w - icon_w - cell_len(name) - detail_w - 1)
+      local line = icon .. " " .. name .. string.rep(" ", gap) .. detail
+      local spans = {
+        { start = 0, len = 65535, fg = p.header_fg or 6, bg = bg, bold = true },
+        { start = 0, len = #icon, fg = icon_fg, bg = bg, bold = true },
+      }
+      if detail ~= "" then
+        spans[#spans + 1] = {
+          start = inner_w - detail_w,
+          len = #detail,
+          fg = p.header_detail_fg or comment,
+          bg = bg,
+          bold = false,
+        }
+      end
+      add(line, p.header_fg or 6, bg, true, spans)
+    elseif p.tabs and #p.tabs > 0 then
       local sp = p.header:find("  ", 1, true)
       if sp then
         local adapter = p.header:sub(1, sp - 1)
@@ -191,12 +232,89 @@ local function side_panel(p)
     add(p.note, p.note_fg or comment, bg, false)
   end
 
-  local is_debugger = p.tabs and #p.tabs > 0
+  -- Generic row: selection bar, native colors, right-aligned detail (used
+  -- by generic panels and the git panel's file/commit/branch/stash rows).
+  -- Optional icon (Nerd Fonts glyph with its own color) and a colored lead
+  -- segment (commit hash / stash ref) get span treatment.
+  local function generic_row(r)
+    local line_w = math.min(math.floor(inner_w / 4), 7)
+    local sel = r.selected
+    local f = sel and selection_fg or (r.fg or fg)
+    local b = sel and selection_bg or (r.bg or bg)
+    local icon = r.icon or ""
+    local icon_fg = (r.icon_fg and r.icon_fg >= 0) and r.icon_fg or f
+    local lead_fg = r.lead_fg or -1
+    local lead_len = r.lead_len or 0
+    local text = r.text or ""
+    if icon ~= "" then
+      text = icon .. " " .. text
+    end
+    local lead_at = icon ~= "" and (#icon + 1) or 0
+    local function base_spans(limit)
+      local out = {
+        { start = 0, len = 65535, fg = f, bg = b, bold = sel },
+      }
+      if icon ~= "" then
+        out[#out + 1] = { start = 0, len = #icon, fg = icon_fg, bg = b, bold = sel }
+      end
+      if lead_fg >= 0 and lead_len > 0 and lead_at < limit then
+        out[#out + 1] = {
+          start = lead_at,
+          len = math.min(lead_len, limit - lead_at),
+          fg = lead_fg,
+          bg = b,
+          bold = sel,
+        }
+      end
+      return out
+    end
+    local detail = r.detail or ""
+    if detail ~= "" then
+      local name_w = math.max(1, inner_w - line_w)
+      local name = trunc_cells(text, name_w)
+      local gap = math.max(0, name_w - cell_len(name))
+      local line = name .. string.rep(" ", gap) .. trunc_cells(detail, line_w)
+      local spans = base_spans(#name)
+      spans[#spans + 1] = { start = #name + gap, len = #line - #name - gap,
+                            fg = sel and selection_fg or comment, bg = b, bold = false }
+      rows[#rows + 1] = {
+        text = line,
+        fg = f,
+        bg = b,
+        spans = spans,
+      }
+    else
+      rows[#rows + 1] = {
+        text = trunc_cells(text, inner_w),
+        fg = f,
+        bg = b,
+        spans = base_spans(#trunc_cells(text, inner_w)),
+      }
+    end
+  end
+
   for _, r in ipairs(p.rows or {}) do
     if #rows >= inner_h then
       break
     end
-    if is_debugger and r.kind then
+    if is_git then
+      if r.kind == "git_section" then
+        section(r.text or "", r.fg or accent)
+      elseif r.kind == "git_hint" then
+        add(r.text, r.fg or fg, r.bg or bg, true)
+      else
+        generic_row(r)
+      end
+    elseif is_git_diff then
+      -- Hunk headers get the accent + bold treatment; added/deleted/meta/
+      -- context rows keep their native colors (the tinted add/del
+      -- backgrounds come through generic_row's per-row bg).
+      if r.kind == "diff_hunk" then
+        add(r.text or "", r.fg or accent, r.bg or bg, true)
+      else
+        generic_row(r)
+      end
+    elseif is_debugger and r.kind then
       local kind = r.kind
       if kind == "section" then
         section(r.text or "")
@@ -247,38 +365,7 @@ local function side_panel(p)
         add(r.text, r.fg or fg, r.bg or bg, r.bold)
       end
     else
-      -- Generic panels: selection rows get the selection bar; outline rows
-      -- carry a right-aligned line number detail.
-      local line_w = math.min(math.floor(inner_w / 4), 7)
-      local sel = r.selected
-      local f = sel and selection_fg or (r.fg or fg)
-      local b = sel and selection_bg or (r.bg or bg)
-      local text = r.text or ""
-      local detail = r.detail or ""
-      if detail ~= "" then
-        local name_w = math.max(1, inner_w - line_w)
-        local name = trunc_cells(text, name_w)
-        local gap = math.max(0, name_w - cell_len(name))
-        local line = name .. string.rep(" ", gap) .. trunc_cells(detail, line_w)
-        rows[#rows + 1] = {
-          text = line,
-          fg = f,
-          bg = b,
-          spans = {
-            { start = 0, len = 65535, fg = f, bg = b, bold = sel },
-            { start = 0, len = #name, fg = f, bg = b, bold = sel },
-            { start = #name + gap, len = #line - #name - gap, fg = sel and selection_fg or comment,
-              bg = b, bold = false },
-          },
-        }
-      else
-        rows[#rows + 1] = {
-          text = trunc_cells(text, inner_w),
-          fg = f,
-          bg = b,
-          spans = { { start = 0, len = 65535, fg = f, bg = b, bold = r.bold } },
-        }
-      end
+      generic_row(r)
     end
   end
 
@@ -288,10 +375,14 @@ local function side_panel(p)
     add(p.error, colors.error or 15, colors.status_error_bg or 1, true)
   end
 
-  -- Key-hint footer for live debug sessions.
+  -- Key-hint footers for the live panels.
   local footer = nil
   if is_debugger then
     footer = "F5 cont  F6 thr  F7/F8 frame  F9 bp  F10 over  F11 in"
+  elseif is_git then
+    footer = "space stage/checkout  a/A all  c commit  d discard  s stash  y copy  r refresh"
+  elseif is_git_diff then
+    footer = "q close  j/k scroll  r refresh"
   end
 
   return present_panel("side_panel",

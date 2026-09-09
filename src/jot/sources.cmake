@@ -24,6 +24,8 @@ set(JOT_ENGINE_SOURCES
   jot/surfaces/quick_pick.cpp
   jot/surfaces/theme.cpp
   jot/workspace/git.cpp
+  jot/workspace/git_client.cpp
+  jot/workspace/git_panel.cpp
   jot/workspace/tasks.cpp
   jot/workspace/workspace.cpp
 )

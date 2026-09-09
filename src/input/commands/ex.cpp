@@ -3,6 +3,7 @@
 #include "editor.h"
 #include "host_api.h"
 #include "jot/lua/api.h"
+#include "jot/workspace/git_run.h"
 
 #include <algorithm>
 #include <cctype>
@@ -1106,6 +1107,10 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
       set_message("Git: not a repository");
     }
   }
+  else if (lcmd == "lazygit")
+  {
+    open_git_client();
+  }
   else if (lcmd == "gitstatus")
   {
     refresh_git_status(true);
@@ -1234,15 +1239,88 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
       {
         set_message("Usage: :gitcommit <message>");
       }
-      else if (git_commit_message(message))
+      else
       {
-        set_message("Git commit created");
+        const std::string err = git_commit_message(message);
+        if (err.empty())
+        {
+          set_message("Git commit created");
+        }
+        else
+        {
+          set_message("Git commit failed: " + err);
+        }
+      }
+      git_panel_refresh();
+    }
+  }
+  else if (lcmd == "gitpanel")
+  {
+    toggle_git_panel();
+  }
+  else if (lcmd == "gitcheckout")
+  {
+    std::string a = trim_copy(arg);
+    if (a.empty())
+    {
+      set_message("Usage: :gitcheckout <branch|hash> | -b <new-branch>");
+    }
+    else if (git_root.empty())
+    {
+      set_message("Git: not a repository");
+    }
+    else
+    {
+      std::string cmd = "checkout ";
+      if (a.rfind("-b ", 0) == 0)
+      {
+        std::string name = trim_copy(a.substr(3));
+        if (name.empty())
+        {
+          set_message("Usage: :gitcheckout -b <new-branch>");
+        }
+        else if (jot_git::run_ok(git_root, "checkout -b " + jot_git::shell_quote(name)))
+        {
+          set_message("Created and checked out: " + name);
+        }
+        else
+        {
+          set_message("Branch creation failed");
+        }
+      }
+      else if (jot_git::run_ok(git_root, cmd + jot_git::shell_quote(a)))
+      {
+        set_message("Checked out: " + a);
       }
       else
       {
-        set_message("Git commit failed");
+        set_message("Checkout failed: " + a);
       }
+      refresh_git_status(true);
+      git_panel_refresh();
     }
+  }
+  else if (lcmd == "gitmerge")
+  {
+    std::string a = trim_copy(arg);
+    if (a.empty())
+    {
+      set_message("Usage: :gitmerge <branch>");
+    }
+    else if (git_root.empty())
+    {
+      set_message("Git: not a repository");
+    }
+    else if (jot_git::run_ok(git_root, "merge --no-edit " + jot_git::shell_quote(a)))
+    {
+      set_message("Merged " + a + " into " + git_branch);
+    }
+    else
+    {
+      set_message("Merge failed — conflicts? (resolve, then :gitmerge --continue)");
+    }
+    refresh_git_status(true);
+    git_panel_refresh();
   }
   else if (lcmd == "gitdiff")
   {

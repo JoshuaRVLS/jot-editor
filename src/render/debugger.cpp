@@ -69,6 +69,7 @@ void Editor::render_debugger_panel()
   // Hand the model to a Lua UI handler when one is registered; it owns the
   // paint. Native fallback below stays byte-identical.
   SidePanelView view;
+  view.mode = "debugger";
   view.x = panel_x;
   view.y = panel_y;
   view.w = panel_w;

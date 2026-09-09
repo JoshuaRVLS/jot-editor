@@ -182,6 +182,7 @@ private:
   void render_integrated_terminal();
   void render_debugger_panel();
   void render_git_diff_panel();
+  void render_git_panel();
   void render_outline_panel();
   bool outline_active() const
   {
@@ -617,7 +618,36 @@ private:
   bool git_unstage_path(const std::string &path);
   bool git_stage_all();
   bool git_unstage_all();
-  bool git_commit_message(const std::string &message);
+  // Empty on success, otherwise git's error (last line of stderr).
+  std::string git_commit_message(const std::string &message);
+  // Opens the lazygit TUI in an integrated terminal tab rooted at the
+  // workspace (or the current file's directory). Reuses an existing lazygit
+  // tab when one is still running.
+  void open_git_client();
+  // Git panel (right dock): lazygit-style files / branches / commits / stash
+  // views driven by the jot_git_panel::State model (see git_panel_models.h).
+  void toggle_git_panel();
+  void git_panel_refresh();
+  void git_panel_switch_view(int view_number);
+  void git_panel_move_selection(int delta);
+  void git_panel_page(int delta);
+  void git_panel_jump_to_end(bool bottom);
+  void git_panel_primary(); // space: stage/unstage, checkout, apply stash
+  void git_panel_stage_all();
+  void git_panel_unstage_all();
+  void git_panel_open_diff_selected();
+  void git_panel_commit_prompt();
+  void git_panel_discard_or_delete(); // d: discard / delete branch / drop stash
+  void git_panel_stash_push();
+  void git_panel_stash_pop();
+  void git_panel_new_branch_prompt();
+  void git_panel_merge_prompt();
+  void git_panel_fetch();
+  void git_panel_push();
+  void git_panel_pull();
+  void git_panel_copy();
+  bool handle_git_panel_mouse(int x, int y, bool is_click, bool is_double_click);
+  void set_clipboard_text(const std::string &text);
 
   void toggle_minimap();
   void toggle_integrated_terminal();

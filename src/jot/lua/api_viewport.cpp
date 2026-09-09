@@ -44,7 +44,9 @@ void LuaAPI::push_viewport_info(lua_State *L)
   lua_setfield(L, -2, "terminal");
   lua_newtable(L);
   lua_push_bool_field(L, "visible", editor->show_right_panel);
-  lua_push_int_field(L, "width", editor->right_panel_width);
+  // The rendered width (clamped to the screen), not the configured one —
+  // the toast stack and any other Lua UI needs the real panel edge.
+  lua_push_int_field(L, "width", editor->effective_right_panel_width());
   lua_setfield(L, -2, "right_panel");
   lua_push_bool_field(L, "zen", editor->zen_mode);
   if (!editor->panes.empty())

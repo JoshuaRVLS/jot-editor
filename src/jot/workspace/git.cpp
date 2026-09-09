@@ -4,6 +4,7 @@
 #include <array>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <sstream>
 
@@ -201,6 +202,8 @@ namespace
   {
     std::string root;
     std::string branch;
+    int ahead = 0;
+    int behind = 0;
     int dirty_count = 0;
     int staged_count = 0;
     int unstaged_count = 0;
@@ -257,6 +260,22 @@ namespace
         std::string from_status = parse_branch_name(line);
         if (!from_status.empty())
           result.branch = from_status;
+        // "## main...origin/main [ahead 1, behind 2]"
+        const size_t bracket = line.find('[');
+        if (bracket != std::string::npos)
+        {
+          const std::string info = line.substr(bracket);
+          const size_t ahead_pos = info.find("ahead ");
+          if (ahead_pos != std::string::npos)
+          {
+            result.ahead = std::atoi(info.c_str() + ahead_pos + 6);
+          }
+          const size_t behind_pos = info.find("behind ");
+          if (behind_pos != std::string::npos)
+          {
+            result.behind = std::atoi(info.c_str() + behind_pos + 7);
+          }
+        }
         continue;
       }
       if (line.size() < 3)
@@ -426,8 +445,21 @@ void Editor::close_git_diff_panel()
   git_diff_panel = GitDiffPanel();
   if (active_right_panel_tab == RIGHT_PANEL_GIT_DIFF)
   {
-    show_right_panel = false;
-    active_right_panel_tab = RIGHT_PANEL_DEBUG;
+    // Coming back from the git panel's per-file diff returns to the panel;
+    // otherwise the right dock closes entirely.
+    if (git_panel.return_after_diff)
+    {
+      git_panel.return_after_diff = false;
+      show_right_panel = true;
+      active_right_panel_tab = RIGHT_PANEL_GIT;
+      focus_state = FOCUS_RIGHT_PANEL;
+      git_panel_refresh();
+    }
+    else
+    {
+      show_right_panel = false;
+      active_right_panel_tab = RIGHT_PANEL_DEBUG;
+    }
   }
 
   needs_redraw = true;
@@ -545,19 +577,43 @@ bool Editor::git_unstage_all()
   return result.ok();
 }
 
-bool Editor::git_commit_message(const std::string &message)
+// Returns an empty string on success, or git's error (last useful line) on
+// failure so callers can tell the user why the commit did not land.
+std::string Editor::git_commit_message(const std::string &message)
 {
-  if (git_root.empty() || message.empty())
+  if (git_root.empty())
   {
-    return false;
+    return "not a repository";
   }
-  GitCommandResult result = capture_command_status("git -C " + shell_quote(git_root) + " commit -m "
-                                                   + shell_quote(message));
+  if (message.empty())
+  {
+    return "empty message";
+  }
+  const std::string base = "git -C " + shell_quote(git_root);
+
+  // Smart commit: when the index is empty, stage everything first (tracked
+  // and untracked) so `c` in the git panel works right after editing files —
+  // the same flow as `a` (stage all) then commit. A deliberate staged
+  // selection is committed as-is.
+  GitCommandResult cached = capture_command_status(base + " diff --cached --quiet");
+  if (cached.ok())
+  {
+    capture_command_status(base + " add -A");
+  }
+
+  GitCommandResult result = capture_command_status(base + " commit -m " + shell_quote(message));
   if (result.ok())
   {
     refresh_git_status(true);
+    return "";
   }
-  return result.ok();
+  std::string err = result.output;
+  const size_t nl = err.rfind('\n');
+  if (nl != std::string::npos)
+  {
+    err = err.substr(nl + 1);
+  }
+  return err.empty() ? "commit failed" : err;
 }
 
 void Editor::refresh_git_status(bool force)
@@ -634,6 +690,7 @@ void Editor::refresh_git_status(bool force)
           }
 
           const bool changed = (result.root != git_root) || (result.branch != git_branch)
+                               || (result.ahead != git_ahead) || (result.behind != git_behind)
                                || (result.dirty_count != git_dirty_count)
                                || (result.staged_count != git_staged_count)
                                || (result.unstaged_count != git_unstaged_count)
@@ -644,6 +701,8 @@ void Editor::refresh_git_status(bool force)
                                || (result.file_status != git_file_status);
           git_root = std::move(result.root);
           git_branch = std::move(result.branch);
+          git_ahead = result.ahead;
+          git_behind = result.behind;
           git_dirty_count = result.dirty_count;
           git_staged_count = result.staged_count;
           git_unstaged_count = result.unstaged_count;
@@ -656,6 +715,11 @@ void Editor::refresh_git_status(bool force)
           {
             invalidate_sidebar_git_cache();
             needs_redraw = true;
+          }
+          // Keep an open git panel in step with the async status result.
+          if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT)
+          {
+            git_panel_refresh();
           }
           if (lua_api)
             lua_api->emit_git_refreshed();
@@ -681,6 +745,7 @@ void Editor::refresh_git_status(bool force)
 
     const bool changed =
         (result.root != git_root) || (result.branch != git_branch)
+        || (result.ahead != git_ahead) || (result.behind != git_behind)
         || (result.dirty_count != git_dirty_count) || (result.staged_count != git_staged_count)
         || (result.unstaged_count != git_unstaged_count)
         || (result.untracked_count != git_untracked_count)
@@ -689,6 +754,8 @@ void Editor::refresh_git_status(bool force)
         || (result.conflict_count != git_conflict_count) || (result.file_status != git_file_status);
     git_root = std::move(result.root);
     git_branch = std::move(result.branch);
+    git_ahead = result.ahead;
+    git_behind = result.behind;
     git_dirty_count = result.dirty_count;
     git_staged_count = result.staged_count;
     git_unstaged_count = result.unstaged_count;
@@ -701,6 +768,11 @@ void Editor::refresh_git_status(bool force)
     {
       invalidate_sidebar_git_cache();
       needs_redraw = true;
+    }
+    // Keep an open git panel in step with the async status result.
+    if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT)
+    {
+      git_panel_refresh();
     }
   }
 }

@@ -198,15 +198,28 @@ local function wrap_text(text, width)
   return lines
 end
 
--- Where the toast sits: top-right, stacked below its predecessors.
+-- Where the toast sits: top-right, stacked below its predecessors. When the
+-- right panel (git / debugger / outline dock) is visible the stack shifts
+-- left of it, so toasts never hide the panel's top rows — a panel with few
+-- rows (e.g. the git branches view) would otherwise look empty while the
+-- toast is up.
 local function layout_toast(t)
   local ww, wh = window_size()
   local margin = math.max(1, cfg_num("toast.margin", 1))
   local gap = math.max(0, cfg_num("toast.gap", 0))
   local max_w = math.max(20, cfg_num("toast.max_width", 56))
 
+  -- Right edge the toast stack may touch: the window edge, or the left edge
+  -- of the right panel when it is visible.
+  local right_edge = ww
+  local ok, info = pcall(function() return jot.viewport.info() end)
+  if ok and type(info) == "table" and type(info.right_panel) == "table"
+     and info.right_panel.visible and tonumber(info.right_panel.width or 0) > 0 then
+    right_edge = math.max(1, ww - tonumber(info.right_panel.width))
+  end
+
   t.wrapped = wrap_text(t.message, math.max(8, max_w - 4))
-  t.width = math.min(max_w, math.max(20, ww - margin * 2))
+  t.width = math.min(max_w, math.max(20, math.min(right_edge, ww) - margin * 2))
   -- Without a title the first wrapped line becomes the title row, so the
   -- painted rows are max(1, #wrapped); with a title they are 1 + #wrapped.
   -- Add the two border rows on top.
@@ -217,7 +230,7 @@ local function layout_toast(t)
     content_rows = math.max(1, #t.wrapped)
   end
   t.height = math.max(3, math.min(wh - margin, content_rows + 2))
-  t.col = math.max(0, ww - t.width - margin - 1)
+  t.col = math.max(margin, right_edge - t.width - margin - 1)
 
   local row = margin
   for _, other in ipairs(toasts) do

@@ -427,6 +427,12 @@ void Editor::copy()
   write_xclip_clipboard(clipboard);
 }
 
+void Editor::set_clipboard_text(const std::string &text)
+{
+  clipboard = text;
+  write_xclip_clipboard(text);
+}
+
 void Editor::cut()
 {
   auto &buf = get_buffer();

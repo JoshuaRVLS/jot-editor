@@ -282,6 +282,7 @@ void Editor::render()
     render_lsp_signature();
     render_integrated_terminal();
     render_debugger_panel();
+    render_git_panel();
     render_git_diff_panel();
     render_outline_panel();
     render_plugin_panel();
@@ -338,6 +339,7 @@ void Editor::render()
       render_lsp_signature();
       render_integrated_terminal();
       render_debugger_panel();
+      render_git_panel();
       render_git_diff_panel();
       render_outline_panel();
       render_plugin_panel();

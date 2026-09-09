@@ -326,6 +326,10 @@ struct SidePanelRowView
   // Debugger kinds: "section", "thread", "frame", "var", "memory",
   // "instruction", "output", "empty", "config".
   std::string kind;
+  std::string icon; // leading Nerd Fonts glyph (own color), may be empty
+  int icon_fg = -1; // icon color, -1 = use fg
+  int lead_fg = -1; // color for the first `lead_len` cells of text, -1 = none
+  int lead_len = 0;
 };
 
 struct SidePanelTabView
@@ -338,8 +342,15 @@ struct SidePanelView
 {
   int x = 0, y = 0, w = 0, h = 0; // panel rect (absolute)
   std::string title;              // kept in the float frame
+  // Panel mode for the Lua kit: "debugger", "git", "" (generic). Lets the
+  // side_panel handler pick a styling branch without sniffing tabs/rows.
+  std::string mode;
   std::string header;             // content header row (file + counts etc), may be empty
   int header_fg = 0;
+  std::string header_icon;        // leading Nerd Fonts glyph for the header, may be empty
+  int header_icon_fg = -1;        // -1 = header_fg
+  std::string header_detail;      // right-aligned header text (diff stats), may be empty
+  int header_detail_fg = 0;
   std::string note; // empty-state message, may be empty
   int note_fg = 0;
   std::string error; // bottom error line (debugger), may be empty

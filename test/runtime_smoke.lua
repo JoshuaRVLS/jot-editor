@@ -109,6 +109,13 @@ check("marks.list", function() return jot.marks.list() end)
 check("symbols.list", function() return jot.symbols.list() end)
 check("git.info", function() return jot.git.info() end)
 check("git.status", function() return jot.git.status() end)
+check("git.panel", function()
+  -- Toggle the native git panel on and off; the smoke scratch dir is not a
+  -- repository, so this exercises the empty-state path (no crash).
+  jot.git.execute("gitpanel")
+  jot.git.execute("gitpanel")
+  return true
+end)
 check("tasks.list", function() return jot.tasks.list() end)
 check("terminal.list", function() return jot.terminal.list() end)
 check("workspace.path", function() return jot.workspace.path() end)
