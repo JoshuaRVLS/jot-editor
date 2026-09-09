@@ -7,6 +7,15 @@ endif()
 
 target_link_libraries(jot PRIVATE jot_engine)
 
+# Tree-sitter headers: the engine propagates JOT_TREESITTER=1 publicly, so
+# main.cpp (via editor.hpp) includes tree_sitter/api.h and needs the same
+# include path. When the runtime came from the FetchContent fallback the
+# dirs point at the build tree; for a system/prefix install they point at
+# the installed headers.
+if(JOT_TREESITTER_ENABLED AND DEFINED TREE_SITTER_INCLUDE_DIRS)
+  target_include_directories(jot SYSTEM PRIVATE ${TREE_SITTER_INCLUDE_DIRS})
+endif()
+
 # Use a clean, portable install RPATH so the installed jot binary can find
 # runtime libraries in ${CMAKE_INSTALL_LIBDIR} relative to the binary.
 # Do NOT use INSTALL_RPATH_USE_LINK_PATH: that would bake build-time link
