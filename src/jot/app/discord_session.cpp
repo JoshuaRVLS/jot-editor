@@ -425,6 +425,52 @@ std::string Editor::discord_command(const std::string &argument)
     needs_redraw = true;
     return report("Disconnected from Discord");
   }
+  if (arg == "assets")
+  {
+    // Discord hides an image whose asset key was never uploaded, and it does
+    // not reliably report that -- the profile just shows text with no artwork.
+    // Listing the exact keys the current activity asks for is what turns that
+    // into a checklist against the developer portal.
+    const jot_discord::PresenceOptions options = discord_presence_options();
+    const jot_discord::TemplateContext ctx = discord_template_context();
+    std::vector<std::string> keys;
+    const auto add = [&keys](const std::string &key)
+    {
+      if (key.empty())
+      {
+        return;
+      }
+      for (const std::string &existing : keys)
+      {
+        if (existing == key)
+        {
+          return;
+        }
+      }
+      keys.push_back(key);
+    };
+    if (ctx.has_file)
+    {
+      add(jot_discord::resolve_file_icon(ctx.file_name, ctx.language));
+    }
+    else
+    {
+      add(options.idle_image_key);
+    }
+    add(options.app_image_key);
+    add(options.debug_image_key);
+
+    std::string list;
+    for (const std::string &key : keys)
+    {
+      list += list.empty() ? key : ", " + key;
+    }
+    const std::string app_id = config.get("discord_app_id", kDefaultAppId);
+    return report("Discord assets needed: " + list + " -- upload them at "
+                  + "discord.com/developers/applications/" + app_id + "/rich-presence/assets"
+                  + " (key = file name without .png; see "
+                    "packaging/discord-presence/ASSETS.md)");
+  }
 
   // status (also the bare ":discord"): everything needed to tell a missing
   // client apart from a rejected asset key.
@@ -444,6 +490,21 @@ std::string Editor::discord_command(const std::string &argument)
   if (!discord_rpc.last_error().empty())
   {
     text += " -- last error: " + discord_rpc.last_error();
+    // An asset rejection is the one error a user can fix themselves, and the
+    // fix is not obvious from Discord's wording.
+    const std::string lowered = [&]
+    {
+      std::string value = discord_rpc.last_error();
+      std::transform(value.begin(),
+                     value.end(),
+                     value.begin(),
+                     [](unsigned char c) { return (char)std::tolower(c); });
+      return value;
+    }();
+    if (lowered.find("asset") != std::string::npos)
+    {
+      text += " (upload it: :discord assets)";
+    }
   }
   if (!discord_pattern_error.empty())
   {

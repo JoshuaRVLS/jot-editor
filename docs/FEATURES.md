@@ -411,12 +411,13 @@ it -- the buffer stays fully visible while you type.
 `:gitrefresh`
 
 **Discord:** `:discord` (status) `:discord enable|disable|reconnect|disconnect`
-— Rich Presence showing the file, language, workspace, git branch and (when the
-remote is a browsable URL) a "View Repository" button, with idling / editing /
-debugging states and an idle timeout. On by default; every row is a template
-(see `discord_details_*` in `:settings`). Discord artwork has to be uploaded to
-your Discord application once — `packaging/discord-presence/ASSETS.md` walks
-through it.
+`:discord assets` (which artwork keys to upload) — Rich Presence showing the
+file, language, workspace, git branch and (when the remote is a browsable URL) a
+"View Repository" button, with idling / editing / debugging states and an idle
+timeout. On by default; every row is a template (see `discord_details_*` in
+`:settings`). Discord artwork has to be uploaded to your Discord application
+once — `packaging/discord-presence/ASSETS.md` walks through it, and
+`:discord assets` lists exactly which keys the current window needs.
 
 ## Configuration
 

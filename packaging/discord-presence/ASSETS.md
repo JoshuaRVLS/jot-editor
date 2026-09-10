@@ -151,9 +151,21 @@ access, but the simplest fix (and what Discord itself recommends) is the
 official download from <https://discord.com/download>.
 
 **Images are missing but the text is fine** -- the asset key was never uploaded,
-or was uploaded under a different name. Run `:discord status`: Discord reports
-`Invalid Asset (...)` and jot shows it, both there and as a red `Discord error`
-chip in the status line.
+or was uploaded under a different name. This is the most common state right
+after setting up, and Discord usually hides the image *silently* (it only
+sometimes answers `Invalid Asset`, so an empty status chip does not prove the
+keys are fine). Run `:discord assets`: it prints the exact keys the current
+window asks for, plus a direct link to the upload page. Compare that list with
+the portal's Art Assets table -- the two must match character for character
+(`cpp`, not `cpp.png`, not `CPP`).
+
+Note that Discord caches the asset list per session: run `:discord reconnect`
+after uploading.
+
+**The language icon never appears, but the jot badge does** -- the fixed keys
+(`jot`, `debug`) were uploaded and the language keys were not. Every language is
+its own asset, so they need uploading too: select all the `icons/*.png` files in
+one go (the upload dialog accepts a multi-selection) and let Discord name them.
 
 **Windows** -- do not run jot or Discord as administrator; the pipe becomes
 invisible to a non-elevated client.

@@ -35,6 +35,21 @@ trap cleanup EXIT
 mkdir -p "$WORK/runtime" "$WORK/home" "$WORK/project/src"
 printf 'fn main() {\n    println!("hi");\n}\n' > "$WORK/project/src/main.rs"
 
+# init.lua exercises the command path in the real editor: jot.execute() runs the
+# same entry point the `:` prompt uses (the leading colon selects the ex path),
+# and the sentinel written afterwards proves :discord assets completed without
+# raising. A Lua error inside the command would surface in stderr and leave the
+# marker missing.
+MARKER="$WORK/assets_cmd.marker"
+cat > "$WORK/home/init.lua" <<LUA
+jot.execute(":discord assets")
+local fh = io.open("$MARKER", "w")
+if fh then
+  fh:write("ok\n")
+  fh:close()
+end
+LUA
+
 # A socket under a scratch XDG_RUNTIME_DIR: the transport must find it there.
 FRAMES="$WORK/frames.jsonl"
 XDG_RUNTIME_DIR="$WORK/runtime" python3 "$ROOT/test/discord_fake_server.py" \
@@ -68,6 +83,13 @@ if [ ! -s "$FRAMES" ]; then
   sed -n '1,20p' "$WORK/err.log" >&2
   exit 1
 fi
+
+if [ ! -s "$MARKER" ]; then
+  echo "discord smoke: FAIL — ':discord assets' did not complete" >&2
+  sed -n '1,20p' "$WORK/err.log" >&2
+  exit 1
+fi
+echo "discord smoke: ok — ':discord assets' ran clean"
 
 HANDSHAKE_OK=$(python3 - "$FRAMES" <<'PY'
 import json, sys

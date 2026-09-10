@@ -204,6 +204,44 @@ TEST_CASE("Presence options shape the activity", "[jot]")
   REQUIRE_FALSE(unlinked.has_button);
 }
 
+TEST_CASE("Presence image keys name an asset the app must have uploaded", "[jot]")
+{
+  // Regression for the "text is there but the language icon never appears"
+  // report: the key we ask Discord for must be the plain language asset
+  // ("cpp"), because that is the name the artwork is uploaded under. A key
+  // that carries a path, an extension or a leading dot can never resolve.
+  const TemplateContext ctx = editing_context();
+  const PresenceOptions options;
+  const Activity activity = build_activity(options, PresenceState::Editing, ctx, "", 1);
+  REQUIRE(activity.large_image_key == "rust");
+  REQUIRE(activity.large_image_key.find('.') == std::string::npos);
+  REQUIRE(activity.large_image_key.find('/') == std::string::npos);
+
+  TemplateContext cpp;
+  cpp.has_file = true;
+  cpp.file_name = "main.cpp";
+  cpp.language = resolve_file_icon("main.cpp", "");
+  REQUIRE(cpp.language == "cpp");
+  const Activity cpp_activity = build_activity(options, PresenceState::Editing, cpp, "", 1);
+  REQUIRE(cpp_activity.large_image_key == "cpp");
+  REQUIRE(cpp_activity.large_image_text == "Editing a CPP file");
+
+  // Headers resolve through the language id, since the name table has no bare
+  // ".h" rule.
+  TemplateContext header;
+  header.has_file = true;
+  header.file_name = "util.h";
+  header.language = resolve_file_icon("util.h", "c");
+  REQUIRE(header.language == "c");
+  // An unknown extension still lands on a real key, never an empty one that
+  // Discord would drop.
+  TemplateContext unknown;
+  unknown.has_file = true;
+  unknown.file_name = "NOTES";
+  unknown.language = resolve_file_icon("NOTES", "");
+  REQUIRE(unknown.language == "text");
+}
+
 TEST_CASE("Presence activity serializes to valid SET_ACTIVITY JSON", "[jot]")
 {
   PresenceOptions options;

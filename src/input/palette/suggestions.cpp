@@ -42,6 +42,7 @@ namespace
         {"discord enable", "Session", "Enable Discord presence", 68},
         {"discord disable", "Session", "Disable Discord presence", 68},
         {"discord reconnect", "Session", "Reconnect to Discord", 66},
+        {"discord assets", "Session", "Which Discord artwork keys to upload", 64},
         {"resume", "Session", "Resume last workspace session", 78},
         {"find", "File", "Open file finder at path", 85},
         {"ff", "File", "Open file finder at path", 80},

@@ -85,6 +85,29 @@ TEST_CASE("Discord presence session honors workspace exclude patterns", "[jot]")
   e.config_set_for_test("discord_exclude_workspaces", "");
 }
 
+TEST_CASE("Discord status and assets report what to upload", "[jot]")
+{
+  Editor &e = probe_editor();
+  e.config_set_for_test("discord_rpc", "true");
+  e.config_set_for_test("discord_exclude_workspaces", "");
+  e.config_set_for_test("discord_app_id", "123456");
+
+  // No file open: the idling artwork plus the always-present badges.
+  const std::string idle = e.discord_command_for_test("assets");
+  REQUIRE(idle.find("jot") != std::string::npos);
+  REQUIRE(idle.find("debug") != std::string::npos);
+  REQUIRE(idle.find("123456") != std::string::npos);
+  REQUIRE(idle.find("/rich-presence/assets") != std::string::npos);
+  REQUIRE(idle.find("ASSETS.md") != std::string::npos);
+
+  // The status line reports the state and the app id, and points at the upload
+  // path when Discord complains about an asset.
+  const std::string status = e.discord_command_for_test("status");
+  REQUIRE(status.find("Discord presence:") != std::string::npos);
+  REQUIRE(status.find("app id 123456") != std::string::npos);
+  REQUIRE(status.find(":discord assets") == std::string::npos); // no asset error yet
+}
+
 TEST_CASE("Discord presence session clears and restores across idle periods", "[jot]")
 {
   Editor &e = probe_editor();
