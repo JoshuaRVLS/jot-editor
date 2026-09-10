@@ -71,6 +71,26 @@ struct QuickPickView
   int x = 0, y = 0, w = 0, h = 0;
 };
 
+struct SettingsItemView
+{
+  std::string label;
+  std::string value;
+  // "bool" | "int" | "string" (inferred like the native menu).
+  std::string type;
+  bool selected = false;
+  bool editing = false;
+  std::string edit_input;
+};
+
+struct SettingsView
+{
+  int x = 0, y = 0, w = 0, h = 0; // panel rect (absolute)
+  int selected = 0;               // absolute index into the full list
+  int scroll = 0;                 // first visible entry
+  int all_count = 0;
+  std::vector<SettingsItemView> items; // windowed to the visible rows
+};
+
 struct PopupView
 {
   std::string title;
@@ -711,6 +731,7 @@ public:
   bool emit_lua_ui_close(const std::string &name);
   bool emit_command_palette(const PaletteView &view);
   bool emit_quick_pick(const QuickPickView &view);
+  bool emit_settings(const SettingsView &view);
   bool emit_popup(const PopupView &view);
   bool emit_prompt(const std::string &name, const PromptView &view);
   bool emit_tree_sitter_status(const TsStatusView &view);

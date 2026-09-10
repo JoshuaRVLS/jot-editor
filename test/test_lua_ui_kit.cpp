@@ -38,6 +38,7 @@ namespace
     std::string last_title;
     std::string last_footer;
     int lines_count = 0;
+    std::vector<std::string> lines; // every body row as rendered
     std::string last_row1; // first body row as rendered (status line text)
     int spans_total = 0; // sum of span lens across set_spans calls
     // Every fg passed through set_spans in order (used to verify that a
@@ -82,6 +83,17 @@ namespace
       ++n;
     }
     g.lines_count = n;
+    g.lines.clear();
+    g.lines.reserve((size_t)n);
+    for (int i = 1; i <= n; i++)
+    {
+      lua_rawgeti(L, 5, i);
+      if (!lua_isnil(L, -1) && lua_isstring(L, -1))
+      {
+        g.lines.push_back(lua_tostring(L, -1));
+      }
+      lua_pop(L, 1);
+    }
     lua_rawgeti(L, 5, 1);
     if (!lua_isnil(L, -1) && lua_isstring(L, -1))
     {
@@ -277,7 +289,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   const std::string path = std::string(JOT_LUA_SOURCE_DIR) + "/features/ui.lua";
   REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
-  REQUIRE(lua_istable(L, 1));  REQUIRE( g.handler_count == 18 );
+  REQUIRE(lua_istable(L, 1));  REQUIRE( g.handler_count == 19 );
   bool has_palette = false, has_quick_pick = false, has_popup = false;
   bool has_save = false, has_quit = false, has_ts = false;
   bool has_lsp = false, has_lsp_status = false, has_telescope = false;
@@ -417,6 +429,74 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);
 
+  // --- settings menu ---
+  push_module_field(L, 1, "settings");
+  push_box(L, 20, 6, 96, 18);
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "selected");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "scroll");
+  lua_pushinteger(L, 34);
+  lua_setfield(L, -2, "all_count");
+  lua_newtable(L); // items (visible window)
+  lua_newtable(L); // row 1: bool, plain
+  lua_pushstring(L, "Auto save");
+  lua_setfield(L, -2, "label");
+  lua_pushstring(L, "on");
+  lua_setfield(L, -2, "value");
+  lua_pushstring(L, "bool");
+  lua_setfield(L, -2, "type");
+  lua_pushboolean(L, false);
+  lua_setfield(L, -2, "selected");
+  lua_pushboolean(L, false);
+  lua_setfield(L, -2, "editing");
+  lua_rawseti(L, -2, 1);
+  lua_newtable(L); // row 2: int, selected + editing
+  lua_pushstring(L, "Tab size");
+  lua_setfield(L, -2, "label");
+  lua_pushstring(L, "4");
+  lua_setfield(L, -2, "value");
+  lua_pushstring(L, "int");
+  lua_setfield(L, -2, "type");
+  lua_pushboolean(L, true);
+  lua_setfield(L, -2, "selected");
+  lua_pushboolean(L, true);
+  lua_setfield(L, -2, "editing");
+  lua_pushstring(L, "8");
+  lua_setfield(L, -2, "edit_input");
+  lua_rawseti(L, -2, 2);
+  lua_setfield(L, -2, "items");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.open_count == 3);
+  REQUIRE(g.last_width == 96);
+  REQUIRE(g.last_height == 18);
+  REQUIRE(g.last_border != "none"); // modal panel: bordered float
+  REQUIRE(g.last_title.find("Settings") != std::string::npos);
+  REQUIRE(g.last_title.find("34 keys") != std::string::npos);
+  REQUIRE(g.last_footer.find("Enter") != std::string::npos);
+  REQUIRE(g.last_footer.find("Esc") != std::string::npos);
+  // Divider + 2 entry rows: the selected bool shows "on", the editing
+  // row shows its " > 8" input prompt.
+  REQUIRE(g.lines_count >= 3);
+  REQUIRE(g.last_row1.find("─") != std::string::npos);
+  bool saw_edit_input = false;
+  for (int i = 0; i < g.lines_count; i++)
+  {
+    if (g.lines[i].find("> 8") != std::string::npos)
+    {
+      saw_edit_input = true;
+    }
+  }
+  REQUIRE(saw_edit_input);
+
+  push_module_field(L, 1, "settings");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+  REQUIRE(g.close_count >= 2); // quick pick + settings closed
+
   // --- popup with scrolling ---
   push_module_field(L, 1, "popup");
   push_box(L, 30, 8, 50, 8);
@@ -434,7 +514,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 3);
+  REQUIRE(g.open_count == 4);
   REQUIRE(g.lines_count == 6);        // h-2 rows windowed from scroll=2
   REQUIRE(g.last_footer == "3-8/10"); // scroll+1 .. scroll+inner_h
   REQUIRE(g.last_title.find("Help") != std::string::npos);
@@ -452,7 +532,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 4);
+  REQUIRE(g.open_count == 5);
   REQUIRE(g.lines_count == 2);
 
   push_module_field(L, 1, "save_prompt");
@@ -465,14 +545,14 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 5);
+  REQUIRE(g.open_count == 6);
   REQUIRE(g.lines_count == 1);
 
   push_module_field(L, 1, "quit_prompt");
   lua_pushnil(L);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);
-  REQUIRE(g.close_count == 5);
+  REQUIRE(g.close_count == 6);
 
   // --- tree-sitter status modal ---
   push_module_field(L, 1, "tree_sitter_status");
@@ -502,7 +582,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 6);
+  REQUIRE(g.open_count == 7);
   REQUIRE(g.last_title.find("Tree-sitter") != std::string::npos);
   REQUIRE(g.lines_count == 14); // h-2 padded rows
   REQUIRE(g.last_footer.find("Up/Down scroll") != std::string::npos);
@@ -558,7 +638,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 7);
+  REQUIRE(g.open_count == 8);
   REQUIRE(g.last_title.find("LSP Manager") != std::string::npos);
   REQUIRE(g.last_footer == "1 servers");
   REQUIRE(g.lines_count == 10);
@@ -655,7 +735,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 8);
+  REQUIRE(g.open_count == 9);
   REQUIRE(g.lines_count == 16);     // h-2 body rows
   REQUIRE(g.set_cursor_count == 1); // query focus caret
   REQUIRE(g.last_cursor_y == 2);
@@ -1115,7 +1195,7 @@ TEST_CASE("Embedded Lua UI kit registers every handler from the binary copy")
   REQUIRE(luaL_loadbuffer(L, reinterpret_cast<const char *>(emb), emb_size, "embedded ui.lua")
           == LUA_OK);
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
-  REQUIRE(lua_istable(L, 1));  REQUIRE( g.handler_count == 18 );
+  REQUIRE(lua_istable(L, 1));  REQUIRE( g.handler_count == 19 );
 
   lua_close(L);
 }

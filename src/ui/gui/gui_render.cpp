@@ -86,7 +86,11 @@ void UIGui::render()
 
   // Modal scrim: a full-window black quad whose alpha eases toward
   // kDimAlpha while any modal is up (dim_rect records it during the
-  // editor's frame paint). Painted over the content and under the floats.
+  // editor's frame paint). The quad itself draws inside
+  // paint_float_overlays, between the background float layer (sidebar,
+  // status line, toasts -- dimmed) and the modal surface's own panel
+  // (quick pick, settings, ... -- bright on top), matching the terminal's
+  // cell-dimming order.
   const float dim_target = dim_active_ ? kDimAlpha : 0.0f;
   if (std::fabs(dim_alpha_ - dim_target) > 0.004f)
   {
@@ -101,24 +105,6 @@ void UIGui::render()
   {
     dim_alpha_ = dim_target;
   }
-  if (dim_alpha_ > 0.003f)
-  {
-    begin_batch();
-    push_quad(0.0f,
-              0.0f,
-              (float)width * cell_w_,
-              (float)height * cell_h_,
-              0,
-              0,
-              1,
-              1,
-              0.0f,
-              0.0f,
-              0.0f,
-              dim_alpha_);
-    flush_tex(program_, white_tex_);
-    end_batch();
-  }
   dim_active_ = false;
 
   paint_float_overlays(dt);
@@ -128,7 +114,6 @@ void UIGui::render()
   // them out instead of leaving the revealed edges empty.
   capture_pane_rows();
   content_grid_ = nullptr;
-
 
   glBindVertexArray(0);
   SDL_GL_SwapWindow(window_);
@@ -693,11 +678,18 @@ void UIGui::paint_float_overlays(float dt)
   // Exponential ease toward the layout position (~70ms settle).
   const float pos_k = 1.0f - std::exp(-dt / 0.07f);
   const float col_k = 1.0f - std::exp(-dt / kFloatColorTau);
-  for (const FloatOverlay &ov : float_overlays)
+
+  // Paint one float with its animation state. The paint loop below runs in
+  // two layers around the modal scrim quad: background floats (sidebar,
+  // status line, toasts) render first and get dimmed by the scrim, then
+  // the open modal surface's own panel (quick pick, settings, telescope,
+  // ...) paints bright on top -- the same order the terminal bakes into
+  // the cell grid.
+  auto paint_one = [&](const FloatOverlay &ov)
   {
     if (ov.w <= 0 || ov.h <= 0 || ov.x < 0 || ov.y < 0)
     {
-      continue;
+      return;
     }
     const std::string key = float_key(ov.surface, ov.handle);
     const int n = std::min(ov.h, std::max(0, height - ov.y));
@@ -873,6 +865,47 @@ void UIGui::paint_float_overlays(float dt)
     }
 
     paint_float_cells(ov.x, ov.y, ov.w, n, dx + edx, dy + edy, fc.cells, fc.rgb, alpha);
+  };
+
+  // Modal surfaces (match api_float.cpp's modal_surface_open set, plus the
+  // settings menu): their own panel draws on top of the scrim; everything
+  // else is background and sits under it.
+  const auto is_modal_float = [](const std::string &s) -> bool
+  {
+    return s == "quick_pick" || s == "popup" || s == "tree_sitter_status"
+           || s == "lsp_status" || s == "telescope" || s == "settings";
+  };
+  for (const FloatOverlay &ov : float_overlays)
+  {
+    if (!is_modal_float(ov.surface))
+    {
+      paint_one(ov);
+    }
+  }
+  if (dim_alpha_ > 0.003f)
+  {
+    begin_batch();
+    push_quad(0.0f,
+              0.0f,
+              (float)width * cell_w_,
+              (float)height * cell_h_,
+              0,
+              0,
+              1,
+              1,
+              0.0f,
+              0.0f,
+              0.0f,
+              dim_alpha_);
+    flush_tex(program_, white_tex_);
+    end_batch();
+  }
+  for (const FloatOverlay &ov : float_overlays)
+  {
+    if (is_modal_float(ov.surface))
+    {
+      paint_one(ov);
+    }
   }
 
   // Exiting floats: paint from the retained capture, fading out while

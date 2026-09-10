@@ -23,6 +23,7 @@
 local helpers = require("jot_ui.helpers")
 local command_palette = require("jot_ui.command_palette")
 local quick_pick = require("jot_ui.quick_pick")
+local settings = require("jot_ui.settings")
 local popup = require("jot_ui.popup")
 local tree_sitter = require("jot_ui.tree_sitter")
 local lsp = require("jot_ui.lsp")
@@ -37,6 +38,7 @@ local toast = require("jot_ui.toast")
 
 jot.ui.handler("command_palette", command_palette.command_palette)
 jot.ui.handler("quick_pick", quick_pick.quick_pick)
+jot.ui.handler("settings", settings.settings)
 jot.ui.handler("popup", popup.popup)
 jot.ui.handler("save_prompt", popup.save_prompt)
 jot.ui.handler("quit_prompt", popup.quit_prompt)
@@ -71,6 +73,7 @@ return {
   side_panel = side_panel.side_panel,
   command_palette = command_palette.command_palette,
   quick_pick = quick_pick.quick_pick,
+  settings = settings.settings,
   popup = popup.popup,
   save_prompt = popup.save_prompt,
   quit_prompt = popup.quit_prompt,

@@ -403,14 +403,15 @@ void LuaAPI::render_floats()
   const bool modal_dim_active = editor->show_quick_pick
       || (editor->popup.visible && editor->popup.presentation == POPUP_MODAL)
       || editor->show_tree_sitter_status_modal || editor->show_lsp_status_modal
-      || editor->telescope.is_active();
+      || editor->telescope.is_active() || editor->show_settings_menu;
   const auto modal_surface_open = [&](const std::string &s) -> bool
   {
     return (s == "quick_pick" && editor->show_quick_pick)
         || (s == "popup" && editor->popup.visible && editor->popup.presentation == POPUP_MODAL)
         || (s == "tree_sitter_status" && editor->show_tree_sitter_status_modal)
         || (s == "lsp_status" && editor->show_lsp_status_modal)
-        || (s == "telescope" && editor->telescope.is_active());
+        || (s == "telescope" && editor->telescope.is_active())
+        || (s == "settings" && editor->show_settings_menu);
   };
   int rw = editor->ui->get_render_width(),
       rh = std::max(1, editor->ui->get_height() - editor->status_height);

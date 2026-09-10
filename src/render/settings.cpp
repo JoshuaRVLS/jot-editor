@@ -58,12 +58,61 @@ void Editor::render_settings_menu()
   settings_panel_w = w;
   settings_panel_h = h;
 
-  // Lua UI handler takes over rendering when registered.
+  settings_selected = std::clamp(settings_selected, 0,
+                                 std::max(0, (int)settings_entries.size() - 1));
+  const int list_y = y + 2;
+  const int list_h = std::max(1, h - 4);
+  const int max_scroll = std::max(0, (int)settings_entries.size() - list_h);
+  settings_scroll = std::clamp(settings_scroll, 0, max_scroll);
+
+  // Invalidate hit rects first; only visible rows get fresh rects below,
+  // so mouse hit-testing can never match a scrolled-away row's stale rect.
+  for (SettingsEntry &e : settings_entries)
+    e.row_y = -1;
+  for (int row = 0; row < list_h; row++)
+  {
+    const int idx = settings_scroll + row;
+    if (idx < 0 || idx >= (int)settings_entries.size())
+      break;
+    SettingsEntry &e = settings_entries[(size_t)idx];
+    e.row_x = x + 1;
+    e.row_y = list_y + row;
+    e.row_w = w - 2;
+  }
+
+  // Lua UI handler takes over rendering when registered (the panel then
+  // paints as a float on top of the modal scrim, like every other modal
+  // surface). The layout + hit rects above are shared by both paths, so
+  // mouse clicks and cursor placement stay exact.
   if (lua_api && lua_api->has_lua_ui_handler("settings"))
   {
-    // The Lua-side settings surface receives the entry list for rendering.
-    // (No dedicated view struct exists; the native render below is the
-    // default and the handler can re-emit its own float.)
+    SettingsView view;
+    view.x = x;
+    view.y = y;
+    view.w = w;
+    view.h = h;
+    view.selected = settings_selected;
+    view.scroll = settings_scroll;
+    view.all_count = (int)settings_entries.size();
+    view.items.reserve((size_t)list_h);
+    for (int row = 0; row < list_h; row++)
+    {
+      const int idx = settings_scroll + row;
+      if (idx < 0 || idx >= (int)settings_entries.size())
+        break;
+      const SettingsEntry &e = settings_entries[(size_t)idx];
+      SettingsItemView item;
+      item.label = e.label;
+      item.value = value_display(e);
+      item.type = e.type == SettingsEntry::Type::Bool
+                      ? "bool"
+                      : (e.type == SettingsEntry::Type::Int ? "int" : "string");
+      item.selected = idx == settings_selected;
+      item.editing = e.editing;
+      item.edit_input = e.edit_input;
+      view.items.push_back(std::move(item));
+    }
+    lua_api->emit_settings(view);
     return;
   }
 
@@ -91,20 +140,8 @@ void Editor::render_settings_menu()
   ui->fill_rect(
       {x + 1, y + 1, std::max(1, w - 2), 1}, "─", theme.fg_panel_border, panel_theme.bg_command);
 
-  const int list_y = y + 2;
-  const int list_h = std::max(1, h - 4);
-  settings_selected = std::clamp(settings_selected, 0,
-                                 std::max(0, (int)settings_entries.size() - 1));
-  const int max_scroll = std::max(0, (int)settings_entries.size() - list_h);
-  settings_scroll = std::clamp(settings_scroll, 0, max_scroll);
-
   const int key_w = std::max(18, (int)(w * 0.55));
   const int val_x = x + 1 + key_w;
-
-  // Invalidate hit rects first; only visible rows get fresh rects below,
-  // so mouse hit-testing can never match a scrolled-away row's stale rect.
-  for (SettingsEntry &e : settings_entries)
-    e.row_y = -1;
 
   for (int row = 0; row < list_h; row++)
   {
@@ -112,9 +149,6 @@ void Editor::render_settings_menu()
     if (idx < 0 || idx >= (int)settings_entries.size())
       break;
     SettingsEntry &e = settings_entries[(size_t)idx];
-    e.row_x = x + 1;
-    e.row_y = list_y + row;
-    e.row_w = w - 2;
 
     const bool selected = idx == settings_selected;
     const int fg = selected ? theme.fg_selection : theme.fg_command;

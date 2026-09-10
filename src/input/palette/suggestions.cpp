@@ -173,6 +173,7 @@ namespace
         {"gitblame", "Git", "Show blame for current line", 70},
         {"gitrefresh", "Git", "Refresh git status", 70},
         {"autosave", "Settings", "Configure auto-save", 70},
+        {"settings", "Settings", "Open the settings menu (config keys)", 80},
         {"help", "Help", "Show help or command list", 80},
         {"h", "Help", "Show help or command list", 70},
         {"plugins", "Plugin", "Show loaded plugins and APIs", 80},

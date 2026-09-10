@@ -77,6 +77,7 @@ void Editor::pump_gui_events()
     needs_redraw = true;
   }
 
+
   // Defensive resize re-sync. Compositors can coalesce or drop resize
   // events (Wayland configure batching, fractional scale changes), which
   // leaves the grid smaller than the window until the next real event --

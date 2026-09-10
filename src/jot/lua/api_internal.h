@@ -236,6 +236,7 @@ namespace jot_lua
         "features/ui/helpers.lua",
         "features/ui/command_palette.lua",
         "features/ui/quick_pick.lua",
+        "features/ui/settings.lua",
         "features/ui/popup.lua",
         "features/ui/tree_sitter.lua",
         "features/ui/lsp.lua",

@@ -263,6 +263,38 @@ bool LuaAPI::emit_quick_pick(const QuickPickView &view)
                      });
 }
 
+bool LuaAPI::emit_settings(const SettingsView &view)
+{
+  return emit_lua_ui("settings",
+                     [&](lua_State *L, int t)
+                     {
+                       lua_set_int_field(L, t, "x", view.x);
+                       lua_set_int_field(L, t, "y", view.y);
+                       lua_set_int_field(L, t, "w", view.w);
+                       lua_set_int_field(L, t, "h", view.h);
+                       lua_set_int_field(L, t, "selected", view.selected);
+                       lua_set_int_field(L, t, "scroll", view.scroll);
+                       lua_set_int_field(L, t, "all_count", view.all_count);
+                       lua_newtable(L);
+                       const int arr = lua_gettop(L);
+                       for (size_t i = 0; i < view.items.size(); i++)
+                       {
+                         const SettingsItemView &item = view.items[i];
+                         lua_newtable(L);
+                         const int it = lua_gettop(L);
+                         lua_set_str_field(L, it, "label", item.label);
+                         lua_set_str_field(L, it, "value", item.value);
+                         lua_set_str_field(L, it, "type", item.type);
+                         lua_set_bool_field(L, it, "selected", item.selected);
+                         lua_set_bool_field(L, it, "editing", item.editing);
+                         lua_set_str_field(L, it, "edit_input", item.edit_input);
+                         lua_rawseti(L, arr, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "items");
+                       push_ui_colors(L, t);
+                     });
+}
+
 bool LuaAPI::emit_popup(const PopupView &view)
 {
   return emit_lua_ui("popup",
