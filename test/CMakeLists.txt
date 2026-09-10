@@ -34,6 +34,7 @@ add_executable(jot_tests
   test_lua_toast.cpp
   test_git_panel.cpp
   test_multicursor.cpp
+  test_mouse_hover.cpp
   test_zen_mode.cpp
   test_settings_menu.cpp
   test_terminal_panel.cpp

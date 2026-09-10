@@ -1124,6 +1124,12 @@ public:
   {
     return terminal.get_height();
   }
+  // Ctrl+hover goto-definition underline (see the mouse dispatcher): true while
+  // Ctrl is held over a token, whatever the frontend.
+  bool ctrl_hover_active_for_test() const
+  {
+    return ctrl_hover_active;
+  }
   // Terminal mouse-selection hooks for headless tests: feeds clicks,
   // motions and releases through the real private handlers.
   bool terminal_mouse_for_test(int x, int y, bool click, bool motion, bool release)

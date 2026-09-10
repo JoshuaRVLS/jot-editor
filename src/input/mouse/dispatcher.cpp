@@ -1544,5 +1544,19 @@ void Editor::handle_mouse(void *event_ptr)
 
   clamp_cursor(pane.buffer_id);
   buf.preferred_x = buf.cursor.x;
-  ensure_cursor_visible(bstate != 32);
+  // Reveal the caret only when the pointer actually moved it: a press/release
+  // places it, and an in-flight drag extends the selection.
+  //
+  // Plain motion must never scroll. It reaches this tail on the Ctrl+hover path
+  // (the LSP-hover early returns above are gated on !ctrl), and the reveal then
+  // scrolled the viewport back to the caret -- so scrolling away from the cursor
+  // and moving the mouse with Ctrl held "teleported" the view to the cursor on
+  // every motion cell. Ordinary motion only escaped that by accident, through
+  // those early returns.
+  const bool caret_moved_by_pointer =
+      bstate == 1 || bstate == 2 || (bstate == 32 && mouse_selecting && mouse_drag_started);
+  if (caret_moved_by_pointer)
+  {
+    ensure_cursor_visible(bstate != 32);
+  }
 }
