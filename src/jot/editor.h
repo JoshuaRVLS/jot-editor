@@ -1095,6 +1095,28 @@ public:
   {
     return grid_height();
   }
+  // The active theme, for tests that assert on painted colors.
+  const Theme &theme_for_test() const
+  {
+    return theme;
+  }
+  // Absolute bracket depth at the start of `line` (the same value the renderer
+  // seeds a scrolled-to line with), so tests can assert that painted rainbow
+  // colors match file position.
+  int bracket_depth_for_test(int line)
+  {
+    return bracket_depth_at_line_start(get_buffer(), line);
+  }
+  // Places the cursor and lets the viewport follow it through the same
+  // ensure_cursor_visible the editing paths use, so tests can drive vertical and
+  // horizontal scrolling without faking scroll offsets the editor would clamp.
+  void scroll_cursor_to_for_test(int line, int col)
+  {
+    FileBuffer &buf = get_buffer();
+    buf.cursor = {col, line};
+    buf.preferred_x = col;
+    ensure_cursor_visible();
+  }
   // The hosting terminal's size. Meaningless under --gui (it keeps the
   // constructor default because the terminal is never initialised there) --
   // exposed so tests can pin that trap.

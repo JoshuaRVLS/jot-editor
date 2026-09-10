@@ -10,6 +10,13 @@ namespace buffer_internal
 inline constexpr int kBracketDepthScanLimitLines = 500;
 inline constexpr int kBracketMatchSearchLimitLines = 5000;
 inline constexpr int kDiagDenseSpanLimit = 64;
+// Lines up to this length are tokenized in full, which is what lets the bracket
+// walks tell "bracket in code" from "bracket in a string/comment". Longer lines
+// are highlighted per visible window, so both the per-line depth walk and the
+// per-row render walk must treat them as raw (no token skip) or their depths
+// disagree and bracket colors drift with the window size. Shared so the two
+// walks cannot drift apart.
+inline constexpr std::size_t kBracketTokenAwareLineBytes = 4096;
 
 struct ActiveBracketGuide
 {

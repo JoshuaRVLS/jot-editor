@@ -231,15 +231,15 @@ int Editor::bracket_depth_at_line_start(FileBuffer &buf, int line)
   }
   // Lines above this keep the raw walk: syntax colors for huge single
   // lines are windowed (see get_line_syntax_colors), so token info for
-  // the whole line is not available without tokenizing megabytes.
-  constexpr std::size_t kTokenAwareLineBytes = 4096;
+  // the whole line is not available without tokenizing megabytes. The render
+  // walk uses the same threshold so both agree on which lines are raw.
   while (upto < target)
   {
     // Walking line `upto` turns the depth at the start of line `upto`
     // into the depth at the start of line `upto + 1`.
     int value = prefix[upto];
     const std::string &ln = buf.line(upto);
-    if (ln.size() > kTokenAwareLineBytes)
+    if (ln.size() > kBracketTokenAwareLineBytes)
     {
       for (char c : ln)
       {

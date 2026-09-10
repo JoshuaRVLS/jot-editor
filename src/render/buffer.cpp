@@ -585,7 +585,13 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
               next_idx = char_idx + 1;
 
             char c = line[char_idx];
-            const bool tokenized = char_idx < (int)colors.size() && colors[char_idx].first == 1;
+            // Token info is only trustworthy for lines highlighted in full: for
+            // longer lines `colors` covers just the requested window (and the
+            // cache may hold a wider one), so letting it decide the
+            // string/comment skip made bracket colors depend on the window.
+            // Long lines are raw here too, matching bracket_depth_at_line_start.
+            const bool tokenized = line.size() <= kBracketTokenAwareLineBytes
+                                   && char_idx < (int)colors.size() && colors[char_idx].first == 1;
             const int token_type = tokenized ? colors[char_idx].second : 0;
             const bool skip_bracket_logic =
                 (token_type == TS_TOKEN_STRING || token_type == TS_TOKEN_COMMENT);
@@ -1004,6 +1010,19 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
         {
           apply_bracket_depth_delta(c, bracket_depth);
         }
+      }
+      // Bracket color must depend on file position only, but the walk above can
+      // stop at the visible edge (and only sees the syntax window of a very long
+      // line), so the depth it reached is not necessarily the line's depth.
+      // Carrying that into the next row made the following lines change color
+      // with the window, and disagree with what a scrolled-to view paints for the
+      // same line. The prefix cache is the authoritative per-line value and is
+      // O(1) for sequential rows. Lazy buffers keep the carried value: the
+      // prefix walk would demand-load lines, which is what their bounded
+      // backscan avoids.
+      if (!buf.is_lazy() && line_idx + 1 < (int)buf.line_count())
+      {
+        bracket_depth = bracket_depth_at_line_start(buf, line_idx + 1);
       }
 
       auto selected_span = selection_row_span();
