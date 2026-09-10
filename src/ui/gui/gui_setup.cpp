@@ -6,9 +6,6 @@
 #include "gui/gui_fit.h"
 
 #include <SDL2/SDL.h>
-// Mesa's gl.h only declares core 2.0+ entry points under this macro.
-#define GL_GLEXT_PROTOTYPES 1
-#include <GL/gl.h>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -100,6 +97,16 @@ UIGui::UIGui(int cols, int rows, int default_fg, int default_bg, int font_px)
   {
     throw std::runtime_error(std::string("jot-gui: SDL_GL_CreateContext failed: ") + SDL_GetError());
   }
+  // Resolve every GL entry point through SDL's loader. Nothing links a system
+  // GL library anymore, so this MUST happen before the first gl* call below --
+  // until it runs, each function pointer is null. The returned version is the
+  // one actually provided by the driver (we request 3.3 core in
+  // init_sdl_and_gl); a zero result means no usable GL was found at all.
+  const int gl_version = gladLoadGL((GLADloadfunc)SDL_GL_GetProcAddress);
+  if (gl_version == 0)
+  {
+    throw std::runtime_error("jot-gui: glad could not load OpenGL");
+  }
   // Vsync: swap is paced by the monitor refresh (60/120/144Hz...).
   if (SDL_GL_SetSwapInterval(1) != 0)
   {
@@ -108,6 +115,14 @@ UIGui::UIGui(int cols, int rows, int default_fg, int default_bg, int font_px)
   }
   SDL_GL_GetDrawableSize(window_, &pixel_w_, &pixel_h_);
   scale_ = jot_gui::display_scale(window_w_, window_h_, pixel_w_, pixel_h_);
+
+  if (std::getenv("JOT_GUI_DEBUG"))
+  {
+    std::fprintf(stderr,
+                 "jot-gui: loaded OpenGL %d.%d\n",
+                 GLAD_VERSION_MAJOR(gl_version),
+                 GLAD_VERSION_MINOR(gl_version));
+  }
 
   if (!compile_shaders() || !create_textures())
   {

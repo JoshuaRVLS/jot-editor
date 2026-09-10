@@ -19,9 +19,10 @@
 
 #include "ui.h"
 #include <cstdint>
-// Mesa's gl.h only declares core 2.0+ entry points under this macro.
-#define GL_GLEXT_PROTOTYPES 1
-#include <GL/gl.h>
+// glad provides every GL entry point the frontend calls. It must be included
+// before any other GL header (none is included alongside it), and its loader
+// must run before the first gl* call -- see UIGui's constructor.
+#include <glad/gl.h>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>

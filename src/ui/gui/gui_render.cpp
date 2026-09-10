@@ -8,9 +8,6 @@
 #include "gui/gui.h"
 
 #include <SDL2/SDL.h>
-// Mesa's gl.h only declares core 2.0+ entry points under this macro.
-#define GL_GLEXT_PROTOTYPES 1
-#include <GL/gl.h>
 
 #include <algorithm>
 #include <cmath>

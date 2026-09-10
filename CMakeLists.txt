@@ -4,6 +4,9 @@ project(jot LANGUAGES C CXX)
 include(GNUInstallDirs)
 
 # Bundled third-party dependencies (built before the engine subdirectory).
+# glad lives in third_party/glad and is added by src/CMakeLists.txt: it is only
+# needed for the GUI frontend, and whether that is available is decided there
+# (after the JOT_GUI option and the SDL2/FreeType probes).
 add_subdirectory(third_party/libvterm)
 
 # Use a clean, portable install RPATH that points to the same prefix's lib dir.

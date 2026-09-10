@@ -4,10 +4,6 @@
 // floats); at realistic grid sizes it can never fill up.
 #include "gui/gui.h"
 
-// Mesa's gl.h only declares core 2.0+ entry points under this macro.
-#define GL_GLEXT_PROTOTYPES 1
-#include <GL/gl.h>
-
 void UIGui::begin_batch()
 {
   vertex_.clear();

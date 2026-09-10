@@ -5,8 +5,6 @@
 // whole atlas once and retries, rebuilding the cache lazily.
 #include "gui/gui.h"
 
-#include <GL/gl.h>
-
 #include <ft2build.h>
 #include FT_FREETYPE_H
 

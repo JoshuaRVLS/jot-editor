@@ -5,10 +5,6 @@
 // instead of sliding stale animation offsets.
 #include "gui/gui.h"
 
-// Mesa's gl.h only declares core 2.0+ entry points under this macro.
-#define GL_GLEXT_PROTOTYPES 1
-#include <GL/gl.h>
-
 #include <cstdint>
 
 void UIGui::paint_cursor()

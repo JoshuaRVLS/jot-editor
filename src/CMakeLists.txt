@@ -276,17 +276,26 @@ include(ui/sources.cmake)
 
 # SDL2/OpenGL GUI frontend ("jot --gui"). The GUI sources are compiled
 # into the engine so the single jot binary serves both backends; when
-# SDL2/freetype/GL are missing the build simply continues without them.
+# SDL2/freetype are missing the build simply continues without them.
+# No system OpenGL is required: the GL entry points come from the vendored
+# glad (third_party/glad), which resolves them at runtime through SDL, so the
+# GUI also builds where only GL 1.1 headers exist.
 # JOT_GUI_ENABLED is recorded in the cache so install.sh can tell whether
 # the installed binary supports --gui.
 set(JOT_GUI_ENABLED FALSE)
 if(JOT_GUI AND NOT WIN32)
   pkg_check_modules(SDL2 QUIET sdl2)
   pkg_check_modules(FREETYPE2 QUIET freetype2)
-  pkg_check_modules(GUI_GL QUIET gl)
-  if(SDL2_FOUND AND FREETYPE2_FOUND AND GUI_GL_FOUND)
+  if(SDL2_FOUND AND FREETYPE2_FOUND)
     set(JOT_GUI_ENABLED TRUE)
     set(JOT_GUI_ENABLED TRUE CACHE INTERNAL "GUI frontend compiled into the engine" FORCE)
+    # Vendored OpenGL loader for the GUI frontend: the system GL headers/library
+    # only expose the modern API on some platforms (Windows' opengl32.dll stops
+    # at GL 1.1), and glad resolves every entry point at runtime through SDL, so
+    # nothing needs to link a system GL library. Added here rather than at the
+    # top level so a terminal-only build never compiles it.
+    add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/glad
+                     ${CMAKE_CURRENT_BINARY_DIR}/glad)
     list(APPEND JOT_UI_SOURCES
          ui/gui/gui_setup.cpp
          ui/gui/gui_glyphs.cpp
@@ -299,7 +308,7 @@ if(JOT_GUI AND NOT WIN32)
          ui/gui/gui_input.cpp)
     list(APPEND JOT_ENGINE_SOURCES jot/event/gui_events.cpp)
   else()
-    message(STATUS "JOT_GUI requested but SDL2/freetype2/GL not found; building terminal-only")
+    message(STATUS "JOT_GUI requested but SDL2/freetype2 not found; building terminal-only")
     set(JOT_GUI_ENABLED FALSE CACHE INTERNAL "GUI frontend compiled into the engine" FORCE)
   endif()
 endif()
@@ -369,14 +378,21 @@ if(NOT WIN32)
 endif()
 if(JOT_GUI_ENABLED)
   target_include_directories(jot_ui_obj SYSTEM PRIVATE
-    ${SDL2_INCLUDE_DIRS} ${FREETYPE2_INCLUDE_DIRS} ${GUI_GL_INCLUDE_DIRS}
+    ${SDL2_INCLUDE_DIRS} ${FREETYPE2_INCLUDE_DIRS}
   )
   target_compile_options(jot_ui_obj PRIVATE
-    ${SDL2_CFLAGS_OTHER} ${FREETYPE2_CFLAGS_OTHER} ${GUI_GL_CFLAGS_OTHER}
+    ${SDL2_CFLAGS_OTHER} ${FREETYPE2_CFLAGS_OTHER}
   )
+  # jot_glad carries its own include dir (glad/gl.h) and the loader object, so
+  # the GUI sources need nothing from the system's GL headers or library.
   target_link_libraries(jot_ui_obj PRIVATE
-    ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} ${GUI_GL_LIBRARIES}
+    ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} jot_glad
   )
+  # Engine translation units (editor.cpp, settings.cpp, gui_events.cpp) include
+  # ui/gui/gui.h too, so they need the vendored header as well. This used to work
+  # by accident: the system GL header sat in a default include path, which a
+  # vendored one does not.
+  target_link_libraries(jot_engine_obj PRIVATE jot_glad)
 endif()
 jot_configure_object_target(jot_ui_obj)
 
@@ -460,10 +476,10 @@ target_link_directories(jot_ui PUBLIC ${UTF8PROC_LIBRARY_DIRS})
 target_link_libraries(jot_engine PUBLIC ${UTF8PROC_LIBRARIES})
 target_link_directories(jot_engine PUBLIC ${UTF8PROC_LIBRARY_DIRS})
 if(JOT_GUI_ENABLED)
-  target_link_libraries(jot_ui PUBLIC ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} ${GUI_GL_LIBRARIES})
-  target_link_directories(jot_ui PUBLIC ${SDL2_LIBRARY_DIRS} ${FREETYPE2_LIBRARY_DIRS} ${GUI_GL_LIBRARY_DIRS})
-  target_link_libraries(jot_engine PUBLIC ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} ${GUI_GL_LIBRARIES})
-  target_link_directories(jot_engine PUBLIC ${SDL2_LIBRARY_DIRS} ${FREETYPE2_LIBRARY_DIRS} ${GUI_GL_LIBRARY_DIRS})
+  target_link_libraries(jot_ui PUBLIC ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} jot_glad)
+  target_link_directories(jot_ui PUBLIC ${SDL2_LIBRARY_DIRS} ${FREETYPE2_LIBRARY_DIRS})
+  target_link_libraries(jot_engine PUBLIC ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} jot_glad)
+  target_link_directories(jot_engine PUBLIC ${SDL2_LIBRARY_DIRS} ${FREETYPE2_LIBRARY_DIRS})
 endif()
 target_link_libraries(jot_core PUBLIC ${LIBUV_LIBRARIES})
 target_link_directories(jot_core PUBLIC ${LIBUV_LIBRARY_DIRS})
