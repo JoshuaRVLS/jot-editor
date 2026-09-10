@@ -18,6 +18,7 @@ set(JOT_RENDER_SOURCES
   render/popup.cpp
   render/prompts.cpp
   render/quick_pick.cpp
+  render/settings.cpp
   render/search.cpp
   render/status_line.cpp
   render/sync.cpp

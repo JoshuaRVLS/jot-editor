@@ -510,6 +510,18 @@ void Editor::handle_mouse(void *event_ptr)
     return;
   }
 
+  if (show_settings_menu)
+  {
+    if (handle_settings_mouse(event->x, event->y, is_click))
+    {
+      return;
+    }
+    if (show_settings_menu)
+    {
+      return;
+    }
+  }
+
   if (show_home_menu)
   {
     if (handle_home_menu_mouse(event->x, event->y, is_click))

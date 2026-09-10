@@ -221,6 +221,17 @@ private:
   void render_quit_prompt();
   void render_popup();
   void render_home_menu();
+  // Cell-based settings menu (:settings / Ctrl+, in GUI mode): a quick-
+  // pick style panel listing every config key with its value. Bools toggle
+  // on Enter; ints/strings edit inline. Lua-registered config keys appear
+  // automatically (the menu enumerates config.keys()).
+  void render_settings_menu();
+  void place_settings_cursor();
+  void toggle_settings_menu();
+  void close_settings_menu();
+  void rebuild_settings_entries();
+  bool handle_settings_input(int ch);
+  bool handle_settings_mouse(int x, int y, bool is_click);
   void render_buffer_content(const SplitPane &pane, int pane_index, int buffer_id);
   // GUI smooth-scroll tracking: last reported first-visible line per pane,
   // so the fold-aware delta for the scroll animation is computed once per
@@ -437,6 +448,9 @@ private:
       int x, int y, bool is_click, bool is_double_click, bool is_scroll_up, bool is_scroll_down);
   bool handle_home_menu_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
   bool handle_home_menu_mouse(int x, int y, bool is_click);
+  // Applies one settings-menu change through the normal config pipeline:
+  // config.set + apply_config_live() + save, plus GUI font-size handling.
+  void apply_settings_value(const std::string &key, const std::string &value);
   bool handle_menu_bar_input(int ch);
   bool handle_menu_bar_mouse(int x, int y, bool is_click, bool is_motion);
   bool handle_integrated_terminal_mouse(int x, int y);
@@ -537,8 +551,6 @@ public:
   // line and centers the pane area at zen_content_width. Returns the new
   // state (true = zen on). Layout-affecting; safe with no panes / no ui.
   bool toggle_zen_mode();
-  // GUI frontend only: opens/closes the RmlUi settings overlay (:settings).
-  void toggle_gui_settings();
   // Left/right margin that centers the pane area at zen_content_width while
   // zen mode is active (0 otherwise or when the area is narrower).
   int zen_content_margin(int available_w);
@@ -896,6 +908,43 @@ public:
   void render_for_test();
   FileBuffer &buffer_for_test(int id = -1);
   SplitPane &pane_for_test(int id = -1);
+  // Settings-menu state accessors for headless tests (the menu surface is
+  // private EditorState; tests drive it through these + handle_settings_input).
+  bool settings_menu_open_for_test() const
+  {
+    return show_settings_menu;
+  }
+  const std::vector<SettingsEntry> &settings_entries_for_test() const
+  {
+    return settings_entries;
+  }
+  void settings_select_for_test(int index)
+  {
+    settings_selected = index;
+  }
+  std::string config_value_for_test(const std::string &key)
+  {
+    return config.get(key, "");
+  }
+  int config_int_for_test(const std::string &key)
+  {
+    return config.get_int(key, 0);
+  }
+  // Feeds one key through the settings menu's real input handler.
+  bool settings_input_for_test(int ch)
+  {
+    return handle_settings_input(ch);
+  }
+  // Opens/closes the settings menu (the :settings command path).
+  void toggle_settings_menu_for_test()
+  {
+    toggle_settings_menu();
+  }
+  // Forces the menu closed so each test case starts from a known state.
+  void close_settings_menu_for_test()
+  {
+    close_settings_menu();
+  }
   bool mouse_selecting_for_test() const;
   void load_file(const std::string &fname);
   void run();

@@ -46,6 +46,7 @@ set(JOT_ENGINE_SOURCES
   jot/surfaces/host_api.cpp
   jot/surfaces/popup.cpp
   jot/surfaces/quick_pick.cpp
+  jot/surfaces/settings.cpp
   jot/surfaces/theme.cpp
   jot/workspace/git.cpp
   jot/workspace/git_client.cpp

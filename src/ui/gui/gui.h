@@ -17,7 +17,6 @@
 #ifndef UI_GUI_H
 #define UI_GUI_H
 
-#include "gui/gui_settings.h"
 #include "ui.h"
 #include <cstdint>
 // Mesa's gl.h only declares core 2.0+ entry points under this macro.
@@ -43,8 +42,8 @@ uint32_t decode_utf8(const char *s, size_t len, size_t &i);
 // RAII guard for glyph-atlas uploads. Glyph rows live in a 2048-wide CPU
 // buffer, so GL must be told rows are kAtlasW bytes apart (UNPACK_ROW_LENGTH)
 // with 1-byte alignment. That pixel-store state is context-global, so it must
-// be restored afterwards or every later GL texture upload (e.g. RmlUi's font
-// textures) reads rows with the wrong stride and can crash the driver.
+// be restored afterwards or every later GL texture upload reads rows with the
+// wrong stride and can crash the driver.
 class AtlasPixelStoreGuard
 {
 public:
@@ -96,18 +95,9 @@ public:
   // Cursor painting happens inside render(); no terminal escapes to emit.
   void flush_cursor() override;
 
-  // RmlUi-powered auxiliary surfaces (the settings overlay).
-  GuiSettingsOverlay &settings()
-  {
-    return settings_;
-  }
-
   // Applies an absolute font size (px, clamped to [8, 40]): re-sizes every
   // style face, drops the atlas and re-fits the grid to the window.
   void apply_font_size(int px);
-
-  // xterm 256 index -> "rgb(r,g,b)" for RmlUi stylesheets.
-  static std::string xterm_css_color(int index);
 
   // Smooth-scroll hook: the editor reports each pane's body region and how
   // many visible rows it scrolled since the last frame. The pane's content
@@ -394,10 +384,6 @@ private:
   int window_h_ = 0;
   int pixel_w_ = 0;
   int pixel_h_ = 0;
-
-  // RmlUi-powered auxiliary surfaces (settings overlay), rendered on top
-  // of the cell grid inside render().
-  GuiSettingsOverlay settings_;
 
   bool quit_requested_ = false;
   // Queued events from multi-codepoint text input / IME commits.

@@ -522,9 +522,9 @@ bool Editor::execute_ex_command(const std::string &input_line)
   }
   else if (lcmd == "settings")
   {
-    // GUI frontend only: opens the RmlUi settings overlay. Terminal mode
-    // has no such surface, so this is a no-op there.
-    toggle_gui_settings();
+    // Opens the cell-based settings menu (works in terminal and GUI):
+    // lists every config key, bools toggle, ints/strings edit inline.
+    toggle_settings_menu();
   }
   else if (lcmd == "debug" || lcmd == "debuggdb")
   {

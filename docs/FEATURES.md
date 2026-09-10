@@ -323,7 +323,7 @@ API.
 | `Ctrl+T` or `Alt+T` | Theme chooser |
 | `` Ctrl+` `` | Open / focus / hide terminal panel |
 | `F12` | Toggle zen focus mode (hide chrome, center buffer) |
-| `Ctrl+,` or `:settings` (GUI only) | Open the settings overlay (theme, font size, cursor style) |
+| `:settings` or `Ctrl+,` (GUI) | Open the settings menu (all config keys: booleans toggle, values edit inline; Lua-registered keys included) |
 
 ### Pane layout
 

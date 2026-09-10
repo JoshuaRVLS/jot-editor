@@ -1,0 +1,346 @@
+// Settings menu model + input (cell-based; see render/settings.cpp for the
+// paint pass). The menu enumerates config.keys(), so every setting -- the
+// built-in defaults, settings.conf overrides and Lua-registered keys from
+// jot.config.set -- appears with its current value. Booleans toggle on
+// Enter / Left / Right; integers and strings open an inline input row
+// (type the new value, Enter applies, Esc cancels). Changes flow through
+// apply_settings_value -> config.set + apply_config_live + save, the same
+// live-apply pipeline Lua uses.
+#include "editor.h"
+#include "ui/gui/gui.h"
+
+#include <algorithm>
+#include <cctype>
+#include <string>
+#include <vector>
+
+namespace
+{
+// Friendly labels + types for the built-in settings. Keys absent from this
+// table (Lua-registered, plugin-owned) fall back to a string entry using
+// the raw key as the label, so the menu stays complete and Lua-extensible.
+struct KnownSetting
+{
+  const char *key;
+  const char *label;
+  SettingsEntry::Type type;
+};
+
+const KnownSetting kKnownSettings[] = {
+    {"auto_detect_indent", "Auto-detect indent", SettingsEntry::Type::Bool},
+    {"auto_indent", "Auto indent", SettingsEntry::Type::Bool},
+    {"auto_save", "Auto save", SettingsEntry::Type::Bool},
+    {"auto_save_interval_ms", "Auto save interval (ms)", SettingsEntry::Type::Int},
+    {"clang_format_on_save", "Clang-format on save", SettingsEntry::Type::Bool},
+    {"cursor_blink_ms", "Cursor blink (ms)", SettingsEntry::Type::Int},
+    {"cursor_style", "Cursor style", SettingsEntry::Type::String},
+    {"debugger_height", "Debugger panel height", SettingsEntry::Type::Int},
+    {"discord_rpc", "Discord presence", SettingsEntry::Type::Bool},
+    {"explorer_width", "Explorer width", SettingsEntry::Type::Int},
+    {"gui_font_size", "GUI font size (px)", SettingsEntry::Type::Int},
+    {"highlight_cursor_line", "Highlight cursor line", SettingsEntry::Type::Bool},
+    {"idle_fps", "Idle FPS", SettingsEntry::Type::Int},
+    {"image_viewer_backend", "Image viewer backend", SettingsEntry::Type::String},
+    {"lsp_change_debounce_ms", "LSP change debounce (ms)", SettingsEntry::Type::Int},
+    {"lsp_completion_ghost_text", "LSP ghost text", SettingsEntry::Type::Bool},
+    {"lsp_completion_max_items", "LSP completion max items", SettingsEntry::Type::Int},
+    {"lsp_completion_nerd_icons", "LSP completion icons", SettingsEntry::Type::Bool},
+    {"minimap_width", "Minimap width", SettingsEntry::Type::Int},
+    {"prettier_on_save", "Prettier on save", SettingsEntry::Type::Bool},
+    {"relative_line_numbers", "Relative line numbers", SettingsEntry::Type::Bool},
+    {"render_fps", "Render FPS", SettingsEntry::Type::Int},
+    {"right_panel_width", "Right panel width", SettingsEntry::Type::Int},
+    {"show_explorer", "Show explorer", SettingsEntry::Type::Bool},
+    {"show_indent_guides", "Indent guides", SettingsEntry::Type::Bool},
+    {"show_line_numbers", "Line numbers", SettingsEntry::Type::Bool},
+    {"show_minimap", "Show minimap", SettingsEntry::Type::Bool},
+    {"smart_paste_indent", "Smart paste indent", SettingsEntry::Type::Bool},
+    {"tab_size", "Tab size", SettingsEntry::Type::Int},
+    {"terminal_height", "Terminal panel height", SettingsEntry::Type::Int},
+    {"word_wrap", "Word wrap", SettingsEntry::Type::Bool},
+};
+
+SettingsEntry::Type infer_type(const std::string &key, const std::string &value)
+{
+  for (const KnownSetting &k : kKnownSettings)
+  {
+    if (key == k.key)
+      return k.type;
+  }
+  // Unknown (Lua-registered) keys: infer from the stored value so the menu
+  // still toggles booleans set from Lua.
+  if (value == "true" || value == "false")
+    return SettingsEntry::Type::Bool;
+  if (!value.empty())
+  {
+    bool numeric = true;
+    for (char c : value)
+    {
+      if (!std::isdigit((unsigned char)c) && c != '-' && c != '.')
+      {
+        numeric = false;
+        break;
+      }
+    }
+    if (numeric)
+      return SettingsEntry::Type::Int;
+  }
+  return SettingsEntry::Type::String;
+}
+} // namespace
+
+void Editor::rebuild_settings_entries()
+{
+  settings_entries.clear();
+  for (const std::string &key : config.keys())
+  {
+    const std::string value = config.get(key, "");
+    SettingsEntry e;
+    e.key = key;
+    e.type = infer_type(key, value);
+    e.value = value;
+    e.label = key; // fallback label; replaced below when known
+    for (const KnownSetting &k : kKnownSettings)
+    {
+      if (key == k.key)
+      {
+        e.label = k.label;
+        break;
+      }
+    }
+    settings_entries.push_back(std::move(e));
+  }
+  settings_selected = std::clamp(settings_selected, 0,
+                                 std::max(0, (int)settings_entries.size() - 1));
+  needs_redraw = true;
+}
+
+void Editor::toggle_settings_menu()
+{
+  if (show_settings_menu)
+  {
+    close_settings_menu();
+    return;
+  }
+  rebuild_settings_entries();
+  show_settings_menu = true;
+  needs_redraw = true;
+}
+
+void Editor::close_settings_menu()
+{
+  show_settings_menu = false;
+  settings_entries.clear();
+  settings_selected = 0;
+  settings_scroll = 0;
+  needs_redraw = true;
+}
+
+void Editor::apply_settings_value(const std::string &key, const std::string &value)
+{
+  config.set(key, value);
+  // GUI font size needs the GUI's live re-fit (same path Ctrl+= uses);
+  // everything else applies through the shared live-config pipeline.
+  if (key == "gui_font_size")
+  {
+    if (auto *gui = dynamic_cast<UIGui *>(ui))
+    {
+      gui->apply_font_size(std::clamp(config.get_int("gui_font_size", 16), 8, 40));
+    }
+  }
+  apply_config_live();
+  config.save();
+  // Keep the menu's model in sync with the applied value.
+  for (SettingsEntry &e : settings_entries)
+  {
+    if (e.key == key)
+    {
+      e.value = config.get(key, "");
+      e.editing = false;
+      break;
+    }
+  }
+  needs_redraw = true;
+}
+
+bool Editor::handle_settings_input(int ch)
+{
+  if (!show_settings_menu)
+    return false;
+
+  if (settings_entries.empty())
+  {
+    if (ch == 27)
+      close_settings_menu();
+    return true;
+  }
+
+  SettingsEntry &cur = settings_entries[(size_t)std::clamp(
+      settings_selected, 0, (int)settings_entries.size() - 1)];
+
+  // Esc: cancel an in-progress edit first, then close the menu.
+  if (ch == 27)
+  {
+    if (cur.editing)
+    {
+      cur.editing = false;
+      needs_redraw = true;
+      return true;
+    }
+    close_settings_menu();
+    return true;
+  }
+
+  if (cur.editing)
+  {
+    if (ch == '\n' || ch == 13)
+    {
+      // Validate ints: empty / non-numeric input cancels the edit.
+      if (cur.type == SettingsEntry::Type::Int)
+      {
+        const std::string &v = cur.edit_input;
+        bool ok = !v.empty();
+        for (char c : v)
+        {
+          if (!std::isdigit((unsigned char)c) && c != '-')
+          {
+            ok = false;
+            break;
+          }
+        }
+        if (!ok)
+        {
+          cur.editing = false;
+          needs_redraw = true;
+          return true;
+        }
+      }
+      else if (cur.edit_input.empty())
+      {
+        // Empty string input: treat as cancel (no meaningful change).
+        cur.editing = false;
+        needs_redraw = true;
+        return true;
+      }
+      apply_settings_value(cur.key, cur.edit_input);
+      return true;
+    }
+    if (ch == 127 || ch == 8)
+    {
+      if (!cur.edit_input.empty())
+        cur.edit_input.pop_back();
+      needs_redraw = true;
+      return true;
+    }
+    if (ch >= 32 && ch < 1000)
+    {
+      cur.edit_input.push_back((char)ch);
+      needs_redraw = true;
+    }
+    return true;
+  }
+
+  // Navigation (not editing).
+  if (ch == 1008 || ch == 'k' || ch == 'K')
+  {
+    settings_selected = std::max(0, settings_selected - 1);
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 1009 || ch == 'j' || ch == 'J')
+  {
+    settings_selected = std::min((int)settings_entries.size() - 1, settings_selected + 1);
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 1015)
+  {
+    settings_selected = std::max(0, settings_selected - 8);
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 1016)
+  {
+    settings_selected =
+        std::min((int)settings_entries.size() - 1, settings_selected + 8);
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 1012)
+  {
+    settings_selected = 0;
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 1013)
+  {
+    settings_selected = (int)settings_entries.size() - 1;
+    needs_redraw = true;
+    return true;
+  }
+
+  // Enter: toggle booleans, start inline edit for ints/strings.
+  if (ch == '\n' || ch == 13)
+  {
+    if (cur.type == SettingsEntry::Type::Bool)
+    {
+      apply_settings_value(cur.key, cur.value == "true" ? "false" : "true");
+    }
+    else
+    {
+      // Fresh input: type the new value from scratch (empty + Enter
+      // cancels the edit). Seeding with the old value would force
+      // backspacing over it for every change.
+      cur.editing = true;
+      cur.edit_input.clear();
+    }
+    needs_redraw = true;
+    return true;
+  }
+
+  // Left/Right toggle booleans too (vim-style).
+  if (ch == 1010 || ch == 1011)
+  {
+    if (cur.type == SettingsEntry::Type::Bool)
+    {
+      apply_settings_value(cur.key, cur.value == "true" ? "false" : "true");
+      needs_redraw = true;
+    }
+    return true;
+  }
+
+  return true;
+}
+
+bool Editor::handle_settings_mouse(int x, int y, bool is_click)
+{
+  if (!show_settings_menu)
+    return false;
+
+  for (int i = 0; i < (int)settings_entries.size(); i++)
+  {
+    const SettingsEntry &e = settings_entries[(size_t)i];
+    if (y == e.row_y && x >= e.row_x && x < e.row_x + e.row_w)
+    {
+      if (settings_selected != i)
+      {
+        settings_selected = i;
+        needs_redraw = true;
+      }
+      if (is_click)
+      {
+        return handle_settings_input('\n');
+      }
+      return true;
+    }
+  }
+
+  const bool inside_panel = x >= settings_panel_x && x < settings_panel_x + settings_panel_w
+                            && y >= settings_panel_y && y < settings_panel_y + settings_panel_h;
+  if (inside_panel)
+    return true;
+  if (!is_click)
+    return true;
+  close_settings_menu();
+  return false;
+}

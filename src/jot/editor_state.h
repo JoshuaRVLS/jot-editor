@@ -361,6 +361,18 @@ struct EditorState
   int home_menu_panel_h;
   std::vector<HomeMenuEntry> home_menu_entries;
 
+  // Cell-based settings menu (:settings, Ctrl+, in GUI mode). Lists every
+  // config key (defaults + Lua-registered) with its current value; bools
+  // toggle on Enter, ints/strings edit through an inline input row.
+  bool show_settings_menu = false;
+  int settings_selected = 0;
+  int settings_scroll = 0;
+  int settings_panel_x = 0;
+  int settings_panel_y = 0;
+  int settings_panel_w = 0;
+  int settings_panel_h = 0;
+  std::vector<SettingsEntry> settings_entries;
+
   bool show_sidebar;
   // Zen focus mode: sidebar + right panel hidden, status line suppressed and
   // the pane area narrowed to zen_content_width and centered. Sidebar / panel

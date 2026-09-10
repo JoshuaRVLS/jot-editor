@@ -41,16 +41,6 @@ void UIGui::xterm_rgb(int index, float &r, float &g, float &b)
   }
 }
 
-std::string UIGui::xterm_css_color(int index)
-{
-  float r = 0, g = 0, b = 0;
-  xterm_rgb(index, r, g, b);
-  char buf[48];
-  std::snprintf(buf, sizeof(buf), "rgb(%d,%d,%d)", (int)(r * 255.0f), (int)(g * 255.0f),
-                (int)(b * 255.0f));
-  return buf;
-}
-
 void UIGui::cell_colors(const UICell &cell, float &fr, float &fg_, float &fb, float &br,
                         float &bg_, float &bb) const
 {

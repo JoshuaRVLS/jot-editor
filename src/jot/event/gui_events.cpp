@@ -36,11 +36,11 @@ void Editor::pump_gui_events()
     {
       break;
     }
-    // GUI-only: Ctrl+, toggles the RmlUi settings overlay (consumed
-    // entirely here; while it is open, poll_event routes input to it).
+    // GUI-only: Ctrl+, toggles the cell-based settings menu (same surface
+    // as the :settings command, rendered by the normal cell grid).
     if (ev.type == EVENT_KEY && ev.key.ctrl && ev.key.key == ',')
     {
-      gui->settings().toggle();
+      toggle_settings_menu();
     }
     // GUI-only font zoom: Ctrl+= / Ctrl+Plus (incl. numpad) zoom in,
     // Ctrl+- zooms out. Intercepted before dispatch so no mode can rebind

@@ -42,6 +42,12 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     return;
   }
 
+  if (show_settings_menu)
+  {
+    handle_settings_input(ch);
+    return;
+  }
+
   if (show_home_menu)
   {
     if (handle_home_menu_input(ch, is_ctrl, is_shift, is_alt))

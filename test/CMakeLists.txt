@@ -30,6 +30,7 @@ add_executable(jot_tests
   test_git_panel.cpp
   test_multicursor.cpp
   test_zen_mode.cpp
+  test_settings_menu.cpp
   test_win_probe.cpp
   test_inlay_hints.cpp
   test_commenting.cpp

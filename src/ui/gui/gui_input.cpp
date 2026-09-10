@@ -106,13 +106,6 @@ bool UIGui::poll_event(Event &out)
     return false;
   }
 
-  // The settings overlay (RmlUi) consumes mouse/key/text events while its
-  // document is open; QUIT and window events still flow to the editor.
-  if (settings_.handle_event(&ev))
-  {
-    return false;
-  }
-
   // Modifiers as captured on the event itself (keysym.mod), not the live
   // keyboard state: the event's snapshot is exact even if a modifier is
   // released before the event is polled, and synthetic/pushed events carry

@@ -54,6 +54,32 @@ struct QuickPickItem
   int severity = 0;
 };
 
+// One row of the cell-based settings menu (:settings / Ctrl+,). Each entry
+// wraps a config key with its human label, current value, value type and
+// edit state. Bool keys toggle on Enter; int/string keys open an inline
+// input row. Lua-registered config keys (jot.config.set) appear here too
+// as generic string entries, so the menu doubles as a config browser.
+struct SettingsEntry
+{
+  enum class Type
+  {
+    Bool,
+    Int,
+    String
+  };
+  std::string key;    // config key
+  std::string label;  // human-readable label
+  std::string value;  // current string value (as stored in settings.conf)
+  Type type = Type::String;
+  // While the row is being edited, its input text and the row's screen
+  // position (set by the render pass, used by mouse hit-testing).
+  bool editing = false;
+  std::string edit_input;
+  int row_x = 0;
+  int row_y = 0;
+  int row_w = 0;
+};
+
 struct SearchMatch
 {
   int line = 0;

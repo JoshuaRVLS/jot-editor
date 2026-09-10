@@ -73,7 +73,7 @@ bool compile_shader(unsigned int type, const char *src, unsigned int &out)
 } // namespace
 
 UIGui::UIGui(int cols, int rows, int default_fg, int default_bg, int font_px)
-    : UI(nullptr), font_px_(std::clamp(font_px, 8, 40)), settings_(this)
+    : UI(nullptr), font_px_(std::clamp(font_px, 8, 40))
 {
   init_sdl_and_gl();
   init_freetype();
@@ -368,8 +368,8 @@ bool UIGui::create_textures()
   // or every glyph is read from a diagonal slice of mostly-empty memory
   // and renders as a few stray pixels. The pixel-store is global GL state,
   // so it is guarded here and restored after the upload -- otherwise every
-  // later texture upload (e.g. RmlUi's font textures) reads rows with the
-  // wrong stride and can crash the driver.
+  // later texture upload reads rows with the wrong stride and can crash the
+  // driver.
   AtlasPixelStoreGuard pixel_store(kAtlasW);
   atlas_pixels_.assign((size_t)kAtlasW * kAtlasH, 0);
   glGenTextures(1, &atlas_tex_);

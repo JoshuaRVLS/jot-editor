@@ -166,9 +166,16 @@ void Editor::render()
 
     // Keep cursor visibility in sync even when no redraw is needed.
     if (show_menu_bar_dropdown || show_context_menu || show_quick_pick
-        || show_tree_sitter_status_modal || show_lsp_status_modal)
+        || show_tree_sitter_status_modal || show_lsp_status_modal || show_settings_menu)
     {
-      ui->hide_cursor();
+      if (show_settings_menu)
+      {
+        place_settings_cursor();
+      }
+      else
+      {
+        ui->hide_cursor();
+      }
       ui->flush_cursor();
       return;
     }
@@ -360,6 +367,7 @@ void Editor::render()
     render_status_line();
     render_command_palette();
     render_quick_pick();
+    render_settings_menu();
     render_which_key_panel();
     render_search_panel();
     render_tree_sitter_status_modal();
@@ -398,6 +406,10 @@ void Editor::render()
         || show_lsp_status_modal)
     {
       ui->hide_cursor();
+    }
+    else if (show_settings_menu)
+    {
+      place_settings_cursor();
     }
     else if (show_command_palette || show_search || show_save_prompt || show_quit_prompt)
     {
