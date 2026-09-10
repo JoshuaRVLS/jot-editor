@@ -14,6 +14,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <vector>
 
 void UIGui::render()
@@ -126,6 +128,12 @@ void UIGui::render()
   // them out instead of leaving the revealed edges empty.
   capture_pane_rows();
   content_grid_ = nullptr;
+
+  // RmlUi auxiliary surfaces (settings overlay): drawn last, on top of the
+  // cell grid, into the same GL context just before the swap.
+  settings_.sync_viewport(pixel_w_, pixel_h_);
+  settings_.update();
+  settings_.render();
 
   glBindVertexArray(0);
   SDL_GL_SwapWindow(window_);

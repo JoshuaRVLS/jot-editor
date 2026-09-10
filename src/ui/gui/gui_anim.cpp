@@ -101,6 +101,12 @@ bool UIGui::needs_repaint() const
   {
     return true;
   }
+  // The RmlUi settings overlay: its transitions/animations advance in
+  // update(), which only runs while frames are being painted.
+  if (settings_.is_open())
+  {
+    return true;
+  }
   return false;
 }
 

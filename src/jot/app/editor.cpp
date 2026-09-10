@@ -418,9 +418,45 @@ void Editor::initialize_gui_ui()
                  std::clamp(config.get_int("gui_font_size", 16), 8, 40));
   ui->set_default_colors(theme.fg_default, theme.bg_default);
 
+  // Wire the RmlUi settings overlay to the editor services (theme + config
+  // live here, not in the UI layer). Font size applies through the same
+  // path the Ctrl+= pump uses, then relayouts the panes.
+  UIGui *gui = static_cast<UIGui *>(ui);
+  GuiSettingsCallbacks &cb = gui->settings().callbacks;
+  cb.list_themes = [this] { return list_available_themes(); };
+  cb.current_theme = [this] { return current_theme_name; };
+  cb.apply_theme = [this](const std::string &name) { apply_theme(name, true, true); };
+  cb.theme_color = [this](const std::string &name, int &fg, int &bg)
+  { return theme_group_color(name, fg, bg); };
+  cb.get_cursor_style = [this] { return config.get("cursor_style", "bar"); };
+  cb.set_cursor_style = [this](const std::string &value)
+  {
+    config.set("cursor_style", value);
+    config.save();
+  };
+  cb.set_font_size = [this, gui](int px)
+  {
+    gui->apply_font_size(px);
+    config.set_int("gui_font_size", gui->font_px());
+    config.save();
+    Event rsz;
+    rsz.type = EVENT_RESIZE;
+    rsz.resize.width = gui->get_width();
+    rsz.resize.height = gui->get_height();
+    handle_terminal_event(rsz);
+  };
+
   int h = ui->get_height();
   int w = ui->get_render_width();
   create_pane(0, 0, w - minimap_width, h - status_height, -1);
+}
+
+void Editor::toggle_gui_settings()
+{
+  if (auto *gui = dynamic_cast<UIGui *>(ui))
+  {
+    gui->settings().toggle();
+  }
 }
 
 EditorHostAPI &Editor::host()

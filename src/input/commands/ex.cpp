@@ -520,6 +520,12 @@ bool Editor::execute_ex_command(const std::string &input_line)
       set_message("Zen mode: off");
     }
   }
+  else if (lcmd == "settings")
+  {
+    // GUI frontend only: opens the RmlUi settings overlay. Terminal mode
+    // has no such surface, so this is a no-op there.
+    toggle_gui_settings();
+  }
   else if (lcmd == "debug" || lcmd == "debuggdb")
   {
     start_debugger_command("gdb", arg);

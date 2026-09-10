@@ -73,7 +73,7 @@ bool compile_shader(unsigned int type, const char *src, unsigned int &out)
 } // namespace
 
 UIGui::UIGui(int cols, int rows, int default_fg, int default_bg, int font_px)
-    : UI(nullptr), font_px_(std::clamp(font_px, 8, 40))
+    : UI(nullptr), font_px_(std::clamp(font_px, 8, 40)), settings_(this)
 {
   init_sdl_and_gl();
   init_freetype();
@@ -244,7 +244,12 @@ void UIGui::refresh_cell_metrics()
 
 void UIGui::apply_font_zoom(int step)
 {
-  const int new_px = std::clamp(font_px_ + step, 8, 40);
+  apply_font_size(font_px_ + step);
+}
+
+void UIGui::apply_font_size(int px)
+{
+  const int new_px = std::clamp(px, 8, 40);
   if (new_px == font_px_)
   {
     return;
@@ -361,10 +366,11 @@ bool UIGui::create_textures()
   // the pixel-store must tell GL the source rows are kAtlasW bytes apart
   // (GL_UNPACK_ROW_LENGTH) and not 4-byte aligned (GL_UNPACK_ALIGNMENT 1)
   // or every glyph is read from a diagonal slice of mostly-empty memory
-  // and renders as a few stray pixels. Set once; pixel-store state is
-  // global, not per-texture.
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  glPixelStorei(GL_UNPACK_ROW_LENGTH, kAtlasW);
+  // and renders as a few stray pixels. The pixel-store is global GL state,
+  // so it is guarded here and restored after the upload -- otherwise every
+  // later texture upload (e.g. RmlUi's font textures) reads rows with the
+  // wrong stride and can crash the driver.
+  AtlasPixelStoreGuard pixel_store(kAtlasW);
   atlas_pixels_.assign((size_t)kAtlasW * kAtlasH, 0);
   glGenTextures(1, &atlas_tex_);
   glBindTexture(GL_TEXTURE_2D, atlas_tex_);
@@ -379,6 +385,7 @@ bool UIGui::create_textures()
 
 void UIGui::clear_atlas()
 {
+  AtlasPixelStoreGuard pixel_store(kAtlasW);
   std::fill(atlas_pixels_.begin(), atlas_pixels_.end(), 0);
   glBindTexture(GL_TEXTURE_2D, atlas_tex_);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, kAtlasW, kAtlasH, GL_RED, GL_UNSIGNED_BYTE,

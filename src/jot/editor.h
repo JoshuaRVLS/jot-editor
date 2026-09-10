@@ -537,6 +537,8 @@ public:
   // line and centers the pane area at zen_content_width. Returns the new
   // state (true = zen on). Layout-affecting; safe with no panes / no ui.
   bool toggle_zen_mode();
+  // GUI frontend only: opens/closes the RmlUi settings overlay (:settings).
+  void toggle_gui_settings();
   // Left/right margin that centers the pane area at zen_content_width while
   // zen mode is active (0 otherwise or when the area is narrower).
   int zen_content_margin(int available_w);

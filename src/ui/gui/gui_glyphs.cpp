@@ -66,9 +66,14 @@ bool UIGui::ensure_glyph(uint32_t codepoint, int style)
     unsigned char *dst = atlas_pixels_.data() + (size_t)(atlas_y_ + y) * kAtlasW + atlas_x_;
     std::memcpy(dst, src, (size_t)gw);
   }
-  glBindTexture(GL_TEXTURE_2D, atlas_tex_);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, atlas_x_, atlas_y_, gw, gh, GL_RED, GL_UNSIGNED_BYTE,
-                  atlas_pixels_.data() + (size_t)atlas_y_ * kAtlasW + atlas_x_);
+  {
+    // Rows come from the 2048-wide CPU atlas buffer; restore the global
+    // pixel-store state afterwards (see AtlasPixelStoreGuard).
+    AtlasPixelStoreGuard pixel_store(kAtlasW);
+    glBindTexture(GL_TEXTURE_2D, atlas_tex_);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, atlas_x_, atlas_y_, gw, gh, GL_RED, GL_UNSIGNED_BYTE,
+                    atlas_pixels_.data() + (size_t)atlas_y_ * kAtlasW + atlas_x_);
+  }
 
   GuiGlyph g;
   g.u0 = (float)atlas_x_ / (float)kAtlasW;

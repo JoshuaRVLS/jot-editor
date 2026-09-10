@@ -36,12 +36,18 @@ void Editor::pump_gui_events()
     {
       break;
     }
+    // GUI-only: Ctrl+, toggles the RmlUi settings overlay (consumed
+    // entirely here; while it is open, poll_event routes input to it).
+    if (ev.type == EVENT_KEY && ev.key.ctrl && ev.key.key == ',')
+    {
+      gui->settings().toggle();
+    }
     // GUI-only font zoom: Ctrl+= / Ctrl+Plus (incl. numpad) zoom in,
     // Ctrl+- zooms out. Intercepted before dispatch so no mode can rebind
     // or swallow it; the editor is told through a synthesized resize event
     // (the grid re-fits the window at the new cell size, panes relayout).
-    if (ev.type == EVENT_KEY && ev.key.ctrl
-        && (ev.key.key == '=' || ev.key.key == '+' || ev.key.key == '-'))
+    else if (ev.type == EVENT_KEY && ev.key.ctrl
+             && (ev.key.key == '=' || ev.key.key == '+' || ev.key.key == '-'))
     {
       gui->apply_font_zoom(ev.key.key == '-' ? -1 : 1);
       // Persist the zoom so the scale survives a relog (settings.conf).

@@ -287,6 +287,23 @@ if(JOT_GUI AND NOT WIN32)
   if(SDL2_FOUND AND FREETYPE2_FOUND AND GUI_GL_FOUND)
     set(JOT_GUI_ENABLED TRUE)
     set(JOT_GUI_ENABLED TRUE CACHE INTERNAL "GUI frontend compiled into the engine" FORCE)
+    # RmlUi powers auxiliary GUI surfaces (the settings overlay): an
+    # HTML/CSS-like layout engine that hands geometry to our GL context.
+    # Only the core library is built; its backward-compatible GL3 renderer
+    # is compiled into jot_ui below so the overlay shares one context with
+    # the cell grid. Requires network at configure time (JOT_FETCH_DEPS).
+    include(FetchContent)
+    FetchContent_Declare(rmlui
+      GIT_REPOSITORY https://github.com/mikke89/RmlUi.git
+      GIT_TAG 6.3
+      GIT_SHALLOW TRUE
+    )
+    set(RMLUI_SAMPLES OFF CACHE BOOL "" FORCE)
+    set(RMLUI_LUA_BINDINGS OFF CACHE BOOL "" FORCE)
+    set(RMLUI_LOTTIE_PLUGIN OFF CACHE BOOL "" FORCE)
+    set(RMLUI_SVG_PLUGIN OFF CACHE BOOL "" FORCE)
+    set(RMLUI_PRECOMPILED_HEADERS OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(rmlui)
     list(APPEND JOT_UI_SOURCES
          ui/gui/gui_setup.cpp
          ui/gui/gui_glyphs.cpp
@@ -296,7 +313,8 @@ if(JOT_GUI AND NOT WIN32)
          ui/gui/gui_anim.cpp
          ui/gui/gui_render.cpp
          ui/gui/gui_cursor.cpp
-         ui/gui/gui_input.cpp)
+         ui/gui/gui_input.cpp
+         ui/gui/gui_settings.cpp)
     list(APPEND JOT_ENGINE_SOURCES jot/event/gui_events.cpp)
   else()
     message(STATUS "JOT_GUI requested but SDL2/freetype2/GL not found; building terminal-only")
@@ -376,6 +394,23 @@ if(JOT_GUI_ENABLED)
   )
   target_link_libraries(jot_ui_obj PRIVATE
     ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} ${GUI_GL_LIBRARIES}
+  )
+  # RmlUi core + the compatibility GL3 renderer (draws into our context).
+  target_link_libraries(jot_ui_obj PRIVATE RmlUi::Core)
+  target_sources(jot_ui_obj PRIVATE
+    ${rmlui_SOURCE_DIR}/Backends/RmlUi_BackwardCompatible/RmlUi_Renderer_BackwardCompatible_GL3.cpp
+  )
+  target_include_directories(jot_ui_obj PRIVATE
+    ${rmlui_SOURCE_DIR}/Backends/RmlUi_BackwardCompatible
+  )
+  # Runtime assets for GUI overlays (settings.rml/rcss), loaded like the
+  # Lua runtime files: from the source tree in dev builds. The RmlUi GL3
+  # renderer compiles against the system GL directly (jot_gl3_loader.h)
+  # instead of its bundled glad loader, so no symbol interposition can
+  # hijack jot's own GL calls.
+  target_compile_definitions(jot_ui_obj PRIVATE
+    JOT_GUI_SOURCE_DIR="${PROJECT_SOURCE_DIR}/runtime/gui"
+    RMLUI_GL3_CUSTOM_LOADER="ui/gui/jot_gl3_loader.h"
   )
 endif()
 jot_configure_object_target(jot_ui_obj)
@@ -464,6 +499,10 @@ if(JOT_GUI_ENABLED)
   target_link_directories(jot_ui PUBLIC ${SDL2_LIBRARY_DIRS} ${FREETYPE2_LIBRARY_DIRS} ${GUI_GL_LIBRARY_DIRS})
   target_link_libraries(jot_engine PUBLIC ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} ${GUI_GL_LIBRARIES})
   target_link_directories(jot_engine PUBLIC ${SDL2_LIBRARY_DIRS} ${FREETYPE2_LIBRARY_DIRS} ${GUI_GL_LIBRARY_DIRS})
+  # RmlUi core for the settings overlay (the renderer sources are compiled
+  # into jot_ui_obj; the library itself links here for the final binary).
+  target_link_libraries(jot_ui PUBLIC RmlUi::Core)
+  target_link_libraries(jot_engine PUBLIC RmlUi::Core)
 endif()
 target_link_libraries(jot_core PUBLIC ${LIBUV_LIBRARIES})
 target_link_directories(jot_core PUBLIC ${LIBUV_LIBRARY_DIRS})
