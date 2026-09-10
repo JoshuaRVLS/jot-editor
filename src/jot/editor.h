@@ -97,6 +97,7 @@ private:
   static constexpr MenuBarAction MENU_ACTION_HOME = ::MENU_ACTION_HOME;
   static constexpr MenuBarAction MENU_ACTION_TOGGLE_TERMINAL = ::MENU_ACTION_TOGGLE_TERMINAL;
   static constexpr MenuBarAction MENU_ACTION_NEW_TERMINAL = ::MENU_ACTION_NEW_TERMINAL;
+  static constexpr MenuBarAction MENU_ACTION_TERMINAL_ZOOM = ::MENU_ACTION_TERMINAL_ZOOM;
   static constexpr MenuBarAction MENU_ACTION_TASKS = ::MENU_ACTION_TASKS;
   static constexpr MenuBarAction MENU_ACTION_RERUN_TASK = ::MENU_ACTION_RERUN_TASK;
   static constexpr MenuBarAction MENU_ACTION_TOGGLE_DEBUG_PANEL = ::MENU_ACTION_TOGGLE_DEBUG_PANEL;
@@ -712,6 +713,18 @@ private:
   void toggle_integrated_terminal();
   void create_integrated_terminal();
   void create_integrated_terminal(const std::string &label, const std::string &cwd = "");
+  // Terminal panel geometry. Zoomed, the terminal owns the whole pane area
+  // (below the pane tab strip, above the status line, full width);
+  // otherwise it is the bottom panel whose height is drag-adjustable.
+  int integrated_terminal_panel_y() const;
+  int integrated_terminal_panel_h() const;
+  int integrated_terminal_panel_w() const;
+  // Height the terminal reserves from the pane area (0 while zoomed).
+  int integrated_terminal_reserved_h() const;
+  void toggle_terminal_zoom();
+  bool begin_terminal_resize_drag(int x, int y);
+  bool update_terminal_resize_drag(int y);
+  void end_terminal_resize_drag();
   void close_integrated_terminal(int index);
   void activate_integrated_terminal(int index, bool focus = true);
   void load_terminal_tasks();
@@ -934,6 +947,58 @@ public:
   bool settings_input_for_test(int ch)
   {
     return handle_settings_input(ch);
+  }
+  // Terminal panel state for headless tests: the integrated-terminal
+  // fields are private EditorState, so tests configure them directly to
+  // exercise the panel geometry / resize-drag math without spawning a
+  // shell.
+  void set_terminal_state_for_test(bool show, bool zoom, int height)
+  {
+    show_integrated_terminal = show;
+    terminal_zoom_active = zoom;
+    integrated_terminal_height = std::max(5, height);
+    update_pane_layout();
+  }
+  bool terminal_zoom_active_for_test() const
+  {
+    return terminal_zoom_active;
+  }
+  int terminal_panel_h_for_test() const
+  {
+    return integrated_terminal_panel_h();
+  }
+  int terminal_panel_y_for_test() const
+  {
+    return integrated_terminal_panel_y();
+  }
+  int terminal_panel_w_for_test() const
+  {
+    return integrated_terminal_panel_w();
+  }
+  bool terminal_resize_dragging_for_test() const
+  {
+    return terminal_resize_dragging;
+  }
+  // Feeds the terminal top-border drag through the real private handlers.
+  bool terminal_resize_begin_for_test(int x, int y)
+  {
+    return begin_terminal_resize_drag(x, y);
+  }
+  bool terminal_resize_update_for_test(int y)
+  {
+    return update_terminal_resize_drag(y);
+  }
+  void terminal_resize_end_for_test()
+  {
+    end_terminal_resize_drag();
+  }
+  int ui_width_for_test() const
+  {
+    return ui ? ui->get_render_width() : 0;
+  }
+  int ui_height_for_test() const
+  {
+    return ui ? ui->get_height() : 0;
   }
   // Opens/closes the settings menu (the :settings command path).
   void toggle_settings_menu_for_test()

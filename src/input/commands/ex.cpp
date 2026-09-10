@@ -479,6 +479,10 @@ bool Editor::execute_ex_command(const std::string &input_line)
   {
     create_integrated_terminal();
   }
+  else if (lcmd == "termzoom" || lcmd == "terminalzoom")
+  {
+    toggle_terminal_zoom();
+  }
   else if (lcmd == "task")
   {
     if (arg.empty())

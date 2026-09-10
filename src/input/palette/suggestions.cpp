@@ -75,6 +75,7 @@ namespace
         {"term", "Terminal", "Open, focus, or hide terminal", 90},
         {"terminal", "Terminal", "Open, focus, or hide terminal", 80},
         {"termnew", "Terminal", "Create terminal tab", 85},
+        {"termzoom", "Terminal", "Toggle terminal fullscreen (like pane zoom)", 82},
         {"task", "Terminal", "Run or list terminal tasks", 85},
         {"tasknew", "Terminal", "Run task in a fresh terminal tab", 80},
         {"taskrerun", "Terminal", "Rerun last task", 75},

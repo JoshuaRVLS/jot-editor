@@ -123,6 +123,10 @@ void Editor::initialize_state_defaults()
   show_minimap = false;
   minimap_width = 10; // Fixed width for now
   show_integrated_terminal = false;
+  terminal_zoom_active = false;
+  terminal_resize_dragging = false;
+  terminal_resize_start_y = 0;
+  terminal_resize_start_height = 0;
   current_integrated_terminal = -1;
   last_terminal_task_name.clear();
   integrated_terminal_height = std::clamp(config.get_int("terminal_height", 10), 5, 20);

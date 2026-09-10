@@ -313,12 +313,7 @@ void Editor::handle_mouse_input(int x,
         if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT)
         {
           git_sidebar_scroll++;
-          int reserved_terminal_h = 0;
-          if (show_integrated_terminal && !integrated_terminals.empty())
-          {
-            reserved_terminal_h =
-                std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
-          }
+          int reserved_terminal_h = integrated_terminal_reserved_h();
           int view_h =
               std::max(1, ui->get_height() - status_height - tab_height - reserved_terminal_h - 2);
           int max_scroll = std::max(0, (int)build_git_sidebar_rows().size() - view_h);

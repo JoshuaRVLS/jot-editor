@@ -484,12 +484,48 @@ void Editor::handle_mouse(void *event_ptr)
     return;
   }
 
+  if (terminal_resize_dragging)
+  {
+    if (is_motion || is_click)
+    {
+      update_terminal_resize_drag(event->y);
+      return;
+    }
+    if (is_click_release)
+    {
+      end_terminal_resize_drag();
+      return;
+    }
+    return;
+  }
+
+  // Zoomed terminal owns the whole pane area: every click below the tab
+  // strip goes to it (tabs, scrollback, focus), never to the panes, the
+  // sidebar or the docks underneath. The menu bar / status line stay
+  // reachable because their handlers run earlier.
+  if (terminal_zoom_active && show_integrated_terminal && !integrated_terminals.empty())
+  {
+    if (is_click && handle_integrated_terminal_mouse(event->x, event->y))
+    {
+      return;
+    }
+    if (is_click || is_right_click || is_middle_click)
+    {
+      return;
+    }
+  }
+
   if (is_click && begin_sidebar_resize_drag(event->x, event->y))
   {
     return;
   }
 
   if (is_click && begin_right_panel_resize_drag(event->x, event->y))
+  {
+    return;
+  }
+
+  if (is_click && begin_terminal_resize_drag(event->x, event->y))
   {
     return;
   }

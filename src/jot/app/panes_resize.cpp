@@ -285,6 +285,59 @@ void Editor::end_sidebar_resize_drag()
   needs_redraw = true;
 }
 
+bool Editor::begin_terminal_resize_drag(int x, int y)
+{
+  if (terminal_zoom_active || !show_integrated_terminal || !ui)
+  {
+    return false;
+  }
+  // The handle is the panel's top border row: dragging it up grows the
+  // terminal, dragging it down shrinks it.
+  if (y != integrated_terminal_panel_y() || x < 0 || x >= integrated_terminal_panel_w())
+  {
+    return false;
+  }
+  terminal_resize_dragging = true;
+  terminal_resize_start_y = y;
+  terminal_resize_start_height = integrated_terminal_height;
+  needs_redraw = true;
+  return true;
+}
+
+bool Editor::update_terminal_resize_drag(int y)
+{
+  if (!terminal_resize_dragging || !ui)
+  {
+    return false;
+  }
+  // Same bounds as integrated_terminal_panel_h: keep at least 5 rows of
+  // panes and never grow past the status line.
+  int max_h = std::max(5, ui->get_height() - status_height - tab_height - 5);
+  int requested = terminal_resize_start_height + (terminal_resize_start_y - y);
+  int next = std::clamp(requested, 5, max_h);
+  if (integrated_terminal_height == next)
+  {
+    return false;
+  }
+  integrated_terminal_height = next;
+  update_pane_layout();
+  needs_redraw = true;
+  return true;
+}
+
+void Editor::end_terminal_resize_drag()
+{
+  if (!terminal_resize_dragging)
+  {
+    return;
+  }
+  terminal_resize_dragging = false;
+  terminal_resize_start_y = 0;
+  terminal_resize_start_height = 0;
+  set_message("Terminal resized");
+  needs_redraw = true;
+}
+
 bool Editor::right_panel_resize_hit_test(int x, int y) const
 {
   if (!show_right_panel || !ui)

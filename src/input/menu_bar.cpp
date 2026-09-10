@@ -142,6 +142,9 @@ void Editor::execute_menu_bar_item(int menu_index, int item_index)
   case MENU_ACTION_NEW_TERMINAL:
     create_integrated_terminal();
     break;
+  case MENU_ACTION_TERMINAL_ZOOM:
+    toggle_terminal_zoom();
+    break;
   case MENU_ACTION_TASKS:
     execute_command(":task");
     break;

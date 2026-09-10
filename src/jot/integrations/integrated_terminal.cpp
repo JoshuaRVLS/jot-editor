@@ -112,6 +112,8 @@ void Editor::close_integrated_terminal(int index)
   {
     current_integrated_terminal = -1;
     show_integrated_terminal = false;
+    terminal_zoom_active = false;
+    update_pane_layout();
     set_message("Closed terminal", false);
     needs_redraw = true;
     return;
@@ -128,6 +130,99 @@ void Editor::close_integrated_terminal(int index)
 
   activate_integrated_terminal(current_integrated_terminal, show_integrated_terminal);
   set_message("Closed terminal", false);
+  needs_redraw = true;
+}
+
+int Editor::integrated_terminal_reserved_h() const
+{
+  if (!show_integrated_terminal || integrated_terminals.empty() || terminal_zoom_active)
+  {
+    return 0;
+  }
+  return integrated_terminal_panel_h();
+}
+
+int Editor::integrated_terminal_panel_h() const
+{
+  if (!ui)
+  {
+    return 5;
+  }
+  if (terminal_zoom_active && show_integrated_terminal)
+  {
+    // Zoomed: the terminal spans everything below the menu bar (which is
+    // 0 rows in the compact layout), covering the pane headers too.
+    return std::max(5, ui->get_height() - status_height - topbar_height());
+  }
+  // Bottom panel: the stored height, capped so the panes always keep a
+  // few rows (the same bound the drag clamps to).
+  int max_h = std::max(5, ui->get_height() - status_height - tab_height - 5);
+  return std::clamp(integrated_terminal_height, 5, max_h);
+}
+
+int Editor::integrated_terminal_panel_y() const
+{
+  if (!ui)
+  {
+    return 0;
+  }
+  if (terminal_zoom_active && show_integrated_terminal)
+  {
+    return topbar_height();
+  }
+  return std::max(tab_height, ui->get_height() - status_height - integrated_terminal_panel_h());
+}
+
+int Editor::integrated_terminal_panel_w() const
+{
+  if (!ui)
+  {
+    return 1;
+  }
+  if (terminal_zoom_active && show_integrated_terminal)
+  {
+    // Zoomed: the terminal also covers the sidebar / right-panel docks.
+    return std::max(1, ui->get_render_width());
+  }
+  return std::max(1, ui->get_render_width() - effective_right_panel_width());
+}
+
+void Editor::toggle_terminal_zoom()
+{
+  if (integrated_terminals.empty())
+  {
+    create_integrated_terminal();
+    return;
+  }
+  IntegratedTerminal *term = get_integrated_terminal();
+  if (!term)
+  {
+    current_integrated_terminal = 0;
+    term = get_integrated_terminal();
+  }
+  if (!term)
+  {
+    create_integrated_terminal();
+    return;
+  }
+  if (!term->is_active())
+  {
+    if (!term->open_shell())
+    {
+      set_message("Failed to open integrated terminal: check $SHELL or PTY support", false);
+      needs_redraw = true;
+      return;
+    }
+    watch_integrated_terminal_fd(term);
+    term->poll_output();
+  }
+  show_integrated_terminal = true;
+  activate_integrated_terminal(current_integrated_terminal, true);
+  terminal_zoom_active = !terminal_zoom_active;
+  update_pane_layout();
+  set_message(terminal_zoom_active ? "Terminal fullscreen (Alt+Shift+Z to exit)"
+                                   : "Terminal un-zoomed",
+              false);
   needs_redraw = true;
 }
 
@@ -187,6 +282,8 @@ void Editor::toggle_integrated_terminal()
   {
     activate_integrated_terminal(current_integrated_terminal, false);
     show_integrated_terminal = false;
+    terminal_zoom_active = false;
+    update_pane_layout();
     set_message("Integrated terminal hidden", false);
   }
   else
@@ -230,9 +327,23 @@ void Editor::handle_integrated_terminal_input(int ch, bool is_ctrl, bool is_shif
     return;
   }
 
+  // Terminal zoom uses the same modifier family as pane zoom (Alt+Shift+Z);
+  // when the terminal is focused the key reaches the shell otherwise, so it
+  // is intercepted here.
+  if (is_alt && is_shift && (ch == 'Z' || ch == 'z'))
+  {
+    toggle_terminal_zoom();
+    return;
+  }
+
   if (ch == 27)
   {
     activate_integrated_terminal(current_integrated_terminal, false);
+    if (terminal_zoom_active)
+    {
+      terminal_zoom_active = false;
+      update_pane_layout();
+    }
     set_message("Terminal focus off");
     needs_redraw = true;
     return;
@@ -251,9 +362,9 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y)
     return false;
   }
 
-  int panel_h = std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
-  int panel_y = std::max(tab_height, ui->get_height() - status_height - panel_h);
-  int panel_w = std::max(1, ui->get_render_width() - effective_right_panel_width());
+  const int panel_h = integrated_terminal_panel_h();
+  const int panel_y = integrated_terminal_panel_y();
+  const int panel_w = integrated_terminal_panel_w();
   int tab_y = panel_y + 1;
 
   if (x < 0 || x >= panel_w || y < panel_y || y >= panel_y + panel_h)
@@ -303,6 +414,15 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y)
     if (x >= tab_x && x < tab_x + (int)plus_tab.size())
     {
       create_integrated_terminal();
+      return true;
+    }
+    tab_x += (int)plus_tab.size();
+
+    // Fullscreen toggle button, drawn right after the + tab.
+    const std::string zoom_tab = "□";
+    if (x >= tab_x && x < tab_x + (int)zoom_tab.size())
+    {
+      toggle_terminal_zoom();
       return true;
     }
 
@@ -409,9 +529,9 @@ bool Editor::handle_integrated_terminal_scroll(int x, int y, bool is_scroll_up, 
     return false;
   }
 
-  int panel_h = std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
-  int panel_y = std::max(tab_height, ui->get_height() - status_height - panel_h);
-  int panel_w = std::max(1, ui->get_render_width() - effective_right_panel_width());
+  const int panel_h = integrated_terminal_panel_h();
+  const int panel_y = integrated_terminal_panel_y();
+  const int panel_w = integrated_terminal_panel_w();
 
   if (x < 0 || x >= panel_w || y < panel_y || y >= panel_y + panel_h)
   {
@@ -454,9 +574,9 @@ void Editor::place_integrated_terminal_cursor()
     return;
   }
 
-  int panel_h = std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
-  int panel_y = std::max(tab_height, ui->get_height() - status_height - panel_h);
-  int panel_w = std::max(1, ui->get_render_width() - effective_right_panel_width());
+  const int panel_h = integrated_terminal_panel_h();
+  const int panel_y = integrated_terminal_panel_y();
+  const int panel_w = integrated_terminal_panel_w();
   int content_w = std::max(1, panel_w - 2);
   int content_h = std::max(1, panel_h - 3);
   term->resize(content_h, content_w);
@@ -475,9 +595,9 @@ void Editor::render_integrated_terminal()
     return;
   }
 
-  int panel_h = std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
-  int panel_y = std::max(tab_height, ui->get_height() - status_height - panel_h);
-  int panel_w = std::max(1, ui->get_render_width() - effective_right_panel_width());
+  const int panel_h = integrated_terminal_panel_h();
+  const int panel_y = integrated_terminal_panel_y();
+  const int panel_w = integrated_terminal_panel_w();
   UIRect panel = {0, panel_y, panel_w, panel_h};
 
   int term_fg = theme.fg_terminal;
@@ -523,6 +643,17 @@ void Editor::render_integrated_terminal()
   {
     ui->draw_text(
         tab_x, tab_y, " + ", theme.fg_terminal_tab_plus, theme.bg_terminal_tab_plus, true);
+    tab_x += 3;
+    // Fullscreen toggle button; highlighted while zoomed so the state is
+    // visible even when the terminal fills the whole area.
+    if (tab_x + 1 < panel_w)
+    {
+      int zoom_fg = terminal_zoom_active ? theme.fg_terminal_tab_focused
+                                         : theme.fg_terminal_tab_inactive;
+      int zoom_bg = terminal_zoom_active ? theme.bg_terminal_tab_focused
+                                         : theme.bg_terminal_tab_inactive;
+      ui->draw_text(tab_x, tab_y, "□", zoom_fg, zoom_bg, true);
+    }
   }
 
   int content_h = std::max(1, panel_h - 3);

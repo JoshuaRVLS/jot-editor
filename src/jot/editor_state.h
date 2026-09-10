@@ -122,6 +122,10 @@ struct EditorState
   int minimap_width;
   bool show_integrated_terminal;
   int integrated_terminal_height;
+  // True while the terminal fills the whole pane area (like pane zoom);
+  // panes stay laid out underneath but are covered and their clicks route
+  // to the terminal until the zoom is toggled off.
+  bool terminal_zoom_active;
   bool show_debugger_panel;
   int debugger_panel_height;
   bool show_right_panel;
@@ -235,6 +239,10 @@ struct EditorState
   float pane_resize_start_ratio;
   bool pane_zoom_active; // true while one pane is expanded over the others
   int pane_zoom_pane;    // pane index expanded while zoomed (-1 when off)
+  // Dragging the terminal panel's top border resizes its height live.
+  bool terminal_resize_dragging;
+  int terminal_resize_start_y;
+  int terminal_resize_start_height;
   bool sidebar_resize_dragging;
   bool sidebar_resize_opening;
   int sidebar_resize_start_x;

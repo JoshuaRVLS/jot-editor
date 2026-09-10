@@ -103,6 +103,8 @@ namespace CommandLineUtils
                                                       "terminal",
                                                       "termnew",
                                                       "terminalnew",
+                                                      "termzoom",
+                                                      "terminalzoom",
                                                       "task",
                                                       "tasknew",
                                                       "taskrerun",

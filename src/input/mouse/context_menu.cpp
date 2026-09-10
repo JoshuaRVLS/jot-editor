@@ -52,9 +52,9 @@ bool Editor::open_context_menu_for_mouse(int x, int y)
 
   if (show_integrated_terminal && !integrated_terminals.empty())
   {
-    int panel_h = std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
-    int panel_y = std::max(tab_height, ui->get_height() - status_height - panel_h);
-    int panel_w = ui->get_render_width();
+    int panel_h = integrated_terminal_panel_h();
+    int panel_y = integrated_terminal_panel_y();
+    int panel_w = integrated_terminal_panel_w();
     int tab_y = panel_y + 1;
     if (x >= 0 && x < panel_w && y >= panel_y && y < panel_y + panel_h)
     {

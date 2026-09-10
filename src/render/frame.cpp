@@ -509,12 +509,7 @@ void Editor::render_pane_resize_guides()
   }
 
   int total_w = std::max(1, ui->get_render_width());
-  int reserved_terminal_h = 0;
-  if (show_integrated_terminal && !integrated_terminals.empty())
-  {
-    reserved_terminal_h =
-        std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
-  }
+  int reserved_terminal_h = integrated_terminal_reserved_h();
   int menu_h = topbar_height();
   int total_h = std::max(1, ui->get_height() - status_height - reserved_terminal_h - menu_h);
   int origin_x = show_sidebar ? effective_sidebar_width() : 0;

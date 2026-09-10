@@ -129,6 +129,7 @@ std::vector<Editor::MenuBarMenu> Editor::build_menu_bar_model() const
       {"Terminal",
        {{"Toggle Terminal", MENU_ACTION_TOGGLE_TERMINAL},
         {"New Terminal", MENU_ACTION_NEW_TERMINAL},
+        {"Zoom Terminal", MENU_ACTION_TERMINAL_ZOOM},
         {"Run Task...", MENU_ACTION_TASKS},
         {"Rerun Last Task", MENU_ACTION_RERUN_TASK}}},
       {"Help",

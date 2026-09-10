@@ -147,6 +147,11 @@ Install helpers also cover Rust, Go, Lua, and Bash.
 
 - A bottom terminal panel backed by a real PTY, with multiple tabs that stay
   alive while hidden.
+- Drag the panel's top border to resize it live; it can grow to nearly the
+  full window.
+- **Fullscreen zoom** (like pane zoom): `Alt+Shift+Z` while focused, the `□`
+  tab button, or `:termzoom` toggles the terminal across the whole pane
+  area. `Esc` exits fullscreen too.
 - `Esc` returns focus to the editor; the mouse switches/closes tabs or opens
   new ones.
 - Local and global task files:
