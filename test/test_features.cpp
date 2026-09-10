@@ -1,6 +1,6 @@
 #include "html.h"
-#include "jot/editor_features.hpp"
 #include "quote_text_object.h"
+#include "text_features.h"
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("Indent Level", "[jot]")

@@ -10,7 +10,6 @@ add_executable(jot_benchmarks
 
 target_include_directories(jot_benchmarks PRIVATE
   ${PROJECT_SOURCE_DIR}/benchmarks
-  ${PROJECT_SOURCE_DIR}/include
   ${PROJECT_SOURCE_DIR}/src
   ${PROJECT_SOURCE_DIR}/src/jot
   ${PROJECT_SOURCE_DIR}/src/features

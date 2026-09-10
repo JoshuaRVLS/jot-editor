@@ -4,10 +4,14 @@ project(jot LANGUAGES C CXX)
 include(GNUInstallDirs)
 
 # Bundled third-party dependencies (built before the engine subdirectory).
-# glad lives in third_party/glad and is added by src/CMakeLists.txt: it is only
-# needed for the GUI frontend, and whether that is available is decided there
-# (after the JOT_GUI option and the SDL2/FreeType probes).
 add_subdirectory(third_party/libvterm)
+# glad provides the OpenGL entry points the GUI frontend calls (the system GL
+# headers/library only expose the modern API on some platforms: Windows'
+# opengl32.dll stops at GL 1.1). It is built unconditionally rather than only
+# when the GUI is enabled because ui/gui/gui.h is included by engine translation
+# units that are always compiled (editor.cpp, settings.cpp), so the header has
+# to be on the include path regardless of JOT_GUI. gl.c needs no system GL.
+add_subdirectory(third_party/glad)
 
 # Use a clean, portable install RPATH that points to the same prefix's lib dir.
 # Do NOT use CMAKE_INSTALL_RPATH_USE_LINK_PATH: it bakes build-time link

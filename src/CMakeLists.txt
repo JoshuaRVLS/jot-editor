@@ -21,7 +21,6 @@ add_custom_command(
 
 function(jot_configure_object_target target_name)
   target_include_directories(${target_name} PRIVATE
-    ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/src/jot
     ${PROJECT_SOURCE_DIR}/src/input
@@ -251,8 +250,12 @@ if(JOT_TREESITTER)
 endif()
 
 function(jot_expose_module_api target_name)
+  # Every consumer (app, tests, benchmarks) sees src/ and each module dir, so
+  # headers are included as either "jot/<module>/<file>.h" or bare "<file>.h"
+  # depending on the module. There is deliberately no separate include/ tree:
+  # it used to hold three empty shims that only renamed headers already here,
+  # while making the "jot/" prefix resolve to two different roots.
   target_include_directories(${target_name} PUBLIC
-    ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/src/jot
     ${PROJECT_SOURCE_DIR}/src/input
@@ -260,7 +263,6 @@ function(jot_expose_module_api target_name)
     ${PROJECT_SOURCE_DIR}/src/edit
     ${PROJECT_SOURCE_DIR}/src/features
     ${PROJECT_SOURCE_DIR}/src/ui
-    ${PROJECT_SOURCE_DIR}/src/python_bridge
     ${PROJECT_SOURCE_DIR}/src/tools
   )
 endfunction()
@@ -289,13 +291,6 @@ if(JOT_GUI AND NOT WIN32)
   if(SDL2_FOUND AND FREETYPE2_FOUND)
     set(JOT_GUI_ENABLED TRUE)
     set(JOT_GUI_ENABLED TRUE CACHE INTERNAL "GUI frontend compiled into the engine" FORCE)
-    # Vendored OpenGL loader for the GUI frontend: the system GL headers/library
-    # only expose the modern API on some platforms (Windows' opengl32.dll stops
-    # at GL 1.1), and glad resolves every entry point at runtime through SDL, so
-    # nothing needs to link a system GL library. Added here rather than at the
-    # top level so a terminal-only build never compiles it.
-    add_subdirectory(${PROJECT_SOURCE_DIR}/third_party/glad
-                     ${CMAKE_CURRENT_BINARY_DIR}/glad)
     list(APPEND JOT_UI_SOURCES
          ui/gui/gui_setup.cpp
          ui/gui/gui_glyphs.cpp
@@ -318,6 +313,9 @@ add_library(jot_engine_obj OBJECT ${JOT_ENGINE_SOURCES})
 jot_configure_object_target(jot_engine_obj)
 target_include_directories(jot_engine_obj SYSTEM PRIVATE ${LIBUV_INCLUDE_DIRS})
 target_compile_options(jot_engine_obj PRIVATE ${LIBUV_CFLAGS_OTHER})
+# Unconditional (not tied to JOT_GUI): engine sources that are always compiled
+# include ui/gui/gui.h, which pulls in glad/gl.h.
+target_link_libraries(jot_engine_obj PRIVATE jot_glad)
 
 add_library(jot_edit_obj OBJECT ${JOT_EDIT_SOURCES})
 jot_configure_object_target(jot_edit_obj)
@@ -388,11 +386,6 @@ if(JOT_GUI_ENABLED)
   target_link_libraries(jot_ui_obj PRIVATE
     ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} jot_glad
   )
-  # Engine translation units (editor.cpp, settings.cpp, gui_events.cpp) include
-  # ui/gui/gui.h too, so they need the vendored header as well. This used to work
-  # by accident: the system GL header sat in a default include path, which a
-  # vendored one does not.
-  target_link_libraries(jot_engine_obj PRIVATE jot_glad)
 endif()
 jot_configure_object_target(jot_ui_obj)
 
@@ -465,6 +458,10 @@ if(JOT_TREESITTER_ENABLED)
 endif()
 target_link_libraries(jot_tools PUBLIC jot_vterm)
 target_link_libraries(jot_engine PUBLIC jot_vterm)
+# Always propagated, not just when the GUI is enabled: ui/gui/gui.h is included
+# by engine sources that are always compiled (editor.cpp, settings.cpp) and its
+# inline atlas guard calls gl* functions.
+target_link_libraries(jot_engine PUBLIC jot_glad)
 if(NOT WIN32)
   target_link_libraries(jot_ui PUBLIC ${TERMKEY_LIBRARIES})
   target_link_directories(jot_ui PUBLIC ${TERMKEY_LIBRARY_DIRS})

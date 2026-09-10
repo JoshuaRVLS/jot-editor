@@ -530,7 +530,6 @@ milliseconds. Compare runs on the same build type and machine.
 apps/jot/        CLI entrypoint and executable target
 benchmarks/      opt-in performance benchmark suite
 cmake/           reusable CMake modules
-include/jot/     public C++ API headers
 src/jot/        editor state, buffers, panes, workspace, LSP, debugger, terminal
 src/edit/        text editing, cursor movement, selection, clipboard, search
 src/features/    syntax, folding, config, bracket helpers, C++ assist
