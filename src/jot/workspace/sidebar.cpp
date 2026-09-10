@@ -147,12 +147,7 @@ void Editor::handle_sidebar_input(int ch)
   if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT)
   {
     std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
-    int reserved_terminal_h = 0;
-    if (show_integrated_terminal && !integrated_terminals.empty())
-    {
-      reserved_terminal_h =
-          std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
-    }
+    int reserved_terminal_h = integrated_terminal_reserved_h();
     const int view_h =
         std::max(1, ui->get_height() - status_height - tab_height - reserved_terminal_h - 2);
     auto clamp_scroll = [&]()

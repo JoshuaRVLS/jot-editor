@@ -17,12 +17,7 @@ bool Editor::collapsed_sidebar_handle_hit_test(int x, int y) const
   {
     return false;
   }
-  int reserved_terminal_h = 0;
-  if (show_integrated_terminal && !integrated_terminals.empty())
-  {
-    reserved_terminal_h =
-        std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
-  }
+  int reserved_terminal_h = integrated_terminal_reserved_h();
   int top = topbar_height();
   int bottom = ui->get_height() - status_height - reserved_terminal_h;
   return y >= top && y < bottom;
@@ -43,12 +38,7 @@ bool Editor::sidebar_resize_hit_test(int x, int y) const
   {
     return false;
   }
-  int reserved_terminal_h = 0;
-  if (show_integrated_terminal && !integrated_terminals.empty())
-  {
-    reserved_terminal_h =
-        std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
-  }
+  int reserved_terminal_h = integrated_terminal_reserved_h();
   int top = topbar_height();
   int bottom = ui->get_height() - status_height - reserved_terminal_h;
   return y >= top && y < bottom;

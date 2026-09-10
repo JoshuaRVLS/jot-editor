@@ -989,6 +989,17 @@ public:
   {
     return integrated_terminal_panel_w();
   }
+  // Sidebar panel height as render_sidebar() computes it: the pane area
+  // minus the terminal's real reserved footprint.
+  int sidebar_panel_h_for_test() const
+  {
+    if (!ui)
+    {
+      return 0;
+    }
+    return std::max(0, ui->get_height() - status_height - topbar_height()
+                           - integrated_terminal_reserved_h());
+  }
   bool terminal_resize_dragging_for_test() const
   {
     return terminal_resize_dragging;

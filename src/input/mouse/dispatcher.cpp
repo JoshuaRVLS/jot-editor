@@ -588,12 +588,7 @@ void Editor::handle_mouse(void *event_ptr)
 
   if (show_sidebar && is_click)
   {
-    int reserved_terminal_h = 0;
-    if (show_integrated_terminal && !integrated_terminals.empty())
-    {
-      reserved_terminal_h =
-          std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
-    }
+    int reserved_terminal_h = integrated_terminal_reserved_h();
     int content_bottom = terminal.get_height() - status_height - reserved_terminal_h;
     int sidebar_w = effective_sidebar_width();
     if (event->x < sidebar_w && event->y >= topbar_height() && event->y < content_bottom)

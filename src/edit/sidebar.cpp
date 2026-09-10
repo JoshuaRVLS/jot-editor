@@ -512,12 +512,10 @@ void Editor::render_sidebar()
   ensure_sidebar_render_cache();
 
   int w = effective_sidebar_width();
-  int reserved_terminal_h = 0;
-  if (show_integrated_terminal && !integrated_terminals.empty())
-  {
-    reserved_terminal_h =
-        std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
-  }
+  // Reserve the terminal's real footprint (not the old 50% cap): the
+  // panel can grow to nearly the full window, and the explorer must
+  // shrink accordingly instead of sliding underneath it.
+  int reserved_terminal_h = integrated_terminal_reserved_h();
   // Full height, aligned with the editor pane: the buffer-tab strip is
   // pane-local (rendered inside the pane frame), so no row belongs above
   // the explorer's top border.
@@ -1057,12 +1055,7 @@ void Editor::render_collapsed_sidebar_handle()
     return;
   }
 
-  int reserved_terminal_h = 0;
-  if (show_integrated_terminal && !integrated_terminals.empty())
-  {
-    reserved_terminal_h =
-        std::clamp(integrated_terminal_height, 5, std::max(5, ui->get_height() / 2));
-  }
+  int reserved_terminal_h = integrated_terminal_reserved_h();
   int top = topbar_height();
   int bottom = ui->get_height() - status_height - reserved_terminal_h;
   int h = std::max(0, bottom - top);

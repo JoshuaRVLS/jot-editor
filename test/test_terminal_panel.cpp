@@ -67,6 +67,34 @@ TEST_CASE("Terminal panel: hidden panel reserves no pane height", "[jot]")
   REQUIRE(e.terminal_panel_h_for_test() >= 5);
 }
 
+TEST_CASE("Sidebar shrinks to leave the terminal its full height", "[jot]")
+{
+  Editor &e = probe_editor();
+  const int screen_h = e.ui_height_for_test();
+  const int status_h = 2; // status line height used by the headless UI
+
+  // A real (shell-less) terminal so the reservation is active.
+  e.add_terminal_for_test();
+
+  // Small terminal: the sidebar keeps everything above it.
+  e.set_terminal_state_for_test(true, false, 10);
+  REQUIRE(e.sidebar_panel_h_for_test() == screen_h - status_h - 10);
+
+  // Tall terminal (well beyond the old 50% cap): the sidebar must shrink
+  // to the pane area above the panel's real footprint -- not the old
+  // clamped half-screen reservation that let the explorer slide under
+  // the terminal.
+  e.set_terminal_state_for_test(true, false, screen_h);
+  REQUIRE(e.terminal_panel_h_for_test() > screen_h / 2);
+  REQUIRE(e.sidebar_panel_h_for_test() < screen_h / 2);
+  REQUIRE(e.sidebar_panel_h_for_test()
+          == screen_h - status_h - e.terminal_panel_h_for_test());
+
+  // Hidden terminal: the sidebar spans the full pane area again.
+  e.set_terminal_state_for_test(false, false, screen_h);
+  REQUIRE(e.sidebar_panel_h_for_test() == screen_h - status_h);
+}
+
 TEST_CASE("Terminal resize drag clamps to the pane-preserving range", "[jot]")
 {
   Editor &e = probe_editor();
