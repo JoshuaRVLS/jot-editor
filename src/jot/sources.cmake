@@ -51,6 +51,7 @@ set(JOT_ENGINE_SOURCES
   jot/workspace/git.cpp
   jot/workspace/git_client.cpp
   jot/workspace/git_panel.cpp
+  jot/workspace/right_panel.cpp
   jot/workspace/tasks.cpp
   jot/workspace/workspace.cpp
   jot/workspace/file_tree.cpp

@@ -75,6 +75,8 @@ void Editor::render_debugger_panel()
   view.w = panel_w;
   view.h = panel_h;
   view.title = " Debug ";
+  build_right_panel_tab_strip_view(view);
+  render_right_panel_tab_strip(panel_x, panel_y, panel_w);
 
   auto emit_view = [&]() -> bool
   {
@@ -86,7 +88,7 @@ void Editor::render_debugger_panel()
   };
 
   int tab_x = panel_x + 1;
-  int tab_y = panel_y + 1;
+  int tab_y = panel_y + 2;
   for (int i = 0; i < (int)debugger_session_state.size(); i++)
   {
     const auto &state = debugger_session_state[i];
@@ -107,8 +109,8 @@ void Editor::render_debugger_panel()
     tab_x += (int)label.size() + 1;
   }
 
-  int content_y = panel_y + 2;
-  int content_h = std::max(1, panel_h - 3);
+  int content_y = panel_y + 3;
+  int content_h = std::max(1, panel_h - 4);
   int content_x = panel_x + 1;
   int content_w = std::max(1, panel_w - 2);
 

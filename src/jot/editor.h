@@ -16,6 +16,7 @@ class HostCoreAPI;
 class HostRenderAPI;
 class HostIOAPI;
 class UIGui;
+struct SidePanelView; // defined in jot/lua/api.h (included by renderers)
 
 class Editor : private EditorState
 {
@@ -558,6 +559,39 @@ public:
   {
     return show_right_panel;
   }
+  // Right dock (VSCode-style tabbed sidebar): panels open as tabs
+  // (git, git diff, symbols, debug, plugin). Ctrl+Shift+B toggles the dock;
+  // the tab strip at the top switches panels and closes individual tabs.
+  void toggle_right_panel();
+  void open_right_panel_tab(RightPanelTab tab);
+  void close_right_panel_tab(RightPanelTab tab);
+  bool right_panel_tab_open(RightPanelTab tab) const;
+  // Right-dock state for headless tests (private EditorState; tests read
+  // the tab list and active tab through these).
+  const std::vector<RightPanelTab> &right_panel_tabs_for_test() const
+  {
+    return right_panel_tabs;
+  }
+  RightPanelTab active_right_panel_tab_for_test() const
+  {
+    return active_right_panel_tab;
+  }
+  // Headless tests: enables the workspace session subsystem for a fake root
+  // so save_workspace_session / restore_workspace_session can round-trip
+  // through a JOT_CONFIG_HOME-backed session file.
+  void enable_workspace_session_for_test(const std::string &root)
+  {
+    workspace_session_enabled = true;
+    workspace_session_root = root;
+  }
+  void save_workspace_session_for_test()
+  {
+    save_workspace_session();
+  }
+  bool restore_workspace_session_for_test()
+  {
+    return restore_workspace_session();
+  }
   int status_line_height() const
   {
     return status_height;
@@ -698,6 +732,9 @@ private:
   // workspace (or the current file's directory). Reuses an existing lazygit
   // tab when one is still running.
   void open_git_client();
+  bool handle_right_panel_tab_strip_mouse(int x, int y, bool is_click);
+  void build_right_panel_tab_strip_view(SidePanelView &view) const;
+  void render_right_panel_tab_strip(int panel_x, int panel_y, int panel_w);
   // Git panel (right dock): lazygit-style files / branches / commits / stash
   // views driven by the jot_git_panel::State model (see git_panel_models.h).
   void toggle_git_panel();

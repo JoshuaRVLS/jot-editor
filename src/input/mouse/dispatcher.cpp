@@ -546,6 +546,11 @@ void Editor::handle_mouse(void *event_ptr)
     return;
   }
 
+  if (handle_right_panel_tab_strip_mouse(event->x, event->y, is_click))
+  {
+    return;
+  }
+
   if ((is_click || is_click_release || is_motion)
       && handle_debugger_mouse(event->x, event->y, is_click))
   {

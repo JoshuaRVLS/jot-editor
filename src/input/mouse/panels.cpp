@@ -209,7 +209,7 @@ void Editor::handle_mouse_input(int x,
       else if (is_click)
       {
         ensure_outline_fresh();
-        int row = y - (panel_y + 3) + outline_panel.scroll;
+        int row = y - (panel_y + 4) + outline_panel.scroll;
         if (row >= 0 && row < (int)outline_panel.symbols.size())
         {
           outline_panel.selected = row;
@@ -236,6 +236,11 @@ void Editor::handle_mouse_input(int x,
       needs_redraw = true;
       return;
     }
+  }
+
+  if (handle_right_panel_tab_strip_mouse(x, y, is_click))
+  {
+    return;
   }
 
   if (handle_debugger_mouse(x, y, is_click, is_scroll_up, is_scroll_down))

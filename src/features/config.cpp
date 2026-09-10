@@ -104,6 +104,12 @@ void Config::load_defaults()
   settings["lsp_completion_max_items"] = "8";
   settings["lsp_completion_nerd_icons"] = "true";
   settings["lsp_completion_ghost_text"] = "true";
+  settings["lsp_inlay_hints"] = "true";
+  settings["lsp_inlay_type_hints"] = "true";
+  settings["decorations_inline_diagnostics"] = "true";
+  settings["color_scheme"] = "dark";
+  settings["right_panel_width"] = "42";
+  settings["zen_content_width"] = "100";
   settings["terminal_height"] = "10";
   settings["debugger_height"] = "12";
   settings["discord_rpc"] = "false";
@@ -111,6 +117,17 @@ void Config::load_defaults()
   settings["treesitter_library_paths"] = "";
   settings["treesitter_query_paths"] = "";
   settings["treesitter_language_overrides"] = "";
+  // Lua feature modules read these with fallback defaults; registering them
+  // here surfaces them in the :settings menu (and settings.conf) so they are
+  // discoverable and editable like any built-in setting.
+  settings["toast.duration_ms"] = "3000";
+  settings["toast.fade_ms"] = "250";
+  settings["toast.gap"] = "0";
+  settings["toast.margin"] = "1";
+  settings["toast.max_visible"] = "5";
+  settings["toast.max_width"] = "56";
+  settings["update.build_dir"] = "";
+  settings["update.check_on_startup"] = "true";
 }
 
 void Config::parse_line(const std::string &line)

@@ -143,3 +143,78 @@ TEST_CASE("Settings menu closes on Esc", "[jot]")
   REQUIRE(e.settings_input_for_test(27));
   REQUIRE_FALSE(e.settings_menu_open_for_test());
 }
+TEST_CASE("Settings menu covers Lua-registered and LSP keys", "[jot]")
+{
+  Editor &e = probe_editor();
+  open_menu(e);
+
+  // C++-read keys that previously fell back to raw names now carry labels.
+  const int scheme = entry_index(e, "color_scheme");
+  REQUIRE(scheme >= 0);
+  REQUIRE(e.settings_entries_for_test()[(size_t)scheme].type
+          == SettingsEntry::Type::String);
+  REQUIRE(e.settings_entries_for_test()[(size_t)scheme].label == "Color scheme");
+
+  const int inlay = entry_index(e, "lsp_inlay_hints");
+  REQUIRE(inlay >= 0);
+  REQUIRE(e.settings_entries_for_test()[(size_t)inlay].type
+          == SettingsEntry::Type::Bool);
+  REQUIRE(e.settings_entries_for_test()[(size_t)inlay].label == "LSP parameter hints");
+
+  const int inlay_type = entry_index(e, "lsp_inlay_type_hints");
+  REQUIRE(inlay_type >= 0);
+  REQUIRE(e.settings_entries_for_test()[(size_t)inlay_type].type
+          == SettingsEntry::Type::Bool);
+
+  const int inline_diag = entry_index(e, "decorations_inline_diagnostics");
+  REQUIRE(inline_diag >= 0);
+  REQUIRE(e.settings_entries_for_test()[(size_t)inline_diag].type
+          == SettingsEntry::Type::Bool);
+
+  const int zen = entry_index(e, "zen_content_width");
+  REQUIRE(zen >= 0);
+  REQUIRE(e.settings_entries_for_test()[(size_t)zen].type
+          == SettingsEntry::Type::Int);
+  REQUIRE(e.settings_entries_for_test()[(size_t)zen].label == "Zen content width");
+
+  // The Lua feature keys registered as defaults are editable ints/bools.
+  const int toast_w = entry_index(e, "toast.max_width");
+  REQUIRE(toast_w >= 0);
+  REQUIRE(e.settings_entries_for_test()[(size_t)toast_w].type
+          == SettingsEntry::Type::Int);
+  REQUIRE(e.settings_entries_for_test()[(size_t)toast_w].label == "Toast max width");
+
+  const int toast_dur = entry_index(e, "toast.duration_ms");
+  REQUIRE(toast_dur >= 0);
+  REQUIRE(e.settings_entries_for_test()[(size_t)toast_dur].type
+          == SettingsEntry::Type::Int);
+
+  const int upd = entry_index(e, "update.check_on_startup");
+  REQUIRE(upd >= 0);
+  REQUIRE(e.settings_entries_for_test()[(size_t)upd].type
+          == SettingsEntry::Type::Bool);
+  REQUIRE(e.settings_entries_for_test()[(size_t)upd].label
+          == "Check updates on startup");
+}
+
+TEST_CASE("Settings menu edits a toast key and persists it", "[jot]")
+{
+  Editor &e = probe_editor();
+  open_menu(e);
+
+  const int idx = entry_index(e, "toast.max_width");
+  REQUIRE(idx >= 0);
+  e.settings_select_for_test(idx);
+  REQUIRE(e.settings_input_for_test('\n'));
+  for (char c : std::string("40"))
+  {
+    e.settings_input_for_test(c);
+  }
+  REQUIRE(e.settings_input_for_test('\n'));
+  REQUIRE(e.config_int_for_test("toast.max_width") == 40);
+  REQUIRE_FALSE(e.settings_entries_for_test()[(size_t)idx].editing);
+
+  // The toast module reads the config live (cfg_num on every show), so the
+  // change takes effect without a restart.
+  REQUIRE(e.config_value_for_test("toast.max_width") == "40");
+}

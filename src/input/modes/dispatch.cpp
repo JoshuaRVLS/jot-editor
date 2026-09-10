@@ -367,10 +367,18 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     return;
   }
 
-  // Global sidebar toggle should work regardless of current focus.
+  // Global sidebar toggles should work regardless of current focus:
+  // Ctrl+B opens the left explorer, Ctrl+Shift+B the right dock.
   if (is_ctrl && (ch == 'b' || ch == 'B'))
   {
-    toggle_sidebar();
+    if (is_shift || ch == 'B')
+    {
+      toggle_right_panel();
+    }
+    else
+    {
+      toggle_sidebar();
+    }
     return;
   }
 
@@ -644,11 +652,9 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
   {
     if (ch == 'q' || ch == 'Q' || ch == 27)
     {
-      show_right_panel = false;
-      active_right_panel_tab = RIGHT_PANEL_DEBUG;
       active_plugin_panel.clear();
+      close_right_panel_tab(RIGHT_PANEL_PLUGIN);
       set_message("Plugin panel closed");
-      needs_redraw = true;
       return;
     }
   }

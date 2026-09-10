@@ -50,16 +50,12 @@ void Editor::toggle_git_panel()
 {
   if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT)
   {
-    show_right_panel = false;
-    active_right_panel_tab = RIGHT_PANEL_DEBUG;
-    focus_state = FOCUS_EDITOR;
+    close_right_panel_tab(RIGHT_PANEL_GIT);
     git_panel.pending_confirm.clear();
     set_message("Git panel closed");
-    needs_redraw = true;
     return;
   }
-  show_right_panel = true;
-  active_right_panel_tab = RIGHT_PANEL_GIT;
+  open_right_panel_tab(RIGHT_PANEL_GIT);
   // Keyboard focus follows the panel: arrows / j-k navigate the panel, not
   // the editor or the sidebar (which would otherwise keep the focus it had
   // from an earlier click).
@@ -770,8 +766,8 @@ bool Editor::handle_git_panel_mouse(int x, int y, bool is_click, bool is_double_
   }
   focus_state = FOCUS_RIGHT_PANEL;
   needs_redraw = true;
-  // Row area starts below the title + header (see render_git_panel).
-  const int row_top = panel_y + 3;
+  // Row area starts below the title + tab strip + header (see render_git_panel).
+  const int row_top = panel_y + 4;
   const int row_index = y - row_top;
   if (row_index < 0)
   {
@@ -780,7 +776,7 @@ bool Editor::handle_git_panel_mouse(int x, int y, bool is_click, bool is_double_
   // Map the click to a row via the same flat row layout the renderer uses.
   using namespace jot_git_panel;
   const std::vector<FlatRow> flat = build_flat_rows(git_panel);
-  const int visible = panel_h - 3;
+  const int visible = panel_h - 4;
   const int index = git_panel.scroll + row_index;
   if (index >= 0 && index < (int)flat.size() && index < git_panel.scroll + visible)
   {

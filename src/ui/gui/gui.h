@@ -292,6 +292,21 @@ private:
   // the sliding content; paint_float_overlays draws them on top instead.
   // Empty = no floats visible = paint from the live grid as usual.
   std::vector<std::vector<UICell>> pre_float_grid_;
+  // Rects of native-floated surfaces (sidebar, right dock, home screen)
+  // currently mid-entrance. paint_plain() skips them in the static pass:
+  // those surfaces are also painted natively into the grid at their final
+  // position, and without the skip the sliding float copy would ghost over
+  // the static paint (the "two explorers" artifact). Rebuilt every frame
+  // in render() before paint_plain(); empty when nothing is entering.
+  struct GuiFloatRect
+  {
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    int h = 0;
+  };
+  std::vector<GuiFloatRect> entering_float_rects_;
+
   // Key for a float's animation state: the handler surface name when the
   // float was opened by a UI handler (those re-emit every frame with a
   // fresh handle, so the handle is useless as a key), or "h:<handle>" for
@@ -333,6 +348,12 @@ private:
     float enter_t = 1.0f;
     float exit_t = 0.0f;
     bool exiting = false;
+    // Consecutive frames this key was absent from the overlay list. A
+    // surface can skip a frame (an editor hiccup mid-resize), and treating
+    // that as a close would restart its entrance and flash the native
+    // paint through -- the ghosted double-explorer. The exit/erase only
+    // starts after kFloatGoneGraceFrames consecutive absences.
+    int gone_frames = 0;
     GuiFloatKind kind = GuiFloatKind::kCenter;
     int exit_x = 0, exit_y = 0, exit_w = 0, exit_h = 0;
     std::vector<std::vector<UICell>> exit_cells;

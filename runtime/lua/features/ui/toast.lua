@@ -208,6 +208,32 @@ local function wrap_text(text, width)
   return lines
 end
 
+-- Right edge the toast stack may touch: the window edge, or the left edge
+-- of the right panel when it is visible.
+local function toast_right_edge(ww)
+  local right_edge = ww
+  local ok, info = pcall(function() return jot.viewport.info() end)
+  if ok and type(info) == "table" and type(info.right_panel) == "table"
+     and info.right_panel.visible and tonumber(info.right_panel.width or 0) > 0 then
+    right_edge = math.max(1, ww - tonumber(info.right_panel.width))
+  end
+  return right_edge
+end
+
+-- Recomputes one toast's size/column from the current window size: the
+-- message re-wraps, the box shrinks/grows with the window, and the column
+-- stays pinned to the top-right edge (or the right panel's left edge).
+local function toast_geometry(t, ww, wh, margin, gap, max_w, right_edge)
+  t.wrapped = wrap_text(t.message, math.max(8, max_w - 4))
+  t.width = math.min(max_w, math.max(20, math.min(right_edge, ww) - margin * 2))
+  -- One header row (logo + level/title + time) plus one row per wrapped
+  -- message line -- the logo never shares a row with the message -- plus
+  -- the two border rows.
+  local content_rows = 1 + #t.wrapped
+  t.height = math.max(3, math.min(wh - margin, content_rows + 2))
+  t.col = math.max(margin, right_edge - t.width - margin - 1)
+end
+
 -- Where the toast sits: top-right, stacked below its predecessors. When the
 -- right panel (git / debugger / outline dock) is visible the stack shifts
 -- left of it, so toasts never hide the panel's top rows — a panel with few
@@ -218,24 +244,7 @@ local function layout_toast(t)
   local margin = math.max(1, cfg_num("toast.margin", 1))
   local gap = math.max(0, cfg_num("toast.gap", 0))
   local max_w = math.max(20, cfg_num("toast.max_width", 56))
-
-  -- Right edge the toast stack may touch: the window edge, or the left edge
-  -- of the right panel when it is visible.
-  local right_edge = ww
-  local ok, info = pcall(function() return jot.viewport.info() end)
-  if ok and type(info) == "table" and type(info.right_panel) == "table"
-     and info.right_panel.visible and tonumber(info.right_panel.width or 0) > 0 then
-    right_edge = math.max(1, ww - tonumber(info.right_panel.width))
-  end
-
-  t.wrapped = wrap_text(t.message, math.max(8, max_w - 4))
-  t.width = math.min(max_w, math.max(20, math.min(right_edge, ww) - margin * 2))
-  -- One header row (logo + level/title + time) plus one row per wrapped
-  -- message line -- the logo never shares a row with the message -- plus
-  -- the two border rows.
-  local content_rows = 1 + #t.wrapped
-  t.height = math.max(3, math.min(wh - margin, content_rows + 2))
-  t.col = math.max(margin, right_edge - t.width - margin - 1)
+  toast_geometry(t, ww, wh, margin, gap, max_w, toast_right_edge(ww))
 
   local row = margin
   for _, other in ipairs(toasts) do
@@ -352,6 +361,44 @@ local function restack()
     other.final_row = row
     row = row + other.height + gap
   end
+end
+
+-- Window resize: recompute every visible toast's geometry (column, width,
+-- height and stack slot) and re-paint its float, so the stack stays pinned
+-- to the window's top-right corner instead of hanging at the old size.
+local function relayout_all()
+  if #toasts == 0 then
+    return
+  end
+  local ww, wh = window_size()
+  local margin = math.max(1, cfg_num("toast.margin", 1))
+  local gap = math.max(0, cfg_num("toast.gap", 0))
+  local max_w = math.max(20, cfg_num("toast.max_width", 56))
+  local right_edge = toast_right_edge(ww)
+  local row = margin
+  for _, t in ipairs(toasts) do
+    toast_geometry(t, ww, wh, margin, gap, max_w, right_edge)
+    t.final_row = row
+    t.row = row -- snap: a mid-slide row would be stale after a resize
+    row = row + t.height + gap
+  end
+  for _, t in ipairs(toasts) do
+    if t.win and t.win ~= 0 then
+      local colors = t.palette or palette()
+      local rows, spans = content_rows_spans(t, colors)
+      pcall(jot.ui.buffer.set_lines, t.buf, 0, -1, true, rows)
+      pcall(jot.ui.float.configure, t.win, {
+        col = t.col,
+        row = t.row,
+        width = t.width,
+        height = t.height,
+      })
+      for i = 1, #spans do
+        pcall(jot.ui.float.set_spans, t.win, i, spans[i])
+      end
+    end
+  end
+  request_redraw()
 end
 
 -- Removes a toast and tears down its float/buffer. Does the bookkeeping the
@@ -570,6 +617,10 @@ function toast.attach()
         duration_ms = tonumber(payload.duration_ms) or 0,
       })
     end)
+    -- Keep visible toasts anchored when the window resizes.
+    if jot.autocmd then
+      jot.autocmd("UIResize", relayout_all)
+    end
   end)
   return ok
 end

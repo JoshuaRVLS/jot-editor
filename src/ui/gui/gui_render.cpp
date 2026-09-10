@@ -82,6 +82,55 @@ void UIGui::render()
     }
     paint_sprite(a, nullptr, a.offset_px);
   }
+
+  // Native-floated surfaces mid-entrance: their rects are skipped in the
+  // static pass below. Those surfaces (sidebar, right dock, home screen)
+  // are also painted natively into the grid at their final position, so
+  // without the skip the sliding float copy would ghost over the static
+  // paint -- the "two explorers" artifact. Standalone floats (toasts,
+  // modals) have pane content beneath and must not be blanked.
+  //
+  // The blanking keys off the ANIMATION state (not the overlay list): a
+  // surface can skip an emit frame mid-resize, and on those frames the
+  // static paint would flash through. The anim survives transient
+  // absences (see the gone_frames grace in paint_float_overlays) and
+  // keeps blanking until the entrance truly completes.
+  entering_float_rects_.clear();
+  const auto is_native_floated_key = [](const std::string &key)
+  {
+    return key == "s:sidebar" || key == "s:side_panel" || key == "s:home_screen";
+  };
+  for (const auto &kv : float_anims_)
+  {
+    const GuiFloatAnim &a = kv.second;
+    if (a.exiting || a.enter_t >= 1.0f || !is_native_floated_key(kv.first))
+    {
+      continue;
+    }
+    if (a.exit_w <= 0 || a.exit_h <= 0)
+    {
+      continue;
+    }
+    entering_float_rects_.push_back(
+        {a.exit_x, a.exit_y, a.exit_w, std::min(a.exit_h, std::max(0, height - a.exit_y))});
+  }
+  // First appearance: the anim is created during paint_float_overlays (after
+  // the static pass), so an overlay whose key has no anim yet must blank too
+  // or its first frame flashes the native paint through.
+  for (const FloatOverlay &ov : float_overlays)
+  {
+    if (ov.w <= 0 || ov.h <= 0 || ov.x < 0 || ov.y < 0)
+    {
+      continue;
+    }
+    const std::string key = float_key(ov.surface, ov.handle);
+    if (!is_native_floated_key(key) || float_anims_.count(key))
+    {
+      continue;
+    }
+    entering_float_rects_.push_back(
+        {ov.x, ov.y, ov.w, std::min(ov.h, std::max(0, height - ov.y))});
+  }
   paint_plain();
 
   // Modal scrim: a full-window black quad whose alpha eases toward
@@ -409,12 +458,19 @@ void UIGui::paint_sprite(const GuiScrollAnim &a, const std::vector<std::vector<U
 // always win where sliding content crossed them.
 void UIGui::paint_plain()
 {
-  size_t quads = 0;
-  begin_batch();
-  for (int y = 0; y < height; y++)
+  // Per-row column ranges the static pass must not paint: the body of
+  // animating panes (the slide sprites already covered them) and the final
+  // rects of native-floated surfaces mid-entrance (sidebar / right dock /
+  // home screen -- the sliding float copy would otherwise ghost over their
+  // static paint). Ranges are merged and the complement painted as
+  // segments, so several skips per row coexist.
+  std::vector<std::pair<int, int>> skips;
+  skips.reserve(4);
+  std::vector<std::pair<int, int>> segs;
+  segs.reserve(6);
+  auto row_segments = [&](int y)
   {
-    int e0 = -1;
-    int e1 = -1;
+    skips.clear();
     for (const auto &kv : scroll_anims_)
     {
       const GuiScrollAnim &a = kv.second;
@@ -424,28 +480,52 @@ void UIGui::paint_plain()
       }
       if (y >= a.y1 && y < a.y2)
       {
-        e0 = a.x1;
-        e1 = a.x2;
+        skips.emplace_back(a.x1, a.x2);
         break;
       }
     }
-    const float y_top = (float)y * cell_h_;
-    if (e0 <= 0 && (e1 < 0 || e1 >= width))
+    for (const GuiFloatRect &r : entering_float_rects_)
     {
-      paint_row_bg((*content_grid_)[(size_t)y], 0, width, 0.0f, y_top, 0.0f, quads);
+      if (y >= r.y && y < r.y + r.h)
+      {
+        const int c0 = std::max(0, r.x);
+        const int c1 = std::min(width, r.x + r.w);
+        if (c1 > c0)
+        {
+          skips.emplace_back(c0, c1);
+        }
+      }
     }
-    else
+    std::sort(skips.begin(), skips.end());
+    segs.clear();
+    int c = 0;
+    for (const auto &s : skips)
     {
-      if (e0 > 0)
+      if (s.second <= c)
       {
-        paint_row_bg((*content_grid_)[(size_t)y], 0, std::min(e0, width), 0.0f, y_top, 0.0f,
-                     quads);
+        continue; // contained in the previous skip
       }
-      if (e1 >= 0 && e1 < width)
+      if (s.first > c)
       {
-        paint_row_bg((*content_grid_)[(size_t)y], std::max(0, e1), width, 0.0f, y_top, 0.0f,
-                     quads);
+        segs.emplace_back(c, std::min(s.first, width));
       }
+      c = std::max(c, std::min(s.second, width));
+    }
+    if (c < width)
+    {
+      segs.emplace_back(c, width);
+    }
+  };
+
+  size_t quads = 0;
+  begin_batch();
+  for (int y = 0; y < height; y++)
+  {
+    row_segments(y);
+    const float y_top = (float)y * cell_h_;
+    for (const auto &s : segs)
+    {
+      paint_row_bg((*content_grid_)[(size_t)y], s.first, s.second, 0.0f, y_top, 0.0f, quads);
     }
   }
   if (quads)
@@ -457,39 +537,11 @@ void UIGui::paint_plain()
   begin_batch();
   for (int y = 0; y < height; y++)
   {
-    int e0 = -1;
-    int e1 = -1;
-    for (const auto &kv : scroll_anims_)
-    {
-      const GuiScrollAnim &a = kv.second;
-      if (std::abs(a.offset_px) < 0.25f)
-      {
-        continue;
-      }
-      if (y >= a.y1 && y < a.y2)
-      {
-        e0 = a.x1;
-        e1 = a.x2;
-        break;
-      }
-    }
+    row_segments(y);
     const float y_top = (float)y * cell_h_;
-    if (e0 <= 0 && (e1 < 0 || e1 >= width))
+    for (const auto &s : segs)
     {
-      paint_row_glyphs((*content_grid_)[(size_t)y], 0, width, 0.0f, y_top, 0.0f);
-    }
-    else
-    {
-      if (e0 > 0)
-      {
-        paint_row_glyphs((*content_grid_)[(size_t)y], 0, std::min(e0, width), 0.0f, y_top,
-                         0.0f);
-      }
-      if (e1 >= 0 && e1 < width)
-      {
-        paint_row_glyphs((*content_grid_)[(size_t)y], std::max(0, e1), width, 0.0f, y_top,
-                         0.0f);
-      }
+      paint_row_glyphs((*content_grid_)[(size_t)y], s.first, s.second, 0.0f, y_top, 0.0f);
     }
   }
   flush_tex(program_, atlas_tex_);
@@ -499,39 +551,12 @@ void UIGui::paint_plain()
   begin_batch();
   for (int y = 0; y < height; y++)
   {
-    int e0 = -1;
-    int e1 = -1;
-    for (const auto &kv : scroll_anims_)
-    {
-      const GuiScrollAnim &a = kv.second;
-      if (std::abs(a.offset_px) < 0.25f)
-      {
-        continue;
-      }
-      if (y >= a.y1 && y < a.y2)
-      {
-        e0 = a.x1;
-        e1 = a.x2;
-        break;
-      }
-    }
+    row_segments(y);
     const float y_top = (float)y * cell_h_;
-    if (e0 <= 0 && (e1 < 0 || e1 >= width))
+    for (const auto &s : segs)
     {
-      paint_row_underlines((*content_grid_)[(size_t)y], 0, width, 0.0f, y_top, 0.0f, any);
-    }
-    else
-    {
-      if (e0 > 0)
-      {
-        paint_row_underlines((*content_grid_)[(size_t)y], 0, std::min(e0, width), 0.0f, y_top,
-                             0.0f, any);
-      }
-      if (e1 >= 0 && e1 < width)
-      {
-        paint_row_underlines((*content_grid_)[(size_t)y], std::max(0, e1), width, 0.0f, y_top,
-                             0.0f, any);
-      }
+      paint_row_underlines((*content_grid_)[(size_t)y], s.first, s.second, 0.0f, y_top, 0.0f,
+                           any);
     }
   }
   if (any)
@@ -659,14 +684,24 @@ void UIGui::paint_float_overlays(float dt)
     cur_keys.insert(float_key(ov.surface, ov.handle));
   }
 
-  // A key that vanished since the last frame has closed: start its exit
+  // A key that vanished since the last frame has closed: after a short
+  // grace period (a surface can skip a frame mid-resize) start its exit
   // animation from the retained capture (the live grid no longer holds
-  // it), fading/sliding it toward its edge.
+  // it), fading/sliding it toward its edge. Restarting an entrance or
+  // starting an exit on a one-frame absence would let the native paint
+  // flash through (the ghosted double-explorer) and stall the fade-in.
+  constexpr int kFloatGoneGraceFrames = 3;
   for (auto &kv : float_anims_)
   {
     GuiFloatAnim &a = kv.second;
     if (a.exiting || cur_keys.count(kv.first))
     {
+      a.gone_frames = 0;
+      continue;
+    }
+    if (a.gone_frames < kFloatGoneGraceFrames)
+    {
+      a.gone_frames++;
       continue;
     }
     auto it = float_colors_.find(kv.first);
@@ -685,7 +720,8 @@ void UIGui::paint_float_overlays(float dt)
   for (auto it = float_anims_.begin(); it != float_anims_.end();)
   {
     const bool done = it->second.exiting && it->second.exit_t >= 1.0f;
-    const bool stale = !it->second.exiting && !cur_keys.count(it->first);
+    const bool stale = !it->second.exiting && !cur_keys.count(it->first)
+                       && it->second.gone_frames >= kFloatGoneGraceFrames;
     if (done || stale)
     {
       it = float_anims_.erase(it);

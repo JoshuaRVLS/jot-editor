@@ -34,9 +34,9 @@ void Editor::render_plugin_panel()
                 true);
 
   int content_x = panel_x + 1;
-  int content_y = panel_y + 2;
+  int content_y = panel_y + 3;
   int content_w = std::max(1, panel_w - 2);
-  int content_h = std::max(0, panel_h - 3);
+  int content_h = std::max(0, panel_h - 4);
   // Hand the model to a Lua UI handler when one is registered; it owns the
   // paint. Native fallback below stays byte-identical.
   SidePanelView view;
@@ -45,6 +45,8 @@ void Editor::render_plugin_panel()
   view.w = panel_w;
   view.h = panel_h;
   view.title = active_plugin_panel.empty() ? " Plugin " : " " + active_plugin_panel + " ";
+  build_right_panel_tab_strip_view(view);
+  render_right_panel_tab_strip(panel_x, panel_y, panel_w);
 
   std::vector<std::string> lines;
   if (lua_api && !active_plugin_panel.empty())

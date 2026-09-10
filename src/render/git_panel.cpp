@@ -96,9 +96,9 @@ void Editor::render_git_panel()
   ui->draw_border(panel, border_fg, theme.bg_terminal);
 
   const int content_x = panel_x + 1;
-  const int content_y = panel_y + 2;
+  const int content_y = panel_y + 3;
   const int content_w = std::max(1, panel_w - 2);
-  const int content_h = std::max(1, panel_h - 3);
+  const int content_h = std::max(1, panel_h - 4);
 
   SidePanelView view;
   view.mode = "git";
@@ -107,6 +107,8 @@ void Editor::render_git_panel()
   view.w = panel_w;
   view.h = panel_h;
   view.title = " Git Panel ";
+  build_right_panel_tab_strip_view(view);
+  render_right_panel_tab_strip(panel_x, panel_y, panel_w);
 
   using namespace jot_git_panel;
   const jot_git_panel::State &state = git_panel;
@@ -120,7 +122,7 @@ void Editor::render_git_panel()
       {" \uF187 5 Stash ", View::Stash},
   };
   int tab_x = panel_x + 1;
-  const int tab_y = panel_y + 1;
+  const int tab_y = panel_y + 2;
   for (const auto &tab : kTabs)
   {
     if (tab_x + (int)tab.first.size() >= panel_x + panel_w - 1)
@@ -182,11 +184,11 @@ void Editor::render_git_panel()
   // Branch name + drift in accent, repo in the muted header color.
   const int branch_cells = std::min((int)ui_cell_count(repo + " " + branch_part),
                                     std::max(1, content_w));
-  ui->draw_text(content_x, panel_y + 2, view.header, view.header_fg, theme.bg_terminal);
+  ui->draw_text(content_x, panel_y + 3, view.header, view.header_fg, theme.bg_terminal);
   if (focused)
   {
     ui->draw_text(content_x,
-                  panel_y + 2,
+                  panel_y + 3,
                   ui_truncate_cells(repo + " " + branch_part, branch_cells),
                   theme.fg_status_file,
                   theme.bg_terminal,

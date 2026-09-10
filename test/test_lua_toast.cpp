@@ -55,6 +55,9 @@ namespace
     int last_cfg_bg = -1;
     int last_cfg_border_fg = -1;
     std::vector<int> configure_rows;
+    std::vector<int> configure_cols;
+    std::vector<int> configure_widths;
+    std::vector<int> configure_heights;
     std::vector<int> span_lens; // last span len per set_spans call
     std::vector<int> span_fgs;
     std::vector<int> interval_refs; // registry refs to set_interval callbacks
@@ -62,6 +65,13 @@ namespace
     int event_subscribe_count = 0;
     std::string last_event_name;
     int event_cb_ref = -1; // registry ref to the subscribed toast.message callback
+    // Simulated window size the viewport stub reports (defaults match the
+    // real 120x40 grid the existing tests assume).
+    int window_w = 120;
+    int window_h = 40;
+    // jot.autocmd stub: the last registered event and its callback.
+    std::string autocmd_event;
+    int autocmd_cb_ref = -1; // registry ref to the UIResize callback
   };
 
   StubState g;
@@ -149,6 +159,15 @@ namespace
     luaL_checktype(L, 2, LUA_TTABLE);
     lua_getfield(L, 2, "row");
     g.configure_rows.push_back((int)lua_tointeger(L, -1));
+    lua_pop(L, 1);
+    lua_getfield(L, 2, "col");
+    g.configure_cols.push_back((int)lua_tointeger(L, -1));
+    lua_pop(L, 1);
+    lua_getfield(L, 2, "width");
+    g.configure_widths.push_back((int)lua_tointeger(L, -1));
+    lua_pop(L, 1);
+    lua_getfield(L, 2, "height");
+    g.configure_heights.push_back((int)lua_tointeger(L, -1));
     lua_pop(L, 1);
     lua_getfield(L, 2, "fg");
     g.last_cfg_fg = lua_isnil(L, -1) ? -1 : (int)lua_tointeger(L, -1);
@@ -292,15 +311,30 @@ namespace
                       {
                         lua_createtable(LL, 0, 1); // info
                         lua_createtable(LL, 0, 2); // window
-                        lua_pushinteger(LL, 120);
+                        lua_pushinteger(LL, g.window_w);
                         lua_setfield(LL, -2, "width");
-                        lua_pushinteger(LL, 40);
+                        lua_pushinteger(LL, g.window_h);
                         lua_setfield(LL, -2, "height");
                         lua_setfield(LL, -2, "window");
                         return 1;
                       });
     lua_setfield(L, -2, "info");
     lua_setfield(L, -2, "viewport");
+
+    lua_pushcfunction(L,
+                      [](lua_State *LL) -> int
+                      {
+                        g.autocmd_event = luaL_checkstring(LL, 1);
+                        luaL_checktype(LL, 2, LUA_TFUNCTION);
+                        lua_pushvalue(LL, 2);
+                        if (g.autocmd_cb_ref >= 0)
+                        {
+                          luaL_unref(LL, LUA_REGISTRYINDEX, g.autocmd_cb_ref);
+                        }
+                        g.autocmd_cb_ref = luaL_ref(LL, LUA_REGISTRYINDEX);
+                        return 0;
+                      });
+    lua_setfield(L, -2, "autocmd");
 
     lua_newtable(L); // jot.timer
     lua_pushcfunction(L, stub_timer_interval);
@@ -762,6 +796,84 @@ TEST_CASE("Toast module forwards statusline messages from the event bus")
   if (g.event_cb_ref >= 0)
   {
     luaL_unref(L, LUA_REGISTRYINDEX, g.event_cb_ref);
+  }
+  lua_close(L);
+}
+TEST_CASE("Toasts re-anchor to the window corner after a resize")
+{
+  g = StubState{};
+  lua_State *L = luaL_newstate();
+  REQUIRE(L != nullptr);
+  luaL_openlibs(L);
+  push_stub_jot(L);
+
+  REQUIRE(jot_lua::load_ui_kit_modules(L));
+  const std::string path = std::string(JOT_LUA_SOURCE_DIR) + "/features/ui.lua";
+  REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
+  REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  REQUIRE(lua_istable(L, 1));
+
+  // The module registered the UIResize re-anchor callback at attach time.
+  REQUIRE(g.autocmd_event == "UIResize");
+  REQUIRE(g.autocmd_cb_ref >= 0);
+
+  // Show a toast at 120x40: pinned top-right (col 62 = 120 - 56 - 1 - 1),
+  // still sliding in (row 4 = final row 1 + entry offset 3).
+  const int id = call_show(L, 1, "resize me", 300);
+  REQUIRE(id > 0);
+  REQUIRE(g.last_col == 62);
+  REQUIRE(g.last_row == 4);
+
+  // The window shrinks (e.g. a smaller tiling slot). The toast must move
+  // with the corner: re-wrap, re-center column, snap to the top slot.
+  g.window_w = 70;
+  g.window_h = 24;
+  lua_rawgeti(L, LUA_REGISTRYINDEX, g.autocmd_cb_ref);
+  REQUIRE(lua_pcall(L, 0, 0, 0) == LUA_OK);
+
+  // One configure call: new column pinned to the new right edge
+  // (70 - 56 - 1 - 1 = 12), row snapped to the margin, size unchanged
+  // (the message still fits the max width).
+  REQUIRE(g.configure_count == 1);
+  REQUIRE(g.configure_cols.size() == 1);
+  REQUIRE(g.configure_cols[0] == 12);
+  REQUIRE(g.configure_rows[0] == 1);
+  REQUIRE(g.configure_widths[0] == 56);
+  REQUIRE(g.configure_heights[0] == 4);
+
+  // The toast is still alive and untouched: no dismiss, no close.
+  REQUIRE(g.close_count == 0);
+  REQUIRE(call_info_count(L, 1) == 1);
+
+  // A narrow window forces the box to shrink with it (70 -> 40 wide:
+  // width clamps to 40 - 2 = 38 and the column stays on the right edge).
+  g.window_w = 40;
+  lua_rawgeti(L, LUA_REGISTRYINDEX, g.autocmd_cb_ref);
+  REQUIRE(lua_pcall(L, 0, 0, 0) == LUA_OK);
+  REQUIRE(g.configure_count == 2);
+  REQUIRE(g.configure_cols[1] == 1); // 40 - 38 - 1 - 1 = 0, clamped to margin 1
+  REQUIRE(g.configure_widths[1] == 38);
+  REQUIRE(g.configure_rows[1] == 1);
+
+  // Growing back restores the full box.
+  g.window_w = 120;
+  lua_rawgeti(L, LUA_REGISTRYINDEX, g.autocmd_cb_ref);
+  REQUIRE(lua_pcall(L, 0, 0, 0) == LUA_OK);
+  REQUIRE(g.configure_count == 3);
+  REQUIRE(g.configure_cols[2] == 62);
+  REQUIRE(g.configure_widths[2] == 56);
+
+  for (int ref : g.interval_refs)
+  {
+    luaL_unref(L, LUA_REGISTRYINDEX, ref);
+  }
+  if (g.event_cb_ref >= 0)
+  {
+    luaL_unref(L, LUA_REGISTRYINDEX, g.event_cb_ref);
+  }
+  if (g.autocmd_cb_ref >= 0)
+  {
+    luaL_unref(L, LUA_REGISTRYINDEX, g.autocmd_cb_ref);
   }
   lua_close(L);
 }

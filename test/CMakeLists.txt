@@ -37,6 +37,7 @@ add_executable(jot_tests
   test_commenting.cpp
   test_sidebar_guides.cpp
   test_blank_guides.cpp
+  test_right_panel.cpp
   test_completion_matching.cpp
   test_key_decode.cpp
 )

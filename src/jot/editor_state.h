@@ -141,6 +141,10 @@ struct EditorState
   bool show_right_panel;
   int right_panel_width;
   RightPanelTab active_right_panel_tab;
+  // Ordered list of panels opened in the right dock (VSCode-style tabs).
+  // Commands like :gitpanel add their tab here; the tab strip at the top of
+  // the panel switches between them and each tab can be closed individually.
+  std::vector<RightPanelTab> right_panel_tabs;
   GitDiffPanel git_diff_panel;
   OutlinePanelState outline_panel;
   std::string active_plugin_panel;

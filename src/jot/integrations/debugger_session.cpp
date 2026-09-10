@@ -42,14 +42,18 @@ DebuggerClient *Editor::get_debugger_session(int index)
 
 void Editor::toggle_debugger_panel()
 {
-  active_right_panel_tab = RIGHT_PANEL_DEBUG;
-  show_right_panel = !show_right_panel;
-  show_debugger_panel = show_right_panel;
-  if (show_right_panel)
+  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_DEBUG)
   {
-    show_home_menu = false;
-    load_debugger_configs();
+    close_right_panel_tab(RIGHT_PANEL_DEBUG);
+    show_debugger_panel = false;
+    update_pane_layout();
+    needs_redraw = true;
+    return;
   }
+  open_right_panel_tab(RIGHT_PANEL_DEBUG);
+  show_debugger_panel = true;
+  show_home_menu = false;
+  load_debugger_configs();
   update_pane_layout();
   needs_redraw = true;
 }
@@ -85,7 +89,7 @@ bool Editor::handle_debugger_mouse(int x,
   {
     return true;
   }
-  if (y == panel_y + 1)
+  if (y == panel_y + 2)
   {
     int tab_x = panel_x + 1;
     for (int i = 0; i < (int)debugger_session_state.size(); i++)
@@ -151,8 +155,7 @@ void Editor::debugger_cycle_thread(int delta)
   const int new_thread = state.threads[(size_t)index].id;
   state.active_thread_id = new_thread;
   show_debugger_panel = true;
-  show_right_panel = true;
-  active_right_panel_tab = RIGHT_PANEL_DEBUG;
+    open_right_panel_tab(RIGHT_PANEL_DEBUG);
   update_pane_layout();
   // The stack-trace response refreshes frames, jumps to the new top frame
   // and re-requests its variables.
@@ -204,8 +207,7 @@ void Editor::debugger_cycle_frame(int delta)
   state.active_frame_id = frame.id;
   jump_to_debugger_frame(frame);
   show_debugger_panel = true;
-  show_right_panel = true;
-  active_right_panel_tab = RIGHT_PANEL_DEBUG;
+    open_right_panel_tab(RIGHT_PANEL_DEBUG);
   update_pane_layout();
   // Refresh the variable list for the frame we landed on.
   client->scopes(frame.id);
@@ -246,9 +248,8 @@ bool Editor::start_debugger_session(DebuggerSessionConfig config)
   }
   if (!config.attach && config.program.empty())
   {
-    show_right_panel = true;
-    show_debugger_panel = true;
-    active_right_panel_tab = RIGHT_PANEL_DEBUG;
+        show_debugger_panel = true;
+    open_right_panel_tab(RIGHT_PANEL_DEBUG);
     update_pane_layout();
     set_message("Usage: :debug <program> [args...]");
     return false;
@@ -257,9 +258,8 @@ bool Editor::start_debugger_session(DebuggerSessionConfig config)
   std::string binary = adapter_binary_for(config.adapter);
   if (!command_exists(binary))
   {
-    show_right_panel = true;
-    show_debugger_panel = true;
-    active_right_panel_tab = RIGHT_PANEL_DEBUG;
+        show_debugger_panel = true;
+    open_right_panel_tab(RIGHT_PANEL_DEBUG);
     update_pane_layout();
     set_message("Debugger adapter missing: " + binary);
     return false;
@@ -268,9 +268,8 @@ bool Editor::start_debugger_session(DebuggerSessionConfig config)
   auto client = std::make_unique<DebuggerClient>(config, adapter_command_for(config.adapter));
   if (!client->start())
   {
-    show_right_panel = true;
-    show_debugger_panel = true;
-    active_right_panel_tab = RIGHT_PANEL_DEBUG;
+        show_debugger_panel = true;
+    open_right_panel_tab(RIGHT_PANEL_DEBUG);
     update_pane_layout();
     set_message("Debugger start failed: " + client->get_last_error());
     return false;
@@ -287,8 +286,7 @@ bool Editor::start_debugger_session(DebuggerSessionConfig config)
   debugger_session_state.push_back(std::move(state));
   current_debugger_session = (int)debugger_sessions.size() - 1;
   show_debugger_panel = true;
-  show_right_panel = true;
-  active_right_panel_tab = RIGHT_PANEL_DEBUG;
+    open_right_panel_tab(RIGHT_PANEL_DEBUG);
   show_integrated_terminal = false;
   for (auto &term : integrated_terminals)
   {
@@ -378,9 +376,8 @@ bool Editor::start_debugger_command(const std::string &adapter, const std::strin
   auto parts = split_shell_words(command_line);
   if (parts.empty())
   {
-    show_right_panel = true;
-    show_debugger_panel = true;
-    active_right_panel_tab = RIGHT_PANEL_DEBUG;
+        show_debugger_panel = true;
+    open_right_panel_tab(RIGHT_PANEL_DEBUG);
     update_pane_layout();
     set_message("Usage: :debug <program> [args...]");
     return false;
@@ -399,9 +396,8 @@ bool Editor::attach_debugger_command(const std::string &adapter, const std::stri
   std::string trimmed = trim_copy(pid_text);
   if (trimmed.empty())
   {
-    show_right_panel = true;
-    show_debugger_panel = true;
-    active_right_panel_tab = RIGHT_PANEL_DEBUG;
+        show_debugger_panel = true;
+    open_right_panel_tab(RIGHT_PANEL_DEBUG);
     update_pane_layout();
     set_message("Usage: :debugattach <pid>");
     return false;
@@ -532,8 +528,7 @@ void Editor::show_debugger_threads()
   }
   client->threads();
   show_debugger_panel = true;
-  show_right_panel = true;
-  active_right_panel_tab = RIGHT_PANEL_DEBUG;
+    open_right_panel_tab(RIGHT_PANEL_DEBUG);
   needs_redraw = true;
 }
 
@@ -567,8 +562,7 @@ void Editor::request_debugger_memory(const std::string &expression, int bytes)
     client->evaluate_and_read_memory(ref, std::clamp(bytes, 1, 1024));
   }
   show_debugger_panel = true;
-  show_right_panel = true;
-  active_right_panel_tab = RIGHT_PANEL_DEBUG;
+    open_right_panel_tab(RIGHT_PANEL_DEBUG);
 }
 
 void Editor::poll_debugger_sessions()
@@ -620,9 +614,8 @@ void Editor::poll_debugger_sessions()
           client->stack_trace(state.active_thread_id);
         }
         // Surface the panel so the paused state is actually visible.
-        show_right_panel = true;
-        show_debugger_panel = true;
-        active_right_panel_tab = RIGHT_PANEL_DEBUG;
+                show_debugger_panel = true;
+        open_right_panel_tab(RIGHT_PANEL_DEBUG);
         update_pane_layout();
         set_message("Debugger stopped: " + event.message);
         break;
@@ -755,6 +748,5 @@ void Editor::request_debugger_disassembly(const std::string &expression)
   }
   client->disassemble(ref, 0, 0, 24);
   show_debugger_panel = true;
-  show_right_panel = true;
-  active_right_panel_tab = RIGHT_PANEL_DEBUG;
+    open_right_panel_tab(RIGHT_PANEL_DEBUG);
 }

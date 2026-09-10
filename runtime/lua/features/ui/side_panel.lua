@@ -143,6 +143,38 @@ local function side_panel(p)
     return { name = name, value = value, vtype = vtype, vfg = vfg }
   end
 
+  -- Right-dock panel tabs (Git / Diff / Symbols / Debug / Plugin): the
+  -- VSCode-style strip on the first interior row. Active tab carries a
+  -- close marker (×) hit-tested by the native strip mouse handler.
+  if p.panel_tabs and #p.panel_tabs > 0 then
+    local line, spans, col = "", {}, 0
+    local active_fg = colors.fg_terminal_tab_focused or accent
+    local active_bg = colors.bg_terminal_tab_focused or selection_bg
+    local inactive_fg = colors.fg_terminal_tab_inactive or comment
+    local inactive_bg = colors.bg_terminal_tab_inactive or bg
+    for _, tab in ipairs(p.panel_tabs) do
+      local label = trunc_cells(tab.label or "", math.max(1, inner_w - col))
+      local at = #line
+      line = line .. label
+      spans[#spans + 1] = {
+        start = at,
+        len = #label,
+        fg = tab.active and active_fg or inactive_fg,
+        bg = tab.active and active_bg or inactive_bg,
+        bold = tab.active,
+      }
+      col = col + cell_len(label)
+      if col >= inner_w then
+        break
+      end
+    end
+    rows[#rows + 1] = { text = trunc_cells(line, inner_w), fg = fg, bg = bg,
+                        spans = { { start = 0, len = 65535, fg = fg, bg = bg } } }
+    for _, sp in ipairs(spans) do
+      rows[#rows].spans[#rows[#rows].spans + 1] = sp
+    end
+  end
+
   -- Debugger session tabs on the first interior row.
   if p.tabs and #p.tabs > 0 then
     local line, spans, col = "", {}, 0

@@ -61,6 +61,56 @@ namespace
     oss << base << "/" << std::hex << hv << ".session";
     return oss.str();
   }
+
+  // Stable names for right-dock tabs in the session file (readable and
+  // immune to enum reordering).
+  const char *right_panel_tab_name(RightPanelTab tab)
+  {
+    switch (tab)
+    {
+    case RIGHT_PANEL_GIT:
+      return "git";
+    case RIGHT_PANEL_GIT_DIFF:
+      return "diff";
+    case RIGHT_PANEL_SYMBOLS:
+      return "symbols";
+    case RIGHT_PANEL_DEBUG:
+      return "debug";
+    case RIGHT_PANEL_PLUGIN:
+      return "plugin";
+    }
+    return "git";
+  }
+
+  bool parse_right_panel_tab(const std::string &name, RightPanelTab &out)
+  {
+    if (name == "git")
+    {
+      out = RIGHT_PANEL_GIT;
+      return true;
+    }
+    if (name == "diff")
+    {
+      out = RIGHT_PANEL_GIT_DIFF;
+      return true;
+    }
+    if (name == "symbols")
+    {
+      out = RIGHT_PANEL_SYMBOLS;
+      return true;
+    }
+    if (name == "debug")
+    {
+      out = RIGHT_PANEL_DEBUG;
+      return true;
+    }
+    if (name == "plugin")
+    {
+      out = RIGHT_PANEL_PLUGIN;
+      return true;
+    }
+    return false;
+  }
 } // namespace
 void Editor::toggle_sidebar()
 {
@@ -249,6 +299,21 @@ void Editor::save_workspace_session()
   out << "sidebar_width\t" << effective_sidebar_width() << "\n";
   out << "sidebar_view\t" << (active_sidebar_view == SIDEBAR_VIEW_GIT ? "git" : "explorer") << "\n";
   out << "right_panel_width\t" << right_panel_width << "\n";
+  out << "show_right_panel\t" << (show_right_panel ? 1 : 0) << "\n";
+  if (!right_panel_tabs.empty())
+  {
+    std::string tab_list;
+    for (size_t i = 0; i < right_panel_tabs.size(); i++)
+    {
+      if (i)
+      {
+        tab_list += ",";
+      }
+      tab_list += right_panel_tab_name(right_panel_tabs[i]);
+    }
+    out << "right_panel_tabs\t" << tab_list << "\n";
+    out << "right_panel_active_tab\t" << right_panel_tab_name(active_right_panel_tab) << "\n";
+  }
   out << "sidebar_show_hidden\t" << (sidebar_show_hidden ? 1 : 0) << "\n";
 
   std::string current_file;
@@ -307,6 +372,10 @@ bool Editor::restore_workspace_session()
   bool restored_hidden = sidebar_show_hidden;
   int restored_sidebar_width = sidebar_width;
   int restored_right_panel_width = right_panel_width;
+  bool restored_show_right_panel = false;
+  std::vector<RightPanelTab> restored_right_panel_tabs;
+  RightPanelTab restored_active_tab = RIGHT_PANEL_DEBUG;
+  bool restored_has_active_tab = false;
   std::string target_current_file;
   std::vector<Entry> entries;
   auto clamp_restored_right_panel_width = [&]()
@@ -361,6 +430,35 @@ bool Editor::restore_workspace_session()
     {
       restored_hidden = (parts[1] == "1");
     }
+    else if (key == "show_right_panel" && parts.size() >= 2)
+    {
+      restored_show_right_panel = (parts[1] == "1");
+    }
+    else if (key == "right_panel_tabs" && parts.size() >= 2)
+    {
+      std::vector<RightPanelTab> tabs;
+      std::stringstream ss(parts[1]);
+      std::string name;
+      while (std::getline(ss, name, ','))
+      {
+        RightPanelTab tab;
+        if (parse_right_panel_tab(name, tab)
+            && std::find(tabs.begin(), tabs.end(), tab) == tabs.end())
+        {
+          tabs.push_back(tab);
+        }
+      }
+      restored_right_panel_tabs = std::move(tabs);
+    }
+    else if (key == "right_panel_active_tab" && parts.size() >= 2)
+    {
+      RightPanelTab tab;
+      if (parse_right_panel_tab(parts[1], tab))
+      {
+        restored_active_tab = tab;
+        restored_has_active_tab = true;
+      }
+    }
     else if (key == "current_file" && parts.size() >= 2)
     {
       target_current_file = unescape_field(parts[1]);
@@ -386,6 +484,31 @@ bool Editor::restore_workspace_session()
       catch (...)
       {
       }
+    }
+  }
+
+  // Restore the right dock tab strip as it was left: the same tabs in the
+  // same order, the same active tab, and the dock open/closed state.
+  if (!restored_right_panel_tabs.empty())
+  {
+    right_panel_tabs = restored_right_panel_tabs;
+    if (restored_has_active_tab
+        && std::find(right_panel_tabs.begin(), right_panel_tabs.end(), restored_active_tab)
+               != right_panel_tabs.end())
+    {
+      active_right_panel_tab = restored_active_tab;
+    }
+    else
+    {
+      active_right_panel_tab = right_panel_tabs.back();
+    }
+    show_right_panel = restored_show_right_panel;
+    // A restored git-diff tab needs its backing state so closing it routes
+    // through the panel's closer (return-to-git) instead of the generic one.
+    if (std::find(right_panel_tabs.begin(), right_panel_tabs.end(), RIGHT_PANEL_GIT_DIFF)
+        != right_panel_tabs.end())
+    {
+      git_diff_panel.visible = true;
     }
   }
 

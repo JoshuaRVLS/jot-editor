@@ -101,9 +101,9 @@ void Editor::render_git_diff_panel()
                 true);
 
   const int content_x = panel_x + 1;
-  const int content_y = panel_y + 2;
+  const int content_y = panel_y + 3;
   const int content_w = std::max(1, panel_w - 2);
-  const int content_h = std::max(1, panel_h - 3);
+  const int content_h = std::max(1, panel_h - 4);
 
   SidePanelView view;
   view.mode = "git_diff";
@@ -112,6 +112,8 @@ void Editor::render_git_diff_panel()
   view.w = panel_w;
   view.h = panel_h;
   view.title = title;
+  build_right_panel_tab_strip_view(view);
+  render_right_panel_tab_strip(panel_x, panel_y, panel_w);
 
   // Header: per-language file icon (brand color) + path (status color) and
   // right-aligned change stats (+N -M · L lines).

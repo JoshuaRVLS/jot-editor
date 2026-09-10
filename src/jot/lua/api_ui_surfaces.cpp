@@ -774,6 +774,17 @@ bool LuaAPI::emit_side_panel(const SidePanelView &view)
                        lua_set_int_field(L, t, "note_fg", view.note_fg);
                        lua_set_str_field(L, t, "error", view.error);
                        lua_newtable(L);
+                       const int panel_tabs = lua_gettop(L);
+                       for (size_t i = 0; i < view.panel_tabs.size(); i++)
+                       {
+                         lua_newtable(L);
+                         const int ti = lua_gettop(L);
+                         lua_set_str_field(L, ti, "label", view.panel_tabs[i].label);
+                         lua_set_bool_field(L, ti, "active", view.panel_tabs[i].active);
+                         lua_rawseti(L, panel_tabs, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "panel_tabs");
+                       lua_newtable(L);
                        const int tabs = lua_gettop(L);
                        for (size_t i = 0; i < view.tabs.size(); i++)
                        {

@@ -511,8 +511,7 @@ void HostIOAPI::show_plugin_panel(const std::string &name)
     return;
   }
   editor.active_plugin_panel = name;
-  editor.show_right_panel = true;
-  editor.active_right_panel_tab = Editor::RIGHT_PANEL_PLUGIN;
+  editor.open_right_panel_tab(Editor::RIGHT_PANEL_PLUGIN);
   editor.show_home_menu = false;
   editor.update_pane_layout();
   editor.needs_redraw = true;

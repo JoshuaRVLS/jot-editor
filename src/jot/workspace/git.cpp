@@ -284,8 +284,7 @@ bool Editor::open_git_diff_panel(const std::string &path, bool staged)
     git_diff_panel.lines.push_back(line);
   }
 
-  show_right_panel = true;
-  active_right_panel_tab = RIGHT_PANEL_GIT_DIFF;
+  open_right_panel_tab(RIGHT_PANEL_GIT_DIFF);
   show_debugger_panel = false;
   needs_redraw = true;
 
@@ -299,19 +298,18 @@ void Editor::close_git_diff_panel()
   if (active_right_panel_tab == RIGHT_PANEL_GIT_DIFF)
   {
     // Coming back from the git panel's per-file diff returns to the panel;
-    // otherwise the right dock closes entirely.
+    // otherwise the diff tab closes (the dock stays open if other tabs
+    // remain, and hides when the last tab is closed).
     if (git_panel.return_after_diff)
     {
       git_panel.return_after_diff = false;
-      show_right_panel = true;
-      active_right_panel_tab = RIGHT_PANEL_GIT;
+      open_right_panel_tab(RIGHT_PANEL_GIT);
       focus_state = FOCUS_RIGHT_PANEL;
       git_panel_refresh();
     }
     else
     {
-      show_right_panel = false;
-      active_right_panel_tab = RIGHT_PANEL_DEBUG;
+      close_right_panel_tab(RIGHT_PANEL_GIT_DIFF);
     }
   }
 

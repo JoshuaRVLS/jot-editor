@@ -15,6 +15,25 @@ void Editor::render_popup()
   if (!popup.visible)
     return;
 
+  // The window may have resized since the popup opened: re-center and clamp
+  // the stored geometry every frame so the panel tracks the window instead
+  // of hanging at the old size (off-center or clipped after a resize).
+  if (popup.presentation == POPUP_MODAL)
+  {
+    const int render_w = ui ? ui->get_render_width() : 80;
+    const int screen_h = ui ? ui->get_height() : 24;
+    const int top = std::min(1, std::max(0, screen_h - 1));
+    const int reserved_status =
+        std::min(std::max(0, status_height), std::max(0, screen_h - top - 1));
+    const int bottom = std::max(top + 1, screen_h - reserved_status);
+    const int usable_h = std::max(1, bottom - top);
+    const int max_popup_w = std::max(1, render_w - 2);
+    popup.w = std::clamp(popup.w, std::min(3, max_popup_w), max_popup_w);
+    popup.h = std::clamp(popup.h, std::min(3, usable_h), usable_h);
+    popup.x = std::max(0, (render_w - popup.w) / 2);
+    popup.y = top + std::max(0, (usable_h - popup.h) / 2);
+  }
+
   // Modal popups (help, keymap listings, ...) hand off to a Lua UI handler
   // when registered; hover popups keep the native path (their Lua counterpart
   // is the lsp.hover_ui handler).

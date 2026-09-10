@@ -103,8 +103,7 @@ void Editor::toggle_outline_panel()
     close_outline_panel();
     return;
   }
-  show_right_panel = true;
-  active_right_panel_tab = RIGHT_PANEL_SYMBOLS;
+  open_right_panel_tab(RIGHT_PANEL_SYMBOLS);
   active_plugin_panel.clear();
   show_debugger_panel = false;
   needs_redraw = true;
@@ -123,8 +122,7 @@ void Editor::close_outline_panel()
 {
   if (outline_active())
   {
-    show_right_panel = false;
-    active_right_panel_tab = RIGHT_PANEL_DEBUG;
+    close_right_panel_tab(RIGHT_PANEL_SYMBOLS);
   }
   needs_redraw = true;
 }
@@ -196,9 +194,9 @@ void Editor::render_outline_panel()
                 true);
 
   const int content_x = panel_x + 1;
-  const int content_y = panel_y + 2;
+  const int content_y = panel_y + 3;
   const int content_w = std::max(1, panel_w - 2);
-  const int content_h = std::max(0, panel_h - 3);
+  const int content_h = std::max(0, panel_h - 4);
 
   // Hand the model to a Lua UI handler when one is registered; it owns the
   // paint. Native fallback below stays byte-identical.
@@ -208,6 +206,8 @@ void Editor::render_outline_panel()
   view.w = panel_w;
   view.h = panel_h;
   view.title = " Outline ";
+  build_right_panel_tab_strip_view(view);
+  render_right_panel_tab_strip(panel_x, panel_y, panel_w);
 
   // Header: current file + symbol count.
   std::string file_label = "No file";
