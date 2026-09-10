@@ -23,6 +23,11 @@ namespace jot_ui
   // 21 for black against white. Used to decide which colour is readable on which.
   float contrast_ratio(int a, int b);
 
+  // Closest palette entry to a 24-bit colour, by squared RGB distance. Used when a
+  // truecolor value has to be shown on a terminal (or in a context) that only
+  // understands palette indices.
+  int palette_nearest_index(unsigned char r, unsigned char g, unsigned char b);
+
   struct CursorColors
   {
     int fill = 7; // the caret body

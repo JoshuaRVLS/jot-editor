@@ -1,6 +1,8 @@
 set(JOT_FEATURES_SOURCES
   features/autoclose.cpp
   features/bracket.cpp
+  features/color_codes.cpp
+  features/color_names.cpp
   features/config.cpp
   features/cpp_assist.cpp
   features/folding.cpp

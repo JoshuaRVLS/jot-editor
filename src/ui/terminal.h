@@ -1,6 +1,7 @@
 #ifndef TERMINAL_H
 #define TERMINAL_H
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
@@ -8,6 +9,17 @@
 #ifndef _WIN32
 #include <unistd.h>
 #endif
+
+// Sentinel for "this colour is an xterm-256 palette index, not a 24-bit value".
+// Lives here because both the cell model (ui.h) and the terminal's SGR writer
+// need it, and ui.h already includes this header.
+inline constexpr std::uint32_t kNoRgb = 0xFFFFFFFFu;
+
+// Whether the environment advertises 24-bit colour support: COLORTERM set to
+// truecolor/24bit, or a TERM that names a direct-colour variant. Used as the
+// "auto" answer for the truecolor config key; the terminal itself never
+// assumes it, because a wrong guess paints every truecolour cell wrong.
+bool terminal_env_supports_truecolor();
 
 struct TermKey;
 
@@ -123,6 +135,9 @@ private:
   // is needed, set JOT_RENDER_CHUNK_BYTES=<n> to enable chunked
   // writes inside `flush()`.
   size_t render_chunk_bytes_ = 0;
+  // Set once at init (detect_truecolor). Defaults to false so the quantised
+  // path is what any test that never runs init() exercises.
+  bool truecolor_ = false;
 
   void enable_raw_mode();
   void disable_raw_mode();
@@ -174,7 +189,21 @@ public:
   void move_cursor(int x, int y);
   void hide_cursor();
   void show_cursor();
-  void set_color(int fg, int bg);
+  // Writes fg/bg as SGR. Indices are always xterm-256 palette entries; when a
+  // 24-bit colour is supplied (kNoRgb means "none") it is used verbatim if the
+  // terminal understands 38;2/48;2, and quantised to the nearest palette entry
+  // otherwise, so callers never have to branch on the terminal's capability.
+  void set_color(int fg, int bg, std::uint32_t fg_rgb = kNoRgb, std::uint32_t bg_rgb = kNoRgb);
+  // Whether the terminal supports 24-bit colour, decided once at init from
+  // COLORTERM/TERM (and the `truecolor` config override).
+  bool supports_truecolor() const
+  {
+    return truecolor_;
+  }
+  void set_truecolor_supported(bool on)
+  {
+    truecolor_ = on;
+  }
   void reset_color();
   void set_bold(bool on);
   void set_italic(bool on);
@@ -257,6 +286,17 @@ public:
   int render_margin() const
   {
     return 1;
+  }
+
+  // The bytes queued for the next flush, without flushing them. Used by tests
+  // to assert on the exact escape sequences the renderer composes.
+  const std::string &pending_output_for_test() const
+  {
+    return buffer;
+  }
+  void clear_pending_output_for_test()
+  {
+    buffer.clear();
   }
 
   // Drain the output buffer to the kernel PTY without blocking. If

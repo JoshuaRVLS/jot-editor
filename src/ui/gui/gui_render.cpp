@@ -172,8 +172,29 @@ void UIGui::resolve_cell_rgb(const UICell &cell, float *out)
 {
   int fgi = cell.reverse ? cell.bg : cell.fg;
   int bgi = cell.reverse ? cell.fg : cell.bg;
-  xterm_rgb(fgi, out[0], out[1], out[2]);
-  xterm_rgb(bgi, out[3], out[4], out[5]);
+  // A cell carrying an exact 24-bit colour (the inline colour preview) paints
+  // that colour verbatim: the palette is only the fallback for every painter
+  // that still works in xterm-256 indices.
+  if (cell.fg_rgb != kNoRgb)
+  {
+    out[0] = ((cell.fg_rgb >> 16) & 0xFF) / 255.0f;
+    out[1] = ((cell.fg_rgb >> 8) & 0xFF) / 255.0f;
+    out[2] = (cell.fg_rgb & 0xFF) / 255.0f;
+  }
+  else
+  {
+    xterm_rgb(fgi, out[0], out[1], out[2]);
+  }
+  if (cell.bg_rgb != kNoRgb)
+  {
+    out[3] = ((cell.bg_rgb >> 16) & 0xFF) / 255.0f;
+    out[4] = ((cell.bg_rgb >> 8) & 0xFF) / 255.0f;
+    out[5] = (cell.bg_rgb & 0xFF) / 255.0f;
+  }
+  else
+  {
+    xterm_rgb(bgi, out[3], out[4], out[5]);
+  }
   if (cell.dim)
   {
     out[0] *= 0.55f;

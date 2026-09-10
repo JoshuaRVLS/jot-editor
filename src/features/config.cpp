@@ -98,6 +98,20 @@ void Config::load_defaults()
   // Half of the blink cycle, in ms (cursor_blink.h drives it). 500 reads as a
   // calm ~1 Hz blink; the old 300 was a jumpy 1.7 Hz. 0 disables blinking.
   settings["cursor_blink_ms"] = "500";
+  // Inline colour preview (features/color_codes.cpp): paint colour literals in
+  // the colour they name. mode is background | foreground | virtualtext.
+  settings["colorizer"] = "true";
+  settings["colorizer_mode"] = "background";
+  settings["colorizer_hex"] = "true";        // #RGB / #RGBA / #RRGGBB
+  settings["colorizer_hex_alpha"] = "false"; // #RRGGBBAA
+  settings["colorizer_names"] = "true";      // CSS names, e.g. red / LightBlue
+  settings["colorizer_functions"] = "true";  // rgb()/rgba()/hsl()/hsla()
+  // Restrict matches to string/comment bytes (off = every byte, like upstream).
+  settings["colorizer_only_in_strings"] = "false";
+  // Extensions to leave alone, e.g. ".min.css,.map".
+  settings["colorizer_exclude_filetypes"] = "";
+  // 24-bit colour output: auto detects from COLORTERM/TERM, on/off force it.
+  settings["truecolor"] = "auto";
   settings["gui_font_size"] = "16";
   settings["highlight_cursor_line"] = "true";
   settings["render_fps"] = "120";

@@ -12,6 +12,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <sstream>
 
 using namespace buffer_internal;
@@ -209,6 +210,33 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
     }
   }
   std::vector<int> visual_cols;
+
+  // Colour-preview gate for this pane's buffer, resolved once per frame rather
+  // than per line: the option list is re-read from config so a change applies
+  // immediately, and the extension comparison is what keeps e.g. lockfiles and
+  // minified bundles out of it.
+  bool colorizer_on = config.get_bool("colorizer", true);
+  const jot_color::DisplayMode colorizer_mode =
+      jot_color::parse_display_mode(config.get("colorizer_mode", "background"));
+  if (colorizer_on && !buf.filepath.empty())
+  {
+    const std::vector<std::string> excluded = config.get_list("colorizer_exclude_filetypes");
+    if (!excluded.empty())
+    {
+      // Matched against the file name's *suffix*, so "app.min.css" can be
+      // excluded by ".min.css" while plain ".css" still gets previews.
+      const std::string name = std::filesystem::path(buf.filepath).filename().string();
+      for (const auto &entry : excluded)
+      {
+        if (!entry.empty() && name.size() >= entry.size()
+            && name.compare(name.size() - entry.size(), entry.size(), entry) == 0)
+        {
+          colorizer_on = false;
+          break;
+        }
+      }
+    }
+  }
 
   int prev_line_idx = buf.scroll_offset - 1;
   for (int i = 0; i < h; i++)
@@ -541,6 +569,44 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
         // Colors only matter up to the visible window; huge single lines are
         // highlighted per-window instead of per-line.
         const auto &colors = get_line_syntax_colors(buf, line_idx, render_limit);
+        // Inline colour preview: scan this line for colour literals once, then
+        // let the chunk walk paint them. The options are read here (per line,
+        // per frame) so a config change or `:reload` takes effect immediately;
+        // the scan itself is memoised by content hash in colorizer_cache.
+        std::vector<jot_color::ColorSpan> color_spans;
+        jot_color::Options colorizer_options;
+        if (colorizer_on)
+        {
+          colorizer_options.hex3 = config.get_bool("colorizer_hex", true);
+          colorizer_options.hex4 = colorizer_options.hex3;
+          colorizer_options.hex6 = colorizer_options.hex3;
+          colorizer_options.hex8 = config.get_bool("colorizer_hex_alpha", false);
+          colorizer_options.names = config.get_bool("colorizer_names", true);
+          colorizer_options.names_camelcase = colorizer_options.names;
+          colorizer_options.functions = config.get_bool("colorizer_functions", true);
+          // Optional string/comment scoping (upstream has no equivalent; it is
+          // useful in codebases where a bare hex-looking token is an id).
+          std::vector<std::uint8_t> scope;
+          const std::vector<std::uint8_t> *scope_ptr = nullptr;
+          if (config.get_bool("colorizer_only_in_strings", false)
+              && line.size() <= kBracketTokenAwareLineBytes)
+          {
+            scope.assign(std::min((size_t)render_limit, line.size()), 0);
+            for (size_t bi = 0; bi < scope.size(); bi++)
+            {
+              const bool is_text = colors[bi].second == TS_TOKEN_STRING
+                                   || colors[bi].second == TS_TOKEN_COMMENT;
+              if (colors[bi].first == 1 && is_text)
+              {
+                scope[bi] = 1;
+              }
+            }
+            scope_ptr = &scope;
+          }
+          color_spans = colorizer_cache.spans_for(
+              line_idx, line, render_limit, colorizer_options, scope_ptr);
+        }
+        size_t color_span_cursor = 0;
         int line_bracket_depth = bracket_depth;
         std::vector<Editor::SearchMatch> search_hits;
         Editor::SearchMatch active_search_match{-1, -1, 0};
@@ -629,6 +695,39 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
 
             int fg = color;
             int bg = theme.bg_default;
+            // Inline colour preview. Painted over the syntax colour but before
+            // selection, search and anchored decorations, so anything the user
+            // is actively looking at still wins over the preview.
+            std::uint32_t span_fg_rgb = kNoRgb;
+            std::uint32_t span_bg_rgb = kNoRgb;
+            if (colorizer_on && !color_spans.empty())
+            {
+              while (color_span_cursor < color_spans.size())
+              {
+                const jot_color::ColorSpan &candidate = color_spans[color_span_cursor];
+                if (char_idx < candidate.start + candidate.len)
+                {
+                  break;
+                }
+                color_span_cursor++;
+              }
+              if (color_span_cursor < color_spans.size()
+                  && char_idx >= color_spans[color_span_cursor].start)
+              {
+                const std::uint32_t rgb = color_spans[color_span_cursor].rgb;
+                if (colorizer_mode == jot_color::DisplayMode::Foreground)
+                {
+                  span_fg_rgb = rgb;
+                }
+                else if (colorizer_mode == jot_color::DisplayMode::Background)
+                {
+                  span_bg_rgb = rgb;
+                  // Flip the text to black or white by contrast, the same rule
+                  // upstream applies with its bright_fg/dark_fg pair.
+                  span_fg_rgb = jot_color::contrast_text_color(rgb);
+                }
+              }
+            }
 
             bool in_sel = is_in_selection(char_idx);
             if (in_sel)
@@ -810,7 +909,9 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
                               false,
                               false,
                               deco_underline,
-                              deco_underline_fg);
+                              deco_underline_fg,
+                              span_fg_rgb,
+                              span_bg_rgb);
               }
             }
             else
@@ -823,7 +924,9 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
                             false,
                             false,
                             deco_underline,
-                            deco_underline_fg);
+                            deco_underline_fg,
+                            span_fg_rgb,
+                            span_bg_rgb);
             }
             char_idx = next_idx;
           }
@@ -1010,6 +1113,43 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
             }
             ui->draw_text(current_x + line_vis_end, draw_y, txt, vfg, vbg);
             break;
+          }
+        }
+
+        // Colour preview in virtualtext mode: a swatch per detected colour,
+        // appended after the line's text (the same end-of-line position the
+        // decoration virtual text uses). The text itself is left untouched.
+        if (colorizer_on && colorizer_mode == jot_color::DisplayMode::VirtualText
+            && !color_spans.empty())
+        {
+          int line_vis_end = visible_len;
+          if ((int)line.size() < (int)visual_cols.size())
+          {
+            line_vis_end = std::max(0, visual_cols[line.size()] - start_visual);
+          }
+          line_vis_end += hint_cells_at_byte((int)line.size());
+          if (line_vis_end < visible_len)
+          {
+            line_vis_end += 1; // one space between the text and the swatches
+          }
+          for (const auto &span : color_spans)
+          {
+            if (line_vis_end >= visible_len)
+            {
+              break;
+            }
+            ui->draw_text(current_x + line_vis_end,
+                          draw_y,
+                          "\u25A0",
+                          theme.fg_default,
+                          theme.bg_default,
+                          false,
+                          false,
+                          0,
+                          -1,
+                          span.rgb,
+                          span.rgb);
+            line_vis_end++;
           }
         }
         bracket_depth = line_bracket_depth;

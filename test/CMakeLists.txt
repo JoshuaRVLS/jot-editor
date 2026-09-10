@@ -7,6 +7,9 @@ add_executable(jot_tests
   test_cursor_blink.cpp
   test_cursor_blink_wiring.cpp
   test_cursor_colors.cpp
+  test_color_codes.cpp
+  test_colorizer_render.cpp
+  test_truecolor_cells.cpp
   test_cursor_scroll.cpp
   test_debugger.cpp
   test_imageviewer.cpp

@@ -94,6 +94,24 @@ void Editor::apply_config_live()
   // auto_detect_indent, lsp_completion_*) need no mirroring: they are live
   // automatically. show_minimap / show_sidebar / widths are toggled by their
   // own commands and intentionally not forced here.
+  // 24-bit colour: the terminal advertises support in the environment at init,
+  // and this setting can force it on or off (useful when the advertisement is
+  // wrong in either direction). "auto" re-detects, so :reload re-reads it too.
+  {
+    const std::string truecolor = config.get("truecolor", "auto");
+    if (truecolor == "on")
+    {
+      terminal.set_truecolor_supported(true);
+    }
+    else if (truecolor == "off")
+    {
+      terminal.set_truecolor_supported(false);
+    }
+    else
+    {
+      terminal.set_truecolor_supported(terminal_env_supports_truecolor());
+    }
+  }
   const std::string scheme = config.get("color_scheme", "");
   if (!scheme.empty() && scheme != current_theme_name)
   {

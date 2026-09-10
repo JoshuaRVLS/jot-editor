@@ -117,6 +117,40 @@ The built-in fallback covers the usual suspects: C/C++, Python, JavaScript/
 TypeScript (incl. JSX/TSX), HTML/XML, Rust, CSS, Java, Go, Markdown, JSON,
 Shell, Ruby, and PHP.
 
+### Colour preview
+
+Colour literals are painted in the colour they name, in any file type (a port
+of the idea behind [nvim-colorizer.lua](https://github.com/catgoose/nvim-colorizer.lua)).
+
+Detected:
+
+- Hex: `#RGB`, `#RGBA`, `#RRGGBB` (`#RRGGBBAA` behind `colorizer_hex_alpha`).
+- CSS/X11 names: `red`, `WhiteSmoke` (UPPERCASE is not matched).
+- Functions: `rgb()`, `rgba()`, `hsl()`, `hsla()`, with percentages, the
+  modern space-and-slash syntax, and `deg`/`grad`/`rad`/`turn` angles.
+
+Only whole literals match: `#fff` inside `#ffffff`, or `red` inside
+`text-red-500`, is not a colour, and neither is `0xabc123`. Alpha channels are
+ignored — the opaque colour is what gets shown.
+
+`colorizer_mode` picks how it is shown:
+
+| Mode | Effect |
+| --- | --- |
+| `background` (default) | The literal's own background becomes the colour, with the text flipped to black or white by contrast. |
+| `foreground` | The literal is drawn in the colour; the background is untouched. |
+| `virtualtext` | The text is left alone and a swatch is appended after the line. |
+
+The preview is painted over the syntax colours but *under* the selection,
+search matches, diagnostics and the cursor, so it never hides what you are
+working on. It applies to the GUI and the terminal alike; the terminal needs a
+24-bit-capable one (`COLORTERM=truecolor`/`24bit`, or a `*-direct` `TERM`) to
+show the exact colour, and otherwise falls back to the closest xterm-256 entry
+— the `truecolor` setting can force either path.
+
+Colours are parsed over the visible window only and memoised per line, so
+minified one-line files stay cheap.
+
 ### LSP
 
 - One language server per language per workspace root, driven natively from
@@ -457,7 +491,12 @@ Built-in defaults include `explorer_width=25`, `minimap_width=15`,
 `cursor_style=bar`, `cursor_blink_ms=500`, `render_fps=120`, `idle_fps=60`,
 `auto_save=false`, `auto_save_interval_ms=2000`, `lsp_change_debounce_ms=120`,
 `lsp_inlay_hints=true`, `lsp_inlay_type_hints=true`, `terminal_height=10`, and
-`debugger_height=12`.
+`debugger_height=12`. The colour preview adds `colorizer=true`,
+`colorizer_mode=background`, `colorizer_hex=true`, `colorizer_hex_alpha=false`,
+`colorizer_names=true`, `colorizer_functions=true`,
+`colorizer_only_in_strings=false` and `colorizer_exclude_filetypes=` (a comma
+separated list of file-name suffixes to skip, e.g. `.min.css,.map`), plus
+`truecolor=auto` for 24-bit output.
 
 The caret is configured with two keys:
 

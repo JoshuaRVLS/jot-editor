@@ -43,11 +43,22 @@ struct FloatOverlay
   std::vector<std::vector<UICell>> cells;
 };
 
+// Sentinel for "this cell has no 24-bit colour, use the palette index".
+// Declared in terminal.h (see the note there); repeated here for discoverability.
+
 struct UICell
 {
   std::string ch = " ";
   int fg = 7;
   int bg = 0;
+  // Optional 24-bit colours. Themes and every existing painter stay on the
+  // xterm-256 indices above; features that know an exact colour (the inline
+  // colour preview) set these and they win over the index. The terminal
+  // backend emits 38;2/48;2 when the terminal supports truecolor and quantises
+  // to the nearest palette entry when it does not, so the cell model itself
+  // stays exact either way; the GUI always resolves them verbatim.
+  std::uint32_t fg_rgb = kNoRgb;
+  std::uint32_t bg_rgb = kNoRgb;
   bool bold = false;
   bool italic = false;
   bool reverse = false;
@@ -59,9 +70,10 @@ struct UICell
 
   bool operator==(const UICell &other) const
   {
-    return ch == other.ch && fg == other.fg && bg == other.bg && bold == other.bold
-           && italic == other.italic && reverse == other.reverse && dim == other.dim
-           && underline == other.underline && underline_fg == other.underline_fg;
+    return ch == other.ch && fg == other.fg && bg == other.bg && fg_rgb == other.fg_rgb
+           && bg_rgb == other.bg_rgb && bold == other.bold && italic == other.italic
+           && reverse == other.reverse && dim == other.dim && underline == other.underline
+           && underline_fg == other.underline_fg;
   }
   bool operator!=(const UICell &other) const
   {
@@ -134,6 +146,10 @@ protected:
   int default_bg = 0;
 
   void set_cell(int x, int y, const UICell &cell);
+  // Writes a cell's colour pair as SGR, applying the dim adjustment and
+  // preferring a 24-bit colour when the cell carries one. Shared by the full
+  // row painter and both diff paths so they cannot drift apart.
+  void emit_cell_colors(const UICell &cell);
   void mark_all_rows_dirty();
   // Paints one row in full: cursor to (0, y), then style-coalesced runs
   // covering the whole paintable width, padded to the right margin. Used
@@ -181,7 +197,9 @@ public:
                  bool bold = false,
                  bool italic = false,
                  int underline = 0,
-                 int underline_fg = -1);
+                 int underline_fg = -1,
+                 std::uint32_t fg_rgb = kNoRgb,
+                 std::uint32_t bg_rgb = kNoRgb);
   void draw_rect(const UIRect &rect, int fg, int bg);
   void draw_border(const UIRect &rect, int fg, int bg);
   void fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg);

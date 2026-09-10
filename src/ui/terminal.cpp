@@ -1,5 +1,7 @@
 #include "terminal.h"
 #include "jot/keybind_catalog.h"
+#include "string_util.h"
+#include "ui/xterm_palette.h"
 
 #include <cctype>
 #include <cerrno>
@@ -369,6 +371,7 @@ void Terminal::disable_raw_mode()
 
 void Terminal::setup_terminal()
 {
+  truecolor_ = terminal_env_supports_truecolor();
   write("\x1b[?1049h");
   write("\x1b[?25l");
   write("\x1b[2J");
@@ -1136,11 +1139,65 @@ void Terminal::show_cursor()
   buffer += "\x1b[?25h";
 }
 
-void Terminal::set_color(int fg, int bg)
+void Terminal::set_color(int fg, int bg, std::uint32_t fg_rgb, std::uint32_t bg_rgb)
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "\x1b[38;5;%dm\x1b[48;5;%dm", fg, bg);
-  buffer += buf;
+  // A 24-bit value is only emitted when the terminal understands it; otherwise
+  // it is folded down to the closest palette entry here, so the caller can
+  // always hand over the exact colour it meant.
+  char buf[48];
+  if (fg_rgb != kNoRgb)
+  {
+    if (truecolor_)
+    {
+      snprintf(buf,
+               sizeof(buf),
+               "\x1b[38;2;%u;%u;%um",
+               (unsigned)((fg_rgb >> 16) & 0xFF),
+               (unsigned)((fg_rgb >> 8) & 0xFF),
+               (unsigned)(fg_rgb & 0xFF));
+    }
+    else
+    {
+      fg = jot_ui::palette_nearest_index(
+          (unsigned char)((fg_rgb >> 16) & 0xFF),
+          (unsigned char)((fg_rgb >> 8) & 0xFF),
+          (unsigned char)(fg_rgb & 0xFF));
+      snprintf(buf, sizeof(buf), "\x1b[38;5;%dm", fg);
+    }
+    buffer += buf;
+  }
+  else
+  {
+    snprintf(buf, sizeof(buf), "\x1b[38;5;%dm", fg);
+    buffer += buf;
+  }
+
+  if (bg_rgb != kNoRgb)
+  {
+    if (truecolor_)
+    {
+      snprintf(buf,
+               sizeof(buf),
+               "\x1b[48;2;%u;%u;%um",
+               (unsigned)((bg_rgb >> 16) & 0xFF),
+               (unsigned)((bg_rgb >> 8) & 0xFF),
+               (unsigned)(bg_rgb & 0xFF));
+    }
+    else
+    {
+      bg = jot_ui::palette_nearest_index(
+          (unsigned char)((bg_rgb >> 16) & 0xFF),
+          (unsigned char)((bg_rgb >> 8) & 0xFF),
+          (unsigned char)(bg_rgb & 0xFF));
+      snprintf(buf, sizeof(buf), "\x1b[48;5;%dm", bg);
+    }
+    buffer += buf;
+  }
+  else
+  {
+    snprintf(buf, sizeof(buf), "\x1b[48;5;%dm", bg);
+    buffer += buf;
+  }
 }
 
 void Terminal::reset_color()
@@ -1339,4 +1396,31 @@ void Terminal::render_capture_marker(const std::string &label, int rows_rendered
             rows_rendered);
   }
   fflush(render_capture_);
+}
+
+// 24-bit colour support is advertised, never probed: querying would mean
+// waiting on a terminal reply mid-startup. COLORTERM is the standard signal
+// (kitty, wezterm, foot, alacritty and Windows Terminal all set it), and the
+// direct-colour TERM variants are the fallback for older setups. Anything
+// unrecognised keeps the quantised path, so a wrong guess can never happen --
+// it is only ever a missed optimisation.
+bool terminal_env_supports_truecolor()
+{
+  if (const char *colorterm = std::getenv("COLORTERM"))
+  {
+    const std::string value = string_util::lower_copy(colorterm);
+    if (value.find("truecolor") != std::string::npos || value.find("24bit") != std::string::npos)
+    {
+      return true;
+    }
+  }
+  if (const char *term = std::getenv("TERM"))
+  {
+    const std::string value = string_util::lower_copy(term);
+    if (value.find("direct") != std::string::npos || value.find("truecolor") != std::string::npos)
+    {
+      return true;
+    }
+  }
+  return false;
 }

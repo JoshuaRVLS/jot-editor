@@ -76,6 +76,27 @@ float contrast_ratio(int a, int b)
   return (hi + 0.05f) / (lo + 0.05f);
 }
 
+int palette_nearest_index(unsigned char r, unsigned char g, unsigned char b)
+{
+  int best = 0;
+  long long best_distance = -1;
+  for (int i = 0; i < 256; i++)
+  {
+    unsigned char pr = 0, pg = 0, pb = 0;
+    palette_rgb(i, pr, pg, pb);
+    const long long dr = (long long)r - pr;
+    const long long dg = (long long)g - pg;
+    const long long db = (long long)b - pb;
+    const long long d = dr * dr + dg * dg + db * db;
+    if (best_distance < 0 || d < best_distance)
+    {
+      best_distance = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
 CursorColors cursor_colors(int cursor_fg, int cursor_bg, int cell_bg)
 {
   const float bg_contrast = contrast_ratio(cursor_bg, cell_bg);

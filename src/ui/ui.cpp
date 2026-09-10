@@ -153,6 +153,17 @@ namespace
     return lum < 40;
   }
 
+  // Dim a 24-bit colour: the same scale ui_dim_color applies to a palette
+  // entry, kept exact so a truecolour cell does not lose its colour to the
+  // scrim's quantisation.
+  std::uint32_t ui_dim_rgb_value(std::uint32_t rgb)
+  {
+    const std::uint32_t r = ((rgb >> 16) & 0xFF) * ui_dim_rgb_scale_pct / 100;
+    const std::uint32_t g = ((rgb >> 8) & 0xFF) * ui_dim_rgb_scale_pct / 100;
+    const std::uint32_t b = (rgb & 0xFF) * ui_dim_rgb_scale_pct / 100;
+    return (r << 16) | (g << 8) | b;
+  }
+
   void append_cell_for_remaining_width(std::string &out, const std::string &text, int remaining)
   {
     int width = rendered_cell_width(text);
@@ -301,6 +312,15 @@ void UI::set_cursor_colors(int fg, int bg)
 {
   cursor_fg = fg;
   cursor_bg = bg;
+}
+
+void UI::emit_cell_colors(const UICell &cell)
+{
+  const bool dim = cell.dim;
+  term->set_color(dim ? ui_dim_color(cell.fg, false) : cell.fg,
+                  dim ? ui_dim_color(cell.bg, true) : cell.bg,
+                  dim && cell.fg_rgb != kNoRgb ? ui_dim_rgb_value(cell.fg_rgb) : cell.fg_rgb,
+                  dim && cell.bg_rgb != kNoRgb ? ui_dim_rgb_value(cell.bg_rgb) : cell.bg_rgb);
 }
 
 void UI::dim_rect(const UIRect &rect)
@@ -481,8 +501,7 @@ void UI::render()
           term->set_underline(cell.underline);
         if (cell.underline_fg != -1)
           term->set_underline_color(cell.underline_fg);
-        term->set_color(cell.dim ? ui_dim_color(cell.fg, false) : cell.fg,
-                        cell.dim ? ui_dim_color(cell.bg, true) : cell.bg);
+        emit_cell_colors(cell);
         write_cell_for_remaining_width(term, cell.ch, row_width - x);
         x += std::min(rendered_cell_width(cell.ch), row_width - x);
       }
@@ -574,6 +593,11 @@ void UI::emit_full_row(int y, int row_width)
 
   int run_fg = -1;
   int run_bg = -1;
+  // 24-bit companions to run_fg/run_bg: a truecolour cell can share a palette
+  // index with its neighbour while painting a different colour, so the run
+  // boundary test has to compare these too.
+  std::uint32_t run_fg_rgb = kNoRgb;
+  std::uint32_t run_bg_rgb = kNoRgb;
   bool run_bold = false;
   bool run_italic = false;
   bool run_dim = false;
@@ -589,9 +613,10 @@ void UI::emit_full_row(int y, int row_width)
   {
     const auto &cell = grid[y][x];
 
-    if (x == 0 || cell.fg != run_fg || cell.bg != run_bg || cell.bold != run_bold
-        || cell.italic != run_italic || cell.dim != run_dim || cell.reverse != run_reverse
-        || cell.underline != run_underline || cell.underline_fg != run_underline_fg)
+    if (x == 0 || cell.fg != run_fg || cell.bg != run_bg || cell.fg_rgb != run_fg_rgb
+        || cell.bg_rgb != run_bg_rgb || cell.bold != run_bold || cell.italic != run_italic
+        || cell.dim != run_dim || cell.reverse != run_reverse || cell.underline != run_underline
+        || cell.underline_fg != run_underline_fg)
     {
       // Optimization: skip ESC[0m (full reset) when only the
       // fg/bg have changed and the bold/italic/reverse bits are
@@ -655,10 +680,11 @@ void UI::emit_full_row(int y, int row_width)
       }
       // `cell.*` hold the values that just changed; `run_*` still hold the
       // previous run's colors here, so emit from the cell.
-      term->set_color(cell.dim ? ui_dim_color(cell.fg, false) : cell.fg,
-                      cell.dim ? ui_dim_color(cell.bg, true) : cell.bg);
+      emit_cell_colors(cell);
       run_fg = cell.fg;
       run_bg = cell.bg;
+      run_fg_rgb = cell.fg_rgb;
+      run_bg_rgb = cell.bg_rgb;
       run_bold = cell.bold;
       run_italic = cell.italic;
       run_dim = cell.dim;
@@ -671,6 +697,7 @@ void UI::emit_full_row(int y, int row_width)
 
     int run_start = x;
     while (x < row_width && grid[y][x].fg == run_fg && grid[y][x].bg == run_bg
+           && grid[y][x].fg_rgb == run_fg_rgb && grid[y][x].bg_rgb == run_bg_rgb
            && grid[y][x].bold == run_bold && grid[y][x].italic == run_italic
            && grid[y][x].dim == run_dim && grid[y][x].reverse == run_reverse
            && grid[y][x].underline == run_underline
@@ -764,6 +791,8 @@ void UI::emit_row_diff(int y, int row_width)
   // when only the colors changed, mirroring emit_full_row().
   int run_fg = -1;
   int run_bg = -1;
+  std::uint32_t run_fg_rgb = kNoRgb;
+  std::uint32_t run_bg_rgb = kNoRgb;
   bool run_bold = false;
   bool run_italic = false;
   bool run_dim = false;
@@ -834,8 +863,7 @@ void UI::emit_row_diff(int y, int row_width)
           term->set_underline(cell.underline);
         if (cell.underline_fg != -1)
           term->set_underline_color(cell.underline_fg);
-        term->set_color(cell.dim ? ui_dim_color(cell.fg, false) : cell.fg,
-                        cell.dim ? ui_dim_color(cell.bg, true) : cell.bg);
+        emit_cell_colors(cell);
         first_run = false;
       }
       else
@@ -844,7 +872,8 @@ void UI::emit_row_diff(int y, int row_width)
                                 && cell.dim == run_dim && cell.reverse == run_reverse
                                 && cell.underline == run_underline
                                 && cell.underline_fg == run_underline_fg;
-        if (attrs_same && cell.fg == run_fg && cell.bg == run_bg)
+        if (attrs_same && cell.fg == run_fg && cell.bg == run_bg && cell.fg_rgb == run_fg_rgb
+            && cell.bg_rgb == run_bg_rgb)
         {
           // Same style as the previous group: no SGR needed, the
           // terminal state already matches.
@@ -853,8 +882,7 @@ void UI::emit_row_diff(int y, int row_width)
         {
           // Only fg/bg changed: set them in place without a full reset
           // (a reset costs bytes and can flash the background).
-          term->set_color(cell.dim ? ui_dim_color(cell.fg, false) : cell.fg,
-                          cell.dim ? ui_dim_color(cell.bg, true) : cell.bg);
+          emit_cell_colors(cell);
         }
         else
         {
@@ -876,12 +904,13 @@ void UI::emit_row_diff(int y, int row_width)
             term->set_underline(cell.underline);
           if (cell.underline_fg != -1)
             term->set_underline_color(cell.underline_fg);
-          term->set_color(cell.dim ? ui_dim_color(cell.fg, false) : cell.fg,
-                          cell.dim ? ui_dim_color(cell.bg, true) : cell.bg);
+          emit_cell_colors(cell);
         }
       }
       run_fg = cell.fg;
       run_bg = cell.bg;
+      run_fg_rgb = cell.fg_rgb;
+      run_bg_rgb = cell.bg_rgb;
       run_bold = cell.bold;
       run_italic = cell.italic;
       run_dim = cell.dim;
@@ -1042,7 +1071,9 @@ void UI::draw_text(int x,
                    bool bold,
                    bool italic,
                    int underline,
-                   int underline_fg)
+                   int underline_fg,
+                   std::uint32_t fg_rgb,
+                   std::uint32_t bg_rgb)
 {
   // Guard against invisible normal text: if the caller used the default-bg
   // path (bg < 0) and the requested foreground would match the background,
@@ -1068,6 +1099,8 @@ void UI::draw_text(int x,
       bad.ch = "?";
       bad.fg = fg;
       bad.bg = bg;
+      bad.fg_rgb = fg_rgb;
+      bad.bg_rgb = bg_rgb;
       bad.bold = bold;
       bad.italic = italic;
       bad.reverse = false;
@@ -1087,6 +1120,8 @@ void UI::draw_text(int x,
     cell.ch = ui_sanitized_cell_text(text.substr(i, cluster_end - i));
     cell.fg = fg;
     cell.bg = bg;
+    cell.fg_rgb = fg_rgb;
+    cell.bg_rgb = bg_rgb;
     cell.bold = bold;
     cell.italic = italic;
     cell.reverse = false;

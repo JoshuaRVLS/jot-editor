@@ -22,8 +22,27 @@ void UIGui::cell_colors(const UICell &cell, float &fr, float &fg_, float &fb, fl
 {
   int fgi = cell.reverse ? cell.bg : cell.fg;
   int bgi = cell.reverse ? cell.fg : cell.bg;
-  xterm_rgb(fgi, fr, fg_, fb);
-  xterm_rgb(bgi, br, bg_, bb);
+  // Exact 24-bit colours win over the palette index (see resolve_cell_rgb).
+  if (cell.fg_rgb != kNoRgb)
+  {
+    fr = ((cell.fg_rgb >> 16) & 0xFF) / 255.0f;
+    fg_ = ((cell.fg_rgb >> 8) & 0xFF) / 255.0f;
+    fb = (cell.fg_rgb & 0xFF) / 255.0f;
+  }
+  else
+  {
+    xterm_rgb(fgi, fr, fg_, fb);
+  }
+  if (cell.bg_rgb != kNoRgb)
+  {
+    br = ((cell.bg_rgb >> 16) & 0xFF) / 255.0f;
+    bg_ = ((cell.bg_rgb >> 8) & 0xFF) / 255.0f;
+    bb = (cell.bg_rgb & 0xFF) / 255.0f;
+  }
+  else
+  {
+    xterm_rgb(bgi, br, bg_, bb);
+  }
   if (cell.dim)
   {
     fr *= 0.55f;
