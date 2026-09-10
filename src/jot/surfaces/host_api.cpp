@@ -335,8 +335,11 @@ void HostCoreAPI::set_cursor(int line, int col)
 HostLayoutInfo HostRenderAPI::layout() const
 {
   HostLayoutInfo info{};
-  info.width = editor.terminal.get_width();
-  info.height = editor.terminal.get_height();
+  // The grid the editor is drawing into (UI), not the hosting terminal: under
+  // --gui there is no terminal, so its size would be the 80x24 default and Lua
+  // would lay out against a window that does not exist.
+  info.width = editor.grid_width();
+  info.height = editor.grid_height();
   info.sidebar_visible = editor.show_sidebar;
   info.sidebar_width = editor.effective_sidebar_width();
   info.minimap_visible = editor.show_minimap;

@@ -628,6 +628,18 @@ private:
   void handle_sidebar_mouse(int x, int y, bool is_click, bool is_double_click = false);
   void render_sidebar();
   void render_collapsed_sidebar_handle();
+  // The cell grid the editor is drawing into. Always use these for layout and
+  // hit-testing, never the Terminal's size: the terminal object only exists in
+  // terminal mode and keeps its 80x24 constructor default under --gui, so
+  // reading it there silently clamps geometry (and clicks) to 24 rows.
+  int grid_height() const
+  {
+    return ui ? ui->get_height() : 0;
+  }
+  int grid_width() const
+  {
+    return ui ? ui->get_render_width() : 0;
+  }
   int sidebar_activity_rail_width() const
   {
     return 5;
@@ -1077,11 +1089,18 @@ public:
   }
   int ui_width_for_test() const
   {
-    return ui ? ui->get_render_width() : 0;
+    return grid_width();
   }
   int ui_height_for_test() const
   {
-    return ui ? ui->get_height() : 0;
+    return grid_height();
+  }
+  // The hosting terminal's size. Meaningless under --gui (it keeps the
+  // constructor default because the terminal is never initialised there) --
+  // exposed so tests can pin that trap.
+  int terminal_height_for_test() const
+  {
+    return terminal.get_height();
   }
   // Terminal mouse-selection hooks for headless tests: feeds clicks,
   // motions and releases through the real private handlers.

@@ -98,7 +98,9 @@ bool Editor::open_context_menu_for_mouse(int x, int y)
   if (show_sidebar)
   {
     int reserved_terminal_h = integrated_terminal_reserved_h();
-    int content_bottom = terminal.get_height() - status_height - reserved_terminal_h;
+    // Grid height, not the terminal's: see Editor::grid_height (the terminal
+    // keeps its 80x24 default under --gui, which would cap this at row 22).
+    int content_bottom = grid_height() - status_height - reserved_terminal_h;
     int sidebar_w = effective_sidebar_width();
     if (x < sidebar_w && y >= topbar_height() && y < content_bottom)
     {

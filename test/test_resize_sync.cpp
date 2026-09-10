@@ -8,6 +8,7 @@
 #include "ui/ui.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -90,6 +91,61 @@ TEST_CASE("A resize re-fits the panes to the new grid", "[jot]")
   const SplitPane narrow = e.pane_for_test();
   REQUIRE(narrow.w > 0);
   REQUIRE(narrow.x + narrow.w <= ui->get_render_width());
+}
+
+TEST_CASE("Explorer clicks work below the terminal's row count", "[jot]")
+{
+  Editor &e = probe_editor();
+
+  // A workspace tall enough to fill a 40-row explorer, with names that sort in
+  // creation order so a screen row maps predictably onto a file.
+  char tmpl[] = "/tmp/jot_click_ws_XXXXXX";
+  REQUIRE(mkdtemp(tmpl) != nullptr);
+  const std::string root = tmpl;
+  for (int i = 0; i < 40; i++)
+  {
+    char name[32];
+    std::snprintf(name, sizeof(name), "/f%02d.txt", i);
+    std::ofstream(root + name) << "file " << i << "\n";
+  }
+  e.host().io.open_workspace(root);
+
+  // The condition that made this a GUI-only bug: the grid is 40 rows while the
+  // terminal still reports its 24-row constructor default (under --gui the
+  // terminal is never initialised). A hit test reading the terminal's height
+  // therefore stops at row 22 in a window of any size.
+  e.apply_resize_for_test(120, 40);
+  e.render_for_test();
+  REQUIRE(e.ui_height_for_test() == 40);
+  REQUIRE(e.terminal_height_for_test() == 24);
+  REQUIRE(e.sidebar_visible_for_test());
+
+  // Explorer rows start at y = 1 (row 0 is the panel's top border), so the
+  // filename index is y - 1.
+  const auto click_row = [&](int y)
+  {
+    e.mouse_event_for_test(5, y, /*bstate=*/1); // press
+    e.render_for_test();
+    return fs::path(e.buffer_for_test().filepath).filename().string();
+  };
+
+  // Control: a row above the old cutoff must keep working.
+  REQUIRE(click_row(1) == "f00.txt");
+
+  // The regression: row 22 is the first row the old terminal-derived gate
+  // rejected, so this click used to be dropped entirely.
+  REQUIRE(click_row(22) == "f21.txt");
+
+  // The last row of the explorer that is actually painted (the panel's bottom
+  // border sits one row lower). Its index in the flat list is 34.
+  REQUIRE(click_row(35) == "f34.txt");
+
+  // The row below that is the panel's bottom border / the status line: it must
+  // not open anything.
+  const std::string before = e.buffer_for_test().filepath;
+  e.mouse_event_for_test(5, 38, /*bstate=*/1);
+  e.render_for_test();
+  REQUIRE(e.buffer_for_test().filepath == before);
 }
 
 TEST_CASE("The sidebar comes back when the window fits again", "[jot]")
