@@ -235,11 +235,14 @@ private:
   // [col0, col1) of it, source column 0 at pixel x `x0px`, top edge at
   // `y_top` translated by `dy`.
   void paint_row_bg(const std::vector<UICell> &src, int col0, int col1, float x0px, float y_top,
-                    float dy, size_t &quads);
+                    float dy, size_t &quads, float clip_top = -1e30f,
+                    float clip_bottom = 1e30f);
   void paint_row_glyphs(const std::vector<UICell> &src, int col0, int col1, float x0px,
-                        float y_top, float dy);
+                        float y_top, float dy, float clip_top = -1e30f,
+                        float clip_bottom = 1e30f);
   void paint_row_underlines(const std::vector<UICell> &src, int col0, int col1, float x0px,
-                            float y_top, float dy, bool &any);
+                            float y_top, float dy, bool &any, float clip_top = -1e30f,
+                            float clip_bottom = 1e30f);
 
   // Cell colors: xterm 256-index -> linear-ish rgb (0..1).
   static void xterm_rgb(int index, float &r, float &g, float &b);

@@ -156,7 +156,9 @@ void UIGui::paint_row_bg(const std::vector<UICell> &src,
                          float x0px,
                          float y_top,
                          float dy,
-                         size_t &quads)
+                         size_t &quads,
+                         float clip_top,
+                         float clip_bottom)
 {
   col0 = std::max(0, col0);
   col1 = std::min(col1, (int)src.size());
@@ -165,6 +167,15 @@ void UIGui::paint_row_bg(const std::vector<UICell> &src,
     return;
   }
   const float py = y_top + dy;
+  // Vertical clip: sliding sprites must never paint outside their pane
+  // rect (e.g. into the status line or its margin), or code text bleeds
+  // under the status bar where nothing repaints it.
+  const float top = std::max(py, clip_top);
+  const float bottom = std::min(py + cell_h_, clip_bottom);
+  if (top >= bottom)
+  {
+    return;
+  }
   int c = col0;
   while (c < col1)
   {
@@ -181,7 +192,7 @@ void UIGui::paint_row_bg(const std::vector<UICell> &src,
       }
       run_end++;
     }
-    push_quad(x0px + (float)c * cell_w_, py, x0px + (float)run_end * cell_w_, py + cell_h_, 0, 0,
+    push_quad(x0px + (float)c * cell_w_, top, x0px + (float)run_end * cell_w_, bottom, 0, 0,
               1, 1, br, bg_, bb, 1.0f);
     quads++;
     c = run_end;
@@ -194,7 +205,9 @@ void UIGui::paint_row_glyphs(const std::vector<UICell> &src,
                              int col1,
                              float x0px,
                              float y_top,
-                             float dy)
+                             float dy,
+                             float clip_top,
+                             float clip_bottom)
 {
   col0 = std::max(0, col0);
   col1 = std::min(col1, (int)src.size());
@@ -237,7 +250,17 @@ void UIGui::paint_row_glyphs(const std::vector<UICell> &src,
     const float gy = py + ascent_ - g.bearing_top;
     const float gw = (g.u1 - g.u0) * kAtlasW;
     const float gh = (g.v1 - g.v0) * kAtlasH;
-    push_quad(gx, gy, gx + gw, gy + gh, g.u0, g.v0, g.u1, g.v1, fr, fg_, fb, 1.0f);
+    // Clip the glyph quad to the pane rect and remap the texture V so a
+    // glyph straddling the pane edge never bleeds below it.
+    const float gtop = std::max(gy, clip_top);
+    const float gbottom = std::min(gy + gh, clip_bottom);
+    if (gtop >= gbottom)
+    {
+      continue;
+    }
+    const float nv0 = g.v0 + (gtop - gy) / gh * (g.v1 - g.v0);
+    const float nv1 = g.v1 - (gy + gh - gbottom) / gh * (g.v1 - g.v0);
+    push_quad(gx, gtop, gx + gw, gbottom, g.u0, nv0, g.u1, nv1, fr, fg_, fb, 1.0f);
   }
 }
 
@@ -248,7 +271,9 @@ void UIGui::paint_row_underlines(const std::vector<UICell> &src,
                                  float x0px,
                                  float y_top,
                                  float dy,
-                                 bool &any)
+                                 bool &any,
+                                 float clip_top,
+                                 float clip_bottom)
 {
   col0 = std::max(0, col0);
   col1 = std::min(col1, (int)src.size());
@@ -270,6 +295,11 @@ void UIGui::paint_row_underlines(const std::vector<UICell> &src,
     }
     const float x0 = x0px + (float)c * cell_w_;
     const float y0 = py + cell_h_ - 2.0f;
+    // 1-2px marks: skip outright when outside the clip band.
+    if (y0 < clip_top || y0 + 2.0f > clip_bottom)
+    {
+      continue;
+    }
     if (cell.underline == 2)
     {
       // Wavy: three short segments zigzagging one pixel.
@@ -314,6 +344,12 @@ void UIGui::paint_sprite(const GuiScrollAnim &a, const std::vector<std::vector<U
   // the pane base for both would paint the grid shifted right by a.x1
   // cells -- a ghost copy beside the real content.
   const float x0px = rows ? (float)a.x1 * cell_w_ : 0.0f;
+  // The sprite is the pane body sliding; clip every quad to the pane rect
+  // so shifted content can never paint below the pane (status line / its
+  // margin) -- paint_plain only repaints backgrounds there, so glyphs
+  // would otherwise stay visible as "code behind the status bar".
+  const float clip_top = (float)a.y1 * cell_h_;
+  const float clip_bottom = (float)a.y2 * cell_h_;
 
   // Backgrounds.
   size_t quads = 0;
@@ -323,7 +359,7 @@ void UIGui::paint_sprite(const GuiScrollAnim &a, const std::vector<std::vector<U
     const std::vector<UICell> &row =
         rows ? (*rows)[(size_t)r] : (*content_grid_)[(size_t)(a.y1 + r)];
     paint_row_bg(row, rows ? 0 : a.x1, rows ? want_w : a.x2, x0px, (float)(a.y1 + r) * cell_h_, dy,
-                 quads);
+                 quads, clip_top, clip_bottom);
   }
   if (quads)
   {
@@ -338,7 +374,7 @@ void UIGui::paint_sprite(const GuiScrollAnim &a, const std::vector<std::vector<U
     const std::vector<UICell> &row =
         rows ? (*rows)[(size_t)r] : (*content_grid_)[(size_t)(a.y1 + r)];
     paint_row_glyphs(row, rows ? 0 : a.x1, rows ? want_w : a.x2, x0px, (float)(a.y1 + r) * cell_h_,
-                     dy);
+                     dy, clip_top, clip_bottom);
   }
   flush_tex(program_, atlas_tex_);
   end_batch();
@@ -356,7 +392,9 @@ void UIGui::paint_sprite(const GuiScrollAnim &a, const std::vector<std::vector<U
                          x0px,
                          (float)(a.y1 + r) * cell_h_,
                          dy,
-                         any);
+                         any,
+                         clip_top,
+                         clip_bottom);
   }
   if (any)
   {
