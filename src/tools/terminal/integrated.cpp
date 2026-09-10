@@ -564,6 +564,61 @@ void IntegratedTerminal::reset_scroll()
   scroll_offset = 0;
 }
 
+int IntegratedTerminal::get_total_rows() const
+{
+  if (screen)
+  {
+    return (int)scrollback.size() + rows;
+  }
+  return (int)scrollback.size() + (!current_line.empty() ? 1 : 0);
+}
+
+int IntegratedTerminal::get_top_visible_row(int visible_rows) const
+{
+  int total = get_total_rows();
+  int take = std::min(std::max(1, visible_rows), total);
+  int max_offset = std::max(0, total - take);
+  int offset = std::clamp(scroll_offset, 0, max_offset);
+  return std::max(0, total - offset - take);
+}
+
+std::string IntegratedTerminal::get_row_text_at(int full_row) const
+{
+  if (full_row < 0)
+  {
+    return "";
+  }
+  if (full_row < (int)scrollback.size())
+  {
+    return row_text(scrollback[(size_t)full_row]);
+  }
+  int screen_row = full_row - (int)scrollback.size();
+  if (screen && screen_row >= 0 && screen_row < rows)
+  {
+    OutputRow out;
+    out.cells.reserve((size_t)cols);
+    for (int col = 0; col < cols; col++)
+    {
+      VTermScreenCell cell{};
+      VTermPos pos{screen_row, col};
+      if (vterm_screen_get_cell(screen, pos, &cell))
+      {
+        out.cells.push_back(styled_from_vterm_cell(screen, cell));
+      }
+      else
+      {
+        out.cells.push_back({" ", 7, 0});
+      }
+    }
+    return row_text(out.cells);
+  }
+  if (!screen && screen_row == 0)
+  {
+    return current_line;
+  }
+  return "";
+}
+
 std::vector<IntegratedTerminal::OutputRow>
 IntegratedTerminal::get_recent_output_rows(int max_lines) const
 {

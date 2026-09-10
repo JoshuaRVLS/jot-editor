@@ -126,6 +126,16 @@ struct EditorState
   // panes stay laid out underneath but are covered and their clicks route
   // to the terminal until the zoom is toggled off.
   bool terminal_zoom_active;
+  // Mouse selection in the integrated terminal: anchors live in full-space
+  // row/col coordinates (see IntegratedTerminal::get_total_rows) so they
+  // survive scrolls and redraws. active = a selection exists (rendered),
+  // dragging = the mouse button is held and motions extend it.
+  bool terminal_sel_active;
+  bool terminal_sel_dragging;
+  int terminal_sel_anchor_row;
+  int terminal_sel_anchor_col;
+  int terminal_sel_cur_row;
+  int terminal_sel_cur_col;
   bool show_debugger_panel;
   int debugger_panel_height;
   bool show_right_panel;

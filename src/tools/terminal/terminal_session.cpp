@@ -123,7 +123,10 @@ namespace
 
     void close_after_exit() override
     {
-      if (!process_exited())
+      // A session that never spawned a child (or already reaped one) must
+      // not reach waitpid: waitpid(-1, ...) would block waiting on *any*
+      // child of the process instead of the terminal's shell.
+      if (child_pid_ <= 0 || !process_exited())
       {
         return;
       }

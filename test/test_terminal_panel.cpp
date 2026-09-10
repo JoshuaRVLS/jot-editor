@@ -112,3 +112,74 @@ TEST_CASE("Terminal resize drag is disabled while zoomed", "[jot]")
   REQUIRE_FALSE(e.terminal_resize_begin_for_test(10, e.terminal_panel_y_for_test()));
   REQUIRE_FALSE(e.terminal_resize_dragging_for_test());
 }
+
+TEST_CASE("Terminal mouse selection: click starts, drag extends, release copies", "[jot]")
+{
+  Editor &e = probe_editor();
+  e.set_terminal_state_for_test(true, false, 10);
+  e.add_terminal_for_test();
+  const int content_y = e.terminal_panel_y_for_test() + 2;
+
+  // A click in the content area anchors the selection there and starts the
+  // drag (col = x - 1: the content starts at screen column 1).
+  REQUIRE(e.terminal_mouse_for_test(5, content_y, true, false, false));
+  REQUIRE(e.terminal_sel_active_for_test());
+  REQUIRE(e.terminal_sel_dragging_for_test());
+  REQUIRE(e.terminal_sel_anchor_col_for_test() == 4);
+  REQUIRE(e.terminal_sel_anchor_row_for_test() == e.terminal_sel_cur_row_for_test());
+
+  // Dragging down-right extends the selection (clamped to the panel rows).
+  REQUIRE(e.terminal_mouse_for_test(9, content_y + 1, false, true, false));
+  REQUIRE(e.terminal_sel_dragging_for_test());
+  REQUIRE(e.terminal_sel_cur_col_for_test() == 8);
+  REQUIRE(e.terminal_sel_cur_row_for_test() > e.terminal_sel_anchor_row_for_test());
+
+  // Releasing keeps the selection but ends the drag (and copies: the
+  // headless terminal has no rows yet, so the copy is a no-op).
+  REQUIRE(e.terminal_mouse_for_test(9, content_y + 1, false, false, true));
+  REQUIRE_FALSE(e.terminal_sel_dragging_for_test());
+  REQUIRE(e.terminal_sel_active_for_test());
+
+  // A second click re-anchors; clearing resets everything.
+  REQUIRE(e.terminal_mouse_for_test(3, content_y, true, false, false));
+  REQUIRE(e.terminal_sel_anchor_col_for_test() == 2);
+  e.clear_terminal_selection();
+  REQUIRE_FALSE(e.terminal_sel_active_for_test());
+  REQUIRE_FALSE(e.terminal_sel_dragging_for_test());
+}
+
+TEST_CASE("Terminal selection clears when the panel closes", "[jot]")
+{
+  Editor &e = probe_editor();
+  e.set_terminal_state_for_test(true, false, 10);
+  e.add_terminal_for_test();
+  const int content_y = e.terminal_panel_y_for_test() + 2;
+
+  e.terminal_mouse_for_test(5, content_y, true, false, false);
+  REQUIRE(e.terminal_sel_active_for_test());
+
+  // Closing the last terminal hides the panel and drops the selection so a
+  // later :terminalnew can't resurrect stale highlights.
+  e.close_terminal_for_test(0);
+  REQUIRE_FALSE(e.terminal_sel_active_for_test());
+  REQUIRE_FALSE(e.terminal_sel_dragging_for_test());
+}
+
+TEST_CASE("Terminal clicks on the tab strip never start a selection", "[jot]")
+{
+  Editor &e = probe_editor();
+  e.set_terminal_state_for_test(true, false, 10);
+  e.add_terminal_for_test();
+  const int tab_y = e.terminal_panel_y_for_test() + 1;
+
+  // The first tab (" term 1 " starting at x=1) activates the terminal; it
+  // must not anchor a selection in the content area.
+  REQUIRE(e.terminal_mouse_for_test(2, tab_y, true, false, false));
+  REQUIRE_FALSE(e.terminal_sel_active_for_test());
+  REQUIRE_FALSE(e.terminal_sel_dragging_for_test());
+
+  // Motions over the tab row are consumed but inert too.
+  e.terminal_mouse_for_test(3, tab_y, false, true, false);
+  REQUIRE_FALSE(e.terminal_sel_active_for_test());
+}
+

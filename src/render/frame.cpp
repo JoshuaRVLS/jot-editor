@@ -291,20 +291,26 @@ void Editor::render()
 
   if (telescope.is_active())
   {
-    if (show_sidebar)
+    if (show_sidebar && !terminal_zoom_active)
     {
       render_sidebar();
     }
     render_panes();
-    render_collapsed_sidebar_handle();
+    if (!terminal_zoom_active)
+    {
+      render_collapsed_sidebar_handle();
+    }
     render_lsp_completion();
     render_lsp_signature();
     render_integrated_terminal();
-    render_debugger_panel();
-    render_git_panel();
-    render_git_diff_panel();
-    render_outline_panel();
-    render_plugin_panel();
+    if (!terminal_zoom_active)
+    {
+      render_debugger_panel();
+      render_git_panel();
+      render_git_diff_panel();
+      render_outline_panel();
+      render_plugin_panel();
+    }
     render_status_line();
     ui->dim_rect({0, 0, ui->get_render_width(), ui->get_height()});
     render_telescope();
@@ -348,20 +354,26 @@ void Editor::render()
     }
     else
     {
-      if (show_sidebar)
+      if (show_sidebar && !terminal_zoom_active)
       {
         render_sidebar();
       }
       render_panes();
-      render_collapsed_sidebar_handle();
+      if (!terminal_zoom_active)
+      {
+        render_collapsed_sidebar_handle();
+      }
       render_lsp_completion();
       render_lsp_signature();
       render_integrated_terminal();
-      render_debugger_panel();
-      render_git_panel();
-      render_git_diff_panel();
-      render_outline_panel();
-      render_plugin_panel();
+      if (!terminal_zoom_active)
+      {
+        render_debugger_panel();
+        render_git_panel();
+        render_git_diff_panel();
+        render_outline_panel();
+        render_plugin_panel();
+      }
     }
 
     render_status_line();

@@ -113,6 +113,7 @@ void Editor::close_integrated_terminal(int index)
     current_integrated_terminal = -1;
     show_integrated_terminal = false;
     terminal_zoom_active = false;
+    clear_terminal_selection();
     update_pane_layout();
     set_message("Closed terminal", false);
     needs_redraw = true;
@@ -129,6 +130,7 @@ void Editor::close_integrated_terminal(int index)
   }
 
   activate_integrated_terminal(current_integrated_terminal, show_integrated_terminal);
+  clear_terminal_selection();
   set_message("Closed terminal", false);
   needs_redraw = true;
 }
@@ -355,7 +357,112 @@ void Editor::handle_integrated_terminal_input(int ch, bool is_ctrl, bool is_shif
   }
 }
 
-bool Editor::handle_integrated_terminal_mouse(int x, int y)
+void Editor::begin_terminal_selection(int x, int y)
+{
+  IntegratedTerminal *term = get_integrated_terminal();
+  if (!term)
+  {
+    return;
+  }
+  const int panel_y = integrated_terminal_panel_y();
+  const int panel_h = integrated_terminal_panel_h();
+  int content_h = std::max(1, panel_h - 3);
+  int row = term->get_top_visible_row(content_h)
+            + std::clamp(y - (panel_y + 2), 0, content_h - 1);
+  int col = std::max(0, x - 1);
+  terminal_sel_anchor_row = row;
+  terminal_sel_anchor_col = col;
+  terminal_sel_cur_row = row;
+  terminal_sel_cur_col = col;
+  terminal_sel_active = true;
+  terminal_sel_dragging = true;
+}
+
+void Editor::update_terminal_selection_pos(int x, int y)
+{
+  IntegratedTerminal *term = get_integrated_terminal();
+  if (!term || !terminal_sel_dragging)
+  {
+    return;
+  }
+  const int panel_y = integrated_terminal_panel_y();
+  const int panel_h = integrated_terminal_panel_h();
+  int content_h = std::max(1, panel_h - 3);
+  int row = term->get_top_visible_row(content_h)
+            + std::clamp(y - (panel_y + 2), 0, content_h - 1);
+  terminal_sel_cur_row = row;
+  terminal_sel_cur_col = std::max(0, x - 1);
+}
+
+std::string Editor::terminal_selection_text()
+{
+  IntegratedTerminal *term = get_integrated_terminal();
+  if (!term || !terminal_sel_active)
+  {
+    return "";
+  }
+  int start_row = std::min(terminal_sel_anchor_row, terminal_sel_cur_row);
+  int end_row = std::max(terminal_sel_anchor_row, terminal_sel_cur_row);
+  int start_col =
+      (start_row == terminal_sel_anchor_row) ? terminal_sel_anchor_col : terminal_sel_cur_col;
+  int end_col =
+      (end_row == terminal_sel_anchor_row) ? terminal_sel_anchor_col : terminal_sel_cur_col;
+  if (start_col > end_col)
+  {
+    std::swap(start_col, end_col);
+  }
+
+  std::string out;
+  for (int r = start_row; r <= end_row; r++)
+  {
+    std::string line = term->get_row_text_at(r);
+    int line_len = (int)line.size();
+    int from = std::clamp(start_col, 0, line_len);
+    int to = (r == end_row) ? std::clamp(end_col, 0, line_len) : line_len;
+    if (to < from)
+    {
+      to = from;
+    }
+    out += line.substr(from, (size_t)(to - from));
+    if (r != end_row)
+    {
+      out += "\n";
+    }
+  }
+  return out;
+}
+
+void Editor::finish_terminal_selection()
+{
+  if (!terminal_sel_dragging)
+  {
+    return;
+  }
+  terminal_sel_dragging = false;
+  std::string text = terminal_selection_text();
+  if (!text.empty())
+  {
+    set_clipboard_text(text);
+    set_message("Copied " + std::to_string(text.size()) + " chars from terminal");
+  }
+  needs_redraw = true;
+}
+
+void Editor::clear_terminal_selection()
+{
+  terminal_sel_active = false;
+  terminal_sel_dragging = false;
+  terminal_sel_anchor_row = -1;
+  terminal_sel_anchor_col = -1;
+  terminal_sel_cur_row = -1;
+  terminal_sel_cur_col = -1;
+}
+
+bool Editor::handle_integrated_terminal_mouse(int x,
+                                              int y,
+                                              bool is_click,
+                                              bool is_motion,
+                                              bool is_click_release)
 {
   if (!show_integrated_terminal || integrated_terminals.empty())
   {
@@ -366,14 +473,38 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y)
   const int panel_y = integrated_terminal_panel_y();
   const int panel_w = integrated_terminal_panel_w();
   int tab_y = panel_y + 1;
+  const bool inside = x >= 0 && x < panel_w && y >= panel_y && y < panel_y + panel_h;
 
-  if (x < 0 || x >= panel_w || y < panel_y || y >= panel_y + panel_h)
+  // While a selection drag is in flight every motion/release belongs to the
+  // selection, even when the pointer leaves the panel (the selection is
+  // clamped to the visible rows).
+  if (terminal_sel_dragging && (is_motion || is_click_release || is_click))
+  {
+    if (inside)
+    {
+      update_terminal_selection_pos(x, y);
+    }
+    if (is_click_release || is_click)
+    {
+      finish_terminal_selection();
+    }
+    needs_redraw = true;
+    return true;
+  }
+
+  if (!inside)
   {
     return false;
   }
 
   if (y == tab_y || y == panel_y)
   {
+    // Only presses act on the tab strip; motions/releases over it (e.g.
+    // dragging a selection up past the content) are consumed but inert.
+    if (!is_click)
+    {
+      return true;
+    }
     int tab_x = 1;
     for (int i = 0; i < (int)integrated_terminals.size(); i++)
     {
@@ -432,31 +563,42 @@ bool Editor::handle_integrated_terminal_mouse(int x, int y)
     return true;
   }
 
-  show_integrated_terminal = true;
-  activate_integrated_terminal(current_integrated_terminal, true);
-  IntegratedTerminal *term = get_integrated_terminal();
-  if (term && !term->is_active())
+  if (is_click)
   {
-    if (term->open_shell())
+    // Content area: a primary click starts a mouse selection (drag to
+    // extend, release copies it) and refocuses / restarts the terminal.
+    begin_terminal_selection(x, y);
+
+    show_integrated_terminal = true;
+    activate_integrated_terminal(current_integrated_terminal, true);
+    IntegratedTerminal *term = get_integrated_terminal();
+    if (term && !term->is_active())
     {
-      watch_integrated_terminal_fd(term);
-      set_message("Integrated terminal restarted");
-    }
-    else
-    {
+      if (term->open_shell())
+      {
+        watch_integrated_terminal_fd(term);
+        set_message("Integrated terminal restarted");
+      }
+      else
+      {
 #ifdef _WIN32
-      set_message("Failed to open integrated terminal: ConPTY unavailable (Windows 10 1809+ required)");
+        set_message(
+            "Failed to open integrated terminal: ConPTY unavailable (Windows 10 1809+ required)");
 #else
-      set_message("Failed to restart terminal: check $SHELL or PTY support");
+        set_message("Failed to restart terminal: check $SHELL or PTY support");
 #endif
+      }
     }
+    if (term)
+    {
+      term->poll_output();
+    }
+    needs_redraw = true;
+    return true;
   }
-  if (term)
-  {
-    term->poll_output();
-  }
-  needs_redraw = true;
-  return true;
+  // Motions/releases over the content (not part of a selection drag) are
+  // not terminal business: they fall through so hovers don't steal focus.
+  return false;
 }
 
 void Editor::watch_integrated_terminal_fd(IntegratedTerminal *term)
@@ -678,10 +820,25 @@ void Editor::render_integrated_terminal()
     rows.push_back({"[try :terminalnew or check $SHELL]", {}});
   }
   int start_y = panel_y + 2;
-  int start = std::max(0, (int)rows.size() - content_h);
+  // Full-space row of the top displayed line; display row i is full-space
+  // row full_base + i when the window is full (synthetic placeholder rows
+  // for a dead terminal map back to 0-based instead).
+  int full_base = term->get_top_visible_row(content_h);
+  int sel_start_row = std::min(terminal_sel_anchor_row, terminal_sel_cur_row);
+  int sel_end_row = std::max(terminal_sel_anchor_row, terminal_sel_cur_row);
+  int sel_start_col =
+      (sel_start_row == terminal_sel_anchor_row) ? terminal_sel_anchor_col : terminal_sel_cur_col;
+  int sel_end_col =
+      (sel_end_row == terminal_sel_anchor_row) ? terminal_sel_anchor_col : terminal_sel_cur_col;
+  if (sel_start_col > sel_end_col)
+  {
+    std::swap(sel_start_col, sel_end_col);
+  }
+  const bool sel = terminal_sel_active && sel_end_row >= 0;
+  const bool full_window = (int)rows.size() >= content_h;
   for (int i = 0; i < content_h; i++)
   {
-    int idx = start + i;
+    int idx = i;
     if (idx >= (int)rows.size())
     {
       break;
@@ -692,6 +849,28 @@ void Editor::render_integrated_terminal()
     if ((int)line.size() > max_cols)
     {
       line = line.substr(trim_from);
+    }
+
+    // Selection window on this row: sel_left inclusive, sel_right
+    // exclusive; unbounded in between the boundary rows.
+    int full_row = full_window ? full_base + i : i;
+    bool row_sel = sel && full_row >= sel_start_row && full_row <= sel_end_row;
+    int sel_left = 0;
+    int sel_right = INT_MAX;
+    if (row_sel)
+    {
+      if (full_row == sel_start_row)
+      {
+        sel_left = sel_start_col;
+      }
+      if (full_row == sel_end_row)
+      {
+        sel_right = sel_end_col;
+      }
+      if (sel_right < sel_left)
+      {
+        sel_right = sel_left;
+      }
     }
 
     bool drew_styled = false;
@@ -706,7 +885,8 @@ void Editor::render_integrated_terminal()
         {
           auto colors = IntegratedTerminal::resolve_cell_colors(styled[j], term_fg, term_bg);
           int fg = std::clamp(colors.fg, 0, 255);
-          int bg = std::clamp(colors.bg, 0, 255);
+          bool sel_cell = row_sel && j >= sel_left && j < sel_right;
+          int bg = sel_cell ? theme.bg_selection : std::clamp(colors.bg, 0, 255);
           ui->draw_text(sx, start_y + i, styled[j].ch, fg, bg);
           sx++;
         }
@@ -716,7 +896,23 @@ void Editor::render_integrated_terminal()
 
     if (!drew_styled)
     {
-      ui->draw_text(1, start_y + i, line, term_fg, term_bg);
+      if (row_sel)
+      {
+        // Byte-granular highlight for plain rows (no vterm cells): each
+        // byte occupies one column, so the anchor's column maps directly.
+        int sx = 1;
+        for (size_t k = 0; k < line.size() && sx < 1 + max_cols; k++, sx++)
+        {
+          int ccol = trim_from + (int)k;
+          bool sel_cell = ccol >= sel_left && ccol < sel_right;
+          ui->draw_text(sx, start_y + i, line.substr(k, 1), term_fg,
+                        sel_cell ? theme.bg_selection : term_bg);
+        }
+      }
+      else
+      {
+        ui->draw_text(1, start_y + i, line, term_fg, term_bg);
+      }
     }
   }
 }

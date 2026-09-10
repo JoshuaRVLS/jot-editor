@@ -454,8 +454,19 @@ private:
   void apply_settings_value(const std::string &key, const std::string &value);
   bool handle_menu_bar_input(int ch);
   bool handle_menu_bar_mouse(int x, int y, bool is_click, bool is_motion);
-  bool handle_integrated_terminal_mouse(int x, int y);
+  bool handle_integrated_terminal_mouse(int x,
+                                        int y,
+                                        bool is_click,
+                                        bool is_motion,
+                                        bool is_click_release);
   bool handle_integrated_terminal_scroll(int x, int y, bool is_scroll_up, bool is_scroll_down);
+  // Mouse selection in the integrated terminal: anchors live in full-space
+  // row/col coordinates (see IntegratedTerminal::get_total_rows) so they
+  // survive scrolls and redraws.
+  void begin_terminal_selection(int x, int y);
+  void update_terminal_selection_pos(int x, int y);
+  void finish_terminal_selection();
+  std::string terminal_selection_text();
   bool handle_debugger_mouse(int x,
                              int y,
                              bool activate = true,
@@ -536,6 +547,9 @@ public:
                          const std::string &line_text,
                          int tab_size);
   void toggle_sidebar();
+  // Drops the integrated-terminal mouse selection (panel close, terminal
+  // close, and the test suite).
+  void clear_terminal_selection();
   bool zen_active() const
   {
     return zen_mode;
@@ -999,6 +1013,51 @@ public:
   int ui_height_for_test() const
   {
     return ui ? ui->get_height() : 0;
+  }
+  // Terminal mouse-selection hooks for headless tests: feeds clicks,
+  // motions and releases through the real private handlers.
+  bool terminal_mouse_for_test(int x, int y, bool click, bool motion, bool release)
+  {
+    return handle_integrated_terminal_mouse(x, y, click, motion, release);
+  }
+  bool terminal_sel_active_for_test() const
+  {
+    return terminal_sel_active;
+  }
+  bool terminal_sel_dragging_for_test() const
+  {
+    return terminal_sel_dragging;
+  }
+  int terminal_sel_anchor_row_for_test() const
+  {
+    return terminal_sel_anchor_row;
+  }
+  int terminal_sel_anchor_col_for_test() const
+  {
+    return terminal_sel_anchor_col;
+  }
+  int terminal_sel_cur_row_for_test() const
+  {
+    return terminal_sel_cur_row;
+  }
+  int terminal_sel_cur_col_for_test() const
+  {
+    return terminal_sel_cur_col;
+  }
+  // Registers a shell-less terminal so mouse/key handlers have a live
+  // vterm-backed target without spawning a process.
+  void add_terminal_for_test()
+  {
+    auto term = std::make_unique<IntegratedTerminal>();
+    term->mark_active_for_test();
+    integrated_terminals.push_back(std::move(term));
+    current_integrated_terminal = (int)integrated_terminals.size() - 1;
+    show_integrated_terminal = true;
+  }
+  // Closes the terminal at the given index through the real handler.
+  void close_terminal_for_test(int index)
+  {
+    close_integrated_terminal(index);
   }
   // Opens/closes the settings menu (the :settings command path).
   void toggle_settings_menu_for_test()

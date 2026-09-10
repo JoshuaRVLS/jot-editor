@@ -107,6 +107,12 @@ public:
   {
     focused = value;
   }
+  // Test hook: marks the terminal active without spawning a shell, so
+  // headless tests can drive mouse/key input against a live vterm.
+  void mark_active_for_test()
+  {
+    active = true;
+  }
   const std::string &get_label() const
   {
     return label;
@@ -135,6 +141,17 @@ public:
   {
     return scroll_offset;
   }
+
+  // Full-space row indexing: row 0 is the oldest scrollback line; rows at
+  // index >= scrollback.size() address the live screen (or the current
+  // input line when no screen exists yet). Used by mouse selection to keep
+  // an anchor stable across scrolls and redraws.
+  int get_total_rows() const;
+  // Full-space index of the top row currently displayed with the given
+  // visible-row count (mirrors get_recent_output_rows' window math).
+  int get_top_visible_row(int visible_rows) const;
+  // Full row text for a full-space index ("" when out of range).
+  std::string get_row_text_at(int full_row) const;
 
   std::vector<std::string> get_recent_lines(int max_lines) const;
   std::vector<std::vector<StyledCell>> get_recent_styled_lines(int max_lines) const;

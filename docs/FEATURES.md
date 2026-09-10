@@ -151,7 +151,11 @@ Install helpers also cover Rust, Go, Lua, and Bash.
   full window.
 - **Fullscreen zoom** (like pane zoom): `Alt+Shift+Z` while focused, the `□`
   tab button, or `:termzoom` toggles the terminal across the whole pane
-  area. `Esc` exits fullscreen too.
+  area. `Esc` exits fullscreen too. While zoomed, the sidebar and right
+  dock are hidden so nothing overlaps the fullscreen terminal.
+- **Mouse selection**: click and drag in the terminal to highlight text
+  (drag beyond the panel edges is clamped to the visible rows); releasing
+  copies the selection to the system clipboard.
 - `Esc` returns focus to the editor; the mouse switches/closes tabs or opens
   new ones.
 - Local and global task files:

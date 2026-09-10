@@ -499,13 +499,29 @@ void Editor::handle_mouse(void *event_ptr)
     return;
   }
 
+  // Terminal selection drag: while the button is held, every motion and
+  // release belongs to the selection (the handler clamps to the panel and
+  // copies on release).
+  if (terminal_sel_dragging
+      && (is_motion || is_click_release || is_click || is_right_click || is_middle_click))
+  {
+    if (handle_integrated_terminal_mouse(
+            event->x, event->y, is_click, is_motion, is_click_release))
+    {
+      return;
+    }
+    return;
+  }
+
   // Zoomed terminal owns the whole pane area: every click below the tab
   // strip goes to it (tabs, scrollback, focus), never to the panes, the
   // sidebar or the docks underneath. The menu bar / status line stay
   // reachable because their handlers run earlier.
   if (terminal_zoom_active && show_integrated_terminal && !integrated_terminals.empty())
   {
-    if (is_click && handle_integrated_terminal_mouse(event->x, event->y))
+    if ((is_click || is_motion || is_click_release)
+        && handle_integrated_terminal_mouse(
+            event->x, event->y, is_click, is_motion, is_click_release))
     {
       return;
     }
@@ -603,7 +619,9 @@ void Editor::handle_mouse(void *event_ptr)
   // Act on the press only: acting on the release too would re-dispatch the
   // same header click after a close rebases the surviving tab onto the same
   // cell, closing two terminals from one click.
-  if (is_click && handle_integrated_terminal_mouse(event->x, event->y))
+  if ((is_click || is_motion || is_click_release)
+      && handle_integrated_terminal_mouse(
+          event->x, event->y, is_click, is_motion, is_click_release))
   {
     return;
   }

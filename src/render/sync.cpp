@@ -53,8 +53,11 @@ void Editor::sync_lua_ui_surfaces()
   sync(show_menu_bar_dropdown, lua_ui_prev_menu_dropdown, "menu_dropdown");
   sync(show_search, lua_ui_prev_search, "search_panel");
   sync(show_home_menu, lua_ui_prev_home, "home_screen");
-  sync(show_sidebar, lua_ui_prev_sidebar, "sidebar");
-  sync(show_right_panel, lua_ui_prev_side_panel, "side_panel");
+  // A zoomed terminal owns the whole pane area: the sidebar and right-dock
+  // floats must be torn down while it is up (frame.cpp also skips their
+  // native paints) so nothing paints over the fullscreen terminal.
+  sync(show_sidebar && !terminal_zoom_active, lua_ui_prev_sidebar, "sidebar");
+  sync(show_right_panel && !terminal_zoom_active, lua_ui_prev_side_panel, "side_panel");
   // The settings float must be torn down when the menu closes (Esc, click
   // outside, :settings toggle): without the close emit the panel stays on
   // screen even though the scrim is gone.
