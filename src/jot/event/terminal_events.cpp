@@ -51,6 +51,9 @@ void Editor::handle_terminal_event(const Event &ev)
   // future focus-in.
   if (ev.type == EVENT_FOCUS_IN)
   {
+    // Window focus is also the Discord presence's idle clock: coming back
+    // restores a presence that the idle timeout had cleared.
+    discord_note_focus(true, jot_discord::monotonic_ms());
     ui->forget_last_frame();
     needs_redraw = true;
     // Second and third repaints after the surface settles: each re-forgets
@@ -74,12 +77,17 @@ void Editor::handle_terminal_event(const Event &ev)
 
   if (ev.type == EVENT_FOCUS_OUT)
   {
+    discord_note_focus(false, jot_discord::monotonic_ms());
     return;
   }
 
   if (ev.type == EVENT_KEY)
   {
     keyboard_press_count++;
+    // Typing proves the window is focused: it cancels an idle stretch (so a
+    // terminal that misreports focus cannot leave the presence cleared) and
+    // restores it on the next poll.
+    discord_note_focus(true, jot_discord::monotonic_ms());
     cancel_lsp_mouse_hover();
     if (ctrl_hover_active)
     {

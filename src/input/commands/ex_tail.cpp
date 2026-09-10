@@ -503,6 +503,10 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
     set_home_menu_visible(true);
     set_message("Home");
   }
+  else if (lcmd == "discord")
+  {
+    discord_command(arg);
+  }
   else if (lcmd == "resume")
   {
     resume_last_workspace_session();

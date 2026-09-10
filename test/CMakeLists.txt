@@ -24,6 +24,9 @@ add_executable(jot_tests
   test_lua_treesitter_module.cpp
   test_tree_sitter_incremental.cpp
   test_decorations.cpp
+  test_discord_presence.cpp
+  test_discord_rpc.cpp
+  test_discord_session.cpp
   test_home_menu.cpp
   test_home_surface.cpp
   test_lua_decorations.cpp

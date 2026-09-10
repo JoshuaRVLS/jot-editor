@@ -327,6 +327,42 @@ void Editor::render_status_line()
     right_segments.push_back({lsp_text, lsp_fg, lsp_bg, false, true, 60});
   }
 
+  // Discord presence chip: only while the feature is on and something is worth
+  // reporting (connected, connecting, or an error from Discord such as a
+  // missing asset key). :discord status carries the full detail.
+  if (config.get_bool("discord_show_status", true) && !discord_status.empty()
+      && discord_status != "off")
+  {
+    std::string text;
+    int fg = theme.fg_status_muted;
+    int bg = theme.bg_status_muted;
+    if (discord_status == "on")
+    {
+      text = " Discord ";
+      fg = theme.fg_status_info;
+      bg = theme.bg_status_info;
+    }
+    else if (discord_status == "idle")
+    {
+      text = " Discord idle ";
+    }
+    else if (discord_status == "excluded")
+    {
+      text = " Discord off (workspace) ";
+    }
+    else if (discord_status == "error")
+    {
+      text = " Discord error ";
+      fg = theme.fg_status_message;
+      bg = theme.bg_status_error;
+    }
+    else
+    {
+      text = " Discord... ";
+    }
+    right_segments.push_back({text, fg, bg, false, true, 45, "\U000F066F", 88});
+  }
+
   // Lua-registered status segments (see jot.status.register). They render on
   // the flat status background and drop first when space runs low.
   if (lua_api)

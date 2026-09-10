@@ -112,7 +112,33 @@ void Config::load_defaults()
   settings["zen_content_width"] = "100";
   settings["terminal_height"] = "10";
   settings["debugger_height"] = "12";
-  settings["discord_rpc"] = "false";
+  // Discord Rich Presence (ported from iCrawl/discord-vscode; the template
+  // placeholders are documented in packaging/discord-presence/ASSETS.md).
+  // On by default, like the extension's "enabled": true, and toggleable live
+  // from :settings or :discord enable/disable.
+  settings["discord_rpc"] = "true";
+  settings["discord_app_id"] = "1513610110256021524";
+  settings["discord_details_idling"] = "Idling";
+  settings["discord_details_editing"] = "Editing {file_name}";
+  settings["discord_details_debugging"] = "Debugging {file_name}";
+  settings["discord_lower_details_idling"] = "Idling";
+  settings["discord_lower_details_editing"] = "Workspace: {workspace}";
+  settings["discord_lower_details_debugging"] = "Debugging: {workspace}";
+  settings["discord_lower_details_no_workspace"] = "No workspace";
+  settings["discord_large_image"] = "Editing a {LANG} file";
+  settings["discord_large_image_idling"] = "Idling";
+  settings["discord_small_image"] = "{app_name}";
+  settings["discord_app_image"] = "jot";
+  settings["discord_idle_image"] = "jot";
+  settings["discord_debug_image"] = "debug";
+  settings["discord_swap_images"] = "false";
+  settings["discord_remove_details"] = "false";
+  settings["discord_remove_lower_details"] = "false";
+  settings["discord_remove_timestamp"] = "false";
+  settings["discord_remove_repository_button"] = "false";
+  settings["discord_idle_timeout"] = "0";
+  settings["discord_show_status"] = "true";
+  settings["discord_exclude_workspaces"] = "";
   settings["image_viewer_backend"] = "auto";
   settings["treesitter_library_paths"] = "";
   settings["treesitter_query_paths"] = "";

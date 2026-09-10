@@ -282,7 +282,10 @@ void Editor::run()
                             poll_lsp_installs();
                           });
   }
-  if (!safe_mode && config.get_bool("discord_rpc", false))
+  // Discord presence. The timer is always registered when not in safe mode and
+  // the enabled check happens inside: registering it conditionally, as this
+  // used to, meant toggling the setting only took effect after a restart.
+  if (!safe_mode)
   {
     event_loop_.set_timer(1000,
                           true,

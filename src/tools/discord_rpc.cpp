@@ -1,204 +1,206 @@
+// Discord IPC client: framing and connection state machine over the platform
+// transport. See discord_rpc.h for the split of responsibilities.
 #include "discord_rpc.h"
-#include <cerrno>
+
 #include <csignal>
 #include <cstdint>
-#include <cstdio>
 #include <cstdlib>
-#include <cstring>
+#include <string>
+#include <vector>
+
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <process.h>
+#include <windows.h>
+#else
 #include <ctime>
-#include <fcntl.h>
-#include <sstream>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/un.h>
 #include <unistd.h>
+#endif
 
 namespace
 {
-
-  constexpr const char *kDiscordAppId = "1513610110256021524";
   constexpr long long kReconnectDelayMs = 30000;
-  constexpr long long kPresenceThrottleMs = 15000;
   constexpr long long kHandshakeTimeoutMs = 10000;
+  constexpr size_t kReadChunk = 4096;
 
-  std::string json_escape(const std::string &value)
+  long pid_value()
   {
-    std::string result;
-    result.reserve(value.size() * 2);
-    for (char c : value)
-    {
-      switch (c)
-      {
-      case '"':
-        result += "\\\"";
-        break;
-      case '\\':
-        result += "\\\\";
-        break;
-      case '\n':
-        result += "\\n";
-        break;
-      case '\r':
-        result += "\\r";
-        break;
-      case '\t':
-        result += "\\t";
-        break;
-      default:
-        result += c;
-        break;
-      }
-    }
-    return result;
-  }
-
-  bool set_nonblocking(int fd)
-  {
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1)
-    {
-      return false;
-    }
-    return fcntl(fd, F_SETFL, flags | O_NONBLOCK) != -1;
-  }
-
-  std::string socket_path_for_index(int index)
-  {
-#if defined(__APPLE__)
-    const char *temp = getenv("TMPDIR");
-    if (!temp || !*temp)
-      temp = "/tmp";
-    return std::string(temp) + "/discord-ipc-" + std::to_string(index);
+#if defined(_WIN32)
+    return static_cast<long>(_getpid());
 #else
-    std::string base;
-    const char *xdg = getenv("XDG_RUNTIME_DIR");
-    if (xdg && *xdg)
-    {
-      base = xdg;
-    }
-    else
-    {
-      const char *snap = getenv("SNAP_USER_COMMON");
-      if (snap && *snap)
-      {
-        base = snap;
-      }
-      else
-      {
-        const char *tmpdir = getenv("TMPDIR");
-        if (tmpdir && *tmpdir)
-        {
-          base = tmpdir;
-        }
-        else
-        {
-          base = "/tmp";
-        }
-      }
-    }
-    return base + "/discord-ipc-" + std::to_string(index);
+    return static_cast<long>(getpid());
 #endif
-  }
-
-  long long monotonic_ms_now()
-  {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
   }
 
   void install_sigpipe_handler()
   {
+#if !defined(_WIN32)
     static bool installed = false;
     if (!installed)
     {
       signal(SIGPIPE, SIG_IGN);
       installed = true;
     }
+#endif
   }
 
+  // The Discord replies we inspect are tiny and fixed-shape (READY, ERROR), so
+  // a full JSON parser would be overkill here; the presence payload itself is
+  // generated, never parsed.
+  std::string json_string_field(const std::string &json, const std::string &key)
+  {
+    const std::string needle = "\"" + key + "\"";
+    size_t pos = json.find(needle);
+    if (pos == std::string::npos)
+    {
+      return "";
+    }
+    pos = json.find(':', pos + needle.size());
+    if (pos == std::string::npos)
+    {
+      return "";
+    }
+    pos = json.find('"', pos);
+    if (pos == std::string::npos)
+    {
+      return "";
+    }
+    std::string out;
+    for (size_t i = pos + 1; i < json.size(); i++)
+    {
+      const char c = json[i];
+      if (c == '\\' && i + 1 < json.size())
+      {
+        out += json[++i];
+        continue;
+      }
+      if (c == '"')
+      {
+        break;
+      }
+      out += c;
+    }
+    return out;
+  }
+
+  bool json_int_field(const std::string &json, const std::string &key, long long &out)
+  {
+    const std::string needle = "\"" + key + "\"";
+    size_t pos = json.find(needle);
+    if (pos == std::string::npos)
+    {
+      return false;
+    }
+    pos = json.find(':', pos + needle.size());
+    if (pos == std::string::npos)
+    {
+      return false;
+    }
+    pos++;
+    while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t'))
+    {
+      pos++;
+    }
+    size_t end = pos;
+    if (end < json.size() && json[end] == '-')
+    {
+      end++;
+    }
+    while (end < json.size() && json[end] >= '0' && json[end] <= '9')
+    {
+      end++;
+    }
+    if (end == pos)
+    {
+      return false;
+    }
+    out = std::strtoll(json.substr(pos, end - pos).c_str(), nullptr, 10);
+    return true;
+  }
 } // namespace
 
 DiscordRPC::DiscordRPC()
-    : sockfd_(-1), state_(DISCONNECTED), last_heartbeat_ms_(0), last_presence_update_ms_(0),
-      last_connect_attempt_ms_(0), started_at_(time(nullptr)), heartbeat_interval_ms_(30000),
-      nonce_counter_(0)
+    : handle_(discord_ipc::kInvalidHandle), state_(DISCONNECTED), last_heartbeat_ms_(0),
+      last_connect_attempt_ms_(0), heartbeat_interval_ms_(30000), nonce_counter_(0)
 {
 }
 
 DiscordRPC::~DiscordRPC()
 {
-  close_socket();
+  close_connection();
 }
 
-bool DiscordRPC::find_and_connect_socket()
+void DiscordRPC::set_app_id(const std::string &app_id)
 {
-  for (int i = 0; i <= 9; i++)
+  if (app_id != app_id_)
   {
-    std::string path = socket_path_for_index(i);
-    struct stat st;
-    if (stat(path.c_str(), &st) != 0)
+    app_id_ = app_id;
+    // A different application means a different presence identity: reconnect so
+    // the new client id is used instead of the cached session.
+    close_connection();
+    last_connect_attempt_ms_ = 0;
+  }
+}
+
+std::string DiscordRPC::make_nonce()
+{
+  nonce_counter_++;
+  return std::to_string(nonce_counter_);
+}
+
+bool DiscordRPC::find_and_connect()
+{
+  probed_.clear();
+  const std::vector<std::string> candidates = discord_ipc::candidate_endpoints();
+  for (const std::string &endpoint : candidates)
+  {
+    const discord_ipc::Handle handle = discord_ipc::connect_endpoint(endpoint);
+    if (handle == discord_ipc::kInvalidHandle)
     {
       continue;
     }
-    if (!S_ISSOCK(st.st_mode))
-    {
-      continue;
-    }
-
-    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (fd < 0)
-    {
-      continue;
-    }
-
-    struct sockaddr_un addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path) - 1);
-
-    if (::connect(fd, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) < 0)
-    {
-      close(fd);
-      continue;
-    }
-
-    sockfd_ = fd;
+    probed_.push_back(endpoint);
+    handle_ = handle;
     return true;
+  }
+  // Nothing accepted a connection: remember which endpoints at least *exist*
+  // (a socket or pipe left behind by a dead client), so :discord status can
+  // tell "Discord is not running" apart from "the socket is there but refuses".
+  for (const std::string &endpoint : candidates)
+  {
+    if (discord_ipc::probe_exists(endpoint))
+    {
+      probed_.push_back(endpoint);
+    }
   }
   return false;
 }
 
-void DiscordRPC::close_socket()
+void DiscordRPC::close_connection()
 {
-  // Non-recursive teardown. Closes the local socket fd and resets
-  // in-memory state. NEVER calls write_all(), send_frame(), or
-  // disconnect() (which would re-enter this path and SIGSEGV from
-  // stack overflow). Sending a CLOSE frame is optional in the
-  // Discord IPC protocol; closing the local fd is sufficient.
-  if (sockfd_ >= 0)
+  if (handle_ != discord_ipc::kInvalidHandle)
   {
-    close(sockfd_);
-    sockfd_ = -1;
+    discord_ipc::close_handle(handle_);
+    handle_ = discord_ipc::kInvalidHandle;
   }
   state_ = DISCONNECTED;
   read_buf_.clear();
-  write_buf_.clear();
 }
 
 void DiscordRPC::disconnect()
 {
-  // Public disconnect path. Closes the local socket without trying
-  // to send a CLOSE frame (sending on a half-broken socket is what
-  // caused the recursive disconnect -> write_all -> disconnect
-  // SIGSEGV).
-  close_socket();
+  close_connection();
+  has_pending_ = false;
+  pending_ = jot_discord::Activity{};
+  last_error_.clear();
 }
 
 void DiscordRPC::send_handshake()
 {
-  std::string json = "{\"v\":1,\"client_id\":\"" + std::string(kDiscordAppId) + "\"}";
-  send_frame(0, json); // HANDSHAKE
+  const std::string client_id = app_id_.empty() ? "0" : app_id_;
+  send_frame(0, "{\"v\":1,\"client_id\":\"" + jot_discord::json_escape(client_id) + "\"}");
 }
 
 void DiscordRPC::poll(long long now_ms)
@@ -212,14 +214,11 @@ void DiscordRPC::poll(long long now_ms)
       return;
     }
     last_connect_attempt_ms_ = now_ms;
-
-    if (!find_and_connect_socket())
+    if (!find_and_connect())
     {
       return;
     }
-
     install_sigpipe_handler();
-    set_nonblocking(sockfd_);
     send_handshake();
     state_ = HANDSHAKING;
     last_heartbeat_ms_ = now_ms;
@@ -236,18 +235,17 @@ void DiscordRPC::poll(long long now_ms)
       if (state_ == CONNECTED)
       {
         last_heartbeat_ms_ = now_ms;
-        if (!pending_presence_details_.empty() || !pending_presence_state_.empty())
-        {
-          send_presence(pending_presence_details_, pending_presence_state_);
-        }
+        send_pending();
         return;
       }
     }
+    if (state_ != HANDSHAKING)
+    {
+      return;
+    }
     if (now_ms - last_connect_attempt_ms_ > kHandshakeTimeoutMs)
     {
-      // Handshake timed out. close_socket() is non-recursive and
-      // safe to call from the poll() loop.
-      close_socket();
+      close_connection();
     }
     break;
   }
@@ -274,49 +272,41 @@ void DiscordRPC::poll(long long now_ms)
   }
 }
 
-bool DiscordRPC::write_all(const uint8_t *data, size_t len)
+bool DiscordRPC::write_all(const uint8_t *data, size_t length)
 {
-  if (sockfd_ < 0)
+  if (handle_ == discord_ipc::kInvalidHandle)
   {
     return false;
   }
   size_t sent = 0;
-  while (sent < len)
+  while (sent < length)
   {
-    ssize_t n = write(sockfd_, data + sent, len - sent);
-    if (n <= 0)
+    const long n = discord_ipc::write_bytes(handle_, data + sent, length - sent);
+    if (n > 0)
     {
-      if (errno == EINTR)
-      {
-        continue;
-      }
-      if (errno == EAGAIN || errno == EWOULDBLOCK)
-      {
-        usleep(1000);
-        continue;
-      }
-      // Unrecoverable write error. Close the socket directly so we
-      // do NOT recurse back through send_frame / write_all / disconnect
-      // (the bug that caused the SIGSEGV). The next poll() will
-      // reconnect if Discord is available again.
-      close_socket();
+      sent += static_cast<size_t>(n);
+      continue;
+    }
+    if (n == -1)
+    {
+      // Transient backpressure: keep the session and let the next tick resend
+      // (presence is idempotent), instead of stalling the editor loop.
       return false;
     }
-    sent += static_cast<size_t>(n);
+    close_connection();
+    return false;
   }
   return true;
 }
 
 bool DiscordRPC::send_frame(int opcode, const std::string &json)
 {
-  if (sockfd_ < 0)
+  if (handle_ == discord_ipc::kInvalidHandle)
   {
     return false;
   }
-
-  uint32_t op = static_cast<uint32_t>(opcode);
-  uint32_t len = static_cast<uint32_t>(json.size());
-
+  const uint32_t op = static_cast<uint32_t>(opcode);
+  const uint32_t len = static_cast<uint32_t>(json.size());
   std::vector<uint8_t> frame;
   frame.reserve(8 + json.size());
   frame.push_back(op & 0xFF);
@@ -330,46 +320,40 @@ bool DiscordRPC::send_frame(int opcode, const std::string &json)
   frame.insert(frame.end(),
                reinterpret_cast<const uint8_t *>(json.data()),
                reinterpret_cast<const uint8_t *>(json.data() + json.size()));
-
   return write_all(frame.data(), frame.size());
 }
 
 bool DiscordRPC::read_frame(int &opcode, std::string &json)
 {
-  if (sockfd_ < 0)
+  if (handle_ == discord_ipc::kInvalidHandle)
   {
     return false;
   }
 
-  uint8_t buf[4096];
-  ssize_t n = read(sockfd_, buf, sizeof(buf));
-  if (n <= 0)
+  uint8_t buffer[kReadChunk];
+  const long n = discord_ipc::read_bytes(handle_, buffer, sizeof(buffer));
+  if (n == 0 || n == -2)
   {
-    if (n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
-    {
-      // n == 0 means EOF / peer closed. Any other non-recoverable
-      // error means the socket is gone. Use close_socket() so we
-      // do not recurse through send_frame / write_all.
-      close_socket();
-    }
+    close_connection();
     return false;
   }
-
-  read_buf_.append(reinterpret_cast<char *>(buf), static_cast<size_t>(n));
+  if (n < 0)
+  {
+    return false; // nothing available yet
+  }
+  read_buf_.append(reinterpret_cast<char *>(buffer), static_cast<size_t>(n));
 
   if (read_buf_.size() < 8)
   {
     return false;
   }
-
   const uint8_t *data = reinterpret_cast<const uint8_t *>(read_buf_.data());
-  uint32_t frame_op = static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8)
-                      | (static_cast<uint32_t>(data[2]) << 16)
-                      | (static_cast<uint32_t>(data[3]) << 24);
-  uint32_t frame_len = static_cast<uint32_t>(data[4]) | (static_cast<uint32_t>(data[5]) << 8)
-                       | (static_cast<uint32_t>(data[6]) << 16)
-                       | (static_cast<uint32_t>(data[7]) << 24);
-
+  const uint32_t frame_op = static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8)
+                            | (static_cast<uint32_t>(data[2]) << 16)
+                            | (static_cast<uint32_t>(data[3]) << 24);
+  const uint32_t frame_len = static_cast<uint32_t>(data[4]) | (static_cast<uint32_t>(data[5]) << 8)
+                             | (static_cast<uint32_t>(data[6]) << 16)
+                             | (static_cast<uint32_t>(data[7]) << 24);
   if (read_buf_.size() < 8 + frame_len)
   {
     return false;
@@ -378,7 +362,6 @@ bool DiscordRPC::read_frame(int &opcode, std::string &json)
   opcode = static_cast<int>(frame_op);
   json.assign(read_buf_, 8, frame_len);
   read_buf_.erase(0, 8 + frame_len);
-
   return true;
 }
 
@@ -388,40 +371,40 @@ void DiscordRPC::handle_frame(int opcode, const std::string &json)
   {
   case 0:
   case 1:
-  { // HANDSHAKE response / FRAME with READY
-    size_t ready_pos = json.find("\"evt\":\"READY\"");
-    size_t hb_pos = json.find("\"heartbeat_interval\"");
-    if (ready_pos != std::string::npos || hb_pos != std::string::npos)
+  {
+    if (json.find("\"evt\":\"READY\"") != std::string::npos
+        || json.find("\"heartbeat_interval\"") != std::string::npos)
     {
-      if (hb_pos != std::string::npos)
+      long long interval = 0;
+      if (json_int_field(json, "heartbeat_interval", interval) && interval > 0)
       {
-        size_t colon = json.find(':', hb_pos);
-        if (colon != std::string::npos)
-        {
-          size_t val_start = colon + 1;
-          while (val_start < json.size() && (json[val_start] == ' ' || json[val_start] == '\t'))
-          {
-            val_start++;
-          }
-          std::string num;
-          while (val_start < json.size() && json[val_start] >= '0' && json[val_start] <= '9')
-          {
-            num += json[val_start];
-            val_start++;
-          }
-          if (!num.empty())
-          {
-            heartbeat_interval_ms_ = std::stoi(num);
-          }
-        }
+        heartbeat_interval_ms_ = static_cast<int>(interval);
       }
       state_ = CONNECTED;
+      last_error_.clear();
+      return;
+    }
+    // Discord rejects a bad request (unknown asset key, unknown client id, ...)
+    // with an error event. Reporting it is the difference between "presence is
+    // broken somehow" and knowing exactly which asset still needs uploading.
+    if (json.find("\"evt\":\"ERROR\"") != std::string::npos)
+    {
+      const std::string message = json_string_field(json, "message");
+      long long code = 0;
+      if (json_int_field(json, "code", code))
+      {
+        last_error_ = message.empty() ? "code " + std::to_string(code)
+                                      : message + " (code " + std::to_string(code) + ")";
+      }
+      else
+      {
+        last_error_ = message;
+      }
     }
     break;
   }
   case 2: // CLOSE
-    // Peer asked us to close. close_socket() is non-recursive.
-    close_socket();
+    close_connection();
     break;
   case 4: // PONG
     break;
@@ -430,61 +413,33 @@ void DiscordRPC::handle_frame(int opcode, const std::string &json)
   }
 }
 
-void DiscordRPC::send_presence(const std::string &details, const std::string &state)
+void DiscordRPC::send_activity(const jot_discord::Activity &activity)
 {
-  pending_presence_details_ = details;
-  pending_presence_state_ = state;
-
-  if (state_ != CONNECTED)
-  {
-    return;
-  }
-
-  std::ostringstream json;
-  json << "{\"cmd\":\"SET_ACTIVITY\",\"nonce\":\"" << make_nonce()
-       << "\",\"args\":{\"pid\":" << getpid() << ",\"activity\":{"
-       << "\"details\":\"" << json_escape(details) << "\""
-       << ",\"state\":\"" << json_escape(state) << "\""
-       << ",\"assets\":{"
-       << "\"large_image\":\"jot\""
-       << ",\"large_text\":\"jot editor\""
-       << "}"
-       << ",\"timestamps\":{\"start\":" << started_at_ << "}"
-       << "}}}";
-
-  if (send_frame(1, json.str()))
-  { // FRAME
-    last_presence_update_ms_ = monotonic_ms_now();
-  }
+  pending_ = activity;
+  has_pending_ = true;
+  send_pending();
 }
 
-void DiscordRPC::update_presence(const std::string &details, const std::string &state)
+void DiscordRPC::send_pending()
 {
-  long long now = monotonic_ms_now();
-  if (last_presence_update_ms_ > 0 && now - last_presence_update_ms_ < kPresenceThrottleMs
-      && details == pending_presence_details_ && state == pending_presence_state_)
+  if (!has_pending_ || state_ != CONNECTED)
   {
     return;
   }
-  send_presence(details, state);
+  const std::string payload =
+      jot_discord::set_activity_payload(pending_, make_nonce(), pid_value());
+  send_frame(1, payload);
 }
 
 void DiscordRPC::clear_presence()
 {
+  has_pending_ = false;
+  pending_ = jot_discord::Activity{};
   if (state_ == CONNECTED)
   {
-    std::ostringstream json;
-    json << "{\"cmd\":\"SET_ACTIVITY\",\"nonce\":\"" << make_nonce()
-         << "\",\"args\":{\"pid\":" << getpid() << "}}";
-    send_frame(1, json.str()); // FRAME
+    // SET_ACTIVITY with no activity object clears the profile.
+    const std::string payload = "{\"cmd\":\"SET_ACTIVITY\",\"nonce\":\"" + make_nonce()
+                                + "\",\"args\":{\"pid\":" + std::to_string(pid_value()) + "}}";
+    send_frame(1, payload);
   }
-  pending_presence_details_.clear();
-  pending_presence_state_.clear();
-  last_presence_update_ms_ = 0;
-}
-
-std::string DiscordRPC::make_nonce()
-{
-  nonce_counter_++;
-  return std::to_string(nonce_counter_);
 }

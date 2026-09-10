@@ -389,8 +389,20 @@ struct EditorState
   int auto_save_interval_ms;
   long long last_auto_save_ms;
 
-  std::string discord_rpc_last_details;
-  std::string discord_rpc_last_state;
+  // Discord Rich Presence session (jot/app/discord_session.cpp). The presence
+  // is sent when this signature changes (it covers the two text rows and the
+  // artwork, so a language switch counts); `discord_status` is the short state
+  // the status-line chip and :discord status report.
+  std::string discord_last_signature;
+  std::string discord_status;
+  std::string discord_pattern_error;
+  std::string discord_remote_root;
+  std::string discord_remote_url;
+  long long discord_presence_start_ms = 0;
+  long long discord_last_send_ms = 0;
+  long long discord_unfocused_since_ms = 0;
+  long long discord_remote_fetched_ms = 0;
+  bool discord_idle_cleared = false;
 
   bool show_home_menu;
   int home_menu_selected;

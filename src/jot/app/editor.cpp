@@ -637,66 +637,6 @@ void Editor::add_diagnostic(const std::string &filepath, const Diagnostic &diagn
   }
 }
 
-void Editor::poll_discord_rpc(long long now_ms)
-{
-  if (!config.get_bool("discord_rpc", true))
-  {
-    if (discord_rpc.is_connected())
-    {
-      discord_rpc.disconnect();
-    }
-    return;
-  }
-
-  discord_rpc.poll(now_ms);
-
-  std::string project = "No Workspace";
-  if (!root_dir.empty() && root_dir != ".")
-  {
-    project = fs::path(root_dir).filename().string();
-  }
-
-  std::string details = "Working on " + project;
-
-  if (has_git_repo() && !git_branch.empty())
-  {
-    details += " . " + git_branch;
-    if (git_dirty_count > 0)
-    {
-      details += " (" + std::to_string(git_dirty_count) + " changes)";
-    }
-  }
-
-  std::string state = "Browsing workspace";
-
-  if (!buffers.empty() && current_buffer >= 0 && !buffers[current_buffer].filepath.empty())
-  {
-    const std::string path = buffers[current_buffer].filepath;
-    const std::string filename = fs::path(path).filename().string();
-    std::string ext = get_file_extension(path);
-    if (!ext.empty() && ext[0] == '.')
-    {
-      ext.erase(0, 1);
-    }
-
-    if (!ext.empty())
-    {
-      state = "Editing " + filename + " . " + ext;
-    }
-    else
-    {
-      state = "Editing " + filename;
-    }
-  }
-
-  if (details != discord_rpc_last_details || state != discord_rpc_last_state)
-  {
-    discord_rpc_last_details = details;
-    discord_rpc_last_state = state;
-    discord_rpc.update_presence(details, state);
-  }
-}
-
 bool Editor::restart_editor(bool force)
 {
   // The new process boots from disk: any unsaved edits would be lost, so the

@@ -261,6 +261,14 @@ private:
     return !lsp_pending_changes.empty() || !lsp_clients.empty();
   }
   void poll_discord_rpc(long long now_ms);
+  // Focus reporting (DECSET 1004 in terminals, SDL window events in the GUI):
+  // leaving the window starts the idle clock that can clear the presence.
+  // `now_ms` comes from jot_discord::monotonic_ms(), the same clock the poll
+  // uses, so the two can never disagree (and tests can drive both).
+  void discord_note_focus(bool focused, long long now_ms);
+  // Backing of the `:discord` command (enable/disable/reconnect/disconnect/
+  // status); returns the message it reported.
+  std::string discord_command(const std::string &argument);
   LSPClient *find_lsp_client(const std::string &language, const std::string &root_path);
 
   void handle_terminal_event(const Event &ev);
@@ -932,6 +940,15 @@ private:
   void initialize_state_defaults();
   void initialize_lua_runtime();
   void initialize_terminal_ui();
+  // --- Discord presence helpers (jot/app/discord_session.cpp) ---
+  // Config::get*() are non-const, so these read config and stay non-const too.
+  bool discord_workspace_excluded();
+  const std::string &discord_repository_remote();
+  long long discord_buffer_size(const FileBuffer &buf);
+  long long discord_error_count(const std::string &filepath);
+  jot_discord::TemplateContext discord_template_context();
+  jot_discord::PresenceState discord_presence_state();
+  jot_discord::PresenceOptions discord_presence_options();
   // GUI frontend (jot --gui): builds the SDL3/OpenGL UIGui and the initial
   // pane. Throws std::runtime_error when the display or font is missing.
   void initialize_gui_ui();
@@ -1124,6 +1141,46 @@ public:
     close_settings_menu();
   }
   bool mouse_selecting_for_test() const;
+  // Discord presence session (jot/app/discord_session.cpp) for headless tests:
+  // the same entry points the 1s timer, focus reporting and :discord use.
+  void discord_poll_for_test(long long now_ms)
+  {
+    poll_discord_rpc(now_ms);
+  }
+  void discord_focus_for_test(bool focused, long long now_ms)
+  {
+    discord_note_focus(focused, now_ms);
+  }
+  std::string discord_status_for_test() const
+  {
+    return discord_status;
+  }
+  bool discord_idle_cleared_for_test() const
+  {
+    return discord_idle_cleared;
+  }
+  bool discord_connected_for_test() const
+  {
+    return discord_rpc.is_connected();
+  }
+  bool discord_pending_activity_for_test() const
+  {
+    return discord_rpc.has_pending_activity();
+  }
+  std::string discord_last_error_for_test() const
+  {
+    return discord_rpc.last_error();
+  }
+  std::string discord_command_for_test(const std::string &argument)
+  {
+    return discord_command(argument);
+  }
+  // Overrides a setting the way :settings does, without writing it to the real
+  // user config (tests run against a scratch JOT_CONFIG_HOME).
+  void config_set_for_test(const std::string &key, const std::string &value)
+  {
+    config.set(key, value);
+  }
   // Headless surface tests: the recording cell grid, and how many visible
   // floats a Lua surface (jot.ui.handler name, e.g. "sidebar", "home_screen")
   // currently owns. The editor constructor already boots the UI kit through

@@ -3,6 +3,7 @@ set(JOT_TOOLS_SOURCES
   tools/debugger/convert.cpp
   tools/debugger/json.cpp
   tools/debugger/process.cpp
+  tools/discord_presence.cpp
   tools/imageviewer.cpp
   tools/lsp/install.cpp
   tools/symbols/index.cpp
@@ -15,6 +16,7 @@ set(JOT_TOOLS_SOURCES
 
 set(JOT_TOOLS_POSIX_SOURCES
   tools/discord_rpc.cpp
+  tools/discord_rpc_transport_unix.cpp
   tools/lsp/client.cpp
   tools/lsp/json.cpp
   tools/lsp/messages.cpp
@@ -23,6 +25,7 @@ set(JOT_TOOLS_POSIX_SOURCES
 )
 
 set(JOT_TOOLS_WINDOWS_SOURCES
+  tools/discord_rpc.cpp
   tools/discord_rpc_win32.cpp
   tools/lsp/client.cpp
   tools/lsp/json.cpp
