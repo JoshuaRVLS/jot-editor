@@ -29,8 +29,31 @@ local ICONS = {
   hint = "",
 }
 
+-- Copy button glyphs (Material Design Nerd Fonts): a copy icon pinned to the
+-- top-right interior cell of the popup, swapping to a checklist while the
+-- "copied" state lasts. Two extra interior cells are reserved for it (a gap
+-- and the icon cell), so content wraps one column shorter.
+local ICON_COPY = "󰆏"  -- nf-md-content_copy
+local ICON_CHECK = "󰄲" -- nf-md-checkbox_marked_circle_outline
+local COPY_RESERVE = 2
+
 local win = nil -- current float handle (0 when none)
 local buf = nil -- current scratch buffer handle
+-- Copy-button interaction state (resets on every present/close):
+--   copy_state  "idle" | "copied" (checklist icon while copied)
+--   copy_hover  pointer rests on the button cell
+--   last_button_col / last_button_start / first_line_base / line1_content_spans
+--   hold the geometry + colors of the previous present() so the button can be
+--   redrawn in place (icon swap, hover highlight) without rebuilding the float.
+local copy_state = "idle"
+local copy_hover = false
+local last_button_col = -1
+local last_button_start = -1
+local first_line_base = ""
+local line1_content_spans = {}
+local last_fg = 7
+local last_footer_fg = 7
+local last_info_fg = nil
 
 local function close_float()
   if win and win ~= 0 then
@@ -41,6 +64,33 @@ local function close_float()
     jot.ui.buffer.delete(buf)
   end
   buf = nil
+  copy_state = "idle"
+  copy_hover = false
+  last_button_col = -1
+  last_button_start = -1
+end
+
+-- Re-renders just the copy button (icon + color) on the already-open float.
+local function refresh_button()
+  if not win or win == 0 or not buf or buf == 0 or last_button_start < 0 then
+    return
+  end
+  local icon = copy_state == "copied" and ICON_CHECK or ICON_COPY
+  jot.ui.buffer.set_lines(buf, 0, 1, true, { first_line_base .. " " .. icon })
+  local spans = {}
+  for _, sp in ipairs(line1_content_spans) do
+    spans[#spans + 1] = sp
+  end
+  local fg = copy_state == "copied" and (last_info_fg or last_fg) or (copy_hover and last_fg or last_footer_fg)
+  spans[#spans + 1] = { start = last_button_start, len = 3, fg = fg }
+  jot.ui.float.set_spans(win, 1, spans)
+  -- Flush the repaint immediately so the icon swap is visible without
+  -- waiting for the next input event (GUI repaints every frame anyway).
+  if jot.pane and jot.pane.redraw then
+    pcall(jot.pane.redraw)
+  elseif jot.ui and jot.ui.redraw then
+    pcall(jot.ui.redraw)
+  end
 end
 
 -- Byte-safe helpers over UTF-8 runes (stock Lua 5.4 utf8 library).
@@ -325,7 +375,8 @@ local function build_sectioned(contents, colors)
       local icon = sec.kind == "diagnostic" and ICONS[sec.severity] or nil
       local prefix = icon and (icon .. " ") or ""
       local pad = icon and 4 or 0 -- 3-byte icon + 1 space, or no indent
-      local wrapped = wrap_line(sec.text, HOVER_MAX_WIDTH - (icon and 4 or 0))
+      local wrapped =
+        wrap_line(sec.text, HOVER_MAX_WIDTH - COPY_RESERVE - (icon and 4 or 0))
       for wi, wl in ipairs(wrapped) do
         local idx = #lines + 1
         lines[idx] = prefix .. wl
@@ -393,7 +444,7 @@ local function present(info)
       width = w
     end
   end
-  width = math.min(HOVER_MAX_WIDTH, math.max(1, width))
+  width = math.min(HOVER_MAX_WIDTH - COPY_RESERVE, math.max(1, width))
 
   local total = #lines
   local shown = math.min(total, HOVER_MAX_ROWS)
@@ -402,15 +453,28 @@ local function present(info)
     body[i] = lines[i]
   end
 
-  buf = jot.ui.buffer.create(false, true)
-  jot.ui.buffer.set_lines(buf, 0, -1, true, body)
-
+  -- Copy button pinned to the top-right interior cell: pad the first line to
+  -- `width`, then a gap and the icon. The padded base line and the button's
+  -- byte offset are remembered so refresh_button() can swap the icon in place.
   local fg = info.fg or 7
   local bg = info.bg or 0
   local border_fg = info.border_fg or info.border or fg
   local footer_fg = (info.colors and info.colors.comment) or fg
+  local first_len = visual_len(body[1] or "")
+  first_line_base = (body[1] or "") .. string.rep(" ", math.max(0, width - first_len))
+  local button_icon = copy_state == "copied" and ICON_CHECK or ICON_COPY
+  body[1] = first_line_base .. " " .. button_icon
+  last_button_start = #(body[1]) - 3 -- 3-byte icon
+  last_button_col = width + 2 -- border-relative: 0 = left border, 1..width+1 interior
+  last_fg = fg
+  last_footer_fg = footer_fg
+  last_info_fg = (info.ui and info.ui.info) or nil
+
+  buf = jot.ui.buffer.create(false, true)
+  jot.ui.buffer.set_lines(buf, 0, -1, true, body)
+
   local h = shown + 2
-  local w = width + 2
+  local w = width + 2 + COPY_RESERVE
   -- jot.ui.float.open(buffer, config): the enter flag is not part of this
   -- binding (config is argument #2); focusable=false keeps it display-only.
   win = jot.ui.float.open(buf, {
@@ -443,11 +507,60 @@ local function present(info)
     buf = nil
     return false
   end
+  -- The button span joins the first line's content spans (byte offsets into
+  -- the padded line: content spans stay valid, the icon sits past them).
+  line1_content_spans = {}
+  if spans[1] then
+    for _, sp in ipairs(spans[1]) do
+      line1_content_spans[#line1_content_spans + 1] = sp
+    end
+  end
+  spans[1] = {}
+  for _, sp in ipairs(line1_content_spans) do
+    spans[1][#spans[1] + 1] = sp
+  end
+  spans[1][#spans[1] + 1] = {
+    start = last_button_start,
+    len = 3,
+    fg = copy_state == "copied" and (last_info_fg or fg) or (copy_hover and fg or footer_fg),
+  }
   for line_idx, s in pairs(spans) do
     if line_idx <= shown then
       jot.ui.float.set_spans(win, line_idx, s)
     end
   end
+  -- The popup is interactive: it consumes every mouse event over its area
+  -- (hovering it never falls through to the editor below) and the copy
+  -- button copies the raw hover contents to the clipboard, swapping its icon
+  -- to a checklist for a moment.
+  local function mouse_handler(ev)
+    local over_button = ev.row == 1 and ev.col == last_button_col
+    if ev.motion then
+      if over_button ~= copy_hover then
+        copy_hover = over_button
+        refresh_button()
+      end
+      return true
+    end
+    if over_button and ev.pressed and copy_state ~= "copied" then
+      copy_state = "copied"
+      if jot.clipboard and jot.clipboard.set then
+        jot.clipboard.set(info.contents or "")
+      end
+      refresh_button()
+      if jot.timer and jot.timer.set_timeout then
+        pcall(jot.timer.set_timeout, 1600, function()
+          if copy_state == "copied" then
+            copy_state = "idle"
+            refresh_button()
+          end
+        end)
+      end
+      return true
+    end
+    return true -- consume everything over the tooltip
+  end
+  jot.ui.float.on_mouse(win, mouse_handler)
   return true
 end
 
@@ -470,4 +583,8 @@ return {
   lang_to_ext = lang_to_ext,
   present = present,
   close = close_float,
+  -- Copy-button state for tests: { copied = bool, hover = bool }.
+  get_state = function()
+    return { copied = copy_state == "copied", hover = copy_hover }
+  end,
 }

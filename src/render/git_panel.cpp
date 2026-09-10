@@ -244,6 +244,8 @@ void Editor::render_git_panel()
       r.text = fr.label;
       const bool selected = fr.index == state.selected;
       r.selected = selected;
+      // Hover highlight (mouse motion); selection always wins the paint.
+      r.hovered = !selected && fr.index == git_panel_hover_row;
       switch (state.view)
       {
       case View::Files:
@@ -331,6 +333,9 @@ void Editor::render_git_panel()
   for (int row = 0; row < draw_rows && row < body_h; row++)
   {
     const SidePanelRowView &r = view.rows[row];
+    // Selected rows keep the tab-active bar; hovered rows get the selection
+    // tint without the selected foreground swap.
+    const int row_bg = r.selected ? theme.bg_tab_active : (r.hovered ? theme.bg_selection : r.bg);
     int draw_x = content_x;
     if (!r.icon.empty())
     {
@@ -338,7 +343,7 @@ void Editor::render_git_panel()
                     body_y + row,
                     r.icon,
                     r.icon_fg >= 0 ? r.icon_fg : r.fg,
-                    r.selected ? theme.bg_tab_active : r.bg);
+                    row_bg);
       draw_x += (int)ui_cell_count(r.icon) + 1;
     }
     std::string text = ui_truncate_cells(r.text, content_w - (draw_x - content_x));
@@ -352,7 +357,7 @@ void Editor::render_git_panel()
                     body_y + row,
                     lead,
                     lead_fg,
-                    r.selected ? theme.bg_tab_active : r.bg,
+                    row_bg,
                     r.bold);
       draw_x += (int)ui_cell_count(lead);
       text = text.substr((size_t)lead_bytes);
@@ -368,7 +373,7 @@ void Editor::render_git_panel()
                   body_y + row,
                   ui_truncate_cells(text, std::max(1, content_w - (draw_x - content_x))),
                   r.fg,
-                  r.selected ? theme.bg_tab_active : r.bg,
+                  row_bg,
                   r.bold);
   }
   if (body_h > draw_rows)

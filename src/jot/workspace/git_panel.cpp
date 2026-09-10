@@ -758,48 +758,63 @@ bool Editor::handle_git_panel_mouse(int x, int y, bool is_click, bool is_double_
   const int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
   if (x < panel_x || x >= panel_x + panel_w || y < panel_y || y >= panel_y + panel_h)
   {
+    // Pointer left the panel: drop the hover highlight.
+    if (git_panel_hover_row != -1)
+    {
+      git_panel_hover_row = -1;
+      needs_redraw = true;
+    }
     return false;
   }
-  if (!is_click)
-  {
-    return true;
-  }
-  focus_state = FOCUS_RIGHT_PANEL;
-  needs_redraw = true;
   // Row area starts below the title + tab strip + header (see render_git_panel).
   const int row_top = panel_y + 4;
   const int row_index = y - row_top;
-  if (row_index < 0)
-  {
-    return true;
-  }
-  // Map the click to a row via the same flat row layout the renderer uses.
   using namespace jot_git_panel;
   const std::vector<FlatRow> flat = build_flat_rows(git_panel);
   const int visible = panel_h - 4;
   const int index = git_panel.scroll + row_index;
-  if (index >= 0 && index < (int)flat.size() && index < git_panel.scroll + visible)
+  int hover_row = -1;
+  if (row_index >= 0 && index >= 0 && index < (int)flat.size() && index < git_panel.scroll + visible
+      && !flat[(size_t)index].section)
   {
-    const FlatRow &row = flat[(size_t)index];
-    if (!row.section && row.index >= 0)
+    hover_row = flat[(size_t)index].index;
+  }
+  if (!is_click)
+  {
+    // Motion: track the hover highlight without stealing focus.
+    if (git_panel_hover_row != hover_row)
     {
-      // Double-click detection mirrors the sidebar's: two clicks on the
-      // same row within 350 ms open the file's diff.
-      const long long now_ms =
-          std::chrono::duration_cast<std::chrono::milliseconds>(
-              std::chrono::steady_clock::now().time_since_epoch())
-              .count();
-      const bool dbl = is_double_click
-                       || (last_git_panel_click_ms > 0 && now_ms - last_git_panel_click_ms <= 350
-                           && last_git_panel_click_row == index);
-      last_git_panel_click_ms = now_ms;
-      last_git_panel_click_row = index;
-      git_panel.selected = row.index;
+      git_panel_hover_row = hover_row;
       needs_redraw = true;
-      if (dbl && git_panel.view == View::Files)
-      {
-        git_panel_open_diff_selected();
-      }
+    }
+    return true;
+  }
+  git_panel_hover_row = hover_row;
+  focus_state = FOCUS_RIGHT_PANEL;
+  needs_redraw = true;
+  if (row_index < 0 || index < 0 || index >= (int)flat.size() || index >= git_panel.scroll + visible)
+  {
+    return true;
+  }
+  const FlatRow &row = flat[(size_t)index];
+  if (!row.section && row.index >= 0)
+  {
+    // Double-click detection mirrors the sidebar's: two clicks on the
+    // same row within 350 ms open the file's diff.
+    const long long now_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count();
+    const bool dbl = is_double_click
+                     || (last_git_panel_click_ms > 0 && now_ms - last_git_panel_click_ms <= 350
+                         && last_git_panel_click_row == index);
+    last_git_panel_click_ms = now_ms;
+    last_git_panel_click_row = index;
+    git_panel.selected = row.index;
+    needs_redraw = true;
+    if (dbl && git_panel.view == View::Files)
+    {
+      git_panel_open_diff_selected();
     }
   }
   return true;

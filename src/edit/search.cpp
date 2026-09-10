@@ -660,3 +660,113 @@ void Editor::handle_search_panel(int ch, bool is_ctrl, bool is_shift, bool /*is_
   }
   needs_redraw = true;
 }
+
+bool Editor::handle_search_mouse(int x, int y, bool is_click)
+{
+  if (!show_search || !ui)
+  {
+    return false;
+  }
+  int w = std::min(72, std::max(42, ui->get_render_width() / 2));
+  int h = search_replace_visible ? 5 : 4;
+  int px = std::max(0, ui->get_width() - w - 2);
+  if (px + w > ui->get_width())
+  {
+    w = std::max(20, ui->get_width() - px);
+  }
+  const int py = topbar_height() + tab_height;
+  if (x < px || x >= px + w || y < py || y >= py + h)
+  {
+    return false;
+  }
+  if (!is_click)
+  {
+    return true; // hover over the panel: consume, no action
+  }
+
+  const int label_w = 9;
+  const int input_x = px + label_w;
+
+  // Chips row (title row): Aa / W / .* / Sel toggles, right-aligned.
+  if (y == py)
+  {
+    std::string chips;
+    chips += search_case_sensitive ? " Aa " : " aa ";
+    chips += search_whole_word ? " W " : " w ";
+    if (search_regex)
+    {
+      chips += " .* ";
+    }
+    if (search_scoped_to_selection)
+    {
+      chips += " Sel ";
+    }
+    std::string count = "0/0";
+    if (search_result_index >= 0 && !search_results.empty())
+    {
+      count = std::to_string(search_result_index + 1) + "/" + std::to_string(search_results.size());
+    }
+    chips += " " + count + " ";
+    int chip_x = std::max(px + 1, px + w - (int)chips.size() - 1);
+    if (x >= chip_x && x < chip_x + 4)
+    {
+      search_case_sensitive = !search_case_sensitive;
+      perform_search();
+      needs_redraw = true;
+      return true;
+    }
+    chip_x += 4;
+    if (x >= chip_x && x < chip_x + 3)
+    {
+      search_whole_word = !search_whole_word;
+      perform_search();
+      needs_redraw = true;
+      return true;
+    }
+    chip_x += 3;
+    if (search_regex)
+    {
+      if (x >= chip_x && x < chip_x + 4)
+      {
+        search_regex = false;
+        perform_search();
+        needs_redraw = true;
+        return true;
+      }
+      chip_x += 4;
+    }
+    if (search_scoped_to_selection)
+    {
+      if (x >= chip_x && x < chip_x + 5)
+      {
+        search_scoped_to_selection = false;
+        perform_search();
+        needs_redraw = true;
+        return true;
+      }
+      chip_x += 5;
+    }
+    return true;
+  }
+
+  // Find / Replace input rows: clicking the input focuses the field.
+  if (y == py + 1)
+  {
+    if (x >= input_x)
+    {
+      search_focus_replace = false;
+      needs_redraw = true;
+    }
+    return true;
+  }
+  if (search_replace_visible && y == py + 2)
+  {
+    if (x >= input_x)
+    {
+      search_focus_replace = true;
+      needs_redraw = true;
+    }
+    return true;
+  }
+  return true;
+}

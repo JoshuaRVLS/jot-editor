@@ -32,6 +32,11 @@ namespace lua_bind
     api(L).push_clipboard_text(L);
     return 1;
   }
+  int l_clip_set(lua_State *L)
+  {
+    api(L).clipboard_set_from_lua(L);
+    return 0;
+  }
   int l_terminal_list(lua_State *L)
   {
     api(L).push_terminal_list(L);

@@ -535,6 +535,7 @@ bool LuaAPI::init()
   field(L, "cut", l_clip_cut);
   field(L, "paste", l_clip_paste);
   field(L, "get", l_clip_get);
+  field(L, "set", l_clip_set);
   lua_setfield(L, -2, "clipboard");
   lua_newtable(L);
   field(L, "active", l_picker_active);

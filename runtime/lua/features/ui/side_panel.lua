@@ -272,7 +272,9 @@ local function side_panel(p)
     local line_w = math.min(math.floor(inner_w / 4), 7)
     local sel = r.selected
     local f = sel and selection_fg or (r.fg or fg)
-    local b = sel and selection_bg or (r.bg or bg)
+    -- Hover (mouse motion) tints the row background with the selection color
+    -- but keeps the normal foreground, so it never reads as selected.
+    local b = sel and selection_bg or ((r.hovered and selection_bg) or (r.bg or bg))
     local icon = r.icon or ""
     local icon_fg = (r.icon_fg and r.icon_fg >= 0) and r.icon_fg or f
     local lead_fg = r.lead_fg or -1

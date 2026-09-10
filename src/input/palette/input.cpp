@@ -260,3 +260,88 @@ void Editor::handle_command_palette(int ch, bool is_ctrl, bool is_shift, bool is
     close_palette();
   }
 }
+
+bool Editor::handle_palette_mouse(int x, int y, bool is_click, bool is_scroll_up, bool is_scroll_down)
+{
+  if (!show_command_palette || !ui)
+  {
+    return false;
+  }
+  // Mirrors command_palette_layout(): full-width bottom panel, the match
+  // list at the top rows and the prompt row as the last row.
+  const int screen_w = ui->get_render_width();
+  const int screen_h = ui->get_height();
+  const int max_items = std::min(8, (int)command_palette_results.size());
+  const int h = std::clamp(max_items + 1, 2, std::max(2, screen_h - 1));
+  const int list_y = screen_h - h;
+  if (y < list_y || y >= list_y + h || x < 0 || x >= screen_w)
+  {
+    return false;
+  }
+
+  if (is_scroll_up || is_scroll_down)
+  {
+    if (!command_palette_results.empty())
+    {
+      const int delta = is_scroll_up ? -3 : 3;
+      const int sel = std::clamp(
+          command_palette_selected + delta, 0, (int)command_palette_results.size() - 1);
+      if (sel != command_palette_selected)
+      {
+        command_palette_selected = sel;
+        needs_redraw = true;
+      }
+    }
+    return true;
+  }
+
+  // Prompt row: consume (typing is keyboard-only).
+  if (y == list_y + h - 1)
+  {
+    return true;
+  }
+
+  const int row = y - list_y;
+  if (row < 0 || row >= max_items)
+  {
+    return true;
+  }
+  const int idx = command_palette_scroll + row;
+  if (idx < 0 || idx >= (int)command_palette_results.size())
+  {
+    return true;
+  }
+
+  if (!is_click)
+  {
+    // Hover selects; the follow-window keeps the visible list in place, so
+    // the row under the pointer never shifts while moving across it.
+    if (command_palette_selected != idx)
+    {
+      command_palette_selected = idx;
+      needs_redraw = true;
+    }
+    return true;
+  }
+
+  // Click: complete to the clicked item and execute it (same path as
+  // Tab + Enter). Errors keep the palette open like the keyboard path.
+  command_palette_selected = idx;
+  std::string q = command_palette_query;
+  const bool has_colon = !q.empty() && q[0] == ':';
+  const std::string chosen = command_palette_results[(size_t)idx].insert_text;
+  command_palette_query = has_colon ? ":" + chosen : chosen;
+  const bool close_prompt = execute_ex_command(command_palette_query);
+  if (close_prompt)
+  {
+    show_command_palette = false;
+    command_palette_query.clear();
+  }
+  command_palette_results.clear();
+  command_palette_selected = 0;
+  command_palette_scroll = 0;
+  command_palette_theme_mode = false;
+  command_palette_theme_original.clear();
+  needs_redraw = true;
+  return true;
+}

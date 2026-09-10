@@ -338,6 +338,7 @@ bool LuaAPI::emit_tree_sitter_status(const TsStatusView &view)
                      [&](lua_State *L, int t)
                      {
                        lua_set_int_field(L, t, "scroll", view.scroll);
+                       lua_set_int_field(L, t, "hover", view.hover);
                        lua_set_int_field(L, t, "x", view.x);
                        lua_set_int_field(L, t, "y", view.y);
                        lua_set_int_field(L, t, "w", view.w);
@@ -366,6 +367,7 @@ bool LuaAPI::emit_lsp_status(const TsStatusView &view)
                      [&](lua_State *L, int t)
                      {
                        lua_set_int_field(L, t, "scroll", view.scroll);
+                       lua_set_int_field(L, t, "hover", view.hover);
                        lua_set_int_field(L, t, "x", view.x);
                        lua_set_int_field(L, t, "y", view.y);
                        lua_set_int_field(L, t, "w", view.w);
@@ -808,6 +810,7 @@ bool LuaAPI::emit_side_panel(const SidePanelView &view)
                          lua_set_int_field(L, ri, "bg", r.bg);
                          lua_set_bool_field(L, ri, "bold", r.bold);
                          lua_set_bool_field(L, ri, "selected", r.selected);
+                         lua_set_bool_field(L, ri, "hovered", r.hovered);
                          lua_set_str_field(L, ri, "kind", r.kind);
                          lua_set_str_field(L, ri, "icon", r.icon);
                          lua_set_int_field(L, ri, "icon_fg", r.icon_fg);

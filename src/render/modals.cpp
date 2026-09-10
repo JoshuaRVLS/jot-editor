@@ -200,6 +200,7 @@ void Editor::render_tree_sitter_status_modal()
   {
     TsStatusView view;
     view.scroll = tree_sitter_status_scroll;
+    view.hover = tree_sitter_status_hover_row;
     view.x = x;
     view.y = y;
     view.w = w;
@@ -398,6 +399,7 @@ void Editor::render_lsp_status_modal()
   {
     TsStatusView view;
     view.scroll = lsp_status_scroll;
+    view.hover = lsp_status_hover_row;
     view.x = x;
     view.y = y;
     view.w = w;

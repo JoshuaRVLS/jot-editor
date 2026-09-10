@@ -118,6 +118,7 @@ struct TsStatusView
   std::vector<TsStatusRowView> rows;
   int scroll = 0;
   int x = 0, y = 0, w = 0, h = 0;
+  int hover = -1; // hovered row index (mouse motion), -1 when none
 };
 
 
@@ -348,6 +349,7 @@ struct SidePanelRowView
   int fg = 0, bg = 0;
   bool bold = false;
   bool selected = false; // full-row selection background
+  bool hovered = false;  // mouse hover highlight (never overrides selected)
   // Row category for richer Lua styling (the Lua side_panel kit restyles by
   // kind; native fallback renders all rows identically). Empty = generic.
   // Debugger kinds: "section", "thread", "frame", "var", "memory",
@@ -897,6 +899,7 @@ public:
   void clipboard_copy_from_lua(lua_State *L);
   void clipboard_cut_from_lua(lua_State *L);
   void clipboard_paste_from_lua(lua_State *L);
+  void clipboard_set_from_lua(lua_State *L);
   void push_terminal_list(lua_State *L);
   void terminal_write_from_lua(lua_State *L);
   void terminal_close_from_lua(lua_State *L);

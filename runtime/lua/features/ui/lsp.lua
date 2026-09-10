@@ -24,6 +24,8 @@ local function lsp_status(p)
   local list_h = math.max(0, p.h - 4)
   local rows = p.rows or {}
   local scroll = math.max(0, p.scroll or 0)
+  local hover = p.hover or -1
+  local hover_bg = colors.selection_bg or colors.sidebar_sel_bg or bg
   local lang_w = math.max(12, math.min(24, math.floor(p.w / 3)))
   local body = {}
   local spans = {}
@@ -36,13 +38,15 @@ local function lsp_status(p)
     local row = rows[idx + 1]
     count = count + 1
     local b = j + 2 -- rows start on the float's second inner line
+    -- Mouse-hover highlight (motion) tints the row background.
+    local rb = idx == hover and hover_bg or bg
     if row.section then
       local text = " " .. trunc_cells(row.label or "", inner_w - 4)
       if row.detail and row.detail ~= "" then
         text = text .. " (" .. row.detail .. ")"
       end
       body[b] = pad_cells(text, inner_w)
-      spans[b] = { { start = 0, len = 65535, fg = comment, bg = bg } }
+      spans[b] = { { start = 0, len = 65535, fg = comment, bg = rb } }
     else
       local name = pad_cells(trunc_cells(row.label or "", lang_w), lang_w)
       local detail = trunc_cells(row.detail or "", math.max(1, inner_w - lang_w - 3))
@@ -50,9 +54,9 @@ local function lsp_status(p)
       local line = " " .. name .. " " .. detail
       body[b] = pad_cells(line, inner_w)
       spans[b] = {
-        { start = 0, len = 65535, fg = fg, bg = bg },
-        { start = 1, len = #name, fg = name_fg, bg = bg },
-        { start = #name + 2, len = #detail, fg = comment, bg = bg },
+        { start = 0, len = 65535, fg = fg, bg = rb },
+        { start = 1, len = #name, fg = name_fg, bg = rb },
+        { start = #name + 2, len = #detail, fg = comment, bg = rb },
       }
     end
   end

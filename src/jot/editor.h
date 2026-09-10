@@ -436,6 +436,12 @@ private:
   void handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
 
   void handle_command_palette(int ch, bool is_ctrl, bool is_shift, bool is_alt);
+  // Mouse for the command palette / quick pick / search panel: hover selects
+  // a row (follow-window keeps the list put), click activates it, wheel
+  // moves the selection. Returns true when the event was consumed.
+  bool handle_palette_mouse(int x, int y, bool is_click, bool is_scroll_up, bool is_scroll_down);
+  bool handle_quick_pick_mouse(int x, int y, bool is_click, bool is_scroll_up, bool is_scroll_down);
+  bool handle_search_mouse(int x, int y, bool is_click);
   bool execute_ex_command(const std::string &line);
   bool
   execute_ex_command_tail(const std::string &lcmd, const std::string &arg, const std::string &line);

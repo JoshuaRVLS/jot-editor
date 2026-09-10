@@ -38,6 +38,11 @@ namespace
     int highlight_calls = 0;
     std::string last_highlight_ext;
     std::string last_highlight_text;
+    std::string clipboard;
+    int mouse_ref = LUA_NOREF;   // on_mouse handler registered by hover.lua
+    int timer_ref = LUA_NOREF;   // set_timeout callback (copied-state revert)
+    int set_lines_count = 0;
+    int on_mouse_count = 0;
   };
 
   StubState g;
@@ -83,6 +88,7 @@ namespace
       ++n;
     }
     g.lines_count = n;
+    g.set_lines_count++;
     return 0;
   }
 
@@ -132,6 +138,43 @@ namespace
   {
     g.close_count++;
     return 0;
+  }
+
+  int stub_float_on_mouse(lua_State *L)
+  {
+    // jot.ui.float.on_mouse(win, fn): remember the handler for the test to
+    // invoke with synthetic mouse events.
+    g.on_mouse_count++;
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+    lua_pushvalue(L, 2);
+    if (g.mouse_ref != LUA_NOREF)
+    {
+      luaL_unref(L, LUA_REGISTRYINDEX, g.mouse_ref);
+    }
+    g.mouse_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    lua_pushboolean(L, 1);
+    return 1;
+  }
+
+  int stub_clipboard_set(lua_State *L)
+  {
+    // jot.clipboard.set(text)
+    g.clipboard = luaL_optstring(L, 1, "");
+    return 0;
+  }
+
+  int stub_timer_set_timeout(lua_State *L)
+  {
+    // jot.timer.set_timeout(ms, fn): capture the callback, don't fire it.
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+    lua_pushvalue(L, 2);
+    if (g.timer_ref != LUA_NOREF)
+    {
+      luaL_unref(L, LUA_REGISTRYINDEX, g.timer_ref);
+    }
+    g.timer_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    lua_pushinteger(L, 1);
+    return 1;
   }
 
   int stub_float_set_spans(lua_State *L)
@@ -200,8 +243,18 @@ namespace
     lua_setfield(L, -2, "close");
     lua_pushcfunction(L, stub_float_set_spans);
     lua_setfield(L, -2, "set_spans");
+    lua_pushcfunction(L, stub_float_on_mouse);
+    lua_setfield(L, -2, "on_mouse");
     lua_setfield(L, -2, "float");
     lua_setfield(L, -2, "ui"); // jot.ui
+    lua_newtable(L);
+    lua_pushcfunction(L, stub_clipboard_set);
+    lua_setfield(L, -2, "set");
+    lua_setfield(L, -2, "clipboard"); // jot.clipboard
+    lua_newtable(L);
+    lua_pushcfunction(L, stub_timer_set_timeout);
+    lua_setfield(L, -2, "set_timeout");
+    lua_setfield(L, -2, "timer"); // jot.timer
     lua_newtable(L);
     lua_pushcfunction(L, stub_syntax_highlight);
     lua_setfield(L, -2, "highlight");
@@ -334,6 +387,71 @@ TEST_CASE("Bundled Lua hover UI renders and dismisses a float")
   REQUIRE(g.set_spans_count >= 1);
   REQUIRE(g.last_spans_line >= 1);
   REQUIRE(g.spans_total >= 1); // "int" highlighted as keyword span
+  REQUIRE(g.on_mouse_count == 1); // the float registered a mouse handler
+
+  // --- copy button: hover highlights, click copies + swaps to checklist ---
+  // Helper to push a synthetic mouse event table and call the handler.
+  auto fire_mouse = [&](int col, int row, bool motion, bool pressed)
+  {
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g.mouse_ref);
+    lua_newtable(L);
+    lua_pushinteger(L, col);
+    lua_setfield(L, -2, "col");
+    lua_pushinteger(L, row);
+    lua_setfield(L, -2, "row");
+    lua_pushinteger(L, motion ? 32 : 0);
+    lua_setfield(L, -2, "button");
+    lua_pushboolean(L, pressed);
+    lua_setfield(L, -2, "pressed");
+    lua_pushboolean(L, false);
+    lua_setfield(L, -2, "released");
+    lua_pushboolean(L, motion);
+    lua_setfield(L, -2, "motion");
+    lua_pushboolean(L, false);
+    lua_setfield(L, -2, "ctrl");
+    lua_pushboolean(L, false);
+    lua_setfield(L, -2, "shift");
+    lua_pushboolean(L, false);
+    lua_setfield(L, -2, "alt");
+    REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+    const bool consumed = lua_toboolean(L, -1);
+    lua_pop(L, 1);
+    return consumed;
+  };
+  auto read_state = [&](const char *field) -> bool
+  {
+    push_module_field(L, 1, "get_state");
+    REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
+    lua_getfield(L, -1, field);
+    const bool v = lua_toboolean(L, -1);
+    lua_pop(L, 2);
+    return v;
+  };
+
+  const int button_col = g.last_width - 2; // last interior cell of row 1
+  const int set_lines_before = g.set_lines_count;
+
+  // Motion over the button highlights it; motion elsewhere does not.
+  REQUIRE(fire_mouse(button_col, 1, true, false));
+  REQUIRE(read_state("hover"));
+  REQUIRE(fire_mouse(button_col - 3, 1, true, false));
+  REQUIRE_FALSE(read_state("hover"));
+
+  // Clicking the button copies the raw contents and swaps to the checklist.
+  REQUIRE(g.clipboard.empty());
+  REQUIRE(fire_mouse(button_col, 1, false, true));
+  REQUIRE(g.clipboard == "Some **hover** content here\n```cpp\nint x;\n```");
+  REQUIRE(read_state("copied"));
+  REQUIRE(g.set_lines_count == set_lines_before + 3); // hover on + off + copied
+
+  // The copied state reverts to idle when the timer fires.
+  REQUIRE(g.timer_ref != LUA_NOREF);
+  lua_rawgeti(L, LUA_REGISTRYINDEX, g.timer_ref);
+  REQUIRE(lua_pcall(L, 0, 0, 0) == LUA_OK);
+  REQUIRE_FALSE(read_state("copied"));
+
+  // Events over the float are consumed (never fall through to the editor).
+  REQUIRE(fire_mouse(1, 2, true, false));
 
   // --- build_display exposes spans; lang_to_ext maps fence tags ---
   push_module_field(L, 1, "lang_to_ext");

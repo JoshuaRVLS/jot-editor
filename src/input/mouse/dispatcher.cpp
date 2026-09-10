@@ -358,61 +358,161 @@ void Editor::handle_mouse(void *event_ptr)
   if (show_tree_sitter_status_modal
       && (is_click || is_click_release || is_right_click || is_middle_click || is_motion))
   {
-    if (is_click || is_right_click || is_middle_click)
+    int screen_w = ui->get_render_width();
+    int screen_h = ui->get_height();
+    int modal_w = std::min(std::max(48, screen_w - 8), 92);
+    int modal_h = std::min(std::max(12, screen_h - 6), 28);
+    if (screen_w < 54)
     {
-      int screen_w = ui->get_render_width();
-      int screen_h = ui->get_height();
-      int modal_w = std::min(std::max(48, screen_w - 8), 92);
-      int modal_h = std::min(std::max(12, screen_h - 6), 28);
-      if (screen_w < 54)
+      modal_w = std::max(20, screen_w - 2);
+    }
+    if (screen_h < 16)
+    {
+      modal_h = std::max(8, screen_h - 2);
+    }
+    int modal_x = std::max(0, (screen_w - modal_w) / 2);
+    int modal_y = std::max(1, (screen_h - modal_h) / 2);
+    bool inside = event->x >= modal_x && event->x < modal_x + modal_w && event->y >= modal_y
+                  && event->y < modal_y + modal_h;
+    if (is_motion)
+    {
+      // Hover: highlight the row under the pointer (visual only).
+      int hover = -1;
+      if (inside)
       {
-        modal_w = std::max(20, screen_w - 2);
+        const int row = event->y - (modal_y + 2);
+        const int idx = tree_sitter_status_scroll + row;
+        if (row >= 0 && row < modal_h - 4 && idx >= 0)
+        {
+          // Rows map to the scroll list; -1 for the title/footer rows. The
+          // renderers only paint rows that exist, so a generous bound is safe.
+          hover = idx;
+        }
       }
-      if (screen_h < 16)
+      if (tree_sitter_status_hover_row != hover)
       {
-        modal_h = std::max(8, screen_h - 2);
+        tree_sitter_status_hover_row = hover;
+        needs_redraw = true;
       }
-      int modal_x = std::max(0, (screen_w - modal_w) / 2);
-      int modal_y = std::max(1, (screen_h - modal_h) / 2);
-      bool inside = event->x >= modal_x && event->x < modal_x + modal_w && event->y >= modal_y
-                    && event->y < modal_y + modal_h;
-      if (!inside || is_right_click || is_middle_click)
+      return;
+    }
+    if (is_click && inside)
+    {
+      const int row = event->y - (modal_y + 2);
+      const int idx = tree_sitter_status_scroll + row;
+      if (row >= 0 && row < modal_h - 4 && idx >= 0)
       {
-        show_tree_sitter_status_modal = false;
+        tree_sitter_status_hover_row = idx;
       }
       needs_redraw = true;
+      return;
     }
+    if (!inside || is_right_click || is_middle_click)
+    {
+      show_tree_sitter_status_modal = false;
+      tree_sitter_status_hover_row = -1;
+    }
+    needs_redraw = true;
     return;
   }
 
   if (show_lsp_status_modal
       && (is_click || is_click_release || is_right_click || is_middle_click || is_motion))
   {
-    if (is_click || is_right_click || is_middle_click)
+    int screen_w = ui->get_render_width();
+    int screen_h = ui->get_height();
+    int modal_w = std::min(std::max(48, screen_w - 8), 92);
+    int modal_h = std::min(std::max(12, screen_h - 6), 28);
+    if (screen_w < 54)
     {
-      int screen_w = ui->get_render_width();
-      int screen_h = ui->get_height();
-      int modal_w = std::min(std::max(48, screen_w - 8), 92);
-      int modal_h = std::min(std::max(12, screen_h - 6), 28);
-      if (screen_w < 54)
+      modal_w = std::max(20, screen_w - 2);
+    }
+    if (screen_h < 16)
+    {
+      modal_h = std::max(8, screen_h - 2);
+    }
+    int modal_x = std::max(0, (screen_w - modal_w) / 2);
+    int modal_y = std::max(1, (screen_h - modal_h) / 2);
+    bool inside = event->x >= modal_x && event->x < modal_x + modal_w && event->y >= modal_y
+                  && event->y < modal_y + modal_h;
+    if (is_motion)
+    {
+      int hover = -1;
+      if (inside)
       {
-        modal_w = std::max(20, screen_w - 2);
+        const int row = event->y - (modal_y + 2);
+        const int idx = lsp_status_scroll + row;
+        if (row >= 0 && row < modal_h - 4 && idx >= 0)
+        {
+          hover = idx;
+        }
       }
-      if (screen_h < 16)
+      if (lsp_status_hover_row != hover)
       {
-        modal_h = std::max(8, screen_h - 2);
+        lsp_status_hover_row = hover;
+        needs_redraw = true;
       }
-      int modal_x = std::max(0, (screen_w - modal_w) / 2);
-      int modal_y = std::max(1, (screen_h - modal_h) / 2);
-      bool inside = event->x >= modal_x && event->x < modal_x + modal_w && event->y >= modal_y
-                    && event->y < modal_y + modal_h;
-      if (!inside || is_right_click || is_middle_click)
+      return;
+    }
+    if (is_click && inside)
+    {
+      const int row = event->y - (modal_y + 2);
+      const int idx = lsp_status_scroll + row;
+      if (row >= 0 && row < modal_h - 4 && idx >= 0)
       {
-        show_lsp_status_modal = false;
+        lsp_status_hover_row = idx;
       }
       needs_redraw = true;
+      return;
     }
+    if (!inside || is_right_click || is_middle_click)
+    {
+      show_lsp_status_modal = false;
+      lsp_status_hover_row = -1;
+    }
+    needs_redraw = true;
     return;
+  }
+
+  // Command palette / quick pick / search panel: full mouse ownership while
+  // open — hover selects rows, clicks activate, and no event falls through
+  // to the buffer underneath.
+  if (show_command_palette)
+  {
+    if (handle_palette_mouse(
+            event->x, event->y, is_click, false, false))
+    {
+      return;
+    }
+    if (show_command_palette)
+    {
+      return;
+    }
+  }
+
+  if (show_quick_pick)
+  {
+    if (handle_quick_pick_mouse(
+            event->x, event->y, is_click, false, false))
+    {
+      return;
+    }
+    if (show_quick_pick)
+    {
+      return;
+    }
+  }
+
+  if (show_search)
+  {
+    if (handle_search_mouse(event->x, event->y, is_click))
+    {
+      return;
+    }
+    if (show_search)
+    {
+      return;
+    }
   }
 
   if (is_right_click)
@@ -557,7 +657,7 @@ void Editor::handle_mouse(void *event_ptr)
     return;
   }
 
-  if (handle_git_panel_mouse(event->x, event->y, is_click, false))
+  if ((is_click || is_motion) && handle_git_panel_mouse(event->x, event->y, is_click, false))
   {
     return;
   }

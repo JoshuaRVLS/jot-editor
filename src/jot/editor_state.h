@@ -46,6 +46,11 @@ struct EditorState
   std::string clipboard;
 
   bool show_command_palette;
+  // Scroll anchor of the visible palette window (follow-window: the selected
+  // row stays visible, but the window only moves when selection leaves it,
+  // so mouse hover over a visible row never shifts the list under the
+  // pointer). Kept separate from the selection like quick_pick_scroll.
+  int command_palette_scroll = 0;
   std::string command_palette_query;
   // Query text remembered when the palette closes with Esc; restored on the
   // next Ctrl+P open so an abandoned search can be picked up where it left
@@ -58,6 +63,9 @@ struct EditorState
 
   QuickPickKind quick_pick_kind;
   bool show_quick_pick;
+  // Scroll anchor of the visible quick-pick window (follow-window, same
+  // contract as command_palette_scroll).
+  int quick_pick_scroll = 0;
   std::string quick_pick_title;
   std::string quick_pick_query;
   std::vector<QuickPickItem> quick_pick_all_items;
@@ -189,10 +197,13 @@ struct EditorState
 
   bool show_tree_sitter_status_modal;
   int tree_sitter_status_scroll;
+  // Hovered row inside the status modals (mouse motion), -1 when none.
+  int tree_sitter_status_hover_row = -1;
   std::vector<TreeSitterInstallJob> tree_sitter_install_jobs;
 
   bool show_lsp_status_modal;
   int lsp_status_scroll;
+  int lsp_status_hover_row = -1;
 
   EventLoop event_loop_;
   std::unique_ptr<TaskQueue> task_queue_;
@@ -208,6 +219,11 @@ struct EditorState
   long long last_sidebar_click_ms;
   long long last_git_panel_click_ms = 0;
   int last_git_panel_click_row = -1;
+  // Mouse hover tracking (motion events): the model row under the pointer in
+  // the git panel and the hovered right-dock tab, -1 when none. Purely
+  // visual — selection is never overwritten by hover.
+  int git_panel_hover_row = -1;
+  int right_panel_hover_tab = -1;
   int last_sidebar_click_row;
   long long last_tab_click_ms;
   int last_tab_clicked_index;

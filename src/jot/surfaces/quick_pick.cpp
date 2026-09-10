@@ -337,6 +337,83 @@ bool Editor::handle_quick_pick_input(int ch)
   return true;
 }
 
+bool Editor::handle_quick_pick_mouse(int x,
+                                     int y,
+                                     bool is_click,
+                                     bool is_scroll_up,
+                                     bool is_scroll_down)
+{
+  if (!show_quick_pick || !ui)
+  {
+    return false;
+  }
+  // Mirrors render_quick_pick(): centered modal panel, list below the
+  // title / input / divider rows.
+  const int screen_w = ui->get_render_width();
+  const int screen_h = ui->get_height();
+  int w = std::min(std::max(56, screen_w - 10), 112);
+  int h = std::min(std::max(12, screen_h - 8), 26);
+  if (screen_w < 62)
+  {
+    w = std::max(22, screen_w - 2);
+  }
+  if (screen_h < 16)
+  {
+    h = std::max(8, screen_h - 2);
+  }
+  const int x0 = std::max(0, (screen_w - w) / 2);
+  const int y0 = std::max(1, (screen_h - h) / 3);
+  if (x < x0 || x >= x0 + w || y < y0 || y >= y0 + h)
+  {
+    return false;
+  }
+
+  if (is_scroll_up || is_scroll_down)
+  {
+    if (!quick_pick_items.empty())
+    {
+      const int delta = is_scroll_up ? -3 : 3;
+      const int sel = std::clamp(
+          quick_pick_selected + delta, 0, (int)quick_pick_items.size() - 1);
+      if (sel != quick_pick_selected)
+      {
+        quick_pick_selected = sel;
+        needs_redraw = true;
+      }
+    }
+    return true;
+  }
+
+  const int list_y = y0 + 3;
+  const int list_h = std::max(0, h - 5);
+  const int row = y - list_y;
+  if (row < 0 || row >= list_h)
+  {
+    return true; // title / input rows: consume, no action
+  }
+  const int idx = quick_pick_scroll + row;
+  if (idx < 0 || idx >= (int)quick_pick_items.size())
+  {
+    return true;
+  }
+
+  if (!is_click)
+  {
+    // Hover selects; the follow-window keeps the visible list in place.
+    if (quick_pick_selected != idx)
+    {
+      quick_pick_selected = idx;
+      needs_redraw = true;
+    }
+    return true;
+  }
+
+  // Click accepts the item under the pointer (same path as Enter).
+  quick_pick_selected = idx;
+  needs_redraw = true;
+  return handle_quick_pick_input('\n');
+}
+
 void Editor::show_project_search(const std::string &query)
 {
   clear_search_scope();

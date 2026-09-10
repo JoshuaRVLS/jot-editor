@@ -137,6 +137,7 @@ namespace lua_bind
   int l_clip_copy(lua_State *L);
   int l_clip_cut(lua_State *L);
   int l_clip_paste(lua_State *L);
+  int l_clip_set(lua_State *L);
   int l_terminal_list(lua_State *L);
   int l_terminal_write(lua_State *L);
   int l_terminal_close(lua_State *L);

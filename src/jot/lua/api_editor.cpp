@@ -64,6 +64,14 @@ void LuaAPI::clipboard_paste_from_lua(lua_State *L)
   if (editor)
     editor->paste();
 }
+void LuaAPI::clipboard_set_from_lua(lua_State *L)
+{
+  if (editor)
+  {
+    const char *text = lua_tostring(L, 1);
+    editor->set_clipboard_text(text ? text : "");
+  }
+}
 
 void LuaAPI::push_workspace_path(lua_State *L)
 {

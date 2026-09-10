@@ -109,11 +109,20 @@ void Editor::render_command_palette()
   if (!command_palette_results.empty())
   {
     int selected = std::clamp(command_palette_selected, 0, (int)command_palette_results.size() - 1);
-    int start_idx = std::max(0, selected - max_items + 1);
-    if (start_idx + max_items > (int)command_palette_results.size())
+    // Follow-window: the window only moves when the selection leaves it, so
+    // hovering a visible row never shifts the list under the pointer (the
+    // old bottom-pinned window chased the hovered row and jittered).
+    int start_idx = command_palette_scroll;
+    if (selected < start_idx)
     {
-      start_idx = std::max(0, (int)command_palette_results.size() - max_items);
+      start_idx = selected;
     }
+    else if (selected >= start_idx + max_items)
+    {
+      start_idx = selected - max_items + 1;
+    }
+    start_idx = std::clamp(start_idx, 0, std::max(0, (int)command_palette_results.size() - max_items));
+    command_palette_scroll = start_idx;
 
     for (int row = 0; row < max_items; row++)
     {

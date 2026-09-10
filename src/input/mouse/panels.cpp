@@ -53,6 +53,28 @@ void Editor::handle_mouse_input(int x,
     return;
   }
 
+  // Command palette / quick pick own the wheel while open (scroll moves the
+  // selection; clicks go through the handle_mouse path).
+  if (show_command_palette)
+  {
+    if (is_scroll_up || is_scroll_down)
+    {
+      handle_palette_mouse(x, y, false, is_scroll_up, is_scroll_down);
+      return;
+    }
+    return;
+  }
+
+  if (show_quick_pick)
+  {
+    if (is_scroll_up || is_scroll_down)
+    {
+      handle_quick_pick_mouse(x, y, false, is_scroll_up, is_scroll_down);
+      return;
+    }
+    return;
+  }
+
   if (show_home_menu)
   {
     if (is_click)

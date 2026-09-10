@@ -143,8 +143,9 @@ void Editor::render_right_panel_tab_strip(int panel_x, int panel_y, int panel_w)
   }
   const int y = panel_y + 1;
   int x = panel_x + 1;
-  for (RightPanelTab tab : right_panel_tabs)
+  for (int i = 0; i < (int)right_panel_tabs.size(); i++)
   {
+    const RightPanelTab tab = right_panel_tabs[(size_t)i];
     const bool active = tab == active_right_panel_tab;
     const std::string label = tab_label(tab, active);
     const int w = (int)label.size();
@@ -152,11 +153,14 @@ void Editor::render_right_panel_tab_strip(int panel_x, int panel_y, int panel_w)
     {
       break;
     }
+    // Hovered tab gets the focused background but keeps its inactive
+    // foreground (mouse motion; selection is never clobbered).
+    const bool hovered = !active && i == right_panel_hover_tab;
     ui->draw_text(x,
                   y,
                   label,
                   active ? theme.fg_terminal_tab_focused : theme.fg_terminal_tab_inactive,
-                  active ? theme.bg_terminal_tab_focused : theme.bg_terminal,
+                  active || hovered ? theme.bg_terminal_tab_focused : theme.bg_terminal,
                   active);
     x += w;
   }
@@ -177,22 +181,55 @@ bool Editor::handle_right_panel_tab_strip_mouse(int x, int y, bool is_click)
   const int panel_y = topbar_height();
   if (y != panel_y + 1)
   {
+    // Pointer left the strip row: drop the hover highlight.
+    if (right_panel_hover_tab != -1)
+    {
+      right_panel_hover_tab = -1;
+      needs_redraw = true;
+    }
     return false;
   }
   if (x < panel_x || x >= panel_x + panel_w)
   {
+    if (right_panel_hover_tab != -1)
+    {
+      right_panel_hover_tab = -1;
+      needs_redraw = true;
+    }
     return false;
   }
   // Consume the whole strip row so clicks never fall through to content.
   if (!is_click)
   {
+    // Motion: highlight the tab under the pointer (visual only).
+    int hovered = -1;
+    int cx = panel_x + 1;
+    for (int i = 0; i < (int)right_panel_tabs.size(); i++)
+    {
+      const std::string label =
+          tab_label(right_panel_tabs[(size_t)i], right_panel_tabs[(size_t)i] == active_right_panel_tab);
+      const int w = (int)label.size();
+      if (x >= cx && x < cx + w)
+      {
+        hovered = i;
+        break;
+      }
+      cx += w;
+    }
+    if (right_panel_hover_tab != hovered)
+    {
+      right_panel_hover_tab = hovered;
+      needs_redraw = true;
+    }
     return true;
   }
+  right_panel_hover_tab = -1;
   focus_state = FOCUS_RIGHT_PANEL;
   needs_redraw = true;
   int cx = panel_x + 1;
-  for (RightPanelTab tab : right_panel_tabs)
+  for (int i = 0; i < (int)right_panel_tabs.size(); i++)
   {
+    const RightPanelTab tab = right_panel_tabs[(size_t)i];
     const std::string label = tab_label(tab, tab == active_right_panel_tab);
     const int w = (int)label.size();
     if (x >= cx && x < cx + w)

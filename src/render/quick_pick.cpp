@@ -106,11 +106,19 @@ void Editor::render_quick_pick()
   int list_y = y + 3;
   int list_h = std::max(0, h - 5);
   int selected = std::clamp(quick_pick_selected, 0, std::max(0, (int)quick_pick_items.size() - 1));
-  int start_idx = std::max(0, selected - list_h + 1);
-  if (start_idx + list_h > (int)quick_pick_items.size())
+  // Follow-window: the window only moves when the selection leaves it, so
+  // hovering a visible row never shifts the list under the pointer.
+  int start_idx = quick_pick_scroll;
+  if (selected < start_idx)
   {
-    start_idx = std::max(0, (int)quick_pick_items.size() - list_h);
+    start_idx = selected;
   }
+  else if (selected >= start_idx + list_h)
+  {
+    start_idx = selected - list_h + 1;
+  }
+  start_idx = std::clamp(start_idx, 0, std::max(0, (int)quick_pick_items.size() - list_h));
+  quick_pick_scroll = start_idx;
 
   if (quick_pick_items.empty())
   {
