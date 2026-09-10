@@ -146,7 +146,10 @@ public:
   void window_size(int &w, int &h) const;
   // Live drawable size in pixels (SDL_GL_GetDrawableSize).
   void drawable_size(int &w, int &h) const;
-  // Grid cell size in window points (also the quad unit).
+  // Grid cell size in *device pixels* (FreeType metrics at the font's pixel
+  // size), which is also the renderer's quad unit. Pointer and window sizes
+  // arrive in logical points instead, so anything comparing the two must go
+  // through jot_gui::point_cell_size(cell, scale).
   float cell_w() const
   {
     return cell_w_;
@@ -154,6 +157,12 @@ public:
   float cell_h() const
   {
     return cell_h_;
+  }
+  // Device pixels per logical point on the current display (1.0 when
+  // unscaled). Refreshed on every resize and font change.
+  float scale() const
+  {
+    return scale_;
   }
   // Cached drawable size (pixels) from the last resize event / sync.
   int pixel_w() const
@@ -191,6 +200,9 @@ private:
   // Recomputes cell_w_/cell_h_/ascent_ from the regular face's metrics
   // (shared by init_freetype and apply_font_zoom).
   void refresh_cell_metrics();
+  // Re-reads the window and drawable sizes and refreshes scale_ (the
+  // device-pixel per point ratio the resize and input paths need).
+  void refresh_scale();
 
   // Batch helpers: accumulate quads into vertex_ and flush with one draw.
   void begin_batch();
@@ -284,6 +296,8 @@ private:
   float cell_h_ = 20.0f;
   float ascent_ = 0.0f;
   int font_px_ = 16;
+  // Device pixels per logical point on the current display; see refresh_scale.
+  float scale_ = 1.0f;
 
   // --- Float overlay state -------------------------------------------------
   // Snapshot of the grid taken before Lua floats paint (see

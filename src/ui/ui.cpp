@@ -227,7 +227,7 @@ void UI::resize(int w, int h)
 {
   int new_w = std::max(1, w);
   int new_h = std::max(1, h);
-  bool dim_changed = (new_w != width) || (new_h != height);
+  const bool dim_changed = (new_w != width) || (new_h != height);
   width = new_w;
   height = new_h;
   cursor_x = -1;
@@ -249,15 +249,21 @@ void UI::resize(int w, int h)
     grid[y].resize(width);
     last_grid[y].resize(width);
   }
-  // The grid was just re-dimensioned, so the next frame must repaint
-  // every row.
+  // The grid was just re-dimensioned, so the next frame must repaint every
+  // row. Marking rows dirty is not enough on its own: the diff pass compares
+  // against last_grid, and newly exposed cells are default-constructed in
+  // *both* grids, so they would compare equal and be skipped even though the
+  // physical screen may hold restored content there (a terminal that re-wraps
+  // saved lines when it grows). The one-shot full paint below writes every
+  // cell exactly once, which also replaces the old per-resize invalidate():
+  // that emitted a full-screen clear (ESC[2J) on every step of a live
+  // drag-resize, which is what made resizing flash.
   mark_all_rows_dirty();
-  // Only invalidate (which calls term->clear()) when the dimensions actually
-  // changed, to avoid an extra ESC[2J when the Editor constructor and
-  // Editor::run() each call resize() at startup.
+  // Only a real dimension change needs the forced full paint; the editor calls
+  // resize() with the same size at startup (constructor + run()).
   if (dim_changed)
   {
-    invalidate();
+    full_repaint_pending_ = true;
   }
 }
 
@@ -382,7 +388,10 @@ void UI::render()
   // is fixed so full-width borders do not leave an oversized right gap.
   const int margin = term->render_margin();
   const int row_width = std::max(0, width - margin);
-  const bool paint_all = force_full || self_heal;
+  // A pending resize forces one full paint: newly exposed cells cannot be
+  // trusted to match the physical screen, and the diff would skip them.
+  const bool paint_all = force_full || self_heal || full_repaint_pending_;
+  full_repaint_pending_ = false;
   if (paint_all)
   {
     renders_since_full_paint_ = 0;

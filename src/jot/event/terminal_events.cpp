@@ -27,12 +27,7 @@ void Editor::handle_terminal_event(const Event &ev)
 
   if (ev.type == EVENT_RESIZE)
   {
-    ui->invalidate();
-    ui->resize(ev.resize.width, ev.resize.height);
-    update_pane_layout();
-    needs_redraw = true;
-    if (lua_api)
-      lua_api->fire_autocmd("UIResize", "", -1);
+    apply_resize(ev.resize.width, ev.resize.height);
     return;
   }
 

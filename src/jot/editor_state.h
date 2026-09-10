@@ -425,6 +425,10 @@ struct EditorState
   std::vector<SettingsEntry> settings_entries;
 
   bool show_sidebar;
+  // True when the *renderer* hid the sidebar because the window was too narrow
+  // for it. Growing the window back re-shows it; a sidebar the user closed
+  // themselves stays closed.
+  bool sidebar_hidden_for_width_ = false;
   // Zen focus mode: sidebar + right panel hidden, status line suppressed and
   // the pane area narrowed to zen_content_width and centered. Sidebar / panel
   // / status-height values are remembered on entry so leaving zen restores

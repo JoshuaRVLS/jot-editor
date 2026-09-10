@@ -15,6 +15,7 @@ set(JOT_ENGINE_SOURCES
   jot/app/panes_resize.cpp
   jot/app/process_job.cpp
   jot/app/relaunch.cpp
+  jot/app/resize.cpp
   jot/app/undo.cpp
   jot/app/utils.cpp
   jot/integrations/debugger_adapters.cpp

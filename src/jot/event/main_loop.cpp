@@ -6,6 +6,11 @@ void Editor::render_frame()
 {
 #ifdef _WIN32
   constexpr int kMaxDrainPerFrame = 64;
+  // Same resize coalescing as the POSIX stdin watcher: the console can deliver
+  // several size changes per drain and only the last one matters.
+  bool resize_pending = false;
+  int resize_w = 0;
+  int resize_h = 0;
   for (int drained = 0; drained < kMaxDrainPerFrame; drained++)
   {
     Event ev = terminal.poll_event();
@@ -13,7 +18,18 @@ void Editor::render_frame()
     {
       break;
     }
+    if (ev.type == EVENT_RESIZE)
+    {
+      resize_pending = true;
+      resize_w = ev.resize.width;
+      resize_h = ev.resize.height;
+      continue;
+    }
     handle_terminal_event(ev);
+  }
+  if (resize_pending)
+  {
+    apply_resize(resize_w, resize_h);
   }
 #endif
   // Terminal size is authoritative in terminal mode. In GUI mode the SDL
@@ -47,12 +63,7 @@ void Editor::render_frame()
   }
   if (rsz.type == EVENT_RESIZE)
   {
-    ui->invalidate();
-    ui->resize(rsz.resize.width, rsz.resize.height);
-    update_pane_layout();
-    needs_redraw = true;
-    if (lua_api)
-      lua_api->fire_autocmd("UIResize", "", -1);
+    apply_resize(rsz.resize.width, rsz.resize.height);
   }
   // Deliver autocmds coalesced during this drain (BufChange, CursorMoved)
   // before the frame paints, so Lua handlers see the edits and their UI
@@ -169,14 +180,35 @@ void Editor::run()
                          {
                            constexpr int kMaxDrainPerWake = 256;
                            int drained = 0;
+                           // A drag-resize queues one resize event per step;
+                           // only the last size in a wake matters, and applying
+                           // each one re-fits every pane and re-runs the
+                           // UIResize autocmd for nothing. Same coalescing the
+                           // GUI pump does.
+                           bool resize_pending = false;
+                           int resize_w = 0;
+                           int resize_h = 0;
                            for (;;)
                            {
                              Event ev = terminal.read_event();
                              if (ev.type == EVENT_REDRAW)
                                break;
-                             handle_terminal_event(ev);
+                             if (ev.type == EVENT_RESIZE)
+                             {
+                               resize_pending = true;
+                               resize_w = ev.resize.width;
+                               resize_h = ev.resize.height;
+                             }
+                             else
+                             {
+                               handle_terminal_event(ev);
+                             }
                              if (++drained >= kMaxDrainPerWake)
                                break;
+                           }
+                           if (resize_pending)
+                           {
+                             apply_resize(resize_w, resize_h);
                            }
                            render_frame();
                          });

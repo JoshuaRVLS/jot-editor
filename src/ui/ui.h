@@ -107,6 +107,11 @@ protected:
   // full paint (the terminal may show stale content from whatever ran
   // before the editor).
   int renders_since_full_paint_ = 90;
+  // Set by resize(): the next render() paints every cell once. Newly exposed
+  // cells are default-constructed in both the live and the retained grid, so
+  // the cell diff would consider them identical and skip them even though the
+  // terminal may show restored content there.
+  bool full_repaint_pending_ = false;
   int width, height;
   int cursor_x, cursor_y;
   UICursorShape cursor_shape;
@@ -269,6 +274,13 @@ public:
       m = 0;
     int w = width - m;
     return w < 1 ? 1 : w;
+  }
+
+  // Whether the next render() will paint every cell because the grid was just
+  // re-dimensioned (see full_repaint_pending_).
+  bool full_repaint_pending() const
+  {
+    return full_repaint_pending_;
   }
 };
 

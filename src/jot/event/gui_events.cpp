@@ -6,6 +6,7 @@
 // paces the actual presentation to the monitor refresh.
 #include "editor.h"
 #include "ui/gui/gui.h"
+#include "ui/gui/gui_fit.h"
 
 #include <chrono>
 
@@ -106,31 +107,28 @@ void Editor::pump_gui_events()
   // events (Wayland configure batching, fractional scale changes), which
   // leaves the grid smaller than the window until the next real event --
   // the "editor doesn't fill the window until I fullscreen" symptom.
-  // Re-derive the grid from the live window size every frame and re-fit
-  // when it disagrees; when only the drawable (pixel) size changed while
-  // the cell count is unchanged, repaint so the newly exposed strip is
-  // painted instead of stale content.
+  // Re-derive the grid from the *drawable* size (device pixels, matching the
+  // cell metrics) rather than the point-sized window -- deriving it from
+  // points here was itself the bug on scaled displays -- and re-fit when it
+  // disagrees. When only the drawable pixel size changed while the cell count
+  // is unchanged, repaint so the newly exposed strip is painted instead of
+  // stale content.
   {
-    int w = 0, h = 0;
-    gui->window_size(w, h);
-    const int cols = std::max(1, (int)((float)w / gui->cell_w()));
-    const int rows = std::max(1, (int)((float)h / gui->cell_h()));
-    if (cols != gui->get_width() || rows != gui->get_height())
+    int dw = 0, dh = 0;
+    gui->drawable_size(dw, dh);
+    const jot_gui::GridFit fit = jot_gui::fit_grid(dw, dh, gui->cell_w(), gui->cell_h());
+    if (fit.cols != gui->get_width() || fit.rows != gui->get_height())
     {
       Event rsz;
       rsz.type = EVENT_RESIZE;
-      rsz.resize.width = cols;
-      rsz.resize.height = rows;
+      rsz.resize.width = fit.cols;
+      rsz.resize.height = fit.rows;
       handle_terminal_event(rsz);
+      gui->note_drawable_size(dw, dh);
     }
-    else
+    else if (gui->note_drawable_size(dw, dh))
     {
-      int dw = 0, dh = 0;
-      gui->drawable_size(dw, dh);
-      if (gui->note_drawable_size(dw, dh))
-      {
-        needs_redraw = true;
-      }
+      needs_redraw = true;
     }
   }
 

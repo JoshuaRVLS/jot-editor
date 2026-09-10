@@ -3,6 +3,7 @@
 // Purely one-time setup -- per-frame work lives in gui_render.cpp and the
 // animation state in gui_anim.cpp.
 #include "gui/gui.h"
+#include "gui/gui_fit.h"
 
 #include <SDL2/SDL.h>
 // Mesa's gl.h only declares core 2.0+ entry points under this macro.
@@ -106,6 +107,7 @@ UIGui::UIGui(int cols, int rows, int default_fg, int default_bg, int font_px)
     std::fprintf(stderr, "jot-gui: vsync unavailable (%s)\n", SDL_GetError());
   }
   SDL_GL_GetDrawableSize(window_, &pixel_w_, &pixel_h_);
+  scale_ = jot_gui::display_scale(window_w_, window_h_, pixel_w_, pixel_h_);
 
   if (!compile_shaders() || !create_textures())
   {
@@ -227,6 +229,13 @@ bool UIGui::init_freetype()
   return true;
 }
 
+void UIGui::refresh_scale()
+{
+  SDL_GetWindowSize(window_, &window_w_, &window_h_);
+  SDL_GL_GetDrawableSize(window_, &pixel_w_, &pixel_h_);
+  scale_ = jot_gui::display_scale(window_w_, window_h_, pixel_w_, pixel_h_);
+}
+
 void UIGui::refresh_cell_metrics()
 {
   // Monospace cell: width from the max advance, height from the full
@@ -272,15 +281,19 @@ void UIGui::apply_font_size(int px)
   // The window keeps its size; the grid re-fits around the new cell size
   // (same math as the SDL resize handler). The editor is told via a
   // synthesized EVENT_RESIZE by the pump, which relayouts the panes.
-  int win_w = 0, win_h = 0;
-  SDL_GetWindowSize(window_, &win_w, &win_h);
-  const int cols = std::max(1, (int)(win_w / cell_w_));
-  const int rows = std::max(1, (int)(win_h / cell_h_));
-  resize(cols, rows);
+  refresh_scale();
+  const jot_gui::GridFit fit = jot_gui::fit_grid(pixel_w_, pixel_h_, cell_w_, cell_h_);
+  resize(fit.cols, fit.rows);
   if (std::getenv("JOT_GUI_DEBUG"))
   {
-    std::fprintf(stderr, "jot-gui: zoom font_px=%d cell=%.1fx%.1f grid=%dx%d\n", font_px_,
-                 cell_w_, cell_h_, cols, rows);
+    std::fprintf(stderr,
+                 "jot-gui: zoom font_px=%d cell=%.1fx%.1f grid=%dx%d scale=%.2f\n",
+                 font_px_,
+                 cell_w_,
+                 cell_h_,
+                 fit.cols,
+                 fit.rows,
+                 (double)scale_);
   }
 }
 

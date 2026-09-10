@@ -44,6 +44,8 @@ add_executable(jot_tests
   test_blank_guides.cpp
   test_right_panel.cpp
   test_completion_matching.cpp
+  test_gui_fit.cpp
+  test_resize_sync.cpp
   test_key_decode.cpp
 )
 

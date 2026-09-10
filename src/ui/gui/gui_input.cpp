@@ -12,6 +12,7 @@
 //  Resize:  SDL window (points) -> cell grid; pixel size feeds the GL
 //           viewport.
 #include "gui/gui.h"
+#include "gui/gui_fit.h"
 
 #include <SDL2/SDL.h>
 
@@ -135,16 +136,23 @@ bool UIGui::poll_event(Event &out)
     case SDL_WINDOWEVENT_RESIZED:
     case SDL_WINDOWEVENT_SIZE_CHANGED:
     {
-      // New window size; the grid is sized in cells. Drawable size (the
-      // GL viewport, pixels) can differ from the point size on HiDPI.
+      // The window size arrives in logical points, the grid and cells are in
+      // device pixels: fit against the drawable (SDL_GL_GetDrawableSize) so a
+      // scaled display does not produce a grid of 1/scale the window.
       SDL_GL_GetDrawableSize(window_, &pixel_w_, &pixel_h_);
-      int cols = std::max(1, (int)(ev.window.data1 / cell_w_));
-      int rows = std::max(1, (int)(ev.window.data2 / cell_h_));
+      window_w_ = ev.window.data1;
+      window_h_ = ev.window.data2;
+      refresh_scale();
+      const jot_gui::GridFit fit = jot_gui::fit_grid(pixel_w_, pixel_h_, cell_w_, cell_h_);
+      const int cols = fit.cols;
+      const int rows = fit.rows;
       if (std::getenv("JOT_GUI_DEBUG"))
       {
-        std::fprintf(stderr, "jot-gui: window %s %dx%d -> grid %dx%d drawable=%dx%d\n",
+        std::fprintf(stderr,
+                     "jot-gui: window %s %dx%d -> grid %dx%d drawable=%dx%d scale=%.2f\n",
                      ev.window.event == SDL_WINDOWEVENT_RESIZED ? "RESIZED" : "SIZE_CHANGED",
-                     ev.window.data1, ev.window.data2, cols, rows, pixel_w_, pixel_h_);
+                     ev.window.data1, ev.window.data2, cols, rows, pixel_w_, pixel_h_,
+                     (double)scale_);
       }
       if (cols == width && rows == height)
       {
@@ -277,8 +285,12 @@ bool UIGui::poll_event(Event &out)
 
   case SDL_MOUSEMOTION:
   {
-    int cx = std::clamp((int)(ev.motion.x / cell_w_), 0, width - 1);
-    int cy = std::clamp((int)(ev.motion.y / cell_h_), 0, height - 1);
+    // SDL reports pointer positions in logical points; cells are in device
+    // pixels, so translate through the point-sized cell.
+    const float pcell_w = jot_gui::point_cell_size(cell_w_, scale_);
+    const float pcell_h = jot_gui::point_cell_size(cell_h_, scale_);
+    int cx = std::clamp((int)(ev.motion.x / pcell_w), 0, width - 1);
+    int cy = std::clamp((int)(ev.motion.y / pcell_h), 0, height - 1);
     // SGR motion encoding: 0x20 bit + the held button (0/1/2), or 3 when
     // no button is held (plain hover).
     int base = 3;
@@ -310,8 +322,10 @@ bool UIGui::poll_event(Event &out)
   case SDL_MOUSEBUTTONDOWN:
   case SDL_MOUSEBUTTONUP:
   {
-    int cx = std::clamp((int)(ev.button.x / cell_w_), 0, width - 1);
-    int cy = std::clamp((int)(ev.button.y / cell_h_), 0, height - 1);
+    const float pcell_w = jot_gui::point_cell_size(cell_w_, scale_);
+    const float pcell_h = jot_gui::point_cell_size(cell_h_, scale_);
+    int cx = std::clamp((int)(ev.button.x / pcell_w), 0, width - 1);
+    int cy = std::clamp((int)(ev.button.y / pcell_h), 0, height - 1);
     bool down = ev.type == SDL_MOUSEBUTTONDOWN;
     int base = 3;
     if (down)
@@ -394,8 +408,8 @@ bool UIGui::poll_event(Event &out)
       SDL_GetMouseState(&mx, &my);
     }
     out.type = EVENT_MOUSE;
-    out.mouse.x = std::clamp((int)(mx / cell_w_), 0, width - 1);
-    out.mouse.y = std::clamp((int)(my / cell_h_), 0, height - 1);
+    out.mouse.x = std::clamp((int)(mx / jot_gui::point_cell_size(cell_w_, scale_)), 0, width - 1);
+    out.mouse.y = std::clamp((int)(my / jot_gui::point_cell_size(cell_h_, scale_)), 0, height - 1);
     out.mouse.button = button;
     out.mouse.pressed = true;
     out.mouse.released = false;

@@ -115,6 +115,9 @@ namespace
 void Editor::toggle_sidebar()
 {
   show_sidebar = !show_sidebar;
+  // An explicit toggle settles the question: the width-driven auto-hide must
+  // not fight the user by re-showing (or re-hiding) the sidebar later.
+  sidebar_hidden_for_width_ = false;
   if (show_sidebar)
   {
     if (file_tree.empty())

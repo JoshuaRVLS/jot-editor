@@ -261,6 +261,11 @@ private:
     return !lsp_pending_changes.empty() || !lsp_clients.empty();
   }
   void poll_discord_rpc(long long now_ms);
+  // Applies one new grid size: re-dimensions the UI (which schedules a single
+  // full repaint), re-fits the panes and notifies Lua. Resize bursts are
+  // coalesced before this is called (see the input drains), so a live drag does
+  // one relayout per wake instead of one per compositor step.
+  void apply_resize(int cols, int rows);
   // Focus reporting (DECSET 1004 in terminals, SDL window events in the GUI):
   // leaving the window starts the idle clock that can clear the presence.
   // `now_ms` comes from jot_discord::monotonic_ms(), the same clock the poll
@@ -1134,6 +1139,24 @@ public:
     close_settings_menu();
   }
   bool mouse_selecting_for_test() const;
+  // Grid resize plumbing (jot/app/resize.cpp) and the sidebar's width-driven
+  // auto-hide: the same paths the terminal/GUI resize handlers drive.
+  void apply_resize_for_test(int cols, int rows)
+  {
+    apply_resize(cols, rows);
+  }
+  bool sidebar_visible_for_test() const
+  {
+    return show_sidebar;
+  }
+  bool sidebar_auto_hidden_for_test() const
+  {
+    return sidebar_hidden_for_width_;
+  }
+  void toggle_sidebar_for_test()
+  {
+    toggle_sidebar();
+  }
   // Discord presence session (jot/app/discord_session.cpp) for headless tests:
   // the same entry points the 1s timer, focus reporting and :discord use.
   void discord_poll_for_test(long long now_ms)

@@ -1,5 +1,6 @@
 set(JOT_UI_SOURCES
   ui/components.cpp
+  ui/gui/gui_fit.cpp
   ui/text.cpp
   ui/ui.cpp
 )

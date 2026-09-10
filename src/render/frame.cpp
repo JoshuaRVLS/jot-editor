@@ -144,12 +144,26 @@ namespace
 void Editor::render()
 {
   IntegratedTerminal *active_terminal = get_integrated_terminal();
-  if (show_sidebar && ui && ui->get_render_width() < min_sidebar_width() + 12)
+  // Too-narrow windows lose the sidebar so the code keeps a usable width. That
+  // is a reaction to the size, not a user decision: remember it and bring the
+  // sidebar back once the window fits again, otherwise shrinking once would
+  // hide the explorer for the rest of the session.
+  if (ui && !zen_mode)
   {
-    show_sidebar = false;
-    if (focus_state == FOCUS_SIDEBAR)
+    const bool too_narrow = ui->get_render_width() < min_sidebar_width() + 12;
+    if (show_sidebar && too_narrow)
     {
-      focus_state = FOCUS_EDITOR;
+      show_sidebar = false;
+      sidebar_hidden_for_width_ = true;
+      if (focus_state == FOCUS_SIDEBAR)
+      {
+        focus_state = FOCUS_EDITOR;
+      }
+    }
+    else if (!show_sidebar && sidebar_hidden_for_width_ && !too_narrow)
+    {
+      show_sidebar = true;
+      sidebar_hidden_for_width_ = false;
     }
   }
   ui->reset_cursor_state();
