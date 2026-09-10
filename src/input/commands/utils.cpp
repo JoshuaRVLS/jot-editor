@@ -210,6 +210,7 @@ namespace CommandLineUtils
                                                       "reopen",
                                                       "reopenlast",
                                                       "autosave",
+                                                      "settings",
                                                       "save",
                                                       "plugins",
                                                       "reload",

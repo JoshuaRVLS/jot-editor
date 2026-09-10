@@ -51,7 +51,7 @@ local function settings(p)
     local is_editing = is_selected and item.editing
     local row_fg = is_selected and selection_fg or fg
     local row_bg = is_selected and selection_bg or bg
-    local prefix = is_selected and " ▎" or "  "
+    local prefix = is_selected and " ▌" or "  "
 
     local label = trunc_cells(item.label or "", key_w - 3)
     local value = item.value or ""

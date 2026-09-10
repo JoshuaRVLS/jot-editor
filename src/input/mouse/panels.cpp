@@ -31,6 +31,28 @@ void Editor::handle_mouse_input(int x,
     return;
   }
 
+  if (show_settings_menu)
+  {
+    if (is_scroll_up && !settings_entries.empty())
+    {
+      settings_selected = std::max(0, settings_selected - 3);
+      needs_redraw = true;
+      return;
+    }
+    if (is_scroll_down && !settings_entries.empty())
+    {
+      settings_selected =
+          std::min((int)settings_entries.size() - 1, settings_selected + 3);
+      needs_redraw = true;
+      return;
+    }
+    if (is_click && handle_settings_mouse(x, y, true))
+    {
+      return;
+    }
+    return;
+  }
+
   if (show_home_menu)
   {
     if (is_click)

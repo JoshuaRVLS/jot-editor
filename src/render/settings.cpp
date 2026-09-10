@@ -64,6 +64,13 @@ void Editor::render_settings_menu()
   const int list_h = std::max(1, h - 4);
   const int max_scroll = std::max(0, (int)settings_entries.size() - list_h);
   settings_scroll = std::clamp(settings_scroll, 0, max_scroll);
+  // Keep the selection visible: the input handler moves settings_selected;
+  // the window follows it here on the next frame (up before down, so a
+  // selection at the very bottom stays fully visible).
+  if (settings_selected < settings_scroll)
+    settings_scroll = settings_selected;
+  if (settings_selected >= settings_scroll + list_h)
+    settings_scroll = settings_selected - list_h + 1;
 
   // Invalidate hit rects first; only visible rows get fresh rects below,
   // so mouse hit-testing can never match a scrolled-away row's stale rect.
@@ -155,7 +162,7 @@ void Editor::render_settings_menu()
     const int bg = selected ? theme.bg_selection : panel_theme.bg_command;
     ui->fill_rect({e.row_x, e.row_y, e.row_w, 1}, " ", fg, bg);
     if (selected)
-      ui->draw_text(e.row_x, e.row_y, "▎", theme.fg_selection, bg);
+      ui->draw_text(e.row_x, e.row_y, "▌", theme.fg_selection, bg);
 
     ui->draw_text(e.row_x + 1, e.row_y, truncate(e.label, key_w - 3), fg, bg);
 
