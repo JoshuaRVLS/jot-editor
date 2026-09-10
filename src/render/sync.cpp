@@ -53,11 +53,24 @@ void Editor::sync_lua_ui_surfaces()
   sync(show_menu_bar_dropdown, lua_ui_prev_menu_dropdown, "menu_dropdown");
   sync(show_search, lua_ui_prev_search, "search_panel");
   sync(show_home_menu, lua_ui_prev_home, "home_screen");
-  // A zoomed terminal owns the whole pane area: the sidebar and right-dock
-  // floats must be torn down while it is up (frame.cpp also skips their
-  // native paints) so nothing paints over the fullscreen terminal.
-  sync(show_sidebar && !terminal_zoom_active, lua_ui_prev_sidebar, "sidebar");
-  sync(show_right_panel && !terminal_zoom_active, lua_ui_prev_side_panel, "side_panel");
+  // A zoomed terminal owns the pane area and the home menu owns the entire
+  // frame (frame.cpp paints only the owning surface, the status line and
+  // standalone floats on those paths), so the editor chrome floats are torn
+  // down with either of them: a sidebar float left over from the last
+  // workspace frame would otherwise keep painting the explorer over the menu
+  // -- the "duplicate left pane" -- and swallow its mouse events, since
+  // float_mouse() is hit-tested before the home handler. They come back on
+  // their own: render_sidebar() and the dock renderers re-emit every frame
+  // once the owning surface closes.
+  const bool frame_owned = terminal_zoom_active || show_home_menu;
+  sync(show_sidebar && !frame_owned, lua_ui_prev_sidebar, "sidebar");
+  sync(show_right_panel && !frame_owned, lua_ui_prev_side_panel, "side_panel");
+  sync(lsp_completion_visible && !lsp_completion_items.empty() && !frame_owned,
+       lua_ui_prev_lsp_completion,
+       "lsp_completion");
+  sync(lsp_signature_visible && !lsp_signature_result.signatures.empty() && !frame_owned,
+       lua_ui_prev_lsp_signature,
+       "lsp_signature");
   // The settings float must be torn down when the menu closes (Esc, click
   // outside, :settings toggle): without the close emit the panel stays on
   // screen even though the scrim is gone.

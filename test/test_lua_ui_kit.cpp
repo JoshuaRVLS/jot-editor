@@ -153,6 +153,14 @@ namespace
     return 0;
   }
 
+  int stub_float_is_valid(lua_State *L)
+  {
+    // Surfaces that keep their float across emits (the home screen) ask before
+    // reusing the handle they cached: valid from open() until close().
+    lua_pushboolean(L, g.open_count > g.close_count);
+    return 1;
+  }
+
   int stub_float_configure(lua_State *L)
   {
     luaL_checktype(L, 2, LUA_TTABLE);
@@ -226,6 +234,8 @@ namespace
     lua_setfield(L, -2, "open");
     lua_pushcfunction(L, stub_float_close);
     lua_setfield(L, -2, "close");
+    lua_pushcfunction(L, stub_float_is_valid);
+    lua_setfield(L, -2, "is_valid");
     lua_pushcfunction(L, stub_float_configure);
     lua_setfield(L, -2, "configure");
     lua_pushcfunction(L, stub_float_set_spans);

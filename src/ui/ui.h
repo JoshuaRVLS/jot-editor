@@ -28,8 +28,10 @@ struct FloatOverlay
   bool animate = true;
   // The jot.ui.handler surface that opened this float ("sidebar",
   // "quick_pick", ...), or empty for standalone floats (toasts, user
-  // floats). Surfaces re-emit every frame with a fresh handle, so the GUI
-  // keys its animation state by this name; standalone floats key by handle.
+  // floats). The GUI keys its animation state by this name, so a surface that
+  // re-emits with a fresh handle every frame still animates as one panel; the
+  // home screen instead keeps its handle and its scratch buffer across frames
+  // (runtime/lua/features/ui/home.lua). Standalone floats key by handle.
   std::string surface;
   // The float's own cells, captured by render_floats right after painting
   // it into the grid (h * w, row-major). Floats overlap in the shared grid

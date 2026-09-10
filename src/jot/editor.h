@@ -1124,6 +1124,12 @@ public:
     close_settings_menu();
   }
   bool mouse_selecting_for_test() const;
+  // Headless surface tests: the recording cell grid, and how many visible
+  // floats a Lua surface (jot.ui.handler name, e.g. "sidebar", "home_screen")
+  // currently owns. The editor constructor already boots the UI kit through
+  // initialize_lua_runtime(), so the handlers are live in tests.
+  UI *ui_for_test();
+  int lua_float_count_for_test(const std::string &surface) const;
   void load_file(const std::string &fname);
   void run();
   // Reloads configuration from disk (settings.conf overlay + config.lua) and

@@ -7,6 +7,7 @@ set(JOT_ENGINE_SOURCES
   jot/app/file.cpp
   jot/app/fold_state.cpp
   jot/app/recent.cpp
+  jot/app/test_hooks.cpp
   jot/app/folding.cpp
   jot/app/panes_layout.cpp
   jot/app/panes_navigate.cpp

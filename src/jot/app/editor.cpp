@@ -546,6 +546,10 @@ void Editor::set_home_menu_visible(bool visible)
   else
   {
     home_menu_selected = 0;
+    // A live LSP hover float would sit on top of the menu and, because
+    // floats with mouse callbacks are hit-tested before the home handler,
+    // swallow the pointer events meant for the menu rows.
+    cancel_lsp_mouse_hover(/*hide_popup_now=*/true);
   }
   needs_redraw = true;
 }

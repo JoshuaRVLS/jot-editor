@@ -81,15 +81,31 @@ namespace
 
   std::string display_parent(const std::string &path)
   {
+    // Canonicalizing a path costs a realpath/stat chain per component, and
+    // the home model is rebuilt on every frame (hover included). The result
+    // only depends on the path string, so it is cached for the session; the
+    // map is bounded by the number of entries in the recent lists.
+    static std::unordered_map<std::string, std::string> cache;
+    auto it = cache.find(path);
+    if (it != cache.end())
+    {
+      return it->second;
+    }
     std::error_code ec;
     std::filesystem::path p(path);
     std::filesystem::path parent = p.parent_path();
+    std::string result;
     if (parent.empty())
     {
-      return path;
+      result = path;
     }
-    std::filesystem::path normalized = std::filesystem::weakly_canonical(parent, ec);
-    return ec ? parent.string() : normalized.string();
+    else
+    {
+      std::filesystem::path normalized = std::filesystem::weakly_canonical(parent, ec);
+      result = ec ? parent.string() : normalized.string();
+    }
+    cache.emplace(path, result);
+    return result;
   }
 } // namespace
 
@@ -104,9 +120,10 @@ void Editor::render_home_menu()
   const int screen_h = ui->get_height();
   const int usable_h = std::max(1, screen_h - status_height);
 
-  UIRect full = {0, 0, screen_w, usable_h};
-  ui->fill_rect(full, " ", theme.fg_default, theme.bg_default);
-
+  // No full-screen fill: render() already cleared the grid to the theme's
+  // default colors (UI::clear runs at the top of the frame, and theme changes
+  // push the new defaults through UI::set_default_colors), so repainting every
+  // cell here would only duplicate that work on each hover frame.
   const int content_w = std::max(1, std::min(screen_w - 4, 118));
   const int content_x = std::max(1, (screen_w - content_w) / 2);
   const int content_y = std::max(0, std::min(2, usable_h - 1));
@@ -117,10 +134,6 @@ void Editor::render_home_menu()
   home_menu_panel_w = content_w;
   home_menu_panel_h = content_h;
 
-  ui->draw_text(content_x, content_y, "JOT", theme.fg_keyword, theme.bg_default, true);
-  ui->draw_text(
-      content_x + 5, content_y, "Developer workspace", theme.fg_comment, theme.bg_default);
-
   std::string context = "No recent workspace yet";
   if (!recent_workspaces.empty())
   {
@@ -130,11 +143,6 @@ void Editor::render_home_menu()
   {
     context = "Last file  " + get_filename(recent_files.front());
   }
-  ui->draw_text(content_x,
-                content_y + 1,
-                ellipsize_right(context, std::max(0, content_w - 2)),
-                theme.fg_default,
-                theme.bg_default);
 
   const bool two_column = screen_w >= 88 && content_w >= 78;
   const int gap = two_column ? 4 : 0;
@@ -304,7 +312,17 @@ void Editor::render_home_menu()
     return;
   }
 
-  // Native fallback paint: header rows are drawn before the model rows.
+  // Native fallback paint (no Lua handler registered): the Lua float paints
+  // the header itself, so the wordmark / tagline / context only need drawing
+  // on this path.
+  ui->draw_text(content_x, content_y, "JOT", theme.fg_keyword, theme.bg_default, true);
+  ui->draw_text(
+      content_x + 5, content_y, "Developer workspace", theme.fg_comment, theme.bg_default);
+  ui->draw_text(content_x,
+                content_y + 1,
+                ellipsize_right(context, std::max(0, content_w - 2)),
+                theme.fg_default,
+                theme.bg_default);
   for (const auto &row : view.rows)
   {
     if (row.section)
