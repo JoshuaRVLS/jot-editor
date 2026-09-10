@@ -18,18 +18,15 @@ local HOVER_MAX_WIDTH = 96  -- wrap width for content
 local HOVER_MAX_ROWS = 14   -- rows shown before the footer counter kicks in
 local HOVER_BORDER = "rounded"
 
--- Nerd-font icon per hover section. Kept in one table so themes/users can
--- swap the whole set without touching the layout code below.
+-- Nerd-font icon per diagnostic severity. Signature, doc and code sections
+-- stay icon-free so the popup reads as plain tooltip text; only diagnostics
+-- (which genuinely benefit from a severity marker) keep a glyph. Kept in one
+-- table so themes/users can swap the set without touching the layout code.
 local ICONS = {
-  signature = "󰊕", -- function signature / declaration line
-  doc = "󰋼",       -- documentation prose
-  code = "",       -- fenced code block
-  diagnostic = "󰋽", -- diagnostics lead section
   error = "",
   warning = "",
   info = "",
   hint = "",
-  footer = "󰎔",
 }
 
 local win = nil -- current float handle (0 when none)
@@ -226,8 +223,6 @@ end
 -- The first fenced-free block is the signature (declaration servers echo),
 -- diagnostics-looking lines (error/warning/error codes) lead their own
 -- section, code fences keep their language for highlighting.
-local SEVERITY_ICON = { error = "error", warning = "warning", info = "info", hint = "hint" }
-
 local function looks_diagnostic(text)
   local low = text:lower()
   if low:match("^error") or low:match("^e%d+") or low:match("%[e%d+%]") then
@@ -309,48 +304,48 @@ end
 
 -- Sectioned display: like build_display but keeps the VSCode-style section
 -- layout (signature line, doc prose, code fences, diagnostics) and returns
--- per-line spans PLUS per-line section headers:
---   lines, spans, kinds = build_sectioned(contents, colors)
--- kinds[line] = "signature"|"doc"|"code"|"diagnostic"|"blank". Section icon
--- prefixes ("  CODE ") are folded into the line text; kinds lets present()
--- paint the icon span in the section accent color.
+-- per-line spans, per-line section kinds, and per-line severities:
+--   lines, spans, kinds, sevs = build_sectioned(contents, colors)
+-- kinds[line] = "signature"|"doc"|"code"|"diagnostic"|"blank". Only
+-- diagnostic sections carry a severity-icon prefix (folded into the line
+-- text); present() paints that icon span in the severity accent color.
 local function build_sectioned(contents, colors)
   local lines = {}
   local spans = {}
   local kinds = {}
+  local sevs = {}
   for _, sec in ipairs(build_sections(contents)) do
     if sec.kind == "blank" then
       local idx = #lines + 1
       lines[idx] = ""
       kinds[idx] = "blank"
     else
-      local icon = ICONS[sec.kind] or ICONS[SEVERITY_ICON[sec.severity or ""] or "doc"]
-      if sec.kind == "diagnostic" then
-        icon = ICONS[sec.severity] or ICONS.diagnostic
-      end
-      local prefix = icon .. " "
-      local wrapped = wrap_line(sec.text, HOVER_MAX_WIDTH - visual_len(prefix))
+      -- Only diagnostics get a severity glyph; signature / doc / code stay
+      -- icon-free so the popup reads as plain tooltip text.
+      local icon = sec.kind == "diagnostic" and ICONS[sec.severity] or nil
+      local prefix = icon and (icon .. " ") or ""
+      local pad = icon and 4 or 0 -- 3-byte icon + 1 space, or no indent
+      local wrapped = wrap_line(sec.text, HOVER_MAX_WIDTH - (icon and 4 or 0))
       for wi, wl in ipairs(wrapped) do
         local idx = #lines + 1
-        if wi == 1 then
-          lines[idx] = prefix .. wl
-          kinds[idx] = sec.kind
+        lines[idx] = prefix .. wl
+        kinds[idx] = sec.kind
+        if sec.severity then
+          sevs[idx] = sec.severity
+        end
+        if wi == 1 and icon then
           -- Icon span covers the icon + trailing space (byte offsets: the
           -- icons above are 3 bytes in UTF-8, +1 for the space).
           spans[idx] = { { start = 0, len = 4, fg = -2 } }
-        else
-          lines[idx] = string.rep(" ", visual_len(prefix)) .. wl
-          kinds[idx] = sec.kind
         end
         if sec.code then
           local s = highlight_line(wl, sec.ext, colors)
           for _, sp in ipairs(s) do
             spans[idx] = spans[idx] or {}
             -- highlight_line returns byte offsets into wl; shift past the
-            -- indent so spans line up with lines[idx]. Continuation lines
-            -- are indented with spaces (1 byte each); first lines carry the
-            -- 3-byte icon + 1 space.
-            local pad = wi == 1 and 4 or visual_len(prefix)
+            -- indent so spans line up with lines[idx]. First lines of a
+            -- diagnostic carry the 3-byte icon + 1 space; everything else
+            -- has no prefix.
             spans[idx][#spans[idx] + 1] = { start = sp.start + pad, len = sp.len, fg = sp.fg }
           end
         end
@@ -361,7 +356,7 @@ local function build_sectioned(contents, colors)
     lines[1] = ""
     kinds[1] = "blank"
   end
-  return lines, spans, kinds
+  return lines, spans, kinds, sevs
 end
 
 local function present(info)
@@ -371,43 +366,19 @@ local function present(info)
   end
 
   local ui = info.ui or {}
-  local lines, spans, kinds = build_sectioned(info.contents, info.colors)
-  -- Resolve the -2 placeholder on icon spans to the section accent color.
-  local accent = {
-    signature = (info.colors and info.colors.type) or ui.title or info.fg or 7,
-    doc = ui.doc or info.fg or 7,
-    code = (info.colors and info.colors["function"]) or ui.title or info.fg or 7,
-    diagnostic = ui.warning or info.fg or 7,
-    blank = info.fg or 7,
-  }
+  local lines, spans, kinds, sevs = build_sectioned(info.contents, info.colors)
+  -- Resolve the -2 placeholder on icon spans to the severity accent color
+  -- (only diagnostic lines carry icon spans).
   local sev_accent = {
     error = ui.error,
     warning = ui.warning,
     info = ui.info,
     hint = ui.hint,
   }
-  -- Re-derive severity per line for diagnostic accent (cheap: kinds only).
-  local line_sev = {}
-  do
-    local secs = build_sections(info.contents)
-    local li = 1
-    for _, sec in ipairs(secs) do
-      if sec.kind == "blank" then
-        li = li + 1
-      else
-        local wrapped = wrap_line(sec.text, HOVER_MAX_WIDTH - 2)
-        for _ in ipairs(wrapped) do
-          line_sev[li] = sec.severity
-          li = li + 1
-        end
-      end
-    end
-  end
   for line_idx, s in pairs(spans) do
-    local kind = kinds[line_idx]
-    local fg = accent[kind] or info.fg or 7
-    if kind == "diagnostic" then
-      fg = sev_accent[line_sev[line_idx] or ""] or fg
+    local fg = info.fg or 7
+    if kinds[line_idx] == "diagnostic" then
+      fg = sev_accent[sevs[line_idx] or ""] or fg
     end
     for _, sp in ipairs(s) do
       if sp.fg == -2 then

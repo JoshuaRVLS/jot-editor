@@ -324,8 +324,8 @@ TEST_CASE("Bundled Lua hover UI renders and dismisses a float")
   REQUIRE((g.last_height >= 3 && g.last_height <= 16));
 
   // Theme colors: border/footer use their own slots (footer falls back to
-  // colors.comment), the code fence produced syntax spans, and the first
-  // line carries the sectioned signature icon span.
+  // colors.comment), the code fence produced syntax spans, and no section
+  // icon spans exist anymore (only diagnostics keep severity icons).
   REQUIRE(g.last_border_fg == 41);
   REQUIRE(g.last_footer_fg == 3); // colors.comment
   REQUIRE(g.highlight_calls == 1);
@@ -333,7 +333,7 @@ TEST_CASE("Bundled Lua hover UI renders and dismisses a float")
   REQUIRE(g.last_highlight_text == "int x;");
   REQUIRE(g.set_spans_count >= 1);
   REQUIRE(g.last_spans_line >= 1);
-  REQUIRE(g.spans_total >= 3); // "int" highlighted as keyword + icon spans
+  REQUIRE(g.spans_total >= 1); // "int" highlighted as keyword span
 
   // --- build_display exposes spans; lang_to_ext maps fence tags ---
   push_module_field(L, 1, "lang_to_ext");
