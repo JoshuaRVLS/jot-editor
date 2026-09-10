@@ -162,7 +162,8 @@ void Editor::render_settings_menu()
     const int bg = selected ? theme.bg_selection : panel_theme.bg_command;
     ui->fill_rect({e.row_x, e.row_y, e.row_w, 1}, " ", fg, bg);
     if (selected)
-      ui->draw_text(e.row_x, e.row_y, "▌", theme.fg_selection, bg);
+      // Nerd Font chevron (nf-fa-chevron-right) marks the selected row.
+      ui->draw_text(e.row_x, e.row_y, "\uF054", theme.fg_selection, bg);
 
     ui->draw_text(e.row_x + 1, e.row_y, truncate(e.label, key_w - 3), fg, bg);
 
