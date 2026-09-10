@@ -70,3 +70,11 @@ target_compile_definitions(jot_tests PRIVATE
 
 include(Catch)
 catch_discover_tests(jot_tests)
+
+# GUI key translation (test_gui_keys.cpp) needs SDL's keysym constants, so it is
+# only built when the GUI frontend is part of the engine. JOT_GUI_ENABLED and
+# SDL2_INCLUDE_DIRS are published by src/CMakeLists.txt.
+if(JOT_GUI_ENABLED)
+  target_sources(jot_tests PRIVATE test_gui_keys.cpp)
+  target_include_directories(jot_tests SYSTEM PRIVATE ${SDL2_INCLUDE_DIRS})
+endif()

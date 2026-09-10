@@ -40,6 +40,12 @@ typedef struct FT_FaceRec_ *FT_Face;
 // translator (gui_input.cpp).
 uint32_t decode_utf8(const char *s, size_t len, size_t &i);
 
+// jot key code for an SDL keysym, or 0 when the key is not a
+// navigation/special key. Printable characters must return 0: SDL delivers them
+// through SDL_TEXTINPUT, and translating them here as well delivers every
+// keystroke twice (a typed space became two cells, reading as a tab stop).
+int translate_sdl_keysym(long keysym);
+
 // RAII guard for glyph-atlas uploads. Glyph rows live in a 2048-wide CPU
 // buffer, so GL must be told rows are kAtlasW bytes apart (UNPACK_ROW_LENGTH)
 // with 1-byte alignment. That pixel-store state is context-global, so it must

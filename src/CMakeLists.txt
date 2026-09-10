@@ -291,6 +291,9 @@ if(JOT_GUI AND NOT WIN32)
   if(SDL2_FOUND AND FREETYPE2_FOUND)
     set(JOT_GUI_ENABLED TRUE)
     set(JOT_GUI_ENABLED TRUE CACHE INTERNAL "GUI frontend compiled into the engine" FORCE)
+    # The test suite has a GUI keysym test that needs SDL's key constants; hand
+    # the include dirs up the way TREE_SITTER_INCLUDE_DIRS is handed up above.
+    set(SDL2_INCLUDE_DIRS "${SDL2_INCLUDE_DIRS}" PARENT_SCOPE)
     list(APPEND JOT_UI_SOURCES
          ui/gui/gui_setup.cpp
          ui/gui/gui_glyphs.cpp

@@ -32,14 +32,20 @@ int termkey_modifier_flags(bool shift, bool alt, bool ctrl)
     flags |= 0x20000;
   return flags;
 }
+} // namespace
 
 // Maps one SDL keycode to jot's special key codes (the same values
 // translate_termkey_keysym produces). Returns 0 when the key is not a
 // navigation/special key (letters, digits and punctuation are handled by
 // the printable branch in the caller).
-int translate_sdl_keysym(SDL_Keycode k)
+//
+// Printable characters -- Space included -- must return 0 here: SDL delivers
+// them through SDL_TEXTINPUT, so mapping them here as well handed the editor
+// every keystroke twice. A typed space then occupied two cells, which at the
+// default tab_size of 2 reads as a tab stop.
+int translate_sdl_keysym(long keysym)
 {
-  switch (k)
+  switch (keysym)
   {
   case SDLK_BACKSPACE:
     return 127;
@@ -50,8 +56,6 @@ int translate_sdl_keysym(SDL_Keycode k)
     return 13;
   case SDLK_ESCAPE:
     return 27;
-  case SDLK_SPACE:
-    return ' ';
   case SDLK_DELETE:
     return 1001;
   // Numpad +/- share the printable symbols so Ctrl+KP_Plus / Ctrl+KP_Minus
@@ -78,18 +82,17 @@ int translate_sdl_keysym(SDL_Keycode k)
   case SDLK_PAGEDOWN:
     return 1016;
   default:
-    if (k >= SDLK_F1 && k <= SDLK_F12)
+    if (keysym >= SDLK_F1 && keysym <= SDLK_F12)
     {
-      return KeyCode::function((int)(k - SDLK_F1) + 1);
+      return KeyCode::function((int)(keysym - SDLK_F1) + 1);
     }
-    if (k >= SDLK_F13 && k <= SDLK_F24)
+    if (keysym >= SDLK_F13 && keysym <= SDLK_F24)
     {
-      return KeyCode::function((int)(k - SDLK_F13) + 13);
+      return KeyCode::function((int)(keysym - SDLK_F13) + 13);
     }
     return 0;
   }
 }
-} // namespace
 
 bool UIGui::poll_event(Event &out)
 {

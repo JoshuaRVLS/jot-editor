@@ -19,7 +19,7 @@ namespace
     }
     std::error_code ec;
     fs::path abs = fs::absolute(fs::path(path), ec).lexically_normal();
-    if (ec)
+    if (ec)   
     {
       abs = fs::path(path).lexically_normal();
     }
