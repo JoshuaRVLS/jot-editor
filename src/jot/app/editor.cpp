@@ -372,6 +372,7 @@ void Editor::initialize_terminal_ui()
   ui = new UI(&terminal);
   ui->resize(terminal.get_width(), terminal.get_height());
   ui->set_default_colors(theme.fg_default, theme.bg_default);
+  ui->set_cursor_colors(theme.fg_cursor, theme.bg_cursor);
 
   int h = terminal.get_height();
   int w = ui->get_render_width();
@@ -421,6 +422,7 @@ void Editor::initialize_gui_ui()
   ui = new UIGui(80, 24, theme.fg_default, theme.bg_default,
                  std::clamp(config.get_int("gui_font_size", 16), 8, 40));
   ui->set_default_colors(theme.fg_default, theme.bg_default);
+  ui->set_cursor_colors(theme.fg_cursor, theme.bg_cursor);
 
   // The GUI frontend paints the same cell grid the terminal backend uses,
   // so no extra wiring is needed here: :settings and Ctrl+, open the same

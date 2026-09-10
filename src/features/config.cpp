@@ -95,7 +95,9 @@ void Config::load_defaults()
   settings["relative_line_numbers"] = "false";
   settings["word_wrap"] = "false";
   settings["cursor_style"] = "bar";
-  settings["cursor_blink_ms"] = "300";
+  // Half of the blink cycle, in ms (cursor_blink.h drives it). 500 reads as a
+  // calm ~1 Hz blink; the old 300 was a jumpy 1.7 Hz. 0 disables blinking.
+  settings["cursor_blink_ms"] = "500";
   settings["gui_font_size"] = "16";
   settings["highlight_cursor_line"] = "true";
   settings["render_fps"] = "120";

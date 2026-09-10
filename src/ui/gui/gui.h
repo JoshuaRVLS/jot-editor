@@ -109,7 +109,7 @@ public:
   // Smooth-scroll hook: the editor reports each pane's body region and how
   // many visible rows it scrolled since the last frame. The pane's content
   // is rendered shifted by the animated offset (points) until it settles.
-  void notify_pane_scroll(int pane_id, int x, int y, int w, int h, int delta_rows) override;
+  void notify_pane_scroll(int pane_id, int x, int y, int w, int h, int delta_rows, bool jumped_x) override;
 
   // Snapshot the float-free grid so floats render as a fixed overlay that
   // never moves with the scroll; see paint_float_overlays.
@@ -470,6 +470,10 @@ private:
     int x1 = 0, y1 = 0, x2 = 0, y2 = 0; // body region (grid cells, x2/y2 exclusive)
     float offset_px = 0.0f;             // current shift of the new content (eases to 0)
     float total_px = 0.0f;              // net scroll of the chain (delta * cell_h)
+    // The pane's horizontal window changed this frame. There is no horizontal
+    // slide animation to ride, so the caret has to be placed rather than eased
+    // (see advance_cursor_glide); refreshed by every notify_pane_scroll call.
+    bool jumped_x = false;
     // Retained viewports of this slide chain, oldest first. Empty until at
     // least one frame has been rendered for this pane.
     std::vector<GuiFrame> frames;
@@ -480,10 +484,16 @@ private:
   // an older copy of the same viewport). Called at the end of every render,
   // so every viewport the chain visits is available to the slide.
   void capture_pane_rows();
-  // Pixel offset for the cursor cell: the new content of an animating pane
-  // is shifted by its offset_px. Returns 0 when the cursor is not inside an
-  // animating pane body.
-  float cursor_pane_offset(int x, int y) const;
+
+  // What the caret must ride for the animation covering its cell: the pane's
+  // in-flight vertical offset, and whether that pane's columns jumped this
+  // frame. Both are zero/false when no animation covers the cell.
+  struct CursorPaneView
+  {
+    float offset_px = 0.0f;
+    bool jumped_x = false;
+  };
+  CursorPaneView cursor_pane_view(int x, int y) const;
 
   // Cursor glide: pixel position eases toward the cursor cell (plus any
   // pane scroll offset covering it) each frame. -1 = uninitialized (snap).

@@ -237,8 +237,11 @@ private:
   void render_buffer_content(const SplitPane &pane, int pane_index, int buffer_id);
   // GUI smooth-scroll tracking: last reported first-visible line per pane,
   // so the fold-aware delta for the scroll animation is computed once per
-  // pane per frame (editor side, where the fold ranges live).
+  // pane per frame (editor side, where the fold ranges live). gui_pane_scroll_xs_
+  // is the same per pane for the horizontal window: it has no slide animation,
+  // so the GUI uses the change to place the caret instead of easing it.
   std::vector<int> gui_pane_top_lines_;
+  std::vector<int> gui_pane_scroll_xs_;
   void poll_lsp_clients();
   // Marks the per-file inlay-hint cache stale (after a did_change flush).
   void mark_lsp_inlay_hints_dirty(const std::string &filepath);
@@ -1003,6 +1006,9 @@ public:
   void create_new_buffer_for_test();
   void move_to_line_start_for_test();
   void render_for_test();
+  // One full frame-loop step (the per-frame blink/scheduling logic plus a
+  // render), for tests that need to observe behaviour over time.
+  void render_frame_for_test();
   FileBuffer &buffer_for_test(int id = -1);
   SplitPane &pane_for_test(int id = -1);
   // Settings-menu state accessors for headless tests (the menu surface is

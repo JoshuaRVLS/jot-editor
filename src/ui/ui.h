@@ -118,11 +118,18 @@ protected:
   bool cursor_hidden;
   bool cursor_dirty = true;
   // Software blink visibility for the terminal cursor (set by the editor's
-  // unified blink clock each frame): visible emits a steady DECSCUSR plus
-  // the show-cursor sequence, hidden emits the hide-cursor sequence.
+  // unified blink clock each frame): visible emits the show sequence with the
+  // steady DECSCUSR shape, hidden emits the hide sequence.
   bool cursor_blink_visible = true;
-  // Builds the DECSCUSR sequence for `shape` honoring cursor_blink_visible.
-  std::string cursor_shape_sequence(UICursorShape shape);
+  // The theme's cursor pair (fg_cursor/bg_cursor). Backends that paint the caret
+  // themselves (the GUI) pick between the two by contrast against the cell; the
+  // terminal leaves the hardware cursor's colour to the emulator, which owns it.
+  int cursor_fg = 0;
+  int cursor_bg = 7;
+  // Builds the DECSCUSR sequence for `shape`. Steady shapes only: the blink is
+  // jot's own clock (cursor_blink_ms), and a blinking shape would blink at the
+  // terminal's rate on top of it.
+  std::string cursor_shape_sequence(UICursorShape shape) const;
   int default_fg = 7;
   int default_bg = 0;
 
@@ -163,6 +170,9 @@ public:
 
   void set_default_colors(int fg, int bg);
 
+  // The theme's cursor colours; see the fields above.
+  void set_cursor_colors(int fg, int bg);
+
   void draw_text(int x,
                  int y,
                  const std::string &text,
@@ -183,13 +193,16 @@ public:
   // GUI smooth-scroll hook: the editor reports each pane's body region
   // (grid cells, border columns excluded) and how many visible rows the
   // pane scrolled since the previous frame (positive = content moved up).
-  // GUI backends animate the shift; the terminal backend ignores it.
+  // `jumped_x` says the pane's horizontal window moved too (no slide
+  // animation covers that axis). GUI backends animate the shift; the
+  // terminal backend ignores it.
   virtual void notify_pane_scroll(int pane_id,
                                   int x,
                                   int y,
                                   int w,
                                   int h,
-                                  int delta_rows)
+                                  int delta_rows,
+                                  bool jumped_x)
   {
     (void)pane_id;
     (void)x;
@@ -197,6 +210,7 @@ public:
     (void)w;
     (void)h;
     (void)delta_rows;
+    (void)jumped_x;
   }
 
   // Called right before Lua floats paint into the grid. GUI backends
@@ -230,6 +244,10 @@ public:
   // Only marks the cursor dirty when the state actually changed, so idle
   // frames never re-emit cursor bytes.
   void set_cursor_blink_visible(bool visible);
+  // The caret's terminal bytes for the current state: hide, or show plus the
+  // steady shape. Composed in one place so a hidden cursor can never be
+  // re-shown by the shape write that follows it.
+  std::string cursor_sequence() const;
   // Emits the pending cursor to the physical screen. The base
   // implementation writes terminal escapes; GUI backends override this to
   // a no-op (their render() paints the cursor from the same state).

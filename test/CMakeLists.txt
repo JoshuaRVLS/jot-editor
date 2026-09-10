@@ -4,6 +4,10 @@ add_executable(jot_tests
   test_features.cpp
   test_cpp_assist.cpp
   test_cursor.cpp
+  test_cursor_blink.cpp
+  test_cursor_blink_wiring.cpp
+  test_cursor_colors.cpp
+  test_cursor_scroll.cpp
   test_debugger.cpp
   test_imageviewer.cpp
   test_syntax.cpp

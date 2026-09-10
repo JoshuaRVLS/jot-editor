@@ -70,3 +70,41 @@ TEST_CASE("Gui fit translates pointer coordinates through the point cell", "[jot
   REQUIRE(point_cell_size(10.0f, 0.0f) == 10.0f);
   REQUIRE(point_cell_size(1.0f, 100.0f) > 0.0f);
 }
+
+// The caret's glide. It eases so a one-cell move reads as motion rather than a
+// teleport -- except while the pane under it is scrolling, where the content is
+// already sliding and a second, slower curve for the caret left it visibly
+// trailing its own line (the "caret gets dragged" symptom).
+TEST_CASE("The caret glide eases normally and snaps while scrolling", "[jot]")
+{
+  // Easing: part-way after one frame, monotonically closer, never overshooting.
+  const float eased = glide_axis(0.0f, 100.0f, 0.016f, /*snap=*/false);
+  REQUIRE(eased > 0.0f);
+  REQUIRE(eased < 100.0f);
+
+  const float eased_more = glide_axis(eased, 100.0f, 0.016f, false);
+  REQUIRE(eased_more > eased);
+  REQUIRE(eased_more < 100.0f);
+
+  // Many frames converge on the target and settle exactly there.
+  float pos = 0.0f;
+  for (int i = 0; i < 100; i++)
+  {
+    pos = glide_axis(pos, 100.0f, 0.016f, false);
+  }
+  REQUIRE(pos == 100.0f);
+
+  // Snapping: placed on the target immediately, whatever the distance -- this is
+  // what keeps the caret glued to its line while the viewport slides.
+  REQUIRE(glide_axis(0.0f, 100.0f, 0.016f, /*snap=*/true) == 100.0f);
+  REQUIRE(glide_axis(0.0f, -37.0f, 0.016f, true) == -37.0f);
+  REQUIRE(glide_axis(50.0f, 50.0f, 0.016f, true) == 50.0f);
+
+  // Sub-pixel remainders snap so the caret lands crisply on its cell.
+  REQUIRE(glide_axis(99.99f, 100.0f, 0.016f, false) == 100.0f);
+
+  // A zero (or negative) frame delta must not move the caret, and a settled
+  // caret stays put rather than drifting.
+  REQUIRE(glide_axis(10.0f, 100.0f, 0.0f, false) == 10.0f);
+  REQUIRE(glide_axis(100.0f, 100.0f, 0.016f, false) == 100.0f);
+}

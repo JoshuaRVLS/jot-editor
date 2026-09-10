@@ -12,6 +12,9 @@ namespace jot_gui
     // with a stale drawable), and trusting it would shrink the grid to a
     // handful of cells.
     constexpr float kMaxScale = 8.0f;
+    // Time constant of the caret's glide (seconds). Short enough to feel
+    // immediate, long enough that a one-cell move reads as motion.
+    constexpr float kCaretGlideTau = 0.045f;
   } // namespace
 
   float display_scale(int window_w, int window_h, int drawable_w, int drawable_h)
@@ -52,5 +55,21 @@ namespace jot_gui
     }
     // A sub-half-point cell would make every downstream division meaningless.
     return std::max(0.5f, cell_px / scale);
+  }
+
+  float glide_axis(float current, float target, float dt, bool snap)
+  {
+    if (snap)
+    {
+      return target;
+    }
+    // Exponential approach: frame-rate independent, fast start, smooth settle.
+    const float k = 1.0f - std::exp(-std::max(0.0f, dt) / kCaretGlideTau);
+    const float next = current + (target - current) * k;
+    if (std::abs(next - target) < 0.05f)
+    {
+      return target;
+    }
+    return next;
   }
 } // namespace jot_gui

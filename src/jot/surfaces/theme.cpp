@@ -88,6 +88,7 @@ bool Editor::apply_theme(const std::string &name, bool persist, bool announce)
   if (ui)
   {
     ui->set_default_colors(theme.fg_default, theme.bg_default);
+    ui->set_cursor_colors(theme.fg_cursor, theme.bg_cursor);
     ui->invalidate();
   }
   needs_redraw = true;

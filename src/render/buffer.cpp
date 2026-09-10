@@ -132,6 +132,10 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
     {
       gui_pane_top_lines_.resize(pane_index + 1, -1);
     }
+    if ((int)gui_pane_scroll_xs_.size() <= pane_index)
+    {
+      gui_pane_scroll_xs_.resize(pane_index + 1, -1);
+    }
     const int old_top = gui_pane_top_lines_[(size_t)pane_index];
     int delta = 0;
     if (old_top >= 0 && new_top >= 0 && old_top != new_top)
@@ -150,13 +154,19 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
       }
     }
     gui_pane_top_lines_[(size_t)pane_index] = new_top;
+    // Horizontal window changes have no slide animation, so the GUI only needs
+    // to know that this pane's columns moved: it places the caret instead of
+    // easing it sideways after the text has already jumped.
+    const int old_scroll_x = gui_pane_scroll_xs_[(size_t)pane_index];
+    const bool jumped_x = old_scroll_x >= 0 && old_scroll_x != buf.scroll_x;
+    gui_pane_scroll_xs_[(size_t)pane_index] = buf.scroll_x;
     // Report every render (delta 0 included): the GUI uses the geometry to
     // keep a retained copy of each pane body, so even the first scroll of a
     // session has a previous frame to slide instead of snapping. Body region:
     // tab-bar and bottom-border rows excluded, border columns excluded --
     // exactly what scrolls with the content.
     ui->notify_pane_scroll(
-        pane_index, pane.x + 1, y, std::max(0, pane.w - 2), h, delta);
+        pane_index, pane.x + 1, y, std::max(0, pane.w - 2), h, delta, jumped_x);
   }
 
   // Re-anchor decorations through the pending edit (if any) once, before any

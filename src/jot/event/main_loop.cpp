@@ -1,6 +1,7 @@
 // The editor main loop: run(), the frame render step, and idle drain.
 #include "editor.h"
 #include "jot/lua/api.h"
+#include "ui/cursor_blink.h"
 
 void Editor::render_frame()
 {
@@ -72,12 +73,12 @@ void Editor::render_frame()
   {
     lua_api->flush_pending_autocmds();
   }
-  // Blinking is owned by the terminal (blinking DECSCUSR), so jot keeps
-  // the cursor visible and lets the frame loop carry visibility through.
-  // Frames that leave the cursor hidden (menus, palettes, popups) pause
-  // the application's notion of visibility too, keeping it in sync with
-  // what is on screen. Repaints happen only when something actually
-  // changes (visibility flip, or extra carets present).
+  // One blink clock for both frontends. The phase comes from cursor_blink_ms and
+  // is re-anchored by restart_blink() on every caret move and keystroke, so the
+  // caret lands solid, holds through the input pause, and resumes its cycle in
+  // the visible half. The terminal applies the phase by hiding/showing the
+  // hardware cursor; the GUI paints the caret from the same flag and needs a
+  // repaint to show the flip.
   {
     bool any_carets = false;
     for (const auto &pane : panes)
@@ -92,19 +93,21 @@ void Editor::render_frame()
     const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                             std::chrono::steady_clock::now().time_since_epoch())
                             .count();
+    const int period_ms = std::clamp(config.get_int("cursor_blink_ms", 500), 0, 2000);
     const std::string style = config.get("cursor_style", "bar");
-    const bool steady = style == "steady_block" || style == "steadyblock";
-    // The terminal owns the blink cycle, so there is no wall-clock phase
-    // to compute. Carry visibility forward: visible unless the last frame
-    // hid the cursor (menu/palette/popup covering the editor). Typing and
-    // caret moves force visible through blink_suspend in restart_blink.
-    const bool suspended = now_ms < blink_suspend_until_ms;
-    const bool hidden_frame = ui->cursor_is_hidden();
-    const bool want_visible = steady || suspended || !hidden_frame || blink_visible;
+    const bool steady = style == "steady_block" || style == "steadyblock"
+                        || style == "steady_bar" || style == "steadybar";
+    const bool hold = steady || now_ms < blink_suspend_until_ms;
+    const bool want_visible =
+        jot_ui::blink_phase_visible(now_ms, blink_anchor_ms, period_ms, hold);
     if (want_visible != blink_visible)
     {
       blink_visible = want_visible;
-      if (!ui->cursor_is_hidden() || any_carets)
+      ui->set_cursor_blink_visible(want_visible);
+      // The GUI paints the caret only inside a render, and extra carets are
+      // painted cells -- both need a repaint. The terminal's hardware cursor
+      // needs only its flush (cursor_needs_flush), which costs no grid walk.
+      if (gui_mode || any_carets)
       {
         needs_redraw = true;
       }

@@ -454,10 +454,26 @@ variant. A bundled starter config lives in `.configs/configs/`.
 
 Built-in defaults include `explorer_width=25`, `minimap_width=15`,
 `tab_size=2`, `show_line_numbers=true`, `relative_line_numbers=true`,
-`cursor_style=bar`, `render_fps=120`, `idle_fps=60`, `auto_save=false`,
-`auto_save_interval_ms=2000`, `lsp_change_debounce_ms=120`,
+`cursor_style=bar`, `cursor_blink_ms=500`, `render_fps=120`, `idle_fps=60`,
+`auto_save=false`, `auto_save_interval_ms=2000`, `lsp_change_debounce_ms=120`,
 `lsp_inlay_hints=true`, `lsp_inlay_type_hints=true`, `terminal_height=10`, and
 `debugger_height=12`.
+
+The caret is configured with two keys:
+
+- `cursor_style` — `bar` or `block`, both blinking; `steady_bar` / `steady_block`
+  keep that shape without blinking. The shape is emitted with the terminal's
+  steady DECSCUSR form in the TUI and drawn directly in the GUI.
+- `cursor_blink_ms` — half of the blink cycle, in milliseconds: the caret is
+  visible for that long, then hidden for the same. `0` makes it solid. The
+  phase is jot's own clock, shared by the terminal and GUI frontends, and it
+  restarts visible whenever you type or move the caret.
+
+The caret's colours come from the theme (`cursor`, or `fg_cursor`/`bg_cursor`).
+Where the caret is painted by jot — the GUI — it uses whichever of the two
+contrasts with the cell underneath, so it stays visible over comments,
+selections and dimmed text. In the TUI the hardware cursor is drawn by the
+terminal emulator, which owns its colour; jot only sets its shape and position.
 
 See [THEMES.md](THEMES.md) for authoring colorschemes and
 [LUA_API.md](LUA_API.md) for the scripting API.

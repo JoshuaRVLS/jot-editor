@@ -34,6 +34,13 @@ namespace jot_gui
   // Logical (point) size of one cell, for translating SDL point coordinates
   // onto grid columns and rows.
   float point_cell_size(float cell_px, float scale);
+
+  // One axis of the caret's glide, in device pixels. The caret eases toward
+  // `target` so short moves read as motion rather than teleports -- except when
+  // the pane under it is scrolling (`snap`), where the content is already
+  // sliding and easing the caret separately would detach it from the line it
+  // belongs to. Also snaps when the remaining distance is sub-pixel.
+  float glide_axis(float current, float target, float dt, bool snap);
 } // namespace jot_gui
 
 #endif // UI_GUI_FIT_H

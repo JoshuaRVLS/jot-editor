@@ -91,10 +91,9 @@ namespace
         break;
       }
     }
-    // When the cursor scrolled out of view, park the terminal caret on the
-    // last row of the pane (not row 0) and report not-found so the caller
-    // hides it: row 0 would yank the eye to the top on every wheel tick,
-    // while the bottom edge reads as "following the scroll".
+    // Reports false when the caret has no cell on screen (its line scrolled out
+    // of view, or the pane is too narrow for the code area); the caller then
+    // hides the caret. display_y is still filled in for the found_row case.
     display_y = (found_row ? visible_row : viewport_h - 1) + pane.y + tab_height;
 
     int logical_cursor_x = buf.cursor.x;
@@ -239,10 +238,10 @@ void Editor::render()
       auto &buf = get_buffer(pane.buffer_id);
       int display_x = 0;
       int display_y = 0;
-      // While wheel-scrolling (cursor off-screen) keep the caret parked on
-      // the last code row instead of hiding it: hiding flips DECTCEM every
-      // wheel tick and some terminals (kitty) reset the DECSCUSR shape on
-      // hide/show, which reads as a bar->block flicker while scrolling.
+      // The caret is only drawn where it belongs: when its line is scrolled out
+      // of view (or the pane is too narrow to hold it) it is hidden. Parking it
+      // on the last row instead made it travel to and ride the bottom edge,
+      // which read as the caret being dragged along by the scroll.
       if (compute_code_cursor_screen_pos(pane,
                                          buf,
                                          show_minimap,
@@ -256,17 +255,13 @@ void Editor::render()
                                          display_x,
                                          display_y))
       {
-        ui->set_cursor(display_x, display_y, editor_cursor_shape(config.get("cursor_style", "bar")));
+        ui->set_cursor(display_x,
+                       display_y,
+                       editor_cursor_shape(config.get("cursor_style", "bar")));
       }
       else
       {
-        auto &pane_ref = get_pane();
-        int draw_w = std::max(1, pane_ref.w);
-        if (show_minimap && draw_w > 20)
-          draw_w = std::max(1, draw_w - minimap_width);
-        ui->set_cursor(pane_ref.x + 1 + kLineNumberGutterWidth,
-                       display_y,
-                       editor_cursor_shape(config.get("cursor_style", "bar")));
+        ui->hide_cursor();
       }
       ui->set_cursor_blink_visible(blink_visible);
       ui->flush_cursor();
@@ -472,9 +467,8 @@ void Editor::render()
         auto &buf = get_buffer(pane.buffer_id);
         int display_x = 0;
         int display_y = 0;
-        // Same off-screen policy as the idle path above: park on the last
-        // code row, never hide, so wheel scrolling can't flicker the
-        // caret shape via DECTCEM toggles.
+        // Same policy as the idle path above: hide the caret when its line is
+        // not on screen instead of parking it on the last code row.
         if (compute_code_cursor_screen_pos(pane,
                                            buf,
                                            show_minimap,
@@ -488,13 +482,13 @@ void Editor::render()
                                            display_x,
                                            display_y))
         {
-          ui->set_cursor(display_x, display_y, editor_cursor_shape(config.get("cursor_style", "bar")));
+          ui->set_cursor(display_x,
+                         display_y,
+                         editor_cursor_shape(config.get("cursor_style", "bar")));
         }
         else
         {
-          ui->set_cursor(pane.x + 1 + kLineNumberGutterWidth,
-                         display_y,
-                         editor_cursor_shape(config.get("cursor_style", "bar")));
+          ui->hide_cursor();
         }
       }
     }

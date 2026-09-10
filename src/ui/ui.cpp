@@ -297,6 +297,12 @@ void UI::set_default_colors(int fg, int bg)
   default_bg = bg;
 }
 
+void UI::set_cursor_colors(int fg, int bg)
+{
+  cursor_fg = fg;
+  cursor_bg = bg;
+}
+
 void UI::dim_rect(const UIRect &rect)
 {
   const int x0 = std::max(0, rect.x);
@@ -526,7 +532,7 @@ void UI::render()
 
   term->reset_color();
 
-  if (cursor_hidden)
+  if (cursor_hidden || !cursor_blink_visible)
   {
     term->hide_cursor();
   }
@@ -548,9 +554,9 @@ void UI::render()
     if (cy < 0)
       cy = 0;
     term->move_cursor(cx, cy);
+    term->write(cursor_sequence());
   }
 
-  term->write(cursor_shape_sequence(cursor_shape));
   term->flush();
   cursor_dirty = false;
 
@@ -954,21 +960,30 @@ void UI::set_cursor_blink_visible(bool visible)
   }
 }
 
-std::string UI::cursor_shape_sequence(UICursorShape shape)
+std::string UI::cursor_shape_sequence(UICursorShape shape) const
 {
-  if (!cursor_blink_visible)
+  // Steady DECSCUSR shapes: bar -> steady bar (6), block -> steady block (2).
+  // The blink phase is jot's own (cursor_blink_ms, see cursor_blink.h) and is
+  // applied by hiding/showing the cursor, so juggling shapes in software would
+  // only add show/hide churn. A blinking shape here would give two clocks.
+  if (shape == UICursorShape::Bar)
+  {
+    return "\033[?25h\033[6 q";
+  }
+  return "\033[?25h\033[2 q";
+}
+
+// The caret's bytes for the current state. Composed in one place because the
+// show sequence used to be written unconditionally after the hide branch, which
+// promptly re-showed a cursor the editor had deliberately hidden (menus,
+// palettes, popups) and parked it over the frame.
+std::string UI::cursor_sequence() const
+{
+  if (cursor_hidden || !cursor_blink_visible)
   {
     return "\033[?25l";
   }
-  // Always the blinking DECSCUSR so the TERMINAL owns the blink phase:
-  // bar -> blinking bar (5), block -> blinking block (1). jot never hides
-  // the cursor in software anymore, so there is no second clock to drift
-  // and no show/hide churn on any compositor.
-  if (shape == UICursorShape::Bar)
-  {
-    return "\033[?25h\033[5 q";
-  }
-  return "\033[?25h\033[1 q";
+  return cursor_shape_sequence(cursor_shape);
 }
 
 // Emit only the current cursor state to the terminal buffer and flush.
@@ -979,7 +994,7 @@ void UI::flush_cursor()
 {
   term->disable_autowrap();
   const int margin = term->render_margin();
-  if (cursor_hidden)
+  if (cursor_hidden || !cursor_blink_visible)
   {
     term->hide_cursor();
   }
@@ -999,8 +1014,8 @@ void UI::flush_cursor()
     if (cy < 0)
       cy = 0;
     term->move_cursor(cx, cy);
+    term->write(cursor_sequence());
   }
-  term->write(cursor_shape_sequence(cursor_shape));
   term->flush();
   cursor_dirty = false;
 

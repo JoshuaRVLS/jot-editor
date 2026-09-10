@@ -1,44 +1,20 @@
-// Cell colors: the same xterm 256-color palette the terminal backend writes
-// as SGR 38;5 / 48;5 indices. 0-15 ANSI, 16-231 6x6x6 cube, 232-255
-// grayscale ramp. cell_colors resolves a cell's effective fg/bg (honoring
-// reverse video and dim) into linear-ish rgb floats for the shader.
+// Cell colors: the xterm 256-color palette the terminal backend writes as
+// SGR 38;5 / 48;5 indices, resolved to rgb for the shader. The palette itself
+// lives in ui/xterm_palette (shared with the caret's contrast decision and
+// unit tested there); cell_colors resolves a cell's effective fg/bg on top of
+// it, honoring reverse video and dim.
 #include "gui/gui.h"
-
-namespace
-{
-const unsigned char kBasicColors[16][3] = {
-    {0, 0, 0},       {205, 0, 0},     {0, 205, 0},     {205, 205, 0},
-    {0, 0, 238},     {205, 0, 205},   {0, 205, 205},   {229, 229, 229},
-    {127, 127, 127}, {255, 0, 0},     {0, 255, 0},     {255, 255, 0},
-    {92, 92, 255},   {255, 0, 255},   {0, 255, 255},   {255, 255, 255},
-};
-const unsigned char kCubeLevels[6] = {0, 95, 135, 175, 215, 255};
-} // namespace
+#include "ui/xterm_palette.h"
 
 void UIGui::xterm_rgb(int index, float &r, float &g, float &b)
 {
-  if (index < 0)
-  {
-    index = 0;
-  }
-  if (index < 16)
-  {
-    r = kBasicColors[index][0] / 255.0f;
-    g = kBasicColors[index][1] / 255.0f;
-    b = kBasicColors[index][2] / 255.0f;
-  }
-  else if (index < 232)
-  {
-    int v = index - 16;
-    r = kCubeLevels[v / 36] / 255.0f;
-    g = kCubeLevels[(v / 6) % 6] / 255.0f;
-    b = kCubeLevels[v % 6] / 255.0f;
-  }
-  else
-  {
-    float v = (8 + (index - 232) * 10) / 255.0f;
-    r = g = b = v;
-  }
+  unsigned char cr = 0;
+  unsigned char cg = 0;
+  unsigned char cb = 0;
+  jot_ui::palette_rgb(index, cr, cg, cb);
+  r = cr / 255.0f;
+  g = cg / 255.0f;
+  b = cb / 255.0f;
 }
 
 void UIGui::cell_colors(const UICell &cell, float &fr, float &fg_, float &fb, float &br,

@@ -94,3 +94,39 @@ TEST_CASE("UI cursor blink visibility forces a flush only on change", "[jot][ui]
   ui.set_cursor_blink_visible(true);
   REQUIRE(ui.cursor_needs_flush());
 }
+
+// The caret's terminal bytes. Composed in one place (UI::cursor_sequence) because
+// the show sequence used to be written unconditionally after the hide branch:
+// hide_cursor() then immediately re-showed the cursor, leaving a stray blinking
+// caret parked over the frame whenever a menu, palette or popup was up.
+TEST_CASE("Cursor sequences hide, or show with a steady shape", "[jot][ui]")
+{
+  Terminal term;
+  UI ui(&term);
+  ui.resize(40, 10);
+
+  // Visible: show plus the STEADY DECSCUSR shape. A blinking shape (1/5 q) here
+  // would blink at the terminal's rate, on top of jot's own cursor_blink_ms
+  // clock -- two clocks, which is the glitchy blink being fixed.
+  ui.set_cursor(3, 3, UICursorShape::Bar);
+  REQUIRE(ui.cursor_sequence() == "\033[?25h\033[6 q");
+  ui.set_cursor(3, 3, UICursorShape::Block);
+  REQUIRE(ui.cursor_sequence() == "\033[?25h\033[2 q");
+
+  // Hidden: hide, and nothing else. No trailing show sequence.
+  ui.hide_cursor();
+  REQUIRE(ui.cursor_sequence() == "\033[?25l");
+
+  // Blink phase off overrides the shape, and never emits a show.
+  ui.set_cursor(3, 3, UICursorShape::Bar);
+  ui.set_cursor_blink_visible(false);
+  REQUIRE(ui.cursor_sequence() == "\033[?25l");
+  // The hidden sequence must not contain a re-show anywhere in it.
+  REQUIRE(ui.cursor_sequence().find("?25h") == std::string::npos);
+
+  // Phase back on: the shape returns, and it is never a blinking DECSCUSR.
+  ui.set_cursor_blink_visible(true);
+  REQUIRE(ui.cursor_sequence() == "\033[?25h\033[6 q");
+  REQUIRE(ui.cursor_sequence().find("1 q") == std::string::npos);
+  REQUIRE(ui.cursor_sequence().find("5 q") == std::string::npos);
+}

@@ -7,13 +7,14 @@
 // keeps the editor pump repainting while anything is in flight, so the
 // animation advances at the monitor's refresh.
 #include "gui/gui.h"
+#include "gui/gui_fit.h"
 
 #include <SDL2/SDL.h>
 
 #include <algorithm>
 #include <cmath>
 
-void UIGui::notify_pane_scroll(int pane_id, int x, int y, int w, int h, int delta_rows)
+void UIGui::notify_pane_scroll(int pane_id, int x, int y, int w, int h, int delta_rows, bool jumped_x)
 {
   GuiScrollAnim &anim = scroll_anims_[pane_id];
   const int old_w = anim.x2 - anim.x1;
@@ -22,6 +23,10 @@ void UIGui::notify_pane_scroll(int pane_id, int x, int y, int w, int h, int delt
   anim.y1 = y;
   anim.x2 = x + std::max(0, w);
   anim.y2 = y + std::max(0, h);
+  // Refreshed every frame (the editor reports every pane every render), so it
+  // describes this frame only -- and it must be set before the delta_rows == 0
+  // early return, since a horizontal jump arrives with no vertical delta.
+  anim.jumped_x = jumped_x;
   // A different pane now owns this slot (split closed, buffers swapped): the
   // retained frames belong to the old occupant and must not slide out.
   if (old_w != anim.x2 - anim.x1 || old_h != anim.y2 - anim.y1)
@@ -143,21 +148,25 @@ void UIGui::advance_animations(float dt)
   }
 }
 
-float UIGui::cursor_pane_offset(int x, int y) const
+UIGui::CursorPaneView UIGui::cursor_pane_view(int x, int y) const
 {
+  CursorPaneView view;
   for (const auto &kv : scroll_anims_)
   {
     const GuiScrollAnim &a = kv.second;
-    if (std::abs(a.offset_px) < 0.25f)
+    const bool animating = std::abs(a.offset_px) >= 0.25f;
+    if (!animating && !a.jumped_x)
     {
       continue;
     }
     if (x >= a.x1 && x < a.x2 && y >= a.y1 && y < a.y2)
     {
-      return a.offset_px;
+      view.offset_px = a.offset_px;
+      view.jumped_x = a.jumped_x;
+      return view;
     }
   }
-  return 0.0f;
+  return view;
 }
 
 void UIGui::advance_cursor_glide(float dt)
@@ -170,9 +179,9 @@ void UIGui::advance_cursor_glide(float dt)
     cursor_target_y_ = -1.0f;
     return;
   }
-  const float soff = cursor_pane_offset(cursor_x, cursor_y);
+  const CursorPaneView pane = cursor_pane_view(cursor_x, cursor_y);
   const float tx = cursor_x * cell_w_;
-  const float ty = cursor_y * cell_h_ + soff;
+  const float ty = cursor_y * cell_h_ + pane.offset_px;
   cursor_target_x_ = tx;
   cursor_target_y_ = ty;
   if (cursor_px_ < 0.0f)
@@ -191,12 +200,13 @@ void UIGui::advance_cursor_glide(float dt)
     cursor_py_ = ty;
     return;
   }
-  const float k = 1.0f - std::exp(-dt / 0.045f);
-  cursor_px_ += dx * k;
-  cursor_py_ += dy * k;
-  if (std::abs(cursor_px_ - tx) < 0.05f && std::abs(cursor_py_ - ty) < 0.05f)
-  {
-    cursor_px_ = tx;
-    cursor_py_ = ty;
-  }
+  // While the pane is scrolling, the caret is placed rather than eased. The
+  // content slides on the pane's own curve (tau 60ms); easing the caret toward
+  // its cell on a second curve (tau 45ms) left it visibly trailing its line,
+  // which read as the caret being dragged along by the scroll. Riding the same
+  // offset keeps it glued to the text. A horizontal window jump has no slide to
+  // ride, so that axis snaps for the same reason.
+  const bool snap = pane.offset_px != 0.0f || pane.jumped_x;
+  cursor_px_ = jot_gui::glide_axis(cursor_px_, tx, dt, snap);
+  cursor_py_ = jot_gui::glide_axis(cursor_py_, ty, dt, snap);
 }

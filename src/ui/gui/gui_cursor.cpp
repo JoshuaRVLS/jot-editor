@@ -4,7 +4,10 @@
 // the block. invalidate() resets all paint state -- the next render snaps
 // instead of sliding stale animation offsets.
 #include "gui/gui.h"
+#include "ui/xterm_palette.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 
 void UIGui::paint_cursor()
@@ -18,11 +21,20 @@ void UIGui::paint_cursor()
     return;
   }
   const UICell &cell = grid[cursor_y][cursor_x];
-  float fr, fg_, fb, br, bg_, bb;
-  cell_colors(cell, fr, fg_, fb, br, bg_, bb);
-  // Cursor is drawn in the cell's foreground color (inverse video); with a
-  // block cursor the glyph is re-drawn on top in the background color. The
-  // glide position eases toward the cursor cell (+ pane scroll offset).
+  // The caret keeps the theme's cursor colours instead of borrowing the cell's
+  // syntax colour: a caret painted in a comment's grey, a keyword's blue, or
+  // black over a cyan selection is exactly what made it hard to find. Whichever
+  // member of the pair contrasts most with the cell's own background becomes the
+  // body; the other stays the ink for the glyph inside a block.
+  const int cell_bg = cell.reverse ? cell.fg : cell.bg;
+  const jot_ui::CursorColors cc = jot_ui::cursor_colors(cursor_fg, cursor_bg, cell_bg);
+  float fr, fg_, fb;
+  xterm_rgb(cc.fill, fr, fg_, fb);
+  float ir, ig, ib;
+  xterm_rgb(cc.ink, ir, ig, ib);
+  // Cursor is drawn in the cursor colour (inverse video); with a block cursor
+  // the glyph is re-drawn on top in the ink colour. The glide position eases
+  // toward the cursor cell (+ pane scroll offset).
   float x0 = cursor_x * cell_w_;
   float y0 = cursor_y * cell_h_;
   if (cursor_px_ >= 0.0f)
@@ -38,14 +50,17 @@ void UIGui::paint_cursor()
   }
   else
   {
-    push_quad(x0, y0, x0 + 2.0f, y0 + cell_h_, 0, 0, 1, 1, fr, fg_, fb, 1.0f);
+    // Proportional bar, never a hairline: 2 device px was invisible at the
+    // cell sizes a HiDPI display or a large font produce.
+    const float bar_w = std::max(2.0f, std::round(cell_w_ / 6.0f));
+    push_quad(x0, y0, x0 + bar_w, y0 + cell_h_, 0, 0, 1, 1, fr, fg_, fb, 1.0f);
   }
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, white_tex_);
   glUniform1i(glGetUniformLocation(program_, "u_tex"), 0);
   end_batch();
 
-  // Redraw the cursor cell's glyph in the background color so it stays
+  // Redraw the cursor cell's glyph in the ink color so it stays
   // legible inside the block.
   if (cursor_shape == UICursorShape::Block && !cell.ch.empty() && cell.ch != " ")
   {
@@ -70,7 +85,7 @@ void UIGui::paint_cursor()
         float gy = y0 + ascent_ - g.bearing_top;
         float gw = (g.u1 - g.u0) * kAtlasW;
         float gh = (g.v1 - g.v0) * kAtlasH;
-        push_quad(gx, gy, gx + gw, gy + gh, g.u0, g.v0, g.u1, g.v1, br, bg_, bb, 1.0f);
+        push_quad(gx, gy, gx + gw, gy + gh, g.u0, g.v0, g.u1, g.v1, ir, ig, ib, 1.0f);
       }
     }
     glActiveTexture(GL_TEXTURE0);

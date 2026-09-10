@@ -8,6 +8,11 @@ UI *Editor::ui_for_test()
   return ui;
 }
 
+void Editor::render_frame_for_test()
+{
+  render_frame();
+}
+
 int Editor::lua_float_count_for_test(const std::string &surface) const
 {
   if (!lua_api)
