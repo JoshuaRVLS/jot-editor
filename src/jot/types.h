@@ -5,6 +5,8 @@
 #include "text_features.h"
 #include <cstddef>
 #include <cstdint>
+
+#include "features/color_definitions.h"
 #include <map>
 #include <memory>
 #include <regex>
@@ -590,6 +592,13 @@ struct FileBuffer
   std::string syntax_cache_extension;
   std::size_t syntax_cache_line_count = 0;
   std::unordered_map<int, SyntaxLineCache> syntax_cache;
+  // Colour-preview variable definitions (--name: value, $name: value) for this
+  // buffer, and their version. Rebuilt lazily when the buffer is edited; the
+  // renderer's line cache keys on the version so a resolved var(--x) is never
+  // served from a scan that predates the edit that changed its definition.
+  jot_color::Definitions color_defs;
+  std::uint64_t color_defs_version = 0;
+  bool color_defs_dirty = true;
   SyntaxEngine syntax_engine = SYNTAX_ENGINE_UNKNOWN;
   std::string syntax_language_label;
 
@@ -604,6 +613,9 @@ struct FileBuffer
   {
     folds_dirty = true;
     ts_line_offsets.clear();
+    // A definition line may have changed, so the colour preview's variable index
+    // has to be rebuilt before it is next consulted.
+    color_defs_dirty = true;
     if (anchor_line < 0)
     {
       anchor_line = 0;

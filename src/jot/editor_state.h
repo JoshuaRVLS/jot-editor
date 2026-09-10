@@ -7,6 +7,7 @@
 #include "config.h"
 #include "discord_rpc.h"
 #include "features/color_codes.h"
+#include "features/color_definitions.h"
 #include "jot/workspace/git_panel_models.h"
 #include "editor_models.h"
 #include "event_loop.h"
@@ -215,10 +216,17 @@ struct EditorState
   bool show_indent_guides;
   // Inline colour preview (features/color_codes.cpp): its options are read from
   // config at point of use in render_buffer_content, which is what makes a
-  // settings change (or :reload) apply on the next frame with no plumbing. Only
-  // the scan memo lives here; it is content-hash validated, so it needs no
-  // invalidation and is shared across buffers (the key is the line's bytes).
+  // settings change (or :reload) apply on the next frame with no plumbing. The
+  // scan memo is content-hash validated, so it needs no invalidation and is
+  // shared across buffers (the key is the line's bytes).
   jot_color::SpanCache colorizer_cache;
+  // Colour-preview variable definitions (--name: value / $name: value) for the
+  // buffer being rendered, plus a version that is bumped on every rebuild so the
+  // line cache above re-resolves references instead of serving a stale colour.
+  jot_color::Definitions colorizer_defs;
+  std::uint64_t colorizer_defs_version = 0;
+  std::string colorizer_defs_path;
+  bool colorizer_defs_dirty = true;
   bool relative_line_numbers;
   bool highlight_cursor_line;
   int tab_scroll_index;

@@ -2,7 +2,12 @@ set(JOT_FEATURES_SOURCES
   features/autoclose.cpp
   features/bracket.cpp
   features/color_codes.cpp
+  features/color_definitions.cpp
+  features/color_functions.cpp
   features/color_names.cpp
+  features/color_space.cpp
+  features/color_tailwind.cpp
+  features/color_terminal_codes.cpp
   features/config.cpp
   features/cpp_assist.cpp
   features/folding.cpp

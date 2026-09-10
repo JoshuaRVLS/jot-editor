@@ -102,10 +102,20 @@ void Config::load_defaults()
   // the colour they name. mode is background | foreground | virtualtext.
   settings["colorizer"] = "true";
   settings["colorizer_mode"] = "background";
-  settings["colorizer_hex"] = "true";        // #RGB / #RGBA / #RRGGBB
-  settings["colorizer_hex_alpha"] = "false"; // #RRGGBBAA
-  settings["colorizer_names"] = "true";      // CSS names, e.g. red / LightBlue
-  settings["colorizer_functions"] = "true";  // rgb()/rgba()/hsl()/hsla()
+  settings["colorizer_hex"] = "true";          // #RGB / #RGBA / #RRGGBB
+  settings["colorizer_hex_alpha"] = "false";   // #RRGGBBAA
+  settings["colorizer_hex_qml"] = "false";     // #AARRGGBB (QML/Android order)
+  settings["colorizer_hex_no_hash"] = "false"; // RRGGBB with no "#"
+  settings["colorizer_hex_0x"] = "false";      // 0xRGB / 0xRRGGBB / 0xAARRGGBB
+  settings["colorizer_names"] = "true";        // CSS names, e.g. red / LightBlue
+  settings["colorizer_tailwind"] = "false";    // text-orange-500, bg-slate-50
+  settings["colorizer_xcolor"] = "false";      // LaTeX xcolor, e.g. red!30
+  // rgb()/rgba()/hsl()/hsla()/hwb()/lab()/lch()/oklch()/hsluv()/color().
+  settings["colorizer_functions"] = "true";
+  settings["colorizer_xterm"] = "false";     // #xNN and ANSI SGR escapes
+  settings["colorizer_ls_colors"] = "false"; // LS_COLORS/SGR snippets, =38;5;196
+  settings["colorizer_css_vars"] = "false";  // --name: value and var(--name)
+  settings["colorizer_sass"] = "false";      // $name: value and $name references
   // Restrict matches to string/comment bytes (off = every byte, like upstream).
   settings["colorizer_only_in_strings"] = "false";
   // Extensions to leave alone, e.g. ".min.css,.map".

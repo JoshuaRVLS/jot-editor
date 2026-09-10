@@ -124,14 +124,26 @@ of the idea behind [nvim-colorizer.lua](https://github.com/catgoose/nvim-coloriz
 
 Detected:
 
-- Hex: `#RGB`, `#RGBA`, `#RRGGBB` (`#RRGGBBAA` behind `colorizer_hex_alpha`).
-- CSS/X11 names: `red`, `WhiteSmoke` (UPPERCASE is not matched).
-- Functions: `rgb()`, `rgba()`, `hsl()`, `hsla()`, with percentages, the
-  modern space-and-slash syntax, and `deg`/`grad`/`rad`/`turn` angles.
+- **Hex**: `#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA` and `#AARRGGBB` (QML's
+  alpha-first order), `0xRGB` / `0xRRGGBB` / `0xAARRGGBB` (Android), and bare
+  `RRGGBB` with no `#`.
+- **Named**: CSS/X11 names (`red`, `WhiteSmoke`), and Tailwind class suffixes
+  (`text-orange-500`, `bg-slate-50`).
+- **CSS functions**: `rgb()`, `rgba()`, `hsl()`, `hsla()`, `hwb()`, `lab()`,
+  `lch()`, `oklch()`, `hsluv()`, `hsluvu()` and `color()` (srgb, srgb-linear,
+  display-p3, a98-rgb, prophoto-rgb, rec2020). Percentages, the modern
+  space-and-slash syntax, and `deg`/`grad`/`rad`/`turn` angles all work.
+- **Terminal codes**: the `#xNN` palette shorthand, and ANSI escapes in any of
+  their spellings (`\e[38;5;208m`, `\x1b[48;2;R;G;Bm`, `\033[…`, or a real ESC),
+  plus LS_COLORS/SGR snippets (`=38;5;196`, `=01;34`, `=48;2;0;0;255`).
+- **Variables**: CSS custom properties (`--brand: #ff8800`, `--x: 240,198,198`)
+  resolved through `var(--brand)`, and Sass variables (`$brand: #ff8800`)
+  resolved through `$brand`, including chains between them.
+- **LaTeX**: xcolor expressions such as `red!30` (30% red mixed toward white).
 
 Only whole literals match: `#fff` inside `#ffffff`, or `red` inside
-`text-red-500`, is not a colour, and neither is `0xabc123`. Alpha channels are
-ignored — the opaque colour is what gets shown.
+`text-red-500`, is not a colour. Alpha channels are ignored — the opaque colour
+is what gets shown.
 
 `colorizer_mode` picks how it is shown:
 
@@ -148,8 +160,24 @@ working on. It applies to the GUI and the terminal alike; the terminal needs a
 show the exact colour, and otherwise falls back to the closest xterm-256 entry
 — the `truecolor` setting can force either path.
 
+Every format has its own switch, so you only pay for what you want
+(`colorizer_hex`, `colorizer_hex_alpha`, `colorizer_hex_qml`,
+`colorizer_hex_no_hash`, `colorizer_hex_0x`, `colorizer_names`,
+`colorizer_tailwind`, `colorizer_xcolor`, `colorizer_functions`,
+`colorizer_xterm`, `colorizer_ls_colors`, `colorizer_css_vars`,
+`colorizer_sass`). The basic ones are on by default; the rest — including the
+looser hex forms, whose bare `RRGGBB` and `0x…` shapes are easy to mistake for
+identifiers — are opt-in.
+
 Colours are parsed over the visible window only and memoised per line, so
-minified one-line files stay cheap.
+minified one-line files stay cheap. Variable definitions are the one exception:
+they are indexed over the whole buffer, and only rebuilt after an edit (or when
+the file changes), never per frame.
+
+Note that a definition in another file is not followed: `@import`-ed or Sass
+`@use`-d variables resolve only when the file defining them is the one being
+rendered. Upstream follows imports with a file watcher per import; jot
+deliberately does not, so a preview never depends on a file you cannot see.
 
 ### LSP
 
@@ -493,10 +521,13 @@ Built-in defaults include `explorer_width=25`, `minimap_width=15`,
 `lsp_inlay_hints=true`, `lsp_inlay_type_hints=true`, `terminal_height=10`, and
 `debugger_height=12`. The colour preview adds `colorizer=true`,
 `colorizer_mode=background`, `colorizer_hex=true`, `colorizer_hex_alpha=false`,
-`colorizer_names=true`, `colorizer_functions=true`,
-`colorizer_only_in_strings=false` and `colorizer_exclude_filetypes=` (a comma
-separated list of file-name suffixes to skip, e.g. `.min.css,.map`), plus
-`truecolor=auto` for 24-bit output.
+`colorizer_hex_qml=false`, `colorizer_hex_no_hash=false`,
+`colorizer_hex_0x=false`, `colorizer_names=true`, `colorizer_tailwind=false`,
+`colorizer_xcolor=false`, `colorizer_functions=true`, `colorizer_xterm=false`,
+`colorizer_ls_colors=false`, `colorizer_css_vars=false`,
+`colorizer_sass=false`, `colorizer_only_in_strings=false` and
+`colorizer_exclude_filetypes=` (a comma separated list of file-name suffixes to
+skip, e.g. `.min.css,.map`), plus `truecolor=auto` for 24-bit output.
 
 The caret is configured with two keys:
 

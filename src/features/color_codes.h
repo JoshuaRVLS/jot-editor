@@ -11,10 +11,13 @@
 // clearer and needs no trie, so the parts that are ported faithfully are the
 // *rules*: which byte sequences count as colours, and where a match may start.
 //
-// Deliberately not ported (upstream has a parser for each): Tailwind names,
-// Sass variables, var(--x) resolution, LaTeX xcolor, xterm/LS_COLORS codes,
-// lab/lch/oklch/hwb/hsluv/color(), rgb(0xRRGGBB) hyprlang hex, and the
-// LSP documentColor bridge.
+// Covered here: hex (with and without "#", the QML/Android alpha-first forms,
+// 0x...), CSS/X11 names, Tailwind class suffixes and LaTeX xcolor expressions.
+// The CSS function family lives in color_functions, terminal codes in
+// color_terminal_codes, and variable resolution in color_definitions.
+//
+// Not ported: the LSP documentColor bridge, and following @import into other
+// files when resolving variables.
 //
 // Kept free of UI/editor types so it is unit testable on its own.
 
@@ -24,6 +27,8 @@
 
 namespace jot_color
 {
+  class Definitions;
+
   struct ColorSpan
   {
     int start = 0;         // byte offset of the first character of the literal
@@ -33,17 +38,30 @@ namespace jot_color
 
   struct Options
   {
-    // Hex forms, matching upstream's hex.default sub-keys.
-    bool hex3 = true;  // #RGB
-    bool hex4 = true;  // #RGBA
-    bool hex6 = true;  // #RRGGBB
-    bool hex8 = false; // #RRGGBBAA
+    // Hex forms, matching upstream's hex.* sub-keys.
+    bool hex3 = true;          // #RGB
+    bool hex4 = true;          // #RGBA
+    bool hex6 = true;          // #RRGGBB
+    bool hex8 = false;         // #RRGGBBAA
+    bool hex_aarrggbb = false; // #AARRGGBB (QML's alpha-first order)
+    bool hex_no_hash = false;  // RRGGBB at a token boundary, with no "#"
+    bool hex_0x = false;       // 0xRGB / 0xRRGGBB / 0xAARRGGBB
     // Named colours (CSS/X11). Case variants are separate switches upstream.
     bool names = true;
     bool names_camelcase = true;  // LightBlue
     bool names_uppercase = false; // LIGHTBLUE
-    // rgb()/rgba()/hsl()/hsla().
+    // Tailwind class suffixes, e.g. text-orange-500 / bg-slate-50.
+    bool tailwind = false;
+    // LaTeX xcolor expressions, e.g. red!30.
+    bool xcolor = false;
+    // rgb()/rgba()/hsl()/hsla()/hwb()/lab()/lch()/oklch()/hsluv()/color().
     bool functions = true;
+    // Terminal codes: #xNN, ANSI SGR escapes, LS_COLORS snippets.
+    bool xterm = false;
+    bool ls_colors = false;
+    // var(--name) and $name references, resolved through `definitions`.
+    bool css_var = false;
+    bool sass = false;
   };
 
   // How a detected colour is shown (upstream's display.mode).
@@ -62,13 +80,15 @@ namespace jot_color
   // (the visible window; a minified file is never walked in full). When `scope`
   // is non-null only bytes whose entry is non-zero may start a match -- the
   // renderer fills it with the string/comment bytes for the
-  // "only in strings and comments" option.
+  // "only in strings and comments" option. When `definitions` is non-null,
+  // var(--x) and $x references resolve against it.
   //
   // The result is sorted by `start` and never overlaps.
   std::vector<ColorSpan> scan_line(const std::string &line,
                                    int byte_limit,
                                    const Options &options,
-                                   const std::vector<std::uint8_t> *scope = nullptr);
+                                   const std::vector<std::uint8_t> *scope = nullptr,
+                                   const Definitions *definitions = nullptr);
 
   // #RGB / #RGBA expansion and the text colour to use on top of a solid fill,
   // exposed for the renderer (and its tests).
@@ -84,12 +104,16 @@ namespace jot_color
   {
   public:
     // Returns the spans for `line`, rescanning only when the content, the
-    // window, the options or the scope changed since the last call.
+    // window, the options, the scope or the definition set changed since the
+    // last call. `definitions_version` is bumped by the owner whenever the
+    // definition index is rebuilt, so resolved variables cannot go stale.
     const std::vector<ColorSpan> &spans_for(int line_index,
                                             const std::string &line,
                                             int byte_limit,
                                             const Options &options,
-                                            const std::vector<std::uint8_t> *scope);
+                                            const std::vector<std::uint8_t> *scope = nullptr,
+                                            const Definitions *definitions = nullptr,
+                                            std::uint64_t definitions_version = 0);
 
     void clear()
     {
@@ -103,6 +127,7 @@ namespace jot_color
       int limit = -1;
       std::uint32_t options_mask = 0;
       std::uint64_t scope_hash = 0;
+      std::uint64_t definitions_version = 0;
       std::vector<ColorSpan> spans;
     };
     std::vector<Entry> entries_;

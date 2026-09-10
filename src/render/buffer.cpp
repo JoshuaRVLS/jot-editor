@@ -218,6 +218,46 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
   bool colorizer_on = config.get_bool("colorizer", true);
   const jot_color::DisplayMode colorizer_mode =
       jot_color::parse_display_mode(config.get("colorizer_mode", "background"));
+  // Every switch is read here, once per frame: that is what makes a settings
+  // change (or :reload) take effect on the next frame with no plumbing.
+  jot_color::Options colorizer_options;
+  colorizer_options.hex3 = config.get_bool("colorizer_hex", true);
+  colorizer_options.hex4 = colorizer_options.hex3;
+  colorizer_options.hex6 = colorizer_options.hex3;
+  colorizer_options.hex8 = config.get_bool("colorizer_hex_alpha", false);
+  colorizer_options.hex_aarrggbb = config.get_bool("colorizer_hex_qml", false);
+  colorizer_options.hex_no_hash = config.get_bool("colorizer_hex_no_hash", false);
+  colorizer_options.hex_0x = config.get_bool("colorizer_hex_0x", false);
+  colorizer_options.names = config.get_bool("colorizer_names", true);
+  colorizer_options.names_camelcase = colorizer_options.names;
+  colorizer_options.tailwind = config.get_bool("colorizer_tailwind", false);
+  colorizer_options.xcolor = config.get_bool("colorizer_xcolor", false);
+  colorizer_options.functions = config.get_bool("colorizer_functions", true);
+  colorizer_options.xterm = config.get_bool("colorizer_xterm", false);
+  colorizer_options.ls_colors = config.get_bool("colorizer_ls_colors", false);
+  colorizer_options.css_var = config.get_bool("colorizer_css_vars", false);
+  colorizer_options.sass = config.get_bool("colorizer_sass", false);
+  const bool colorizer_only_in_strings = config.get_bool("colorizer_only_in_strings", false);
+
+  // Variable definitions are per buffer and only rebuilt when the buffer was
+  // edited, since building them walks every line.
+  const bool colorizer_wants_defs = colorizer_on
+                                    && (colorizer_options.css_var || colorizer_options.sass);
+  if (colorizer_wants_defs && buf.color_defs_dirty && !buf.is_lazy())
+  {
+    std::vector<std::string> all_lines;
+    all_lines.reserve((size_t)buf.line_count());
+    for (int li = 0; li < (int)buf.line_count(); li++)
+    {
+      all_lines.push_back(buf.line(li));
+    }
+    buf.color_defs.rebuild(all_lines, colorizer_options);
+    buf.color_defs_dirty = false;
+    buf.color_defs_version++;
+    // Resolved references are baked into cached spans, so the cache must not
+    // serve a line that was scanned against the previous definitions.
+    colorizer_cache.clear();
+  }
   if (colorizer_on && !buf.filepath.empty())
   {
     const std::vector<std::string> excluded = config.get_list("colorizer_exclude_filetypes");
@@ -574,22 +614,13 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
         // per frame) so a config change or `:reload` takes effect immediately;
         // the scan itself is memoised by content hash in colorizer_cache.
         std::vector<jot_color::ColorSpan> color_spans;
-        jot_color::Options colorizer_options;
         if (colorizer_on)
         {
-          colorizer_options.hex3 = config.get_bool("colorizer_hex", true);
-          colorizer_options.hex4 = colorizer_options.hex3;
-          colorizer_options.hex6 = colorizer_options.hex3;
-          colorizer_options.hex8 = config.get_bool("colorizer_hex_alpha", false);
-          colorizer_options.names = config.get_bool("colorizer_names", true);
-          colorizer_options.names_camelcase = colorizer_options.names;
-          colorizer_options.functions = config.get_bool("colorizer_functions", true);
           // Optional string/comment scoping (upstream has no equivalent; it is
           // useful in codebases where a bare hex-looking token is an id).
           std::vector<std::uint8_t> scope;
           const std::vector<std::uint8_t> *scope_ptr = nullptr;
-          if (config.get_bool("colorizer_only_in_strings", false)
-              && line.size() <= kBracketTokenAwareLineBytes)
+          if (colorizer_only_in_strings && line.size() <= kBracketTokenAwareLineBytes)
           {
             scope.assign(std::min((size_t)render_limit, line.size()), 0);
             for (size_t bi = 0; bi < scope.size(); bi++)
@@ -603,8 +634,10 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
             }
             scope_ptr = &scope;
           }
+          const jot_color::Definitions *defs = colorizer_wants_defs ? &buf.color_defs : nullptr;
+          const std::uint64_t defs_version = colorizer_wants_defs ? buf.color_defs_version : 0;
           color_spans = colorizer_cache.spans_for(
-              line_idx, line, render_limit, colorizer_options, scope_ptr);
+              line_idx, line, render_limit, colorizer_options, scope_ptr, defs, defs_version);
         }
         size_t color_span_cursor = 0;
         int line_bracket_depth = bracket_depth;

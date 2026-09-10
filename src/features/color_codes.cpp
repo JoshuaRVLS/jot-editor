@@ -1,6 +1,10 @@
 #include "features/color_codes.h"
 
+#include "features/color_definitions.h"
+#include "features/color_functions.h"
 #include "features/color_names.h"
+#include "features/color_tailwind.h"
+#include "features/color_terminal_codes.h"
 
 #include <algorithm>
 #include <cmath>
@@ -36,7 +40,13 @@ namespace
            || c == '-';
   }
 
-  inline std::uint32_t pack(int r, int g, int b)
+  // True when a token starting at `i` is a whole word (nothing word-ish before it).
+inline bool at_word_start(const std::string &line, size_t i)
+{
+  return i == 0 || !is_word_char(line[i - 1]);
+}
+
+inline std::uint32_t pack(int r, int g, int b)
   {
     return ((std::uint32_t)(r & 0xFF) << 16) | ((std::uint32_t)(g & 0xFF) << 8)
            | (std::uint32_t)(b & 0xFF);
@@ -347,7 +357,8 @@ namespace jot_color
   std::vector<ColorSpan> scan_line(const std::string &line,
                                    int byte_limit,
                                    const Options &options,
-                                   const std::vector<std::uint8_t> *scope)
+                                   const std::vector<std::uint8_t> *scope,
+                                   const Definitions *definitions)
   {
     std::vector<ColorSpan> spans;
     const size_t n = line.size();
@@ -387,7 +398,8 @@ namespace jot_color
           run++;
         }
         const bool enabled = (run == 3 && options.hex3) || (run == 4 && options.hex4)
-                             || (run == 6 && options.hex6) || (run == 8 && options.hex8);
+                             || (run == 6 && options.hex6)
+                             || (run == 8 && (options.hex8 || options.hex_aarrggbb));
         // The byte after the run must not continue the token: "#abcdefg" is an
         // identifier, not a colour, and a longer run is handled by `enabled`.
         const size_t after = i + 1 + run;
@@ -401,6 +413,14 @@ namespace jot_color
           {
             span.rgb = expand_short_hex(line.data() + i + 1, (int)run);
           }
+          else if (run == 8 && !options.hex8 && options.hex_aarrggbb)
+          {
+            // #AARRGGBB: the QML/Android order, alpha first.
+            const char *d = line.data() + i + 1;
+            span.rgb = pack(hex_value(d[2]) * 16 + hex_value(d[3]),
+                            hex_value(d[4]) * 16 + hex_value(d[5]),
+                            hex_value(d[6]) * 16 + hex_value(d[7]));
+          }
           else
           {
             const char *d = line.data() + i + 1;
@@ -412,65 +432,178 @@ namespace jot_color
           i = after;
           continue;
         }
-        i++;
-        continue;
-      }
-
-      // --- Functions and names ---------------------------------------------
-      const bool alpha = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
-      if (!alpha || prev_is_word_char(i))
-      {
-        i++;
-        continue;
-      }
-
-      if (options.functions)
-      {
-        // rgb( / rgba( / hsl( / hsla(
-        static const struct
+        // "#x208": the xterm palette index shorthand, which is also '#'-led.
+        if (options.xterm)
         {
-          const char *name;
-          int len;
-          bool hsl;
-        } kFunctions[] = {
-            {"rgba", 4, false}, {"rgb", 3, false}, {"hsla", 4, true}, {"hsl", 3, true}};
-        bool matched = false;
-        for (const auto &fn : kFunctions)
-        {
-          const size_t need = (size_t)fn.len;
-          if (i + need >= limit || line.compare(i, need, fn.name) != 0)
+          std::uint32_t xterm_rgb = 0;
+          size_t xterm_end = 0;
+          if (parse_xterm_code(line, i, limit, xterm_rgb, xterm_end))
           {
+            spans.push_back(ColorSpan{(int)i, (int)(xterm_end - i), xterm_rgb});
+            i = xterm_end;
             continue;
           }
-          // The character after the name must open the call; "rgbx(" is a name.
-          if (line[i + need] != '(')
+        }
+        i++;
+        continue;
+      }
+
+      // --- Non-letter-led forms --------------------------------------------
+      // These start with a byte the identifier walk below would skip, so they
+      // are tried first: 0x..., =38;5;..., $var, \e[..., var(--x).
+      const bool alpha = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+      const bool word_start = at_word_start(line, i);
+
+      // 0x-prefixed hex (Android/Java and friends): 0xRGB, 0xRRGGBB, 0xAARRGGBB.
+      if (options.hex_0x && c == '0' && i + 1 < limit && (line[i + 1] == 'x' || line[i + 1] == 'X'))
+      {
+        size_t run = 0;
+        while (i + 2 + run < limit && is_hex_digit(line[i + 2 + run]))
+        {
+          run++;
+        }
+        const size_t after = i + 2 + run;
+        const bool clean_end = after >= limit || !is_word_char(line[after]);
+        if ((run == 3 || run == 6 || run == 8) && clean_end)
+        {
+          const char *d = line.data() + i + 2;
+          auto nib = [&](size_t k) { return hex_value(d[k]); };
+          std::uint32_t rgb = 0;
+          if (run == 3)
           {
-            continue;
+            rgb = pack(nib(0) * 17, nib(1) * 17, nib(2) * 17);
+          }
+          else if (run == 6)
+          {
+            rgb = pack(nib(0) * 16 + nib(1), nib(2) * 16 + nib(3), nib(4) * 16 + nib(5));
+          }
+          else
+          {
+            // 0xAARRGGBB: alpha first, as in Android resources.
+            rgb = pack(nib(2) * 16 + nib(3), nib(4) * 16 + nib(5), nib(6) * 16 + nib(7));
+          }
+          spans.push_back(ColorSpan{(int)i, (int)(after - i), rgb});
+          i = after;
+          continue;
+        }
+      }
+
+      // LS_COLORS / SGR snippets ('=38;5;196').
+      if (options.ls_colors && c == '=')
+      {
+        std::uint32_t rgb = 0;
+        size_t end = 0;
+        if (parse_ls_colors(line, i, limit, rgb, end))
+        {
+          spans.push_back(ColorSpan{(int)i, (int)(end - i), rgb});
+          i = end;
+          continue;
+        }
+      }
+
+      // Escape sequences: a literal backslash form or a real ESC byte.
+      if (options.xterm && (c == '\\' || c == '\x1b'))
+      {
+        std::uint32_t rgb = 0;
+        size_t end = 0;
+        if (parse_xterm_code(line, i, limit, rgb, end))
+        {
+          spans.push_back(ColorSpan{(int)i, (int)(end - i), rgb});
+          i = end;
+          continue;
+        }
+      }
+
+      // Sass variable reference: $name.
+      if (definitions != nullptr && options.sass && c == '$' && word_start)
+      {
+        size_t n = i + 1;
+        while (n < limit && is_word_char(line[n]))
+        {
+          n++;
+        }
+        std::uint32_t rgb = 0;
+        if (n > i + 1 && definitions->lookup_sass(line.substr(i + 1, n - i - 1), rgb))
+        {
+          spans.push_back(ColorSpan{(int)i, (int)(n - i), rgb});
+          i = n;
+          continue;
+        }
+      }
+
+      // CSS custom-property reference: var(--name), tolerating a fallback.
+      if (definitions != nullptr && options.css_var && alpha && word_start
+          && line.compare(i, 4, "var(") == 0)
+      {
+        size_t n = i + 4;
+        while (n < limit && std::isspace((unsigned char)line[n]))
+        {
+          n++;
+        }
+        if (n + 1 < limit && line[n] == '-' && line[n + 1] == '-')
+        {
+          n += 2;
+          const size_t name_start = n;
+          while (n < limit && is_word_char(line[n]))
+          {
+            n++;
           }
           std::uint32_t rgb = 0;
-          const bool ok = fn.hsl ? parse_hsl_function(line, i + need, limit, rgb)
-                                 : parse_rgb_function(line, i + need, limit, rgb);
-          if (!ok)
+          if (n > name_start
+              && definitions->lookup_css(line.substr(name_start, n - name_start), rgb))
           {
+            // The span covers the whole call, closing paren included.
+            size_t close = n;
+            int depth = 1;
+            while (close < limit && depth > 0)
+            {
+              if (line[close] == '(')
+              {
+                depth++;
+              }
+              else if (line[close] == ')')
+              {
+                depth--;
+              }
+              close++;
+            }
+            const size_t span_end = depth == 0 ? close : n;
+            spans.push_back(ColorSpan{(int)i, (int)(span_end - i), rgb});
+            i = span_end;
             continue;
           }
-          // Report the whole call, up to and including its closing paren.
-          size_t close = i + need;
-          while (close < limit && line[close] != ')')
-          {
-            close++;
-          }
-          ColorSpan span;
-          span.start = (int)i;
-          span.len = (int)(close + 1 - i);
-          span.rgb = rgb;
-          spans.push_back(span);
-          i = close + 1;
-          matched = true;
-          break;
         }
-        if (matched)
+      }
+
+      if (!alpha)
+      {
+        i++;
+        continue;
+      }
+
+      // CSS colour functions: rgb(), hsl(), hwb(), lab(), lch(), oklch(),
+      // hsluv() and color(), each validating its own argument grammar.
+      if (word_start && options.functions)
+      {
+        std::uint32_t rgb = 0;
+        size_t end = 0;
+        if (parse_css_function(line, i, limit, rgb, end))
         {
+          spans.push_back(ColorSpan{(int)i, (int)(end - i), rgb});
+          i = end;
+          continue;
+        }
+      }
+
+      // #xNN, which is '#'-led and therefore handled with the hex forms.
+      if (word_start && options.xterm)
+      {
+        std::uint32_t rgb = 0;
+        size_t end = 0;
+        if (parse_xterm_code(line, i, limit, rgb, end))
+        {
+          spans.push_back(ColorSpan{(int)i, (int)(end - i), rgb});
+          i = end;
           continue;
         }
       }
@@ -478,25 +611,84 @@ namespace jot_color
       // A whole identifier: only its full spelling can be a colour name, so the
       // run is looked up once and then skipped. That rejects "red" in
       // "text-red-500" without any extra boundary bookkeeping.
-      size_t end = i;
-      while (end < limit && is_word_char(line[end]))
+      size_t ident_end = i;
+      while (ident_end < limit && is_word_char(line[ident_end]))
       {
-        end++;
+        ident_end++;
       }
-      if (options.names && end > i)
+      if (word_start && ident_end > i)
       {
+        const std::string word = line.substr(i, ident_end - i);
         std::uint32_t rgb = 0;
-        if (lookup_named_color(
-                line.data() + i, end - i, options.names_camelcase, options.names_uppercase, rgb))
+        // Bare hex (RRGGBB / RRGGBBAA) with no "#": only a whole word of the
+        // right length, so an identifier that happens to look hex-ish is not
+        // mistaken for a colour. A CSS name is never all hex digits, so
+        // trying this first cannot shadow one.
+        if (options.hex_no_hash && (word.size() == 6 || word.size() == 8)
+            && std::all_of(word.begin(), word.end(), is_hex_digit))
         {
-          ColorSpan span;
-          span.start = (int)i;
-          span.len = (int)(end - i);
-          span.rgb = rgb;
-          spans.push_back(span);
+          const char *d = word.data();
+          spans.push_back(ColorSpan{(int)i,
+                                    (int)word.size(),
+                                    pack(hex_value(d[0]) * 16 + hex_value(d[1]),
+                                         hex_value(d[2]) * 16 + hex_value(d[3]),
+                                         hex_value(d[4]) * 16 + hex_value(d[5]))});
+          i = ident_end;
+          continue;
+        }
+        // xcolor is checked first when it is on: "red!30" denotes 30% red, so
+        // the whole expression is the colour the reader means, not the word
+        // "red" inside it. (Upstream's fallback ordering would paint just
+        // "red" here, which loses the expression's actual value.)
+        if (options.xcolor && ident_end < limit && line[ident_end] == '!')
+        {
+          // xcolor: NAME!NN mixes toward white, so red!30 is 30% red.
+          size_t n = ident_end + 1;
+          const size_t digits_start = n;
+          while (n < limit && isdigit((unsigned char)line[n]))
+          {
+            n++;
+          }
+          const int pct = n > digits_start
+                              ? std::atoi(line.substr(digits_start, n - digits_start).c_str())
+                              : -1;
+          std::uint32_t base = 0;
+          if (pct >= 0 && pct <= 100
+              && lookup_named_color(line.data() + i,
+                                    ident_end - i,
+                                    options.names_camelcase,
+                                    options.names_uppercase,
+                                    base))
+          {
+            const double t = pct / 100.0;
+            const auto mix = [&](int shift)
+            {
+              return (int)std::lround(((base >> shift) & 0xFF) * t + 255.0 * (1.0 - t));
+            };
+            spans.push_back(ColorSpan{(int)i,
+                                      (int)(n - i),
+                                      pack(std::clamp(mix(16), 0, 255),
+                                           std::clamp(mix(8), 0, 255),
+                                           std::clamp(mix(0), 0, 255))});
+            i = n;
+            continue;
+          }
+        }
+        if (options.names
+            && lookup_named_color(line.data() + i,
+                                  ident_end - i,
+                                  options.names_camelcase,
+                                  options.names_uppercase,
+                                  rgb))
+        {
+          spans.push_back(ColorSpan{(int)i, (int)(ident_end - i), rgb});
+        }
+        else if (options.tailwind && lookup_tailwind(word, rgb))
+        {
+          spans.push_back(ColorSpan{(int)i, (int)(ident_end - i), rgb});
         }
       }
-      i = end > i ? end : i + 1;
+      i = ident_end > i ? ident_end : i + 1;
     }
 
     return spans;
@@ -506,9 +698,37 @@ namespace jot_color
   {
     std::uint32_t options_mask(const Options &o)
     {
-      return (o.hex3 ? 1u : 0u) | (o.hex4 ? 2u : 0u) | (o.hex6 ? 4u : 0u) | (o.hex8 ? 8u : 0u)
-             | (o.names ? 16u : 0u) | (o.names_camelcase ? 32u : 0u)
-             | (o.names_uppercase ? 64u : 0u) | (o.functions ? 128u : 0u);
+      // Every switch must set a bit: a cached line is only rescanned when this
+      // mask changes, so an option left out here would never take effect on a
+      // line that is already cached.
+      const bool flags[] = {o.hex3,
+                            o.hex4,
+                            o.hex6,
+                            o.hex8,
+                            o.hex_aarrggbb,
+                            o.hex_no_hash,
+                            o.hex_0x,
+                            o.names,
+                            o.names_camelcase,
+                            o.names_uppercase,
+                            o.tailwind,
+                            o.xcolor,
+                            o.functions,
+                            o.xterm,
+                            o.ls_colors,
+                            o.css_var,
+                            o.sass};
+      std::uint32_t mask = 0;
+      std::uint32_t bit = 1;
+      for (bool flag : flags)
+      {
+        if (flag)
+        {
+          mask |= bit;
+        }
+        bit <<= 1;
+      }
+      return mask;
     }
 
     // FNV-1a over the bytes we actually scan: cheap (a few hundred bytes per
@@ -529,7 +749,9 @@ namespace jot_color
                                                      const std::string &line,
                                                      int byte_limit,
                                                      const Options &options,
-                                                     const std::vector<std::uint8_t> *scope)
+                                                     const std::vector<std::uint8_t> *scope,
+                                                     const Definitions *definitions,
+                                                     std::uint64_t definitions_version)
   {
     static const std::vector<ColorSpan> kEmpty;
 
@@ -557,7 +779,7 @@ namespace jot_color
     {
       Entry &e = entries_[(size_t)slot];
       if (e.hash == hash && e.limit == byte_limit && e.options_mask == mask
-          && e.scope_hash == scope_hash)
+          && e.scope_hash == scope_hash && e.definitions_version == definitions_version)
       {
         return e.spans;
       }
@@ -576,7 +798,8 @@ namespace jot_color
     entry.limit = byte_limit;
     entry.options_mask = mask;
     entry.scope_hash = scope_hash;
-    entry.spans = scan_line(line, byte_limit, options, scope);
+    entry.definitions_version = definitions_version;
+    entry.spans = scan_line(line, byte_limit, options, scope, definitions);
     entries_.push_back(std::move(entry));
     line_to_slot_[(size_t)line_index] = (int)entries_.size() - 1;
     return entries_.back().spans;

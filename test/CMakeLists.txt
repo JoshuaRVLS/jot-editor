@@ -8,6 +8,8 @@ add_executable(jot_tests
   test_cursor_blink_wiring.cpp
   test_cursor_colors.cpp
   test_color_codes.cpp
+  test_color_formats.cpp
+  test_color_space.cpp
   test_colorizer_render.cpp
   test_truecolor_cells.cpp
   test_cursor_scroll.cpp
