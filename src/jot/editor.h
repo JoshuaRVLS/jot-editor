@@ -299,8 +299,7 @@ private:
   // when one is ready; returns false so the caller falls back to re-indent.
   bool lsp_format_active_buffer();
   // Applies server text edits (format results) to the buffer in place.
-  void apply_lsp_text_edits(const std::string &filepath,
-                            const std::vector<LSPTextEdit> &edits);
+  void apply_lsp_text_edits(const std::string &filepath, const std::vector<LSPTextEdit> &edits);
   LSPClient *ensure_lsp_for_file(const std::string &filepath);
   void notify_lsp_open(const std::string &filepath);
   // Attaches any already-open buffers whose language matches `language` to a
@@ -335,11 +334,8 @@ private:
   bool handle_lsp_status_input(int ch);
   // Live diagnostic totals for one attached language, summed over open buffers
   // (severity 1=Error 2=Warning 3=Info 4=Hint).
-  void lsp_server_diagnostic_counts(const std::string &language,
-                                    int *errors,
-                                    int *warnings,
-                                    int *infos,
-                                    int *hints) const;
+  void lsp_server_diagnostic_counts(
+      const std::string &language, int *errors, int *warnings, int *infos, int *hints) const;
   bool handle_quick_pick_input(int ch);
   void open_quick_pick(QuickPickKind kind,
                        const std::string &title,
@@ -434,12 +430,12 @@ private:
                     bool is_alt = false,
                     int original_ch = 0);
   void handle_mouse_input(int x,
-                            int y,
-                            bool is_click,
-                            bool is_scroll_up,
-                            bool is_scroll_down,
-                            bool is_scroll_left = false,
-                            bool is_scroll_right = false);
+                          int y,
+                          bool is_click,
+                          bool is_scroll_up,
+                          bool is_scroll_down,
+                          bool is_scroll_left = false,
+                          bool is_scroll_right = false);
 
   void handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
 
@@ -469,11 +465,8 @@ private:
   void apply_settings_value(const std::string &key, const std::string &value);
   bool handle_menu_bar_input(int ch);
   bool handle_menu_bar_mouse(int x, int y, bool is_click, bool is_motion);
-  bool handle_integrated_terminal_mouse(int x,
-                                        int y,
-                                        bool is_click,
-                                        bool is_motion,
-                                        bool is_click_release);
+  bool handle_integrated_terminal_mouse(
+      int x, int y, bool is_click, bool is_motion, bool is_click_release);
   bool handle_integrated_terminal_scroll(int x, int y, bool is_scroll_up, bool is_scroll_down);
   // Mouse selection in the integrated terminal: anchors live in full-space
   // row/col coordinates (see IntegratedTerminal::get_total_rows) so they
@@ -482,11 +475,8 @@ private:
   void update_terminal_selection_pos(int x, int y);
   void finish_terminal_selection();
   std::string terminal_selection_text();
-  bool handle_debugger_mouse(int x,
-                             int y,
-                             bool activate = true,
-                             bool wheel_up = false,
-                             bool wheel_down = false);
+  bool handle_debugger_mouse(
+      int x, int y, bool activate = true, bool wheel_up = false, bool wheel_down = false);
   // Debugger panel navigation: scrolls the output history, cycles the active
   // thread / frame of the current session. No-ops with a status message when
   // there is no stopped session to act on.
@@ -556,11 +546,10 @@ public:
                                   const std::string &line_text);
   // (shifted screen column, cell width) pairs for every hint on `line`,
   // mirroring the renderer's layout (used to un-shift mouse clicks).
-  std::vector<std::pair<int, int>>
-  lsp_inlay_hints_visual(const std::string &filepath,
-                         int line,
-                         const std::string &line_text,
-                         int tab_size);
+  std::vector<std::pair<int, int>> lsp_inlay_hints_visual(const std::string &filepath,
+                                                          int line,
+                                                          const std::string &line_text,
+                                                          int tab_size);
   void toggle_sidebar();
   // Drops the integrated-terminal mouse selection (panel close, terminal
   // close, and the test suite).
@@ -949,6 +938,11 @@ private:
   jot_discord::TemplateContext discord_template_context();
   jot_discord::PresenceState discord_presence_state();
   jot_discord::PresenceOptions discord_presence_options();
+  // Sets the status the status-line chip reports and repaints when it actually
+  // changed: the poll runs on a timer, so without this the chip would only
+  // appear on the next unrelated repaint (which, in an idle editor, may never
+  // come).
+  void discord_set_status(const std::string &status);
   // GUI frontend (jot --gui): builds the SDL3/OpenGL UIGui and the initial
   // pane. Throws std::runtime_error when the display or font is missing.
   void initialize_gui_ui();
@@ -984,8 +978,7 @@ public:
   void insert_string_for_test(const std::string &str);
   // Seeds the per-file inlay-hint cache directly (sorted on ingest like a
   // real server answer), so coordinate helpers can be unit-tested headless.
-  void set_inlay_hints_for_test(const std::string &filepath,
-                                std::vector<LSPInlayHint> hints);
+  void set_inlay_hints_for_test(const std::string &filepath, std::vector<LSPInlayHint> hints);
   // Headless mouse driver for tests: feeds a synthetic mouse event through
   // the real handle_mouse path (pane hit-test, selection, edge-panning).
   void mouse_event_for_test(int x, int y, int bstate);
@@ -1057,8 +1050,8 @@ public:
     {
       return 0;
     }
-    return std::max(0, ui->get_height() - status_height - topbar_height()
-                           - integrated_terminal_reserved_h());
+    return std::max(
+        0, ui->get_height() - status_height - topbar_height() - integrated_terminal_reserved_h());
   }
   bool terminal_resize_dragging_for_test() const
   {
@@ -1174,6 +1167,22 @@ public:
   std::string discord_command_for_test(const std::string &argument)
   {
     return discord_command(argument);
+  }
+  // A pending repaint: proves a status change reaches the screen instead of
+  // waiting for the next unrelated redraw.
+  bool needs_redraw_for_test() const
+  {
+    return needs_redraw;
+  }
+  void clear_needs_redraw_for_test()
+  {
+    needs_redraw = false;
+  }
+  // Emulates what a settings change does (apply_config_live marks the frame
+  // dirty), so a test can render a config change that has no other trigger.
+  void request_redraw_for_test()
+  {
+    needs_redraw = true;
   }
   // Overrides a setting the way :settings does, without writing it to the real
   // user config (tests run against a scratch JOT_CONFIG_HOME).

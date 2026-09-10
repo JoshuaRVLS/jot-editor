@@ -108,6 +108,82 @@ TEST_CASE("Discord status and assets report what to upload", "[jot]")
   REQUIRE(status.find(":discord assets") == std::string::npos); // no asset error yet
 }
 
+TEST_CASE("Discord status is visible in the status line", "[jot]")
+{
+  Editor &e = probe_editor();
+  e.config_set_for_test("discord_show_status", "true");
+  e.config_set_for_test("discord_exclude_workspaces", "");
+  // Start from the disabled state so enabling produces a real status change
+  // (the probe editor is shared across cases, so its status is not pristine).
+  e.config_set_for_test("discord_rpc", "false");
+  e.discord_poll_for_test(500);
+  REQUIRE(e.discord_status_for_test() == "off");
+
+  // A status change must request a repaint on its own: the poll runs on a
+  // timer, so without this the chip would not show up until the user happened
+  // to trigger a redraw by typing.
+  e.config_set_for_test("discord_rpc", "true");
+  e.clear_needs_redraw_for_test();
+  e.discord_poll_for_test(1000);
+  REQUIRE(e.discord_status_for_test() == "connecting");
+  REQUIRE(e.needs_redraw_for_test());
+
+  // And the chip really is painted: scan the status rows for the label. No
+  // Discord runs here, so the session reports the connecting state.
+  e.render_for_test();
+  UI *ui = e.ui_for_test();
+  REQUIRE(ui != nullptr);
+  const int height = e.ui_height_for_test();
+  const auto row_text = [&](int y)
+  {
+    std::string text;
+    for (int x = 0; x < e.ui_width_for_test(); x++)
+    {
+      const UICell *cell = ui->cell_at(x, y);
+      text += cell ? cell->ch : " ";
+    }
+    return text;
+  };
+  std::string status_rows;
+  for (int y = height - 2; y < height; y++)
+  {
+    status_rows += "\n  row " + std::to_string(y) + ": [" + row_text(y) + "]";
+  }
+  INFO("status rows:" << status_rows);
+  REQUIRE(status_rows.find("Discord") != std::string::npos);
+
+  // No cell in the status rows may hold a control character: the status line is
+  // assembled from byte-offset spans, and a stray newline would move the
+  // terminal cursor and shear the row apart.
+  for (int y = height - 2; y < height; y++)
+  {
+    for (int x = 0; x < e.ui_width_for_test(); x++)
+    {
+      const UICell *cell = ui->cell_at(x, y);
+      if (cell && (cell->ch == "\n" || cell->ch == "\r" || cell->ch == "\t"))
+      {
+        INFO("control character cell at column " << x << " row " << y);
+        REQUIRE(cell->ch == " ");
+      }
+    }
+  }
+
+  // Turning the chip off removes it (the config change dirties the frame the
+  // way apply_config_live does).
+  e.config_set_for_test("discord_show_status", "false");
+  e.request_redraw_for_test();
+  e.render_for_test();
+  std::string hidden_rows;
+  for (int y = height - 2; y < height; y++)
+  {
+    hidden_rows += row_text(y);
+  }
+  REQUIRE(hidden_rows.find("Discord") == std::string::npos);
+
+  e.config_set_for_test("discord_show_status", "true");
+  e.render_for_test();
+}
+
 TEST_CASE("Discord presence session clears and restores across idle periods", "[jot]")
 {
   Editor &e = probe_editor();

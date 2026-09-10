@@ -302,6 +302,18 @@ jot_discord::PresenceOptions Editor::discord_presence_options()
   return options;
 }
 
+void Editor::discord_set_status(const std::string &status)
+{
+  if (discord_status == status)
+  {
+    return;
+  }
+  discord_status = status;
+  // The status line is immediate-mode: a change has to ask for a repaint or the
+  // chip stays stale until something else happens to redraw the bottom rows.
+  needs_redraw = true;
+}
+
 void Editor::poll_discord_rpc(long long now_ms)
 {
   const bool enabled = config.get_bool("discord_rpc", true);
@@ -312,7 +324,7 @@ void Editor::poll_discord_rpc(long long now_ms)
       discord_rpc.clear_presence();
     }
     discord_rpc.disconnect();
-    discord_status = enabled ? "excluded" : "off";
+    discord_set_status(enabled ? "excluded" : "off");
     return;
   }
 
@@ -321,15 +333,15 @@ void Editor::poll_discord_rpc(long long now_ms)
 
   if (!discord_rpc.last_error().empty())
   {
-    discord_status = "error";
+    discord_set_status("error");
   }
   else if (discord_rpc.is_connected())
   {
-    discord_status = "on";
+    discord_set_status("on");
   }
   else
   {
-    discord_status = "connecting";
+    discord_set_status("connecting");
   }
 
   // Idle: upstream clears the presence when the window has been unfocused for
@@ -344,7 +356,7 @@ void Editor::poll_discord_rpc(long long now_ms)
     {
       discord_idle_cleared = true;
       discord_rpc.clear_presence();
-      discord_status = "idle";
+      discord_set_status("idle");
     }
     return;
   }
@@ -406,8 +418,7 @@ std::string Editor::discord_command(const std::string &argument)
     config.save();
     discord_rpc.clear_presence();
     discord_rpc.disconnect();
-    discord_status = "off";
-    needs_redraw = true;
+    discord_set_status("off");
     return report("Discord presence disabled");
   }
   if (arg == "reconnect")
@@ -421,8 +432,7 @@ std::string Editor::discord_command(const std::string &argument)
   {
     discord_rpc.clear_presence();
     discord_rpc.disconnect();
-    discord_status = "off";
-    needs_redraw = true;
+    discord_set_status("off");
     return report("Disconnected from Discord");
   }
   if (arg == "assets")

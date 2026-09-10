@@ -65,17 +65,37 @@ if [ ! -S "$WORK/runtime/discord-ipc-0" ]; then
 fi
 
 echo "discord smoke: booting $BIN with a fake Discord on discord-ipc-0"
+# The pty output is kept: it is the only place the *terminal* rendering can be
+# inspected, and the status-line chip lives there. `stty` first because a pty
+# with no size (what `script` gives an unattended shell) makes jot render an
+# empty frame, and there is no terminal emulator here to answer its size probe.
 XDG_RUNTIME_DIR="$WORK/runtime" \
   JOT_CONFIG_HOME="$WORK/home" \
   JOT_CACHE_HOME="$WORK/home" \
   timeout "$SECS" \
-  script -qec "$BIN $WORK/project/src/main.rs" /dev/null >/dev/null 2>"$WORK/err.log"
+  script -qec "stty rows 40 cols 120; $BIN $WORK/project/src/main.rs" "$WORK/screen.log" \
+  >/dev/null 2>"$WORK/err.log"
 STATUS=$?
 if [ "$STATUS" -ne 124 ] && [ "$STATUS" -ne 0 ]; then
   echo "discord smoke: FAIL — jot exited with $STATUS" >&2
   sed -n '1,20p' "$WORK/err.log" >&2
   exit 1
 fi
+
+# The terminal status line must show the presence chip (the chip is what tells
+# the user the feature is alive at all).
+if ! python3 - "$WORK/screen.log" <<'PY'
+import re, sys
+raw = open(sys.argv[1], "rb").read().decode("utf-8", "replace")
+text = re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", raw)
+text = re.sub(r"\x1b\][^\x07\x1b]*(\x07|\x1b\\)", "", text)
+sys.exit(0 if "Discord" in text else 1)
+PY
+then
+  echo "discord smoke: FAIL — no Discord chip in the terminal status line" >&2
+  exit 1
+fi
+echo "discord smoke: ok — Discord chip visible in the terminal status line"
 
 if [ ! -s "$FRAMES" ]; then
   echo "discord smoke: FAIL — no IPC frames reached the fake Discord" >&2
