@@ -24,6 +24,15 @@ void Editor::pump_gui_events()
 
   constexpr int kMaxDrainPerWake = 128;
   int drained = 0;
+  // Coalesce resize events within a wake: a drag-resize can queue several
+  // per pump (compositor configure batching), and only the final size
+  // matters. Applying each one redundantly re-runs the grid resize, pane
+  // layout, and UIResize autocmds per event; the defensive re-sync below
+  // re-fits from the live window size anyway, so the intermediate events
+  // are pure waste.
+  bool resize_pending = false;
+  int resize_w = 0;
+  int resize_h = 0;
   for (;;)
   {
     if (gui->quit_requested())
@@ -35,6 +44,13 @@ void Editor::pump_gui_events()
     if (!gui->poll_event(ev))
     {
       break;
+    }
+    if (ev.type == EVENT_RESIZE)
+    {
+      resize_pending = true;
+      resize_w = ev.resize.width;
+      resize_h = ev.resize.height;
+      continue;
     }
     // GUI-only: Ctrl+, toggles the cell-based settings menu (same surface
     // as the :settings command, rendered by the normal cell grid).
@@ -67,6 +83,14 @@ void Editor::pump_gui_events()
     {
       break;
     }
+  }
+  if (resize_pending)
+  {
+    Event rsz;
+    rsz.type = EVENT_RESIZE;
+    rsz.resize.width = resize_w;
+    rsz.resize.height = resize_h;
+    handle_terminal_event(rsz);
   }
 
   // While a scroll/cursor animation is in flight the GUI keeps repainting

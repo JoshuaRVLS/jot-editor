@@ -235,19 +235,22 @@ void UI::resize(int w, int h)
   cursor_shape = UICursorShape::Block;
   cursor_hidden = true;
   cursor_dirty = true;
+  // Resize the grid in place. The old code re-blanked every cell here, but
+  // every resize path repaints the whole frame right after (EVENT_RESIZE
+  // sets needs_redraw, whose render calls UI::clear() then repaints all
+  // rows), so that O(w*h) pass was pure waste -- and during a live
+  // drag-resize it ran once per compositor configure. Freshly added cells
+  // are default-constructed and get painted over before anything reads
+  // them.
   grid.resize(height);
   last_grid.resize(height);
   for (int y = 0; y < height; y++)
   {
     grid[y].resize(width);
     last_grid[y].resize(width);
-    for (int x = 0; x < width; x++)
-    {
-      grid[y][x] = {" ", default_fg, default_bg, false, false, false};
-      last_grid[y][x] = {" ", default_fg, default_bg, false, false, false};
-    }
   }
-  // The grid was just blanked, so the next frame must repaint every row.
+  // The grid was just re-dimensioned, so the next frame must repaint
+  // every row.
   mark_all_rows_dirty();
   // Only invalidate (which calls term->clear()) when the dimensions actually
   // changed, to avoid an extra ESC[2J when the Editor constructor and
