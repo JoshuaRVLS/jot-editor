@@ -259,6 +259,86 @@ void HostCoreAPI::insert_text(const std::string &text)
   editor.insert_string(text);
 }
 
+bool HostCoreAPI::apply_edit(int start_line,
+                             int start_col,
+                             int end_line,
+                             int end_col,
+                             const std::string &text)
+{
+  if (editor.buffers.empty())
+  {
+    return false;
+  }
+  FileBuffer &buf = editor.get_buffer();
+  if (buf.is_lazy())
+  {
+    buf.materialize();
+  }
+  const int line_count = (int)buf.line_count();
+  if (line_count == 0)
+  {
+    return false;
+  }
+
+  auto clamp_pos = [&](int line, int col, Cursor &out)
+  {
+    out.y = std::clamp(line, 0, line_count - 1);
+    out.x = std::clamp(col, 0, (int)buf.line(out.y).size());
+  };
+  Cursor start{0, 0};
+  Cursor end{0, 0};
+  clamp_pos(start_line - 1, start_col - 1, start);
+  clamp_pos(end_line - 1, end_col - 1, end);
+  if (end.y < start.y || (end.y == start.y && end.x < start.x))
+  {
+    std::swap(start, end);
+  }
+
+  editor.save_state();
+
+  // Split the replacement into lines, then splice: head of the first line is
+  // kept, tail of the last line is kept, everything between is replaced.
+  std::vector<std::string> pieces;
+  size_t from = 0;
+  while (true)
+  {
+    const size_t nl = text.find('\n', from);
+    if (nl == std::string::npos)
+    {
+      pieces.push_back(text.substr(from));
+      break;
+    }
+    pieces.push_back(text.substr(from, nl - from));
+    from = nl + 1;
+  }
+
+  const std::string head = buf.line(start.y).substr(0, (size_t)start.x);
+  const std::string tail = buf.line(end.y).substr((size_t)end.x);
+  pieces.front() = head + pieces.front();
+  pieces.back() += tail;
+
+  buf.lines.erase(buf.lines.begin() + start.y, buf.lines.begin() + end.y + 1);
+  buf.lines.insert(buf.lines.begin() + start.y, pieces.begin(), pieces.end());
+
+  buf.cursor.y = start.y + (int)pieces.size() - 1;
+  buf.cursor.x = (int)(pieces.back().size() - tail.size());
+  buf.preferred_x = buf.cursor.x;
+  buf.selection.active = false;
+  buf.modified = true;
+  buf.is_placeholder = false;
+  editor.ensure_cursor_visible();
+  editor.needs_redraw = true;
+  if (editor.lua_api)
+  {
+    editor.lua_api->on_buffer_change(buf.filepath, "");
+  }
+  if (!buf.filepath.empty())
+  {
+    editor.notify_lsp_change(buf.filepath);
+  }
+  return true;
+}
+
 void HostCoreAPI::insert_char_at_carets(char c)
 {
   if (editor.buffers.empty())

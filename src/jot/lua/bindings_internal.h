@@ -186,6 +186,13 @@ namespace lua_bind
   int l_filetree_children(lua_State *L);
   int l_buf_select(lua_State *L);
   int l_buf_clear_selection(lua_State *L);
+  int l_buf_apply_edit(lua_State *L);
+  int l_file_list(lua_State *L);
+  int l_file_read(lua_State *L);
+  int l_editor_default_tab(lua_State *L);
+  int l_editor_default_shift_tab(lua_State *L);
+  int l_lsp_register_snippet_handler(lua_State *L);
+  int l_lsp_accept_completion(lua_State *L);
   int l_buf_lines(lua_State *L);
   int l_timer_set_timeout(lua_State *L);
   int l_timer_set_interval(lua_State *L);

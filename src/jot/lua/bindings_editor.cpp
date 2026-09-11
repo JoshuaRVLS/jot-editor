@@ -18,6 +18,26 @@ namespace lua_bind
                                   (int)luaL_optinteger(L, 2, 5000));
     return 0;
   }
+  int l_file_list(lua_State *L)
+  {
+    api(L).push_file_list(L);
+    return 1;
+  }
+  int l_file_read(lua_State *L)
+  {
+    api(L).push_file_read(L);
+    return lua_isnil(L, -1) ? 2 : 1;
+  }
+  int l_editor_default_tab(lua_State *L)
+  {
+    api(L).default_tab_from_lua(L);
+    return 0;
+  }
+  int l_editor_default_shift_tab(lua_State *L)
+  {
+    api(L).default_shift_tab_from_lua(L);
+    return 0;
+  }
   int l_get_buffer(lua_State *L)
   {
     lua_pushstring(L, api(L).get_current_buffer().c_str());

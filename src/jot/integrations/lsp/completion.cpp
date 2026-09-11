@@ -543,6 +543,10 @@ bool Editor::apply_selected_lsp_completion()
     text.erase(marker_pos, 1);
   }
 
+  // Keep the raw snippet text (tabstops and all) for the bundled snippet
+  // engine, which expands it with real placeholders; `text` is the flattened
+  // fallback used when no engine handler is registered.
+  const std::string raw_snippet_text = text;
   if (item.insert_text_format == 2)
   {
     SnippetExpansion expansion = expand_lsp_snippet(text);
@@ -555,18 +559,16 @@ bool Editor::apply_selected_lsp_completion()
     return false;
   }
 
-  save_state();
-
-  std::string &line = buf.line_mut(buf.cursor.y);
-  int cursor = std::clamp(buf.cursor.x, 0, (int)line.size());
+  const std::string &line_ref = buf.line(buf.cursor.y);
+  const int cursor = std::clamp(buf.cursor.x, 0, (int)line_ref.size());
   int start = cursor;
   int end = cursor;
 
   if (item.has_text_edit_range && item.edit_start_line == buf.cursor.y
       && item.edit_end_line == buf.cursor.y)
   {
-    start = std::clamp(item.edit_start_char, 0, (int)line.size());
-    end = std::clamp(item.edit_end_char, start, (int)line.size());
+    start = std::clamp(item.edit_start_char, 0, (int)line_ref.size());
+    end = std::clamp(item.edit_end_char, start, (int)line_ref.size());
   }
   else if (lsp_completion_replace_start.y == buf.cursor.y)
   {
@@ -574,24 +576,45 @@ bool Editor::apply_selected_lsp_completion()
   }
   else
   {
-    while (start > 0 && is_identifier_char(line[start - 1]))
+    while (start > 0 && is_identifier_char(line_ref[start - 1]))
     {
       start--;
     }
   }
 
+  // Snippet items (`insert_text_format = 2`) expand through the bundled
+  // snippet engine when it registered a handler: it owns tabstops, choices,
+  // mirrors and nested snippets, which a plain-text expansion cannot express.
+  // 1-based line/column, end-exclusive, matching jot.buffer.apply_edit.
+  if (item.insert_text_format == 2 && lua_api
+      && lua_api->run_lsp_snippet_handler(raw_snippet_text,
+                                          buf.cursor.y + 1,
+                                          start + 1,
+                                          buf.cursor.y + 1,
+                                          end + 1))
+  {
+    hide_lsp_completion();
+    needs_redraw = true;
+    return true;
+  }
+
+  save_state();
+
+  std::string &line = buf.line_mut(buf.cursor.y);
+  int insert_at = cursor;
+
   if (start < end)
   {
     line.erase(start, end - start);
-    cursor = start;
+    insert_at = start;
   }
   else if (start < cursor)
   {
     line.erase(start, cursor - start);
-    cursor = start;
+    insert_at = start;
   }
-  std::string tail = line.substr(cursor);
-  line.erase(cursor);
+  std::string tail = line.substr(insert_at);
+  line.erase(insert_at);
 
   size_t segment_start = 0;
   std::vector<std::string> inserted_lines;
@@ -611,7 +634,7 @@ bool Editor::apply_selected_lsp_completion()
     inserted_lines.push_back("");
   }
 
-  line.insert(cursor, inserted_lines.front());
+  line.insert(insert_at, inserted_lines.front());
   int insert_line = buf.cursor.y;
   for (size_t i = 1; i < inserted_lines.size(); i++)
   {
@@ -621,7 +644,7 @@ bool Editor::apply_selected_lsp_completion()
 
   int target_offset = cursor_offset >= 0 ? cursor_offset : (int)text.size();
   int target_line_delta = 0;
-  int target_col = cursor;
+  int target_col = insert_at;
   for (int i = 0; i < target_offset && i < (int)text.size(); i++)
   {
     if (text[i] == '\n')

@@ -567,6 +567,11 @@ public:
                                                           int line,
                                                           const std::string &line_text,
                                                           int tab_size);
+  // The modeless Tab / Shift+Tab actions. Exposed so keymaps that shadow
+  // those chords (the bundled snippet engine) can fall back to exactly the
+  // editor's own behavior instead of re-deriving it in Lua.
+  void apply_default_tab();
+  void apply_default_shift_tab();
   void toggle_sidebar();
   // Drops the integrated-terminal mouse selection (panel close, terminal
   // close, and the test suite).

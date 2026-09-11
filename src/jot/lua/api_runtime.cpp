@@ -50,6 +50,11 @@ void LuaAPI::cleanup()
     luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, lsp_hover_ui_ref_);
     lsp_hover_ui_ref_ = LUA_NOREF;
   }
+  if (lsp_snippet_handler_ref_ != LUA_NOREF)
+  {
+    luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, lsp_snippet_handler_ref_);
+    lsp_snippet_handler_ref_ = LUA_NOREF;
+  }
   for (auto &[name, ref] : lua_ui_handlers_)
   {
     (void)name;
@@ -95,6 +100,11 @@ void LuaAPI::clear_runtime_state()
   pending_debugger_session = -1;
   edit_snapshots_.clear();
   last_edit_ = LuaEditDelta{};
+  if (lsp_snippet_handler_ref_ != LUA_NOREF && lua_state)
+  {
+    luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, lsp_snippet_handler_ref_);
+    lsp_snippet_handler_ref_ = LUA_NOREF;
+  }
 }
 bool LuaAPI::load_script_path(const std::string &module, const std::string &path)
 {
@@ -357,6 +367,36 @@ bool LuaAPI::load_markdown_runtime(lua_State *L)
     }
   }
   return load_bundled_lua_file(L, "features/markdown/init.lua", "Markdown preview");
+}
+
+bool LuaAPI::load_snippet_runtime(lua_State *L)
+{
+  // The snippet engine is a module tree (features/snippet/*.lua): pre-load each
+  // module into package.loaded["jot_snip.*"] in dependency order, then run
+  // init.lua — the only file that executes, registering commands, keymaps and
+  // the LSP snippet hook.
+  static const char *kModules[] = {
+      "features/snippet/config.lua",
+      "features/snippet/doc.lua",
+      "features/snippet/env.lua",
+      "features/snippet/nodes.lua",
+      "features/snippet/parser.lua",
+      "features/snippet/store.lua",
+      "features/snippet/json.lua",
+      "features/snippet/session.lua",
+      "features/snippet/expand.lua",
+      "features/snippet/loaders.lua",
+      "features/snippet/keymaps.lua",
+      "features/snippet/lsp.lua",
+  };
+  for (const char *rel : kModules)
+  {
+    if (!jot_lua::load_bundled_lua_module(L, rel, "jot_snip"))
+    {
+      return false;
+    }
+  }
+  return load_bundled_lua_file(L, "features/snippet/init.lua", "Snippets");
 }
 
 // Recursively converts one native FileNode (and its children) into a Lua

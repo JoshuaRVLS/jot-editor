@@ -324,6 +324,42 @@ The preview is driven from Lua — `jot.md.start/stop/toggle/refresh`,
 `jot.preview.*` transport, so a plugin can re-implement or extend any part of
 it. See [LUA_API.md](LUA_API.md#markdown-preview).
 
+### Snippets
+
+A full snippet engine, ported from LuaSnip's model. Snippets are matched
+against the text before the caret, expanded in place, and then navigated
+placeholder by placeholder with the caret — typing in one occurrence of a
+tabstop updates every mirror.
+
+- **Formats** — every snippet-text form the LSP and VSCode define: `$1`,
+  `${1}`, `${1:default}`, `${1|one,two|}` choices, `${1/(.*)/\U\1/}` transforms
+  (with `\u`/`\l`/`\U`/`\L`/`\E` and the `/upcase`, `/downcase`, `/capitalize`,
+  `/camelcase`, `/pascalcase`, `/snakecase`, `/kebabcase` format field), and the
+  `TM_*` / `LS_*` variables (`${TM_FILENAME}`, `${TM_LINE_NUMBER}`, …).
+- **Packs** — Lua snippet files (`snip_env` with `s()`, `t()`, `i()`, `c()`,
+  `f()`, `d()`, `r()`, `rep()`, `fmt()`, …), VSCode `.json` / `.code-snippets`
+  and snipMate `.snippets` files, looked up under `~/.config/jot/snippets`,
+  `<workspace>/.jot/snippets` and anything in `snippet_paths`.
+- **Triggers** — plain word-boundary triggers, Lua-pattern triggers
+  (`regTrig`), function triggers, `priority`, `condition` / `show_condition`,
+  autosnippets, and the `extends` graph so a filetype can inherit another's
+  snippets.
+- **Keymaps** — `Tab` expands a trigger or jumps to the next placeholder,
+  `Shift+Tab` jumps back, and `Ctrl+E` / `Ctrl+Shift+E` cycle a choice while the
+  session is live. All four fall back to the editor's own behaviour when no
+  snippet applies, so `Tab` still indents and `Shift+Tab` still outdents.
+- **LSP** — when a server answers a completion with `insertTextFormat = 2`,
+  jot hands the snippet text to the engine, so accepting it expands with real
+  tabstops, mirrors and choices instead of a flat text insert.
+- **Commands** — `:Snippets` (pick one for the current filetype), `:Snippet
+  <trigger>` (expand a literal trigger), `:SnippetList`, `:SnippetReload`,
+  `:SnippetToggle`.
+
+Everything is available from Lua as `jot.snip` (constructors, registry,
+`expand` / `expand_or_jump`, `jump` / `change_choice`, `env`, loaders), so a
+plugin can register snippets at runtime or take over the engine. See
+[LUA_API.md](LUA_API.md#snippets).
+
 ### Debugger
 
 - Native Debug Adapter Protocol client with GDB/LLDB launch commands and
@@ -559,6 +595,9 @@ it -- the buffer stays fully visible while you type.
 **Markdown:** `:MarkdownPreview` `:MarkdownPreviewStop`
 `:MarkdownPreviewToggle`
 
+**Snippets:** `:Snippets` `:Snippet <trigger>` `:SnippetList` `:SnippetReload`
+`:SnippetToggle`
+
 **Debugger:** `:debug <program>` `:debuggdb` `:debuglldb` `:debugconfig`
 `:debugattach <pid>` `:debugpanel` `:debugstop|restart|continue|pause`
 `:debugstep|next|out` `:debugthreads` `:debugmemory` `:debugdisasm`
@@ -635,6 +674,14 @@ The markdown preview adds `markdown_preview_auto_start=false`,
 `markdown_preview_echo_preview_url`, `markdown_preview_custom_css`,
 `markdown_preview_images_path`, `markdown_preview_open_timeout_ms`, and the
 `markdown_preview_option_*` switches listed above.
+
+The snippet engine adds `snippet_enabled=true`, `snippet_auto_expand=false`,
+`snippet_tab_key=Tab`, `snippet_backtab_key=Shift+Tab`,
+`snippet_choice_next_key=Ctrl+E`, `snippet_choice_prev_key=Ctrl+Shift+E`,
+`snippet_highlight=true`, `snippet_history=true`, `snippet_history_size=32`,
+`snippet_load_vscode=true`, `snippet_load_snipmate=true`, `snippet_paths=`,
+and `snippet_filetypes=` (a comma-separated `ext=filetype` override list, e.g.
+`.tsx=typescriptreact`).
 
 The caret is configured with two keys:
 

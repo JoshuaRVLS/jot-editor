@@ -606,16 +606,7 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
   if (ch == '\t' || ch == 9)
   {
     hide_lsp_completion();
-    auto &buf = get_buffer();
-    if (buf.selection.active)
-    {
-      indent_selection();
-    }
-    else
-    {
-      insert_char('\t');
-    }
-    needs_redraw = true;
+    apply_default_tab();
     return;
   }
 
@@ -623,8 +614,7 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
   if (ch == 1017)
   {
     hide_lsp_completion();
-    outdent_selection();
-    needs_redraw = true;
+    apply_default_shift_tab();
     return;
   }
 

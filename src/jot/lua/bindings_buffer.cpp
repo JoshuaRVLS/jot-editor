@@ -100,6 +100,11 @@ namespace lua_bind
     api(L).buffer_clear_selection_from_lua(L);
     return 0;
   }
+  int l_buf_apply_edit(lua_State *L)
+  {
+    api(L).apply_buffer_edit_from_lua(L);
+    return 1;
+  }
   int l_buf_set_var(lua_State *L)
   {
     api(L).set_buffer_var(L);

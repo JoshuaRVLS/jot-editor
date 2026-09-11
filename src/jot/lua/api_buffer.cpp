@@ -254,6 +254,25 @@ void LuaAPI::on_buffer_save(const std::string &f)
   fire_autocmd("BufSave", f, -1);
   emit_buffer_event("buffer.save", f);
 }
+void LuaAPI::apply_buffer_edit_from_lua(lua_State *L)
+{
+  if (!editor)
+  {
+    lua_pushboolean(L, 0);
+    return;
+  }
+  const int start_line = (int)luaL_checkinteger(L, 1);
+  const int start_col = (int)luaL_checkinteger(L, 2);
+  const int end_line = (int)luaL_checkinteger(L, 3);
+  const int end_col = (int)luaL_checkinteger(L, 4);
+  const char *text = luaL_optstring(L, 5, "");
+  const bool ok = editor->host_api
+                      ? editor->host_api->core.apply_edit(
+                            start_line, start_col, end_line, end_col, text ? text : "")
+                      : false;
+  lua_pushboolean(L, ok ? 1 : 0);
+}
+
 std::string LuaAPI::get_current_buffer()
 {
   return editor && editor->host_api ? editor->host_api->core.buffer_content() : "";

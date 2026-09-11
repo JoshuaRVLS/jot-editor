@@ -895,6 +895,81 @@ jot.md.setup({
 })
 ```
 
+## Snippets
+
+The snippet engine is the bundled Lua feature reachable as `jot.snip`, mirroring
+LuaSnip's `ls` surface. Snippet packs are loaded from `~/.config/jot/snippets`,
+`<workspace>/.jot/snippets` and `snippet_paths`.
+
+### Constructors
+
+`jot.snip.s` / `sn` / `t` / `i` / `f` / `d` / `c` / `r` / `rep` / `fmt` / `isn` /
+`ms` (and their long names `snippet`, `snippet_node`, `text_node`, `insert_node`,
+`function_node`, `dynamic_node`, `choice_node`, `restore_node`, `repeat_node`,
+`format_node`, `indent_snippet_node`, `multi_snippet`). `jot.snip.parse_snippet(context, text, opts)`
+parses an LSP/VSCode snippet body directly.
+
+```lua
+jot.snip.add_snippets("lua", {
+  jot.snip.s("forp", {
+    jot.snip.t("for "), jot.snip.i(1, "k"), jot.snip.t(", "),
+    jot.snip.i(2, "v"), jot.snip.t(" in "), jot.snip.i(3, "pairs"),
+    jot.snip.t(" do\n\t"), jot.snip.i(0), jot.snip.t("\nend"),
+  }),
+})
+```
+
+### Registry
+
+- `jot.snip.add_snippets(ft, snippets[, opts])` — `ft` may be a filetype or a
+  list; `snippets` a list or a keyed map. `snippets` may also be a snippet
+  definition table (`{ trig, nodes, snippetType, priority, condition, ... }`).
+- `jot.snip.filetype_extend(ft, parents)` — include another filetype's snippets.
+- `jot.snip.get_snippets(ft[, include_auto])`, `jot.snip.get_autosnippets(ft)`
+- `jot.snip.cleanup(ft)`, `jot.snip.refresh_notify(ft)`, `jot.snip.invalidate_snippets()`
+- `jot.snip.reload()` — re-read every snippet pack.
+
+### Expansion and navigation
+
+- `jot.snip.expand([opts])` — expand the trigger before the caret. Passing
+  `{ snippet = <def> }` expands that snippet regardless of the trigger.
+- `jot.snip.expand_or_jump()`, `jot.snip.expandable()`, `jot.snip.expand_auto()`
+- `jot.snip.jump(dir[, absolute])`, `jot.snip.jumpable(dir)`,
+  `jot.snip.locally_jumpable(dir)`, `jot.snip.jump_destination(dir)`
+- `jot.snip.change_choice(dir)`, `jot.snip.choice_active()`,
+  `jot.snip.current_node()`, `jot.snip.locate_node(pos)`,
+  `jot.snip.active()`, `jot.snip.current_index()`, `jot.snip.region()`,
+  `jot.snip.exit_out_of_region()`
+
+### Environment
+
+- `jot.snip.env.get(name, ctx)`, `jot.snip.env.extend(name, value)`,
+  `jot.snip.env.resolve(text, ctx)`, `jot.snip.env.namespace(name, opts)`.
+
+### Loaders and setup
+
+- `jot.snip.loaders.from_lua(root)`, `from_vscode(root)`, `from_snipmate(root)`,
+  `load_all()`, `reload()`
+- `jot.snip.setup({ enabled = true, auto_expand = false, keymaps = {...},
+  snip_env = {...}, paths = "..." })` — scalars write the `snippet_*` config
+  keys, the rest stay on the module.
+- `jot.snip.install_keymaps()` / `jot.snip.uninstall_keymaps()`
+- `jot.snip.lsp` — the LSP snippet-completion bridge; `jot.lsp.register_snippet_handler(fn)`
+  (see below) hands `fn` the snippet text of an LSP completion item.
+
+### `jot.lsp.register_snippet_handler`
+
+```lua
+jot.lsp.register_snippet_handler(function(item)
+  -- item = { text, kind, label, offset }
+  return true -- claimed, or false to let the editor insert it as plain text
+end)
+```
+
+The bundled engine registers one on load, so LSP completions with
+`insertTextFormat = 2` expand with real placeholders out of the box; passing
+`nil` unregisters it.
+
 ## Native Boundary
 
 Lua owns runtime composition, commands, actions, and event policy. C++ owns

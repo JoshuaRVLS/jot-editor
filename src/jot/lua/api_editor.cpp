@@ -20,6 +20,8 @@ namespace fs = std::filesystem;
 #include "tools/symbols/index.h"
 #include "ui/components.h"
 #include "ui/text.h"
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -378,6 +380,79 @@ void LuaAPI::motion_from_lua(lua_State *L, int kind)
     return;
   }
   editor->needs_redraw = true;
+}
+
+void LuaAPI::push_file_read(lua_State *L)
+{
+  const std::string path = luaL_optstring(L, 1, "");
+  if (path.empty())
+  {
+    lua_pushnil(L);
+    return;
+  }
+  std::ifstream in(path, std::ios::binary);
+  if (!in)
+  {
+    lua_pushnil(L);
+    lua_pushstring(L, "cannot read file");
+    return;
+  }
+  std::ostringstream buffer;
+  buffer << in.rdbuf();
+  const std::string text = buffer.str();
+  lua_pushlstring(L, text.data(), text.size());
+}
+
+void LuaAPI::push_file_list(lua_State *L)
+{
+  lua_newtable(L);
+  const std::string dir = luaL_optstring(L, 1, "");
+  if (dir.empty())
+  {
+    return;
+  }
+  std::error_code ec;
+  if (!fs::is_directory(dir, ec))
+  {
+    return;
+  }
+  std::vector<fs::directory_entry> entries;
+  for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
+  {
+    entries.push_back(*it);
+  }
+  std::sort(entries.begin(),
+            entries.end(),
+            [](const fs::directory_entry &a, const fs::directory_entry &b)
+            { return a.path().filename().string() < b.path().filename().string(); });
+  int n = 1;
+  for (const fs::directory_entry &entry : entries)
+  {
+    std::error_code is_dir_ec;
+    lua_newtable(L);
+    lua_push_str_field(L, "name", entry.path().filename().string());
+    lua_push_str_field(L, "path", entry.path().string());
+    lua_push_bool_field(L, "dir", entry.is_directory(is_dir_ec));
+    lua_rawseti(L, -2, n++);
+  }
+}
+
+void LuaAPI::default_tab_from_lua(lua_State *L)
+{
+  (void)L;
+  if (editor)
+  {
+    editor->apply_default_tab();
+  }
+}
+
+void LuaAPI::default_shift_tab_from_lua(lua_State *L)
+{
+  (void)L;
+  if (editor)
+  {
+    editor->apply_default_shift_tab();
+  }
 }
 
 void LuaAPI::push_sidebar_info(lua_State *L)

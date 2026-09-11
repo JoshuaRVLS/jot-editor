@@ -173,6 +173,7 @@ bool LuaAPI::init()
   field(L, "tokens", l_buf_tokens);
   field(L, "select", l_buf_select);
   field(L, "clear_selection", l_buf_clear_selection);
+  field(L, "apply_edit", l_buf_apply_edit);
   field(L, "lines", l_buf_lines);
   field(L, "filetype", l_buf_filetype);
   field(L, "get_line", l_buf_get_line);
@@ -204,6 +205,8 @@ bool LuaAPI::init()
   field(L, "save", l_save);
   field(L, "execute", l_execute);
   field(L, "run", l_job);
+  field(L, "list", l_file_list);
+  field(L, "read", l_file_read);
   lua_setfield(L, -2, "file");
   lua_newtable(L);
   field(L, "show_message", l_show_message);
@@ -294,6 +297,7 @@ bool LuaAPI::init()
   field(L, "tokens", l_buf_tokens);
   field(L, "select", l_buf_select);
   field(L, "clear_selection", l_buf_clear_selection);
+  field(L, "apply_edit", l_buf_apply_edit);
   field(L, "lines", l_buf_lines);
   field(L, "filetype", l_buf_filetype);
   field(L, "get_line", l_buf_get_line);
@@ -322,6 +326,8 @@ bool LuaAPI::init()
   field(L, "request_redraw", l_editor_redraw);
   command_field(L, this, "undo", ":undo");
   command_field(L, this, "redo", ":redo");
+  field(L, "tab", l_editor_default_tab);
+  field(L, "shift_tab", l_editor_default_shift_tab);
   command_field(L, this, "insert_newline", ":newline");
   command_field(L, this, "insert_line_below", ":newlinebelow");
   command_field(L, this, "insert_line_above", ":newlineabove");
@@ -359,6 +365,8 @@ bool LuaAPI::init()
   field(L, "new", l_new_buffer);
   field(L, "open_workspace", l_open_workspace);
   field(L, "recent", l_recent_files);
+  field(L, "list", l_file_list);
+  field(L, "read", l_file_read);
   lua_setfield(L, -2, "file");
   lua_newtable(L);
   field(L, "toggle_sidebar", l_toggle_sidebar);
@@ -460,6 +468,8 @@ bool LuaAPI::init()
   field(L, "request_symbols", l_lsp_request_symbols);
   field(L, "request_completion", l_lsp_request_completion);
   field(L, "hover_ui", l_lsp_hover_ui);
+  field(L, "accept_completion", l_lsp_accept_completion);
+  field(L, "register_snippet_handler", l_lsp_register_snippet_handler);
   field(L, "disabled", l_lsp_disabled);
   field(L, "set_enabled", l_lsp_set_enabled);
   field(L, "install", l_lsp_install);
@@ -713,6 +723,12 @@ bool LuaAPI::init()
   // in Lua. Loaded after plugins so its commands and autocmds are not reset by
   // load_plugins().
   load_markdown_runtime(L);
+  // Snippet engine (features/snippet/*.lua): a LuaSnip-equivalent expansion
+  // system with VSCode/snipMate/Lua packs, Tab/Shift-Tab jumping inside an
+  // active snippet and a hook for LSP snippet completions. Loaded after
+  // keymaps so its Tab handling shadows the built-in fallback only while a
+  // snippet is active.
+  load_snippet_runtime(L);
   // Self-update (:update + silent startup check, features/update.lua). Loaded
   // last so user config can tune update.* settings before the module boots.
   jot_lua::load_bundled_lua_file(L, "features/update.lua", "Update");

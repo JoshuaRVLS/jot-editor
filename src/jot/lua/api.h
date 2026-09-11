@@ -595,6 +595,9 @@ private:
   std::vector<PluginLoadStatus> plugin_load_status;
   // Registry ref (LUA_NOREF when unset) of the jot.lsp.hover_ui handler.
   int lsp_hover_ui_ref_ = -2;
+  // Registry ref (LUA_NOREF when unset) of the jot.lsp snippet-completion
+  // handler (registered by the bundled snippet engine).
+  int lsp_snippet_handler_ref_ = -2;
   // Surface name -> registered handler (jot.ui.handler). Values are registry
   // refs; -1 entries are removed lazily on next emit.
   std::map<std::string, int> lua_ui_handlers_;
@@ -730,6 +733,7 @@ public:
   // Bundled markdown preview feature (features/markdown/init.lua and its
   // modules). Loaded after user plugins so its commands/autocmds survive.
   bool load_markdown_runtime(lua_State *L);
+  bool load_snippet_runtime(lua_State *L);
 
   // LSP installer host half (see api_lsp_install.cpp): loads the Lua
   // installer module (runtime/lua/lsp/install.lua, mason-style registry +
@@ -980,6 +984,13 @@ public:
   // File tree: mirror the native explorer tree (same FileNode data the
   // sidebar renders) without re-walking the disk.
   void push_filetree_root(lua_State *L);
+  // Reads a file from disk (jot.file.read), independent of the buffer list:
+  // snippet packs and other config data live outside the open buffers.
+  void push_file_read(lua_State *L);
+  // Directory listing (jot.file.list): the entries of an arbitrary path, so
+  // Lua features can discover snippet/config packs outside the workspace
+  // file tree (which only covers the workspace root).
+  void push_file_list(lua_State *L);
   // Cursor motions (jot.motion): native movement primitives for macros.
   // kind: 0 word_next, 1 word_prev, 2 line_start, 3 line_end, 4 file_start,
   // 5 file_end, 6 matching_bracket, 7 select_function.
@@ -987,6 +998,28 @@ public:
   // Sidebar (jot.sidebar): mirror/control the explorer/git activity views.
   void push_sidebar_info(lua_State *L);
   void sidebar_set_view_from_lua(lua_State *L);
+  // Precise buffer edit (jot.buffer.apply_edit): replace a half-open range
+  // with text, splitting on '\n'. 1-based lines and columns, end-exclusive.
+  void apply_buffer_edit_from_lua(lua_State *L);
+  // The editor's own Tab / Shift+Tab actions (jot.edit.tab / shift_tab), so
+  // Lua keymaps that shadow those chords can fall back to them exactly.
+  void default_tab_from_lua(lua_State *L);
+  void default_shift_tab_from_lua(lua_State *L);
+  // Applies the currently selected LSP completion item (jot.lsp
+  // .accept_completion), so Lua keymaps that shadow Tab can hand the key back
+  // to the completion popup instead of breaking accept-on-Tab.
+  void lsp_accept_completion_from_lua(lua_State *L);
+  // Snippet completion bridge: the bundled snippet engine registers a handler
+  // that claims LSP items carrying `insert_text_format = 2` so they expand
+  // through the real snippet engine instead of the plain-text fallback.
+  void set_lsp_snippet_handler_ref(int lua_ref);
+  // Calls the registered handler with the snippet body and the exact 1-based
+  // replace range. Returns true when Lua consumed (expanded) it.
+  bool run_lsp_snippet_handler(const std::string &text,
+                               int start_line,
+                               int start_col,
+                               int end_line,
+                               int end_col);
   // LSP manager actions (jot.lsp): disabled set + server enable/install/remove.
   void push_lsp_disabled(lua_State *L);
   // Current resident memory of the editor process in bytes (jot.process

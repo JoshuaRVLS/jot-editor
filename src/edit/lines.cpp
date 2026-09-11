@@ -113,6 +113,29 @@ void Editor::insert_line_above()
     notify_lsp_change(buf.filepath);
 }
 
+// The modeless Tab action: indent every line of an active selection, else
+// advance the caret to the next tab stop (same as insert_char('\t')).
+void Editor::apply_default_tab()
+{
+  auto &buf = get_buffer();
+  if (buf.selection.active)
+  {
+    indent_selection();
+  }
+  else
+  {
+    insert_char('\t');
+  }
+  needs_redraw = true;
+}
+
+// The modeless Shift+Tab action: outdent the selection, or the cursor line.
+void Editor::apply_default_shift_tab()
+{
+  outdent_selection();
+  needs_redraw = true;
+}
+
 void Editor::indent_selection()
 {
   auto &buf = get_buffer();

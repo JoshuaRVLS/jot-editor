@@ -109,6 +109,71 @@ bool LuaAPI::has_lsp_hover_ui() const
   return lsp_hover_ui_ref_ != LUA_NOREF && lua_state != nullptr;
 }
 
+void LuaAPI::lsp_accept_completion_from_lua(lua_State *L)
+{
+  const bool applied = editor ? editor->apply_selected_lsp_completion() : false;
+  if (applied && editor)
+  {
+    editor->needs_redraw = true;
+  }
+  lua_pushboolean(L, applied ? 1 : 0);
+}
+
+void LuaAPI::set_lsp_snippet_handler_ref(int lua_ref)
+{
+  if (lsp_snippet_handler_ref_ != LUA_NOREF && lua_state != nullptr)
+  {
+    luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, lsp_snippet_handler_ref_);
+  }
+  lsp_snippet_handler_ref_ = lua_ref;
+}
+
+bool LuaAPI::run_lsp_snippet_handler(const std::string &text,
+                                     int start_line,
+                                     int start_col,
+                                     int end_line,
+                                     int end_col)
+{
+  if (lsp_snippet_handler_ref_ == LUA_NOREF || lua_state == nullptr)
+  {
+    return false;
+  }
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  const int top = lua_gettop(L);
+  lua_rawgeti(L, LUA_REGISTRYINDEX, lsp_snippet_handler_ref_);
+  if (!lua_isfunction(L, -1))
+  {
+    lua_settop(L, top);
+    return false;
+  }
+  lua_newtable(L);
+  lua_push_str_field(L, "text", text);
+  lua_push_int_field(L, "start_line", start_line);
+  lua_push_int_field(L, "start_col", start_col);
+  lua_push_int_field(L, "end_line", end_line);
+  lua_push_int_field(L, "end_col", end_col);
+  const int ok = lua_pcall(L, 1, 1, 0);
+  bool consumed = false;
+  if (ok != LUA_OK)
+  {
+    // Same rule as the hover UI: never let a Lua error reach stderr while the
+    // screen is live; surface it in the message bar instead.
+    if (editor)
+    {
+      std::string msg = lua_tostring(L, -1) ? lua_tostring(L, -1) : "unknown";
+      if (msg.size() > 80)
+        msg.resize(80);
+      editor->set_message("Lua snippet error: " + msg);
+    }
+  }
+  else
+  {
+    consumed = lua_toboolean(L, -1) != 0;
+  }
+  lua_settop(L, top);
+  return consumed;
+}
+
 bool LuaAPI::present_lsp_hover(const std::string &contents,
                                const std::string &filepath,
                                int line,

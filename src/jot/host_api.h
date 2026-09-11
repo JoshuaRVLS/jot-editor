@@ -58,6 +58,16 @@ public:
   std::string selected_text_for(const Selection &sel) const;
   void replace_selection(const std::string &text);
   void insert_text(const std::string &text);
+  // Replaces the half-open range [start_line:start_col, end_line:end_col)
+  // with `text`, splitting it on '\n' into new lines and leaving the cursor
+  // at the end of the inserted text. All arguments are 1-based; the end is
+  // exclusive. Out-of-range positions clamp to the buffer. Returns false when
+  // there is no buffer to edit.
+  bool apply_edit(int start_line,
+                  int start_col,
+                  int end_line,
+                  int end_col,
+                  const std::string &text);
   void insert_char_at_carets(char c);
   void undo();
   void redo();

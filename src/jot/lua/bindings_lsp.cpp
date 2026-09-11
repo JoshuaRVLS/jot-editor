@@ -72,6 +72,27 @@ namespace lua_bind
     api(L).lsp_restart_all_from_lua(L);
     return 0;
   }
+  int l_lsp_accept_completion(lua_State *L)
+  {
+    api(L).lsp_accept_completion_from_lua(L);
+    return 1;
+  }
+  int l_lsp_register_snippet_handler(lua_State *L)
+  {
+    // jot.lsp.register_snippet_handler(fn) claims LSP snippet completions;
+    // nil clears it and restores the built-in plain-text expansion.
+    if (lua_isnoneornil(L, 1))
+    {
+      api(L).set_lsp_snippet_handler_ref(LUA_NOREF);
+    }
+    else
+    {
+      luaL_checktype(L, 1, LUA_TFUNCTION);
+      lua_pushvalue(L, 1);
+      api(L).set_lsp_snippet_handler_ref(luaL_ref(L, LUA_REGISTRYINDEX));
+    }
+    return 0;
+  }
   int l_lsp_hover_ui(lua_State *L)
   {
     // jot.lsp.hover_ui(fn) registers a Lua hover renderer; nil clears it.
