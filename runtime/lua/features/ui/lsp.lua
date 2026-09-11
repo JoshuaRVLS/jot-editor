@@ -3,6 +3,7 @@
 -- focused; features/ui.lua is the orchestrator that requires
 -- every module and registers the handlers.
 local h = require("jot_ui.helpers")
+local completion_label = require("jot_ui.completion_label")
 local close = h.close
 local cell_len = h.cell_len
 local trunc_cells = h.trunc_cells
@@ -244,6 +245,21 @@ local function add_part(parts, offsets, text, fg)
   parts[#parts + 1] = text
 end
 
+-- Boolean settings, read per popup (they are live, so a :settings change applies
+-- to the next completion). Guarded because the UI kit also runs against stubs
+-- that do not provide the config bridge.
+local function config_bool(key, default)
+  local get = jot and jot.config and jot.config.get_bool
+  if get == nil then
+    return default
+  end
+  local value = get(key, default)
+  if value == nil then
+    return default
+  end
+  return value and true or false
+end
+
 local function lsp_completion(p)
   if not p then
     close("lsp_completion")
@@ -268,8 +284,29 @@ local function lsp_completion(p)
   local items = p.items or {}
   local total = math.max(1, p.total or 0)
   local rows = {}
-  local meta_w = math.max(8, math.floor(content_w / 3))
-  local label_w = math.max(1, content_w - meta_w - 1)
+
+  -- Plan every visible row first so the annotation column can be measured
+  -- across them and the types line up down the popup. The measurement covers
+  -- every row, including servers whose annotations sit inline: their text still
+  -- has to fit beside the name.
+  local rich = config_bool("completion_rich_labels", true)
+  local dim_arguments = config_bool("completion_dim_arguments", true)
+  local align_type = config_bool("completion_align_type", true)
+  local plans = {}
+  local right_w = 0
+  for i, it in ipairs(items) do
+    plans[i] = completion_label.plan(it, colors, {
+      server = p.server,
+      dim_arguments = dim_arguments,
+      rich = rich,
+    })
+    if rich then
+      right_w = math.max(right_w, cell_len(completion_label.right_text(plans[i])))
+    end
+  end
+  -- Never spend more than half the row on the annotation.
+  right_w = math.min(right_w, math.max(0, math.floor(content_w / 2)))
+
   for i, it in ipairs(items) do
     local sel = (p.start or 0) + i - 1 == (p.selected or 0)
     local row_fg = sel and selection_fg or fg
@@ -277,44 +314,22 @@ local function lsp_completion(p)
     local parts = {}
     local offsets = {}
     local icon = it.kind_icon or " "
-    -- Reserve the first cell as a gutter; icon + label stay within label_w.
-    local name = trunc_cells((it.label or ""), math.max(1, label_w - cell_len(icon) - 1))
     parts[#parts + 1] = " "
     add_part(parts, offsets, icon, completion_kind_color(it.kind_name, colors))
-    local name_off = #table.concat(parts)
-    add_part(parts, offsets, name, it.deprecated and comment or row_fg)
-    -- nvim-cmp's CmpItemAbbrMatch: highlight the characters the typed
-    -- prefix consumed in the label (offsets are bytes into the raw label;
-    -- the rendered name is a prefix of it, so out-of-range offsets drop).
-    if not it.deprecated and it.match and #it.match > 0 then
-      local match_fg = sel and selection_fg or (colors.accent or 6)
-      for _, m in ipairs(it.match) do
-        if m >= 0 and m + 1 <= #name then
-          offsets[#offsets + 1] = { start = name_off + m, len = 1, fg = match_fg }
-        end
-      end
-    end
-    local meta = it.kind_name or ""
-    if it.deprecated then
-      meta = meta == "" and "deprecated" or (meta .. " deprecated")
-    end
-    local detail = (it.detail ~= nil and it.detail ~= "") and it.detail or it.documentation or ""
-    if detail ~= "" then
-      meta = meta == "" and detail or (meta .. "  " .. detail)
+    -- The label area runs to the end of the row: the label builder splits it
+    -- into name / arguments / type and right-aligns the type itself.
+    local label_w = math.max(1, content_w - cell_len(icon) - 1)
+    local rendered = completion_label.render(plans[i], colors, {
+      width = label_w,
+      right_width = right_w,
+      align = align_type and plans[i].align,
+    })
+    local label_off = #table.concat(parts)
+    parts[#parts + 1] = rendered.text
+    for _, sp in ipairs(rendered.spans) do
+      offsets[#offsets + 1] = { start = label_off + sp.start, len = sp.len, fg = sp.fg }
     end
     local line = table.concat(parts)
-    -- Right-align the meta column by cells (wide glyphs count 2).
-    local cur = cell_len(line)
-    local meta_col = math.max(cur + 1, content_w - meta_w)
-    if cur < meta_col then
-      line = line .. string.rep(" ", meta_col - cur)
-    end
-    local meta_off = #line
-    local meta_text = trunc_cells(meta, math.max(1, content_w - meta_col))
-    line = line .. meta_text
-    if meta_text ~= "" then
-      offsets[#offsets + 1] = { start = meta_off, len = #meta_text, fg = sel and selection_fg or comment }
-    end
     rows[#rows + 1] = {
       text = line,
       fg = row_fg,

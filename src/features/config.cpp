@@ -120,6 +120,11 @@ void Config::load_defaults()
   settings["colorizer_only_in_strings"] = "false";
   // Extensions to leave alone, e.g. ".min.css,.map".
   settings["colorizer_exclude_filetypes"] = "";
+  // LSP completion rows: split the label into name / arguments / type and
+  // right-align the type (see features/ui/completion_label.lua).
+  settings["completion_rich_labels"] = "true";
+  settings["completion_align_type"] = "true";
+  settings["completion_dim_arguments"] = "true";
   // 24-bit colour output: auto detects from COLORTERM/TERM, on/off force it.
   settings["truecolor"] = "auto";
   settings["gui_font_size"] = "16";

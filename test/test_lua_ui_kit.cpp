@@ -5,10 +5,12 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <map>
 #include <string>
 
 #include "jot/lua/api_internal.h"
 #include "jot/lua/embedded_lua.h"
+#include "ui/text.h"
 
 extern "C"
 {
@@ -44,6 +46,18 @@ namespace
     // Every fg passed through set_spans in order (used to verify that a
     // row's per-language icon glyph is colored with its own brand color).
     std::vector<int> spans_fg;
+    // Full geometry of the most recent set_spans call, so a test can assert
+    // where a part landed (the completion popup right-aligns its type column).
+    struct RecordedSpan
+    {
+      int start;
+      int len;
+      int fg;
+    };
+    std::vector<RecordedSpan> last_spans;
+    // Spans keyed by the float line they were set for, which is what a
+    // multi-row surface (the completion popup) needs to be asserted row by row.
+    std::map<int, std::vector<RecordedSpan>> spans_by_line;
     int set_cursor_count = 0;
     int last_cursor_x = -1;
     int last_cursor_y = -1;
@@ -189,23 +203,45 @@ namespace
     g.set_spans_count++;
     luaL_checktype(L, 3, LUA_TTABLE);
     const int n = (int)lua_rawlen(L, 3);
+    g.last_spans.clear();
+    const int line_index = (int)luaL_checkinteger(L, 2);
+    g.spans_by_line[line_index].clear();
     for (int i = 1; i <= n; i++)
     {
+      g.last_spans.push_back({0, 0, -1});
+      g.spans_by_line[line_index].push_back({0, 0, -1});
+      StubState::RecordedSpan &line_rec = g.spans_by_line[line_index].back();
       lua_rawgeti(L, 3, i);
       if (lua_istable(L, -1))
       {
+        StubState::RecordedSpan &rec = g.last_spans.back();
+        StubState::RecordedSpan &line_rec = g.spans_by_line[line_index].back();
         lua_getfield(L, -1, "len");
-        // Count only single-char emphasis spans (match highlighting); full
-        // row-background spans are long and not what these asserts measure.
-        if ((int)lua_tointeger(L, -1) == 1)
+        if (lua_isnumber(L, -1))
         {
-          g.spans_total++;
+          rec.len = (int)lua_tointeger(L, -1);
+          line_rec.len = rec.len;
+          // Count only single-char emphasis spans (match highlighting); full
+          // row-background spans are long and not what these asserts measure.
+          if (rec.len == 1)
+          {
+            g.spans_total++;
+          }
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "start");
+        if (lua_isnumber(L, -1))
+        {
+          rec.start = (int)lua_tointeger(L, -1);
+          line_rec.start = rec.start;
         }
         lua_pop(L, 1);
         lua_getfield(L, -1, "fg");
         if (lua_isnumber(L, -1))
         {
-          g.spans_fg.push_back((int)lua_tointeger(L, -1));
+          rec.fg = (int)lua_tointeger(L, -1);
+          line_rec.fg = rec.fg;
+          g.spans_fg.push_back(rec.fg);
         }
         lua_pop(L, 1);
       }
@@ -276,6 +312,8 @@ namespace
     lua_setfield(L, -2, "comment");
     lua_pushinteger(L, 215);
     lua_setfield(L, -2, "accent");
+    lua_pushinteger(L, 81);
+    lua_setfield(L, -2, "type");
     lua_setfield(L, -2, "colors");
   }
 
@@ -1287,6 +1325,255 @@ TEST_CASE("Status line renders the process memory segment")
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
   REQUIRE(g.last_row1.find("mem") == std::string::npos);
+
+  lua_close(L);
+}
+
+// Completion rows: the label is split into name / arguments / type / extra info
+// and the type is right-aligned into a column measured across the visible rows
+// (a port of colorful-menu.nvim's presentation). These assert the rendered rows
+// themselves — the alignment and the per-part colours are the whole point — and
+// they go through the real handler rather than the builder, so a row that is
+// assembled wrong is still caught.
+TEST_CASE("Completion rows split the label and right-align the type")
+{
+  g = StubState{};
+  lua_State *L = luaL_newstate();
+  REQUIRE(L != nullptr);
+  luaL_openlibs(L);
+  push_stub_jot(L);
+  REQUIRE(jot_lua::load_ui_kit_modules(L));
+  const std::string path = std::string(JOT_LUA_SOURCE_DIR) + "/features/ui.lua";
+  REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
+  REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  REQUIRE(lua_istable(L, 1)); // module table
+
+  const int row_fg = 250;  // colors.fg in the stub payload
+  const int comment = 244; // colors.comment
+  const int type_fg = 81;  // colors.type
+  const int inner_w = 44;
+
+  // A clangd-shaped payload: bare-name labels, the parameter list and include
+  // path in labelDetails, the return type in detail. The icon is single-cell
+  // ASCII so the column arithmetic reads straight off the row strings.
+  push_module_field(L, 1, "lsp_completion");
+  push_box(L, 10, 4, inner_w, 4); // content box: 3 items + footer
+  lua_pushinteger(L, 3);
+  lua_setfield(L, -2, "max_items");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "start");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "selected");
+  lua_pushinteger(L, 3);
+  lua_setfield(L, -2, "total");
+  lua_pushinteger(L, 3);
+  lua_setfield(L, -2, "all_total");
+  lua_pushboolean(L, 0);
+  lua_setfield(L, -2, "filtered");
+  lua_pushstring(L, "pr");
+  lua_setfield(L, -2, "prefix");
+  lua_pushstring(L, "clangd");
+  lua_setfield(L, -2, "server");
+  lua_newtable(L); // items
+  const char *i_label[] = {"printf", "parse_config", "value"};
+  const char *i_detail[] = {"int", "Config", "std::uint32_t"};
+  const char *i_ldetail[] = {"(const char *format, ...)", "", ""};
+  const char *i_ldesc[] = {"X <stdio.h>", "", "X <cstdint>"};
+  for (int i = 1; i <= 3; i++)
+  {
+    lua_newtable(L);
+    lua_pushstring(L, i_label[i - 1]);
+    lua_setfield(L, -2, "label");
+    lua_pushinteger(L, 12);
+    lua_setfield(L, -2, "kind");
+    lua_pushstring(L, "Function");
+    lua_setfield(L, -2, "kind_name");
+    lua_pushstring(L, "*");
+    lua_setfield(L, -2, "kind_icon");
+    lua_pushstring(L, i_detail[i - 1]);
+    lua_setfield(L, -2, "detail");
+    lua_pushstring(L, i_ldetail[i - 1]);
+    lua_setfield(L, -2, "label_detail");
+    lua_pushstring(L, i_ldesc[i - 1]);
+    lua_setfield(L, -2, "label_description");
+    lua_newtable(L);
+    lua_setfield(L, -2, "match");
+    lua_rawseti(L, -2, i);
+  }
+  lua_setfield(L, -2, "items");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+
+  REQUIRE(g.lines_count == 4); // 3 items + footer
+  REQUIRE(g.lines.size() >= 3);
+  const std::vector<std::string> &rows = g.lines;
+
+  // Rows are padded to the popup's inner width in *cells*, which is what lets
+  // the annotations line up on the right edge. (Count cells, not bytes: the
+  // elision marker is one cell but three bytes.)
+  for (int r = 0; r < 3; r++)
+  {
+    REQUIRE(ui_cell_count(rows[r]) == inner_w);
+  }
+
+  // Right-aligned: each row ends with its own annotation, so the start columns
+  // differ by exactly the width difference. Left-aligned rows would all start
+  // right after the name instead.
+  const auto cell_at = [](const std::string &row, const std::string &needle)
+  {
+    const size_t pos = row.find(needle);
+    return pos == std::string::npos ? -1 : ui_cell_count(row.substr(0, pos));
+  };
+  // Annotations of different lengths end on the same column (the row's right
+  // edge), which is what "right-aligned" means here: a row with a 6-cell
+  // annotation starts 11 cells further right than one with a 17-cell annotation.
+  // "int  X <stdio.h>" is 16 cells, "Config" is 6.
+  REQUIRE(cell_at(rows[0], "int  X <stdio.h>") + 16 == inner_w);
+  REQUIRE(cell_at(rows[1], "Config") + 6 == inner_w);
+  REQUIRE(cell_at(rows[1], "Config") - cell_at(rows[0], "int  X <stdio.h>") == 10);
+
+  // Name in the row colour, parameter list dimmed, type and extra info in their
+  // own colours — and the spans must not overlap (the float painter never
+  // rewinds, so an overlap would double-draw).
+  const auto &row0 = g.spans_by_line[1];
+  bool saw_name = false, saw_args = false, saw_type = false, saw_extra = false;
+  int previous_end = 0;
+  for (const auto &sp : row0)
+  {
+    // The first span is present_panel's full-line background fill (a huge len
+    // covering whatever the renderer clips the row to), not part of the label.
+    if (sp.len >= 65535)
+    {
+      continue;
+    }
+    REQUIRE(sp.start >= previous_end);
+    previous_end = sp.start + sp.len;
+    const std::string text = rows[0].substr((size_t)sp.start, (size_t)sp.len);
+    if (text == "printf")
+    {
+      REQUIRE(sp.fg == row_fg);
+      saw_name = true;
+    }
+    else if (!text.empty() && text[0] == '(')
+    {
+      // The parameter list may be clipped to fit (this one is), so match on the
+      // opening parenthesis rather than the whole string.
+      REQUIRE(sp.fg == comment);
+      saw_args = true;
+    }
+    else if (text == "int")
+    {
+      REQUIRE(sp.fg == type_fg);
+      saw_type = true;
+    }
+    else if (text == "X <stdio.h>")
+    {
+      REQUIRE(sp.fg == comment);
+      saw_extra = true;
+    }
+  }
+  REQUIRE(saw_name);
+  REQUIRE(saw_args);
+  REQUIRE(saw_type);
+  REQUIRE(saw_extra);
+
+  // A server with no profile still gets a coloured label rather than an
+  // unformatted or empty row.
+  g.lines.clear();
+  g.spans_by_line.clear();
+  push_module_field(L, 1, "lsp_completion");
+  push_box(L, 10, 4, inner_w, 3);
+  lua_pushinteger(L, 1);
+  lua_setfield(L, -2, "max_items");
+  lua_pushstring(L, "someone-elses-ls");
+  lua_setfield(L, -2, "server");
+  lua_newtable(L);
+  lua_newtable(L);
+  lua_pushstring(L, "compute");
+  lua_setfield(L, -2, "label");
+  lua_pushstring(L, "Function");
+  lua_setfield(L, -2, "kind_name");
+  lua_pushstring(L, "*");
+  lua_setfield(L, -2, "kind_icon");
+  lua_rawseti(L, -2, 1);
+  lua_setfield(L, -2, "items");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.lines[0].find("compute") != std::string::npos);
+  bool fallback_coloured = false;
+  for (const auto &sp : g.spans_by_line[1])
+  {
+    if (g.lines[0].substr((size_t)sp.start, (size_t)sp.len) == "compute")
+    {
+      fallback_coloured = sp.fg == row_fg;
+    }
+  }
+  REQUIRE(fallback_coloured);
+
+  // A padded label (clangd really sends " printf") must not leave a stray space
+  // after the icon, and the match offsets must move with the trim or the
+  // highlighted characters would sit one cell to the left.
+  g.lines.clear();
+  g.spans_by_line.clear();
+  push_module_field(L, 1, "lsp_completion");
+  push_box(L, 10, 4, inner_w, 3);
+  lua_pushinteger(L, 1);
+  lua_setfield(L, -2, "max_items");
+  lua_pushstring(L, "clangd");
+  lua_setfield(L, -2, "server");
+  lua_newtable(L);
+  lua_newtable(L);
+  lua_pushstring(L, " printf");
+  lua_setfield(L, -2, "label");
+  lua_pushstring(L, "int");
+  lua_setfield(L, -2, "detail");
+  lua_pushstring(L, "(const char *fmt, ...)");
+  lua_setfield(L, -2, "label_detail");
+  lua_pushstring(L, "Function");
+  lua_setfield(L, -2, "kind_name");
+  // Icons carry their own trailing space (see completion_kind_icon), so the
+  // label must not add a second one.
+  lua_pushstring(L, "[F] ");
+  lua_setfield(L, -2, "kind_icon");
+  lua_newtable(L); // match: offsets 1..3 are "pri" in the padded label
+  lua_pushinteger(L, 1);
+  lua_rawseti(L, -2, 1);
+  lua_pushinteger(L, 2);
+  lua_rawseti(L, -2, 2);
+  lua_pushinteger(L, 3);
+  lua_rawseti(L, -2, 3);
+  lua_setfield(L, -2, "match");
+  lua_rawseti(L, -2, 1);
+  lua_setfield(L, -2, "items");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  // The row starts with the gutter, the icon, one space, then the name: no
+  // leftover padding from the label.
+  const size_t name_pos = g.lines[0].find("printf");
+  REQUIRE(name_pos != std::string::npos);
+  // gutter + "[F] " = 5 cells, i.e. exactly one space of separation.
+  REQUIRE(ui_cell_count(g.lines[0].substr(0, name_pos)) == 5);
+  // The three matched characters land on "pri", not on " pr".
+  // "[F] " is 4 cells, the gutter 1, so the name starts at byte 5 and the three
+  // matched characters are the next three.
+  int matched_cells = 0;
+  for (const auto &sp : g.spans_by_line[1])
+  {
+    if (sp.start >= 5 && sp.start < 8 && sp.len == 1)
+    {
+      matched_cells++;
+    }
+  }
+  REQUIRE(matched_cells == 3);
+
+  // Closing the surface still works.
+  push_module_field(L, 1, "lsp_completion");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
 
   lua_close(L);
 }

@@ -177,6 +177,11 @@ struct CompletionItemView
   bool deprecated = false;
   std::string detail;
   std::string documentation;
+  // The LSP labelDetails pair (empty unless the server sent them). Which of
+  // these carries the type differs per server, so the row builder decides; see
+  // runtime/lua/features/ui/completion_label.lua.
+  std::string label_detail;
+  std::string label_description;
   std::vector<int> match; // byte offsets into label matched by the query
 };
 
@@ -192,6 +197,9 @@ struct CompletionView
   int all_total = 0; // unfiltered count (footer "filtered" hint)
   bool filtered = false;
   std::string prefix;
+  // Which language server produced these items (e.g. "clangd"); the row builder
+  // picks per-server label presentation from it, falling back to a generic one.
+  std::string server;
   std::vector<CompletionItemView> items; // windowed to max_items rows
 };
 

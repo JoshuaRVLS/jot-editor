@@ -312,6 +312,29 @@ bool LSPClient::flush_pending_writes()
   return true;
 }
 
+// The completion-related client capabilities, as one string so the initialize
+// request and the test that asserts them cannot drift apart. labelDetails is
+// opt-in per the spec: a server only sends it (and the popup's richer rows are
+// built from it) when the client asks for it here.
+std::string LSPClient::completion_client_capabilities()
+{
+  return "\"completion\":{"
+         "\"dynamicRegistration\":false,"
+         "\"contextSupport\":true,"
+         "\"completionItem\":{"
+         "\"snippetSupport\":true,"
+         "\"deprecatedSupport\":true,"
+         "\"preselectSupport\":true,"
+         "\"commitCharactersSupport\":true,"
+         "\"documentationFormat\":[\"markdown\",\"plaintext\"],"
+         "\"labelDetailsSupport\":true,"
+         "\"tagSupport\":{\"valueSet\":[1]},"
+         "\"insertReplaceSupport\":false,"
+         "\"resolveSupport\":{\"properties\":[\"documentation\",\"detail\"]}"
+         "}"
+         "}";
+}
+
 bool LSPClient::start()
 {
   if (running)
@@ -533,20 +556,11 @@ bool LSPClient::start()
        << "\"capabilities\":{"
        << "\"general\":{\"positionEncodings\":[\"utf-8\",\"utf-16\"]},"
        << "\"textDocument\":{"
-       << "\"completion\":{"
-       << "\"dynamicRegistration\":false,"
-       << "\"contextSupport\":true,"
-       << "\"completionItem\":{"
-       << "\"snippetSupport\":true,"
-       << "\"deprecatedSupport\":true,"
-       << "\"preselectSupport\":true,"
-       << "\"commitCharactersSupport\":true,"
-       << "\"documentationFormat\":[\"markdown\",\"plaintext\"],"
-       << "\"tagSupport\":{\"valueSet\":[1]},"
-       << "\"insertReplaceSupport\":false,"
-       << "\"resolveSupport\":{\"properties\":[\"documentation\",\"detail\"]}"
-       << "}"
-       << "},"
+       << completion_client_capabilities()
+       // The helper returns a single member, so the separator lives here: drop
+       // it and the whole initialize request becomes invalid JSON and the server
+       // refuses to start (clangd answers with a JSON parse error).
+       << ","
        << "\"hover\":{\"dynamicRegistration\":false,"
        << "\"contentFormat\":[\"markdown\",\"plaintext\"]},"
        << "\"definition\":{\"dynamicRegistration\":false,"

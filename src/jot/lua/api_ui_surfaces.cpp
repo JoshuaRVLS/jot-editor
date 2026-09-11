@@ -488,6 +488,7 @@ bool LuaAPI::emit_lsp_completion(const CompletionView &view)
                        lua_set_int_field(L, t, "all_total", view.all_total);
                        lua_set_bool_field(L, t, "filtered", view.filtered);
                        lua_set_str_field(L, t, "prefix", view.prefix);
+                       lua_set_str_field(L, t, "server", view.server);
                        lua_newtable(L);
                        const int arr = lua_gettop(L);
                        for (size_t i = 0; i < view.items.size(); i++)
@@ -502,6 +503,8 @@ bool LuaAPI::emit_lsp_completion(const CompletionView &view)
                          lua_set_bool_field(L, ii, "deprecated", it.deprecated);
                          lua_set_str_field(L, ii, "detail", it.detail);
                          lua_set_str_field(L, ii, "documentation", it.documentation);
+                         lua_set_str_field(L, ii, "label_detail", it.label_detail);
+                         lua_set_str_field(L, ii, "label_description", it.label_description);
                          lua_newtable(L);
                          const int mi = lua_gettop(L);
                          for (size_t k = 0; k < it.match.size(); k++)

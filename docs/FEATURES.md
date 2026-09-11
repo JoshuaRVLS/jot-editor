@@ -190,6 +190,27 @@ deliberately does not, so a preview never depends on a file you cannot see.
   rename across all affected files (`:lsprename <new_name>`); find
   references in a jumpable quick-pick list (`:lsprefs`); code actions
   (quick fixes and refactors) offered at the cursor (`:lspactions`).
+
+  Completion rows are built from the item itself (a port of the idea behind
+  [colorful-menu.nvim](https://github.com/xzbdmw/colorful-menu.nvim)): the
+  label is split into name, parameter list and type, and the type is
+  right-aligned into a column measured across the visible rows, so a row reads
+  like `parse_config(…) -> Result<Config>` rather than a bare name with
+  everything else crowded into a narrow column. The name takes the kind's
+  colour, the parameter list is dimmed, and the type uses the theme's type
+  colour. Which field carries the type differs per server, so there is a small
+  table of per-server rules (`runtime/lua/features/ui/completion_label.lua`)
+  covering clangd, gopls, rust-analyzer, zls, lua-language-server, the
+  pyright/pylance/basedpyright family, typescript-language-server/vtsls and
+  intelephense, with a generic fallback for everything else. Three switches:
+  `completion_rich_labels`, `completion_align_type` and
+  `completion_dim_arguments`.
+
+  Two notes: the type is only available when the server sends `detail` or
+  `labelDetails` in the initial response — jot never sends
+  `completionItem/resolve`, so servers that only fill those lazily show a plain
+  name — and a server with no profile still gets a correctly coloured row, just
+  with less split out.
 - Signature help popup, plus clangd-style inlay hints on already-written
   code: parameter names (`a: 1, b: 2`) before arguments and type hints after
   variable declarations (`auto x = 5` shows `x: int`), both as dimmed
@@ -527,7 +548,9 @@ Built-in defaults include `explorer_width=25`, `minimap_width=15`,
 `colorizer_ls_colors=false`, `colorizer_css_vars=false`,
 `colorizer_sass=false`, `colorizer_only_in_strings=false` and
 `colorizer_exclude_filetypes=` (a comma separated list of file-name suffixes to
-skip, e.g. `.min.css,.map`), plus `truecolor=auto` for 24-bit output.
+skip, e.g. `.min.css,.map`), plus `truecolor=auto` for 24-bit output. LSP
+completion rows add `completion_rich_labels=true`, `completion_align_type=true`
+and `completion_dim_arguments=true`.
 
 The caret is configured with two keys:
 

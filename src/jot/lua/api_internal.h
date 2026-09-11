@@ -234,6 +234,7 @@ namespace jot_lua
   {
     static const char *kModules[] = {
         "features/ui/helpers.lua",
+        "features/ui/completion_label.lua",
         "features/ui/command_palette.lua",
         "features/ui/quick_pick.lua",
         "features/ui/settings.lua",

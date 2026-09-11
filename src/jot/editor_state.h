@@ -343,6 +343,9 @@ struct EditorState
   Cursor lsp_completion_anchor;
   Cursor lsp_completion_replace_start;
   std::string lsp_completion_filepath;
+  // Server that produced the current items (LSPClient::server_id), used by the
+  // completion popup to pick per-server label presentation.
+  std::string lsp_completion_server;
   std::string lsp_completion_prefix;
   // nvim-cmp-style ghost text: the selected item's insert text minus the
   // typed prefix, previewed dimmed at the cursor while the popup is open.

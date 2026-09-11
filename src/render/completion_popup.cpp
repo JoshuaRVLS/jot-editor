@@ -187,27 +187,61 @@ void Editor::render_lsp_completion()
   }
 
   int longest_label = 12;
-  int longest_meta = 8;
+  int longest_right = 8;
   for (int i = start_idx; i < start_idx + max_items; i++)
   {
     if (i < 0 || i >= (int)lsp_completion_items.size())
     {
       continue;
     }
-    longest_label = std::max(longest_label, (int)lsp_completion_items[i].label.size() + 4);
-    std::string meta = completion_kind_name(lsp_completion_items[i].kind);
-    if (!lsp_completion_items[i].detail.empty())
+    const LSPCompletionItem &item = lsp_completion_items[i];
+    // Two layouts share this width: the native fallback puts kind + detail in a
+    // meta column, while the Lua row splits the label and puts the type /
+    // labelDetails annotation to the right. Estimate both from the same fields
+    // the rows will use, so neither is clipped in the text that makes it
+    // readable and the popup is not left wider than its content.
+    //
+    // labelDetails.detail holds a bare parameter list for some servers (clangd),
+    // which the row appends to the label; for others it holds the signature and
+    // belongs in the annotation.
+    std::string label_text = item.label;
+    std::string annotation;
+    if (!item.label_detail.empty() && item.label_detail.front() == '(')
     {
-      meta += " " + one_line_text(lsp_completion_items[i].detail);
+      label_text += item.label_detail;
+      annotation = one_line_text(item.detail);
     }
-    else if (!lsp_completion_items[i].documentation.empty())
+    else
     {
-      meta += " " + one_line_text(lsp_completion_items[i].documentation);
+      annotation = one_line_text(item.label_detail);
+      if (annotation.empty())
+      {
+        annotation = one_line_text(item.detail);
+      }
     }
-    longest_meta = std::max(longest_meta, std::min(32, (int)meta.size()));
+    if (!item.label_description.empty())
+    {
+      if (!annotation.empty())
+      {
+        annotation += "  ";
+      }
+      annotation += one_line_text(item.label_description);
+    }
+    std::string native_meta = completion_kind_name(item.kind);
+    if (!item.detail.empty())
+    {
+      native_meta += " " + one_line_text(item.detail);
+    }
+    else if (!item.documentation.empty())
+    {
+      native_meta += " " + one_line_text(item.documentation);
+    }
+    longest_label = std::max(longest_label, (int)label_text.size() + 4);
+    const int right = std::max((int)native_meta.size(), (int)annotation.size());
+    longest_right = std::max(longest_right, std::min(48, right));
   }
 
-  int box_w = std::clamp(longest_label + longest_meta + 8, 28, std::min(visible_w, 82));
+  int box_w = std::clamp(longest_label + longest_right + 8, 28, std::min(visible_w, 82));
   int box_h = max_items + footer_h;
 
   int safe_cursor_y = std::clamp(buf.cursor.y, 0, (int)buf.line_count() - 1);
@@ -274,6 +308,7 @@ void Editor::render_lsp_completion()
     view.all_total = (int)lsp_completion_all_items.size();
     view.filtered = view.all_total > view.total;
     view.prefix = lsp_completion_prefix;
+    view.server = lsp_completion_server;
     for (int row = 0; row < max_items; row++)
     {
       const int item_idx = start_idx + row;
@@ -290,6 +325,8 @@ void Editor::render_lsp_completion()
       iv.deprecated = item.deprecated;
       iv.detail = one_line_text(item.detail);
       iv.documentation = one_line_text(item.documentation);
+      iv.label_detail = one_line_text(item.label_detail);
+      iv.label_description = one_line_text(item.label_description);
       iv.match = completion_matching::match_positions(lsp_completion_prefix, item.label);
       view.items.push_back(std::move(iv));
     }

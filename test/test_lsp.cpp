@@ -121,3 +121,72 @@ TEST_CASE("LSP code actions parse titles and edits, drop command-only", "[lsp]")
   REQUIRE(actions[0].edits[0].second[0].end_char == 5);
   REQUIRE(actions[0].edits[0].second[0].new_text == "auto");
 }
+
+// The completion popup splits each row using the item's own fields, and the
+// half of the information that arrives in labelDetails is only sent when the
+// client advertises labelDetailsSupport. These cases pin the parse; the client
+// capability itself is asserted below so a future edit cannot silently drop it
+// and leave the popup with nothing to work from.
+TEST_CASE("LSP completion items parse labelDetails", "[lsp]")
+{
+  // Both fields, as clangd sends them (parameter list + include path).
+  {
+    std::string json =
+        R"json([{"label":"printf","kind":3,"detail":"int","labelDetails":{"detail":"(const char *format, ...)","description":"X <stdio.h>"}}])json";
+    size_t pos = 0;
+    lsp_detail::JsonValue value;
+    REQUIRE(lsp_detail::parse_json_value(json, pos, value));
+    const auto items = lsp_detail::completion_items_from_json(value);
+    REQUIRE(items.size() == 1);
+    REQUIRE(items[0].label == "printf");
+    REQUIRE(items[0].detail == "int");
+    REQUIRE(items[0].label_detail == "(const char *format, ...)");
+    REQUIRE(items[0].label_description.find("stdio.h") != std::string::npos);
+  }
+
+  // Only a description, as rust-analyzer sends for trait methods.
+  {
+    std::string json =
+        R"json([{"label":"next","detail":"fn next() -> Option<T>","labelDetails":{"description":"(as Iterator)"}}])json";
+    size_t pos = 0;
+    lsp_detail::JsonValue value;
+    REQUIRE(lsp_detail::parse_json_value(json, pos, value));
+    const auto items = lsp_detail::completion_items_from_json(value);
+    REQUIRE(items.size() == 1);
+    REQUIRE(items[0].label_detail.empty());
+    REQUIRE(items[0].label_description == "(as Iterator)");
+  }
+
+  // Absent (the common case for servers that never send it): the fields stay
+  // empty rather than picking up something else.
+  {
+    std::string json = R"json([{"label":"foo","detail":"int","documentation":"a note"}])json";
+    size_t pos = 0;
+    lsp_detail::JsonValue value;
+    REQUIRE(lsp_detail::parse_json_value(json, pos, value));
+    const auto items = lsp_detail::completion_items_from_json(value);
+    REQUIRE(items.size() == 1);
+    REQUIRE(items[0].label_detail.empty());
+    REQUIRE(items[0].label_description.empty());
+    // The older fields are untouched by the change.
+    REQUIRE(items[0].detail == "int");
+    REQUIRE(items[0].documentation == "a note");
+  }
+}
+
+// The labelDetails fields only arrive if the client asks for them, so the
+// capability is asserted directly: without it servers are entitled to omit the
+// data the popup now relies on for its richer rows.
+TEST_CASE("LSP initialize advertises labelDetailsSupport", "[lsp]")
+{
+  const std::string caps = LSPClient::completion_client_capabilities();
+  REQUIRE(caps.find("\"labelDetailsSupport\":true") != std::string::npos);
+  REQUIRE(caps.find("\"completionItem\":{") != std::string::npos);
+  // ...and it has to be *valid* JSON: this string is spliced into the
+  // initialize request, where a missing comma makes the whole request
+  // unparseable and the server refuses to start.
+  size_t pos = 0;
+  lsp_detail::JsonValue value;
+  REQUIRE(lsp_detail::parse_json_value("{" + caps + "}", pos, value));
+  REQUIRE(value.type == lsp_detail::JsonValue::Object);
+}

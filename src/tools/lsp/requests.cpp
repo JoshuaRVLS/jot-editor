@@ -4,6 +4,7 @@
 // the consume_* accessors the editor drains results through.
 #include "tools/lsp/internal.h"
 #include "tools/lsp/client.h"
+#include "tools/string_util.h"
 #include <algorithm>
 #include <filesystem>
 #include <sstream>
@@ -671,4 +672,30 @@ bool LSPClient::has_open_document(const std::string &filepath) const
 std::string LSPClient::describe() const
 {
   return language + " @ " + root_path;
+}
+
+// The server binary's basename, which is what the presentation rules for
+// completion rows key on. Servers are launched by absolute path often enough
+// (`/usr/bin/clangd`, a managed install under the cache dir) that the basename is
+// the only stable identifier; the language name stands in when there is no
+// command to look at.
+std::string LSPClient::server_id() const
+{
+  if (!command.empty() && !command.front().empty())
+  {
+    const std::string &exe = command.front();
+    const size_t slash = exe.find_last_of("/\\");
+    std::string base = slash == std::string::npos ? exe : exe.substr(slash + 1);
+    // Strip a Windows executable suffix so "clangd.exe" and "clangd" agree.
+    const std::string lower = string_util::lower_copy(base);
+    if (lower.size() > 4 && lower.compare(lower.size() - 4, 4, ".exe") == 0)
+    {
+      base = base.substr(0, base.size() - 4);
+    }
+    if (!base.empty())
+    {
+      return base;
+    }
+  }
+  return language;
 }

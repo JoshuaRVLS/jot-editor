@@ -137,6 +137,11 @@ void Editor::poll_lsp_clients()
       }
 
       lsp_completion_filepath = entry.first;
+      // Which server produced these items. The completion popup presents rows
+      // slightly differently per server (where the type lives, whether it is
+      // right-aligned), and that is a property of the response, not of the
+      // buffer, so it is recorded alongside the items.
+      lsp_completion_server = client->server_id();
       bool visible = refresh_lsp_completion_filter();
       if (lsp_completion_manual_request && !visible)
       {

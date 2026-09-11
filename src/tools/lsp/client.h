@@ -13,6 +13,13 @@ struct LSPCompletionItem
   std::string insert_text;
   std::string detail;
   std::string documentation;
+  // The spec's optional labelDetails, which a server only sends when the client
+  // advertises labelDetailsSupport. Servers split the useful information between
+  // these fields and `detail` differently -- clangd puts the parameter list in
+  // labelDetails.detail and the include/namespace in .description, tsserver the
+  // signature and the extra info -- so the completion popup reads both.
+  std::string label_detail;
+  std::string label_description;
   std::string filter_text;
   std::string sort_text;
   std::vector<std::string> commit_characters;
@@ -259,6 +266,10 @@ public:
             const std::string &initialization_options = {});
   ~LSPClient();
 
+  // The completion-related client capabilities, shared by the initialize request
+  // and the test that asserts them (labelDetails is opt-in per the spec).
+  static std::string completion_client_capabilities();
+
   bool start();
   void stop();
   bool restart();
@@ -363,6 +374,11 @@ public:
   {
     return language;
   }
+  // Identifies the server binary (e.g. "clangd", "rust-analyzer") from the
+  // command's basename, falling back to the language name when the command is
+  // empty. Used to pick presentation rules for completion rows, which differ per
+  // server (see runtime/lua/features/ui/completion_label.lua).
+  std::string server_id() const;
   const std::string &get_root_path() const
   {
     return root_path;

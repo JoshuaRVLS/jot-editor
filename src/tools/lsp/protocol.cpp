@@ -233,6 +233,18 @@ namespace lsp_detail
       }
       completion.filter_text = json_string_or_empty(json_object_get(item, "filterText"));
       completion.sort_text = json_string_or_empty(json_object_get(item, "sortText"));
+      // labelDetails is optional and only sent when the client advertised
+      // labelDetailsSupport (see the capabilities in client.cpp). Servers put a
+      // different half of the useful text in each field, so both are kept.
+      if (const JsonValue *label_details = json_object_get(item, "labelDetails"))
+      {
+        if (label_details->type == JsonValue::Object)
+        {
+          completion.label_detail = json_string_or_empty(json_object_get(*label_details, "detail"));
+          completion.label_description =
+              json_string_or_empty(json_object_get(*label_details, "description"));
+        }
+      }
       const JsonValue *commit_chars = json_object_get(item, "commitCharacters");
       if (commit_chars && commit_chars->type == JsonValue::Array)
       {
