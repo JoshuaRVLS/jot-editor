@@ -148,14 +148,27 @@ TEST_CASE("Home screen owns the frame: the explorer float is torn down", "[jot]"
   write_file(root + "/src/a.cpp", "int a;");
   write_file(root + "/README.md", "# hi");
 
-  // A workspace frame: the explorer float is up and painting its left border.
+  // A workspace frame: the explorer float is up and painting its separator on
+  // the only edge it shares with the editor. The screen-edge left column is
+  // left unpainted -- borders only go where two regions meet (pane_edges.h).
   e.host().io.open_workspace(root);
   e.render_for_test();
   REQUIRE(e.lua_float_count_for_test("sidebar") == 1);
   UI *ui = e.ui_for_test();
   REQUIRE(ui != nullptr);
   REQUIRE(ui->cell_at(0, 1) != nullptr);
-  REQUIRE(ui->cell_at(0, 1)->ch == "│");
+  REQUIRE(ui->cell_at(0, 1)->ch != "│");
+  int separator_x = -1;
+  for (int x = 1; x < 200; ++x)
+  {
+    const UICell *cell = ui->cell_at(x, 1);
+    if (cell && cell->ch == "│")
+    {
+      separator_x = x;
+      break;
+    }
+  }
+  REQUIRE(separator_x > 0);
 
   // Opening home tears the explorer float down instead of letting it paint
   // over the menu (the duplicated left pane).
@@ -163,11 +176,11 @@ TEST_CASE("Home screen owns the frame: the explorer float is torn down", "[jot]"
   e.render_for_test();
   REQUIRE(e.lua_float_count_for_test("sidebar") == 0);
   REQUIRE(e.lua_float_count_for_test("home_screen") == 1);
-  REQUIRE(ui->cell_at(0, 1)->ch != "│");
+  REQUIRE(ui->cell_at(separator_x, 1)->ch != "│");
 
   // Closing home brings the explorer back.
   e.set_home_menu_visible(false);
   e.render_for_test();
   REQUIRE(e.lua_float_count_for_test("sidebar") == 1);
-  REQUIRE(ui->cell_at(0, 1)->ch == "│");
+  REQUIRE(ui->cell_at(separator_x, 1)->ch == "│");
 }

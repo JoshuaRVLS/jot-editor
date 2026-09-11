@@ -9,9 +9,12 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+class PreviewServer;
 
 struct LuaScratchBuffer
 {
@@ -724,6 +727,9 @@ public:
   // they can register handlers against them (see load_treesitter_runtime).
   bool load_hover_ui_runtime(lua_State *L);
   bool load_ui_kit_runtime(lua_State *L);
+  // Bundled markdown preview feature (features/markdown/init.lua and its
+  // modules). Loaded after user plugins so its commands/autocmds survive.
+  bool load_markdown_runtime(lua_State *L);
 
   // LSP installer host half (see api_lsp_install.cpp): loads the Lua
   // installer module (runtime/lua/lsp/install.lua, mason-style registry +
@@ -1128,6 +1134,23 @@ public:
                    bool alt);
   void render_floats();
   void clear_floats();
+
+  // Markdown preview transport (markdown/preview_server.h): a libuv HTTP/SSE
+  // server the Lua markdown feature drives. Every entry point is main-thread
+  // and maps 1:1 onto one Lua function in the jot.preview namespace.
+  void preview_start_from_lua(lua_State *L);
+  void preview_stop_from_lua(lua_State *L);
+  void preview_status_from_lua(lua_State *L);
+  void preview_set_page_from_lua(lua_State *L);
+  void preview_page_from_lua(lua_State *L);
+  void preview_set_content_from_lua(lua_State *L);
+  void preview_notify_from_lua(lua_State *L);
+  void preview_sync_from_lua(lua_State *L);
+  void preview_take_scroll_from_lua(lua_State *L);
+
+private:
+  PreviewServer *ensure_preview_server();
+  std::unique_ptr<PreviewServer> preview_server_;
 };
 
 #endif

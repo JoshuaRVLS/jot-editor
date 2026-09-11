@@ -11,6 +11,7 @@
 #include "jot/lua/api_internal.h"
 #include "jot/lua/embedded_lua.h"
 #include "jot/lua/lua_loader.h"
+#include "markdown/preview_server.h"
 #include "tools/symbols/index.h"
 #include "ui/components.h"
 #include "ui/text.h"
@@ -591,6 +592,19 @@ bool LuaAPI::init()
   field(L, "register", l_status_register);
   field(L, "unregister", l_status_unregister);
   lua_setfield(L, -2, "status");
+  // jot.preview: the markdown preview HTTP/SSE transport (libuv). All content
+  // policy (parsing, template, commands) lives in the Lua markdown feature.
+  lua_newtable(L);
+  field(L, "start", l_preview_start);
+  field(L, "stop", l_preview_stop);
+  field(L, "status", l_preview_status);
+  field(L, "set_page", l_preview_set_page);
+  field(L, "page", l_preview_page);
+  field(L, "set_content", l_preview_set_content);
+  field(L, "notify", l_preview_notify);
+  field(L, "sync", l_preview_sync);
+  field(L, "take_scroll", l_preview_take_scroll);
+  lua_setfield(L, -2, "preview");
   lua_setglobal(L, "jot");
   lua_getglobal(L, "jot");
   lua_getfield(L, -1, "ui");
@@ -694,6 +708,11 @@ bool LuaAPI::init()
   // Zen focus mode (features/zen.lua): F12 toggles the centered, chrome-free
   // layout. Loaded after keymaps so it can reuse the jot.keymap API.
   jot_lua::load_bundled_lua_file(L, "features/zen.lua", "Zen mode");
+  // Markdown preview (:MarkdownPreview / :MarkdownPreviewStop / --Toggle): a
+  // browser preview served over a libuv HTTP/SSE transport, rendered entirely
+  // in Lua. Loaded after plugins so its commands and autocmds are not reset by
+  // load_plugins().
+  load_markdown_runtime(L);
   // Self-update (:update + silent startup check, features/update.lua). Loaded
   // last so user config can tune update.* settings before the module boots.
   jot_lua::load_bundled_lua_file(L, "features/update.lua", "Update");

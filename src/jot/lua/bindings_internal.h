@@ -90,6 +90,15 @@ namespace lua_bind
   int l_float_on_key(lua_State *L);
   int l_float_on_mouse(lua_State *L);
   int l_job_capture(lua_State *L);
+  int l_preview_start(lua_State *L);
+  int l_preview_stop(lua_State *L);
+  int l_preview_status(lua_State *L);
+  int l_preview_set_page(lua_State *L);
+  int l_preview_page(lua_State *L);
+  int l_preview_set_content(lua_State *L);
+  int l_preview_notify(lua_State *L);
+  int l_preview_sync(lua_State *L);
+  int l_preview_take_scroll(lua_State *L);
   int l_diagnostics_get(lua_State *L);
   int l_buf_set_var(lua_State *L);
   int l_buf_get_var(lua_State *L);

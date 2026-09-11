@@ -38,6 +38,11 @@ public:
   void run();
   void stop();
 
+  // Raw libuv loop for modules that own their own handles on the main loop
+  // (the markdown preview HTTP server). Initializes the loop on first use.
+  // Main thread only.
+  uv_loop_t *raw_loop();
+
   void
   watch_fd(int fd, bool read = true, bool write = false, std::function<void()> on_ready = nullptr);
   void unwatch_fd(int fd);

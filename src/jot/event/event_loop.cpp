@@ -66,6 +66,12 @@ void EventLoop::prepare()
   async_initialized_ = true;
 }
 
+uv_loop_t *EventLoop::raw_loop()
+{
+  prepare();
+  return &loop_;
+}
+
 void EventLoop::watch_fd(int fd, bool read, bool write, std::function<void()> on_ready)
 {
   if (fd < 0 || (!read && !write) || !on_ready)

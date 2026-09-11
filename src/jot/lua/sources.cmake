@@ -10,6 +10,7 @@ set(JOT_LUA_SOURCES
   jot/lua/bindings_lsp.cpp
   jot/lua/bindings_mark.cpp
   jot/lua/bindings_plugin.cpp
+  jot/lua/bindings_preview.cpp
   jot/lua/bindings_state.cpp
   jot/lua/bindings_syntax.cpp
   jot/lua/bindings_task.cpp
@@ -22,6 +23,7 @@ set(JOT_LUA_SOURCES
   jot/lua/api_editor.cpp
   jot/lua/api_mark.cpp
   jot/lua/api_plugin.cpp
+  jot/lua/api_preview.cpp
   jot/lua/api_runtime.cpp
   jot/lua/api_status.cpp
   jot/lua/api_task.cpp

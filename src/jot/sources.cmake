@@ -45,6 +45,8 @@ set(JOT_ENGINE_SOURCES
   jot/event/in_memory_line_provider.cpp
   jot/event/lazy_line_provider.cpp
   jot/event/task_queue.cpp
+  jot/markdown/http_message.cpp
+  jot/markdown/preview_server.cpp
   jot/surfaces/home.cpp
   jot/surfaces/host_api.cpp
   jot/surfaces/popup.cpp

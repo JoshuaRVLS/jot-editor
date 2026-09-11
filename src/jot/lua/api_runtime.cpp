@@ -332,6 +332,33 @@ bool LuaAPI::load_ui_kit_runtime(lua_State *L)
   return load_bundled_lua_file(L, "features/ui.lua", "UI kit");
 }
 
+bool LuaAPI::load_markdown_runtime(lua_State *L)
+{
+  // The markdown preview feature is a module tree (features/markdown/*.lua):
+  // pre-load each module into package.loaded["jot_md.*"], then run init.lua —
+  // the only file that executes, registering commands, autocmds and keymaps.
+  static const char *kModules[] = {
+      "features/markdown/config.lua",
+      "features/markdown/inline.lua",
+      "features/markdown/toc.lua",
+      "features/markdown/block.lua",
+      "features/markdown/assets.lua",
+      "features/markdown/template.lua",
+      "features/markdown/render.lua",
+      "features/markdown/browser.lua",
+      "features/markdown/sync.lua",
+      "features/markdown/session.lua",
+  };
+  for (const char *rel : kModules)
+  {
+    if (!jot_lua::load_bundled_lua_module(L, rel, "jot_md"))
+    {
+      return false;
+    }
+  }
+  return load_bundled_lua_file(L, "features/markdown/init.lua", "Markdown preview");
+}
+
 // Recursively converts one native FileNode (and its children) into a Lua
 // table — the exact tree the explorer sidebar renders.
 

@@ -54,6 +54,8 @@ add_executable(jot_tests
   test_sidebar_guides.cpp
   test_blank_guides.cpp
   test_right_panel.cpp
+  test_markdown_http.cpp
+  test_lua_markdown.cpp
   test_completion_matching.cpp
   test_gui_fit.cpp
   test_resize_sync.cpp

@@ -285,6 +285,45 @@ available — Kitty graphics first, Sixel (`img2sixel`) second, and a 256-color
 cell preview as the fallback. Configure with `image_viewer_backend = auto`
 (`kitty`, `sixel`, `cell`, or `off`).
 
+### Markdown preview
+
+`:MarkdownPreview` renders the current markdown buffer in your browser through
+a tiny loopback HTTP server, and keeps the page and the editor in step in both
+directions:
+
+- **Live refresh** — every edit (debounced) and every save re-renders the
+  document and pushes just the new body to the open page over Server-Sent
+  Events, so the scroll position and any diagram state survive the update. The
+  full page is only replaced when the shell itself changes (title, theme, CSS).
+- **Two-way scroll sync** — while both sides are open, the editor's top visible
+  line is pushed to the page and the page's scroll position is pulled back into
+  the editor, so scrolling either one follows the other. The cadence is
+  `markdown_preview_refresh_interval` (ms).
+- **GFM by default** — headings with slug anchors, paragraphs, nested ordered
+  and task lists, tables with alignment, blockquotes and GitHub-style alerts
+  (`[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`), fenced code
+  with a copy button, `==mark==`, `++ins++`, `H~2~O`, `E=mc^2^`, footnotes,
+  reference links, autolinks, raw HTML passthrough and horizontal rules.
+- **Optional extras**, each a `markdown_preview_option_*` switch: `highlightjs`
+  (default on), `code_copy` (on), `source_map` (on), plus `katex` math,
+  `mermaid` / `plantuml` / `flowchart` diagrams, `echarts` and `vega` charts,
+  `emoji` shortcodes and a floating `toc` panel.
+- **Customisable page** — `markdown_preview_theme` (`dark`/`light`/`auto`),
+  `markdown_preview_page_title`, `markdown_preview_custom_css` and a Lua
+  `preprocessor(text, path)` hook that can rewrite the source before parsing.
+
+Local images resolve relative to the document (honouring
+`markdown_preview_images_path` for a prefix) and are served by the same server.
+`markdown_preview_browser` picks the browser to open (`none` to just print the
+URL, or any name from the built-in list; the platform opener is used when
+unset), and `markdown_preview_auto_start` / `markdown_preview_auto_close`
+tie the session to markdown buffers opening and closing.
+
+The preview is driven from Lua — `jot.md.start/stop/toggle/refresh`,
+`jot.md.url()`, `jot.md.is_running()` and `jot.md.setup{}` — over the native
+`jot.preview.*` transport, so a plugin can re-implement or extend any part of
+it. See [LUA_API.md](LUA_API.md#markdown-preview).
+
 ### Debugger
 
 - Native Debug Adapter Protocol client with GDB/LLDB launch commands and
@@ -517,6 +556,9 @@ it -- the buffer stays fully visible while you type.
 **Terminal & tasks:** `:term` `:termnew` `:task [name]` `:tasknew <name>`
 `:taskrerun`
 
+**Markdown:** `:MarkdownPreview` `:MarkdownPreviewStop`
+`:MarkdownPreviewToggle`
+
 **Debugger:** `:debug <program>` `:debuggdb` `:debuglldb` `:debugconfig`
 `:debugattach <pid>` `:debugpanel` `:debugstop|restart|continue|pause`
 `:debugstep|next|out` `:debugthreads` `:debugmemory` `:debugdisasm`
@@ -584,6 +626,15 @@ Built-in defaults include `explorer_width=25`, `minimap_width=15`,
 skip, e.g. `.min.css,.map`), plus `truecolor=auto` for 24-bit output. LSP
 completion rows add `completion_rich_labels=true`, `completion_align_type=true`
 and `completion_dim_arguments=true`.
+
+The markdown preview adds `markdown_preview_auto_start=false`,
+`markdown_preview_auto_close=true`, `markdown_preview_refresh_interval=100`,
+`markdown_preview_markdown_ext`, `markdown_preview_port=0`,
+`markdown_preview_host`, `markdown_preview_theme=dark`,
+`markdown_preview_page_title`, `markdown_preview_browser`,
+`markdown_preview_echo_preview_url`, `markdown_preview_custom_css`,
+`markdown_preview_images_path`, `markdown_preview_open_timeout_ms`, and the
+`markdown_preview_option_*` switches listed above.
 
 The caret is configured with two keys:
 

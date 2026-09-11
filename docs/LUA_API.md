@@ -835,6 +835,66 @@ jot.status.register("branch", {
 })
 ```
 
+## Markdown Preview
+
+Two layers: `jot.preview` is the native transport (a loopback HTTP server plus
+an SSE broadcast), and `jot.md` is the bundled Lua feature that renders the
+document and drives the session. The transport never parses markdown and the
+feature never touches a socket, so either half can be replaced.
+
+### `jot.preview` (native)
+
+- `jot.preview.start{ host = "127.0.0.1", port = 0 }` — binds the server
+  (`0` picks a free port). Returns `true, port` or `nil, error`.
+- `jot.preview.stop()` — unbinds the server and closes every client.
+- `jot.preview.status()` — `{ running = bool, port = int, clients = int }`.
+- `jot.preview.set_page(html)` / `jot.preview.page()` — the full page served at
+  `GET /`; the page shell is replaced as a whole.
+- `jot.preview.set_content(body)` — the rendered document body kept for the
+  initial `GET /` response (the SSE `content` event carries it to live clients).
+- `jot.preview.notify(event, data)` — broadcast an SSE event to every open
+  client (the feature uses `content` and `title`).
+- `jot.preview.sync(line)` — broadcast `event: sync` with a 1-based line, used
+  to tell the page to scroll (data is sent raw, so several `data:` lines form a
+  multi-line payload).
+- `jot.preview.take_scroll()` — consumes and returns the last line the page
+  asked the editor to scroll to (1-based), or `nil`.
+
+The server also serves `GET /image?path=...` for local images referenced by the
+document.
+
+```lua
+local ok, port = jot.preview.start({ port = 0 })
+if ok then
+  jot.preview.set_page("<html><body><div id='x'></div></body></html>")
+  jot.preview.notify("content", "<p>hello</p>")
+end
+```
+
+### `jot.md` (bundled feature)
+
+- `jot.md.setup(opts)` — applies options; scalars go into the `markdown_preview_*`
+  config keys, `options = { mermaid = true, ... }` into the
+  `markdown_preview_option_*` switches, and `preprocessor = function(text, path)`
+  stays on the module. Edits apply live.
+- `jot.md.start([opts])`, `jot.md.stop()`, `jot.md.toggle()`, `jot.md.refresh([force])`
+- `jot.md.is_running()`, `jot.md.url()`, `jot.md.state()` — `{ running, port, url, path }`
+- `jot.md.render(text, { path, name })` — pure renderer returning
+  `{ html, body, toc, title, options }` without touching the transport; handy
+  for tests and for embedding a preview elsewhere.
+- `jot.md.config` — the option module (`get`, `option`, `setup`, `is_markdown_path`).
+
+```lua
+jot.md.setup({
+  auto_start = true,
+  theme = "light",
+  options = { mermaid = true, toc = true },
+  preprocessor = function(text)
+    return text:gsub("\r\n", "\n")
+  end,
+})
+```
+
 ## Native Boundary
 
 Lua owns runtime composition, commands, actions, and event policy. C++ owns
