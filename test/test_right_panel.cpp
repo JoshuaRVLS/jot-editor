@@ -3,6 +3,7 @@
 // active tab activates a neighbor, and closing the last tab hides the dock.
 // Ctrl+Shift+B toggles the dock itself.
 #include "editor.h"
+#include "jot/keybind_catalog.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
 #include <filesystem>
@@ -179,5 +180,51 @@ TEST_CASE("Right dock: open dock state restores open", "[jot]")
     (void)e2.restore_workspace_session_for_test();
     REQUIRE(e2.right_panel_visible());
     REQUIRE(e2.active_right_panel_tab_for_test() == RIGHT_PANEL_DEBUG);
+  }
+}
+// The two sidebar toggles share a letter and are told apart by Shift, so the
+// whole path has to keep the case straight: a terminal that reports Ctrl+B via
+// the kitty keyboard protocol sends "CSI 98;5u", and decoding that into an
+// uppercase 'B' makes the dispatcher read it as Ctrl+Shift+B. That is exactly
+// what happened -- Ctrl+B opened the right dock in the terminal while the GUI
+// (which only uppercases for a real Shift) opened the left explorer.
+TEST_CASE("Ctrl+B opens the left explorer, Ctrl+Shift+B the right dock", "[jot]")
+{
+  Editor &e = probe_editor();
+  using jot::keybind_detail::decode_csi_u_key;
+
+  // Exactly the bytes a kitty-protocol terminal sends. The decoder's output is a
+  // raw key code, so the same two steps the backend performs are reproduced.
+  // 98 = 'b', 115 = 's'; modifier 5 = Ctrl, 6 = Ctrl+Shift (bitmask + 1).
+  const int ctrl_b = decode_csi_u_key("\x1b[98;5u");
+  const int ctrl_shift_b = decode_csi_u_key("\x1b[98;6u");
+  REQUIRE(ctrl_b >= 0);
+  REQUIRE(ctrl_shift_b >= 0);
+  // The unshifted chord must not carry the shift bit, in any spelling.
+  REQUIRE((ctrl_b & 0x80000) == 0);
+  REQUIRE((ctrl_shift_b & 0x80000) != 0);
+
+  // Ctrl+B: the left explorer toggles and the dock is left alone.
+  const bool sidebar_before = e.sidebar_visible_for_test();
+  const bool dock_before = e.right_panel_visible();
+  e.raw_key_for_test(ctrl_b);
+  REQUIRE(e.sidebar_visible_for_test() != sidebar_before);
+  REQUIRE(e.right_panel_visible() == dock_before);
+
+  // Ctrl+Shift+B: the other way round.
+  const bool sidebar_now = e.sidebar_visible_for_test();
+  const bool dock_now = e.right_panel_visible();
+  e.raw_key_for_test(ctrl_shift_b);
+  REQUIRE(e.sidebar_visible_for_test() == sidebar_now);
+  REQUIRE(e.right_panel_visible() != dock_now);
+
+  // Restore the starting state for the other cases in this file.
+  if (e.sidebar_visible_for_test() != sidebar_before)
+  {
+    e.toggle_sidebar_for_test();
+  }
+  if (e.right_panel_visible() != dock_before)
+  {
+    e.toggle_right_panel();
   }
 }

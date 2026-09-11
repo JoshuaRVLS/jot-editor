@@ -103,8 +103,24 @@ TEST_CASE("CSI-u decode follows the kitty bitmask+1 modifier convention")
   REQUIRE(decode_csi_u_key("\x1b[13;1u") == 13);
   REQUIRE((decode_csi_u_key("\x1b[13;3u") & 0x40000) != 0);
   REQUIRE((decode_csi_u_key("\x1b[13;2u") & kShift) != 0);
-  // Letters come out uppercase, matching the chord canonical form.
-  REQUIRE((decode_csi_u_key("\x1b[115;5u") & 0xFFFF) == 'S');
+  // Letters keep their case unless Shift is actually held. Uppercasing every
+  // letter lost the difference between Ctrl+B and Ctrl+Shift+B, and the global
+  // sidebar toggle reads the case to choose between the left explorer and the
+  // right dock.
+  REQUIRE((decode_csi_u_key("\x1b[115;5u") & 0xFFFF) == 's');
+  REQUIRE((decode_csi_u_key("\x1b[98;5u") & 0xFFFF) == 'b');
+  REQUIRE((decode_csi_u_key("\x1b[98;5u") & kShift) == 0);
+  // Shift+letter is uppercase (the convention the rest of the input path uses),
+  // whether the terminal reports the shifted code or the base code plus Shift.
+  REQUIRE((decode_csi_u_key("\x1b[98;6u") & 0xFFFF) == 'B');
+  REQUIRE((decode_csi_u_key("\x1b[98;6u") & kShift) != 0);
+  REQUIRE((decode_csi_u_key("\x1b[66;6u") & 0xFFFF) == 'B');
+  REQUIRE((decode_csi_u_key("\x1b[66;6u") & kShift) != 0);
+  // The canonical chord name is uppercase either way, so plugin keymaps that
+  // register "Ctrl+B" still match the lowercase event. (chord_name takes the
+  // already-decoded key, not a raw code with modifier bits.)
+  REQUIRE(jot::keybind_detail::chord_name('b', true, false, false, 0) == "Ctrl+B");
+  REQUIRE(jot::keybind_detail::chord_name('B', true, true, false, 0) == "Ctrl+Shift+B");
   // Non-CSI-u input and malformed bodies are rejected.
   REQUIRE(decode_csi_u_key("abc") == -1);
   REQUIRE(decode_csi_u_key("\x1b[13") == -1);

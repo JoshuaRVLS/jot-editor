@@ -1202,6 +1202,10 @@ public:
   {
     return show_sidebar;
   }
+  // Feeds one raw key code through the frontend's key path: the same
+  // decode_key_event -> handle_input sequence the terminal and GUI backends use,
+  // so a binding's routing can be tested without a terminal.
+  void raw_key_for_test(int raw_ch);
   bool sidebar_auto_hidden_for_test() const
   {
     return sidebar_hidden_for_width_;

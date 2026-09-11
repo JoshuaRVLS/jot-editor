@@ -195,11 +195,17 @@ namespace jot
           flags |= 0x20000; // Ctrl
       }
       // Map the code to the editor's key encoding. Codes >= 0x20 are plain
-      // unicode codepoints; control keys keep their raw value. Uppercase
-      // letters follow the shift convention used by the rest of the input
-      // path.
+      // unicode codepoints; control keys keep their raw value.
+      //
+      // A *shifted* letter is reported uppercase, matching the convention the
+      // rest of the input path uses (termkey delivers Shift+b as "B" with the
+      // shift flag). An unshifted letter must stay lowercase: uppercasing every
+      // letter made Ctrl+B indistinguishable from Ctrl+Shift+B, and the global
+      // sidebar toggle reads the case to tell the two apart -- so Ctrl+B opened
+      // the right dock in the terminal while the GUI (which only applies the
+      // uppercase bit for a real Shift) opened the left explorer.
       int key = (int)code;
-      if (key >= 'a' && key <= 'z')
+      if (key >= 'a' && key <= 'z' && (flags & 0x80000) != 0)
       {
         key = std::toupper(key);
       }
