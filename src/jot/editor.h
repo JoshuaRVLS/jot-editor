@@ -71,6 +71,7 @@ private:
   static constexpr QuickPickKind QUICK_PICK_DIAGNOSTICS = ::QUICK_PICK_DIAGNOSTICS;
   static constexpr QuickPickKind QUICK_PICK_SYMBOLS = ::QUICK_PICK_SYMBOLS;
   static constexpr QuickPickKind QUICK_PICK_PLUGIN = ::QUICK_PICK_PLUGIN;
+  static constexpr QuickPickKind QUICK_PICK_FONT = ::QUICK_PICK_FONT;
 
   static constexpr MenuBarAction MENU_ACTION_NONE = ::MENU_ACTION_NONE;
   static constexpr MenuBarAction MENU_ACTION_COMMAND = ::MENU_ACTION_COMMAND;
@@ -984,6 +985,21 @@ private:
   void update_pane_layout();
   void split_pane_direction(int dx, int dy);
   void refresh_command_palette();
+  // Lists every installed fixed-width family and applies the chosen one.
+  void open_font_picker();
+  // Switches the GUI to `family` (empty = the built-in font), persists it and
+  // reports the result. False means nothing changed: either this frontend has
+  // no font to change, or the name matched no installed family. The reason is
+  // left in the statusline either way, so callers need not explain it again.
+  //
+  // Kept here rather than letting callers reach into UIGui: the GUI header
+  // needs the GL loader, which the input layer does not link.
+  bool apply_gui_font_family(const std::string &family);
+  // The family in use, empty when the built-in font is loaded.
+  std::string gui_font_family_name() const;
+  // Installed fixed-width families, sorted. Reads the font directories, so it
+  // is a picker-time call, not a per-frame one.
+  std::vector<std::string> gui_font_families() const;
   // DEPRECATED: statusline message channel. Kept for compatibility; toasts
   // (runtime/lua/features/ui/toast.lua) are the message surface now — these still
   // feed them via the native bridge. `toast=false` shows the statusline

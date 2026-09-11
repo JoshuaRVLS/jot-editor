@@ -84,8 +84,12 @@ catch_discover_tests(jot_tests)
 
 # GUI key translation (test_gui_keys.cpp) needs SDL's keysym constants, so it is
 # only built when the GUI frontend is part of the engine. JOT_GUI_ENABLED and
-# SDL2_INCLUDE_DIRS are published by src/CMakeLists.txt.
+# SDL2_INCLUDE_DIRS are published by src/CMakeLists.txt. The font catalog test
+# needs FreeType for the same reason: it reads installed faces.
 if(JOT_GUI_ENABLED)
-  target_sources(jot_tests PRIVATE test_gui_keys.cpp)
-  target_include_directories(jot_tests SYSTEM PRIVATE ${SDL2_INCLUDE_DIRS})
+  target_sources(jot_tests PRIVATE test_gui_keys.cpp test_font_catalog.cpp)
+  target_include_directories(jot_tests SYSTEM PRIVATE
+    ${SDL2_INCLUDE_DIRS}
+    ${FREETYPE2_INCLUDE_DIRS}
+  )
 endif()

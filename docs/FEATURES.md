@@ -49,9 +49,31 @@ backend, but with a GPU and vsync'd to the monitor refresh, so typing is
 smooth at any refresh rate (60/120/144Hz...). It uses the same editor core,
 keybindings, LSP, panes and Lua UI — only the screen differs. Rendering is
 direct OpenGL 3.3 core with a FreeType glyph atlas (Nerd Font icons
-included; set `JOT_GUI_FONT` to override the font). The GUI frontend is
-optional: it compiles in when SDL2 + FreeType are available (`JOT_GUI=OFF`
-to disable) and the terminal build is unaffected.
+included). The GUI frontend is optional: it compiles in when SDL2 + FreeType
+are available (`JOT_GUI=OFF` to disable) and the terminal build is
+unaffected.
+
+The typeface and its size are independent settings:
+
+```vim
+:font                      " pick from the installed fixed-width families
+:font Fira Code            " or name one directly
+:font DejaVu Sans Mono     " tab-completes from what is installed
+```
+
+`gui_font_family` holds the choice (empty = the font jot ships with) and
+`gui_font_size` the size in px; both apply live and are also in `:settings`
+(Ctrl+,). A family is matched however it is spelled — `FiraCode`,
+`fira-code` and `Fira Code` are the same font — and its own regular, bold,
+italic and bold-italic faces are loaded together, so bold and italic match
+the family rather than falling back to a different typeface. Families that
+ship only some of those styles render the missing ones with their regular
+face. Only fixed-width families are listed, since a proportional face cannot
+fill a cell grid. Lookups read `~/.local/share/fonts`, `~/.fonts`,
+`/usr/local/share/fonts`, `/usr/share/fonts` (plus the macOS and Windows font
+directories), and an unknown name is reported and ignored, leaving the
+current font in place. `JOT_GUI_FONT` still overrides the regular face with
+an explicit font file.
 
 ## Feature tour
 

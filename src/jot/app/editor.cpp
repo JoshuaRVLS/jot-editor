@@ -85,6 +85,21 @@ void Editor::apply_config_live()
   debugger_panel_height = std::clamp(config.get_int("debugger_height", 12), 6, 24);
   right_panel_width = std::clamp(config.get_int("right_panel_width", 42), 28, 80);
   image_viewer.configure_backend(config.get("image_viewer_backend", "auto"));
+  // The GUI font family is reconciled here so every path that writes the
+  // setting takes effect the same way: the settings menu, :font, a Lua
+  // jot.config.set, and :reload. Loading the family already in use is a no-op,
+  // so this costs nothing when the setting has not moved.
+  if (auto *gui = dynamic_cast<UIGui *>(ui))
+  {
+    const std::string wanted = config.get("gui_font_family", "");
+    if (wanted != gui->font_family() && !gui->apply_font_family(wanted))
+    {
+      // Worth saying out loud: the GUI is usually launched from a desktop
+      // icon, where the warning init_freetype writes to stderr is never seen,
+      // and the only other clue is a font that did not change.
+      set_message("Font family not found: " + wanted);
+    }
+  }
 #ifdef JOT_TREESITTER
   ts_manager_.set_runtime_options(config.get_list("treesitter_library_paths"),
                                   config.get_list("treesitter_query_paths"),
@@ -451,8 +466,12 @@ void Editor::initialize_gui_ui()
   // starter; the first resize event re-fits the real window). No terminal
   // is touched: raw mode, alternate screen and the ANSI diff renderer are
   // all skipped, and UIGui::render() paints the same cell grid with GL.
-  ui = new UIGui(80, 24, theme.fg_default, theme.bg_default,
-                 std::clamp(config.get_int("gui_font_size", 16), 8, 40));
+  ui = new UIGui(80,
+                 24,
+                 theme.fg_default,
+                 theme.bg_default,
+                 std::clamp(config.get_int("gui_font_size", 16), 8, 40),
+                 config.get("gui_font_family", ""));
   ui->set_default_colors(theme.fg_default, theme.bg_default);
   ui->set_cursor_colors(theme.fg_cursor, theme.bg_cursor);
 

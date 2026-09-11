@@ -87,8 +87,15 @@ class UIGui : public UI
 public:
   // Creates the SDL3 window sized for `cols` x `rows` cells at the default
   // font size, sets up the GL 3.3 core context (vsync on) and the glyph
-  // atlas. Throws std::runtime_error when the display/font is unavailable.
-  UIGui(int cols, int rows, int default_fg, int default_bg, int font_px = 16);
+  // atlas. `font_family` names the typeface to render with; empty uses the
+  // built-in default. Throws std::runtime_error when the display/font is
+  // unavailable.
+  UIGui(int cols,
+        int rows,
+        int default_fg,
+        int default_bg,
+        int font_px = 16,
+        const std::string &font_family = std::string());
   ~UIGui() override;
 
   void render() override;
@@ -105,6 +112,24 @@ public:
   // Applies an absolute font size (px, clamped to [8, 40]): re-sizes every
   // style face, drops the atlas and re-fits the grid to the window.
   void apply_font_size(int px);
+
+  // Switches the typeface: loads the named family's regular, bold, italic and
+  // bold-italic faces (falling back to its regular for styles it does not
+  // ship), then re-fits the grid, since a different face means a different
+  // cell size. An unknown name changes nothing and returns false, so a typo
+  // cannot leave the UI without a font.
+  bool apply_font_family(const std::string &family);
+
+  // The family currently in use, as its font reports itself; empty when the
+  // built-in default is still loaded (no family was ever selected).
+  const std::string &font_family() const
+  {
+    return font_family_;
+  }
+
+  // Names of every installed fixed-width family, sorted, for a picker. Reads
+  // the font directories, so it is not something to call per frame.
+  std::vector<std::string> available_font_families() const;
 
   // Smooth-scroll hook: the editor reports each pane's body region and how
   // many visible rows it scrolled since the last frame. The pane's content
@@ -200,6 +225,15 @@ private:
   // Loads the face for `style`, falling back to the regular face. Paths
   // are probed in order; JOT_GUI_FONT overrides the regular face path.
   bool load_face(int style, const std::vector<std::string> &paths);
+  // The built-in path chain (JOT_GUI_FONT included), used when no family was
+  // selected and when the selection is cleared.
+  bool load_default_faces();
+  // Loads all four style faces of `family`, replacing the current ones only
+  // when its regular face opened. False leaves the loaded faces untouched.
+  bool load_family_faces(const std::string &family);
+  // Re-fits the cell grid to the window after a font change (size or family)
+  // and reports it under JOT_GUI_DEBUG.
+  void refit_grid();
   // Renders `codepoint` in `style` into the atlas if not already cached.
   // Returns false when the atlas is full (caller clears and retries once).
   bool ensure_glyph(uint32_t codepoint, int style);
@@ -303,6 +337,16 @@ private:
   float cell_h_ = 20.0f;
   float ascent_ = 0.0f;
   int font_px_ = 16;
+  // The typeface in use, when one was selected rather than the built-in
+  // default chain. Kept so the picker can mark the current entry.
+  std::string font_family_;
+  // The name the last load resolved to, which is the font's own spelling
+  // rather than whatever the user typed to select it.
+  std::string resolved_family_name_;
+  // The last family asked for, and whether it resolved. A rejected name is
+  // remembered so it is not looked up again on every config change.
+  std::string last_font_request_;
+  bool last_font_request_ok_ = true;
   // Device pixels per logical point on the current display; see refresh_scale.
   float scale_ = 1.0f;
 

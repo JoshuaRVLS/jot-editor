@@ -132,6 +132,9 @@ void Config::load_defaults()
   // 24-bit colour output: auto detects from COLORTERM/TERM, on/off force it.
   settings["truecolor"] = "auto";
   settings["gui_font_size"] = "16";
+  // Empty keeps the built-in font; any installed family name switches the
+  // GUI to it (:font lists what is available).
+  settings["gui_font_family"] = "";
   settings["highlight_cursor_line"] = "true";
   settings["render_fps"] = "120";
   settings["idle_fps"] = "60";

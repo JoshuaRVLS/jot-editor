@@ -66,7 +66,9 @@ const KnownSetting kKnownSettings[] = {
     {"discord_lower_details_editing", "Discord state (editing)", SettingsEntry::Type::String},
     {"discord_lower_details_idling", "Discord state (idling)", SettingsEntry::Type::String},
     {"discord_large_image", "Discord large image text", SettingsEntry::Type::String},
-    {"discord_large_image_idling", "Discord large image text (idling)", SettingsEntry::Type::String},
+    {"discord_large_image_idling",
+     "Discord large image text (idling)",
+     SettingsEntry::Type::String},
     {"discord_small_image", "Discord small image text", SettingsEntry::Type::String},
     {"discord_idle_timeout", "Discord idle timeout (s)", SettingsEntry::Type::Int},
     {"discord_swap_images", "Discord swap images", SettingsEntry::Type::Bool},
@@ -76,6 +78,7 @@ const KnownSetting kKnownSettings[] = {
     {"discord_remove_repository_button", "Discord hide repo button", SettingsEntry::Type::Bool},
     {"discord_show_status", "Discord status chip", SettingsEntry::Type::Bool},
     {"explorer_width", "Explorer width", SettingsEntry::Type::Int},
+    {"gui_font_family", "GUI font family", SettingsEntry::Type::String},
     {"gui_font_size", "GUI font size (px)", SettingsEntry::Type::Int},
     {"highlight_cursor_line", "Highlight cursor line", SettingsEntry::Type::Bool},
     {"idle_fps", "Idle FPS", SettingsEntry::Type::Int},
@@ -104,7 +107,9 @@ const KnownSetting kKnownSettings[] = {
     {"toast.margin", "Toast margin", SettingsEntry::Type::Int},
     {"toast.max_visible", "Toast max visible", SettingsEntry::Type::Int},
     {"toast.max_width", "Toast max width", SettingsEntry::Type::Int},
-    {"treesitter_language_overrides", "Tree-sitter language overrides", SettingsEntry::Type::String},
+    {"treesitter_language_overrides",
+     "Tree-sitter language overrides",
+     SettingsEntry::Type::String},
     {"treesitter_library_paths", "Tree-sitter library paths", SettingsEntry::Type::String},
     {"treesitter_query_paths", "Tree-sitter query paths", SettingsEntry::Type::String},
     {"update.build_dir", "Update build dir", SettingsEntry::Type::String},
@@ -192,7 +197,7 @@ void Editor::close_settings_menu()
 void Editor::apply_settings_value(const std::string &key, const std::string &value)
 {
   config.set(key, value);
-  // GUI font size needs the GUI's live re-fit (same path Ctrl+= uses);
+  // Font changes need the GUI's live re-fit (same path Ctrl+= uses);
   // everything else applies through the shared live-config pipeline.
   if (key == "gui_font_size")
   {
@@ -200,6 +205,13 @@ void Editor::apply_settings_value(const std::string &key, const std::string &val
     {
       gui->apply_font_size(std::clamp(config.get_int("gui_font_size", 16), 8, 40));
     }
+  }
+  else if (key == "gui_font_family")
+  {
+    // One place handles rejecting an unknown name, and writes back the family
+    // that actually took effect so the file cannot keep a name that resolves
+    // to nothing.
+    apply_gui_font_family(config.get("gui_font_family", ""));
   }
   apply_config_live();
   config.save();

@@ -75,6 +75,8 @@ namespace
         {"resizeup", "Pane", "Resize current pane up", 65},
         {"resizedown", "Pane", "Resize current pane down", 65},
         {"theme", "Appearance", "Apply color theme", 90},
+        {"font", "Appearance", "Change the UI font family", 88},
+        {"fonts", "Appearance", "Change the UI font family", 80},
         {"colorscheme", "Appearance", "Apply color theme", 80},
         {"minimap", "Appearance", "Toggle minimap", 70},
         {"term", "Terminal", "Open, focus, or hide terminal", 90},
@@ -464,6 +466,16 @@ void Editor::refresh_command_palette()
       for (const auto &theme : list_available_themes())
       {
         add_arg(theme, "Theme", "Apply color theme", 120);
+      }
+    }
+    else if (lcmd == "font" || lcmd == "fonts")
+    {
+      // The installed families, so the spelling never has to be guessed. The
+      // list is scanned once and cached, so re-completing while typing is
+      // cheap.
+      for (const std::string &family : gui_font_families())
+      {
+        add_arg(family, "Font", "Change the UI font family", 120);
       }
     }
     else if (lcmd == "openrecent")

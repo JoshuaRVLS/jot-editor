@@ -799,6 +799,19 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
       set_message("Pane resized down");
     }
   }
+  else if (lcmd == "font" || lcmd == "fonts")
+  {
+    if (trim_copy(arg).empty())
+    {
+      // No name: pick from what is installed, current family marked.
+      open_font_picker();
+    }
+    else
+    {
+      // Reports its own reason on failure (no GUI, or an unknown family).
+      apply_gui_font_family(trim_copy(arg));
+    }
+  }
   else if (lcmd == "theme" || lcmd == "colorscheme" || lcmd == "colo")
   {
     const auto themes = list_available_themes();

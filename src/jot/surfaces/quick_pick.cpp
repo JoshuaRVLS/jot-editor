@@ -1,8 +1,9 @@
 #include "editor.h"
 #include "jot/lua/api.h"
-#include "tools/symbols/index.h"
 #include "tools/string_util.h"
+#include "tools/symbols/index.h"
 #include "tools/workspace/search.h"
+#include "ui/gui/gui.h"
 
 #include <algorithm>
 #include <cctype>
@@ -207,6 +208,14 @@ void Editor::accept_quick_pick()
     {
       lua_api->run_plugin_callback(callback, value);
     }
+    needs_redraw = true;
+    return;
+  }
+  if (quick_pick_kind == QUICK_PICK_FONT)
+  {
+    const std::string chosen = item.value;
+    close_quick_pick();
+    apply_gui_font_family(chosen);
     needs_redraw = true;
     return;
   }
@@ -601,6 +610,69 @@ void Editor::show_symbol_picker()
   {
     set_message("No symbols found yet");
   }
+}
+
+bool Editor::apply_gui_font_family(const std::string &family)
+{
+  auto *gui = dynamic_cast<UIGui *>(ui);
+  if (!gui)
+  {
+    set_message("Fonts apply to the GUI frontend only");
+    return false;
+  }
+  if (!gui->apply_font_family(family))
+  {
+    set_message("Unknown font family: " + family + " (:font lists them)");
+    return false;
+  }
+  config.set("gui_font_family", gui->font_family());
+  config.save();
+  set_message(gui->font_family().empty() ? "Font: built-in default"
+                                         : "Font: " + gui->font_family());
+  return true;
+}
+
+std::string Editor::gui_font_family_name() const
+{
+  const auto *gui = dynamic_cast<const UIGui *>(ui);
+  return gui ? gui->font_family() : std::string();
+}
+
+std::vector<std::string> Editor::gui_font_families() const
+{
+  const auto *gui = dynamic_cast<const UIGui *>(ui);
+  return gui ? gui->available_font_families() : std::vector<std::string>();
+}
+
+void Editor::open_font_picker()
+{
+  if (!dynamic_cast<UIGui *>(ui))
+  {
+    set_message("Fonts apply to the GUI frontend only");
+    return;
+  }
+  const std::string current = gui_font_family_name();
+  std::vector<QuickPickItem> items;
+  // The built-in chain comes first so the picker can always get back to it.
+  QuickPickItem default_item;
+  default_item.label = "Default";
+  default_item.detail = current.empty() ? "current" : "the font jot ships with";
+  items.push_back(std::move(default_item));
+
+  for (const std::string &name : gui_font_families())
+  {
+    QuickPickItem item;
+    item.label = name;
+    item.detail = (name == current) ? "current" : "";
+    item.value = name;
+    items.push_back(std::move(item));
+  }
+  if (items.size() == 1)
+  {
+    set_message("No font families found (looked in ~/.local/share/fonts and /usr/share/fonts)");
+    return;
+  }
+  open_quick_pick(QUICK_PICK_FONT, "Font", std::move(items));
 }
 
 void Editor::request_document_symbols()

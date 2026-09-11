@@ -4,6 +4,7 @@
 // animation state in gui_anim.cpp.
 #include "gui/gui.h"
 #include "gui/gui_fit.h"
+#include "ui/gui/font_catalog.h"
 
 #include <SDL2/SDL.h>
 
@@ -70,8 +71,9 @@ bool compile_shader(unsigned int type, const char *src, unsigned int &out)
 }
 } // namespace
 
-UIGui::UIGui(int cols, int rows, int default_fg, int default_bg, int font_px)
-    : UI(nullptr), font_px_(std::clamp(font_px, 8, 40))
+UIGui::UIGui(
+    int cols, int rows, int default_fg, int default_bg, int font_px, const std::string &font_family)
+    : UI(nullptr), font_px_(std::clamp(font_px, 8, 40)), font_family_(font_family)
 {
   init_sdl_and_gl();
   init_freetype();
@@ -184,13 +186,8 @@ bool UIGui::init_sdl_and_gl()
   return true;
 }
 
-bool UIGui::init_freetype()
+bool UIGui::load_default_faces()
 {
-  if (FT_Init_FreeType(&ft_lib_) != 0)
-  {
-    throw std::runtime_error("jot-gui: FreeType init failed");
-  }
-
   const char *home = std::getenv("HOME");
   const std::string base = home ? std::string(home) + "/.local/share/fonts" : "";
 
@@ -232,14 +229,42 @@ bool UIGui::init_freetype()
   load_face(kStyleBold, bold_paths);
   load_face(kStyleItalic, italic_paths);
   load_face(kStyleBoldItalic, bold_italic_paths);
+  return faces_[kStyleRegular] != nullptr;
+}
 
-  FT_Face regular = faces_[kStyleRegular];
-  if (!regular)
+bool UIGui::init_freetype()
+{
+  if (FT_Init_FreeType(&ft_lib_) != 0)
+  {
+    throw std::runtime_error("jot-gui: FreeType init failed");
+  }
+
+  // A selected family names the typeface explicitly. Its style faces come
+  // from the same family, so bold and italic match the regular face instead of
+  // coming from whatever the default chain happened to find.
+  bool family_loaded = false;
+  if (!font_family_.empty())
+  {
+    family_loaded = load_family_faces(font_family_);
+    if (!family_loaded)
+    {
+      // A name that no longer resolves (font uninstalled, typo in the config)
+      // must not cost the user their UI: fall through to the default chain.
+      std::fprintf(
+          stderr, "jot-gui: font family '%s' not found; using the default\n", font_family_.c_str());
+      font_family_.clear();
+    }
+    else
+    {
+      font_family_ = resolved_family_name_;
+    }
+  }
+  if (!family_loaded && !load_default_faces())
   {
     throw std::runtime_error("jot-gui: no usable font found (set JOT_GUI_FONT to a .ttf)");
   }
 
-  FT_Set_Pixel_Sizes(regular, 0, font_px_);
+  FT_Set_Pixel_Sizes(faces_[kStyleRegular], 0, font_px_);
   refresh_cell_metrics();
   return true;
 }
@@ -271,6 +296,138 @@ void UIGui::apply_font_zoom(int step)
   apply_font_size(font_px_ + step);
 }
 
+bool UIGui::load_family_faces(const std::string &family)
+{
+  jot_gui::FontFamily found;
+  if (!jot_gui::resolve_font_family(ft_lib_, family, found) || !found.valid())
+  {
+    return false;
+  }
+  const std::string *paths[kStyleCount] = {
+      &found.regular, &found.bold, &found.italic, &found.bold_italic};
+  FT_Face loaded[kStyleCount] = {nullptr, nullptr, nullptr, nullptr};
+  for (int style = 0; style < kStyleCount; style++)
+  {
+    const std::string *path = paths[style];
+    // A style the family does not ship falls back to its regular face: bold
+    // and italic text then renders unslanted rather than switching typeface.
+    if ((path == nullptr || path->empty()) && style != kStyleRegular)
+    {
+      path = &found.regular;
+    }
+    if (path != nullptr && !path->empty()
+        && FT_New_Face(ft_lib_, path->c_str(), 0, &loaded[style]) == 0)
+    {
+      FT_Set_Pixel_Sizes(loaded[style], 0, font_px_);
+    }
+  }
+  if (!loaded[kStyleRegular])
+  {
+    for (FT_Face face : loaded)
+    {
+      if (face)
+      {
+        FT_Done_Face(face);
+      }
+    }
+    return false;
+  }
+
+  // The atlas is deliberately not cleared here: this runs during
+  // init_freetype, before the GL context and the atlas texture exist, and
+  // clearing it touches both. Callers that switch fonts at runtime clear it
+  // themselves (see apply_font_family); at startup there is nothing cached yet.
+  for (int style = 0; style < kStyleCount; style++)
+  {
+    if (faces_[style])
+    {
+      FT_Done_Face(faces_[style]);
+    }
+    faces_[style] = loaded[style];
+  }
+  resolved_family_name_ = found.name;
+  return true;
+}
+
+void UIGui::refit_grid()
+{
+  // The window keeps its size; the grid re-fits around the new cell size
+  // (same math as the SDL resize handler). The editor is told via a
+  // synthesized EVENT_RESIZE by the pump, which relayouts the panes.
+  refresh_scale();
+  const jot_gui::GridFit fit = jot_gui::fit_grid(pixel_w_, pixel_h_, cell_w_, cell_h_);
+  resize(fit.cols, fit.rows);
+  if (std::getenv("JOT_GUI_DEBUG"))
+  {
+    std::fprintf(stderr,
+                 "jot-gui: font_px=%d cell=%.1fx%.1f grid=%dx%d scale=%.2f family=%s\n",
+                 font_px_,
+                 cell_w_,
+                 cell_h_,
+                 fit.cols,
+                 fit.rows,
+                 (double)scale_,
+                 font_family_.empty() ? "(default)" : font_family_.c_str());
+  }
+}
+
+bool UIGui::apply_font_family(const std::string &family)
+{
+  if (family == font_family_)
+  {
+    return true;
+  }
+  // Remember a name that does not resolve. Without this, a config file holding
+  // a family that was since uninstalled would re-scan the font directories on
+  // every config change, to fail the same way every time.
+  if (family == last_font_request_ && !last_font_request_ok_)
+  {
+    return false;
+  }
+  last_font_request_ = family;
+  // An empty name returns to the built-in chain, which is how the picker
+  // offers a way back from a family the user does not want after all. The
+  // faces are only replaced once the switch succeeded, so a name that does
+  // not resolve leaves the current font on screen.
+  bool switched = false;
+  std::string resolved;
+  if (family.empty())
+  {
+    switched = load_default_faces();
+  }
+  else
+  {
+    switched = load_family_faces(family);
+    if (switched)
+    {
+      resolved = resolved_family_name_;
+    }
+  }
+  if (!switched)
+  {
+    last_font_request_ok_ = false;
+    return false;
+  }
+  last_font_request_ok_ = true;
+  font_family_ = family.empty() ? std::string() : resolved;
+  // The atlas caches glyphs rasterised from the old faces, and a different
+  // face means a different cell size.
+  clear_atlas();
+  refresh_cell_metrics();
+  refit_grid();
+  return true;
+}
+
+std::vector<std::string> UIGui::available_font_families() const
+{
+  std::vector<std::string> names;
+  for (const jot_gui::FontFamily &family : jot_gui::installed_families(ft_lib_))
+  {
+    names.push_back(family.name);
+  }
+  return names;
+}
+
 void UIGui::apply_font_size(int px)
 {
   const int new_px = std::clamp(px, 8, 40);
@@ -292,24 +449,7 @@ void UIGui::apply_font_size(int px)
   // let the next paint rebuild it lazily.
   clear_atlas();
   refresh_cell_metrics();
-
-  // The window keeps its size; the grid re-fits around the new cell size
-  // (same math as the SDL resize handler). The editor is told via a
-  // synthesized EVENT_RESIZE by the pump, which relayouts the panes.
-  refresh_scale();
-  const jot_gui::GridFit fit = jot_gui::fit_grid(pixel_w_, pixel_h_, cell_w_, cell_h_);
-  resize(fit.cols, fit.rows);
-  if (std::getenv("JOT_GUI_DEBUG"))
-  {
-    std::fprintf(stderr,
-                 "jot-gui: zoom font_px=%d cell=%.1fx%.1f grid=%dx%d scale=%.2f\n",
-                 font_px_,
-                 cell_w_,
-                 cell_h_,
-                 fit.cols,
-                 fit.rows,
-                 (double)scale_);
-  }
+  refit_grid();
 }
 
 bool UIGui::load_face(int style, const std::vector<std::string> &paths)

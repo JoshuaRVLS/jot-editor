@@ -40,7 +40,8 @@ enum QuickPickKind
   QUICK_PICK_SYMBOLS,
   QUICK_PICK_REFERENCES,
   QUICK_PICK_CODE_ACTIONS,
-  QUICK_PICK_PLUGIN
+  QUICK_PICK_PLUGIN,
+  QUICK_PICK_FONT
 };
 
 struct QuickPickItem
@@ -49,6 +50,9 @@ struct QuickPickItem
   std::string detail;
   std::string preview;
   std::string filepath;
+  // The value the row stands for, when it is not a location: the font picker
+  // puts the family name here so the label can carry the display text.
+  std::string value;
   int line = 0;
   int col = 0;
   int severity = 0;
