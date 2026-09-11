@@ -117,6 +117,16 @@ void Editor::apply_config_live()
   {
     apply_theme(scheme, false, false);
   }
+  // Right-edge margin (see Terminal::render_margin_): 0 paints the full width.
+  // A change alters the paintable width, so the layout has to be rebuilt.
+  {
+    const int margin = std::clamp(config.get_int("render_margin", 0), 0, 4);
+    if (margin != terminal.render_margin())
+    {
+      terminal.set_render_margin(margin);
+      update_pane_layout();
+    }
+  }
   needs_redraw = true;
 }
 
@@ -386,6 +396,10 @@ void Editor::initialize_terminal_ui()
   // weren't ready when init ran. Re-probing here ensures the first UI frame
   // uses the real terminal dimensions, not a stale value.
   terminal.refresh_size();
+  // Right-edge margin (see Terminal::render_margin_): 0 paints the full width.
+  // Read here as well as in apply_config_live() so a configured value is in
+  // effect for the first frame, before create_pane() sizes the layout.
+  terminal.set_render_margin(config.get_int("render_margin", 0));
   terminal.set_poll_timeout_ms(std::max(1, 1000 / std::max(render_fps, idle_fps)));
   ui = new UI(&terminal);
   ui->resize(terminal.get_width(), terminal.get_height());

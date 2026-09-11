@@ -423,9 +423,25 @@ struct LuaFloatWindow
   int border_fg = -1; // -1 = fall back to fg
   int title_fg = -1;  // -1 = fall back to fg
   int footer_fg = -1; // -1 = fall back to fg
+  // Background for the footer row (-1 = the float's own bg). The footer shares
+  // the bottom border row, so a surface whose bar takes the region below it
+  // gives the footer the same background.
+  int footer_bg = -1;
   std::string relative = "editor";
   std::string anchor = "NW";
   std::string border = "none";
+  // Which sides of that border to ink. Defaults to all four, which is what a
+  // float over buffer content wants. A surface that is pinned against another
+  // region (the right dock) turns the others off so the separator between them
+  // is one line, drawn by the region on its left -- see render/pane_edges.h.
+  // The border still reserves its cell, so content geometry is unchanged.
+  bool border_top = true;
+  bool border_right = true;
+  bool border_bottom = true;
+  bool border_left = true;
+  // Background for the bottom border row (-1 = the float's own bg). Used when the
+  // bar sits on top of another region and should take its colour.
+  int border_bottom_bg = -1;
   std::array<std::string, 8> custom_border = {"", "", "", "", "", "", "", ""};
   std::string title;
   std::string footer;

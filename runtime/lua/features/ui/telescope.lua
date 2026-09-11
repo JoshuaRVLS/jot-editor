@@ -369,7 +369,7 @@ local function telescope(p)
                        p,
                        {},
                        {
-                         border = "rounded",
+                         border = "single",
                          title = p.title or " ",
                          title_fg = t_fg,
                        },

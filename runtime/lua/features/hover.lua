@@ -16,7 +16,7 @@ local jot = jot
 -- Tune these to restyle the hover popup.
 local HOVER_MAX_WIDTH = 96  -- wrap width for content
 local HOVER_MAX_ROWS = 14   -- rows shown before the footer counter kicks in
-local HOVER_BORDER = "rounded"
+local HOVER_BORDER = "single"
 
 -- Nerd-font icon per diagnostic severity. Signature, doc and code sections
 -- stay icon-free so the popup reads as plain tooltip text; only diagnostics

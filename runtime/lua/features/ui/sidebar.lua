@@ -59,14 +59,19 @@ local function sidebar(p)
           { col = col, fill = true, w = math.max(1, ww or 1), f = f or 7, b = b or 0 }
     end
   end
-  -- Panel frame (closed box, rounded corners), mirroring the native paint.
-  place(x, y, "╭" .. string.rep("─", math.max(0, w - 2)) .. "╮", border_fg, bg)
-  for i = 2, h - 1 do
-    local row = y + i - 1
-    place(x, row, "│", border_fg, bg)
-    place(x + w - 1, row, "│", border_fg, bg)
+  -- The two sides that face another region: the editor to the right, and the
+  -- status line below. The top and left edges are the screen's, which delimit
+  -- nothing, so they stay unpainted -- the same rule the panes follow
+  -- (see pane_edges.h).
+  --
+  -- The bottom edge ends in a T (up + left + right): the editor's own bottom
+  -- separator continues to the right of this panel, so the two form one line
+  -- across the status line instead of stopping at the panel's edge.
+  for i = 1, h - 1 do
+    place(x + w - 1, y + i - 1, "│", border_fg, bg)
   end
-  place(x, y + h - 1, "╰" .. string.rep("─", math.max(0, w - 2)) .. "╯", border_fg, bg)
+  local bar_bg = colors.status_bg or bg
+  place(x, y + h - 1, string.rep("─", math.max(0, w - 1)) .. "┴", border_fg, bar_bg)
 
   -- Activity rail (left, inside the frame): active view marker + label, and
   -- a separator between the rail and content.
@@ -149,10 +154,25 @@ local function sidebar(p)
     end
   end
 
-  -- Compose every content row (2 .. h-1): merge placement ops sorted by
-  -- column; bounded background fills are emitted first, glyph spans on top
-  -- so text always wins. Byte offsets stay exact even with wide glyphs.
-  for i = 2, h - 1 do
+  -- Header: the workspace root (icon first) on the panel's first row. Placed as
+  -- an op so it composes with the right-edge separator like any other row --
+  -- there is no border row to bake it into.
+  local hcol = math.max(1, (p.header_x or (content_x + 1)) - x)
+  if p.header and p.header ~= "" then
+    place(x + hcol - 1,
+          y,
+          trunc_cells(p.header, math.max(1, content_w)),
+          p.header_fg or dir,
+          bg,
+          true)
+  end
+
+  -- Compose every row (1 .. h). The bounds used to be 2 .. h-1 because the first
+  -- and last rows were the frame's top and bottom edges, composed separately;
+  -- with no frame those rows are ordinary content, and skipping them left the
+  -- right-edge separator one row short at each end (so it no longer met the
+  -- pane's line at the bottom).
+  for i = 1, h do
     local list = ops[i] or {}
     table.sort(list, function(a, b)
       if a.col ~= b.col then
@@ -194,43 +214,6 @@ local function sidebar(p)
     if #ls > 0 then
       spans[i] = ls
     end
-  end
-
-  -- Top border row with the header baked in (the native paint draws the
-  -- header on the border row after the frame).
-  local hcol = math.max(2, (p.header_x or (content_x + 1)) - x)
-  local htxt = (p.header and p.header ~= "")
-      and trunc_cells(p.header, math.max(1, content_w))
-      or ""
-  -- The label (icon first) is baked into the border dash run. Reserve a
-  -- couple of cells of dash after the corner so a leading icon never butts
-  -- against the frame; hand-written headers with their own leading space
-  -- are fine (blank cells here read as intentional padding, not a notch).
-  local hcells = cell_len(htxt)
-  local lead = math.min(math.max(hcol - 1, 2), w - 2)
-  local tail = math.max(0, (w - 2) - lead - hcells)
-  local top = "╭" .. string.rep("─", lead) .. htxt .. string.rep("─", tail) .. "╮"
-  body[1] = pad_cells(top, w)
-  -- Border glyphs are 3-byte UTF-8, so the border prefix is 3 + 3*lead
-  -- bytes; spans must never slice mid-rune or the corner renders as `?`.
-  local border_bytes = 3 + 3 * lead
-  local top_spans = { { start = 0, len = border_bytes, fg = border_fg, bg = bg,
-                        bold = p.resizing } }
-  if htxt ~= "" then
-    top_spans[#top_spans + 1] =
-        { start = border_bytes, len = #htxt, fg = p.header_fg or dir, bg = bg, bold = true }
-  end
-  top_spans[#top_spans + 1] = { start = border_bytes + #htxt,
-                                len = #top - border_bytes - #htxt,
-                                fg = border_fg, bg = bg, bold = p.resizing }
-  if #top_spans > 0 then
-    spans[1] = top_spans
-  end
-
-  -- Bottom border row.
-  if h > 1 then
-    body[h] = pad_cells("╰" .. string.rep("─", math.max(0, w - 2)) .. "╯", w)
-    spans[h] = { { start = 0, len = 65535, fg = border_fg, bg = bg, bold = p.resizing } }
   end
 
   -- Reuse the persistent buffer/float across frames.

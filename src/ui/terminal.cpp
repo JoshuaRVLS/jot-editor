@@ -457,9 +457,8 @@ void Terminal::init()
   if (height <= 0)
     height = 24;
 
-  // Renderer safety margin is fixed at one cell. Larger margins create a
-  // visible right-edge gap; zero brings back the rightmost-column wrap bug.
-  render_margin_ = 1;
+  // The right-edge margin keeps its default (zero: paint the full width) and is
+  // owned by the `render_margin` setting, applied in Editor::apply_config_live().
 
   // Per-row chunked-flush threshold. JOT_RENDER_CHUNK_BYTES=<n> overrides
   // the default of 0 (disabled). Set to e.g. 2048 or 4096 to enable

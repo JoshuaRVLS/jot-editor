@@ -338,7 +338,18 @@ editor.
 
 The chrome is yours to arrange: menu bar, pane tabs, editor panes, optional
 sidebar, optional minimap, a right-side tool dock, bottom terminal/debugger
-panels, and a two-row status/message area. The mouse is wired throughout —
+panels, and a two-row status/message area.
+
+Borders mark where one region ends and another begins, and only there: a region
+draws a line only on the side facing another region, so the sidebar and the
+editor share a single `│`, a split has one separator rather than two, and a lone
+pane has no frame at all — focus is shown by the cursor and the active tab, never
+by the border. Floats (hover, completion, dialogs, telescope, the tool dock's
+panels) sit over buffer content on every side, so they keep a full box. Everything
+is drawn with flat corners; the colour comes from the theme's `WinSeparator` /
+`FloatBorder` / `SidebarBorder` slots.
+
+The mouse is wired throughout —
 click to place the cursor, drag to select (with edge auto-scroll), double/
 triple-click for word/line selection (double-click stops at `.`, so `ext`
 in `ext.begin()` selects just `ext`), `Ctrl+D` to select the next occurrence
@@ -567,6 +578,13 @@ Where the caret is painted by jot — the GUI — it uses whichever of the two
 contrasts with the cell underneath, so it stays visible over comments,
 selections and dimmed text. In the TUI the hardware cursor is drawn by the
 terminal emulator, which owns its colour; jot only sets its shape and position.
+
+`render_margin` (default `0`) is the number of columns left unpainted on the
+right edge. `0` uses the full width, so full-width rules and the bottom bar end
+on the last column. Raise it to `1` only if a terminal corrupts the frame when
+its last column is written: the renderer already disables autowrap and addresses
+each row with an absolute cursor move, so the wrap hazard the margin guarded
+against cannot trigger on a conforming terminal.
 
 See [THEMES.md](THEMES.md) for authoring colorschemes and
 [LUA_API.md](LUA_API.md) for the scripting API.

@@ -202,11 +202,27 @@ UI::UI(Terminal *t)
     last_grid[y].resize(width);
     for (int x = 0; x < width; x++)
     {
-      grid[y][x] = {" ", default_fg, default_bg, false, false, false};
-      last_grid[y][x] = {" ", default_fg, default_bg, false, false, false};
+      grid[y][x] = blank_cell();
+      last_grid[y][x] = blank_cell();
     }
   }
   mark_all_rows_dirty();
+}
+
+// A blank cell in the UI's default colors.
+//
+// Deliberately built by assignment rather than a brace initializer: UICell's
+// optional 24-bit colors sit between `bg` and `bold`, so the positional form
+// ({" ", fg, bg, false, false, false}) silently assigned `false` -- i.e. 0,
+// truecolor *black* -- to fg_rgb and bg_rgb instead of leaving them unset. Every
+// cell the clear path touched then painted black-on-black.
+UICell UI::blank_cell() const
+{
+  UICell cell;
+  cell.ch = " ";
+  cell.fg = default_fg;
+  cell.bg = default_bg;
+  return cell;
 }
 
 void UI::mark_all_rows_dirty()
@@ -296,7 +312,7 @@ void UI::clear()
   {
     for (auto &cell : row)
     {
-      cell = {" ", default_fg, default_bg, false, false, false};
+      cell = blank_cell();
     }
   }
   mark_all_rows_dirty();
@@ -1160,7 +1176,7 @@ void UI::draw_rect(const UIRect &rect, int fg, int bg)
   }
 }
 
-void UI::draw_border(const UIRect &rect, int fg, int bg)
+void UI::draw_border(const UIRect &rect, int fg, int bg, const UIBorderEdges &edges, int bottom_bg)
 {
   // Defensive clamp: if the caller asked for a right edge that lands
   // in the right-edge render margin (the column the renderer will
@@ -1176,55 +1192,84 @@ void UI::draw_border(const UIRect &rect, int fg, int bg)
       clamped.w = 1;
   }
 
-  // Top and Bottom
-  for (int x = clamped.x; x < clamped.x + clamped.w && x < width; x++)
+  const int right_x = clamped.x + clamped.w - 1;
+  const int bottom_y = clamped.y + clamped.h - 1;
+
+  auto put = [&](int x, int y, const char *ch, int row_bg)
   {
+    if (x < 0 || x >= width || y < 0 || y >= height)
+    {
+      return;
+    }
     UICell cell;
-    cell.ch = "─"; // U+2500
+    cell.ch = ch;
     cell.fg = fg;
-    cell.bg = bg;
+    cell.bg = row_bg;
     cell.bold = false;
     cell.italic = false;
     cell.reverse = false;
+    set_cell(x, y, cell);
+  };
+  // A corner only exists where both of its sides are drawn; a side that ends on
+  // its own runs its line glyph out to the endpoint instead, so a separator
+  // never leaves a stray corner glyph hanging off its end.
+  auto corner_or_line = [&](bool vertical, bool horizontal, const char *corner, const char *line)
+  { return (vertical && horizontal) ? corner : line; };
 
-    if (x == clamped.x)
-      cell.ch = "┌"; // U+250C
-    else if (x == clamped.x + clamped.w - 1)
-      cell.ch = "┐"; // U+2510 (Top Right)
-
-    // Draw top
-    if (clamped.y >= 0 && clamped.y < height)
-      set_cell(x, clamped.y, cell);
-
-    // Prepare bottom corners
-    if (x == clamped.x)
-      cell.ch = "└"; // U+2514
-    else if (x == clamped.x + clamped.w - 1)
-      cell.ch = "┘"; // U+2518
-    else
-      cell.ch = "─";
-
-    // Draw bottom
-    if (clamped.y + clamped.h - 1 < height && clamped.y + clamped.h - 1 >= 0)
-      set_cell(x, clamped.y + clamped.h - 1, cell);
+  if (edges.top)
+  {
+    for (int x = clamped.x; x <= right_x; x++)
+    {
+      const char *ch = "─";
+      if (x == clamped.x)
+      {
+        ch = corner_or_line(edges.left, true, "┌", "─");
+      }
+      else if (x == right_x)
+      {
+        ch = corner_or_line(edges.right, true, "┐", "─");
+      }
+      put(x, clamped.y, ch, bg);
+    }
   }
 
-  // Left and Right (excluding corners which are already drawn)
-  for (int y = clamped.y + 1; y < clamped.y + clamped.h - 1 && y < height; y++)
+  if (edges.bottom)
   {
-    UICell cell;
-    cell.ch = "│"; // U+2502
-    cell.fg = fg;
-    cell.bg = bg;
-    cell.bold = false;
-    cell.italic = false;
-    cell.reverse = false;
+    for (int x = clamped.x; x <= right_x; x++)
+    {
+      const char *ch = "─";
+      if (x == clamped.x)
+      {
+        // A left side that meets the run is an L; if the run also continues to
+        // the left, the junction is a T.
+        ch = !edges.left ? "─" : (edges.join_left ? "┴" : "└");
+      }
+      else if (x == right_x)
+      {
+        ch = !edges.right ? "─" : (edges.join_right ? "┴" : "┘");
+      }
+      put(x, bottom_y, ch, bottom_bg >= 0 ? bottom_bg : bg);
+    }
+  }
 
-    if (clamped.x >= 0 && clamped.x < width)
-      set_cell(clamped.x, y, cell);
-
-    if (clamped.x + clamped.w - 1 < width && clamped.x + clamped.w - 1 >= 0)
-      set_cell(clamped.x + clamped.w - 1, y, cell);
+  // The vertical runs cover the whole height when the matching horizontal side
+  // is absent (so the line reaches the box's ends), and the interior otherwise
+  // (the corners are already drawn by the horizontal passes).
+  const int v_from = edges.top ? clamped.y + 1 : clamped.y;
+  const int v_to = edges.bottom ? bottom_y - 1 : bottom_y;
+  if (edges.left)
+  {
+    for (int y = v_from; y <= v_to; y++)
+    {
+      put(clamped.x, y, "│", bg);
+    }
+  }
+  if (edges.right)
+  {
+    for (int y = v_from; y <= v_to; y++)
+    {
+      put(right_x, y, "│", bg);
+    }
   }
 }
 

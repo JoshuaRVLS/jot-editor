@@ -289,7 +289,7 @@ local function open_panel()
     height = height,
     relative = "editor",
     anchor = "NW",
-    border = "rounded",
+    border = "single",
     focusable = false,
     mouse = true,
     hide = false,

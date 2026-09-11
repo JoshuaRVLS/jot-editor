@@ -322,7 +322,7 @@ local function paint_toast(t)
     height = t.height,
     relative = "editor",
     anchor = "NW",
-    border = "rounded",
+    border = "single",
     focusable = false,
     mouse = true,
     hide = false,

@@ -46,7 +46,10 @@ void Editor::render_image_viewer()
 
   UIRect panel = {x, y, vw, vh};
   ui->fill_rect(panel, " ", theme.fg_default, theme.bg_image_border);
-  ui->draw_border(panel, image_viewer.get_border_fg(), image_viewer.get_border_bg());
+  ui->draw_border(panel,
+                  image_viewer.get_border_fg(),
+                  image_viewer.get_border_bg(),
+                  UIBorderEdges{false, false, false, false});
 
   std::string status = image_viewer.get_status_text();
   if (!status.empty())

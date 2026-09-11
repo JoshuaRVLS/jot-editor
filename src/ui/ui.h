@@ -11,6 +11,24 @@ struct UIRect
   int x, y, w, h;
 };
 
+// Which sides of a box to ink. Chrome that sits against another region draws
+// only the edge facing it (see src/render/pane_edges.h), so a separator between
+// two regions is one line rather than two adjacent ones. The default inks all
+// four sides, which is what a float over buffer content wants.
+struct UIBorderEdges
+{
+  bool top = true;
+  bool right = true;
+  bool bottom = true;
+  bool left = true;
+  // The horizontal line continues past this corner, because a region on that
+  // side draws its own bottom edge on the same row. The corner is then a
+  // T-junction (┴: up + left + right) rather than an L (└/┘), so one continuous
+  // separator runs across the row instead of appearing to break at each box.
+  bool join_left = false;
+  bool join_right = false;
+};
+
 struct UICell;
 
 // One Lua float-window's screen rect (grid cells), as laid out by
@@ -146,6 +164,11 @@ protected:
   int default_bg = 0;
 
   void set_cell(int x, int y, const UICell &cell);
+  // A blank cell in the UI's default colors. Use this rather than a brace
+  // initializer for UICell: the optional 24-bit colors sit between `bg` and
+  // `bold`, so a positional initializer silently sets them to 0 (truecolor
+  // black) instead of leaving them unset.
+  UICell blank_cell() const;
   // Writes a cell's colour pair as SGR, applying the dim adjustment and
   // preferring a 24-bit colour when the cell carries one. Shared by the full
   // row painter and both diff paths so they cannot drift apart.
@@ -201,7 +224,19 @@ public:
                  std::uint32_t fg_rgb = kNoRgb,
                  std::uint32_t bg_rgb = kNoRgb);
   void draw_rect(const UIRect &rect, int fg, int bg);
-  void draw_border(const UIRect &rect, int fg, int bg);
+  // Draws a box, optionally inking only some of its sides. A corner glyph is
+  // used only where both of its sides are on; a lone side runs its line glyph
+  // through to the endpoint, so a separator never ends in a stray corner.
+  //
+  // `bottom_bg` overrides the background of the bottom row (-1 = use `bg`). A
+  // bar sitting directly on top of another region takes that region's
+  // background: with the editor's own background it read as leftover editor
+  // space with a line drawn in it rather than as the top edge of the block below.
+  void draw_border(const UIRect &rect,
+                   int fg,
+                   int bg,
+                   const UIBorderEdges &edges = UIBorderEdges{},
+                   int bottom_bg = -1);
   void fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg);
   // Dims a region of the grid (modal scrim). GUI backends override this to
   // skip the grid paint and draw their own eased scrim overlay instead, so

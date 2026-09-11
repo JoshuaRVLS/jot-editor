@@ -126,6 +126,7 @@ bool LuaAPI::configure_float(int id, lua_State *L, int ti)
   f.border_fg = table_int(L, ti, "border_fg", f.border_fg);
   f.title_fg = table_int(L, ti, "title_fg", f.title_fg);
   f.footer_fg = table_int(L, ti, "footer_fg", f.footer_fg);
+  f.footer_bg = table_int(L, ti, "footer_bg", f.footer_bg);
   lua_getfield(L, ti, "style");
   if (lua_istable(L, -1))
   {
@@ -146,6 +147,17 @@ bool LuaAPI::configure_float(int id, lua_State *L, int ti)
         f.custom_border[i] = lua_tostring(L, -1);
       lua_pop(L, 1);
     }
+  lua_pop(L, 1);
+  f.border_bottom_bg = table_int(L, ti, "border_bottom_bg", f.border_bottom_bg);
+  // Which sides of the border to ink; absent keys leave the side on.
+  lua_getfield(L, ti, "border_edges");
+  if (lua_istable(L, -1))
+  {
+    f.border_top = table_bool(L, -1, "top", f.border_top);
+    f.border_right = table_bool(L, -1, "right", f.border_right);
+    f.border_bottom = table_bool(L, -1, "bottom", f.border_bottom);
+    f.border_left = table_bool(L, -1, "left", f.border_left);
+  }
   lua_pop(L, 1);
   for (const char *key : {"on_key", "key_callback"})
   {
@@ -472,19 +484,46 @@ void LuaAPI::render_floats()
         b = {"─", "│", "─", "│", "╭", "╮", "╯", "╰"};
       if (f->border == "custom")
         b = f->custom_border;
-      editor->ui->draw_text(x, y, b[4], border_fg, f->bg);
-      editor->ui->draw_text(x + f->w - 1, y, b[5], border_fg, f->bg);
-      editor->ui->draw_text(x, y + f->h - 1, b[7], border_fg, f->bg);
-      editor->ui->draw_text(x + f->w - 1, y + f->h - 1, b[6], border_fg, f->bg);
-      for (int i = 1; i < f->w - 1; i++)
+      // A side that is off is skipped entirely -- including its corners, which
+      // would otherwise hang off the end of a line that is not there. A lone
+      // side runs its line glyph out to the endpoint instead.
+      const bool top = f->border_top;
+      const bool bottom = f->border_bottom;
+      const bool left = f->border_left;
+      const bool right = f->border_right;
+      if (top)
       {
-        editor->ui->draw_text(x + i, y, b[0], border_fg, f->bg);
-        editor->ui->draw_text(x + i, y + f->h - 1, b[2], border_fg, f->bg);
+        editor->ui->draw_text(x, y, left ? b[4] : b[0], border_fg, f->bg);
+        editor->ui->draw_text(x + f->w - 1, y, right ? b[5] : b[0], border_fg, f->bg);
+        for (int i = 1; i < f->w - 1; i++)
+        {
+          editor->ui->draw_text(x + i, y, b[0], border_fg, f->bg);
+        }
       }
-      for (int i = 1; i < f->h - 1; i++)
+      if (bottom)
       {
-        editor->ui->draw_text(x, y + i, b[3], border_fg, f->bg);
-        editor->ui->draw_text(x + f->w - 1, y + i, b[1], border_fg, f->bg);
+        const int row_bg = f->border_bottom_bg >= 0 ? f->border_bottom_bg : f->bg;
+        editor->ui->draw_text(x, y + f->h - 1, left ? b[7] : b[2], border_fg, row_bg);
+        editor->ui->draw_text(x + f->w - 1, y + f->h - 1, right ? b[6] : b[2], border_fg, row_bg);
+        for (int i = 1; i < f->w - 1; i++)
+        {
+          editor->ui->draw_text(x + i, y + f->h - 1, b[2], border_fg, row_bg);
+        }
+      }
+      // The vertical runs cover the ends too when the matching horizontal side
+      // is absent, so a lone side reaches the box's corners.
+      const int v_from = top ? 1 : 0;
+      const int v_to = bottom ? f->h - 1 : f->h;
+      for (int i = v_from; i < v_to; i++)
+      {
+        if (left)
+        {
+          editor->ui->draw_text(x, y + i, b[3], border_fg, f->bg);
+        }
+        if (right)
+        {
+          editor->ui->draw_text(x + f->w - 1, y + i, b[1], border_fg, f->bg);
+        }
       }
     }
     auto bi = scratch_buffers.find(f->buffer);
@@ -576,7 +615,8 @@ void LuaAPI::render_floats()
     {
       const std::string footer_text =
           ui_truncate_cells(" " + f->footer + " ", std::max(0, r.w - 2));
-      editor->ui->draw_text(x + 1, y + r.h - 1, footer_text, footer_fg, f->bg);
+      const int footer_bg = f->footer_bg >= 0 ? f->footer_bg : f->bg;
+      editor->ui->draw_text(x + 1, y + r.h - 1, footer_text, footer_fg, footer_bg);
     }
     if (modal_dim_active && !modal_surface_open(f->surface))
     {

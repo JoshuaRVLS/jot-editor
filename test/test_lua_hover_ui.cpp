@@ -366,7 +366,7 @@ TEST_CASE("Bundled Lua hover UI renders and dismisses a float")
   REQUIRE(g.close_count == 0);
   REQUIRE(g.lines_count == g.last_height - 2);
   REQUIRE(g.last_width >= 1);
-  REQUIRE(g.last_border == "rounded");
+  REQUIRE(g.last_border == "single"); // flat corners, matching the pane chrome
   REQUIRE(g.last_fg == 250);
   REQUIRE(g.last_bg == 237);
   REQUIRE(g.last_col == "40");

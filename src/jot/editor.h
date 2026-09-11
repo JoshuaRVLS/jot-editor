@@ -235,6 +235,14 @@ private:
   bool handle_settings_input(int ch);
   bool handle_settings_mouse(int x, int y, bool is_click);
   void render_buffer_content(const SplitPane &pane, int pane_index, int buffer_id);
+  // The regions that share a separator with this pane: the other visible panes
+  // (skipping the ones zoom hides), the sidebar when it is up, the right dock,
+  // and whatever occupies the rows below the pane area. Used to decide which
+  // sides of the pane's box get inked (see render/pane_edges.h).
+  std::vector<UIRect> pane_neighbours(const SplitPane &pane, int draw_w) const;
+  // The right dock's box sides. Nothing lies to its right and the panes own the
+  // separator on its left, so only the status-line edge below it gets ink.
+  UIBorderEdges right_dock_edges(const UIRect &panel) const;
   // GUI smooth-scroll tracking: last reported first-visible line per pane,
   // so the fold-aware delta for the scroll animation is computed once per
   // pane per frame (editor side, where the fold ranges live). gui_pane_scroll_xs_

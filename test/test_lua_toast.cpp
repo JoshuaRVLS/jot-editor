@@ -601,7 +601,7 @@ TEST_CASE("Bundled toast module shows, stacks, and auto-dismisses")
   const int first = call_show(L, 1, "hello", 250);
   REQUIRE(first > 0);
   REQUIRE(g.open_count == 1);
-  REQUIRE(g.last_border == "rounded");
+  REQUIRE(g.last_border == "single"); // flat corners, matching the pane chrome
   REQUIRE(g.last_width == 56);
   REQUIRE(g.last_height == 4); // header row + message row + 2 borders
   REQUIRE(g.last_col == 62);   // 120 - 56 - margin(1) - 1

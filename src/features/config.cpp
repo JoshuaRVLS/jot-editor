@@ -82,6 +82,10 @@ void Config::load_defaults()
   settings["minimap_width"] = "15";
   settings["show_explorer"] = "true";
   settings["show_minimap"] = "true";
+  // Columns left unpainted on the right edge. 0 (the default) uses the full
+  // width; raise it only if a terminal corrupts the frame when its last column
+  // is written. See Terminal::render_margin_.
+  settings["render_margin"] = "0";
   settings["tab_size"] = "2";
   settings["show_indent_guides"] = "true";
   settings["auto_indent"] = "true";

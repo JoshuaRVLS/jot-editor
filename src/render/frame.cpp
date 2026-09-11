@@ -4,6 +4,7 @@
 #include "editor.h"
 #include "folding.h"
 #include "jot/lua/api.h"
+#include "render/pane_edges.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <cstdio>
@@ -879,6 +880,84 @@ bool Editor::cycle_local_tab(int delta)
   return switch_to_local_tab(next_idx);
 }
 
+std::vector<UIRect> Editor::pane_neighbours(const SplitPane &pane, int draw_w) const
+{
+  std::vector<UIRect> out;
+  if (!ui)
+  {
+    return out;
+  }
+
+  const int total_w = std::max(1, ui->get_render_width());
+  const int total_h = std::max(1, ui->get_height());
+
+  // The pane area stops above the status line and any bottom panel, and is
+  // inset by the sidebar and the right dock -- the same arithmetic
+  // update_pane_layout uses, so adjacency lines up with the layout.
+  const int menu_h = topbar_height();
+  const int bottom_h = status_height + integrated_terminal_reserved_h();
+  const int area_y = menu_h;
+  const int area_h = std::max(1, total_h - bottom_h - area_y);
+
+  for (size_t i = 0; i < panes.size(); i++)
+  {
+    if (&panes[i] == &pane)
+    {
+      continue;
+    }
+    // A zoomed pane covers the area alone; the others are parked off-screen.
+    if (pane_zoom_active && (int)i != current_pane)
+    {
+      continue;
+    }
+    const SplitPane &other = panes[i];
+    if (other.h <= 0 || other.w <= 0)
+    {
+      continue;
+    }
+    out.push_back(UIRect{other.x, other.y, other.w, other.h});
+  }
+
+  // The sidebar occupies the columns immediately left of the pane area, so a
+  // separator is shared; the sidebar itself draws that line (its right edge).
+  const int sidebar_w = show_sidebar ? effective_sidebar_width() : 0;
+  if (sidebar_w > 0 && pane.x >= sidebar_w)
+  {
+    out.push_back(UIRect{0, area_y, sidebar_w, area_h});
+  }
+
+  // The right dock starts where the pane area ends.
+  const int dock_w = effective_right_panel_width();
+  if (dock_w > 0 && pane.x + draw_w <= total_w - dock_w)
+  {
+    out.push_back(UIRect{total_w - dock_w, area_y, dock_w, area_h});
+  }
+
+  // Whatever the pane area sits above (the integrated terminal, the debugger
+  // panel) shares the rows directly below it.
+  if (area_y + area_h < total_h)
+  {
+    out.push_back(UIRect{0, area_y + area_h, total_w, total_h - (area_y + area_h)});
+  }
+  return out;
+}
+
+UIBorderEdges Editor::right_dock_edges(const UIRect &panel) const
+{
+  std::vector<UIRect> below;
+  if (!ui)
+  {
+    return UIBorderEdges{false, false, false, false};
+  }
+  const int total_h = ui->get_height();
+  const int bottom = panel.y + panel.h;
+  if (bottom < total_h)
+  {
+    below.push_back(UIRect{0, bottom, std::max(1, ui->get_width()), total_h - bottom});
+  }
+  return pane_layout::border_edges(panel, below);
+}
+
 void Editor::render_pane(const SplitPane &pane, int pane_index)
 {
   int draw_w = std::max(1, pane.w);
@@ -929,7 +1008,15 @@ void Editor::render_pane(const SplitPane &pane, int pane_index)
   // Deliberately dim: the pane frame uses the quiet panel border color for
   // both focused and unfocused panes (focus is shown by the cursor and the
   // active tab marker instead of a loud border).
-  ui->draw_border(rect, theme.fg_panel_border, theme.bg_panel_border);
+  //
+  // Only the sides facing another region get ink: a separator belongs to the
+  // region on its left/top, so two adjacent regions never draw two lines, and a
+  // lone pane draws no frame at all (see pane_edges.h).
+  ui->draw_border(rect,
+                  theme.fg_panel_border,
+                  theme.bg_panel_border,
+                  pane_layout::border_edges(rect, pane_neighbours(pane, draw_w)),
+                  theme.bg_status);
 
   // Pane-local file tabs name the pane's open buffers. The strip stays up
   // even when only one file is open so the top row always carries the

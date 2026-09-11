@@ -7,6 +7,7 @@ add_executable(jot_tests
   test_cursor_blink.cpp
   test_cursor_blink_wiring.cpp
   test_cursor_colors.cpp
+  test_pane_edges.cpp
   test_color_codes.cpp
   test_color_formats.cpp
   test_color_space.cpp

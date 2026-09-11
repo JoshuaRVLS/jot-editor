@@ -3,6 +3,7 @@ set(JOT_RENDER_SOURCES
   render/buffer.cpp
   render/diagnostics.cpp
   render/debugger.cpp
+  render/pane_edges.cpp
   render/easter.cpp
   render/frame.cpp
   render/minimap.cpp

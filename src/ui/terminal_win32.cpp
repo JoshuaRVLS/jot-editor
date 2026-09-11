@@ -775,7 +775,8 @@ void Terminal::init()
     width = 80;
   if (height <= 0)
     height = 24;
-  render_margin_ = 1;
+  // The right-edge margin keeps its default (zero: paint the full width) and is
+  // owned by the `render_margin` setting, applied in Editor::apply_config_live().
 
   const char *chunk = getenv("JOT_RENDER_CHUNK_BYTES");
   if (chunk && chunk[0] != '\0')

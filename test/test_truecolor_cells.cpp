@@ -139,3 +139,39 @@ TEST_CASE("A cell's 24-bit colour survives the diff renderer", "[jot][colorizer]
   REQUIRE(a != b);
   REQUIRE(a == UICell(a));
 }
+
+// The trap that produced black cells: UICell's optional 24-bit colours sit
+// between `bg` and `bold`, so a positional brace initializer written before they
+// existed ({" ", fg, bg, false, false, false}) assigns `false` -- i.e. 0,
+// truecolor *black* -- to them instead of leaving them unset. The clear path
+// used exactly that form, so every cell nothing painted afterwards rendered
+// black-on-black: visibly a black cell at each end of the tab row.
+//
+// This pins the invariant the clear path has to satisfy, and the helper it now
+// uses (UI::blank_cell) is what makes it hold.
+TEST_CASE("A cleared grid carries no 24-bit colours", "[jot][ui]")
+{
+  Terminal term;
+  UI ui(&term);
+  ui.resize(24, 6);
+
+  for (int y = 0; y < 6; y++)
+  {
+    for (int x = 0; x < 24; x++)
+    {
+      const UICell *cell = ui.cell_at(x, y);
+      REQUIRE(cell != nullptr);
+      // kNoRgb, not 0: 0 means "paint truecolor black", which is a very
+      // different thing from "no explicit colour".
+      REQUIRE(cell->fg_rgb == kNoRgb);
+      REQUIRE(cell->bg_rgb == kNoRgb);
+    }
+  }
+
+  // clear() (which the frame loop calls every frame) must preserve that.
+  ui.clear();
+  const UICell *after = ui.cell_at(3, 3);
+  REQUIRE(after != nullptr);
+  REQUIRE(after->fg_rgb == kNoRgb);
+  REQUIRE(after->bg_rgb == kNoRgb);
+}

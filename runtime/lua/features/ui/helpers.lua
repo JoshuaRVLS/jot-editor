@@ -149,7 +149,9 @@ local function present_panel(name, p, rows, opts, body_override, spans_override)
 
   -- Borderless floats (e.g. the statusline-integrated command palette) have
   -- no chrome rows, so content fills the whole surface instead of h-2 / w-2.
-  local has_border = (opts.border or "rounded") ~= "none"
+  -- Square corners: the pane chrome is square, and one style across the whole
+  -- UI is what keeps the floats from looking like a different design.
+  local has_border = (opts.border or "single") ~= "none"
   local inner_h = has_border and math.max(1, p.h - 2) or math.max(1, p.h)
   local body
   local spans_by_line
@@ -195,7 +197,11 @@ local function present_panel(name, p, rows, opts, body_override, spans_override)
     height = p.h,
     relative = "editor",
     anchor = "NW",
-    border = opts.border or "rounded",
+    border = opts.border or "single",
+    border_edges = opts.border_edges,
+    border_bottom_bg = opts.border_bottom_bg,
+    -- The footer shares the bottom border row, so it takes the same background.
+    footer_bg = opts.border_bottom_bg,
     -- Strip floats may occupy the statusline rows at the screen bottom
     -- (the statusline itself is one); the command palette needs this to
     -- sit its prompt row on the statusline slot.

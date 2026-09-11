@@ -112,18 +112,20 @@ private:
   int render_capture_seq_ = 0;
   bool render_capture_raw_ = false;
   int last_flush_bytes_ = 0;
-  // Per-frame safety margin: the renderer will not write the
-  // rightmost `render_margin_` physical columns of any row, and the
-  // cursor is clamped one cell inside that margin, so we never
-  // trigger the terminal's pending-wrap state at large widths.
-  // The margin is fixed at one cell; larger values would only
-  // produce a visibly oversized blank strip on the right edge of
-  // the UI without any safety benefit. UI::get_render_width() is
-  // defined as `width - render_margin()` and is the width every
-  // full-width panel (pane layout, status line, integrated
-  // terminal, image viewer, home menu) must use so its right
-  // border lands on the last paintable column.
-  int render_margin_ = 1;
+  // Columns on the right edge of every row that the renderer leaves unpainted.
+  // Zero (the default) uses the full width, which is what the layout wants:
+  // any margin shows up as a permanent blank strip down the right edge, and the
+  // bottom bar then stops one cell short of the corner it should meet.
+  //
+  // The wrap hazard the margin used to guard against is already handled: every
+  // frame disables autowrap (\x1b[?7l, see disable_autowrap) and each row is
+  // addressed with an absolute cursor move, so writing the last column neither
+  // wraps nor scrolls. The setting exists only as an escape hatch for a terminal
+  // that misbehaves there. UI::get_render_width() is defined as
+  // `width - render_margin()` and is the width every full-width panel (pane
+  // layout, status line, integrated terminal, image viewer, home menu) must use
+  // so its right border lands on the last paintable column.
+  int render_margin_ = 0;
   // Per-frame chunking threshold for `flush()`. When > 0 and the
   // output buffer has grown past this many bytes, `flush()` will
   // emit the data in blocking `write()` chunks of this size
@@ -280,12 +282,16 @@ public:
   void render_capture_marker(const std::string &label, int rows_rendered);
 
   // Number of physical columns on the right edge of every row that the
-  // renderer must leave untouched. This is fixed at exactly one cell so
-  // full-width borders sit on the last paintable column without creating
-  // a wider visual gap.
+  // renderer leaves untouched (see `render_margin_`).
   int render_margin() const
   {
-    return 1;
+    return render_margin_;
+  }
+
+  // Sets that margin; negative values are treated as zero.
+  void set_render_margin(int margin)
+  {
+    render_margin_ = margin > 0 ? margin : 0;
   }
 
   // The bytes queued for the next flush, without flushing them. Used by tests

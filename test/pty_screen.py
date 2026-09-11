@@ -31,6 +31,12 @@ class Screen:
         self.cols = cols
         self.rows = rows
         self.cells = [[" "] * cols for _ in range(rows)]
+        # Background colour per cell (a palette index, or -1 for "terminal
+        # default"). Tracked so a probe can tell one region's fill from another's
+        # -- the bottom bar is meant to carry the status line's background, and
+        # that is invisible in the text alone.
+        self.bg = [[-1] * cols for _ in range(rows)]
+        self.cur_bg = -1
         self.x = 0
         self.y = 0
         # An escape sequence can be split across reads; whatever follows a lone
@@ -96,10 +102,34 @@ class Screen:
                 ch = "?"
             if self.y < self.rows and self.x < self.cols:
                 self.cells[self.y][self.x] = ch
+                self.bg[self.y][self.x] = self.cur_bg
             self.x += 1
             i += length
 
+    def _sgr(self, params: str) -> None:
+        args = [int(p) for p in params.split(";") if p.isdigit()] if params else [0]
+        if not args:
+            self.cur_bg = -1
+            return
+        k = 0
+        while k < len(args):
+            a = args[k]
+            if a in (0, 49):
+                self.cur_bg = -1
+            elif a == 48 and k + 2 < len(args) and args[k + 1] == 5:
+                self.cur_bg = args[k + 2]
+                k += 2
+            elif a == 48 and k + 4 < len(args) and args[k + 1] == 2:
+                # Truecolour: keep the channels, tagged so it cannot be mistaken
+                # for a palette index.
+                self.cur_bg = 1000 + ((args[k + 2] << 16) | (args[k + 3] << 8) | args[k + 4])
+                k += 4
+            k += 1
+
     def _csi(self, params: str, final: str) -> None:
+        if final == "m":
+            self._sgr(params)
+            return
         args = [int(p) for p in params.split(";") if p.isdigit()] if params else []
         if final in ("H", "f"):
             self.y = max(0, (args[0] if args else 1) - 1)
@@ -116,18 +146,23 @@ class Screen:
             mode = args[0] if args else 0
             if mode == 2:
                 self.cells = [[" "] * self.cols for _ in range(self.rows)]
+                self.bg = [[-1] * self.cols for _ in range(self.rows)]
             elif mode == 0:
                 for cx in range(self.x, self.cols):
                     self.cells[self.y][cx] = " "
+                    self.bg[self.y][cx] = self.cur_bg
                 for cy in range(self.y + 1, self.rows):
                     self.cells[cy] = [" "] * self.cols
+                    self.bg[cy] = [-1] * self.cols
         elif final == "K":
             mode = args[0] if args else 0
             if mode == 0:
                 for cx in range(self.x, self.cols):
                     self.cells[self.y][cx] = " "
+                    self.bg[self.y][cx] = self.cur_bg
             elif mode == 2:
                 self.cells[self.y] = [" "] * self.cols
+                self.bg[self.y] = [-1] * self.cols
 
     def text(self) -> str:
         return "\n".join("".join(row).rstrip() for row in self.cells)
