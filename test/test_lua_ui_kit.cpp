@@ -386,7 +386,8 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
 
   // --- command palette ---
   push_module_field(L, 1, "command_palette");
-  push_box(L, 20, 5, 60, 12);
+  // Height is what command_palette_layout produces for 3 results: max_items + 1.
+  push_box(L, 20, 5, 60, 4);
   lua_pushstring(L, "open");
   lua_setfield(L, -2, "query");
   lua_pushinteger(L, 0);
@@ -418,7 +419,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
 
   REQUIRE(g.open_count == 1);
   REQUIRE(g.last_width == 60);
-  REQUIRE(g.last_height == 12);
+  REQUIRE(g.last_height == 4);
   REQUIRE(g.last_border == "none"); // statusline-integrated: no popup box
   REQUIRE(g.last_fg == 250);
   REQUIRE(g.last_bg == 235);
@@ -1571,6 +1572,89 @@ TEST_CASE("Completion rows split the label and right-align the type")
 
   // Closing the surface still works.
   push_module_field(L, 1, "lsp_completion");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+
+  lua_close(L);
+}
+
+// The palette's prompt row is the box's LAST row -- the statusline slot, which
+// is where place_command_palette_cursor puts the caret. The layout reserves one
+// row of headroom above the prompt even with nothing to show (the native
+// renderer puts its "No matches" line there), so the surface has to fill the box
+// it is given. It used to emit one row per match plus the prompt, which meant
+// with no matches the prompt was drawn on the box's first row while the caret
+// sat on its last: the input field appeared to move up and leave the cursor
+// behind.
+TEST_CASE("Palette keeps the prompt on the box's last row")
+{
+  g = StubState{};
+  lua_State *L = luaL_newstate();
+  REQUIRE(L != nullptr);
+  luaL_openlibs(L);
+  push_stub_jot(L);
+  REQUIRE(jot_lua::load_ui_kit_modules(L));
+  const std::string path = std::string(JOT_LUA_SOURCE_DIR) + "/features/ui.lua";
+  REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
+  REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  REQUIRE(lua_istable(L, 1));
+
+  // One call of the real handler with `count` results in a `box_h`-tall box.
+  auto emit = [&](int box_h, int count, const char *query)
+  {
+    push_module_field(L, 1, "command_palette");
+    push_box(L, 0, 0, 60, box_h);
+    lua_pushstring(L, query);
+    lua_setfield(L, -2, "query");
+    lua_pushinteger(L, 0);
+    lua_setfield(L, -2, "selected");
+    lua_newtable(L);
+    for (int i = 1; i <= count; i++)
+    {
+      lua_newtable(L);
+      lua_pushfstring(L, "match %d", i);
+      lua_setfield(L, -2, "label");
+      lua_newtable(L);
+      lua_setfield(L, -2, "match");
+      lua_rawseti(L, -2, i);
+    }
+    lua_setfield(L, -2, "results");
+    REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+    REQUIRE(lua_toboolean(L, -1));
+    lua_pop(L, 1);
+  };
+
+  // Nothing matches: the box keeps its headroom row and the prompt is on the
+  // last one, exactly where the caret goes. (command_palette_layout gives h=2
+  // for an empty result set.)
+  g.lines.clear();
+  emit(2, 0, "zzz");
+  REQUIRE(g.lines_count == 2);
+  REQUIRE(g.lines.size() == 2);
+  REQUIRE(g.lines[1].find(":zzz") != std::string::npos);
+  REQUIRE(g.lines[0].find(":zzz") == std::string::npos); // the headroom row is blank
+
+  // One match: prompt still last, and the match sits above it.
+  g.lines.clear();
+  emit(2, 1, "ma");
+  REQUIRE(g.lines_count == 2);
+  REQUIRE(g.lines[0].find("match 1") != std::string::npos);
+  REQUIRE(g.lines[1].find(":ma") != std::string::npos);
+
+  // A box too short for every match: the list is clamped so the prompt keeps its
+  // row, instead of the matches filling the box and dropping the prompt off the
+  // bottom.
+  g.lines.clear();
+  emit(3, 8, "m");
+  REQUIRE(g.lines_count == 3);
+  REQUIRE(g.lines[2].find(":m") != std::string::npos);
+  // ...and the rows above are matches, not prompt copies.
+  REQUIRE(g.lines[0].find(":m") == std::string::npos);
+  REQUIRE(g.lines[1].find(":m") == std::string::npos);
+
+  // Closing still works.
+  push_module_field(L, 1, "command_palette");
   lua_pushnil(L);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);

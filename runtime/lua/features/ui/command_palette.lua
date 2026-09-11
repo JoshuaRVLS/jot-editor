@@ -28,9 +28,15 @@ local function command_palette(p)
   local rows = {}
   local selected = math.max(0, p.selected or 0)
   local results = p.results or {}
-  local max_items = math.min(8, #results)
+  -- The prompt row is the box's LAST row (the statusline slot), which is where
+  -- place_command_palette_cursor puts the caret. Reserve that row and clamp the
+  -- list to what is left, or a short window would fill every row with matches
+  -- and drop the prompt off the bottom.
+  local box_h = math.max(1, p.h or 1)
+  local list_h = box_h - 1
+  local max_items = math.min(8, #results, list_h)
   local start_idx = 0
-  if #results > 0 then
+  if #results > 0 and max_items > 0 then
     start_idx = math.max(0, selected - max_items + 1)
     if start_idx + max_items > #results then
       start_idx = math.max(0, #results - max_items)
@@ -57,6 +63,14 @@ local function command_palette(p)
       end
     end
     rows[#rows + 1] = { text = pad(" " .. label, inner_w), fg = row_fg, bg = row_bg, spans = spans }
+  end
+  -- Blank headroom so the prompt still lands on the last row when there are
+  -- fewer matches than the box is tall. The box keeps one row of headroom even
+  -- with no matches at all (the native renderer puts its "No matches" line
+  -- there), and without this the prompt would be drawn on that first row while
+  -- the caret stayed on the last one.
+  while #rows < list_h do
+    rows[#rows + 1] = { text = pad("", inner_w), fg = fg, bg = bg }
   end
   -- The cmdline prompt row as the LAST row -- the statusline slot at the
   -- very bottom of the screen. Truncation matches the native caret math
