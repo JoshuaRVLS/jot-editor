@@ -42,6 +42,27 @@ namespace
     return base.empty() ? "[No Name]" : base;
   }
 
+  // The git_file_status map is keyed by absolute, lexically-normal path, and the
+  // tab strip looks one up per tab per frame. Resolving that path goes through
+  // std::filesystem, so borrow the answer from the buffer's memo instead of
+  // recomputing it on every frame; the memo re-derives itself whenever the
+  // buffer's path changes (save-as, reload).
+  const std::string &git_status_key_for(FileBuffer &buffer)
+  {
+    if (buffer.git_status_key_path != buffer.filepath)
+    {
+      buffer.git_status_key_path = buffer.filepath;
+      std::error_code ec;
+      std::filesystem::path p = std::filesystem::absolute(buffer.filepath, ec);
+      if (ec)
+      {
+        p = std::filesystem::path(buffer.filepath);
+      }
+      buffer.git_status_key = p.lexically_normal().string();
+    }
+    return buffer.git_status_key;
+  }
+
   std::pair<int, int> git_tab_colors(const Theme &theme, const std::string &status)
   {
     if (status.find('U') != std::string::npos || status == "AA" || status == "DD")
@@ -728,13 +749,13 @@ Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane, int d
     segment.active = (id == pane.buffer_id);
     segment.modified = buffers[id].modified;
     segment.preview = buffers[id].is_preview;
-    std::error_code status_ec;
-    const std::string status_path =
-        std::filesystem::absolute(buffers[id].filepath, status_ec).lexically_normal().string();
-    auto status_it = git_file_status.find(status_path);
-    if (status_it != git_file_status.end())
+    if (!buffers[id].filepath.empty())
     {
-      segment.git_status = status_it->second;
+      auto status_it = git_file_status.find(git_status_key_for(buffers[id]));
+      if (status_it != git_file_status.end())
+      {
+        segment.git_status = status_it->second;
+      }
     }
     layout.segments.push_back(std::move(segment));
     tab_x += need;

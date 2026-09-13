@@ -65,6 +65,12 @@ namespace
     return "";
   }
 
+  // Upper bound on the per-buffer line-colour cache (see get_line_syntax_colors).
+  // One entry costs roughly one (int, int) pair per byte of its line, so this
+  // is a few hundred thousand highlighted lines' worth of colour data; past it
+  // the cache is dropped wholesale and refilled from the visible viewport.
+  constexpr std::size_t kSyntaxCacheByteBudget = 8u * 1024u * 1024u;
+
 #ifdef JOT_TREESITTER
   bool contains_any(const std::string &text, const std::vector<std::string> &needles)
   {
@@ -376,6 +382,7 @@ void Editor::init_ts_for_buffer(FileBuffer &buf)
     buf.ts_parser = nullptr;
     buf.ts_language_id = language_id;
     buf.syntax_cache.clear();
+    buf.syntax_cache_bytes = 0;
     buf.ts_tree_in_sync = false;
     buf.ts_parse_pending = true;
     ts_manager_.queue_async_parse(std::move(job));
@@ -385,6 +392,7 @@ void Editor::init_ts_for_buffer(FileBuffer &buf)
   buf.ts_parser = parser;
   buf.ts_language_id = language_id;
   buf.syntax_cache.clear();
+  buf.syntax_cache_bytes = 0;
   buf.ts_async_parse_failed = false;
   reparse_tree(buf);
 }
@@ -465,6 +473,7 @@ void Editor::install_finished_parses()
       buf->ts_tree_in_sync = true;
     }
     buf->syntax_cache.clear();
+    buf->syntax_cache_bytes = 0;
     repaint = true;
   }
   if (repaint)
@@ -473,18 +482,32 @@ void Editor::install_finished_parses()
   }
 }
 
-std::string Editor::tree_sitter_extension_for_buffer(const FileBuffer &buf)
+std::string Editor::tree_sitter_extension_for_buffer(FileBuffer &buf)
 {
-  std::string ext = get_file_extension(buf.filepath);
+  const std::string ext = get_file_extension(buf.filepath);
   if (ext != ".h" || ts_manager_.has_language_override(ext))
   {
     return ext;
   }
-  if (has_cpp_sibling_source(buf.filepath) || header_content_looks_like_cpp(buf))
+  // The probe below is a property of the buffer, not of the line being
+  // highlighted, but this function is called once per rendered row per frame
+  // (plus once per bracket/diagnostic pass). Resolve it once and remember the
+  // answer for this path; mark_edited drops a "not C++" answer so a header the
+  // user is filling in still gets promoted on the next frame, while the
+  // stable ".cpp" answer survives edits.
+  if (buf.ts_extension_probe_path != buf.filepath)
   {
-    return ".cpp";
+    buf.ts_extension_probe_path = buf.filepath;
+    buf.ts_extension_probe.clear();
   }
-  return ext;
+  if (buf.ts_extension_probe.empty())
+  {
+    buf.ts_extension_probe = (has_cpp_sibling_source(buf.filepath)
+                              || header_content_looks_like_cpp(buf))
+                                 ? ".cpp"
+                                 : ext;
+  }
+  return buf.ts_extension_probe;
 }
 #endif
 
@@ -515,6 +538,7 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit)
     buf.syntax_cache_extension = cache_extension;
     buf.syntax_cache_line_count = buf.line_count();
     buf.syntax_cache.clear();
+    buf.syntax_cache_bytes = 0;
     buf.syntax_engine = SYNTAX_ENGINE_UNKNOWN;
     buf.syntax_language_label.clear();
   }
@@ -523,6 +547,7 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit)
   {
     buf.syntax_cache_line_count = buf.line_count();
     buf.syntax_cache.clear();
+    buf.syntax_cache_bytes = 0;
   }
 
 #ifdef JOT_TREESITTER
@@ -547,6 +572,7 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit)
   if (query && buf.ts_tree && buf.syntax_query != query && !buf.syntax_cache.empty())
   {
     buf.syntax_cache.clear();
+    buf.syntax_cache_bytes = 0;
     buf.syntax_cache_line_count = buf.line_count();
   }
   // Re-run the tree-sitter pass not only when the engine is not TS yet, but
@@ -558,7 +584,31 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit)
 #endif
 
   const std::string &line = buf.line(line_idx);
+  // Bound the per-line colour cache before touching it. Each entry holds a
+  // (token flag, token type) pair per byte of its line, so a multi-megabyte
+  // source file scrolled end to end would otherwise keep one entry -- and one
+  // colour vector -- for every line ever rendered, growing without limit. When
+  // the accumulated cost passes the budget the whole cache is dropped; only the
+  // viewport is highlighted per frame, so refilling costs exactly one frame of
+  // the work a first paint already does. Checked before `cache` is taken so the
+  // reference can never outlive the clear.
+  if (buf.syntax_cache_bytes > kSyntaxCacheByteBudget)
+  {
+    buf.syntax_cache.clear();
+    buf.syntax_cache_bytes = 0;
+  }
   SyntaxLineCache &cache = buf.syntax_cache[line_idx];
+  // Charge this entry against the cache budget, adding only the difference when
+  // a line is re-highlighted (a windowed line grows between frames).
+  const auto account_cache_entry = [&buf, &cache]() {
+    // The fixed term approximates the unordered_map node plus the vector
+    // header, which the budget cares about at the same order of magnitude as
+    // the colour bytes themselves.
+    const std::size_t now = sizeof(SyntaxLineCache) + 48u
+                            + cache.colors.size() * sizeof(std::pair<int, int>);
+    buf.syntax_cache_bytes += now - cache.accounted_bytes;
+    cache.accounted_bytes = now;
+  };
   // Normal lines are highlighted whole once and cached for good: requests with
   // a growing window (horizontal scroll into the line, minimap probing) then
   // hit the cache instead of re-running the query/regexes at every window size.
@@ -589,6 +639,7 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit)
     buf.syntax_engine = SYNTAX_ENGINE_TREESITTER;
     buf.syntax_query = query;
     buf.syntax_language_label = ts_manager_.language_id_for_extension(ts_extension);
+    account_cache_entry();
     return cache.colors;
   }
   buf.syntax_query = nullptr;
@@ -596,6 +647,7 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit)
 
   highlighter.set_language(raw_extension);
   cache.colors = highlighter.get_colors(line, limit);
+  account_cache_entry();
   if (highlighter.has_rules())
   {
     buf.syntax_engine = SYNTAX_ENGINE_REGEX;
@@ -631,6 +683,7 @@ void Editor::invalidate_syntax_cache(FileBuffer &buf)
   buf.syntax_cache_extension.clear();
   buf.syntax_cache_line_count = 0;
   buf.syntax_cache.clear();
+  buf.syntax_cache_bytes = 0;
   buf.syntax_engine = SYNTAX_ENGINE_UNKNOWN;
 #ifdef JOT_TREESITTER
   buf.syntax_query = nullptr;

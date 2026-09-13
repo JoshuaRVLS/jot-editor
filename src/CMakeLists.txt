@@ -176,6 +176,12 @@ if(NOT UTF8PROC_FOUND)
     set(UTF8PROC_CFLAGS_OTHER "")
   endif()
 endif()
+# Propagate to the app/test/benchmark dirs (add_subdirectory scopes). The
+# benchmark target compiles ui/text.cpp directly, so it needs utf8proc on its
+# own link line rather than inheriting it from the engine target.
+set(UTF8PROC_INCLUDE_DIRS "${UTF8PROC_INCLUDE_DIRS}" PARENT_SCOPE)
+set(UTF8PROC_LIBRARIES "${UTF8PROC_LIBRARIES}" PARENT_SCOPE)
+set(UTF8PROC_LIBRARY_DIRS "${UTF8PROC_LIBRARY_DIRS}" PARENT_SCOPE)
 if(JOT_TREESITTER)
   if(WIN32)
     find_package(tree-sitter CONFIG QUIET)

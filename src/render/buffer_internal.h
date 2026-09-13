@@ -45,7 +45,9 @@ int rainbow_bracket_color(const Theme &theme, int depth);
 void apply_bracket_depth_delta(char c, int &depth);
 bool bracket_chars(char c, char &open, char &close, bool &is_open);
 BracketPairMatch find_pair_at(const FileBuffer &buf, int line, int col);
-ActiveBracketGuide build_active_bracket_guide(const FileBuffer &buf, int tab_size);
+// Memoizes its result on the buffer (see FileBuffer::BracketGuideMemo), so the
+// buffer reference is mutable.
+ActiveBracketGuide build_active_bracket_guide(FileBuffer &buf, int tab_size);
 
 // diagnostics.cpp
 int diagnostic_severity_color(const Theme &theme, int severity);

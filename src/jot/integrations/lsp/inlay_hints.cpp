@@ -18,6 +18,14 @@
 // not immediately re-ask the server.
 static constexpr int kInlayHintMarginLines = 100;
 
+// The hint cache is keyed by file path and a server reports hints for files
+// other than the one on screen (headers pulled in by the current file), so a
+// long session in a large project accumulates one entry per file ever queried
+// and nothing ever removed them. Once the map grows past this many files, the
+// entries whose file is not open are dropped: they are only a cache, and a
+// miss simply asks the server again when that file is viewed.
+static constexpr std::size_t kMaxInlayHintCachedFiles = 64;
+
 // Hint cells inserted before `byte_col` on `line` of `filepath` — the amount
 // the text at that position is shifted right on screen. Shared by the buffer
 // renderer's overlays, the hardware caret placement, and the mouse mapping
@@ -167,6 +175,32 @@ void Editor::refresh_lsp_inlay_hints_if_needed()
     return;
   }
   const std::string &filepath = buf.filepath;
+  // See kMaxInlayHintCachedFiles. Never drops the current file or an entry with
+  // a request in flight (its answer would land in a recreated, half-filled
+  // entry).
+  if (lsp_inlay_hint_caches.size() > kMaxInlayHintCachedFiles)
+  {
+    for (auto it = lsp_inlay_hint_caches.begin(); it != lsp_inlay_hint_caches.end();)
+    {
+      bool open = it->first == filepath || it->second.in_flight;
+      for (const FileBuffer &other : buffers)
+      {
+        if (!other.filepath.empty() && other.filepath == it->first)
+        {
+          open = true;
+          break;
+        }
+      }
+      if (open)
+      {
+        ++it;
+      }
+      else
+      {
+        it = lsp_inlay_hint_caches.erase(it);
+      }
+    }
+  }
   auto &cache = lsp_inlay_hint_caches[filepath];
   if (cache.in_flight)
   {

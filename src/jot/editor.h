@@ -431,7 +431,9 @@ private:
 #ifdef JOT_TREESITTER
   void reparse_tree(FileBuffer &buf);
   void init_ts_for_buffer(FileBuffer &buf);
-  std::string tree_sitter_extension_for_buffer(const FileBuffer &buf);
+  // Memoizes its filesystem/content probe on the buffer (see syntax.cpp), so
+  // the buffer reference is mutable.
+  std::string tree_sitter_extension_for_buffer(FileBuffer &buf);
   // Called just before a text mutation while the tree-sitter tree is in sync:
   // snapshots the current text so the next rebuild can reparse incrementally.
   void ts_begin_edit(FileBuffer &buf);

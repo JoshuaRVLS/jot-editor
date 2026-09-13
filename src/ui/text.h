@@ -8,6 +8,11 @@ bool ui_is_valid_utf8_sequence(const std::string &text);
 std::string ui_sanitized_cell_text(const std::string &text);
 
 int ui_cell_count(const std::string &text);
+// Cell count of the byte range [begin, end) of `text`. Identical to
+// ui_cell_count(text.substr(begin, end - begin)) but without building the
+// substring, which matters because the column walks call it once per grapheme
+// per rendered row per frame.
+int ui_range_cell_count(const std::string &text, int begin, int end);
 std::string ui_take_cells(const std::string &text, int max_cells);
 std::string ui_truncate_cells(const std::string &text, int max_cells);
 std::string ui_truncate_left_cells(const std::string &text, int max_cells);

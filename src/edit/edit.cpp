@@ -28,7 +28,7 @@ namespace
       if (next <= i)
         next = i + 1;
       visual += (line[i] == '\t') ? tab_advance(visual, tab_size)
-                                  : std::max(1, ui_cell_count(line.substr(i, next - i)));
+                                  : std::max(1, ui_range_cell_count(line, i, next));
       i = next;
     }
     return visual;

@@ -771,6 +771,29 @@ cmake --build build --target jot_benchmarks -j
 Output reports per-case iteration counts and min/average/max runtimes in
 milliseconds. Compare runs on the same build type and machine.
 
+### Hot-path rules
+
+The renderer repaints the whole cell grid every frame, so anything it touches
+per row or per cell is a per-frame cost. A few rules keep that honest:
+
+- **Per-row scratch is reused, never reallocated.** Buffers and vectors the row
+  loop needs (visual columns, inlay-hint rows, colour spans, search hits) live
+  outside the loop and are cleared per row, so their high-water mark is
+  allocated once rather than once per visible row.
+- **Per-buffer properties are memoized, not recomputed per row.** Deciding
+  whether a `.h` is really C++, or resolving a buffer's absolute git-status
+  path, both touch the filesystem. Both are cached on the buffer and
+  recomputed only when the file or its content changes.
+- **Grapheme walks are O(1) per step.** The text helpers fast-path ASCII, which
+  is what almost every cell holds; the UTF-8 decoder only runs for bytes it is
+  actually needed for.
+- **Per-line caches are bounded.** The syntax cache holds one entry per line ever
+  highlighted, so it is capped and dropped wholesale when it passes the budget;
+  only the viewport is re-highlighted, which is one frame of work.
+- **GL uniform locations are resolved once** at link time, and batched geometry
+  is written straight into the vertex buffer rather than through per-float
+  appends.
+
 ## Project layout
 
 ```text

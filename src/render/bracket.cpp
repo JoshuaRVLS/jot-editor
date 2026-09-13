@@ -169,12 +169,40 @@ BracketPairMatch find_pair_at(const FileBuffer &buf, int line, int col)
 
   return result;
 }
-ActiveBracketGuide build_active_bracket_guide(const FileBuffer &buf, int tab_size)
+ActiveBracketGuide build_active_bracket_guide(FileBuffer &buf, int tab_size)
 {
   ActiveBracketGuide guide;
+  // Reuse the previous frame's answer when neither the caret nor the buffer
+  // content moved. The builder is called once per pane per frame and, in the
+  // worst case (an unmatched bracket under the caret), each of its three
+  // candidate columns walks kBracketMatchSearchLimitLines lines looking for a
+  // partner -- work that is identical from frame to frame while the caret is
+  // parked. See FileBuffer::BracketGuideMemo.
+  FileBuffer::BracketGuideMemo &memo = buf.bracket_guide_memo;
+  if (memo.valid && memo.generation == buf.edit_generation && memo.cursor_x == buf.cursor.x
+      && memo.cursor_y == buf.cursor.y && memo.tab_size == tab_size)
+  {
+    guide.active = memo.active;
+    guide.visual_column = memo.column;
+    guide.start_line = memo.start_line;
+    guide.end_line = memo.end_line;
+    return guide;
+  }
+  memo.valid = true;
+  memo.generation = buf.edit_generation;
+  memo.cursor_x = buf.cursor.x;
+  memo.cursor_y = buf.cursor.y;
+  memo.tab_size = tab_size;
+  const auto store = [&memo](const ActiveBracketGuide &g) {
+    memo.active = g.active;
+    memo.column = g.visual_column;
+    memo.start_line = g.start_line;
+    memo.end_line = g.end_line;
+    return g;
+  };
   if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.line_count())
   {
-    return guide;
+    return store(guide);
   }
 
   const std::string &line = buf.line(buf.cursor.y);
@@ -208,10 +236,10 @@ ActiveBracketGuide build_active_bracket_guide(const FileBuffer &buf, int tab_siz
     guide.visual_column = leading_indent_visual_column(open_line, tab_size);
     guide.start_line = top;
     guide.end_line = bottom;
-    return guide;
+    return store(guide);
   }
 
-  return guide;
+  return store(guide);
 }
 } // namespace buffer_internal
 

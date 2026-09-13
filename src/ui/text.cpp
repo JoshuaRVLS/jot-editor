@@ -109,15 +109,39 @@ std::string ui_sanitized_cell_text(const std::string &text)
   return text;
 }
 
-int ui_cell_count(const std::string &text)
+int ui_range_cell_count(const std::string &text, int begin, int end)
 {
+  const int n = (int)text.size();
+  int i = std::clamp(begin, 0, n);
+  const int stop = std::clamp(end, i, n);
+  const auto *bytes = reinterpret_cast<const unsigned char *>(text.data());
+
+  // Fast path: printable ASCII (0x20..0x7e) is exactly one cell per byte and
+  // needs no decoding. In an editor practically every character is ASCII, and
+  // a byte scan is far cheaper than a utf8proc decode per character -- this is
+  // the hottest text predicate in the renderer (it runs once per grapheme per
+  // visible row per frame). Control bytes and anything >= 0x7f still go
+  // through the decoder below so the result stays bit-identical to the
+  // previous all-decoder implementation.
   int cells = 0;
-  int i = 0;
-  while (i < (int)text.size())
+  while (i < stop)
+  {
+    const unsigned char c = bytes[i];
+    if (c < 0x20 || c >= 0x7f)
+    {
+      break;
+    }
+    cells += 1;
+    i++;
+  }
+
+  while (i < stop)
   {
     utf8proc_int32_t codepoint = -1;
     int len = 0;
-    if (!decode_at(text, i, codepoint, len))
+    // A sequence that overruns the requested range is counted byte by byte,
+    // which is what decoding the equivalent truncated substring would do.
+    if (!decode_at(text, i, codepoint, len) || i + len > stop)
     {
       cells += 1;
       i += 1;
@@ -127,6 +151,11 @@ int ui_cell_count(const std::string &text)
     i += len;
   }
   return cells;
+}
+
+int ui_cell_count(const std::string &text)
+{
+  return ui_range_cell_count(text, 0, (int)text.size());
 }
 
 std::string ui_take_cells(const std::string &text, int max_cells)
@@ -240,6 +269,15 @@ int ui_clamp_to_utf8_boundary(const std::string &text, int byte_index)
   if (byte_index >= (int)text.size())
     return (int)text.size();
 
+  // Fast path: a byte below 0x80 is a complete single-byte codepoint, so the
+  // index already sits on a boundary -- a continuation byte is always >= 0x80
+  // and an invalid lead byte is left to the slow walk below. The render and
+  // edit walks advance one grapheme at a time, and without this every step
+  // re-scanned the line from byte 0, making ui_next_grapheme_boundary O(n) per
+  // call and a whole-line walk O(n^2).
+  if ((unsigned char)text[byte_index] < 0x80)
+    return byte_index;
+
   int i = 0;
   int last = 0;
   while (i < (int)text.size())
@@ -263,17 +301,30 @@ int ui_clamp_to_utf8_boundary(const std::string &text, int byte_index)
 
 int ui_next_grapheme_boundary(const std::string &text, int byte_index)
 {
+  const int n = (int)text.size();
   int i = ui_clamp_to_utf8_boundary(text, byte_index);
-  if (i >= (int)text.size())
-    return (int)text.size();
+  if (i >= n)
+    return n;
+
+  // Fast path: an ASCII byte always decodes to a single-byte codepoint, and it
+  // can only be extended into a cluster by a following combining mark -- all of
+  // which encode with a lead byte >= 0xCC. A following ASCII byte therefore
+  // always starts the next grapheme, so the decode and the utf8proc property
+  // lookup below (the two costs that dominate the per-row column walk on
+  // ordinary code) can both be skipped.
+  if ((unsigned char)text[i] < 0x80
+      && (i + 1 >= n || (unsigned char)text[i + 1] < 0x80))
+  {
+    return i + 1;
+  }
 
   utf8proc_int32_t codepoint = -1;
   int len = 0;
   if (!decode_at(text, i, codepoint, len))
-    return std::min((int)text.size(), i + 1);
+    return std::min(n, i + 1);
   i += len;
 
-  while (i < (int)text.size())
+  while (i < n)
   {
     utf8proc_int32_t next = -1;
     int next_len = 0;

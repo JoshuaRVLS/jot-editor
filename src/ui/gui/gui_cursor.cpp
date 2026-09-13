@@ -57,7 +57,7 @@ void UIGui::paint_cursor()
   }
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, white_tex_);
-  glUniform1i(glGetUniformLocation(program_, "u_tex"), 0);
+  glUniform1i(u_tex_loc_, 0);
   end_batch();
 
   // Redraw the cursor cell's glyph in the ink color so it stays
@@ -90,7 +90,7 @@ void UIGui::paint_cursor()
     }
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, atlas_tex_);
-    glUniform1i(glGetUniformLocation(program_, "u_tex"), 0);
+    glUniform1i(u_tex_loc_, 0);
     end_batch();
   }
 }

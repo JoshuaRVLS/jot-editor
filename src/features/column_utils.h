@@ -28,7 +28,7 @@ inline int compute_visual_column(const std::string &line, int logical_col, int t
     }
     else
     {
-      visual += std::max(1, ui_cell_count(line.substr(i, next - i)));
+      visual += std::max(1, ui_range_cell_count(line, i, next));
     }
     i = next;
   }
@@ -36,16 +36,23 @@ inline int compute_visual_column(const std::string &line, int logical_col, int t
 }
 
 // Like build_visual_columns, but stops walking once `byte_limit` bytes are
-// covered. Renderers only ever index columns up to the visible window, so for
-// huge single-line files (minified/generated code) this keeps per-frame cost
-// proportional to the on-screen width instead of the line length.
-inline std::vector<int> build_visual_columns(const std::string &line, int tab_size, int byte_limit)
+// covered and fills a caller-owned vector instead of returning a fresh one.
+// Renderers only ever index columns up to the visible window, so for huge
+// single-line files (minified/generated code) this keeps per-frame cost
+// proportional to the on-screen width instead of the line length; the out
+// parameter keeps the render loop's per-row scratch buffer from being
+// reallocated on every row of every frame.
+inline void build_visual_columns_into(const std::string &line,
+                                      int tab_size,
+                                      int byte_limit,
+                                      std::vector<int> &cols)
 {
   const int n = (int)line.size();
   const int limit = std::clamp(byte_limit, 0, n);
   // +8 headroom: graphemes are at most 4 bytes, so a walk that stops at
-  // `limit` may emit an index up to limit + 3.
-  std::vector<int> cols(limit + 8, 0);
+  // `limit` may emit an index up to limit + 3. assign() reuses the existing
+  // capacity, so a steady stream of same-width rows never touches the heap.
+  cols.assign((size_t)limit + 8, 0);
   int visual = 0;
   for (int i = 0; i < limit;)
   {
@@ -59,7 +66,7 @@ inline std::vector<int> build_visual_columns(const std::string &line, int tab_si
     }
     else
     {
-      width = std::max(1, ui_cell_count(line.substr(i, next - i)));
+      width = std::max(1, ui_range_cell_count(line, i, next));
     }
     for (int j = i; j < next && j < (int)cols.size(); j++)
     {
@@ -72,6 +79,12 @@ inline std::vector<int> build_visual_columns(const std::string &line, int tab_si
     }
     i = next;
   }
+}
+
+inline std::vector<int> build_visual_columns(const std::string &line, int tab_size, int byte_limit)
+{
+  std::vector<int> cols;
+  build_visual_columns_into(line, tab_size, byte_limit, cols);
   return cols;
 }
 
@@ -90,7 +103,7 @@ inline int visual_to_logical_column(const std::string &line, int visual_col, int
     if (next <= i)
       next = i + 1;
     const int width = line[i] == '\t' ? tab_advance(visual, tab_size)
-                                      : std::max(1, ui_cell_count(line.substr(i, next - i)));
+                                      : std::max(1, ui_range_cell_count(line, i, next));
     const int next_visual = visual + width;
     if (target < next_visual)
     {

@@ -250,8 +250,11 @@ private:
   void push_quad(float x0, float y0, float x1, float y1, float u0, float v0,
                  float u1, float v1, float r, float g, float b, float a);
   void end_batch();
-  // Binds `tex` to unit 0 and sets the u_tex uniform (shared by all passes).
-  static void flush_tex(unsigned int program, unsigned int tex);
+  // Binds `tex` to unit 0 and sets the u_tex sampler uniform (shared by all
+  // passes). The uniform locations are looked up once at link time:
+  // glGetUniformLocation walks the driver's name table and is far too slow to
+  // call a dozen times per frame, which is what this used to do.
+  void flush_tex(unsigned int tex);
   // Scratch vertex buffer size in floats (8 floats/vertex, 6 verts/quad).
   static constexpr int kMaxBatchVertices = 1 << 20;
 
@@ -312,6 +315,9 @@ private:
   void *gl_context_ = nullptr;
 
   unsigned int program_ = 0;
+  // Cached uniform locations, resolved once in compile_shaders().
+  int u_scale_loc_ = -1;
+  int u_tex_loc_ = -1;
   unsigned int vao_ = 0;
   unsigned int vbo_ = 0;
   unsigned int white_tex_ = 0;

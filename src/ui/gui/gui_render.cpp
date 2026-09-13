@@ -30,8 +30,7 @@ void UIGui::render()
   // displays.
   int point_w = 0, point_h = 0;
   SDL_GetWindowSize(window_, &point_w, &point_h);
-  glUniform2f(glGetUniformLocation(program_, "u_scale"),
-              2.0f / std::max(1, point_w), -2.0f / std::max(1, point_h));
+  glUniform2f(u_scale_loc_, 2.0f / std::max(1, point_w), -2.0f / std::max(1, point_h));
   glBindVertexArray(vao_);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -430,7 +429,7 @@ void UIGui::paint_sprite(const GuiScrollAnim &a, const std::vector<std::vector<U
   }
   if (quads)
   {
-    flush_tex(program_, white_tex_);
+    flush_tex(white_tex_);
     end_batch();
   }
 
@@ -443,7 +442,7 @@ void UIGui::paint_sprite(const GuiScrollAnim &a, const std::vector<std::vector<U
     paint_row_glyphs(row, rows ? 0 : a.x1, rows ? want_w : a.x2, x0px, (float)(a.y1 + r) * cell_h_,
                      dy, clip_top, clip_bottom);
   }
-  flush_tex(program_, atlas_tex_);
+  flush_tex(atlas_tex_);
   end_batch();
 
   // Underlines.
@@ -465,7 +464,7 @@ void UIGui::paint_sprite(const GuiScrollAnim &a, const std::vector<std::vector<U
   }
   if (any)
   {
-    flush_tex(program_, white_tex_);
+    flush_tex(white_tex_);
     end_batch();
   }
 }
@@ -548,7 +547,7 @@ void UIGui::paint_plain()
   }
   if (quads)
   {
-    flush_tex(program_, white_tex_);
+    flush_tex(white_tex_);
     end_batch();
   }
 
@@ -562,7 +561,7 @@ void UIGui::paint_plain()
       paint_row_glyphs((*content_grid_)[(size_t)y], s.first, s.second, 0.0f, y_top, 0.0f);
     }
   }
-  flush_tex(program_, atlas_tex_);
+  flush_tex(atlas_tex_);
   end_batch();
 
   bool any = false;
@@ -579,7 +578,7 @@ void UIGui::paint_plain()
   }
   if (any)
   {
-    flush_tex(program_, white_tex_);
+    flush_tex(white_tex_);
     end_batch();
   }
 }
@@ -989,7 +988,7 @@ void UIGui::paint_float_overlays(float dt)
               0.0f,
               0.0f,
               dim_alpha_);
-    flush_tex(program_, white_tex_);
+    flush_tex(white_tex_);
     end_batch();
   }
   for (const FloatOverlay &ov : float_overlays)
@@ -1089,7 +1088,7 @@ void UIGui::paint_float_cells(int x, int y, int w, int h, float dx_px, float dy_
   }
   if (quads)
   {
-    flush_tex(program_, white_tex_);
+    flush_tex(white_tex_);
     end_batch();
   }
 
@@ -1138,7 +1137,7 @@ void UIGui::paint_float_cells(int x, int y, int w, int h, float dx_px, float dy_
       push_quad(gx, gy, gx + gw, gy + gh, g.u0, g.v0, g.u1, g.v1, p[0], p[1], p[2], alpha);
     }
   }
-  flush_tex(program_, atlas_tex_);
+  flush_tex(atlas_tex_);
   end_batch();
 
   // Underlines.
@@ -1177,7 +1176,7 @@ void UIGui::paint_float_cells(int x, int y, int w, int h, float dx_px, float dy_
   }
   if (any)
   {
-    flush_tex(program_, white_tex_);
+    flush_tex(white_tex_);
     end_batch();
   }
 }

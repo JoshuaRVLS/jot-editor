@@ -1,3 +1,4 @@
+#include "column_utils.h"
 #include "features/folding.h"
 #include "in_memory_line_provider.h"
 #include "lazy_line_provider.h"
@@ -146,6 +147,13 @@ namespace
     auto cpp_lines = make_cpp_lines(12000);
     auto python_lines = make_python_lines(9000);
     std::string long_ascii_line(4096, 'x');
+    // Mixed ASCII + multi-byte UTF-8, the shape that bypasses the ASCII fast
+    // paths in the text predicates.
+    std::string unicode_line;
+    for (int i = 0; i < 256; i++)
+    {
+      unicode_line += "ascii \xe2\x94\x82 box \xe8\xa1\xa8 wide ";
+    }
     return {
         {"in_memory_line_provider_random_reads",
          8,
@@ -225,6 +233,52 @@ namespace
            if (total <= 0)
            {
              throw std::runtime_error("unexpected text count");
+           }
+         }},
+        {"ui_text_cell_count_unicode",
+         20,
+         [unicode_line]()
+         {
+           int total = 0;
+           for (int i = 0; i < 4000; i++)
+           {
+             total += ui_cell_count(unicode_line);
+           }
+           if (total <= 0)
+           {
+             throw std::runtime_error("unexpected text count");
+           }
+         }},
+        // The per-row column walk the renderer runs for every visible line:
+        // it sorts tabs and wide glyphs into screen columns. This used to
+        // re-scan the line from byte 0 for every grapheme (O(n^2)).
+        {"ui_text_build_visual_columns",
+         20,
+         [long_ascii_line]()
+         {
+           int total = 0;
+           for (int i = 0; i < 400; i++)
+           {
+             const auto cols = build_visual_columns(long_ascii_line, 4);
+             total += cols.size() < 9 ? 0 : cols[cols.size() - 9];
+           }
+           if (total <= 0)
+           {
+             throw std::runtime_error("unexpected visual columns");
+           }
+         }},
+        {"ui_text_visual_column_lookup",
+         20,
+         [long_ascii_line]()
+         {
+           int total = 0;
+           for (int i = 0; i < 20000; i++)
+           {
+             total += compute_visual_column(long_ascii_line, 2000, 4);
+           }
+           if (total <= 0)
+           {
+             throw std::runtime_error("unexpected visual column");
            }
          }},
         {"symbol_index_python_document",

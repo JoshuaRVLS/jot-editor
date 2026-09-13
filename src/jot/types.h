@@ -480,6 +480,10 @@ struct SyntaxLineCache
   // full-line colorization on every newly-scrolled-into-view line.
   std::size_t colors_upto = 0;
   std::vector<std::pair<int, int>> colors;
+  // Bytes this entry is charged against FileBuffer::syntax_cache_bytes, kept so
+  // re-highlighting a line can add only the difference rather than double
+  // count it.
+  std::size_t accounted_bytes = 0;
 };
 
 struct FoldRange
@@ -591,6 +595,49 @@ struct FileBuffer
   std::vector<uint32_t> ts_line_offsets;
   std::string syntax_cache_extension;
   std::size_t syntax_cache_line_count = 0;
+  // Memoized answer of the "is this .h really C++?" probe (see
+  // Editor::tree_sitter_extension_for_buffer). Resolving it stats the
+  // filesystem for a sibling translation unit and samples the first 32KB of
+  // the buffer, and it used to run once per rendered row per frame. An empty
+  // result means "not computed yet"; `ts_extension_probe_path` pins the answer
+  // to the file it was computed for, so save-as / reload recompute it without
+  // every path assignment having to remember to invalidate.
+  std::string ts_extension_probe;
+  std::string ts_extension_probe_path;
+  // Memoized git_file_status key (absolute, lexically-normal path) for this
+  // buffer. Resolving it runs std::filesystem::absolute + lexically_normal, and
+  // the tab strip asks for it once per tab per frame. Pinned to the path it was
+  // computed from so save-as / reload recompute it without a separate hook.
+  std::string git_status_key;
+  std::string git_status_key_path;
+  // Approximate bytes held by `syntax_cache`'s per-line colour vectors, used
+  // to bound the cache's growth (see get_line_syntax_colors).
+  std::size_t syntax_cache_bytes = 0;
+  // Bumped by every content mutation (mark_edited); lets render-side memos
+  // reuse work across frames without any edit path knowing about them.
+  std::uint64_t edit_generation = 0;
+  // Memoized bracket-pair guide for the caret's row (see
+  // buffer_internal::build_active_bracket_guide). Finding the partner bracket
+  // walks up to kBracketMatchSearchLimitLines lines and the builder tries
+  // three caret columns, so an unmatched bracket under the caret -- the normal
+  // state while typing a block -- used to rescan thousands of lines on every
+  // frame. Keyed on the edit generation and the caret, so it is recomputed
+  // exactly when either changes.
+  struct BracketGuideMemo
+  {
+    bool valid = false;
+    std::uint64_t generation = 0;
+    int cursor_x = -1;
+    int cursor_y = -1;
+    // The reported column is a visual column, so a change to the tab width has
+    // to invalidate the memo as well.
+    int tab_size = -1;
+    // Result, mirroring buffer_internal::ActiveBracketGuide.
+    bool active = false;
+    int column = 0;
+    int start_line = 0;
+    int end_line = 0;
+  } bracket_guide_memo;
   std::unordered_map<int, SyntaxLineCache> syntax_cache;
   // Colour-preview variable definitions (--name: value, $name: value) for this
   // buffer, and their version. Rebuilt lazily when the buffer is edited; the
@@ -612,7 +659,15 @@ struct FileBuffer
   void mark_edited(int anchor_line = 0)
   {
     folds_dirty = true;
+    edit_generation++;
     ts_line_offsets.clear();
+    // A header that does not look like C++ yet may be getting filled in, so
+    // re-probe it on the next highlight. Once the answer is "C++" it is
+    // stable, and the cache stays warm across edits.
+    if (ts_extension_probe != ".cpp")
+    {
+      ts_extension_probe.clear();
+    }
     // A definition line may have changed, so the colour preview's variable index
     // has to be rebuilt before it is next consulted.
     color_defs_dirty = true;

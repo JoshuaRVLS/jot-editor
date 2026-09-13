@@ -32,6 +32,17 @@ namespace buffer_internal
 
 namespace
 {
+  // One inlay hint placed on the row being painted: the byte column it sits
+  // before, the already-shifted screen column it lands on, and how many cells
+  // it inserts. Declared at namespace scope because the render loop keeps one
+  // scratch vector of these across rows instead of rebuilding it per row.
+  struct RowHint
+  {
+    int byte_col = 0;
+    int visual_col = 0;
+    int width = 0;
+  };
+
   int visible_row_for_line(const std::vector<FoldRange> &ranges,
                            int first_line,
                            int target_line,
@@ -278,9 +289,26 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
     }
   }
 
+  // Per-row scratch, hoisted out of the row loop. Each of these used to be
+  // constructed (and freed) once per visible row per frame -- a few hundred
+  // allocator round-trips per frame at 60-144fps on a full-height viewport.
+  // They are cleared at the top of each row instead, so only their high-water
+  // mark is ever allocated.
+  std::vector<RowHint> row_hints;
+  std::vector<jot_color::ColorSpan> color_spans;
+  std::vector<std::uint8_t> colorizer_scope;
+  std::vector<Editor::SearchMatch> search_hits;
+  // Second scratch for the blank-line indent-guide source walk (it needs the
+  // target row's columns at the same time as `visual_cols`).
+  std::vector<int> guide_source_visual_cols;
+
   int prev_line_idx = buf.scroll_offset - 1;
   for (int i = 0; i < h; i++)
   {
+    row_hints.clear();
+    color_spans.clear();
+    colorizer_scope.clear();
+    search_hits.clear();
     int line_idx = Folding::buffer_line_for_visible_offset(
         buf.fold_ranges, buf.scroll_offset, i, (int)buf.line_count());
     // The per-row walk normally carries depth across consecutive visible
@@ -389,7 +417,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
       // on every row of every frame made scrolling freeze.
       const int render_limit =
           std::min((int)line.size(), clamped_scroll_x + (visible_len + 2) * 4 + 8);
-      visual_cols = build_visual_columns(line, tab_size, render_limit);
+      build_visual_columns_into(line, tab_size, render_limit, visual_cols);
       int start_visual = visual_cols[clamped_scroll_x];
       int leading_ws_end = 0;
       while (leading_ws_end < (int)line.length()
@@ -404,13 +432,6 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
       // already-shifted screen column; the byte/visual helpers below answer
       // "how many hint cells sit before position p" for the glyph walk and
       // the selection/guide overlays.
-      struct RowHint
-      {
-        int byte_col = 0;
-        int visual_col = 0;
-        int width = 0;
-      };
-      std::vector<RowHint> row_hints;
       if (inlay_hints_enabled && !folded_header)
       {
         // Stale hints stay drawn while a refresh is in flight; only a
@@ -613,26 +634,24 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
         // let the chunk walk paint them. The options are read here (per line,
         // per frame) so a config change or `:reload` takes effect immediately;
         // the scan itself is memoised by content hash in colorizer_cache.
-        std::vector<jot_color::ColorSpan> color_spans;
         if (colorizer_on)
         {
           // Optional string/comment scoping (upstream has no equivalent; it is
           // useful in codebases where a bare hex-looking token is an id).
-          std::vector<std::uint8_t> scope;
           const std::vector<std::uint8_t> *scope_ptr = nullptr;
           if (colorizer_only_in_strings && line.size() <= kBracketTokenAwareLineBytes)
           {
-            scope.assign(std::min((size_t)render_limit, line.size()), 0);
-            for (size_t bi = 0; bi < scope.size(); bi++)
+            colorizer_scope.assign(std::min((size_t)render_limit, line.size()), 0);
+            for (size_t bi = 0; bi < colorizer_scope.size(); bi++)
             {
               const bool is_text = colors[bi].second == TS_TOKEN_STRING
                                    || colors[bi].second == TS_TOKEN_COMMENT;
               if (colors[bi].first == 1 && is_text)
               {
-                scope[bi] = 1;
+                colorizer_scope[bi] = 1;
               }
             }
-            scope_ptr = &scope;
+            scope_ptr = &colorizer_scope;
           }
           const jot_color::Definitions *defs = colorizer_wants_defs ? &buf.color_defs : nullptr;
           const std::uint64_t defs_version = colorizer_wants_defs ? buf.color_defs_version : 0;
@@ -641,7 +660,6 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
         }
         size_t color_span_cursor = 0;
         int line_bracket_depth = bracket_depth;
-        std::vector<Editor::SearchMatch> search_hits;
         Editor::SearchMatch active_search_match{-1, -1, 0};
         if (show_search && !search_query.empty())
         {
@@ -1366,8 +1384,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
           const int src_ws_end = blank_guides::leading_ws(src_line);
           if (src_ws_end > 0)
           {
-            const std::vector<int> src_visual =
-                build_visual_columns(src_line, tab_size, src_ws_end);
+            build_visual_columns_into(src_line, tab_size, src_ws_end, guide_source_visual_cols);
+            const std::vector<int> &src_visual = guide_source_visual_cols;
             for (int col = start_visual; col < src_visual[src_ws_end]; col++)
             {
               if (col % tab_size != 0)

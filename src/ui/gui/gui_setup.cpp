@@ -499,6 +499,12 @@ bool UIGui::compile_shaders()
     return false;
   }
 
+  // Resolve the uniforms once. glGetUniformLocation searches the driver's
+  // name table on every call, and the per-frame paint path used to call it for
+  // each batch flush plus once per frame for u_scale.
+  u_scale_loc_ = glGetUniformLocation(program_, "u_scale");
+  u_tex_loc_ = glGetUniformLocation(program_, "u_tex");
+
   glGenVertexArrays(1, &vao_);
   glGenBuffers(1, &vbo_);
   glBindVertexArray(vao_);
