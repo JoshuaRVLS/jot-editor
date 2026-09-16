@@ -144,8 +144,8 @@ local function one_line(s)
   return s
 end
 
--- Rebuilds the four content rows of the panel from the current state.
--- Row layout: title / spinner+primary / detail / hint.
+-- Rebuilds the three content rows of the panel from the current state.
+-- Row layout: title / spinner+primary / detail.
 local function content_rows(colors)
   local accent = colors[panel.level] or colors.info
   local spin = panel.busy and SPIN_FRAMES[(panel.spin % #SPIN_FRAMES) + 1] or "⠿"
@@ -157,13 +157,12 @@ local function content_rows(colors)
     { text = "  jot update", fg = colors.title },
     { text = " " .. spin .. "  " .. primary, fg = accent },
     { text = (panel.detail or "") ~= "" and (" " .. (panel.detail or "")) or "", fg = colors.fg },
-    { text = (panel.hint or "") ~= "" and (" " .. (panel.hint or "")) or "", fg = colors.warning },
   }, accent
 end
 
 local function panel_lines(rows)
   local lines = {}
-  for i = 1, 4 do
+  for i = 1, 3 do
     lines[i] = (rows[i] and rows[i].text or "") .. " "
   end
   return lines
@@ -177,7 +176,7 @@ local function repaint()
   local rows, accent = content_rows(colors)
   local lines = panel_lines(rows)
   pcall(jot.ui.buffer.set_lines, panel.buf, 0, -1, true, lines)
-  for i = 1, 4 do
+  for i = 1, 3 do
     if rows[i] and rows[i].text ~= "" then
       -- Row spans: whole row in the row color. Byte offsets are 0-based.
       pcall(jot.ui.float.set_spans, panel.win, i,
@@ -275,12 +274,12 @@ local function open_panel()
   end
   local ww, _ = window_size()
   local width = math.min(64, math.max(44, ww - 10))
-  local height = 6 -- 2 borders + 4 content rows
+  local height = 5 -- 2 borders + 3 content rows
   local okc, buf = pcall(jot.ui.buffer.create, false, true)
   if not okc then
     return false
   end
-  pcall(jot.ui.buffer.set_lines, buf, 0, -1, true, { " ", " ", " ", " " })
+  pcall(jot.ui.buffer.set_lines, buf, 0, -1, true, { " ", " ", " " })
   local colors = palette()
   local okw, win = pcall(jot.ui.float.open, buf, {
     col = math.max(2, math.floor((ww - width) / 2)),
@@ -316,7 +315,6 @@ local function open_panel()
   panel.spin = 0
   panel.primary = ""
   panel.detail = ""
-  panel.hint = ""
   local ok, id = pcall(jot.timer.set_interval, SPIN_MS, spin_tick)
   if ok then
     panel.timer = id or 0
@@ -346,12 +344,11 @@ local function notify_result(level, primary, detail)
   pcall(jot.notify, line, 6000)
 end
 
-local function show_result(level, primary, detail, hint)
+local function show_result(level, primary, detail)
   panel.busy = false
   panel.level = level
   panel.primary = primary
   panel.detail = one_line(detail)
-  panel.hint = hint or "click to dismiss"
   update_indicator()
   if panel.open then
     repaint()
@@ -372,11 +369,10 @@ local function start_job(primary, detail, cmd, cb)
   panel.level = "info"
   panel.primary = primary
   panel.detail = detail
-  panel.hint = ""
   repaint()
   local ok = pcall(jot.job.capture, cmd, panel.repo, cb)
   if not ok then
-    show_result("error", "Could not start git", "Check that jot.job is available", nil)
+    show_result("error", "Could not start git", "Check that jot.job is available")
   end
 end
 
@@ -401,7 +397,7 @@ local function check_chain(silent)
       quiet()
       return
     end
-    show_result("error", "Update check failed", msg, nil)
+    show_result("error", "Update check failed", msg)
   end
 
   git("rev-parse --abbrev-ref HEAD", function(res)
@@ -417,7 +413,7 @@ local function check_chain(silent)
         return
       end
       show_result("warning", "No git remote configured",
-                  "jot has no origin to fetch from in " .. panel.repo, nil)
+                  "jot has no origin to fetch from in " .. panel.repo)
       return
     end
       local branch = panel.branch
@@ -429,7 +425,7 @@ local function check_chain(silent)
               return
             end
             show_result("error", "Could not reach the remote",
-                        one_line(f.output), nil)
+                        one_line(f.output))
             return
           end
           git("rev-list --count HEAD..origin/" .. branch .. " 2>/dev/null; echo --; "
@@ -454,8 +450,7 @@ local function check_chain(silent)
                 return
               end
               show_result("info", "Up to date",
-                          "origin/" .. branch .. " does not exist yet — push it from here",
-                          "click to dismiss")
+                          "origin/" .. branch .. " does not exist yet — push it from here")
               return
             end
             if behind > 0 then
@@ -463,8 +458,7 @@ local function check_chain(silent)
               show_result("warning",
                           behind .. " new " .. p .. " available",
                           "origin/" .. branch .. " is ahead of " .. sha
-                            .. " — run :update run to pull & rebuild",
-                          "click to dismiss")
+                            .. " — run :update run to pull & rebuild")
             elseif silent then
               quiet()
             else
@@ -473,7 +467,7 @@ local function check_chain(silent)
                 a = " (" .. ahead .. " local ahead)"
               end
               show_result("success", "Up to date",
-                          sha .. " on " .. branch .. a, "click to dismiss")
+                          sha .. " on " .. branch .. a)
             end
           end)
         end)
@@ -496,7 +490,7 @@ local function check_update(silent)
     if not silent then
       show_result("info", "Nothing to update",
                   "This jot has no source clone to fetch from. Install from "
-                    .. "the release build instead.", "click to dismiss")
+                    .. "the release build instead.")
     end
     return
   end
@@ -512,7 +506,6 @@ local function check_update(silent)
   end
   panel.primary = "Checking for updates…"
   panel.detail = ""
-  panel.hint = ""
   check_chain(false)
 end
 
@@ -527,12 +520,12 @@ local function run_update()
   panel.repo = repo_root()
   if panel.repo == "" then
     show_result("info", "Nothing to update",
-                "This jot has no source clone to rebuild from.", "click to dismiss")
+                "This jot has no source clone to rebuild from.")
     return
   end
   if is_windows() then
     show_result("info", "Windows source update not supported yet",
-                "Rebuild jot from the checkout manually.", "click to dismiss")
+                "Rebuild jot from the checkout manually.")
     return
   end
   if not open_panel() then
@@ -576,7 +569,7 @@ local function run_update()
     if res.exit_code == 0 then
       local sha = trim(out:match("([^\n]*)$") or "")
       show_result("success", "Updated to " .. sha,
-                  "Restarting with the new build…", "restarting")
+                  "Restarting with the new build…")
       -- Give the success state a moment to paint, then swap in the fresh
       -- binary (self-restart replays the launch args, so the same files or
       -- workspace reopen automatically).
@@ -584,14 +577,13 @@ local function run_update()
         local okr, started = pcall(jot.restart)
         if not okr or not started then
           show_result("error", "Auto-restart skipped",
-                      "Update applied — relaunch jot manually to load it.",
-                      "click to dismiss")
+                      "Update applied — relaunch jot manually to load it.")
         end
       end)
     elseif res.exit_code == 3 then
       show_result("error", "No build tree found",
                   "Nothing in the clone matches a configured CMake build dir. "
-                    .. "Set update.build_dir in settings.conf.", "click to dismiss")
+                    .. "Set update.build_dir in settings.conf.")
     else
       local lines = {}
       for part in out:gmatch("[^\n]+") do
@@ -600,7 +592,7 @@ local function run_update()
         end
       end
       local tail = table.concat(lines, " | ")
-      show_result("error", "Update failed", one_line(tail), "click to dismiss")
+      show_result("error", "Update failed", one_line(tail))
     end
   end)
 end

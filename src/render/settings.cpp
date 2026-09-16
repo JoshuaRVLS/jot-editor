@@ -182,9 +182,11 @@ void Editor::render_settings_menu()
     }
   }
 
-  std::string footer = "Enter toggle/edit   Esc close   ↑/↓ move";
-  ui_draw_footer(*ui, rect, ui_truncate_cells(footer, w - 2), theme.fg_comment,
-                 panel_theme.bg_command);
+  // The footer row keeps its background but no longer spells out the bindings.
+  ui->fill_rect({rect.x + 1, rect.y + rect.h - 1, std::max(1, rect.w - 2), 1},
+                " ",
+                theme.fg_comment,
+                panel_theme.bg_command);
 }
 
 void Editor::place_settings_cursor()

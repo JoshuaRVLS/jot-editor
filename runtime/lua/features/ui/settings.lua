@@ -80,10 +80,7 @@ local function settings(p)
                         spans = spans }
   end
 
-  local footer = "Enter toggle/edit   Esc close   ↑/↓ move"
-
-  return present_panel("settings", p, rows, { title = title, title_fg = accent,
-                                              footer = footer, footer_fg = comment })
+  return present_panel("settings", p, rows, { title = title, title_fg = accent })
 end
 
 

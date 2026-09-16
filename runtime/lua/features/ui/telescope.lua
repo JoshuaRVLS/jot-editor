@@ -36,10 +36,14 @@ local function telescope(p)
   local colors = p.colors or {}
   local t_fg = colors.t_fg or colors.fg or 7
   local t_bg = colors.t_bg or colors.bg or 0
-  local t_sel_fg = colors.t_sel_fg or colors.selection_fg or 0
-  local t_sel_bg = colors.t_sel_bg or colors.selection_bg or 6
   local t_prev_fg = colors.t_prev_fg or t_fg
-  local t_prev_bg = colors.t_prev_bg or t_bg
+  -- Results and preview paint no background of their own: the telescope slots
+  -- (TelescopeNormal / TelescopeSelection / TelescopePreviewNormal) are light in
+  -- several themes, and filling the list with them turned the whole panel into a
+  -- slab of white over a dark editor. Text sits on the float's own background
+  -- instead, like every other surface, and the selected row is marked by a caret
+  -- in the results gutter (the same "▎" the palette and quick pick use) rather
+  -- than by a highlight band.
   -- Query row colors: a calm input background (command-bar style) rather than
   -- the loud selection highlight, so typed text stays readable on every theme.
   local t_query_fg = colors.t_query_fg or colors.fg_command or t_fg
@@ -108,62 +112,20 @@ local function telescope(p)
     span(b, 0, 65535, row_fg, row_bg)
   end
 
-  -- Bounded background over the results-list band of one row: from cell
-  -- column `col0` for `width` cells. Spans use byte offsets, so the band
-  -- edges are mapped from cells to bytes by walking the row (wide glyphs
-  -- make cells and bytes diverge). Must run AFTER the row text is placed
-  -- (padding before put would push the text past its column). The span
-  -- starts at col0 > 0, so the float renderer treats it as a segment
-  -- background, not the whole-row background (which it infers only from
-  -- start==0 spans) — the selection highlight therefore stays inside the
-  -- results column and never floods under the separator or preview pane.
-  local function fill_col(b, col0, width, row_fg, row_bg)
-    if b < 1 or b > inner_h or width <= 0 then
-      return
-    end
-    body[b] = body[b] or ""
-    -- Ensure the row is at least col0+width cells so the walk below finds a
-    -- full band of spaces when the text is shorter.
-    local cur = cell_len(body[b])
-    if cur < col0 + width then
-      body[b] = body[b] .. string.rep(" ", col0 + width - cur)
-    end
-    local function cell_to_byte(row, col)
-      local byte = 0
-      local cell = 0
-      for _, cp in utf8.codes(row) do
-        if cell >= col then
-          break
-        end
-        local w = h.rune_width(cp)
-        if cell + w > col then
-          break
-        end
-        byte = byte + utf8.len(utf8.char(cp))
-        cell = cell + w
-      end
-      return byte
-    end
-    local s = cell_to_byte(body[b], col0)
-    local e = cell_to_byte(body[b], col0 + width)
-    if e > s then
-      span(b, s, e - s, row_fg, row_bg)
-    end
-  end
-
   -- Root line + query row.
   local root_row = bof(p.inner_y or 0)
-  put(root_row, 1, left_clip(p.root or "", math.max(1, inner_w - 2)), comment, t_bg)
+  put(root_row, 1, left_clip(p.root or "", math.max(1, inner_w - 2)), comment, nil)
   local query_row = bof(p.query_y or 0)
   local query = p.query or ""
   local query_text = "  → " .. query
-  if query == "" then
-    query_text = query_text .. "type to filter files"
-  end
   local query_focus = (p.focus or "results") == "query"
-  local query_bg = query_focus and t_query_bg or t_bg
+  -- The command-bar fill belongs to the focused query row only; an unfocused one
+  -- is plain text like the rest of the panel.
+  local query_bg = query_focus and t_query_bg or nil
   local query_fg = query_focus and t_query_fg or comment
-  fill_row_span(query_row, query_fg, query_bg)
+  if query_bg then
+    fill_row_span(query_row, query_fg, query_bg)
+  end
   local q_off = put(query_row,
                     (p.query_x or 0) - (p.x or 0) - 1,
                     truncate(query_text, math.max(1, inner_w - 1)),
@@ -201,7 +163,7 @@ local function telescope(p)
         list_col,
         trunc_cells(empty, list_w),
         comment,
-        t_bg)
+        nil)
   end
   for i, r in ipairs(results) do
     local b = list_row0 + i - 1
@@ -212,7 +174,7 @@ local function telescope(p)
     -- (like the sidebar) and keep a trailing space so names still align.
     local icon = r.is_directory and "> "
       or (r.icon ~= nil and r.icon ~= "" and (r.icon .. " ") or "  ")
-    local icon_fg = is_selected and t_sel_fg
+    local icon_fg = is_selected and accent
       or (r.is_directory and (colors.sidebar_directory or accent)
           or (r.icon_fg ~= nil and r.icon_fg >= 0 and r.icon_fg or t_fg))
     local parent = (r.parent_path or "") == "." and "" or r.parent_path or ""
@@ -232,24 +194,23 @@ local function telescope(p)
       name = trunc_cells(raw_name, name_budget - 1) .. "…"
       ellipsis_bytes = 3
     end
-    local row_fg = is_selected and t_sel_fg or t_fg
-    local row_bg = is_selected and t_sel_bg or t_bg
-    local row_off = put(b, list_col, icon .. name, row_fg, row_bg)
+    local row_fg = t_fg
+    local row_off = put(b, list_col, icon .. name, row_fg, nil)
     -- Paint the icon in its own color (brand color for files, directory
     -- color for folders, selection fg when selected so it stays readable
     -- against the highlight); row_off is the byte offset of the icon.
     if row_off >= 0 then
-      span(b, row_off, #icon, icon_fg, row_bg)
+      span(b, row_off, #icon, icon_fg, nil)
     end
     -- Highlight the characters the query consumed in the name (telescope's
     -- TelescopeMatching). r.match holds byte offsets into the raw name; the
     -- rendered name is a prefix of it, so offsets beyond the rendered text
     -- (or inside the trailing ellipsis) are dropped.
     if row_off >= 0 and r.match and #r.match > 0 then
-      local match_fg = is_selected and t_sel_fg or accent
+      local match_fg = accent
       for _, m in ipairs(r.match) do
         if m >= 0 and m + 1 <= #name - ellipsis_bytes then
-          span(b, row_off + #icon + m, 1, match_fg, row_bg)
+          span(b, row_off + #icon + m, 1, match_fg, nil)
         end
       end
     end
@@ -257,18 +218,12 @@ local function telescope(p)
       put(b,
           list_col + math.max(0, list_w - parent_w),
           trunc_cells(left_clip(r.parent_path, parent_w), parent_w),
-          -- On the selected row the dimmed location must still read against
-          -- the highlight: reuse the selection fg (usually a dark-on-light
-          -- pair) rather than the grey comment color.
-          is_selected and t_sel_fg or comment,
-          row_bg)
+          comment,
+          nil)
     end
-    -- Selection highlight: bounded to the results-list band so it never
-    -- paints over the separator gutter or the preview pane. Runs after the
-    -- text is placed (fill_col must not pad the row before put, or the text
-    -- would be pushed past its column).
-    if is_selected then
-      fill_col(b, list_col, list_w, row_fg, row_bg)
+    -- Selection: a caret in the gutter before the row, not a background band.
+    if is_selected and list_col >= 1 then
+      put(b, list_col - 1, "▎", accent, nil)
     end
   end
 
@@ -276,7 +231,7 @@ local function telescope(p)
   if p.show_preview then
     local sep_col = (p.preview_x or 0) - 2 - (p.x or 0) - 1
     for ar = p.body_y or 0, (p.body_y or 0) + (p.body_h or 0) - 1 do
-      put(bof(ar), sep_col, "│", border, t_bg)
+      put(bof(ar), sep_col, "│", border, nil)
     end
     local prev_row = bof(p.preview_y or 0)
     local prev_col = (p.preview_x or 0) - (p.x or 0) - 1
@@ -286,13 +241,13 @@ local function telescope(p)
     put(prev_row,
         prev_col,
         "Preview",
-        prev_focus and (colors.t_sel_fg or accent) or t_fg,
-        t_bg)
+        prev_focus and accent or t_fg,
+        nil)
     local title = preview.title or ""
     put(prev_row + 1, prev_col, trunc_cells(left_clip(title, prev_inner_w), prev_inner_w), t_prev_fg,
-        t_prev_bg)
+        nil)
     if preview.detail and preview.detail ~= "" then
-      put(prev_row + 2, prev_col, trunc_cells(preview.detail, prev_inner_w), comment, t_prev_bg)
+      put(prev_row + 2, prev_col, trunc_cells(preview.detail, prev_inner_w), comment, nil)
     end
     local code_row = prev_row + 3
     local line_no = preview.start_line or 0
@@ -301,13 +256,12 @@ local function telescope(p)
     for _, ln in ipairs(preview.lines or {}) do
       local b = code_row
       code_row = code_row + 1
-      local row_bg = t_prev_bg
       local row_fg = plain and comment or t_prev_fg
       if not plain then
-        put(b, prev_col, string.format("%3d ", line_no + 1), comment, t_prev_bg)
+        put(b, prev_col, string.format("%3d ", line_no + 1), comment, nil)
         local text_col = prev_col + 4
         local clipped = trunc_cells(ln, math.max(1, prev_inner_w - 4))
-        local code_start = put(b, text_col, clipped, t_prev_fg, t_prev_bg)
+        local code_start = put(b, text_col, clipped, t_prev_fg, nil)
         if jot.syntax and jot.syntax.highlight then
           local ok, caps = pcall(jot.syntax.highlight, ext, clipped)
           if ok and type(caps) == "table" then
@@ -318,13 +272,13 @@ local function telescope(p)
                 -- where clipped was actually appended (code_start), which is
                 -- NOT the same as the cell column once the separator or any
                 -- wide glyph precedes it.
-                span(b, code_start + (cap.start or 0), cap.len or 0, cap_fg, t_prev_bg)
+                span(b, code_start + (cap.start or 0), cap.len or 0, cap_fg, nil)
               end
             end
           end
         end
       else
-        put(b, prev_col, trunc_cells(ln, prev_inner_w), row_fg, t_prev_bg)
+        put(b, prev_col, trunc_cells(ln, prev_inner_w), row_fg, nil)
       end
       line_no = line_no + 1
     end
@@ -333,32 +287,9 @@ local function telescope(p)
   -- Footer: selected path on the bottom border row (native geometry).
   local footer = p.scan_pending and "Searching"
     or (#results == 0 and "No selection" or "")
-  -- Key hints with accent-highlighted bindings (built with byte offsets so
-  -- the spans survive any wide glyphs elsewhere in the row).
-  local keys_accent = nil
-  if footer == "" then
-    local parts = { "Enter", "Esc", "Tab", "↑/↓" }
-    footer = ""
-    local acc = 0
-    keys_accent = {}
-    for i, k in ipairs(parts) do
-      if i > 1 then
-        footer = footer .. "  "
-        acc = acc + 2
-      end
-      keys_accent[i] = { start = acc, len = #k }
-      footer = footer .. k
-      acc = acc + #k
-    end
-  end
   local footer_b = bof(p.footer_y or 0)
-  if footer_b >= 1 and footer_b <= inner_h then
-    local f_off = put(footer_b, 1, truncate(footer, math.max(1, inner_w - 2)), comment, t_bg)
-    if f_off >= 0 and keys_accent then
-      for _, k in ipairs(keys_accent) do
-        span(footer_b, f_off + k.start, k.len, accent, t_bg)
-      end
-    end
+  if footer_b >= 1 and footer_b <= inner_h and footer ~= "" then
+    put(footer_b, 1, truncate(footer, math.max(1, inner_w - 2)), comment, nil)
   end
 
   local body_list = {}

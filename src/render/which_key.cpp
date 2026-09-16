@@ -149,16 +149,10 @@ void Editor::render_which_key_panel()
                   child.group ? theme.fg_comment : fg, bg);
   }
 
-  std::string footer;
-  if (which_key_path.size() > 1)
-  {
-    footer = "Esc close · Backspace up · Enter run";
-  }
-  else
-  {
-    footer = "Esc close · Backspace up · arrow keys to move";
-  }
-  ui_draw_footer(
-      *ui, rect, ui_truncate_cells(footer, w - 2), theme.fg_comment, panel_theme.bg_command);
+  // The footer row keeps its background but carries no key hints.
+  ui->fill_rect({rect.x + 1, rect.y + rect.h - 1, std::max(1, rect.w - 2), 1},
+                " ",
+                theme.fg_comment,
+                panel_theme.bg_command);
 }
 

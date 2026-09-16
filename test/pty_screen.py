@@ -169,13 +169,19 @@ class Screen:
 
 
 def run_in_pty(binary: str, args, keys: bytes, settle: float = 2.5, after: float = 3.0,
-               cols: int = 100, rows: int = 30, cfg: str = "/tmp/jot_probe_cfg"):
+               cols: int = 100, rows: int = 30, cfg: str = "/tmp/jot_probe_cfg",
+               cwd: str = None):
     """Runs `binary args...` in a pty, sends `keys`, and returns the Screen.
 
     `settle` is how long the editor gets to start before the keys are sent (LSP
     servers need seconds to attach), `after` how long to keep reading afterwards.
+    `cwd` sets the child's working directory, which is what decides the workspace
+    root the file explorer and telescope open on.
     """
     os.makedirs(cfg, exist_ok=True)
+    # Resolve before forking: the child may chdir to `cwd`, and a relative
+    # binary path would then no longer point at anything.
+    binary = os.path.abspath(binary)
     pid, fd = pty.fork()
     if pid == 0:
         os.environ["TERM"] = "xterm-256color"
@@ -183,6 +189,8 @@ def run_in_pty(binary: str, args, keys: bytes, settle: float = 2.5, after: float
         os.environ["JOT_CONFIG_HOME"] = cfg
         os.environ["JOT_CACHE_HOME"] = cfg
         try:
+            if cwd:
+                os.chdir(cwd)
             os.execv(binary, [binary] + list(args))
         except OSError:
             os._exit(127)

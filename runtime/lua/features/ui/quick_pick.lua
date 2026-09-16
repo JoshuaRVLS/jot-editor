@@ -74,8 +74,6 @@ local function quick_pick(p)
   if selected >= 0 and selected < #items and items[selected + 1].preview
       and items[selected + 1].preview ~= "" then
     footer = items[selected + 1].preview
-  else
-    footer = "Enter open   Esc close   Up/Down move   PgUp/PgDn page"
   end
 
   return present_panel("quick_pick", p, rows, { title = title, title_fg = accent, footer = footer })

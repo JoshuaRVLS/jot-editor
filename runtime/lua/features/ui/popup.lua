@@ -57,10 +57,9 @@ local function save_prompt(p)
   local bg = colors.panel_bg or colors.bg or 0
   local inner_w = math.max(1, p.w - 2)
   local rows = {
-    { text = pad(truncate(" Save As: type filename, Enter=save, Esc=cancel", inner_w), inner_w), fg = fg, bg = bg },
     { text = pad(truncate(" Filename: " .. (p.input or ""), inner_w), inner_w), fg = fg, bg = bg },
   }
-  return present_panel("save_prompt", p, rows, {})
+  return present_panel("save_prompt", p, rows, { title = " Save As", title_fg = fg })
 end
 
 local function quit_prompt(p)
@@ -73,7 +72,7 @@ local function quit_prompt(p)
   local bg = colors.panel_bg or colors.bg or 0
   local inner_w = math.max(1, p.w - 2)
   local rows = {
-    { text = pad(truncate(" Unsaved changes! Quit anyway? (y/n)", inner_w), inner_w), fg = fg, bg = bg },
+    { text = pad(truncate(" Unsaved changes! Quit anyway?", inner_w), inner_w), fg = fg, bg = bg },
   }
   return present_panel("quit_prompt", p, rows, {})
 end

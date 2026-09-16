@@ -524,8 +524,8 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(g.last_border != "none"); // modal panel: bordered float
   REQUIRE(g.last_title.find("Settings") != std::string::npos);
   REQUIRE(g.last_title.find("34 keys") != std::string::npos);
-  REQUIRE(g.last_footer.find("Enter") != std::string::npos);
-  REQUIRE(g.last_footer.find("Esc") != std::string::npos);
+  // The footer is gone: the surface shows its state, not a list of bindings.
+  REQUIRE(g.last_footer.empty());
   // Divider + 2 entry rows: the selected bool shows "on", the editing
   // row shows its " > 8" input prompt.
   REQUIRE(g.lines_count >= 3);
@@ -582,7 +582,12 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
   REQUIRE(g.open_count == 5);
-  REQUIRE(g.lines_count == 2);
+  // One row: the filename input. "Save As" moved to the panel title, and the
+  // line that spelled out Enter/Esc is gone. The box is taller than the content
+  // because the native layout reserves the height.
+  REQUIRE(g.lines_count == 1);
+  REQUIRE(g.last_title.find("Save As") != std::string::npos);
+  REQUIRE(g.last_footer.empty());
 
   push_module_field(L, 1, "save_prompt");
   lua_pushnil(L);
@@ -634,7 +639,9 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(g.open_count == 7);
   REQUIRE(g.last_title.find("Tree-sitter") != std::string::npos);
   REQUIRE(g.lines_count == 14); // h-2 padded rows
-  REQUIRE(g.last_footer.find("Up/Down scroll") != std::string::npos);
+  // No key hints; this list fits without scrolling, so there is no counter
+  // footer either.
+  REQUIRE(g.last_footer.empty());
 
   push_module_field(L, 1, "tree_sitter_status");
   lua_pushnil(L);

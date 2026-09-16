@@ -72,11 +72,8 @@ local function lsp_status(p)
     body_list[i] = pad_cells(body[i] or "", inner_w)
   end
 
-  local footer = "Esc close   Up/Down scroll"
   local max_scroll = math.max(0, #rows - list_h)
-  if max_scroll > 0 then
-    footer = footer .. "  " .. tostring(scroll + 1) .. "/" .. tostring(max_scroll + 1)
-  end
+  local footer = max_scroll > 0 and (tostring(scroll + 1) .. "/" .. tostring(max_scroll + 1)) or nil
   return present_panel("lsp_status",
                        p,
                        {},

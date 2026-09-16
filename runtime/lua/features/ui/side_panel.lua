@@ -409,16 +409,7 @@ local function side_panel(p)
     add(p.error, colors.error or 15, colors.status_error_bg or 1, true)
   end
 
-  -- Key-hint footers for the live panels.
-  local footer = nil
-  if is_debugger then
-    footer = "F5 cont  F6 thr  F7/F8 frame  F9 bp  F10 over  F11 in"
-  elseif is_git then
-    footer = "space stage/checkout  a/A all  c commit  d discard  s stash  y copy  r refresh"
-  elseif is_git_diff then
-    footer = "q close  j/k scroll  r refresh"
-  end
-
+  -- No key-hint footer: the panel shows its state, not a list of bindings.
   return present_panel("side_panel",
                        p,
                        rows,

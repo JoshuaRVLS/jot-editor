@@ -52,11 +52,9 @@ local function search_panel(p)
   if p.replace_visible then
     rows[#rows + 1] = search_field_row(p, "Replace", p.replace_text, focus_replace, input_w, colors)
   end
-  -- Footer: key hints left, toggles + result count right.
-  local hint = p.replace_visible
-      and (p.scoped_to_selection and "Enter next  Up prev  Tab field  ^R one  ^R+Shift all in sel"
-            or "Enter next  Up prev  Tab field  ^R one  ^R+Shift all")
-      or "Enter next  Up prev  Tab case  ^H replace  ^E regex"
+  -- Footer: state chips only, right-aligned. The chips report what the search is
+  -- doing (case, whole word, regex, selection scope, match count); the key hints
+  -- that used to sit to their left were instructions, not state.
   local parts = {}
   local offsets = {}
   local function chip(text, active)
@@ -75,10 +73,9 @@ local function search_panel(p)
   end
   chip((p.count or "0/0") .. " ", false)
   local right = table.concat(parts)
-  local hint_w = math.max(1, inner_w - cell_len(right) - 1)
-  local line = trunc_cells(hint, hint_w) .. string.rep(" ", math.max(0, inner_w - hint_w - cell_len(right))) .. right
-  -- Recompute the chip offsets on the final line: hints are ASCII + pad, so
-  -- each chip's byte position is (inner_w - cell_len(right)) + its part start.
+  local line = string.rep(" ", math.max(0, inner_w - cell_len(right))) .. right
+  -- Chip offsets on the final line: each chip sits at its part start inside the
+  -- right-aligned run.
   local base = inner_w - cell_len(right)
   for _, sp in ipairs(offsets) do
     sp.start = sp.start + base

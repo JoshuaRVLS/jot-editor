@@ -225,14 +225,17 @@ void Editor::render_telescope()
   for (int i = start_idx; i < end_idx; i++)
   {
     int row_y = layout.list_y + (i - start_idx);
-    int fg = theme.fg_telescope, bg = theme.bg_telescope;
+    const int fg = theme.fg_telescope;
+    const int bg = theme.bg_telescope;
+    const bool selected_row = (i == selected);
 
-    if (i == selected)
+    if (selected_row && layout.list_x >= 1)
     {
-      fg = theme.fg_telescope_selected;
-      bg = theme.bg_telescope_selected;
-      UIRect row_rect = {layout.list_x - 1, row_y, layout.list_w + 1, 1};
-      ui->fill_rect(row_rect, " ", fg, bg);
+      // Selection is a caret in the gutter -- the marker the palette, quick
+      // pick and which-key already use -- rather than a filled band. The band
+      // took its colours straight from TelescopeSelection, which is a bright
+      // slab of background on the light themes.
+      ui->draw_text(layout.list_x - 1, row_y, "▎", theme.fg_selection, bg);
     }
 
     std::string icon = telescope_icon(results[i].is_directory, use_nerd_icons);
@@ -245,6 +248,10 @@ void Editor::render_telescope()
         icon = std::string(fti.glyph) + " ";
         icon_fg = fti.color;
       }
+    }
+    if (selected_row)
+    {
+      icon_fg = theme.fg_selection;
     }
     const int icon_cells = ui_cell_count(icon);
     std::string name = results[i].name;
@@ -262,7 +269,7 @@ void Editor::render_telescope()
                   clip_text(rest, std::max(0, layout.list_w - icon_cells)),
                   fg,
                   bg,
-                  i == selected);
+                  selected_row);
   }
 
   if (layout.show_preview)
@@ -346,14 +353,6 @@ void Editor::render_telescope()
           }
         }
       }
-    }
-    else
-    {
-      ui->draw_text(layout.preview_x,
-                    layout.preview_y + 2,
-                    "Select a file to preview.",
-                    theme.fg_comment,
-                    theme.bg_telescope);
     }
   }
 
