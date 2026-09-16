@@ -141,6 +141,54 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     show_jumplist_picker();
   }
+  else if (lcmd == "expand" || lcmd == "expandselection")
+  {
+    expand_selection_to_node();
+  }
+  else if (lcmd == "shrink" || lcmd == "shrinkselection")
+  {
+    shrink_selection_to_node();
+  }
+  else if (lcmd == "textobject" || lcmd == "textobj")
+  {
+    // :textobject [inside|around] function|class|argument|comment
+    std::string spec = trim_copy(arg);
+    bool inner = false;
+    for (const std::string &prefix : {"inside ", "inner ", "i "})
+    {
+      if (spec.size() > prefix.size() && spec.compare(0, prefix.size(), prefix) == 0)
+      {
+        inner = true;
+        spec = spec.substr(prefix.size());
+        break;
+      }
+    }
+    for (const std::string &prefix : {"around ", "outer ", "a "})
+    {
+      if (spec.size() > prefix.size() && spec.compare(0, prefix.size(), prefix) == 0)
+      {
+        spec = spec.substr(prefix.size());
+        break;
+      }
+    }
+    const std::string kind = trim_copy(spec);
+    if (kind.empty())
+    {
+      set_message("Usage: :textobject [inside|around] function|class|argument|comment");
+    }
+    else
+    {
+      select_textobject(kind, inner);
+    }
+  }
+  else if (lcmd == "nextfunction" || lcmd == "nextfunc")
+  {
+    goto_relative_function(1);
+  }
+  else if (lcmd == "prevfunction" || lcmd == "prevfunc")
+  {
+    goto_relative_function(-1);
+  }
   else if (lcmd == "wsymbols" || lcmd == "workspacesymbols")
   {
     show_workspace_symbols_picker();

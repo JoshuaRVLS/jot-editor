@@ -374,6 +374,35 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     return;
   }
 
+  // Tree-sitter textobjects. Alt+O/Alt+I are helix's chords but both are taken
+  // here (sort lines, smart line start), so the selection pair lives on the
+  // Alt+Shift layer the other structural edits use.
+  if (is_alt && is_shift && (ch == 'o' || ch == 'O'))
+  {
+    expand_selection_to_node();
+    return;
+  }
+  if (is_alt && is_shift && (ch == 'i' || ch == 'I'))
+  {
+    shrink_selection_to_node();
+    return;
+  }
+  if (is_alt && is_shift && (ch == 'f' || ch == 'F'))
+  {
+    select_textobject("function", true);
+    return;
+  }
+  if (is_alt && is_shift && (ch == 'c' || ch == 'C'))
+  {
+    select_textobject("class", true);
+    return;
+  }
+  if (is_alt && is_shift && (ch == 'a' || ch == 'A'))
+  {
+    select_textobject("argument", true);
+    return;
+  }
+
   // Global sidebar toggles should work regardless of current focus:
   // Ctrl+B opens the left explorer, Ctrl+Shift+B the right dock.
   if (is_ctrl && (ch == 'b' || ch == 'B'))

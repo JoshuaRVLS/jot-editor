@@ -15,6 +15,7 @@ add_executable(jot_tests
   test_truecolor_cells.cpp
   test_cursor_scroll.cpp
   test_jumplist.cpp
+  test_textobjects.cpp
   test_debugger.cpp
   test_imageviewer.cpp
   test_syntax.cpp

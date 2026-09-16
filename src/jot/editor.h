@@ -464,6 +464,12 @@ private:
   // Called just before a text mutation while the tree-sitter tree is in sync:
   // snapshots the current text so the next rebuild can reparse incrementally.
   void ts_begin_edit(FileBuffer &buf);
+#ifdef JOT_TREESITTER
+  // True when the buffer has a usable syntax tree (parsing it if it is small
+  // enough to do synchronously); reports why not when it does not.
+  bool syntax_tree_ready(FileBuffer &buf);
+  bool select_byte_range(uint32_t start, uint32_t end);
+#endif
   // Drains finished background parses and installs them into their buffers
   // (main thread only; see init_ts_for_buffer for the queue side).
   void install_finished_parses();
@@ -1058,6 +1064,13 @@ public:
   void clear_extra_carets();
   bool add_caret_at(int line_y, int x);
   bool select_next_occurrence();
+  // Tree-sitter textobjects: expand/shrink the selection to a syntax node (helix
+  // Alt+o / Alt+i), select the inside/around of a function, class or argument,
+  // and step between functions. All act on the primary selection.
+  bool expand_selection_to_node();
+  bool shrink_selection_to_node();
+  bool select_textobject(const std::string &kind, bool inner);
+  bool goto_relative_function(int direction);
   void delete_selection_for_test();
   void delete_char_for_test(bool forward);
   void insert_string_for_test(const std::string &str);
@@ -1199,6 +1212,29 @@ public:
   std::vector<QuickPickItem> workspace_diagnostics_for_test() const
   {
     return workspace_diagnostic_quick_pick_items();
+  }
+  // Textobjects: drive the real commands from a test.
+  bool expand_selection_for_test()
+  {
+    return expand_selection_to_node();
+  }
+  bool shrink_selection_for_test()
+  {
+    return shrink_selection_to_node();
+  }
+  bool select_textobject_for_test(const std::string &kind, bool inner)
+  {
+    return select_textobject(kind, inner);
+  }
+  bool goto_function_for_test(int direction)
+  {
+    return goto_relative_function(direction);
+  }
+  // True when the buffer has a parsed syntax tree, so a test can skip rather
+  // than fail on a machine with no grammar installed.
+  bool syntax_tree_ready_for_test()
+  {
+    return get_buffer().ts_tree != nullptr;
   }
   // Runs an ex command line the way the palette does, so command plumbing can
   // be asserted without typing into a prompt.

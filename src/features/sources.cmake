@@ -12,6 +12,7 @@ set(JOT_FEATURES_SOURCES
   features/cpp_assist.cpp
   features/folding.cpp
   features/text_features.cpp
+  features/textobjects.cpp
   features/syntax.cpp
   features/tree_sitter/install.cpp
   features/tree_sitter/manager.cpp

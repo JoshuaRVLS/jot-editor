@@ -55,6 +55,8 @@ void Editor::show_command_help(const std::string &topic_text)
       "  Ctrl+Shift+M     Diagnostics picker",
       "  Ctrl+Shift+O     Document symbol picker",
       "  Ctrl+Shift+W     Workspace symbol picker (across the project)",
+      "  Alt+Shift+O/I    Expand / shrink the selection to a syntax node",
+      "  Alt+Shift+F/C/A  Select inside a function / class / argument",
       "  Ctrl+Shift+X     Workspace diagnostics picker",
       "  :outline         Symbols/outline panel for the current file",
       "  Ctrl+T           Theme chooser",

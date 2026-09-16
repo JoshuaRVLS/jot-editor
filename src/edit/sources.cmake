@@ -8,6 +8,7 @@ set(JOT_EDIT_SOURCES
   edit/join_lines.cpp
   edit/lines.cpp
   edit/multicursor.cpp
+  edit/textobject.cpp
   edit/path_clipboard.cpp
   edit/replace.cpp
   edit/reverse_lines.cpp
