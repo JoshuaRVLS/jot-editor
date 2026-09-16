@@ -65,8 +65,15 @@ void Editor::sync_lua_ui_surfaces()
   // their own: render_sidebar() and the dock renderers re-emit every frame
   // once the owning surface closes.
   const bool frame_owned = terminal_zoom_active || show_home_menu;
-  sync(show_sidebar && !frame_owned, lua_ui_prev_sidebar, "sidebar");
-  sync(show_right_panel && !frame_owned, lua_ui_prev_side_panel, "side_panel");
+  // The sidebar surface is skipped while its git view is showing (the git panel
+  // emits `side_panel` instead), so the float has to be torn down then or the
+  // explorer keeps painting over the panel.
+  sync(show_sidebar && !git_panel_visible() && !frame_owned, lua_ui_prev_sidebar, "sidebar");
+  // `side_panel` is the right dock's panels *and* the sidebar's git panel, so it
+  // stays visible while either one is up and closes when both are gone.
+  sync((show_right_panel || git_panel_visible()) && !frame_owned,
+       lua_ui_prev_side_panel,
+       "side_panel");
   sync(lsp_completion_visible && !lsp_completion_items.empty() && !frame_owned,
        lua_ui_prev_lsp_completion,
        "lsp_completion");
