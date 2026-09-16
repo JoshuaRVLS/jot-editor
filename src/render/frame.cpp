@@ -562,18 +562,7 @@ void Editor::render_pane_resize_guides()
     return;
   }
 
-  int total_w = std::max(1, ui->get_render_width());
-  int reserved_terminal_h = integrated_terminal_reserved_h();
-  int menu_h = topbar_height();
-  int total_h = std::max(1, ui->get_height() - status_height - reserved_terminal_h - menu_h);
-  int origin_x = show_sidebar ? effective_sidebar_width() : 0;
-  int right_w = effective_right_panel_width();
-  int available_w = std::max(1, total_w - origin_x - right_w);
-  // Match update_pane_layout: zen mode narrows and centers the pane area, so
-  // the resize guides land on the same columns as the panes themselves.
-  const int zen_margin = zen_content_margin(available_w);
-  origin_x += zen_margin;
-  available_w = std::max(1, available_w - zen_margin * 2);
+  const PaneArea area = compute_pane_area();
 
   std::function<void(int, int, int, int, int)> draw_node =
       [&](int node_index, int x, int y, int w, int h)
@@ -629,7 +618,7 @@ void Editor::render_pane_resize_guides()
     }
   };
 
-  draw_node(pane_root, origin_x, menu_h, available_w, total_h);
+  draw_node(pane_root, area.x, area.y, area.w, area.h);
 }
 
 Editor::FileTabLayout Editor::build_file_tab_layout(const SplitPane &pane, int draw_w)

@@ -684,7 +684,7 @@ public:
   bool toggle_zen_mode();
   // Left/right margin that centers the pane area at zen_content_width while
   // zen mode is active (0 otherwise or when the area is narrower).
-  int zen_content_margin(int available_w);
+  int zen_content_margin(int available_w) const;
   void load_file_tree(const std::string &path);
   void open_workspace(const std::string &path, bool restore_session = true);
   // Test seam: the computed explorer/git sidebar rows (rebuilding the cache
@@ -965,6 +965,18 @@ private:
   void pane_show_buffer(int buffer_index);
   bool resize_current_pane(int delta);
   bool resize_current_pane_direction(char dir, int delta);
+  // The region the pane tree fills, after the chrome (top bar, status line,
+  // bottom panel), the docks (sidebar, right dock) and zen centering have taken
+  // their share. Derived in exactly one place so the renderer, the splitter
+  // hit-tests and the resize guides cannot disagree about where a pane is.
+  struct PaneArea
+  {
+    int x = 0;
+    int y = 0;
+    int w = 1;
+    int h = 1;
+  };
+  PaneArea compute_pane_area() const;
   int pane_split_at_position(int x, int y) const;
   bool begin_pane_resize_drag(int x, int y);
   bool update_pane_resize_drag(int x, int y);

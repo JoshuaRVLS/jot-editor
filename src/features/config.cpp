@@ -294,7 +294,7 @@ void Config::set_bool(const std::string &key, bool value)
   settings[key] = value ? "true" : "false";
 }
 
-int Config::get_int(const std::string &key, int default_val)
+int Config::get_int(const std::string &key, int default_val) const
 {
   auto it = settings.find(key);
   if (it == settings.end())

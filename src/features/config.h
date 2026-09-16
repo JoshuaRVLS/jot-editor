@@ -23,7 +23,7 @@ public:
   void set(const std::string &key, const std::string &value);
   void set_int(const std::string &key, int value);
   void set_bool(const std::string &key, bool value);
-  int get_int(const std::string &key, int default_val = 0);
+  int get_int(const std::string &key, int default_val = 0) const;
   double get_double(const std::string &key, double default_val = 0.0);
   bool get_bool(const std::string &key, bool default_val = false);
   std::vector<std::string>

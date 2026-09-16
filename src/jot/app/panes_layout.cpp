@@ -50,7 +50,7 @@ int Editor::max_right_panel_width() const
   return std::max(0, total_w - left_w - kMinPaneWidth);
 }
 
-int Editor::zen_content_margin(int available_w)
+int Editor::zen_content_margin(int available_w) const
 {
   if (!zen_mode)
   {
@@ -59,6 +59,24 @@ int Editor::zen_content_margin(int available_w)
   const int zen_w =
       std::clamp(config.get_int("zen_content_width", 100), 40, 240);
   return std::max(0, (available_w - zen_w) / 2);
+}
+
+Editor::PaneArea Editor::compute_pane_area() const
+{
+  const int total_w = std::max(1, ui->get_render_width());
+  // The bottom panel reserves its height from the pane area; 0 while the shell
+  // is zoomed (the zoomed panel paints over the full region).
+  const int reserved_h = integrated_terminal_reserved_h();
+  const int top = topbar_height();
+  const int total_h = std::max(1, ui->get_height() - status_height - reserved_h - top);
+  int origin_x = show_sidebar ? effective_sidebar_width() : 0;
+  const int right_w = effective_right_panel_width();
+  int available_w = std::max(1, total_w - origin_x - right_w);
+  // Zen focus mode narrows the pane area to zen_content_width and centers it.
+  const int zen_margin = zen_content_margin(available_w);
+  origin_x += zen_margin;
+  available_w = std::max(1, available_w - zen_margin * 2);
+  return PaneArea{origin_x, top, available_w, total_h};
 }
 
 int Editor::create_pane(int x, int y, int w, int h, int buffer_id)
@@ -109,20 +127,11 @@ void Editor::update_pane_layout()
     pane_root = 0;
   }
 
-  int total_w = std::max(1, ui->get_render_width());
-  // The terminal reserves its panel height from the pane area; 0 while
-  // zoomed (the zoomed panel paints over the full area).
-  int reserved_terminal_h = integrated_terminal_reserved_h();
-  int menu_h = topbar_height();
-  int total_h = std::max(1, ui->get_height() - status_height - reserved_terminal_h - menu_h);
-  int origin_x = show_sidebar ? effective_sidebar_width() : 0;
-  int right_w = effective_right_panel_width();
-  int available_w = std::max(1, total_w - origin_x - right_w);
-  // Zen focus mode: narrow the pane area to zen_content_width and center it.
-  const int zen_margin = zen_content_margin(available_w);
-  origin_x += zen_margin;
-  available_w = std::max(1, available_w - zen_margin * 2);
-  int origin_y = menu_h;
+  const PaneArea area = compute_pane_area();
+  const int total_h = area.h;
+  const int origin_x = area.x;
+  const int available_w = area.w;
+  const int origin_y = area.y;
 
   if (pane_zoom_active && panes.size() > 1 && current_pane >= 0
       && current_pane < (int)panes.size())
@@ -799,13 +808,7 @@ int Editor::pane_split_at_position(int x, int y) const
     }
   };
 
-  int total_w = std::max(1, ui->get_render_width());
-  int reserved_terminal_h = integrated_terminal_reserved_h();
-  int menu_h = topbar_height();
-  int total_h = std::max(1, ui->get_height() - status_height - reserved_terminal_h - menu_h);
-  int origin_x = show_sidebar ? effective_sidebar_width() : 0;
-  int right_w = effective_right_panel_width();
-  int available_w = std::max(1, total_w - origin_x - right_w);
-  visit(pane_root, origin_x, menu_h, available_w, total_h);
+  const PaneArea area = compute_pane_area();
+  visit(pane_root, area.x, area.y, area.w, area.h);
   return best;
 }
