@@ -1080,6 +1080,11 @@ public:
   bool shrink_selection_to_node();
   bool select_textobject(const std::string &kind, bool inner);
   bool goto_relative_function(int direction);
+  // The same walk for any textobject kind ("function", "class"), which is what
+  // the ]<kind> / [<kind> family uses.
+  bool goto_relative_object(const std::string &kind, int direction);
+  // Selection helpers the operator menus act on.
+  bool select_word_at_cursor();
   void delete_selection_for_test();
   void delete_char_for_test(bool forward);
   void insert_string_for_test(const std::string &str);

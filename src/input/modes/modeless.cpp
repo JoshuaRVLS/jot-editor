@@ -456,11 +456,9 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
     move_word_forward(false);
     return;
   }
-  if (is_alt && ch == 'd')
-  {
-    delete_line();
-    return;
-  }
+  // Alt+D is the delete operator of the keymap grammar (see
+  // runtime/lua/features/keymaps.lua); deleting a line is Alt+D l. Alt+Shift+D
+  // below still duplicates the line.
   if (is_alt && ch == 'D')
   { // convenience: duplicate current line
     duplicate_line();

@@ -483,6 +483,26 @@ API.
 | `Ctrl+Shift+L` | Select current line |
 | `Ctrl+Shift+U` / `Ctrl+Shift+N` | Uppercase / lowercase selection or word |
 
+### The keymap grammar (operators, selection, next/previous)
+
+Bindings with a family shape live behind a prefix whose letter says what it is,
+and the sequence after it is chosen from the menu which-key shows (a bare key with
+no action is a group title). The object letters are the same for every operator,
+so the grammar is learnt once:
+
+| Sequence | Action |
+| --- | --- |
+| `Alt+D` / `Alt+Y` | Delete / yank, then `I`/`A` (inside / around), then the object |
+| `Alt+D W` / `Alt+D L` | Delete the word / the line (objects that need no inside/around) |
+| `Alt+D A F`, `Alt+D I A` | Delete around a function, inside an argument |
+| `Alt+Y A C`, `Alt+Y W` | Yank around a class, yank the word |
+| `Alt+V` | Selection: `E` expand, `C` shrink, `K` keep primary, `R` rotate, `A`/`B` cursor above/below, `L` split lines, `M` match all occurrences, `S` select an object |
+| `Alt+]` / `Alt+[` | Next / previous: `F` function, `C` class, `D` diagnostic (`Alt+E` remains an alias) |
+
+Objects available today are `F` function, `C` class or type, `A`
+argument/parameter, `W` word, `L` line — the syntax objects come from tree-sitter,
+so they need a grammar for the file type.
+
 ### Navigation
 
 | Shortcut | Action |

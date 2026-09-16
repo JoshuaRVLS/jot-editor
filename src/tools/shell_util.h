@@ -72,6 +72,20 @@ namespace shell_util
 #endif
   }
 
+  // Redirect for a helper we hand data to and then forget: a detached process
+  // (a clipboard owner, a watcher) must not inherit our stdout. Two reasons: it
+  // paints over a full-screen UI, and it holds our stdout pipe open, so anything
+  // reading that pipe (a terminal multiplexer, a test harness) waits forever for
+  // a process that is never going to exit.
+  inline std::string detached_redirect()
+  {
+#ifdef _WIN32
+    return " >NUL 2>NUL";
+#else
+    return " >/dev/null 2>&1";
+#endif
+  }
+
   // Platform popen wrapper.
   inline FILE *open_command_pipe(const std::string &command, const char *mode)
   {

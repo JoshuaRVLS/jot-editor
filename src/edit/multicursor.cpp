@@ -789,3 +789,36 @@ bool Editor::select_all_occurrences()
   needs_redraw = true;
   return true;
 }
+
+// Selects the word under the cursor: the object the word operators act on, and
+// the same span Ctrl+D starts from, so "select the word" and "select the next
+// occurrence" agree on what a word is.
+bool Editor::select_word_at_cursor()
+{
+  auto &buf = get_buffer();
+  if (buf.is_lazy())
+  {
+    buf.materialize();
+  }
+  if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.line_count())
+  {
+    return false;
+  }
+  const std::string &line = buf.line(buf.cursor.y);
+  int start = 0;
+  int end = 0;
+  word_span_at(line, buf.cursor.x, start, end);
+  if (start >= end)
+  {
+    set_message("No word here");
+    return false;
+  }
+  buf.selection.start = {start, buf.cursor.y};
+  buf.selection.end = {end, buf.cursor.y};
+  buf.selection.active = true;
+  buf.cursor = buf.selection.end;
+  buf.preferred_x = buf.cursor.x;
+  restart_blink();
+  needs_redraw = true;
+  return true;
+}

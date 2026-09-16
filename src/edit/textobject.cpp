@@ -412,6 +412,11 @@ bool Editor::select_textobject(const std::string &kind, bool inner)
 
 bool Editor::goto_relative_function(int direction)
 {
+  return goto_relative_object("function", direction);
+}
+
+bool Editor::goto_relative_object(const std::string &kind, int direction)
+{
 #ifdef JOT_TREESITTER
   auto &buf = get_buffer();
   if (!syntax_tree_ready(buf))
@@ -422,8 +427,8 @@ bool Editor::goto_relative_function(int direction)
       jot_textobjects::names_for_extension(tree_sitter_extension_for_buffer(buf));
   const uint32_t from = byte_for_cursor(buf, buf.cursor);
 
-  // A flat scan of the whole tree, in document order, filtering to function
-  // nodes: cheap enough to run on a keystroke and it cannot miss a definition
+  // A flat scan of the whole tree, in document order, filtering to the kind asked
+  // for: cheap enough to run on a keystroke and it cannot miss a definition
   // nested in a class or a namespace the way a sibling walk would.
   TSNode found = {};
   bool have_found = false;
@@ -434,13 +439,12 @@ bool Editor::goto_relative_function(int direction)
     stack.pop_back();
     uint32_t start = 0;
     uint32_t end = 0;
-    if (node_range(node, start, end) && names.is_function(ts_node_type(node)))
+    if (node_range(node, start, end) && type_matches(names, kind, ts_node_type(node)))
     {
-      // Same trap as the textobject: the declarator starts four columns into
-      // "int add(...)", so land on the enclosing definition.
-      const TSNode outer = climb_same_kind(node, names, "function");
-      const uint32_t outer_start = ts_node_start_byte(outer);
-      start = outer_start;
+      // The declarator/definition trap again: "int add(...)" starts four columns
+      // in, so land on the enclosing definition when there is one.
+      const TSNode outer = kind == "function" ? climb_same_kind(node, names, kind) : node;
+      start = ts_node_start_byte(outer);
       end = ts_node_end_byte(outer);
       const bool after = start > from;
       if ((direction > 0 && after) || (direction < 0 && start < from))
@@ -448,7 +452,7 @@ bool Editor::goto_relative_function(int direction)
         if (!have_found || (direction > 0 && start < ts_node_start_byte(found))
             || (direction < 0 && start > ts_node_start_byte(found)))
         {
-          found = node;
+          found = outer;
           have_found = true;
         }
       }
@@ -461,12 +465,13 @@ bool Editor::goto_relative_function(int direction)
   }
   if (!have_found)
   {
-    set_message(direction > 0 ? "No function after the cursor" : "No function before the cursor");
+    set_message(direction > 0 ? "Nothing after the cursor" : "Nothing before the cursor");
     return false;
   }
   const uint32_t start = ts_node_start_byte(found);
   return select_byte_range(start, start);
 #else
+  (void)kind;
   (void)direction;
   set_message("Built without tree-sitter");
   return false;

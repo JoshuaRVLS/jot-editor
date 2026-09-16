@@ -31,7 +31,7 @@ bool write_wl_clipboard(const std::string &text)
 {
   if (!shell_util::command_exists("wl-copy"))
     return false;
-  FILE *pipe = shell_util::open_command_pipe("wl-copy", "w");
+  FILE *pipe = shell_util::open_command_pipe("wl-copy" + shell_util::detached_redirect(), "w");
   if (!pipe)
     return false;
     
@@ -43,7 +43,8 @@ bool write_xclip_selection(const std::string &text)
 {
   if (!shell_util::command_exists("xclip"))
     return false;
-  FILE *pipe = shell_util::open_command_pipe("xclip -selection clipboard -in", "w");
+  FILE *pipe = shell_util::open_command_pipe(
+      "xclip -selection clipboard -in" + shell_util::detached_redirect(), "w");
   if (!pipe)
     return false;
   fwrite(text.data(), 1, text.size(), pipe);

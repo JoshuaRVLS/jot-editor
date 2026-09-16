@@ -4,6 +4,7 @@
 #include "jot/lua/api.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 
 void Editor::open_which_key(const std::string &chord)
@@ -134,11 +135,31 @@ bool Editor::handle_which_key_input(int ch, bool is_ctrl, bool is_shift, bool is
       }
     }
   }
+  // Case-insensitive on purpose. A pressed key is canonicalised ("a" arrives as
+  // "A", and a chord as "Ctrl+N"), so an exact comparison silently refuses any
+  // child registered in the case the user actually types -- and it does so by
+  // closing the panel and typing the key, which looks like the keymap was never
+  // registered at all.
+  const auto same_token = [](const std::string &a, const std::string &b)
+  {
+    if (a.size() != b.size())
+    {
+      return false;
+    }
+    for (size_t i = 0; i < a.size(); i++)
+    {
+      if (std::tolower((unsigned char)a[i]) != std::tolower((unsigned char)b[i]))
+      {
+        return false;
+      }
+    }
+    return true;
+  };
   for (const auto &form : match_forms)
   {
     for (const auto &child : children)
     {
-      if (child.key == form)
+      if (same_token(child.key, form))
       {
         return pick(child);
       }

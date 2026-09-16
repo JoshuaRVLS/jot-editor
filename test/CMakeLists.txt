@@ -16,6 +16,7 @@ add_executable(jot_tests
   test_cursor_scroll.cpp
   test_jumplist.cpp
   test_textobjects.cpp
+  test_keymap_grammar.cpp
   test_debugger.cpp
   test_imageviewer.cpp
   test_syntax.cpp

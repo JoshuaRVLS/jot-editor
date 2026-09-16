@@ -220,3 +220,29 @@ TEST_CASE("Textobject node names differ per language family", "[jot][textobject]
   REQUIRE_FALSE(names_for_extension(".rs").is_function("function_definition"));
   REQUIRE_FALSE(names_for_extension(".py").is_function("function_item"));
 }
+
+// The operator keymap (Alt+D a f) is two commands: select the object, then act on
+// it. This drives that pair the way the keymap does, so a break between "the
+// textobject command works" and "the sequence works" is visible here rather than
+// only in a live session.
+TEST_CASE("Deleting around a function is select-then-delete", "[jot][textobject]")
+{
+  Editor &e = probe_editor();
+  if (!load_and_place(e, 6, 6)) // inside add()'s body
+  {
+    SUCCEED("cpp grammar not installed; the operator pair is skipped");
+    return;
+  }
+  const std::string before = e.host().core.buffer_content();
+  REQUIRE(before.find("int add") != std::string::npos);
+
+  e.run_ex_for_test(":textobject around function");
+  INFO("selection: [" << e.host().core.selected_text() << "]");
+  REQUIRE(e.host().core.selected_text().find("int add") != std::string::npos);
+
+  e.run_ex_for_test(":deleteselection");
+  const std::string after = e.host().core.buffer_content();
+  INFO("after: [" << after << "]");
+  REQUIRE(after.find("int add") == std::string::npos);
+  REQUIRE(after.find("int other") != std::string::npos); // the other function stays
+}

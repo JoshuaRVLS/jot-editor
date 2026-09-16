@@ -141,6 +141,92 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     show_jumplist_picker();
   }
+  // Operator side of the keymap grammar (Alt+D / Alt+Y then an object): one
+  // command per verb, so the keymap tables stay pure data.
+  else if (lcmd == "yankselection")
+  {
+    copy();
+    set_message("Yanked the selection");
+  }
+  else if (lcmd == "deleteselection")
+  {
+    if (get_buffer().selection.active)
+    {
+      copy();
+      delete_selection();
+      set_message("Deleted the selection");
+    }
+    else
+    {
+      delete_line();
+    }
+  }
+  else if (lcmd == "deleteobject" || lcmd == "yankobject")
+  {
+    // :deleteobject [inside|around] function|class|argument|word|line
+    std::string spec = trim_copy(arg);
+    bool inner = false;
+    for (const std::string &prefix : {"inside ", "inner ", "i "})
+    {
+      if (spec.size() > prefix.size() && spec.compare(0, prefix.size(), prefix) == 0)
+      {
+        inner = true;
+        spec = spec.substr(prefix.size());
+        break;
+      }
+    }
+    for (const std::string &prefix : {"around ", "outer ", "a "})
+    {
+      if (spec.size() > prefix.size() && spec.compare(0, prefix.size(), prefix) == 0)
+      {
+        spec = spec.substr(prefix.size());
+        break;
+      }
+    }
+    const std::string object = trim_copy(spec);
+    const bool deleting = lcmd == "deleteobject";
+    bool selected = false;
+    if (object == "word")
+    {
+      selected = select_word_at_cursor();
+    }
+    else if (object == "line")
+    {
+      select_current_line();
+      selected = true;
+    }
+    else if (!object.empty())
+    {
+      selected = select_textobject(object, inner);
+    }
+    if (!selected)
+    {
+      return false;
+    }
+    if (deleting)
+    {
+      copy();
+      delete_selection();
+      set_message("Deleted " + (inner ? std::string("inside ") : std::string("around ")) + object);
+    }
+    else
+    {
+      copy();
+      set_message("Yanked " + (inner ? std::string("inside ") : std::string("around ")) + object);
+    }
+  }
+  else if (lcmd == "selectword")
+  {
+    select_word_at_cursor();
+  }
+  else if (lcmd == "selectline")
+  {
+    select_current_line();
+  }
+  else if (lcmd == "nextclass" || lcmd == "prevclass")
+  {
+    goto_relative_object("class", lcmd == "nextclass" ? 1 : -1);
+  }
   else if (lcmd == "keepprimary" || lcmd == "keepselection")
   {
     keep_primary_selection();
