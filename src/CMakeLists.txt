@@ -468,6 +468,19 @@ if(JOT_TREESITTER_ENABLED)
     ${TREE_SITTER_LIBRARY_DIRS}
   )
 endif()
+
+# The GUI frontend is optional, so the always-compiled code that reaches for it
+# needs a compile-time switch. Without one a JOT_GUI=OFF build fails to link:
+# the referencing translation units are still compiled, but the GUI sources that
+# define UIGui -- and with them its vtable and typeinfo -- are not, so the
+# references are undefined rather than merely unused. Defined on the object
+# targets *and* the libraries they are folded into, because $<TARGET_OBJECTS:>
+# does not carry usage requirements across.
+if(JOT_GUI_ENABLED)
+  foreach(target_name IN ITEMS jot_engine_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj jot_core jot_edit jot_features jot_input jot_render jot_tools jot_lua_api jot_ui jot_engine)
+    target_compile_definitions(${target_name} PUBLIC JOT_GUI=1)
+  endforeach()
+endif()
 target_link_libraries(jot_tools PUBLIC jot_vterm)
 target_link_libraries(jot_engine PUBLIC jot_vterm)
 # Always propagated, not just when the GUI is enabled: ui/gui/gui.h is included

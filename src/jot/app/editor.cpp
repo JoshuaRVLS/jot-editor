@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <stdexcept>
 
 namespace
 {
@@ -85,11 +86,12 @@ void Editor::apply_config_live()
   debugger_panel_height = std::clamp(config.get_int("debugger_height", 12), 6, 24);
   right_panel_width = std::clamp(config.get_int("right_panel_width", 42), 28, 80);
   image_viewer.configure_backend(config.get("image_viewer_backend", "auto"));
+#ifdef JOT_GUI
   // The GUI font family is reconciled here so every path that writes the
   // setting takes effect the same way: the settings menu, :font, a Lua
   // jot.config.set, and :reload. Loading the family already in use is a no-op,
   // so this costs nothing when the setting has not moved.
-  if (auto *gui = dynamic_cast<UIGui *>(ui))
+  if (auto *gui = gui_ui())
   {
     const std::string wanted = config.get("gui_font_family", "");
     if (wanted != gui->font_family() && !gui->apply_font_family(wanted))
@@ -100,6 +102,7 @@ void Editor::apply_config_live()
       set_message("Font family not found: " + wanted);
     }
   }
+#endif
 #ifdef JOT_TREESITTER
   ts_manager_.set_runtime_options(config.get_list("treesitter_library_paths"),
                                   config.get_list("treesitter_query_paths"),
@@ -460,8 +463,31 @@ Editor::Editor(bool gui_mode)
   initialize_lua_runtime();
 }
 
+// The single place the GUI frontend is found by downcast. Two builds exist: one
+// with the GUI sources compiled in, where the cast is a real type check, and one
+// without, where UIGui has no definition anywhere and simply naming it would
+// leave an undefined reference to its typeinfo at link time.
+UIGui *Editor::gui_ui()
+{
+#ifdef JOT_GUI
+  return dynamic_cast<UIGui *>(ui);
+#else
+  return nullptr;
+#endif
+}
+
+const UIGui *Editor::gui_ui() const
+{
+#ifdef JOT_GUI
+  return dynamic_cast<const UIGui *>(ui);
+#else
+  return nullptr;
+#endif
+}
+
 void Editor::initialize_gui_ui()
 {
+#ifdef JOT_GUI
   // The GUI frontend sizes its window from the requested cell grid (80x24
   // starter; the first resize event re-fits the real window). No terminal
   // is touched: raw mode, alternate screen and the ANSI diff renderer are
@@ -481,6 +507,12 @@ void Editor::initialize_gui_ui()
   int h = ui->get_height();
   int w = ui->get_render_width();
   create_pane(0, 0, w - minimap_width, h - status_height, -1);
+#else
+  // --gui on a build configured without SDL2/freetype. main() turns the throw
+  // into an error message and a non-zero exit, which is the right outcome: the
+  // flag was honoured by the command line but this binary cannot serve it.
+  throw std::runtime_error("this build has no GUI frontend (configured without SDL2/freetype)");
+#endif
 }
 
 EditorHostAPI &Editor::host()

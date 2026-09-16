@@ -248,10 +248,12 @@ void Editor::apply_settings_value(const std::string &key, const std::string &val
   // everything else applies through the shared live-config pipeline.
   if (key == "gui_font_size")
   {
-    if (auto *gui = dynamic_cast<UIGui *>(ui))
+#ifdef JOT_GUI
+    if (auto *gui = gui_ui())
     {
       gui->apply_font_size(std::clamp(config.get_int("gui_font_size", 16), 8, 40));
     }
+#endif
   }
   else if (key == "gui_font_family")
   {

@@ -992,6 +992,13 @@ private:
   void update_pane_layout();
   void split_pane_direction(int dx, int dy);
   void refresh_command_palette();
+  // The GUI frontend, or nullptr when this build has no GUI (JOT_GUI=OFF) or the
+  // terminal frontend is in use. Every GUI call goes through here so the
+  // compile-time switch lives in one place: naming UIGui at all needs its vtable
+  // and typeinfo, which only exist when the GUI sources are compiled in, and a
+  // build without them would fail to link rather than simply find nullptr.
+  UIGui *gui_ui();
+  const UIGui *gui_ui() const;
   // Lists every installed fixed-width family and applies the chosen one.
   void open_font_picker();
   // Switches the GUI to `family` (empty = the built-in font), persists it and

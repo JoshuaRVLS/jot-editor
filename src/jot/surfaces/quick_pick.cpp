@@ -614,39 +614,50 @@ void Editor::show_symbol_picker()
 
 bool Editor::apply_gui_font_family(const std::string &family)
 {
-  auto *gui = dynamic_cast<UIGui *>(ui);
-  if (!gui)
+#ifdef JOT_GUI
+  auto *gui = gui_ui();
+  if (gui)
   {
-    set_message("Fonts apply to the GUI frontend only");
-    return false;
+    if (!gui->apply_font_family(family))
+    {
+      set_message("Unknown font family: " + family + " (:font lists them)");
+      return false;
+    }
+    config.set("gui_font_family", gui->font_family());
+    config.save();
+    set_message(gui->font_family().empty() ? "Font: built-in default"
+                                           : "Font: " + gui->font_family());
+    return true;
   }
-  if (!gui->apply_font_family(family))
-  {
-    set_message("Unknown font family: " + family + " (:font lists them)");
-    return false;
-  }
-  config.set("gui_font_family", gui->font_family());
-  config.save();
-  set_message(gui->font_family().empty() ? "Font: built-in default"
-                                         : "Font: " + gui->font_family());
-  return true;
+#endif
+  // Either the terminal frontend is in use, or this build has no GUI at all.
+  set_message("Fonts apply to the GUI frontend only");
+  return false;
 }
 
 std::string Editor::gui_font_family_name() const
 {
-  const auto *gui = dynamic_cast<const UIGui *>(ui);
+#ifdef JOT_GUI
+  const auto *gui = gui_ui();
   return gui ? gui->font_family() : std::string();
+#else
+  return {};
+#endif
 }
 
 std::vector<std::string> Editor::gui_font_families() const
 {
-  const auto *gui = dynamic_cast<const UIGui *>(ui);
+#ifdef JOT_GUI
+  const auto *gui = gui_ui();
   return gui ? gui->available_font_families() : std::vector<std::string>();
+#else
+  return {};
+#endif
 }
 
 void Editor::open_font_picker()
 {
-  if (!dynamic_cast<UIGui *>(ui))
+  if (!gui_ui())
   {
     set_message("Fonts apply to the GUI frontend only");
     return;

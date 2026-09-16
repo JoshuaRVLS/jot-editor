@@ -220,10 +220,12 @@ void Editor::run()
 
   // GUI frontend: SDL drives input through a high-frequency pump (input-
   // to-paint latency is a few ms; the vsync'd swap paces presentation).
+#ifdef JOT_GUI
   if (gui_mode)
   {
     event_loop_.set_timer(4, true, [this] { pump_gui_events(); });
   }
+#endif
 
   int render_ms = std::max(1, 1000 / std::max(1, render_fps));
   event_loop_.set_timer(render_ms, true, [this] { render_frame(); });

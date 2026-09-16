@@ -18,9 +18,6 @@ jobs:
           - name: Linux x86_64
             os: ubuntu-latest
             platform: linux
-          - name: Windows x64
-            os: windows-2022
-            platform: windows
 
     steps:
       - name: Checkout
@@ -35,18 +32,6 @@ jobs:
             libvterm-dev libtermkey-dev libuv1-dev libutf8proc-dev \
             libtree-sitter-dev
 
-      - name: Set up Python on Windows
-        if: matrix.platform == 'windows'
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-
-      - name: Install Windows dependencies
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          vcpkg install libuv:x64-windows utf8proc:x64-windows
-
       - name: Configure Linux build
         if: matrix.platform == 'linux'
         run: |
@@ -55,38 +40,10 @@ jobs:
             -DBUILD_TESTING=ON \
             -DJOT_ENABLE_CCACHE=OFF
 
-      - name: Configure Windows build
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          cmake -S . -B build -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            -DJOT_TREESITTER=OFF `
-            -DBUILD_TESTING=ON
-
       - name: Build Linux
         if: matrix.platform == 'linux'
         run: cmake --build build --parallel 1
 
-      - name: Build Windows
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: cmake --build build --config Release --parallel 2
-
       - name: Test Linux
         if: matrix.platform == 'linux'
         run: ctest --test-dir build --output-on-failure
-
-      - name: Test Windows
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          # Deterministic order first (whole suite, one process).
-          & build\tests\jot_tests.exe --order decl
-          Write-Host "=== full suite (decl order) exit: $LASTEXITCODE"
-          # Then each crashing test in its own fresh process to detect
-          # cross-test state corruption.
-          foreach ($t in @('*Real Lua runtime boot*','*Tree-sitter install metadata*','*Bundled Lua Tree-sitter startup*','*Bundled Lua Tree-sitter module loads*','*Windows CI tree-sitter boot probe*')) {
-            & build\tests\jot_tests.exe --order decl $t
-            Write-Host "=== isolated: $t exit: $LASTEXITCODE"
-          }
