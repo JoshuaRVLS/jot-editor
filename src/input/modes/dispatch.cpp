@@ -374,6 +374,40 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     return;
   }
 
+  // Selection manipulation on the same Alt+Shift layer. Names chosen to read
+  // from the command: K(eep) primary, P(rimary) rotate, D(own)/B(ack) caret,
+  // S(plit) lines, M(all) occurrences.
+  if (is_alt && is_shift && (ch == 'k' || ch == 'K'))
+  {
+    keep_primary_selection();
+    return;
+  }
+  if (is_alt && is_shift && (ch == 'p' || ch == 'P'))
+  {
+    rotate_primary_selection(1);
+    return;
+  }
+  if (is_alt && is_shift && (ch == 'd' || ch == 'D'))
+  {
+    add_caret_on_adjacent_line(1);
+    return;
+  }
+  if (is_alt && is_shift && (ch == 'b' || ch == 'B'))
+  {
+    add_caret_on_adjacent_line(-1);
+    return;
+  }
+  if (is_alt && is_shift && (ch == 's' || ch == 'S'))
+  {
+    split_selection_on_newlines();
+    return;
+  }
+  if (is_alt && is_shift && (ch == 'm' || ch == 'M'))
+  {
+    select_all_occurrences();
+    return;
+  }
+
   // Tree-sitter textobjects. Alt+O/Alt+I are helix's chords but both are taken
   // here (sort lines, smart line start), so the selection pair lives on the
   // Alt+Shift layer the other structural edits use.

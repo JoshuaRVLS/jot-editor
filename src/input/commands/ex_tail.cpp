@@ -141,6 +141,32 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     show_jumplist_picker();
   }
+  else if (lcmd == "keepprimary" || lcmd == "keepselection")
+  {
+    keep_primary_selection();
+  }
+  else if (lcmd == "rotatecaret" || lcmd == "rotateselection")
+  {
+    const std::string arg_l = trim_copy(arg);
+    const bool back = arg_l == "back" || arg_l == "backward" || arg_l == "-";
+    rotate_primary_selection(back ? -1 : 1);
+  }
+  else if (lcmd == "addcaretbelow")
+  {
+    add_caret_on_adjacent_line(1);
+  }
+  else if (lcmd == "addcaretabove")
+  {
+    add_caret_on_adjacent_line(-1);
+  }
+  else if (lcmd == "splitlines" || lcmd == "splitselines")
+  {
+    split_selection_on_newlines();
+  }
+  else if (lcmd == "selectoccurrences" || lcmd == "selectalloccurrences")
+  {
+    select_all_occurrences();
+  }
   else if (lcmd == "expand" || lcmd == "expandselection")
   {
     expand_selection_to_node();

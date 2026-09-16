@@ -501,3 +501,291 @@ bool Editor::select_next_occurrence()
   set_message("No more occurrences");
   return false;
 }
+
+// --- Selection manipulation (helix's selection-first commands) ----------------
+//
+// All of these work on the primary selection plus the extra carets, and none of
+// them mutate the buffer: they only move selections around, so there is no undo
+// state to save.
+
+namespace
+{
+  // The primary as a range, normalised, whether or not it is active.
+  void primary_range(const FileBuffer &buf, Cursor &from, Cursor &to)
+  {
+    if (buf.selection.active)
+    {
+      from = buf.selection.start;
+      to = buf.selection.end;
+    }
+    else
+    {
+      from = buf.cursor;
+      to = buf.cursor;
+    }
+    if (from.y > to.y || (from.y == to.y && from.x > to.x))
+    {
+      std::swap(from, to);
+    }
+  }
+} // namespace
+
+void Editor::keep_primary_selection()
+{
+  auto &buf = get_buffer();
+  if (buf.extra_carets.empty())
+  {
+    set_message("No extra selections to drop");
+    return;
+  }
+  const size_t dropped = buf.extra_carets.size();
+  buf.extra_carets.clear();
+  set_message("Kept the primary (dropped " + std::to_string(dropped) + ")");
+  needs_redraw = true;
+}
+
+bool Editor::rotate_primary_selection(int direction)
+{
+  auto &buf = get_buffer();
+  if (buf.extra_carets.empty())
+  {
+    set_message("Only one selection");
+    return false;
+  }
+  Selection primary{buf.selection.start, buf.selection.end, buf.selection.active};
+  if (!buf.selection.active)
+  {
+    primary = {buf.cursor, buf.cursor, false};
+  }
+  // The old primary goes to the far end of the list and the neighbour at the
+  // other end takes over, so the caret order travels with the rotation.
+  if (direction >= 0)
+  {
+    const Selection next = buf.extra_carets.front();
+    buf.extra_carets.erase(buf.extra_carets.begin());
+    buf.extra_carets.push_back(primary);
+    buf.selection = next;
+  }
+  else
+  {
+    const Selection next = buf.extra_carets.back();
+    buf.extra_carets.pop_back();
+    buf.extra_carets.insert(buf.extra_carets.begin(), primary);
+    buf.selection = next;
+  }
+  buf.cursor = buf.selection.active ? buf.selection.end : buf.selection.start;
+  if (!buf.selection.active)
+  {
+    buf.cursor = buf.selection.start;
+  }
+  buf.preferred_x = buf.cursor.x;
+  restart_blink();
+  ensure_cursor_visible();
+  needs_redraw = true;
+  return true;
+}
+
+// Copying the primary onto the neighbouring line is how helix grows a column of
+// cursors (C / Alt-C): the selection travels with it, clamped to the new line,
+// so a rectangle of same-named things can be edited in one pass.
+bool Editor::add_caret_on_adjacent_line(int direction)
+{
+  auto &buf = get_buffer();
+  if (buf.is_lazy())
+  {
+    buf.materialize();
+  }
+  Cursor from{};
+  Cursor to{};
+  primary_range(buf, from, to);
+  const int target_y = from.y + direction;
+  if (target_y < 0 || target_y >= (int)buf.line_count())
+  {
+    set_message("No line that way");
+    return false;
+  }
+  if ((int)buf.extra_carets.size() >= kMaxExtraCarets)
+  {
+    set_message("Too many cursors");
+    return false;
+  }
+  const std::string &line = buf.line(target_y);
+  const int len = (int)line.size();
+  Selection borrowed;
+  borrowed.start = {std::clamp(from.x, 0, len), target_y};
+  borrowed.end = {std::clamp(to.x, 0, len), target_y};
+  borrowed.active = buf.selection.active && borrowed.start.x != borrowed.end.x;
+  if (caret_present(buf, borrowed))
+  {
+    set_message("Already a cursor there");
+    return false;
+  }
+  Selection primary{buf.selection.start, buf.selection.end, buf.selection.active};
+  if (!buf.selection.active)
+  {
+    primary = {buf.cursor, buf.cursor, false};
+  }
+  buf.extra_carets.push_back(primary);
+  buf.selection = borrowed;
+  buf.cursor = borrowed.active ? borrowed.end : borrowed.start;
+  buf.preferred_x = buf.cursor.x;
+  restart_blink();
+  ensure_cursor_visible();
+  needs_redraw = true;
+  return true;
+}
+
+// One cursor per line of a multi-line selection, at the first non-blank column of
+// each (helix's Alt-s): the starting point for editing the same thing on every
+// line of a block.
+bool Editor::split_selection_on_newlines()
+{
+  auto &buf = get_buffer();
+  if (buf.is_lazy())
+  {
+    buf.materialize();
+  }
+  if (!buf.selection.active)
+  {
+    set_message("Select several lines first");
+    return false;
+  }
+  Cursor from{};
+  Cursor to{};
+  primary_range(buf, from, to);
+  if (from.y == to.y)
+  {
+    set_message("Selection is one line");
+    return false;
+  }
+
+  buf.extra_carets.clear();
+  const int last = to.y;
+  for (int y = from.y; y <= last; y++)
+  {
+    const std::string &line = buf.line(y);
+    size_t indent = 0;
+    while (indent < line.size() && (line[indent] == ' ' || line[indent] == '\t'))
+    {
+      indent++;
+    }
+    const int col = (int)indent;
+    const bool is_last = (y == last);
+    if (is_last)
+    {
+      continue; // installed as the primary below
+    }
+    if ((int)buf.extra_carets.size() >= kMaxExtraCarets)
+    {
+      set_message("Too many cursors");
+      break;
+    }
+    buf.extra_carets.push_back(Selection{{col, y}, {col, y}, false});
+  }
+  const std::string &last_line = buf.line(last);
+  size_t last_indent = 0;
+  while (last_indent < last_line.size()
+         && (last_line[last_indent] == ' ' || last_line[last_indent] == '\t'))
+  {
+    last_indent++;
+  }
+  buf.selection.start = {(int)last_indent, last};
+  buf.selection.end = buf.selection.start;
+  buf.selection.active = false;
+  buf.cursor = buf.selection.start;
+  buf.preferred_x = buf.cursor.x;
+  restart_blink();
+  ensure_cursor_visible();
+  set_message("Split into " + std::to_string(buf.extra_carets.size() + 1) + " cursors");
+  needs_redraw = true;
+  return true;
+}
+
+// Every occurrence of the selection (or of the word under the cursor) becomes a
+// selection: Ctrl+D repeated, in one step.
+bool Editor::select_all_occurrences()
+{
+  auto &buf = get_buffer();
+  if (buf.is_lazy())
+  {
+    buf.materialize();
+  }
+  std::string needle;
+  if (buf.selection.active)
+  {
+    Cursor from{};
+    Cursor to{};
+    primary_range(buf, from, to);
+    if (from.y != to.y)
+    {
+      set_message("Select within one line first");
+      return false;
+    }
+    const std::string &line = buf.line(from.y);
+    const int a = std::clamp(from.x, 0, (int)line.size());
+    const int b = std::clamp(to.x, 0, (int)line.size());
+    if (b > a)
+    {
+      needle = line.substr((size_t)a, (size_t)(b - a));
+    }
+  }
+  if (needle.empty())
+  {
+    if (buf.cursor.y < 0 || buf.cursor.y >= (int)buf.line_count())
+    {
+      return false;
+    }
+    const std::string &line = buf.line(buf.cursor.y);
+    int start = 0;
+    int end = 0;
+    word_span_at(line, buf.cursor.x, start, end);
+    if (start >= end)
+    {
+      set_message("Nothing to match");
+      return false;
+    }
+    needle = line.substr((size_t)start, (size_t)(end - start));
+  }
+
+  buf.extra_carets.clear();
+  std::vector<Selection> found;
+  for (int y = 0; y < (int)buf.line_count(); y++)
+  {
+    const std::string &line = buf.line(y);
+    size_t pos = line.find(needle);
+    while (pos != std::string::npos)
+    {
+      found.push_back(Selection{{(int)pos, y}, {(int)(pos + needle.size()), y}, true});
+      pos = line.find(needle, pos + 1);
+    }
+  }
+  if (found.empty())
+  {
+    set_message("No occurrence found");
+    return false;
+  }
+  if (found.size() == 1)
+  {
+    // One occurrence is still the answer: the selection is already the only
+    // match, so say so rather than reporting a failure.
+    set_message("Only one occurrence");
+  }
+  // The last occurrence becomes the primary (the caret travels to the end of the
+  // list, like Ctrl+D does) and the rest are extras, capped.
+  for (size_t i = 0; i + 1 < found.size(); i++)
+  {
+    if ((int)buf.extra_carets.size() >= kMaxExtraCarets)
+    {
+      break;
+    }
+    buf.extra_carets.push_back(found[i]);
+  }
+  buf.selection = found.back();
+  buf.cursor = buf.selection.end;
+  buf.preferred_x = buf.cursor.x;
+  restart_blink();
+  ensure_cursor_visible();
+  set_message("Selected " + std::to_string(buf.extra_carets.size() + 1) + " occurrences");
+  needs_redraw = true;
+  return true;
+}

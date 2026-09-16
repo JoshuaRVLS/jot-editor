@@ -1064,6 +1064,15 @@ public:
   void clear_extra_carets();
   bool add_caret_at(int line_y, int x);
   bool select_next_occurrence();
+  // Selection manipulation, helix's selection-first family: drop the extra
+  // carets, rotate which one is primary, copy the primary onto the neighbouring
+  // line, split a multi-line selection into one cursor per line, and make every
+  // occurrence of the selection a cursor.
+  void keep_primary_selection();
+  bool rotate_primary_selection(int direction);
+  bool add_caret_on_adjacent_line(int direction);
+  bool split_selection_on_newlines();
+  bool select_all_occurrences();
   // Tree-sitter textobjects: expand/shrink the selection to a syntax node (helix
   // Alt+o / Alt+i), select the inside/around of a function, class or argument,
   // and step between functions. All act on the primary selection.
@@ -1212,6 +1221,27 @@ public:
   std::vector<QuickPickItem> workspace_diagnostics_for_test() const
   {
     return workspace_diagnostic_quick_pick_items();
+  }
+  // Selection manipulation: drive the real commands from a test.
+  void keep_primary_selection_for_test()
+  {
+    keep_primary_selection();
+  }
+  bool rotate_primary_for_test(int direction)
+  {
+    return rotate_primary_selection(direction);
+  }
+  bool add_caret_adjacent_for_test(int direction)
+  {
+    return add_caret_on_adjacent_line(direction);
+  }
+  bool split_lines_for_test()
+  {
+    return split_selection_on_newlines();
+  }
+  bool select_occurrences_for_test()
+  {
+    return select_all_occurrences();
   }
   // Textobjects: drive the real commands from a test.
   bool expand_selection_for_test()
