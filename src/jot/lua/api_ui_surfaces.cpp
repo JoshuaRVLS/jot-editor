@@ -770,6 +770,7 @@ bool LuaAPI::emit_side_panel(const SidePanelView &view)
                        lua_set_int_field(L, t, "h", view.h);
                        lua_set_str_field(L, t, "title", view.title);
                        lua_set_str_field(L, t, "mode", view.mode);
+                       lua_set_bool_field(L, t, "in_sidebar", view.in_sidebar);
                        lua_set_str_field(L, t, "header", view.header);
                        lua_set_int_field(L, t, "header_fg", view.header_fg);
                        lua_set_str_field(L, t, "header_icon", view.header_icon);

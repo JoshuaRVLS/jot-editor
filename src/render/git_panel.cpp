@@ -130,6 +130,7 @@ void Editor::render_git_panel()
   view.w = panel_w;
   view.h = panel_h;
   view.title = " Git Panel ";
+  view.in_sidebar = true;
 
   using namespace jot_git_panel;
   const jot_git_panel::State &state = git_panel;
@@ -155,8 +156,8 @@ void Editor::render_git_panel()
     ui->draw_text(tab_x,
                   tab_y,
                   tab.first,
-                  active ? theme.fg_terminal_tab_focused : theme.fg_terminal_tab_inactive,
-                  active ? theme.bg_terminal_tab_focused : theme.bg_terminal_tab_inactive,
+                  active ? theme.fg_sidebar_directory : theme.fg_comment,
+                  theme.bg_sidebar,
                   active);
     tab_x += (int)tab.first.size();
   }
@@ -292,7 +293,7 @@ void Editor::render_git_panel()
         }
         else
         {
-          r.fg = theme.fg_terminal;
+          r.fg = theme.fg_sidebar;
           r.icon_fg = theme.fg_comment;
         }
         r.detail = branch.tracking;
@@ -304,7 +305,7 @@ void Editor::render_git_panel()
         r.kind = "git_commit";
         r.icon = kIconCommit;
         r.icon_fg = theme.fg_comment;
-        r.fg = theme.fg_terminal;
+        r.fg = theme.fg_sidebar;
         r.lead_fg = theme.fg_status_info;
         r.lead_len = (int)commit.hash.size();
         break;
@@ -315,7 +316,7 @@ void Editor::render_git_panel()
         r.kind = "git_stash";
         r.icon = kIconStash;
         r.icon_fg = theme.fg_comment;
-        r.fg = theme.fg_terminal;
+        r.fg = theme.fg_sidebar;
         r.lead_fg = theme.fg_status_warning;
         r.lead_len = (int)stash.ref.size();
         break;
@@ -323,10 +324,10 @@ void Editor::render_git_panel()
       }
       if (selected)
       {
-        r.fg = theme.fg_tab_active;
+        r.fg = theme.fg_sidebar_selected;
         if (r.icon_fg < 0)
         {
-          r.icon_fg = theme.fg_tab_active;
+          r.icon_fg = theme.fg_sidebar_selected;
         }
       }
     }
@@ -339,7 +340,7 @@ void Editor::render_git_panel()
     SidePanelRowView hint;
     hint.text = " press d again to confirm ";
     hint.kind = "git_hint";
-    hint.fg = theme.fg_status_warning;
+    hint.fg = theme.fg_comment;
     hint.bg = theme.bg_sidebar;
     view.rows.push_back(std::move(hint));
   }
@@ -356,7 +357,9 @@ void Editor::render_git_panel()
     const SidePanelRowView &r = view.rows[row];
     // Selected rows keep the tab-active bar; hovered rows get the selection
     // tint without the selected foreground swap.
-    const int row_bg = r.selected ? theme.bg_tab_active : (r.hovered ? theme.bg_selection : r.bg);
+    const int row_bg =
+        r.selected ? theme.bg_sidebar_selected
+                   : (r.hovered ? theme.bg_sidebar_selected_inactive : r.bg);
     int draw_x = content_x;
     if (!r.icon.empty())
     {

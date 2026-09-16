@@ -30,6 +30,14 @@ local function side_panel(p)
   local accent = colors.accent or colors.fg or 7
   local selection_fg = colors.selection_fg or 0
   local selection_bg = colors.selection_bg or 6
+  -- A panel docked in the primary sidebar borrows that surface's palette, so
+  -- the panel and the explorer read as one column instead of a dock floating
+  -- inside it.
+  if p.in_sidebar then
+    bg = colors.sidebar_bg or bg
+    selection_fg = colors.sidebar_sel_fg or selection_fg
+    selection_bg = colors.sidebar_sel_bg or selection_bg
+  end
 
   local inner_w = math.max(1, (p.w or 2) - 2)
   local inner_h = math.max(1, (p.h or 2) - 2)
@@ -178,10 +186,11 @@ local function side_panel(p)
   -- Debugger session tabs on the first interior row.
   if p.tabs and #p.tabs > 0 then
     local line, spans, col = "", {}, 0
-    local active_fg = colors.fg_terminal_tab_focused or accent
-    local active_bg = colors.bg_terminal_tab_focused or selection_bg
-    local inactive_fg = colors.fg_terminal_tab_inactive or comment
-    local inactive_bg = colors.bg_terminal_tab_inactive or bg
+    local active_fg = p.in_sidebar and (colors.sidebar_dir or accent)
+                      or (colors.fg_terminal_tab_focused or accent)
+    local active_bg = p.in_sidebar and bg or (colors.bg_terminal_tab_focused or selection_bg)
+    local inactive_fg = p.in_sidebar and comment or (colors.fg_terminal_tab_inactive or comment)
+    local inactive_bg = p.in_sidebar and bg or (colors.bg_terminal_tab_inactive or bg)
     for _, tab in ipairs(p.tabs) do
       local label = trunc_cells(tab.label or "", math.max(1, inner_w - col))
       local at = #line
@@ -410,6 +419,12 @@ local function side_panel(p)
   end
 
   -- No key-hint footer: the panel shows its state, not a list of bindings.
+  -- Sidebar-docked: the sidebar draws the frame, the footer and the title row,
+  -- so the panel contributes rows only -- no border, no title of its own.
+  if p.in_sidebar then
+    return present_panel("side_panel", p, rows,
+                         { border = "none", footer = footer, footer_fg = comment })
+  end
   return present_panel("side_panel",
                        p,
                        rows,

@@ -388,6 +388,9 @@ struct SidePanelView
   // Panel mode for the Lua kit: "debugger", "git", "" (generic). Lets the
   // side_panel handler pick a styling branch without sniffing tabs/rows.
   std::string mode;
+  // Docked in the primary sidebar rather than the right dock: the renderer
+  // borrows that surface's palette so the panel and the explorer read alike.
+  bool in_sidebar = false;
   std::string header;             // content header row (file + counts etc), may be empty
   int header_fg = 0;
   std::string header_icon;        // leading Nerd Fonts glyph for the header, may be empty
