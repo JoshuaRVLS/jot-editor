@@ -54,6 +54,8 @@ void Editor::show_command_help(const std::string &topic_text)
       "  Ctrl+Shift+F     Replace in selection, or search workspace",
       "  Ctrl+Shift+M     Diagnostics picker",
       "  Ctrl+Shift+O     Document symbol picker",
+      "  Ctrl+Shift+W     Workspace symbol picker (across the project)",
+      "  Ctrl+Shift+X     Workspace diagnostics picker",
       "  :outline         Symbols/outline panel for the current file",
       "  Ctrl+T           Theme chooser",
       "  Ctrl+M           Toggle minimap",

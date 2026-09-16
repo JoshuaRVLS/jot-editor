@@ -105,6 +105,18 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt
     open_rename_prompt();
     return;
   }
+  if (is_ctrl && is_shift && (ch == 'w' || ch == 'W'))
+  {
+    hide_lsp_completion();
+    show_workspace_symbols_picker();
+    return;
+  }
+  if (is_ctrl && is_shift && (ch == 'x' || ch == 'X'))
+  {
+    hide_lsp_completion();
+    show_workspace_diagnostics_picker();
+    return;
+  }
   if (is_ctrl && is_shift && (ch == 'o' || ch == 'O'))
   {
     hide_lsp_completion();

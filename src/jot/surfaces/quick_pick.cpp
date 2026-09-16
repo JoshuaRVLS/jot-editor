@@ -708,6 +708,143 @@ void Editor::request_document_symbols()
   client->request_document_symbols(buf.filepath);
 }
 
+void Editor::show_workspace_symbols_picker()
+{
+  // Unlike the document picker there is nothing to show before the server
+  // answers: the native symbol index only knows the open buffer. An empty query
+  // asks for everything, which is what opening the picker should mean.
+  open_quick_pick(QUICK_PICK_WORKSPACE_SYMBOLS, "Workspace Symbols", {});
+  request_workspace_symbols(quick_pick_query);
+  set_message("Querying workspace symbols...");
+}
+
+void Editor::request_workspace_symbols(const std::string &query)
+{
+  if (buffers.empty() || current_buffer < 0 || current_buffer >= (int)buffers.size())
+  {
+    return;
+  }
+  auto &buf = get_buffer();
+  if (buf.filepath.empty())
+  {
+    set_message("Save file first to use LSP");
+    return;
+  }
+  LSPClient *client = ensure_lsp_for_file(buf.filepath);
+  if (!client)
+  {
+    set_message("No LSP server for this file");
+    return;
+  }
+  client->did_change(buf.filepath, get_buffer_text(buf));
+  if (!client->request_workspace_symbols(query))
+  {
+    set_message("Workspace symbol request failed");
+  }
+}
+
+void Editor::handle_workspace_symbols_result(const LSPDocumentSymbolResult &result)
+{
+  if (!show_quick_pick || quick_pick_kind != QUICK_PICK_WORKSPACE_SYMBOLS)
+  {
+    return;
+  }
+  if (result.symbols.empty())
+  {
+    set_message("No workspace symbols found");
+    needs_redraw = true;
+    return;
+  }
+  std::vector<QuickPickItem> items;
+  for (const auto &symbol : result.symbols)
+  {
+    QuickPickItem item;
+    item.filepath = symbol.filepath;
+    item.line = symbol.line;
+    item.col = symbol.character;
+    item.label = symbol.name;
+    item.detail = symbol.kind + "  " + fs::path(symbol.filepath).filename().string();
+    // The container ("Class::", "module.") is the useful tie-breaker between
+    // same-named symbols from different files.
+    item.preview = symbol.detail;
+    items.push_back(std::move(item));
+  }
+  quick_pick_all_items = std::move(items);
+  quick_pick_selected = 0;
+  refresh_quick_pick();
+  set_message("Workspace symbols: " + std::to_string(quick_pick_all_items.size()));
+  needs_redraw = true;
+}
+
+void Editor::show_workspace_diagnostics_picker()
+{
+  open_quick_pick(QUICK_PICK_WORKSPACE_DIAGNOSTICS,
+                  "Workspace Diagnostics",
+                  workspace_diagnostic_quick_pick_items());
+}
+
+std::vector<Editor::QuickPickItem> Editor::workspace_diagnostic_quick_pick_items() const
+{
+  // Straight from the per-server diagnostics store rather than from the open
+  // buffers: a workspace view is supposed to include the files the servers have
+  // reported on, whether or not they are open right now.
+  std::vector<QuickPickItem> items;
+  std::set<std::string> seen;
+  for (const auto &by_client : lsp_diag_slices_)
+  {
+    for (const auto &file_entry : by_client.second)
+    {
+      const std::string &path = file_entry.first;
+      for (const auto &diag : file_entry.second)
+      {
+        // Two servers can report the same problem for one file; the key is the
+        // whole visible row.
+        const std::string key = path + "|" + std::to_string(diag.line) + "|"
+                                + std::to_string(diag.col) + "|" + std::to_string(diag.severity)
+                                + "|" + diag.message;
+        if (!seen.insert(key).second)
+        {
+          continue;
+        }
+        QuickPickItem item;
+        item.filepath = path;
+        item.line = std::max(0, diag.line);
+        item.col = std::max(0, diag.col);
+        item.severity = diag.severity;
+        item.label = diagnostic_label(diag.severity) + ": " + diag.message;
+        item.detail = fs::path(path).filename().string() + ":" + std::to_string(item.line + 1) + ":"
+                      + std::to_string(item.col + 1);
+        // The source line for an open buffer; a closed file would mean reading it
+        // from disk on every item, so those rows go without a preview.
+        for (const auto &buf : buffers)
+        {
+          if (same_path(buf.filepath, path) && item.line < (int)buf.line_count())
+          {
+            item.preview = trim_preview(buf.line(item.line));
+            break;
+          }
+        }
+        items.push_back(std::move(item));
+      }
+    }
+  }
+  std::stable_sort(items.begin(),
+                   items.end(),
+                   [](const QuickPickItem &a, const QuickPickItem &b)
+                   {
+                     if (diagnostic_rank(a.severity) != diagnostic_rank(b.severity))
+                     {
+                       return diagnostic_rank(a.severity) < diagnostic_rank(b.severity);
+                     }
+                     if (a.filepath != b.filepath)
+                     {
+                       return a.filepath < b.filepath;
+                     }
+                     return a.line < b.line;
+                   });
+  return items;
+}
+
 void Editor::handle_document_symbols_result(const LSPDocumentSymbolResult &result)
 {
   // A Lua one-shot sink (jot.lsp.request_symbols) consumes the result first;

@@ -162,6 +162,8 @@ namespace
         {"diagnosticnext", "Navigation", "Go to next diagnostic", 72},
         {"diagprev", "Navigation", "Go to previous diagnostic", 72},
         {"symbols", "Navigation", "Open document symbol picker", 78},
+        {"wsymbols", "Navigation", "Open workspace symbol picker", 76},
+        {"wproblems", "Navigation", "Open workspace diagnostics picker", 75},
         {"outline", "Navigation", "Toggle symbols/outline panel", 76},
         {"tsinstall", "Tree-sitter", "Install Tree-sitter grammar", 68},
         {"treesitterinstall", "Tree-sitter", "Install Tree-sitter grammar", 64},

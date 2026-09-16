@@ -200,6 +200,13 @@ void Editor::poll_lsp_clients()
         lua_api->emit_lsp_symbols(symbols);
       handle_document_symbols_result(symbols);
     }
+    // Workspace symbol replies land in the same picker flow, just with a list
+    // that spans files.
+    auto workspace_symbols = client->consume_workspace_symbol_results();
+    for (auto &entry : workspace_symbols)
+    {
+      handle_workspace_symbols_result(entry);
+    }
   }
   handle_lsp_references_results();
   handle_lsp_code_action_results();

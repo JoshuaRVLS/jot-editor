@@ -531,6 +531,38 @@ bool LSPClient::request_document_symbols(const std::string &filepath)
   return true;
 }
 
+bool LSPClient::request_workspace_symbols(const std::string &query)
+{
+  if (!running)
+  {
+    return false;
+  }
+  if (pending_workspace_symbol_requests.size() >= 64)
+  {
+    last_error = "too many pending LSP workspace symbol requests";
+    return false;
+  }
+  const int request_id = next_request_id++;
+  // No file to key on: a workspace query is not tied to an open buffer, so there
+  // is no version to check the answer against.
+  pending_workspace_symbol_requests.insert(request_id);
+
+  std::ostringstream json;
+  json << "{"
+       << "\"jsonrpc\":\"2.0\","
+       << "\"id\":" << request_id << ","
+       << "\"method\":\"workspace/symbol\","
+       << "\"params\":{\"query\":\"" << json_escape(query) << "\"}"
+       << "}";
+
+  if (!send_message(json.str()))
+  {
+    pending_workspace_symbol_requests.erase(request_id);
+    return false;
+  }
+  return true;
+}
+
 std::vector<std::pair<std::string, std::vector<Diagnostic>>>
 LSPClient::consume_published_diagnostics()
 {
@@ -570,6 +602,13 @@ std::vector<LSPInlayHintResult> LSPClient::consume_inlay_hint_results()
 {
   auto out = std::move(pending_inlay_hints);
   pending_inlay_hints.clear();
+  return out;
+}
+
+std::vector<LSPDocumentSymbolResult> LSPClient::consume_workspace_symbol_results()
+{
+  auto out = std::move(pending_workspace_symbols);
+  pending_workspace_symbols.clear();
   return out;
 }
 

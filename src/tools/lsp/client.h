@@ -3,6 +3,7 @@
 
 #include "text_features.h"
 #include <map>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -252,6 +253,9 @@ private:
   std::map<int, PendingPositionRequest> pending_reference_requests;
   std::map<int, PendingPositionRequest> pending_code_action_requests;
   std::map<int, PendingDocumentRequest> pending_document_symbol_requests;
+  // Workspace symbol queries have no file or version to check, so the pending
+  // set is just the request ids.
+  std::set<int> pending_workspace_symbol_requests;
   std::map<int, PendingDocumentRequest> pending_format_requests;
   std::map<int, PendingPositionRequest> pending_rename_requests;
   std::map<int, PendingInlayRequest> pending_inlay_hint_requests;
@@ -263,6 +267,7 @@ private:
   std::vector<LSPDefinitionResult> pending_references;
   std::vector<LSPCodeActionResult> pending_code_actions;
   std::vector<LSPDocumentSymbolResult> pending_document_symbols;
+  std::vector<LSPDocumentSymbolResult> pending_workspace_symbols;
   std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> pending_formats;
   std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> pending_renames;
 
@@ -327,6 +332,11 @@ public:
   bool request_definition(const std::string &filepath, int line, int character);
   bool request_references(const std::string &filepath, int line, int character);
   bool request_document_symbols(const std::string &filepath);
+  // workspace/symbol: symbols across the whole project, by name. The reply has
+  // the same SymbolInformation shape documentSymbol uses, so it parses with the
+  // same helper.
+  bool request_workspace_symbols(const std::string &query);
+  std::vector<LSPDocumentSymbolResult> consume_workspace_symbol_results();
   // Asks the server for code actions (quick fixes, refactors) at the given
   // position, passing the cursor-line diagnostics so servers can offer
   // fixes. Results arrive via consume_code_action_results().

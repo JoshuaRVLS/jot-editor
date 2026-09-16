@@ -370,3 +370,73 @@ TEST_CASE(":lsprename with no name opens the prompt, with a name renames directl
   e.run_ex_for_test(":lsprename renamed_by_command");
   REQUIRE_FALSE(e.rename_prompt_visible_for_test());
 }
+
+TEST_CASE("LSP workspace/symbol parses SymbolInformation with location and container", "[lsp]")
+{
+  // workspace/symbol answers with SymbolInformation: name, kind, containerName
+  // and a location in another file. That is the same shape documentSymbol uses
+  // for its flat form, so it is parsed by the same helper -- this pins that the
+  // workspace reply really does go through it (a new parser would be the easy
+  // mistake, and the container is what tells two same-named symbols apart).
+  const std::string json = R"([
+    {"name":"Widget","kind":5,"containerName":"ui::",
+     "location":{"uri":"file:///tmp/ws/widget.cpp","range":{"start":{"line":12,"character":4},
+     "end":{"line":12,"character":10}}}},
+    {"name":"render","kind":6,"containerName":"",
+     "location":{"uri":"file:///tmp/ws/widget.cpp","range":{"start":{"line":40,"character":0},
+     "end":{"line":40,"character":6}}}}
+  ])";
+  size_t pos = 0;
+  lsp_detail::JsonValue value;
+  REQUIRE(lsp_detail::parse_json_value(json, pos, value));
+  const auto symbols = lsp_detail::document_symbols_from_result(value, std::string());
+  REQUIRE(symbols.size() == 2);
+  REQUIRE(symbols[0].name == "Widget");
+  REQUIRE(symbols[0].detail == "ui::"); // containerName, shown as the tie-breaker
+  REQUIRE(symbols[0].filepath.find("widget.cpp") != std::string::npos);
+  REQUIRE(symbols[0].line == 12);
+  REQUIRE(symbols[0].character == 4);
+  REQUIRE(symbols[1].name == "render");
+  REQUIRE(symbols[1].detail.empty());
+}
+
+TEST_CASE("Workspace diagnostics list files that are not open, once each", "[lsp]")
+{
+  Editor &e = probe_editor();
+  const std::string open_path = write_temp_source(e, "int open_file = 1;\n");
+  const std::string closed_path = "/tmp/jot_ws_diag_closed.cpp";
+
+  // A diagnostic for a file that is not open at all: the workspace picker is
+  // supposed to cover those (they are what the servers already told us), which
+  // is why closing a file no longer drops its diagnostics.
+  e.seed_lsp_diagnostic_for_test("cpp|/tmp/ws", closed_path, 7, 1, "not open but broken");
+  // The same problem reported by two servers is one row.
+  e.seed_lsp_diagnostic_for_test("cpp|/tmp/ws", closed_path, 7, 1, "not open but broken");
+  e.seed_lsp_diagnostic_for_test("clang-tidy|/tmp/ws", closed_path, 7, 1, "not open but broken");
+  // ...and one for an open file, to show both sources merge.
+  e.seed_lsp_diagnostic_for_test("cpp|/tmp/ws", open_path, 0, 2, "open file warning");
+
+  const auto items = e.workspace_diagnostics_for_test();
+  int closed_rows = 0;
+  int open_rows = 0;
+  int duplicates = 0;
+  for (const auto &item : items)
+  {
+    if (item.filepath == closed_path)
+    {
+      closed_rows++;
+      duplicates += item.label == "Error: not open but broken" ? 1 : 0;
+    }
+    if (item.filepath == open_path)
+    {
+      open_rows++;
+    }
+  }
+  REQUIRE(closed_rows == 1);
+  REQUIRE(open_rows == 1);
+  REQUIRE(duplicates == 1);
+
+  // Errors sort before warnings, whichever file they are in.
+  REQUIRE_FALSE(items.empty());
+  REQUIRE(items.front().severity == 1);
+}

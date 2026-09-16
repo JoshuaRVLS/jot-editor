@@ -39,3 +39,19 @@ int Editor::lua_float_count_for_test(const std::string &surface) const
   }
   return count;
 }
+
+void Editor::seed_lsp_diagnostic_for_test(const std::string &client_key,
+                                          const std::string &path,
+                                          int line,
+                                          int severity,
+                                          const std::string &message)
+{
+  Diagnostic diagnostic;
+  diagnostic.line = line;
+  diagnostic.col = 0;
+  diagnostic.end_line = line;
+  diagnostic.end_col = 1;
+  diagnostic.severity = severity;
+  diagnostic.message = message;
+  lsp_diag_slices_[client_key][path].push_back(diagnostic);
+}

@@ -369,8 +369,9 @@ void Editor::notify_lsp_close(const std::string &filepath)
       client->did_close(filepath);
     }
   }
-  for (auto &by_client : lsp_diag_slices_)
-  {
-    by_client.second.erase(filepath);
-  }
+  // The diagnostics the servers already published for this file are kept, not
+  // dropped: they are what the workspace diagnostics picker shows, and a file
+  // being closed says nothing about whether the problem in it is still there.
+  // Re-opening the file re-derives them (notify_lsp_open clears the slices
+  // first), so nothing goes stale once the server looks again.
 }

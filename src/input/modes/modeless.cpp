@@ -125,6 +125,20 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
     open_rename_prompt();
     return;
   }
+  if (is_ctrl && is_shift && (ch == 'w' || ch == 'W'))
+  {
+    // Workspace symbols / workspace diagnostics: the project-wide versions of
+    // Ctrl+Shift+O and Ctrl+Shift+M.
+    hide_lsp_completion();
+    show_workspace_symbols_picker();
+    return;
+  }
+  if (is_ctrl && is_shift && (ch == 'x' || ch == 'X'))
+  {
+    hide_lsp_completion();
+    show_workspace_diagnostics_picker();
+    return;
+  }
   // Ctrl+Tab / Ctrl+Shift+Tab: cycle pane-local tabs.
   if (is_ctrl && (ch == '\t' || ch == 9))
   {

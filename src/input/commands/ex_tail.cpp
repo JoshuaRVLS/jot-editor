@@ -141,6 +141,14 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     show_jumplist_picker();
   }
+  else if (lcmd == "wsymbols" || lcmd == "workspacesymbols")
+  {
+    show_workspace_symbols_picker();
+  }
+  else if (lcmd == "wproblems" || lcmd == "workspacediagnostics")
+  {
+    show_workspace_diagnostics_picker();
+  }
   else if (lcmd == "lsprename" || lcmd == "lspren")
   {
     // No argument: prompt for the new name, pre-filled with the identifier under

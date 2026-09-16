@@ -424,6 +424,13 @@ private:
   void jump_back();
   void jump_forward();
   void show_jumplist_picker();
+  // Workspace-wide LSP pickers: symbols by name across the project, and the
+  // diagnostics every attached server has reported (open files or not).
+  void show_workspace_symbols_picker();
+  void request_workspace_symbols(const std::string &query);
+  void handle_workspace_symbols_result(const LSPDocumentSymbolResult &result);
+  void show_workspace_diagnostics_picker();
+  std::vector<QuickPickItem> workspace_diagnostic_quick_pick_items() const;
   void hide_lsp_completion();
   bool refresh_lsp_completion_filter();
   void update_lsp_completion_ghost();
@@ -1180,6 +1187,18 @@ public:
     buf.cursor = {col, line};
     buf.preferred_x = col;
     ensure_cursor_visible();
+  }
+  // Workspace diagnostics read from the per-server store, so a test needs a way
+  // to put something in it without a server. `client_key` stands in for the
+  // server, which is what the dedupe across servers keys on.
+  void seed_lsp_diagnostic_for_test(const std::string &client_key,
+                                    const std::string &path,
+                                    int line,
+                                    int severity,
+                                    const std::string &message);
+  std::vector<QuickPickItem> workspace_diagnostics_for_test() const
+  {
+    return workspace_diagnostic_quick_pick_items();
   }
   // Runs an ex command line the way the palette does, so command plumbing can
   // be asserted without typing into a prompt.

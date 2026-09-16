@@ -485,6 +485,19 @@ void LSPClient::handle_stdout_data(const std::string &data)
       continue;
     }
 
+    auto workspace_symbol_it = pending_workspace_symbol_requests.find(request_id);
+    if (workspace_symbol_it != pending_workspace_symbol_requests.end())
+    {
+      LSPDocumentSymbolResult symbols;
+      if (result)
+      {
+        symbols.symbols = document_symbols_from_result(*result, std::string());
+      }
+      pending_workspace_symbols.push_back(std::move(symbols));
+      pending_workspace_symbol_requests.erase(workspace_symbol_it);
+      continue;
+    }
+
     auto symbol_it = pending_document_symbol_requests.find(request_id);
     if (symbol_it != pending_document_symbol_requests.end())
     {
