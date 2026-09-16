@@ -279,7 +279,7 @@ void Editor::render()
       {
         ui->set_cursor(display_x,
                        display_y,
-                       editor_cursor_shape(config.get("cursor_style", "bar")));
+                       editor_cursor_shape(config.get("cursor_style", "block")));
       }
       else
       {
@@ -506,7 +506,7 @@ void Editor::render()
         {
           ui->set_cursor(display_x,
                          display_y,
-                         editor_cursor_shape(config.get("cursor_style", "bar")));
+                         editor_cursor_shape(config.get("cursor_style", "block")));
         }
         else
         {

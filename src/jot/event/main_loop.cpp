@@ -94,7 +94,7 @@ void Editor::render_frame()
                             std::chrono::steady_clock::now().time_since_epoch())
                             .count();
     const int period_ms = std::clamp(config.get_int("cursor_blink_ms", 500), 0, 2000);
-    const std::string style = config.get("cursor_style", "bar");
+    const std::string style = config.get("cursor_style", "block");
     const bool steady = style == "steady_block" || style == "steadyblock"
                         || style == "steady_bar" || style == "steadybar";
     const bool hold = steady || now_ms < blink_suspend_until_ms;

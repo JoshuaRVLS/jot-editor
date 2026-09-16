@@ -98,7 +98,10 @@ void Config::load_defaults()
   settings["show_line_numbers"] = "true";
   settings["relative_line_numbers"] = "false";
   settings["word_wrap"] = "false";
-  settings["cursor_style"] = "bar";
+  // Block by default: a bar reads as a thin sliver at the cell sizes a HiDPI
+  // display or a large font produce. The resolvers below fall back to the same
+  // value, so a config file that predates this key still gets a block.
+  settings["cursor_style"] = "block";
   // Half of the blink cycle, in ms (cursor_blink.h drives it). 500 reads as a
   // calm ~1 Hz blink; the old 300 was a jumpy 1.7 Hz. 0 disables blinking.
   settings["cursor_blink_ms"] = "500";

@@ -77,7 +77,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
   // on dark themes. The cursor cell is therefore painted with the default
   // pair so the caret reads as a normal high-contrast block while parked on
   // a caret/selection.
-  std::string cursor_style_raw = config.get("cursor_style", "bar");
+  std::string cursor_style_raw = config.get("cursor_style", "block");
   std::transform(
       cursor_style_raw.begin(), cursor_style_raw.end(), cursor_style_raw.begin(), ::tolower);
   const bool block_cursor = cursor_style_raw == "block" || cursor_style_raw == "steady_block"
