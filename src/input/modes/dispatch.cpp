@@ -413,7 +413,9 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     return;
   }
 
-  if (show_sidebar && focus_state == FOCUS_SIDEBAR)
+  // The git view of the sidebar is the git panel, whose keys are handled in
+  // its own block below: skip the explorer's key handling while it is showing.
+  if (show_sidebar && focus_state == FOCUS_SIDEBAR && !git_panel_visible())
   {
     if (ch == 27)
     {
@@ -468,7 +470,7 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     return;
   }
 
-  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT && !is_ctrl && !is_alt)
+  if (git_panel_visible() && focus_state == FOCUS_SIDEBAR && !is_ctrl && !is_alt)
   {
     const bool shift = is_shift || std::isupper((unsigned char)ch);
     if (ch == 'q' || ch == 'Q' || ch == 27)

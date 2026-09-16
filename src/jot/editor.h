@@ -213,6 +213,11 @@ private:
   void render_debugger_panel();
   void render_git_diff_panel();
   void render_git_panel();
+  // The git panel lives in the primary sidebar's git view: the area inside its
+  // frame, to the right of the activity rail. Derived here so the renderer and
+  // its mouse hit-tests share one rect.
+  UIRect git_panel_box() const;
+  bool git_panel_visible() const;
   void render_outline_panel();
   bool outline_active() const
   {
@@ -730,7 +735,8 @@ private:
   int sidebar_list_rows() const;
   int sidebar_activity_rail_width() const
   {
-    return 5;
+    // Wide enough for the rail's text labels, not just single glyphs.
+    return 6;
   }
   int min_sidebar_width() const
   {
