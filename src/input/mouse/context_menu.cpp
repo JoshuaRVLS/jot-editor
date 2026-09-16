@@ -105,7 +105,7 @@ bool Editor::open_context_menu_for_mouse(int x, int y)
     if (x < sidebar_w && y >= topbar_height() && y < content_bottom)
     {
       focus_state = FOCUS_SIDEBAR;
-      if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT)
+      if (!explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT)
       {
         std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
         int sidebar_row = y - topbar_height() - 1;

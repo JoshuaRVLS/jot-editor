@@ -540,7 +540,7 @@ void Editor::render_sidebar()
   // remains as the exact fallback when Lua is disabled.
   const int border_fg = sidebar_resize_dragging ? theme.fg_active_border : theme.fg_sidebar_border;
   const int rail_w =
-      kExplorerOnly ? 0 : std::min(sidebar_activity_rail_width(), std::max(1, w - 1));
+      explorer_only() ? 0 : std::min(sidebar_activity_rail_width(), std::max(1, w - 1));
   SidebarPanelView view;
   view.x = 0;
   view.y = y;
@@ -549,10 +549,10 @@ void Editor::render_sidebar()
   view.border_fg = border_fg;
   view.bg = theme.bg_sidebar;
   view.resizing = sidebar_resize_dragging;
-  view.git_view = !kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT;
+  view.git_view = !explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT;
   view.rail_w = rail_w;
-  view.rail_explorer_row = kExplorerOnly ? -1 : 1;
-  view.rail_git_row = kExplorerOnly ? -1 : 3;
+  view.rail_explorer_row = explorer_only() ? -1 : 1;
+  view.rail_git_row = explorer_only() ? -1 : 3;
   // Content geometry: the Lua handler truncates the baked-in header/footer
   // against content_w, so it must be populated before emit (defaults to 0
   // otherwise, silently clipping the header to nothing).
@@ -621,7 +621,7 @@ void Editor::render_sidebar()
     }
   };
 
-  if (!kExplorerOnly)
+  if (!explorer_only())
   {
     draw_rail_item(1, "󰉋 ", SIDEBAR_VIEW_EXPLORER);
     draw_rail_item(3, " ", SIDEBAR_VIEW_GIT);
@@ -662,7 +662,7 @@ void Editor::render_sidebar()
     }
   };
 
-  if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT)
+  if (!explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT)
   {
     std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
     int header_y = y;

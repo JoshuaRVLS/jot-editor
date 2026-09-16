@@ -518,7 +518,7 @@ bool Editor::restore_workspace_session()
   if (entries.empty())
   {
     show_sidebar = restored_show_sidebar;
-    active_sidebar_view = kExplorerOnly ? SIDEBAR_VIEW_EXPLORER : restored_sidebar_view;
+    active_sidebar_view = explorer_only() ? SIDEBAR_VIEW_EXPLORER : restored_sidebar_view;
     sidebar_width = std::clamp(restored_sidebar_width, min_sidebar_width(), max_sidebar_width());
     right_panel_width = clamp_restored_right_panel_width();
     sidebar_show_hidden = restored_hidden;
@@ -526,7 +526,7 @@ bool Editor::restore_workspace_session()
   }
 
   sidebar_width = std::clamp(restored_sidebar_width, min_sidebar_width(), max_sidebar_width());
-  active_sidebar_view = kExplorerOnly ? SIDEBAR_VIEW_EXPLORER : restored_sidebar_view;
+  active_sidebar_view = explorer_only() ? SIDEBAR_VIEW_EXPLORER : restored_sidebar_view;
   right_panel_width = clamp_restored_right_panel_width();
   sidebar_show_hidden = restored_hidden;
   load_file_tree(workspace_session_root);
@@ -630,7 +630,7 @@ bool Editor::restore_workspace_session()
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
   show_sidebar = restored_show_sidebar;
-  active_sidebar_view = kExplorerOnly ? SIDEBAR_VIEW_EXPLORER : restored_sidebar_view;
+  active_sidebar_view = explorer_only() ? SIDEBAR_VIEW_EXPLORER : restored_sidebar_view;
   sidebar_width = effective_sidebar_width();
   set_message("Workspace restored: " + root_dir);
   return true;

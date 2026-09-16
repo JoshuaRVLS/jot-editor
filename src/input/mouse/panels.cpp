@@ -324,7 +324,7 @@ void Editor::handle_mouse_input(int x,
     {
       if (is_scroll_up)
       {
-        if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT)
+        if (!explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT)
         {
           if (git_sidebar_scroll > 0)
             git_sidebar_scroll--;
@@ -337,7 +337,7 @@ void Editor::handle_mouse_input(int x,
       }
       else if (is_scroll_down)
       {
-        if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT)
+        if (!explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT)
         {
           git_sidebar_scroll++;
           int reserved_terminal_h = integrated_terminal_reserved_h();

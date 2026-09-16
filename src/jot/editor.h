@@ -27,10 +27,17 @@ class Editor : private EditorState
   friend class HostIOAPI;
 
 private:
-  // Temporary presentation gates. Keep underlying features intact while the
+  // Temporary presentation gate. Keep the underlying feature intact while the
   // compact editor layout is evaluated.
   static constexpr bool kTopBarVisible = false;
-  static constexpr bool kExplorerOnly = true;
+
+  // The activity bar is what turns the primary sidebar into a dock with more
+  // than one view. With it on, the rail is drawn and the git view is reachable;
+  // with it off the sidebar is a plain explorer.
+  bool explorer_only() const
+  {
+    return !show_activity_bar;
+  }
 
   int topbar_height() const
   {
@@ -1144,6 +1151,10 @@ public:
   bool terminal_zoom_active_for_test() const
   {
     return terminal_zoom_active;
+  }
+  bool terminal_visible_for_test() const
+  {
+    return show_integrated_terminal;
   }
   int terminal_panel_h_for_test() const
   {

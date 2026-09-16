@@ -130,7 +130,7 @@ void Editor::handle_sidebar_input(int ch)
 
   if (ch == '\t')
   {
-    if (kExplorerOnly)
+    if (explorer_only())
     {
       return;
     }
@@ -144,7 +144,7 @@ void Editor::handle_sidebar_input(int ch)
     return;
   }
 
-  if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT)
+  if (!explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT)
   {
     std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
     int reserved_terminal_h = integrated_terminal_reserved_h();
@@ -905,7 +905,7 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click, bool is_double_cl
   int rel_y = y - topbar_height();
   if (rel_y < 0)
     return;
-  if (!kExplorerOnly && x < sidebar_activity_rail_width())
+  if (!explorer_only() && x < sidebar_activity_rail_width())
   {
     if (rel_y == 1)
     {
@@ -921,7 +921,7 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click, bool is_double_cl
     return;
   }
 
-  if (!kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT)
+  if (!explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT)
   {
     std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
     int sidebar_row = y - topbar_height() - 1;

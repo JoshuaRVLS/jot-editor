@@ -137,6 +137,31 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     return;
   }
 
+  // Global dock toggles, VS Code's chords:
+  //   Ctrl+B      primary sidebar (left dock)
+  //   Ctrl+Alt+B  secondary sidebar (right dock); Ctrl+Shift+B stays as an alias
+  //   Ctrl+J      bottom panel
+  // They run before the focused integrated terminal sees the key so they keep
+  // working while the shell owns focus -- the same commandsToSkipShell
+  // behaviour VS Code gives its panel toggles.
+  if (is_ctrl && (ch == 'b' || ch == 'B' || original_ch == 'b' || original_ch == 'B'))
+  {
+    if (is_alt || is_shift || ch == 'B' || original_ch == 'B')
+    {
+      toggle_right_panel();
+    }
+    else
+    {
+      toggle_sidebar();
+    }
+    return;
+  }
+  if (is_ctrl && (ch == 'j' || ch == 'J' || original_ch == 'j' || original_ch == 'J'))
+  {
+    toggle_integrated_terminal();
+    return;
+  }
+
   IntegratedTerminal *active_terminal = get_integrated_terminal();
   if (show_integrated_terminal && active_terminal && active_terminal->is_focused())
   {
@@ -371,21 +396,6 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
   if (show_rename_prompt)
   {
     handle_rename_prompt(ch);
-    return;
-  }
-
-  // Global sidebar toggles should work regardless of current focus:
-  // Ctrl+B opens the left explorer, Ctrl+Shift+B the right dock.
-  if (is_ctrl && (ch == 'b' || ch == 'B'))
-  {
-    if (is_shift || ch == 'B')
-    {
-      toggle_right_panel();
-    }
-    else
-    {
-      toggle_sidebar();
-    }
     return;
   }
 

@@ -706,7 +706,7 @@ void Editor::handle_mouse(void *event_ptr)
       long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now().time_since_epoch())
                              .count();
-      int sidebar_scroll = !kExplorerOnly && active_sidebar_view == SIDEBAR_VIEW_GIT
+      int sidebar_scroll = !explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT
                                ? git_sidebar_scroll
                                : file_tree_scroll;
       int sidebar_row = event->y - topbar_height() - 1 + sidebar_scroll;

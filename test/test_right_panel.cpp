@@ -1,7 +1,8 @@
 // Right dock tab management: panels open as tabs (git, git diff, symbols,
 // debug, plugin), the active tab switches the dock content, closing the
 // active tab activates a neighbor, and closing the last tab hides the dock.
-// Ctrl+Shift+B toggles the dock itself.
+// The dock is the secondary sidebar: Ctrl+Alt+B toggles it (Ctrl+Shift+B is a
+// legacy alias), Ctrl+B the primary sidebar and Ctrl+J the bottom panel.
 #include "editor.h"
 #include "jot/keybind_catalog.h"
 #include <catch2/catch_test_macros.hpp>
@@ -227,4 +228,56 @@ TEST_CASE("Ctrl+B opens the left explorer, Ctrl+Shift+B the right dock", "[jot]"
   {
     e.toggle_right_panel();
   }
+}
+
+// The three dock chords VS Code uses: Ctrl+B for the primary sidebar,
+// Ctrl+Alt+B for the secondary sidebar and Ctrl+J for the bottom panel. The
+// primary/secondary pair share the letter B, so Alt has to be read from the
+// modifier bits rather than inferred from the key case -- Ctrl+Alt+B arrives
+// as lowercase 'b' plus Alt.
+TEST_CASE("Dock chords: Ctrl+Alt+B secondary sidebar, Ctrl+J bottom panel", "[jot]")
+{
+  char home[] = "/tmp/jot_dock_chords_XXXXXX";
+  mkdtemp(home);
+  setenv("JOT_CONFIG_HOME", home, 1);
+  setenv("JOT_CACHE_HOME", home, 1);
+
+  Editor e;
+  // A fresh editor opens on the home surface, which owns every key until it is
+  // dismissed; close it so the chords reach the dispatcher.
+  e.set_home_menu_visible(false);
+  using jot::keybind_detail::decode_csi_u_key;
+
+  // Protocol modifiers are a bitmask + 1: Ctrl=5, Ctrl+Alt=7. 98 = 'b',
+  // 106 = 'j'.
+  const int ctrl_alt_b = decode_csi_u_key("\x1b[98;7u");
+  const int ctrl_j = decode_csi_u_key("\x1b[106;5u");
+  REQUIRE((ctrl_alt_b & 0xFFFF) == 'b');
+  REQUIRE((ctrl_alt_b & (0x20000 | 0x40000)) == (0x20000 | 0x40000));
+  REQUIRE((ctrl_j & 0xFFFF) == 'j');
+  REQUIRE((ctrl_j & 0x20000) != 0);
+  REQUIRE((ctrl_j & 0x40000) == 0);
+
+  // Ctrl+Alt+B drives the secondary sidebar and leaves the primary alone.
+  e.open_right_panel_tab(RIGHT_PANEL_SYMBOLS);
+  e.toggle_right_panel();
+  REQUIRE_FALSE(e.right_panel_visible());
+  const bool sidebar_before = e.sidebar_visible_for_test();
+  e.raw_key_for_test(ctrl_alt_b);
+  REQUIRE(e.right_panel_visible());
+  REQUIRE(e.sidebar_visible_for_test() == sidebar_before);
+  e.raw_key_for_test(ctrl_alt_b);
+  REQUIRE_FALSE(e.right_panel_visible());
+  REQUIRE(e.sidebar_visible_for_test() == sidebar_before);
+
+  // Ctrl+J drives the bottom panel. A shell-less terminal keeps the case
+  // headless: with the panel hidden and a terminal already live, the chord
+  // reveals it without anything having to spawn a process. (The hiding half
+  // of the cycle needs a terminal that survives a poll, so it is not
+  // reachable here.)
+  e.add_terminal_for_test();
+  e.set_terminal_state_for_test(false, false, 10);
+  REQUIRE_FALSE(e.terminal_visible_for_test());
+  e.raw_key_for_test(ctrl_j);
+  REQUIRE(e.terminal_visible_for_test());
 }
