@@ -360,6 +360,9 @@ struct SidebarRenderRow
   bool expanded = false;
   int depth = 0;
   int diagnostic_severity = 0;
+  // Errors and warnings only: they are what the numeric file badge counts.
+  int diagnostic_errors = 0;
+  int diagnostic_warnings = 0;
   std::string git_status;
   // Per-language icon for files (empty for directories). Painted ahead of
   // the label in its brand color, like the status line.

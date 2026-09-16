@@ -244,23 +244,6 @@ static std::pair<int, int> git_status_colors(const Theme &theme, const std::stri
   return {theme.fg_sidebar, theme.bg_sidebar};
 }
 
-static const char *diagnostic_symbol(int severity)
-{
-  switch (severity)
-  {
-  case 1:
-    return "E";
-  case 2:
-    return "W";
-  case 3:
-    return "I";
-  case 4:
-    return "H";
-  default:
-    return "";
-  }
-}
-
 void Editor::invalidate_sidebar_tree_cache()
 {
   sidebar_render_cache_.tree_dirty = true;
@@ -377,6 +360,8 @@ void Editor::rebuild_sidebar_diagnostics_cache()
   for (auto &row : sidebar_render_cache_.rows)
   {
     row.diagnostic_severity = 0;
+    row.diagnostic_errors = 0;
+    row.diagnostic_warnings = 0;
   }
 
   auto propagate = [&](const std::string &path, int severity)
@@ -421,6 +406,32 @@ void Editor::rebuild_sidebar_diagnostics_cache()
       severity = merge_sidebar_severity(severity, d.severity);
     }
     propagate(buf.filepath, severity);
+  }
+
+  // Numeric file badges count errors and warnings per file. The per-server
+  // slices are the source refresh_lsp_diagnostics_for merges from, so open and
+  // unopened files are counted alike.
+  for (const auto &by_client : lsp_diag_slices_)
+  {
+    for (const auto &file_entry : by_client.second)
+    {
+      const std::string normalized = normalize_sidebar_path(file_entry.first);
+      if (normalized.empty())
+        continue;
+      const auto row_it = sidebar_render_cache_.path_to_row.find(normalized);
+      if (row_it == sidebar_render_cache_.path_to_row.end())
+        continue;
+      auto &row = sidebar_render_cache_.rows[(size_t)row_it->second];
+      if (row.is_dir)
+        continue;
+      for (const auto &d : file_entry.second)
+      {
+        if (d.severity == 1)
+          row.diagnostic_errors++;
+        else if (d.severity == 2)
+          row.diagnostic_warnings++;
+      }
+    }
   }
 
   sidebar_render_cache_.diagnostics_dirty = false;
@@ -852,7 +863,7 @@ void Editor::render_sidebar()
     const std::string git_xy = row.git_status;
     const std::string git_symbol = git_status_symbol(git_xy);
     const int sev = row.diagnostic_severity;
-    const std::string diag_symbol = diagnostic_symbol(sev);
+    const bool has_git = !git_xy.empty();
     const bool selected = idx == file_tree_selected;
     const bool is_active_file =
         !row.is_dir && !active_file_path.empty() && row.normalized_path == active_file_path;
@@ -860,12 +871,20 @@ void Editor::render_sidebar()
     int row_fg = row.is_dir ? theme.fg_sidebar_directory : theme.fg_sidebar;
     int row_bg = theme.bg_sidebar;
     auto git_colors = git_status_colors(theme, git_xy);
-    if (!row.is_dir && !git_xy.empty() && !selected)
+    if (row.is_dir)
     {
+      // A folder name is tinted by whatever happened inside it, most severe
+      // diagnostic first, then the git state.
+      if (sev > 0)
+        row_fg = severity_to_color(sev, true);
+      else if (has_git)
+        row_fg = git_colors.first;
+    }
+    else if (has_git && !selected)
+    {
+      // Changed files take the git color on the name only; the row keeps the
+      // panel background instead of being filled with a status band.
       row_fg = git_colors.first;
-      row_bg = git_colors.second;
-      ui->fill_rect(
-          {content_x + 1, tree_y + i, std::max(1, content_w - 2), 1}, " ", row_fg, row_bg);
     }
 
     if (selected)
@@ -891,10 +910,40 @@ void Editor::render_sidebar()
 
     const bool show_badges = w >= 16;
     const int border_x = w - 1;
-    const int diag_x = border_x - 5;
-    const int git_x = border_x - 3;
-    const int label_max = show_badges ? std::max(0, diag_x - (content_x + 1) - 1)
-                                      : std::max(0, border_x - (content_x + 1));
+    // Files badge how many errors and warnings they carry, with the git letter
+    // appended when the file is also changed ("1, M"). Folders badge a dot.
+    // Diagnostics own the color: an error outranks a warning, both outrank git.
+    std::string badge;
+    int badge_fg = -1;
+    if (row.is_dir)
+    {
+      if (sev > 0 || has_git)
+      {
+        badge = "●";
+        badge_fg = sev > 0 ? severity_to_color(sev, true) : git_colors.first;
+      }
+    }
+    else
+    {
+      const int diag_total = row.diagnostic_errors + row.diagnostic_warnings;
+      if (diag_total > 0)
+      {
+        badge = std::to_string(diag_total);
+        badge_fg = severity_to_color(sev, false);
+      }
+      if (has_git)
+      {
+        if (!badge.empty())
+          badge += ", ";
+        badge += git_symbol;
+        if (badge_fg < 0)
+          badge_fg = git_colors.first;
+      }
+    }
+    const int badge_cells = show_badges ? cell_count(badge) : 0;
+    const int badge_x = border_x - 1 - badge_cells;
+    const int label_max = badge_cells > 0 ? std::max(0, badge_x - (content_x + 1) - 1)
+                                          : std::max(0, border_x - (content_x + 1));
 
     // Rows split into tree indent guides (comment color), then the
     // per-language icon glyph in its own brand color (files), then the name.
@@ -986,20 +1035,11 @@ void Editor::render_sidebar()
       r.symbol_fg = theme.fg_sidebar_directory;
       r.symbol_bold = true;
     }
-    if (show_badges)
+    if (badge_cells > 0)
     {
-      if (!diag_symbol.empty())
-      {
-        r.badge2 = diag_symbol;
-        r.badge2_x = diag_x;
-        r.badge2_fg = severity_to_color(sev, false);
-      }
-      if (!git_symbol.empty())
-      {
-        r.badge = git_symbol;
-        r.badge_x = git_x;
-        r.badge_fg = git_colors.first;
-      }
+      r.badge = badge;
+      r.badge_x = badge_x;
+      r.badge_fg = badge_fg;
     }
     view.rows.push_back(std::move(r));
   }
