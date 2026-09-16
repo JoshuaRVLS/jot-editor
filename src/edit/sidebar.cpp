@@ -523,15 +523,15 @@ void Editor::render_sidebar()
   ensure_sidebar_render_cache();
 
   int w = effective_sidebar_width();
-  // Reserve the terminal's real footprint (not the old 50% cap): the
-  // panel can grow to nearly the full window, and the explorer must
-  // shrink accordingly instead of sliding underneath it.
-  int reserved_terminal_h = integrated_terminal_reserved_h();
   // Full height, aligned with the editor pane: the buffer-tab strip is
   // pane-local (rendered inside the pane frame), so no row belongs above
-  // the explorer's top border.
-  int h = std::max(0, ui->get_height() - status_height - topbar_height() - reserved_terminal_h);
-  int y = topbar_height();
+  // the explorer's top border. The column also reserves the terminal's real
+  // footprint (not the old 50% cap): the panel can grow to nearly the full
+  // window, and the explorer must shrink accordingly instead of sliding
+  // underneath it.
+  const ContentColumn col = content_column();
+  int h = col.h;
+  int y = col.top;
   if (w < 2 || h < 1)
     return;
 
@@ -550,6 +550,7 @@ void Editor::render_sidebar()
   view.bg = theme.bg_sidebar;
   view.resizing = sidebar_resize_dragging;
   view.git_view = !explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT;
+  view.git_panel_active = show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT;
   view.rail_w = rail_w;
   view.rail_explorer_row = explorer_only() ? -1 : 1;
   view.rail_git_row = explorer_only() ? -1 : 3;
@@ -605,11 +606,10 @@ void Editor::render_sidebar()
     ui->draw_text(w - 1, y, "─", border_fg, theme.bg_sidebar);
   }
 
-  auto draw_rail_item = [&](int row, const std::string &label, SidebarView which)
+  auto draw_rail_item = [&](int row, const std::string &label, bool active)
   {
     if (row < 0 || row >= h)
       return;
-    bool active = active_sidebar_view == which;
     int fg = active ? theme.fg_sidebar_directory : theme.fg_comment;
     // The panel's left border occupies column 0, so the activity rail lives
     // one cell inside the frame.
@@ -623,8 +623,10 @@ void Editor::render_sidebar()
 
   if (!explorer_only())
   {
-    draw_rail_item(1, "󰉋 ", SIDEBAR_VIEW_EXPLORER);
-    draw_rail_item(3, " ", SIDEBAR_VIEW_GIT);
+    draw_rail_item(1, "󰉋 ", active_sidebar_view == SIDEBAR_VIEW_EXPLORER);
+    // The git item launches the git panel (":gitpanel"), so its marker
+    // follows that panel rather than which sidebar view is showing.
+    draw_rail_item(3, " ", view.git_panel_active);
     for (int i = y + 1; i < y + h - 1; i++)
     {
       ui->draw_text(std::max(0, rail_w - 1), i, "│", theme.fg_sidebar_border, theme.bg_sidebar);
@@ -834,7 +836,7 @@ void Editor::render_sidebar()
   int tree_y = y + 1;
   // One extra row is reserved at the bottom for the panel border, so the
   // footer moves up to y + h - 2 and the tree ends above it.
-  int tree_h = std::max(0, h - 3);
+  int tree_h = sidebar_list_rows();
   const auto &rows = sidebar_render_cache_.rows;
 
   int max_scroll = std::max(0, (int)rows.size() - std::max(1, tree_h));
@@ -1095,16 +1097,13 @@ void Editor::render_collapsed_sidebar_handle()
     return;
   }
 
-  int reserved_terminal_h = integrated_terminal_reserved_h();
-  int top = topbar_height();
-  int bottom = ui->get_height() - status_height - reserved_terminal_h;
-  int h = std::max(0, bottom - top);
-  if (h <= 0)
+  const ContentColumn col = content_column();
+  if (col.h <= 0)
   {
     return;
   }
 
-  int mid = top + h / 2;
+  int mid = col.top + col.h / 2;
   int fg = sidebar_resize_dragging ? theme.fg_active_border : theme.fg_sidebar_border;
   ui->draw_text(0, mid, "›", fg, theme.bg_default, true);
 }

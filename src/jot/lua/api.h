@@ -344,6 +344,9 @@ struct SidebarPanelView
   int border_fg = 0;
   int bg = 0;
   bool git_view = false;
+  // The rail's git item launches the git panel rather than switching the view,
+  // so its marker follows the panel instead of `git_view`.
+  bool git_panel_active = false;
   bool resizing = false;
   int rail_explorer_row = -1, rail_git_row = -1; // active rail rows, -1 = none
   std::string header;

@@ -97,18 +97,15 @@ bool Editor::open_context_menu_for_mouse(int x, int y)
 
   if (show_sidebar)
   {
-    int reserved_terminal_h = integrated_terminal_reserved_h();
-    // Grid height, not the terminal's: see Editor::grid_height (the terminal
-    // keeps its 80x24 default under --gui, which would cap this at row 22).
-    int content_bottom = grid_height() - status_height - reserved_terminal_h;
+    const ContentColumn col = content_column();
     int sidebar_w = effective_sidebar_width();
-    if (x < sidebar_w && y >= topbar_height() && y < content_bottom)
+    if (x < sidebar_w && y >= col.top && y < col.bottom)
     {
       focus_state = FOCUS_SIDEBAR;
       if (!explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT)
       {
         std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
-        int sidebar_row = y - topbar_height() - 1;
+        int sidebar_row = y - col.top - 1;
         int row = sidebar_row + git_sidebar_scroll;
         if (sidebar_row >= 0 && row >= 0 && row < (int)git_rows.size())
         {

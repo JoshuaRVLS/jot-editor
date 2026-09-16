@@ -708,6 +708,7 @@ bool LuaAPI::emit_sidebar(const SidebarPanelView &view)
                        lua_set_int_field(L, t, "border_fg", view.border_fg);
                        lua_set_int_field(L, t, "bg", view.bg);
                        lua_set_bool_field(L, t, "git_view", view.git_view);
+                       lua_set_bool_field(L, t, "git_panel_active", view.git_panel_active);
                        lua_set_bool_field(L, t, "resizing", view.resizing);
                        lua_set_int_field(L, t, "rail_explorer_row", view.rail_explorer_row);
                        lua_set_int_field(L, t, "rail_git_row", view.rail_git_row);

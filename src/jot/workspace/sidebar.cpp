@@ -147,9 +147,7 @@ void Editor::handle_sidebar_input(int ch)
   if (!explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT)
   {
     std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
-    int reserved_terminal_h = integrated_terminal_reserved_h();
-    const int view_h =
-        std::max(1, ui->get_height() - status_height - tab_height - reserved_terminal_h - 2);
+    const int view_h = std::max(1, sidebar_list_rows());
     auto clamp_scroll = [&]()
     {
       int max_scroll = std::max(0, (int)git_rows.size() - view_h);
@@ -352,7 +350,7 @@ void Editor::handle_sidebar_input(int ch)
   std::vector<FileNode *> flat;
   flatten_nodes_mut(file_tree, flat);
 
-  int view_h = std::max(1, ui->get_height() - status_height - tab_height - 2);
+  int view_h = std::max(1, sidebar_list_rows());
   auto clamp_scroll = [&]()
   {
     int max_scroll = std::max(0, (int)flat.size() - view_h);
@@ -914,9 +912,9 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click, bool is_double_cl
     }
     else if (rel_y == 3)
     {
-      active_sidebar_view = SIDEBAR_VIEW_GIT;
-      refresh_git_status(true);
-      needs_redraw = true;
+      // The rail's git item is the git panel launcher (":gitpanel"), not a
+      // switch of the sidebar's own view. The toggle refreshes the panel.
+      toggle_git_panel();
     }
     return;
   }

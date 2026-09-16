@@ -17,10 +17,8 @@ bool Editor::collapsed_sidebar_handle_hit_test(int x, int y) const
   {
     return false;
   }
-  int reserved_terminal_h = integrated_terminal_reserved_h();
-  int top = topbar_height();
-  int bottom = ui->get_height() - status_height - reserved_terminal_h;
-  return y >= top && y < bottom;
+  const ContentColumn col = content_column();
+  return y >= col.top && y < col.bottom;
 }
 
 bool Editor::sidebar_resize_hit_test(int x, int y) const
@@ -38,10 +36,8 @@ bool Editor::sidebar_resize_hit_test(int x, int y) const
   {
     return false;
   }
-  int reserved_terminal_h = integrated_terminal_reserved_h();
-  int top = topbar_height();
-  int bottom = ui->get_height() - status_height - reserved_terminal_h;
-  return y >= top && y < bottom;
+  const ContentColumn col = content_column();
+  return y >= col.top && y < col.bottom;
 }
 
 bool Editor::resize_current_pane(int delta)

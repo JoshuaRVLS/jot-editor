@@ -61,14 +61,28 @@ int Editor::zen_content_margin(int available_w) const
   return std::max(0, (available_w - zen_w) / 2);
 }
 
+Editor::ContentColumn Editor::content_column() const
+{
+  // The bottom panel reserves its height from the pane area; 0 while the shell
+  // is zoomed (the zoomed panel paints over the full region).
+  ContentColumn col;
+  col.top = topbar_height();
+  col.bottom = grid_height() - status_height - integrated_terminal_reserved_h();
+  col.h = std::max(0, col.bottom - col.top);
+  return col;
+}
+
+int Editor::sidebar_list_rows() const
+{
+  // Header row, footer row and the bottom border sit inside the column.
+  return std::max(0, content_column().h - 3);
+}
+
 Editor::PaneArea Editor::compute_pane_area() const
 {
   const int total_w = std::max(1, ui->get_render_width());
-  // The bottom panel reserves its height from the pane area; 0 while the shell
-  // is zoomed (the zoomed panel paints over the full region).
-  const int reserved_h = integrated_terminal_reserved_h();
-  const int top = topbar_height();
-  const int total_h = std::max(1, ui->get_height() - status_height - reserved_h - top);
+  const ContentColumn col = content_column();
+  const int total_h = std::max(1, col.h);
   int origin_x = show_sidebar ? effective_sidebar_width() : 0;
   const int right_w = effective_right_panel_width();
   int available_w = std::max(1, total_w - origin_x - right_w);
@@ -76,7 +90,7 @@ Editor::PaneArea Editor::compute_pane_area() const
   const int zen_margin = zen_content_margin(available_w);
   origin_x += zen_margin;
   available_w = std::max(1, available_w - zen_margin * 2);
-  return PaneArea{origin_x, top, available_w, total_h};
+  return PaneArea{origin_x, col.top, available_w, total_h};
 }
 
 int Editor::create_pane(int x, int y, int w, int h, int buffer_id)

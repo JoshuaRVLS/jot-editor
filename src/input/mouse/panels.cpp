@@ -348,9 +348,7 @@ void Editor::handle_mouse_input(int x,
         if (!explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT)
         {
           git_sidebar_scroll++;
-          int reserved_terminal_h = integrated_terminal_reserved_h();
-          int view_h =
-              std::max(1, ui->get_height() - status_height - tab_height - reserved_terminal_h - 2);
+          int view_h = std::max(1, sidebar_list_rows());
           int max_scroll = std::max(0, (int)build_git_sidebar_rows().size() - view_h);
           git_sidebar_scroll = std::clamp(git_sidebar_scroll, 0, max_scroll);
         }

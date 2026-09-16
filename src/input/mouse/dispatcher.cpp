@@ -693,14 +693,9 @@ void Editor::handle_mouse(void *event_ptr)
 
   if (show_sidebar && is_click)
   {
-    int reserved_terminal_h = integrated_terminal_reserved_h();
-    // The grid height, not the hosting terminal's: there is no terminal under
-    // --gui, so its size stays at the 80x24 constructor default and using it
-    // here cut the explorer's clickable area off at row 22 for every window
-    // size.
-    int content_bottom = grid_height() - status_height - reserved_terminal_h;
+    const ContentColumn col = content_column();
     int sidebar_w = effective_sidebar_width();
-    if (event->x < sidebar_w && event->y >= topbar_height() && event->y < content_bottom)
+    if (event->x < sidebar_w && event->y >= col.top && event->y < col.bottom)
     {
       focus_state = FOCUS_SIDEBAR;
       long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -709,7 +704,7 @@ void Editor::handle_mouse(void *event_ptr)
       int sidebar_scroll = !explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT
                                ? git_sidebar_scroll
                                : file_tree_scroll;
-      int sidebar_row = event->y - topbar_height() - 1 + sidebar_scroll;
+      int sidebar_row = event->y - col.top - 1 + sidebar_scroll;
       bool sidebar_double = (last_sidebar_click_ms > 0) && (now_ms - last_sidebar_click_ms <= 350)
                             && (last_sidebar_click_row == sidebar_row);
       last_sidebar_click_ms = now_ms;

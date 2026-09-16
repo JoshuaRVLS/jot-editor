@@ -714,6 +714,20 @@ private:
   {
     return ui ? ui->get_render_width() : 0;
   }
+  // The vertical span the chrome columns (sidebar, right dock) occupy: the rows
+  // between the top bar and the status line, less whatever the bottom panel
+  // reserves. Derived once so the dock edges, the renderers and the mouse
+  // hit-tests cannot disagree about where a column starts and ends.
+  struct ContentColumn
+  {
+    int top = 0;
+    int bottom = 0;
+    int h = 0;
+  };
+  ContentColumn content_column() const;
+  // Rows the sidebar's list can show: the content column minus its own header,
+  // footer and bottom-border rows.
+  int sidebar_list_rows() const;
   int sidebar_activity_rail_width() const
   {
     return 5;
@@ -1211,12 +1225,7 @@ public:
   // minus the terminal's real reserved footprint.
   int sidebar_panel_h_for_test() const
   {
-    if (!ui)
-    {
-      return 0;
-    }
-    return std::max(
-        0, ui->get_height() - status_height - topbar_height() - integrated_terminal_reserved_h());
+    return content_column().h;
   }
   bool terminal_resize_dragging_for_test() const
   {

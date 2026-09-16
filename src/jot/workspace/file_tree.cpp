@@ -134,7 +134,7 @@ void Editor::load_file_tree(const std::string &path)
       }
     }
   }
-  int view_h = std::max(1, ui->get_height() - status_height - tab_height - 2);
+  int view_h = std::max(1, sidebar_list_rows());
   int max_scroll = std::max(0, (int)refreshed_flat.size() - view_h);
   file_tree_scroll = std::clamp(old_scroll, 0, max_scroll);
   if (file_tree_selected < file_tree_scroll)
