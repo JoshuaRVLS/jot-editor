@@ -30,6 +30,7 @@ cmake --install build --prefix "$HOME/.local"
 jot                 # resume last workspace, or home menu
 jot file.cpp        # open a file
 jot path/to/project # open a folder as the workspace
+add --gui flag to use the GUI.
 ```
 
 ## Docs
