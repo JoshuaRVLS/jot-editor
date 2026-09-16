@@ -370,11 +370,9 @@ void Editor::begin_terminal_selection(int x, int y)
   {
     return;
   }
-  const int panel_y = integrated_terminal_panel_y();
-  const int panel_h = integrated_terminal_panel_h();
-  int content_h = std::max(1, panel_h - 3);
+  const int content_h = std::max(1, bottom_panel_content_h());
   int row = term->get_top_visible_row(content_h)
-            + std::clamp(y - (panel_y + 2), 0, content_h - 1);
+            + std::clamp(y - bottom_panel_content_y(), 0, content_h - 1);
   int col = std::max(0, x - 1);
   terminal_sel_anchor_row = row;
   terminal_sel_anchor_col = col;
@@ -391,11 +389,9 @@ void Editor::update_terminal_selection_pos(int x, int y)
   {
     return;
   }
-  const int panel_y = integrated_terminal_panel_y();
-  const int panel_h = integrated_terminal_panel_h();
-  int content_h = std::max(1, panel_h - 3);
+  const int content_h = std::max(1, bottom_panel_content_h());
   int row = term->get_top_visible_row(content_h)
-            + std::clamp(y - (panel_y + 2), 0, content_h - 1);
+            + std::clamp(y - bottom_panel_content_y(), 0, content_h - 1);
   terminal_sel_cur_row = row;
   terminal_sel_cur_col = std::max(0, x - 1);
 }
@@ -478,7 +474,7 @@ bool Editor::handle_integrated_terminal_mouse(int x,
   const int panel_h = integrated_terminal_panel_h();
   const int panel_y = integrated_terminal_panel_y();
   const int panel_w = integrated_terminal_panel_w();
-  int tab_y = panel_y + 1;
+  const int tab_y = bottom_panel_terminal_tab_y();
   const bool inside = x >= 0 && x < panel_w && y >= panel_y && y < panel_y + panel_h;
 
   // While a selection drag is in flight every motion/release belongs to the
@@ -503,7 +499,16 @@ bool Editor::handle_integrated_terminal_mouse(int x,
     return false;
   }
 
-  if (y == tab_y || y == panel_y)
+  // The top border and the panel's view tab row sit above the shell's own
+  // strip. The view tabs are hit-tested by handle_bottom_panel_mouse, which
+  // runs first; whatever it declines up there is consumed inertly so a stray
+  // click can never fall through and focus a shell.
+  if (y == panel_y || y == bottom_panel_view_tab_y())
+  {
+    return true;
+  }
+
+  if (y == tab_y)
   {
     // Only presses act on the tab strip; motions/releases over it (e.g.
     // dragging a selection up past the content) are consumed but inert.
@@ -511,13 +516,9 @@ bool Editor::handle_integrated_terminal_mouse(int x,
     {
       return true;
     }
-    // The panel's view tabs occupy the leading columns; the shell's own tabs
-    // start after them, inset by exactly what the renderer reserved.
+    // The shell's strip spans the full panel width: the view tabs moved to
+    // their own row above it.
     int tab_x = 1;
-    if (panel_w >= bottom_panel_view_tabs_width())
-    {
-      tab_x += bottom_panel_view_tabs_width();
-    }
     for (int i = 0; i < (int)integrated_terminals.size(); i++)
     {
       std::string base_label = integrated_terminals[i]->get_label().empty()
@@ -692,7 +693,7 @@ bool Editor::handle_integrated_terminal_scroll(int x, int y, bool is_scroll_up, 
     return false;
   }
 
-  int content_h = std::max(1, panel_h - 3);
+  int content_h = std::max(1, bottom_panel_content_h());
   bool changed = false;
   if (is_scroll_up)
   {
@@ -728,14 +729,12 @@ void Editor::place_integrated_terminal_cursor()
     return;
   }
 
-  const int panel_h = integrated_terminal_panel_h();
-  const int panel_y = integrated_terminal_panel_y();
   const int panel_w = integrated_terminal_panel_w();
   int content_w = std::max(1, panel_w - 2);
-  int content_h = std::max(1, panel_h - 3);
+  int content_h = std::max(1, bottom_panel_content_h());
   term->resize(content_h, content_w);
 
-  int cursor_y = panel_y + 2 + std::clamp(term->get_cursor_row(), 0, content_h - 1);
+  int cursor_y = bottom_panel_content_y() + std::clamp(term->get_cursor_row(), 0, content_h - 1);
   int cursor_x = 1 + (int)std::min((size_t)(content_w - 1), term->get_cursor_column());
 
   ui->set_cursor(cursor_x, cursor_y);
@@ -748,9 +747,33 @@ const char *Editor::bottom_panel_view_label(int view)
 
 int Editor::bottom_panel_view_tabs_width() const
 {
-  // Both labels plus the one-cell gap before the terminal's own tab strip.
+  // Both labels plus the one-cell gap before the shell's own tab strip.
   return (int)std::string(bottom_panel_view_label(BOTTOM_PANEL_TERMINAL)).size()
          + (int)std::string(bottom_panel_view_label(BOTTOM_PANEL_PROBLEMS)).size() + 1;
+}
+
+int Editor::bottom_panel_view_tab_y() const
+{
+  return integrated_terminal_panel_y() + 1;
+}
+
+int Editor::bottom_panel_terminal_tab_y() const
+{
+  return integrated_terminal_panel_y() + 2;
+}
+
+int Editor::bottom_panel_content_y() const
+{
+  // The shell spends a second row on its own tab strip; the list has only the
+  // view tabs above it.
+  return bottom_panel_terminal_tab_y() + (bottom_panel_view == BOTTOM_PANEL_TERMINAL ? 1 : 0);
+}
+
+int Editor::bottom_panel_content_h() const
+{
+  // Everything between the content row and the panel's bottom border.
+  const int bottom = integrated_terminal_panel_y() + integrated_terminal_panel_h() - 1;
+  return std::max(0, bottom - bottom_panel_content_y());
 }
 
 void Editor::render_integrated_terminal()
@@ -783,29 +806,33 @@ void Editor::render_integrated_terminal()
   ui->fill_rect(panel, " ", term_fg, term_bg);
   ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal);
 
-  int tab_y = panel_y + 1;
-  int tab_x = 1;
-  // View tabs first: which of the panel's views is showing. Drawing walks the
-  // same two labels the click handler hit-tests, so the offsets cannot drift.
+  // View tabs (which of the panel's views is showing) get their own row, so
+  // the shell's tab strip below can use the full width instead of sharing the
+  // row with them. Drawing walks the same two labels the click handler
+  // hit-tests, so the offsets cannot drift.
+  const int view_tab_y = bottom_panel_view_tab_y();
   if (panel_w >= bottom_panel_view_tabs_width())
   {
+    int view_tab_x = 1;
     for (int view = 0; view < 2; view++)
     {
       const std::string label = bottom_panel_view_label(view);
       const bool active = ((int)bottom_panel_view == view);
       const int fg = active ? theme.fg_terminal_tab_focused : theme.fg_terminal_tab_inactive;
       const int bg = active ? theme.bg_terminal_tab_focused : theme.bg_terminal_tab_inactive;
-      ui->draw_text(tab_x, tab_y, label, fg, bg, active);
-      tab_x += (int)label.size();
+      ui->draw_text(view_tab_x, view_tab_y, label, fg, bg, active);
+      view_tab_x += (int)label.size();
     }
-    tab_x += 1;
   }
 
   if (bottom_panel_view == BOTTOM_PANEL_PROBLEMS)
   {
-    render_problems_view(0, panel_y, panel_w, panel_h);
+    render_problems_view(0, panel_w);
     return;
   }
+
+  const int tab_y = bottom_panel_terminal_tab_y();
+  int tab_x = 1;
 
   for (int i = 0; i < (int)integrated_terminals.size(); i++)
   {
@@ -851,7 +878,7 @@ void Editor::render_integrated_terminal()
     }
   }
 
-  int content_h = std::max(1, panel_h - 3);
+  int content_h = std::max(1, bottom_panel_content_h());
   int content_w = std::max(1, panel_w - 2);
   term->resize(content_h, content_w);
   auto rows = term->get_recent_output_rows(content_h);
@@ -872,7 +899,7 @@ void Editor::render_integrated_terminal()
     rows.push_back({"[terminal inactive: shell failed or exited]", {}});
     rows.push_back({"[try :terminalnew or check $SHELL]", {}});
   }
-  int start_y = panel_y + 2;
+  int start_y = bottom_panel_content_y();
   // Full-space row of the top displayed line; display row i is full-space
   // row full_base + i when the window is full (synthetic placeholder rows
   // for a dead terminal map back to 0-based instead).
@@ -1104,13 +1131,9 @@ bool Editor::handle_bottom_panel_mouse(int x, int y, bool is_click)
     return false;
   }
 
-  const int panel_y = integrated_terminal_panel_y();
-  const int panel_h = integrated_terminal_panel_h();
-
   // The view tab strip belongs to the panel as a whole, not to the view that
-  // happens to be showing -- it is the only way back once the shell is active,
-  // and the shell's own tab strip is inset past it.
-  if (y == panel_y + 1)
+  // happens to be showing -- it is the only way back once the shell is active.
+  if (y == bottom_panel_view_tab_y())
   {
     int tab_x = 1;
     for (int view = 0; view < 2; view++)
@@ -1138,8 +1161,8 @@ bool Editor::handle_bottom_panel_mouse(int x, int y, bool is_click)
       }
       tab_x += label_w;
     }
-    // Past the view tabs: the shell view hands the rest of the strip to its own
-    // tab handler, while the Problems view has nothing else up here.
+    // Past the view tabs: the rest of the row is inert (the shell's own tab
+    // strip lives on the row below), while the Problems view owns the row.
     return bottom_panel_view == BOTTOM_PANEL_PROBLEMS;
   }
 
@@ -1155,8 +1178,8 @@ bool Editor::handle_bottom_panel_mouse(int x, int y, bool is_click)
     return true;
   }
 
-  const int content_y = panel_y + 2;
-  const int content_h = std::max(0, panel_h - 3);
+  const int content_y = bottom_panel_content_y();
+  const int content_h = bottom_panel_content_h();
   if (y < content_y || y >= content_y + content_h)
   {
     return true;
@@ -1210,12 +1233,12 @@ void Editor::jump_to_problem(int index)
   needs_redraw = true;
 }
 
-void Editor::render_problems_view(int x, int y, int w, int h)
+void Editor::render_problems_view(int x, int w)
 {
   const int content_x = x + 1;
   const int content_w = std::max(0, w - 2);
-  const int content_y = y + 2;
-  const int content_h = std::max(0, h - 3);
+  const int content_y = bottom_panel_content_y();
+  const int content_h = bottom_panel_content_h();
   if (content_w < 8 || content_h <= 0)
   {
     return;

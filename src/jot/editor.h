@@ -198,11 +198,18 @@ private:
   // The bottom panel: one dock, two views (the shell and the diagnostics
   // list). The tab strip and the frame are shared; the body switches.
   void render_integrated_terminal();
-  void render_problems_view(int x, int y, int w, int h);
-  // Width the panel's view tabs occupy, so the terminal's own tab strip
-  // starts after them and mouse hit-testing can share the arithmetic.
+  void render_problems_view(int x, int w);
+  // Width the panel's view tabs occupy, so the renderer and the click
+  // hit-test walk the same two label offsets.
   int bottom_panel_view_tabs_width() const;
   static const char *bottom_panel_view_label(int view);
+  // The panel's rows: the view tabs, a second strip for the shell's own tabs
+  // (terminal view only), then content. Shared here so the renderer, the mouse
+  // hit-tests and the terminal's selection math cannot drift apart.
+  int bottom_panel_view_tab_y() const;
+  int bottom_panel_terminal_tab_y() const;
+  int bottom_panel_content_y() const;
+  int bottom_panel_content_h() const;
   void render_debugger_panel();
   void render_git_diff_panel();
   void render_git_panel();
@@ -1286,6 +1293,22 @@ public:
   int bottom_panel_view_tabs_width_for_test() const
   {
     return bottom_panel_view_tabs_width();
+  }
+  int bottom_panel_view_tab_y_for_test() const
+  {
+    return bottom_panel_view_tab_y();
+  }
+  int bottom_panel_terminal_tab_y_for_test() const
+  {
+    return bottom_panel_terminal_tab_y();
+  }
+  int bottom_panel_content_y_for_test() const
+  {
+    return bottom_panel_content_y();
+  }
+  int bottom_panel_content_h_for_test() const
+  {
+    return bottom_panel_content_h();
   }
   void show_problems_panel_for_test()
   {

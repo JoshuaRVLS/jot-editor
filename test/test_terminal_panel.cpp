@@ -146,7 +146,7 @@ TEST_CASE("Terminal mouse selection: click starts, drag extends, release copies"
   Editor &e = probe_editor();
   e.set_terminal_state_for_test(true, false, 10);
   e.add_terminal_for_test();
-  const int content_y = e.terminal_panel_y_for_test() + 2;
+  const int content_y = e.bottom_panel_content_y_for_test();
 
   // A click in the content area anchors the selection there and starts the
   // drag (col = x - 1: the content starts at screen column 1).
@@ -181,7 +181,7 @@ TEST_CASE("Terminal selection clears when the panel closes", "[jot]")
   Editor &e = probe_editor();
   e.set_terminal_state_for_test(true, false, 10);
   e.add_terminal_for_test();
-  const int content_y = e.terminal_panel_y_for_test() + 2;
+  const int content_y = e.bottom_panel_content_y_for_test();
 
   e.terminal_mouse_for_test(5, content_y, true, false, false);
   REQUIRE(e.terminal_sel_active_for_test());
@@ -198,7 +198,7 @@ TEST_CASE("Terminal clicks on the tab strip never start a selection", "[jot]")
   Editor &e = probe_editor();
   e.set_terminal_state_for_test(true, false, 10);
   e.add_terminal_for_test();
-  const int tab_y = e.terminal_panel_y_for_test() + 1;
+  const int tab_y = e.bottom_panel_terminal_tab_y_for_test();
 
   // The first tab (" term 1 " starting at x=1) activates the terminal; it
   // must not anchor a selection in the content area.
