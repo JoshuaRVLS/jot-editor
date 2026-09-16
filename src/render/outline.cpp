@@ -160,6 +160,7 @@ void Editor::outline_jump_selected()
   clear_selection();
   ensure_cursor_visible();
   needs_redraw = true;
+  record_jump();
   set_message(get_filename(buf.filepath) + ":" + std::to_string(buf.cursor.y + 1) + "  "
               + symbol.kind + "  " + symbol.name);
 }

@@ -55,7 +55,7 @@ private:
   using ContextMenuSurface = ::ContextMenuSurface;
   using ContextMenuAction = ::ContextMenuAction;
   using ContextMenuItem = ::ContextMenuItem;
-  using LSPJumpLocation = ::LSPJumpLocation;
+  using JumpLocation = ::JumpLocation;
   using ClosedBufferSnapshot = ::ClosedBufferSnapshot;
   using HomeMenuEntry = ::HomeMenuEntry;
   using SidebarView = ::SidebarView;
@@ -72,6 +72,10 @@ private:
   static constexpr QuickPickKind QUICK_PICK_SYMBOLS = ::QUICK_PICK_SYMBOLS;
   static constexpr QuickPickKind QUICK_PICK_PLUGIN = ::QUICK_PICK_PLUGIN;
   static constexpr QuickPickKind QUICK_PICK_FONT = ::QUICK_PICK_FONT;
+  static constexpr QuickPickKind QUICK_PICK_JUMPLIST = ::QUICK_PICK_JUMPLIST;
+  static constexpr QuickPickKind QUICK_PICK_WORKSPACE_SYMBOLS = ::QUICK_PICK_WORKSPACE_SYMBOLS;
+  static constexpr QuickPickKind QUICK_PICK_WORKSPACE_DIAGNOSTICS =
+      ::QUICK_PICK_WORKSPACE_DIAGNOSTICS;
 
   static constexpr MenuBarAction MENU_ACTION_NONE = ::MENU_ACTION_NONE;
   static constexpr MenuBarAction MENU_ACTION_COMMAND = ::MENU_ACTION_COMMAND;
@@ -402,8 +406,17 @@ private:
   void handle_lsp_signature_result(const LSPSignatureHelpResult &signature_help);
   void handle_lsp_definition_result(const LSPDefinitionResult &definition);
   bool apply_pending_lsp_definition_jump();
-  bool apply_pending_lsp_back_jump();
-  void return_from_lsp_definition();
+  // Applies a jumplist restore once the target file is open.
+  bool apply_pending_jump();
+  // Jumplist. record_jump() goes at the end of any navigation that moves the
+  // cursor somewhere else (a picker, a definition, a search hit, another file);
+  // back/forward then walk those places.
+  JumpLocation capture_jump_location();
+  void record_jump();
+  bool jump_to(const JumpLocation &loc);
+  void jump_back();
+  void jump_forward();
+  void show_jumplist_picker();
   void hide_lsp_completion();
   bool refresh_lsp_completion_filter();
   void update_lsp_completion_ghost();
@@ -1160,6 +1173,51 @@ public:
     buf.cursor = {col, line};
     buf.preferred_x = col;
     ensure_cursor_visible();
+  }
+  // Jumplist: drive the real commands and read the history back. The probe
+  // editor is shared between cases, so tests reset the history first.
+  void reset_jumplist_for_test()
+  {
+    jump_history.clear();
+    jump_index = -1;
+    jump_pending = false;
+    jump_pending_location = {};
+  }
+  void record_jump_for_test()
+  {
+    record_jump();
+  }
+  void jump_back_for_test()
+  {
+    jump_back();
+  }
+  void jump_forward_for_test()
+  {
+    jump_forward();
+  }
+  int jump_count_for_test() const
+  {
+    return (int)jump_history.size();
+  }
+  int jump_position_for_test() const
+  {
+    return jump_index;
+  }
+  std::string jump_path_for_test(int index) const
+  {
+    if (index < 0 || index >= (int)jump_history.size())
+    {
+      return {};
+    }
+    return jump_history[(size_t)index].filepath;
+  }
+  int jump_line_for_test(int index) const
+  {
+    if (index < 0 || index >= (int)jump_history.size())
+    {
+      return -1;
+    }
+    return jump_history[(size_t)index].cursor.y;
   }
   // The hosting terminal's size. Meaningless under --gui (it keeps the
   // constructor default because the terminal is never initialised there) --

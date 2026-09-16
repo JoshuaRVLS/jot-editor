@@ -373,11 +373,25 @@ struct EditorState
     std::vector<LSPInlayHint> hints;
   };
   std::map<std::string, LspInlayHintCache> lsp_inlay_hint_caches;
-  std::vector<LSPJumpLocation> lsp_jump_stack;
+  // Go-to-definition arms its landing spot and applies it inside open_file, the
+  // same way a jumplist restore does.
   bool lsp_definition_jump_pending;
   LSPLocation lsp_definition_pending_location;
-  bool lsp_back_jump_pending;
-  LSPJumpLocation lsp_back_pending_location;
+  // Navigation history. Every jump records where it landed, so back/forward
+  // walk the places the cursor has been rather than one LSP-only stack: the
+  // history has a cursor of its own (`jump_index`), and a new jump drops
+  // whatever was ahead of it, the way a new branch replaces a redo tail.
+  std::vector<JumpLocation> jump_history;
+  int jump_index = -1;
+  // Set while a restore is in flight: restoring moves the cursor too, and that
+  // must not be recorded as a new jump.
+  bool jump_restoring = false;
+  // A location waiting to be restored. The cursor can only be placed once the
+  // file is open, and open_file can finish asynchronously, so the jump is armed
+  // here and applied from open_file (and again by its caller, which is
+  // idempotent -- the flag is cleared on apply).
+  bool jump_pending = false;
+  JumpLocation jump_pending_location;
 
   Popup popup;
 

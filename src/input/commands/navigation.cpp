@@ -38,6 +38,7 @@ void Editor::accept_telescope_selection()
   else
   {
     open_file(path);
+    record_jump();
   }
   telescope.close();
   needs_redraw = true;

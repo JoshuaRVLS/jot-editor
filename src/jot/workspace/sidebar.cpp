@@ -563,6 +563,7 @@ void Editor::handle_sidebar_input(int ch)
       {
         load_file(node->path);
         focus_state = FOCUS_EDITOR;
+        record_jump();
         needs_redraw = true;
       }
     }

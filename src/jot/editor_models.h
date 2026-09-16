@@ -41,7 +41,10 @@ enum QuickPickKind
   QUICK_PICK_REFERENCES,
   QUICK_PICK_CODE_ACTIONS,
   QUICK_PICK_PLUGIN,
-  QUICK_PICK_FONT
+  QUICK_PICK_FONT,
+  QUICK_PICK_JUMPLIST,
+  QUICK_PICK_WORKSPACE_SYMBOLS,
+  QUICK_PICK_WORKSPACE_DIAGNOSTICS
 };
 
 struct QuickPickItem
@@ -306,7 +309,10 @@ struct ContextMenuItem
   bool enabled = true;
 };
 
-struct LSPJumpLocation
+// One place the cursor has been: what the jumplist stores and restores. The
+// scroll fields are what make Ctrl+O feel like "back" rather than "reposition":
+// the view you left comes back with the cursor.
+struct JumpLocation
 {
   std::string filepath;
   Cursor cursor;

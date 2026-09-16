@@ -95,6 +95,7 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
     buf.cursor.x = std::clamp(col_1based - 1, 0, line_len);
     clear_selection();
     ensure_cursor_visible();
+    record_jump();
     set_message("Jumped to line " + std::to_string(buf.cursor.y + 1) + ", col "
                 + std::to_string(buf.cursor.x + 1));
   };
@@ -127,9 +128,18 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     request_lsp_definition();
   }
-  else if (lcmd == "lspback")
+  else if (lcmd == "jumpback" || lcmd == "lspback")
   {
-    return_from_lsp_definition();
+    // lspback predates the general jumplist; it is the same walk now.
+    jump_back();
+  }
+  else if (lcmd == "jumpforward")
+  {
+    jump_forward();
+  }
+  else if (lcmd == "jumplist" || lcmd == "jumps")
+  {
+    show_jumplist_picker();
   }
   else if (lcmd == "lsprename" || lcmd == "lspren")
   {

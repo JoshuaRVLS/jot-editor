@@ -371,11 +371,12 @@ void Editor::initialize_state_defaults()
   lsp_signature_open_paren_col = 0;
   lsp_signature_filepath.clear();
   lsp_signature_result = {};
-  lsp_jump_stack.clear();
   lsp_definition_jump_pending = false;
   lsp_definition_pending_location = {};
-  lsp_back_jump_pending = false;
-  lsp_back_pending_location = {};
+  jump_history.clear();
+  jump_index = -1;
+  jump_pending = false;
+  jump_pending_location = {};
 
   // Easter egg
   easter_egg_timer = 0;

@@ -244,6 +244,7 @@ void Editor::accept_quick_pick()
       clear_selection();
       ensure_cursor_visible();
       set_message(get_filename(buf.filepath) + ":" + std::to_string(buf.cursor.y + 1));
+      record_jump();
     }
   }
   needs_redraw = true;

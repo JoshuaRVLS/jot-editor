@@ -537,23 +537,15 @@ void Editor::handle_lsp_definition_result(const LSPDefinitionResult &definition)
     return;
   }
 
-  LSPJumpLocation origin;
-  origin.filepath = buf.filepath;
-  origin.cursor = buf.cursor;
-  origin.scroll_offset = buf.scroll_offset;
-  origin.scroll_x = buf.scroll_x;
-  origin.preview = buf.is_preview;
-  lsp_jump_stack.push_back(origin);
-  if (lsp_jump_stack.size() > 50)
-  {
-    lsp_jump_stack.erase(lsp_jump_stack.begin());
-  }
-
   lsp_definition_pending_location = definition.locations.front();
   lsp_definition_jump_pending = true;
   const bool same_file = lsp_internal::same_path(buf.filepath, lsp_definition_pending_location.filepath);
   open_file(lsp_definition_pending_location.filepath, !same_file);
-  apply_pending_lsp_definition_jump();
+  if (apply_pending_lsp_definition_jump())
+  {
+    // The definition is a jump like any other: Ctrl+O comes back here.
+    record_jump();
+  }
 }
 
 bool Editor::apply_pending_lsp_definition_jump()
@@ -583,46 +575,32 @@ bool Editor::apply_pending_lsp_definition_jump()
   return true;
 }
 
-bool Editor::apply_pending_lsp_back_jump()
+// Places the cursor for a jumplist restore. Silent about the outcome: the
+// caller knows whether it is going back or forward and says so.
+bool Editor::apply_pending_jump()
 {
-  if (!lsp_back_jump_pending || buffers.empty() || current_buffer < 0
+  if (!jump_pending || buffers.empty() || current_buffer < 0
       || current_buffer >= (int)buffers.size())
   {
     return false;
   }
 
   auto &buf = get_buffer();
-  if (!lsp_internal::same_path(buf.filepath, lsp_back_pending_location.filepath))
+  if (!lsp_internal::same_path(buf.filepath, jump_pending_location.filepath))
   {
     return false;
   }
 
   buf.cursor.y =
-      std::clamp(lsp_back_pending_location.cursor.y, 0, std::max(0, (int)buf.line_count() - 1));
+      std::clamp(jump_pending_location.cursor.y, 0, std::max(0, (int)buf.line_count() - 1));
   buf.cursor.x =
-      std::clamp(lsp_back_pending_location.cursor.x, 0, (int)buf.line(buf.cursor.y).size());
+      std::clamp(jump_pending_location.cursor.x, 0, (int)buf.line(buf.cursor.y).size());
   buf.preferred_x = buf.cursor.x;
-  buf.scroll_offset = std::max(0, lsp_back_pending_location.scroll_offset);
-  buf.scroll_x = std::max(0, lsp_back_pending_location.scroll_x);
+  buf.scroll_offset = std::max(0, jump_pending_location.scroll_offset);
+  buf.scroll_x = std::max(0, jump_pending_location.scroll_x);
   clear_selection();
   ensure_cursor_visible();
-  lsp_back_jump_pending = false;
-  set_message("Returned: " + get_filename(buf.filepath) + ":" + std::to_string(buf.cursor.y + 1));
+  jump_pending = false;
   needs_redraw = true;
   return true;
-}
-
-void Editor::return_from_lsp_definition()
-{
-  if (lsp_jump_stack.empty())
-  {
-    set_message("No LSP jump to return to");
-    return;
-  }
-
-  lsp_back_pending_location = lsp_jump_stack.back();
-  lsp_jump_stack.pop_back();
-  lsp_back_jump_pending = true;
-  open_file(lsp_back_pending_location.filepath, lsp_back_pending_location.preview);
-  apply_pending_lsp_back_jump();
 }

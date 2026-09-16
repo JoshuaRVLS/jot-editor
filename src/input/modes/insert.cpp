@@ -135,6 +135,17 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt
   {
     switch (ch)
     {
+    case 'o':
+    case 'O':
+      // Ctrl+O / Ctrl+I walk the jumplist. Ctrl+I is only distinguishable from
+      // Tab where the terminal reports modifiers distinctly (kitty protocol);
+      // 0x09 never arrives with the ctrl flag, so Tab keeps inserting.
+      jump_back();
+      return;
+    case 'i':
+    case 'I':
+      jump_forward();
+      return;
     case 'q':
     case 'Q':
     {

@@ -339,6 +339,7 @@ void Editor::find_next()
   buf.cursor.x = search_results[search_result_index].col;
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
+  record_jump();
 
   const bool wrapped = prev_index >= 0 && search_result_index <= prev_index;
   set_message(std::to_string(search_result_index + 1) + "/" + std::to_string(search_results.size())
@@ -369,6 +370,7 @@ void Editor::find_prev()
   buf.cursor.x = search_results[search_result_index].col;
   clamp_cursor(get_pane().buffer_id);
   ensure_cursor_visible();
+  record_jump();
 
   const bool wrapped = prev_index >= 0 && search_result_index >= prev_index;
   set_message(std::to_string(search_result_index + 1) + "/" + std::to_string(search_results.size())

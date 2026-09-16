@@ -176,7 +176,7 @@ void Editor::execute_menu_bar_item(int menu_index, int item_index)
     request_lsp_definition();
     break;
   case MENU_ACTION_LSP_BACK:
-    return_from_lsp_definition();
+    jump_back();
     break;
   case MENU_ACTION_HELP:
     execute_command(":help");

@@ -239,6 +239,7 @@ void LuaAPI::jump_mark(lua_State *L)
   buf.preferred_x = buf.cursor.x;
   editor->clear_selection();
   editor->ensure_cursor_visible();
+  editor->record_jump();
   editor->needs_redraw = true;
   lua_pushboolean(L, 1);
 }

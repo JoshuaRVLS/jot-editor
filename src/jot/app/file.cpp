@@ -539,7 +539,7 @@ void Editor::finish_open_file(FileBuffer fb, const std::string &path_to_open, bo
   }
   refresh_git_status(true);
   apply_pending_lsp_definition_jump();
-  apply_pending_lsp_back_jump();
+  apply_pending_jump();
   needs_redraw = true;
 }
 void Editor::create_new_buffer()
