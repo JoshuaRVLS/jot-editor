@@ -50,6 +50,7 @@ void Editor::show_command_help(const std::string &topic_text)
       "  Ctrl+O           Jump back (jumplist)",
       "  Ctrl+I           Jump forward (jumplist; needs a terminal that reports Ctrl+I)",
       "  :jumplist        Pick a place from the jumplist",
+      "  Ctrl+Shift+R     Rename the symbol under the cursor",
       "  Ctrl+Shift+F     Replace in selection, or search workspace",
       "  Ctrl+Shift+M     Diagnostics picker",
       "  Ctrl+Shift+O     Document symbol picker",

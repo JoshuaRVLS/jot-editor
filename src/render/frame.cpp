@@ -229,6 +229,10 @@ void Editor::render()
       {
         place_save_prompt_cursor();
       }
+      else if (show_rename_prompt)
+      {
+        place_rename_prompt_cursor();
+      }
       else
       {
         ui->hide_cursor();
@@ -379,6 +383,10 @@ void Editor::render()
     {
       render_save_prompt();
     }
+    else if (show_rename_prompt)
+    {
+      render_rename_prompt();
+    }
     else if (show_quit_prompt)
     {
       render_quit_prompt();
@@ -467,6 +475,10 @@ void Editor::render()
       else if (show_save_prompt)
       {
         place_save_prompt_cursor();
+      }
+      else if (show_rename_prompt)
+      {
+        place_rename_prompt_cursor();
       }
       else
       {

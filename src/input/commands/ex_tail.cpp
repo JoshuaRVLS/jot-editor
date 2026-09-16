@@ -143,7 +143,17 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   }
   else if (lcmd == "lsprename" || lcmd == "lspren")
   {
-    lsp_rename_symbol(trim_copy(arg));
+    // No argument: prompt for the new name, pre-filled with the identifier under
+    // the cursor. With one, rename straight away. (:rename is a different
+    // command -- it renames the file on disk -- so it is not aliased here.)
+    if (trim_copy(arg).empty())
+    {
+      open_rename_prompt();
+    }
+    else
+    {
+      lsp_rename_symbol(trim_copy(arg));
+    }
   }
   else if (lcmd == "lsprefs" || lcmd == "lspreferences" || lcmd == "refs")
   {

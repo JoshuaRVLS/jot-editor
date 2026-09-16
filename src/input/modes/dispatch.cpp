@@ -366,6 +366,13 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     handle_save_prompt(ch);
     return;
   }
+  // ...and so does the rename prompt, for the same reason: its text field would
+  // otherwise be read as editor commands.
+  if (show_rename_prompt)
+  {
+    handle_rename_prompt(ch);
+    return;
+  }
 
   // Global sidebar toggles should work regardless of current focus:
   // Ctrl+B opens the left explorer, Ctrl+Shift+B the right dock.

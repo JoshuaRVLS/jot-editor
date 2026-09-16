@@ -62,6 +62,21 @@ local function save_prompt(p)
   return present_panel("save_prompt", p, rows, { title = " Save As", title_fg = fg })
 end
 
+local function rename_prompt(p)
+  if not p then
+    close("rename_prompt")
+    return true
+  end
+  local colors = p.colors or {}
+  local fg = colors.fg or 7
+  local bg = colors.panel_bg or colors.bg or 0
+  local inner_w = math.max(1, p.w - 2)
+  local rows = {
+    { text = pad(truncate(" New name: " .. (p.input or ""), inner_w), inner_w), fg = fg, bg = bg },
+  }
+  return present_panel("rename_prompt", p, rows, { title = " Rename Symbol", title_fg = fg })
+end
+
 local function quit_prompt(p)
   if not p then
     close("quit_prompt")
@@ -82,4 +97,5 @@ return {
   popup = popup,
   save_prompt = save_prompt,
   quit_prompt = quit_prompt,
+  rename_prompt = rename_prompt,
 }

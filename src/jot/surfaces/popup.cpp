@@ -762,6 +762,14 @@ bool Editor::close_active_floating_ui()
     return true;
   }
 
+  if (show_rename_prompt)
+  {
+    show_rename_prompt = false;
+    rename_prompt_input.clear();
+    needs_redraw = true;
+    return true;
+  }
+
   if (show_quit_prompt)
   {
     show_quit_prompt = false;

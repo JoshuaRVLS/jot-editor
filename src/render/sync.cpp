@@ -13,6 +13,7 @@ void Editor::sync_lua_ui_surfaces()
     lua_ui_prev_quick_pick = false;
     lua_ui_prev_popup = false;
     lua_ui_prev_save_prompt = false;
+    lua_ui_prev_rename_prompt = false;
     lua_ui_prev_quit_prompt = false;
     lua_ui_prev_tree_sitter_status = false;
     lua_ui_prev_telescope = false;
@@ -39,6 +40,7 @@ void Editor::sync_lua_ui_surfaces()
   sync(show_quick_pick, lua_ui_prev_quick_pick, "quick_pick");
   sync(popup.visible && popup.presentation == POPUP_MODAL, lua_ui_prev_popup, "popup");
   sync(show_save_prompt, lua_ui_prev_save_prompt, "save_prompt");
+  sync(show_rename_prompt, lua_ui_prev_rename_prompt, "rename_prompt");
   sync(show_quit_prompt, lua_ui_prev_quit_prompt, "quit_prompt");
   sync(show_tree_sitter_status_modal, lua_ui_prev_tree_sitter_status, "tree_sitter_status");
   sync(show_lsp_status_modal, lua_ui_prev_lsp_status, "lsp_status");

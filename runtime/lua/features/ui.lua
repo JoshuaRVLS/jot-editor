@@ -42,6 +42,7 @@ jot.ui.handler("settings", settings.settings)
 jot.ui.handler("popup", popup.popup)
 jot.ui.handler("save_prompt", popup.save_prompt)
 jot.ui.handler("quit_prompt", popup.quit_prompt)
+jot.ui.handler("rename_prompt", popup.rename_prompt)
 jot.ui.handler("tree_sitter_status", tree_sitter.tree_sitter_status)
 jot.ui.handler("lsp_status", lsp.lsp_status)
 jot.ui.handler("lsp_manager", lsp.lsp_manager)
@@ -77,6 +78,7 @@ return {
   popup = popup.popup,
   save_prompt = popup.save_prompt,
   quit_prompt = popup.quit_prompt,
+  rename_prompt = popup.rename_prompt,
   tree_sitter_status = tree_sitter.tree_sitter_status,
   lsp_status = lsp.lsp_status,
   lsp_manager = lsp.lsp_manager,

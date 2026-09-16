@@ -1,7 +1,43 @@
+#include "editor.h"
 #include "tools/lsp/client.h"
 #include "tools/lsp/internal.h"
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
+#include <string>
+#include <fstream>
+#include <cstdlib>
+
+namespace
+{
+  // A probe editor for the prompt cases: real Editor, isolated config, temp file.
+  Editor &probe_editor()
+  {
+    static bool seeded = false;
+    if (!seeded)
+    {
+      char cfgdir[] = "/tmp/jot_lsp_prompt_XXXXXX";
+      REQUIRE(mkdtemp(cfgdir) != nullptr);
+      setenv("JOT_CONFIG_HOME", cfgdir, 1);
+      setenv("JOT_CACHE_HOME", cfgdir, 1);
+      seeded = true;
+    }
+    static Editor e;
+    return e;
+  }
+
+  std::string write_temp_source(Editor &e, const std::string &text)
+  {
+    static int counter = 0;
+    const std::string path =
+        "/tmp/jot_rename_prompt_" + std::to_string(::getpid()) + "_" + std::to_string(counter++)
+        + ".cpp";
+    std::ofstream out(path);
+    out << text;
+    out.close();
+    e.load_file(path);
+    return path;
+  }
+} // namespace
 
 TEST_CASE("LSP file URI encodes reserved path characters", "[lsp]")
 {
@@ -266,4 +302,72 @@ TEST_CASE("LSP initialize params are one valid JSON object", "[lsp]")
   REQUIRE(progress->type == lsp_detail::JsonValue::Bool);
   REQUIRE(progress->bool_value);
   REQUIRE(lsp_detail::json_object_get(params, "window") == nullptr);
+}
+
+TEST_CASE("Rename prompt seeds from the cursor, applies on Enter, cancels on Esc", "[lsp]")
+{
+  // The prompt is the interactive half of LSP rename: :lsprename with no name
+  // opens it seeded with the identifier under the cursor, so the common case is
+  // one edit and Enter. Esc must leave the buffer alone.
+  Editor &e = probe_editor();
+  write_temp_source(e, "int counter_value = 1;\n");
+
+  // Cursor inside "counter_value": the prompt opens holding that word.
+  e.scroll_cursor_to_for_test(0, 6);
+  e.open_rename_prompt_for_test();
+  REQUIRE(e.rename_prompt_visible_for_test());
+  REQUIRE(e.rename_prompt_text_for_test() == "counter_value");
+
+  // Editing the field does not touch the buffer.
+  e.rename_prompt_input_for_test('x');
+  REQUIRE(e.rename_prompt_text_for_test() == "counter_valuex");
+  REQUIRE(e.buffer_for_test().line(0) == "int counter_value = 1;");
+
+  e.rename_prompt_input_for_test(127); // Backspace
+  REQUIRE(e.rename_prompt_text_for_test() == "counter_value");
+
+  // Esc closes it and changes nothing.
+  e.rename_prompt_input_for_test(27);
+  REQUIRE_FALSE(e.rename_prompt_visible_for_test());
+  REQUIRE(e.buffer_for_test().line(0) == "int counter_value = 1;");
+}
+
+TEST_CASE("Rename prompt Enter without a name does not rename", "[lsp]")
+{
+  Editor &e = probe_editor();
+  write_temp_source(e, "int other_name = 2;\n");
+  e.scroll_cursor_to_for_test(0, 5);
+  e.open_rename_prompt_for_test();
+  REQUIRE(e.rename_prompt_text_for_test() == "other_name");
+
+  // Clear the field, then Enter: an empty new name is not a rename, and the
+  // prompt closes either way.
+  for (size_t i = 0; i < std::string("other_name").size(); i++)
+  {
+    e.rename_prompt_input_for_test(127);
+  }
+  REQUIRE(e.rename_prompt_text_for_test().empty());
+  e.rename_prompt_input_for_test('\n');
+  REQUIRE_FALSE(e.rename_prompt_visible_for_test());
+  REQUIRE(e.buffer_for_test().line(0) == "int other_name = 2;");
+}
+
+TEST_CASE(":lsprename with no name opens the prompt, with a name renames directly", "[lsp]")
+{
+  // The command existed first and must keep working with an argument; without
+  // one it now prompts instead of reporting usage.
+  Editor &e = probe_editor();
+  write_temp_source(e, "int some_identifier = 3;\n");
+  e.scroll_cursor_to_for_test(0, 5);
+
+  e.run_ex_for_test(":lsprename");
+  REQUIRE(e.rename_prompt_visible_for_test());
+  REQUIRE(e.rename_prompt_text_for_test() == "some_identifier");
+  e.rename_prompt_input_for_test(27); // Esc: leave it closed for the next check
+  REQUIRE_FALSE(e.rename_prompt_visible_for_test());
+
+  // With a name it goes straight to the rename request (no prompt): there is no
+  // server in this test, so the observable effect is that no prompt opened.
+  e.run_ex_for_test(":lsprename renamed_by_command");
+  REQUIRE_FALSE(e.rename_prompt_visible_for_test());
 }

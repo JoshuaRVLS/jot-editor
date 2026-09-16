@@ -150,7 +150,7 @@ namespace
         {"lspback", "LSP", "Return from LSP definition jump", 66},
         {"jumpforward", "Navigation", "Jump forward in the jumplist", 71},
         {"jumplist", "Navigation", "Open the jumplist picker", 70},
-        {"lsprename", "LSP", "Rename symbol under cursor (LSP)", 74},
+        {"lsprename", "LSP", "Rename symbol under cursor (prompts when no name)", 74},
         {"lspren", "LSP", "Rename symbol under cursor (LSP)", 70},
         {"lsprefs", "LSP", "Find references to symbol under cursor", 74},
         {"lspreferences", "LSP", "Find references to symbol under cursor", 70},

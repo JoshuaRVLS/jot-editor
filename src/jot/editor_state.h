@@ -93,6 +93,10 @@ struct EditorState
   bool show_save_prompt;
   std::string save_prompt_input;
   bool show_quit_prompt;
+  // Interactive LSP rename: the prompt is seeded with the identifier under the
+  // cursor and commits through lsp_rename_symbol.
+  bool show_rename_prompt;
+  std::string rename_prompt_input;
 
   // Which-key style keybind helper. It appears automatically when the user
   // presses a chord that is a prefix of longer plugin keymap sequences (e.g.
@@ -109,6 +113,7 @@ struct EditorState
   bool lua_ui_prev_quick_pick = false;
   bool lua_ui_prev_popup = false;
   bool lua_ui_prev_save_prompt = false;
+  bool lua_ui_prev_rename_prompt = false;
   bool lua_ui_prev_quit_prompt = false;
   bool lua_ui_prev_tree_sitter_status = false;
   bool lua_ui_prev_lsp_status = false;

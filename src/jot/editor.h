@@ -224,6 +224,13 @@ private:
   void render_context_menu();
   void render_tree_sitter_status_modal();
   void render_save_prompt();
+  // Interactive LSP rename: opened by :lsprename with no argument or Ctrl+Shift+R.
+  void open_rename_prompt();
+  void handle_rename_prompt(int ch);
+  // The identifier under the cursor, used to seed the prompt.
+  std::string identifier_under_cursor();
+  void render_rename_prompt();
+  void place_rename_prompt_cursor();
   void place_save_prompt_cursor();
   void render_quit_prompt();
   void render_popup();
@@ -1173,6 +1180,29 @@ public:
     buf.cursor = {col, line};
     buf.preferred_x = col;
     ensure_cursor_visible();
+  }
+  // Runs an ex command line the way the palette does, so command plumbing can
+  // be asserted without typing into a prompt.
+  void run_ex_for_test(const std::string &line)
+  {
+    execute_ex_command(line);
+  }
+  // Rename prompt: open it and drive its input handler.
+  void open_rename_prompt_for_test()
+  {
+    open_rename_prompt();
+  }
+  void rename_prompt_input_for_test(int ch)
+  {
+    handle_rename_prompt(ch);
+  }
+  bool rename_prompt_visible_for_test() const
+  {
+    return show_rename_prompt;
+  }
+  const std::string &rename_prompt_text_for_test() const
+  {
+    return rename_prompt_input;
   }
   // Jumplist: drive the real commands and read the history back. The probe
   // editor is shared between cases, so tests reset the history first.

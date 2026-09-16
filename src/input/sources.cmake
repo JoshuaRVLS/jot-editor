@@ -4,6 +4,7 @@ set(JOT_INPUT_SOURCES
   input/commands/help.cpp
   input/commands/navigation.cpp
   input/commands/save_prompt.cpp
+  input/commands/rename_prompt.cpp
   input/commands/utils.cpp
   input/commands/ex.cpp
   input/commands/ex_tail.cpp

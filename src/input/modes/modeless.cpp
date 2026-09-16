@@ -119,6 +119,12 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
     show_diagnostics_picker();
     return;
   }
+  if (is_ctrl && is_shift && (ch == 'r' || ch == 'R'))
+  {
+    // Rename the symbol under the cursor: helix's Space+r prompt.
+    open_rename_prompt();
+    return;
+  }
   // Ctrl+Tab / Ctrl+Shift+Tab: cycle pane-local tabs.
   if (is_ctrl && (ch == '\t' || ch == 9))
   {

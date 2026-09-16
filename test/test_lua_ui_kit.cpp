@@ -337,7 +337,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   const std::string path = std::string(JOT_LUA_SOURCE_DIR) + "/features/ui.lua";
   REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
-  REQUIRE(lua_istable(L, 1));  REQUIRE( g.handler_count == 19 );
+  REQUIRE(lua_istable(L, 1));  REQUIRE( g.handler_count == 20 );
   bool has_palette = false, has_quick_pick = false, has_popup = false;
   bool has_save = false, has_quit = false, has_ts = false;
   bool has_lsp = false, has_lsp_status = false, has_telescope = false;
@@ -594,19 +594,47 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);
 
+  // The rename prompt: same one-field shape, seeded with the identifier under
+  // the cursor by the native side and titled so it does not need an
+  // instruction line.
+  push_module_field(L, 1, "rename_prompt");
+  push_box(L, 30, 10, 60, 4);
+  lua_pushstring(L, "counter_value");
+  lua_setfield(L, -2, "input");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.lines_count == 1);
+  REQUIRE(g.last_title.find("Rename Symbol") != std::string::npos);
+  REQUIRE(g.last_footer.empty());
+  bool saw_name_input = false;
+  for (int i = 0; i < g.lines_count; i++)
+  {
+    if (g.lines[i].find("counter_value") != std::string::npos)
+    {
+      saw_name_input = true;
+    }
+  }
+  REQUIRE(saw_name_input);
+
+  push_module_field(L, 1, "rename_prompt");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+
   push_module_field(L, 1, "quit_prompt");
   push_box(L, 30, 10, 40, 3);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 6);
+  REQUIRE(g.open_count == 7);
   REQUIRE(g.lines_count == 1);
 
   push_module_field(L, 1, "quit_prompt");
   lua_pushnil(L);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);
-  REQUIRE(g.close_count == 6);
+  REQUIRE(g.close_count == 7);
 
   // --- tree-sitter status modal ---
   push_module_field(L, 1, "tree_sitter_status");
@@ -636,7 +664,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 7);
+  REQUIRE(g.open_count == 8);
   REQUIRE(g.last_title.find("Tree-sitter") != std::string::npos);
   REQUIRE(g.lines_count == 14); // h-2 padded rows
   // No key hints; this list fits without scrolling, so there is no counter
@@ -694,7 +722,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 8);
+  REQUIRE(g.open_count == 9);
   REQUIRE(g.last_title.find("LSP Manager") != std::string::npos);
   REQUIRE(g.last_footer == "1 servers");
   REQUIRE(g.lines_count == 10);
@@ -791,7 +819,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 9);
+  REQUIRE(g.open_count == 10);
   REQUIRE(g.lines_count == 16);     // h-2 body rows
   REQUIRE(g.set_cursor_count == 1); // query focus caret
   REQUIRE(g.last_cursor_y == 2);
@@ -1251,7 +1279,7 @@ TEST_CASE("Embedded Lua UI kit registers every handler from the binary copy")
   REQUIRE(luaL_loadbuffer(L, reinterpret_cast<const char *>(emb), emb_size, "embedded ui.lua")
           == LUA_OK);
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
-  REQUIRE(lua_istable(L, 1));  REQUIRE( g.handler_count == 19 );
+  REQUIRE(lua_istable(L, 1));  REQUIRE( g.handler_count == 20 );
 
   lua_close(L);
 }
