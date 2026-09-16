@@ -182,13 +182,27 @@ LuaAPI::plugin_keymap_children(const std::string &chord_path, const std::string 
   return out;
 }
 
-std::string LuaAPI::plugin_keymap_group_title(const std::string &chord, const std::string &m)
+std::string LuaAPI::plugin_keymap_group_title(const std::string &chord_path, const std::string &m)
 {
+  // The title of a group is the description registered on its bare prefix key:
+  // "Alt+D" at the top level, "Alt+D a" for a nested menu. Compared step by step
+  // so a nested prefix matches too -- matching single-chord keys only left every
+  // submenu untitled.
+  const std::vector<std::string> want = keymap_steps(chord_path);
+  if (want.empty())
+  {
+    return "";
+  }
   for (const auto &x : plugin_keymaps)
   {
     if (x.mode != "global" && x.mode != m)
       continue;
-    if (keymap_steps(x.key).size() == 1 && x.key == chord && !x.detail.empty())
+    if (x.detail.empty())
+      continue;
+    const std::vector<std::string> have = keymap_steps(x.key);
+    if (have.size() != want.size())
+      continue;
+    if (std::equal(have.begin(), have.end(), want.begin()))
       return x.detail;
   }
   return "";

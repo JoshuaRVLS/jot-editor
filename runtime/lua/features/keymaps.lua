@@ -44,7 +44,8 @@ jot.keymap.set("Ctrl+PageDown", function() jot.debugger.scroll_output(-6) end, "
 -- tree-sitter textobjects composable: "delete around function" is Alt+D a f
 -- rather than a chord per verb and object.
 --
--- A bare key with an empty action is a group title, and every child carries the
+-- A bare key with an empty action is a group title (which-key marks it with a
+-- marker of its own, so the label carries no ellipsis), and every child carries the
 -- description which-key prints, so a binding can be found without memorising it.
 -- Both properties are already part of jot.keymap.set; nothing here needs new
 -- input machinery.
@@ -68,7 +69,7 @@ local objects = {
 
 for _, op in ipairs(operators) do
   local base = op.key
-  jot.keymap.set(base, "", op.label .. " ...")
+  jot.keymap.set(base, "", op.label)
 
   -- Word and line need no inside/around: the selection IS the object.
   jot.keymap.set(base .. " w", ":" .. op.verb .. " word", op.label .. " word")
@@ -76,7 +77,7 @@ for _, op in ipairs(operators) do
 
   for _, qualifier in ipairs({ { "i", "inside" }, { "a", "around" } }) do
     local qkey, qword = qualifier[1], qualifier[2]
-    jot.keymap.set(base .. " " .. qkey, "", op.label .. " " .. qword .. " ...")
+    jot.keymap.set(base .. " " .. qkey, "", op.label .. " " .. qword)
     for _, object in ipairs(objects) do
       local okey, oname = object[1], object[2]
       jot.keymap.set(base .. " " .. qkey .. " " .. okey,
@@ -87,7 +88,7 @@ for _, op in ipairs(operators) do
 end
 
 -- Selection: expand, shape, collapse. The "visual" family.
-jot.keymap.set("Alt+V", "", "Selection ...")
+jot.keymap.set("Alt+V", "", "Selection")
 jot.keymap.set("Alt+V e", ":expand", "Expand to the enclosing syntax node")
 jot.keymap.set("Alt+V c", ":shrink", "Shrink one level in")
 jot.keymap.set("Alt+V k", ":keepprimary", "Keep only the primary selection")
@@ -96,7 +97,7 @@ jot.keymap.set("Alt+V b", ":addcaretbelow", "Add a cursor on the line below")
 jot.keymap.set("Alt+V a", ":addcaretabove", "Add a cursor on the line above")
 jot.keymap.set("Alt+V l", ":splitlines", "One cursor per line of the selection")
 jot.keymap.set("Alt+V m", ":selectoccurrences", "Every occurrence becomes a cursor")
-jot.keymap.set("Alt+V s", "", "Select an object ...")
+jot.keymap.set("Alt+V s", "", "Select an object")
 for _, object in ipairs(objects) do
   local okey, oname = object[1], object[2]
   jot.keymap.set("Alt+V s " .. okey, function()
@@ -111,8 +112,8 @@ local jumps = {
   { "c", ":nextclass", ":prevclass", "class" },
   { "d", ":diagnext", ":diagprev", "diagnostic" },
 }
-jot.keymap.set("Alt+]", "", "Next ...")
-jot.keymap.set("Alt+[", "", "Previous ...")
+jot.keymap.set("Alt+]", "", "Next")
+jot.keymap.set("Alt+[", "", "Previous")
 for _, jump in ipairs(jumps) do
   jot.keymap.set("Alt+] " .. jump[1], jump[2], "Next " .. jump[4])
   jot.keymap.set("Alt+[ " .. jump[1], jump[3], "Previous " .. jump[4])
