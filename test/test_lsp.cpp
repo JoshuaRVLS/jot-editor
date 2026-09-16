@@ -2,10 +2,10 @@
 #include "tools/lsp/client.h"
 #include "tools/lsp/internal.h"
 #include <catch2/catch_test_macros.hpp>
-#include <filesystem>
-#include <string>
-#include <fstream>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <string>
 
 namespace
 {
@@ -28,9 +28,8 @@ namespace
   std::string write_temp_source(Editor &e, const std::string &text)
   {
     static int counter = 0;
-    const std::string path =
-        "/tmp/jot_rename_prompt_" + std::to_string(::getpid()) + "_" + std::to_string(counter++)
-        + ".cpp";
+    const std::string path = "/tmp/jot_rename_prompt_" + std::to_string(::getpid()) + "_"
+                             + std::to_string(counter++) + ".cpp";
     std::ofstream out(path);
     out << text;
     out.close();
