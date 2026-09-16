@@ -158,7 +158,13 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
   }
   if (is_ctrl && (ch == 'j' || ch == 'J' || original_ch == 'j' || original_ch == 'J'))
   {
-    toggle_integrated_terminal();
+    toggle_bottom_panel();
+    return;
+  }
+  //   Ctrl+Shift+M  bottom panel, on its Problems view
+  if (is_ctrl && is_shift && (ch == 'm' || ch == 'M' || original_ch == 'm' || original_ch == 'M'))
+  {
+    show_problems_panel();
     return;
   }
 
@@ -166,6 +172,14 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
   if (show_integrated_terminal && active_terminal && active_terminal->is_focused())
   {
     handle_integrated_terminal_input(ch, is_ctrl, is_shift, is_alt);
+    return;
+  }
+
+  // The bottom panel owns its keys while it has focus, so the shell is never
+  // handed j/k/Enter and the buffer underneath never sees them either.
+  if (show_integrated_terminal && focus_state == FOCUS_BOTTOM_PANEL)
+  {
+    handle_bottom_panel_input(ch, is_ctrl, is_shift, is_alt);
     return;
   }
 

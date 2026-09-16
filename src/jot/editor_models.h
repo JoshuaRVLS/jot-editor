@@ -434,7 +434,17 @@ enum EditorFocus
 {
   FOCUS_EDITOR,
   FOCUS_SIDEBAR,
-  FOCUS_RIGHT_PANEL
+  FOCUS_RIGHT_PANEL,
+  FOCUS_BOTTOM_PANEL
+};
+
+// Views the bottom panel hosts. They share the panel's geometry and its view
+// tabs; only the body differs, so a dock that used to be terminal-only now
+// switches between the shell and the diagnostics list.
+enum BottomPanelView
+{
+  BOTTOM_PANEL_TERMINAL,
+  BOTTOM_PANEL_PROBLEMS
 };
 
 #endif

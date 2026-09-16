@@ -275,6 +275,14 @@ void Editor::handle_mouse_input(int x,
     return;
   }
 
+  // The panel's Problems view scrolls its own list; the handler declines when
+  // the panel shows the shell instead.
+  if ((is_scroll_up || is_scroll_down)
+      && handle_problems_scroll(x, y, is_scroll_up, is_scroll_down))
+  {
+    return;
+  }
+
   if ((is_scroll_up || is_scroll_down)
       && handle_integrated_terminal_scroll(x, y, is_scroll_up, is_scroll_down))
   {

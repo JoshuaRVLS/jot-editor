@@ -72,6 +72,7 @@ private:
   using FileTabSegment = ::FileTabSegment;
   using FileTabLayout = ::FileTabLayout;
   using EditorFocus = ::EditorFocus;
+  using BottomPanelView = ::BottomPanelView;
 
   static constexpr QuickPickKind QUICK_PICK_NONE = ::QUICK_PICK_NONE;
   static constexpr QuickPickKind QUICK_PICK_PROJECT_SEARCH = ::QUICK_PICK_PROJECT_SEARCH;
@@ -194,7 +195,14 @@ private:
   void render_telescope();
   void render_minimap(int x, int y, int w, int h, int buffer_id);
   void render_image_viewer();
+  // The bottom panel: one dock, two views (the shell and the diagnostics
+  // list). The tab strip and the frame are shared; the body switches.
   void render_integrated_terminal();
+  void render_problems_view(int x, int y, int w, int h);
+  // Width the panel's view tabs occupy, so the terminal's own tab strip
+  // starts after them and mouse hit-testing can share the arithmetic.
+  int bottom_panel_view_tabs_width() const;
+  static const char *bottom_panel_view_label(int view);
   void render_debugger_panel();
   void render_git_diff_panel();
   void render_git_panel();
@@ -841,6 +849,18 @@ private:
 
   void toggle_minimap();
   void toggle_integrated_terminal();
+  // Ctrl+J: show/hide the whole panel, whatever view it hosts.
+  void toggle_bottom_panel();
+  // Ctrl+Shift+M: reveal the panel on its Problems view.
+  void show_problems_panel();
+  // The Problems view's own input: the panel is a dock, so its keys are read
+  // here when it owns focus rather than being forwarded to a shell.
+  bool handle_bottom_panel_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
+  bool handle_bottom_panel_mouse(int x, int y, bool is_click);
+  bool handle_problems_scroll(int x, int y, bool is_scroll_up, bool is_scroll_down);
+  // Opens the file behind a Problems row at its location, through the same
+  // accept path the workspace-diagnostics picker uses.
+  void jump_to_problem(int index);
   void create_integrated_terminal();
   void create_integrated_terminal(const std::string &label, const std::string &cwd = "");
   // Terminal panel geometry. Zoomed, the terminal owns the whole pane area
@@ -1237,6 +1257,52 @@ public:
   std::vector<QuickPickItem> workspace_diagnostics_for_test() const
   {
     return workspace_diagnostic_quick_pick_items();
+  }
+  // --- bottom panel: view switching and the Problems list (test) ---
+  void set_bottom_panel_view_for_test(int view)
+  {
+    bottom_panel_view = (BottomPanelView)view;
+  }
+  int bottom_panel_view_for_test() const
+  {
+    return (int)bottom_panel_view;
+  }
+  int problems_selected_for_test() const
+  {
+    return problems_selected;
+  }
+  int problems_scroll_for_test() const
+  {
+    return problems_scroll;
+  }
+  bool bottom_panel_key_for_test(int ch, bool ctrl = false, bool shift = false, bool alt = false)
+  {
+    return handle_bottom_panel_input(ch, ctrl, shift, alt);
+  }
+  bool bottom_panel_mouse_for_test(int x, int y, bool click)
+  {
+    return handle_bottom_panel_mouse(x, y, click);
+  }
+  int bottom_panel_view_tabs_width_for_test() const
+  {
+    return bottom_panel_view_tabs_width();
+  }
+  void show_problems_panel_for_test()
+  {
+    show_problems_panel();
+  }
+  int panel_reserved_h_for_test() const
+  {
+    return integrated_terminal_reserved_h();
+  }
+  int focus_state_for_test() const
+  {
+    return (int)focus_state;
+  }
+  bool terminal_focused_for_test()
+  {
+    IntegratedTerminal *term = get_integrated_terminal();
+    return term != nullptr && term->is_focused();
   }
   // Selection manipulation: drive the real commands from a test.
   void keep_primary_selection_for_test()

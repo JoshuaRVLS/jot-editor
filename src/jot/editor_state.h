@@ -137,6 +137,11 @@ struct EditorState
   int minimap_width;
   bool show_integrated_terminal;
   int integrated_terminal_height;
+  // Which view the bottom panel shows, and the Problems view's list cursor.
+  // The panel is one dock: both views share its height and its tab strip.
+  BottomPanelView bottom_panel_view = BOTTOM_PANEL_TERMINAL;
+  int problems_selected = 0;
+  int problems_scroll = 0;
   // True while the terminal fills the whole pane area (like pane zoom);
   // panes stay laid out underneath but are covered and their clicks route
   // to the terminal until the zoom is toggled off.

@@ -720,6 +720,14 @@ void Editor::handle_mouse(void *event_ptr)
     }
   }
 
+  // The bottom panel owns its columns: the view tabs (either view) and the
+  // Problems list. It declines for the shell's own content.
+  if ((is_click || is_motion || is_click_release)
+      && handle_bottom_panel_mouse(event->x, event->y, is_click))
+  {
+    return;
+  }
+
   // Act on the press only: acting on the release too would re-dispatch the
   // same header click after a close rebases the surviving tab onto the same
   // cell, closing two terminals from one click.

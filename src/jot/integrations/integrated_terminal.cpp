@@ -137,7 +137,13 @@ void Editor::close_integrated_terminal(int index)
 
 int Editor::integrated_terminal_reserved_h() const
 {
-  if (!show_integrated_terminal || integrated_terminals.empty() || terminal_zoom_active)
+  if (!show_integrated_terminal || terminal_zoom_active)
+  {
+    return 0;
+  }
+  // The panel reserves its height for either view: the problems list is just
+  // as real as the shell and must not be laid over the panes.
+  if (bottom_panel_view == BOTTOM_PANEL_TERMINAL && integrated_terminals.empty())
   {
     return 0;
   }
@@ -505,7 +511,13 @@ bool Editor::handle_integrated_terminal_mouse(int x,
     {
       return true;
     }
+    // The panel's view tabs occupy the leading columns; the shell's own tabs
+    // start after them, inset by exactly what the renderer reserved.
     int tab_x = 1;
+    if (panel_w >= bottom_panel_view_tabs_width())
+    {
+      tab_x += bottom_panel_view_tabs_width();
+    }
     for (int i = 0; i < (int)integrated_terminals.size(); i++)
     {
       std::string base_label = integrated_terminals[i]->get_label().empty()
@@ -729,10 +741,29 @@ void Editor::place_integrated_terminal_cursor()
   ui->set_cursor(cursor_x, cursor_y);
 }
 
+const char *Editor::bottom_panel_view_label(int view)
+{
+  return view == BOTTOM_PANEL_PROBLEMS ? " Problems " : " Terminal ";
+}
+
+int Editor::bottom_panel_view_tabs_width() const
+{
+  // Both labels plus the one-cell gap before the terminal's own tab strip.
+  return (int)std::string(bottom_panel_view_label(BOTTOM_PANEL_TERMINAL)).size()
+         + (int)std::string(bottom_panel_view_label(BOTTOM_PANEL_PROBLEMS)).size() + 1;
+}
+
 void Editor::render_integrated_terminal()
 {
+  if (!show_integrated_terminal)
+  {
+    return;
+  }
+
   IntegratedTerminal *term = get_integrated_terminal();
-  if (!show_integrated_terminal || !term)
+  // The shell view needs a terminal; the problems list does not, which is what
+  // lets the panel stay useful before any shell exists.
+  if (bottom_panel_view == BOTTOM_PANEL_TERMINAL && !term)
   {
     return;
   }
@@ -754,6 +785,28 @@ void Editor::render_integrated_terminal()
 
   int tab_y = panel_y + 1;
   int tab_x = 1;
+  // View tabs first: which of the panel's views is showing. Drawing walks the
+  // same two labels the click handler hit-tests, so the offsets cannot drift.
+  if (panel_w >= bottom_panel_view_tabs_width())
+  {
+    for (int view = 0; view < 2; view++)
+    {
+      const std::string label = bottom_panel_view_label(view);
+      const bool active = ((int)bottom_panel_view == view);
+      const int fg = active ? theme.fg_terminal_tab_focused : theme.fg_terminal_tab_inactive;
+      const int bg = active ? theme.bg_terminal_tab_focused : theme.bg_terminal_tab_inactive;
+      ui->draw_text(tab_x, tab_y, label, fg, bg, active);
+      tab_x += (int)label.size();
+    }
+    tab_x += 1;
+  }
+
+  if (bottom_panel_view == BOTTOM_PANEL_PROBLEMS)
+  {
+    render_problems_view(0, panel_y, panel_w, panel_h);
+    return;
+  }
+
   for (int i = 0; i < (int)integrated_terminals.size(); i++)
   {
     std::string base_label = integrated_terminals[i]->get_label().empty()
@@ -913,6 +966,338 @@ void Editor::render_integrated_terminal()
       {
         ui->draw_text(1, start_y + i, line, term_fg, term_bg);
       }
+    }
+  }
+}
+
+void Editor::toggle_bottom_panel()
+{
+  show_home_menu = false;
+  if (show_integrated_terminal)
+  {
+    // Hide. The panel toggles even while the shell owns focus, which is what
+    // VS Code's workbench.action.togglePanel does with its skip-shell list.
+    show_integrated_terminal = false;
+    terminal_zoom_active = false;
+    if (bottom_panel_view == BOTTOM_PANEL_TERMINAL)
+    {
+      activate_integrated_terminal(current_integrated_terminal, false);
+    }
+    else if (focus_state == FOCUS_BOTTOM_PANEL)
+    {
+      focus_state = FOCUS_EDITOR;
+    }
+    update_pane_layout();
+    set_message("Panel hidden", false);
+    needs_redraw = true;
+    return;
+  }
+
+  if (bottom_panel_view == BOTTOM_PANEL_TERMINAL)
+  {
+    if (integrated_terminals.empty())
+    {
+      // Nothing to reveal yet; creating a terminal shows the panel too.
+      create_integrated_terminal();
+      return;
+    }
+    show_integrated_terminal = true;
+    activate_integrated_terminal(current_integrated_terminal, true);
+  }
+  else
+  {
+    show_integrated_terminal = true;
+    focus_state = FOCUS_BOTTOM_PANEL;
+  }
+  update_pane_layout();
+  set_message("Panel opened", false);
+  needs_redraw = true;
+}
+
+void Editor::show_problems_panel()
+{
+  bottom_panel_view = BOTTOM_PANEL_PROBLEMS;
+  show_integrated_terminal = true;
+  // The list takes focus, so the shell must stop swallowing keys.
+  activate_integrated_terminal(current_integrated_terminal, false);
+  focus_state = FOCUS_BOTTOM_PANEL;
+  problems_selected = 0;
+  problems_scroll = 0;
+  update_pane_layout();
+  needs_redraw = true;
+}
+
+bool Editor::handle_bottom_panel_input(int ch, bool is_ctrl, bool is_shift, bool is_alt)
+{
+  if (!show_integrated_terminal || bottom_panel_view != BOTTOM_PANEL_PROBLEMS)
+  {
+    return false;
+  }
+
+  const std::vector<QuickPickItem> items = workspace_diagnostic_quick_pick_items();
+  const int total = (int)items.size();
+  auto step = [&](int delta)
+  {
+    if (total <= 0)
+    {
+      return;
+    }
+    problems_selected = std::clamp(problems_selected + delta, 0, total - 1);
+    needs_redraw = true;
+  };
+
+  if (ch == 27)
+  {
+    focus_state = FOCUS_EDITOR;
+    set_message("Panel focus off", false);
+    needs_redraw = true;
+    return true;
+  }
+  // 1009 / 1008 are the decoded Down / Up arrow codes.
+  if (ch == 'j' || ch == 1009)
+  {
+    step(1);
+    return true;
+  }
+  if (ch == 'k' || ch == 1008)
+  {
+    step(-1);
+    return true;
+  }
+  if (ch == 'g')
+  {
+    problems_selected = 0;
+    problems_scroll = 0;
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 'G')
+  {
+    problems_selected = std::max(0, total - 1);
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 13 || ch == 10)
+  {
+    jump_to_problem(problems_selected);
+    return true;
+  }
+  if (!is_ctrl && !is_alt && ch == 'q')
+  {
+    show_integrated_terminal = false;
+    focus_state = FOCUS_EDITOR;
+    update_pane_layout();
+    needs_redraw = true;
+    return true;
+  }
+  // Anything else belongs to the list, not the buffer underneath it: focus is
+  // in the panel, so unhandled keys are swallowed rather than forwarded.
+  (void)is_shift;
+  (void)is_alt;
+  return true;
+}
+
+bool Editor::handle_bottom_panel_mouse(int x, int y, bool is_click)
+{
+  if (!show_integrated_terminal)
+  {
+    return false;
+  }
+
+  const int panel_y = integrated_terminal_panel_y();
+  const int panel_h = integrated_terminal_panel_h();
+
+  // The view tab strip belongs to the panel as a whole, not to the view that
+  // happens to be showing -- it is the only way back once the shell is active,
+  // and the shell's own tab strip is inset past it.
+  if (y == panel_y + 1)
+  {
+    int tab_x = 1;
+    for (int view = 0; view < 2; view++)
+    {
+      const int label_w = (int)std::string(bottom_panel_view_label(view)).size();
+      if (x >= tab_x && x < tab_x + label_w)
+      {
+        if ((int)bottom_panel_view != view)
+        {
+          bottom_panel_view = (BottomPanelView)view;
+          if (bottom_panel_view == BOTTOM_PANEL_PROBLEMS)
+          {
+            // The list takes focus; the shell must stop swallowing keys.
+            activate_integrated_terminal(current_integrated_terminal, false);
+            focus_state = FOCUS_BOTTOM_PANEL;
+          }
+          else
+          {
+            focus_state = FOCUS_EDITOR;
+            activate_integrated_terminal(current_integrated_terminal, true);
+          }
+          needs_redraw = true;
+        }
+        return true;
+      }
+      tab_x += label_w;
+    }
+    // Past the view tabs: the shell view hands the rest of the strip to its own
+    // tab handler, while the Problems view has nothing else up here.
+    return bottom_panel_view == BOTTOM_PANEL_PROBLEMS;
+  }
+
+  // Only the Problems view has rows to hit; the shell's content belongs to the
+  // terminal handler, which runs after this one declines.
+  if (bottom_panel_view != BOTTOM_PANEL_PROBLEMS)
+  {
+    return false;
+  }
+
+  if (!is_click)
+  {
+    return true;
+  }
+
+  const int content_y = panel_y + 2;
+  const int content_h = std::max(0, panel_h - 3);
+  if (y < content_y || y >= content_y + content_h)
+  {
+    return true;
+  }
+  const std::vector<QuickPickItem> items = workspace_diagnostic_quick_pick_items();
+  const int index = problems_scroll + (y - content_y);
+  if (index < 0 || index >= (int)items.size())
+  {
+    return true;
+  }
+  jump_to_problem(index);
+  return true;
+}
+
+bool Editor::handle_problems_scroll(int x, int y, bool is_scroll_up, bool is_scroll_down)
+{
+  if (!show_integrated_terminal || bottom_panel_view != BOTTOM_PANEL_PROBLEMS)
+  {
+    return false;
+  }
+  (void)x;
+  (void)y;
+  // The renderer clamps against the list length, so a free-running offset is
+  // safe here and keeps the scroll from needing the row count.
+  if (is_scroll_up)
+  {
+    problems_scroll = std::max(0, problems_scroll - 3);
+    needs_redraw = true;
+  }
+  if (is_scroll_down)
+  {
+    problems_scroll += 3;
+    needs_redraw = true;
+  }
+  return true;
+}
+
+void Editor::jump_to_problem(int index)
+{
+  std::vector<QuickPickItem> items = workspace_diagnostic_quick_pick_items();
+  if (index < 0 || index >= (int)items.size())
+  {
+    return;
+  }
+  // Reuse the picker's accept path so opening the file and placing the cursor
+  // stays in one place; the picker is opened only to be accepted immediately.
+  open_quick_pick(QUICK_PICK_WORKSPACE_DIAGNOSTICS, "Workspace Diagnostics", std::move(items));
+  quick_pick_selected = index;
+  accept_quick_pick();
+  focus_state = FOCUS_EDITOR;
+  needs_redraw = true;
+}
+
+void Editor::render_problems_view(int x, int y, int w, int h)
+{
+  const int content_x = x + 1;
+  const int content_w = std::max(0, w - 2);
+  const int content_y = y + 2;
+  const int content_h = std::max(0, h - 3);
+  if (content_w < 8 || content_h <= 0)
+  {
+    return;
+  }
+
+  const std::vector<QuickPickItem> items = workspace_diagnostic_quick_pick_items();
+  const int total = (int)items.size();
+  if (total == 0)
+  {
+    ui->draw_text(content_x, content_y, "No problems", theme.fg_comment, theme.bg_terminal);
+    return;
+  }
+
+  // Keep the cursor on a row that exists, and the list scrolled to it.
+  problems_selected = std::clamp(problems_selected, 0, total - 1);
+  if (problems_selected < problems_scroll)
+  {
+    problems_scroll = problems_selected;
+  }
+  if (problems_selected >= problems_scroll + content_h)
+  {
+    problems_scroll = problems_selected - content_h + 1;
+  }
+  problems_scroll = std::clamp(problems_scroll, 0, std::max(0, total - content_h));
+
+  for (int row = 0; row < content_h; row++)
+  {
+    const int index = problems_scroll + row;
+    if (index >= total)
+    {
+      break;
+    }
+    const QuickPickItem &item = items[(size_t)index];
+    const bool selected = index == problems_selected;
+    const int bg = selected ? theme.bg_selection : theme.bg_terminal;
+    int fg = theme.fg_default;
+    switch (item.severity)
+    {
+    case 1:
+      fg = theme.fg_diagnostic_error;
+      break;
+    case 2:
+      fg = theme.fg_diagnostic_warning;
+      break;
+    case 3:
+      fg = theme.fg_diagnostic_info;
+      break;
+    case 4:
+      fg = theme.fg_diagnostic_hint;
+      break;
+    default:
+      break;
+    }
+
+    // The picker's label carries a written severity ("Error: ...") that the
+    // colored dot already says, so the row leads with the message.
+    std::string message = item.label;
+    const size_t sep = message.find(": ");
+    if (sep != std::string::npos)
+    {
+      message = message.substr(sep + 2);
+    }
+    std::string location = item.detail;
+    const bool show_location = (int)location.size() + 5 < content_w;
+    const int text_w = std::max(0, content_w - 2 - (show_location ? (int)location.size() + 2 : 0));
+    if ((int)message.size() > text_w)
+    {
+      message = message.substr(0, (size_t)text_w);
+    }
+
+    const int row_y = content_y + row;
+    ui->draw_text(content_x, row_y, "●", fg, bg, selected);
+    ui->draw_text(content_x + 1, row_y, " ", fg, bg, selected);
+    ui->draw_text(content_x + 2,
+                  row_y,
+                  message + std::string(std::max(0, text_w - (int)message.size()), ' '),
+                  fg,
+                  bg,
+                  selected);
+    if (show_location)
+    {
+      ui->draw_text(content_x + 2 + text_w + 2, row_y, location, theme.fg_comment, bg, selected);
     }
   }
 }
