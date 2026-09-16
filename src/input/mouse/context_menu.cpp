@@ -102,28 +102,15 @@ bool Editor::open_context_menu_for_mouse(int x, int y)
     if (x < sidebar_w && y >= col.top && y < col.bottom)
     {
       focus_state = FOCUS_SIDEBAR;
-      if (!explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT)
+      if (git_panel_visible())
       {
-        std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
-        int sidebar_row = y - col.top - 1;
-        int row = sidebar_row + git_sidebar_scroll;
-        if (sidebar_row >= 0 && row >= 0 && row < (int)git_rows.size())
-        {
-          git_sidebar_selected = row;
-          context_menu_target_path = git_rows[(size_t)row].path;
-          context_menu_target_is_dir = false;
-        }
-        bool has_target = !context_menu_target_path.empty();
+        // The rows here belong to the git panel, which handles its own clicks;
+        // offer the repo-level actions rather than picking a file from the
+        // retired flat list.
         bool has_repo = has_git_repo();
         std::vector<ContextMenuItem> items = {
-            {"Open", CONTEXT_ACTION_SIDEBAR_OPEN, has_target},
-            {"Git Stage", CONTEXT_ACTION_GIT_STAGE, has_target && has_repo},
-            {"Git Unstage", CONTEXT_ACTION_GIT_UNSTAGE, has_target && has_repo},
-            {"Git Diff", CONTEXT_ACTION_GIT_DIFF, has_target && has_repo},
-            {"Git Diff Staged", CONTEXT_ACTION_GIT_DIFF_STAGED, has_target && has_repo},
             {"Git Stage All", CONTEXT_ACTION_GIT_STAGE_ALL, has_repo},
             {"Refresh", CONTEXT_ACTION_GIT_REFRESH, true},
-            {"Copy Path", CONTEXT_ACTION_SIDEBAR_COPY_PATH, has_target},
         };
         open_context_menu(x, y, CONTEXT_MENU_SIDEBAR, items);
       }
