@@ -327,6 +327,51 @@ void Editor::render_status_line()
     right_segments.push_back({lsp_text, lsp_fg, lsp_bg, false, true, 60});
   }
 
+  // LSP progress: what the servers are working on ("indexing", "3/12 files"),
+  // the way helix puts a spinner beside the file name. The frame comes from the
+  // clock rather than the render count, so it advances at a fixed rate however
+  // often the frame happens to be repainted.
+  if (!lsp_clients.empty())
+  {
+    std::vector<LSPProgress> running;
+    for (const auto &client : lsp_clients)
+    {
+      if (!client || !client->is_running())
+      {
+        continue;
+      }
+      for (auto &entry : client->active_progress())
+      {
+        running.push_back(std::move(entry));
+      }
+    }
+    if (!running.empty())
+    {
+      static const char *kSpinner[] = {"\u280b", "\u2819", "\u2839", "\u2838", "\u283c",
+                                       "\u2834", "\u2826", "\u2827", "\u2807", "\u280f"};
+      const long long now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now().time_since_epoch())
+                                .count();
+      std::string text = running.front().message.empty() ? running.front().title
+                                                         : running.front().message;
+      if (running.front().percentage >= 0)
+      {
+        text += " " + std::to_string(running.front().percentage) + "%";
+      }
+      if (running.size() > 1)
+      {
+        text += " +" + std::to_string(running.size() - 1);
+      }
+      right_segments.push_back({"  " + std::string(kSpinner[(size_t)((now / 100) % 10)]) + " "
+                                    + ui_truncate_cells(text, 24) + " ",
+                                theme.fg_status_info,
+                                theme.bg_status_info,
+                                false,
+                                true,
+                                65});
+    }
+  }
+
   // Discord presence chip: only while the feature is on and something is worth
   // reporting (connected, connecting, or an error from Discord such as a
   // missing asset key). :discord status carries the full detail.

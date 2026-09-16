@@ -108,10 +108,86 @@ void LSPClient::handle_stdout_data(const std::string &data)
       continue;
     }
 
+    // Server -> client progress ($/progress, LSP 3.15+). Servers report work
+    // under a token: begin sets the title, report updates the message and
+    // optional percentage, end clears it. Kept as state on the client rather
+    // than a queue -- the statusline asks what is running now, and a burst of
+    // reports must collapse to the latest, not replay in order.
+    if (method && method->type == JsonValue::String && method->string_value == "$/progress")
+    {
+      const JsonValue *params = json_object_get(root, "params");
+      const JsonValue *token = params ? json_object_get(*params, "token") : nullptr;
+      const JsonValue *value = params ? json_object_get(*params, "value") : nullptr;
+      if (!token || !value || value->type != JsonValue::Object)
+      {
+        continue;
+      }
+      std::string key;
+      if (token->type == JsonValue::String)
+      {
+        key = token->string_value;
+      }
+      else if (token->type == JsonValue::Number)
+      {
+        key = std::to_string((long long)token->number_value);
+      }
+      else
+      {
+        continue;
+      }
+      int percentage = -1;
+      if (const JsonValue *pct = json_object_get(*value, "percentage"))
+      {
+        if (pct->type == JsonValue::Number)
+        {
+          percentage = (int)pct->number_value;
+        }
+      }
+      // Logged because progress is otherwise invisible: it drives a statusline
+      // spinner and leaves no other trace, so a probe (or a bug report) cannot
+      // tell "the server never reported" from "we dropped it".
+      append_log_line("RECV ",
+                      "$/progress " + key + " "
+                          + json_string_or_empty(json_object_get(*value, "kind")));
+      apply_lsp_progress(progress_,
+                         key,
+                         json_string_or_empty(json_object_get(*value, "kind")),
+                         json_string_or_empty(json_object_get(*value, "title")),
+                         json_string_or_empty(json_object_get(*value, "message")),
+                         percentage);
+      continue;
+    }
+
+    // window/showMessage: the server talking to the user ("indexing failed",
+    // "configuration invalid"). Queued for the editor to raise as a toast.
+    if (method && method->type == JsonValue::String && method->string_value == "window/showMessage")
+    {
+      const JsonValue *params = json_object_get(root, "params");
+      const std::string text = params ? json_string_or_empty(json_object_get(*params, "message")) : "";
+      if (!text.empty())
+      {
+        pending_show_messages.push_back(text);
+      }
+      continue;
+    }
+
     // Server -> client request: answer workspace/configuration pulls so
     // servers that support it (lua-language-server) receive our client-side
     // defaults (e.g. the bundled jot API stub registered as a Lua library).
     const JsonValue *id = json_object_get(root, "id");
+    if (method && method->type == JsonValue::String && id && id->type == JsonValue::Number
+        && (method->string_value == "client/registerCapability"
+            || method->string_value == "client/unregisterCapability"))
+    {
+      // The server dynamically registering a feature (clangd registers watched
+      // files this way). A client that never answers leaves the server waiting
+      // on the request, and whatever it was going to do once registered never
+      // happens.
+      std::ostringstream ok;
+      ok << "{\"jsonrpc\":\"2.0\",\"id\":" << (int)id->number_value << ",\"result\":null}";
+      send_message(ok.str(), true);
+      continue;
+    }
     if (method && method->type == JsonValue::String && id && id->type == JsonValue::Number
         && method->string_value == "workspace/configuration")
     {
@@ -120,6 +196,25 @@ void LSPClient::handle_stdout_data(const std::string &data)
       cfg << (library_dirs.empty() ? "null" : lua_settings_json());
       cfg << ",null,null,null,null]}";
       send_message(cfg.str(), true);
+      continue;
+    }
+
+    // window/workDoneProgress/create: the server asking permission to report
+    // progress under a token. Answering null accepts it; until it is answered
+    // the server waits and reports nothing at all -- clangd asks for
+    // "backgroundIndexProgress" and stays silent without this reply.
+    if (method && method->type == JsonValue::String && id && id->type == JsonValue::Number
+        && method->string_value == "window/workDoneProgress/create")
+    {
+      const JsonValue *params = json_object_get(root, "params");
+      const JsonValue *token = params ? json_object_get(*params, "token") : nullptr;
+      append_log_line("RECV ",
+                      "window/workDoneProgress/create "
+                          + (token && token->type == JsonValue::String ? token->string_value
+                                                                      : std::string("?")));
+      std::ostringstream ok;
+      ok << "{\"jsonrpc\":\"2.0\",\"id\":" << (int)id->number_value << ",\"result\":null}";
+      send_message(ok.str(), true);
       continue;
     }
 
@@ -480,3 +575,38 @@ void LSPClient::handle_stderr_data(const std::string &data)
   append_log_line("STDERR ", data);
 }
 
+
+void apply_lsp_progress(std::map<std::string, LSPProgress> &tokens,
+                        const std::string &token,
+                        const std::string &kind,
+                        const std::string &title,
+                        const std::string &message,
+                        int percentage)
+{
+  if (token.empty())
+  {
+    return;
+  }
+  // "end" (and any unknown kind) retires the token: a server that stops
+  // reporting must not leave a spinner running forever.
+  if (kind != "begin" && kind != "report")
+  {
+    tokens.erase(token);
+    return;
+  }
+  LSPProgress &entry = tokens[token];
+  // A begin carries the title; reports carry moving text. Empty fields are
+  // "unchanged", not "cleared" -- servers omit what did not move.
+  if (!title.empty())
+  {
+    entry.title = title;
+  }
+  if (!message.empty())
+  {
+    entry.message = message;
+  }
+  if (percentage >= 0)
+  {
+    entry.percentage = percentage;
+  }
+}

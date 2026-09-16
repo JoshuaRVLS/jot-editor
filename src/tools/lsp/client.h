@@ -130,6 +130,25 @@ struct LSPDocumentSymbolResult
   std::vector<LSPSymbol> symbols;
 };
 
+// One thing a server is working on (`$/progress`). `title` is set by the begin
+// message, `message`/`percentage` keep moving while it runs.
+struct LSPProgress
+{
+  std::string title;
+  std::string message;
+  int percentage = -1;
+};
+
+// Applies one `$/progress` body to a token table: "begin" starts a token,
+// "report" moves its message/percentage, anything else ("end") clears it. Free
+// function so the state machine is testable without a running server.
+void apply_lsp_progress(std::map<std::string, LSPProgress> &tokens,
+                        const std::string &token,
+                        const std::string &kind,
+                        const std::string &title,
+                        const std::string &message,
+                        int percentage);
+
 struct LSPTextEdit
 {
   int start_line = 0;
@@ -216,6 +235,9 @@ private:
   std::vector<std::string> deferred_messages;
   std::string last_error;
   std::vector<std::pair<std::string, std::vector<Diagnostic>>> pending_diagnostics;
+  // Active progress by token, plus the messages the server asked us to show.
+  std::map<std::string, LSPProgress> progress_;
+  std::vector<std::string> pending_show_messages;
   // Mirrors of the last results each consume_* call handed to the editor, so
   // other consumers (the Lua API) can read per-server answers without racing
   // or stealing results from the native UI flow.
@@ -269,6 +291,19 @@ public:
   // The completion-related client capabilities, shared by the initialize request
   // and the test that asserts them (labelDetails is opt-in per the spec).
   static std::string completion_client_capabilities();
+  // The window block of the initialize capabilities; split out so the test
+  // can assert it the way the completion block is asserted.
+  static std::string window_client_capabilities();
+  // The initialize params as a JSON object; split out so a test can parse the
+  // whole thing rather than its pieces.
+  std::string initialize_params_json() const;
+  // The same builder, reachable from tests without starting a server (the
+  // constructor takes a command, but nothing is spawned until start()).
+  static std::string initialize_params_json_for_test()
+  {
+    LSPClient probe("cpp", "/tmp/jot-lsp-params", {}, {}, "");
+    return probe.initialize_params_json();
+  }
 
   bool start();
   void stop();
@@ -345,6 +380,25 @@ public:
   const std::vector<std::pair<std::string, std::vector<Diagnostic>>> &last_diagnostics() const
   {
     return last_diagnostics_;
+  }
+  // What this server is working on right now, oldest token first.
+  std::vector<LSPProgress> active_progress() const
+  {
+    std::vector<LSPProgress> out;
+    out.reserve(progress_.size());
+    for (const auto &entry : progress_)
+    {
+      out.push_back(entry.second);
+    }
+    return out;
+  }
+  // window/showMessage texts, drained once. A server talking to the user is an
+  // event, unlike progress, so it does not belong in the polling accessor above.
+  std::vector<std::string> consume_show_messages()
+  {
+    auto out = std::move(pending_show_messages);
+    pending_show_messages.clear();
+    return out;
   }
   const LSPHoverResult &last_hover() const
   {

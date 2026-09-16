@@ -335,6 +335,13 @@ std::string LSPClient::completion_client_capabilities()
          "}";
 }
 
+std::string LSPClient::window_client_capabilities()
+{
+  // Servers gate $/progress on this: without it they check once and never send
+  // work-done progress (helix advertises the same flag).
+  return "\"window\":{\"workDoneProgress\":true}";
+}
+
 bool LSPClient::start()
 {
   if (running)
@@ -549,7 +556,27 @@ bool LSPClient::start()
        << "\"jsonrpc\":\"2.0\","
        << "\"id\":" << initialize_request_id << ","
        << "\"method\":\"initialize\","
-       << "\"params\":{"
+       << "\"params\":" << initialize_params_json()
+       << "}";
+  if (!send_message(init.str(), true))
+  {
+    stop();
+    return false;
+  }
+
+  append_log_line("INFO ", "Initializing " + describe());
+  return true;
+}
+
+// The params of the initialize request, on its own so a test can parse it. Two
+// separate comma/brace slips in this assembly have made the whole request
+// unparseable, and a server that cannot read `initialize` never starts at all --
+// a failure that looks like "the language server does nothing", with the only
+// evidence in the server's stderr.
+std::string LSPClient::initialize_params_json() const
+{
+  std::ostringstream params;
+  params << "{"
        << "\"processId\":" << current_process_id() << ","
        << "\"rootUri\":\"" << json_escape(to_file_uri(root_path)) << "\","
        << "\"rootPath\":\"" << json_escape(root_path) << "\","
@@ -571,22 +598,21 @@ bool LSPClient::start()
        << "\"inlayHint\":{\"dynamicRegistration\":false}"
        << "},"
        << "\"workspace\":{\"configuration\":true}"
+       // Capabilities is still open here: the window block belongs to it, and
+       // the `},` below closes it. Placing it after that brace would make it a
+       // params member instead, which servers ignore -- and the extra brace made
+       // the whole request unparseable, so clangd answered with a JSON error and
+       // never reported progress at all.
+       << ","
+       << window_client_capabilities()
        << "},"
        << "\"workspaceFolders\":[{\"uri\":\"" << json_escape(to_file_uri(root_path))
        << "\",\"name\":\"" << json_escape(fs::path(root_path).filename().string()) << "\"}]"
        << (initialization_options.empty()
                ? ""
                : ",\"initializationOptions\":{" + initialization_options + "}")
-       << "}"
        << "}";
-  if (!send_message(init.str(), true))
-  {
-    stop();
-    return false;
-  }
-
-  append_log_line("INFO ", "Initializing " + describe());
-  return true;
+  return params.str();
 }
 
 void LSPClient::stop()

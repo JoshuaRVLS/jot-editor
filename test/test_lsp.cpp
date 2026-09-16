@@ -190,3 +190,80 @@ TEST_CASE("LSP initialize advertises labelDetailsSupport", "[lsp]")
   REQUIRE(lsp_detail::parse_json_value("{" + caps + "}", pos, value));
   REQUIRE(value.type == lsp_detail::JsonValue::Object);
 }
+
+TEST_CASE("LSP initialize advertises window.workDoneProgress", "[lsp]")
+{
+  // Servers gate $/progress on this capability: without it they check once and
+  // never report work, so the statusline spinner would never have anything to
+  // show. Same trap (and same test shape) as labelDetailsSupport.
+  const std::string caps = LSPClient::window_client_capabilities();
+  REQUIRE(caps.find("\"workDoneProgress\":true") != std::string::npos);
+  size_t pos = 0;
+  lsp_detail::JsonValue value;
+  REQUIRE(lsp_detail::parse_json_value("{" + caps + "}", pos, value));
+  REQUIRE(value.type == lsp_detail::JsonValue::Object);
+}
+
+TEST_CASE("LSP progress tokens start, move and clear", "[lsp]")
+{
+  std::map<std::string, LSPProgress> tokens;
+
+  // begin carries the title; an empty message/percentage means "not yet".
+  apply_lsp_progress(tokens, "tok", "begin", "Indexing", "", -1);
+  REQUIRE(tokens.size() == 1);
+  REQUIRE(tokens["tok"].title == "Indexing");
+  REQUIRE(tokens["tok"].message.empty());
+  REQUIRE(tokens["tok"].percentage == -1);
+
+  // report moves the message and percentage without losing the title.
+  apply_lsp_progress(tokens, "tok", "report", "", "3/12 files", 25);
+  REQUIRE(tokens["tok"].title == "Indexing");
+  REQUIRE(tokens["tok"].message == "3/12 files");
+  REQUIRE(tokens["tok"].percentage == 25);
+
+  // Fields that did not move stay put rather than being cleared.
+  apply_lsp_progress(tokens, "tok", "report", "", "", -1);
+  REQUIRE(tokens["tok"].message == "3/12 files");
+  REQUIRE(tokens["tok"].percentage == 25);
+
+  // Two tokens are tracked separately, which is what the "+N" in the statusline
+  // counts.
+  apply_lsp_progress(tokens, "other", "begin", "Loading", "", -1);
+  REQUIRE(tokens.size() == 2);
+
+  // end retires just that token; an unknown kind is treated as the end so a
+  // server that stops reporting cannot leave a spinner running.
+  apply_lsp_progress(tokens, "tok", "end", "", "", -1);
+  REQUIRE(tokens.size() == 1);
+  REQUIRE(tokens.count("tok") == 0);
+  apply_lsp_progress(tokens, "other", "surprise", "", "", -1);
+  REQUIRE(tokens.empty());
+}
+
+TEST_CASE("LSP initialize params are one valid JSON object", "[lsp]")
+{
+  // Assembled by hand from many pieces, so it is asserted as a whole: the two
+  // bugs this has already had (a dropped comma, a stray brace from the window
+  // capability) both produced "Text after end of document" from clangd and a
+  // server that silently never started.
+  lsp_detail::JsonValue params;
+  size_t pos = 0;
+  const std::string json = LSPClient::initialize_params_json_for_test();
+  REQUIRE(lsp_detail::parse_json_value(json, pos, params));
+  REQUIRE(params.type == lsp_detail::JsonValue::Object);
+  // The reader must stop exactly at the end: trailing text is what the server
+  // chokes on.
+  REQUIRE(pos == json.size());
+
+  // window.workDoneProgress has to sit *inside* capabilities -- as a params
+  // member it is ignored and servers never report progress.
+  const lsp_detail::JsonValue *caps = lsp_detail::json_object_get(params, "capabilities");
+  REQUIRE(caps != nullptr);
+  const lsp_detail::JsonValue *window = lsp_detail::json_object_get(*caps, "window");
+  REQUIRE(window != nullptr);
+  const lsp_detail::JsonValue *progress = lsp_detail::json_object_get(*window, "workDoneProgress");
+  REQUIRE(progress != nullptr);
+  REQUIRE(progress->type == lsp_detail::JsonValue::Bool);
+  REQUIRE(progress->bool_value);
+  REQUIRE(lsp_detail::json_object_get(params, "window") == nullptr);
+}

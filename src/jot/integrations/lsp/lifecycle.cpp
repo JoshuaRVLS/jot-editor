@@ -68,6 +68,21 @@ void Editor::poll_lsp_clients()
     {
       continue;
     }
+    // window/showMessage: the server telling the user something it cannot say
+    // through a diagnostic ("indexing failed", "configuration invalid"). Raised
+    // as a toast, like helix prints LSP messages under the statusline.
+    auto messages = client->consume_show_messages();
+    for (auto &message : messages)
+    {
+      set_message(message);
+    }
+    // Progress is state, not an event: while a server reports a token the
+    // statusline shows a spinner, which has to keep animating even when nothing
+    // else changes.
+    if (!client->active_progress().empty())
+    {
+      needs_redraw = true;
+    }
     // Diagnostics are stored per (server, file) and merged on refresh so two
     // servers attached to one buffer never clobber each other's findings.
     auto published = client->consume_published_diagnostics();
