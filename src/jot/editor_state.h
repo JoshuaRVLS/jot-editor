@@ -95,7 +95,9 @@ struct EditorState
   bool show_quit_prompt;
   // Interactive LSP rename: the prompt is seeded with the identifier under the
   // cursor and commits through lsp_rename_symbol.
-  bool show_rename_prompt;
+  // Uninitialised, this decides whether the rename prompt renders from
+  // whatever happened to be in memory -- it showed up over a blank editor.
+  bool show_rename_prompt = false;
   std::string rename_prompt_input;
 
   // Which-key style keybind helper. It appears automatically when the user
