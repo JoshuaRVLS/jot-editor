@@ -323,7 +323,7 @@ ImageViewer::build_kitty_file_command(const std::string &path, int x, int y, int
   std::ostringstream out;
   out << "\x1b[" << y + 1 << ";" << x + 1 << "H";
   out << "\x1b_Ga=T,f=100,t=f,q=2,i=" << kKittyImageId << ",c=" << std::max(1, w)
-      << ",r=" << std::max(1, h) << ";";
+      << ",r=" << std::max(1, h) << ";"
       << base64_encode(path) << "\x1b\\";
   return out.str();
 }
