@@ -22,6 +22,12 @@ local jot = jot
 -- server publishes).
 local owned = {}
 
+-- Buffers whose dims are already painted. Reading a buffer costs one crossing
+-- into the editor per line, and CursorMoved fires on every key without the
+-- text changing, so the answer is only recomputed when the text can have
+-- moved: BufChange, or the first time a buffer is seen.
+local seen = {}
+
 local function release(buffer)
   local ids = owned[buffer]
   if not ids then
@@ -271,7 +277,7 @@ local function file_lines(path)
   return lines
 end
 
-local apply = function(info)
+local apply = function(info, force)
   if not enabled() then
     return
   end
@@ -282,6 +288,9 @@ local apply = function(info)
   local buffer = info and info.buffer
   if not buffer or buffer < 0 then
     retry()
+    return
+  end
+  if not force and seen[buffer] then
     return
   end
   local path = (info and (info.filepath or info.path)) or ""
@@ -307,6 +316,7 @@ local apply = function(info)
   local defined = configured_macros()
   local ranges = inactive_ranges(lines, defined)
 
+  seen[buffer] = true
   release(buffer)
   local painted = 0
   for _, range in ipairs(ranges) do
@@ -377,7 +387,7 @@ retry = function()
   local function run()
     local id = current_buffer()
     if id then
-      apply({ buffer = id, path = current_path() })
+      apply({ buffer = id, path = current_path() }, false)
     end
   end
   if not pcall(jot.set_timeout, run, 120) then
@@ -385,12 +395,18 @@ retry = function()
   end
 end
 
-jot.autocmd("CursorMoved", apply)
-jot.autocmd("BufChange", apply)
+-- The text only moves on an edit, so a cursor move is worth a full rescan
+-- once per buffer and never again.
+jot.autocmd("CursorMoved", function(info)
+  apply(info, false)
+end)
+jot.autocmd("BufChange", function(info)
+  apply(info, true)
+end)
 -- A file arriving is the moment the fade should show up, without touching
 -- anything, so this one is worth the retry loop.
 jot.autocmd("BufOpen", function()
-  apply({ buffer = current_buffer(), path = current_path() })
+  apply({ buffer = current_buffer(), path = current_path() }, true)
   retry()
 end)
 
