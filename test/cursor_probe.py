@@ -75,8 +75,26 @@ def run_jot(binary: str, seconds: float, cols: int = 100, rows: int = 30):
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
     reads = []
     deadline = time.time() + seconds
+    # Move the caret while we watch: a caret that never moves is never
+    # re-placed, and re-placement is where it went to the wrong cell.
+    # SGR mouse press/release pairs, then keys: a click re-homes the caret
+    # through the mouse path, which is a different route to the same cell.
+    def click(col, row):
+        seq = f"\x1b[<0;{col};{row}M".encode()
+        return seq + seq[:-1] + b"m"
+
+    nudges = [b"\x1b[C", b"\x1b[C", b"\x1b[D",
+              click(30, 12), click(44, 20), click(12, 6),
+              b"\x1b[C", b"\x1b[A", b"\x1b[D", click(60, 24), b"\x1b[B"]
+    nudge_at = time.time() + 0.7
     try:
         while time.time() < deadline:
+            if nudges and time.time() >= nudge_at:
+                try:
+                    os.write(fd, nudges.pop(0))
+                except OSError:
+                    pass
+                nudge_at = time.time() + 0.22
             r, _, _ = select.select([fd], [], [], 0.05)
             if not r:
                 continue
@@ -155,6 +173,23 @@ def main() -> int:
               f"stretch {longest:.2f}s)")
         return 1
     print(f"cursor probe: ok - the caret blinked (longest show-free stretch {longest:.2f}s)")
+
+    # Where each show lands. jot shows the caret with ?25h and positions it with
+    # a CUP move immediately before, so a show with no move behind it -- or one
+    # behind a move to (1,1) -- puts the caret in the top-left corner.
+    cup = re.compile(rb"\x1b\[(\d+);(\d+)H")
+    shows = 0
+    for m in re.finditer(re.escape(SHOW), stream):
+        shows += 1
+        moves = list(cup.finditer(stream, 0, m.start()))
+        if not moves:
+            print(f"cursor probe: FAIL - show #{shows} had no caret move before it")
+            return 1
+        row, col = (int(x) for x in moves[-1].groups())
+        if (row, col) == (1, 1):
+            print(f"cursor probe: FAIL - show #{shows} put the caret in the top-left corner")
+            return 1
+    print(f"cursor probe: ok - all {shows} caret shows followed a real caret cell")
 
     print("cursor probe: PASS")
     return 0
