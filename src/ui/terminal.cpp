@@ -977,20 +977,26 @@ void Terminal::flush()
     fwrite(buffer.c_str(), 1, n, render_capture_);
   }
 
-  // Single ordered flush path: a blocking write() loop on
-  // STDOUT_FILENO. We previously used fwrite()/fflush(stdout) here
-  // and a non-blocking write() in try_drain() mid-frame. Mixing
-  // stdio with low-level writes caused byte reordering on some
-  // terminals (notably COSMIC at fullscreen sizes) and the
-  // observable symptom was the cursor teleporting away from the
-  // click position while typing. Using one low-level write() loop
-  // for the whole frame keeps the output strictly ordered and
-  // EINTR-safe.
-  const char *p = buffer.c_str();
-  size_t remaining = (size_t)n;
+  // Present the frame atomically (DECSET 2026, synchronized output). A frame is
+  // a long stream of cursor moves, row diffs and cursor show/hide toggles, and
+  // without this the terminal is free to repaint any intermediate state -- so a
+  // moment where the cursor sits where a row write left it shows the caret away
+  // from the text for one frame. Terminals that do not know the mode ignore it.
+  // Both markers wrap the payload inside this one write, so the mode can never
+  // be left open by an early return.
+  std::string framed;
+  framed.reserve((size_t)n + 16);
+  framed += "\x1b[?2026h";
+  framed.append(buffer, 0, (size_t)n);
+  framed += "\x1b[?2026l";
+  // One low-level write() loop for the whole frame: mixing stdio with these
+  // writes reordered bytes on some terminals, and the symptom was the cursor
+  // landing away from the click position while typing.
+  const char *p = framed.c_str();
+  size_t remaining = framed.size();
   while (remaining > 0)
   {
-    ssize_t w = ::write(STDOUT_FILENO, p, remaining);
+    const ssize_t w = ::write(STDOUT_FILENO, p, remaining);
     if (w > 0)
     {
       p += w;
@@ -998,33 +1004,27 @@ void Terminal::flush()
     }
     else if (w == -1 && errno == EINTR)
     {
-      // Interrupted by a signal; retry the same bytes.
-      continue;
+      continue; // interrupted by a signal; retry the same bytes
     }
     else if (w == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
     {
-      // stdout was switched to O_NONBLOCK somewhere; fall back to
-      // a short blocking wait by poll()-ing for writability.
+      // stdout was switched to O_NONBLOCK somewhere; wait briefly for it.
       struct pollfd pfd;
       pfd.fd = STDOUT_FILENO;
       pfd.events = POLLOUT;
       pfd.revents = 0;
       if (::poll(&pfd, 1, 1000) <= 0)
       {
-        // Give up after 1s; drop the rest of the frame to avoid a
-        // permanent hang.
-        break;
+        break; // give up after 1s rather than hang forever
       }
-      continue;
     }
     else
     {
-      // EPIPE, EBADF, etc. Drop the rest of the frame.
       break;
     }
   }
-
   buffer.clear();
+  return;
 }
 
 void Terminal::flush_if_buffer_exceeds()
