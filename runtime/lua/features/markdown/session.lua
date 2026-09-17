@@ -85,6 +85,14 @@ local function start_timers()
     if not state.running then
       return
     end
+    -- Only follow the editor while it is showing the previewed file. The
+    -- scroll line comes from whichever pane has focus, so without this a
+    -- glance at another buffer drags the page to a line number that means
+    -- nothing in it.
+    local focused = sync.focused_path()
+    if focused and focused ~= state.path then
+      return
+    end
     local line = sync.editor_line()
     if line and line ~= state.last_line and sync.should_push(line) then
       state.last_line = line
