@@ -191,6 +191,22 @@ def main() -> int:
             return 1
     print(f"cursor probe: ok - all {shows} caret shows followed a real caret cell")
 
+    # The size probe parks the cursor to ask the terminal for its geometry. It
+    # must save and restore around that: without the save it left the visible
+    # caret in the top-left corner until the next frame, on every probe -- and
+    # probes fire on input events when ioctl reports no size.
+    parks = stream.count(b"\x1b[999;999H")
+    saved_parks = stream.count(b"\x1b7\x1b[999;999H")
+    if parks != saved_parks:
+        print(f"cursor probe: FAIL - {parks - saved_parks} size probe(s) park the cursor "
+              "without saving it first")
+        return 1
+    if stream.count(b"\x1b7") != stream.count(b"\x1b8"):
+        print("cursor probe: FAIL - DECSC/DECRC are unbalanced (a probe can leave the "
+              "cursor parked)")
+        return 1
+    print(f"cursor probe: ok - all {parks} size probe(s) save and restore the cursor")
+
     print("cursor probe: PASS")
     return 0
 

@@ -88,8 +88,13 @@ static bool cursor_probe_size(int &width, int &height, int budget_ms = 200)
   // budget_ms instead of blocking startup. Terminals that do answer reply
   // within a few milliseconds, well inside even the small confirmatory
   // budget.
-  ::write(STDOUT_FILENO, "\x1b[999;999H", 10);
-  ::write(STDOUT_FILENO, "\x1b[6n", 4);
+  // Save the cursor (DECSC), park it and ask for the position in a single
+  // write, so the parked position is never a state the terminal can present on
+  // its own. The cursor is restored with DECRC at the end: homing it instead
+  // left the visible caret in the top-left corner until the next frame, which
+  // read as the caret flickering there whenever this probe ran.
+  static const char kProbePark[] = "\x1b" "7" "\x1b[999;999H\x1b[6n";
+  ::write(STDOUT_FILENO, kProbePark, sizeof(kProbePark) - 1);
 
   const auto deadline = std::chrono::steady_clock::now()
                         + std::chrono::milliseconds(budget_ms);
@@ -124,6 +129,8 @@ static bool cursor_probe_size(int &width, int &height, int budget_ms = 200)
     i++;
   }
 
+  ::write(STDOUT_FILENO, "\x1b" "8", 2); // DECRC: put the caret back
+
   int rows = 0, cols = 0;
   if (sscanf(buf, "\x1b[%d;%d", &rows, &cols) == 2)
   {
@@ -131,10 +138,8 @@ static bool cursor_probe_size(int &width, int &height, int budget_ms = 200)
       height = rows;
     if (cols > 0)
       width = cols;
-    ::write(STDOUT_FILENO, "\x1b[H", 3);
     return true;
   }
-  ::write(STDOUT_FILENO, "\x1b[H", 3);
   return false;
 }
 
@@ -501,7 +506,12 @@ bool Terminal::refresh_size(bool force_probe)
   // This is the only way to recover when ioctl is returning stale
   // dimensions (e.g. after the alternate screen was entered) or when the
   // controlling TTY / foreground process group changed.
-  if ((force_probe || !got) && isatty(STDIN_FILENO) && isatty(STDOUT_FILENO))
+  // The DSR probe parks and restores the cursor, so it is reserved for the
+  // cases that need it: no size at all, or a caller who knows a resize
+  // happened. Probing on every event was pure overhead on terminals whose
+  // ioctl reports nothing.
+  if ((force_probe || !size_known_) && (force_probe || !got) && isatty(STDIN_FILENO)
+      && isatty(STDOUT_FILENO))
   {
     int probe_w = new_width;
     int probe_h = new_height;
@@ -533,6 +543,7 @@ bool Terminal::refresh_size(bool force_probe)
   bool changed = (new_width != width) || (new_height != height);
   width = new_width;
   height = new_height;
+  size_known_ = true;
   return changed;
 }
 
@@ -834,8 +845,9 @@ Event Terminal::check_resize_event()
   // size can be stale (or stuck at the 80x24 constructor fallback) even
   // when no signal has been delivered. Reset g_resize_pending so a single
   // signal doesn't keep forcing resizes after we've already absorbed it.
+  const bool resize_pending = g_resize_pending != 0;
   g_resize_pending = 0;
-  if (refresh_size())
+  if (refresh_size(/*force_probe=*/resize_pending))
   {
     ev.type = EVENT_RESIZE;
     ev.resize.width = width;

@@ -191,6 +191,9 @@ public:
   void move_cursor(int x, int y);
   void hide_cursor();
   void show_cursor();
+  // True once any source has produced a size, so the DSR probe (which parks and
+  // restores the cursor) only runs when there is nothing to go on.
+  bool size_known_ = false;
   // Writes fg/bg as SGR. Indices are always xterm-256 palette entries; when a
   // 24-bit colour is supplied (kNoRgb means "none") it is used verbatim if the
   // terminal understands 38;2/48;2, and quantised to the nearest palette entry
