@@ -271,7 +271,7 @@ local function file_lines(path)
   return lines
 end
 
-local apply
+local apply = function(info)
   if not enabled() then
     return
   end
@@ -352,7 +352,7 @@ local function current_path()
   return (ok and type(value) == "string") and value or ""
 end
 
-local function retry()
+retry = function()
   if retries >= 8 or type(jot.set_timeout) ~= "function" then
     return
   end
