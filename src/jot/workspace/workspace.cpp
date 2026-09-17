@@ -451,9 +451,6 @@ bool Editor::restore_workspace_session()
           tabs.push_back(tab);
         }
       }
-      // The git panel is the sidebar's git view now: a dock tab written by an
-      // older session has nothing to render, so drop it.
-      tabs.erase(std::remove(tabs.begin(), tabs.end(), RIGHT_PANEL_GIT), tabs.end());
       restored_right_panel_tabs = std::move(tabs);
     }
     else if (key == "right_panel_active_tab" && parts.size() >= 2)

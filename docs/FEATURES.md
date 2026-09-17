@@ -388,8 +388,8 @@ plugin can register snippets at runtime or take over the engine. See
 ### Git
 
 **Git panel** (`:gitpanel`) — a native, lazygit-style git client in the
-primary sidebar (the activity rail's `git` item opens it too) with four views
-(switch with `2`/`3`/`4`/`5`, matching lazygit's panel numbers):
+right dock with four views (switch with `2`/`3`/`4`/`5`, matching lazygit's
+panel numbers):
 
 - **2 Files** — conflicts, staged, unstaged and untracked sections with
   status-colored rows; `space` stages/unstages the selected file, `a`/`A`

@@ -550,7 +550,7 @@ void Editor::render_sidebar()
   view.bg = theme.bg_sidebar;
   view.resizing = sidebar_resize_dragging;
   view.git_view = !explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT;
-  view.git_panel_active = git_panel_visible();
+  view.git_panel_active = show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT;
   view.rail_w = rail_w;
   view.rail_explorer_row = explorer_only() ? -1 : 1;
   view.rail_git_row = explorer_only() ? -1 : 3;
@@ -626,7 +626,7 @@ void Editor::render_sidebar()
     draw_rail_item(1, "󰉋 ", active_sidebar_view == SIDEBAR_VIEW_EXPLORER);
     // The git item launches the git panel (":gitpanel"), so its marker
     // follows that panel rather than which sidebar view is showing.
-    draw_rail_item(3, "git", view.git_panel_active);
+    draw_rail_item(3, " ", view.git_panel_active);
     for (int i = y + 1; i < y + h - 1; i++)
     {
       ui->draw_text(std::max(0, rail_w - 1), i, "│", theme.fg_sidebar_border, theme.bg_sidebar);
@@ -664,14 +664,159 @@ void Editor::render_sidebar()
     }
   };
 
-  if (git_panel_visible())
+  if (!explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT)
   {
-    // The git view is the full git panel (":gitpanel"), painted inside this
-    // panel's own frame; it emits its own surface, so skip the explorer rows.
-    render_git_panel();
+    std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
+    int header_y = y;
+    int list_y = y + 1;
+    // One extra row is reserved at the bottom for the panel border, so the
+    // footer moves up to y + h - 2.
+    int list_h = std::max(0, h - 3);
+
+    std::string header_label = has_git_repo() ? " " + git_branch : " Git";
+    if (has_git_repo())
+    {
+      if (git_staged_count > 0)
+      {
+        header_label += " +" + std::to_string(git_staged_count);
+      }
+      if (git_unstaged_count > 0)
+      {
+        header_label += " ~" + std::to_string(git_unstaged_count);
+      }
+      if (git_untracked_count > 0)
+      {
+        header_label += " ?" + std::to_string(git_untracked_count);
+      }
+      if (git_conflict_count > 0)
+      {
+        header_label += " !" + std::to_string(git_conflict_count);
+      }
+    }
+    view.header = truncate_cells(header_label, std::max(0, content_w - 3));
+    view.header_x = content_x + 1;
+    view.header_y = header_y;
+    view.header_fg = theme.fg_sidebar_directory;
+    ui->draw_text(
+        content_x + 1, header_y, view.header, theme.fg_sidebar_directory, theme.bg_sidebar, true);
+
+    if (!git_rows.empty())
+    {
+      git_sidebar_selected = std::clamp(git_sidebar_selected, 0, (int)git_rows.size() - 1);
+    }
+    else
+    {
+      git_sidebar_selected = 0;
+    }
+    int max_scroll = std::max(0, (int)git_rows.size() - std::max(1, list_h));
+    git_sidebar_scroll = std::clamp(git_sidebar_scroll, 0, max_scroll);
+
+    if (git_rows.empty())
+    {
+      std::string empty = has_git_repo() ? "No changes" : "Not a Git repo";
+      if (list_h > 0)
+      {
+        ui->draw_text(content_x + 1,
+                      list_y,
+                      truncate_cells(empty, std::max(0, content_w - 3)),
+                      theme.fg_comment,
+                      theme.bg_sidebar);
+      }
+    }
+    else
+    {
+      for (int i = 0; i < list_h; i++)
+      {
+        int idx = i + git_sidebar_scroll;
+        if (idx >= (int)git_rows.size())
+          break;
+
+        const auto &row = git_rows[(size_t)idx];
+        bool selected = idx == git_sidebar_selected;
+        int row_fg = theme.fg_sidebar;
+        int row_bg = theme.bg_sidebar;
+        auto git_colors = git_status_colors(theme, row.status);
+        if (!selected && !row.status.empty())
+        {
+          row_fg = git_colors.first;
+          row_bg = git_colors.second;
+          ui->fill_rect(
+              {content_x, list_y + i, std::max(1, content_w - 1), 1}, " ", row_fg, row_bg);
+        }
+        if (selected)
+        {
+          if (focus_state == FOCUS_SIDEBAR)
+          {
+            row_fg = theme.fg_sidebar_selected;
+            row_bg = theme.bg_sidebar_selected;
+          }
+          else
+          {
+            row_fg = theme.fg_sidebar_selected_inactive;
+            row_bg = theme.bg_sidebar_selected_inactive;
+          }
+          ui->draw_text(
+              content_x, list_y + i, std::string(std::max(0, content_w - 1), ' '), row_fg, row_bg);
+        }
+
+        std::string symbol = git_status_symbol(row.status);
+        if (symbol.empty())
+        {
+          symbol = " ";
+        }
+        ui->draw_text(content_x + 1, list_y + i, symbol, git_colors.first, row_bg, true);
+        std::string label = " " + row.relative_path;
+        ui->draw_text(content_x + 3,
+                      list_y + i,
+                      truncate_cells(label, std::max(0, content_w - 5)),
+                      row_fg,
+                      row_bg);
+
+        SidebarPanelRowView r;
+        r.x = content_x;
+        r.y = list_y + i;
+        r.w = std::max(1, content_w - 1);
+        r.fg = row_fg;
+        r.bg = row_bg;
+        r.symbol = symbol;
+        r.symbol_x = content_x + 1;
+        r.symbol_fg = git_colors.first;
+        r.symbol_bold = true;
+        r.text = truncate_cells(label, std::max(0, content_w - 5));
+        r.text_x = content_x + 3;
+        view.rows.push_back(std::move(r));
+      }
+    }
+
+    std::string footer;
+    if (!git_rows.empty() && git_sidebar_selected >= 0
+        && git_sidebar_selected < (int)git_rows.size())
+    {
+      footer = " " + git_rows[(size_t)git_sidebar_selected].relative_path;
+    }
+    else if (has_git_repo())
+    {
+      footer = std::to_string(git_dirty_count) + " changes";
+    }
+    else
+    {
+      footer = "Open a Git workspace";
+    }
+    if (h >= 3)
+    {
+      view.footer = truncate_cells(footer, std::max(0, content_w - 3));
+      view.footer_x = content_x + 1;
+      view.footer_y = y + h - 2;
+      view.footer_fg = theme.fg_comment;
+      ui->draw_text(content_x + 1, y + h - 2, view.footer, theme.fg_comment, theme.bg_sidebar);
+    }
+
+    if (emit_sidebar_view())
+    {
+      return;
+    }
     return;
   }
-
 
   std::string header_label = ""
                    + (sidebar_render_cache_.root_label.empty()

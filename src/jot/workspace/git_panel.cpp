@@ -48,26 +48,22 @@ namespace
 
 void Editor::toggle_git_panel()
 {
-  // The panel is a view of the primary sidebar: the toggle reveals it there
-  // and closes it back to the explorer.
-  if (git_panel_visible() && focus_state == FOCUS_SIDEBAR)
+  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT)
   {
-    active_sidebar_view = SIDEBAR_VIEW_EXPLORER;
+    close_right_panel_tab(RIGHT_PANEL_GIT);
     git_panel.pending_confirm.clear();
-    set_message("Git panel hidden", false);
-    needs_redraw = true;
+    set_message("Git panel closed");
     return;
   }
-  show_sidebar = true;
-  active_sidebar_view = SIDEBAR_VIEW_GIT;
-  // Keyboard focus follows the panel: j/k/space drive it, not the editor (which
-  // would otherwise keep the focus it had from an earlier click).
-  focus_state = FOCUS_SIDEBAR;
+  open_right_panel_tab(RIGHT_PANEL_GIT);
+  // Keyboard focus follows the panel: arrows / j-k navigate the panel, not
+  // the editor or the sidebar (which would otherwise keep the focus it had
+  // from an earlier click).
+  focus_state = FOCUS_RIGHT_PANEL;
   show_home_menu = false;
   refresh_git_status(true);
   git_panel_refresh();
   set_message("Git panel — 2 files · 3 branches · 4 commits · 5 stash · ? keys");
-  update_pane_layout();
   needs_redraw = true;
 }
 
@@ -748,19 +744,18 @@ void Editor::git_panel_copy()
 
 bool Editor::handle_git_panel_mouse(int x, int y, bool is_click, bool is_double_click)
 {
-  if (!git_panel_visible() || !ui)
+  if (!show_right_panel || active_right_panel_tab != RIGHT_PANEL_GIT || !ui)
   {
     return false;
   }
-  const UIRect panel = git_panel_box();
-  const int panel_x = panel.x;
-  const int panel_y = panel.y;
-  const int panel_w = panel.w;
-  const int panel_h = panel.h;
-  if (panel_w < 4 || panel_h < 3)
+  int panel_w = effective_right_panel_width();
+  if (panel_w <= 0)
   {
     return false;
   }
+  const int panel_x = std::max(0, ui->get_render_width() - panel_w);
+  const int panel_y = topbar_height();
+  const int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
   if (x < panel_x || x >= panel_x + panel_w || y < panel_y || y >= panel_y + panel_h)
   {
     // Pointer left the panel: drop the hover highlight.
@@ -771,12 +766,12 @@ bool Editor::handle_git_panel_mouse(int x, int y, bool is_click, bool is_double_
     }
     return false;
   }
-  // Rows start below the view tabs and the branch header (see render_git_panel).
-  const int row_top = panel_y + 2;
+  // Row area starts below the title + tab strip + header (see render_git_panel).
+  const int row_top = panel_y + 4;
   const int row_index = y - row_top;
   using namespace jot_git_panel;
   const std::vector<FlatRow> flat = build_flat_rows(git_panel);
-  const int visible = panel_h - 2;
+  const int visible = panel_h - 4;
   const int index = git_panel.scroll + row_index;
   int hover_row = -1;
   if (row_index >= 0 && index >= 0 && index < (int)flat.size() && index < git_panel.scroll + visible
@@ -795,7 +790,7 @@ bool Editor::handle_git_panel_mouse(int x, int y, bool is_click, bool is_double_
     return true;
   }
   git_panel_hover_row = hover_row;
-  focus_state = FOCUS_SIDEBAR;
+  focus_state = FOCUS_RIGHT_PANEL;
   needs_redraw = true;
   if (row_index < 0 || index < 0 || index >= (int)flat.size() || index >= git_panel.scroll + visible)
   {

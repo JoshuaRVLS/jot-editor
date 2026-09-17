@@ -919,10 +919,23 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click, bool is_double_cl
     return;
   }
 
-  if (git_panel_visible())
+  if (!explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT)
   {
-    // This view is the git panel, so its own hit-testing owns the rows.
-    handle_git_panel_mouse(x, y, true, is_double_click);
+    std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
+    int sidebar_row = y - topbar_height() - 1;
+    if (sidebar_row < 0)
+      return;
+    int row = sidebar_row + git_sidebar_scroll;
+    if (row >= 0 && row < (int)git_rows.size())
+    {
+      git_sidebar_selected = row;
+      open_file(git_rows[(size_t)row].path, !is_double_click);
+      if (is_double_click)
+      {
+        focus_state = FOCUS_EDITOR;
+      }
+      needs_redraw = true;
+    }
     return;
   }
 

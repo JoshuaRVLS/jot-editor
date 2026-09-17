@@ -93,7 +93,7 @@ local function sidebar(p)
   if p.rail_git_row and p.rail_git_row >= 0 then
     -- The git item launches the git panel (":gitpanel"), so its marker
     -- follows that panel rather than the sidebar's own view.
-    draw_rail(y + p.rail_git_row, "git", p.git_panel_active)
+    draw_rail(y + p.rail_git_row, " ", p.git_panel_active)
   end
   if rail_w > 0 then
     for i = 2, h - 1 do

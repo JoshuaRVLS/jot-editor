@@ -467,10 +467,11 @@ struct EditorState
   std::vector<SettingsEntry> settings_entries;
 
   bool show_sidebar;
-  // Activity bar: the icon rail down the left edge that switches which view the
-  // primary sidebar shows (explorer, git). With it hidden the sidebar falls
-  // back to a plain explorer, which is what the old explorer-only gate did.
-  bool show_activity_bar = true;
+  // Activity bar: the icon rail down the left edge that would switch which view
+  // the primary sidebar shows. It is off, so the sidebar is a plain file
+  // explorer -- no rail, the view pinned to the explorer, and Tab inert. The
+  // git panel lives in the secondary sidebar (the right dock) instead.
+  bool show_activity_bar = false;
   // True when the *renderer* hid the sidebar because the window was too narrow
   // for it. Growing the window back re-shows it; a sidebar the user closed
   // themselves stays closed.

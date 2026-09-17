@@ -341,6 +341,7 @@ void Editor::render()
     if (!terminal_zoom_active)
     {
       render_debugger_panel();
+      render_git_panel();
       render_git_diff_panel();
       render_outline_panel();
       render_plugin_panel();
@@ -407,6 +408,7 @@ void Editor::render()
       if (!terminal_zoom_active)
       {
         render_debugger_panel();
+        render_git_panel();
         render_git_diff_panel();
         render_outline_panel();
         render_plugin_panel();

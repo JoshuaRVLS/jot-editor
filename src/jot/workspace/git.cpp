@@ -297,17 +297,14 @@ void Editor::close_git_diff_panel()
   git_diff_panel = GitDiffPanel();
   if (active_right_panel_tab == RIGHT_PANEL_GIT_DIFF)
   {
-    // Coming back from the git panel's per-file diff returns to the panel,
-    // which is the primary sidebar's git view now, so the diff tab closes (the
-    // dock stays open if other tabs remain, and hides when the last one goes).
+    // Coming back from the git panel's per-file diff returns to the panel;
+    // otherwise the diff tab closes (the dock stays open if other tabs
+    // remain, and hides when the last tab is closed).
     if (git_panel.return_after_diff)
     {
       git_panel.return_after_diff = false;
-      close_right_panel_tab(RIGHT_PANEL_GIT_DIFF);
-      show_sidebar = true;
-      active_sidebar_view = SIDEBAR_VIEW_GIT;
-      focus_state = FOCUS_SIDEBAR;
-      update_pane_layout();
+      open_right_panel_tab(RIGHT_PANEL_GIT);
+      focus_state = FOCUS_RIGHT_PANEL;
       git_panel_refresh();
     }
     else
@@ -569,7 +566,7 @@ void Editor::refresh_git_status(bool force)
             needs_redraw = true;
           }
           // Keep an open git panel in step with the async status result.
-          if (git_panel_visible())
+          if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT)
           {
             git_panel_refresh();
           }
@@ -622,7 +619,7 @@ void Editor::refresh_git_status(bool force)
       needs_redraw = true;
     }
     // Keep an open git panel in step with the async status result.
-    if (git_panel_visible())
+    if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_GIT)
     {
       git_panel_refresh();
     }

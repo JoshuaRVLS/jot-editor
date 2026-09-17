@@ -73,55 +73,33 @@ namespace
   }
 } // namespace
 
-UIRect Editor::git_panel_box() const
-{
-  if (!ui)
-  {
-    return {0, 0, 0, 0};
-  }
-  // The sidebar's content area: inside its frame, right of the activity rail.
-  // Mirrors render_sidebar's view.content_x / content_w.
-  const int w = effective_sidebar_width();
-  const int rail_w =
-      explorer_only() ? 0 : std::min(sidebar_activity_rail_width(), std::max(1, w - 1));
-  const int content_x = std::max(1, rail_w);
-  const int content_w = std::max(0, w - content_x - 1);
-  const ContentColumn col = content_column();
-  return {content_x, col.top + 1, content_w, std::max(0, col.h - 2)};
-}
-
-bool Editor::git_panel_visible() const
-{
-  // Independent of the activity rail: with it hidden the panel is still the
-  // sidebar's git view, it just has no rail entry to click.
-  return show_sidebar && effective_sidebar_width() > 0
-         && active_sidebar_view == SIDEBAR_VIEW_GIT;
-}
-
 void Editor::render_git_panel()
 {
-  if (!git_panel_visible() || !ui)
+  if (!show_right_panel || active_right_panel_tab != RIGHT_PANEL_GIT || !ui)
   {
     return;
   }
-  const UIRect panel = git_panel_box();
-  const int panel_x = panel.x;
-  const int panel_y = panel.y;
-  const int panel_w = panel.w;
-  const int panel_h = panel.h;
-  if (panel_w < 4 || panel_h < 3)
+  int panel_w = effective_right_panel_width();
+  if (panel_w <= 0)
   {
     return;
   }
 
-  // The sidebar draws the frame this panel lives in, so there is nothing to
-  // fill or border here; focus is the sidebar's.
-  const bool focused = focus_state == FOCUS_SIDEBAR;
+  const int panel_x = std::max(0, ui->get_render_width() - panel_w);
+  const int panel_y = topbar_height();
+  const int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
+  UIRect panel = {panel_x, panel_y, panel_w, panel_h};
 
-  const int content_x = panel_x;
-  const int content_y = panel_y + 1;
-  const int content_w = std::max(1, panel_w);
-  const int content_h = std::max(1, panel_h - 2);
+  const bool focused = focus_state == FOCUS_RIGHT_PANEL;
+  const int border_fg = focused ? theme.fg_active_border : theme.fg_panel_border;
+  ui->fill_rect(panel, " ", theme.fg_terminal, theme.bg_terminal);
+  ui->draw_border(panel, border_fg, theme.bg_terminal, right_dock_edges(panel),
+                       theme.bg_status);
+
+  const int content_x = panel_x + 1;
+  const int content_y = panel_y + 3;
+  const int content_w = std::max(1, panel_w - 2);
+  const int content_h = std::max(1, panel_h - 4);
 
   SidePanelView view;
   view.mode = "git";
@@ -130,7 +108,8 @@ void Editor::render_git_panel()
   view.w = panel_w;
   view.h = panel_h;
   view.title = " Git Panel ";
-  view.in_sidebar = true;
+  build_right_panel_tab_strip_view(view);
+  render_right_panel_tab_strip(panel_x, panel_y, panel_w);
 
   using namespace jot_git_panel;
   const jot_git_panel::State &state = git_panel;
@@ -143,11 +122,11 @@ void Editor::render_git_panel()
       {" \uE731 4 Commits ", View::Commits},
       {" \uF187 5 Stash ", View::Stash},
   };
-  int tab_x = panel_x;
-  const int tab_y = panel_y;
+  int tab_x = panel_x + 1;
+  const int tab_y = panel_y + 2;
   for (const auto &tab : kTabs)
   {
-    if (tab_x + (int)tab.first.size() >= panel_x + panel_w)
+    if (tab_x + (int)tab.first.size() >= panel_x + panel_w - 1)
     {
       break;
     }
@@ -156,8 +135,8 @@ void Editor::render_git_panel()
     ui->draw_text(tab_x,
                   tab_y,
                   tab.first,
-                  active ? theme.fg_sidebar_directory : theme.fg_comment,
-                  theme.bg_sidebar,
+                  active ? theme.fg_terminal_tab_focused : theme.fg_terminal_tab_inactive,
+                  active ? theme.bg_terminal_tab_focused : theme.bg_terminal_tab_inactive,
                   active);
     tab_x += (int)tab.first.size();
   }
@@ -206,14 +185,14 @@ void Editor::render_git_panel()
   // Branch name + drift in accent, repo in the muted header color.
   const int branch_cells = std::min((int)ui_cell_count(repo + " " + branch_part),
                                     std::max(1, content_w));
-  ui->draw_text(content_x, content_y, view.header, view.header_fg, theme.bg_sidebar);
+  ui->draw_text(content_x, panel_y + 3, view.header, view.header_fg, theme.bg_terminal);
   if (focused)
   {
     ui->draw_text(content_x,
-                  content_y,
+                  panel_y + 3,
                   ui_truncate_cells(repo + " " + branch_part, branch_cells),
                   theme.fg_status_file,
-                  theme.bg_sidebar,
+                  theme.bg_terminal,
                   true);
   }
 
@@ -231,7 +210,7 @@ void Editor::render_git_panel()
     {
       return;
     }
-    ui->draw_text(content_x, content_y, view.note, view.note_fg, theme.bg_sidebar);
+    ui->draw_text(content_x, content_y, view.note, view.note_fg, theme.bg_terminal);
     return;
   }
 
@@ -248,7 +227,7 @@ void Editor::render_git_panel()
     const FlatRow &fr = flat[(size_t)flat_index];
 
     SidePanelRowView r;
-    r.bg = theme.bg_sidebar;
+    r.bg = theme.bg_terminal;
     if (fr.section)
     {
       const SectionStyle style = section_style(theme, fr.label);
@@ -293,7 +272,7 @@ void Editor::render_git_panel()
         }
         else
         {
-          r.fg = theme.fg_sidebar;
+          r.fg = theme.fg_terminal;
           r.icon_fg = theme.fg_comment;
         }
         r.detail = branch.tracking;
@@ -305,7 +284,7 @@ void Editor::render_git_panel()
         r.kind = "git_commit";
         r.icon = kIconCommit;
         r.icon_fg = theme.fg_comment;
-        r.fg = theme.fg_sidebar;
+        r.fg = theme.fg_terminal;
         r.lead_fg = theme.fg_status_info;
         r.lead_len = (int)commit.hash.size();
         break;
@@ -316,7 +295,7 @@ void Editor::render_git_panel()
         r.kind = "git_stash";
         r.icon = kIconStash;
         r.icon_fg = theme.fg_comment;
-        r.fg = theme.fg_sidebar;
+        r.fg = theme.fg_terminal;
         r.lead_fg = theme.fg_status_warning;
         r.lead_len = (int)stash.ref.size();
         break;
@@ -324,10 +303,10 @@ void Editor::render_git_panel()
       }
       if (selected)
       {
-        r.fg = theme.fg_sidebar_selected;
+        r.fg = theme.fg_tab_active;
         if (r.icon_fg < 0)
         {
-          r.icon_fg = theme.fg_sidebar_selected;
+          r.icon_fg = theme.fg_tab_active;
         }
       }
     }
@@ -340,8 +319,8 @@ void Editor::render_git_panel()
     SidePanelRowView hint;
     hint.text = " press d again to confirm ";
     hint.kind = "git_hint";
-    hint.fg = theme.fg_comment;
-    hint.bg = theme.bg_sidebar;
+    hint.fg = theme.fg_status_warning;
+    hint.bg = theme.bg_terminal;
     view.rows.push_back(std::move(hint));
   }
 
@@ -357,9 +336,7 @@ void Editor::render_git_panel()
     const SidePanelRowView &r = view.rows[row];
     // Selected rows keep the tab-active bar; hovered rows get the selection
     // tint without the selected foreground swap.
-    const int row_bg =
-        r.selected ? theme.bg_sidebar_selected
-                   : (r.hovered ? theme.bg_sidebar_selected_inactive : r.bg);
+    const int row_bg = r.selected ? theme.bg_tab_active : (r.hovered ? theme.bg_selection : r.bg);
     int draw_x = content_x;
     if (!r.icon.empty())
     {
@@ -406,6 +383,6 @@ void Editor::render_git_panel()
                   body_y + draw_rows,
                   "space stage/checkout  a/A all  c commit  d discard  s stash  y copy  r refresh",
                   theme.fg_comment,
-                  theme.bg_sidebar);
+                  theme.bg_terminal);
   }
 }
