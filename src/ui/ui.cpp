@@ -565,6 +565,15 @@ void UI::render()
     last_grid[y] = grid[y];
   }
 
+  // Graphics ride with the cells: same buffered write, same synchronized
+  // block as the frame. Emitted before the caret is parked because both
+  // protocols move the terminal's own cursor to place the image.
+  if (!frame_graphics_.empty())
+  {
+    term->write(frame_graphics_);
+    frame_graphics_.clear();
+  }
+
   term->reset_color();
 
   // Same rule as flush_cursor(): the -1 sentinel means nothing placed a caret,
@@ -1075,13 +1084,9 @@ void UI::flush_cursor()
   }
 }
 
-void UI::emit_raw_after_frame(const std::string &bytes)
+void UI::set_frame_graphics(const std::string &bytes)
 {
-  if (bytes.empty())
-    return;
-  term->write(bytes);
-  term->flush();
-  cursor_dirty = true;
+  frame_graphics_ = bytes;
 }
 
 void UI::draw_text(int x,

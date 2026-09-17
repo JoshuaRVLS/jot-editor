@@ -205,7 +205,12 @@ public:
   // Paint the retained grid. The base implementation emits the terminal
   // diff; GUI backends override this to draw the same cells with a GPU.
   virtual void render();
-  void emit_raw_after_frame(const std::string &bytes);
+  // Terminal graphics (Kitty APC / Sixel DCS) to emit as part of this frame.
+  // The bytes ride the same buffered write() as the cells, so the image is
+  // never presented in a separate synchronized-output block from the grid it
+  // belongs to.
+  void set_frame_graphics(const std::string &bytes);
+  std::string frame_graphics_;
 
   void set_default_colors(int fg, int bg);
 
