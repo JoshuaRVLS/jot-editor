@@ -67,6 +67,10 @@ std::uint64_t LuaAPI::decoration_set(int buffer_idx, lua_State *L, int opts_inde
     d.id = next_decoration_id++;
   }
   decoration_insert(buf, std::move(d));
+  if (editor)
+  {
+    editor->needs_redraw = true;
+  }
   return d.id;
 }
 
@@ -74,13 +78,19 @@ bool LuaAPI::decoration_delete(int buffer_idx, std::uint64_t id)
 {
   if (!editor || buffer_idx < 0 || buffer_idx >= (int)editor->buffers.size())
     return false;
-  return decoration_erase(editor->buffers[(size_t)buffer_idx], id);
+  const bool erased = decoration_erase(editor->buffers[(size_t)buffer_idx], id);
+  if (erased)
+  {
+    editor->needs_redraw = true;
+  }
+  return erased;
 }
 
 void LuaAPI::decoration_clear(int buffer_idx)
 {
   if (!editor || buffer_idx < 0 || buffer_idx >= (int)editor->buffers.size())
     return;
+  editor->needs_redraw = true;
   FileBuffer &buf = editor->buffers[(size_t)buffer_idx];
   if (buf.decoration_dirty)
   {
