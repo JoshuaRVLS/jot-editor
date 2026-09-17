@@ -87,7 +87,7 @@ local function refresh_button()
     spans[#spans + 1] = sp
   end
   local fg = copy_state == "copied" and (last_info_fg or last_fg) or (copy_hover and last_fg or last_footer_fg)
-  spans[#spans + 1] = { start = last_button_start, len = #icon, fg = fg }
+  
   jot.ui.float.set_spans(win, 1, spans)
   -- Flush the repaint immediately so the icon swap is visible without
   -- waiting for the next input event (GUI repaints every frame anyway).
