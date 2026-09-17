@@ -65,6 +65,8 @@ local C_EXTENSIONS = {
 -- and search hits all have to stay legible on top of a dimmed branch.
 local DIM_PRIORITY = 1
 
+local retry = function() end
+
 local function enabled()
   return jot.config.get(ENABLED_KEY, "true") ~= "false"
 end
@@ -269,7 +271,7 @@ local function file_lines(path)
   return lines
 end
 
-local function apply(info)
+local apply
   if not enabled() then
     return
   end
@@ -278,7 +280,8 @@ local function apply(info)
   -- parses "1-based row/col". Passing 0-based values silently targets the
   -- wrong buffer or an out-of-range row and every call is rejected.
   local buffer = info and info.buffer
-  if not buffer then
+  if not buffer or buffer < 0 then
+    retry()
     return
   end
   local path = (info and (info.filepath or info.path)) or ""
@@ -292,8 +295,10 @@ local function apply(info)
     lines = file_lines(path)
   end
   if #lines == 0 then
+    retry()
     return
   end
+  retries = 0
 
   local defined = configured_macros()
   local ranges = inactive_ranges(lines, defined)
@@ -316,11 +321,61 @@ local function apply(info)
   end
 end
 
--- CursorMoved, not BufOpen: BufOpen is fired with no buffer id (the event
--- carries -1), so a handler cannot attach anything to the file it announces.
--- CursorMoved carries the current buffer and fires once the file is on screen.
+-- The event that announces a file can arrive before its text is readable, and
+-- then the run paints nothing: BufOpen carries no buffer id at all (-1), and
+-- the first CursorMoved can land while the buffer is still empty. Those runs
+-- used to be the end of it, so the fade only appeared once some unrelated event
+-- forced a repaint -- which made it look like the feature took a minute to
+-- start. Retry briefly instead of waiting for the next keystroke.
+local retries = 0
+
+local function current_buffer()
+  local ok, value = pcall(jot.buffer.current)
+  if not ok or value == nil then
+    return nil
+  end
+  if type(value) == "number" then
+    return value
+  end
+  if type(value) == "table" then
+    return value.id or value.buffer or value.index
+  end
+  return nil
+end
+
+local function current_path()
+  local fn = jot.current_file or (jot.editor and jot.editor.current_file)
+  if type(fn) ~= "function" then
+    return ""
+  end
+  local ok, value = pcall(fn)
+  return (ok and type(value) == "string") and value or ""
+end
+
+local function retry()
+  if retries >= 8 or type(jot.set_timeout) ~= "function" then
+    return
+  end
+  retries = retries + 1
+  local function run()
+    local id = current_buffer()
+    if id then
+      apply({ buffer = id, path = current_path() })
+    end
+  end
+  if not pcall(jot.set_timeout, run, 120) then
+    pcall(jot.set_timeout, 120, run)
+  end
+end
+
 jot.autocmd("CursorMoved", apply)
 jot.autocmd("BufChange", apply)
+-- A file arriving is the moment the fade should show up, without touching
+-- anything, so this one is worth the retry loop.
+jot.autocmd("BufOpen", function()
+  apply({ buffer = current_buffer(), path = current_path() })
+  retry()
+end)
 
 -- Exposed so the preprocessor logic can be exercised directly, without an
 -- editor: test/cpp_inactive_probe.lua drives these.
