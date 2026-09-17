@@ -52,10 +52,14 @@ pcall(function()
     side = "right",
     priority = 25,
     text = function()
-      if session.is_running() then
-        return " md:" .. tostring(session.state().port)
+      local snapshot = session.state()
+      if not snapshot.running then
+        return ""
       end
-      return ""
+      -- live while the page is behind the buffer, idle once the render has
+      -- caught up. The port lives in the start message instead: it is read
+      -- once, not watched.
+      return " md " .. (snapshot.live and "live" or "idle")
     end,
   })
 end)

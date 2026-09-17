@@ -6,6 +6,13 @@
 -- queues it and this module drains the queue on a timer.
 local M = {}
 
+-- The line the browser last asked the editor to scroll to. Pushing it
+-- straight back makes the page move, read its own move as an editor scroll,
+-- and scroll again -- the two ends trade the same number and the view
+-- jitters. Cleared as soon as the editor is somewhere else, so a genuine
+-- later scroll to that same line still syncs.
+local echoed = nil
+
 -- First visible line of the focused pane's buffer, or nil.
 function M.editor_line()
   local ok, info = pcall(jot.viewport.info)
@@ -22,6 +29,15 @@ function M.focused_path()
     return nil
   end
   return meta.path
+end
+
+-- False while the editor sits on a line the browser just asked for.
+function M.should_push(line)
+  if line == echoed then
+    return false
+  end
+  echoed = nil
+  return true
 end
 
 -- Pushes the editor's top line to the browser.
@@ -43,6 +59,7 @@ function M.drain_browser_scroll()
   if not ok or type(line) ~= "number" then
     return nil
   end
+  echoed = line
   pcall(jot.viewport.scroll_top, line)
   return line
 end

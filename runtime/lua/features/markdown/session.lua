@@ -20,6 +20,9 @@ local state = {
   debounce = nil,
   poll = nil,
   push = nil,
+  -- True between an edit and the render that catches up with it: what the
+  -- status segment reports as live.
+  pending = false,
 }
 
 -- Read-only snapshot (tests and status segments use it).
@@ -29,6 +32,7 @@ function M.state()
     port = state.port,
     url = state.url,
     path = state.path,
+    live = state.pending,
   }
 end
 
@@ -82,7 +86,7 @@ local function start_timers()
       return
     end
     local line = sync.editor_line()
-    if line and line ~= state.last_line then
+    if line and line ~= state.last_line and sync.should_push(line) then
       state.last_line = line
       sync.push_editor_scroll()
     end
@@ -104,6 +108,7 @@ function M.refresh(force)
     return false
   end
   state.last_text = text
+  state.pending = false
 
   local ok, meta = pcall(jot.buffer.meta, path)
   local name = ok and type(meta) == "table" and meta.name or nil
@@ -126,6 +131,7 @@ function M.schedule_refresh()
   if state.debounce then
     pcall(jot.timer.clear, state.debounce)
   end
+  state.pending = true
   state.debounce = jot.timer.set_timeout(interval_ms(), function()
     state.debounce = nil
     M.refresh(false)
@@ -162,6 +168,7 @@ function M.start(opts)
   state.last_text = text
   state.body = rendered.body
   state.last_line = nil
+  state.pending = false
   jot.preview.set_page(rendered.html)
   jot.preview.set_content(rendered.body)
   jot.preview.notify("content", rendered.body)
@@ -206,6 +213,7 @@ function M.stop()
   state.body = nil
   state.last_text = nil
   state.last_line = nil
+  state.pending = false
   jot.ui.show_message("markdown preview stopped")
 end
 
