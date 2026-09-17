@@ -35,7 +35,10 @@ static bool probe_terminal_size_via_ioctl(int fd, struct winsize &ws)
   return ioctl(fd, TIOCGWINSZ, &ws) != -1;
 }
 
-static bool get_terminal_size(int &width, int &height)
+// cell_px_* are left at 0 when the terminal does not report a
+// pixel size (the env fallback cannot know it).
+static bool get_terminal_size(int &width, int &height, int *cell_px_w = nullptr,
+                              int *cell_px_h = nullptr)
 {
   struct winsize ws;
 
@@ -45,6 +48,10 @@ static bool get_terminal_size(int &width, int &height)
   {
     width = std::max(1, (int)ws.ws_col);
     height = std::max(1, (int)ws.ws_row);
+    if (cell_px_w)
+      *cell_px_w = (int)ws.ws_xpixel;
+    if (cell_px_h)
+      *cell_px_h = (int)ws.ws_ypixel;
     return true;
   }
 
@@ -58,6 +65,10 @@ static bool get_terminal_size(int &width, int &height)
       {
         width = std::max(1, (int)ws.ws_col);
         height = std::max(1, (int)ws.ws_row);
+        if (cell_px_w)
+          *cell_px_w = (int)ws.ws_xpixel;
+        if (cell_px_h)
+          *cell_px_h = (int)ws.ws_ypixel;
         return true;
       }
     }
@@ -497,7 +508,7 @@ bool Terminal::refresh_size(bool force_probe)
   int new_height = height;
 
   // First source: ioctl and env vars.
-  bool got = get_terminal_size(new_width, new_height);
+  bool got = get_terminal_size(new_width, new_height, &cell_px_w_, &cell_px_h_);
 
   // If the caller asked us to force-probe, or the ioctl/env path failed,
   // try the ANSI cursor-position probe. The probe moves the cursor to

@@ -140,6 +140,10 @@ private:
   // Set once at init (detect_truecolor). Defaults to false so the quantised
   // path is what any test that never runs init() exercises.
   bool truecolor_ = false;
+  // Cell size in pixels, 0 when unreported. Kitty places images in cells and
+  // needs none of this; Sixel output is sized in pixels.
+  int cell_px_w_ = 0;
+  int cell_px_h_ = 0;
 
   void enable_raw_mode();
   void disable_raw_mode();
@@ -208,6 +212,20 @@ public:
   void set_truecolor_supported(bool on)
   {
     truecolor_ = on;
+  }
+
+  int cell_pixel_width() const
+  {
+    return cell_px_w_;
+  }
+  int cell_pixel_height() const
+  {
+    return cell_px_h_;
+  }
+  void set_cell_pixel_size(int w, int h)
+  {
+    cell_px_w_ = w;
+    cell_px_h_ = h;
   }
   void reset_color();
   void set_bold(bool on);
