@@ -14,7 +14,9 @@
 
 namespace
 {
-  constexpr int kLineNumberGutterWidth = 8;
+  // Marker column + line number + gap. Must match the gutter the buffer
+  // renderer draws (render/buffer.cpp) or the caret lands off the text.
+  constexpr int kLineNumberGutterWidth = 7;
   std::string ellipsize_right(const std::string &s, int max_len)
   {
     if (max_len <= 0)

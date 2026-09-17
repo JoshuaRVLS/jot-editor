@@ -1103,7 +1103,8 @@ void Editor::render_collapsed_sidebar_handle()
     return;
   }
 
-  int mid = col.top + col.h / 2;
-  int fg = sidebar_resize_dragging ? theme.fg_active_border : theme.fg_sidebar_border;
-  ui->draw_text(0, mid, "›", fg, theme.bg_default, true);
+  // The handle draws nothing: its glyph sat on the editor's first column, and
+  // the drag-to-open hit area above already covers the gesture. `col` is still
+  // read so the column geometry stays the single source of truth for it.
+  (void)col;
 }

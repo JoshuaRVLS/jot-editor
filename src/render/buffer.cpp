@@ -354,10 +354,6 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
       {
         ui->draw_text(x + 1, draw_y, "●", theme.fg_status_error, gutter_bg, true);
       }
-      else if (!buf.filepath.empty() && is_debugger_breakpoint_hover(pane.buffer_id, line_idx))
-      {
-        ui->draw_text(x + 1, draw_y, "●", theme.fg_comment, gutter_bg);
-      }
       else if (line_diag_severity > 0)
       {
         // VSCode-like gutter accent: a solid color block instead of W/E glyphs.
