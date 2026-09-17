@@ -193,7 +193,9 @@ TEST_CASE("Bundled decorations straight-underline style falls back for old termi
 
   invoke_handler(L);
 
-  REQUIRE(g.spans.size() == 2);
+  // Two underlines plus the end-of-line message that now rides each
+  // diagnostic; the zero-width hint carries a message and no underline.
+  REQUIRE(g.spans.size() == 3);
   REQUIRE(g.spans[0].underline == 1); // straight, not wavy
   REQUIRE(g.spans[0].underline_hl == "diagnostic_error");
   REQUIRE(g.spans[1].underline == 1);
@@ -217,8 +219,10 @@ TEST_CASE("Bundled decorations feature applies wavy underlines per diagnostic")
 
   invoke_handler(L);
 
-  REQUIRE(g.clear_count == 1);
-  REQUIRE(g.spans.size() == 2); // zero-width hint is skipped
+  // The feature deletes only the spans it created: a buffer-wide clear() also
+  // wipes the preprocessor dimming (see test/decorations_ownership_probe.lua).
+  REQUIRE(g.clear_count == 0);
+  REQUIRE(g.spans.size() == 3); // two underlines plus the hint's message
 
   const DecoSpan &error = g.spans[0];
   REQUIRE(error.row == 2);
@@ -234,10 +238,14 @@ TEST_CASE("Bundled decorations feature applies wavy underlines per diagnostic")
   REQUIRE(warning.underline == 2);
   REQUIRE(warning.underline_hl == "diagnostic_warning");
 
-  // No virtual text anywhere: the feature renders squiggles only.
+  // Every diagnostic carries its message at the end of its line. The
+  // zero-width hint is the one with nothing to underline.
+  const DecoSpan &hint = g.spans[2];
+  REQUIRE(hint.underline == 0);
+  REQUIRE_FALSE(hint.virt_text.empty());
   for (const DecoSpan &s : g.spans)
   {
-    REQUIRE(s.virt_text.empty());
+    REQUIRE_FALSE(s.virt_text.empty());
   }
 
   lua_close(L);

@@ -428,27 +428,9 @@ TEST_CASE("Bundled Lua hover UI renders and dismisses a float")
     return v;
   };
 
-  const int button_col = g.last_width - 2; // last interior cell of row 1
-  const int set_lines_before = g.set_lines_count;
-
-  // Motion over the button highlights it; motion elsewhere does not.
-  REQUIRE(fire_mouse(button_col, 1, true, false));
-  REQUIRE(read_state("hover"));
-  REQUIRE(fire_mouse(button_col - 3, 1, true, false));
-  REQUIRE_FALSE(read_state("hover"));
-
-  // Clicking the button copies the raw contents and swaps to the checklist.
-  REQUIRE(g.clipboard.empty());
-  REQUIRE(fire_mouse(button_col, 1, false, true));
-  REQUIRE(g.clipboard == "Some **hover** content here\n```cpp\nint x;\n```");
-  REQUIRE(read_state("copied"));
-  REQUIRE(g.set_lines_count == set_lines_before + 3); // hover on + off + copied
-
-  // The copied state reverts to idle when the timer fires.
-  REQUIRE(g.timer_ref != LUA_NOREF);
-  lua_rawgeti(L, LUA_REGISTRYINDEX, g.timer_ref);
-  REQUIRE(lua_pcall(L, 0, 0, 0) == LUA_OK);
-  REQUIRE_FALSE(read_state("copied"));
+  // The copy button is gone (see features/hover.lua): there is no button cell
+  // left to hover or click, so the mouse-state assertions that used to sit
+  // here have nothing to drive.
 
   // Events over the float are consumed (never fall through to the editor).
   REQUIRE(fire_mouse(1, 2, true, false));
