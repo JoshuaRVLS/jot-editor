@@ -306,6 +306,15 @@ std::string ImageViewer::base64_encode(const std::string &input)
   return out;
 }
 
+// One image at a time, and it has an id: deleting by id leaves every other
+// image on screen untouched, where "delete all" could take out placements
+// that were never ours. The value is arbitrary but distinctive, so it does
+// not collide with an application that picks 1.
+namespace
+{
+  constexpr int kKittyImageId = 1001;
+}
+
 std::string
 ImageViewer::build_kitty_file_command(const std::string &path, int x, int y, int w, int h)
 {
@@ -313,14 +322,15 @@ ImageViewer::build_kitty_file_command(const std::string &path, int x, int y, int
     return "";
   std::ostringstream out;
   out << "\x1b[" << y + 1 << ";" << x + 1 << "H";
-  out << "\x1b_Ga=T,f=100,t=f,q=2,c=" << std::max(1, w) << ",r=" << std::max(1, h) << ";"
+  out << "\x1b_Ga=T,f=100,t=f,q=2,i=" << kKittyImageId << ",c=" << std::max(1, w)
+      << ",r=" << std::max(1, h) << ";";
       << base64_encode(path) << "\x1b\\";
   return out.str();
 }
 
 std::string ImageViewer::build_kitty_delete_command()
 {
-  return "\x1b_Ga=d,d=A,q=2;\x1b\\";
+  return "\x1b_Ga=d,d=i,i=" + std::to_string(kKittyImageId) + ",q=2;\x1b\\";
 }
 
 std::string ImageViewer::build_sixel_command(const std::string &path, int w, int h)

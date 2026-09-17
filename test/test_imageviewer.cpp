@@ -30,6 +30,12 @@ TEST_CASE("Image Viewer Kitty Command", "[jot]")
   REQUIRE(cmd.find("\x1b_G") != std::string::npos);
   REQUIRE(cmd.find("a=T") != std::string::npos);
   REQUIRE(cmd.find("f=100") != std::string::npos);
+  // The transmission carries the viewer's image id, and the delete names that
+  // id: "delete all" would take out placements that were never ours.
+  REQUIRE(cmd.find("i=1001") != std::string::npos);
+  const std::string del = ImageViewer::build_kitty_delete_command();
+  REQUIRE(del.find("d=i,i=1001") != std::string::npos);
+  REQUIRE(del.find("d=A") == std::string::npos);
   REQUIRE(cmd.find("t=f") != std::string::npos);
   REQUIRE(cmd.find("c=40") != std::string::npos);
   REQUIRE(cmd.find("r=12") != std::string::npos);
