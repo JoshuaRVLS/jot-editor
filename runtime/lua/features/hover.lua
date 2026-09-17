@@ -512,23 +512,6 @@ local function present(info)
     buf = nil
     return false
   end
-  -- The button span joins the first line's content spans (byte offsets into
-  -- the padded line: content spans stay valid, the icon sits past them).
-  line1_content_spans = {}
-  if spans[1] then
-    for _, sp in ipairs(spans[1]) do
-      line1_content_spans[#line1_content_spans + 1] = sp
-    end
-  end
-  spans[1] = {}
-  for _, sp in ipairs(line1_content_spans) do
-    spans[1][#spans[1] + 1] = sp
-  end
-  spans[1][#spans[1] + 1] = {
-    start = last_button_start,
-    len = 3,
-    fg = copy_state == "copied" and (last_info_fg or fg) or (copy_hover and fg or footer_fg),
-  }
   for line_idx, s in pairs(spans) do
     if line_idx <= shown then
       jot.ui.float.set_spans(win, line_idx, s)
