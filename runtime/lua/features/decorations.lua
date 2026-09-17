@@ -39,11 +39,13 @@ local function enabled()
   return jot.config.get(ENABLED_KEY, "true") ~= "false"
 end
 
--- End-of-line message for a diagnostic: the connector drops out of the squiggle
--- and the text carries the severity colour. The renderer draws only the first
--- virt_text it finds on a row, so the map below keeps exactly one per line.
+-- End-of-line message for a diagnostic, in the severity colour. The lead marker
+-- is a plain dot, not a corner: the message sits beside the code, so anything
+-- with a stem in it (a "|-" / corner glyph) would imply a line below that is
+-- not there. The renderer draws only the first virt_text it finds on a row, so
+-- the map below keeps exactly one per line.
 local VIRT_TEXT_KEY = "diagnostics_virtual_text"
-local VIRT_TEXT_PREFIX = "  └─ "
+local VIRT_TEXT_PREFIX = "  ● "
 
 local function virtual_text_enabled()
   return jot.config.get(VIRT_TEXT_KEY, "true") ~= "false"
