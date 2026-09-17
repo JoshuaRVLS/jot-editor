@@ -29,13 +29,16 @@ local ICONS = {
   hint = "",
 }
 
--- Copy button glyphs (Material Design Nerd Fonts): a copy icon pinned to the
--- top-right interior cell of the popup, swapping to a checklist while the
--- "copied" state lasts. Two extra interior cells are reserved for it (a gap
--- and the icon cell), so content wraps one column shorter.
-local ICON_COPY = "󰆏"  -- nf-md-content_copy
-local ICON_CHECK = "󰄲" -- nf-md-checkbox_marked_circle_outline
-local COPY_RESERVE = 2
+-- Copy button label, pinned to the top-right of the popup and swapping while
+-- the "copied" state lasts. Plain ASCII on purpose: the previous glyphs were
+-- Material Design Nerd Font icons from the Private Use Area, which most
+-- terminal fonts do not carry -- they rendered as question marks -- and they
+-- were four bytes wide while the geometry below assumed three, so the
+-- highlight span started inside the character.
+local ICON_COPY = "copy"
+local ICON_CHECK = "ok"
+-- Interior cells the button needs: a gap plus the widest label.
+local COPY_RESERVE = 1 + math.max(#ICON_COPY, #ICON_CHECK)
 
 local win = nil -- current float handle (0 when none)
 local buf = nil -- current scratch buffer handle
@@ -82,7 +85,7 @@ local function refresh_button()
     spans[#spans + 1] = sp
   end
   local fg = copy_state == "copied" and (last_info_fg or last_fg) or (copy_hover and last_fg or last_footer_fg)
-  spans[#spans + 1] = { start = last_button_start, len = 3, fg = fg }
+  spans[#spans + 1] = { start = last_button_start, len = #icon, fg = fg }
   jot.ui.float.set_spans(win, 1, spans)
   -- Flush the repaint immediately so the icon swap is visible without
   -- waiting for the next input event (GUI repaints every frame anyway).
@@ -460,11 +463,14 @@ local function present(info)
   local bg = info.bg or 0
   local border_fg = info.border_fg or info.border or fg
   local footer_fg = (info.colors and info.colors.comment) or fg
-  local first_len = visual_len(body[1] or "")
-  first_line_base = (body[1] or "") .. string.rep(" ", math.max(0, width - first_len))
   local button_icon = copy_state == "copied" and ICON_CHECK or ICON_COPY
+  local first_len = visual_len(body[1] or "")
+  -- Pad short by the label's extra width so the button's right edge lands on
+  -- the interior edge instead of running past it.
+  local pad = math.max(0, width - first_len - (#button_icon - 1))
+  first_line_base = (body[1] or "") .. string.rep(" ", pad)
   body[1] = first_line_base .. " " .. button_icon
-  last_button_start = #(body[1]) - 3 -- 3-byte icon
+  last_button_start = #(body[1]) - #button_icon
   last_button_col = width + 2 -- border-relative: 0 = left border, 1..width+1 interior
   last_fg = fg
   last_footer_fg = footer_fg
