@@ -148,6 +148,8 @@ void Config::load_defaults()
   settings["lsp_inlay_hints"] = "true";
   settings["lsp_inlay_type_hints"] = "true";
   settings["decorations_inline_diagnostics"] = "true";
+  // End-of-line diagnostic message next to the squiggle (features/decorations.lua).
+  settings["diagnostics_virtual_text"] = "true";
   settings["color_scheme"] = "dark";
   settings["right_panel_width"] = "42";
   settings["zen_content_width"] = "100";

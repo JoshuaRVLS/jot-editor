@@ -39,13 +39,29 @@ local function enabled()
   return jot.config.get(ENABLED_KEY, "true") ~= "false"
 end
 
+-- End-of-line message for a diagnostic: the connector drops out of the squiggle
+-- and the text carries the severity colour. The renderer draws only the first
+-- virt_text it finds on a row, so the map below keeps exactly one per line.
+local VIRT_TEXT_KEY = "diagnostics_virtual_text"
+local VIRT_TEXT_PREFIX = "  └─ "
+
+local function virtual_text_enabled()
+  return jot.config.get(VIRT_TEXT_KEY, "true") ~= "false"
+end
+
+local function one_line(text)
+  return (text or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
 local function underline_style()
   local style = (jot.config.get(STYLE_KEY, "wavy") or "wavy"):lower()
   return UNDERLINE_STYLE[style] or UNDERLINE_STYLE.wavy
 end
 
 local function apply_diagnostics(info)
-  if not enabled() then
+  local want_underline = enabled()
+  local want_text = virtual_text_enabled()
+  if not want_underline and not want_text then
     return
   end
   local buffer = info.buffer
@@ -55,23 +71,40 @@ local function apply_diagnostics(info)
   jot.decoration.clear(buffer)
   local diagnostics = jot.diagnostics.get(buffer) or {}
   local underline = underline_style()
-  if underline == 0 then
-    return
+
+  -- The most severe diagnostic on a line owns that line's message: an error
+  -- must not be hidden behind a warning reported on the same line.
+  local loudest = {}
+  if want_text then
+    for _, d in ipairs(diagnostics) do
+      local current = loudest[d.line]
+      if not current or (d.severity or 4) < (current.severity or 4) then
+        loudest[d.line] = d
+      end
+    end
   end
+
   for _, d in ipairs(diagnostics) do
     local hl = SEVERITY_HL[d.severity] or "diagnostic_info"
+    local width = math.max(0, (d.end_col or (d.col + 1)) - d.col)
     -- Underline over the reported range (byte columns, 1-based):
     -- 2 = wavy squiggle (SGR 4:3), 1 = plain straight underline.
-    local width = math.max(0, (d.end_col or (d.col + 1)) - d.col)
-    if width > 0 then
-      jot.decoration.set(buffer, {
-        row = d.line,
-        col = d.col,
-        width = width,
-        underline = underline,
-        underline_hl = hl,
-        priority = 10,
-      })
+    local deco = {
+      row = d.line,
+      col = d.col,
+      width = width,
+      priority = 10,
+    }
+    if want_underline and underline ~= 0 and width > 0 then
+      deco.underline = underline
+      deco.underline_hl = hl
+    end
+    if want_text and loudest[d.line] == d then
+      deco.virt_text = VIRT_TEXT_PREFIX .. one_line(d.message)
+      deco.virt_hl = hl
+    end
+    if deco.underline or deco.virt_text then
+      jot.decoration.set(buffer, deco)
     end
   end
 end
