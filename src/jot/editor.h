@@ -1107,12 +1107,12 @@ private:
   // Installed fixed-width families, sorted. Reads the font directories, so it
   // is a picker-time call, not a per-frame one.
   std::vector<std::string> gui_font_families() const;
-  // DEPRECATED: statusline message channel. Kept for compatibility; toasts
-  // (runtime/lua/features/ui/toast.lua) are the message surface now — these still
-  // feed them via the native bridge. `toast=false` shows the statusline
-  // message without surfacing a toast (used for noisy open/close news).
-  void set_message(const std::string &msg, bool toast = true);
-  void set_transient_message(const std::string &msg, int duration_ms = 5000, bool toast = true);
+  // The quiet surface for routine news ("Saved", "3 lines joined"): the status
+  // line shows it and the transient timer clears it. A toast is opt-in per call
+  // (`toast = true`) for news that genuinely wants attention — making it the
+  // default put a toast over the editor for every ordinary action.
+  void set_message(const std::string &msg, bool toast = false);
+  void set_transient_message(const std::string &msg, int duration_ms = 5000, bool toast = false);
   bool close_active_floating_ui();
 
 public:
