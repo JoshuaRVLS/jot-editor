@@ -1039,14 +1039,17 @@ void UI::flush_cursor()
 {
   term->disable_autowrap();
   const int margin = term->render_margin();
-  if (cursor_hidden || !cursor_blink_visible)
+  // A caret with no placed cell (reset_cursor_state parks x/y at -1) has
+  // nothing correct to show. Substituting 0,0 here put a visible caret in the
+  // top-left corner on any flush that ran before something placed one.
+  if (cursor_hidden || !cursor_blink_visible || cursor_x < 0 || cursor_y < 0)
   {
     term->hide_cursor();
   }
   else
   {
-    int cx = (cursor_x < 0) ? 0 : cursor_x;
-    int cy = (cursor_y < 0) ? 0 : cursor_y;
+    int cx = cursor_x;
+    int cy = cursor_y;
     // Same right-edge clamp as render(): never park the cursor on the
     // rightmost cell the renderer leaves untouched.
     const int cursor_max_x = (width > 1) ? (width - margin - 1) : (width - 1);
