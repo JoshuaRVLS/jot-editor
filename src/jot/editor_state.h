@@ -39,7 +39,7 @@ struct EditorState
   int pane_root = 0;
   int current_pane = 0;
   int current_buffer = 0;
-  PaneLayoutMode pane_layout_mode;
+  PaneLayoutMode pane_layout_mode = PANE_LAYOUT_SINGLE;
 
   bool running = false;
   std::string message;
@@ -63,7 +63,7 @@ struct EditorState
   bool command_palette_theme_mode = false;
   std::string command_palette_theme_original;
 
-  QuickPickKind quick_pick_kind;
+  QuickPickKind quick_pick_kind = QUICK_PICK_NONE;
   bool show_quick_pick = false;
   // Scroll anchor of the visible quick-pick window (follow-window, same
   // contract as command_palette_scroll).
@@ -162,7 +162,7 @@ struct EditorState
   int debugger_panel_height = 0;
   bool show_right_panel = false;
   int right_panel_width = 0;
-  RightPanelTab active_right_panel_tab;
+  RightPanelTab active_right_panel_tab = RIGHT_PANEL_DEBUG;
   // Ordered list of panels opened in the right dock (VSCode-style tabs).
   // Commands like :gitpanel add their tab here; the tab strip at the top of
   // the panel switches between them and each tab can be closed individually.
@@ -257,7 +257,7 @@ struct EditorState
   bool auto_indent = false;
   bool needs_redraw = false;
   bool mouse_selecting = false;
-  MouseSelectionMode mouse_selection_mode;
+  MouseSelectionMode mouse_selection_mode = MOUSE_SELECT_CHAR;
   Cursor mouse_start;
   Cursor mouse_anchor_end;
   int mouse_press_screen_x = 0;
@@ -335,7 +335,7 @@ struct EditorState
   bool blink_visible = false;
 
   bool show_context_menu = false;
-  ContextMenuSurface context_menu_surface;
+  ContextMenuSurface context_menu_surface = CONTEXT_MENU_NONE;
   std::vector<ContextMenuItem> context_menu_items;
   int context_menu_x = 0;
   int context_menu_y = 0;
@@ -486,7 +486,7 @@ struct EditorState
   bool zen_saved_sidebar_ = true;
   bool zen_saved_panel_ = false;
   int zen_saved_status_height_ = 2;
-  SidebarView active_sidebar_view;
+  SidebarView active_sidebar_view = SIDEBAR_VIEW_EXPLORER;
   int sidebar_width = 0;
   std::string root_dir;
   bool workspace_session_enabled = false;
@@ -502,7 +502,7 @@ struct EditorState
   std::string file_tree_event_watch_root_;
   SidebarRenderCache sidebar_render_cache_;
 
-  EditorFocus focus_state;
+  EditorFocus focus_state = FOCUS_EDITOR;
   std::vector<int> recent_keys;
   int easter_egg_timer = 0;
 
