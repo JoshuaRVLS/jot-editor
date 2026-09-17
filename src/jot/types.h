@@ -519,7 +519,10 @@ struct Decoration
   std::string virt_text; // end-of-line virtual text (empty = none)
   int virt_fg = -1;
   int virt_bg = -1;
-  std::string virt_hl; // theme group for the virtual text
+  std::string virt_hl; // theme group for the virtual text  // Faint (SGR 2): keeps the token's own colours and drops its
+  // intensity, unlike a colour swap. The terminal equivalent of an opacity
+  // fade on inactive preprocessor branches.
+  bool dim = false;
 };
 
 struct FileBuffer

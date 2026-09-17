@@ -45,6 +45,7 @@ std::uint64_t LuaAPI::decoration_set(int buffer_idx, lua_State *L, int opts_inde
   d.hl = jot_lua::table_string(L, opts_index, "hl", "");
   d.underline = std::clamp(jot_lua::table_int(L, opts_index, "underline", 0), 0, 2);
   d.underline_fg = jot_lua::table_int(L, opts_index, "underline_fg", -1);
+  d.dim = jot_lua::table_bool(L, opts_index, "dim", false);
   d.underline_hl = jot_lua::table_string(L, opts_index, "underline_hl", "");
   d.right_gravity = jot_lua::table_bool(L, opts_index, "right_gravity", true);
   d.virt_text = jot_lua::table_string(L, opts_index, "virt_text", "");

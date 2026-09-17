@@ -222,7 +222,8 @@ public:
                  int underline = 0,
                  int underline_fg = -1,
                  std::uint32_t fg_rgb = kNoRgb,
-                 std::uint32_t bg_rgb = kNoRgb);
+                 std::uint32_t bg_rgb = kNoRgb,
+                 bool dim = false);
   void draw_rect(const UIRect &rect, int fg, int bg);
   // Draws a box, optionally inking only some of its sides. A corner glyph is
   // used only where both of its sides are on; a lone side runs its line glyph

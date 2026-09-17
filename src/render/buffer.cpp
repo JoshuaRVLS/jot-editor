@@ -863,6 +863,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
             // that already ended as the walk moved right.
             int deco_fg = -1;
             int deco_bg = -1;
+            bool deco_dim = false;
             int deco_underline = 0;
             int deco_underline_fg = -1;
             if (row_deco_lo < row_deco_hi)
@@ -884,6 +885,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
                     {
                       theme_group_color(d.hl, deco_fg, deco_bg);
                     }
+                    deco_dim = d.dim;
                     deco_underline = d.underline;
                     deco_underline_fg = d.underline_fg;
                     if (d.underline != 0 && deco_underline_fg == -1 && !d.underline_hl.empty())
@@ -955,7 +957,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
                               deco_underline,
                               deco_underline_fg,
                               span_fg_rgb,
-                              span_bg_rgb);
+                              span_bg_rgb,
+                              deco_dim);
               }
             }
             else
@@ -970,7 +973,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
                             deco_underline,
                             deco_underline_fg,
                             span_fg_rgb,
-                            span_bg_rgb);
+                            span_bg_rgb,
+                              deco_dim);
             }
             char_idx = next_idx;
           }

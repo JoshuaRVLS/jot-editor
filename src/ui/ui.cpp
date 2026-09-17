@@ -1094,7 +1094,8 @@ void UI::draw_text(int x,
                    int underline,
                    int underline_fg,
                    std::uint32_t fg_rgb,
-                   std::uint32_t bg_rgb)
+                   std::uint32_t bg_rgb,
+                   bool dim)
 {
   // Guard against invisible normal text: if the caller used the default-bg
   // path (bg < 0) and the requested foreground would match the background,
@@ -1124,6 +1125,7 @@ void UI::draw_text(int x,
       bad.bg_rgb = bg_rgb;
       bad.bold = bold;
       bad.italic = italic;
+      bad.dim = dim;
       bad.reverse = false;
       bad.underline = underline;
       bad.underline_fg = underline_fg;
@@ -1145,6 +1147,7 @@ void UI::draw_text(int x,
     cell.bg_rgb = bg_rgb;
     cell.bold = bold;
     cell.italic = italic;
+    cell.dim = dim;
     cell.reverse = false;
     cell.underline = underline;
     cell.underline_fg = underline_fg;

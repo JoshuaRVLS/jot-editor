@@ -308,7 +308,7 @@ local function apply(info)
           row = index,
           col = 1,
           width = #text,
-          hl = "comment",
+          dim = true,
           priority = DIM_PRIORITY,
         }))
       end
