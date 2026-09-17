@@ -118,7 +118,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
     return;
   }
 
-  int line_num_width = 8;
+  int line_num_width = 7;
   ActiveBracketGuide bracket_guide = build_active_bracket_guide(buf, tab_size);
 
   refresh_folds(buf);
@@ -385,15 +385,12 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
       {
         ln_fg = diag_fg;
       }
-      ui->draw_text(x + 3, draw_y, num_buf, ln_fg, ln_bg);
+      ui->draw_text(x + 2, draw_y, num_buf, ln_fg, ln_bg);
+      // No fold marker column: the fold still shows in the "… N lines" suffix
+      // on the header row, and the column it used to take goes to the code.
       int fold_index = -1;
-      bool folded_header = Folding::is_line_folded_header(buf.fold_ranges, line_idx, &fold_index);
-      bool foldable_header =
-          folded_header || Folding::fold_starting_at_line(buf.fold_ranges, line_idx) >= 0;
-      if (foldable_header)
-      {
-        ui->draw_text(x + 2, draw_y, folded_header ? "▸" : "▾", theme.fg_comment, gutter_bg);
-      }
+      const bool folded_header =
+          Folding::is_line_folded_header(buf.fold_ranges, line_idx, &fold_index);
 
       const std::string &line = buf.line(line_idx);
       int scroll_x = ui_clamp_to_utf8_boundary(line, buf.scroll_x);

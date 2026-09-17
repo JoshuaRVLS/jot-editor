@@ -233,7 +233,7 @@ void Editor::initialize_state_defaults()
 
   show_sidebar = false;
   active_sidebar_view = SIDEBAR_VIEW_EXPLORER;
-  sidebar_width = 30;
+  sidebar_width = 26;
   root_dir = ".";
   workspace_session_enabled = false;
   workspace_session_root.clear();

@@ -875,7 +875,7 @@ void Editor::handle_mouse(void *event_ptr)
   if (inside_pane && is_click)
     focus_state = FOCUS_EDITOR;
 
-  const int line_num_width = 8;
+  const int line_num_width = 7;
   const int code_start_x = pane.x + 1 + line_num_width;
   const int content_top = pane.y + tab_height;
   const int content_bottom = pane.y + pane.h - 1;

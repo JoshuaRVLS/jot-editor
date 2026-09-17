@@ -139,7 +139,7 @@ void Editor::render_lsp_completion()
     draw_w = std::max(1, draw_w - minimap_width);
   }
 
-  const int line_num_width = 8;
+  const int line_num_width = 7;
   const bool use_nerd_icons = config.get_bool("lsp_completion_nerd_icons", true);
   int visible_h = std::max(1, pane.h - tab_height - 1);
   int visible_w = std::max(12, draw_w - 2 - line_num_width);

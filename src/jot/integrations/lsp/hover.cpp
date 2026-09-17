@@ -473,7 +473,7 @@ void Editor::handle_lsp_hover_result(const LSPHoverResult &hover)
   }
 
   const SplitPane &pane = get_pane();
-  constexpr int line_num_width = 8;
+  constexpr int line_num_width = 7;
   int row = hover.origin_line - buf.scroll_offset;
   int max_row = std::max(0, pane.h - tab_height - 1);
   int anchor_y = pane.y + tab_height + std::clamp(row, 0, max_row);
