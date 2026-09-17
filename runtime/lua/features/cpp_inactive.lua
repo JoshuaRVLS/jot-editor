@@ -214,8 +214,9 @@ local function inactive_ranges(lines, defined)
   return ranges, defines
 end
 
--- jot.buffer.get_line is 1-based and takes the buffer, so this reads the buffer
--- that changed rather than whichever one happens to be current.
+-- jot.buffer.get_line is 1-based and takes the buffer. It is empty while a
+-- file is still being opened (BufOpen fires before the text is in), so the
+-- caller falls back to reading the file.
 local function buffer_lines(buffer)
   local lines = {}
   for index = 1, 200000 do
@@ -228,10 +229,26 @@ local function buffer_lines(buffer)
   return lines
 end
 
+local function file_lines(path)
+  local ok, text = pcall(jot.file.read, path)
+  if not ok or type(text) ~= "string" or text == "" then
+    return {}
+  end
+  local lines = {}
+  for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+    lines[#lines + 1] = line
+  end
+  return lines
+end
+
 local function apply(info)
   if not enabled() then
     return
   end
+  -- Buffer ids and rows are both 1-based here: the event payload hands out
+  -- buffer + 1 (resolve_buffer_arg subtracts the 1 itself), and decoration_set
+  -- parses "1-based row/col". Passing 0-based values silently targets the
+  -- wrong buffer or an out-of-range row and every call is rejected.
   local buffer = info and info.buffer
   if not buffer then
     return
@@ -240,7 +257,12 @@ local function apply(info)
   if not is_c_family(path) then
     return
   end
+  -- The buffer first (it has unsaved edits), the file when it is still empty
+  -- because BufOpen ran before the text was loaded.
   local lines = buffer_lines(buffer)
+  if #lines == 0 then
+    lines = file_lines(path)
+  end
   if #lines == 0 then
     return
   end
@@ -249,13 +271,14 @@ local function apply(info)
   local ranges = inactive_ranges(lines, defined)
 
   jot.decoration.clear(buffer)
+  local painted = 0
   for _, range in ipairs(ranges) do
     for index = range[1], range[2] do
       local text = lines[index] or ""
       if #text > 0 then
         jot.decoration.set(buffer, {
-          row = index - 1,
-          col = 0,
+          row = index,
+          col = 1,
           width = #text,
           hl = "comment",
           priority = DIM_PRIORITY,
@@ -265,7 +288,10 @@ local function apply(info)
   end
 end
 
-jot.autocmd("BufOpen", apply)
+-- CursorMoved, not BufOpen: BufOpen is fired with no buffer id (the event
+-- carries -1), so a handler cannot attach anything to the file it announces.
+-- CursorMoved carries the current buffer and fires once the file is on screen.
+jot.autocmd("CursorMoved", apply)
 jot.autocmd("BufChange", apply)
 
 -- Exposed so the preprocessor logic can be exercised directly, without an
