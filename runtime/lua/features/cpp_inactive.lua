@@ -253,7 +253,45 @@ end
 -- jot.buffer.get_line is 1-based and takes the buffer. It is empty while a
 -- file is still being opened (BufOpen fires before the text is in), so the
 -- caller falls back to reading the file.
+-- jot.buffer.get_text reads the whole buffer in one crossing, but it reads the
+-- buffer on screen, so it is only usable when that is the buffer being painted.
+-- Worth the check: the loop below costs one crossing per line of the file.
+local function current_id()
+  local ok, value = pcall(jot.buffer.current)
+  if not ok or value == nil then
+    return nil
+  end
+  if type(value) == "number" then
+    return value
+  end
+  if type(value) == "table" then
+    return value.id or value.buffer or value.index
+  end
+  return nil
+end
+
+local function whole_buffer_text(buffer)
+  if type(jot.buffer.get_text) ~= "function" or current_id() ~= buffer then
+    return nil
+  end
+  local ok, text = pcall(jot.buffer.get_text)
+  if not ok or type(text) ~= "string" or text == "" then
+    return nil
+  end
+  return text
+end
+
 local function buffer_lines(buffer)
+  local whole = whole_buffer_text(buffer)
+  if whole then
+    local lines = {}
+    for line in (whole .. "\n"):gmatch("([^\n]*)\n") do
+      lines[#lines + 1] = line
+    end
+    if #lines > 0 then
+      return lines
+    end
+  end
   local lines = {}
   for index = 1, 200000 do
     local text = jot.buffer.get_line(index, buffer)
