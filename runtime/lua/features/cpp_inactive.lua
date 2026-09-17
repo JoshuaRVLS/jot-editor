@@ -285,6 +285,10 @@ local apply = function(info)
     return
   end
   local path = (info and (info.filepath or info.path)) or ""
+  if path == "" then
+    retry()
+    return
+  end
   if not is_c_family(path) then
     return
   end
@@ -343,13 +347,26 @@ local function current_buffer()
   return nil
 end
 
+-- jot.buffer.current_file is the shipped spelling (features/keymaps.lua uses
+-- it); the others are tried in case it moves.
 local function current_path()
-  local fn = jot.current_file or (jot.editor and jot.editor.current_file)
-  if type(fn) ~= "function" then
-    return ""
+  local candidates = {}
+  if jot.buffer and type(jot.buffer.current_file) == "function" then
+    candidates[#candidates + 1] = jot.buffer.current_file
   end
-  local ok, value = pcall(fn)
-  return (ok and type(value) == "string") and value or ""
+  if type(jot.current_file) == "function" then
+    candidates[#candidates + 1] = jot.current_file
+  end
+  if jot.editor and type(jot.editor.current_file) == "function" then
+    candidates[#candidates + 1] = jot.editor.current_file
+  end
+  for _, fn in ipairs(candidates) do
+    local ok, value = pcall(fn)
+    if ok and type(value) == "string" and value ~= "" then
+      return value
+    end
+  end
+  return ""
 end
 
 retry = function()
