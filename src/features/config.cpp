@@ -150,6 +150,10 @@ void Config::load_defaults()
   settings["decorations_inline_diagnostics"] = "true";
   // End-of-line diagnostic message next to the squiggle (features/decorations.lua).
   settings["diagnostics_virtual_text"] = "true";
+  // Dim C/C++ branches the preprocessor would skip, and the symbols that
+  // count as defined when deciding (features/cpp_inactive.lua).
+  settings["cpp_dim_inactive"] = "true";
+  settings["cpp_defined_macros"] = "";
   settings["color_scheme"] = "dark";
   settings["right_panel_width"] = "42";
   settings["zen_content_width"] = "100";

@@ -59,6 +59,7 @@ const KnownSetting kKnownSettings[] = {
     {"debugger_height", "Debugger panel height", SettingsEntry::Type::Int},
     {"decorations_inline_diagnostics", "Inline diagnostics", SettingsEntry::Type::Bool},
     {"diagnostics_virtual_text", "Diagnostic messages inline", SettingsEntry::Type::Bool},
+    {"cpp_dim_inactive", "Dim inactive #ifdef branches", SettingsEntry::Type::Bool},
     {"discord_rpc", "Discord presence", SettingsEntry::Type::Bool},
     {"discord_app_id", "Discord app id", SettingsEntry::Type::String},
     {"discord_details_editing", "Discord details (editing)", SettingsEntry::Type::String},

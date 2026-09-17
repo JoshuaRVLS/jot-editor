@@ -711,6 +711,9 @@ bool LuaAPI::init()
   // disable it.
   load_plugins();
   jot_lua::load_bundled_lua_file(L, "features/decorations.lua", "Decorations");
+  // Dims the untaken branches of C/C++ conditionals (features/cpp_inactive.lua).
+  // Loaded here for the same reason as the decorations above.
+  jot_lua::load_bundled_lua_file(L, "features/cpp_inactive.lua", "CppInactive");
   // Built-in editor keybinds (features/keymaps.lua). Loaded after plugins so
   // user keymaps registered first take precedence; the Lua registrations
   // shadow the matching hardcoded fallbacks in the modeless input path.
