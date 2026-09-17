@@ -350,14 +350,12 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
       int line_diag_severity = line_diagnostic_severity(buf, line_idx);
       int diag_fg = line_diag_severity > 0 ? diagnostic_severity_color(theme, line_diag_severity)
                                            : theme.fg_line_num;
-      if (!buf.filepath.empty() && has_debugger_breakpoint(buf.filepath, line_idx))
+      if (line_diag_severity > 0)
       {
-        ui->draw_text(x + 1, draw_y, "●", theme.fg_status_error, gutter_bg, true);
-      }
-      else if (line_diag_severity > 0)
-      {
-        // VSCode-like gutter accent: a solid color block instead of W/E glyphs.
-        ui->draw_text(x + 1, draw_y, " ", diag_fg, diag_fg, true);
+        // VSCode-like gutter accent, kept to a sliver: a full cell of the
+        // severity colour reads as a bar next to the number, and the eighth
+        // block narrows it to a line without needing a second column.
+        ui->draw_text(x + 1, draw_y, "▏", diag_fg, gutter_bg, true);
       }
       else
       {
