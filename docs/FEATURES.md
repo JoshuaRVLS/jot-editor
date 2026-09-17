@@ -486,8 +486,8 @@ API.
 ### The keymap grammar (operators, selection, next/previous)
 
 Bindings with a family shape live behind a prefix whose letter says what it is,
-and the sequence after it is chosen from the menu which-key shows (a bare key with
-no action is a group title). The object letters are the same for every operator,
+and the sequence after it is typed through, with no menu prompting you (a bare
+key with no action is a group title). The object letters are the same for every operator,
 so the grammar is learnt once:
 
 | Sequence | Action |

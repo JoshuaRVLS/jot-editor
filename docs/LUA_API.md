@@ -50,13 +50,12 @@ jot.marks        set, get, jump, del, list
 jot.status       register, unregister
 ```
 
-### Keymap groups (which-key)
+### Keymap groups
 
 `register_keymap` (and `jot.keymap.set`) accepts **multi-chord sequences**:
-write the chords space-separated, and pressing the prefix automatically opens
-a which-key helper above the status line that lists the next options. Run an
-action by pressing its next chord; subgroups nest (`"Ctrl+T W L"` →
-`Ctrl+T`, then `W`, then `L`). `Esc` closes, `Backspace` goes up a level.
+write the chords space-separated, and pressing the prefix starts the sequence.
+Run an action by pressing its next chord; subgroups nest (`"Ctrl+T W L"` →
+`Ctrl+T`, then `W`, then `L`). `Esc` cancels, `Backspace` goes up a level.
 
 ```lua
 register_keymap("Ctrl+T N", function() jot.file.new() end, "New file")

@@ -421,7 +421,6 @@ void Editor::render()
     render_command_palette();
     render_quick_pick();
     render_settings_menu();
-    render_which_key_panel();
     render_search_panel();
     render_tree_sitter_status_modal();
     render_lsp_status_modal();

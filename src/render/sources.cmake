@@ -24,7 +24,6 @@ set(JOT_RENDER_SOURCES
   render/status_line.cpp
   render/sync.cpp
   render/tabs.cpp
-  render/which_key.cpp
   render/git_diff.cpp
   render/git_panel.cpp
   render/outline.cpp

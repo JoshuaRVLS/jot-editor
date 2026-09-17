@@ -219,8 +219,8 @@ void Editor::handle_terminal_event(const Event &ev)
             needs_redraw = true;
             return;
           }
-          // Pressing a chord that is a prefix of longer keymap sequences
-          // (e.g. "Ctrl+T" for "Ctrl+T N") reveals the which-key helper.
+          // A chord that prefixes longer keymap sequences (e.g. "Ctrl+T" for
+          // "Ctrl+T N") starts the sequence; the next chord completes it.
           if (lua_api->plugin_keymap_is_prefix(candidate, "editor"))
           {
             open_which_key(candidate);

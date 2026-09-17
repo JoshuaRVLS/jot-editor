@@ -231,14 +231,13 @@ private:
   void render_status_line();
   void render_command_palette();
   void render_quick_pick();
-  // Which-key style helper for multi-chord plugin keymaps ("Ctrl+T N"):
-  // open_which_key shows the next-chord options for a pressed prefix chord,
-  // handle_which_key_input advances/runs/closes, and the panel renders above
-  // the status line (see ui.cpp / event_loop.cpp).
+  // Multi-chord plugin keymaps ("Ctrl+T N"): a prefix chord starts a pending
+  // sequence and handle_which_key_input advances it, runs the final chord, or
+  // closes it. Nothing is drawn for it -- the options used to be listed in a
+  // panel above the status line, which was more distraction than help.
   void open_which_key(const std::string &chord);
   void close_which_key();
   bool handle_which_key_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int original_ch);
-  void render_which_key_panel();
   void sync_lua_ui_surfaces();
   void render_search_panel();
   void place_command_palette_cursor();

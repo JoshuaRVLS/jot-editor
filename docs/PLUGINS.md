@@ -31,11 +31,11 @@ variables), `jot.diagnostics.get`, `jot.marks.*` (named marks),
 (custom status bar segments). `BufChange` autocmd callbacks now receive the
 editing buffer's `buffer`, `line`, and `column` fields.
 
-### Keymap groups (which-key helper)
+### Keymap groups
 
 `register_keymap` keys may be multi-chord **sequences** written with spaces;
-pressing the prefix chord automatically pops up a which-key style helper above
-the status line listing the possible next keys:
+pressing the prefix chord starts the sequence and the next chords complete it
+(nothing is listed on screen -- the question-mark helper was removed):
 
 ```lua
 register_keymap("Ctrl+T N", function() jot.file.new() end, "New file")
