@@ -567,14 +567,16 @@ void UI::render()
 
   term->reset_color();
 
-  if (cursor_hidden || !cursor_blink_visible)
+  // Same rule as flush_cursor(): the -1 sentinel means nothing placed a caret,
+  // and folding it to 0,0 showed a caret in the top-left corner.
+  if (cursor_hidden || !cursor_blink_visible || cursor_x < 0 || cursor_y < 0)
   {
     term->hide_cursor();
   }
   else
   {
-    int cx = (cursor_x < 0) ? 0 : cursor_x;
-    int cy = (cursor_y < 0) ? 0 : cursor_y;
+    int cx = cursor_x;
+    int cy = cursor_y;
     // Clamp x one cell inside the render margin so the cursor itself is
     // never parked on a right-edge cell. This applies to all widths
     // greater than 1; on a single-column terminal we obviously cannot
