@@ -37,8 +37,10 @@ local ICONS = {
 -- highlight span started inside the character.
 local ICON_COPY = "copy"
 local ICON_CHECK = "ok"
--- Interior cells the button needs: a gap plus the widest label.
-local COPY_RESERVE = 1 + math.max(#ICON_COPY, #ICON_CHECK)
+-- Removed at the user's request: the hover no longer carries a copy button, so
+-- nothing is reserved for it. Kept at 0 rather than deleting the constant so
+-- the wrap and width arithmetic below keep their shape.
+local COPY_RESERVE = 0
 
 local win = nil -- current float handle (0 when none)
 local buf = nil -- current scratch buffer handle
@@ -463,15 +465,12 @@ local function present(info)
   local bg = info.bg or 0
   local border_fg = info.border_fg or info.border or fg
   local footer_fg = (info.colors and info.colors.comment) or fg
-  local button_icon = copy_state == "copied" and ICON_CHECK or ICON_COPY
   local first_len = visual_len(body[1] or "")
-  -- Pad short by the label's extra width so the button's right edge lands on
-  -- the interior edge instead of running past it.
-  local pad = math.max(0, width - first_len - (#button_icon - 1))
-  first_line_base = (body[1] or "") .. string.rep(" ", pad)
-  body[1] = first_line_base .. " " .. button_icon
-  last_button_start = #(body[1]) - #button_icon
-  last_button_col = width + 2 -- border-relative: 0 = left border, 1..width+1 interior
+  first_line_base = (body[1] or "") .. string.rep(" ", math.max(0, width - first_len))
+  -- No button column, so the pointer can never be "over" it and the copy
+  -- action is unreachable.
+  last_button_start = -1
+  last_button_col = -1
   last_fg = fg
   last_footer_fg = footer_fg
   last_info_fg = (info.ui and info.ui.info) or nil
