@@ -125,7 +125,18 @@ namespace
       }
       if ((int)line.size() > max_cols)
       {
-        line = line.substr(0, (size_t)std::max(0, max_cols - 1)) + "...";
+        // Cut on a character boundary: slicing at a byte index can land inside
+        // a multi-byte character, and the orphaned continuation bytes then
+        // render as "?" in the hover (draw_text substitutes for an invalid
+        // cluster). max_cols counts columns, so this is already approximate --
+        // staying inside the character is what matters.
+        size_t cut = (size_t)std::max(0, max_cols - 1);
+        while (cut > 0 && cut < line.size()
+               && (static_cast<unsigned char>(line[cut]) & 0xC0) == 0x80)
+        {
+          --cut;
+        }
+        line = line.substr(0, cut) + "...";
       }
       if (!out.empty())
       {
