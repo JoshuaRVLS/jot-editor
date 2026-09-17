@@ -16,6 +16,34 @@
 
 local jot = jot
 
+-- This feature deletes only the decorations it created: jot.decoration.clear()
+-- wipes every decoration on the buffer, which would take the diagnostics'
+-- squiggles (or, the other way round, wipe these dims the moment the language
+-- server publishes).
+local owned = {}
+
+local function release(buffer)
+  local ids = owned[buffer]
+  if not ids then
+    return
+  end
+  for _, id in ipairs(ids) do
+    jot.decoration.delete(buffer, id)
+  end
+  owned[buffer] = {}
+end
+
+local function keep(buffer, id)
+  if type(id) == "number" and id ~= 0 then
+    local ids = owned[buffer]
+    if not ids then
+      ids = {}
+      owned[buffer] = ids
+    end
+    ids[#ids + 1] = id
+  end
+end
+
 local ENABLED_KEY = "cpp_dim_inactive"
 local MACROS_KEY = "cpp_defined_macros"
 
@@ -270,19 +298,19 @@ local function apply(info)
   local defined = configured_macros()
   local ranges = inactive_ranges(lines, defined)
 
-  jot.decoration.clear(buffer)
+  release(buffer)
   local painted = 0
   for _, range in ipairs(ranges) do
     for index = range[1], range[2] do
       local text = lines[index] or ""
       if #text > 0 then
-        jot.decoration.set(buffer, {
+        keep(buffer, jot.decoration.set(buffer, {
           row = index,
           col = 1,
           width = #text,
           hl = "comment",
           priority = DIM_PRIORITY,
-        })
+        }))
       end
     end
   end

@@ -19,6 +19,34 @@
 
 local jot = jot
 
+-- This feature deletes only the decorations it created: jot.decoration.clear()
+-- wipes every decoration on the buffer, which would take the diagnostics'
+-- squiggles (or, the other way round, wipe these dims the moment the language
+-- server publishes).
+local owned = {}
+
+local function release(buffer)
+  local ids = owned[buffer]
+  if not ids then
+    return
+  end
+  for _, id in ipairs(ids) do
+    jot.decoration.delete(buffer, id)
+  end
+  owned[buffer] = {}
+end
+
+local function keep(buffer, id)
+  if type(id) == "number" and id ~= 0 then
+    local ids = owned[buffer]
+    if not ids then
+      ids = {}
+      owned[buffer] = ids
+    end
+    ids[#ids + 1] = id
+  end
+end
+
 local ENABLED_KEY = "decorations_inline_diagnostics"
 local STYLE_KEY = "decorations_underline_style"
 
@@ -70,7 +98,7 @@ local function apply_diagnostics(info)
   if not buffer then
     return
   end
-  jot.decoration.clear(buffer)
+  release(buffer)
   local diagnostics = jot.diagnostics.get(buffer) or {}
   local underline = underline_style()
 
@@ -106,7 +134,7 @@ local function apply_diagnostics(info)
       deco.virt_hl = hl
     end
     if deco.underline or deco.virt_text then
-      jot.decoration.set(buffer, deco)
+      keep(buffer, jot.decoration.set(buffer, deco))
     end
   end
 end
