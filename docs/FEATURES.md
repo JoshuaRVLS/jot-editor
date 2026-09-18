@@ -713,6 +713,19 @@ The caret is configured with two keys:
   phase is jot's own clock, shared by the terminal and GUI frontends, and it
   restarts visible whenever you type or move the caret.
 
+The mouse wheel scrolls smoothly. `smooth_scroll=true` (the default) eases a
+notch over a few frames instead of jumping it, using neoscroll.nvim's model:
+the same easing functions (`smooth_scroll_easing`, `linear` by default, plus
+`quadratic`, `cubic`, `quartic`, `quintic`, `circular` and `sine`), the same
+per-notch duration (100ms) scaled by `smooth_scroll_duration_multiplier` (1.0),
+and the same behaviour for a burst — a notch arriving mid-animation extends it,
+reversing eases it to a stop, and a held wheel can never fall more than two
+notches behind the viewport. It only moves the viewport, so the caret and every
+other navigation path keep scrolling instantly, and moving the viewport another
+way (a jump, a fold, the caret pulled back into view) ends the animation where
+it stands. The GUI frontend already slides its content pixel by pixel and is
+left alone.
+
 The caret's colours come from the theme (`cursor`, or `fg_cursor`/`bg_cursor`).
 Where the caret is painted by jot — the GUI — it uses whichever of the two
 contrasts with the cell underneath, so it stays visible over comments,

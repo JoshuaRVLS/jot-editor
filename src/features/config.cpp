@@ -141,6 +141,16 @@ void Config::load_defaults()
   settings["highlight_cursor_line"] = "true";
   settings["render_fps"] = "120";
   settings["idle_fps"] = "60";
+  // Smooth scrolling (features/smooth_scroll.cpp, neoscroll.nvim's model): the
+  // wheel eases the viewport over a few frames instead of jumping a notch per
+  // event. `smooth_scroll_easing` takes upstream's easing names (linear,
+  // quadratic, cubic, quartic, quintic, circular, sine) and
+  // `smooth_scroll_duration_multiplier` is upstream's duration_multiplier: the
+  // per-notch duration is 100ms times it. Upstream's defaults are used here
+  // too, so "linear" and 1.0 are its motion.
+  settings["smooth_scroll"] = "true";
+  settings["smooth_scroll_easing"] = "linear";
+  settings["smooth_scroll_duration_multiplier"] = "1.0";
   settings["lsp_change_debounce_ms"] = "120";
   settings["lsp_completion_max_items"] = "8";
   settings["lsp_completion_nerd_icons"] = "true";

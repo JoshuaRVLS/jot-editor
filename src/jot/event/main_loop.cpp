@@ -73,6 +73,16 @@ void Editor::render_frame()
   {
     lua_api->flush_pending_autocmds();
   }
+  // Smooth scrolling runs on the frame clock (neoscroll's line timer, sampled
+  // per frame): advance the animation before the paint so this frame shows the
+  // new viewport, and repaint while it is still moving.
+  if (advance_smooth_scroll(
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::steady_clock::now().time_since_epoch())
+              .count()))
+  {
+    needs_redraw = true;
+  }
   // One blink clock for both frontends. The phase comes from cursor_blink_ms and
   // is re-anchored by restart_blink() on every caret move and keystroke, so the
   // caret lands solid, holds through the input pause, and resumes its cycle in

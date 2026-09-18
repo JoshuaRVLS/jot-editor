@@ -1,5 +1,6 @@
 add_executable(jot_tests
   test_productivity.cpp
+  test_smooth_scroll.cpp
   test_folding.cpp
   test_fold_click.cpp
   test_features.cpp

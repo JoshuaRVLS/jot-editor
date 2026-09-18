@@ -5,6 +5,7 @@
 #include "ui/gui/gui.h"
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <stdexcept>
 
@@ -81,6 +82,17 @@ void Editor::apply_config_live()
   set_auto_save_interval(config.get_int("auto_save_interval_ms", 2000), false);
   render_fps = std::clamp(config.get_int("render_fps", 120), 30, 240);
   idle_fps = std::clamp(config.get_int("idle_fps", 60), 5, 240);
+  smooth_scroll_enabled_ = config.get_bool("smooth_scroll", true);
+  {
+    // An unknown easing name costs the curve, not the feature: fall back to
+    // upstream's default rather than leaving the animation half-configured.
+    SmoothScroll::Easing easing = SmoothScroll::Easing::Linear;
+    (void)SmoothScroll::easing_from_name(config.get("smooth_scroll_easing", "linear"), easing);
+    smooth_scroll_easing_ = easing;
+    const double multiplier = config.get_double("smooth_scroll_duration_multiplier", 1.0);
+    smooth_scroll_duration_multiplier_ =
+        std::isfinite(multiplier) ? std::clamp(multiplier, 0.1, 10.0) : 1.0;
+  }
   lsp_change_debounce_ms = std::clamp(config.get_int("lsp_change_debounce_ms", 120), 25, 1000);
   integrated_terminal_height = std::clamp(config.get_int("terminal_height", 10), 5, 20);
   debugger_panel_height = std::clamp(config.get_int("debugger_height", 12), 6, 24);
@@ -337,6 +349,7 @@ void Editor::initialize_state_defaults()
   idle_fps = std::clamp(config.get_int("idle_fps", 60), 5, 240);
   lsp_change_debounce_ms = std::clamp(config.get_int("lsp_change_debounce_ms", 120), 25, 1000);
   last_cursor_shape = -1;
+  cancel_smooth_scroll();
   blink_anchor_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now().time_since_epoch())
                         .count();

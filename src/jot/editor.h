@@ -5,6 +5,7 @@
 #include "bracket.h"
 #include "editor_state.h"
 #include "host_api.h"
+#include "smooth_scroll.h"
 #include "tools/lsp/client.h"
 #include <string>
 #include <utility>
@@ -285,6 +286,37 @@ private:
   // so the GUI uses the change to place the caret instead of easing it.
   std::vector<int> gui_pane_top_lines_;
   std::vector<int> gui_pane_scroll_xs_;
+  // --- Smooth scrolling (features/smooth_scroll.h: neoscroll.nvim's model) ---
+  // A viewport-only scroll animates scroll_offset toward its destination over
+  // a few frames instead of jumping there. One animation at a time: it belongs
+  // to the pane the wheel was over, and it is dropped the moment anything else
+  // moves that viewport (see advance_smooth_scroll).
+  struct SmoothScrollAnim
+  {
+    bool active = false;
+    int buffer_id = -1;  // the pane's buffer when the animation started
+    int from = 0;        // offset the animation started from
+    int applied = -1;    // offset this animation wrote last (the drift probe)
+    int notch_lines = 1; // one wheel step: the duration's reference distance
+    SmoothScroll::Easing easing = SmoothScroll::Easing::Linear;
+    SmoothScroll::InFlight in_flight;
+    long long start_ms = 0;
+    long long duration_ms = 0;
+  };
+  SmoothScrollAnim smooth_scroll_;
+  bool smooth_scroll_enabled_ = true;
+  SmoothScroll::Easing smooth_scroll_easing_ = SmoothScroll::Easing::Linear;
+  double smooth_scroll_duration_multiplier_ = 1.0;
+  // Animates a viewport-only scroll of `lines` visible lines (negative scrolls
+  // up) over `base_ms`, merging with an animation already in flight. Returns
+  // true when the viewport moved or is about to. Jumps immediately when smooth
+  // scrolling is off, and never animates in GUI mode (the GUI frontend already
+  // eases the content shift pixel by pixel).
+  bool scroll_view_smooth(int lines, int base_ms);
+  // Advances the running animation to `now_ms`; true when it changed the
+  // viewport, so the caller has to repaint.
+  bool advance_smooth_scroll(long long now_ms);
+  void cancel_smooth_scroll();
   void poll_lsp_clients();
   // Marks the per-file inlay-hint cache stale (after a did_change flush).
   void mark_lsp_inlay_hints_dirty(const std::string &filepath);
@@ -1162,6 +1194,42 @@ public:
   // One full frame-loop step (the per-frame blink/scheduling logic plus a
   // render), for tests that need to observe behaviour over time.
   void render_frame_for_test();
+  // --- smooth scrolling (test) ---
+  // Requests an animation and steps it at explicit timestamps, so the easing
+  // curve can be asserted on without a clock.
+  bool scroll_view_smooth_for_test(int lines, int base_ms)
+  {
+    return scroll_view_smooth(lines, base_ms);
+  }
+  bool advance_smooth_scroll_for_test(long long now_ms)
+  {
+    return advance_smooth_scroll(now_ms);
+  }
+  bool smooth_scroll_active_for_test() const
+  {
+    return smooth_scroll_.active;
+  }
+  int smooth_scroll_target_for_test() const
+  {
+    return smooth_scroll_.in_flight.target;
+  }
+  long long smooth_scroll_start_ms_for_test() const
+  {
+    return smooth_scroll_.start_ms;
+  }
+  long long smooth_scroll_duration_for_test() const
+  {
+    return smooth_scroll_.duration_ms;
+  }
+  // Reads the animation's easing, so a settings change can be asserted on.
+  const char *smooth_scroll_easing_for_test() const
+  {
+    return SmoothScroll::easing_name(smooth_scroll_easing_);
+  }
+  bool smooth_scroll_enabled_for_test() const
+  {
+    return smooth_scroll_enabled_;
+  }
   FileBuffer &buffer_for_test(int id = -1);
   SplitPane &pane_for_test(int id = -1);
   // Settings-menu state accessors for headless tests (the menu surface is
@@ -1607,6 +1675,13 @@ public:
   void config_set_for_test(const std::string &key, const std::string &value)
   {
     config.set(key, value);
+  }
+  // Applies the settings the way a :settings edit or a Lua jot.config.set does
+  // (config.set + apply_config_live), so a test can change a live-read setting
+  // without going through the menu surface.
+  void apply_config_live_for_test()
+  {
+    apply_config_live();
   }
   // Headless surface tests: the recording cell grid, and how many visible
   // floats a Lua surface (jot.ui.handler name, e.g. "sidebar", "home_screen")

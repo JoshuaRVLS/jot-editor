@@ -2,6 +2,7 @@
 // panel, integrated terminal, pane resizing, and scroll-wheel routing.
 #include "editor.h"
 #include "folding.h"
+#include "smooth_scroll.h"
 #include <algorithm>
 #include <chrono>
 #include <string>
@@ -424,33 +425,15 @@ void Editor::handle_mouse_input(int x,
     return;
   }
 
-  if (is_scroll_up)
+  // Vertical wheel over the code area: a viewport-only scroll, animated over a
+  // few frames (features/smooth_scroll.h). Scrolls arriving while the previous
+  // one is still easing extend it instead of restarting it, so a burst reads as
+  // one continuous glide.
+  if (is_scroll_up || is_scroll_down)
   {
-    for (int i = 0; i < wheel_step && buf.scroll_offset > 0; i++)
+    if (scroll_view_smooth(is_scroll_down ? wheel_step : -wheel_step,
+                           SmoothScroll::kWheelDurationMs))
     {
-      int prev = Folding::previous_visible_line(buf.fold_ranges, buf.scroll_offset);
-      if (prev == buf.scroll_offset)
-      {
-        break;
-      }
-      buf.scroll_offset = prev;
-      needs_redraw = true;
-    }
-    return;
-  }
-  if (is_scroll_down)
-  {
-    // Walk the next visible lines directly instead of counting all visible
-    // lines before the scroll offset (O(scroll_offset) per wheel event).
-    for (int i = 0; i < wheel_step; i++)
-    {
-      int next =
-          Folding::next_visible_line(buf.fold_ranges, buf.scroll_offset, (int)buf.line_count());
-      if (next <= buf.scroll_offset || next >= (int)buf.line_count())
-      {
-        break;
-      }
-      buf.scroll_offset = next;
       needs_redraw = true;
     }
     return;

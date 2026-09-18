@@ -21,4 +21,5 @@ set(JOT_FEATURES_SOURCES
   features/html.cpp
   features/language.cpp
   features/quote_text_object.cpp
+  features/smooth_scroll.cpp
 )
