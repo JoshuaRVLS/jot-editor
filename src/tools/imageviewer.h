@@ -45,7 +45,6 @@ private:
   std::string graphics_file;
   bool remove_graphics_file;
 
-  bool is_image_file(const std::string &path);
   void generate_ascii_preview(const std::string &path);
   std::string get_image_info(const std::string &path);
   Backend resolve_backend() const;
@@ -54,6 +53,8 @@ private:
 
 public:
   ImageViewer();
+  // The renderer needs this to know a pane is showing an image.
+  bool is_image_file(const std::string &path);
   static Backend parse_backend(const std::string &name);
   static std::string backend_name(Backend backend);
   static bool terminal_supports_kitty();

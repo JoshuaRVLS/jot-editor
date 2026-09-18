@@ -690,16 +690,6 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     }
   }
 
-  if (image_viewer.is_active())
-  {
-    if (ch == 'q' || ch == 27)
-    {
-      image_viewer.close();
-      needs_redraw = true;
-    }
-    return;
-  }
-
   handle_modeless_input(ch, is_ctrl, is_shift, is_alt);
   return;
 }

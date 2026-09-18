@@ -370,7 +370,6 @@ void Editor::render()
   {
     if (image_viewer.is_active())
     {
-      render_image_viewer();
       render_status_line();
       if (lua_api)
       {
@@ -1016,7 +1015,20 @@ void Editor::render_pane(const SplitPane &pane, int pane_index)
     draw_w = std::max(1, draw_w - minimap_width);
   }
 
-  render_buffer_content(pane, pane_index, pane.buffer_id);
+  // An image tab draws the picture inside the pane's own frame, the way any
+  // other file draws its contents, instead of as a window-wide overlay.
+  const std::string pane_path =
+      (pane.buffer_id >= 0 && pane.buffer_id < (int)buffers.size())
+          ? buffers[(size_t)pane.buffer_id].filepath
+          : std::string();
+  if (image_viewer.is_image_file(pane_path))
+  {
+    render_image_viewer();
+  }
+  else
+  {
+    render_buffer_content(pane, pane_index, pane.buffer_id);
+  }
 
   if (show_minimap && pane.w > 20)
   {
