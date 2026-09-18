@@ -226,6 +226,7 @@ ImageViewer::ImageViewer()
   active_backend = Backend::Cell;
   graphics_dirty = false;
   graphics_visible = false;
+  graphics_backend = Backend::Auto;
   graphics_x = graphics_y = graphics_w = graphics_h = 0;
   status_text.clear();
   graphics_file.clear();
@@ -291,6 +292,25 @@ bool ImageViewer::terminal_may_support_sixel()
   return false;
 }
 
+bool ImageViewer::terminal_likely_sixel()
+{
+  std::string term = string_util::lower_copy(getenv_string("TERM"));
+  std::string program = string_util::lower_copy(getenv_string("TERM_PROGRAM"));
+  if (term.find("sixel") != std::string::npos)
+    return true;
+  if (term.find("mlterm") != std::string::npos)
+    return true;
+  if (program.find("wezterm") != std::string::npos)
+    return true;
+  if (program.find("contour") != std::string::npos)
+    return true;
+  if (program.find("mintty") != std::string::npos)
+    return true;
+  if (env_present("KONSOLE_VERSION"))
+    return true;
+  return false;
+}
+
 bool ImageViewer::helper_available(const std::string &cmd)
 {
   if (cmd.empty())
@@ -325,13 +345,19 @@ namespace
   constexpr int kKittyImageId = 1001;
 }
 
+std::string ImageViewer::cursor_move(int x, int y)
+{
+  return "\x1b[" + std::to_string(std::max(0, y) + 1) + ";" + std::to_string(std::max(0, x) + 1)
+         + "H";
+}
+
 std::string
 ImageViewer::build_kitty_file_command(const std::string &path, int x, int y, int w, int h)
 {
   if (path.empty() || w <= 0 || h <= 0)
     return "";
   std::ostringstream out;
-  out << "\x1b[" << y + 1 << ";" << x + 1 << "H";
+  out << cursor_move(x, y);
   out << "\x1b_Ga=T,f=100,t=f,q=2,i=" << kKittyImageId << ",c=" << std::max(1, w)
       << ",r=" << std::max(1, h) << ";"
       << base64_encode(path) << "\x1b\\";
@@ -349,6 +375,9 @@ std::string ImageViewer::build_sixel_command(const std::string &path, int w, int
     return "";
   int px_w = std::max(1, w * 8);
   int px_h = std::max(1, h * 16);
+  // Only stderr is silenced: stdout is the sixel payload this call reads back
+  // through the pipe. The cursor move that aims the placement at the pane is
+  // added to that payload, not to the shell command.
   return "img2sixel -w " + std::to_string(px_w) + " -h " + std::to_string(px_h) + " "
          + shell_util::shell_quote(path) + shell_util::null_redirect();
 }
@@ -379,7 +408,12 @@ ImageViewer::Backend ImageViewer::resolve_backend() const
   }
   if (terminal_supports_kitty())
     return Backend::Kitty;
-  if (terminal_may_support_sixel() && helper_available("img2sixel"))
+  // Auto asks the narrow question: a placement sent to a terminal that cannot
+  // paint sixel is invisible, and believing it landed would hide the cell
+  // preview behind a picture that is not there. "xterm" in TERM only means the
+  // terminal speaks xterm -- an ssh session, a multiplexer and a plain xterm all
+  // report it -- so it is not enough to bet the preview on.
+  if (terminal_likely_sixel() && helper_available("img2sixel"))
     return Backend::Sixel;
   return Backend::Cell;
 }
@@ -794,6 +828,13 @@ void ImageViewer::render(int x, int y, int w, int h, int border_fg, int border_b
     graphics_h = next_h;
   }
   active_backend = resolve_backend();
+  // A sixel placement is painted into the cells rather than held by the terminal
+  // as an overlay the way a kitty placement is, so repainting the pane erases it:
+  // it has to go out again on every draw of the image.
+  if (active_backend == Backend::Sixel)
+  {
+    graphics_dirty = true;
+  }
 }
 
 int ImageViewer::preview_content_rows() const
@@ -831,7 +872,10 @@ std::string ImageViewer::take_graphics_output()
       graphics_visible && (!is_open || graphics_dirty || !uses_real_graphics());
   if (delete_existing)
   {
-    if (terminal_supports_kitty())
+    // Only a kitty placement has a delete command, and only a terminal that
+    // understands it should get one: a sixel picture is erased by the cell
+    // repaint that is already happening.
+    if (graphics_backend == Backend::Kitty && terminal_supports_kitty())
     {
       out += build_kitty_delete_command();
     }
@@ -863,24 +907,32 @@ std::string ImageViewer::take_graphics_output()
     }
     out += build_kitty_file_command(file, graphics_x, graphics_y, graphics_w, graphics_h);
     graphics_visible = true;
+    graphics_backend = Backend::Kitty;
     status_text = "Real image: kitty";
     return out;
   }
   if (active_backend == Backend::Sixel)
   {
     std::string cmd = build_sixel_command(current_image, graphics_w, graphics_h);
+    std::string payload;
     FILE *pipe = shell_util::open_command_pipe(cmd, "r");
     if (pipe)
     {
       char buffer[4096];
       while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
       {
-        out += buffer;
+        payload += buffer;
       }
-      int rc = shell_util::close_command_pipe(pipe);
-      if (rc == 0 && !out.empty())
+      const int rc = shell_util::command_exit_code(shell_util::close_command_pipe(pipe));
+      if (rc == 0 && !payload.empty())
       {
+        // Aim the placement at the panel first: the frame writes its graphics
+        // after the cells, and by then the terminal cursor is wherever the last
+        // painted row left it.
+        out += cursor_move(graphics_x, graphics_y);
+        out += payload;
         graphics_visible = true;
+        graphics_backend = Backend::Sixel;
         status_text = "Real image: sixel";
         return out;
       }

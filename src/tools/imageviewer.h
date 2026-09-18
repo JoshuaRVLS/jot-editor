@@ -41,6 +41,10 @@ private:
   Backend active_backend;
   bool graphics_dirty;
   bool graphics_visible;
+  // Which protocol placed the visible picture. A kitty placement is an overlay
+  // the terminal keeps for us; a sixel one is painted into the cells, so it has
+  // to be sent again on every draw and has no delete of its own.
+  Backend graphics_backend;
   int graphics_x, graphics_y, graphics_w, graphics_h;
   std::string status_text;
   // get_image_info() shells out to identify, so its answer is kept: this is
@@ -84,8 +88,16 @@ public:
   static std::string backend_name(Backend backend);
   static bool terminal_supports_kitty();
   static bool terminal_may_support_sixel();
+  // The narrower question the Auto backend asks: a terminal recognised as
+  // sixel-capable, rather than one whose TERM merely says "xterm".
+  static bool terminal_likely_sixel();
   static bool helper_available(const std::string &cmd);
   static std::string base64_encode(const std::string &input);
+  // Move the terminal cursor to a cell. Both terminal-side protocols paint at
+  // the cursor, so each placement carries its own move; the frame writes its
+  // graphics after the cells, when the cursor is wherever the last painted row
+  // left it.
+  static std::string cursor_move(int x, int y);
   static std::string build_kitty_file_command(const std::string &path, int x, int y, int w, int h);
   static std::string build_kitty_delete_command();
   static std::string build_sixel_command(const std::string &path, int w, int h);

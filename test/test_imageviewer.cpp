@@ -90,6 +90,15 @@ TEST_CASE("Image Viewer Previews Scroll", "[jot]")
   std::filesystem::remove(path, ec);
 }
 
+TEST_CASE("Image Viewer Places Graphics At A Cell", "[jot]")
+{
+  // Both terminal-side protocols paint at the cursor, and the frame writes its
+  // graphics after the cells, so each placement carries the move that lands it
+  // in the pane instead of wherever the last painted row left the cursor.
+  REQUIRE(ImageViewer::cursor_move(0, 0) == "\x1b[1;1H");
+  REQUIRE(ImageViewer::cursor_move(2, 3) == "\x1b[4;3H");
+}
+
 TEST_CASE("Image Viewer Kitty Command", "[jot]")
 {
   std::string cmd = ImageViewer::build_kitty_file_command("/tmp/a.png", 2, 3, 40, 12);
@@ -118,9 +127,16 @@ TEST_CASE("Image Viewer Sixel Command", "[jot]")
   REQUIRE(cmd.find("img2sixel") != std::string::npos);
   REQUIRE(cmd.find("-w 80") != std::string::npos);
   REQUIRE(cmd.find("-h 80") != std::string::npos);
+  // The command is read back through a pipe, so only stderr may be silenced:
+  // the sixel payload arrives on stdout, and swallowing it leaves the viewer
+  // with nothing to place.
 #ifdef _WIN32
   REQUIRE(cmd.find("\"/tmp/a b.png\"") != std::string::npos);
+  REQUIRE(cmd.find(" 2>NUL") != std::string::npos);
+  REQUIRE(cmd.find(" >NUL") == std::string::npos);
 #else
   REQUIRE(cmd.find("'/tmp/a b.png'") != std::string::npos);
+  REQUIRE(cmd.find(" 2>/dev/null") != std::string::npos);
+  REQUIRE(cmd.find(" >/dev/null") == std::string::npos);
 #endif
 }
