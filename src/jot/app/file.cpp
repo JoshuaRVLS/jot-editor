@@ -320,11 +320,6 @@ void Editor::open_file(const std::string &path, bool preview)
     }
   }
 
-  if (image_viewer.is_active())
-  {
-    image_viewer.close();
-  }
-
   auto find_open_index = [&]()
   {
     for (size_t i = 0; i < buffers.size(); i++)
