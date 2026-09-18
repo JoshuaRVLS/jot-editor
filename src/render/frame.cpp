@@ -370,6 +370,7 @@ void Editor::render()
   {
     if (image_viewer.is_active())
     {
+      render_image_viewer();
       render_status_line();
       if (lua_api)
       {

@@ -314,9 +314,11 @@ void Editor::open_file(const std::string &path, bool preview)
       track_recent_file(path_to_open);
       refresh_git_status(true);
       needs_redraw = true;
-      // Deliberately no return: the image needs a buffer of its own so it gets
-      // a tab and behaves like any other file. The pane draws the viewer for
-      // it instead of the text (render_pane).
+      // No buffer for an image yet: loading one as text is what froze the
+      // editor (a whole PNG becomes a single line for the rope and the
+      // highlighter). A tab needs a lazy buffer first -- see the note on
+      // render_pane's image branch.
+      return;
     }
   }
 
