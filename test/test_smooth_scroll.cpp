@@ -69,6 +69,15 @@ namespace
     e.apply_resize_for_test(120, 40);
   }
 
+  // Smooth scrolling is off by default, so a case that wants the animation asks
+  // for it explicitly instead of relying on the shipped default (which the
+  // pty probe covers end to end, with an empty settings.conf).
+  void set_smooth(Editor &e, bool enabled)
+  {
+    e.config_set_for_test("smooth_scroll", enabled ? "true" : "false");
+    e.apply_config_live_for_test();
+  }
+
   // The easing setting reaches the animation only through the live config
   // apply, so every case that changes it has to put it back.
   void set_easing(Editor &e, const std::string &name)
@@ -227,11 +236,38 @@ TEST_CASE("A duration scales with the distance left and with the multiplier", "[
   REQUIRE(SmoothScroll::duration_ms(0, kOne, 3, 3) == 1);
 }
 
+TEST_CASE("Smooth scrolling is off until a config turns it on", "[jot]")
+{
+  // Seed the scratch config home (the shared probe), then read the shipped
+  // default from a fresh editor: the shared one has had settings written into
+  // it by the cases above, and this is about what a user gets out of the box.
+  (void)probe_editor();
+  Editor e;
+  REQUIRE_FALSE(e.smooth_scroll_enabled_for_test());
+
+  load_long_file(e);
+  make_wide(e);
+  e.buffer_for_test().scroll_offset = 10;
+  // The wheel's entry point lands the notch in the one call, as it did before
+  // the animation existed.
+  REQUIRE(e.scroll_view_smooth_for_test(/*lines=*/3, /*base_ms=*/100));
+  REQUIRE(e.buffer_for_test().scroll_offset == 13);
+  REQUIRE_FALSE(e.smooth_scroll_active_for_test());
+
+  // ... and the animation is one setting away.
+  set_smooth(e, true);
+  e.buffer_for_test().scroll_offset = 10;
+  REQUIRE(e.scroll_view_smooth_for_test(3, 100));
+  REQUIRE(e.buffer_for_test().scroll_offset == 10);
+  REQUIRE(e.smooth_scroll_active_for_test());
+}
+
 TEST_CASE("A wheel notch eases the viewport over the frame clock", "[jot]")
 {
   Editor &e = probe_editor();
   load_long_file(e);
   make_wide(e);
+  set_smooth(e, true);
   e.buffer_for_test().scroll_offset = 10;
 
   REQUIRE(e.scroll_view_smooth_for_test(/*lines=*/3, /*base_ms=*/100));
@@ -264,6 +300,7 @@ TEST_CASE("A configured easing changes the curve, and off means no animation", "
   load_long_file(e);
   make_wide(e);
 
+  set_smooth(e, true);
   set_easing(e, "quadratic");
   REQUIRE(std::string(e.smooth_scroll_easing_for_test()) == "quadratic");
   e.buffer_for_test().scroll_offset = 0;
@@ -282,8 +319,7 @@ TEST_CASE("A configured easing changes the curve, and off means no animation", "
 
   // Switched off: the same request jumps to the destination in one call.
   set_easing(e, "linear");
-  e.config_set_for_test("smooth_scroll", "false");
-  e.apply_config_live_for_test();
+  set_smooth(e, false);
   REQUIRE_FALSE(e.smooth_scroll_enabled_for_test());
   e.buffer_for_test().scroll_offset = 10;
   REQUIRE(e.scroll_view_smooth_for_test(/*lines=*/3, /*base_ms=*/100));
@@ -291,18 +327,13 @@ TEST_CASE("A configured easing changes the curve, and off means no animation", "
   REQUIRE_FALSE(e.smooth_scroll_active_for_test());
 
   // Turned off mid-animation: the animation is dropped where it stands.
-  e.config_set_for_test("smooth_scroll", "true");
-  e.apply_config_live_for_test();
+  set_smooth(e, true);
   e.buffer_for_test().scroll_offset = 0;
   REQUIRE(e.scroll_view_smooth_for_test(3, 100));
   REQUIRE(e.smooth_scroll_active_for_test());
-  e.config_set_for_test("smooth_scroll", "false");
-  e.apply_config_live_for_test();
+  set_smooth(e, false);
   REQUIRE_FALSE(e.advance_smooth_scroll_for_test(e.smooth_scroll_start_ms_for_test() + 50));
   REQUIRE_FALSE(e.smooth_scroll_active_for_test());
-
-  e.config_set_for_test("smooth_scroll", "true");
-  e.apply_config_live_for_test();
 }
 
 TEST_CASE("A viewport moved by something else drops the animation", "[jot]")
@@ -310,6 +341,7 @@ TEST_CASE("A viewport moved by something else drops the animation", "[jot]")
   Editor &e = probe_editor();
   load_long_file(e);
   make_wide(e);
+  set_smooth(e, true);
 
   e.buffer_for_test().scroll_offset = 0;
   REQUIRE(e.scroll_view_smooth_for_test(/*lines=*/3, /*base_ms=*/100));
@@ -333,6 +365,7 @@ TEST_CASE("A wheel at the end of the file neither moves nor animates", "[jot]")
   // A file shorter than the viewport is already at both of its edges.
   load_short_file(e);
   make_wide(e);
+  set_smooth(e, true);
   e.buffer_for_test().scroll_offset = 0;
 
   REQUIRE_FALSE(e.scroll_view_smooth_for_test(/*lines=*/3, /*base_ms=*/100));

@@ -82,7 +82,7 @@ void Editor::apply_config_live()
   set_auto_save_interval(config.get_int("auto_save_interval_ms", 2000), false);
   render_fps = std::clamp(config.get_int("render_fps", 120), 30, 240);
   idle_fps = std::clamp(config.get_int("idle_fps", 60), 5, 240);
-  smooth_scroll_enabled_ = config.get_bool("smooth_scroll", true);
+  smooth_scroll_enabled_ = config.get_bool("smooth_scroll", false);
   {
     // An unknown easing name costs the curve, not the feature: fall back to
     // upstream's default rather than leaving the animation half-configured.

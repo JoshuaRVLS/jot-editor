@@ -304,7 +304,8 @@ private:
     long long duration_ms = 0;
   };
   SmoothScrollAnim smooth_scroll_;
-  bool smooth_scroll_enabled_ = true;
+  // Off until the config says otherwise (see Config::load_defaults).
+  bool smooth_scroll_enabled_ = false;
   SmoothScroll::Easing smooth_scroll_easing_ = SmoothScroll::Easing::Linear;
   double smooth_scroll_duration_multiplier_ = 1.0;
   // Animates a viewport-only scroll of `lines` visible lines (negative scrolls

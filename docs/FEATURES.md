@@ -713,8 +713,9 @@ The caret is configured with two keys:
   phase is jot's own clock, shared by the terminal and GUI frontends, and it
   restarts visible whenever you type or move the caret.
 
-The mouse wheel scrolls smoothly. `smooth_scroll=true` (the default) eases a
-notch over a few frames instead of jumping it, using neoscroll.nvim's model:
+The mouse wheel can scroll smoothly. `smooth_scroll` is off by default — the
+wheel jumps a notch per event, as it always has — and `smooth_scroll=true`
+eases a notch over a few frames instead, using neoscroll.nvim's model:
 the same easing functions (`smooth_scroll_easing`, `linear` by default, plus
 `quadratic`, `cubic`, `quartic`, `quintic`, `circular` and `sine`), the same
 per-notch duration (100ms) scaled by `smooth_scroll_duration_multiplier` (1.0),
