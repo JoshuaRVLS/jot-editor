@@ -1086,7 +1086,12 @@ void UI::flush_cursor()
 
 void UI::set_frame_graphics(const std::string &bytes)
 {
-  frame_graphics_ = bytes;
+  // An empty string means "nothing to add", not "clear what is pending": both
+  // call sites can fire in the same frame.
+  if (!bytes.empty())
+  {
+    frame_graphics_ = bytes;
+  }
 }
 
 void UI::draw_text(int x,

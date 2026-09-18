@@ -529,12 +529,6 @@ void Editor::render()
     }
 
     ui->set_cursor_blink_visible(blink_visible);
-    // Handed to the frame before it is rendered, so the image shares the
-    // frame's synchronized-output block instead of following it in its own.
-    if (image_viewer.is_active() || image_viewer.has_pending_graphics_output())
-    {
-      ui->set_frame_graphics(image_viewer.take_graphics_output());
-    }
     ui->render();
     needs_redraw = false;
   }

@@ -35,6 +35,15 @@ void Editor::render_image_viewer()
 
   image_viewer.render(img_x, img_y, img_w, img_h, theme.fg_image_border, theme.bg_image_border);
 
+  // Taken here, not from the frame's own pass: this function is what runs for
+  // the viewer, and the frame-side call was unreachable. render() above has
+  // just set the geometry the command is built from.
+  const std::string graphics = image_viewer.take_graphics_output();
+  if (!graphics.empty())
+  {
+    ui->set_frame_graphics(graphics);
+  }
+
   int x = image_viewer.get_view_x();
   int y = image_viewer.get_view_y();
   int vw = image_viewer.get_view_w();
@@ -57,7 +66,7 @@ void Editor::render_image_viewer()
     ui->draw_text(x + 2, y, " " + status + " ", theme.fg_comment, theme.bg_default);
   }
 
-  if (image_viewer.uses_real_graphics())
+  if (image_viewer.uses_real_graphics() && !graphics.empty())
   {
     return;
   }
