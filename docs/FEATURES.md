@@ -253,7 +253,11 @@ Install helpers also cover Rust, Go, Lua, and Bash.
 - A bottom terminal panel backed by a real PTY, with multiple tabs that stay
   alive while hidden. Each tab is labelled with the shell icon (the same glyph
   the file tree uses for shell scripts), so the strip reads as a row of shell
-  sessions.
+  sessions. A custom tab name (a task, a plugin) is elided with an ellipsis
+  once it exceeds its share of the strip -- a quarter of the row, with a
+  12-cell floor -- so one long name cannot push the other tabs and the `+`
+  off it. The terminal keeps the full name internally (`get_label`, the Lua
+  API), so only the drawn label shortens.
 - Drag the rule above the panel (the editor's bottom border) to resize it
   live; it can grow to nearly the full window. The panel has no frame of  its own: the pane area inks the separator along its top, so its first row is the
   `Terminal`/`Problems` view tabs (each labelled with an icon: a terminal for the

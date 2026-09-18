@@ -15,6 +15,10 @@ int ui_cell_count(const std::string &text);
 int ui_range_cell_count(const std::string &text, int begin, int end);
 std::string ui_take_cells(const std::string &text, int max_cells);
 std::string ui_truncate_cells(const std::string &text, int max_cells);
+// Same right-hand truncation, but the cut is marked with a real ellipsis
+// (U+2026): one cell instead of the two the ".." suffix costs, so a cell
+// budget keeps one more character of the name.
+std::string ui_truncate_cells_ellipsis(const std::string &text, int max_cells);
 std::string ui_truncate_left_cells(const std::string &text, int max_cells);
 std::string ui_one_line(std::string text);
 int ui_clamp_to_utf8_boundary(const std::string &text, int byte_index);

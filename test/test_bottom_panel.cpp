@@ -7,6 +7,7 @@
 #include "editor.h"
 #include "ui/text.h"
 #include "ui/ui.h"
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
 #include <string>
@@ -165,6 +166,86 @@ TEST_CASE("Bottom panel: the shell's tabs carry the shell glyph", "[jot]")
   REQUIRE(e.terminal_mouse_for_test(1 + ui_cell_count(first), tab_y, true, false, false));
   REQUIRE(e.integrated_terminal_tab_label_for_test(0) == " \uE795 term 1 ");
   REQUIRE(e.integrated_terminal_tab_label_for_test(1).empty());
+}
+
+TEST_CASE("Bottom panel: a long custom tab name is elided to the strip's share", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_home_menu_visible(false);
+  const std::string full_name = "an-extremely-long-custom-terminal-name";
+  e.add_terminal_for_test(full_name);
+  e.add_terminal_for_test();
+  e.set_bottom_panel_view_for_test(BOTTOM_PANEL_TERMINAL);
+  e.set_terminal_state_for_test(true, false, 10);
+  e.request_redraw_for_test();
+  e.render_for_test();
+
+  const int tab_y = e.bottom_panel_terminal_tab_y_for_test();
+  const int panel_w = e.terminal_panel_w_for_test();
+  UI *ui = e.ui_for_test();
+
+  // The name itself is untouched -- it is the identity the task runner, the
+  // lazygit reuse check and the Lua API match on -- and only the label the
+  // strip draws is shortened.
+  REQUIRE(e.integrated_terminal_name_for_test(0) == full_name);
+
+  // What is drawn is capped at the tab's share of the panel (a quarter, with a
+  // 12-cell floor) and marks the cut with an ellipsis rather than a dot pair.
+  const std::string label = e.integrated_terminal_tab_label_for_test(0);
+  REQUIRE(ui_cell_count(label) == std::max(12, panel_w / 4));
+  REQUIRE(label.substr(0, 5) == " \uE795 ");
+  REQUIRE(label.find("\u2026") != std::string::npos);
+  REQUIRE(label.find(full_name) == std::string::npos);
+  // The head of the name survives, so the tab is still recognisable.
+  REQUIRE(label.find(full_name.substr(0, 5)) != std::string::npos);
+
+  // ...and the tabs after it are not squeezed out: the second tab (a generated
+  // "term 2") and the "+" both still sit on the row.
+  const std::string second = e.integrated_terminal_tab_label_for_test(1);
+  const int second_x = 1 + ui_cell_count(label) + 2;
+  const UICell *second_icon = ui->cell_at(second_x + 1, tab_y);
+  REQUIRE(second_icon != nullptr);
+  REQUIRE(second_icon->ch == "\uE795");
+  const int plus_x = second_x + ui_cell_count(second) + 2;
+  const UICell *plus = ui->cell_at(plus_x + 1, tab_y);
+  REQUIRE(plus != nullptr);
+  REQUIRE(plus->ch == "+");
+
+  // Hit-testing walks the elided label too: the ellipsis moved the close marker
+  // left, and pressing it closes this tab rather than landing on a neighbour.
+  REQUIRE(e.terminal_mouse_for_test(1 + ui_cell_count(label), tab_y, true, false, false));
+  REQUIRE(e.integrated_terminal_tab_label_for_test(0) == " \uE795 term 1 ");
+  REQUIRE(ui_cell_count(e.integrated_terminal_tab_label_for_test(0)) == 10);
+}
+
+TEST_CASE("Bottom panel: a custom tab name that fits is drawn in full", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_home_menu_visible(false);
+  e.add_terminal_for_test("lazygit");
+  e.set_bottom_panel_view_for_test(BOTTOM_PANEL_TERMINAL);
+  e.set_terminal_state_for_test(true, false, 10);
+  e.request_redraw_for_test();
+  e.render_for_test();
+
+  // A name inside its share is drawn exactly as set: no ellipsis, no padding
+  // out to the budget.
+  const std::string label = e.integrated_terminal_tab_label_for_test(0);
+  REQUIRE(label == " \uE795 lazygit ");
+
+  const int tab_y = e.bottom_panel_terminal_tab_y_for_test();
+  UI *ui = e.ui_for_test();
+  const UICell *first = ui->cell_at(4, tab_y);
+  REQUIRE(first != nullptr);
+  REQUIRE(first->ch == "l");
+  const UICell *last = ui->cell_at(10, tab_y);
+  REQUIRE(last != nullptr);
+  REQUIRE(last->ch == "t");
+  const UICell *close = ui->cell_at(1 + ui_cell_count(label), tab_y);
+  REQUIRE(close != nullptr);
+  REQUIRE(close->ch == "x");
 }
 
 TEST_CASE("Bottom panel: hovering the view tabs leaves the view alone", "[jot]")

@@ -200,6 +200,20 @@ std::string ui_truncate_cells(const std::string &text, int max_cells)
   return ui_take_cells(text, max_cells - 2) + "..";
 }
 
+std::string ui_truncate_cells_ellipsis(const std::string &text, int max_cells)
+{
+  if (max_cells <= 0)
+    return "";
+  if (ui_cell_count(text) <= max_cells)
+    return text;
+  // The ellipsis is one cell wide, so the kept prefix gets the rest of the
+  // budget. ui_take_cells drops any wide character that would straddle the
+  // cut, so the result can be shorter than the budget but never wider.
+  if (max_cells == 1)
+    return "\u2026";
+  return ui_take_cells(text, max_cells - 1) + "\u2026";
+}
+
 std::string ui_truncate_left_cells(const std::string &text, int max_cells)
 {
   if (max_cells <= 0)

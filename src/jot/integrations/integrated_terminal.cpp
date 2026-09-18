@@ -8,6 +8,21 @@ namespace
 // for shell scripts: it says "this tab is a shell session" without repeating
 // the view tab's fa-terminal two rows above it.
 constexpr const char *kShellTabIcon = "\uE795";
+
+// Cells the label spends around the name itself: the leading pad, the glyph,
+// the space after it and the trailing pad.
+constexpr int kShellTabFrameCells = 4;
+
+// A single tab's cell allowance. The renderer drops every tab that no longer
+// fits on the row, so before this one long custom name (a task, an install
+// job, a plugin's label) hid the tabs after it and the "+" with them. A
+// quarter of the strip keeps several names visible at any width; the floor
+// keeps the name readable on a narrow panel instead of collapsing it to one
+// character.
+int shell_tab_label_cells(int panel_w)
+{
+  return std::max(12, panel_w / 4);
+}
 } // namespace
 
 std::string Editor::integrated_terminal_tab_label(int index) const
@@ -17,7 +32,20 @@ std::string Editor::integrated_terminal_tab_label(int index) const
     return {};
   }
   const std::string &custom = integrated_terminals[index]->get_label();
-  const std::string base = custom.empty() ? "term " + std::to_string(index + 1) : custom;
+  std::string base;
+  if (custom.empty())
+  {
+    // A generated name is bounded by construction; draw it exactly.
+    base = "term " + std::to_string(index + 1);
+  }
+  else
+  {
+    // A custom name is unbounded, so elide it to the tab's share with an
+    // ellipsis. Only the drawn label shrinks: get_label() keeps the full name,
+    // which is what the task runner, lazygit reuse and the Lua API match on.
+    base = ui_truncate_cells_ellipsis(
+        custom, shell_tab_label_cells(integrated_terminal_panel_w()) - kShellTabFrameCells);
+  }
   return " " + std::string(kShellTabIcon) + " " + base + " ";
 }
 

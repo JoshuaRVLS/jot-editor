@@ -212,7 +212,9 @@ private:
   int bottom_panel_view_tab_y() const;
   int bottom_panel_terminal_tab_y() const;
   // One shell tab's label (leading pad, shell glyph, name, trailing pad), built
-  // here so the strip's renderer and every hit-test measure the same string.
+  // here so the strip's renderer and every hit-test measure the same string. A
+  // long custom name is elided to a share of the strip so it cannot push the
+  // tabs after it (and the "+") off the row.
   std::string integrated_terminal_tab_label(int index) const;
   int bottom_panel_content_y() const;
   int bottom_panel_content_h() const;
@@ -1404,6 +1406,16 @@ public:
   {
     return integrated_terminal_tab_label(index);
   }
+  // The terminal's own name (get_label), as opposed to the label the strip
+  // draws: the two differ once a custom name was elided for display.
+  std::string integrated_terminal_name_for_test(int index) const
+  {
+    if (index < 0 || index >= (int)integrated_terminals.size() || !integrated_terminals[index])
+    {
+      return {};
+    }
+    return integrated_terminals[index]->get_label();
+  }
   int bottom_panel_content_y_for_test() const
   {
     return bottom_panel_content_y();
@@ -1585,11 +1597,13 @@ public:
     return terminal_sel_cur_col;
   }
   // Registers a shell-less terminal so mouse/key handlers have a live
-  // vterm-backed target without spawning a process.
-  void add_terminal_for_test()
+  // vterm-backed target without spawning a process. `label` seeds a custom tab
+  // name (what task/plugin terminals carry); empty keeps the generated one.
+  void add_terminal_for_test(const std::string &label = "")
   {
     auto term = std::make_unique<IntegratedTerminal>();
     term->mark_active_for_test();
+    term->set_label(label);
     integrated_terminals.push_back(std::move(term));
     current_integrated_terminal = (int)integrated_terminals.size() - 1;
     show_integrated_terminal = true;

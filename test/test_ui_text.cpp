@@ -37,6 +37,27 @@ TEST_CASE("UI Text Truncate Right", "[jot]")
   REQUIRE(ui_truncate_cells("abc", 4) == "abc");
 }
 
+TEST_CASE("UI Text Truncate Right With An Ellipsis", "[jot]")
+{
+  // Exact fit is untouched; a cut spends one cell on the ellipsis instead of
+  // the two dots' two, so one more character of the name survives.
+  REQUIRE(ui_truncate_cells_ellipsis("abcdef", -1) == "");
+  REQUIRE(ui_truncate_cells_ellipsis("abcdef", 0) == "");
+  REQUIRE(ui_truncate_cells_ellipsis("abcdef", 1) == "\u2026");
+  REQUIRE(ui_truncate_cells_ellipsis("abcdef", 4) == "abc\u2026");
+  REQUIRE(ui_truncate_cells_ellipsis("abcdef", 6) == "abcdef");
+  REQUIRE(ui_truncate_cells_ellipsis("abc", 4) == "abc");
+
+  // A wide character that would straddle the cut is dropped whole rather than
+  // split or overrun, so the result never exceeds its budget.
+  std::string wide = "a\xe8\xa1\xa8"
+                     "b";
+  REQUIRE(ui_truncate_cells_ellipsis(wide, 1) == "\u2026");
+  REQUIRE(ui_truncate_cells_ellipsis(wide, 2) == "a\u2026");
+  REQUIRE(ui_cell_count(ui_truncate_cells_ellipsis(wide, 3)) <= 3);
+  REQUIRE(ui_cell_count(ui_truncate_cells_ellipsis(wide, 4)) == 4);
+}
+
 TEST_CASE("UI Text Truncate Left", "[jot]")
 {
   REQUIRE(ui_truncate_left_cells("/a/b/c/d", 0) == "");
