@@ -1023,6 +1023,13 @@ void Editor::render_pane(const SplitPane &pane, int pane_index)
           : std::string();
   if (image_viewer.is_image_file(pane_path))
   {
+    // The pane owns the picture now, so it keeps the viewer pointed at the
+    // image it is showing: a closed or stale viewer reports no geometry and
+    // draws nothing, which is the black panel.
+    if (!image_viewer.is_active() || image_viewer.get_current() != pane_path)
+    {
+      image_viewer.open(pane_path);
+    }
     render_image_viewer();
   }
   else
