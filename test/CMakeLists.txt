@@ -1,6 +1,7 @@
 add_executable(jot_tests
   test_productivity.cpp
   test_folding.cpp
+  test_fold_click.cpp
   test_features.cpp
   test_cpp_assist.cpp
   test_cursor.cpp

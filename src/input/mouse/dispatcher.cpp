@@ -974,11 +974,10 @@ void Editor::handle_mouse(void *event_ptr)
     focus_state = FOCUS_EDITOR;
     return;
   }
-  if (is_click && event->x == pane.x + 2 && toggle_fold_at_line(buf, click_y))
-  {
-    focus_state = FOCUS_EDITOR;
-    return;
-  }
+  // No fold hit-test in the gutter: the marker column is gone (the folded
+  // header already says "… N lines"), so pane.x + 2 is now the line number's
+  // first digit and must not fold anything. Folding stays on the context
+  // menu's Toggle Fold and the fold commands.
   const std::string &clicked_line = buf.line(click_y);
   int line_len = clicked_line.length();
   int start_visual = compute_visual_column(clicked_line, buf.scroll_x, tab_size);
