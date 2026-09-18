@@ -318,6 +318,15 @@ void Editor::open_file(const std::string &path, bool preview)
     }
   }
 
+  // Opening anything else leaves the viewer. It owns the screen while it is
+  // active, so without this the file loads behind it and the viewer stays --
+  // which read as "clicking another file does nothing".
+  if (image_viewer.is_active())
+  {
+    image_viewer.close();
+    needs_redraw = true;
+  }
+
   if (image_viewer.is_active())
   {
     image_viewer.close();
