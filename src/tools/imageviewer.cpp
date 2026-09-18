@@ -534,9 +534,14 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
   {
     const int target_w = 56;
     const int target_h = 24;
-    std::string cmd = "convert " + shell_util::shell_quote(path)
+    // -thumbnail rather than -resize: it decodes the source at the size it
+    // needs instead of at full resolution and scaling afterwards, which is the
+    // difference between a brief pause and an apparently hung editor on a
+    // large image. The time limit is the backstop -- this runs on the UI
+    // thread, so a pathological file must not be able to hold it forever.
+    std::string cmd = "convert -limit time 5 -limit thread 1 " + shell_util::shell_quote(path)
                       + " -auto-orient "
-                        "-resize "
+                        "-thumbnail "
                       + std::to_string(target_w) + "x" + std::to_string(target_h) + "\\! txt:-"
                       + shell_util::null_redirect();
     FILE *pipe = shell_util::open_command_pipe(cmd, "r");
