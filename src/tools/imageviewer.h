@@ -72,7 +72,13 @@ private:
     Backend backend = Backend::Auto;
   };
   std::unordered_map<std::string, PreviewCacheEntry> preview_cache;
+  // A sixel placement is re-sent on every draw (the cell repaint under it
+  // erases it), so the converted bytes are kept rather than running the helper
+  // again for each one. One entry per image *and* raster size: a pane resize
+  // changes the -w/-h the conversion was made for.
+  std::unordered_map<std::string, std::string> sixel_cache;
 
+  const std::string &sixel_payload_for(const std::string &path, int w, int h);
   void store_preview_cache(const std::string &path);
   void generate_ascii_preview(const std::string &path);
   std::string get_image_info(const std::string &path);
@@ -101,6 +107,9 @@ public:
   static std::string build_kitty_file_command(const std::string &path, int x, int y, int w, int h);
   static std::string build_kitty_delete_command();
   static std::string build_sixel_command(const std::string &path, int w, int h);
+  // What makes two sixel conversions interchangeable. Used to key the payload
+  // cache, so it is part of the invalidation contract rather than a detail.
+  static std::string sixel_cache_key(const std::string &path, int w, int h);
 
   void configure_backend(const std::string &backend);
   void open(const std::string &path);

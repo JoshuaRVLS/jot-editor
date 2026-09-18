@@ -369,6 +369,13 @@ std::string ImageViewer::build_kitty_delete_command()
   return "\x1b_Ga=d,d=i,i=" + std::to_string(kKittyImageId) + ",q=2;\x1b\\";
 }
 
+std::string ImageViewer::sixel_cache_key(const std::string &path, int w, int h)
+{
+  // A unit separator keeps a path from ever reading as part of a size (a path
+  // ending in digits must not alias a larger raster).
+  return path + "\x1f" + std::to_string(w) + "x" + std::to_string(h);
+}
+
 std::string ImageViewer::build_sixel_command(const std::string &path, int w, int h)
 {
   if (path.empty() || w <= 0 || h <= 0)
@@ -380,6 +387,56 @@ std::string ImageViewer::build_sixel_command(const std::string &path, int w, int
   // added to that payload, not to the shell command.
   return "img2sixel -w " + std::to_string(px_w) + " -h " + std::to_string(px_h) + " "
          + shell_util::shell_quote(path) + shell_util::null_redirect();
+}
+
+namespace
+{
+  // Enough for the image being shown, a second pane's copy of it, and a resize
+  // or two; each entry is a converted payload, so this stays small.
+  constexpr size_t kSixelCacheMax = 4;
+} // namespace
+
+const std::string &ImageViewer::sixel_payload_for(const std::string &path, int w, int h)
+{
+  static const std::string empty;
+  if (path.empty() || w <= 0 || h <= 0)
+  {
+    return empty;
+  }
+
+  const std::string key = sixel_cache_key(path, w, h);
+  const auto cached = sixel_cache.find(key);
+  if (cached != sixel_cache.end())
+  {
+    return cached->second;
+  }
+
+  std::string payload;
+  FILE *pipe = shell_util::open_command_pipe(build_sixel_command(path, w, h), "r");
+  if (pipe)
+  {
+    char buffer[4096];
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+    {
+      payload += buffer;
+    }
+    if (shell_util::command_exit_code(shell_util::close_command_pipe(pipe)) != 0)
+    {
+      payload.clear();
+    }
+  }
+  // A failure is not cached: the helper may be missing now and present later,
+  // and "no payload" is answered by the caller's cell-preview fallback.
+  if (payload.empty())
+  {
+    return empty;
+  }
+
+  if (sixel_cache.size() >= kSixelCacheMax)
+  {
+    sixel_cache.erase(sixel_cache.begin());
+  }
+  return sixel_cache.emplace(key, std::move(payload)).first->second;
 }
 
 void ImageViewer::configure_backend(const std::string &backend)
@@ -913,29 +970,20 @@ std::string ImageViewer::take_graphics_output()
   }
   if (active_backend == Backend::Sixel)
   {
-    std::string cmd = build_sixel_command(current_image, graphics_w, graphics_h);
-    std::string payload;
-    FILE *pipe = shell_util::open_command_pipe(cmd, "r");
-    if (pipe)
+    // Sent on every draw, so the conversion is cached per image and raster size
+    // rather than re-run for each redraw.
+    const std::string &payload = sixel_payload_for(current_image, graphics_w, graphics_h);
+    if (!payload.empty())
     {
-      char buffer[4096];
-      while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
-      {
-        payload += buffer;
-      }
-      const int rc = shell_util::command_exit_code(shell_util::close_command_pipe(pipe));
-      if (rc == 0 && !payload.empty())
-      {
-        // Aim the placement at the panel first: the frame writes its graphics
-        // after the cells, and by then the terminal cursor is wherever the last
-        // painted row left it.
-        out += cursor_move(graphics_x, graphics_y);
-        out += payload;
-        graphics_visible = true;
-        graphics_backend = Backend::Sixel;
-        status_text = "Real image: sixel";
-        return out;
-      }
+      // Aim the placement at the panel first: the frame writes its graphics
+      // after the cells, and by then the terminal cursor is wherever the last
+      // painted row left it.
+      out += cursor_move(graphics_x, graphics_y);
+      out += payload;
+      graphics_visible = true;
+      graphics_backend = Backend::Sixel;
+      status_text = "Real image: sixel";
+      return out;
     }
     active_backend = Backend::Cell;
     status_text = "Sixel unavailable; using cell preview";

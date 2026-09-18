@@ -99,6 +99,21 @@ TEST_CASE("Image Viewer Places Graphics At A Cell", "[jot]")
   REQUIRE(ImageViewer::cursor_move(2, 3) == "\x1b[4;3H");
 }
 
+TEST_CASE("Image Viewer Sixel Cache Keys", "[jot]")
+{
+  // A redraw re-sends the placement, and the converted bytes are only reusable
+  // at the raster size they were made for, so the key separates both -- without
+  // letting a path read as part of a size.
+  REQUIRE(ImageViewer::sixel_cache_key("/a.png", 40, 20)
+          == ImageViewer::sixel_cache_key("/a.png", 40, 20));
+  REQUIRE(ImageViewer::sixel_cache_key("/a.png", 40, 20)
+          != ImageViewer::sixel_cache_key("/a.png", 41, 20));
+  REQUIRE(ImageViewer::sixel_cache_key("/a.png", 40, 20)
+          != ImageViewer::sixel_cache_key("/b.png", 40, 20));
+  REQUIRE(ImageViewer::sixel_cache_key("/a2.png", 4, 0)
+          != ImageViewer::sixel_cache_key("/a", 24, 0));
+}
+
 TEST_CASE("Image Viewer Kitty Command", "[jot]")
 {
   std::string cmd = ImageViewer::build_kitty_file_command("/tmp/a.png", 2, 3, 40, 12);
