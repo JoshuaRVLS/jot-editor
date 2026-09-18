@@ -370,7 +370,6 @@ void Editor::render()
   {
     if (image_viewer.is_active())
     {
-      render_image_viewer();
       render_status_line();
       if (lua_api)
       {
@@ -1031,7 +1030,7 @@ void Editor::render_pane(const SplitPane &pane, int pane_index)
     {
       image_viewer.open(pane_path);
     }
-    render_image_viewer();
+    render_image_viewer(pane);
   }
   else
   {
