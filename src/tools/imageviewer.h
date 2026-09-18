@@ -42,6 +42,10 @@ private:
   bool graphics_visible;
   int graphics_x, graphics_y, graphics_w, graphics_h;
   std::string status_text;
+  // get_image_info() shells out to identify, so its answer is kept: this is
+  // asked for on the render path and used to spawn a process per frame.
+  std::string cached_info_for;
+  std::string cached_info;
   std::string graphics_file;
   bool remove_graphics_file;
 

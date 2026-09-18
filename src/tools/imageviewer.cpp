@@ -828,6 +828,13 @@ std::string ImageViewer::take_graphics_output()
     return out;
   }
 
-  status_text = get_image_info(current_image);
+  // Cached: get_image_info runs identify, and this is reached while building
+  // the frame, so asking every time froze the editor on an image tab.
+  if (cached_info_for != current_image)
+  {
+    cached_info_for = current_image;
+    cached_info = get_image_info(current_image);
+  }
+  status_text = cached_info;
   return out;
 }
