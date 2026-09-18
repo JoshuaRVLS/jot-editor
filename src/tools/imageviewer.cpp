@@ -143,6 +143,14 @@ namespace
         int bb = parse_component(parts[2]);
         if (rr >= 0 && gg >= 0 && bb >= 0)
         {
+          // A fourth component is alpha, and zero means the pixel is fully
+          // transparent: its RGB is meaningless (ImageMagick reports
+          // "(0,0,0,0)"), so painting it would put opaque black where the
+          // image shows nothing at all.
+          if (parts.size() >= 4 && parse_component(parts[3]) == 0)
+          {
+            return false;
+          }
           r = rr;
           g = gg;
           b = bb;
@@ -534,8 +542,10 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
     FILE *pipe = shell_util::open_command_pipe(cmd, "r");
     if (pipe)
     {
+      // -1 = draw with the default background, which is what a transparent
+      // or unparsed pixel should show rather than a fixed colour.
       std::vector<std::vector<int>> colors((size_t)target_h,
-                                           std::vector<int>((size_t)target_w, 16));
+                                           std::vector<int>((size_t)target_w, -1));
       bool any = false;
       char buffer[1024];
       while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
