@@ -784,12 +784,9 @@ bool Editor::close_active_floating_ui()
     return true;
   }
 
-  if (image_viewer.is_active())
-  {
-    image_viewer.close();
-    needs_redraw = true;
-    return true;
-  }
+  // The image viewer is not a floating UI: its picture lives in a pane, and
+  // closing it here would swallow Esc / Ctrl+Q (Ctrl+B etc.), which then had no
+  // way to close the tab, the panel, or the editor.
 
   if (lsp_completion_visible)
   {

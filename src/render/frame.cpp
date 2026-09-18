@@ -368,20 +368,7 @@ void Editor::render()
   }
   else
   {
-    if (image_viewer.is_active())
-    {
-      render_image_viewer();
-      render_status_line();
-      if (lua_api)
-      {
-        lua_api->render_floats();
-      }
-      ui->hide_cursor();
-      ui->render();
-      needs_redraw = false;
-      return;
-    }
-    else if (show_save_prompt)
+    if (show_save_prompt)
     {
       render_save_prompt();
     }
@@ -416,6 +403,33 @@ void Editor::render()
         render_plugin_panel();
       }
     }
+
+    // The picture is drawn inside its pane, so the viewer is only "open" while
+    // a pane actually shows it. Closing it here is what emits the delete for a
+    // terminal-side placement (kitty / sixel): without it the image stayed
+    // painted over whatever replaced it.
+    bool image_on_screen = false;
+    for (size_t i = 0; i < panes.size(); i++)
+    {
+      if (pane_zoom_active && (int)i != current_pane)
+      {
+        continue;
+      }
+      const int id = panes[i].buffer_id;
+      if (id >= 0 && id < (int)buffers.size()
+          && image_viewer.is_image_file(buffers[(size_t)id].filepath))
+      {
+        image_on_screen = true;
+        break;
+      }
+    }
+    if (!image_on_screen && image_viewer.is_active())
+    {
+      image_viewer.close();
+    }
+    // Graphics ride with the cells: taken once per frame, after the panes have
+    // set the viewer's geometry for this draw.
+    ui->set_frame_graphics(image_viewer.take_graphics_output());
 
     render_status_line();
     render_command_palette();
@@ -1031,7 +1045,7 @@ void Editor::render_pane(const SplitPane &pane, int pane_index)
     {
       image_viewer.open(pane_path);
     }
-    render_image_viewer();
+    render_image_viewer(pane);
   }
   else
   {

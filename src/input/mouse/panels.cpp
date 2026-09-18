@@ -415,6 +415,15 @@ void Editor::handle_mouse_input(int x,
   int visible_rows = std::max(1, pane.h - tab_height - 1);
   const int wheel_step = std::max(1, std::min(5, visible_rows / 6));
 
+  // An image pane has no text to scroll: the wheel pans the viewer's preview
+  // instead, so it behaves there the way it does in any other file.
+  if ((is_scroll_up || is_scroll_down) && image_viewer.is_image_file(buf.filepath))
+  {
+    image_viewer.scroll_preview(is_scroll_down ? wheel_step : -wheel_step);
+    needs_redraw = true;
+    return;
+  }
+
   if (is_scroll_up)
   {
     for (int i = 0; i < wheel_step && buf.scroll_offset > 0; i++)

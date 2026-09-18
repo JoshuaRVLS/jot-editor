@@ -25,21 +25,11 @@ void Editor::accept_telescope_selection()
     return;
   }
 
-  std::string ext = get_file_extension(path);
-  std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-  if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".bmp"
-      || ext == ".svg" || ext == ".webp" || ext == ".ico" || ext == ".tif" || ext == ".tiff"
-      || ext == ".avif" || ext == ".heic" || ext == ".ppm" || ext == ".pgm" || ext == ".pbm"
-      || ext == ".xpm" || ext == ".jxl")
-  {
-    image_viewer.open(path);
-  }
-  else
-  {
-    open_file(path);
-    record_jump();
-  }
+  // An image goes through open_file like any other file: that is what gives it
+  // a tab and a pane to draw the picture in. Opening the viewer directly here
+  // left it active with no pane showing it, which read as "nothing happened".
+  open_file(path);
+  record_jump();
   telescope.close();
   needs_redraw = true;
 }

@@ -2,6 +2,7 @@
 #define IMAGEVIEWER_H
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // enum {
@@ -48,7 +49,27 @@ private:
   std::string cached_info;
   std::string graphics_file;
   bool remove_graphics_file;
+  // Where the pane's preview is scrolled to, counted in preview rows. The
+  // picture is not a buffer, so the wheel and the navigation keys move this
+  // instead of a cursor.
+  int preview_scroll;
+  // Height of the preview viewport, recorded by render() so scroll_preview()
+  // can clamp its answer without being told the pane's size again.
+  int preview_viewport_rows;
+  // A generated preview is kept per path: render_pane re-opens the viewer
+  // whenever the pane's image changes, and regenerating copies the picture
+  // through ImageMagick every time, which is a subprocess per switch.
+  struct PreviewCacheEntry
+  {
+    std::string status_text;
+    std::vector<std::string> ascii_preview;
+    std::vector<std::vector<int>> color_preview_bg;
+    bool has_color_preview = false;
+    Backend backend = Backend::Auto;
+  };
+  std::unordered_map<std::string, PreviewCacheEntry> preview_cache;
 
+  void store_preview_cache(const std::string &path);
   void generate_ascii_preview(const std::string &path);
   std::string get_image_info(const std::string &path);
   Backend resolve_backend() const;
@@ -74,6 +95,16 @@ public:
   void close();
   void render(int x, int y, int w, int h, int border_fg, int border_bg);
   std::string take_graphics_output();
+
+  // Preview scrolling: one pane shows one picture, and it has no text buffer
+  // to move, so j/k, the arrows, the wheel and the paging keys pan these rows.
+  int preview_content_rows() const;
+  int get_preview_scroll() const
+  {
+    return preview_scroll;
+  }
+  void set_preview_scroll(int row);
+  void scroll_preview(int delta);
   bool is_active() const
   {
     return is_open;
@@ -129,6 +160,13 @@ public:
   bool uses_real_graphics() const
   {
     return active_backend == Backend::Kitty || active_backend == Backend::Sixel;
+  }
+  // True only once a terminal-side placement has actually gone out: kitty needs
+  // a successful conversion and sixel its helper, so a backend that resolved
+  // but produced nothing must not hide the cell preview underneath it.
+  bool real_graphics_shown() const
+  {
+    return graphics_visible && uses_real_graphics();
   }
   bool has_pending_graphics_output() const
   {

@@ -230,6 +230,8 @@ ImageViewer::ImageViewer()
   status_text.clear();
   graphics_file.clear();
   remove_graphics_file = false;
+  preview_scroll = 0;
+  preview_viewport_rows = 1;
 }
 
 ImageViewer::Backend ImageViewer::parse_backend(const std::string &name)
@@ -697,6 +699,24 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
   }
 }
 
+void ImageViewer::store_preview_cache(const std::string &path)
+{
+  // Bounded, and evicted in insertion order: the last few pictures visited
+  // stay instant to return to, and a long session cannot grow this without
+  // end.
+  if (preview_cache.size() >= 8)
+  {
+    preview_cache.erase(preview_cache.begin());
+  }
+  PreviewCacheEntry entry;
+  entry.status_text = status_text;
+  entry.ascii_preview = ascii_preview;
+  entry.color_preview_bg = color_preview_bg;
+  entry.has_color_preview = has_color_preview;
+  entry.backend = active_backend;
+  preview_cache[path] = std::move(entry);
+}
+
 void ImageViewer::open(const std::string &path)
 {
   if (!is_image_file(path))
@@ -706,10 +726,25 @@ void ImageViewer::open(const std::string &path)
 
   current_image = path;
   is_open = true;
+  preview_scroll = 0;
   clear_graphics_file();
-  active_backend = resolve_backend();
-  status_text = get_image_info(path);
-  generate_ascii_preview(path);
+
+  const auto cached = preview_cache.find(path);
+  if (cached != preview_cache.end())
+  {
+    status_text = cached->second.status_text;
+    ascii_preview = cached->second.ascii_preview;
+    color_preview_bg = cached->second.color_preview_bg;
+    has_color_preview = cached->second.has_color_preview;
+    active_backend = cached->second.backend;
+  }
+  else
+  {
+    active_backend = resolve_backend();
+    status_text = get_image_info(path);
+    generate_ascii_preview(path);
+    store_preview_cache(path);
+  }
   graphics_dirty = true;
 }
 
@@ -728,6 +763,7 @@ void ImageViewer::close()
   color_preview_bg.clear();
   has_color_preview = false;
   status_text.clear();
+  preview_scroll = 0;
 }
 
 void ImageViewer::render(int x, int y, int w, int h, int border_fg, int border_bg)
@@ -741,6 +777,9 @@ void ImageViewer::render(int x, int y, int w, int h, int border_fg, int border_b
   view_h = h;
   this->border_fg = border_fg;
   this->border_bg = border_bg;
+  // The preview inside this panel starts one row in (the status caption rides
+  // on the top border) and stops one row short of the bottom border.
+  preview_viewport_rows = std::max(1, h - 2);
 
   int next_x = x + 1;
   int next_y = y + 2;
@@ -755,6 +794,29 @@ void ImageViewer::render(int x, int y, int w, int h, int border_fg, int border_b
     graphics_h = next_h;
   }
   active_backend = resolve_backend();
+}
+
+int ImageViewer::preview_content_rows() const
+{
+  int rows = (int)ascii_preview.size();
+  if (has_color_preview)
+  {
+    // A blank row separates the caption and ASCII art from the color block.
+    rows += 1 + (int)color_preview_bg.size();
+  }
+  return rows;
+}
+
+void ImageViewer::set_preview_scroll(int row)
+{
+  const int max_scroll =
+      std::max(0, preview_content_rows() - std::max(1, preview_viewport_rows));
+  preview_scroll = std::clamp(row, 0, max_scroll);
+}
+
+void ImageViewer::scroll_preview(int delta)
+{
+  set_preview_scroll(preview_scroll + delta);
 }
 
 std::string ImageViewer::take_graphics_output()

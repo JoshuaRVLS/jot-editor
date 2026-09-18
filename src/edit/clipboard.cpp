@@ -437,6 +437,13 @@ void Editor::cut()
 
 void Editor::paste()
 {
+  // An image tab's buffer is an empty placeholder: pasting into it would fill
+  // that placeholder, and a later save would write it over the picture.
+  if (image_viewer.is_image_file(get_buffer().filepath))
+  {
+    return;
+  }
+
   std::string source_clipboard = clipboard;
   read_xclip_clipboard(source_clipboard);
   if (source_clipboard.empty())

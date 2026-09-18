@@ -331,6 +331,15 @@ void Editor::open_file(const std::string &path, bool preview)
         FileBuffer fb;
         fb.filepath = path_to_open;
         fb.lines.push_back("");
+        // Every field the text paths set, set here too: FileBuffer's members
+        // have no initializers, and a garbage `modified` made an image tab look
+        // unsaved, so quitting stopped for a prompt nobody expected.
+        fb.cursor = {0, 0};
+        fb.preferred_x = 0;
+        fb.selection = {{0, 0}, {0, 0}, false};
+        fb.scroll_offset = 0;
+        fb.scroll_x = 0;
+        fb.modified = false;
         fb.is_preview = false;
         fb.is_placeholder = false;
         buffers.push_back(std::move(fb));
@@ -644,6 +653,18 @@ bool Editor::save_buffer_at(int index, bool announce)
   auto &buf = buffers[index];
   if (buf.filepath.empty())
   {
+    return false;
+  }
+
+  // An image tab's buffer is an empty placeholder, never the file's text (see
+  // open_file). Writing it out would replace the picture with a blank line.
+  if (image_viewer.is_image_file(buf.filepath))
+  {
+    if (announce)
+    {
+      message = "Save skipped: " + get_filename(buf.filepath) + " is an image";
+      needs_redraw = true;
+    }
     return false;
   }
 

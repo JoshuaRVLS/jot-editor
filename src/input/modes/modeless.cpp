@@ -3,6 +3,60 @@
 
 void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_alt)
 {
+  // An image tab's buffer is only an empty placeholder (see open_file). Letting
+  // an edit key through would type into that placeholder, and the next save
+  // would write it over the picture; navigation pans the preview instead of a
+  // cursor. Everything that is neither editing nor scrolling falls through to
+  // the normal handling, so the global shortcuts still work here.
+  const bool image_buffer = current_buffer >= 0 && current_buffer < (int)buffers.size()
+                            && image_viewer.is_image_file(buffers[(size_t)current_buffer].filepath);
+  if (image_buffer && !is_ctrl && !is_alt)
+  {
+    int scroll_lines = 0;
+    if (ch == 1008 || ch == 'k' || ch == 'K')
+    {
+      scroll_lines = -1;
+    }
+    else if (ch == 1009 || ch == 'j' || ch == 'J')
+    {
+      scroll_lines = 1;
+    }
+    else if (ch == 1015)
+    {
+      scroll_lines = -10;
+    }
+    else if (ch == 1016)
+    {
+      scroll_lines = 10;
+    }
+    else if (ch == 1012)
+    {
+      image_viewer.set_preview_scroll(0);
+      needs_redraw = true;
+      return;
+    }
+    else if (ch == 1013)
+    {
+      image_viewer.set_preview_scroll(image_viewer.preview_content_rows());
+      needs_redraw = true;
+      return;
+    }
+    if (scroll_lines != 0)
+    {
+      image_viewer.scroll_preview(scroll_lines);
+      needs_redraw = true;
+      return;
+    }
+
+    const bool editing_key = ch == '\n' || ch == 13 || ch == '\t' || ch == 9 || ch == 127
+                             || ch == 8 || ch == 1001 || ch == 1017
+                             || (ch >= 32 && ch < 1000);
+    if (editing_key)
+    {
+      return;
+    }
+  }
+
   if (lsp_completion_visible)
   {
     if (ch == 1008)
