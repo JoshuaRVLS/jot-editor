@@ -313,11 +313,50 @@ void Editor::open_file(const std::string &path, bool preview)
       image_viewer.open(path_to_open);
       track_recent_file(path_to_open);
       refresh_git_status(true);
+      // A tab for the image, built empty rather than read: loading the file as
+      // text turns a whole PNG into one enormous line and the frame never
+      // finishes. Nothing ever renders this buffer's text -- render_pane draws
+      // the viewer for a buffer whose path is an image.
+      int existing = -1;
+      for (size_t i = 0; i < buffers.size(); i++)
+      {
+        if (buffers[i].filepath == path_to_open)
+        {
+          existing = (int)i;
+          break;
+        }
+      }
+      if (existing < 0)
+      {
+        FileBuffer fb;
+        fb.filepath = path_to_open;
+        fb.lines.push_back("");
+        fb.is_preview = false;
+        fb.is_placeholder = false;
+        buffers.push_back(std::move(fb));
+        existing = (int)buffers.size() - 1;
+      }
+      current_buffer = existing;
+      tab_scroll_index = std::min(tab_scroll_index, current_buffer);
+      preview_buffer_index = -1;
+      {
+        auto &pane = get_pane();
+        capture_pane_view(current_pane);
+        pane.buffer_id = current_buffer;
+        restore_pane_view(current_pane);
+        if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(), current_buffer)
+            == pane.tab_buffer_ids.end())
+        {
+          pane.tab_buffer_ids.push_back(current_buffer);
+        }
+        int draw_w = std::max(1, pane.w);
+        if (show_minimap && draw_w > 20)
+        {
+          draw_w = std::max(1, draw_w - minimap_width);
+        }
+        reveal_local_tab(pane, find_local_tab_index(pane, current_buffer), draw_w);
+      }
       needs_redraw = true;
-      // No buffer for an image yet: loading one as text is what froze the
-      // editor (a whole PNG becomes a single line for the rope and the
-      // highlighter). A tab needs a lazy buffer first -- see the note on
-      // render_pane's image branch.
       return;
     }
   }
