@@ -1609,6 +1609,10 @@ public:
   {
     return show_sidebar;
   }
+  int sidebar_width_for_test() const
+  {
+    return effective_sidebar_width();
+  }
   // Feeds one raw key code through the frontend's key path: the same
   // decode_key_event -> handle_input sequence the terminal and GUI backends use,
   // so a binding's routing can be tested without a terminal.

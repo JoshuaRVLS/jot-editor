@@ -277,9 +277,10 @@ bool Editor::begin_terminal_resize_drag(int x, int y)
   {
     return false;
   }
-  // The handle is the panel's top border row: dragging it up grows the
-  // terminal, dragging it down shrinks it.
-  if (y != integrated_terminal_panel_y() || x < 0 || x >= integrated_terminal_panel_w())
+  // The handle is the rule above the panel -- the pane area's last row, which
+  // the panes ink, since the panel has no border row of its own. Dragging it up
+  // grows the terminal, dragging it down shrinks it.
+  if (y != integrated_terminal_panel_y() - 1 || x < 0 || x >= integrated_terminal_panel_w())
   {
     return false;
   }

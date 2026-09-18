@@ -499,11 +499,11 @@ bool Editor::handle_integrated_terminal_mouse(int x,
     return false;
   }
 
-  // The top border and the panel's view tab row sit above the shell's own
-  // strip. The view tabs are hit-tested by handle_bottom_panel_mouse, which
-  // runs first; whatever it declines up there is consumed inertly so a stray
-  // click can never fall through and focus a shell.
-  if (y == panel_y || y == bottom_panel_view_tab_y())
+  // The view tab row is the panel's first row, above the shell's own strip.
+  // The tabs are hit-tested by handle_bottom_panel_mouse, which runs first;
+  // whatever it declines up there is consumed inertly so a stray click can
+  // never fall through and focus a shell.
+  if (y == bottom_panel_view_tab_y())
   {
     return true;
   }
@@ -561,14 +561,6 @@ bool Editor::handle_integrated_terminal_mouse(int x,
       return true;
     }
     tab_x += (int)plus_tab.size();
-
-    // Fullscreen toggle button, drawn right after the + tab.
-    const std::string zoom_tab = "□";
-    if (x >= tab_x && x < tab_x + (int)zoom_tab.size())
-    {
-      toggle_terminal_zoom();
-      return true;
-    }
 
     show_integrated_terminal = true;
     activate_integrated_terminal(current_integrated_terminal, true);
@@ -752,14 +744,17 @@ int Editor::bottom_panel_view_tabs_width() const
          + (int)std::string(bottom_panel_view_label(BOTTOM_PANEL_PROBLEMS)).size() + 1;
 }
 
+// The panel has no border row of its own: the pane area above owns the
+// separator along its top (see pane_edges.h), so the panel's first row carries
+// the view tabs -- which is also what stops the two rules from stacking.
 int Editor::bottom_panel_view_tab_y() const
 {
-  return integrated_terminal_panel_y() + 1;
+  return integrated_terminal_panel_y();
 }
 
 int Editor::bottom_panel_terminal_tab_y() const
 {
-  return integrated_terminal_panel_y() + 2;
+  return integrated_terminal_panel_y() + 1;
 }
 
 int Editor::bottom_panel_content_y() const
@@ -804,7 +799,23 @@ void Editor::render_integrated_terminal()
   }
 
   ui->fill_rect(panel, " ", term_fg, term_bg);
-  ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal);
+  // The panel is a drawer under the pane area, so it inks only the sides that
+  // face a region: the status line below, and the right dock when it shares the
+  // panel's rows. Its top is the pane's own bottom border and its left is the
+  // screen edge, neither of which it draws -- a full box here put a second rule
+  // directly under the editor's bottom border. The bottom row takes the status
+  // background, the way the docked panels do, so that shared row reads as one
+  // piece of chrome.
+  UIBorderEdges edges = right_dock_edges(panel);
+  const int dock_w = effective_right_panel_width();
+  if (dock_w > 0 && panel.x + panel.w <= ui->get_render_width() - dock_w)
+  {
+    // The dock spans these rows and ends on the same bottom row, so the shared
+    // edge is the panel's right side and the corners are T-junctions.
+    edges.right = true;
+    edges.join_right = true;
+  }
+  ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal, edges, theme.bg_status);
 
   // View tabs (which of the panel's views is showing) get their own row, so
   // the shell's tab strip below can use the full width instead of sharing the
@@ -865,17 +876,6 @@ void Editor::render_integrated_terminal()
   {
     ui->draw_text(
         tab_x, tab_y, " + ", theme.fg_terminal_tab_plus, theme.bg_terminal_tab_plus, true);
-    tab_x += 3;
-    // Fullscreen toggle button; highlighted while zoomed so the state is
-    // visible even when the terminal fills the whole area.
-    if (tab_x + 1 < panel_w)
-    {
-      int zoom_fg = terminal_zoom_active ? theme.fg_terminal_tab_focused
-                                         : theme.fg_terminal_tab_inactive;
-      int zoom_bg = terminal_zoom_active ? theme.bg_terminal_tab_focused
-                                         : theme.bg_terminal_tab_inactive;
-      ui->draw_text(tab_x, tab_y, "□", zoom_fg, zoom_bg, true);
-    }
   }
 
   int content_h = std::max(1, bottom_panel_content_h());
@@ -1133,8 +1133,14 @@ bool Editor::handle_bottom_panel_mouse(int x, int y, bool is_click)
 
   // The view tab strip belongs to the panel as a whole, not to the view that
   // happens to be showing -- it is the only way back once the shell is active.
+  // Switching a view is an action, so it takes a press: hovering the labels
+  // (or dragging a selection across the row) must leave the panel alone.
   if (y == bottom_panel_view_tab_y())
   {
+    if (!is_click)
+    {
+      return true;
+    }
     int tab_x = 1;
     for (int view = 0; view < 2; view++)
     {

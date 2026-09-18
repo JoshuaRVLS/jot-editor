@@ -38,6 +38,10 @@ TEST_CASE("Terminal panel geometry: bottom panel vs fullscreen zoom", "[jot]")
   REQUIRE(panel_h >= 5);
   // The panel sits above the status line and never covers the tab strip.
   REQUIRE(panel_y >= 1);
+  // Its own rows start with the view tabs: the separator along its top belongs
+  // to the pane area above, so the panel has no border row to spend.
+  REQUIRE(e.bottom_panel_view_tab_y_for_test() == panel_y);
+  REQUIRE(e.bottom_panel_terminal_tab_y_for_test() == panel_y + 1);
   REQUIRE(panel_y + panel_h <= screen_h - 1);
   REQUIRE(panel_w >= 1);
 
@@ -100,10 +104,11 @@ TEST_CASE("Terminal resize drag clamps to the pane-preserving range", "[jot]")
   Editor &e = probe_editor();
   const int screen_h = e.ui_height_for_test();
   e.set_terminal_state_for_test(true, false, 10);
-  const int border_y = e.terminal_panel_y_for_test();
+  // The handle is the rule the pane area inks above the panel.
+  const int border_y = e.terminal_panel_y_for_test() - 1;
 
-  // Dragging the top border up (start at the border, end near the top)
-  // grows the terminal.
+  // Dragging that rule up (start at the rule, end near the top) grows the
+  // terminal.
   REQUIRE(e.terminal_resize_begin_for_test(10, border_y));
   REQUIRE(e.terminal_resize_dragging_for_test());
   REQUIRE(e.terminal_resize_update_for_test(5));
@@ -118,14 +123,16 @@ TEST_CASE("Terminal resize drag clamps to the pane-preserving range", "[jot]")
 
   // Dragging below the panel's own top edge shrinks it again, and the
   // 5-row floor holds.
-  e.terminal_resize_begin_for_test(10, e.terminal_panel_y_for_test());
+  e.terminal_resize_begin_for_test(10, e.terminal_panel_y_for_test() - 1);
   REQUIRE(e.terminal_resize_update_for_test(200));
   REQUIRE(e.terminal_panel_h_for_test() >= 5);
 
   e.terminal_resize_end_for_test();
   REQUIRE_FALSE(e.terminal_resize_dragging_for_test());
 
-  // A click not on the top border never starts a drag.
+  // A click on the panel's own rows never starts a drag: its first row is the
+  // view tabs, which the bottom-panel handler owns.
+  REQUIRE_FALSE(e.terminal_resize_begin_for_test(10, e.terminal_panel_y_for_test()));
   REQUIRE_FALSE(e.terminal_resize_begin_for_test(10, e.terminal_panel_y_for_test() + 1));
   REQUIRE_FALSE(e.terminal_resize_dragging_for_test());
   // Leave the drag state clean so later test cases start from a known
