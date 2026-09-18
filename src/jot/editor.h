@@ -194,7 +194,7 @@ private:
   bool cycle_local_tab(int delta);
   void render_telescope();
   void render_minimap(int x, int y, int w, int h, int buffer_id);
-  void render_image_viewer(const SplitPane &pane);
+  void render_image_viewer();
   // The bottom panel: one dock, two views (the shell and the diagnostics
   // list). The tab strip and the frame are shared; the body switches.
   void render_integrated_terminal();

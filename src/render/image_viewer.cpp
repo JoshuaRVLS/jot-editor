@@ -13,19 +13,17 @@
 
 using namespace overlay_internal;
 
-void Editor::render_image_viewer(const SplitPane &pane)
+void Editor::render_image_viewer()
 {
   int w = ui->get_render_width();
   int h = ui->get_height();
   if (w < 4 || h <= status_height + tab_height)
     return;
 
-  // Live inside the pane that holds the image, the way any other file's
-  // contents do: a window-wide panel reads as an overlay.
-  int area_x = pane.x;
-  int area_y = pane.y;
-  int area_w = std::max(1, pane.w);
-  int area_h = std::max(1, pane.h);
+  int area_x = show_sidebar ? effective_sidebar_width() : 0;
+  int area_y = tab_height;
+  int area_w = std::max(1, w - area_x);
+  int area_h = std::max(1, h - status_height - tab_height);
 
   UIRect clear_area = {area_x, area_y, area_w, area_h};
   ui->fill_rect(clear_area, " ", theme.fg_default, theme.bg_default);
