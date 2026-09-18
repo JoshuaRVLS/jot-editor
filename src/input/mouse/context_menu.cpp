@@ -65,11 +65,9 @@ bool Editor::open_context_menu_for_mouse(int x, int y)
         int tab_x = 1;
         for (int i = 0; i < (int)integrated_terminals.size(); i++)
         {
-          std::string base_label = integrated_terminals[i]->get_label().empty()
-                                       ? "term " + std::to_string(i + 1)
-                                       : integrated_terminals[i]->get_label();
-          std::string label = " " + base_label + " ";
-          int tab_w = (int)label.size() + 2;
+          // Reuse the strip's own label and measurement (cells) so the tab a
+          // right-click targets is the tab that was drawn there.
+          int tab_w = ui_cell_count(integrated_terminal_tab_label(i)) + 2;
           if (x >= tab_x && x < tab_x + tab_w)
           {
             target_terminal = i;

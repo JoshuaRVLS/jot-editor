@@ -2,6 +2,25 @@
 #include "ui/text.h"
 #include <algorithm>
 
+namespace
+{
+// A shell tab leads with nf-dev-terminal, the glyph the file tree already uses
+// for shell scripts: it says "this tab is a shell session" without repeating
+// the view tab's fa-terminal two rows above it.
+constexpr const char *kShellTabIcon = "\uE795";
+} // namespace
+
+std::string Editor::integrated_terminal_tab_label(int index) const
+{
+  if (index < 0 || index >= (int)integrated_terminals.size() || !integrated_terminals[index])
+  {
+    return {};
+  }
+  const std::string &custom = integrated_terminals[index]->get_label();
+  const std::string base = custom.empty() ? "term " + std::to_string(index + 1) : custom;
+  return " " + std::string(kShellTabIcon) + " " + base + " ";
+}
+
 IntegratedTerminal *Editor::get_integrated_terminal(int index)
 {
   if (integrated_terminals.empty())
@@ -522,12 +541,10 @@ bool Editor::handle_integrated_terminal_mouse(int x,
     int tab_x = 1;
     for (int i = 0; i < (int)integrated_terminals.size(); i++)
     {
-      std::string base_label = integrated_terminals[i]->get_label().empty()
-                                   ? "term " + std::to_string(i + 1)
-                                   : integrated_terminals[i]->get_label();
-      std::string label = " " + base_label + " ";
-      int close_x = tab_x + (int)label.size();
-      int tab_w = (int)label.size() + 2;
+      // The same builder the renderer used, measured the same way (cells).
+      const std::string label = integrated_terminal_tab_label(i);
+      int close_x = tab_x + ui_cell_count(label);
+      int tab_w = ui_cell_count(label) + 2;
 
       if (x >= tab_x && x < tab_x + tab_w)
       {
@@ -854,10 +871,10 @@ void Editor::render_integrated_terminal()
 
   for (int i = 0; i < (int)integrated_terminals.size(); i++)
   {
-    std::string base_label = integrated_terminals[i]->get_label().empty()
-                                 ? "term " + std::to_string(i + 1)
-                                 : integrated_terminals[i]->get_label();
-    std::string label = " " + base_label + " ";
+    const std::string label = integrated_terminal_tab_label(i);
+    // Cells, not bytes: the label carries a multi-byte glyph and may also carry
+    // a user-set name, and the renderer lays the strip out by rendered width.
+    const int label_w = ui_cell_count(label);
     bool active = (i == current_integrated_terminal);
     bool focused = active && integrated_terminals[i]->is_focused();
     int fg = focused ? theme.fg_terminal_tab_focused
@@ -865,18 +882,18 @@ void Editor::render_integrated_terminal()
     int bg = focused ? theme.bg_terminal_tab_focused
                      : (active ? theme.bg_terminal_tab_active : theme.bg_terminal_tab_inactive);
 
-    if (tab_x + (int)label.size() + 2 >= panel_w)
+    if (tab_x + label_w + 2 >= panel_w)
     {
       break;
     }
 
     ui->draw_text(tab_x, tab_y, label, fg, bg, active);
-    int close_x = tab_x + (int)label.size();
+    int close_x = tab_x + label_w;
     // Always render the close marker in the close color so it reads as a
     // button even when it is the only tab (clicking it closes the panel).
     ui->draw_text(close_x, tab_y, "x", theme.fg_terminal_tab_close, bg);
     ui->draw_text(close_x + 1, tab_y, "|", theme.fg_terminal_tab_separator, theme.bg_terminal);
-    tab_x += (int)label.size() + 2;
+    tab_x += label_w + 2;
   }
 
   if (tab_x + 3 < panel_w)

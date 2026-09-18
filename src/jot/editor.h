@@ -211,6 +211,9 @@ private:
   // hit-tests and the terminal's selection math cannot drift apart.
   int bottom_panel_view_tab_y() const;
   int bottom_panel_terminal_tab_y() const;
+  // One shell tab's label (leading pad, shell glyph, name, trailing pad), built
+  // here so the strip's renderer and every hit-test measure the same string.
+  std::string integrated_terminal_tab_label(int index) const;
   int bottom_panel_content_y() const;
   int bottom_panel_content_h() const;
   void render_debugger_panel();
@@ -1396,6 +1399,10 @@ public:
   int bottom_panel_terminal_tab_y_for_test() const
   {
     return bottom_panel_terminal_tab_y();
+  }
+  std::string integrated_terminal_tab_label_for_test(int index) const
+  {
+    return integrated_terminal_tab_label(index);
   }
   int bottom_panel_content_y_for_test() const
   {

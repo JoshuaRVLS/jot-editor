@@ -207,8 +207,9 @@ TEST_CASE("Terminal clicks on the tab strip never start a selection", "[jot]")
   e.add_terminal_for_test();
   const int tab_y = e.bottom_panel_terminal_tab_y_for_test();
 
-  // The first tab (" term 1 " starting at x=1) activates the terminal; it
-  // must not anchor a selection in the content area.
+  // The first tab starts at x=1 and leads with the shell glyph (x=2) before
+  // its "term 1" name; pressing it activates the terminal, and it must not
+  // anchor a selection in the content area.
   REQUIRE(e.terminal_mouse_for_test(2, tab_y, true, false, false));
   REQUIRE_FALSE(e.terminal_sel_active_for_test());
   REQUIRE_FALSE(e.terminal_sel_dragging_for_test());

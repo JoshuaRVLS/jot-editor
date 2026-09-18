@@ -251,7 +251,9 @@ Install helpers also cover Rust, Go, Lua, and Bash.
 ### Integrated terminal and tasks
 
 - A bottom terminal panel backed by a real PTY, with multiple tabs that stay
-  alive while hidden.
+  alive while hidden. Each tab is labelled with the shell icon (the same glyph
+  the file tree uses for shell scripts), so the strip reads as a row of shell
+  sessions.
 - Drag the rule above the panel (the editor's bottom border) to resize it
   live; it can grow to nearly the full window. The panel has no frame of  its own: the pane area inks the separator along its top, so its first row is the
   `Terminal`/`Problems` view tabs (each labelled with an icon: a terminal for the

@@ -114,6 +114,59 @@ TEST_CASE("Bottom panel: the shell's own tabs get their own row", "[jot]")
   REQUIRE(e.terminal_mouse_for_test(1, shell_tab_y, true, false, false));
 }
 
+TEST_CASE("Bottom panel: the shell's tabs carry the shell glyph", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_home_menu_visible(false);
+  e.add_terminal_for_test();
+  e.add_terminal_for_test();
+  e.set_bottom_panel_view_for_test(BOTTOM_PANEL_TERMINAL);
+  e.set_terminal_state_for_test(true, false, 10);
+  e.request_redraw_for_test();
+  e.render_for_test();
+
+  UI *ui = e.ui_for_test();
+  const int tab_y = e.bottom_panel_terminal_tab_y_for_test();
+  const std::string first = e.integrated_terminal_tab_label_for_test(0);
+
+  // The shell tab has the same shape as the view tabs one row up: a pad, the
+  // glyph, a space, then the name.
+  REQUIRE(first == " \uE795 term 1 ");
+  const UICell *pad = ui->cell_at(1, tab_y);
+  REQUIRE(pad != nullptr);
+  REQUIRE(pad->ch == " ");
+  const UICell *icon = ui->cell_at(2, tab_y);
+  REQUIRE(icon != nullptr);
+  REQUIRE(icon->ch == "\uE795");
+  const UICell *name = ui->cell_at(4, tab_y);
+  REQUIRE(name != nullptr);
+  REQUIRE(name->ch == "t");
+
+  // The label is 10 cells but 12 bytes: the glyph costs one cell, not three.
+  // The strip lays the tabs out by that cell count, so the second tab starts
+  // exactly where the first one's close marker ends, and the close marker of
+  // the first sits one cell past its label -- the same offset the click
+  // handler computes.
+  const int second_x = 1 + ui_cell_count(first) + 2;
+  REQUIRE(ui_cell_count(first) == 10);
+  REQUIRE((int)first.size() == 12);
+  const UICell *second_icon = ui->cell_at(second_x + 1, tab_y);
+  REQUIRE(second_icon != nullptr);
+  REQUIRE(second_icon->ch == "\uE795");
+  const UICell *close = ui->cell_at(1 + ui_cell_count(first), tab_y);
+  REQUIRE(close != nullptr);
+  REQUIRE(close->ch == "x");
+
+  // Pressing that close marker closes the first terminal, which is what pins
+  // the glyph-inclusive width: a strip that still counted the label's bytes
+  // would put the marker three cells to the right of this one, and the click
+  // would land on the second tab instead.
+  REQUIRE(e.terminal_mouse_for_test(1 + ui_cell_count(first), tab_y, true, false, false));
+  REQUIRE(e.integrated_terminal_tab_label_for_test(0) == " \uE795 term 1 ");
+  REQUIRE(e.integrated_terminal_tab_label_for_test(1).empty());
+}
+
 TEST_CASE("Bottom panel: hovering the view tabs leaves the view alone", "[jot]")
 {
   seed_config_home();
