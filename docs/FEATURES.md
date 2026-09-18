@@ -253,9 +253,12 @@ Install helpers also cover Rust, Go, Lua, and Bash.
 - A bottom terminal panel backed by a real PTY, with multiple tabs that stay
   alive while hidden.
 - Drag the rule above the panel (the editor's bottom border) to resize it
-  live; it can grow to nearly the full window. The panel has no frame of its
-  own: the pane area inks the separator along its top, so its first row is the
-  `Terminal`/`Problems` view tabs rather than a second border.
+  live; it can grow to nearly the full window. The panel has no frame of  its own: the pane area inks the separator along its top, so its first row is the
+  `Terminal`/`Problems` view tabs (each labelled with an icon: a terminal for the
+  shell, a warning triangle for diagnostics) rather than a second border.
+- The Problems list keeps every row on the panel's own background, colouring
+  only the text by severity; the selected row is marked with an accent sliver
+  instead of a selection fill, so a highlighted row's message stays readable.
 - **Fullscreen zoom** (like pane zoom): `Alt+Shift+Z` while focused, or
   `:termzoom`, toggles the terminal across the whole pane area. `Esc` exits
   fullscreen too. While zoomed, the sidebar and right dock are hidden so

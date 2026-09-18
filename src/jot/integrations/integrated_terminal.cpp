@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "ui/text.h"
 #include <algorithm>
 
 IntegratedTerminal *Editor::get_integrated_terminal(int index)
@@ -734,14 +735,20 @@ void Editor::place_integrated_terminal_cursor()
 
 const char *Editor::bottom_panel_view_label(int view)
 {
-  return view == BOTTOM_PANEL_PROBLEMS ? " Problems " : " Terminal ";
+  // A glyph per view, so the strip says which view it is at a glance: the
+  // classic FontAwesome terminal for the shell, and the warning triangle the
+  // status line already uses for diagnostics. Nerd Fonts codepoints, like the
+  // rest of the chrome (see file_icons.h and git_panel.cpp).
+  return view == BOTTOM_PANEL_PROBLEMS ? " \uF071 Problems " : " \uF120 Terminal ";
 }
 
 int Editor::bottom_panel_view_tabs_width() const
 {
-  // Both labels plus the one-cell gap before the shell's own tab strip.
-  return (int)std::string(bottom_panel_view_label(BOTTOM_PANEL_TERMINAL)).size()
-         + (int)std::string(bottom_panel_view_label(BOTTOM_PANEL_PROBLEMS)).size() + 1;
+  // Both labels plus the one-cell gap before the shell's own tab strip. Cell
+  // count, not byte count: the labels carry a multi-byte glyph, and the
+  // renderer lays the labels out by rendered width.
+  return ui_cell_count(bottom_panel_view_label(BOTTOM_PANEL_TERMINAL))
+         + ui_cell_count(bottom_panel_view_label(BOTTOM_PANEL_PROBLEMS)) + 1;
 }
 
 // The panel has no border row of its own: the pane area above owns the
@@ -832,7 +839,7 @@ void Editor::render_integrated_terminal()
       const int fg = active ? theme.fg_terminal_tab_focused : theme.fg_terminal_tab_inactive;
       const int bg = active ? theme.bg_terminal_tab_focused : theme.bg_terminal_tab_inactive;
       ui->draw_text(view_tab_x, view_tab_y, label, fg, bg, active);
-      view_tab_x += (int)label.size();
+      view_tab_x += ui_cell_count(label);
     }
   }
 
@@ -1144,7 +1151,7 @@ bool Editor::handle_bottom_panel_mouse(int x, int y, bool is_click)
     int tab_x = 1;
     for (int view = 0; view < 2; view++)
     {
-      const int label_w = (int)std::string(bottom_panel_view_label(view)).size();
+      const int label_w = ui_cell_count(bottom_panel_view_label(view));
       if (x >= tab_x && x < tab_x + label_w)
       {
         if ((int)bottom_panel_view != view)
@@ -1279,7 +1286,13 @@ void Editor::render_problems_view(int x, int w)
     }
     const QuickPickItem &item = items[(size_t)index];
     const bool selected = index == problems_selected;
-    const int bg = selected ? theme.bg_selection : theme.bg_terminal;
+    // No selection fill. The row's text is the point of the list, and its two
+    // halves are already colored by severity and by "secondary" -- painting the
+    // theme's selection color behind both (a loud mid-tone in the default
+    // palette) is what made them hard to read. The selected row is marked the
+    // way the pane tabs mark the active one: an accent sliver in a column of its
+    // own, leaving every glyph on the panel's own background.
+    const int bg = theme.bg_terminal;
     int fg = theme.fg_default;
     switch (item.severity)
     {
@@ -1308,17 +1321,25 @@ void Editor::render_problems_view(int x, int w)
       message = message.substr(sep + 2);
     }
     std::string location = item.detail;
-    const bool show_location = (int)location.size() + 5 < content_w;
-    const int text_w = std::max(0, content_w - 2 - (show_location ? (int)location.size() + 2 : 0));
+    // A marker column, then the severity dot, then the message. The location
+    // only takes part of the row once a column of message is still left over.
+    const bool show_location = (int)location.size() + 6 < content_w;
+    const int text_w = std::max(0, content_w - 3 - (show_location ? (int)location.size() + 2 : 0));
     if ((int)message.size() > text_w)
     {
       message = message.substr(0, (size_t)text_w);
     }
 
     const int row_y = content_y + row;
-    ui->draw_text(content_x, row_y, "●", fg, bg, selected);
-    ui->draw_text(content_x + 1, row_y, " ", fg, bg, selected);
-    ui->draw_text(content_x + 2,
+    ui->draw_text(content_x,
+                  row_y,
+                  selected ? "▌" : " ",
+                  selected ? theme.fg_active_border : fg,
+                  bg,
+                  selected);
+    ui->draw_text(content_x + 1, row_y, "●", fg, bg, selected);
+    ui->draw_text(content_x + 2, row_y, " ", fg, bg, selected);
+    ui->draw_text(content_x + 3,
                   row_y,
                   message + std::string(std::max(0, text_w - (int)message.size()), ' '),
                   fg,
@@ -1326,7 +1347,7 @@ void Editor::render_problems_view(int x, int w)
                   selected);
     if (show_location)
     {
-      ui->draw_text(content_x + 2 + text_w + 2, row_y, location, theme.fg_comment, bg, selected);
+      ui->draw_text(content_x + 3 + text_w + 2, row_y, location, theme.fg_comment, bg, selected);
     }
   }
 }

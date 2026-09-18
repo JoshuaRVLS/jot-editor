@@ -5,6 +5,7 @@
 // hit-testing (the view tabs get their own row, the shell's strip the next
 // one), and the focus handoff between the two.
 #include "editor.h"
+#include "ui/text.h"
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
@@ -50,8 +51,8 @@ TEST_CASE("Bottom panel: view tabs switch the view and hand off focus", "[jot]")
   e.set_bottom_panel_view_for_test(BOTTOM_PANEL_TERMINAL);
 
   // " Terminal " then " Problems ", then one gap cell before the shell's tabs.
-  const int terminal_tab_w = (int)std::string(" Terminal ").size();
-  const int problems_tab_w = (int)std::string(" Problems ").size();
+  const int terminal_tab_w = ui_cell_count(Editor::bottom_panel_view_label_for_test(BOTTOM_PANEL_TERMINAL));
+  const int problems_tab_w = ui_cell_count(Editor::bottom_panel_view_label_for_test(BOTTOM_PANEL_PROBLEMS));
   REQUIRE(e.bottom_panel_view_tabs_width_for_test() == terminal_tab_w + problems_tab_w + 1);
 
   const int tab_y = e.bottom_panel_view_tab_y_for_test();
@@ -123,7 +124,8 @@ TEST_CASE("Bottom panel: hovering the view tabs leaves the view alone", "[jot]")
   e.set_terminal_state_for_test(true, false, 10);
 
   const int tab_y = e.bottom_panel_view_tab_y_for_test();
-  const int problems_x = 1 + (int)std::string(" Terminal ").size();
+  const int problems_x =
+      1 + ui_cell_count(Editor::bottom_panel_view_label_for_test(BOTTOM_PANEL_TERMINAL));
 
   // The dispatcher passes is_click=false for both a motion and a release, so
   // this is what sweeping the pointer across the labels used to do: switch the
@@ -175,9 +177,18 @@ TEST_CASE("Bottom panel: the pane area inks the rule along its top", "[jot]")
   REQUIRE(first_col != nullptr);
   REQUIRE(first_col->ch != "┌");
   REQUIRE(first_col->ch != "─");
-  const UICell *label = ui->cell_at(2, panel_y);
+  // The label keeps the one-cell pad the strip used before the glyphs, then the
+  // view's icon, then the name: column 1 is blank, column 2 is the terminal
+  // icon, and the "T" of " Terminal " is two cells past it.
+  const UICell *pad = ui->cell_at(1, panel_y);
+  REQUIRE(pad != nullptr);
+  REQUIRE(pad->ch == " ");
+  const UICell *icon = ui->cell_at(2, panel_y);
+  REQUIRE(icon != nullptr);
+  REQUIRE(icon->ch == "\uF120");
+  const UICell *label = ui->cell_at(4, panel_y);
   REQUIRE(label != nullptr);
-  REQUIRE(label->ch == "T"); // " Terminal "
+  REQUIRE(label->ch == "T");
 
   // The fullscreen toggle glyph is gone from the shell's tab strip; zooming is
   // keyboard-only (:termzoom, Alt+Shift+Z).
@@ -303,4 +314,92 @@ TEST_CASE("Bottom panel: the list owns the keyboard while focused", "[jot]")
   // Esc hands focus back to the editor.
   REQUIRE(e.bottom_panel_key_for_test(27));
   REQUIRE(e.focus_state_for_test() == (int)FOCUS_EDITOR);
+}
+
+TEST_CASE("Bottom panel: the view tabs lead with an icon", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_home_menu_visible(false);
+
+  const std::string terminal = Editor::bottom_panel_view_label_for_test(BOTTOM_PANEL_TERMINAL);
+  const std::string problems = Editor::bottom_panel_view_label_for_test(BOTTOM_PANEL_PROBLEMS);
+
+  // A Nerd Fonts glyph, then the view's name: the classic FontAwesome terminal
+  // for the shell, and the warning triangle the status line already uses for
+  // diagnostics.
+  REQUIRE(terminal == std::string(" \uF120 Terminal "));
+  REQUIRE(problems == std::string(" \uF071 Problems "));
+
+  // The strip is measured in cells -- what the renderer lays the labels out by
+  // -- and not in bytes: each glyph is three bytes, so a byte count would
+  // report the strip two cells wider than it is drawn and put the second
+  // label's hit-test past its text.
+  REQUIRE(e.bottom_panel_view_tabs_width_for_test() == 25);
+  REQUIRE(e.bottom_panel_view_tabs_width_for_test()
+          == ui_cell_count(terminal) + ui_cell_count(problems) + 1);
+  REQUIRE(e.bottom_panel_view_tabs_width_for_test()
+          < (int)(terminal.size() + problems.size()) + 1);
+}
+
+TEST_CASE("Bottom panel: the Problems list keeps its text on the panel background", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_home_menu_visible(false);
+  e.seed_lsp_diagnostic_for_test("cpp|/tmp/bp_bg", "/tmp/bp_bg_a.cpp", 3, 1, "first error");
+  e.seed_lsp_diagnostic_for_test("cpp|/tmp/bp_bg", "/tmp/bp_bg_b.cpp", 5, 2, "a warning");
+  REQUIRE(e.workspace_diagnostics_for_test().size() == 2);
+  e.show_problems_panel_for_test();
+  e.request_redraw_for_test();
+  e.render_for_test();
+
+  UI *ui = e.ui_for_test();
+  const Theme &th = e.theme_for_test();
+  const int panel_w = e.terminal_panel_w_for_test();
+  const int first_row = e.bottom_panel_content_y_for_test();
+
+  // Otherwise the check below could pass on a theme whose selection color is
+  // the panel's own background.
+  REQUIRE(th.bg_selection != th.bg_terminal);
+
+  // The selected row is marked by an accent sliver in a column of its own, the
+  // way the pane tabs mark the active one.
+  const int selected_row = e.problems_selected_for_test();
+  REQUIRE(selected_row == 0);
+  const UICell *marker = ui->cell_at(1, first_row + selected_row);
+  REQUIRE(marker != nullptr);
+  REQUIRE(marker->ch == "▌");
+  REQUIRE(marker->fg == th.fg_active_border);
+  const UICell *dot = ui->cell_at(2, first_row + selected_row);
+  REQUIRE(dot != nullptr);
+  REQUIRE(dot->ch == "●");
+
+  // No row paints the selection color behind its text: every cell of every
+  // listed row stays on the panel's own background, so the severity-colored
+  // message and the secondary-colored location are never fighting a fill.
+  const int rows = e.bottom_panel_content_h_for_test() >= 2 ? 2 : 1;
+  for (int row = 0; row < rows; row++)
+  {
+    for (int x = 0; x < panel_w; x++)
+    {
+      const UICell *cell = ui->cell_at(x, first_row + row);
+      REQUIRE(cell != nullptr);
+      REQUIRE(cell->bg != th.bg_selection);
+      REQUIRE(cell->bg == th.bg_terminal);
+    }
+  }
+
+  // Moving the selection down moves the sliver with it and leaves the row it
+  // came from filled with nothing but the panel background.
+  REQUIRE(e.bottom_panel_key_for_test('j'));
+  REQUIRE(e.problems_selected_for_test() == 1);
+  e.request_redraw_for_test();
+  e.render_for_test();
+  const UICell *moved = ui->cell_at(1, first_row + 1);
+  REQUIRE(moved != nullptr);
+  REQUIRE(moved->ch == "▌");
+  const UICell *vacated = ui->cell_at(1, first_row);
+  REQUIRE(vacated != nullptr);
+  REQUIRE(vacated->ch == " ");
 }

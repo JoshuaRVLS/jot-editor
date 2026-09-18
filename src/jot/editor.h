@@ -1385,6 +1385,10 @@ public:
   {
     return bottom_panel_view_tabs_width();
   }
+  static const char *bottom_panel_view_label_for_test(int view)
+  {
+    return bottom_panel_view_label(view);
+  }
   int bottom_panel_view_tab_y_for_test() const
   {
     return bottom_panel_view_tab_y();
