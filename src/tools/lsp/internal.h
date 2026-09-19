@@ -66,6 +66,9 @@ namespace lsp_detail
   void code_actions_from_result(const JsonValue &result, std::vector<LSPCodeAction> &out);
   bool location_from_json(const JsonValue &item, LSPLocation &out);
   std::vector<LSPLocation> definition_locations_from_result(const JsonValue &result);
+  // The method sent for one of the location lookups. Split out so the four-way
+  // mapping is asserted directly instead of through a running server.
+  const char *navigation_method_name(LSPNavigationKind kind);
   std::vector<LSPSymbol> document_symbols_from_result(const JsonValue &result,
                                                       const std::string &filepath);
   std::string symbol_kind_name(int kind);

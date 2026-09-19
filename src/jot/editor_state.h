@@ -43,6 +43,10 @@ struct EditorState
 
   bool running = false;
   std::string message;
+  // Every message ever set, whether or not a Lua status_line handler owns the
+  // surface (when one does, `message` above is deliberately left alone). The
+  // statusline text is a user-visible outcome, so tests assert on it here.
+  std::string last_message;
   std::uint64_t transient_message_timer = 0;
   std::uint64_t message_generation = 0;
   std::string clipboard;
@@ -393,6 +397,9 @@ struct EditorState
   // same way a jumplist restore does.
   bool lsp_definition_jump_pending = false;
   LSPLocation lsp_definition_pending_location;
+  // What the pending jump is called ("Declaration", "Type definition", …) so
+  // the deferred landing message names the navigation that produced it.
+  std::string lsp_navigation_jump_label = "Definition";
   // Navigation history. Every jump records where it landed, so back/forward
   // walk the places the cursor has been rather than one LSP-only stack: the
   // history has a cursor of its own (`jump_index`), and a new jump drops

@@ -128,6 +128,28 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     request_lsp_definition();
   }
+  // The rest of the location lookups. In C++ these are different places: a
+  // declaration (often in a header), the definition, the type behind a variable
+  // (auto, typedefs, templates), and the implementation of a virtual method.
+  else if (lcmd == "declaration" || lcmd == "lspdeclaration" || lcmd == "lspdecl")
+  {
+    request_lsp_declaration();
+  }
+  else if (lcmd == "typedefinition" || lcmd == "lsptypedefinition" || lcmd == "lsptypedef")
+  {
+    request_lsp_type_definition();
+  }
+  else if (lcmd == "implementation" || lcmd == "lspimplementation" || lcmd == "lspimpl")
+  {
+    request_lsp_implementation();
+  }
+  // clangd's switchSourceHeader: .cpp <-> .h. Named for what it does rather
+  // than for clangd, since other servers implement the same extension.
+  else if (lcmd == "switchheader" || lcmd == "switchsourceheader" || lcmd == "lspheader"
+           || lcmd == "lspalt")
+  {
+    switch_lsp_source_header();
+  }
   else if (lcmd == "jumpback" || lcmd == "lspback")
   {
     // lspback predates the general jumplist; it is the same walk now.

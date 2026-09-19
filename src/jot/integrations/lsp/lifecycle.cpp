@@ -193,6 +193,12 @@ void Editor::poll_lsp_clients()
       handle_lsp_definition_result(definition);
     }
 
+    auto switches = client->consume_switch_source_header_results();
+    for (const auto &paired : switches)
+    {
+      handle_lsp_switch_source_header_result(paired);
+    }
+
     auto document_symbols = client->consume_document_symbol_results();
     for (const auto &symbols : document_symbols)
     {

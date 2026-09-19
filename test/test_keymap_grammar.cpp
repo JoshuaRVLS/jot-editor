@@ -407,5 +407,37 @@ TEST_CASE("The grammar resolves through the which-key path", "[jot][keymap]")
   REQUIRE(api.plugin_keymap_children("Alt+D a", "editor").size() == 3);
   REQUIRE(api.plugin_keymap_children("Alt+D a f", "editor").empty());
 
+  // The code-navigation family, which is the same shape (prefix, then a letter
+  // per lookup). Each child has to reach a real ex command: a typo here is a key
+  // that opens the group and then does nothing.
+  REQUIRE(api.plugin_keymap_is_prefix("Alt+C", "editor"));
+  const std::map<std::string, std::string> code_leaves = {
+      {"d", "gd"},
+      {"c", "lspdecl"},
+      {"t", "lsptypedef"},
+      {"i", "lspimpl"},
+      {"h", "switchheader"},
+      {"r", "lsprefs"},
+      {"n", "lsprename"},
+      {"a", "lspactions"},
+      {"s", "symbols"},
+      {"w", "wsymbols"},
+      {"k", "hover"},
+  };
+  std::vector<std::string> code_keys;
+  for (const auto &child : api.plugin_keymap_children("Alt+C", "editor"))
+  {
+    code_keys.push_back(child.key);
+  }
+  for (const auto &leaf : code_leaves)
+  {
+    INFO("leaf Alt+C " << leaf.first << " -> :" << leaf.second);
+    REQUIRE(std::find(code_keys.begin(), code_keys.end(), leaf.first) != code_keys.end());
+    const KeymapRecord *record = find("Alt+C " + leaf.first);
+    REQUIRE(record != nullptr);
+    REQUIRE(record->command == leaf.second);
+  }
+  REQUIRE(code_keys.size() == code_leaves.size());
+
   lua_close(L);
 }

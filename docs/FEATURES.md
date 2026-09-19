@@ -212,6 +212,13 @@ deliberately does not, so a preview never depends on a file you cannot see.
   rename across all affected files (`:lsprename <new_name>`); find
   references in a jumpable quick-pick list (`:lsprefs`); code actions
   (quick fixes and refactors) offered at the cursor (`:lspactions`).
+- The whole location family, not just the definition: `:declaration`
+  (usually the header), `:typedefinition` (what an `auto`, a typedef or a
+  template instantiation really is) and `:implementation` (the override
+  body) all land like a definition does -- same preview tab, same return
+  stack. `:switchheader` flips between a C++ source and its paired header
+  using clangd's `switchSourceHeader`, and reports "no paired
+  header/source" rather than guessing. All four are in the `Alt+C` family.
 
   Completion rows are built from the item itself (a port of the idea behind
   [colorful-menu.nvim](https://github.com/xzbdmw/colorful-menu.nvim)): the
@@ -523,6 +530,7 @@ so the grammar is learnt once:
 | `Alt+Y A C`, `Alt+Y W` | Yank around a class, yank the word |
 | `Alt+V` | Selection: `E` expand, `C` shrink, `K` keep primary, `R` rotate, `A`/`B` cursor above/below, `L` split lines, `M` match all occurrences, `S` select an object |
 | `Alt+]` / `Alt+[` | Next / previous: `F` function, `C` class, `D` diagnostic (`Alt+E` remains an alias) |
+| `Alt+C` | Code: `D` definition, `C` declaration, `T` type definition, `I` implementation, `H` switch header/source, `R` references, `N` rename, `A` code actions, `S` symbols, `W` workspace symbols, `K` documentation |
 
 Objects available today are `F` function, `C` class or type, `A`
 argument/parameter, `W` word, `L` line — the syntax objects come from tree-sitter,
@@ -629,7 +637,8 @@ it -- the buffer stays fully visible while you type.
 `:datetime` `:stats`
 
 **LSP:** `:lspinstall` `:lspremove` `:lspstatus` `:hover` `:definition`
-`:gd` `:lspback` `:lsprename <name>` `:lsprefs` `:lspactions`
+`:gd` `:lspback` `:lsprename <name>` `:lsprefs` `:lspactions` `:declaration`
+`:typedefinition` `:implementation` `:switchheader`
 
 **Tree-sitter:** `:tsinstall <lang>` (e.g. `:tsinstall javascript` or
 `:tsinstall jsx`) `:tsstatus` `:tsreload`

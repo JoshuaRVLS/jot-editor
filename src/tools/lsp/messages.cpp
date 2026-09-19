@@ -404,6 +404,7 @@ void LSPClient::handle_stdout_data(const std::string &data)
       definition.origin_filepath = definition_it->second.filepath;
       definition.origin_line = definition_it->second.line;
       definition.origin_character = definition_it->second.character;
+      definition.navigation = definition_it->second.navigation;
       if (result)
       {
         definition.locations = definition_locations_from_result(*result);
@@ -417,6 +418,27 @@ void LSPClient::handle_stdout_data(const std::string &data)
       }
       pending_definitions.push_back(std::move(definition));
       pending_definition_requests.erase(definition_it);
+      continue;
+    }
+
+    auto switch_it = pending_switch_source_header_requests.find(request_id);
+    if (switch_it != pending_switch_source_header_requests.end())
+    {
+      const auto current_version = file_versions.find(switch_it->second.filepath);
+      if (current_version != file_versions.end()
+          && current_version->second == switch_it->second.version)
+      {
+        // clangd answers with a URI, or "" / null when it cannot pair the file.
+        // An empty result is worth delivering: the editor reports "no pair"
+        // instead of waiting for an answer that never comes.
+        std::string paired;
+        if (result && result->type == JsonValue::String)
+        {
+          paired = from_file_uri(result->string_value);
+        }
+        pending_switch_source_headers.push_back(std::move(paired));
+      }
+      pending_switch_source_header_requests.erase(switch_it);
       continue;
     }
 

@@ -440,3 +440,104 @@ TEST_CASE("Workspace diagnostics list files that are not open, once each", "[lsp
   REQUIRE_FALSE(items.empty());
   REQUIRE(items.front().severity == 1);
 }
+
+// --- Navigation: declaration / type definition / implementation, and the
+// header <-> source flip.
+//
+// The four location lookups share one request/reply path and differ only in the
+// method sent, so the method mapping is asserted directly and the landing policy
+// is driven through the same handler the client's poll loop calls.
+
+TEST_CASE("LSP navigation kinds map to their protocol methods", "[lsp][navigation]")
+{
+  using Kind = LSPNavigationKind;
+  REQUIRE(std::string(lsp_detail::navigation_method_name(Kind::Definition))
+          == "textDocument/definition");
+  REQUIRE(std::string(lsp_detail::navigation_method_name(Kind::Declaration))
+          == "textDocument/declaration");
+  REQUIRE(std::string(lsp_detail::navigation_method_name(Kind::TypeDefinition))
+          == "textDocument/typeDefinition");
+  REQUIRE(std::string(lsp_detail::navigation_method_name(Kind::Implementation))
+          == "textDocument/implementation");
+}
+
+TEST_CASE("Switch header/source result parses the URI clangd answers with", "[lsp][navigation]")
+{
+  const std::filesystem::path header =
+      (std::filesystem::temp_directory_path() / "jot switch pair.h").lexically_normal();
+  const std::string uri = LSPClient::file_uri_from_path(header.string());
+  REQUIRE(LSPClient::file_path_from_uri(uri) == header.string());
+  // No pair is reported as an empty string, which the editor turns into a
+  // message rather than a jump.
+  REQUIRE(LSPClient::file_path_from_uri("").empty());
+}
+
+TEST_CASE("A declaration jump lands and reports which lookup found it", "[lsp][navigation]")
+{
+  Editor &e = probe_editor();
+  const std::string file = write_temp_source(
+      e, "struct Widget { int value; };\nint main() { Widget w; return w.value; }\n");
+  e.scroll_cursor_to_for_test(1, 20);
+
+  LSPDefinitionResult result;
+  result.origin_filepath = file;
+  result.origin_line = 1;
+  result.origin_character = 20;
+  result.navigation = LSPNavigationKind::Declaration;
+  LSPLocation location;
+  location.filepath = file;
+  location.line = 0;
+  location.character = 13;
+  location.end_line = 0;
+  location.end_character = 18;
+  result.locations.push_back(location);
+
+  e.deliver_lsp_definition_for_test(result);
+
+  REQUIRE(e.buffer_for_test().cursor.y == 0);
+  const std::string name = std::filesystem::path(file).filename().string();
+  REQUIRE(e.message_for_test() == "Declaration: " + name + ":1");
+}
+
+TEST_CASE("A location lookup with no hit says so instead of waiting", "[lsp][navigation]")
+{
+  Editor &e = probe_editor();
+  const std::string file = write_temp_source(e, "int main() { return 0; }\n");
+  e.scroll_cursor_to_for_test(0, 4);
+
+  LSPDefinitionResult result;
+  result.origin_filepath = file;
+  result.origin_line = 0;
+  result.origin_character = 4;
+  result.navigation = LSPNavigationKind::TypeDefinition;
+
+  e.deliver_lsp_definition_for_test(result);
+
+  REQUIRE(e.message_for_test() == "No type definition found");
+}
+
+TEST_CASE("Switch header/source opens the paired file, or reports there is none", "[lsp][navigation]")
+{
+  Editor &e = probe_editor();
+  const std::string source = write_temp_source(e, "int f();\n");
+  // The probe editor is shared across cases, so start the history from here.
+  e.reset_jumplist_for_test();
+  const std::filesystem::path twin =
+      std::filesystem::path(source).replace_extension(".h");
+  {
+    std::ofstream out(twin.string());
+    out << "int f();\n";
+  }
+
+  e.deliver_lsp_switch_source_header_for_test("");
+  REQUIRE(e.message_for_test() == "No paired header/source found");
+  REQUIRE(std::filesystem::path(e.buffer_for_test().filepath).filename().string()
+          == std::filesystem::path(source).filename().string());
+
+  e.deliver_lsp_switch_source_header_for_test(twin.string());
+  REQUIRE(std::filesystem::path(e.buffer_for_test().filepath).filename().string()
+          == twin.filename().string());
+  REQUIRE(e.message_for_test() == "Switched to " + twin.filename().string());
+  // Landing in the pair is a jump like any other.
+  REQUIRE(e.jump_count_for_test() == 1);
+}

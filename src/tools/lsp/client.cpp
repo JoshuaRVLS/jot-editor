@@ -532,12 +532,14 @@ bool LSPClient::start()
   pending_hover_requests.clear();
   pending_signature_requests.clear();
   pending_definition_requests.clear();
+  pending_switch_source_header_requests.clear();
   pending_document_symbol_requests.clear();
   pending_format_requests.clear();
   pending_completions.clear();
   pending_hovers.clear();
   pending_signatures.clear();
   pending_definitions.clear();
+  pending_switch_source_headers.clear();
   pending_document_symbols.clear();
   pending_formats.clear();
   stdout_buffer.clear();
@@ -591,6 +593,15 @@ std::string LSPClient::initialize_params_json() const
        << "\"hover\":{\"dynamicRegistration\":false,"
        << "\"contentFormat\":[\"markdown\",\"plaintext\"]},"
        << "\"definition\":{\"dynamicRegistration\":false,"
+       << "\"linkSupport\":true},"
+       // The rest of the location lookups clangd offers. Declaring them is what
+       // makes clangd advertise the providers, and they share the definition
+       // reply path (Location | Location[] | LocationLink[]).
+       << "\"declaration\":{\"dynamicRegistration\":false,"
+       << "\"linkSupport\":true},"
+       << "\"typeDefinition\":{\"dynamicRegistration\":false,"
+       << "\"linkSupport\":true},"
+       << "\"implementation\":{\"dynamicRegistration\":false,"
        << "\"linkSupport\":true},"
        << "\"documentSymbol\":{\"dynamicRegistration\":false,"
        << "\"hierarchicalDocumentSymbolSupport\":true,"       << "\"symbolKind\":{\"valueSet\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,"
@@ -701,12 +712,14 @@ void LSPClient::stop()
   pending_hover_requests.clear();
   pending_signature_requests.clear();
   pending_definition_requests.clear();
+  pending_switch_source_header_requests.clear();
   pending_document_symbol_requests.clear();
   pending_format_requests.clear();
   pending_completions.clear();
   pending_hovers.clear();
   pending_signatures.clear();
   pending_definitions.clear();
+  pending_switch_source_headers.clear();
   pending_document_symbols.clear();
   pending_formats.clear();
   outbound_buffer.clear();

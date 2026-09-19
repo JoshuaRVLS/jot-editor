@@ -581,6 +581,7 @@ void Editor::set_message(const std::string &msg, bool toast)
     transient_message_timer = 0;
   }
   ++message_generation;
+  last_message = msg;
   if (!(lua_api && lua_api->has_lua_ui_handler("status_line")))
   {
     message = msg;
@@ -604,6 +605,7 @@ void Editor::set_transient_message(const std::string &msg, int duration_ms, bool
     transient_message_timer = 0;
   }
   const std::uint64_t generation = ++message_generation;
+  last_message = msg;
   if (!(lua_api && lua_api->has_lua_ui_handler("status_line")))
   {
     message = msg;

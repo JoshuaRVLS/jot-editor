@@ -467,7 +467,17 @@ private:
   // Dismisses a Lua-rendered hover float (notifies the jot.lsp.hover_ui
   // handler); no-op when the Lua hover UI is not registered.
   void close_lua_hover_ui();
+  // Location lookups: definition, declaration, type definition, implementation
+  // all share one request/reply path and differ only in the method sent.
   void request_lsp_definition();
+  void request_lsp_declaration();
+  void request_lsp_type_definition();
+  void request_lsp_implementation();
+  void request_lsp_navigation(LSPNavigationKind kind);
+  // clangd's switchSourceHeader: opens the paired header/source, or reports
+  // that there is none.
+  void switch_lsp_source_header();
+  void handle_lsp_switch_source_header_result(const std::string &filepath);
   void lsp_rename_symbol(const std::string &new_name);
   void request_lsp_references();
   void handle_lsp_references_results();
@@ -1194,6 +1204,23 @@ public:
   // Seeds the per-file inlay-hint cache directly (sorted on ingest like a
   // real server answer), so coordinate helpers can be unit-tested headless.
   void set_inlay_hints_for_test(const std::string &filepath, std::vector<LSPInlayHint> hints);
+  // LSP replies arrive through the client's poll loop; these deliver one the
+  // way that loop does, so the landing policy (which file, which tab, what the
+  // status says) can be asserted without a running server.
+  void deliver_lsp_definition_for_test(const LSPDefinitionResult &result)
+  {
+    handle_lsp_definition_result(result);
+  }
+  void deliver_lsp_switch_source_header_for_test(const std::string &paired)
+  {
+    handle_lsp_switch_source_header_result(paired);
+  }
+  // The last statusline message, for asserting what an action reported. The
+  // visible text comes from here too when no Lua status_line handler owns it.
+  const std::string &message_for_test() const
+  {
+    return last_message;
+  }
   // Headless mouse driver for tests: feeds a synthetic mouse event through
   // the real handle_mouse path (pane hit-test, selection, edge-panning).
   void mouse_event_for_test(int x, int y, int bstate);

@@ -317,26 +317,38 @@ bool LSPClient::request_inlay_hints(const std::string &filepath,
 
 bool LSPClient::request_definition(const std::string &filepath, int line, int character)
 {
+  return request_navigation(filepath, line, character, LSPNavigationKind::Definition);
+}
+
+bool LSPClient::request_navigation(const std::string &filepath,
+                                   int line,
+                                   int character,
+                                   LSPNavigationKind kind)
+{
   if (!running)
   {
     return false;
   }
 
+  const char *method = lsp_detail::navigation_method_name(kind);
+
   std::string abs_path = fs::absolute(filepath).string();
   if (pending_definition_requests.size() >= 64)
   {
-    last_error = "too many pending LSP definition requests";
+    last_error = "too many pending LSP navigation requests";
     return false;
   }
   int request_id = next_request_id++;
-  pending_definition_requests[request_id] = PendingPositionRequest{
+  PendingPositionRequest pending{
       abs_path, std::max(0, line), std::max(0, character), file_versions[abs_path]};
+  pending.navigation = kind;
+  pending_definition_requests[request_id] = pending;
 
   std::ostringstream json;
   json << "{"
        << "\"jsonrpc\":\"2.0\","
        << "\"id\":" << request_id << ","
-       << "\"method\":\"textDocument/definition\","
+       << "\"method\":\"" << method << "\","
        << "\"params\":{"
        << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path)) << "\"},"
        << "\"position\":{\"line\":" << std::max(0, line)
@@ -350,6 +362,51 @@ bool LSPClient::request_definition(const std::string &filepath, int line, int ch
     return false;
   }
   return true;
+}
+
+bool LSPClient::request_switch_source_header(const std::string &filepath)
+{
+  if (!running)
+  {
+    return false;
+  }
+
+  std::string abs_path = fs::absolute(filepath).string();
+  if (pending_switch_source_header_requests.size() >= 16)
+  {
+    last_error = "too many pending LSP switch-source-header requests";
+    return false;
+  }
+  int request_id = next_request_id++;
+  pending_switch_source_header_requests[request_id] =
+      PendingDocumentRequest{abs_path, file_versions[abs_path]};
+
+  // clangd's extension takes the TextDocumentIdentifier itself as params (not
+  // a {"textDocument": ...} wrapper), and answers with the paired file's URI
+  // -- "" when it cannot tell which file that is.
+  std::ostringstream json;
+  json << "{"
+       << "\"jsonrpc\":\"2.0\","
+       << "\"id\":" << request_id << ","
+       << "\"method\":\"textDocument/switchSourceHeader\","
+       << "\"params\":{"
+       << "\"uri\":\"" << json_escape(to_file_uri(abs_path)) << "\""
+       << "}"
+       << "}";
+
+  if (!send_message(json.str()))
+  {
+    pending_switch_source_header_requests.erase(request_id);
+    return false;
+  }
+  return true;
+}
+
+std::vector<std::string> LSPClient::consume_switch_source_header_results()
+{
+  std::vector<std::string> out;
+  out.swap(pending_switch_source_headers);
+  return out;
 }
 
 bool LSPClient::request_references(const std::string &filepath, int line, int character)

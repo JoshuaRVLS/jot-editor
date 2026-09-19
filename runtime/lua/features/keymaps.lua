@@ -118,3 +118,25 @@ for _, jump in ipairs(jumps) do
   jot.keymap.set("Alt+] " .. jump[1], jump[2], "Next " .. jump[4])
   jot.keymap.set("Alt+[ " .. jump[1], jump[3], "Previous " .. jump[4])
 end
+
+-- ---------------------------------------------------------------------------
+-- Code navigation (the LSP family).
+--
+-- Alt+G is already "file start", so the family lives under Alt+C ("code").
+-- The four location lookups are genuinely different places in C++ -- a
+-- declaration is usually the header, the definition the .cpp, the type
+-- definition what an `auto` or a typedef really is, and the implementation the
+-- override body -- which is why they get a key each instead of one "go to".
+-- Alt+C h is clangd's switchSourceHeader, the CLion header/source flip.
+jot.keymap.set("Alt+C", "", "Code")
+jot.keymap.set("Alt+C d", ":gd", "Go to definition")
+jot.keymap.set("Alt+C c", ":lspdecl", "Go to declaration")
+jot.keymap.set("Alt+C t", ":lsptypedef", "Go to type definition")
+jot.keymap.set("Alt+C i", ":lspimpl", "Go to implementation")
+jot.keymap.set("Alt+C h", ":switchheader", "Switch header/source")
+jot.keymap.set("Alt+C r", ":lsprefs", "Find references")
+jot.keymap.set("Alt+C n", ":lsprename", "Rename symbol")
+jot.keymap.set("Alt+C a", ":lspactions", "Code actions")
+jot.keymap.set("Alt+C s", ":symbols", "Document symbols")
+jot.keymap.set("Alt+C w", ":wsymbols", "Workspace symbols")
+jot.keymap.set("Alt+C k", ":hover", "Show documentation")

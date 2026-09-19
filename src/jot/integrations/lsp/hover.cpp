@@ -8,6 +8,7 @@
 #include "jot/integrations/lsp/common.h"
 #include "ui/text.h"
 #include <algorithm>
+#include <cctype>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -16,6 +17,34 @@
 namespace
 {
   constexpr int kLspMouseHoverDelayMs = 450;
+
+  // How a navigation kind reads in a message: lowercase for the request
+  // ("LSP declaration requested"), capitalised when it labels a jump.
+  std::string navigation_name(LSPNavigationKind kind)
+  {
+    switch (kind)
+    {
+    case LSPNavigationKind::Declaration:
+      return "declaration";
+    case LSPNavigationKind::TypeDefinition:
+      return "type definition";
+    case LSPNavigationKind::Implementation:
+      return "implementation";
+    case LSPNavigationKind::Definition:
+      break;
+    }
+    return "definition";
+  }
+
+  std::string navigation_display_name(LSPNavigationKind kind)
+  {
+    std::string name = navigation_name(kind);
+    if (!name.empty())
+    {
+      name[0] = (char)std::toupper((unsigned char)name[0]);
+    }
+    return name;
+  }
 
   const char *diag_severity_hover_label(int severity)
   {
@@ -363,7 +392,9 @@ void Editor::maybe_fire_lsp_mouse_hover()
   lsp_mouse_hover_pending = false;
 }
 
-void Editor::request_lsp_definition()
+// The shared body of definition / declaration / type definition /
+// implementation: same position lookup, different method and label.
+void Editor::request_lsp_navigation(LSPNavigationKind kind)
 {
   auto &buf = get_buffer();
   if (buf.is_lazy())
@@ -385,12 +416,80 @@ void Editor::request_lsp_definition()
 
   lsp_pending_changes.erase(buf.filepath);
   client->did_change(buf.filepath, get_buffer_text(buf));
-  if (!client->request_definition(buf.filepath, buf.cursor.y, buf.cursor.x))
+  if (!client->request_navigation(buf.filepath, buf.cursor.y, buf.cursor.x, kind))
   {
-    set_message("LSP definition request failed");
+    set_message("LSP " + navigation_name(kind) + " request failed");
     return;
   }
-  set_message("LSP definition requested");
+  set_message("LSP " + navigation_name(kind) + " requested");
+}
+
+void Editor::request_lsp_definition()
+{
+  request_lsp_navigation(LSPNavigationKind::Definition);
+}
+
+void Editor::request_lsp_declaration()
+{
+  request_lsp_navigation(LSPNavigationKind::Declaration);
+}
+
+void Editor::request_lsp_type_definition()
+{
+  request_lsp_navigation(LSPNavigationKind::TypeDefinition);
+}
+
+void Editor::request_lsp_implementation()
+{
+  request_lsp_navigation(LSPNavigationKind::Implementation);
+}
+
+void Editor::switch_lsp_source_header()
+{
+  auto &buf = get_buffer();
+  if (buf.is_lazy())
+  {
+    return;
+  }
+  if (buf.filepath.empty())
+  {
+    set_message("Save file first to switch header/source");
+    return;
+  }
+
+  LSPClient *client = ensure_lsp_for_file(buf.filepath);
+  if (!client)
+  {
+    set_message("No LSP server for this file");
+    return;
+  }
+
+  if (!client->request_switch_source_header(buf.filepath))
+  {
+    set_message("LSP switch source/header request failed");
+    return;
+  }
+  set_message("Looking for the paired header/source");
+}
+
+void Editor::handle_lsp_switch_source_header_result(const std::string &filepath)
+{
+  if (filepath.empty())
+  {
+    set_message("No paired header/source found");
+    return;
+  }
+  if (buffers.empty() || current_buffer < 0 || current_buffer >= (int)buffers.size())
+  {
+    return;
+  }
+  // Same tab policy as a definition jump: a different file opens as a preview
+  // tab, so switching back and forth does not pile up tabs.
+  const bool same_file = lsp_internal::same_path(get_buffer().filepath, filepath);
+  open_file(filepath, !same_file);
+  // Landing somewhere else is a jump like any other: Ctrl+O comes back here.
+  record_jump();
+  set_message("Switched to " + get_filename(filepath));
 }
 
 void Editor::handle_lsp_hover_result(const LSPHoverResult &hover)
@@ -544,10 +643,11 @@ void Editor::handle_lsp_definition_result(const LSPDefinitionResult &definition)
   }
   if (definition.locations.empty())
   {
-    set_message("No definition found");
+    set_message("No " + navigation_name(definition.navigation) + " found");
     return;
   }
 
+  lsp_navigation_jump_label = navigation_display_name(definition.navigation);
   lsp_definition_pending_location = definition.locations.front();
   lsp_definition_jump_pending = true;
   const bool same_file = lsp_internal::same_path(buf.filepath, lsp_definition_pending_location.filepath);
@@ -581,7 +681,8 @@ bool Editor::apply_pending_lsp_definition_jump()
   clear_selection();
   ensure_cursor_visible();
   lsp_definition_jump_pending = false;
-  set_message("Definition: " + get_filename(buf.filepath) + ":" + std::to_string(buf.cursor.y + 1));
+  set_message(lsp_navigation_jump_label + ": " + get_filename(buf.filepath) + ":"
+              + std::to_string(buf.cursor.y + 1));
   needs_redraw = true;
   return true;
 }

@@ -571,6 +571,22 @@ namespace lsp_detail
     return !out.filepath.empty();
   }
 
+  const char *navigation_method_name(LSPNavigationKind kind)
+  {
+    switch (kind)
+    {
+    case LSPNavigationKind::Declaration:
+      return "textDocument/declaration";
+    case LSPNavigationKind::TypeDefinition:
+      return "textDocument/typeDefinition";
+    case LSPNavigationKind::Implementation:
+      return "textDocument/implementation";
+    case LSPNavigationKind::Definition:
+      break;
+    }
+    return "textDocument/definition";
+  }
+
   std::vector<LSPLocation> definition_locations_from_result(const JsonValue &result)
   {
     std::vector<LSPLocation> locations;

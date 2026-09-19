@@ -105,11 +105,24 @@ struct LSPInlayHintResult
   std::vector<LSPInlayHint> hints;
 };
 
+// Which navigation request produced a location reply. Definition, declaration,
+// type definition and implementation all answer with the same shapes
+// (Location | Location[] | LocationLink[]), so they share one reply path and
+// differ only in the method sent and the label the editor reports.
+enum class LSPNavigationKind
+{
+  Definition,
+  Declaration,
+  TypeDefinition,
+  Implementation,
+};
+
 struct LSPDefinitionResult
 {
   std::string origin_filepath;
   int origin_line = 0;
   int origin_character = 0;
+  LSPNavigationKind navigation = LSPNavigationKind::Definition;
   std::vector<LSPLocation> locations;
 };
 
@@ -186,6 +199,9 @@ private:
     int line = 0;
     int character = 0;
     int version = 0;
+    // Only read for the navigation lookups (definition and friends); the other
+    // position requests leave it at the default.
+    LSPNavigationKind navigation = LSPNavigationKind::Definition;
   };
 
   struct PendingDocumentRequest
@@ -250,6 +266,8 @@ private:
   std::map<int, PendingPositionRequest> pending_hover_requests;
   std::map<int, PendingPositionRequest> pending_signature_requests;
   std::map<int, PendingPositionRequest> pending_definition_requests;
+  std::map<int, PendingDocumentRequest> pending_switch_source_header_requests;
+  std::vector<std::string> pending_switch_source_headers;
   std::map<int, PendingPositionRequest> pending_reference_requests;
   std::map<int, PendingPositionRequest> pending_code_action_requests;
   std::map<int, PendingDocumentRequest> pending_document_symbol_requests;
@@ -330,6 +348,18 @@ public:
                               int character,
                               char trigger_character = '\0');
   bool request_definition(const std::string &filepath, int line, int character);
+  // The other position lookups clangd answers with locations. Same reply path
+  // as request_definition, different method and label.
+  bool request_navigation(const std::string &filepath,
+                          int line,
+                          int character,
+                          LSPNavigationKind kind);
+  // clangd extension: the header paired with this source file (or the source
+  // paired with this header). Params are the bare TextDocumentIdentifier, and
+  // the reply is a URI string ("" or null when there is no pair).
+  bool request_switch_source_header(const std::string &filepath);
+  // One entry per reply: the paired file's path, or "" for "no pair".
+  std::vector<std::string> consume_switch_source_header_results();
   bool request_references(const std::string &filepath, int line, int character);
   bool request_document_symbols(const std::string &filepath);
   // workspace/symbol: symbols across the whole project, by name. The reply has
