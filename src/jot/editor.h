@@ -1617,10 +1617,31 @@ public:
     return terminal.get_height();
   }
   // Ctrl+hover goto-definition underline (see the mouse dispatcher): true while
-  // Ctrl is held over a token, whatever the frontend.
+  // Ctrl is held over a token, whatever the frontend. The span is the token the
+  // underline covers, in logical columns.
   bool ctrl_hover_active_for_test() const
   {
     return ctrl_hover_active;
+  }
+  bool ctrl_hover_span_for_test(int &start, int &end) const
+  {
+    if (!ctrl_hover_active)
+    {
+      return false;
+    }
+    start = ctrl_hover_start;
+    end = ctrl_hover_end;
+    return true;
+  }
+  // A headless test feeds clicks far faster than a hand can, so the mouse
+  // dispatcher's 350 ms double/triple-click window would read them as one
+  // cluster and turn the later ones into word/line selections. Tests reset it
+  // between clicks to keep every click a single click.
+  void reset_mouse_clicks_for_test()
+  {
+    last_left_click_ms = 0;
+    last_left_click_count = 0;
+    last_left_click_pos = {0, 0};
   }
   // Terminal mouse-selection hooks for headless tests: feeds clicks,
   // motions and releases through the real private handlers.

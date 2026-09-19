@@ -210,7 +210,8 @@ deliberately does not, so a preview never depends on a file you cannot see.
 - Debounced file sync, diagnostics overlay, and next/previous diagnostic
   jumps.
 - Completion with fuzzy filtering and `textEdit` support; hover on demand or
-  on mouse hover; go-to-definition with a return stack (`:lspback`); LSP
+  on mouse hover; go-to-definition with a return stack (`:lspback`), from the
+  keyboard or from `Ctrl+click`; LSP
   rename across all affected files (`:lsprename <new_name>`); find
   references in a jumpable quick-pick list (`:lsprefs`); code actions
   (quick fixes and refactors) offered at the cursor (`:lspactions`).
@@ -487,6 +488,13 @@ in `ext.begin()` selects just `ext`), `Ctrl+D` to select the next occurrence
 (`Alt+Click` adds a caret, `Esc` clears extra carets), click tabs, drag split
 dividers, jump
 the minimap viewport, navigate the sidebar, and toggle breakpoints.
+
+`Ctrl+click` goes to the definition of the symbol under the pointer, and a
+chain is read per element rather than per cell: in `counter.stored`, `p->field`
+and `outer::thing` the receiver answers for itself, `.`/`->` name the member on
+their right, a `::` colon names the qualifier on its left, and a click anywhere
+inside a name asks about that name. The `Ctrl+hover` underline covers exactly
+that same element, so what is underlined is what the click will jump to.
 
 **Zen focus mode** (`F12` or `:zen`) strips the chrome: sidebar, right
 panel, and status line hide, and the pane area narrows to the

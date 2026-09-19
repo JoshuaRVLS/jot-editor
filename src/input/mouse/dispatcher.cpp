@@ -125,7 +125,20 @@ static bool is_identifier_chain_char(const std::string &line, int i)
     return true;
   if (c == '.' || c == '-')
   {
-    return i > 0 && i + 1 < (int)line.size() && is_word_char((unsigned char)line[i - 1])
+    if (i > 0 && i + 1 < (int)line.size() && is_word_char((unsigned char)line[i - 1])
+        && is_word_char((unsigned char)line[i + 1]))
+    {
+      return true;
+    }
+    // `p->field` is one chain: the arrow joins the two names the way the dot
+    // does. It used to split them, so the underline covered half the token and
+    // clicking the arrow resolved to nothing at all.
+    return c == '-' && i > 0 && i + 1 < (int)line.size()
+           && is_word_char((unsigned char)line[i - 1]) && line[i + 1] == '>';
+  }
+  if (c == '>')
+  {
+    return i > 0 && line[i - 1] == '-' && i + 1 < (int)line.size()
            && is_word_char((unsigned char)line[i + 1]);
   }
   if (c == ':')
@@ -225,6 +238,72 @@ static bool find_smart_token_span(const std::string &line, int x, int &start, in
   start = pivot;
   end = pivot + 1;
   return true;
+}
+
+// The element a pointer position on a chain names.
+//
+// `counter.stored`, `p->field` and `outer::thing` are one run of characters but
+// several symbols, and clangd answers about exactly one of them per position:
+// the receiver on its own name, the member on the dot or the arrow, the
+// qualifier on a `::` colon. Asking at the raw pointer cell therefore depends on
+// the pointer landing on precisely the cell of the name the user aimed at -- one
+// cell off and the answer is the neighbour's, which is how "Ctrl+click the
+// receiver" comes back with the member. Resolve the element here instead: an
+// identifier answers for itself, `.`/`->` name the member on their right, a `::`
+// colon names the qualifier on its left (what clangd answers for the separator
+// itself). The same span drives the Ctrl+hover underline, so the affordance
+// covers the symbol the click will actually ask about.
+static bool chain_element_span(const std::string &line,
+                               int start,
+                               int end,
+                               int x,
+                               int &out_start,
+                               int &out_end)
+{
+  int prev_start = -1;
+  int prev_end = -1;
+  bool have = false;
+  for (int i = start; i < end;)
+  {
+    while (i < end && !is_word_char((unsigned char)line[i]))
+      i++;
+    if (i >= end)
+      break;
+    const int name_start = i;
+    while (i < end && is_word_char((unsigned char)line[i]))
+      i++;
+    const int name_end = i;
+    if (!have)
+    {
+      // No name contains the pointer: answer about the first one rather than
+      // nothing (the span came from word_span_at_exact, so one exists).
+      out_start = name_start;
+      out_end = name_end;
+      have = true;
+    }
+    if (x >= name_start && x < name_end)
+    {
+      out_start = name_start;
+      out_end = name_end;
+      return true;
+    }
+    if (x < name_start && prev_start >= 0)
+    {
+      // Between the previous name and this one: `.` and `->` select the name
+      // after them, a `::` selects the one before.
+      bool scope = false;
+      for (int c = prev_end; c < name_start; c++)
+      {
+        scope = scope || line[c] == ':';
+      }
+      out_start = scope ? prev_start : name_start;
+      out_end = scope ? prev_end : name_end;
+      return true;
+    }
+    prev_start = name_start;
+    prev_end = name_end;
+  }
+  return have;
 }
 
 static bool find_plain_word_span(const std::string &line, int x, int &start, int &end)
@@ -1250,6 +1329,17 @@ void Editor::handle_mouse(void *event_ptr)
         && ctrl_ev_x >= code_start_x
         && word_span_at_exact(click_y, click_x, tok_start, tok_end))
     {
+      // Underline the element the click would ask about, not the whole run:
+      // `counter.stored` is two symbols, and one underline across both promises
+      // a jump that the click is never going to make for half of it.
+      int element_start = 0;
+      int element_end = 0;
+      if (chain_element_span(
+              buf.line(click_y), tok_start, tok_end, click_x, element_start, element_end))
+      {
+        tok_start = element_start;
+        tok_end = element_end;
+      }
       found = true;
     }
     if (found)
@@ -1311,7 +1401,24 @@ void Editor::handle_mouse(void *event_ptr)
     if (word_span_at_exact(click_y, click_x, token_start, token_end))
     {
       focus_state = FOCUS_EDITOR;
-      buf.cursor.x = std::clamp(click_x, token_start, token_end);
+      // The symbol under the pointer, not the pointer's cell: the caret is the
+      // position the request is made from, so putting it on the element keeps
+      // the request, the underline and the reply's origin check on one column.
+      int element_start = 0;
+      int element_end = 0;
+      if (chain_element_span(buf.line(click_y),
+                             token_start,
+                             token_end,
+                             click_x,
+                             element_start,
+                             element_end))
+      {
+        buf.cursor.x = element_start;
+      }
+      else
+      {
+        buf.cursor.x = std::clamp(click_x, token_start, token_end);
+      }
       buf.cursor.y = click_y;
       buf.preferred_x = buf.cursor.x;
       buf.selection.start = buf.cursor;

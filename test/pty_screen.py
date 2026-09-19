@@ -21,10 +21,13 @@ import struct
 import termios
 import time
 
-# Colon subparameters (SGR 4:3 for a wavy underline, 58:5:n for an underline
-# colour) are part of the parameter bytes too; without them here the sequence
-# fails to match and its tail prints as text on the reconstructed screen.
-CSI = re.compile(rb"\x1b\[([0-9;:? ]*)([a-zA-Z])")
+# The real CSI grammar: parameter bytes (0x30-0x3f, which also covers colon
+# subparameters like SGR 4:3 and 58:5:n, and private prefixes like the kitty
+# protocol's `(ESC [ > 1 u`), then optional intermediate bytes, then the final
+# byte. Anything narrower silently swallows the sequences it does not know: the
+# old [0-9;:? ]* pattern never matched `(ESC [ > 1 u`, so the sequence stayed
+# "unfinished" and every byte after it was withheld from the screen.
+CSI = re.compile(rb"\x1b\[([0-?]*)([ -/]*)([@-~])")
 
 
 class Screen:
@@ -39,13 +42,22 @@ class Screen:
         # -- the bottom bar is meant to carry the status line's background, and
         # that is invisible in the text alone.
         self.bg = [[-1] * cols for _ in range(rows)]
+        # Underline style per cell (0 none, 1 straight, 3 wavy), tracked the way
+        # bg is so a probe can read *which* cells carry an underline -- the
+        # Ctrl+hover affordance, for one, is only visible this way.
+        self.underline = [[0] * cols for _ in range(rows)]
         # Every byte read after the child started, for the checks that are about
         # the escape stream itself rather than the reconstructed screen (e.g. a
         # colour the theme only emits as 38;2 rather than a palette index).
         self.raw = bytearray()
         self.cur_bg = -1
+        self.cur_underline = 0
         self.x = 0
         self.y = 0
+        # DECSC/DECRC (ESC 7 / ESC 8): the editor parks the cursor far away to
+        # probe the terminal and restores it, so a reconstruction that ignores
+        # the save keeps writing at the parked cell and loses that text.
+        self.saved_xy = None
         # An escape sequence can be split across reads; whatever follows a lone
         # ESC is kept here until the rest arrives, or it would print as text.
         self.pending = b""
@@ -65,10 +77,25 @@ class Screen:
                 if nxt == ord("["):
                     m = CSI.match(data, i)
                     if m:
-                        self._csi(m.group(1).decode(), m.group(2).decode())
+                        self._csi((m.group(1) + m.group(2)).decode(), m.group(3).decode())
                         i = m.end()
                         continue
-                    if len(data) - i < 32:
+                    # A later escape means this one never got its final byte:
+                    # the sequence was truncated (the editor writes frames with
+                    # one write() per frame, and a pty that could not take it all
+                    # leaves a partial sequence behind). Holding it would
+                    # withhold every byte after it, so drop the fragment and
+                    # resume at the next escape.
+                    resume = data.find(b"\x1b", i + 2)
+                    if resume >= 0:
+                        i = resume
+                        continue
+                    # Otherwise this is a sequence split across reads: hold the
+                    # whole thing, however long. One cell can carry a colour, a
+                    # background, an underline style and its colour at once (an
+                    # inlay hint does), so a small bound would print the tail of
+                    # a long SGR as text and shift every following cell.
+                    if len(data) - i < 4096:
                         self.pending = data[i:]
                         return
                     i += 2
@@ -84,6 +111,10 @@ class Screen:
                         continue
                     i = (end + 1) if (end != -1 and (st == -1 or end < st)) else (st + 2)
                     continue
+                if nxt == ord("7"):
+                    self.saved_xy = (self.x, self.y)
+                elif nxt == ord("8") and self.saved_xy is not None:
+                    self.x, self.y = self.saved_xy
                 i += 2  # two-byte escape (charset select, keypad mode, ...)
                 continue
             if b == 0x0D:
@@ -111,18 +142,37 @@ class Screen:
             if self.y < self.rows and self.x < self.cols:
                 self.cells[self.y][self.x] = ch
                 self.bg[self.y][self.x] = self.cur_bg
+                self.underline[self.y][self.x] = self.cur_underline
             self.x += 1
             i += length
 
     def _sgr(self, params: str) -> None:
+        # A wavy underline is SGR 4:3, a colon subparameter that the integer
+        # split below drops, so read that form off the raw groups first.
+        if not params:
+            self.cur_underline = 0
+        for group in params.split(";"):
+            if group.startswith("4:") and group[2:].isdigit():
+                self.cur_underline = int(group[2:])
         args = [int(p) for p in params.split(";") if p.isdigit()] if params else [0]
         if not args:
             self.cur_bg = -1
             return
+        # The underline is handled in this walk and not by scanning the groups,
+        # because "24" is both underline-off and the blue channel of a
+        # truecolour background -- the consumption below is what tells them
+        # apart (48;2;30;27;24 must not read as a reset).
         k = 0
         while k < len(args):
             a = args[k]
-            if a in (0, 49):
+            if a == 0:
+                self.cur_bg = -1
+                self.cur_underline = 0
+            elif a == 24:
+                self.cur_underline = 0
+            elif a == 4:
+                self.cur_underline = 1
+            elif a == 49:
                 self.cur_bg = -1
             elif a == 48 and k + 2 < len(args) and args[k + 1] == 5:
                 self.cur_bg = args[k + 2]
@@ -155,13 +205,16 @@ class Screen:
             if mode == 2:
                 self.cells = [[" "] * self.cols for _ in range(self.rows)]
                 self.bg = [[-1] * self.cols for _ in range(self.rows)]
+                self.underline = [[0] * self.cols for _ in range(self.rows)]
             elif mode == 0:
                 for cx in range(self.x, self.cols):
                     self.cells[self.y][cx] = " "
                     self.bg[self.y][cx] = self.cur_bg
+                    self.underline[self.y][cx] = self.cur_underline
                 for cy in range(self.y + 1, self.rows):
                     self.cells[cy] = [" "] * self.cols
                     self.bg[cy] = [-1] * self.cols
+                    self.underline[cy] = [0] * self.cols
         elif final == "K":
             mode = args[0] if args else 0
             if mode == 0:
@@ -174,6 +227,22 @@ class Screen:
 
     def text(self) -> str:
         return "\n".join("".join(row).rstrip() for row in self.cells)
+
+    def underline_runs(self, row: int):
+        """[(start_col, end_col, text), ...] for the underlined cells of a row."""
+        runs = []
+        col = 0
+        while col < self.cols:
+            if not self.underline[row][col]:
+                col += 1
+                continue
+            start = col
+            text = ""
+            while col < self.cols and self.underline[row][col]:
+                text += self.cells[row][col]
+                col += 1
+            runs.append((start, col, text.rstrip()))
+        return runs
 
 
 def run_in_pty(binary: str, args, keys: bytes, settle: float = 2.5, after: float = 3.0,
@@ -205,7 +274,23 @@ def run_in_pty(binary: str, args, keys: bytes, settle: float = 2.5, after: float
 
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
     screen = Screen(cols, rows)
-    time.sleep(settle)
+    # Drain while waiting for the editor to settle instead of sleeping through
+    # it: a real terminal reads as the frames arrive, and a stalled reader fills
+    # the pty -- the editor then can't finish a frame, drops its tail and never
+    # repaints those cells, so a probe that slept here measured a corrupted
+    # screen it had caused itself.
+    settle_end = time.time() + settle
+    while time.time() < settle_end:
+        r, _, _ = select.select([fd], [], [], 0.1)
+        if not r:
+            continue
+        try:
+            data = os.read(fd, 65536)
+        except OSError:
+            break
+        if not data:
+            break
+        screen.feed(data)
     try:
         os.write(fd, keys)
     except OSError:
