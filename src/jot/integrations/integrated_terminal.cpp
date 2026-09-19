@@ -1206,6 +1206,18 @@ bool Editor::handle_bottom_panel_mouse(int x, int y, bool is_click)
     return false;
   }
 
+  // The panel owns its own rows and nothing else. Claiming the whole screen here
+  // (the Problems view used to answer for any y, on any click or motion) left the
+  // list holding focus -- and the keys with it -- so a click in the buffer could
+  // not get back to editing, and a motion in the explorer was swallowed too.
+  const int panel_y = integrated_terminal_panel_y();
+  const int panel_h = integrated_terminal_panel_h();
+  const int panel_w = integrated_terminal_panel_w();
+  if (y < panel_y || y >= panel_y + panel_h || x < 0 || x >= panel_w)
+  {
+    return false;
+  }
+
   // The view tab strip belongs to the panel as a whole, not to the view that
   // happens to be showing -- it is the only way back once the shell is active.
   // Switching a view is an action, so it takes a press: hovering the labels
@@ -1263,6 +1275,8 @@ bool Editor::handle_bottom_panel_mouse(int x, int y, bool is_click)
   const int content_h = bottom_panel_content_h();
   if (y < content_y || y >= content_y + content_h)
   {
+    // Inside the panel but not on a list row (the shell's tab strip, the space
+    // under a short list): inert, but it still takes focus.
     return true;
   }
   const std::vector<QuickPickItem> items = workspace_diagnostic_quick_pick_items();
@@ -1281,8 +1295,15 @@ bool Editor::handle_problems_scroll(int x, int y, bool is_scroll_up, bool is_scr
   {
     return false;
   }
-  (void)x;
-  (void)y;
+  // Only the wheel over the panel's own rows belongs to the list: anywhere else
+  // it is the buffer, the explorer or a dock scrolling.
+  const int panel_y = integrated_terminal_panel_y();
+  const int panel_h = integrated_terminal_panel_h();
+  const int panel_w = integrated_terminal_panel_w();
+  if (y < panel_y || y >= panel_y + panel_h || x < 0 || x >= panel_w)
+  {
+    return false;
+  }
   // The renderer clamps against the list length, so a free-running offset is
   // safe here and keeps the scroll from needing the row count.
   if (is_scroll_up)

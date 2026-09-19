@@ -1442,6 +1442,10 @@ public:
   {
     return handle_bottom_panel_mouse(x, y, click);
   }
+  bool problems_scroll_input_for_test(int x, int y, bool up, bool down)
+  {
+    return handle_problems_scroll(x, y, up, down);
+  }
   int bottom_panel_view_tabs_width_for_test() const
   {
     return bottom_panel_view_tabs_width();

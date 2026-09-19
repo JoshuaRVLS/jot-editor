@@ -292,6 +292,10 @@ Install helpers also cover Rust, Go, Lua, and Bash.
 - The Problems list keeps every row on the panel's own background, colouring
   only the text by severity; the selected row is marked with an accent sliver
   instead of a selection fill, so a highlighted row's message stays readable.
+- The panel owns its own rows and nothing else. A press, a drag or the wheel
+  anywhere else goes to what is under the pointer -- the buffer, the explorer,
+  a dock -- so a click in the code brings focus and the keys back to editing
+  while the list is up, and the list still answers while its own rows are hit.
 - **Fullscreen zoom** (like pane zoom): `Alt+Shift+Z` while focused, or
   `:termzoom`, toggles the terminal across the whole pane area. `Esc` exits
   fullscreen too. While zoomed, the sidebar and right dock are hidden so

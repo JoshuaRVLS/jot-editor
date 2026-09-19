@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
+#include <fstream>
 #include <string>
 
 namespace
@@ -476,6 +477,74 @@ TEST_CASE("Bottom panel: the list owns the keyboard while focused", "[jot]")
 
   // Esc hands focus back to the editor.
   REQUIRE(e.bottom_panel_key_for_test(27));
+  REQUIRE(e.focus_state_for_test() == (int)FOCUS_EDITOR);
+}
+
+TEST_CASE("Bottom panel: the list answers only over its own rows", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_home_menu_visible(false);
+  e.seed_lsp_diagnostic_for_test("cpp|/tmp/bp_hit", "/tmp/bp_hit_a.cpp", 3, 1, "first");
+  e.seed_lsp_diagnostic_for_test("cpp|/tmp/bp_hit", "/tmp/bp_hit_b.cpp", 5, 2, "second");
+  e.seed_lsp_diagnostic_for_test("cpp|/tmp/bp_hit", "/tmp/bp_hit_c.cpp", 9, 3, "third");
+  e.show_problems_panel_for_test();
+  REQUIRE(e.bottom_panel_view_for_test() == (int)BOTTOM_PANEL_PROBLEMS);
+  REQUIRE(e.focus_state_for_test() == (int)FOCUS_BOTTOM_PANEL);
+
+  // A code cell: inside the pane, on a body row below its tab strip (the
+  // pane's first row) and above the panel.
+  const SplitPane &pane = e.pane_for_test();
+  const int code_x = pane.x + 3;
+  const int code_y = pane.y + 1;
+  REQUIRE(code_y < e.bottom_panel_view_tab_y_for_test());
+
+  // The list is a dock, not a mode: a press or a motion in the buffer is not
+  // its to claim, so the event reaches the editor instead of dying on the
+  // panel -- and the keys stay with the buffer, which is what made it
+  // uneditable while the list was up.
+  REQUIRE_FALSE(e.bottom_panel_mouse_for_test(code_x, code_y, true));
+  REQUIRE_FALSE(e.bottom_panel_mouse_for_test(code_x, code_y, false));
+
+  // The wheel follows the same split: over the buffer it belongs to the code,
+  // not the list...
+  REQUIRE_FALSE(e.problems_scroll_input_for_test(code_x, code_y, false, true));
+  REQUIRE(e.problems_scroll_for_test() == 0);
+  // ...and over the list's own rows it still scrolls the list.
+  const int content_y = e.bottom_panel_content_y_for_test();
+  REQUIRE(e.problems_scroll_input_for_test(2, content_y, false, true));
+  REQUIRE(e.problems_scroll_for_test() == 3);
+  REQUIRE(e.problems_scroll_input_for_test(2, content_y, true, false));
+  REQUIRE(e.problems_scroll_for_test() == 0);
+
+  // The whole path: a press in the buffer lands and brings the focus with it.
+  // The key dispatch hands keys to the panel only while it holds focus
+  // (input/modes/dispatch.cpp), so this is what makes the buffer typeable.
+  REQUIRE(e.focus_state_for_test() == (int)FOCUS_BOTTOM_PANEL);
+  e.mouse_event_for_test(code_x, code_y, 1);
+  REQUIRE(e.focus_state_for_test() == (int)FOCUS_EDITOR);
+}
+
+TEST_CASE("Bottom panel: a press on a list row still opens the file", "[jot]")
+{
+  seed_config_home();
+  char dir[] = "/tmp/jot_bp_rows_XXXXXX";
+  REQUIRE(mkdtemp(dir) != nullptr);
+  const std::string path = std::string(dir) + "/only.cpp";
+  {
+    std::ofstream out(path);
+    out << "int answer = 42;\n";
+  }
+
+  Editor e;
+  e.set_home_menu_visible(false);
+  e.seed_lsp_diagnostic_for_test("cpp|/tmp/bp_rows", path, 1, 1, "only one");
+  e.show_problems_panel_for_test();
+
+  // The list's own rows are still the list's: the row under the strip opens
+  // the file behind it, through the same accept path the picker uses.
+  REQUIRE(e.bottom_panel_mouse_for_test(2, e.bottom_panel_content_y_for_test(), true));
+  REQUIRE(e.buffer_for_test().filepath == path);
   REQUIRE(e.focus_state_for_test() == (int)FOCUS_EDITOR);
 }
 
