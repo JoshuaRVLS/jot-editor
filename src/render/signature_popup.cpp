@@ -161,18 +161,13 @@ void Editor::render_lsp_signature()
   int cursor_x =
       pane.x + 1 + line_num_width + (cursor_visual - scroll_visual)
       + lsp_inlay_hint_cells_before(buf.filepath, buf.cursor.y, buf.cursor.x, line);
-  int cursor_row = 0;
   const int viewport_h = std::max(1, pane.h - tab_height);
-  for (int row = 0; row < viewport_h; row++)
-  {
-    int l = Folding::buffer_line_for_visible_offset(
-        buf.fold_ranges, buf.scroll_offset, row, (int)buf.line_count());
-    if (l >= 0 && l == buf.cursor.y && !Folding::is_line_hidden(buf.fold_ranges, l))
-    {
-      cursor_row = row;
-      break;
-    }
-  }
+  const Folding::FoldView fold_view(buf.fold_ranges);
+  const int cursor_row = std::max(0,
+                                  fold_view.visible_row_for_line(buf.scroll_offset,
+                                                                 buf.cursor.y,
+                                                                 viewport_h,
+                                                                 (int)buf.line_count()));
   int cursor_y = pane.y + tab_height + cursor_row;
 
   int min_x = pane.x + 1 + line_num_width;

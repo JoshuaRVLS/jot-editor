@@ -57,19 +57,25 @@ namespace
   // companion both backends read from a cell, leaving the palette index the
   // caller also carries as the fallback for anything that cannot hold 24 bits.
   // An explicit rgb -- the inline colour preview -- always wins.
+  std::uint32_t exact_rgb_of(int value)
+  {
+    unsigned char r = 0;
+    unsigned char g = 0;
+    unsigned char b = 0;
+    if (!jot_ui::exact_color_rgb(value, r, g, b))
+    {
+      return kNoRgb;
+    }
+    return ((std::uint32_t)r << 16) | ((std::uint32_t)g << 8) | (std::uint32_t)b;
+  }
+
   void resolve_exact_cell_color(int value, std::uint32_t &rgb)
   {
     if (rgb != kNoRgb)
     {
       return;
     }
-    unsigned char r = 0;
-    unsigned char g = 0;
-    unsigned char b = 0;
-    if (jot_ui::exact_color_rgb(value, r, g, b))
-    {
-      rgb = ((std::uint32_t)r << 16) | ((std::uint32_t)g << 8) | (std::uint32_t)b;
-    }
+    rgb = exact_rgb_of(value);
   }
 
   // Colour value → RGB. Named (not a lambda) so both ui_dim_color and the
@@ -342,12 +348,13 @@ void UI::invalidate()
 
 void UI::clear()
 {
+  // One blank cell for the whole grid. Building it per cell (and resolving its
+  // two optional 24-bit colours per cell) was pure repetition: the paint is
+  // uniform, and at a full-height viewport this ran 30k times a second.
+  const UICell blank = blank_cell();
   for (auto &row : grid)
   {
-    for (auto &cell : row)
-    {
-      cell = blank_cell();
-    }
+    std::fill(row.begin(), row.end(), blank);
   }
   mark_all_rows_dirty();
 }
@@ -819,9 +826,14 @@ void UI::emit_row_diff(int y, int row_width)
   const auto &prev = last_grid[y];
 
   // Collect the columns whose cells differ from the frame the terminal
-  // already shows.
-  std::vector<int> changed;
-  changed.reserve(32);
+  // already shows. The working vectors are reused across rows (see the
+  // members): a row that turns out unchanged -- the common case, since the
+  // paint pass marks every row dirty -- must not cost an allocation to find
+  // that out.
+  std::vector<int> &changed = diff_changed_;
+  std::vector<RowRun> &runs = diff_runs_;
+  std::vector<RowRun> &merged = diff_merged_;
+  changed.clear();
   for (int x = 0; x < row_width; x++)
   {
     if (cur[x] != prev[x])
@@ -835,13 +847,7 @@ void UI::emit_row_diff(int y, int row_width)
   // few identical cells than to pay a cursor move + SGR for a separate
   // run.
   constexpr int kMergeGap = 4;
-  struct Run
-  {
-    int start;
-    int end;
-  };
-  std::vector<Run> runs;
-  runs.reserve(changed.size());
+  runs.clear();
   int run_start = changed[0];
   int run_end = changed[0] + 1;
   for (size_t i = 1; i < changed.size(); i++)
@@ -869,8 +875,7 @@ void UI::emit_row_diff(int y, int row_width)
     while (r.end < row_width && cur[r.end].ch.empty())
       r.end++;
   }
-  std::vector<Run> merged;
-  merged.reserve(runs.size());
+  merged.clear();
   for (const auto &r : runs)
   {
     if (!merged.empty() && r.start <= merged.back().end)
@@ -1225,7 +1230,7 @@ void UI::draw_text(int x,
     }
 
     UICell cell;
-    cell.ch = ui_sanitized_cell_text(text.substr(i, cluster_end - i));
+    ui_sanitize_cell_range(text, i, cluster_end, cell.ch);
     cell.fg = fg;
     cell.bg = bg;
     cell.fg_rgb = fg_rgb;
@@ -1368,18 +1373,35 @@ void UI::draw_border(const UIRect &rect, int fg, int bg, const UIBorderEdges &ed
 
 void UI::fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg)
 {
-  for (int y = rect.y; y < rect.y + rect.h && y < height; y++)
+  const int x0 = std::max(0, rect.x);
+  const int y0 = std::max(0, rect.y);
+  const int x1 = std::min(width, rect.x + rect.w);
+  const int y1 = std::min(height, rect.y + rect.h);
+  if (x0 >= x1 || y0 >= y1)
   {
-    for (int x = rect.x; x < rect.x + rect.w && x < width; x++)
+    return;
+  }
+  // The paint is uniform, so the cell is built -- and its two optional 24-bit
+  // colours resolved -- once for the whole rect rather than once per cell. The
+  // rects this is called with cover the screen every frame, and on a
+  // hex-coloured theme the per-cell resolution called into the exact-colour
+  // table ~60k times a second to recompute the same handful of values.
+  UICell cell;
+  cell.ch = ch;
+  cell.fg = fg;
+  cell.bg = bg;
+  cell.bold = false;
+  cell.italic = false;
+  cell.reverse = false;
+  resolve_exact_cell_color(cell.fg, cell.fg_rgb);
+  resolve_exact_cell_color(cell.bg, cell.bg_rgb);
+  for (int y = y0; y < y1; y++)
+  {
+    auto &row = grid[(size_t)y];
+    for (int x = x0; x < x1; x++)
     {
-      UICell cell;
-      cell.ch = ch;
-      cell.fg = fg;
-      cell.bg = bg;
-      cell.bold = false;
-      cell.italic = false;
-      cell.reverse = false;
-      set_cell(x, y, cell);
+      row[(size_t)x] = cell;
     }
+    row_dirty[(size_t)y] = 1;
   }
 }

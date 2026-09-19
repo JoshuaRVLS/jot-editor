@@ -109,6 +109,38 @@ std::string ui_sanitized_cell_text(const std::string &text)
   return text;
 }
 
+void ui_sanitize_cell_range(const std::string &text, int begin, int end, std::string &out)
+{
+  const int n = (int)text.size();
+  const int from = std::clamp(begin, 0, n);
+  const int stop = std::clamp(end, from, n);
+  if (from >= stop)
+  {
+    out = " ";
+    return;
+  }
+  // Printable ASCII sanitizes to itself, and it is what the renderer paints
+  // almost exclusively. Anything a decoder has an opinion about (control bytes,
+  // and every byte >= 0x7f) falls through to the validating path below, which
+  // then sees the same bytes it always has.
+  bool printable_ascii = true;
+  for (int i = from; i < stop; i++)
+  {
+    const unsigned char c = (unsigned char)text[(std::size_t)i];
+    if (c < 0x20 || c >= 0x7f)
+    {
+      printable_ascii = false;
+      break;
+    }
+  }
+  if (printable_ascii)
+  {
+    out.assign(text, (std::size_t)from, (std::size_t)(stop - from));
+    return;
+  }
+  out = ui_sanitized_cell_text(text.substr((std::size_t)from, (std::size_t)(stop - from)));
+}
+
 int ui_range_cell_count(const std::string &text, int begin, int end)
 {
   const int n = (int)text.size();

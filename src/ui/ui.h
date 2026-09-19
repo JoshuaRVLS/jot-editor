@@ -188,6 +188,19 @@ protected:
   // cells are byte-identical to what the terminal shows, so skipping
   // them is safe and cuts per-frame output to a few short writes on a
   // typical typing frame.
+  //
+  // The three working vectors it needs (changed columns, runs, merged runs)
+  // are members rather than locals: one row's worth of these was allocated and
+  // freed per row per frame, which at a full-height viewport is ~720k
+  // allocator round-trips a second for buffers whose rows rarely differ.
+  struct RowRun
+  {
+    int start = 0;
+    int end = 0;
+  };
+  std::vector<int> diff_changed_;
+  std::vector<RowRun> diff_runs_;
+  std::vector<RowRun> diff_merged_;
   void emit_row_diff(int y, int row_width);
 
 public:

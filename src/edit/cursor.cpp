@@ -126,8 +126,11 @@ void Editor::ensure_cursor_visible(bool adjust_horizontal)
   if (viewport_h < 1)
     viewport_h = 1;
 
-  buf.scroll_offset = Folding::clamp_scroll_offset(
-      buf.fold_ranges, buf.scroll_offset, viewport_h, (int)buf.line_count());
+  // One prepared view for every fold question below (the caret reveal runs on
+  // every press, drag cell and keystroke).
+  const Folding::FoldView fold_view(buf.fold_ranges);
+  buf.scroll_offset =
+      fold_view.clamp_scroll_offset(buf.scroll_offset, viewport_h, (int)buf.line_count());
 
   if (buf.cursor.y < buf.scroll_offset)
   {
@@ -135,14 +138,15 @@ void Editor::ensure_cursor_visible(bool adjust_horizontal)
   }
   else
   {
-    int last_visible = Folding::buffer_line_for_visible_offset(
-        buf.fold_ranges, buf.scroll_offset, viewport_h - 1, (int)buf.line_count());
+    const int last_visible =
+        fold_view.buffer_line_for_visible_offset(buf.scroll_offset, viewport_h - 1,
+                                                 (int)buf.line_count());
     if (buf.cursor.y > last_visible)
     {
       buf.scroll_offset = buf.cursor.y;
       for (int i = 1; i < viewport_h; i++)
       {
-        buf.scroll_offset = Folding::previous_visible_line(buf.fold_ranges, buf.scroll_offset);
+        buf.scroll_offset = fold_view.previous_visible_line(buf.scroll_offset);
       }
     }
   }

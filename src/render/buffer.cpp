@@ -43,22 +43,6 @@ namespace
     int width = 0;
   };
 
-  int visible_row_for_line(const std::vector<FoldRange> &ranges,
-                           int first_line,
-                           int target_line,
-                           int viewport_h,
-                           int line_count)
-  {
-    for (int row = 0; row < viewport_h; row++)
-    {
-      int line = Folding::buffer_line_for_visible_offset(ranges, first_line, row, line_count);
-      if (line >= 0 && line == target_line && !Folding::is_line_hidden(ranges, line))
-      {
-        return row;
-      }
-    }
-    return -1;
-  }
 } // namespace
 
 void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int buffer_id)
@@ -127,8 +111,11 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
   // region), and the seed below must describe the rows that are actually
   // about to be drawn. Seeding from the unclamped value painted the whole
   // viewport at the wrong absolute depth until the next frame.
-  buf.scroll_offset =
-      Folding::clamp_scroll_offset(buf.fold_ranges, buf.scroll_offset, h, (int)buf.line_count());
+  // One prepared view for the whole frame: every per-row fold query below
+  // (which line a row shows, whether it is hidden, whether it is a folded
+  // header) reads this index instead of re-scanning every detected range.
+  const Folding::FoldView fold_view(buf.fold_ranges);
+  buf.scroll_offset = fold_view.clamp_scroll_offset(buf.scroll_offset, h, (int)buf.line_count());
 
   // GUI smooth-scroll hook: report this pane's viewport every frame so the
   // GUI backend can animate the content shift (neovide-style). The delta is
@@ -138,8 +125,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
   // report 0 and snap.
   if (gui_mode && ui)
   {
-    const int new_top = Folding::buffer_line_for_visible_offset(
-        buf.fold_ranges, buf.scroll_offset, 0, (int)buf.line_count());
+    const int new_top = fold_view.buffer_line_for_visible_offset(
+        buf.scroll_offset, 0, (int)buf.line_count());
     if ((int)gui_pane_top_lines_.size() <= pane_index)
     {
       gui_pane_top_lines_.resize(pane_index + 1, -1);
@@ -154,14 +141,12 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
     {
       if (new_top > old_top)
       {
-        int r = Folding::visible_row_for_line(
-            buf.fold_ranges, old_top, new_top, h + 1, (int)buf.line_count());
+        int r = fold_view.visible_row_for_line(old_top, new_top, h + 1, (int)buf.line_count());
         delta = r >= 0 ? r : 0;
       }
       else
       {
-        int r = Folding::visible_row_for_line(
-            buf.fold_ranges, new_top, old_top, h + 1, (int)buf.line_count());
+        int r = fold_view.visible_row_for_line(new_top, old_top, h + 1, (int)buf.line_count());
         delta = r >= 0 ? -r : 0;
       }
     }
@@ -309,8 +294,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
     color_spans.clear();
     colorizer_scope.clear();
     search_hits.clear();
-    int line_idx = Folding::buffer_line_for_visible_offset(
-        buf.fold_ranges, buf.scroll_offset, i, (int)buf.line_count());
+    int line_idx =
+        fold_view.buffer_line_for_visible_offset(buf.scroll_offset, i, (int)buf.line_count());
     // The per-row walk normally carries depth across consecutive visible
     // lines (row N+1 = row N + 1 exactly when nothing is folded). Whenever
     // that continuity breaks -- folded/hidden lines collapse a range, or a
@@ -326,7 +311,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
     int draw_y = y + i;
 
     if (line_idx >= 0 && line_idx < (int)buf.line_count()
-        && !Folding::is_line_hidden(buf.fold_ranges, line_idx))
+        && !fold_view.hidden(line_idx))
     {
       // The cursor row tints only the line-number gutter so the active row
       // reads at a glance without washing out the code itself. The code area
@@ -382,9 +367,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
       ui->draw_text(x + 2, draw_y, num_buf, ln_fg, ln_bg);
       // No fold marker column: the fold still shows in the "… N lines" suffix
       // on the header row, and the column it used to take goes to the code.
-      int fold_index = -1;
-      const bool folded_header =
-          Folding::is_line_folded_header(buf.fold_ranges, line_idx, &fold_index);
+      const bool folded_header = fold_view.folded_header(line_idx);
 
       const std::string &line = buf.line(line_idx);
       int scroll_x = ui_clamp_to_utf8_boundary(line, buf.scroll_x);
@@ -392,7 +375,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
       int visible_len = w - 2 - line_num_width;
       if (folded_header)
       {
-        int hidden_count = Folding::hidden_line_count_for_header(buf.fold_ranges, line_idx);
+        int hidden_count = fold_view.hidden_count_for_header(line_idx);
         std::string suffix = "  … " + std::to_string(hidden_count) + " lines";
         int suffix_x = current_x + std::max(0, visible_len - (int)suffix.size());
         if (suffix_x > current_x)
@@ -1446,8 +1429,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
 
   if (pane.active)
   {
-    int cursor_visible_row = visible_row_for_line(
-        buf.fold_ranges, buf.scroll_offset, buf.cursor.y, h, (int)buf.line_count());
+    int cursor_visible_row =
+        fold_view.visible_row_for_line(buf.scroll_offset, buf.cursor.y, h, (int)buf.line_count());
     // The bundled Lua feature lua/features/decorations.lua renders inline
     // diagnostics as anchored decorations (spans + end-of-line virtual text)
     // while this config key is enabled; the native cursor-line popup would

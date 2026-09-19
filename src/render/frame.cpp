@@ -101,20 +101,15 @@ namespace
     const int min_y = pane.y + tab_height;
     int max_y = pane.y + pane.h - 1;
 
-    int visible_row = 0;
-    bool found_row = false;
     const int viewport_h = std::max(1, pane.h - tab_height);
-    for (int row = 0; row < viewport_h; row++)
-    {
-      int line = Folding::buffer_line_for_visible_offset(
-          buf.fold_ranges, buf.scroll_offset, row, (int)buf.line_count());
-      if (line >= 0 && line == buf.cursor.y && !Folding::is_line_hidden(buf.fold_ranges, line))
-      {
-        visible_row = row;
-        found_row = true;
-        break;
-      }
-    }
+    // One prepared view for the whole question: the loop it replaces asked
+    // "which line is on row N" once per row, re-scanning every fold range each
+    // time. This runs twice per frame (the idle and the paint path).
+    const Folding::FoldView fold_view(buf.fold_ranges);
+    const int found = fold_view.visible_row_for_line(
+        buf.scroll_offset, buf.cursor.y, viewport_h, (int)buf.line_count());
+    const int visible_row = found >= 0 ? found : 0;
+    const bool found_row = found >= 0;
     // Reports false when the caret has no cell on screen (its line scrolled out
     // of view, or the pane is too narrow for the code area); the caller then
     // hides the caret. display_y is still filled in for the found_row case.

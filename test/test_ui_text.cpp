@@ -77,6 +77,53 @@ TEST_CASE("UI Text Invalid UTF-8 Fallback", "[jot]")
   REQUIRE(ui_sanitized_cell_text("") == " ");
 }
 
+// The range form exists so the renderer can sanitize one grapheme of a string
+// without materialising the substring first (draw_text runs it once per cell of
+// every string it paints). It has to answer exactly what the substring form
+// would, including for ranges that do not line up with a codepoint.
+TEST_CASE("UI Text Sanitizes A Range Like Its Substring", "[jot]")
+{
+  const std::string mixed = "a\x07b\xc3\xa9c";
+  for (int begin = 0; begin <= (int)mixed.size(); begin++)
+  {
+    for (int end = begin; end <= (int)mixed.size(); end++)
+    {
+      std::string out;
+      ui_sanitize_cell_range(mixed, begin, end, out);
+      REQUIRE(out == ui_sanitized_cell_text(mixed.substr(begin, end - begin)));
+    }
+  }
+
+  // Printable ASCII is the path that skips the decoder, and it must return the
+  // bytes themselves rather than a placeholder.
+  std::string ascii;
+  ui_sanitize_cell_range("hello", 1, 4, ascii);
+  REQUIRE(ascii == "ell");
+
+  // An empty (or inverted) range is the blank cell.
+  std::string empty;
+  ui_sanitize_cell_range("hello", 2, 2, empty);
+  REQUIRE(empty == " ");
+  ui_sanitize_cell_range("hello", 4, 1, empty);
+  REQUIRE(empty == " ");
+
+  // A control byte inside the range is still rejected; so is a construct that
+  // only decodes as the whole string, not as the requested slice. (`\a` rather
+  // than `\x07b`: a hex escape swallows the following hex digits, so `\x07b`
+  // is the single byte 0x7b.)
+  std::string control;
+  ui_sanitize_cell_range("a\ab", 1, 2, control);
+  REQUIRE(control == "?");
+  std::string split;
+  ui_sanitize_cell_range("\xc3\xa9", 0, 1, split);
+  REQUIRE(split == "?");
+
+  // Out-of-range bounds clamp to the string instead of reading past it.
+  std::string overshoot;
+  ui_sanitize_cell_range("ab", -5, 99, overshoot);
+  REQUIRE(overshoot == "ab");
+}
+
 TEST_CASE("UI Text Grapheme Boundaries And Normalization", "[jot]")
 {
   std::string decomposed = "e\xcc\x81";

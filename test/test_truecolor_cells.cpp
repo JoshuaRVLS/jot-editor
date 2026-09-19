@@ -388,3 +388,55 @@ TEST_CASE("A cleared grid carries no 24-bit colours", "[jot][ui]")
   REQUIRE(after->fg_rgb == kNoRgb);
   REQUIRE(after->bg_rgb == kNoRgb);
 }
+
+// fill_rect paints a whole region in one colour pair, and it resolves that pair
+// once for the rect rather than once per cell (the rects it is called with
+// cover the screen every frame). The cell it writes still has to carry the
+// 24-bit companions, or a hex theme's background would quantise to a palette
+// index wherever a panel was filled rather than drawn.
+TEST_CASE("A filled rect carries its exact colours to every cell", "[jot][ui]")
+{
+  Terminal term;
+  UI ui(&term);
+  ui.resize(20, 8);
+
+  const int fg = exact_color_from_hex("#ff8800");
+  const int bg = exact_color_from_hex("#102030");
+  REQUIRE(fg >= kExactColorBase);
+  REQUIRE(bg >= kExactColorBase);
+
+  ui.fill_rect({2, 1, 5, 3}, " ", fg, bg);
+
+  for (int y = 1; y < 4; y++)
+  {
+    for (int x = 2; x < 7; x++)
+    {
+      const UICell *cell = ui.cell_at(x, y);
+      REQUIRE(cell != nullptr);
+      REQUIRE(cell->fg == fg);
+      REQUIRE(cell->bg == bg);
+      REQUIRE(cell->fg_rgb == 0xff8800u);
+      REQUIRE(cell->bg_rgb == 0x102030u);
+    }
+  }
+
+  // Outside the rect nothing is touched -- including the cell just past each
+  // edge, which a clamp that used <= would have painted.
+  const UICell *left_of = ui.cell_at(1, 2);
+  const UICell *below = ui.cell_at(3, 4);
+  REQUIRE(left_of != nullptr);
+  REQUIRE(below != nullptr);
+  REQUIRE(left_of->fg_rgb == kNoRgb);
+  REQUIRE(below->fg_rgb == kNoRgb);
+
+  // A rect that starts off-screen is clipped, not indexed out of bounds: this
+  // one covers x 0..1 and y 0..1, so the origin is painted and its far corner
+  // is the cell just past it.
+  ui.fill_rect({-4, -3, 6, 5}, " ", fg, bg);
+  const UICell *origin = ui.cell_at(0, 0);
+  REQUIRE(origin != nullptr);
+  REQUIRE(origin->fg_rgb == 0xff8800u);
+  const UICell *past_clipped = ui.cell_at(8, 5);
+  REQUIRE(past_clipped != nullptr);
+  REQUIRE(past_clipped->fg_rgb == kNoRgb);
+}

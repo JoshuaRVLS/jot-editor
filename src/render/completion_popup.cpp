@@ -146,18 +146,13 @@ void Editor::render_lsp_completion()
 
   // Caret screen row: the popup placement is decided from the space below
   // and above it, so this must be known before sizing the box.
-  int cursor_row = 0;
   const int viewport_h = std::max(1, pane.h - tab_height);
-  for (int row = 0; row < viewport_h; row++)
-  {
-    int line = Folding::buffer_line_for_visible_offset(
-        buf.fold_ranges, buf.scroll_offset, row, (int)buf.line_count());
-    if (line >= 0 && line == buf.cursor.y && !Folding::is_line_hidden(buf.fold_ranges, line))
-    {
-      cursor_row = row;
-      break;
-    }
-  }
+  const Folding::FoldView fold_view(buf.fold_ranges);
+  const int cursor_row = std::max(0,
+                                  fold_view.visible_row_for_line(buf.scroll_offset,
+                                                                 buf.cursor.y,
+                                                                 viewport_h,
+                                                                 (int)buf.line_count()));
   const int cursor_y = pane.y + tab_height + cursor_row;
   const int space_below = (pane.y + visible_h - 1) - cursor_y;
   const int space_above = cursor_y - (pane.y + tab_height);

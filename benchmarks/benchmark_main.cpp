@@ -221,6 +221,39 @@ namespace
              throw std::runtime_error("invalid visible line");
            }
          }},
+        // One rendered frame's fold questions: which line sits on row N, is it
+        // hidden, is it a folded header, where may the scroll start -- with the
+        // view built the way the renderer builds it, once per frame. The file
+        // has ~24k detected ranges (one per brace pair) and every third one is
+        // collapsed, so this is the shape that used to cost a scan per row.
+        {"folding_foldview_frame_queries",
+         15,
+         [cpp_lines]()
+         {
+           auto ranges = Folding::detect_ranges(cpp_lines, ".cpp");
+           for (std::size_t i = 0; i < ranges.size(); i += 3)
+           {
+             ranges[i].collapsed = true;
+           }
+           const int line_count = (int)cpp_lines.size();
+           int checksum = 0;
+           for (int frame = 0; frame < 200; frame++)
+           {
+             const Folding::FoldView view(ranges);
+             checksum += view.clamp_scroll_offset(frame, 34, line_count);
+             for (int row = 0; row < 34; row++)
+             {
+               const int line = view.buffer_line_for_visible_offset(frame, row, line_count);
+               checksum += line < 0 ? 0 : line;
+               checksum += view.hidden(row) ? 1 : 0;
+               checksum += view.folded_header(row) ? 2 : 0;
+             }
+           }
+           if (checksum <= 0)
+           {
+             throw std::runtime_error("unexpected fold view checksum");
+           }
+         }},
         {"ui_text_cell_count_long_lines",
          20,
          [long_ascii_line]()

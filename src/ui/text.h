@@ -6,6 +6,13 @@
 int ui_utf8_char_len(const std::string &text, int i);
 bool ui_is_valid_utf8_sequence(const std::string &text);
 std::string ui_sanitized_cell_text(const std::string &text);
+// Writes the sanitized text of the byte range [begin, end) of `text` into
+// `out`, answering exactly what ui_sanitized_cell_text(text.substr(begin,
+// end - begin)) answers but without building that substring first. draw_text
+// calls it once per grapheme of every string it paints, so the printable-ASCII
+// case -- one byte, one cell, nothing to sanitize -- is answered straight off
+// the bytes instead of through utf8proc.
+void ui_sanitize_cell_range(const std::string &text, int begin, int end, std::string &out);
 
 int ui_cell_count(const std::string &text);
 // Cell count of the byte range [begin, end) of `text`. Identical to

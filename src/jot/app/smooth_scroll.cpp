@@ -26,11 +26,21 @@ namespace
   // The viewport offset `lines` visible lines away from `from`, clamped to the
   // pane's scroll limits: fold-aware, and stopped at the last screenful so a
   // scroll never parks the text past the end of the file (upstream's stop_eof).
-  int offset_after_lines(const FileBuffer &buf, int view_h, int from, int lines)
+  //
+  // The caller's prepared view is used for both halves. Preparing one here
+  // instead would index the collapsed ranges once per *line* the step crosses
+  // -- five full scans of a file's range vector per wheel notch on a file with
+  // a range per brace pair, which is what made wheel scrolling cost more than
+  // the frame it triggered.
+  int offset_after_lines(const FileBuffer &buf,
+                         const Folding::FoldView &fold_view,
+                         int view_h,
+                         int from,
+                         int lines)
   {
     const int line_count = (int)buf.line_count();
-    const int moved = Folding::advance_visible_lines(buf.fold_ranges, from, lines, line_count);
-    return Folding::clamp_scroll_offset(buf.fold_ranges, moved, view_h, line_count);
+    const int moved = fold_view.advance_visible_lines(from, lines, line_count);
+    return fold_view.clamp_scroll_offset(moved, view_h, line_count);
   }
 } // namespace
 
@@ -47,7 +57,10 @@ bool Editor::scroll_view_smooth(int lines, int base_ms)
 
   const int view_h = std::max(1, pane.h - tab_height);
   const int before = buf.scroll_offset;
-  const int destination = offset_after_lines(buf, view_h, before, lines);
+  // One prepared fold view for the whole gesture step: both the walk to the
+  // destination and the clamp answer from it.
+  const Folding::FoldView fold_view(buf.fold_ranges);
+  const int destination = offset_after_lines(buf, fold_view, view_h, before, lines);
   const int step = destination - before;
 
   // The GUI frontend already eases each pane's content shift pixel by pixel
