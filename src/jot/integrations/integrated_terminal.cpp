@@ -855,9 +855,9 @@ void Editor::render_integrated_terminal()
   // face a region: the status line below, and the right dock when it shares the
   // panel's rows. Its top is the pane's own bottom border and its left is the
   // screen edge, neither of which it draws -- a full box here put a second rule
-  // directly under the editor's bottom border. The bottom row takes the status
-  // background, the way the docked panels do, so that shared row reads as one
-  // piece of chrome.
+  // directly under the editor's bottom border. The bottom row keeps the panel's
+  // own background like the rest of the frame: it is this panel's last row, and
+  // in the status colour it read as the status line's own top edge.
   UIBorderEdges edges = right_dock_edges(panel);
   const int dock_w = effective_right_panel_width();
   if (dock_w > 0 && panel.x + panel.w <= ui->get_render_width() - dock_w)
@@ -867,7 +867,7 @@ void Editor::render_integrated_terminal()
     edges.right = true;
     edges.join_right = true;
   }
-  ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal, edges, theme.bg_status);
+  ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal, edges);
 
   // View tabs (which of the panel's views is showing) get their own row, so
   // the shell's tab strip below can use the full width instead of sharing the

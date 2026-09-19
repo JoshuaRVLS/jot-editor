@@ -395,10 +395,17 @@ TEST_CASE("Bottom panel: the dock meets its bottom rule in a T", "[jot]")
   REQUIRE(dock_rule != nullptr);
   REQUIRE(dock_rule->ch == "─");
 
-  // ...and the row takes the status background on both sides of the junction,
-  // so it reads as one band of chrome instead of two panels' edges.
-  REQUIRE(junction->bg == e.theme_for_test().bg_status);
-  REQUIRE(dock_rule->bg == e.theme_for_test().bg_status);
+  // ...and each side of the junction takes its own panel's background, not the
+  // status line's: the row is both panels' last one, so it belongs to them. In
+  // the status colour it read as the status line's own top edge and made the
+  // two-row status line look three rows tall.
+  const Theme &theme = e.theme_for_test();
+  const UICell *dock_body = ui->cell_at(panel_w + 5, panel_y + 5);
+  REQUIRE(dock_body != nullptr);
+  REQUIRE(junction->bg == theme.bg_terminal);
+  REQUIRE(dock_rule->bg == dock_body->bg);
+  REQUIRE(junction->bg != theme.bg_status);
+  REQUIRE(dock_rule->bg != theme.bg_status);
 }
 
 TEST_CASE("Bottom panel: Problems navigation clamps to the list", "[jot]")

@@ -23,8 +23,7 @@ void Editor::render_plugin_panel()
   UIRect panel = {panel_x, panel_y, panel_w, panel_h};
 
   ui->fill_rect(panel, " ", theme.fg_terminal, theme.bg_terminal);
-  ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal, right_dock_edges(panel),
-                       theme.bg_status);
+  ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal, right_dock_edges(panel));
 
   std::string title = active_plugin_panel.empty() ? " Plugin " : " " + active_plugin_panel + " ";
   ui->draw_text(panel_x + 1,

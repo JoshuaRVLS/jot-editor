@@ -93,8 +93,7 @@ void Editor::render_git_panel()
   const bool focused = focus_state == FOCUS_RIGHT_PANEL;
   const int border_fg = focused ? theme.fg_active_border : theme.fg_panel_border;
   ui->fill_rect(panel, " ", theme.fg_terminal, theme.bg_terminal);
-  ui->draw_border(panel, border_fg, theme.bg_terminal, right_dock_edges(panel),
-                       theme.bg_status);
+  ui->draw_border(panel, border_fg, theme.bg_terminal, right_dock_edges(panel));
 
   const int content_x = panel_x + 1;
   const int content_y = panel_y + 3;

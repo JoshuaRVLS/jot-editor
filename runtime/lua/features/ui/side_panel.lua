@@ -419,8 +419,9 @@ local function side_panel(p)
                          -- separator on this panel's left, so only the edge
                          -- over the status line is inked (see pane_edges.h).
                          border_edges = { top = false, right = false, left = false },
-                         -- The bar sits on the status line, so it takes its colour.
-                         border_bottom_bg = colors.status_bg,
+                         -- The bar is this panel's own last row, so it keeps the
+                         -- panel's background. Taking the status line's colour
+                         -- read as part of the status line instead.
                          title = p.title or nil,
                          title_fg = accent,
                          footer = footer,

@@ -91,26 +91,27 @@ def main() -> int:
     if framed:
         failures += 1
 
-    # The bottom bar carries the status line's background. With the editor's own
-    # background it read as leftover editor space with a line drawn in it rather
-    # than as the top edge of the block below, which is what a bar sitting
-    # directly on the status line has to look like.
+    # The bar is the pane area's last row, and it belongs to the panels above it:
+    # each draws its own bottom edge there, so the row carries the panel's own
+    # background on both sides of the junction and the status line keeps its two
+    # rows to itself. In the status background it read as the status line's own
+    # top edge -- a status line that looked three rows tall -- and hid the fact
+    # that this row was the panel's last one.
     for name, keys in [("single pane", b""), ("sidebar", b"\x1b[98;5u"), ("dock", b"\x1b[98;6u")]:
         screen = run_in_pty(binary, [path], keys, settle=2.5, after=1.5,
                             cols=80, rows=20, cfg="/tmp/jot_edges_probe_cfg")
-        rows = screen.text().split("\n")
         # The bar is the pane area's last row: status_height(2) + 1 above the end.
         bar_row = 20 - 3
         status_row = 20 - 1
-        editor_row = 20 - 5
+        panel_row = 20 - 5
         bar_bg = screen.bg[bar_row][10]
+        panel_bg = screen.bg[panel_row][10]
         status_bg = screen.bg[status_row][10]
-        editor_bg = screen.bg[editor_row][10]
-        ok = bar_bg == status_bg and bar_bg != editor_bg
+        ok = bar_bg == panel_bg and bar_bg != status_bg
         if not ok:
             failures += 1
         print(f"sidebar edges probe: {name:<12} bar background -> {'ok' if ok else 'FAIL'}"
-              f" (bar={bar_bg} status={status_bg} editor={editor_bg})")
+              f" (bar={bar_bg} panel={panel_bg} status={status_bg})")
 
     if failures:
         print("sidebar edges probe: FAIL")

@@ -237,10 +237,13 @@ public:
   // used only where both of its sides are on; a lone side runs its line glyph
   // through to the endpoint, so a separator never ends in a stray corner.
   //
-  // `bottom_bg` overrides the background of the bottom row (-1 = use `bg`). A
-  // bar sitting directly on top of another region takes that region's
-  // background: with the editor's own background it read as leftover editor
-  // space with a line drawn in it rather than as the top edge of the block below.
+  // `bottom_bg` overrides the background of the bottom row (-1 = use `bg`). The
+  // editor's own panel edges leave it at -1: a region's bottom rule is that
+  // region's, so it carries its own background too. Handing the row the colour
+  // of whatever lies below (the status line, for the panes and docks) made that
+  // neighbour read one row taller than it is, and hid whose row it was. The
+  // override stays for a surface that genuinely wants its bottom row to read as
+  // the top edge of the block underneath.
   void draw_border(const UIRect &rect,
                    int fg,
                    int bg,

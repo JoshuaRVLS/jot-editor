@@ -66,12 +66,14 @@ local function sidebar(p)
   --
   -- The bottom edge ends in a T (up + left + right): the editor's own bottom
   -- separator continues to the right of this panel, so the two form one line
-  -- across the status line instead of stopping at the panel's edge.
+  -- across the status line instead of stopping at the panel's edge. The row is
+  -- this panel's own last row, so it keeps the panel's background: in the
+  -- status colour it hid that the row belonged to the panel and made the
+  -- two-row status line below read as three rows.
   for i = 1, h - 1 do
     place(x + w - 1, y + i - 1, "│", border_fg, bg)
   end
-  local bar_bg = colors.status_bg or bg
-  place(x, y + h - 1, string.rep("─", math.max(0, w - 1)) .. "┴", border_fg, bar_bg)
+  place(x, y + h - 1, string.rep("─", math.max(0, w - 1)) .. "┴", border_fg, bg)
 
   -- Activity rail (left, inside the frame): active view marker + label, and
   -- a separator between the rail and content.

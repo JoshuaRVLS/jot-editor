@@ -975,6 +975,10 @@ std::vector<UIRect> Editor::pane_neighbours(const SplitPane &pane, int draw_w) c
   return out;
 }
 
+// The bottom edge of a panel that the status line lies under. Every docked
+// panel paints that row in its own background (see the call sites): the
+// separator belongs to the region above it, and handing it the status line's
+// background made the status line read one row taller than it is.
 UIBorderEdges Editor::right_dock_edges(const UIRect &panel) const
 {
   std::vector<UIRect> below;
@@ -1065,11 +1069,16 @@ void Editor::render_pane(const SplitPane &pane, int pane_index)
   // Only the sides facing another region get ink: a separator belongs to the
   // region on its left/top, so two adjacent regions never draw two lines, and a
   // lone pane draws no frame at all (see pane_edges.h).
+  //
+  // The bottom rule keeps the pane's own background, like the other sides. It
+  // used to borrow the status line's so the two would read as one band of
+  // chrome, but that row is the pane's own last row: in the status colour it
+  // made the two-row status line look three rows tall and hid the fact that the
+  // row was the pane's.
   ui->draw_border(rect,
                   theme.fg_panel_border,
                   theme.bg_panel_border,
-                  pane_layout::border_edges(rect, pane_neighbours(pane, draw_w)),
-                  theme.bg_status);
+                  pane_layout::border_edges(rect, pane_neighbours(pane, draw_w)));
 
   // Pane-local file tabs name the pane's open buffers. The strip stays up
   // even when only one file is open so the top row always carries the
