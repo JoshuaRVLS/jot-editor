@@ -1028,13 +1028,24 @@ void Terminal::set_poll_timeout_ms(int timeout_ms)
   poll_timeout_ms = std::clamp(timeout_ms, 1, 250);
 }
 
-void Terminal::flush()
+bool Terminal::flush()
 {
+  // Same contract as the POSIX backend: the return value tells the renderer
+  // whether the frame it queued actually reached the terminal (see the header).
+  const bool dropped_earlier = frame_bytes_dropped_;
+  frame_bytes_dropped_ = false;
+
   int n = (int)buffer.length();
   last_flush_bytes_ = n;
   if (n <= 0)
   {
-    return;
+    return !dropped_earlier;
+  }
+  if (flush_stall_for_test_)
+  {
+    flush_stall_for_test_ = false;
+    buffer.clear();
+    return false;
   }
   if (render_capture_ && render_capture_raw_)
   {
@@ -1054,13 +1065,19 @@ void Terminal::flush()
     remaining -= written;
   }
   buffer.clear();
+  return remaining == 0 && !dropped_earlier;
 }
 
 void Terminal::flush_if_buffer_exceeds()
 {
   if (render_chunk_bytes_ > 0 && buffer.size() >= render_chunk_bytes_)
   {
-    flush();
+    // Mid-frame flush: its caller cannot report a failure, so the frame's
+    // final flush() has to (same as the POSIX backend).
+    if (!flush())
+    {
+      frame_bytes_dropped_ = true;
+    }
   }
 }
 

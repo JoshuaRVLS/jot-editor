@@ -315,7 +315,7 @@ void Editor::render()
     }
     ui->hide_cursor();
     ui->render();
-    needs_redraw = false;
+    needs_redraw = frame_needs_repaint();
     return;
   }
 
@@ -363,7 +363,7 @@ void Editor::render()
       ui->hide_cursor();
     }
     ui->render();
-    needs_redraw = false;
+    needs_redraw = frame_needs_repaint();
     return;
   }
   else
@@ -544,7 +544,7 @@ void Editor::render()
 
     ui->set_cursor_blink_visible(blink_visible);
     ui->render();
-    needs_redraw = false;
+    needs_redraw = frame_needs_repaint();
   }
 }
 

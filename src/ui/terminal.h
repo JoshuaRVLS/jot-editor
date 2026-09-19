@@ -111,6 +111,13 @@ private:
   FILE *render_capture_ = nullptr;
   int render_capture_seq_ = 0;
   bool render_capture_raw_ = false;
+  // Test seam: the next flush() reports a stalled terminal (see
+  // stall_next_flush_for_test). One-shot.
+  bool flush_stall_for_test_ = false;
+  // Set when a chunked flush dropped bytes part-way through a frame, so that
+  // frame's final flush() still reports it (see flush()). Cleared by the next
+  // flush().
+  bool frame_bytes_dropped_ = false;
   int last_flush_bytes_ = 0;
   // Columns on the right edge of every row that the renderer leaves unpainted.
   // Zero (the default) uses the full width, which is what the layout wants:
@@ -189,7 +196,15 @@ public:
 
   Event poll_event();
   void set_poll_timeout_ms(int timeout_ms);
-  void flush();
+  // Writes the buffered frame and reports whether the terminal took all of it.
+  //
+  // Returns false when the write gave up (a pty that stayed full past the
+  // timeout): the bytes that never went out are dropped rather than replayed,
+  // so the caller has to treat the screen as unknown. The renderer's diff
+  // baseline cannot decide this on its own -- it records the cells as painted
+  // when they were *queued*, so a half-written frame would leave those cells
+  // wrong until something else happened to redraw them.
+  bool flush();
 
   void clear();
   void move_cursor(int x, int y);
@@ -286,6 +301,14 @@ public:
   // shell is left in its normal state.
   void disable_autowrap();
   void enable_autowrap();
+
+  // Test seam: make the next flush() report a stalled terminal without needing
+  // a pty nobody is reading, so the incomplete-frame recovery can be exercised
+  // off a real terminal. One-shot: the frame after it flushes normally.
+  void stall_next_flush_for_test()
+  {
+    flush_stall_for_test_ = true;
+  }
 
   // When `JOT_RENDER_CAPTURE=/path/to/log` is set at startup, every
   // Terminal::flush() appends summary metadata to that file path.

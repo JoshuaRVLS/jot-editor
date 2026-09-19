@@ -209,6 +209,38 @@ TEST_CASE("A resize schedules exactly one full repaint", "[jot]")
   REQUIRE_FALSE(ui->full_repaint_pending());
 }
 
+// A frame the terminal did not take completely is the other half of the
+// one-shot full repaint: the retained baseline records cells as painted when
+// they are queued, so the rows the terminal never received would be skipped by
+// the cell diff from then on. The next tick has to come back for them on its
+// own -- an idle editor has no other reason to repaint.
+TEST_CASE("An incomplete frame is repainted and keeps asking for a redraw", "[jot]")
+{
+  Editor &e = probe_editor();
+  UI *ui = e.ui_for_test();
+  REQUIRE(ui != nullptr);
+
+  // One clean frame-loop step: nothing pending, and the loop may go idle.
+  e.request_redraw_for_test();
+  e.render_frame_for_test();
+  REQUIRE_FALSE(ui->full_repaint_pending());
+  REQUIRE_FALSE(e.needs_redraw_for_test());
+
+  // The terminal takes nothing from this frame, so the cells it queued are
+  // missing while the baseline believes they were painted.
+  ui->stall_next_flush_for_test();
+  e.request_redraw_for_test();
+  e.render_frame_for_test();
+  REQUIRE(ui->full_repaint_pending());
+  REQUIRE(e.needs_redraw_for_test());
+
+  // The next tick repaints every row -- the recovery -- and that is the end of
+  // it: the frame lands, so the loop goes back to idling.
+  e.render_frame_for_test();
+  REQUIRE_FALSE(ui->full_repaint_pending());
+  REQUIRE_FALSE(e.needs_redraw_for_test());
+}
+
 TEST_CASE("A resize re-fits the panes to the new grid", "[jot]")
 {
   Editor &e = probe_editor();

@@ -657,8 +657,17 @@ void UI::render()
     term->write(cursor_sequence());
   }
 
-  term->flush();
+  const bool frame_written = term->flush();
   cursor_dirty = false;
+  if (!frame_written)
+  {
+    // The terminal did not take the whole frame, and the bytes that never went
+    // out were dropped rather than replayed. last_grid was updated as the cells
+    // were queued, so it describes a screen the terminal does not have: force a
+    // full repaint next frame instead of diffing against it, or those cells stay
+    // half-drawn until something unrelated happens to redraw them.
+    full_repaint_pending_ = true;
+  }
 
   if (capture_on)
   {
@@ -1137,8 +1146,12 @@ void UI::flush_cursor()
     term->move_cursor(cx, cy);
     term->write(cursor_sequence());
   }
-  term->flush();
-  cursor_dirty = false;
+  const bool cursor_written = term->flush();
+  // A cursor-only frame carries nothing but the caret bytes -- no grid cell
+  // rides with it -- so a failed flush is repaired by re-sending them. Leave the
+  // caret marked undelivered (the next tick's flush_cursor() retries it) instead
+  // of forcing a whole-screen repaint for three bytes.
+  cursor_dirty = !cursor_written;
 
   if (term->render_capture_enabled())
   {

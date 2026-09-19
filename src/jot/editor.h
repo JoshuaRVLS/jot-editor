@@ -181,6 +181,15 @@ private:
   static constexpr EditorFocus FOCUS_SIDEBAR = ::FOCUS_SIDEBAR;
 
   void render();
+  // Whether the frame just painted has to be painted again on the next tick.
+  // UI's retained baseline records cells as painted when they are queued, so a
+  // frame the terminal could not take completely (see UI::render) left them
+  // half-drawn and the cell diff would skip them from now on: keep the redraw
+  // request alive instead of going idle on a screen known to be wrong.
+  bool frame_needs_repaint() const
+  {
+    return ui && ui->full_repaint_pending();
+  }
   void render_tabs();
   void render_panes();
   void render_pane_resize_guides();

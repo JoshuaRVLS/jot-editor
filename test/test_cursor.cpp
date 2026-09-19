@@ -1,6 +1,8 @@
 #include "column_utils.h"
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>
+#include <cstdlib>
+#include <string>
 
 // The row-diff renderer only emits rows whose content changed since the
 // last frame. Immediate-mode drawing repaints the whole grid every frame,
@@ -93,6 +95,112 @@ TEST_CASE("UI cursor blink visibility forces a flush only on change", "[jot][ui]
   // steady shape (blinking is software-side now).
   ui.set_cursor_blink_visible(true);
   REQUIRE(ui.cursor_needs_flush());
+}
+
+// A frame the terminal did not take leaves the screen in an unknown state: the
+// bytes that never went out are dropped rather than replayed, so the cells they
+// carried are missing while the retained baseline believes they were painted.
+// The next frame must repaint every row instead of diffing against that
+// baseline -- the case a slow terminal hits when its pty buffer fills part-way
+// through a frame, which used to leave those rows half-drawn until something
+// unrelated happened to redraw them.
+TEST_CASE("A frame the terminal could not take forces a full repaint", "[jot][ui]")
+{
+  Terminal term;
+  UI ui(&term);
+  ui.resize(40, 10);
+
+  const auto paint_every_row = [&]
+  {
+    for (int y = 0; y < 10; y++)
+    {
+      UIRect r{0, y, 40, 1};
+      ui.fill_rect(r, " ", 7, 30 + y);
+    }
+  };
+
+  // Frame 1: the baseline. Every row differs from the blank grid, so the whole
+  // screen is written.
+  paint_every_row();
+  ui.render();
+  const int full_bytes = term.render_capture_bytes_since_last_flush();
+  REQUIRE(full_bytes > 500);
+
+  // Frame 2: identical content, so every row is skipped.
+  paint_every_row();
+  ui.render();
+  const int skip_bytes = term.render_capture_bytes_since_last_flush();
+  REQUIRE(skip_bytes < 300);
+  REQUIRE_FALSE(ui.full_repaint_pending());
+
+  // Frame 3: the terminal takes nothing from this frame.
+  term.stall_next_flush_for_test();
+  paint_every_row();
+  ui.render();
+  REQUIRE(ui.full_repaint_pending());
+
+  // Frame 4: the same content again -- and it is written out in full anyway.
+  // This is the recovery: the baseline is only a claim about the terminal, and
+  // the failed frame invalidated it.
+  paint_every_row();
+  ui.render();
+  const int recovery_bytes = term.render_capture_bytes_since_last_flush();
+  REQUIRE_FALSE(ui.full_repaint_pending()); // consumed by this frame
+  REQUIRE(recovery_bytes >= full_bytes - 64);
+  REQUIRE(recovery_bytes > skip_bytes);
+
+  // Frame 5: the baseline is accurate again, so idle frames go back to writing
+  // almost nothing.
+  paint_every_row();
+  ui.render();
+  REQUIRE(term.render_capture_bytes_since_last_flush() < 300);
+}
+
+// flush() reports whether the terminal took the whole frame; the renderer's
+// response to "no" is the full repaint above, so the report has to be honest in
+// both places bytes can go missing: the frame's own write, and a chunked flush
+// that gave up part-way through building it.
+TEST_CASE("flush reports a frame the terminal did not take", "[jot][ui]")
+{
+  Terminal term;
+  term.write("frame bytes");
+  REQUIRE(term.flush());
+
+  // A stalled write drops its bytes rather than replaying them -- replaying
+  // would re-send what the terminal may already have shown, which is its own
+  // corruption -- and it reports the loss.
+  term.stall_next_flush_for_test();
+  term.write("frame bytes");
+  REQUIRE_FALSE(term.flush());
+  REQUIRE(term.pending_output_for_test().empty());
+
+  // The seam is one-shot: the next frame is judged on its own.
+  term.write("frame bytes");
+  REQUIRE(term.flush());
+
+  // A chunked flush (JOT_RENDER_CHUNK_BYTES) is called from inside the frame
+  // builder, where there is nowhere to report a failure: the bytes it dropped
+  // are only known to the frame it belonged to, so that frame's final flush has
+  // to report it even though its own write lands in full.
+  const char *saved_chunk = std::getenv("JOT_RENDER_CHUNK_BYTES");
+  const std::string saved_chunk_value = saved_chunk ? saved_chunk : "";
+  setenv("JOT_RENDER_CHUNK_BYTES", "4", 1);
+  {
+    Terminal chunked;
+    if (saved_chunk)
+      setenv("JOT_RENDER_CHUNK_BYTES", saved_chunk_value.c_str(), 1);
+    else
+      unsetenv("JOT_RENDER_CHUNK_BYTES");
+
+    chunked.write("0123456789"); // past the 4-byte threshold
+    chunked.stall_next_flush_for_test();
+    chunked.flush_if_buffer_exceeds(); // drops this part of the frame
+    chunked.write("tail"); // the frame keeps being built
+    REQUIRE_FALSE(chunked.flush());
+    // And the next frame is judged on its own again.
+    chunked.flush_if_buffer_exceeds();
+    REQUIRE(chunked.flush());
+  }
 }
 
 // The caret's terminal bytes. Composed in one place (UI::cursor_sequence) because

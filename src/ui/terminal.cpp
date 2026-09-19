@@ -982,13 +982,29 @@ void Terminal::set_poll_timeout_ms(int timeout_ms)
   poll_timeout_ms = std::clamp(timeout_ms, 1, 250);
 }
 
-void Terminal::flush()
+bool Terminal::flush()
 {
+  // Bytes dropped by a chunked flush earlier in this frame (see
+  // flush_if_buffer_exceeds): part of what the frame queued never reached the
+  // terminal, so the frame as a whole cannot be trusted -- even if this write
+  // lands in full. Read once, so a single drop is reported by exactly one
+  // frame and the next one can be judged on its own.
+  const bool dropped_earlier = frame_bytes_dropped_;
+  frame_bytes_dropped_ = false;
+
   int n = (int)buffer.length();
   last_flush_bytes_ = n;
   if (n <= 0)
   {
-    return;
+    return !dropped_earlier;
+  }
+  if (flush_stall_for_test_)
+  {
+    // Model a terminal that accepted nothing from this frame: the bytes are
+    // dropped, exactly as they are when the write below gives up.
+    flush_stall_for_test_ = false;
+    buffer.clear();
+    return false;
   }
 
   // Write the raw capture file first. fwrite is stdio-buffered and
@@ -1047,7 +1063,10 @@ void Terminal::flush()
     }
   }
   buffer.clear();
-  return;
+  // False tells the caller the screen cannot be trusted for the cells this
+  // frame queued: it repaints every row next frame instead of diffing against
+  // a baseline that assumes they landed.
+  return remaining == 0 && !dropped_earlier;
 }
 
 void Terminal::flush_if_buffer_exceeds()
@@ -1058,7 +1077,13 @@ void Terminal::flush_if_buffer_exceeds()
   }
   if (buffer.size() >= render_chunk_bytes_)
   {
-    flush();
+    // This is a mid-frame flush: its caller is still queueing the frame and
+    // has nowhere to report a failure, so remember it here and let the frame's
+    // final flush() report it.
+    if (!flush())
+    {
+      frame_bytes_dropped_ = true;
+    }
   }
 }
 

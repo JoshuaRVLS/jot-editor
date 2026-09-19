@@ -356,11 +356,22 @@ public:
     return w < 1 ? 1 : w;
   }
 
-  // Whether the next render() will paint every cell because the grid was just
-  // re-dimensioned (see full_repaint_pending_).
+  // Whether the next render() will paint every cell. True after a grid resize
+  // (see full_repaint_pending_) -- and, read straight after a render(), exactly
+  // when that frame could not be written completely.
   bool full_repaint_pending() const
   {
     return full_repaint_pending_;
+  }
+
+  // Test seam: make the next frame's flush report a terminal that took nothing,
+  // so the incomplete-frame recovery can be driven without a stalled pty.
+  void stall_next_flush_for_test()
+  {
+    if (term)
+    {
+      term->stall_next_flush_for_test();
+    }
   }
 };
 
