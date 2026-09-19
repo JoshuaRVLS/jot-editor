@@ -38,8 +38,9 @@ TEST_CASE("Terminal panel geometry: bottom panel vs fullscreen zoom", "[jot]")
   REQUIRE(panel_h >= 5);
   // The panel sits above the status line and never covers the tab strip.
   REQUIRE(panel_y >= 1);
-  // Its own rows start with the view tabs: the separator along its top belongs
-  // to the pane area above, so the panel has no border row to spend.
+  // Its own rows start with the view tabs. The rule along its top is one row
+  // higher, inside the panel's reservation, so it costs the pane area a row
+  // only while the panel is up -- the pane's last row stays a code row.
   REQUIRE(e.bottom_panel_view_tab_y_for_test() == panel_y);
   REQUIRE(e.bottom_panel_terminal_tab_y_for_test() == panel_y + 1);
   REQUIRE(panel_y + panel_h <= screen_h - 1);
@@ -75,14 +76,17 @@ TEST_CASE("Sidebar shrinks to leave the terminal its full height", "[jot]")
 {
   Editor &e = probe_editor();
   const int screen_h = e.ui_height_for_test();
-  const int status_h = 2; // status line height used by the headless UI
+  const int status_h = 1; // status line height used by the headless UI
 
   // A real (shell-less) terminal so the reservation is active.
   e.add_terminal_for_test();
 
-  // Small terminal: the sidebar keeps everything above it.
+  // Small terminal: the sidebar keeps everything above it. The panel's
+  // reservation includes the rule row along its top (its resize handle), so
+  // the sidebar ends above that row.
   e.set_terminal_state_for_test(true, false, 10);
-  REQUIRE(e.sidebar_panel_h_for_test() == screen_h - status_h - 10);
+  REQUIRE(e.panel_reserved_h_for_test() == 10 + 1);
+  REQUIRE(e.sidebar_panel_h_for_test() == screen_h - status_h - e.panel_reserved_h_for_test());
 
   // Tall terminal (well beyond the old 50% cap): the sidebar must shrink
   // to the pane area above the panel's real footprint -- not the old
@@ -92,7 +96,7 @@ TEST_CASE("Sidebar shrinks to leave the terminal its full height", "[jot]")
   REQUIRE(e.terminal_panel_h_for_test() > screen_h / 2);
   REQUIRE(e.sidebar_panel_h_for_test() < screen_h / 2);
   REQUIRE(e.sidebar_panel_h_for_test()
-          == screen_h - status_h - e.terminal_panel_h_for_test());
+          == screen_h - status_h - e.panel_reserved_h_for_test());
 
   // Hidden terminal: the sidebar spans the full pane area again.
   e.set_terminal_state_for_test(false, false, screen_h);
@@ -104,7 +108,7 @@ TEST_CASE("Terminal resize drag clamps to the pane-preserving range", "[jot]")
   Editor &e = probe_editor();
   const int screen_h = e.ui_height_for_test();
   e.set_terminal_state_for_test(true, false, 10);
-  // The handle is the rule the pane area inks above the panel.
+  // The handle is the rule along the panel's own top row.
   const int border_y = e.terminal_panel_y_for_test() - 1;
 
   // Dragging that rule up (start at the rule, end near the top) grows the

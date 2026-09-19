@@ -911,7 +911,7 @@ void Editor::handle_mouse(void *event_ptr)
   {
     if (event->x >= pane.x + pane.w - minimap_width && event->x < pane.x + pane.w)
     {
-      int h = std::max(1, pane.h - tab_height - 1);
+      int h = std::max(1, pane.h - tab_height);
       if (event->y >= pane.y + tab_height && event->y < pane.y + tab_height + h)
       {
         int rel_y = event->y - (pane.y + tab_height);
@@ -972,7 +972,7 @@ void Editor::handle_mouse(void *event_ptr)
   // edges (edge-panning selection) or must clamp (gutter clicks); an
   // unconditional clamp would pin the cursor to column 0/the viewport edge
   // and defeat horizontal auto-scroll.
-  int visible_rows = std::max(1, pane.h - tab_height - 1);
+  int visible_rows = std::max(1, pane.h - tab_height);
   int max_scroll_offset = std::max(
       0, Folding::visible_line_count(buf.fold_ranges, (int)buf.line_count()) - visible_rows);
 

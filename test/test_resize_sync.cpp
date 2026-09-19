@@ -292,8 +292,8 @@ TEST_CASE("Explorer clicks work below the terminal's row count", "[jot]")
   REQUIRE(e.terminal_height_for_test() == 24);
   REQUIRE(e.sidebar_visible_for_test());
 
-  // Explorer rows start at y = 1 (row 0 is the panel's top border), so the
-  // filename index is y - 1.
+  // Explorer rows start at y = 1 (row 0 is the header), so the filename index
+  // is y - 1.
   const auto click_row = [&](int y)
   {
     e.mouse_event_for_test(5, y, /*bstate=*/1); // press
@@ -308,14 +308,19 @@ TEST_CASE("Explorer clicks work below the terminal's row count", "[jot]")
   // rejected, so this click used to be dropped entirely.
   REQUIRE(click_row(22) == "f21.txt");
 
-  // The last row of the explorer that is actually painted (the panel's bottom
-  // border sits one row lower). Its index in the flat list is 34.
-  REQUIRE(click_row(35) == "f34.txt");
+  // The last row of the explorer that is actually painted. It is the column's
+  // last row: the panel has no bottom border row, and the footer takes the row
+  // under the tree, so the painted list ends here. Its index is 36.
+  REQUIRE(click_row(37) == "f36.txt");
 
-  // The row below that is the panel's bottom border / the status line: it must
-  // not open anything.
+  // The row below that is the footer, and the one under it the status line:
+  // neither may open anything (the footer is not a tree row, and the status
+  // line is outside the column the click guard accepts).
   const std::string before = e.buffer_for_test().filepath;
   e.mouse_event_for_test(5, 38, /*bstate=*/1);
+  e.render_for_test();
+  REQUIRE(e.buffer_for_test().filepath == before);
+  e.mouse_event_for_test(5, 39, /*bstate=*/1);
   e.render_for_test();
   REQUIRE(e.buffer_for_test().filepath == before);
 }

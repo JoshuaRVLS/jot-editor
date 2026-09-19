@@ -280,7 +280,7 @@ TEST_CASE("Bottom panel: hovering the view tabs leaves the view alone", "[jot]")
   REQUIRE(e.bottom_panel_view_for_test() == (int)BOTTOM_PANEL_TERMINAL);
 }
 
-TEST_CASE("Bottom panel: the pane area inks the rule along its top", "[jot]")
+TEST_CASE("Bottom panel: one rule along its top, none at its bottom", "[jot]")
 {
   seed_config_home();
   Editor e;
@@ -296,14 +296,19 @@ TEST_CASE("Bottom panel: the pane area inks the rule along its top", "[jot]")
   const int panel_w = e.terminal_panel_w_for_test();
   UI *ui = e.ui_for_test();
 
-  // Exactly one rule above the panel, drawn by the pane area: no corner glyphs,
-  // since the panel is not a box of its own.
+  // Exactly one rule above the panel, and it is the panel's own first row: no
+  // corner glyphs, since the panel is not a box of its own. The row being the
+  // panel's is what keeps the pane area's last row a code row (see
+  // pane_edges.h); the rule doubles as the resize handle.
   for (int x = 0; x < panel_w; x++)
   {
     const UICell *cell = ui->cell_at(x, panel_y - 1);
     REQUIRE(cell != nullptr);
     REQUIRE(cell->ch == "─");
   }
+  const UICell *pane_last = ui->cell_at(1, panel_y - 2);
+  REQUIRE(pane_last != nullptr);
+  REQUIRE(pane_last->ch != "─");
 
   // The panel's first row carries the view tabs, so nothing draws a second
   // rule (or a corner) directly under the first.
@@ -334,36 +339,33 @@ TEST_CASE("Bottom panel: the pane area inks the rule along its top", "[jot]")
     REQUIRE(cell->ch != "□");
   }
 
-  // The bottom rule closes the panel without a corner against the screen edge.
+  // The panel does not end in a rule: its last row is content, marked off from
+  // the status line by its own background (see pane_edges.h). The rule it does
+  // own sits above its first row.
   const UICell *bottom_right = ui->cell_at(panel_w - 1, panel_y + panel_h - 1);
   REQUIRE(bottom_right != nullptr);
-  REQUIRE(bottom_right->ch == "─");
+  REQUIRE(bottom_right->ch != "─");
+  const UICell *top_rule = ui->cell_at(panel_w - 1, panel_y - 1);
+  REQUIRE(top_rule != nullptr);
+  REQUIRE(top_rule->ch == "─");
 
-  // With the explorer up, that same row is the sidebar's bottom edge running
-  // into the pane's: the vertical separator between them ends in a T instead of
-  // the two boxes drawing a corner each.
+  // With the explorer up, the rule still runs unbroken: it is the panel's own
+  // row, and the explorer's column ends one row above it, so there is no second
+  // region inking a bottom edge on this row and no junction glyph.
   e.toggle_sidebar_for_test();
   REQUIRE(e.sidebar_visible_for_test());
   e.request_redraw_for_test();
   e.render_for_test();
-  const int sidebar_w = e.sidebar_width_for_test();
-  int corners = 0;
   for (int x = 0; x < panel_w; x++)
   {
     const UICell *cell = ui->cell_at(x, panel_y - 1);
     REQUIRE(cell != nullptr);
-    REQUIRE((cell->ch == "─" || cell->ch == "┴"));
-    if (cell->ch == "┴")
-    {
-      corners++;
-      REQUIRE(x == sidebar_w - 1);
-    }
+    REQUIRE(cell->ch == "─");
   }
-  REQUIRE(corners == 1);
   e.toggle_sidebar_for_test();
 }
 
-TEST_CASE("Bottom panel: the dock meets its bottom rule in a T", "[jot]")
+TEST_CASE("Bottom panel: the rule along its top is the dock's own row", "[jot]")
 {
   seed_config_home();
   Editor e;
@@ -378,34 +380,54 @@ TEST_CASE("Bottom panel: the dock meets its bottom rule in a T", "[jot]")
   const int panel_y = e.terminal_panel_y_for_test();
   const int panel_h = e.terminal_panel_h_for_test();
   const int panel_w = e.terminal_panel_w_for_test();
+  const int rule_y = panel_y - 1;
   const int bottom_row = panel_y + panel_h - 1;
   UI *ui = e.ui_for_test();
+  const Theme &theme = e.theme_for_test();
 
-  // The dock is a region beside the panel, so the panel inks its right side.
+  // The rule is the panel's own first row and spans exactly the panel's
+  // columns; the right dock beside it makes the separator run up through the
+  // rule row, so the two meet in a corner instead of the rule running into the
+  // dock.
+  for (int x = 0; x < panel_w - 1; x++)
+  {
+    const UICell *cell = ui->cell_at(x, rule_y);
+    REQUIRE(cell != nullptr);
+    REQUIRE(cell->ch == "─");
+  }
+  const UICell *corner = ui->cell_at(panel_w - 1, rule_y);
+  REQUIRE(corner != nullptr);
+  REQUIRE(corner->ch == "┐");
+  REQUIRE(corner->bg == theme.bg_terminal);
+  const UICell *dock_row = ui->cell_at(panel_w, rule_y);
+  REQUIRE(dock_row != nullptr);
+  REQUIRE(dock_row->ch != "─");
+
+  // The panel's own rows start under the rule, and the dock is a region beside
+  // them, so the panel inks its right side all the way down.
   const UICell *side = ui->cell_at(panel_w - 1, panel_y);
   REQUIRE(side != nullptr);
   REQUIRE(side->ch == "│");
+  const UICell *bottom_side = ui->cell_at(panel_w - 1, bottom_row);
+  REQUIRE(bottom_side != nullptr);
+  REQUIRE(bottom_side->ch == "│");
 
-  // Both end on the same row, so the shared corner is a T (the dock's own rule
-  // continues to the right) rather than an L.
-  const UICell *junction = ui->cell_at(panel_w - 1, bottom_row);
-  REQUIRE(junction != nullptr);
-  REQUIRE(junction->ch == "┴");
-  const UICell *dock_rule = ui->cell_at(panel_w, bottom_row);
-  REQUIRE(dock_rule != nullptr);
-  REQUIRE(dock_rule->ch == "─");
+  // The panel does not end in a rule: its last row is content, marked off from
+  // the status line by its own background.
+  const UICell *bottom_inside = ui->cell_at(1, bottom_row);
+  REQUIRE(bottom_inside != nullptr);
+  REQUIRE(bottom_inside->ch != "─");
+  const UICell *panel_body = ui->cell_at(1, panel_y + 5);
+  REQUIRE(panel_body != nullptr);
+  REQUIRE(bottom_inside->bg == panel_body->bg);
+  REQUIRE(bottom_inside->bg != theme.bg_status);
 
-  // ...and each side of the junction takes its own panel's background, not the
-  // status line's: the row is both panels' last one, so it belongs to them. In
-  // the status colour it read as the status line's own top edge and made the
-  // two-row status line look three rows tall.
-  const Theme &theme = e.theme_for_test();
-  const UICell *dock_body = ui->cell_at(panel_w + 5, panel_y + 5);
-  REQUIRE(dock_body != nullptr);
-  REQUIRE(junction->bg == theme.bg_terminal);
-  REQUIRE(dock_rule->bg == dock_body->bg);
-  REQUIRE(junction->bg != theme.bg_status);
-  REQUIRE(dock_rule->bg != theme.bg_status);
+  // The row above the rule is the pane area's last one, and it is a code row:
+  // the pane's own background, no rule, no status colour.
+  const UICell *pane_last = ui->cell_at(1, rule_y - 1);
+  REQUIRE(pane_last != nullptr);
+  REQUIRE(pane_last->ch != "─");
+  REQUIRE(pane_last->bg != theme.bg_status);
 }
 
 TEST_CASE("Bottom panel: Problems navigation clamps to the list", "[jot]")

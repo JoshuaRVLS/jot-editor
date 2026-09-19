@@ -59,21 +59,16 @@ local function sidebar(p)
           { col = col, fill = true, w = math.max(1, ww or 1), f = f or 7, b = b or 0 }
     end
   end
-  -- The two sides that face another region: the editor to the right, and the
-  -- status line below. The top and left edges are the screen's, which delimit
-  -- nothing, so they stay unpainted -- the same rule the panes follow
-  -- (see pane_edges.h).
-  --
-  -- The bottom edge ends in a T (up + left + right): the editor's own bottom
-  -- separator continues to the right of this panel, so the two form one line
-  -- across the status line instead of stopping at the panel's edge. The row is
-  -- this panel's own last row, so it keeps the panel's background: in the
-  -- status colour it hid that the row belonged to the panel and made the
-  -- two-row status line below read as three rows.
-  for i = 1, h - 1 do
+  -- One line, and only where it delimits something: the editor to the right.
+  -- The top and left edges are the screen's, which delimit nothing, so they
+  -- stay unpainted -- the same rule the panes follow (see pane_edges.h). The
+  -- bottom needs no rule either: this column's last row is a tree row, and the
+  -- break against the status line is the background change. A rule there was a
+  -- file row spent on chrome, and its T pointed at an editor bottom border that
+  -- no longer exists.
+  for i = 1, h do
     place(x + w - 1, y + i - 1, "│", border_fg, bg)
   end
-  place(x, y + h - 1, string.rep("─", math.max(0, w - 1)) .. "┴", border_fg, bg)
 
   -- Activity rail (left, inside the frame): active view marker + label, and
   -- a separator between the rail and content.
@@ -98,7 +93,7 @@ local function sidebar(p)
     draw_rail(y + p.rail_git_row, " ", p.git_panel_active)
   end
   if rail_w > 0 then
-    for i = 2, h - 1 do
+    for i = 2, h do
       place(x + math.max(0, rail_w - 1), y + i - 1, "│", border_fg, bg, false)
     end
   end  -- Rows: fill each rect, then symbol / text / badges on top.
@@ -127,7 +122,7 @@ local function sidebar(p)
     end
   end
 
-  -- Footer (one row above the bottom border).
+  -- Footer (the column's last row, directly above the status line).
   if p.footer and p.footer ~= "" and p.footer_y and p.footer_y >= y and p.footer_y < y + h then
     place(p.footer_x or content_x + 1,
           p.footer_y,

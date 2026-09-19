@@ -187,17 +187,24 @@ local function status_line(p)
   end
   table.insert(row1_spans, 1, { start = 0, len = 65535, fg = status_fg, bg = status_bg })
 
-  -- Row 2: transient message (bold) or the workspace context label (muted).
-  local has_message = p.message and p.message ~= ""
-  local row2_text = trunc_cells(has_message and "  " .. p.message or (p.context or ""),
-                                math.max(0, w))
-  local row2_spans = {
-    { start = 0, len = 65535, fg = status_fg, bg = status_bg },
-    { start = 0, len = #row2_text, fg = has_message and message_fg or muted_fg, bg = status_bg,
-      bold = has_message },
-  }
-
-  local body = { trunc_cells(row1_text, w), row2_text }
+  -- The bar is a single row (status_height == 1), and the editor hands the
+  -- message / workspace context that used to be a second row over as segments,
+  -- so row 1 carries everything. Rows 2+ are only filled when the strip is
+  -- taller than that, which keeps a legacy two-row layout from losing its
+  -- message.
+  local body = { trunc_cells(row1_text, w) }
+  local spans_by_row = { row1_spans }
+  if h >= 2 then
+    local has_message = p.message and p.message ~= ""
+    local row2_text = trunc_cells(has_message and "  " .. p.message or (p.context or ""),
+                                  math.max(0, w))
+    body[2] = row2_text
+    spans_by_row[2] = {
+      { start = 0, len = 65535, fg = status_fg, bg = status_bg },
+      { start = 0, len = #row2_text, fg = has_message and message_fg or muted_fg,
+        bg = status_bg, bold = has_message },
+    }
+  end
   for i = 1, h do
     body[i] = pad_cells(body[i] or "", w)
   end
@@ -243,8 +250,11 @@ local function status_line(p)
     surfaces["status_line"] = { win = win, buf = buf }
   end
   jot.ui.buffer.set_lines(buf, 0, -1, true, body)
-  jot.ui.float.set_spans(win, 1, row1_spans)
-  jot.ui.float.set_spans(win, 2, row2_spans)
+  for i = 1, h do
+    if spans_by_row[i] then
+      jot.ui.float.set_spans(win, i, spans_by_row[i])
+    end
+  end
   return true
 end
 

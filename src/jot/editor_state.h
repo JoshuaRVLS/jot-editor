@@ -496,7 +496,7 @@ struct EditorState
   bool zen_mode = false;
   bool zen_saved_sidebar_ = true;
   bool zen_saved_panel_ = false;
-  int zen_saved_status_height_ = 2;
+  int zen_saved_status_height_ = 1;
   SidebarView active_sidebar_view = SIDEBAR_VIEW_EXPLORER;
   int sidebar_width = 0;
   std::string root_dir;

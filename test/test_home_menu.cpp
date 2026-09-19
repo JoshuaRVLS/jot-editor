@@ -47,7 +47,7 @@ namespace
     explicit HomeProbe(const Editor &e)
     {
       const int screen_w = e.ui_width_for_test();
-      const int usable_h = std::max(1, e.ui_height_for_test() - 2); // status line
+      const int usable_h = std::max(1, e.ui_height_for_test() - 1); // status line
       const int content_w = std::max(1, std::min(screen_w - 4, 118));
       content_x = std::max(1, (screen_w - content_w) / 2);
       content_y = std::max(0, std::min(2, usable_h - 1));

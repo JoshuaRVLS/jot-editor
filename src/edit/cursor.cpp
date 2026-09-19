@@ -122,7 +122,7 @@ void Editor::ensure_cursor_visible(bool adjust_horizontal)
   auto &pane = get_pane();
   auto &buf = get_buffer(pane.buffer_id);
 
-  int viewport_h = pane.h - tab_height - 1;
+  int viewport_h = pane.h - tab_height;
   if (viewport_h < 1)
     viewport_h = 1;
 

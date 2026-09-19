@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "render/pane_edges.h"
 #include "jot/lua/api.h"
 
 #include <algorithm>
@@ -57,7 +58,7 @@ void Editor::render_debugger_panel()
   UIRect panel = {panel_x, panel_y, panel_w, panel_h};
 
   ui->fill_rect(panel, " ", theme.fg_terminal, theme.bg_terminal);
-  ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal, right_dock_edges(panel));
+  ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal, pane_layout::kNoEdges);
 
   ui->draw_text(panel_x + 1,
                 panel_y,
@@ -110,7 +111,9 @@ void Editor::render_debugger_panel()
   }
 
   int content_y = panel_y + 3;
-  int content_h = std::max(1, panel_h - 4);
+  // No bottom border row to reserve: the panel's last row is content, and the
+  // error line below writes into it rather than over a rule (see pane_edges.h).
+  int content_h = std::max(1, panel_h - 3);
   int content_x = panel_x + 1;
   int content_w = std::max(1, panel_w - 2);
 

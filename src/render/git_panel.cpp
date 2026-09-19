@@ -8,6 +8,7 @@
 // byte-identical.
 
 #include "editor.h"
+#include "render/pane_edges.h"
 #include "jot/file_icons.h"
 #include "jot/lua/api.h"
 #include "jot/workspace/git_panel_models.h"
@@ -93,12 +94,14 @@ void Editor::render_git_panel()
   const bool focused = focus_state == FOCUS_RIGHT_PANEL;
   const int border_fg = focused ? theme.fg_active_border : theme.fg_panel_border;
   ui->fill_rect(panel, " ", theme.fg_terminal, theme.bg_terminal);
-  ui->draw_border(panel, border_fg, theme.bg_terminal, right_dock_edges(panel));
+  ui->draw_border(panel, border_fg, theme.bg_terminal, pane_layout::kNoEdges);
 
   const int content_x = panel_x + 1;
   const int content_y = panel_y + 3;
   const int content_w = std::max(1, panel_w - 2);
-  const int content_h = std::max(1, panel_h - 4);
+  // No bottom border row to reserve: the panel's last row is content (the row
+  // area the mouse handler already counts -- see pane_edges.h).
+  const int content_h = std::max(1, panel_h - 3);
 
   SidePanelView view;
   view.mode = "git";

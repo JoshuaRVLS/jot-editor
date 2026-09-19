@@ -151,8 +151,14 @@ local function present_panel(name, p, rows, opts, body_override, spans_override)
   -- no chrome rows, so content fills the whole surface instead of h-2 / w-2.
   -- Square corners: the pane chrome is square, and one style across the whole
   -- UI is what keeps the floats from looking like a different design.
+  --
+  -- A border side that is masked off is not a chrome row either: the float's
+  -- own inset follows the inked sides, so a panel whose bottom edge is off (a
+  -- dock panel whose last row is content) gets that row for content too.
   local has_border = (opts.border or "single") ~= "none"
-  local inner_h = has_border and math.max(1, p.h - 2) or math.max(1, p.h)
+  local bottom_edge = has_border and not (opts.border_edges and opts.border_edges.bottom == false)
+  local chrome_rows = (has_border and 1 or 0) + (bottom_edge and 1 or 0)
+  local inner_h = math.max(1, p.h - chrome_rows)
   local body
   local spans_by_line
   local shown

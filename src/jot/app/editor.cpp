@@ -269,7 +269,9 @@ void Editor::initialize_state_defaults()
   file_tree_watch_ready_ = false;
   focus_state = FOCUS_EDITOR;
 
-  status_height = 2;
+  // One row, like the pane tab strip: the second row's content (the message or
+  // the workspace label) rides as a segment on the same bar now.
+  status_height = 1;
   tab_height = 1;
   tab_size = config.get_int("tab_size", 2);
   show_indent_guides = config.get_bool("show_indent_guides", true);

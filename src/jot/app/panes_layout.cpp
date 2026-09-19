@@ -74,8 +74,10 @@ Editor::ContentColumn Editor::content_column() const
 
 int Editor::sidebar_list_rows() const
 {
-  // Header row, footer row and the bottom border sit inside the column.
-  return std::max(0, content_column().h - 3);
+  // Header row and footer row sit inside the column; the column's last row is
+  // a tree row (a region's bottom row is content, marked off from the status
+  // line by its background alone -- see pane_edges.h).
+  return std::max(0, content_column().h - 2);
 }
 
 Editor::PaneArea Editor::compute_pane_area() const

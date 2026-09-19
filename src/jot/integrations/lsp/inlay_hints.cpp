@@ -209,7 +209,7 @@ void Editor::refresh_lsp_inlay_hints_if_needed()
 
   // The pane the user sees is the active one; its height bounds the viewport.
   const SplitPane &pane = get_pane();
-  const int viewport_h = std::max(1, pane.h - tab_height - 1);
+  const int viewport_h = std::max(1, pane.h - tab_height);
   const int first_visible = std::max(0, buf.scroll_offset - kInlayHintMarginLines);
   const int last_visible =
       std::min((int)std::max<long long>(0, buf.line_count() - 1),

@@ -91,17 +91,16 @@ def main() -> int:
     if framed:
         failures += 1
 
-    # The bar is the pane area's last row, and it belongs to the panels above it:
-    # each draws its own bottom edge there, so the row carries the panel's own
-    # background on both sides of the junction and the status line keeps its two
-    # rows to itself. In the status background it read as the status line's own
-    # top edge -- a status line that looked three rows tall -- and hid the fact
-    # that this row was the panel's last one.
+    # The pane area's last row is content now -- code in the pane's columns, a
+    # tree row in the explorer's -- with no bottom border row and no status
+    # background: the status line is one row and the break is the background
+    # change alone. In the status colour it read as the status line's own top
+    # edge, made the bar look two rows tall and hid that the row was the panes'.
     for name, keys in [("single pane", b""), ("sidebar", b"\x1b[98;5u"), ("dock", b"\x1b[98;6u")]:
         screen = run_in_pty(binary, [path], keys, settle=2.5, after=1.5,
                             cols=80, rows=20, cfg="/tmp/jot_edges_probe_cfg")
-        # The bar is the pane area's last row: status_height(2) + 1 above the end.
-        bar_row = 20 - 3
+        # The bar is the pane area's last row: status_height(1) + 1 above the end.
+        bar_row = 20 - 2
         status_row = 20 - 1
         panel_row = 20 - 5
         bar_bg = screen.bg[bar_row][10]

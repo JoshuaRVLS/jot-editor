@@ -529,6 +529,9 @@ void Editor::render_sidebar()
   // footprint (not the old 50% cap): the panel can grow to nearly the full
   // window, and the explorer must shrink accordingly instead of sliding
   // underneath it.
+  //
+  // No bottom border row: the column's last row is a tree row, and the break
+  // against the status line is the background change alone.
   const ContentColumn col = content_column();
   int h = col.h;
   int y = col.top;
@@ -574,36 +577,16 @@ void Editor::render_sidebar()
     ui->draw_text(0, i, std::string(w, ' '), theme.fg_sidebar, theme.bg_sidebar);
   }
 
-  // Full panel frame: top/left/right/bottom borders with connected corners,
-  // so the explorer is a closed box (not just a right edge).
-  if (h >= 2)
+  // One line, and only where it delimits something: the right edge, where the
+  // panes sit. The top, left and bottom of the column are the screen's own edge
+  // or a background change against the status line, so nothing is inked there --
+  // the rule the panes follow (see pane_edges.h). It runs through every row,
+  // including the column's last one, because that row is a tree row: inking a
+  // bottom border over it was spending a file row on chrome. The Lua handler,
+  // which normally owns the surface, paints the same way.
+  for (int i = y; i < y + h; i++)
   {
-    ui->draw_text(0, y, "╭", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
-    for (int bx = 1; bx < w - 1; bx++)
-    {
-      ui->draw_text(bx, y, "─", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
-    }
-    ui->draw_text(w - 1, y, "╮", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
-    for (int i = y + 1; i < y + h - 1; i++)
-    {
-      ui->draw_text(0, i, "│", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
-      ui->draw_text(w - 1, i, "│", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
-    }
-    ui->draw_text(0, y + h - 1, "╰", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
-    for (int bx = 1; bx < w - 1; bx++)
-    {
-      ui->draw_text(bx, y + h - 1, "─", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
-    }
-    ui->draw_text(w - 1, y + h - 1, "╯", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
-  }
-  else
-  {
-    ui->draw_text(0, y, "─", border_fg, theme.bg_sidebar);
-    for (int bx = 1; bx < w - 1; bx++)
-    {
-      ui->draw_text(bx, y, "─", border_fg, theme.bg_sidebar);
-    }
-    ui->draw_text(w - 1, y, "─", border_fg, theme.bg_sidebar);
+    ui->draw_text(w - 1, i, "│", border_fg, theme.bg_sidebar, sidebar_resize_dragging);
   }
 
   auto draw_rail_item = [&](int row, const std::string &label, bool active)
@@ -627,7 +610,7 @@ void Editor::render_sidebar()
     // The git item launches the git panel (":gitpanel"), so its marker
     // follows that panel rather than which sidebar view is showing.
     draw_rail_item(3, " ", view.git_panel_active);
-    for (int i = y + 1; i < y + h - 1; i++)
+    for (int i = y + 1; i < y + h; i++)
     {
       ui->draw_text(std::max(0, rail_w - 1), i, "│", theme.fg_sidebar_border, theme.bg_sidebar);
     }
@@ -669,9 +652,9 @@ void Editor::render_sidebar()
     std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
     int header_y = y;
     int list_y = y + 1;
-    // One extra row is reserved at the bottom for the panel border, so the
-    // footer moves up to y + h - 2.
-    int list_h = std::max(0, h - 3);
+    // Header at the top, footer on the column's last row, the list in between:
+    // there is no bottom border row to reserve.
+    int list_h = std::max(0, h - 2);
 
     std::string header_label = has_git_repo() ? " " + git_branch : " Git";
     if (has_git_repo())
@@ -802,13 +785,13 @@ void Editor::render_sidebar()
     {
       footer = "Open a Git workspace";
     }
-    if (h >= 3)
+    if (h >= 2)
     {
       view.footer = truncate_cells(footer, std::max(0, content_w - 3));
       view.footer_x = content_x + 1;
-      view.footer_y = y + h - 2;
+      view.footer_y = y + h - 1;
       view.footer_fg = theme.fg_comment;
-      ui->draw_text(content_x + 1, y + h - 2, view.footer, theme.fg_comment, theme.bg_sidebar);
+      ui->draw_text(content_x + 1, y + h - 1, view.footer, theme.fg_comment, theme.bg_sidebar);
     }
 
     if (emit_sidebar_view())
@@ -834,8 +817,9 @@ void Editor::render_sidebar()
   }
 
   int tree_y = y + 1;
-  // One extra row is reserved at the bottom for the panel border, so the
-  // footer moves up to y + h - 2 and the tree ends above it.
+  // The header is row 0 and the footer takes the column's last row, so the tree
+  // fills everything between them -- its last row sits directly above the
+  // status line.
   int tree_h = sidebar_list_rows();
   const auto &rows = sidebar_render_cache_.rows;
 
@@ -1075,13 +1059,13 @@ void Editor::render_sidebar()
   {
     footer = std::to_string(rows.size()) + " items";
   }
-  if (h >= 3)
+  if (h >= 2)
   {
     view.footer = truncate_cells(footer, std::max(0, content_w - 3));
     view.footer_x = content_x + 1;
-    view.footer_y = y + h - 2;
+    view.footer_y = y + h - 1;
     view.footer_fg = theme.fg_comment;
-    ui->draw_text(content_x + 1, y + h - 2, view.footer, theme.fg_comment, theme.bg_sidebar);
+    ui->draw_text(content_x + 1, y + h - 1, view.footer, theme.fg_comment, theme.bg_sidebar);
   }
 
   if (emit_sidebar_view())

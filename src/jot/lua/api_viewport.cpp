@@ -63,7 +63,7 @@ void LuaAPI::push_viewport_info(lua_State *L)
     if (pane.buffer_id >= 0 && pane.buffer_id < (int)editor->buffers.size())
     {
       FileBuffer &buf = editor->buffers[(size_t)pane.buffer_id];
-      const int rows = std::max(0, pane.h - editor->tab_height - 1);
+      const int rows = std::max(0, pane.h - editor->tab_height);
       const int line_count = (int)buf.line_count();
       const int first = buf.scroll_offset + 1;
       const int last = std::min(line_count, buf.scroll_offset + rows);
@@ -90,7 +90,7 @@ void LuaAPI::push_viewport_line_at(lua_State *L)
   const int sy = (int)luaL_checkinteger(L, 1) - 1; // 0-based screen row
   const SplitPane &pane = editor->get_pane();
   const int top = pane.y + editor->tab_height;
-  const int rows = std::max(0, pane.h - editor->tab_height - 1);
+  const int rows = std::max(0, pane.h - editor->tab_height);
   if (sy < top || sy >= top + rows)
   {
     lua_pushnil(L);
@@ -195,7 +195,7 @@ void LuaAPI::viewport_scroll_top_from_lua(lua_State *L)
     return;
   }
   FileBuffer &buf = editor->buffers[(size_t)pane.buffer_id];
-  const int rows = std::max(0, pane.h - editor->tab_height - 1);
+  const int rows = std::max(0, pane.h - editor->tab_height);
   const int line_count = (int)buf.line_count();
   const int target = (int)luaL_checkinteger(L, 1) - 1;
   const int max_top = std::max(0, line_count - rows);
@@ -214,7 +214,7 @@ void LuaAPI::viewport_scroll_lines_from_lua(lua_State *L)
     return;
   }
   FileBuffer &buf = editor->buffers[(size_t)pane.buffer_id];
-  const int rows = std::max(0, pane.h - editor->tab_height - 1);
+  const int rows = std::max(0, pane.h - editor->tab_height);
   const int line_count = (int)buf.line_count();
   const int delta = (int)luaL_checkinteger(L, 1);
   const int max_top = std::max(0, line_count - rows);

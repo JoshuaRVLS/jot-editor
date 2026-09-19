@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "render/pane_edges.h"
 #include "jot/lua/api.h"
 #include "tools/symbols/index.h"
 #include "ui/text.h"
@@ -184,7 +185,7 @@ void Editor::render_outline_panel()
   UIRect panel = {panel_x, panel_y, panel_w, panel_h};
 
   ui->fill_rect(panel, " ", theme.fg_terminal, theme.bg_terminal);
-  ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal, right_dock_edges(panel));
+  ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal, pane_layout::kNoEdges);
 
   const std::string title = " Outline ";
   ui->draw_text(panel_x + 1,
@@ -197,7 +198,9 @@ void Editor::render_outline_panel()
   const int content_x = panel_x + 1;
   const int content_y = panel_y + 3;
   const int content_w = std::max(1, panel_w - 2);
-  const int content_h = std::max(0, panel_h - 4);
+  // No bottom border row to reserve: the panel's last row is content, marked
+  // off from the status line by its background (see pane_edges.h).
+  const int content_h = std::max(0, panel_h - 3);
 
   // Hand the model to a Lua UI handler when one is registered; it owns the
   // paint. Native fallback below stays byte-identical.

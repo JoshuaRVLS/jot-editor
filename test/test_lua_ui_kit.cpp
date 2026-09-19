@@ -1087,6 +1087,35 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);
 
+  // The bar is one row in the editor now (status_height == 1); the handler
+  // still fills every row it is handed, so a one-row strip emits exactly one
+  // line and no leftover second row.
+  push_module_field(L, 1, "status_line");
+  push_box(L, 0, 30, 120, 1);
+  lua_pushstring(L, "  workspace");
+  lua_setfield(L, -2, "context");
+  lua_newtable(L); // segments
+  for (int i = 1; i <= 2; i++)
+  {
+    lua_newtable(L);
+    lua_pushstring(L, i == 1 ? " file.cpp " : " 12:34 ");
+    lua_setfield(L, -2, "text");
+    lua_pushstring(L, "left");
+    lua_setfield(L, -2, "side");
+    lua_rawseti(L, -2, i);
+  }
+  lua_setfield(L, -2, "segments");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.last_height == 1);
+  REQUIRE(g.lines_count == 1);
+  REQUIRE(g.set_spans_count > 0);
+  push_module_field(L, 1, "status_line");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+
   // --- sidebar ---
   push_module_field(L, 1, "sidebar");
   push_box(L, 0, 1, 28, 10);
@@ -1213,6 +1242,29 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(g.last_border == "single");
   REQUIRE(g.last_title == " Outline ");
   REQUIRE(g.lines_count == 4); // header + 3 rows
+  push_module_field(L, 1, "side_panel");
+  lua_pushnil(L);
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+
+  // The dock panel masks its bottom edge, so its last row is content: a full
+  // list fills h - 1 rows (only the title strip is chrome), not h - 2.
+  push_module_field(L, 1, "side_panel");
+  push_box(L, 100, 1, 30, 6);
+  lua_newtable(L); // rows
+  for (int i = 1; i <= 10; i++)
+  {
+    lua_newtable(L);
+    lua_pushstring(L, i == 1 ? " first entry" : " entry");
+    lua_setfield(L, -2, "text");
+    lua_rawseti(L, -2, i);
+  }
+  lua_setfield(L, -2, "rows");
+  REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  REQUIRE(lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  REQUIRE(g.last_height == 6);
+  REQUIRE(g.lines_count == 5);
   push_module_field(L, 1, "side_panel");
   lua_pushnil(L);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);

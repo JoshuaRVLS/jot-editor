@@ -216,7 +216,7 @@ bool Editor::open_context_menu_for_mouse(int x, int y)
   const int line_num_width = 7;
   const int code_start_x = pane.x + 1 + line_num_width;
   const int content_top = pane.y + tab_height;
-  const int visible_rows = std::max(1, pane.h - tab_height - 1);
+  const int visible_rows = std::max(1, pane.h - tab_height);
   if (y >= content_top && y < content_top + visible_rows)
   {
     int rel_y = std::clamp(y - content_top, 0, visible_rows - 1);

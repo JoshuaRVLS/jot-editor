@@ -140,7 +140,7 @@ void Editor::render_lsp_signature()
     draw_w = std::max(1, draw_w - minimap_width);
   }
   const int line_num_width = 7;
-  int visible_h = std::max(1, pane.h - tab_height - 1);
+  int visible_h = std::max(1, pane.h - tab_height);
   int visible_w = std::max(12, draw_w - 2 - line_num_width);
 
   int widest = 0;
@@ -162,7 +162,7 @@ void Editor::render_lsp_signature()
       pane.x + 1 + line_num_width + (cursor_visual - scroll_visual)
       + lsp_inlay_hint_cells_before(buf.filepath, buf.cursor.y, buf.cursor.x, line);
   int cursor_row = 0;
-  const int viewport_h = std::max(1, pane.h - tab_height - 1);
+  const int viewport_h = std::max(1, pane.h - tab_height);
   for (int row = 0; row < viewport_h; row++)
   {
     int l = Folding::buffer_line_for_visible_offset(

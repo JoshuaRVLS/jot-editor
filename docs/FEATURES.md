@@ -282,10 +282,13 @@ Install helpers also cover Rust, Go, Lua, and Bash.
   12-cell floor -- so one long name cannot push the other tabs and the `+`
   off it. The terminal keeps the full name internally (`get_label`, the Lua
   API), so only the drawn label shortens.
-- Drag the rule above the panel (the editor's bottom border) to resize it
-  live; it can grow to nearly the full window. The panel has no frame of  its own: the pane area inks the separator along its top, so its first row is the
-  `Terminal`/`Problems` view tabs (each labelled with an icon: a terminal for the
-  shell, a warning triangle for diagnostics) rather than a second border.
+- Drag the rule above the panel to resize it live; it can grow to nearly the
+  full window. That rule is the panel's own top row -- part of the height it
+  reserves -- so while it is up the pane area ends above the rule and the
+  editor's last row stays a code row; with the panel closed there is no rule at
+  all. Under it, the first row is the `Terminal`/`Problems` view tabs (each
+  labelled with an icon: a terminal for the shell, a warning triangle for
+  diagnostics) rather than a second border.
 - The Problems list keeps every row on the panel's own background, colouring
   only the text by severity; the selected row is marked with an accent sliver
   instead of a selection fill, so a highlighted row's message stays readable.

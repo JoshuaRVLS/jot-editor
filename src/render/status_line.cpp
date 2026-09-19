@@ -432,9 +432,24 @@ void Editor::render_status_line()
     }
   }
 
-  // Message / context row content (used by both the Lua handler and the
-  // native fallback so the second status line always matches).
+  // Message / context content (used by both the Lua handler and the native
+  // fallback so the single bar always matches).
   std::string status_context_label = "  " + status_workspace_label(root_dir);
+
+  // The bar is one row (status_height), so what used to be a second row -- the
+  // transient `:message` or, normally, the workspace label -- rides as a
+  // segment after the left block. A message is kept (it is momentary and worth
+  // the space); the workspace label is optional and drops first.
+  if (!message.empty())
+  {
+    left_segments.push_back(
+        {"  " + message, theme.fg_status_message, theme.bg_status, true, false, 95});
+  }
+  else
+  {
+    left_segments.push_back(
+        {status_context_label, theme.fg_status_muted, theme.bg_status, false, true, 20});
+  }
 
   // Hand the raw model to a Lua UI handler when one is registered; it owns
   // layout, drop-to-fit and painting. Native fallback below keeps the exact
@@ -527,32 +542,6 @@ void Editor::render_status_line()
   if (right_w > 0)
   {
     status_draw_segmented_at(ui, right_x, y, right_w, right_segments);
-  }
-
-  // Message / context row.
-  // DEPRECATED: statusline messages are kept for compatibility; they are no
-  // longer the primary message surface — toasts (runtime/lua/features/ui/toast.lua)
-  // handle that now.
-  if (!message.empty())
-  {
-    status_draw_clipped(ui,
-                        content_x,
-                        y + 1,
-                        content_w,
-                        "  " + message,
-                        theme.fg_status_message,
-                        theme.bg_status,
-                        true);
-  }
-  else
-  {
-    status_draw_clipped(ui,
-                        content_x,
-                        y + 1,
-                        content_w,
-                        ui_truncate_cells(status_context_label, std::max(0, content_w)),
-                        theme.fg_status_muted,
-                        theme.bg_status);
   }
 }
 

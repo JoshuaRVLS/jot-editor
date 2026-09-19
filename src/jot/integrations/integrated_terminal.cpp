@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "render/pane_edges.h"
 #include "ui/text.h"
 #include <algorithm>
 
@@ -195,7 +196,11 @@ int Editor::integrated_terminal_reserved_h() const
   {
     return 0;
   }
-  return integrated_terminal_panel_h();
+  // One row more than the panel's own rows: the rule along its top is the
+  // panel's first row now, not the pane area's last one. Keeping it inside this
+  // reservation is what lets a pane's last row be code (see pane_edges.h): the
+  // pane area ends above the rule instead of spending a row on it.
+  return integrated_terminal_panel_h() + 1;
 }
 
 int Editor::integrated_terminal_panel_h() const
@@ -851,21 +856,37 @@ void Editor::render_integrated_terminal()
   }
 
   ui->fill_rect(panel, " ", term_fg, term_bg);
+  // The rule along the panel's top is the panel's own first row -- the
+  // reservation above includes it -- and doubles as the resize handle. It used
+  // to be the pane area's last row, which spent a code row on chrome; drawing
+  // it here keeps that row code and marks the panel off from the panes by its
+  // own background. Wrapped in the reservation, so it is skipped while zoomed
+  // (where the panel starts right under the menu bar).
+  const int rule_y = panel_y - 1;
+  const bool has_rule = integrated_terminal_reserved_h() > 0 && rule_y >= topbar_height();
   // The panel is a drawer under the pane area, so it inks only the sides that
-  // face a region: the status line below, and the right dock when it shares the
-  // panel's rows. Its top is the pane's own bottom border and its left is the
-  // screen edge, neither of which it draws -- a full box here put a second rule
-  // directly under the editor's bottom border. The bottom row keeps the panel's
-  // own background like the rest of the frame: it is this panel's last row, and
-  // in the status colour it read as the status line's own top edge.
-  UIBorderEdges edges = right_dock_edges(panel);
+  // face a region: the right dock when it shares the panel's rows. Its left and
+  // the row over the status line are left unpainted: the dock beside it draws
+  // its own line, and the background change marks the row against the status
+  // line (see pane_edges.h).
+  UIBorderEdges edges = pane_layout::kNoEdges;
   const int dock_w = effective_right_panel_width();
   if (dock_w > 0 && panel.x + panel.w <= ui->get_render_width() - dock_w)
   {
-    // The dock spans these rows and ends on the same bottom row, so the shared
-    // edge is the panel's right side and the corners are T-junctions.
+    // The dock spans these rows, so the shared edge is the panel's right side.
     edges.right = true;
-    edges.join_right = true;
+  }
+  if (has_rule)
+  {
+    UIBorderEdges rule_edges = pane_layout::kNoEdges;
+    rule_edges.bottom = true;
+    ui->draw_border(UIRect{0, rule_y, panel_w, 1}, theme.fg_panel_border, theme.bg_terminal, rule_edges);
+    if (edges.right)
+    {
+      // The separator against the right dock runs up through the rule row, so
+      // the two meet in a corner instead of the rule running into the dock.
+      ui->draw_text(panel_w - 1, rule_y, "┐", theme.fg_panel_border, theme.bg_terminal);
+    }
   }
   ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal, edges);
 

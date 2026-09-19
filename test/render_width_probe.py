@@ -30,17 +30,23 @@ HORIZONTAL_RULES = "─━"
 
 
 def widest_painted_column(screen) -> int:
-    """Rightmost column index carrying ink, or -1 for a blank screen.
+    """Rightmost column index the frame painted, or -1 for a blank screen.
 
     tmux-style trailing-blank trimming is not available here, so the screen is
-    read as a grid: the parser keeps every cell, blanks included, and this walks
-    the rows looking for the last non-space cell.
+    read as a grid. A cell counts as painted when it carries ink *or* a
+    background: the region fills -- the status line over its whole row, the pane
+    body behind blank padding -- are how the frame reaches the last column, and
+    the row that used to guarantee ink there (a full-width rule above the status
+    line) is gone by design, its row now code.
     """
     widest = -1
     for row in range(screen.rows):
+        # The reconstructed line is trailing-trimmed, so the walk has to span
+        # the grid rather than the string.
         line = screen.text().split("\n")[row]
-        for col in range(len(line) - 1, widest, -1):
-            if line[col] != " ":
+        for col in range(screen.cols - 1, widest, -1):
+            ink = col < len(line) and line[col] != " "
+            if ink or screen.bg[row][col] != -1:
                 widest = max(widest, col)
                 break
     return widest
@@ -75,29 +81,28 @@ def main() -> int:
         print(f"render width probe: {cols}x{rows} -> rightmost painted column {last + 1} "
               f"of {cols} {'ok' if ok else 'FAIL'}")
 
-    # The bottom bar is the row the user actually notices: it has to run to the
-    # last column so it meets the right edge of the frame.
+    # The bottom band is the row the user actually notices: the status line is
+    # the last row and has to reach the last column so it meets the right edge of
+    # the frame. It is read by background, not ink: the line ends in padding, and
+    # the row above it is a code row now rather than the full-width rule this
+    # check used to find.
     cols, rows = 80, 24
     cfg = "/tmp/jot_width_probe_cfg_bar"
     screen = run_case(binary, work, cols, rows, cfg)
-    lines = screen.text().split("\n")
-    bar_row = None
-    for row in range(rows - 1, -1, -1):
-        if sum(1 for ch in lines[row] if ch in HORIZONTAL_RULES) > cols // 2:
-            bar_row = row
-            break
-    if bar_row is None:
-        print("render width probe: no bottom bar found FAIL")
+    status_row = rows - 1
+    last = max(c for c in range(cols) if screen.bg[status_row][c] != -1)
+    ok = last == cols - 1
+    if not ok:
         failures += 1
-    else:
-        # The bar is a rule with a junction where a divider meets it, so the last
-        # cell is the rule itself.
-        last = max(c for c, ch in enumerate(lines[bar_row]) if ch != " ")
-        ok = last == cols - 1
-        if not ok:
-            failures += 1
-        print(f"render width probe: bottom bar ends at column {last + 1} of {cols} "
-              f"{'ok' if ok else 'FAIL'}")
+    print(f"render width probe: status line ends at column {last + 1} of {cols} "
+          f"{'ok' if ok else 'FAIL'}")
+    # The row above it is code, not the rule that used to be there.
+    above = "".join(screen.text().split("\n")[status_row - 1])
+    ok = not (sum(1 for ch in above if ch in HORIZONTAL_RULES) > cols // 2)
+    if not ok:
+        failures += 1
+    print(f"render width probe: no rule above the status line "
+          f"{'ok' if ok else 'FAIL'}")
 
     # Teeth: the setting must still reproduce the old one-column gap, so a
     # regression that hardwires full width would be caught too.
@@ -107,7 +112,7 @@ def main() -> int:
         fh.write("render_margin=1\n")
     screen = run_case(binary, work, 80, 24, cfg)
     last = widest_painted_column(screen)
-    ok = last == 79 - 1  # 79 columns wide, so the last painted index is 77
+    ok = last == 79 - 1  # 79 columns wide, so the last painted index is 78
     if not ok:
         failures += 1
     print(f"render width probe: render_margin=1 -> rightmost painted column {last + 1} "

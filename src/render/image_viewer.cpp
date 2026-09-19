@@ -26,7 +26,7 @@ void Editor::render_image_viewer(const SplitPane &pane)
   int area_x = pane.x;
   int area_y = pane.y + tab_height;
   int area_w = std::max(1, pane.w);
-  int area_h = std::max(0, pane.h - tab_height - 1);
+  int area_h = std::max(0, pane.h - tab_height);
   if (area_h <= 0)
     return;
 

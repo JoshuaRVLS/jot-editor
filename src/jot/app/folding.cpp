@@ -8,7 +8,7 @@ namespace
 {
   int fold_viewport_height(const SplitPane &pane, int tab_height)
   {
-    return std::max(1, pane.h - tab_height - 1);
+    return std::max(1, pane.h - tab_height);
   }
 
   int anchored_scroll_for_header(const std::vector<FoldRange> &ranges,

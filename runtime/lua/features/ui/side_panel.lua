@@ -32,7 +32,10 @@ local function side_panel(p)
   local selection_bg = colors.selection_bg or 6
 
   local inner_w = math.max(1, (p.w or 2) - 2)
-  local inner_h = math.max(1, (p.h or 2) - 2)
+  -- The panel's last row is content, not a border: the break against the status
+  -- line is the background change (see pane_edges.h), so only the row over the
+  -- title strip is chrome.
+  local inner_h = math.max(1, (p.h or 2) - 1)
   local rows = {}
   local function add(text, f, b, bold, spans)
     if #rows >= inner_h then
@@ -416,12 +419,10 @@ local function side_panel(p)
                        {
                          border = "single",
                          -- Pinned against the editor: the pane draws the
-                         -- separator on this panel's left, so only the edge
-                         -- over the status line is inked (see pane_edges.h).
-                         border_edges = { top = false, right = false, left = false },
-                         -- The bar is this panel's own last row, so it keeps the
-                         -- panel's background. Taking the status line's colour
-                         -- read as part of the status line instead.
+                         -- separator on this panel's left, and the panel's last
+                         -- row is content, so no side is inked at all (see
+                         -- pane_edges.h).
+                         border_edges = { top = false, right = false, left = false, bottom = false },
                          title = p.title or nil,
                          title_fg = accent,
                          footer = footer,

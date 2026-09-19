@@ -535,11 +535,17 @@ void LuaAPI::render_floats()
     }
     if (bi == scratch_buffers.end())
       continue;
-    const int inset = (f->border == "none" ? 0 : 1);
-    int ix = x + inset;
-    int iy = y + inset;
-    int iw = std::max(0, r.w - (f->border == "none" ? 0 : 2));
-    int ih = std::max(0, r.h - (f->border == "none" ? 0 : 2));
+    // The body inset follows the sides that are actually inked. The top row is
+    // chrome whenever a border style is chosen -- it carries the title -- but a
+    // masked-off bottom edge (a dock panel whose last row is content, see
+    // pane_edges.h) gives that row back instead of reserving an empty one.
+    const bool bordered = f->border != "none";
+    const int inset_top = bordered ? 1 : 0;
+    const int inset_bottom = (bordered && f->border_bottom) ? 1 : 0;
+    int ix = x + (bordered ? 1 : 0);
+    int iy = y + inset_top;
+    int iw = std::max(0, r.w - (bordered ? 2 : 0));
+    int ih = std::max(0, r.h - inset_top - inset_bottom);
     for (int i = 0; i < ih && i < (int)bi->second.lines.size(); i++)
     {
       const std::string &line = bi->second.lines[i];

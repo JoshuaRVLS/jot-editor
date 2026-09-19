@@ -103,7 +103,7 @@ namespace
 
     int visible_row = 0;
     bool found_row = false;
-    const int viewport_h = std::max(1, pane.h - tab_height - 1);
+    const int viewport_h = std::max(1, pane.h - tab_height);
     for (int row = 0; row < viewport_h; row++)
     {
       int line = Folding::buffer_line_for_visible_offset(
@@ -966,33 +966,15 @@ std::vector<UIRect> Editor::pane_neighbours(const SplitPane &pane, int draw_w) c
     out.push_back(UIRect{total_w - dock_w, area_y, dock_w, area_h});
   }
 
-  // Whatever the pane area sits above (the integrated terminal, the debugger
-  // panel) shares the rows directly below it.
-  if (area_y + area_h < total_h)
-  {
-    out.push_back(UIRect{0, area_y + area_h, total_w, total_h - (area_y + area_h)});
-  }
+  // Deliberately not reported: the rows below the pane area (the integrated
+  // terminal, a dock, the status line). Those regions carry a background of
+  // their own -- and the dock's own rule row is inside the height it reserves,
+  // above the pane area -- so a rule between them and the pane is not needed,
+  // and the pane would draw it in its own last row, which is a code row. A pane
+  // stacked on another pane still comes through the loop above and keeps its
+  // divider: two panes share one background, so the line is the only thing
+  // separating them.
   return out;
-}
-
-// The bottom edge of a panel that the status line lies under. Every docked
-// panel paints that row in its own background (see the call sites): the
-// separator belongs to the region above it, and handing it the status line's
-// background made the status line read one row taller than it is.
-UIBorderEdges Editor::right_dock_edges(const UIRect &panel) const
-{
-  std::vector<UIRect> below;
-  if (!ui)
-  {
-    return UIBorderEdges{false, false, false, false};
-  }
-  const int total_h = ui->get_height();
-  const int bottom = panel.y + panel.h;
-  if (bottom < total_h)
-  {
-    below.push_back(UIRect{0, bottom, std::max(1, ui->get_width()), total_h - bottom});
-  }
-  return pane_layout::border_edges(panel, below);
 }
 
 void Editor::render_pane(const SplitPane &pane, int pane_index)

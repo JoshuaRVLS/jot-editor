@@ -413,7 +413,7 @@ void Editor::handle_mouse_input(int x,
   auto &buf = get_buffer(pane.buffer_id);
   refresh_folds(buf);
 
-  int visible_rows = std::max(1, pane.h - tab_height - 1);
+  int visible_rows = std::max(1, pane.h - tab_height);
   const int wheel_step = std::max(1, std::min(5, visible_rows / 6));
 
   // An image pane has no text to scroll: the wheel pans the viewer's preview

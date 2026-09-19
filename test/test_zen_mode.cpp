@@ -34,7 +34,7 @@ TEST_CASE("Zen mode hides chrome on enter and restores it on exit", "[jot]")
   }
   e.host().io.show_plugin_panel("zen_test_panel");
   REQUIRE(e.right_panel_visible());
-  REQUIRE(e.status_line_height() == 2);
+  REQUIRE(e.status_line_height() == 1);
   const bool was_sidebar = e.host().render.layout().sidebar_visible;
   const bool was_panel = e.right_panel_visible();
 
@@ -49,7 +49,7 @@ TEST_CASE("Zen mode hides chrome on enter and restores it on exit", "[jot]")
   REQUIRE_FALSE(e.zen_active());
   REQUIRE(e.host().render.layout().sidebar_visible == was_sidebar);
   REQUIRE(e.right_panel_visible() == was_panel);
-  REQUIRE(e.status_line_height() == 2);
+  REQUIRE(e.status_line_height() == 1);
 }
 
 TEST_CASE("Zen mode with no chrome still restores cleanly", "[jot]")
@@ -67,7 +67,7 @@ TEST_CASE("Zen mode with no chrome still restores cleanly", "[jot]")
   e.toggle_zen_mode();
   REQUIRE_FALSE(e.host().render.layout().sidebar_visible);
   REQUIRE(e.right_panel_visible() == was_panel);
-  REQUIRE(e.status_line_height() == 2);
+  REQUIRE(e.status_line_height() == 1);
 }
 
 TEST_CASE("Zen content margin centers the pane area", "[jot]")

@@ -292,7 +292,6 @@ private:
   std::vector<UIRect> pane_neighbours(const SplitPane &pane, int draw_w) const;
   // The right dock's box sides. Nothing lies to its right and the panes own the
   // separator on its left, so only the status-line edge below it gets ink.
-  UIBorderEdges right_dock_edges(const UIRect &panel) const;
   // GUI smooth-scroll tracking: last reported first-visible line per pane,
   // so the fold-aware delta for the scroll animation is computed once per
   // pane per frame (editor side, where the fold ranges live). gui_pane_scroll_xs_

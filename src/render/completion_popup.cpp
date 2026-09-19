@@ -141,13 +141,13 @@ void Editor::render_lsp_completion()
 
   const int line_num_width = 7;
   const bool use_nerd_icons = config.get_bool("lsp_completion_nerd_icons", true);
-  int visible_h = std::max(1, pane.h - tab_height - 1);
+  int visible_h = std::max(1, pane.h - tab_height);
   int visible_w = std::max(12, draw_w - 2 - line_num_width);
 
   // Caret screen row: the popup placement is decided from the space below
   // and above it, so this must be known before sizing the box.
   int cursor_row = 0;
-  const int viewport_h = std::max(1, pane.h - tab_height - 1);
+  const int viewport_h = std::max(1, pane.h - tab_height);
   for (int row = 0; row < viewport_h; row++)
   {
     int line = Folding::buffer_line_for_visible_offset(
