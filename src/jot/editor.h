@@ -373,6 +373,10 @@ private:
                                        const std::vector<std::string> &command,
                                        const std::vector<std::string> &library_dirs,
                                        const std::string &initialization_options = {});
+  // Installs a server the package vendors (share/jot/payload/<bin>) the first
+  // time a buffer needs it, at most once per binary per session. The install
+  // job attaches the waiting buffers when it lands.
+  void auto_install_bundled_lsp(const std::string &bin);
   // All live clients that should receive document notifications for a file:
   // the primary server plus policy extras attached at the same workspace
   // root. Root is returned for callers that need it.

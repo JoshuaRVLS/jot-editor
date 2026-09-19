@@ -6,12 +6,14 @@ runtime/lua/lsp/managers/payload.lua). This stages exactly that layout beside a
 copy of the built binary -- bin/jot + share/jot/payload/clangd/<version>/... --
 points the lsp data dir at a scratch XDG_DATA_HOME, and drives the real binary:
 
-  * `jot.lsp.install("cpp")` (the same call :lspinstall makes) links the shipped
-    binary into <data>/jot/lsp/bin and writes the package receipt;
+  * opening a C++ buffer installs the shipped server on its own -- no config,
+    no command: the link appears in <data>/jot/lsp/bin and the package receipt
+    is written;
   * the link target is inside the staged payload tree, which is how this probe
     knows the bundled copy was used rather than a download;
-  * a second run opens a C++ file with clangd removed from $PATH, so the only
-    clangd left to serve it is the one linked out of the payload.
+  * $PATH is a shim holding only the shell tools the install script itself
+    runs, so no clangd is reachable that way: the only clangd that can serve
+    the buffer is the one linked out of the payload.
 
 jot is modeless, so there is no `:` line to type at; the first run seeds the
 install through init.lua, which is also how a user could ask for it.
@@ -38,25 +40,30 @@ DATA = "/tmp/jot_payload_probe_data"
 WORK = "/tmp/jot_payload_probe_work"
 CFG_INSTALL = "/tmp/jot_payload_probe_cfg_install"
 CFG_SERVE = "/tmp/jot_payload_probe_cfg_serve"
-EMPTY_PATH = "/tmp/jot_payload_probe_empty_path"
+SHIM_PATH = "/tmp/jot_payload_probe_path"
 VERSION_DIR = "clangd_22.1.8"
+# Only what the payload install script itself shells out to; deliberately no
+# clangd.
+SHIM_TOOLS = ("find", "ln", "mkdir", "chmod", "head", "rm", "cat")
 
 
 def stage_layout(binary):
-    for path in (STAGE, DATA, WORK, CFG_INSTALL, CFG_SERVE, EMPTY_PATH):
+    for path in (STAGE, DATA, WORK, CFG_INSTALL, CFG_SERVE, SHIM_PATH):
         shutil.rmtree(path, ignore_errors=True)
     os.makedirs(os.path.join(STAGE, "bin"))
     os.makedirs(os.path.join(STAGE, "share", "jot", "payload", "clangd", VERSION_DIR, "bin"))
     os.makedirs(WORK)
-    os.makedirs(EMPTY_PATH)
+    os.makedirs(SHIM_PATH)
+    for tool in SHIM_TOOLS:
+        real = shutil.which(tool)
+        if real:
+            os.symlink(real, os.path.join(SHIM_PATH, tool))
     staged_binary = os.path.join(STAGE, "bin", "jot")
     shutil.copy2(binary, staged_binary)
     with open(os.path.join(WORK, "probe.cpp"), "w") as fh:
         fh.write("int main() { int unused = 1; return 0; }\n")
-    # The install trigger: the same entry point :lspinstall cpp takes.
+    # No configuration at all: the C++ buffer is the only trigger.
     os.makedirs(CFG_INSTALL)
-    with open(os.path.join(CFG_INSTALL, "init.lua"), "w") as fh:
-        fh.write('jot.autocmd("EditorEnter", function() jot.lsp.install("cpp") end)\n')
 
     payload_bin = os.path.join(STAGE, "share", "jot", "payload", "clangd",
                                VERSION_DIR, "bin", "clangd")
@@ -90,8 +97,13 @@ def main() -> int:
 
     # Run 1: install the bundled copy. No JOT_LSP_PAYLOAD_DIR: the binary must
     # find the payload through its own location (bin/jot -> ../share/jot).
-    screen = run_in_pty(staged_binary, [os.path.join(WORK, "probe.cpp")], b"",
-                        settle=3.0, after=4.0, cfg=CFG_INSTALL, cwd=WORK)
+    old_path = os.environ.get("PATH", "")
+    os.environ["PATH"] = SHIM_PATH
+    try:
+        screen = run_in_pty(staged_binary, [os.path.join(WORK, "probe.cpp")], b"",
+                            settle=3.0, after=4.0, cfg=CFG_INSTALL, cwd=WORK)
+    finally:
+        os.environ["PATH"] = old_path
     text = screen.text()
 
     link = os.path.join(DATA, "jot", "lsp", "bin", "clangd")
@@ -113,18 +125,16 @@ def main() -> int:
             log_text += fh.read()
     check("install job reported success", "[jot:lsp] success cpp" in log_text,
           log_text.strip() or repr(text[-300:]))
+    # The buffer that asked for the server must attach in this same run: the
+    # install completion heals it, which is what makes first use seamless.
+    check("buffer attached after the install", "cpp @" in text,
+          "status shows the server" if "cpp @" in text else repr(text[-300:]))
 
-    # Run 2: with clangd removed from $PATH the only thing that can serve this
-    # buffer is the payload-linked binary, which is what the status segment
-    # ("cpp @ ...") then proves.
+    # Run 2: the installed link is the only clangd reachable, so the status
+    # segment ("cpp @ ...") proves the payload copy is the one serving.
     if have_clangd:
-        old_path = os.environ.get("PATH", "")
-        os.environ["PATH"] = EMPTY_PATH
-        try:
-            screen = run_in_pty(staged_binary, [os.path.join(WORK, "probe.cpp")], b"",
-                                settle=4.0, after=4.0, cfg=CFG_SERVE, cwd=WORK)
-        finally:
-            os.environ["PATH"] = old_path
+        screen = run_in_pty(staged_binary, [os.path.join(WORK, "probe.cpp")], b"",
+                            settle=4.0, after=4.0, cfg=CFG_SERVE, cwd=WORK)
         text = screen.text()
         attached = "cpp @" in text or "clangd" in text
         check("payload clangd serves the buffer without PATH", attached,

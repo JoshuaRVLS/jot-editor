@@ -12,6 +12,41 @@
 #include <utility>
 #include <vector>
 
+namespace
+{
+// The binary a command runs, as its basename and without a Windows ".exe"
+// suffix: that is the key a vendored payload tree uses
+// (share/jot/payload/<bin>) and what LSPClient::server_id() reports.
+std::string command_bin_name(const std::string &exe)
+{
+  const size_t slash = exe.find_last_of("/\\");
+  std::string base = slash == std::string::npos ? exe : exe.substr(slash + 1);
+  const std::string lower = string_util::lower_copy(base);
+  if (lower.size() > 4 && lower.compare(lower.size() - 4, 4, ".exe") == 0)
+  {
+    base = base.substr(0, base.size() - 4);
+  }
+  return base;
+}
+} // namespace
+
+// A release package vendors some servers (clangd) under share/jot/payload, and
+// installing one is a local link, so it happens on first use: the buffer asks
+// for a server that is neither installed nor on $PATH, the shipped copy is
+// linked in, and poll_lsp_installs() attaches this buffer when the job reports
+// success. Only the first buffer pays for it: the attempt is recorded so a
+// failure (or a server whose name the registry does not resolve) cannot re-run
+// on every open, and a successful install makes the binary available, which is
+// what later opens check first.
+void Editor::auto_install_bundled_lsp(const std::string &bin)
+{
+  if (!lsp_bundled_auto_installs.insert(bin).second)
+  {
+    return;
+  }
+  install_lsp_server(bin);
+}
+
 std::string Editor::get_buffer_text(const FileBuffer &buf) const
 {
   if (buf.is_lazy())
@@ -105,6 +140,19 @@ LSPClient *Editor::ensure_lsp_for_file(const std::string &filepath)
 
   const std::string root = lsp_internal::find_workspace_root(filepath, language);
   std::vector<std::string> command = lsp_internal::command_for_language(language);
+
+  // No server, but the package ships one: install it and let the install job's
+  // completion attach this buffer (see auto_install_bundled_lsp).
+  if (!command.empty())
+  {
+    const std::string bin = command_bin_name(command.front());
+    if (!bin.empty() && !lsp_internal::lsp_bin_available(bin)
+        && !LspInstall::bundled_payload_dir(bin).empty())
+    {
+      auto_install_bundled_lsp(bin);
+      return nullptr;
+    }
+  }
 
   // For lua, register the bundled jot API stub (EmmyLua annotations) as a
   // server library so user scripts get completions for the whole jot.*

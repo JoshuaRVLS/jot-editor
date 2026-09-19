@@ -246,10 +246,12 @@ deliberately does not, so a preview never depends on a file you cannot see.
   servers (`:lspinstall <server>`, `:lspremove <server>`).
 - **Bundled servers**: a release package vendors clangd under
   `share/jot/payload/clangd`, so C/C++ support needs no system package and no
-  network. `:lspinstall cpp` links the shipped binary into the per-user LSP
-  dir (`~/.local/share/jot/lsp/bin`) and writes the usual receipt;
-  `:lspremove cpp` removes that link and the receipt only, never the shipped
-  copy. A payload may sit beside the executable or at the compiled-in prefix,
+  network. Opening a C/C++ buffer installs it on the spot (once per binary per
+  session, and only when the package ships it): the shipped binary is linked
+  into the per-user LSP dir (`~/.local/share/jot/lsp/bin`) and the usual
+  receipt is written, after which the waiting buffer attaches.
+  `:lspinstall cpp` does the same by hand and `:lspremove cpp` removes that
+  link and the receipt only, never the shipped copy. A payload may sit beside the executable or at the compiled-in prefix,
   and `JOT_LSP_PAYLOAD_DIR` overrides the lookup (authoritatively, which is
   how a packager or a build without the payload says "none here"). Any server
   a package ships as `payload/<binary-name>/` is installed this way; the rest

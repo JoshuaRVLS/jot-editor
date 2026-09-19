@@ -192,6 +192,10 @@ struct EditorState
   std::vector<std::unique_ptr<LSPClient>> lsp_clients;
   std::unordered_map<std::string, long long> lsp_pending_changes;
   std::vector<LspInstallJob> lsp_install_jobs;
+  // Binaries whose vendored-payload install was already started automatically
+  // (see Editor::auto_install_bundled_lsp), so a failed attempt stays a single
+  // try instead of re-running on every buffer open.
+  std::set<std::string> lsp_bundled_auto_installs;
   std::set<std::string> lsp_disabled_servers;
   // LSP published diagnostics kept per (server|root -> filepath) so several
   // servers attached to one buffer merge instead of clobbering each other.
