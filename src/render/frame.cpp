@@ -105,8 +105,8 @@ namespace
     // One prepared view for the whole question: the loop it replaces asked
     // "which line is on row N" once per row, re-scanning every fold range each
     // time. This runs twice per frame (the idle and the paint path).
-    const Folding::FoldView fold_view(buf.fold_ranges);
-    const int found = fold_view.visible_row_for_line(
+    const auto fold_view = Folding::view_of(buf.fold_ranges);
+    const int found = fold_view->visible_row_for_line(
         buf.scroll_offset, buf.cursor.y, viewport_h, (int)buf.line_count());
     const int visible_row = found >= 0 ? found : 0;
     const bool found_row = found >= 0;

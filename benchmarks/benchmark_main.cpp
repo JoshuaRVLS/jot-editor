@@ -254,6 +254,60 @@ namespace
              throw std::runtime_error("unexpected fold view checksum");
            }
          }},
+        // The same per-frame questions, answered from the index cached on the
+        // store instead of a view built per frame. This is what the editor
+        // does now, so it has to stay well under the construct-per-frame case
+        // above -- and it is where the verification cadence is amortized.
+        {"folding_cached_index_frame_queries",
+         15,
+         [cpp_lines]()
+         {
+           FoldRanges folds;
+           folds.assign(Folding::detect_ranges(cpp_lines, ".cpp"));
+           for (std::size_t i = 0; i < folds.size(); i += 3)
+           {
+             folds.set_collapsed(i, true);
+           }
+           const int line_count = (int)cpp_lines.size();
+           int checksum = 0;
+           for (int frame = 0; frame < 200; frame++)
+           {
+             const auto view = Folding::view_of(folds);
+             checksum += view->clamp_scroll_offset(frame, 34, line_count);
+             for (int row = 0; row < 34; row++)
+             {
+               const int line = view->buffer_line_for_visible_offset(frame, row, line_count);
+               checksum += line < 0 ? 0 : line;
+               checksum += view->hidden(row) ? 1 : 0;
+               checksum += view->folded_header(row) ? 2 : 0;
+             }
+           }
+           if (checksum <= 0)
+           {
+             throw std::runtime_error("unexpected cached fold view checksum");
+           }
+         }},
+        // One fold question at a time against the store (the mouse and scroll
+        // paths): the index is already prepared here, so this measures the
+        // lookup itself plus its share of the checksum verification cadence.
+        {"folding_cached_index_lookups",
+         20,
+         [cpp_lines]()
+         {
+           FoldRanges folds;
+           folds.assign(Folding::detect_ranges(cpp_lines, ".cpp"));
+           folds.set_collapsed(0, true);
+           const int line_count = (int)cpp_lines.size();
+           int checksum = 0;
+           for (int i = 0; i < 20000; i++)
+           {
+             checksum += Folding::is_line_hidden(folds, (i * 13) % line_count) ? 1 : 0;
+           }
+           if (checksum < 0)
+           {
+             throw std::runtime_error("unexpected fold lookup checksum");
+           }
+         }},
         {"ui_text_cell_count_long_lines",
          20,
          [long_ascii_line]()

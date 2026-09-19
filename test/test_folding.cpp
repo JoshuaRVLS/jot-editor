@@ -437,11 +437,253 @@ TEST_CASE("Folding Decode Ignores Malformed Ranges", "[jot]")
   REQUIRE(decoded[0].end_line == 5);
 }
 
+namespace
+{
+  // What a freshly built index answers, bypassing the store: the cached index
+  // has to give the same answers as this, or it is describing ranges the
+  // buffer does not have any more.
+  int fresh_visible_count(const FoldRanges &folds, int line_count)
+  {
+    return Folding::FoldView(folds.ranges()).visible_line_count(line_count);
+  }
+} // namespace
+
+// The prepared index is what every fold question in the editor is answered
+// from, so it must be impossible for it to describe anything but the ranges it
+// was handed. The first two cases pin the two halves of that: one index per
+// revision (which is the point of caching it), retired by every write. The
+// third pins the half the revision cannot cover on its own -- a change no
+// writer made -- which is what the checksum is for.
+TEST_CASE("The prepared fold index is reused until a write retires it", "[jot]")
+{
+  FoldRanges folds;
+  folds.assign({{0, 4, false}, {10, 14, false}});
+
+  const auto first = Folding::view_of(folds);
+  const auto second = Folding::view_of(folds);
+  REQUIRE(first.get() == second.get());
+  REQUIRE(first->visible_line_count(20) == 20);
+  REQUIRE_FALSE(folds.index_needs_rebuild());
+
+  // A write retires it, and the next lookup rebuilds from the new state -- the
+  // folded block's four hidden lines are gone from the visible count.
+  folds.set_collapsed(0, true);
+  const auto folded = Folding::view_of(folds);
+  REQUIRE(folded.get() != first.get());
+  REQUIRE(folded->visible_line_count(20) == 16);
+  REQUIRE(folded->hidden(2));
+  REQUIRE(folded.get() == Folding::view_of(folds).get());
+  REQUIRE_FALSE(folds.index_needs_rebuild());
+
+  // The block itself is still a foldable header, at its own position in the
+  // range vector -- the index records that position, so it is what invalidates
+  // when a range in front of it appears or disappears.
+  int header_index = -1;
+  REQUIRE(folded->folded_header(0, &header_index));
+  REQUIRE(header_index == 0);
+}
+
+TEST_CASE("Every fold-range writer invalidates the index", "[jot]")
+{
+  FoldRanges folds;
+
+  const auto expect_current = [&folds](int line_count) {
+    // Whatever asked first prepares the index; the store's own verification is
+    // then revision plus a checksum of the contents, and the answer has to
+    // match a view built from scratch right now.
+    const auto view = Folding::view_of(folds);
+    REQUIRE_FALSE(folds.index_needs_rebuild());
+    REQUIRE(view->visible_line_count(line_count) == fresh_visible_count(folds, line_count));
+  };
+
+  // assign(), and the assignment operator built on it.
+  folds.assign({{0, 4, true}, {10, 14, false}});
+  expect_current(20);
+  std::uint64_t revision = folds.revision();
+  folds = std::vector<FoldRange>{{0, 4, false}};
+  REQUIRE(folds.revision() > revision);
+  expect_current(20);
+
+  // set_collapsed(): both directions, and a write of the value already there is
+  // not a change and must not retire the index.
+  revision = folds.revision();
+  folds.set_collapsed(0, true);
+  REQUIRE(folds.revision() > revision);
+  expect_current(20);
+  revision = folds.revision();
+  folds.set_collapsed(0, true);
+  REQUIRE(folds.revision() == revision);
+  folds.set_collapsed(0, false);
+  REQUIRE(folds.revision() > revision);
+  expect_current(20);
+
+  // set_collapsed() on an index past the end is a no-op, not a stray write.
+  revision = folds.revision();
+  folds.set_collapsed(99, true);
+  REQUIRE(folds.revision() == revision);
+
+  // set_all_collapsed(): the fold-all / unfold-all commands, including the
+  // no-op case that must leave the index standing.
+  folds.set_all_collapsed(true);
+  expect_current(20);
+  REQUIRE(folds[0].collapsed);
+  revision = folds.revision();
+  folds.set_all_collapsed(true);
+  REQUIRE(folds.revision() == revision);
+  folds.set_all_collapsed(false);
+  REQUIRE(folds.revision() > revision);
+  expect_current(20);
+  REQUIRE_FALSE(folds[0].collapsed);
+
+  // clear().
+  folds.clear();
+  REQUIRE(folds.empty());
+  expect_current(20);
+
+  // The module entry points that rewrite the ranges from outside: a
+  // re-detection that keeps the folded set, and a restore of a saved one.
+  std::vector<std::string> lines = {"int f() {", "  if (a) {", "    g();", "  }", "}"};
+  Folding::refresh_ranges(folds, lines, ".cpp");
+  REQUIRE(folds.size() == 2);
+  REQUIRE(folds[0].start_line == 0);
+  REQUIRE(folds[0].end_line == 4);
+  folds.set_collapsed(0, true);
+  expect_current(5);
+
+  // Re-detecting the same text keeps the fold -- the pair still exists -- and
+  // the write happens once, so the index retires once.
+  Folding::refresh_ranges(folds, lines, ".cpp");
+  REQUIRE(folds[0].collapsed);
+  expect_current(5);
+
+  // A restore of a saved set (the session's collapsed ranges) replaces the
+  // whole collapsed state in one write.
+  Folding::apply_collapsed_ranges(folds, {{0, 4, false}, {1, 3, true}});
+  REQUIRE_FALSE(folds[0].collapsed);
+  REQUIRE(folds[1].collapsed);
+  expect_current(5);
+
+  Folding::apply_collapsed_ranges(folds, {{0, 4, true}, {1, 3, false}});
+  REQUIRE(folds[0].collapsed);
+  REQUIRE_FALSE(folds[1].collapsed);
+  expect_current(5);
+}
+
+TEST_CASE("A change no writer made is caught by the checksum", "[jot]")
+{
+  FoldRanges folds;
+  folds.assign({{0, 4, false}, {10, 14, false}});
+  const auto cached = Folding::view_of(folds);
+  REQUIRE(cached->visible_line_count(20) == 20);
+
+  // The threat model the checksum exists for: a writer that never went through
+  // the store, so no revision changed -- an alias held across a mutation, or a
+  // future writer added beside this class. Written through a const_cast here
+  // because reaching these fields past the store is exactly that bug.
+  const std::uint64_t revision = folds.revision();
+  const std::vector<FoldRange> &alias = folds.ranges();
+  const_cast<FoldRange &>(alias[0]).collapsed = true;
+  REQUIRE(folds.revision() == revision);
+  REQUIRE(cached->visible_line_count(20) == 20); // the stale index still says so
+
+  // The verification sees it: the index was built from different contents than
+  // the ranges hold.
+  REQUIRE(folds.index_needs_rebuild());
+
+  // And view_of() runs that verification on its own cadence, so a caller that
+  // only ever asks for the index is re-indexed within kVerifyEveryAccesses
+  // lookups rather than drawn from the old shape indefinitely.
+  std::shared_ptr<const Folding::FoldView> view;
+  for (unsigned i = 0; i < FoldRanges::kVerifyEveryAccesses; i++)
+  {
+    view = Folding::view_of(folds);
+  }
+  REQUIRE(view->visible_line_count(20) == 16);
+  REQUIRE(view->hidden(2));
+  REQUIRE_FALSE(folds.index_needs_rebuild());
+  REQUIRE(view.get() != cached.get());
+}
+
+TEST_CASE("A copied fold store carries a valid index", "[jot]")
+{
+  // The closed-buffer snapshot copies the store (the restore in buffers.cpp),
+  // so a copy must neither resurrect a stale index nor throw away a good one:
+  // the index is immutable and its content is a function of the ranges, which
+  // the copy carries identically.
+  FoldRanges folds;
+  folds.assign({{0, 4, true}, {10, 14, false}});
+  const auto prepared = Folding::view_of(folds);
+
+  FoldRanges copy = folds;
+  REQUIRE(copy.revision() == folds.revision());
+  REQUIRE_FALSE(copy.index_needs_rebuild());
+  REQUIRE(Folding::view_of(copy).get() == prepared.get());
+
+  // A write in the copy retires only the copy's index. The original's ranges
+  // did not change, so its index still stands -- including for a copy taken
+  // before that write.
+  copy.set_collapsed(1, true);
+  REQUIRE(Folding::view_of(copy).get() != prepared.get());
+  REQUIRE(Folding::is_line_hidden(copy, 12));
+  REQUIRE_FALSE(Folding::is_line_hidden(folds, 12));
+  REQUIRE(Folding::view_of(folds).get() == prepared.get());
+
+  // Assignment (the restore path) is the same: the restored store answers from
+  // the copied index instead of rebuilding one.
+  FoldRanges restored;
+  restored.assign({{7, 9, false}});
+  Folding::view_of(restored);
+  restored = copy;
+  REQUIRE_FALSE(restored.index_needs_rebuild());
+  REQUIRE(Folding::is_line_hidden(restored, 12));
+  REQUIRE(Folding::view_of(restored).get() == Folding::view_of(copy).get());
+}
+
+TEST_CASE("Buffer call sites answer from the prepared index", "[jot]")
+{
+  FoldRanges folds;
+  folds.assign({{0, 4, false}, {10, 14, false}});
+  REQUIRE(folds.prepared_index() == nullptr);
+
+  // Passing the store (which is what `buf.fold_ranges` is) prepares the index
+  // once and answers every later question from it, and the answers match the
+  // one-shot forms the tests and standalone helpers use.
+  REQUIRE_FALSE(Folding::is_line_hidden(folds, 12));
+  REQUIRE(folds.prepared_index() != nullptr);
+  folds.set_collapsed(1, true);
+  REQUIRE(Folding::is_line_hidden(folds, 12));
+  REQUIRE(Folding::is_line_hidden(folds, 12));
+  REQUIRE(Folding::hidden_line_count_for_header(folds, 10) == 4);
+  REQUIRE(Folding::visible_line_count(folds, 20) == 16);
+  // Offset 16 is the 17th visible row of a 16-line view: past the end, which
+  // the mouse path handles as "no line" (it walks back up for a real one).
+  REQUIRE(Folding::buffer_line_for_visible_offset(folds, 0, 16, 20) == -1);
+  REQUIRE(Folding::buffer_line_for_visible_offset(folds, 0, 15, 20) == 19);
+  REQUIRE(Folding::clamp_scroll_offset(folds, 12, 5, 20) == 10);
+  REQUIRE(Folding::advance_visible_lines(folds, 9, 2, 20) == 15);
+  REQUIRE(Folding::previous_visible_line(folds, 12) == 10);
+  REQUIRE(Folding::next_visible_line(folds, 9, 20) == 10);
+  // The header itself steps past the block it folds.
+  REQUIRE(Folding::next_visible_line(folds, 10, 20) == 15);
+  REQUIRE_FALSE(Folding::is_line_folded_header(folds, 9));
+  REQUIRE(Folding::is_line_folded_header(folds, 10));
+  REQUIRE(Folding::visible_row_for_line(folds, 0, 15, 20, 20) == 11);
+  REQUIRE(Folding::buffer_line_for_visible_index(folds, 11, 20) == 15);
+
+  // The same answers, asked of a bare vector.
+  const std::vector<FoldRange> &raw = folds.ranges();
+  REQUIRE(Folding::is_line_hidden(raw, 12));
+  REQUIRE(Folding::hidden_line_count_for_header(raw, 10) == 4);
+  REQUIRE(Folding::visible_line_count(raw, 20) == 16);
+  REQUIRE(Folding::clamp_scroll_offset(raw, 12, 5, 20) == 10);
+}
+
 TEST_CASE("Folding Apply Collapsed Ranges Requires Exact Match", "[jot]")
 {
-  std::vector<FoldRange> ranges = {{0, 4, false}, {5, 9, false}};
+  FoldRanges folds;
+  folds.assign({{0, 4, false}, {5, 9, false}});
   std::vector<FoldRange> collapsed = {{0, 4, true}, {7, 9, true}};
-  Folding::apply_collapsed_ranges(ranges, collapsed);
-  REQUIRE(ranges[0].collapsed);
-  REQUIRE_FALSE(ranges[1].collapsed);
+  Folding::apply_collapsed_ranges(folds, collapsed);
+  REQUIRE(folds[0].collapsed);
+  REQUIRE_FALSE(folds[1].collapsed);
 }

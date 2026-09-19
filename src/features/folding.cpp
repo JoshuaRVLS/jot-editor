@@ -565,23 +565,49 @@ namespace Folding
     return detect_brace_ranges(lines);
   }
 
-  void refresh_ranges(std::vector<FoldRange> &ranges,
+  std::shared_ptr<const FoldView> view_of(const FoldRanges &folds)
+  {
+    if (!folds.prepared_index() || folds.prepared_revision() != folds.revision())
+    {
+      auto built = std::make_shared<const FoldView>(folds.ranges());
+      folds.set_prepared_index(built);
+      return built;
+    }
+    // The revision says nothing wrote to the ranges since this index was built,
+    // and that holds for every write this class knows about. A checksum
+    // comparison every kVerifyEveryAccesses lookups is what covers a change it
+    // cannot know about -- an alias held across a mutation -- so a stale index
+    // is re-indexed within that many lookups instead of being drawn from.
+    if (folds.verification_due() && folds.index_needs_rebuild())
+    {
+      auto built = std::make_shared<const FoldView>(folds.ranges());
+      folds.set_prepared_index(built);
+      return built;
+    }
+    return folds.prepared_index();
+  }
+
+  void refresh_ranges(FoldRanges &folds,
                       const std::vector<std::string> &lines,
                       const std::string &extension)
   {
+    // The folded set outlives a re-detection: the ranges are re-derived from
+    // the lines, and whatever was collapsed and still exists is folded again.
+    // The write happens once, so the prepared index retires once.
     std::set<std::pair<int, int>> collapsed;
-    for (const auto &range : ranges)
+    for (const auto &range : folds.ranges())
     {
       if (range.collapsed)
       {
         collapsed.insert({range.start_line, range.end_line});
       }
     }
-    ranges = detect_ranges(lines, extension);
+    std::vector<FoldRange> ranges = detect_ranges(lines, extension);
     for (auto &range : ranges)
     {
       range.collapsed = collapsed.count({range.start_line, range.end_line}) > 0;
     }
+    folds.assign(std::move(ranges));
   }
 
   std::string encode_collapsed_ranges(const std::vector<FoldRange> &ranges)
@@ -632,8 +658,7 @@ namespace Folding
     return ranges;
   }
 
-  void apply_collapsed_ranges(std::vector<FoldRange> &ranges,
-                              const std::vector<FoldRange> &collapsed)
+  void apply_collapsed_ranges(FoldRanges &folds, const std::vector<FoldRange> &collapsed)
   {
     std::set<std::pair<int, int>> wanted;
     for (const auto &range : collapsed)
@@ -643,10 +668,12 @@ namespace Folding
         wanted.insert({range.start_line, range.end_line});
       }
     }
+    std::vector<FoldRange> ranges = folds.ranges();
     for (auto &range : ranges)
     {
       range.collapsed = wanted.count({range.start_line, range.end_line}) > 0;
     }
+    folds.assign(std::move(ranges));
   }
 
   int fold_at_or_before_line(const std::vector<FoldRange> &ranges, int line)
@@ -807,5 +834,72 @@ namespace Folding
                           int line_count)
   {
     return FoldView(ranges).clamp_scroll_offset(scroll, visible_rows, line_count);
+  }
+
+  // See folding.h: the buffer's own index answers, so the scan a bare vector
+  // would pay for is paid once per change instead of once per question.
+  bool is_line_hidden(const FoldRanges &folds, int line)
+  {
+    return view_of(folds)->hidden(line);
+  }
+
+  bool is_line_folded_header(const FoldRanges &folds, int line, int *range_index)
+  {
+    return view_of(folds)->folded_header(line, range_index);
+  }
+
+  int hidden_line_count_for_header(const FoldRanges &folds, int line)
+  {
+    return view_of(folds)->hidden_count_for_header(line);
+  }
+
+  int next_visible_line(const FoldRanges &folds, int line, int line_count)
+  {
+    return view_of(folds)->next_visible_line(line, line_count);
+  }
+
+  int previous_visible_line(const FoldRanges &folds, int line)
+  {
+    return view_of(folds)->previous_visible_line(line);
+  }
+
+  int advance_visible_lines(const FoldRanges &folds, int line, int delta, int line_count)
+  {
+    return view_of(folds)->advance_visible_lines(line, delta, line_count);
+  }
+
+  int visible_line_count(const FoldRanges &folds, int line_count)
+  {
+    return view_of(folds)->visible_line_count(line_count);
+  }
+
+  int buffer_line_for_visible_index(const FoldRanges &folds, int visible_index, int line_count)
+  {
+    return view_of(folds)->buffer_line_for_visible_index(visible_index, line_count);
+  }
+
+  int visible_row_for_line(const FoldRanges &folds,
+                           int first_line,
+                           int target_line,
+                           int visible_rows,
+                           int line_count)
+  {
+    return view_of(folds)->visible_row_for_line(first_line, target_line, visible_rows, line_count);
+  }
+
+  int buffer_line_for_visible_offset(const FoldRanges &folds,
+                                     int first_line,
+                                     int offset,
+                                     int line_count)
+  {
+    return view_of(folds)->buffer_line_for_visible_offset(first_line, offset, line_count);
+  }
+
+  int clamp_scroll_offset(const FoldRanges &folds,
+                          int scroll,
+                          int visible_rows,
+                          int line_count)
+  {
+    return view_of(folds)->clamp_scroll_offset(scroll, visible_rows, line_count);
   }
 } // namespace Folding

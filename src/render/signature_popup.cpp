@@ -162,9 +162,9 @@ void Editor::render_lsp_signature()
       pane.x + 1 + line_num_width + (cursor_visual - scroll_visual)
       + lsp_inlay_hint_cells_before(buf.filepath, buf.cursor.y, buf.cursor.x, line);
   const int viewport_h = std::max(1, pane.h - tab_height);
-  const Folding::FoldView fold_view(buf.fold_ranges);
+  const auto fold_view = Folding::view_of(buf.fold_ranges);
   const int cursor_row = std::max(0,
-                                  fold_view.visible_row_for_line(buf.scroll_offset,
+                                  fold_view->visible_row_for_line(buf.scroll_offset,
                                                                  buf.cursor.y,
                                                                  viewport_h,
                                                                  (int)buf.line_count()));

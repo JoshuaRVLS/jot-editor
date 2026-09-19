@@ -59,8 +59,8 @@ bool Editor::scroll_view_smooth(int lines, int base_ms)
   const int before = buf.scroll_offset;
   // One prepared fold view for the whole gesture step: both the walk to the
   // destination and the clamp answer from it.
-  const Folding::FoldView fold_view(buf.fold_ranges);
-  const int destination = offset_after_lines(buf, fold_view, view_h, before, lines);
+  const auto fold_view = Folding::view_of(buf.fold_ranges);
+  const int destination = offset_after_lines(buf, *fold_view, view_h, before, lines);
   const int step = destination - before;
 
   // The GUI frontend already eases each pane's content shift pixel by pixel

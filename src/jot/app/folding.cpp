@@ -82,7 +82,9 @@ bool Editor::toggle_fold_at_line(FileBuffer &buf, int line)
           ? Folding::visible_row_for_line(
                 buf.fold_ranges, buf.scroll_offset, header_line, viewport_h, (int)buf.line_count())
           : -1;
-  buf.fold_ranges[index].collapsed = !buf.fold_ranges[index].collapsed;
+  // Through the store: folding a block invalidates the prepared index, and
+  // that is the store's business, not this caller's.
+  buf.fold_ranges.set_collapsed((size_t)index, will_collapse);
   if (buf.fold_ranges[index].collapsed && Folding::is_line_hidden(buf.fold_ranges, buf.cursor.y))
   {
     buf.cursor.y = buf.fold_ranges[index].start_line;
@@ -116,7 +118,7 @@ bool Editor::fold_at_cursor()
           ? Folding::visible_row_for_line(
                 buf.fold_ranges, buf.scroll_offset, header_line, viewport_h, (int)buf.line_count())
           : -1;
-  buf.fold_ranges[index].collapsed = true;
+  buf.fold_ranges.set_collapsed((size_t)index, true);
   if (Folding::is_line_hidden(buf.fold_ranges, buf.cursor.y))
   {
     buf.cursor.y = buf.fold_ranges[index].start_line;
@@ -148,7 +150,7 @@ bool Editor::unfold_at_cursor()
     set_message("No folded block");
     return false;
   }
-  buf.fold_ranges[index].collapsed = false;
+  buf.fold_ranges.set_collapsed((size_t)index, false);
   ensure_cursor_visible();
   set_message("Unfolded block");
   needs_redraw = true;
@@ -171,10 +173,7 @@ void Editor::fold_all()
 {
   auto &buf = get_buffer();
   refresh_folds(buf);
-  for (auto &range : buf.fold_ranges)
-  {
-    range.collapsed = true;
-  }
+  buf.fold_ranges.set_all_collapsed(true);
   if (Folding::is_line_hidden(buf.fold_ranges, buf.cursor.y))
   {
     while (buf.cursor.y > 0 && Folding::is_line_hidden(buf.fold_ranges, buf.cursor.y))
@@ -192,10 +191,7 @@ void Editor::unfold_all()
 {
   auto &buf = get_buffer();
   refresh_folds(buf);
-  for (auto &range : buf.fold_ranges)
-  {
-    range.collapsed = false;
-  }
+  buf.fold_ranges.set_all_collapsed(false);
   ensure_cursor_visible();
   set_message("Unfolded all blocks");
   needs_redraw = true;

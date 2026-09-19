@@ -833,7 +833,7 @@ void Editor::handle_mouse(void *event_ptr)
   // One prepared view for this event's fold questions: the minimap jump, the
   // drag auto-scroll and the click-to-line mapping below all need visibility
   // math, and each used to prepare (or scan) the ranges on its own.
-  const Folding::FoldView fold_view(buf.fold_ranges);
+  const auto fold_view = Folding::view_of(buf.fold_ranges);
 
   if ((is_click || is_middle_click) && event->y == pane.y && !buffers.empty())
   {
@@ -910,7 +910,7 @@ void Editor::handle_mouse(void *event_ptr)
       if (event->y >= pane.y + tab_height && event->y < pane.y + tab_height + h)
       {
         int rel_y = event->y - (pane.y + tab_height);
-        int total_lines = fold_view.visible_line_count((int)buf.line_count());
+        int total_lines = fold_view->visible_line_count((int)buf.line_count());
         if (total_lines > 0)
         {
           float ratio = (float)h / total_lines;
@@ -968,7 +968,7 @@ void Editor::handle_mouse(void *event_ptr)
   // and defeat horizontal auto-scroll.
   int visible_rows = std::max(1, pane.h - tab_height);
   int max_scroll_offset =
-      std::max(0, fold_view.visible_line_count((int)buf.line_count()) - visible_rows);
+      std::max(0, fold_view->visible_line_count((int)buf.line_count()) - visible_rows);
 
   if (bstate == 32 && mouse_selecting)
   {
@@ -981,10 +981,10 @@ void Editor::handle_mouse(void *event_ptr)
     {
       // Visible rank of the current viewport top: the count of visible lines
       // above it (the view answers that without walking the buffer).
-      const int current_visible = fold_view.visible_rank_of_line(buf.scroll_offset);
+      const int current_visible = fold_view->visible_rank_of_line(buf.scroll_offset);
       int scroll_by =
           std::min(max_scroll_offset - current_visible, std::max(1, raw_rel_y - visible_rows + 1));
-      buf.scroll_offset = fold_view.buffer_line_for_visible_index(current_visible + scroll_by,
+      buf.scroll_offset = fold_view->buffer_line_for_visible_index(current_visible + scroll_by,
                                                                   (int)buf.line_count());
     }
   }
@@ -1022,10 +1022,10 @@ void Editor::handle_mouse(void *event_ptr)
   // past the end of the buffer (a click below the last line must land on it,
   // not on line 0).
   int click_y =
-      fold_view.buffer_line_for_visible_offset(buf.scroll_offset, rel_y, (int)buf.line_count());
+      fold_view->buffer_line_for_visible_offset(buf.scroll_offset, rel_y, (int)buf.line_count());
   for (int fallback_row = rel_y - 1; click_y < 0 && fallback_row >= 0; fallback_row--)
   {
-    click_y = fold_view.buffer_line_for_visible_offset(
+    click_y = fold_view->buffer_line_for_visible_offset(
         buf.scroll_offset, fallback_row, (int)buf.line_count());
   }
   if (click_y < 0)
@@ -1296,7 +1296,7 @@ void Editor::handle_mouse(void *event_ptr)
   };
 
   int second_click_y =
-      fold_view.buffer_line_for_visible_offset(buf.scroll_offset, rel_y, (int)buf.line_count());
+      fold_view->buffer_line_for_visible_offset(buf.scroll_offset, rel_y, (int)buf.line_count());
   if (second_click_y < 0)
     second_click_y = 0;
   if (second_click_y >= (int)buf.line_count())
