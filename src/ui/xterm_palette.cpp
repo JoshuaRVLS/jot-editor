@@ -1,7 +1,9 @@
 #include "ui/xterm_palette.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <vector>
 
 namespace
 {
@@ -23,12 +25,140 @@ float linearize(float channel)
   return channel <= 0.03928f ? channel / 12.92f
                              : std::pow((channel + 0.055f) / 1.055f, 2.4f);
 }
+
+// The exact colours interned so far, indexed by id - kExactColorBase.
+std::vector<std::array<unsigned char, 3>> &exact_table()
+{
+  static std::vector<std::array<unsigned char, 3>> table;
+  return table;
+}
+
+// -1 when `c` is not a hex digit.
+int hex_digit(char c)
+{
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  if (c >= 'a' && c <= 'f')
+    return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F')
+    return c - 'A' + 10;
+  return -1;
+}
 } // namespace
 
 namespace jot_ui
 {
+int exact_color_id(unsigned char r, unsigned char g, unsigned char b)
+{
+  auto &table = exact_table();
+  for (std::size_t i = 0; i < table.size(); i++)
+  {
+    if (table[i][0] == r && table[i][1] == g && table[i][2] == b)
+    {
+      return kExactColorBase + (int)i;
+    }
+  }
+  table.push_back({r, g, b});
+  return kExactColorBase + (int)table.size() - 1;
+}
+
+bool exact_color_rgb(int value, unsigned char &r, unsigned char &g, unsigned char &b)
+{
+  if (value < kExactColorBase)
+  {
+    return false;
+  }
+  auto &table = exact_table();
+  const std::size_t index = (std::size_t)(value - kExactColorBase);
+  if (index >= table.size())
+  {
+    return false;
+  }
+  r = table[index][0];
+  g = table[index][1];
+  b = table[index][2];
+  return true;
+}
+
+bool is_exact_color(int value)
+{
+  return value >= kExactColorBase
+         && (std::size_t)(value - kExactColorBase) < exact_table().size();
+}
+
+bool parse_hex_color(const std::string &text, unsigned char &r, unsigned char &g, unsigned char &b)
+{
+  const std::size_t begin = text.find_first_not_of(" \t");
+  if (begin == std::string::npos || text[begin] != '#')
+  {
+    return false;
+  }
+  const std::size_t end = text.find_last_not_of(" \t");
+  const std::string digits = text.substr(begin + 1, end - begin);
+  if (digits.size() == 3)
+  {
+    // Short form: each digit is doubled, so #48c is #4488cc.
+    const int dr = hex_digit(digits[0]);
+    const int dg = hex_digit(digits[1]);
+    const int db = hex_digit(digits[2]);
+    if (dr < 0 || dg < 0 || db < 0)
+    {
+      return false;
+    }
+    r = (unsigned char)(dr * 17);
+    g = (unsigned char)(dg * 17);
+    b = (unsigned char)(db * 17);
+    return true;
+  }
+  if (digits.size() == 6 || digits.size() == 8)
+  {
+    // #rrggbb and #rrggbbaa: the alpha channel is dropped, since every surface
+    // that paints a theme colour composites over an opaque background anyway.
+    int channels[3] = {0, 0, 0};
+    for (int i = 0; i < 3; i++)
+    {
+      const int hi = hex_digit(digits[(std::size_t)i * 2]);
+      const int lo = hex_digit(digits[(std::size_t)i * 2 + 1]);
+      if (hi < 0 || lo < 0)
+      {
+        return false;
+      }
+      channels[i] = hi * 16 + lo;
+    }
+    r = (unsigned char)channels[0];
+    g = (unsigned char)channels[1];
+    b = (unsigned char)channels[2];
+    return true;
+  }
+  return false;
+}
+
+int exact_color_from_hex(const std::string &text)
+{
+  unsigned char r = 0;
+  unsigned char g = 0;
+  unsigned char b = 0;
+  if (!parse_hex_color(text, r, g, b))
+  {
+    return -1;
+  }
+  return exact_color_id(r, g, b);
+}
+
+std::size_t exact_color_count()
+{
+  return exact_table().size();
+}
+
 void palette_rgb(int index, unsigned char &r, unsigned char &g, unsigned char &b)
 {
+  // An exact colour resolves to itself. Every consumer reads colours through
+  // here -- SGR 38;2 / 48;2, the GUI's shader, the luminance and contrast
+  // maths -- so an exact colour needs no special case anywhere else.
+  if (exact_color_rgb(index, r, g, b))
+  {
+    return;
+  }
   if (index < 0)
   {
     index = 0;

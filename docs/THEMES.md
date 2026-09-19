@@ -7,38 +7,50 @@ jot ships two themes, both of them its own:
 
 | Theme | Look |
 |---|---|
-| `jot-dark` (default) | warm charcoal (`235`-family greys), cream ink, amber keywords, soft teal functions |
-| `jot-light` | the same ink on warm cream paper |
+| `jot-dark` (default) | warm charcoal (`#1e1b18`), cream ink, amber keywords, soft teal functions |
+| `jot-light` | the same ink on warm paper (`#f9f4ea`) |
 
 The amber/teal pair is the palette's signature: keywords, the active pane
 border, the cursor line number and the search highlight all carry the accent,
 so the chrome reads as jot's own scheme rather than a neutral grey editor with
 a blue border.
 
-Colors are xterm 256 indices, so backgrounds land on the nearest grey and the
-palette is a close -- not exact -- 24-bit match; tune any slot by copying a file
-to `~/.config/jot/configs/colors/`. The names of the themes that used to be
-bundled (`dark` and `light`) still resolve to the jot theme that replaced them,
-so a `color_scheme` written before the change keeps working. Any other name now
-needs a file of its own.
+Both shipped themes are exact 24-bit palettes: every slot names a `#rrggbb`
+colour, and jot paints it verbatim (SGR `38;2`/`48;2`, or the exact value in the
+GUI) instead of rounding it to the nearest of 256 entries. A slot still accepts
+an xterm 256 index for a theme written that way, and the two forms can be mixed
+in one file. Tune any slot by copying a file to `~/.config/jot/configs/colors/`.
+The names of the themes that used to be bundled (`dark` and `light`) still
+resolve to the jot theme that replaced them, so a `color_scheme` written before
+the change keeps working. Any other name now needs a file of its own.
 
 Apply with `:colorscheme jot-light` or from Lua:
 
 ```lua
-set_hl("Normal", { fg = 252, bg = 234 })
+set_hl("Normal", { fg = "#e8ddcc", bg = "#1e1b18" })
+set_hl("Keyword", { fg = 215 }) -- an xterm index still works
 ```
 
-Theme files contain highlight groups mapped to foreground/background xterm
-256-color values. Use `-1` or `null` for transparent/inherited values.
+Theme files contain highlight groups mapped to foreground/background colours:
+an exact `"#rrggbb"` string, or an xterm 256 index as a number. A three-digit
+`"#rgb"` is accepted and expanded, and an eight-digit `"#rrggbbaa"` drops its
+alpha channel (every surface composites over an opaque background). A value that
+is neither is ignored, leaving the slot at whatever it inherited. Use `-1` or
+`null` for transparent/inherited values.
 
 ```json
 {
-  "Normal": {"fg": 252, "bg": 234},
-  "Comment": {"fg": 244, "bg": 234},
-  "Keyword": {"fg": 81, "bg": 234},
-  "Visual": {"fg": 234, "bg": 110}
+  "Normal": {"fg": "#e8ddcc", "bg": "#1e1b18"},
+  "Comment": {"fg": "#8b8178", "bg": "#1e1b18"},
+  "Keyword": {"fg": "#f5b06b", "bg": "#1e1b18"},
+  "Visual": {"fg": 231, "bg": 240}
 }
 ```
+
+Exact colours need a terminal that understands 24-bit colour (`COLORTERM`
+reports `truecolor`/`24bit`, or `TERM` ends in `-direct`); elsewhere jot folds
+each one down to the nearest palette entry, so the theme still reads correctly
+on a 256-colour terminal. The `truecolor` setting forces the answer either way.
 
 ## Group names
 
@@ -147,19 +159,19 @@ A minimal annotated theme:
 
 ```json
 {
-  "Normal": {"fg": 188, "bg": 234},          // plain text / editor background
-  "Comment": {"fg": 103, "bg": 234},         // comments
-  "keyword": {"fg": 176, "bg": 234},         // all keywords
-  "keyword.control": {"fg": 141, "bg": 234}, // if/for/while - override control
-  "string": {"fg": 151, "bg": 234},          // string literals
-  "number": {"fg": 216, "bg": 234},          // numbers, constants fall back here
-  "function": {"fg": 222, "bg": 234},        // function names
-  "function.method": {"fg": 180, "bg": 234}, // method names (optional: keep = function)
-  "type": {"fg": 117, "bg": 234},            // type identifiers
-  "property": {"fg": 152, "bg": 234},        // obj.field members
-  "punctuation": {"fg": 145, "bg": 234},     // dim the brackets/semicolons
-  "tag": {"fg": 175, "bg": 234},             // HTML/JSX tags
-  "attribute": {"fg": 216, "bg": 234}        // HTML/JSX tag attributes
+  "Normal": {"fg": "#d7d0c4", "bg": "#1e1b18"},         // plain text / editor background
+  "Comment": {"fg": "#8b8178", "bg": "#1e1b18"},        // comments
+  "keyword": {"fg": "#d7afd7", "bg": "#1e1b18"},        // all keywords
+  "keyword.control": {"fg": "#af87d7", "bg": "#1e1b18"}, // if/for/while - override control
+  "string": {"fg": "#a9d3b0", "bg": "#1e1b18"},         // string literals
+  "number": {"fg": "#f0a884", "bg": "#1e1b18"},         // numbers, constants fall back here
+  "function": {"fg": "#e8ddcc", "bg": "#1e1b18"},       // function names
+  "function.method": {"fg": "#d9b68e", "bg": "#1e1b18"}, // method names (optional: keep = function)
+  "type": {"fg": "#9fc7e0", "bg": "#1e1b18"},           // type identifiers
+  "property": {"fg": "#b8d8c8", "bg": "#1e1b18"},       // obj.field members
+  "punctuation": {"fg": "#9a9188", "bg": "#1e1b18"},    // dim the brackets/semicolons
+  "tag": {"fg": "#ef7d96", "bg": "#1e1b18"},            // HTML/JSX tags
+  "attribute": {"fg": "#f0a884", "bg": "#1e1b18"}       // HTML/JSX tag attributes
 }
 ```
 
@@ -168,12 +180,15 @@ A minimal annotated theme:
 `tools/vscode_themes_import.py <pack-dir> <output-dir>` converts a VSCode theme
 pack (colors + TextMate scopes) into jot schemes; point the output at
 `~/.config/jot/configs/colors` so the imports stay yours. jot's own two themes
-are never overwritten by an import.
+are never overwritten by an import. The source's colours are written through as
+hex, so an imported scheme keeps the 24-bit values it was designed with instead
+of landing on the nearest palette entry.
 
 Rules:
 
-- Colors are xterm 256 indices (0-255). `fg`/`bg` of `-1` leaves that side
-  untouched so a group can change only one side.
+- Colors are exact `"#rrggbb"` strings; an xterm 256 index (0-255) is also
+  accepted and can be mixed with hex values in one file. `fg`/`bg` of `-1`
+  leaves that side untouched so a group can change only one side.
 - Any slot you omit falls back per the table above; base slots are
   `default`, `keyword`, `string`, `comment`, `number`, `function`, `type`.
 - JSON keys are matched against slot names directly — dotted and snake forms

@@ -1,10 +1,15 @@
-// Truecolour plumbing for the cell model.
+// Truecolour plumbing for the cell model and the colour-value domain.
 //
 // jot's cells were xterm-256 palette indices only, so a colour preview could
 // never show the colour a literal actually named. UICell now carries an
 // optional 24-bit value that wins over the index; these cases pin both ends of
 // that: the GUI resolves it exactly, and the terminal emits 38;2/48;2 when it
 // is supported and quantises to the nearest palette entry when it is not.
+//
+// The same value domain is what a theme file's hex colours land in: values from
+// kExactColorBase up are interned exact colours, which is why a hex theme needs
+// no special case in the renderer -- but it does need the resolution at the
+// point a cell is built, which the last cases cover.
 #include "ui/terminal.h"
 #include "ui/ui.h"
 #include "ui/xterm_palette.h"
@@ -13,6 +18,146 @@
 #include <string>
 
 using namespace jot_ui;
+
+namespace
+{
+  // UI's colour emitter is an implementation detail (protected); a case that
+  // wants to read the SGR it produces opens that one door without widening the
+  // production interface.
+  class SgrProbeUI : public UI
+  {
+  public:
+    explicit SgrProbeUI(Terminal *t) : UI(t) {}
+    using UI::emit_cell_colors;
+  };
+} // namespace
+
+TEST_CASE("Hex colours intern into exact values, indices stay indices", "[jot][palette]")
+{
+  unsigned char r = 0;
+  unsigned char g = 0;
+  unsigned char b = 0;
+
+  // The documented forms: #rgb, #rrggbb, #rrggbbaa (alpha dropped), any case,
+  // surrounding whitespace tolerated.
+  REQUIRE(parse_hex_color("#ff8800", r, g, b));
+  REQUIRE(r == 0xFF);
+  REQUIRE(g == 0x88);
+  REQUIRE(b == 0x00);
+  REQUIRE(parse_hex_color("#f80", r, g, b));
+  REQUIRE((r == 0xFF && g == 0x88 && b == 0x00));
+  REQUIRE(parse_hex_color("#F80", r, g, b));
+  REQUIRE((r == 0xFF && g == 0x88 && b == 0x00));
+  REQUIRE(parse_hex_color("#ff880080", r, g, b));
+  REQUIRE((r == 0xFF && g == 0x88 && b == 0x00));
+  REQUIRE(parse_hex_color("  #0f0  ", r, g, b));
+  REQUIRE((r == 0x00 && g == 0xFF && b == 0x00));
+
+  // Not colours: a bare palette index, a truncated value, a non-hex digit, an
+  // empty string. A theme slot that carries one of these is left at the value
+  // it inherited rather than painted black.
+  REQUIRE_FALSE(parse_hex_color("215", r, g, b));
+  REQUIRE_FALSE(parse_hex_color("#12345", r, g, b));
+  REQUIRE_FALSE(parse_hex_color("#gggggg", r, g, b));
+  REQUIRE_FALSE(parse_hex_color("#", r, g, b));
+  REQUIRE_FALSE(parse_hex_color("", r, g, b));
+  REQUIRE(exact_color_from_hex("chartreuse") == -1);
+
+  // An exact colour is interned once and resolves back to itself, so the same
+  // rgb named by two themes (or by a Lua set_hl and a theme file) shares an id.
+  const int amber = exact_color_from_hex("#5a5b5c");
+  REQUIRE(amber >= kExactColorBase);
+  REQUIRE(is_exact_color(amber));
+  const std::size_t after_first = exact_color_count();
+  REQUIRE(exact_color_from_hex("#5A5B5C") == amber);
+  REQUIRE(exact_color_count() == after_first); // no second entry
+  REQUIRE(exact_color_rgb(amber, r, g, b));
+  REQUIRE((r == 0x5A && g == 0x5B && b == 0x5C));
+
+  // Every consumer reads colours through palette_rgb, so an exact colour is
+  // resolved by the GUI, the caret's contrast maths and the SGR emitter alike.
+  palette_rgb(amber, r, g, b);
+  REQUIRE((r == 0x5A && g == 0x5B && b == 0x5C));
+  REQUIRE(contrast_ratio(amber, 0) > 1.5f);
+  // A palette index still resolves through the palette.
+  REQUIRE_FALSE(is_exact_color(255));
+  REQUIRE_FALSE(is_exact_color(-1));
+  // A value that was never handed out is not an exact colour, and an
+  // out-of-range one still blacks out instead of reading past the table.
+  REQUIRE_FALSE(is_exact_color(kExactColorBase + 100000));
+  palette_rgb(kExactColorBase + 100000, r, g, b);
+  REQUIRE((r == 0 && g == 0 && b == 0));
+}
+
+TEST_CASE("A theme's exact colour reaches the cell as 24-bit", "[jot][ui]")
+{
+  // The cell builders are the choke point: a painter hands over the int it got
+  // from the theme, and the cell comes out with the 24-bit companion both
+  // backends read. Nothing in the painting code has to know about hex colours.
+  Terminal term;
+  SgrProbeUI ui(&term);
+  ui.resize(20, 4);
+
+  const int ink = exact_color_from_hex("#e8ddcc");
+  const int paper = exact_color_from_hex("#1e1b18");
+  const int slate = exact_color_from_hex("#4a4440");
+  REQUIRE(ink >= kExactColorBase);
+  ui.set_default_colors(ink, paper);
+
+  // The clear path (blank_cell) resolves the theme's default pair.
+  ui.clear();
+  const UICell *blank = ui.cell_at(2, 2);
+  REQUIRE(blank != nullptr);
+  REQUIRE(blank->fg == ink);
+  REQUIRE(blank->fg_rgb == 0xE8DDCCu);
+  REQUIRE(blank->bg_rgb == 0x1E1B18u);
+
+  // draw_text carries the exact colour through to the cell, including the
+  // background of a selection the painter only had as an int.
+  ui.draw_text(0, 0, "hi", ink, slate);
+  const UICell *cell = ui.cell_at(0, 0);
+  REQUIRE(cell != nullptr);
+  REQUIRE(cell->fg_rgb == 0xE8DDCCu);
+  REQUIRE(cell->bg_rgb == 0x4A4440u);
+
+  // An explicit 24-bit value still wins over the int (the inline colour
+  // preview), and a palette index is left without a 24-bit companion.
+  ui.draw_text(0, 1, "x", 4, 5, false, false, 0, -1, 0x123456u, kNoRgb);
+  const UICell *explicit_rgb = ui.cell_at(0, 1);
+  REQUIRE(explicit_rgb->fg_rgb == 0x123456u);
+  REQUIRE(explicit_rgb->bg_rgb == kNoRgb);
+  ui.draw_text(0, 2, "y", 4, 5);
+  const UICell *index_cell = ui.cell_at(0, 2);
+  REQUIRE(index_cell->fg == 4);
+  REQUIRE(index_cell->fg_rgb == kNoRgb);
+
+  // And the terminal emits it as truecolour, which is the other end of the
+  // promise: a hex theme on a truecolor terminal is 38;2 / 48;2, not the
+  // nearest of 256 entries.
+  term.set_truecolor_supported(true);
+  term.clear_pending_output_for_test();
+  ui.emit_cell_colors(*cell);
+  const std::string emitted = term.pending_output_for_test();
+  REQUIRE(emitted.find("38;2;232;221;204") != std::string::npos);
+  REQUIRE(emitted.find("48;2;74;68;64") != std::string::npos);
+  REQUIRE(emitted.find("38;5;") == std::string::npos);
+
+  // A cell that only knows a palette index is untouched: no invented 24-bit
+  // colour, and the index goes out as 38;5.
+  term.clear_pending_output_for_test();
+  ui.emit_cell_colors(*index_cell);
+  REQUIRE(term.pending_output_for_test().find("38;5;4m") != std::string::npos);
+  REQUIRE(term.pending_output_for_test().find("38;2;") == std::string::npos);
+
+  // Dimming an exact colour stays exact (a scrim over a hex theme dims the 24-bit
+  // value rather than quantising it to the nearest of 256 first), and the
+  // "reads dark" probe that decides whether SGR 2 is needed resolves the exact
+  // background too instead of decoding an id as an index.
+  ui.dim_rect(UIRect{0, 0, 20, 1});
+  term.clear_pending_output_for_test();
+  ui.emit_cell_colors(*cell);
+  REQUIRE(term.pending_output_for_test().find("38;2;127;121;112") != std::string::npos);
+}
 
 TEST_CASE("Nearest palette index round-trips the palette", "[jot][colorizer]")
 {

@@ -15,6 +15,7 @@
 #include "tools/symbols/index.h"
 #include "ui/components.h"
 #include "ui/text.h"
+#include "ui/xterm_palette.h"
 
 #include <algorithm>
 #include <array>
@@ -39,6 +40,26 @@ using namespace lua_bind;
 
 namespace lua_bind
 {
+  // One colour out of a theme table: an xterm index as a number, or an exact
+  // 24-bit colour as a "#rrggbb" (also #rgb / #rrggbbaa) string. -1 -- the
+  // "leave this slot alone" sentinel set_theme_color expects -- for anything
+  // else, including a string that is not a colour.
+  int theme_color_field(lua_State *L, int table_index, const char *name)
+  {
+    lua_getfield(L, table_index, name);
+    int value = -1;
+    if (lua_isnumber(L, -1))
+    {
+      value = (int)lua_tointeger(L, -1);
+    }
+    else if (lua_isstring(L, -1))
+    {
+      value = jot_ui::exact_color_from_hex(lua_tostring(L, -1));
+    }
+    lua_pop(L, 1);
+    return value;
+  }
+
   LuaAPI &api(lua_State *L)
   {
     void *ud = lua_touserdata(L, lua_upvalueindex(1));
@@ -124,12 +145,8 @@ bool LuaAPI::init()
          {
            auto &a = api(s);
            luaL_checktype(s, 2, LUA_TTABLE);
-           lua_getfield(s, 2, "fg");
-           int fg = lua_isnumber(s, -1) ? (int)lua_tointeger(s, -1) : -1;
-           lua_pop(s, 1);
-           lua_getfield(s, 2, "bg");
-           int bg = lua_isnumber(s, -1) ? (int)lua_tointeger(s, -1) : -1;
-           lua_pop(s, 1);
+           const int fg = theme_color_field(s, 2, "fg");
+           const int bg = theme_color_field(s, 2, "bg");
            a.set_theme_color(luaL_optstring(s, 1, ""), fg, bg);
            return 0;
          });
@@ -227,12 +244,8 @@ bool LuaAPI::init()
         {
           auto &a = api(s);
           luaL_checktype(s, 2, LUA_TTABLE);
-          lua_getfield(s, 2, "fg");
-          int fg = lua_isnumber(s, -1) ? (int)lua_tointeger(s, -1) : -1;
-          lua_pop(s, 1);
-          lua_getfield(s, 2, "bg");
-          int bg = lua_isnumber(s, -1) ? (int)lua_tointeger(s, -1) : -1;
-          lua_pop(s, 1);
+          const int fg = theme_color_field(s, 2, "fg");
+          const int bg = theme_color_field(s, 2, "bg");
           a.set_theme_color(luaL_optstring(s, 1, ""), fg, bg);
           return 0;
         });
@@ -663,12 +676,8 @@ bool LuaAPI::init()
         {
           auto &a = api(s);
           luaL_checktype(s, 2, LUA_TTABLE);
-          lua_getfield(s, 2, "fg");
-          int fg = lua_isnumber(s, -1) ? (int)lua_tointeger(s, -1) : -1;
-          lua_pop(s, 1);
-          lua_getfield(s, 2, "bg");
-          int bg = lua_isnumber(s, -1) ? (int)lua_tointeger(s, -1) : -1;
-          lua_pop(s, 1);
+          const int fg = theme_color_field(s, 2, "fg");
+          const int bg = theme_color_field(s, 2, "bg");
           a.set_theme_color(luaL_optstring(s, 1, ""), fg, bg);
           return 0;
         });

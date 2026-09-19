@@ -1016,9 +1016,11 @@ void Editor::render_integrated_terminal()
         for (int j = start_cell; j < (int)styled.size() && sx < 1 + max_cols; j++)
         {
           auto colors = IntegratedTerminal::resolve_cell_colors(styled[j], term_fg, term_bg);
-          int fg = std::clamp(colors.fg, 0, 255);
+          // No clamp here: a cell colour is an index, but the shell's default
+          // colours are theme values, which may be exact 24-bit colours.
+          int fg = colors.fg;
           bool sel_cell = row_sel && j >= sel_left && j < sel_right;
-          int bg = sel_cell ? theme.bg_selection : std::clamp(colors.bg, 0, 255);
+          int bg = sel_cell ? theme.bg_selection : colors.bg;
           ui->draw_text(sx, start_y + i, styled[j].ch, fg, bg);
           sx++;
         }

@@ -73,8 +73,12 @@ public:
   static ResolvedCellColors
   resolve_cell_colors(const StyledCell &cell, int default_fg, int default_bg)
   {
-    ResolvedCellColors colors{cell.fg_default ? default_fg : cell.fg,
-                              cell.bg_default ? default_bg : cell.bg};
+    // A cell's own colour comes out of vterm and is always a 0-255 palette
+    // index; the shell's default colours come from the theme and may be exact
+    // 24-bit values. Only the cell-derived side is clamped -- clamping both
+    // (as this used to) flattened a hex Terminal colour onto index 255.
+    ResolvedCellColors colors{cell.fg_default ? default_fg : std::clamp(cell.fg, 0, 255),
+                              cell.bg_default ? default_bg : std::clamp(cell.bg, 0, 255)};
     if (cell.reverse)
     {
       std::swap(colors.fg, colors.bg);

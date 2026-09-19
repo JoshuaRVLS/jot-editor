@@ -21,7 +21,10 @@ import struct
 import termios
 import time
 
-CSI = re.compile(rb"\x1b\[([0-9;? ]*)([a-zA-Z])")
+# Colon subparameters (SGR 4:3 for a wavy underline, 58:5:n for an underline
+# colour) are part of the parameter bytes too; without them here the sequence
+# fails to match and its tail prints as text on the reconstructed screen.
+CSI = re.compile(rb"\x1b\[([0-9;:? ]*)([a-zA-Z])")
 
 
 class Screen:
@@ -36,6 +39,10 @@ class Screen:
         # -- the bottom bar is meant to carry the status line's background, and
         # that is invisible in the text alone.
         self.bg = [[-1] * cols for _ in range(rows)]
+        # Every byte read after the child started, for the checks that are about
+        # the escape stream itself rather than the reconstructed screen (e.g. a
+        # colour the theme only emits as 38;2 rather than a palette index).
+        self.raw = bytearray()
         self.cur_bg = -1
         self.x = 0
         self.y = 0
@@ -44,6 +51,7 @@ class Screen:
         self.pending = b""
 
     def feed(self, data: bytes) -> None:
+        self.raw.extend(data)
         data = self.pending + data
         self.pending = b""
         i = 0

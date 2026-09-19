@@ -24,7 +24,9 @@ pitch and install steps, see the [README](../README.md).
 - **Git workflows** for status, diffs, staging, unstaging, committing, log,
   blame, and refresh — all from inside the editor.
 - **Lua plugins and JSON colorschemes** for customization, with behavior owned
-  by the C++ core.
+  by the C++ core. The two shipped schemes (`jot-dark`, `jot-light`) are exact
+  24-bit palettes authored in hex; a theme file may also use xterm-256 indices,
+  or mix the two.
 
 ## Running jot
 

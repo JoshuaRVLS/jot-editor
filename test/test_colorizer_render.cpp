@@ -8,6 +8,7 @@
 #include "editor.h"
 #include "features/color_codes.h"
 #include "ui/ui.h"
+#include "ui/xterm_palette.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
@@ -82,6 +83,20 @@ namespace
     e.request_redraw_for_test();
     e.render_for_test();
   }
+
+  // A theme colour as 0xRRGGBB: the bundled themes name exact colours, a
+  // built-in default is a palette index.
+  std::uint32_t theme_rgb(int value)
+  {
+    unsigned char r = 0;
+    unsigned char g = 0;
+    unsigned char b = 0;
+    if (!jot_ui::exact_color_rgb(value, r, g, b))
+    {
+      jot_ui::palette_rgb(value, r, g, b);
+    }
+    return ((std::uint32_t)r << 16) | ((std::uint32_t)g << 8) | b;
+  }
 } // namespace
 
 TEST_CASE("A hex literal is painted in its own colour", "[jot][colorizer]")
@@ -115,8 +130,11 @@ TEST_CASE("Foreground mode colours the text and leaves the background", "[jot][c
   UI *ui = e.ui_for_test();
   const UICell *orange_text = find_cell_with_fg(ui, 0xFF8800u);
   REQUIRE(orange_text != nullptr);
-  // The background stays the theme's, i.e. no fill was painted.
-  REQUIRE(orange_text->bg_rgb == kNoRgb);
+  // The background stays the theme's own, i.e. no fill was painted: a themed
+  // cell carries the theme's colour as a 24-bit value now that the bundled
+  // palettes are hex, so the check is against that rather than "nothing".
+  REQUIRE(orange_text->bg_rgb == theme_rgb(e.theme_for_test().bg_default));
+  REQUIRE(orange_text->bg_rgb != 0xFF8800u);
 
   // Switching back to background mode must take effect on the next frame.
   e.config_set_for_test("colorizer_mode", "background");
@@ -186,6 +204,7 @@ TEST_CASE("Virtualtext mode leaves the text alone and appends a swatch", "[jot][
   render(e);
 
   UI *ui = e.ui_for_test();
+  const std::uint32_t literal = 0xFF8800u;
   // The literal's own cells must not be filled: that is the whole point of
   // virtualtext mode, the text keeps its syntax colours.
   int literal_row = -1;
@@ -213,8 +232,12 @@ TEST_CASE("Virtualtext mode leaves the text alone and appends a swatch", "[jot][
   {
     const UICell *c = ui->cell_at(literal_col + k, literal_row);
     REQUIRE(c != nullptr);
-    REQUIRE(c->bg_rgb == kNoRgb);
-    REQUIRE(c->fg_rgb == kNoRgb);
+    // No fill and no recoloured text: neither side of the cell is the literal's
+    // colour. The background is the theme's own (a hex theme's cells carry it as
+    // an exact value), the foreground is whatever the syntax colouring used.
+    REQUIRE(c->bg_rgb != literal);
+    REQUIRE(c->fg_rgb != literal);
+    REQUIRE(c->bg_rgb == theme_rgb(e.theme_for_test().bg_default));
   }
 
   // A swatch carrying the colour is drawn after the literal's text ends.

@@ -1,5 +1,6 @@
 #include "ui.h"
 #include "ui/text.h"
+#include "ui/xterm_palette.h"
 #include <algorithm>
 
 namespace
@@ -52,12 +53,58 @@ namespace
   // theme doesn't collapse.
   constexpr int ui_dim_rgb_scale_pct = 55;
 
-  // xterm-256 index → RGB. Named (not a lambda) so both ui_dim_color and the
-  // darkness probe below can use it.
+  // Converts a colour value that is an exact (24-bit) colour into the 24-bit
+  // companion both backends read from a cell, leaving the palette index the
+  // caller also carries as the fallback for anything that cannot hold 24 bits.
+  // An explicit rgb -- the inline colour preview -- always wins.
+  void resolve_exact_cell_color(int value, std::uint32_t &rgb)
+  {
+    if (rgb != kNoRgb)
+    {
+      return;
+    }
+    unsigned char r = 0;
+    unsigned char g = 0;
+    unsigned char b = 0;
+    if (jot_ui::exact_color_rgb(value, r, g, b))
+    {
+      rgb = ((std::uint32_t)r << 16) | ((std::uint32_t)g << 8) | (std::uint32_t)b;
+    }
+  }
+
+  // SGR 58 is only ever emitted in its indexed form, so an exact underline colour
+  // is folded to the closest palette entry: the underline is a hairline, while
+  // the text above it keeps its exact colour.
+  int underline_paint_index(int value)
+  {
+    unsigned char r = 0;
+    unsigned char g = 0;
+    unsigned char b = 0;
+    if (!jot_ui::exact_color_rgb(value, r, g, b))
+    {
+      return value;
+    }
+    return jot_ui::palette_nearest_index(r, g, b);
+  }
+
+  // Colour value → RGB. Named (not a lambda) so both ui_dim_color and the
+  // darkness probe below can use it. An exact colour decodes to itself, which is
+  // what keeps the dimmed-look probe and the scrim's quantisation honest for a
+  // theme whose backgrounds are not palette entries.
   struct XtermPalette
   {
     static void decode(int i, int rgb[3])
     {
+      unsigned char er = 0;
+      unsigned char eg = 0;
+      unsigned char eb = 0;
+      if (jot_ui::exact_color_rgb(i, er, eg, eb))
+      {
+        rgb[0] = er;
+        rgb[1] = eg;
+        rgb[2] = eb;
+        return;
+      }
       if (i < 0)
       {
         rgb[0] = rgb[1] = rgb[2] = 0;
@@ -222,6 +269,8 @@ UICell UI::blank_cell() const
   cell.ch = " ";
   cell.fg = default_fg;
   cell.bg = default_bg;
+  resolve_exact_cell_color(cell.fg, cell.fg_rgb);
+  resolve_exact_cell_color(cell.bg, cell.bg_rgb);
   return cell;
 }
 
@@ -332,11 +381,22 @@ void UI::set_cursor_colors(int fg, int bg)
 
 void UI::emit_cell_colors(const UICell &cell)
 {
+  int fg = cell.fg;
+  int bg = cell.bg;
+  std::uint32_t fg_rgb = cell.fg_rgb;
+  std::uint32_t bg_rgb = cell.bg_rgb;
+  // Cells normally arrive through set_cell(), which has already resolved an
+  // exact colour; a cell that reached the grid by another route still gets it
+  // here, so no render path can emit an exact id as if it were an index.
+  resolve_exact_cell_color(fg, fg_rgb);
+  resolve_exact_cell_color(bg, bg_rgb);
   const bool dim = cell.dim;
-  term->set_color(dim ? ui_dim_color(cell.fg, false) : cell.fg,
-                  dim ? ui_dim_color(cell.bg, true) : cell.bg,
-                  dim && cell.fg_rgb != kNoRgb ? ui_dim_rgb_value(cell.fg_rgb) : cell.fg_rgb,
-                  dim && cell.bg_rgb != kNoRgb ? ui_dim_rgb_value(cell.bg_rgb) : cell.bg_rgb);
+  auto dim_rgb = [](std::uint32_t value)
+  { return value == kNoRgb ? kNoRgb : ui_dim_rgb_value(value); };
+  term->set_color(dim ? ui_dim_color(fg, false) : fg,
+                  dim ? ui_dim_color(bg, true) : bg,
+                  dim ? dim_rgb(fg_rgb) : fg_rgb,
+                  dim ? dim_rgb(bg_rgb) : bg_rgb);
 }
 
 void UI::dim_rect(const UIRect &rect)
@@ -359,7 +419,14 @@ void UI::set_cell(int x, int y, const UICell &cell)
 {
   if (x >= 0 && x < width && y >= 0 && y < height)
   {
-    grid[y][x] = cell;
+    // The one place a cell is written. A theme colour that is not a palette
+    // entry is turned into the 24-bit colour the backends paint here, rather
+    // than in every painter that hands a theme slot to draw_text.
+    UICell &target = grid[y][x];
+    target = cell;
+    resolve_exact_cell_color(target.fg, target.fg_rgb);
+    resolve_exact_cell_color(target.bg, target.bg_rgb);
+    target.underline_fg = underline_paint_index(target.underline_fg);
     row_dirty[y] = 1;
   }
 }

@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "jot/lua/api.h"
+#include "ui/xterm_palette.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -73,11 +74,27 @@ namespace
     out.push_back(fs::current_path() / "configs" / "colors");
     return out;
   }
+  // One colour slot out of a group body: -1 when the key is absent, otherwise
+  // the colour value the rest of the editor speaks. `"fg": 215` is an xterm
+  // palette index; `"fg": "#ffb86b"` (or #rgb, #rrggbbaa) is an exact 24-bit
+  // colour, which is what lets a theme be authored outside the 256-entry grid.
+  // A string that is not a colour reads as absent, so a typo leaves the slot at
+  // the value it inherited instead of painting a broken one.
   int value(const std::string &s, const char *key)
   {
-    std::regex r(std::string("\\\"") + key + "\\\"\\s*:\\s*(-?[0-9]+)");
+    const std::string prefix = std::string("\\\"") + key + "\\\"\\s*:\\s*";
     std::smatch m;
-    return std::regex_search(s, m, r) ? std::stoi(m[1].str()) : -1;
+    std::regex index_re(prefix + "(-?[0-9]+)");
+    if (std::regex_search(s, m, index_re))
+    {
+      return std::stoi(m[1].str());
+    }
+    std::regex hex_re(prefix + "\\\"([^\\\"]*)\\\"");
+    if (std::regex_search(s, m, hex_re))
+    {
+      return jot_ui::exact_color_from_hex(m[1].str());
+    }
+    return -1;
   }
 } // namespace
 

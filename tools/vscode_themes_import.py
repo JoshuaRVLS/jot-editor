@@ -13,8 +13,11 @@ schemes (jot-dark, jot-light) and never overwrites them, so pass your own
 config directory -- `~/.config/jot/configs/colors` -- to keep imports personal
 instead of adding them to the tree.
 
-jot themes are flat maps of highlight group -> {fg, bg} where fg/bg are ANSI
-256 palette indices (-1 = unset). VSCode themes are converted in two steps:
+jot themes are flat maps of highlight group -> {fg, bg} where fg/bg are either
+an exact "#rrggbb" colour or an ANSI 256 palette index (-1 = unset). Imports
+write the exact colour: the source themes are 24-bit to begin with, and
+quantising them onto the 256-entry grid threw away most of what made a source
+scheme look like itself. VSCode themes are converted in two steps:
 
   - tokenColors scopes (TextMate) are matched against each jot syntax group
     with longest-scope-prefix priority; later rules win on ties, mirroring
@@ -136,43 +139,14 @@ def hex_to_rgb(value):
         return None
 
 
-def rgb_to_ansi256(r, g, b):
-    """Nearest ANSI 256 index for an (r, g, b) tuple (standard xterm cube)."""
-    def dist(c):
-        return (c[0] - r) ** 2 + (c[1] - g) ** 2 + (c[2] - b) ** 2
+def color_json(rgb):
+    """One theme slot's JSON value: an exact "#rrggbb" colour, or -1 (unset).
 
-    basic = [
-        (0, 0, 0), (128, 0, 0), (0, 128, 0), (128, 128, 0),
-        (0, 0, 128), (128, 0, 128), (0, 128, 128), (192, 192, 192),
-        (128, 128, 128), (255, 0, 0), (0, 255, 0), (255, 255, 0),
-        (0, 0, 255), (255, 0, 255), (0, 255, 255), (255, 255, 255),
-    ]
-    best = min(range(16), key=lambda i: dist(basic[i]))
-    best_d = dist(basic[best])
-
-    cube_best, cube_d = 16, None
-    for r6 in range(6):
-        for g6 in range(6):
-            for b6 in range(6):
-                c = (55 + r6 * 40 if r6 else 0,
-                     55 + g6 * 40 if g6 else 0,
-                     55 + b6 * 40 if b6 else 0)
-                d = dist(c)
-                if cube_d is None or d < cube_d:
-                    cube_d, cube_best = d, 16 + 36 * r6 + 6 * g6 + b6
-
-    gray_best, gray_d = 232, None
-    for i in range(24):
-        v = 8 + i * 10
-        d = dist((v, v, v))
-        if gray_d is None or d < gray_d:
-            gray_d, gray_best = d, 232 + i
-
-    if best_d <= (cube_d or 1e9) and best_d <= (gray_d or 1e9):
-        return best
-    if (cube_d or 1e9) <= (gray_d or 1e9):
-        return cube_best
-    return gray_best
+    The importer keeps the source's 24-bit colours instead of quantising them:
+    jot reads hex in a theme file, and an imported scheme that had been snapped
+    to the 256-entry grid looked like a different theme.
+    """
+    return -1 if rgb is None else "#%02x%02x%02x" % rgb
 
 
 def ansi(value, default=-1):
@@ -447,12 +421,6 @@ def convert(theme, src_name):
             return hex_to_rgb(colors.get(key))
         return None
 
-    def fg_ansi(rgb):
-        return rgb_to_ansi256(*rgb) if rgb else -1
-
-    def bg_ansi(rgb):
-        return rgb_to_ansi256(*rgb) if rgb else -1
-
     # Collect raw (fg_rgb, bg_rgb) pairs first; a contrast pass then repairs
     # any foreground the source theme made unreadable against its background
     # (generic scopes painted with the background color are common in the pack
@@ -491,7 +459,7 @@ def convert(theme, src_name):
         # carry none fall back to the editor background.
         ref_bg = rgb_bg if rgb_bg is not None else bg
         rgb_fg = fix_fg_contrast(rgb_fg, ref_bg, fg)
-        out[group] = {"fg": fg_ansi(rgb_fg), "bg": bg_ansi(rgb_bg)}
+        out[group] = {"fg": color_json(rgb_fg), "bg": color_json(rgb_bg)}
     return out
 
 
@@ -530,8 +498,13 @@ def main():
         except Exception as exc:  # noqa: BLE001 - report and keep going
             skipped.append((name, str(exc)))
             continue
+        def slot(value):
+            # -1 stays a number; a colour is the quoted hex string. Printed with
+            # %s because the two forms are deliberately different JSON types.
+            return "-1" if isinstance(value, int) else "\"%s\"" % value
+
         body = ",\n".join(
-            "  \"%s\": {\"fg\": %d, \"bg\": %d}" % (g, groups[g]["fg"], groups[g]["bg"])
+            "  \"%s\": {\"fg\": %s, \"bg\": %s}" % (g, slot(groups[g]["fg"]), slot(groups[g]["bg"]))
             for g in GROUP_ORDER)
         with open(os.path.join(out_dir, name + ".json"), "w") as f:
             f.write("{\n%s\n}\n" % body)

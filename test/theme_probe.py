@@ -9,6 +9,11 @@ shows up in a unit test of the palette -- the file is copied into a temp config
 dir there -- so this drives the real binary with only the shipped themes on disk
 and reads the cell backgrounds back out of the pty stream.
 
+Both themes name exact 24-bit colours, so the same run also pins the depth: the
+backgrounds must arrive as 48;2 and the accent (the active pane border) as 38;2.
+A slot that fell back to a palette index would still paint, just not the colour
+the scheme was authored with -- exactly the quiet downgrade this catches.
+
 Scenes: the default scheme (jot-dark), jot-light, the legacy `dark` name, and the
 theme chooser's list.
 
@@ -26,11 +31,25 @@ from pty_screen import run_in_pty  # noqa: E402
 
 PALETTE = b"\x1b[112;6u"  # Ctrl+Shift+P
 
-# The backgrounds the bundled themes set for the editor body and the status line.
-JOT_DARK_BODY = 234
-JOT_DARK_STATUS = 236
-JOT_LIGHT_BODY = 230
-JOT_LIGHT_STATUS = 253
+
+# pty_screen tags a 24-bit background as 1000 + its rgb, so it cannot be
+# mistaken for a palette index (see Screen._sgr).
+def truecolour(rgb: int) -> int:
+    return 1000 + rgb
+
+
+# The backgrounds the bundled themes set for the editor body and the status
+# line. Both themes name exact 24-bit colours, so what has to arrive on the wire
+# is a 48;2 sequence -- the themes are the one place a palette index would be a
+# silent downgrade of the whole scheme.
+JOT_DARK_BODY = truecolour(0x1E1B18)
+JOT_DARK_STATUS = truecolour(0x2A2522)
+JOT_LIGHT_BODY = truecolour(0xF9F4EA)
+JOT_LIGHT_STATUS = truecolour(0xECE4D6)
+# The accent each theme inks its active pane border with, as it must appear in
+# the escape stream: 38;2;r;g;b, never 38;5;n.
+JOT_DARK_ACCENT = b"\x1b[38;2;245;176;107m"  # #f5b06b
+JOT_LIGHT_ACCENT = b"\x1b[38;2;169;92;20m"  # #a95c14
 # What an editor with no theme applied paints (the built-in ANSI default).
 UNTHEMED_BODY = 0
 
@@ -94,15 +113,15 @@ def main() -> int:
     failures = []
 
     scenes = [
-        ("default", None, JOT_DARK_BODY, JOT_DARK_STATUS),
-        ("jot-light", "jot-light", JOT_LIGHT_BODY, JOT_LIGHT_STATUS),
-        ("jot-dark", "jot-dark", JOT_DARK_BODY, JOT_DARK_STATUS),
+        ("default", None, JOT_DARK_BODY, JOT_DARK_STATUS, JOT_DARK_ACCENT),
+        ("jot-light", "jot-light", JOT_LIGHT_BODY, JOT_LIGHT_STATUS, JOT_LIGHT_ACCENT),
+        ("jot-dark", "jot-dark", JOT_DARK_BODY, JOT_DARK_STATUS, JOT_DARK_ACCENT),
         # The name the removed catalog used: it must still resolve, and to the
         # jot theme that replaced it rather than to the ANSI fallback.
-        ("dark (legacy name)", "dark", JOT_DARK_BODY, JOT_DARK_STATUS),
-        ("light (legacy name)", "light", JOT_LIGHT_BODY, JOT_LIGHT_STATUS),
+        ("dark (legacy name)", "dark", JOT_DARK_BODY, JOT_DARK_STATUS, JOT_DARK_ACCENT),
+        ("light (legacy name)", "light", JOT_LIGHT_BODY, JOT_LIGHT_STATUS, JOT_LIGHT_ACCENT),
     ]
-    for index, (label, scheme, want_body, want_status) in enumerate(scenes):
+    for index, (label, scheme, want_body, want_status, want_accent) in enumerate(scenes):
         cfg = f"/tmp/jot_theme_probe_cfg_{index}"
         if scheme is not None:
             write_config(cfg, scheme)
@@ -118,6 +137,9 @@ def main() -> int:
                             + (" (the theme did not apply)" if body == UNTHEMED_BODY else ""))
         if status != want_status:
             failures.append(f"{label}: status background {status}, expected {want_status}")
+        if want_accent not in screen.raw:
+            failures.append(f"{label}: the accent never arrived as 38;2 ({want_accent!r} "
+                            f"missing from {len(screen.raw)} bytes of output)")
 
     # The chooser offers the installed themes as argument completions of
     # `:theme`. The palette only switches to argument completion once the query
