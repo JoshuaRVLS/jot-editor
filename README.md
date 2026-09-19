@@ -38,6 +38,7 @@ add --gui flag to use the GUI.
 - [Features, keybindings & commands](docs/FEATURES.md) — what jot can do and how to drive it
 - [Configuration](docs/FEATURES.md#configuration) — Lua-first settings
 - [Themes](docs/THEMES.md) — authoring colorschemes
+- [Architecture](docs/ARCHITECTURE.md) — module layout for contributors
 - [Lua API](docs/LUA_API.md) — plugins and scripting
 - [Plugins](docs/PLUGINS.md)
 - [Debugger](docs/DEBUGGER.md)

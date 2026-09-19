@@ -375,6 +375,7 @@ void Editor::render_status_line()
   // Discord presence chip: only while the feature is on and something is worth
   // reporting (connected, connecting, or an error from Discord such as a
   // missing asset key). :discord status carries the full detail.
+  const std::string &discord_status = discord.status();
   if (config.get_bool("discord_show_status", true) && !discord_status.empty()
       && discord_status != "off")
   {

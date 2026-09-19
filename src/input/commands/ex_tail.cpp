@@ -715,7 +715,7 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   }
   else if (lcmd == "discord")
   {
-    discord_command(arg);
+    discord.command(arg);
   }
   else if (lcmd == "resume")
   {
@@ -805,7 +805,7 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   }
   else if (lcmd == "search")
   {
-    toggle_search();
+    search.toggle();
   }
   else if (lcmd == "format")
   {

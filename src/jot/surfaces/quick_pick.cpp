@@ -426,7 +426,7 @@ bool Editor::handle_quick_pick_mouse(int x,
 
 void Editor::show_project_search(const std::string &query)
 {
-  clear_search_scope();
+  search.clear_scope();
   std::vector<QuickPickItem> items;
   if (!query.empty())
   {

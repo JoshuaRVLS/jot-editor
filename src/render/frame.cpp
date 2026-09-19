@@ -212,15 +212,15 @@ void Editor::render()
       return;
     }
 
-    if (show_command_palette || show_search || show_save_prompt || show_quit_prompt)
+    if (show_command_palette || search.visible() || show_save_prompt || show_quit_prompt)
     {
       if (show_command_palette)
       {
         place_command_palette_cursor();
       }
-      else if (show_search)
+      else if (search.visible())
       {
-        place_search_cursor();
+        search.place_cursor();
       }
       else if (show_save_prompt)
       {
@@ -430,7 +430,7 @@ void Editor::render()
     render_command_palette();
     render_quick_pick();
     render_settings_menu();
-    render_search_panel();
+    search.render_panel();
     render_tree_sitter_status_modal();
     render_lsp_status_modal();
     render_context_menu();
@@ -472,15 +472,15 @@ void Editor::render()
     {
       place_settings_cursor();
     }
-    else if (show_command_palette || show_search || show_save_prompt || show_quit_prompt)
+    else if (show_command_palette || search.visible() || show_save_prompt || show_quit_prompt)
     {
       if (show_command_palette)
       {
         place_command_palette_cursor();
       }
-      else if (show_search)
+      else if (search.visible())
       {
-        place_search_cursor();
+        search.place_cursor();
       }
       else if (show_save_prompt)
       {

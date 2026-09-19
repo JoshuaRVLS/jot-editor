@@ -160,7 +160,7 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift, bool /*is_a
       needs_redraw = true;
       return;
     case '/':
-      toggle_search();
+      search.toggle();
       needs_redraw = true;
       return;
     case 's':
@@ -527,15 +527,15 @@ void Editor::handle_normal_mode(int ch, bool is_ctrl, bool is_shift, bool /*is_a
   }
 
   case '/':
-    toggle_search();
+    search.toggle();
     needs_redraw = true;
     return;
   case 'n':
-    find_next();
+    search.find_next();
     needs_redraw = true;
     return;
   case 'N':
-    find_prev();
+    search.find_prev();
     needs_redraw = true;
     return;
   case ':':

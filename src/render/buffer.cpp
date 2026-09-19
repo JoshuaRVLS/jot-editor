@@ -634,20 +634,22 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
         }
         size_t color_span_cursor = 0;
         int line_bracket_depth = bracket_depth;
-        Editor::SearchMatch active_search_match{-1, -1, 0};
-        if (show_search && !search_query.empty())
+        SearchMatch active_search_match{-1, -1, 0};
+        const std::vector<SearchMatch> &search_matches = search.results();
+        if (search.visible() && !search.query().empty())
         {
           auto it = std::lower_bound(
-              search_results.begin(), search_results.end(), Editor::SearchMatch{line_idx, 0, 0});
-          while (it != search_results.end() && it->line == line_idx)
+              search_matches.begin(), search_matches.end(), SearchMatch{line_idx, 0, 0});
+          while (it != search_matches.end() && it->line == line_idx)
           {
             search_hits.push_back(*it);
             ++it;
           }
-          if (search_result_index >= 0 && search_result_index < (int)search_results.size()
-              && search_results[search_result_index].line == line_idx)
+          const int selected = search.selected_index();
+          if (selected >= 0 && selected < (int)search_matches.size()
+              && search_matches[selected].line == line_idx)
           {
-            active_search_match = search_results[search_result_index];
+            active_search_match = search_matches[selected];
           }
         }
         size_t next_search_hit = 0;

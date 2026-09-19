@@ -81,7 +81,7 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt
   if (is_ctrl && is_shift && (ch == 'f' || ch == 'F'))
   {
     hide_lsp_completion();
-    if (open_scoped_replace_from_selection())
+    if (search.open_scoped_replace_from_selection())
     {
       return;
     }
@@ -233,7 +233,7 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt
     case 'f':
     case 'F':
       hide_lsp_completion();
-      open_search();
+      search.open();
       needs_redraw = true;
       return;
     case 'r':
@@ -443,7 +443,7 @@ void Editor::handle_insert_mode(int ch, bool is_ctrl, bool is_shift, bool is_alt
   }
   if (is_alt && (ch == 'f' || ch == 'F'))
   {
-    toggle_search();
+    search.toggle();
     needs_redraw = true;
     return;
   }

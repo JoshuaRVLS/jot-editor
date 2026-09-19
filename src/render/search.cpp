@@ -1,4 +1,7 @@
-// Search panel rendering (project-wide search) and cursor placement.
+// Search panel rendering and cursor placement. The panel's state and the rest
+// of its behaviour live in SearchController (jot/editor/search_controller.h).
+#include "jot/editor/search_controller.h"
+
 #include "editor.h"
 #include "jot/lua/api.h"
 #include "ui/components.h"
@@ -7,49 +10,49 @@
 #include <string>
 #include <vector>
 
-void Editor::render_search_panel()
+void SearchController::render_panel()
 {
-  if (!show_search)
+  if (!visible_)
     return;
 
-  int w = std::min(72, std::max(42, ui->get_render_width() / 2));
-  int h = search_replace_visible ? 5 : 4;
-  int x = ui->get_width() - w - 2;
-  int y = topbar_height() + tab_height;
+  int w = std::min(72, std::max(42, editor_.ui->get_render_width() / 2));
+  int h = replace_visible_ ? 5 : 4;
+  int x = editor_.ui->get_width() - w - 2;
+  int y = editor_.topbar_height() + editor_.tab_height;
 
   if (x < 0)
     x = 0;
-  if (x + w > ui->get_width())
-    w = std::max(20, ui->get_width() - x);
+  if (x + w > editor_.ui->get_width())
+    w = std::max(20, editor_.ui->get_width() - x);
 
   // A registered Lua UI handler paints the search panel from this state; the
   // native rect and row geometry stay the source of truth so the input caret
   // (placed natively) lands on the Lua-drawn fields.
-  if (lua_api && lua_api->has_lua_ui_handler("search_panel"))
+  if (editor_.lua_api && editor_.lua_api->has_lua_ui_handler("search_panel"))
   {
     SearchView view;
     view.x = x;
     view.y = y;
     view.w = w;
     view.h = h;
-    view.query = search_query;
-    view.replace_text = search_replace_text;
-    view.replace_visible = search_replace_visible;
-    view.focus_replace = search_replace_visible && search_focus_replace;
-    view.case_sensitive = search_case_sensitive;
-    view.whole_word = search_whole_word;
-    view.regex = search_regex;
-    view.scoped_to_selection = search_scoped_to_selection;
-    if (search_result_index >= 0 && !search_results.empty())
+    view.query = query_;
+    view.replace_text = replace_text_;
+    view.replace_visible = replace_visible_;
+    view.focus_replace = replace_visible_ && focus_replace_;
+    view.case_sensitive = case_sensitive_;
+    view.whole_word = whole_word_;
+    view.regex = regex_;
+    view.scoped_to_selection = scoped_to_selection_;
+    if (result_index_ >= 0 && !results_.empty())
     {
       view.count =
-          std::to_string(search_result_index + 1) + "/" + std::to_string(search_results.size());
+          std::to_string(result_index_ + 1) + "/" + std::to_string(results_.size());
     }
     else
     {
       view.count = "0/0";
     }
-    if (lua_api->emit_search(view))
+    if (editor_.lua_api->emit_search(view))
     {
       return;
     }
@@ -57,86 +60,86 @@ void Editor::render_search_panel()
 
   UIRect rect = {x, y, w, h};
   ui_draw_panel(
-      *ui, rect, {theme.fg_command, theme.bg_command, theme.fg_panel_border, theme.bg_command});
+      *editor_.ui, rect, {editor_.theme.fg_command, editor_.theme.bg_command, editor_.theme.fg_panel_border, editor_.theme.bg_command});
 
   std::string count = "0/0";
-  if (search_result_index >= 0 && !search_results.empty())
+  if (result_index_ >= 0 && !results_.empty())
   {
-    count = std::to_string(search_result_index + 1) + "/" + std::to_string(search_results.size());
+    count = std::to_string(result_index_ + 1) + "/" + std::to_string(results_.size());
   }
-  else if (!search_query.empty())
+  else if (!query_.empty())
   {
     count = "0/0";
   }
 
   std::string chips;
-  chips += search_case_sensitive ? " Aa " : " aa ";
-  chips += search_whole_word ? " W " : " w ";
-  if (search_regex)
+  chips += case_sensitive_ ? " Aa " : " aa ";
+  chips += whole_word_ ? " W " : " w ";
+  if (regex_)
   {
     chips += " .* ";
   }
-  if (search_scoped_to_selection)
+  if (scoped_to_selection_)
   {
     chips += " Sel ";
   }
   chips += " " + count + " ";
-  ui_draw_panel_title(*ui,
+  ui_draw_panel_title(*editor_.ui,
                       rect,
-                      search_scoped_to_selection ? " Find in Selection" : " Find",
-                      theme.fg_command,
-                      theme.bg_command);
-  ui->draw_text(
-      std::max(x + 1, x + w - (int)chips.size() - 1), y, chips, theme.fg_comment, theme.bg_command);
+                      scoped_to_selection_ ? " Find in Selection" : " Find",
+                      editor_.theme.fg_command,
+                      editor_.theme.bg_command);
+  editor_.ui->draw_text(
+      std::max(x + 1, x + w - (int)chips.size() - 1), y, chips, editor_.theme.fg_comment, editor_.theme.bg_command);
 
   int label_w = 9;
   int input_w = std::max(1, w - label_w - 3);
-  int find_fg = search_focus_replace ? theme.fg_command : theme.fg_selection;
-  int find_bg = search_focus_replace ? theme.bg_command : theme.bg_selection;
-  ui->draw_text(x + 1, y + 1, "Find", theme.fg_comment, theme.bg_command);
-  ui->draw_text(x + label_w,
+  int find_fg = focus_replace_ ? editor_.theme.fg_command : editor_.theme.fg_selection;
+  int find_bg = focus_replace_ ? editor_.theme.bg_command : editor_.theme.bg_selection;
+  editor_.ui->draw_text(x + 1, y + 1, "Find", editor_.theme.fg_comment, editor_.theme.bg_command);
+  editor_.ui->draw_text(x + label_w,
                 y + 1,
-                ui_truncate_cells(search_query, input_w),
+                ui_truncate_cells(query_, input_w),
                 find_fg,
                 find_bg,
-                !search_focus_replace);
+                !focus_replace_);
 
-  if (search_replace_visible)
+  if (replace_visible_)
   {
-    int replace_fg = search_focus_replace ? theme.fg_selection : theme.fg_command;
-    int replace_bg = search_focus_replace ? theme.bg_selection : theme.bg_command;
-    ui->draw_text(x + 1, y + 2, "Replace", theme.fg_comment, theme.bg_command);
-    ui->draw_text(x + label_w,
+    int replace_fg = focus_replace_ ? editor_.theme.fg_selection : editor_.theme.fg_command;
+    int replace_bg = focus_replace_ ? editor_.theme.bg_selection : editor_.theme.bg_command;
+    editor_.ui->draw_text(x + 1, y + 2, "Replace", editor_.theme.fg_comment, editor_.theme.bg_command);
+    editor_.ui->draw_text(x + label_w,
                   y + 2,
-                  ui_truncate_cells(search_replace_text, input_w),
+                  ui_truncate_cells(replace_text_, input_w),
                   replace_fg,
                   replace_bg,
-                  search_focus_replace);
+                  focus_replace_);
   }
 
-  std::string footer = search_replace_visible
-                           ? (search_scoped_to_selection
+  std::string footer = replace_visible_
+                           ? (scoped_to_selection_
                                   ? "Enter next  Up prev  Tab field  ^R one  ^R+Shift all in sel"
                                   : "Enter next  Up prev  Tab field  ^R one  ^R+Shift all")
                            : "Enter next  Up prev  Tab case  ^H replace  ^E regex";
-  ui->draw_text(
-      x + 1, y + h - 2, ui_truncate_cells(footer, w - 3), theme.fg_comment, theme.bg_command);
+  editor_.ui->draw_text(
+      x + 1, y + h - 2, ui_truncate_cells(footer, w - 3), editor_.theme.fg_comment, editor_.theme.bg_command);
 }
 
-void Editor::place_search_cursor()
+void SearchController::place_cursor()
 {
-  if (!show_search)
+  if (!visible_)
     return;
-  int w = std::min(72, std::max(42, ui->get_render_width() / 2));
-  int x = std::max(0, ui->get_width() - w - 2);
-  if (x + w > ui->get_width())
-    w = std::max(20, ui->get_width() - x);
+  int w = std::min(72, std::max(42, editor_.ui->get_render_width() / 2));
+  int x = std::max(0, editor_.ui->get_width() - w - 2);
+  if (x + w > editor_.ui->get_width())
+    w = std::max(20, editor_.ui->get_width() - x);
   const int label_w = 9;
   const int input_w = std::max(1, w - label_w - 3);
-  const bool replace = search_replace_visible && search_focus_replace;
-  const std::string &input = replace ? search_replace_text : search_query;
+  const bool replace = replace_visible_ && focus_replace_;
+  const std::string &input = replace ? replace_text_ : query_;
   const int cursor_x = x + label_w + std::min(input_w - 1, std::max(0, ui_cell_count(input)));
-  const int cursor_y = topbar_height() + tab_height + (replace ? 2 : 1);
-  ui->set_cursor(cursor_x, cursor_y);
+  const int cursor_y = editor_.topbar_height() + editor_.tab_height + (replace ? 2 : 1);
+  editor_.ui->set_cursor(cursor_x, cursor_y);
 }
 

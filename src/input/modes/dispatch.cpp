@@ -456,9 +456,9 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     return;
   }
 
-  if (show_search)
+  if (search.visible())
   {
-    handle_search_panel(ch, is_ctrl, is_shift, is_alt);
+    search.handle_panel_input(ch, is_ctrl, is_shift);
     return;
   }
 

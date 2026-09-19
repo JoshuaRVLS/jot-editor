@@ -1,0 +1,80 @@
+#ifndef JOT_MODEL_MENU_H
+#define JOT_MODEL_MENU_H
+
+#include <string>
+#include <vector>
+enum MenuBarAction
+{
+  MENU_ACTION_NONE,
+  MENU_ACTION_COMMAND,
+  MENU_ACTION_NEW_FILE,
+  MENU_ACTION_OPEN_FINDER,
+  MENU_ACTION_SAVE,
+  MENU_ACTION_SAVE_AS,
+  MENU_ACTION_CLOSE_FILE,
+  MENU_ACTION_QUIT,
+  MENU_ACTION_UNDO,
+  MENU_ACTION_REDO,
+  MENU_ACTION_CUT,
+  MENU_ACTION_COPY,
+  MENU_ACTION_PASTE,
+  MENU_ACTION_SELECT_ALL,
+  MENU_ACTION_SELECT_LINE,
+  MENU_ACTION_DUPLICATE_LINE,
+  MENU_ACTION_MOVE_LINE_UP,
+  MENU_ACTION_MOVE_LINE_DOWN,
+  MENU_ACTION_TOGGLE_COMMENT,
+  MENU_ACTION_COMMAND_PALETTE,
+  MENU_ACTION_TOGGLE_SIDEBAR,
+  MENU_ACTION_TOGGLE_MINIMAP,
+  MENU_ACTION_THEME,
+  MENU_ACTION_HOME,
+  MENU_ACTION_TOGGLE_TERMINAL,
+  MENU_ACTION_NEW_TERMINAL,
+  MENU_ACTION_TERMINAL_ZOOM,
+  MENU_ACTION_TASKS,
+  MENU_ACTION_RERUN_TASK,
+  MENU_ACTION_TOGGLE_DEBUG_PANEL,
+  MENU_ACTION_DEBUG_STOP,
+  MENU_ACTION_DEBUG_CONTINUE,
+  MENU_ACTION_DEBUG_PAUSE,
+  MENU_ACTION_DEBUG_STEP_IN,
+  MENU_ACTION_DEBUG_STEP_OVER,
+  MENU_ACTION_DEBUG_STEP_OUT,
+  MENU_ACTION_LSP_DEFINITION,
+  MENU_ACTION_LSP_BACK,
+  MENU_ACTION_HELP
+};
+
+struct MenuBarItem
+{
+  std::string label;
+  MenuBarAction action = MENU_ACTION_NONE;
+  std::string command;
+  bool enabled = true;
+};
+
+struct MenuBarMenu
+{
+  std::string label;
+  std::vector<MenuBarItem> items;
+};
+
+struct MenuBarSegment
+{
+  int menu_index = -1;
+  int x = 0;
+  int end_x = 0;
+};
+
+struct HomeMenuEntry
+{
+  int action;
+  int recent_index;
+  int recent_workspace_index;
+  int x;
+  int y;
+  int w;
+};
+
+#endif

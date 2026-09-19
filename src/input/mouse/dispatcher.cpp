@@ -573,13 +573,13 @@ void Editor::handle_mouse(void *event_ptr)
     }
   }
 
-  if (show_search)
+  if (search.visible())
   {
-    if (handle_search_mouse(event->x, event->y, is_click))
+    if (search.handle_mouse(event->x, event->y, is_click))
     {
       return;
     }
-    if (show_search)
+    if (search.visible())
     {
       return;
     }

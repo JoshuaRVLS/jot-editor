@@ -201,8 +201,7 @@ namespace
 
 void Editor::save_state()
 {
-  search_results.clear();
-  search_result_index = -1;
+  search.clear_results();
 
   auto &buf = get_buffer();
   // Anchor the bracket-depth prefix invalidation at the first line the

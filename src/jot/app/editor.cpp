@@ -205,7 +205,7 @@ void Editor::initialize_state_defaults()
   debugger_breakpoint_hover_pane = -1;
   debugger_breakpoint_hover_buffer = -1;
   debugger_breakpoint_hover_line = -1;
-  show_search = false;
+  search.reset();
   quick_pick_kind = QUICK_PICK_NONE;
   show_quick_pick = false;
   quick_pick_title.clear();
@@ -220,15 +220,6 @@ void Editor::initialize_state_defaults()
   menu_bar_active = -1;
   menu_bar_selected = 0;
   menu_bar_segments.clear();
-  search_result_index = -1;
-  search_case_sensitive = false;
-  search_whole_word = false;
-  search_regex = false;
-  search_replace_visible = false;
-  search_focus_replace = false;
-  search_scoped_to_selection = false;
-  search_scope_start = {0, 0};
-  search_scope_end = {0, 0};
   show_save_prompt = false;
   show_quit_prompt = false;
 

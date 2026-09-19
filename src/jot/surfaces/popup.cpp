@@ -746,10 +746,9 @@ bool Editor::close_active_floating_ui()
     return true;
   }
 
-  if (show_search)
+  if (search.visible())
   {
-    show_search = false;
-    clear_search_scope();
+    search.close();
     needs_redraw = true;
     return true;
   }

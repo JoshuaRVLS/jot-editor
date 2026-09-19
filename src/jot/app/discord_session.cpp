@@ -1,10 +1,17 @@
-// Discord Rich Presence session: turns live editor state into presence content
-// and drives the IPC client (discord_rpc.cpp), plus the :discord command.
+// Discord Rich Presence session (jot/editor/discord_controller.h): turns live
+// editor state into presence content and drives the IPC client
+// (discord_rpc.cpp), plus the :discord command and the status chip's state.
 //
 // Kept apart from editor.cpp so the presence port stays one readable unit: the
 // pure content rules live in discord_presence.cpp, the wire protocol in
 // discord_rpc.cpp, and this file is the glue (config, editor state, idle timer,
 // workspace rules).
+//
+// The session used to be Editor members; it is a collaborator now, so the
+// shared state it reads (buffers, config, the diagnostics and debugger models,
+// the message line and the redraw flag) is reached through `editor_`.
+#include "jot/editor/discord_controller.h"
+
 #include "editor.h"
 
 #include <algorithm>
@@ -81,10 +88,10 @@ namespace
   }
 } // namespace
 
-void Editor::discord_note_focus(bool focused, long long now_ms)
+void DiscordController::note_focus(bool focused, long long now_ms)
 {
-  discord_unfocused_since_ms = focused ? 0 : now_ms;
-  if (!focused || !discord_idle_cleared)
+  unfocused_since_ms_ = focused ? 0 : now_ms;
+  if (!focused || !idle_cleared_)
   {
     // Ordinary typing (which also lands here) must not force a resend: only a
     // return from an idle stretch that actually cleared the presence does.
@@ -93,14 +100,15 @@ void Editor::discord_note_focus(bool focused, long long now_ms)
   // The profile was cleared while away, so the content is unchanged from the
   // client's point of view; clearing the signature is what makes the next poll
   // restore it instead of taking the "nothing changed" shortcut.
-  discord_idle_cleared = false;
-  discord_last_signature.clear();
+  idle_cleared_ = false;
+  last_signature_.clear();
 }
 
-bool Editor::discord_workspace_excluded()
+bool DiscordController::workspace_excluded()
 {
-  const std::vector<std::string> patterns = config.get_list("discord_exclude_workspaces");
-  if (patterns.empty() || root_dir.empty())
+  const std::vector<std::string> patterns =
+      editor_.config.get_list("discord_exclude_workspaces");
+  if (patterns.empty() || editor_.root_dir.empty())
   {
     return false;
   }
@@ -112,7 +120,7 @@ bool Editor::discord_workspace_excluded()
     }
     try
     {
-      if (std::regex_search(root_dir, std::regex(pattern)))
+      if (std::regex_search(editor_.root_dir, std::regex(pattern)))
       {
         return true;
       }
@@ -121,32 +129,32 @@ bool Editor::discord_workspace_excluded()
     {
       // A malformed pattern must not disable presence silently: report it once
       // through the status chip and ignore the rule.
-      discord_pattern_error = pattern;
+      pattern_error_ = pattern;
     }
   }
   return false;
 }
 
-const std::string &Editor::discord_repository_remote()
+const std::string &DiscordController::repository_remote()
 {
-  if (root_dir != discord_remote_root || discord_remote_url.empty())
+  if (editor_.root_dir != remote_root_ || remote_url_.empty())
   {
     const long long now = jot_discord::monotonic_ms();
-    if (root_dir != discord_remote_root || now - discord_remote_fetched_ms > kRemoteRefreshMs)
+    if (editor_.root_dir != remote_root_ || now - remote_fetched_ms_ > kRemoteRefreshMs)
     {
-      discord_remote_root = root_dir;
-      discord_remote_fetched_ms = now;
-      discord_remote_url.clear();
-      if (has_git_repo())
+      remote_root_ = editor_.root_dir;
+      remote_fetched_ms_ = now;
+      remote_url_.clear();
+      if (editor_.has_git_repo())
       {
-        discord_remote_url = trimmed(run_git_capture("remote get-url origin 2>/dev/null"));
+        remote_url_ = trimmed(editor_.run_git_capture("remote get-url origin 2>/dev/null"));
       }
     }
   }
-  return discord_remote_url;
+  return remote_url_;
 }
 
-long long Editor::discord_buffer_size(const FileBuffer &buf)
+long long DiscordController::buffer_size(const FileBuffer &buf)
 {
   // An unsaved file has no meaningful size on disk, and re-reading the file
   // every second would be pointless work: the in-memory lines are the truth
@@ -168,7 +176,7 @@ long long Editor::discord_buffer_size(const FileBuffer &buf)
   return bytes;
 }
 
-long long Editor::discord_error_count(const std::string &filepath)
+long long DiscordController::error_count(const std::string &filepath)
 {
   if (filepath.empty())
   {
@@ -176,8 +184,8 @@ long long Editor::discord_error_count(const std::string &filepath)
   }
   const auto count_for = [this](const std::string &key) -> long long
   {
-    const auto it = lsp_diag_slices_.find(key);
-    if (it == lsp_diag_slices_.end())
+    const auto it = editor_.lsp_diag_slices_.find(key);
+    if (it == editor_.lsp_diag_slices_.end())
     {
       return -1;
     }
@@ -207,7 +215,7 @@ long long Editor::discord_error_count(const std::string &filepath)
   return errors < 0 ? 0 : errors;
 }
 
-jot_discord::TemplateContext Editor::discord_template_context()
+jot_discord::TemplateContext DiscordController::template_context()
 {
   jot_discord::TemplateContext ctx;
   ctx.app_name = "jot";
@@ -215,165 +223,173 @@ jot_discord::TemplateContext Editor::discord_template_context()
   // Workspace. jot has no multi-root workspaces, so the "workspace" and the
   // "folder" are the same thing; {workspace_and_folder} therefore collapses to
   // the name instead of upstream's "Workspace - Folder".
-  if (!root_dir.empty() && root_dir != ".")
+  if (!editor_.root_dir.empty() && editor_.root_dir != ".")
   {
-    ctx.workspace = file_name_of(root_dir);
+    ctx.workspace = file_name_of(editor_.root_dir);
     ctx.workspace_folder = ctx.workspace;
     ctx.workspace_and_folder = ctx.workspace;
     ctx.has_workspace = true;
   }
   else
   {
-    ctx.workspace = config.get("discord_lower_details_no_workspace", "No workspace");
+    ctx.workspace = editor_.config.get("discord_lower_details_no_workspace", "No workspace");
     ctx.workspace_folder = ctx.workspace;
     ctx.workspace_and_folder = ctx.workspace;
   }
 
-  if (has_git_repo())
+  if (editor_.has_git_repo())
   {
     ctx.has_git = true;
-    ctx.git_branch = git_branch;
-    ctx.git_repo_name = jot_discord::repository_name_from_url(discord_repository_remote());
+    ctx.git_branch = editor_.git_branch;
+    ctx.git_repo_name = jot_discord::repository_name_from_url(repository_remote());
     if (ctx.git_repo_name.empty())
     {
       ctx.git_repo_name = ctx.workspace;
     }
   }
 
-  if (!buffers.empty() && current_buffer >= 0 && current_buffer < (int)buffers.size())
+  if (!editor_.buffers.empty() && editor_.current_buffer >= 0
+      && editor_.current_buffer < (int)editor_.buffers.size())
   {
-    const FileBuffer &buf = buffers[current_buffer];
+    const FileBuffer &buf = editor_.buffers[editor_.current_buffer];
     if (!buf.filepath.empty())
     {
       ctx.has_file = true;
       ctx.file_name = file_name_of(buf.filepath);
       ctx.dir_name = file_name_of(fs::path(buf.filepath).parent_path().string());
-      ctx.full_dir_name = relative_directory(buf.filepath, root_dir);
+      ctx.full_dir_name = relative_directory(buf.filepath, editor_.root_dir);
       ctx.current_line = buf.cursor.y + 1;
       ctx.current_column = buf.cursor.x + 1;
       ctx.total_lines = buf.line_count();
-      ctx.file_size = discord_buffer_size(buf);
-      ctx.current_errors = discord_error_count(buf.filepath);
+      ctx.file_size = buffer_size(buf);
+      ctx.current_errors = error_count(buf.filepath);
       ctx.language = jot_discord::resolve_file_icon(buf.filepath, buf.syntax_language_label);
     }
   }
   return ctx;
 }
 
-jot_discord::PresenceState Editor::discord_presence_state()
+jot_discord::PresenceState DiscordController::presence_state()
 {
-  for (const DebuggerSessionState &session : debugger_session_state)
+  for (const DebuggerSessionState &session : editor_.debugger_session_state)
   {
     if (session.running || session.stopped)
     {
       return jot_discord::PresenceState::Debugging;
     }
   }
-  bool has_file = !buffers.empty() && current_buffer >= 0 && current_buffer < (int)buffers.size()
-                  && !buffers[current_buffer].filepath.empty();
+  bool has_file = !editor_.buffers.empty() && editor_.current_buffer >= 0
+                  && editor_.current_buffer < (int)editor_.buffers.size()
+                  && !editor_.buffers[editor_.current_buffer].filepath.empty();
   return has_file ? jot_discord::PresenceState::Editing : jot_discord::PresenceState::Idling;
 }
 
-jot_discord::PresenceOptions Editor::discord_presence_options()
+jot_discord::PresenceOptions DiscordController::presence_options()
 {
   jot_discord::PresenceOptions options;
-  options.details_idling = config.get("discord_details_idling", options.details_idling);
-  options.details_editing = config.get("discord_details_editing", options.details_editing);
-  options.details_debugging = config.get("discord_details_debugging", options.details_debugging);
+  options.details_idling =
+      editor_.config.get("discord_details_idling", options.details_idling);
+  options.details_editing =
+      editor_.config.get("discord_details_editing", options.details_editing);
+  options.details_debugging =
+      editor_.config.get("discord_details_debugging", options.details_debugging);
   options.lower_details_idling =
-      config.get("discord_lower_details_idling", options.lower_details_idling);
+      editor_.config.get("discord_lower_details_idling", options.lower_details_idling);
   options.lower_details_editing =
-      config.get("discord_lower_details_editing", options.lower_details_editing);
+      editor_.config.get("discord_lower_details_editing", options.lower_details_editing);
   options.lower_details_debugging =
-      config.get("discord_lower_details_debugging", options.lower_details_debugging);
+      editor_.config.get("discord_lower_details_debugging", options.lower_details_debugging);
   options.lower_details_no_workspace =
-      config.get("discord_lower_details_no_workspace", options.lower_details_no_workspace);
-  options.large_image = config.get("discord_large_image", options.large_image);
-  options.large_image_idling = config.get("discord_large_image_idling", options.large_image_idling);
-  options.small_image = config.get("discord_small_image", options.small_image);
-  options.app_image_key = config.get("discord_app_image", options.app_image_key);
-  options.idle_image_key = config.get("discord_idle_image", options.idle_image_key);
-  options.debug_image_key = config.get("discord_debug_image", options.debug_image_key);
-  options.swap_big_and_small_image = config.get_bool("discord_swap_images", false);
-  options.remove_details = config.get_bool("discord_remove_details", false);
-  options.remove_lower_details = config.get_bool("discord_remove_lower_details", false);
-  options.remove_timestamp = config.get_bool("discord_remove_timestamp", false);
-  options.remove_remote_repository = config.get_bool("discord_remove_repository_button", false);
+      editor_.config.get("discord_lower_details_no_workspace", options.lower_details_no_workspace);
+  options.large_image = editor_.config.get("discord_large_image", options.large_image);
+  options.large_image_idling =
+      editor_.config.get("discord_large_image_idling", options.large_image_idling);
+  options.small_image = editor_.config.get("discord_small_image", options.small_image);
+  options.app_image_key = editor_.config.get("discord_app_image", options.app_image_key);
+  options.idle_image_key = editor_.config.get("discord_idle_image", options.idle_image_key);
+  options.debug_image_key = editor_.config.get("discord_debug_image", options.debug_image_key);
+  options.swap_big_and_small_image = editor_.config.get_bool("discord_swap_images", false);
+  options.remove_details = editor_.config.get_bool("discord_remove_details", false);
+  options.remove_lower_details = editor_.config.get_bool("discord_remove_lower_details", false);
+  options.remove_timestamp = editor_.config.get_bool("discord_remove_timestamp", false);
+  options.remove_remote_repository =
+      editor_.config.get_bool("discord_remove_repository_button", false);
   return options;
 }
 
-void Editor::discord_set_status(const std::string &status)
+void DiscordController::set_status(const std::string &status)
 {
-  if (discord_status == status)
+  if (status_ == status)
   {
     return;
   }
-  discord_status = status;
+  status_ = status;
   // The status line is immediate-mode: a change has to ask for a repaint or the
   // chip stays stale until something else happens to redraw the bottom rows.
-  needs_redraw = true;
+  editor_.needs_redraw = true;
 }
 
-void Editor::poll_discord_rpc(long long now_ms)
+void DiscordController::poll(long long now_ms)
 {
-  const bool enabled = config.get_bool("discord_rpc", true);
-  if (!enabled || discord_workspace_excluded())
+  const bool enabled = editor_.config.get_bool("discord_rpc", true);
+  if (!enabled || workspace_excluded())
   {
-    if (discord_rpc.is_connected() || discord_rpc.has_pending_activity())
+    if (rpc_.is_connected() || rpc_.has_pending_activity())
     {
-      discord_rpc.clear_presence();
+      rpc_.clear_presence();
     }
-    discord_rpc.disconnect();
-    discord_set_status(enabled ? "excluded" : "off");
+    rpc_.disconnect();
+    set_status(enabled ? "excluded" : "off");
     return;
   }
 
-  discord_rpc.set_app_id(config.get("discord_app_id", kDefaultAppId));
-  discord_rpc.poll(now_ms);
+  rpc_.set_app_id(editor_.config.get("discord_app_id", kDefaultAppId));
+  rpc_.poll(now_ms);
 
-  if (!discord_rpc.last_error().empty())
+  if (!rpc_.last_error().empty())
   {
-    discord_set_status("error");
+    set_status("error");
   }
-  else if (discord_rpc.is_connected())
+  else if (rpc_.is_connected())
   {
-    discord_set_status("on");
+    set_status("on");
   }
   else
   {
-    discord_set_status("connecting");
+    set_status("connecting");
   }
 
   // Idle: upstream clears the presence when the window has been unfocused for
   // the configured number of seconds, and restores it on return. A keystroke
   // also clears the marker, so a terminal that never reports focus (or reports
   // it wrongly) cannot leave the presence stuck in the cleared state.
-  const int idle_timeout_s = std::clamp(config.get_int("discord_idle_timeout", 0), 0, 86400);
-  if (idle_timeout_s > 0 && discord_unfocused_since_ms > 0
-      && now_ms - discord_unfocused_since_ms >= idle_timeout_s * 1000LL)
+  const int idle_timeout_s =
+      std::clamp(editor_.config.get_int("discord_idle_timeout", 0), 0, 86400);
+  if (idle_timeout_s > 0 && unfocused_since_ms_ > 0
+      && now_ms - unfocused_since_ms_ >= idle_timeout_s * 1000LL)
   {
-    if (!discord_idle_cleared)
+    if (!idle_cleared_)
     {
-      discord_idle_cleared = true;
-      discord_rpc.clear_presence();
-      discord_set_status("idle");
+      idle_cleared_ = true;
+      rpc_.clear_presence();
+      set_status("idle");
     }
     return;
   }
-  if (discord_idle_cleared)
+  if (idle_cleared_)
   {
     return;
   }
 
-  if (discord_presence_start_ms <= 0)
+  if (presence_start_ms_ <= 0)
   {
-    discord_presence_start_ms = (long long)std::time(nullptr);
+    presence_start_ms_ = (long long)std::time(nullptr);
   }
-  const jot_discord::Activity activity = jot_discord::build_activity(discord_presence_options(),
-                                                                     discord_presence_state(),
-                                                                     discord_template_context(),
-                                                                     discord_repository_remote(),
-                                                                     discord_presence_start_ms);
+  const jot_discord::Activity activity = jot_discord::build_activity(presence_options(),
+                                                                     presence_state(),
+                                                                     template_context(),
+                                                                     repository_remote(),
+                                                                     presence_start_ms_);
 
   // Signature of what the profile shows: the two text rows plus the artwork,
   // so switching files (or languages) updates without spamming Discord while
@@ -381,58 +397,58 @@ void Editor::poll_discord_rpc(long long now_ms)
   const std::string signature = activity.details + "\x1f" + activity.state + "\x1f"
                                 + activity.large_image_key + "\x1f" + activity.small_image_key
                                 + "\x1f" + (activity.has_button ? activity.button_url : "");
-  if (signature == discord_last_signature)
+  if (signature == last_signature_)
   {
     return;
   }
-  if (discord_last_signature.empty() || now_ms - discord_last_send_ms >= kPresenceThrottleMs)
+  if (last_signature_.empty() || now_ms - last_send_ms_ >= kPresenceThrottleMs)
   {
-    discord_last_signature = signature;
-    discord_last_send_ms = now_ms;
-    discord_rpc.send_activity(activity);
+    last_signature_ = signature;
+    last_send_ms_ = now_ms;
+    rpc_.send_activity(activity);
   }
 }
 
-std::string Editor::discord_command(const std::string &argument)
+std::string DiscordController::command(const std::string &argument)
 {
   const std::string arg = trimmed(argument);
   const auto report = [this](const std::string &text)
   {
-    set_message(text);
+    editor_.set_message(text);
     return text;
   };
 
   if (arg == "enable" || arg == "on")
   {
-    config.set("discord_rpc", "true");
-    config.save();
-    discord_presence_start_ms = (long long)std::time(nullptr);
-    discord_last_signature.clear();
-    discord_rpc.disconnect();
-    needs_redraw = true;
+    editor_.config.set("discord_rpc", "true");
+    editor_.config.save();
+    presence_start_ms_ = (long long)std::time(nullptr);
+    last_signature_.clear();
+    rpc_.disconnect();
+    editor_.needs_redraw = true;
     return report("Discord presence enabled");
   }
   if (arg == "disable" || arg == "off")
   {
-    config.set("discord_rpc", "false");
-    config.save();
-    discord_rpc.clear_presence();
-    discord_rpc.disconnect();
-    discord_set_status("off");
+    editor_.config.set("discord_rpc", "false");
+    editor_.config.save();
+    rpc_.clear_presence();
+    rpc_.disconnect();
+    set_status("off");
     return report("Discord presence disabled");
   }
   if (arg == "reconnect")
   {
-    discord_rpc.disconnect();
-    discord_last_signature.clear();
-    needs_redraw = true;
+    rpc_.disconnect();
+    last_signature_.clear();
+    editor_.needs_redraw = true;
     return report("Reconnecting to Discord");
   }
   if (arg == "disconnect")
   {
-    discord_rpc.clear_presence();
-    discord_rpc.disconnect();
-    discord_set_status("off");
+    rpc_.clear_presence();
+    rpc_.disconnect();
+    set_status("off");
     return report("Disconnected from Discord");
   }
   if (arg == "assets")
@@ -441,8 +457,8 @@ std::string Editor::discord_command(const std::string &argument)
     // not reliably report that -- the profile just shows text with no artwork.
     // Listing the exact keys the current activity asks for is what turns that
     // into a checklist against the developer portal.
-    const jot_discord::PresenceOptions options = discord_presence_options();
-    const jot_discord::TemplateContext ctx = discord_template_context();
+    const jot_discord::PresenceOptions options = presence_options();
+    const jot_discord::TemplateContext ctx = template_context();
     std::vector<std::string> keys;
     const auto add = [&keys](const std::string &key)
     {
@@ -475,7 +491,7 @@ std::string Editor::discord_command(const std::string &argument)
     {
       list += list.empty() ? key : ", " + key;
     }
-    const std::string app_id = config.get("discord_app_id", kDefaultAppId);
+    const std::string app_id = editor_.config.get("discord_app_id", kDefaultAppId);
     return report("Discord assets needed: " + list + " -- upload them at "
                   + "discord.com/developers/applications/" + app_id + "/rich-presence/assets"
                   + " (key = file name without .png; see "
@@ -485,26 +501,26 @@ std::string Editor::discord_command(const std::string &argument)
   // status (also the bare ":discord"): everything needed to tell a missing
   // client apart from a rejected asset key.
   std::string text;
-  const bool enabled = config.get_bool("discord_rpc", true);
+  const bool enabled = editor_.config.get_bool("discord_rpc", true);
   text += enabled ? "Discord presence: " : "Discord presence: disabled";
   if (enabled)
   {
-    text += discord_rpc.is_connected()                           ? "connected"
-            : discord_rpc.get_state() == DiscordRPC::HANDSHAKING ? "connecting"
-                                                                 : "not connected";
-    if (discord_workspace_excluded())
+    text += rpc_.is_connected()                           ? "connected"
+            : rpc_.get_state() == DiscordRPC::HANDSHAKING ? "connecting"
+                                                          : "not connected";
+    if (workspace_excluded())
     {
       text += " (workspace excluded)";
     }
   }
-  if (!discord_rpc.last_error().empty())
+  if (!rpc_.last_error().empty())
   {
-    text += " -- last error: " + discord_rpc.last_error();
+    text += " -- last error: " + rpc_.last_error();
     // An asset rejection is the one error a user can fix themselves, and the
     // fix is not obvious from Discord's wording.
     const std::string lowered = [&]
     {
-      std::string value = discord_rpc.last_error();
+      std::string value = rpc_.last_error();
       std::transform(value.begin(),
                      value.end(),
                      value.begin(),
@@ -516,13 +532,13 @@ std::string Editor::discord_command(const std::string &argument)
       text += " (upload it: :discord assets)";
     }
   }
-  if (!discord_pattern_error.empty())
+  if (!pattern_error_.empty())
   {
-    text += " -- bad exclude pattern: " + discord_pattern_error;
+    text += " -- bad exclude pattern: " + pattern_error_;
   }
-  if (!discord_rpc.probed_endpoints().empty())
+  if (!rpc_.probed_endpoints().empty())
   {
-    text += " -- endpoints: " + discord_rpc.probed_endpoints().front();
+    text += " -- endpoints: " + rpc_.probed_endpoints().front();
   }
   else if (enabled)
   {
@@ -530,7 +546,7 @@ std::string Editor::discord_command(const std::string &argument)
   }
   if (enabled)
   {
-    text += " -- app id " + config.get("discord_app_id", kDefaultAppId);
+    text += " -- app id " + editor_.config.get("discord_app_id", kDefaultAppId);
   }
   return report(text);
 }

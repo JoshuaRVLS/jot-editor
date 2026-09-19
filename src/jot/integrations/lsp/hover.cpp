@@ -357,7 +357,7 @@ void Editor::maybe_fire_lsp_mouse_hover()
   {
     return;
   }
-  if (show_context_menu || show_command_palette || show_search || telescope.is_active()
+  if (show_context_menu || show_command_palette || search.visible() || telescope.is_active()
       || mouse_selecting || mouse_drag_started)
   {
     return;

@@ -64,7 +64,7 @@ void Editor::execute_command(const std::string &cmd)
   }
   else if (cmd == "Toggle Search")
   {
-    toggle_search();
+    search.toggle();
   }
   else if (cmd == "Split Horizontal")
   {
@@ -184,11 +184,11 @@ void Editor::execute_command(const std::string &cmd)
   }
   else if (cmd == "Toggle Case Search")
   {
-    search_case_sensitive = !search_case_sensitive;
-    message = search_case_sensitive ? "Search: case-sensitive ON" : "Search: case-sensitive OFF";
-    if (!search_query.empty())
+    search.set_case_sensitive(!search.case_sensitive());
+    message = search.case_sensitive() ? "Search: case-sensitive ON" : "Search: case-sensitive OFF";
+    if (!search.query().empty())
     {
-      perform_search();
+      search.perform();
     }
     needs_redraw = true;
   }

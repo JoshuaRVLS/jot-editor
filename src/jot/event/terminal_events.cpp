@@ -48,7 +48,7 @@ void Editor::handle_terminal_event(const Event &ev)
   {
     // Window focus is also the Discord presence's idle clock: coming back
     // restores a presence that the idle timeout had cleared.
-    discord_note_focus(true, jot_discord::monotonic_ms());
+    discord.note_focus(true, jot_discord::monotonic_ms());
     ui->forget_last_frame();
     needs_redraw = true;
     // Second and third repaints after the surface settles: each re-forgets
@@ -72,7 +72,7 @@ void Editor::handle_terminal_event(const Event &ev)
 
   if (ev.type == EVENT_FOCUS_OUT)
   {
-    discord_note_focus(false, jot_discord::monotonic_ms());
+    discord.note_focus(false, jot_discord::monotonic_ms());
     return;
   }
 
@@ -82,7 +82,7 @@ void Editor::handle_terminal_event(const Event &ev)
     // Typing proves the window is focused: it cancels an idle stretch (so a
     // terminal that misreports focus cannot leave the presence cleared) and
     // restores it on the next poll.
-    discord_note_focus(true, jot_discord::monotonic_ms());
+    discord.note_focus(true, jot_discord::monotonic_ms());
     cancel_lsp_mouse_hover();
     if (ctrl_hover_active)
     {
@@ -182,9 +182,9 @@ void Editor::handle_terminal_event(const Event &ev)
     {
       handle_command_palette(ch, is_ctrl, is_shift, is_alt);
     }
-    else if (show_search)
+    else if (search.visible())
     {
-      handle_search_panel(ch, is_ctrl, is_shift, is_alt);
+      search.handle_panel_input(ch, is_ctrl, is_shift);
     }
     else if (telescope.is_active())
     {
@@ -301,13 +301,13 @@ void Editor::handle_terminal_event(const Event &ev)
       }
     }
 
-    if (is_h_wheel && !telescope.is_active() && !show_command_palette && !show_search)
+    if (is_h_wheel && !telescope.is_active() && !show_command_palette && !search.visible())
     {
       bool left = (wheel_base == 66) || (shift_held && wheel_base == 64);
       bool right = (wheel_base == 67) || (shift_held && wheel_base == 65);
       handle_mouse_input(ev.mouse.x, ev.mouse.y, false, false, false, left, right);
     }
-    else if (is_wheel && !telescope.is_active() && !show_command_palette && !show_search)
+    else if (is_wheel && !telescope.is_active() && !show_command_palette && !search.visible())
     {
       handle_mouse_input(ev.mouse.x, ev.mouse.y, false, wheel_base == 64, wheel_base == 65);
     }

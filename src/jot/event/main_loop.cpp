@@ -342,7 +342,7 @@ void Editor::run()
                                 std::chrono::duration_cast<std::chrono::milliseconds>(
                                     std::chrono::steady_clock::now().time_since_epoch())
                                     .count();
-                            poll_discord_rpc(now_ms);
+                            discord.poll(now_ms);
                           });
   }
 

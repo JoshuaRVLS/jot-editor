@@ -125,19 +125,19 @@ void LuaAPI::push_search_info(lua_State *L)
   lua_newtable(L);
   if (!editor)
     return;
-  lua_push_bool_field(L, "visible", editor->show_search);
-  lua_push_str_field(L, "query", editor->search_query);
-  lua_push_bool_field(L, "case_sensitive", editor->search_case_sensitive);
-  lua_push_bool_field(L, "whole_word", editor->search_whole_word);
-  lua_push_bool_field(L, "regex", editor->search_regex);
-  lua_push_bool_field(L, "replace", editor->search_replace_visible);
-  lua_push_str_field(L, "replace_text", editor->search_replace_text);
-  lua_push_bool_field(L, "scoped", editor->search_scoped_to_selection);
-  lua_push_int_field(L, "result_count", (long long)editor->search_results.size());
+  const SearchController &search = editor->search;
+  lua_push_bool_field(L, "visible", search.visible());
+  lua_push_str_field(L, "query", search.query());
+  lua_push_bool_field(L, "case_sensitive", search.case_sensitive());
+  lua_push_bool_field(L, "whole_word", search.whole_word());
+  lua_push_bool_field(L, "regex", search.regex());
+  lua_push_bool_field(L, "replace", search.replace_visible());
+  lua_push_str_field(L, "replace_text", search.replace_text());
+  lua_push_bool_field(L, "scoped", search.scoped_to_selection());
+  lua_push_int_field(L, "result_count", (long long)search.results().size());
   lua_push_int_field(L,
                      "result_index",
-                     editor->search_result_index >= 0 ? (long long)editor->search_result_index + 1
-                                                      : 0);
+                     search.selected_index() >= 0 ? (long long)search.selected_index() + 1 : 0);
 }
 
 void LuaAPI::push_search_matches(lua_State *L)
@@ -146,7 +146,7 @@ void LuaAPI::push_search_matches(lua_State *L)
   if (!editor)
     return;
   int n = 1;
-  for (const SearchMatch &m : editor->search_results)
+  for (const SearchMatch &m : editor->search.results())
   {
     lua_newtable(L);
     lua_push_int_field(L, "line", (long long)m.line + 1);

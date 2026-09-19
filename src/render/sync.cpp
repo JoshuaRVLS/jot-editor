@@ -53,7 +53,7 @@ void Editor::sync_lua_ui_surfaces()
        "lsp_signature");
   sync(show_context_menu, lua_ui_prev_context_menu, "context_menu");
   sync(show_menu_bar_dropdown, lua_ui_prev_menu_dropdown, "menu_dropdown");
-  sync(show_search, lua_ui_prev_search, "search_panel");
+  sync(search.visible(), lua_ui_prev_search, "search_panel");
   sync(show_home_menu, lua_ui_prev_home, "home_screen");
   // A zoomed terminal owns the pane area and the home menu owns the entire
   // frame (frame.cpp paints only the owning surface, the status line and
