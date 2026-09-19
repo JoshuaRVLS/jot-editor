@@ -1284,18 +1284,40 @@ void Terminal::set_underline(int style)
   }
 }
 
-void Terminal::set_underline_color(int fg)
+void Terminal::set_underline_color(int fg, std::uint32_t rgb)
 {
-  if (fg < 0)
+  // Same contract as set_color(): a 24-bit value is used verbatim when the
+  // terminal understands it and quantised here when it does not, so a caller can
+  // always hand over the exact colour it meant. The colon subparameter form is
+  // the one colour-aware terminals parse for SGR 58 (58:2::r:g:b) and matches
+  // the wavy underline's 4:3; the indexed form is what everything else reads.
+  if (fg < 0 && rgb == kNoRgb)
   {
     buffer += "\x1b[59m";
+    return;
+  }
+  char buf[32];
+  if (rgb != kNoRgb && truecolor_)
+  {
+    snprintf(buf,
+             sizeof(buf),
+             "\x1b[58:2::%u:%u:%um",
+             (unsigned)((rgb >> 16) & 0xFF),
+             (unsigned)((rgb >> 8) & 0xFF),
+             (unsigned)(rgb & 0xFF));
   }
   else
   {
-    char buf[24];
+    if (rgb != kNoRgb)
+    {
+      fg = jot_ui::palette_nearest_index(
+          (unsigned char)((rgb >> 16) & 0xFF),
+          (unsigned char)((rgb >> 8) & 0xFF),
+          (unsigned char)(rgb & 0xFF));
+    }
     snprintf(buf, sizeof(buf), "\x1b[58;5;%dm", fg);
-    buffer += buf;
   }
+  buffer += buf;
 }
 
 void Terminal::write(const std::string &str)

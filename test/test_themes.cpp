@@ -15,7 +15,7 @@
 // the same conversion the renderer uses instead of comparing an index.
 #include "editor.h"
 #include "jot/lua/api.h"
-#include "jot/lua/bindings_internal.h"
+#include "jot/lua/api_internal.h"
 #include "ui/xterm_palette.h"
 
 #include <algorithm>
@@ -275,12 +275,13 @@ TEST_CASE("A hex and an index can name the same slot value", "[jot][theme]")
   REQUIRE(rgb_of(t.bg_keyword) == 0x0A0B0C);
 }
 
-TEST_CASE("set_hl takes a palette index or a hex colour", "[jot][theme]")
+TEST_CASE("set_hl and decorations take an index or a hex colour", "[jot][theme]")
 {
   // The Lua face of the same colour values: `jot.set_hl("Keyword", {fg = 215})`
   // is the long-standing form, and `{fg = "#e8ddcc"}` is the hex one the
-  // bundled themes now use. Both have to reach a theme slot; anything else has
-  // to leave the slot alone rather than paint a wrong colour.
+  // bundled themes now use. `jot.decoration.set` reads its colours through the
+  // same helper, so both APIs accept both forms; anything else has to leave the
+  // slot alone rather than paint a wrong colour.
   lua_State *L = luaL_newstate();
   lua_newtable(L); // the options table, kept at stack index 1
   lua_pushinteger(L, 215);
@@ -290,8 +291,8 @@ TEST_CASE("set_hl takes a palette index or a hex colour", "[jot][theme]")
   lua_pushstring(L, "chartreuse");
   lua_setfield(L, 1, "virt_fg");
 
-  REQUIRE(lua_bind::theme_color_field(L, 1, "fg") == 215);
-  const int hex = lua_bind::theme_color_field(L, 1, "bg");
+  REQUIRE(jot_lua::table_color(L, 1, "fg") == 215);
+  const int hex = jot_lua::table_color(L, 1, "bg");
   REQUIRE(jot_ui::is_exact_color(hex));
   unsigned char r = 0;
   unsigned char g = 0;
@@ -300,8 +301,8 @@ TEST_CASE("set_hl takes a palette index or a hex colour", "[jot][theme]")
   REQUIRE(r == 0xE8);
   REQUIRE(g == 0xDD);
   REQUIRE(b == 0xCC);
-  REQUIRE(lua_bind::theme_color_field(L, 1, "missing") == -1);
-  REQUIRE(lua_bind::theme_color_field(L, 1, "virt_fg") == -1);
+  REQUIRE(jot_lua::table_color(L, 1, "missing") == -1);
+  REQUIRE(jot_lua::table_color(L, 1, "virt_fg") == -1);
 
   lua_settop(L, 0);
   lua_close(L);

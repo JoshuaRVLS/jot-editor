@@ -82,16 +82,19 @@ struct UICell
   bool reverse = false;
   bool dim = false;
   // Underline style: 0 = none, 1 = straight, 2 = wavy. underline_fg is the
-  // underline color (SGR 58, -1 = inherit the text color).
+  // underline color (SGR 58, -1 = inherit the text color) and underline_rgb its
+  // optional 24-bit companion, filled in from an exact colour the same way
+  // fg_rgb/bg_rgb are.
   int underline = 0;
   int underline_fg = -1;
+  std::uint32_t underline_rgb = kNoRgb;
 
   bool operator==(const UICell &other) const
   {
     return ch == other.ch && fg == other.fg && bg == other.bg && fg_rgb == other.fg_rgb
            && bg_rgb == other.bg_rgb && bold == other.bold && italic == other.italic
            && reverse == other.reverse && dim == other.dim && underline == other.underline
-           && underline_fg == other.underline_fg;
+           && underline_fg == other.underline_fg && underline_rgb == other.underline_rgb;
   }
   bool operator!=(const UICell &other) const
   {

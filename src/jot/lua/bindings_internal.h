@@ -15,9 +15,6 @@ class LuaAPI;
 namespace lua_bind
 {
   LuaAPI &api(lua_State *L);
-  // A colour out of a theme table -- an xterm index as a number, an exact
-  // 24-bit colour as a "#rrggbb" string -- or -1 to leave the slot alone.
-  int theme_color_field(lua_State *L, int table_index, const char *name);
   int l_show_message(lua_State *L);
   int l_show_transient_message(lua_State *L);
   int l_register_command(lua_State *L);

@@ -212,6 +212,67 @@ check("decoration.virt_text", function()
   jot.decoration.delete(jot.buffer.current(), id)
   return got or "missing"
 end)
+check("decoration.hex_colors", function()
+  local id = jot.decoration.set(jot.buffer.current(), {
+    row = 1,
+    col = 1,
+    width = 2,
+    fg = "#ff8800",
+    bg = 200,
+    underline = 2,
+    underline_fg = "#44cc99",
+    virt_text = " hex",
+    virt_fg = "#123456",
+  })
+  if not id then
+    return "set-failed"
+  end
+  local got = nil
+  for _, d in ipairs(jot.decoration.list(jot.buffer.current()) or {}) do
+    if d.id == id then
+      got = d
+    end
+  end
+  jot.decoration.delete(jot.buffer.current(), id)
+  if not got then
+    return "missing"
+  end
+  -- An exact colour round-trips as the hex it was written as; a palette index
+  -- stays a number, so a decoration can mix both forms.
+  if got.fg ~= "#ff8800" then
+    return "fg=" .. tostring(got.fg)
+  end
+  if got.bg ~= 200 then
+    return "bg=" .. tostring(got.bg)
+  end
+  if got.underline_fg ~= "#44cc99" then
+    return "ufg=" .. tostring(got.underline_fg)
+  end
+  if got.virt_fg ~= "#123456" then
+    return "vfg=" .. tostring(got.virt_fg)
+  end
+  return "ok"
+end)
+check("decoration.bad_color_ignored", function()
+  -- A value that is not a colour leaves the slot unset: the decoration must
+  -- not paint a black or half-parsed colour.
+  local id = jot.decoration.set(jot.buffer.current(),
+                                { row = 1, col = 1, width = 1, fg = "notacolour", bg = "#zzz" })
+  local got = nil
+  for _, d in ipairs(jot.decoration.list(jot.buffer.current()) or {}) do
+    if d.id == id then
+      got = d
+    end
+  end
+  jot.decoration.delete(jot.buffer.current(), id)
+  if not id or not got then
+    return "missing"
+  end
+  if got.fg ~= nil or got.bg ~= nil then
+    return "painted"
+  end
+  return "ok"
+end)
 check("decoration.clear", function()
   jot.decoration.set(jot.buffer.current(), { row = 1, col = 1, width = 2 })
   jot.decoration.set(jot.buffer.current(), { row = 1, col = 1, virt_text = "x" })
@@ -311,6 +372,38 @@ check("theme.palette", function() return jot.theme.palette() end)
 check("theme.palette.slots", function()
   local p = jot.theme.palette()
   return p.default and p.default.fg ~= nil and p.status and p.status.bg ~= nil
+end)
+check("theme.set_hl_hex", function()
+  -- set_hl takes a palette index or an exact "#rrggbb". Both must reach the
+  -- slot; the same colour interns to one value whichever way it is spelled,
+  -- and a value that is not a colour must leave the slot as it was.
+  local keyword_before = jot.theme.palette().keyword.fg
+  local comment_before = jot.theme.palette().comment.fg
+
+  set_hl("Keyword", { fg = 208 })
+  if jot.theme.palette().keyword.fg ~= 208 then
+    return "index-not-stored"
+  end
+
+  set_hl("Keyword", { fg = "#ffbb33" })
+  local hex = jot.theme.palette().keyword.fg
+  if type(hex) ~= "number" or hex < 256 then
+    return "hex-not-stored:" .. tostring(hex)
+  end
+
+  set_hl("Comment", { fg = "#FFBB33" })
+  if jot.theme.palette().comment.fg ~= hex then
+    return "not-interned"
+  end
+
+  set_hl("Keyword", { fg = "chartreuse" })
+  if jot.theme.palette().keyword.fg ~= hex then
+    return "bad-value-painted"
+  end
+
+  set_hl("Keyword", { fg = keyword_before })
+  set_hl("Comment", { fg = comment_before })
+  return "ok"
 end)
 
 -- ------------------------------------------------- buffer.lines / clip.get

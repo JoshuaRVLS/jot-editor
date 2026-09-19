@@ -29,6 +29,7 @@ namespace
   public:
     explicit SgrProbeUI(Terminal *t) : UI(t) {}
     using UI::emit_cell_colors;
+    using UI::emit_full_row;
   };
 } // namespace
 
@@ -157,6 +158,73 @@ TEST_CASE("A theme's exact colour reaches the cell as 24-bit", "[jot][ui]")
   term.clear_pending_output_for_test();
   ui.emit_cell_colors(*cell);
   REQUIRE(term.pending_output_for_test().find("38;2;127;121;112") != std::string::npos);
+}
+
+TEST_CASE("The terminal emits a 24-bit underline colour when it can", "[jot][palette]")
+{
+  Terminal term;
+  term.clear_pending_output_for_test();
+
+  // The indexed form is unchanged, and -1 still resets to the text colour.
+  term.set_underline_color(3, kNoRgb);
+  REQUIRE(term.pending_output_for_test() == "\x1b[58;5;3m");
+  term.clear_pending_output_for_test();
+  term.set_underline_color(-1, kNoRgb);
+  REQUIRE(term.pending_output_for_test() == "\x1b[59m");
+
+  // A 24-bit value on a terminal that does not understand it folds to the
+  // nearest palette entry, the way set_color does -- never emitted raw.
+  term.clear_pending_output_for_test();
+  REQUIRE_FALSE(term.supports_truecolor());
+  term.set_underline_color(3, 0xFF8800u);
+  const std::string folded = term.pending_output_for_test();
+  REQUIRE(folded.find("58;5;") != std::string::npos);
+  REQUIRE(folded.find("58:2") == std::string::npos);
+
+  // And on a terminal that does, the exact value goes out in SGR 58's colon form.
+  term.clear_pending_output_for_test();
+  term.set_truecolor_supported(true);
+  term.set_underline_color(3, 0xFF8800u);
+  REQUIRE(term.pending_output_for_test() == "\x1b[58:2::255:136:0m");
+}
+
+TEST_CASE("An exact underline colour reaches the cell and the row", "[jot][ui]")
+{
+  // Decorations and themes carry underline colours the same way they carry text
+  // colours: one int that may be an exact 24-bit value. The cell has to keep it
+  // (and its 24-bit companion), and the row painter emits SGR 58 in its 24-bit
+  // form -- the underline is no longer folded to the nearest palette entry.
+  Terminal term;
+  SgrProbeUI ui(&term);
+  ui.resize(20, 4);
+  const int underline = exact_color_from_hex("#44cc99");
+  REQUIRE(is_exact_color(underline));
+
+  ui.draw_text(0, 0, "wavy", 4, 5, false, false, 2, underline);
+  const UICell *cell = ui.cell_at(0, 0);
+  REQUIRE(cell != nullptr);
+  REQUIRE(cell->underline == 2);
+  REQUIRE(cell->underline_fg == underline); // the exact value stays the cell's colour
+  REQUIRE(cell->underline_rgb == 0x44CC99u);
+
+  term.set_truecolor_supported(true);
+  term.clear_pending_output_for_test();
+  ui.emit_full_row(0, 20);
+  const std::string emitted = term.pending_output_for_test();
+  REQUIRE(emitted.find("4:3") != std::string::npos); // the wavy underline
+  REQUIRE(emitted.find("58:2::68:204:153") != std::string::npos);
+
+  // A palette-index underline keeps the indexed form: only exact colours are
+  // promoted, and a cell with no underline colour emits nothing for SGR 58.
+  ui.draw_text(0, 1, "plain", 4, 5, false, false, 1, 6);
+  const UICell *indexed = ui.cell_at(0, 1);
+  REQUIRE(indexed->underline_fg == 6);
+  REQUIRE(indexed->underline_rgb == kNoRgb);
+  term.clear_pending_output_for_test();
+  ui.emit_full_row(1, 20);
+  const std::string indexed_row = term.pending_output_for_test();
+  REQUIRE(indexed_row.find("58;5;6m") != std::string::npos);
+  REQUIRE(indexed_row.find("58:2") == std::string::npos);
 }
 
 TEST_CASE("Nearest palette index round-trips the palette", "[jot][colorizer]")

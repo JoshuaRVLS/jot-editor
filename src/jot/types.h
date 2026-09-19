@@ -505,7 +505,7 @@ struct Decoration
   int row = 0;
   int col = 0; // byte offset within the line
   bool right_gravity = true; // true: insert at (row,col) keeps the mark after
-  int fg = -1; // span foreground (-1 = unset)
+  int fg = -1; // span foreground (-1 = unset; an xterm index or an exact 24-bit colour)
   int bg = -1; // span background (-1 = unset)
   std::string hl; // theme group name, resolved at render time (e.g. "DiagnosticError")
   int width = 0; // span length in bytes (0 = point mark, no span)
@@ -514,14 +514,17 @@ struct Decoration
   // the underline does NOT recolor the text — the decoration color only
   // reaches the underline itself (VSCode-style squiggle).
   int underline = 0;
-  int underline_fg = -1; // raw underline color (-1 = fall back to hl, then fg)
+  // Raw underline colour (-1 = fall back to hl, then fg): an xterm index or an
+  // exact 24-bit colour (see ui/xterm_palette.h), painted as SGR 58.
+  int underline_fg = -1;
   std::string underline_hl; // theme group for the underline color
   std::string virt_text; // end-of-line virtual text (empty = none)
   int virt_fg = -1;
   int virt_bg = -1;
-  std::string virt_hl; // theme group for the virtual text  // Faint (SGR 2): keeps the token's own colours and drops its
-  // intensity, unlike a colour swap. The terminal equivalent of an opacity
-  // fade on inactive preprocessor branches.
+  std::string virt_hl; // theme group for the virtual text
+  // Faint (SGR 2): keeps the token's own colours and drops its intensity,
+  // unlike a colour swap. The terminal equivalent of an opacity fade on
+  // inactive preprocessor branches.
   bool dim = false;
 };
 

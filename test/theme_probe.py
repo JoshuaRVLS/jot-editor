@@ -14,8 +14,13 @@ backgrounds must arrive as 48;2 and the accent (the active pane border) as 38;2.
 A slot that fell back to a palette index would still paint, just not the colour
 the scheme was authored with -- exactly the quiet downgrade this catches.
 
-Scenes: the default scheme (jot-dark), jot-light, the legacy `dark` name, and the
-theme chooser's list.
+The same value domain carries a decoration's colours, so one scene places a
+wavy underline with a hex colour through init.lua and reads the SGR 58 sequence
+back out of the stream: an underline is where a quantised colour would be
+hardest to notice and easiest to ship.
+
+Scenes: the default scheme (jot-dark), jot-light, the legacy `dark` name, the
+theme chooser's list, and a decoration's exact underline colour.
 
 Usage: test/theme_probe.py [path-to-jot] [--dump]
 Exit codes: 0 pass, 1 fail, 2 skipped (no binary).
@@ -50,6 +55,8 @@ JOT_LIGHT_STATUS = truecolour(0xECE4D6)
 # the escape stream: 38;2;r;g;b, never 38;5;n.
 JOT_DARK_ACCENT = b"\x1b[38;2;245;176;107m"  # #f5b06b
 JOT_LIGHT_ACCENT = b"\x1b[38;2;169;92;20m"  # #a95c14
+# A decoration's underline colour as SGR 58's 24-bit colon form.
+DECO_UNDERLINE = b"\x1b[58:2::68:204:153m"  # #44cc99
 # What an editor with no theme applied paints (the built-in ANSI default).
 UNTHEMED_BODY = 0
 
@@ -70,6 +77,22 @@ def write_config(cfg: str, scheme: str) -> None:
     os.makedirs(os.path.join(cfg, "configs"), exist_ok=True)
     with open(os.path.join(cfg, "configs", "settings.conf"), "w") as fh:
         fh.write(f"color_scheme={scheme}\n")
+
+
+def write_decoration_init(cfg: str) -> None:
+    """Places a wavy underline whose colour is an exact hex value.
+
+    init.lua is how a user sets one without waiting on an LSP diagnostic, and it
+    exercises the same decoration path a diagnostic would.
+    """
+    os.makedirs(cfg, exist_ok=True)
+    with open(os.path.join(cfg, "init.lua"), "w") as fh:
+        # Deferred: init.lua runs before the file on the command line is opened,
+        # so placing it straight away would decorate the startup buffer instead.
+        fh.write("jot.timer.set_timeout(300, function()\n"
+                 "  jot.decoration.set(jot.buffer.current(),\n"
+                 "    { row = 1, col = 1, width = 4, underline = 2, underline_fg = \"#44cc99\" })\n"
+                 "end)\n")
 
 
 def body_background(screen) -> int:
@@ -140,6 +163,24 @@ def main() -> int:
         if want_accent not in screen.raw:
             failures.append(f"{label}: the accent never arrived as 38;2 ({want_accent!r} "
                             f"missing from {len(screen.raw)} bytes of output)")
+
+    # A decoration's underline colour: the exact value has to reach SGR 58's
+    # 24-bit form rather than being folded onto the nearest palette entry.
+    cfg = "/tmp/jot_theme_probe_cfg_deco"
+    write_config(cfg, "jot-dark")
+    write_decoration_init(cfg)
+    screen = run(binary, path, root, cfg)
+    if dump:
+        print(screen.text())
+        print("-" * 70)
+    wavy = b"\x1b[4:3m" in screen.raw
+    print(f"decoration underline: 4:3 {wavy}, 58:2 form "
+          f"{DECO_UNDERLINE in screen.raw}")
+    if not wavy:
+        failures.append("the decoration's wavy underline never reached the screen")
+    if DECO_UNDERLINE not in screen.raw:
+        failures.append(f"the underline colour was not emitted as 24-bit "
+                        f"({DECO_UNDERLINE!r} missing)")
 
     # The chooser offers the installed themes as argument completions of
     # `:theme`. The palette only switches to argument completion once the query

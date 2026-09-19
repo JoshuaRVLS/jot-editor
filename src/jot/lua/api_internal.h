@@ -7,6 +7,7 @@
 #include "jot/lua/embedded_lua.h"
 #include "jot/lua/lua_loader.h"
 #include "tools/shell_util.h"
+#include "ui/xterm_palette.h"
 
 #include <array>
 #include <cctype>
@@ -266,6 +267,27 @@ namespace jot_lua
   {
     lua_getfield(L, i, k);
     int v = lua_isnumber(L, -1) ? (int)lua_tointeger(L, -1) : d;
+    lua_pop(L, 1);
+    return v;
+  }
+
+  // Reads a colour field: an xterm palette index as a number, or an exact
+  // 24-bit colour as a "#rrggbb" string (also #rgb / #rrggbbaa) -- the same two
+  // forms a theme file and set_hl take. Returns -1 for anything else, which is
+  // the "leave this colour alone" sentinel every colour slot understands, so a
+  // mis-typed value can never paint a wrong colour.
+  inline int table_color(lua_State *L, int i, const char *k)
+  {
+    lua_getfield(L, i, k);
+    int v = -1;
+    if (lua_isnumber(L, -1))
+    {
+      v = (int)lua_tointeger(L, -1);
+    }
+    else if (lua_isstring(L, -1))
+    {
+      v = jot_ui::exact_color_from_hex(lua_tostring(L, -1));
+    }
     lua_pop(L, 1);
     return v;
   }

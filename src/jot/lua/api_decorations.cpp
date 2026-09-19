@@ -8,6 +8,7 @@
 #include "jot/lua/api_internal.h"
 
 #include <cstdint>
+#include <cstdio>
 
 extern "C"
 {
@@ -18,6 +19,24 @@ extern "C"
 namespace
 {
   std::uint64_t next_decoration_id = 1;
+
+  // Pushes a stored colour back in the form it was set in: an exact colour as
+  // "#rrggbb" (what the caller wrote), a palette index as a number. Round-trips
+  // jot.decoration.list() against decoration.set().
+  void push_color(lua_State *L, int value)
+  {
+    unsigned char r = 0;
+    unsigned char g = 0;
+    unsigned char b = 0;
+    if (jot_ui::exact_color_rgb(value, r, g, b))
+    {
+      char hex[8];
+      snprintf(hex, sizeof(hex), "#%02x%02x%02x", (unsigned)r, (unsigned)g, (unsigned)b);
+      lua_pushstring(L, hex);
+      return;
+    }
+    lua_pushinteger(L, value);
+  }
 } // namespace
 
 std::uint64_t LuaAPI::decoration_set(int buffer_idx, lua_State *L, int opts_index)
@@ -40,17 +59,19 @@ std::uint64_t LuaAPI::decoration_set(int buffer_idx, lua_State *L, int opts_inde
   d.col = jot_lua::table_int(L, opts_index, "col", 1) - 1;
   d.width = jot_lua::table_int(L, opts_index, "width", 0);
   d.priority = jot_lua::table_int(L, opts_index, "priority", 50);
-  d.fg = jot_lua::table_int(L, opts_index, "fg", -1);
-  d.bg = jot_lua::table_int(L, opts_index, "bg", -1);
+  // Colours take the same two forms as a theme slot: an xterm index as a number,
+  // or an exact 24-bit colour as "#rrggbb".
+  d.fg = jot_lua::table_color(L, opts_index, "fg");
+  d.bg = jot_lua::table_color(L, opts_index, "bg");
   d.hl = jot_lua::table_string(L, opts_index, "hl", "");
   d.underline = std::clamp(jot_lua::table_int(L, opts_index, "underline", 0), 0, 2);
-  d.underline_fg = jot_lua::table_int(L, opts_index, "underline_fg", -1);
+  d.underline_fg = jot_lua::table_color(L, opts_index, "underline_fg");
   d.dim = jot_lua::table_bool(L, opts_index, "dim", false);
   d.underline_hl = jot_lua::table_string(L, opts_index, "underline_hl", "");
   d.right_gravity = jot_lua::table_bool(L, opts_index, "right_gravity", true);
   d.virt_text = jot_lua::table_string(L, opts_index, "virt_text", "");
-  d.virt_fg = jot_lua::table_int(L, opts_index, "virt_fg", -1);
-  d.virt_bg = jot_lua::table_int(L, opts_index, "virt_bg", -1);
+  d.virt_fg = jot_lua::table_color(L, opts_index, "virt_fg");
+  d.virt_bg = jot_lua::table_color(L, opts_index, "virt_bg");
   d.virt_hl = jot_lua::table_string(L, opts_index, "virt_hl", "");
   if (d.row < 0 || d.col < 0 || d.width < 0)
   {
@@ -132,12 +153,12 @@ void LuaAPI::decoration_list(int buffer_idx, lua_State *L)
     lua_setfield(L, -2, "right_gravity");
     if (d.fg != -1)
     {
-      lua_pushinteger(L, d.fg);
+      push_color(L, d.fg);
       lua_setfield(L, -2, "fg");
     }
     if (d.bg != -1)
     {
-      lua_pushinteger(L, d.bg);
+      push_color(L, d.bg);
       lua_setfield(L, -2, "bg");
     }
     if (!d.hl.empty())
@@ -152,7 +173,7 @@ void LuaAPI::decoration_list(int buffer_idx, lua_State *L)
     }
     if (d.underline_fg != -1)
     {
-      lua_pushinteger(L, d.underline_fg);
+      push_color(L, d.underline_fg);
       lua_setfield(L, -2, "underline_fg");
     }
     if (!d.underline_hl.empty())
@@ -167,12 +188,12 @@ void LuaAPI::decoration_list(int buffer_idx, lua_State *L)
     }
     if (d.virt_fg != -1)
     {
-      lua_pushinteger(L, d.virt_fg);
+      push_color(L, d.virt_fg);
       lua_setfield(L, -2, "virt_fg");
     }
     if (d.virt_bg != -1)
     {
-      lua_pushinteger(L, d.virt_bg);
+      push_color(L, d.virt_bg);
       lua_setfield(L, -2, "virt_bg");
     }
     if (!d.virt_hl.empty())

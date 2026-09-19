@@ -1133,18 +1133,30 @@ void Terminal::set_underline(int style)
     buffer += "\x1b[24m";
   }
 }
-void Terminal::set_underline_color(int fg)
+void Terminal::set_underline_color(int fg, std::uint32_t rgb)
 {
-  if (fg < 0)
+  // Mirrors the POSIX backend (see terminal.cpp): the colon form carries a
+  // 24-bit underline colour, the indexed form is what an older console reads.
+  if (fg < 0 && rgb == kNoRgb)
   {
     buffer += "\x1b[59m";
+    return;
+  }
+  char buf[32];
+  if (rgb != kNoRgb)
+  {
+    snprintf(buf,
+             sizeof(buf),
+             "\x1b[58:2::%u:%u:%um",
+             (unsigned)((rgb >> 16) & 0xFF),
+             (unsigned)((rgb >> 8) & 0xFF),
+             (unsigned)(rgb & 0xFF));
   }
   else
   {
-    char buf[24];
     snprintf(buf, sizeof(buf), "\x1b[58;5;%dm", fg);
-    buffer += buf;
   }
+  buffer += buf;
 }
 void Terminal::write(const std::string &str)
 {

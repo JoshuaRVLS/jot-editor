@@ -72,21 +72,6 @@ namespace
     }
   }
 
-  // SGR 58 is only ever emitted in its indexed form, so an exact underline colour
-  // is folded to the closest palette entry: the underline is a hairline, while
-  // the text above it keeps its exact colour.
-  int underline_paint_index(int value)
-  {
-    unsigned char r = 0;
-    unsigned char g = 0;
-    unsigned char b = 0;
-    if (!jot_ui::exact_color_rgb(value, r, g, b))
-    {
-      return value;
-    }
-    return jot_ui::palette_nearest_index(r, g, b);
-  }
-
   // Colour value → RGB. Named (not a lambda) so both ui_dim_color and the
   // darkness probe below can use it. An exact colour decodes to itself, which is
   // what keeps the dimmed-look probe and the scrim's quantisation honest for a
@@ -426,7 +411,9 @@ void UI::set_cell(int x, int y, const UICell &cell)
     target = cell;
     resolve_exact_cell_color(target.fg, target.fg_rgb);
     resolve_exact_cell_color(target.bg, target.bg_rgb);
-    target.underline_fg = underline_paint_index(target.underline_fg);
+    // The underline carries its own exact colour (SGR 58 has a 24-bit form), so
+    // a decoration or a theme's underline colour is painted verbatim too.
+    resolve_exact_cell_color(target.underline_fg, target.underline_rgb);
     row_dirty[y] = 1;
   }
 }
@@ -583,7 +570,7 @@ void UI::render()
         if (cell.underline)
           term->set_underline(cell.underline);
         if (cell.underline_fg != -1)
-          term->set_underline_color(cell.underline_fg);
+          term->set_underline_color(cell.underline_fg, cell.underline_rgb);
         emit_cell_colors(cell);
         write_cell_for_remaining_width(term, cell.ch, row_width - x);
         x += std::min(rendered_cell_width(cell.ch), row_width - x);
@@ -698,6 +685,7 @@ void UI::emit_full_row(int y, int row_width)
   bool run_reverse = false;
   int run_underline = 0;
   int run_underline_fg = -1;
+  std::uint32_t run_underline_rgb = kNoRgb;
   int written = 0;
 
   std::string body;
@@ -710,7 +698,7 @@ void UI::emit_full_row(int y, int row_width)
     if (x == 0 || cell.fg != run_fg || cell.bg != run_bg || cell.fg_rgb != run_fg_rgb
         || cell.bg_rgb != run_bg_rgb || cell.bold != run_bold || cell.italic != run_italic
         || cell.dim != run_dim || cell.reverse != run_reverse || cell.underline != run_underline
-        || cell.underline_fg != run_underline_fg)
+        || cell.underline_fg != run_underline_fg || cell.underline_rgb != run_underline_rgb)
     {
       // Optimization: skip ESC[0m (full reset) when only the
       // fg/bg have changed and the bold/italic/reverse bits are
@@ -722,7 +710,8 @@ void UI::emit_full_row(int y, int row_width)
       const bool attrs_unchanged =
           (x != 0) && cell.bold == run_bold && cell.italic == run_italic && cell.dim == run_dim
           && cell.reverse == run_reverse && cell.underline == run_underline
-          && cell.underline_fg == run_underline_fg && (run_fg != -1 || run_bg != -1);
+          && cell.underline_fg == run_underline_fg && cell.underline_rgb == run_underline_rgb
+          && (run_fg != -1 || run_bg != -1);
       if (!attrs_unchanged)
       {
         term->reset_color();
@@ -742,7 +731,7 @@ void UI::emit_full_row(int y, int row_width)
         if (cell.underline)
           term->set_underline(cell.underline);
         if (cell.underline_fg != -1)
-          term->set_underline_color(cell.underline_fg);
+          term->set_underline_color(cell.underline_fg, cell.underline_rgb);
       }
       else
       {
@@ -769,8 +758,8 @@ void UI::emit_full_row(int y, int row_width)
           term->set_reverse(cell.reverse);
         if (cell.underline != run_underline)
           term->set_underline(cell.underline);
-        if (cell.underline_fg != run_underline_fg)
-          term->set_underline_color(cell.underline_fg);
+        if (cell.underline_fg != run_underline_fg || cell.underline_rgb != run_underline_rgb)
+          term->set_underline_color(cell.underline_fg, cell.underline_rgb);
       }
       // `cell.*` hold the values that just changed; `run_*` still hold the
       // previous run's colors here, so emit from the cell.
@@ -785,6 +774,7 @@ void UI::emit_full_row(int y, int row_width)
       run_reverse = cell.reverse;
       run_underline = cell.underline;
       run_underline_fg = cell.underline_fg;
+      run_underline_rgb = cell.underline_rgb;
     }
 
     body.clear();
@@ -795,7 +785,8 @@ void UI::emit_full_row(int y, int row_width)
            && grid[y][x].bold == run_bold && grid[y][x].italic == run_italic
            && grid[y][x].dim == run_dim && grid[y][x].reverse == run_reverse
            && grid[y][x].underline == run_underline
-           && grid[y][x].underline_fg == run_underline_fg)
+           && grid[y][x].underline_fg == run_underline_fg
+           && grid[y][x].underline_rgb == run_underline_rgb)
     {
       int cell_w = std::min(rendered_cell_width(grid[y][x].ch), row_width - x);
       append_cell_for_remaining_width(body, grid[y][x].ch, row_width - x);
@@ -893,6 +884,7 @@ void UI::emit_row_diff(int y, int row_width)
   bool run_reverse = false;
   int run_underline = 0;
   int run_underline_fg = -1;
+  std::uint32_t run_underline_rgb = kNoRgb;
   // Terminal column the cursor sits at after the previous emit in this
   // row; used to skip or shorten cursor moves between runs.
   int last_x = 0;
@@ -956,7 +948,7 @@ void UI::emit_row_diff(int y, int row_width)
         if (cell.underline)
           term->set_underline(cell.underline);
         if (cell.underline_fg != -1)
-          term->set_underline_color(cell.underline_fg);
+          term->set_underline_color(cell.underline_fg, cell.underline_rgb);
         emit_cell_colors(cell);
         first_run = false;
       }
@@ -965,7 +957,8 @@ void UI::emit_row_diff(int y, int row_width)
         const bool attrs_same = cell.bold == run_bold && cell.italic == run_italic
                                 && cell.dim == run_dim && cell.reverse == run_reverse
                                 && cell.underline == run_underline
-                                && cell.underline_fg == run_underline_fg;
+                                && cell.underline_fg == run_underline_fg
+                                && cell.underline_rgb == run_underline_rgb;
         if (attrs_same && cell.fg == run_fg && cell.bg == run_bg && cell.fg_rgb == run_fg_rgb
             && cell.bg_rgb == run_bg_rgb)
         {
@@ -997,7 +990,7 @@ void UI::emit_row_diff(int y, int row_width)
           if (cell.underline)
             term->set_underline(cell.underline);
           if (cell.underline_fg != -1)
-            term->set_underline_color(cell.underline_fg);
+            term->set_underline_color(cell.underline_fg, cell.underline_rgb);
           emit_cell_colors(cell);
         }
       }
@@ -1011,6 +1004,7 @@ void UI::emit_row_diff(int y, int row_width)
       run_reverse = cell.reverse;
       run_underline = cell.underline;
       run_underline_fg = cell.underline_fg;
+      run_underline_rgb = cell.underline_rgb;
 
       std::string body;
       body.reserve((size_t)(r.end - x));
@@ -1019,7 +1013,8 @@ void UI::emit_row_diff(int y, int row_width)
         const auto &c = cur[x];
         if (c.fg != cell.fg || c.bg != cell.bg || c.bold != cell.bold
             || c.italic != cell.italic || c.dim != cell.dim || c.reverse != cell.reverse
-            || c.underline != cell.underline || c.underline_fg != cell.underline_fg)
+            || c.underline != cell.underline || c.underline_fg != cell.underline_fg
+            || c.underline_rgb != cell.underline_rgb)
         {
           break;
         }

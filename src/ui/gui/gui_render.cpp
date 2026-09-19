@@ -202,7 +202,18 @@ void UIGui::resolve_cell_rgb(const UICell &cell, float *out)
   }
   if (cell.underline_fg >= 0)
   {
-    xterm_rgb(cell.underline_fg, out[6], out[7], out[8]);
+    // An exact underline colour paints verbatim, like fg/bg above; the index is
+    // the fallback for a palette entry (see resolve_exact_cell_color).
+    if (cell.underline_rgb != kNoRgb)
+    {
+      out[6] = ((cell.underline_rgb >> 16) & 0xFF) / 255.0f;
+      out[7] = ((cell.underline_rgb >> 8) & 0xFF) / 255.0f;
+      out[8] = (cell.underline_rgb & 0xFF) / 255.0f;
+    }
+    else
+    {
+      xterm_rgb(cell.underline_fg, out[6], out[7], out[8]);
+    }
   }
   else
   {
@@ -357,7 +368,16 @@ void UIGui::paint_row_underlines(const std::vector<UICell> &src,
     float ur = fr, ug = fg_, ub = fb;
     if (cell.underline_fg >= 0)
     {
-      xterm_rgb(cell.underline_fg, ur, ug, ub);
+      if (cell.underline_rgb != kNoRgb)
+      {
+        ur = ((cell.underline_rgb >> 16) & 0xFF) / 255.0f;
+        ug = ((cell.underline_rgb >> 8) & 0xFF) / 255.0f;
+        ub = (cell.underline_rgb & 0xFF) / 255.0f;
+      }
+      else
+      {
+        xterm_rgb(cell.underline_fg, ur, ug, ub);
+      }
     }
     const float x0 = x0px + (float)c * cell_w_;
     const float y0 = py + cell_h_ - 2.0f;

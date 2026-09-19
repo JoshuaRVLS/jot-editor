@@ -236,8 +236,11 @@ public:
   // colon subparameter; supported by kitty/wezterm/Windows Terminal/etc.,
   // older terminals fall back to no underline or straight).
   void set_underline(int style);
-  // Underline color via SGR 58 (256-color). -1 resets to the text color.
-  void set_underline_color(int fg);
+  // Underline color via SGR 58. A 24-bit value (kNoRgb means "none") goes out in
+  // the colon form (58:2::r:g:b) when the terminal understands 24-bit color and
+  // is folded to the nearest palette entry otherwise, exactly like set_color.
+  // -1 with no 24-bit value resets the underline to the text color.
+  void set_underline_color(int fg, std::uint32_t rgb = kNoRgb);
 
   void write(const std::string &str);
   void write_char(char c);

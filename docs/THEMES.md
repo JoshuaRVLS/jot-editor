@@ -47,10 +47,19 @@ is neither is ignored, leaving the slot at whatever it inherited. Use `-1` or
 }
 ```
 
+The same two forms are accepted wherever the Lua API takes a colour — `set_hl`,
+`jot.theme.set_color`, and a decoration's `fg`, `bg`, `underline_fg`, `virt_fg`
+and `virt_bg` (`jot.decoration.set`) — so a plugin or a theme can name the exact
+colour it means instead of hunting for the nearest index. `jot.decoration.list()`
+hands an exact colour back as the `#rrggbb` string it was set with, and a palette
+index back as a number; a value that is neither is ignored, leaving that colour
+unset rather than painting a wrong one.
+
 Exact colours need a terminal that understands 24-bit colour (`COLORTERM`
 reports `truecolor`/`24bit`, or `TERM` ends in `-direct`); elsewhere jot folds
-each one down to the nearest palette entry, so the theme still reads correctly
-on a 256-colour terminal. The `truecolor` setting forces the answer either way.
+each one down to the nearest palette entry — text, background and underline
+alike — so the theme still reads correctly on a 256-colour terminal. The
+`truecolor` setting forces the answer either way.
 
 ## Group names
 
