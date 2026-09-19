@@ -1487,6 +1487,14 @@ public:
   }
   // Runs an ex command line the way the palette does, so command plumbing can
   // be asserted without typing into a prompt.
+  // The plan the installer would run for a language server: its id, the shell
+  // script and the status message. Lets a test pin the manager choice (a
+  // bundled payload vs a download) without spawning a background job.
+  // Defined in test_hooks.cpp: editor.h only forward-declares LuaAPI.
+  bool lsp_install_plan_for_test(const std::string &name,
+                                 std::string *id,
+                                 std::string *script,
+                                 std::string *message);
   void run_ex_for_test(const std::string &line)
   {
     execute_ex_command(line);

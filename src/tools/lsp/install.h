@@ -23,6 +23,12 @@ namespace LspInstall
   std::string platform_tag();   // "linux" | "mac" | "win"
   // Absolute path of a managed binary when installed there, else "".
   std::string resolve_managed_bin(const std::string &bin_name);
+  // Directory a packaged copy of this binary ships in
+  // (share/jot/payload/<bin_name>), or "" when the package carries none. A
+  // release vendors clangd this way, so the installer can link it instead of
+  // downloading it. $JOT_LSP_PAYLOAD_DIR is authoritative when set; without it
+  // the tree beside the executable and then the compiled-in prefix are tried.
+  std::string bundled_payload_dir(const std::string &bin_name);
   // True when the package dir carries a receipt (a completed install).
   bool is_installed(const std::string &id);
   // Ids of every server with a receipt under the install root, sorted.

@@ -242,7 +242,19 @@ deliberately does not, so a preview never depends on a file you cannot see.
   `jot.config.set("lsp_inlay_type_hints", false)`.
 - Document symbols via LSP with regex fallback — as a picker or a persistent
   outline.
-- Status, start/stop/restart, a manager, and install/remove helpers.
+- Status, start/stop/restart, a manager, and install/remove helpers for 100+
+  servers (`:lspinstall <server>`, `:lspremove <server>`).
+- **Bundled servers**: a release package vendors clangd under
+  `share/jot/payload/clangd`, so C/C++ support needs no system package and no
+  network. `:lspinstall cpp` links the shipped binary into the per-user LSP
+  dir (`~/.local/share/jot/lsp/bin`) and writes the usual receipt;
+  `:lspremove cpp` removes that link and the receipt only, never the shipped
+  copy. A payload may sit beside the executable or at the compiled-in prefix,
+  and `JOT_LSP_PAYLOAD_DIR` overrides the lookup (authoritatively, which is
+  how a packager or a build without the payload says "none here"). Any server
+  a package ships as `payload/<binary-name>/` is installed this way; the rest
+  keep using the registry's download managers. Source builds carry no payload
+  and behave exactly as before.
 
 Default servers: `pylsp` (Python), `typescript-language-server --stdio`
 (JS/TS), `vscode-html-language-server --stdio` (HTML), `clangd` (C/C++).

@@ -23,6 +23,14 @@ void Editor::raw_key_for_test(int raw_ch)
   handle_input(ev.key, ev.ctrl, ev.shift, ev.alt, ev.key);
 }
 
+bool Editor::lsp_install_plan_for_test(const std::string &name,
+                                       std::string *id,
+                                       std::string *script,
+                                       std::string *message)
+{
+  return lua_api && lua_api->lsp_install_plan(name, id, script, message);
+}
+
 int Editor::lua_float_count_for_test(const std::string &surface) const
 {
   if (!lua_api)

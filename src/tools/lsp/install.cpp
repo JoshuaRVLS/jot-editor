@@ -6,6 +6,18 @@
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
+#include <vector>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <climits>
+#include <mach-o/dyld.h>
+#else
+#include <climits>
+#include <unistd.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -29,6 +41,38 @@ namespace
     const char *home = getenv("HOME");
 #endif
     return home ? fs::path(home) / ".local" / "share" / "jot" / "lsp" : fs::path();
+  }
+
+  // Directory the running executable lives in, or empty when it cannot be
+  // resolved. A release tarball can be unpacked anywhere, so the payload tree
+  // is looked up relative to the binary (`<exe>/../share/jot/payload`) rather
+  // than trusting the prefix compiled into JOT_DEFAULT_DATA_DIR.
+  fs::path exe_dir()
+  {
+#ifdef _WIN32
+    wchar_t buf[MAX_PATH];
+    const DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+    if (n > 0 && n < MAX_PATH)
+    {
+      return fs::path(buf).parent_path();
+    }
+#elif defined(__APPLE__)
+    char buf[PATH_MAX];
+    uint32_t size = sizeof(buf);
+    if (_NSGetExecutablePath(buf, &size) == 0)
+    {
+      return fs::path(buf).parent_path();
+    }
+#else
+    char buf[PATH_MAX];
+    const ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (n > 0)
+    {
+      buf[n] = '\0';
+      return fs::path(buf).parent_path();
+    }
+#endif
+    return {};
   }
 
 } // namespace
@@ -55,6 +99,44 @@ namespace LspInstall
 #else
     return "linux";
 #endif
+  }
+
+  std::string bundled_payload_dir(const std::string &bin_name)
+  {
+    if (bin_name.empty())
+    {
+      return "";
+    }
+    // Payload tree roots. JOT_LSP_PAYLOAD_DIR is authoritative when set (that
+    // is what lets a packager or a test say "no payload here" instead of
+    // falling through to the install tree); otherwise a relocated tarball and
+    // a normal cmake --install prefix are tried.
+    std::vector<fs::path> roots;
+    if (const char *env = getenv("JOT_LSP_PAYLOAD_DIR"); env && *env)
+    {
+      roots.emplace_back(env);
+    }
+    else
+    {
+      const fs::path exe = exe_dir();
+      if (!exe.empty())
+      {
+        roots.push_back(exe.parent_path() / "share" / "jot" / "payload");
+      }
+#ifdef JOT_DEFAULT_DATA_DIR
+      roots.emplace_back(fs::path(JOT_DEFAULT_DATA_DIR) / "payload");
+#endif
+    }
+    std::error_code ec;
+    for (const auto &root : roots)
+    {
+      const fs::path candidate = root / bin_name;
+      if (fs::is_directory(candidate, ec))
+      {
+        return candidate.string();
+      }
+    }
+    return "";
   }
 
   std::string resolve_managed_bin(const std::string &bin_name)

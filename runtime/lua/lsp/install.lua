@@ -8,14 +8,15 @@
 -- uninstall and status stay trivial.
 --
 -- The native host wraps the returned script with [jot:lsp] markers, spawns
--- it and polls the log. Pure Lua except `jot_lsp_root`/`jot_lsp_platform`
--- which the host sets before loading.
+-- it and polls the log. Pure Lua except `jot_lsp_root`/`jot_lsp_platform` and
+-- the `jot_lsp_bundled` payload lookup, which the host sets before loading.
 
 local registry = dofile(_G.jot_lsp_lua_root .. "/registry.lua")
 
 local managers = {}
 for _, name in ipairs({ "npm", "pypi", "golang", "cargo", "gem", "nuget",
-                        "github", "generic", "openvsx", "luarocks", "composer", "opam" }) do
+                        "github", "generic", "openvsx", "luarocks", "composer", "opam",
+                        "payload" }) do
   managers[name] = dofile(_G.jot_lsp_lua_root .. "/managers/" .. name .. ".lua")
 end
 
@@ -30,6 +31,26 @@ end
 
 local function package_dir(id)
   return ROOT .. "/" .. id
+end
+
+-- A package that ships the server under share/jot/payload/<bin> (the release
+-- vendors clangd that way) is installed from that copy instead of the entry's
+-- manager: no network, and no unpacking either. The host answers with nil when
+-- this package carries no payload for the binary, which keeps every unbundled
+-- server on its normal manager.
+local function bundled_dir(entry)
+  if type(jot_lsp_bundled) ~= "function" then
+    return nil
+  end
+  local bin = entry.bin and entry.bin[1]
+  if not bin then
+    return nil
+  end
+  local dir = jot_lsp_bundled(bin)
+  if type(dir) == "string" and dir ~= "" then
+    return dir
+  end
+  return nil
 end
 
 -- Shared POSIX preamble: $PDIR (package dir), $BIN (managed bin dir) and a
@@ -103,7 +124,26 @@ local function build_install_script(entry)
   local bin_dir = ROOT .. "/bin"
   local dirs = { root = ROOT, dir = dir, bin_dir = bin_dir,
                  dl_dir = dir .. "/dl" }
-  local manager = managers[entry.manager]
+  -- The bundled payload wins over the entry's manager when the package ships
+  -- one. The payload path rides on a copy: `entry` is shared registry state and
+  -- must not be stamped with per-install fields.
+  local payload = bundled_dir(entry)
+  local manager
+  if payload then
+    local copy = {}
+    for k, v in pairs(entry) do
+      copy[k] = v
+    end
+    copy.payload_dir = payload
+    -- The payload manager produces the links itself; the shared _jot_bin step
+    -- would look for the binaries under $PDIR, where a payload install puts
+    -- nothing.
+    copy.no_bin_link = true
+    entry = copy
+    manager = managers.payload
+  else
+    manager = managers[entry.manager]
+  end
   if not manager or not manager.install_lines then
     return nil
   end
@@ -170,6 +210,9 @@ function M.plan_install(name)
   end
   base.script = script
   base.message = "LSP install started: " .. entry.id
+  if bundled_dir(entry) then
+    base.message = base.message .. " (bundled copy)"
+  end
   return base
 end
 

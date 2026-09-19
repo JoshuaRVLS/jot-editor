@@ -132,6 +132,22 @@ install(DIRECTORY runtime/lua
   DESTINATION ${CMAKE_INSTALL_DATADIR}/jot
 )
 
+# Vendored LSP payloads. Releases point this at a directory laid out as
+# <bin-name>/... (e.g. clangd/ unpacked from the official clangd archive) and
+# the tree lands under share/jot/payload, where jot's installer links it into
+# its managed bin dir with no network access at all (see
+# runtime/lua/lsp/managers/payload.lua). Source builds leave it empty and keep
+# using :lspinstall's download managers.
+set(JOT_LSP_PAYLOAD_DIR "" CACHE PATH "Vendored LSP payloads to install under share/jot/payload")
+if(JOT_LSP_PAYLOAD_DIR)
+  if(NOT IS_DIRECTORY "${JOT_LSP_PAYLOAD_DIR}")
+    message(FATAL_ERROR "JOT_LSP_PAYLOAD_DIR is not a directory: ${JOT_LSP_PAYLOAD_DIR}")
+  endif()
+  install(DIRECTORY "${JOT_LSP_PAYLOAD_DIR}/"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/jot/payload
+  )
+endif()
+
 # ── Uninstall target ──────────────────────────────────────────────────────────
 # `cmake --build build --target uninstall` removes every file CMake installed.
 configure_file(

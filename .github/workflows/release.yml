@@ -30,9 +30,30 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes \
-            cmake ninja-build pkg-config \
+            cmake ninja-build pkg-config unzip \
             libvterm-dev libtermkey-dev libuv1-dev libutf8proc-dev \
             libtree-sitter-dev
+
+      - name: Vendor clangd payload
+        if: matrix.platform == 'linux'
+        run: |
+          set -euo pipefail
+          # Ship clangd inside the package so C/C++ support needs no network and
+          # no system package: the installer links this copy into its managed
+          # LSP dir (runtime/lua/lsp/managers/payload.lua). The archive keeps
+          # its versioned top-level directory and the LLVM license, both of
+          # which ship as-is.
+          json="$(curl -fsSL https://api.github.com/repos/clangd/clangd/releases/latest)"
+          url="$(printf '%s' "$json" \
+            | grep -o '"browser_download_url": *"[^"]*clangd-linux[^"]*\.zip"' \
+            | head -n1 | sed 's/.*"\(https[^"]*\)".*/\1/')"
+          test -n "$url"
+          echo "Vendoring $url"
+          curl -fsSL -o /tmp/clangd.zip "$url"
+          mkdir -p payload/clangd
+          unzip -q -o /tmp/clangd.zip -d payload/clangd
+          rm -f /tmp/clangd.zip
+          find payload/clangd -maxdepth 3 \( -name clangd -o -name 'LICENSE*' \) -print
 
       - name: Configure Linux build
         if: matrix.platform == 'linux'
@@ -40,7 +61,8 @@ jobs:
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
-            -DJOT_ENABLE_CCACHE=OFF
+            -DJOT_ENABLE_CCACHE=OFF \
+            -DJOT_LSP_PAYLOAD_DIR="${GITHUB_WORKSPACE}/payload"
 
       - name: Build Linux
         if: matrix.platform == 'linux'

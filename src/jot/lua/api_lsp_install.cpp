@@ -258,6 +258,23 @@ namespace
     return 1;
   }
 
+  // Nil (not "") when the package carries no bundled copy of the binary, so the
+  // installer Lua can tell the two apart without a sentinel.
+  int l_lsp_bundled(lua_State *L)
+  {
+    const char *name = lua_tostring(L, 1);
+    const std::string dir = name ? LspInstall::bundled_payload_dir(name) : std::string();
+    if (dir.empty())
+    {
+      lua_pushnil(L);
+    }
+    else
+    {
+      lua_pushstring(L, dir.c_str());
+    }
+    return 1;
+  }
+
   void bind(lua_State *L, LuaAPI *a, const char *name, lua_CFunction fn)
   {
     lua_pushlightuserdata(L, a);
@@ -305,6 +322,9 @@ void LuaAPI::register_lsp_install_api(lua_State *L)
   lua_setglobal(L, "jot_lsp_root");
   lua_pushstring(L, LspInstall::platform_tag().c_str());
   lua_setglobal(L, "jot_lsp_platform");
+  // Payload lookup for the manager choice: see managers/payload.lua.
+  lua_pushcfunction(L, l_lsp_bundled);
+  lua_setglobal(L, "jot_lsp_bundled");
   const int top = lua_gettop(L);
   if (luaL_loadfile(L, path.string().c_str()) || lua_pcall(L, 0, 0, 0))
   {
