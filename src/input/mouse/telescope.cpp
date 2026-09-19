@@ -1,9 +1,16 @@
-// Telescope mouse support: list navigation and selection clicks.
+// Telescope mouse support: hover highlights the row under the pointer, clicks
+// select (double-click opens), and the wheel moves the list or scrolls the file
+// view, depending on which box it is over.
 #include "editor.h"
 #include <algorithm>
 
-bool Editor::handle_telescope_mouse(
-    int x, int y, bool is_click, bool is_double_click, bool is_scroll_up, bool is_scroll_down)
+bool Editor::handle_telescope_mouse(int x,
+                                    int y,
+                                    bool is_click,
+                                    bool is_double_click,
+                                    bool is_scroll_up,
+                                    bool is_scroll_down,
+                                    bool is_motion)
 {
   if (!telescope.is_active())
   {
@@ -17,30 +24,30 @@ bool Editor::handle_telescope_mouse(
     return false;
   }
 
-  bool inside =
+  const bool inside_list =
       x >= layout.x && x < layout.x + layout.w && y >= layout.y && y < layout.y + layout.h;
-  if (!inside)
+  const bool inside_view =
+      layout.show_preview && x >= layout.preview_x && x < layout.preview_x + layout.preview_w
+      && y >= layout.preview_y && y < layout.preview_y + layout.preview_h;
+  if (!inside_list && !inside_view)
   {
+    // A press outside dismisses nothing (the picker owns the keyboard), it just
+    // does not act on it.
     return true;
   }
 
-  bool in_list = x >= layout.list_x - 1 && x < layout.list_x + layout.list_w + 1
-                 && y >= layout.list_y && y < layout.list_y + layout.list_h;
-  bool in_preview = layout.show_preview && x >= layout.preview_x
-                    && x < layout.preview_x + layout.preview_w && y >= layout.preview_y
-                    && y < layout.preview_y + layout.preview_h;
+  const bool over_rows =
+      inside_list && y >= layout.list_y && y < layout.list_y + layout.list_h && layout.list_h > 0;
 
   if (is_scroll_up || is_scroll_down)
   {
-    int delta = is_scroll_down ? 3 : -3;
-    if (in_preview)
+    const int delta = is_scroll_down ? 3 : -3;
+    if (inside_view)
     {
       telescope.set_focus(TelescopeFocus::Preview);
-      int line_start_y = layout.preview_y + 4;
-      int preview_lines_h = std::max(1, layout.preview_y + layout.preview_h - line_start_y);
-      telescope.scroll_preview(delta, preview_lines_h);
+      telescope.scroll_preview(delta, std::max(1, layout.preview_inner_h));
     }
-    else if (in_list || inside)
+    else
     {
       telescope.set_focus(TelescopeFocus::Results);
       telescope.move_by(delta);
@@ -50,15 +57,14 @@ bool Editor::handle_telescope_mouse(
     return true;
   }
 
-  if (is_click && in_list)
+  if (is_click && over_rows)
   {
     telescope.set_focus(TelescopeFocus::Results);
-    int target = telescope.get_list_scroll_offset() + (y - layout.list_y);
+    const int target = telescope.get_list_scroll_offset() + (y - layout.list_y);
     if (target >= 0 && target < telescope.get_result_count())
     {
       telescope.select_index(target);
       telescope.ensure_selected_visible(layout.list_h);
-
       if (is_double_click)
       {
         accept_telescope_selection();
@@ -68,18 +74,38 @@ bool Editor::handle_telescope_mouse(
     return true;
   }
 
+  // Hover: the row under the pointer becomes the selection, so the highlight
+  // band follows the mouse the way it follows j/k.
+  if (is_motion && over_rows && !is_click)
+  {
+    const int target = telescope.get_list_scroll_offset() + (y - layout.list_y);
+    if (target >= 0 && target < telescope.get_result_count()
+        && target != telescope.get_selected_index())
+    {
+      telescope.select_index(target);
+      telescope.ensure_selected_visible(layout.list_h);
+      needs_redraw = true;
+    }
+    return true;
+  }
+
+  if (is_motion && inside_view)
+  {
+    return true;
+  }
+
   if (is_click)
   {
-    if (x >= layout.query_x && x < layout.query_x + layout.query_w && y == layout.query_y)
+    if (inside_list && y == layout.query_y)
     {
       telescope.set_focus(TelescopeFocus::Query);
     }
-    else if (in_preview)
+    else if (inside_view)
     {
       telescope.set_focus(TelescopeFocus::Preview);
     }
     needs_redraw = true;
+    return true;
   }
   return true;
 }
-

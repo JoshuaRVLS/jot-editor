@@ -115,7 +115,8 @@ one explicitly in a theme overrides the fallback.
 `TabClose`, `Sidebar`, `SidebarDir`, `SidebarSel`, `SidebarSelNC`,
 `SidebarBorder`, `DiagnosticError`, `DiagnosticWarn`, `DiagnosticInfo`,
 `DiagnosticHint`, `Pmenu`, `PmenuSel`, `TelescopeNormal`,
-`TelescopeSelection`, `TelescopePreviewNormal`, `Terminal`, `TerminalTab`,
+`TelescopeSelection`, `TelescopePreviewNormal`, `TelescopeQuery`,
+`Terminal`, `TerminalTab`,
 `TerminalTabActive`, `TerminalTabFocused`, `TerminalTabClose`,
 `TerminalTabPlus`, `TerminalTabSeparator`.
 
@@ -131,6 +132,13 @@ Git status colors for file rows (git view), file tabs, and the diff panel use
 `git_modified`, `git_added`, `git_untracked`, `git_deleted`, `git_renamed`,
 and `git_conflict` (`fg` text / `bg` row tint). Themes that omit them fall
 back to the built-in ANSI defaults, which do not match the colorscheme.
+
+The four `Telescope*` slots paint the file finder's two boxes: `TelescopeNormal`
+is the result list (a panel, so its `bg` should match `Sidebar`/`Pmenu`),
+`TelescopeSelection` the band on the selected and hovered row, and
+`TelescopeQuery` the query field's own band while it has focus.
+`TelescopePreviewNormal` is the file view on the right, which is meant to read
+as a small editor, so its `bg` should be the editor's `Normal` background.
 
 ## Authoring a theme
 

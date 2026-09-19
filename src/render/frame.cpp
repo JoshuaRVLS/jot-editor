@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <functional>
+#include <limits>
 #include <unordered_map>
 
 namespace
@@ -345,13 +346,27 @@ void Editor::render()
     }
     render_status_line();
     ui->dim_rect({0, 0, ui->get_render_width(), ui->get_height()});
-    render_telescope();
-    // Lua surface floats must be drawn on this early-return path too: when a
-    // registered handler consumes the native telescope render, it paints a
-    // float that only appears here.
+    // The picker is a modal: the chrome floats (sidebar, side panel, status
+    // line) are painted first and stay under the scrim, the picker paints over
+    // them -- natively below, or through its own float when a registered Lua
+    // handler renders it -- and only the floats above the modal layer (toasts)
+    // paint after. Two layers rather than one pass because the chrome floats are
+    // recreated every frame: painted in a single pass after the picker's float
+    // they would out-rank it by creation order and repaint their rectangles over
+    // the panel (the picker's left box used to vanish behind the explorer).
     if (lua_api)
     {
-      lua_api->render_floats();
+      lua_api->begin_float_pass();
+      lua_api->render_float_layer(std::numeric_limits<int>::min(),
+                                  LuaAPI::kModalFloatZindex - 1);
+    }
+    render_telescope();
+    // A Lua handler that consumed the native render opened the picker's float
+    // during render_telescope(); this pass paints it, above the chrome.
+    if (lua_api)
+    {
+      lua_api->render_float_layer(LuaAPI::kModalFloatZindex,
+                                  std::numeric_limits<int>::max());
     }
     if (telescope.focus() != TelescopeFocus::Query)
     {

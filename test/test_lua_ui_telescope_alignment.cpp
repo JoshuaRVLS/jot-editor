@@ -241,10 +241,13 @@ TEST_CASE("Telescope Lua render: straight separator, bounded rows, byte-aligned 
 
   lua_getfield(L, 1, "telescope");
   lua_newtable(L); // payload p
+  // The handler's float covers the whole region -- both boxes and the column
+  // between them -- so w is region_w, exactly as the native renderer sends it.
   push_int(L, "x", lay.x);
   push_int(L, "y", lay.y);
-  push_int(L, "w", lay.w);
+  push_int(L, "w", lay.region_w);
   push_int(L, "h", lay.h);
+  push_int(L, "region_w", lay.region_w);
   push_int(L, "inner_x", lay.inner_x);
   push_int(L, "inner_y", lay.inner_y);
   push_int(L, "inner_w", lay.inner_w);
@@ -262,11 +265,18 @@ TEST_CASE("Telescope Lua render: straight separator, bounded rows, byte-aligned 
   push_int(L, "preview_y", lay.preview_y);
   push_int(L, "preview_w", lay.preview_w);
   push_int(L, "preview_h", lay.preview_h);
+  push_int(L, "preview_inner_x", lay.preview_inner_x);
+  push_int(L, "preview_inner_y", lay.preview_inner_y);
+  push_int(L, "preview_inner_w", lay.preview_inner_w);
+  push_int(L, "preview_inner_h", lay.preview_inner_h);
+  push_int(L, "preview_text_y", lay.preview_text_y);
+  push_int(L, "preview_status_y", lay.preview_status_y);
   push_int(L, "footer_y", lay.footer_y);
   lua_pushboolean(L, lay.show_preview ? 1 : 0);
   lua_setfield(L, -2, "show_preview");
   push_str(L, "query", "c");
   push_str(L, "root", "/home/josrvl/jot");
+  push_str(L, "folder", "");
   push_str(L, "title", " Find Files ");
   push_int(L, "selected", 1);
   push_int(L, "list_scroll", 0);
@@ -287,6 +297,9 @@ TEST_CASE("Telescope Lua render: straight separator, bounded rows, byte-aligned 
   push_int(L, "t_sel_bg", 17);
   push_int(L, "t_prev_fg", 250);
   push_int(L, "t_prev_bg", 0);
+  push_int(L, "t_query_fg", 250);
+  push_int(L, "t_query_bg", 236);
+  push_int(L, "line_nr", 244);
   push_int(L, "keyword", 210);
   push_int(L, "comment", 244);
   push_int(L, "function", 215);
@@ -322,6 +335,8 @@ TEST_CASE("Telescope Lua render: straight separator, bounded rows, byte-aligned 
     push_str(L, "parent_path", parents[i - 1]);
     lua_pushboolean(L, 0);
     lua_setfield(L, -2, "is_directory");
+    lua_pushboolean(L, (i % 2) == 1);
+    lua_setfield(L, -2, "opened");
     lua_rawseti(L, -2, i);
   }
   lua_setfield(L, -2, "results");
@@ -359,42 +374,49 @@ TEST_CASE("Telescope Lua render: straight separator, bounded rows, byte-aligned 
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
 
-  const int inner_w = lay.inner_w;
+  const int region_w = lay.region_w;
 
-  // 1. Every row fits the float interior in cells (no ".." clip at border).
+  // 1. Every row fits the float in cells (no ".." clip at the right edge). The
+  //    float is borderless and covers the whole two-box region.
   for (int i = 0; i < cap.count; i++)
   {
     CAPTURE(i);
-    REQUIRE(ui_cell_count(cap.lines[i]) <= inner_w);
+    REQUIRE(ui_cell_count(cap.lines[i]) <= region_w);
   }
 
-  // 2. The separator '│' is on one constant cell column across all rows.
-  int sep_col = -1;
+  // 2. Both boxes are straight: the same four border columns -- the list box's
+  //    left and right, the file view's left and right -- on every row. A byte
+  //    offset used as a cell origin would shift the view box per row (the wide
+  //    CJK names and comments in the fixtures are what used to move it).
+  const int list_right = lay.w - 1;
+  const int view_left = lay.preview_x - lay.x;
+  const int view_right = view_left + lay.preview_w - 1;
   for (int i = 0; i < cap.count; i++)
   {
+    CAPTURE(i);
+    std::vector<int> cols;
     const std::string &row = cap.lines[i];
-    for (size_t j = 0; j + 2 < row.size();)
+    for (size_t j = 0; j < row.size();)
     {
-      if ((unsigned char)row[j] == 0xE2 && (unsigned char)row[j + 1] == 0x94
-          && (unsigned char)row[j + 2] == 0x82)
-      {
-        const int col = ui_cell_count(row.substr(0, j));
-        if (sep_col == -1)
-          sep_col = col;
-        else
-          REQUIRE(col == sep_col);
-        break;
-      }
       const int len = ui_utf8_char_len(row, (int)j);
       if (len <= 0)
       {
         j++;
         continue;
       }
+      // Frame glyphs only: the horizontal rule is U+2500 and runs the whole
+      // border, the sides and corners are what mark a column.
+      const bool frame_glyph =
+          len == 3 && (unsigned char)row[j] == 0xE2 && (unsigned char)row[j + 1] == 0x94
+          && (unsigned char)row[j + 2] != 0x80; // not '─'
+      if (frame_glyph)
+      {
+        cols.push_back(ui_cell_count(row.substr(0, j)));
+      }
       j += (size_t)len;
     }
+    REQUIRE(cols == std::vector<int>({0, list_right, view_left, view_right}));
   }
-  REQUIRE(sep_col != -1);
 
   // 3. Every span starts on a rune boundary and points inside its row
   //    (huge-len background spans are clamped by the renderer).

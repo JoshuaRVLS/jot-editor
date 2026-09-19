@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -230,6 +231,30 @@ bool LuaAPI::set_float_spans(int window, int line, lua_State *L, int spans_index
   }
   return true;
 }
+namespace
+{
+  // Surfaces whose native render dims the whole grid and paints a panel over
+  // it. A float opened by one of these handlers focuses a modal, not chrome:
+  // it opens on LuaAPI::kModalFloatZindex so the background floats -- which are
+  // recreated every frame and would otherwise out-rank it by creation order --
+  // cannot repaint their rectangles over the panel.
+  bool is_modal_surface(const std::string &name)
+  {
+    return name == "quick_pick" || name == "popup" || name == "tree_sitter_status"
+           || name == "lsp_status" || name == "telescope" || name == "settings";
+  }
+} // namespace
+
+bool LuaAPI::modal_surface_open() const
+{
+  if (!editor)
+    return false;
+  return editor->show_quick_pick
+      || (editor->popup.visible && editor->popup.presentation == POPUP_MODAL)
+      || editor->show_tree_sitter_status_modal || editor->show_lsp_status_modal
+      || editor->telescope.is_active() || editor->show_settings_menu;
+}
+
 int LuaAPI::open_float(int buffer, bool enter, lua_State *L, int ti)
 {
   if (scratch_buffers.find(buffer) == scratch_buffers.end())
@@ -239,6 +264,12 @@ int LuaAPI::open_float(int buffer, bool enter, lua_State *L, int ti)
   f.buffer = buffer;
   f.enter = enter;
   f.surface = current_emit_surface_;
+  // A modal surface's own float opens on the modal layer instead of the chrome
+  // default (plugins.h: zindex 50), so the background floats -- repainted every
+  // frame and therefore newer than it by creation order -- stay under the
+  // panel. An explicit zindex in the options table still wins (configure_float).
+  if (is_modal_surface(f.surface) && f.zindex < kModalFloatZindex)
+    f.zindex = kModalFloatZindex;
   f.creation_order = next_float_order++;
   float_windows.emplace(f.handle, f);
   if (!configure_float(f.handle, L, ti))
@@ -336,10 +367,16 @@ bool LuaAPI::float_mouse(int x,
 {
   if (!lua_state || !editor || !editor->event_loop_.is_main_thread())
     return false;
+  const bool modal_open = modal_surface_open();
   for (auto it = float_windows.rbegin(); it != float_windows.rend(); ++it)
   {
     auto &f = it->second;
     if (f.hide || f.mouse_callback < 0)
+      continue;
+    // The background chrome (sidebar, side panel, status line) keeps its
+    // rectangle while a modal covers it, but not its input: without this the
+    // explorer swallowed every motion and click over the picker's left box.
+    if (modal_open && !is_modal_surface(f.surface))
       continue;
     int handle = f.handle;
     int bx = f.x, by = f.y;
@@ -385,23 +422,33 @@ void LuaAPI::attach_test_ui(UI *ui)
   editor->ui = ui;
 }
 
-void LuaAPI::render_floats()
+void LuaAPI::begin_float_pass()
 {
-  if (!editor || !editor->ui)
-    return;
   // GUI overlays: before any float paints, snapshot the float-free grid so
   // the GUI frontend can render floats as a fixed overlay on top of the
   // sliding content (they would otherwise move with the scroll animation).
-  // The overlay rects are collected below; the terminal backend ignores
-  // both.
+  // The overlay rects are collected by render_float_layer(); the terminal
+  // backend ignores both.
+  if (!editor || !editor->ui)
+    return;
   editor->ui->float_overlays.clear();
-  {
-    bool any_visible = false;
-    for (const auto &x : float_windows)
-      if (!x.second.hide)
-        any_visible = true;
-    editor->ui->before_float_render(any_visible);
-  }
+  bool any_visible = false;
+  for (const auto &x : float_windows)
+    if (!x.second.hide)
+      any_visible = true;
+  editor->ui->before_float_render(any_visible);
+}
+
+void LuaAPI::render_floats()
+{
+  begin_float_pass();
+  render_float_layer(std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
+}
+
+void LuaAPI::render_float_layer(int min_zindex, int max_zindex)
+{
+  if (!editor || !editor->ui)
+    return;
   // Modal scrim: the native modal surfaces (command palette, quick pick,
   // modal popups, TS-status / LSP manager / telescope) dim the whole grid
   // with UI::dim_rect *before* this pass runs. Every cell a float repaints
@@ -412,10 +459,7 @@ void LuaAPI::render_floats()
   // and it draws on top of the dim like the native modal panels do).
   // The command palette is integrated into the statusline (no modal scrim);
   // the remaining modal surfaces dim the grid.
-  const bool modal_dim_active = editor->show_quick_pick
-      || (editor->popup.visible && editor->popup.presentation == POPUP_MODAL)
-      || editor->show_tree_sitter_status_modal || editor->show_lsp_status_modal
-      || editor->telescope.is_active() || editor->show_settings_menu;
+  const bool modal_dim_active = modal_surface_open();
   const auto modal_surface_open = [&](const std::string &s) -> bool
   {
     return (s == "quick_pick" && editor->show_quick_pick)
@@ -429,7 +473,7 @@ void LuaAPI::render_floats()
       rh = std::max(1, editor->ui->get_height() - editor->status_height);
   std::vector<LuaFloatWindow *> fs;
   for (auto &x : float_windows)
-    if (!x.second.hide)
+    if (!x.second.hide && x.second.zindex >= min_zindex && x.second.zindex <= max_zindex)
       fs.push_back(&x.second);
   std::sort(fs.begin(),
             fs.end(),

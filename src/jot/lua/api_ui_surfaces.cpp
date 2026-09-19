@@ -162,6 +162,7 @@ void LuaAPI::push_ui_colors(lua_State *L, int t)
   lua_set_int_field(L, c, "t_prev_bg", th.bg_telescope_preview);
   lua_set_int_field(L, c, "t_query_fg", th.fg_telescope_query);
   lua_set_int_field(L, c, "t_query_bg", th.bg_telescope_query);
+  lua_set_int_field(L, c, "line_nr", th.fg_line_num);
   // Syntax colors (token kind name -> theme color), matching the hover payload
   // so code previews highlight with the same colors as the editor.
   lua_set_int_field(L, c, "keyword", th.fg_keyword);
@@ -416,10 +417,18 @@ bool LuaAPI::emit_telescope(const TelescopeView &view)
                        lua_set_int_field(L, t, "preview_y", view.preview_y);
                        lua_set_int_field(L, t, "preview_w", view.preview_w);
                        lua_set_int_field(L, t, "preview_h", view.preview_h);
+                       lua_set_int_field(L, t, "preview_inner_x", view.preview_inner_x);
+                       lua_set_int_field(L, t, "preview_inner_y", view.preview_inner_y);
+                       lua_set_int_field(L, t, "preview_inner_w", view.preview_inner_w);
+                       lua_set_int_field(L, t, "preview_inner_h", view.preview_inner_h);
+                       lua_set_int_field(L, t, "preview_text_y", view.preview_text_y);
+                       lua_set_int_field(L, t, "preview_status_y", view.preview_status_y);
+                       lua_set_int_field(L, t, "region_w", view.region_w);
                        lua_set_int_field(L, t, "footer_y", view.footer_y);
                        lua_set_bool_field(L, t, "show_preview", view.show_preview);
                        lua_set_str_field(L, t, "query", view.query);
                        lua_set_str_field(L, t, "root", view.root);
+                       lua_set_str_field(L, t, "folder", view.folder);
                        lua_set_str_field(L, t, "title", view.title);
                        lua_set_int_field(L, t, "selected", view.selected);
                        lua_set_int_field(L, t, "list_scroll", view.list_scroll);
@@ -437,6 +446,7 @@ bool LuaAPI::emit_telescope(const TelescopeView &view)
                          lua_set_str_field(L, it, "name", r.name);
                          lua_set_str_field(L, it, "parent_path", r.parent_path);
                          lua_set_bool_field(L, it, "is_directory", r.is_directory);
+                         lua_set_bool_field(L, it, "opened", r.opened);
                          lua_set_str_field(L, it, "icon", r.icon);
                          lua_set_int_field(L, it, "icon_fg", r.icon_fg);
                          lua_newtable(L);
@@ -458,6 +468,10 @@ bool LuaAPI::emit_telescope(const TelescopeView &view)
                        lua_set_str_field(L, pv, "extension", view.preview.extension);
                        lua_set_bool_field(L, pv, "is_directory", view.preview.is_directory);
                        lua_set_bool_field(L, pv, "skipped", view.preview.skipped);
+                       lua_set_bool_field(L, pv, "is_binary", view.preview.is_binary);
+                       lua_set_bool_field(L, pv, "truncated", view.preview.truncated);
+                       lua_pushinteger(L, (lua_Integer)view.preview.size_bytes);
+                       lua_setfield(L, pv, "size_bytes");
                        lua_newtable(L);
                        const int pl = lua_gettop(L);
                        for (size_t i = 0; i < view.preview.lines.size(); i++)

@@ -1,22 +1,18 @@
 #!/usr/bin/env python3
-"""Probe: the telescope paints no background of its own across its rows.
+"""Probe: each telescope box is painted with the theme slots it stands for.
 
-The result rows used to be filled with the theme's Telescope slots --
-TelescopeNormal for every row, TelescopeSelection for the selected one, and
-TelescopePreviewNormal for the preview -- so opening the telescope put a slab of
-the theme's list background across the panel (a white one on the light themes:
-space-light is 255 for the list, 249 selected, 15 preview). The rows now paint
-no background at all and the selection is a caret.
+The redesign made the picker two surfaces: the list box is a panel (the
+theme's TelescopeNormal background, with TelescopeSelection as the band on the
+selected row and TelescopeQuery on the query field), and the file view is an
+editor (its own background, TelescopePreviewNormal). This guards that mapping
+on both render paths -- a later change that fills both boxes with one colour,
+or drops the selection band back to a caret, fails here.
 
-Matching "no cell uses index 255" would not work: in a light theme the editor's
-own background is one of those light indices too, so the check has to be
-relative. It compares the background of a *selected* list row against an
-unselected one (a band would show up as a difference) and a list row against a
-preview row (a separate fill would too). Against the old renderer both differ,
-which is the regression this guards.
-
-Text is checked in the same pass: the key-hint footer the telescope used to spell
-out must not be on screen either.
+The theme is jot-light, where the four slots are four distinct colours
+(#f1eadd list, #e2d8c6 selection, #f9f4ea view, #f9f4ea query), so "which slot
+is this cell using" is a decidable question. The file view's background is also
+required to be the editor's own Normal background: the right box is meant to
+read as a normal editor, not as a preview pane in a different palette.
 
 Usage: test/telescope_theme_probe.py [path-to-jot]
 Exit codes: 0 pass, 1 fail, 2 binary missing.
@@ -25,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -32,46 +29,186 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pty_screen import run_in_pty  # noqa: E402
 
 THEME = "jot-light"
-# Key hints the surfaces used to spell out. The probe workspace files are named so
-# these strings cannot arrive as content by accident.
-STALE_HINTS = ["Enter open", "Esc close", "↑/↓ move", "type to filter files",
-               "Up/Down move", "PgUp/PgDn", "Up/Down scroll"]
+WS = "/tmp/jot_telescope_theme_probe"
+CFG = "/tmp/jot_telescope_theme_probe_cfg"
+COLS, ROWS = 120, 32
+BOX = set("│┌┐└┘─┬┴├┤╭╮╯╰")
+# Chrome the picker used to spell out: the key-hint footer it no longer has, and
+# the "Preview" label the right box no longer is. The probe files are named so
+# none of these can arrive as content by accident.
+STALE = ["Enter open", "Esc close", "↑/↓ move", "Up/Down move", "PgUp/PgDn",
+         "Up/Down scroll", "Preview"]
 
 
-def slot_backgrounds(theme_path: str) -> dict:
-    """Background indices the Telescope* highlight groups map to."""
-    data = json.load(open(theme_path))
-    out = {}
-    for key, value in data.items():
-        if key.startswith("Telescope") and isinstance(value, dict) and "bg" in value:
-            out[key] = value["bg"]
-    return out
+def code(value) -> int:
+    """A theme colour as the screen records it: an index, or 1000+rgb for the
+    truecolor form the hex themes use."""
+    if isinstance(value, int):
+        return value
+    if not value:
+        return -1
+    if value.startswith("#"):
+        h = value[1:]
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        return 1000 + int(h[:6], 16)
+    return int(value)
 
 
-def find_row(screen, needle: str):
-    """(row, column) of the first cell of `needle`, or None."""
-    for y in range(screen.rows):
-        row = "".join(screen.cells[y])
-        x = row.find(needle)
-        if x >= 0:
-            return y, x
-    return None
+def theme_slots() -> dict:
+    path = os.path.join(".configs", "configs", "colors", f"{THEME}.json")
+    data = json.load(open(path))
+    return {
+        "list": code(data["TelescopeNormal"]["bg"]),
+        "selection": code(data["TelescopeSelection"]["bg"]),
+        "view": code(data["TelescopePreviewNormal"]["bg"]),
+        "query": code(data["TelescopeQuery"]["bg"]),
+        "editor": code(data["Normal"]["bg"]),
+        # The float's own colour, which is what the picker paints the column
+        # between the boxes with (theme.panel_border / the kit's float fill).
+        "backdrop": code(data["FloatBorder"]["bg"]),
+    }
 
 
-def float_interior(screen):
-    """(top, bottom, left, right) rows/columns strictly inside the panel border."""
-    top = bottom = left = right = None
-    for y in range(screen.rows):
-        row = "".join(screen.cells[y])
-        if top is None and "┌" in row:
+def write_workspace() -> str:
+    shutil.rmtree(WS, ignore_errors=True)
+    os.makedirs(os.path.join(WS, "src", "render"), exist_ok=True)
+    with open(os.path.join(WS, "src", "render", "frame.cpp"), "w") as fh:
+        fh.write("// frame paint\nint paint_frame(int w) {\n  return w + 1;\n}\n")
+    with open(os.path.join(WS, "notes.txt"), "w") as fh:
+        fh.write("alpha\nbeta\ngamma\n")
+    if not os.path.isdir(os.path.join(WS, ".git")):
+        subprocess.run(["git", "init", "-q", WS], check=False)
+    return WS
+
+
+def config_dir(native: bool) -> str:
+    """A probe-owned config home pinned to the probe theme. `native` unregisters
+    the Lua telescope handler so the native renderer is the one on screen."""
+    cfg = f"{CFG}_{'native' if native else 'lua'}"
+    os.makedirs(os.path.join(cfg, "configs"), exist_ok=True)
+    with open(os.path.join(cfg, "configs", "settings.conf"), "w") as fh:
+        fh.write(f"color_scheme={THEME}\n")
+    with open(os.path.join(cfg, "init.lua"), "w") as fh:
+        if native:
+            fh.write('jot.ui.handler("telescope", nil)\n')
+    return cfg
+
+
+def rows(screen):
+    return ["".join(row) for row in screen.cells]
+
+
+def geometry(screen):
+    """(top, left, list_right, view_x, view_right, bottom) from the borders, or
+    None when the picker is not up."""
+    top = bottom = None
+    for y, row in enumerate(rows(screen)):
+        if top is None and row.count("┌") == 2:
             top = y
             left = row.index("┌")
-            right = row.rindex("┐") if "┐" in row else None
-        if "└" in row:
+            list_right = row.index("┐", left)
+            view_x = row.index("┌", list_right)
+            view_right = row.rindex("┐")
+        if top is not None and "└" in row:
             bottom = y
-    if top is None or bottom is None or left is None or right is None:
+    if top is None or bottom is None:
         return None
-    return top + 1, bottom, left + 1, right
+    return top, left, list_right, view_x, view_right, bottom
+
+
+class Checks:
+    def __init__(self, label: str):
+        self.label = label
+        self.failures: list[str] = []
+
+    def check(self, name: str, ok: bool, detail: str = "") -> None:
+        if not ok:
+            self.failures.append(f"{name}{(' -- ' + detail) if detail else ''}")
+
+    def report(self) -> int:
+        if self.failures:
+            print(f"telescope theme probe [{self.label}]: FAIL")
+            for f in self.failures:
+                print(f"  - {f}")
+            return 1
+        print(f"telescope theme probe [{self.label}]: PASS")
+        return 0
+
+
+def body_bgs(screen, y: int, first: int, last: int) -> set:
+    """Background codes across a cell range on one row."""
+    return {screen.bg[y][x] for x in range(first, last + 1)}
+
+
+def probe(screen, slots: dict, c: Checks) -> None:
+    geo = geometry(screen)
+    c.check("the picker is on screen", geo is not None)
+    if geo is None:
+        return
+    top, left, list_right, view_x, view_right, bottom = geo
+    query_y = top + 1
+    # The query field is inset one cell from either border (query_w = list_w-2).
+    query_first, query_last = left + 2, list_right - 2
+    list_first, list_last = left + 1, list_right - 1
+    view_first, view_last = view_x + 1, view_right - 1
+
+    # --- the query field ------------------------------------------------------
+    c.check("the query field carries the TelescopeQuery band",
+            body_bgs(screen, query_y, query_first, query_last) == {slots["query"]},
+            str(body_bgs(screen, query_y, query_first, query_last)))
+
+    # --- the list box: a panel, with the selection as a band ------------------
+    list_rows_bgs = {}
+    for y in range(query_y + 1, bottom):
+        list_rows_bgs[y] = body_bgs(screen, y, list_first, list_last)
+    plain = {y: b for y, b in list_rows_bgs.items() if b == {slots["list"]}}
+    banded = {y: b for y, b in list_rows_bgs.items() if b == {slots["selection"]}}
+    c.check("the list box is drawn on TelescopeNormal",
+            len(plain) >= 1, f"bgs by row: {list_rows_bgs}")
+    c.check("exactly one row is the selection band", len(banded) == 1,
+            f"banded rows: {sorted(banded)}")
+    c.check("the selection band is TelescopeSelection, not the list colour",
+            slots["selection"] != slots["list"])
+    c.check("the band spans the whole interior row",
+            all(len(b) == 1 for b in banded.values()),
+            f"banded: {banded}")
+    c.check("no list row mixes backgrounds",
+            all(len(b) == 1 for b in list_rows_bgs.values()),
+            f"bgs by row: {list_rows_bgs}")
+
+    # --- the file view: an editor surface of its own --------------------------
+    view_bgs = {y: body_bgs(screen, y, view_first, view_last)
+                for y in range(top + 1, bottom)}
+    flat = {y: b for y, b in view_bgs.items() if b == {slots["view"]}}
+    c.check("the file view is drawn on TelescopePreviewNormal",
+            len(flat) == len(view_bgs), f"bgs by row: {view_bgs}")
+    c.check("the view's background is the editor's own",
+            slots["view"] == slots["editor"],
+            f"view {slots['view']}, editor {slots['editor']}")
+    c.check("the two boxes are two surfaces", slots["list"] != slots["view"])
+
+    # --- between the boxes ----------------------------------------------------
+    gap_cols = range(list_right + 1, view_x)
+    glyphs = [rows(screen)[y][x] for y in range(top + 1, bottom) for x in gap_cols]
+    c.check("the column between the boxes holds no border",
+            not any(g in BOX for g in glyphs), "".join(sorted(set(glyphs))))
+    gap_bgs = {screen.bg[y][x] for y in range(top + 1, bottom) for x in gap_cols}
+    c.check("the list box's fill stops at its border",
+            slots["list"] not in gap_bgs, str(gap_bgs))
+    c.check("the gap is the picker's own float colour",
+            gap_bgs == {slots["backdrop"]}, str(gap_bgs))
+
+    # --- no retired chrome ----------------------------------------------------
+    text = "\n".join(rows(screen))
+    for stale in STALE:
+        c.check(f"no stale chrome {stale!r}", stale not in text)
+
+
+def run(binary: str, native: bool):
+    return run_in_pty(binary, [os.path.join(WS, "src", "render", "frame.cpp")],
+                      b"\x05", settle=3.0, after=4.0, cols=COLS, rows=ROWS,
+                      cfg=config_dir(native), cwd=WS)
 
 
 def main() -> int:
@@ -79,83 +216,17 @@ def main() -> int:
     if not os.path.exists(binary):
         print(f"telescope theme probe: SKIP - no binary at {binary}")
         return 2
-
-    theme_path = os.path.join(".configs", "configs", "colors", f"{THEME}.json")
-    if not os.path.exists(theme_path):
-        print(f"telescope theme probe: SKIP - no theme at {theme_path}")
-        return 2
-    slots = slot_backgrounds(theme_path)
-    if not slots:
-        print("telescope theme probe: SKIP - theme has no Telescope backgrounds")
-        return 2
-
-    work = "/tmp/jot_telescope_probe"
-    os.makedirs(work, exist_ok=True)
-    for name in ("alpha.c", "beta.lua", "gamma.py"):
-        with open(os.path.join(work, name), "w") as fh:
-            fh.write("-- probe\n")
-    # A marker (a real repo, so the git panel has nothing to complain about) makes
-    # the probe directory the detected root; without one the telescope walks up
-    # to "/" and lists the filesystem instead of these files.
-    if not os.path.isdir(os.path.join(work, ".git")):
-        subprocess.run(["git", "init", "-q", work], check=False)
-
-    # The theme is applied from the config the probe owns, so the user's own
-    # settings are never touched. The key is `color_scheme` (read at startup as
-    # well as by `:theme`); `theme` would be silently ignored.
-    cfg = "/tmp/jot_telescope_probe_cfg"
-    os.makedirs(os.path.join(cfg, "configs"), exist_ok=True)
-    with open(os.path.join(cfg, "configs", "settings.conf"), "w") as fh:
-        fh.write(f"color_scheme={THEME}\n")
-
-    screen = run_in_pty(binary, [os.path.join(work, "alpha.c")], b"\x05",
-                        settle=3.0, after=4.0, cols=110, rows=32, cfg=cfg, cwd=work)
-    view = screen.text()
-
-    box = float_interior(screen)
-    listed = find_row(screen, "alpha.c") and find_row(screen, "beta.lua")
-    preview = find_row(screen, "Preview")
-    if not (box and listed and preview):
-        print("telescope theme probe: FAIL - the telescope never opened (Ctrl+E)")
-        print(view)
-        return 1
-
-    top, bottom, left, right = box
-    print(f"telescope theme probe: theme {THEME}, slot backgrounds {slots}")
-    print(f"telescope theme probe: panel interior rows {top}..{bottom}, "
-          f"cols {left}..{right}")
+    slots = theme_slots()
+    print(f"telescope theme probe: {THEME} slots {slots}")
+    write_workspace()
 
     failures = 0
-
-    # The body must be one flat background. The query row is the one exception:
-    # it keeps the command-bar fill while focused, so it is skipped. The old
-    # renderer filled the list with TelescopeNormal, the selected row with
-    # TelescopeSelection and the preview with TelescopePreviewNormal, which is
-    # three different values here (255 / 249 / 15).
-    seen: dict = {}
-    for y in range(top, bottom):
-        row = "".join(screen.cells[y])
-        if "→" in row:
-            continue
-        for x in range(left, right):
-            bg = screen.bg[y][x]
-            seen[bg] = seen.get(bg, 0) + 1
-    print(f"telescope theme probe: body backgrounds: {dict(sorted(seen.items()))}")
-    if len(seen) > 1:
-        failures += 1
-        print(f"telescope theme probe: FAIL - the panel body is not one flat "
-              f"background: {dict(sorted(seen.items()))}")
-
-    stale = [h for h in STALE_HINTS if h in view]
-    for hint in stale:
-        failures += 1
-        print(f"telescope theme probe: FAIL - stale hint text on screen: {hint!r}")
-
-    if failures:
-        print("telescope theme probe: FAIL")
-        return 1
-    print("telescope theme probe: PASS")
-    return 0
+    for native in (False, True):
+        label = "native renderer" if native else "lua kit"
+        c = Checks(label)
+        probe(run(binary, native), slots, c)
+        failures += c.report()
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

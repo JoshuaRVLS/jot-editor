@@ -36,6 +36,9 @@ struct LuaFloatWindow
   std::string surface;
   int x = 0, y = 0, w = 1, h = 1;
   int row = 0, col = 0;
+  // Paint order: higher wins. 50 is editor chrome (sidebar, side panel, status
+  // line); a modal surface's own float opens at LuaAPI::kModalFloatZindex so it
+  // stays above that chrome even though the chrome is recreated every frame.
   int zindex = 50;
   bool valid = true;
   bool enter = false;

@@ -48,10 +48,25 @@ struct TelescopeLayout
 {
   bool valid = false;
   bool show_preview = false;
+  // Two separate boxes with one column between them -- the list (query +
+  // results) and the file view. Nothing is shared, so each gets its own
+  // border ring and the eye reads them as two panes.
+  //
+  //   x/y/w/h            the list box, its border included
+  //   inner_*            inside that border
+  //   query_*            the input row (first interior row)
+  //   list_*/body_*      the result rows below it
+  //   footer_y           the list box's bottom border (match count)
+  //   preview_*          the file view box, its border included
+  //   preview_inner_*    inside it (the code rows)
+  //   preview_text_y     first code row inside the file view box
+  //   preview_status_y   the file view's bottom border (size / line count)
+  //   region_w           the two boxes plus the gap, for hit-testing
   int x = 0;
   int y = 0;
   int w = 0;
   int h = 0;
+  int region_w = 0;
   int inner_x = 0;
   int inner_y = 0;
   int inner_w = 0;
@@ -65,11 +80,17 @@ struct TelescopeLayout
   int list_y = 0;
   int list_w = 0;
   int list_h = 0;
+  int footer_y = 0;
   int preview_x = 0;
   int preview_y = 0;
   int preview_w = 0;
   int preview_h = 0;
-  int footer_y = 0;
+  int preview_inner_x = 0;
+  int preview_inner_y = 0;
+  int preview_inner_w = 0;
+  int preview_inner_h = 0;
+  int preview_text_y = 0;
+  int preview_status_y = 0;
 };
 
 TelescopeLayout
@@ -82,7 +103,10 @@ class Telescope
 public:
   Telescope();
 
-  void open(const std::string &root = "");
+  // `floor` is the directory the picker may not walk above (the workspace the
+  // find belongs to). It defaults to `root`, so an ordinary open is rooted at
+  // its scope and cannot back out of it.
+  void open(const std::string &root = "", const std::string &floor = "");
   void close();
   bool is_active() const
   {
@@ -107,7 +131,11 @@ public:
   void select_index(int index);
   void ensure_selected_visible(int visible_rows);
   void select();
+  // Steps the scan root one directory up, but never out of the directory the
+  // picker was opened in: the workspace is the floor, so there is no ".."
+  // above it to walk back into. `can_go_parent()` is what the input freezes on.
   void go_parent();
+  bool can_go_parent() const;
   void scroll_preview(int delta, int visible_rows);
   void cycle_focus(int delta);
   void set_focus(TelescopeFocus value)
@@ -148,6 +176,11 @@ public:
   {
     return root_dir.string();
   }
+  // The scan root relative to the floor it was opened at, "" when they are the
+  // same and "."-free otherwise ("src/render"). This is the folder the list
+  // header names; the rows carry their own file paths, so nothing in the list
+  // is a folder.
+  std::string get_relative_root() const;
   int current_scan_id() const
   {
     return scan_id_.load();
@@ -199,6 +232,9 @@ private:
   bool scan_pending_ = false;
   TelescopeFocus focus_ = TelescopeFocus::Query;
   fs::path root_dir;
+  // The directory the picker was opened in: go_parent() stops here, so a
+  // workspace-scoped find never escapes into the filesystem above it.
+  fs::path floor_dir_;
 
   // Last scan failure, if any (e.g. a scan root that is not a directory).
   // Kept so the picker can tell "nothing matched" apart from "the tree was

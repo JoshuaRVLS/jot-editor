@@ -119,8 +119,11 @@ struct TsStatusView
 struct TelescopeResultView
 {
   std::string name;
-  std::string parent_path;
+  std::string parent_path; // the file's folder, shown dimmed on the row
   bool is_directory = false;
+  // True when this file already has a tab: the row's leading dot is lit for an
+  // open file and hollow for one that is not.
+  bool opened = false;
   std::vector<int> match; // byte offsets into name matched by the query
   std::string icon;       // per-language file glyph (empty for directories)
   int icon_fg = -1;       // brand color index, -1 = use the row foreground
@@ -135,22 +138,34 @@ struct TelescopePreviewView
   std::string extension;          // ".cpp" or empty
   bool is_directory = false;
   bool skipped = false;
+  bool is_binary = false;
+  bool truncated = false;
+  std::uintmax_t size_bytes = 0;
 };
 
 struct TelescopeView
 {
   // Native layout geometry is passed through unchanged so mouse hit-testing
   // (row clicks, wheel regions, query focus) keeps working on the Lua render.
+  // x/y/w/h is the list box and preview_x/... the file view box: two separate
+  // frames with one column between them.
   int x = 0, y = 0, w = 0, h = 0;
+  int region_w = 0;
   int inner_x = 0, inner_y = 0, inner_w = 0, inner_h = 0;
   int query_x = 0, query_y = 0, query_w = 0;
   int body_y = 0, body_h = 0;
   int list_x = 0, list_y = 0, list_w = 0, list_h = 0;
   int preview_x = 0, preview_y = 0, preview_w = 0, preview_h = 0;
+  int preview_inner_x = 0, preview_inner_y = 0;
+  int preview_inner_w = 0, preview_inner_h = 0;
+  int preview_text_y = 0, preview_status_y = 0;
   int footer_y = 0;
   bool show_preview = false;
   std::string query;
   std::string root;
+  // The scan root relative to the workspace it was opened in ("src/render"),
+  // empty when the picker is at the workspace root.
+  std::string folder;
   std::string title;
   int selected = 0;
   int list_scroll = 0;

@@ -78,7 +78,13 @@ private:
   void handle_save_prompt(int ch);
   void handle_integrated_terminal_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
   bool handle_telescope_mouse(
-      int x, int y, bool is_click, bool is_double_click, bool is_scroll_up, bool is_scroll_down);
+      int x,
+      int y,
+      bool is_click,
+      bool is_double_click,
+      bool is_scroll_up,
+      bool is_scroll_down,
+      bool is_motion = false);
   bool handle_home_menu_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
   bool handle_home_menu_mouse(int x, int y, bool is_click);
   // Applies one settings-menu change through the normal config pipeline:

@@ -64,6 +64,7 @@
   "TelescopeNormal": {"fg": "#25201b", "bg": "#f1eadd"},
   "TelescopeSelection": {"fg": "#25201b", "bg": "#e2d8c6"},
   "TelescopePreviewNormal": {"fg": "#25201b", "bg": "#f9f4ea"},
+  "TelescopeQuery": {"fg": "#25201b", "bg": "#f9f4ea"},
   "Terminal": {"fg": "#25201b", "bg": "#f1eadd"},
   "TerminalTab": {"fg": "#9a8f81", "bg": "#f1eadd"},
   "TerminalTabActive": {"fg": "#25201b", "bg": "#e2d8c6"},

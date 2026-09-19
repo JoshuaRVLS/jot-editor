@@ -618,6 +618,30 @@ public:
                    bool ctrl,
                    bool shift,
                    bool alt);
+  // Float z-order layers. Floats open at 0 by default (editor chrome: sidebar,
+  // side panel, status line). A modal surface's own float opens on
+  // kModalFloatZindex instead, so it always paints above that chrome -- the
+  // chrome is repainted every frame, and creation order alone would put a
+  // background float on top of the modal that is open over it. Toasts sit
+  // above both (see runtime/lua/features/ui/toast.lua).
+  static constexpr int kModalFloatZindex = 50000;
+
+  // Starts a float pass: drops the per-frame overlay list and snapshots the
+  // float-free grid for the GUI backend. Call once per frame, before the first
+  // render_float_layer().
+  // Whether one of the modal surfaces (quick pick, a modal popup, the
+  // tree-sitter/LSP status modals, the telescope, the settings menu) is up
+  // right now. A modal owns the frame while it is open: it paints above the
+  // background floats (render_float_layer) and it is the only surface that
+  // takes the mouse (float_mouse).
+  bool modal_surface_open() const;
+
+  void begin_float_pass();
+  // Paints the visible floats inside the z-index window (inclusive), in paint
+  // order. A modal frame splits its pass across kModalFloatZindex so the chrome
+  // lands under the modal and the modal's own float above it; render_floats()
+  // is the whole-window pass and the common case.
+  void render_float_layer(int min_zindex, int max_zindex);
   void render_floats();
   void clear_floats();
 

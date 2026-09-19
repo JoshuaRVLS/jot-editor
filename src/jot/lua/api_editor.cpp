@@ -305,6 +305,7 @@ void LuaAPI::push_theme_palette(lua_State *L)
   color("telescope", t.fg_telescope, t.bg_telescope);
   color("telescope_selected", t.fg_telescope_selected, t.bg_telescope_selected);
   color("telescope_preview", t.fg_telescope_preview, t.bg_telescope_preview);
+  color("telescope_query", t.fg_telescope_query, t.bg_telescope_query);
   color("terminal", t.fg_terminal, t.bg_terminal);
   color("terminal_tab_inactive", t.fg_terminal_tab_inactive, t.bg_terminal_tab_inactive);
   color("terminal_tab_active", t.fg_terminal_tab_active, t.bg_terminal_tab_active);

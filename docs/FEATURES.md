@@ -122,8 +122,12 @@ an explicit font file.
 - Selection-scoped replace via `Ctrl+Shift+F` — or project-wide search when
   nothing is selected.
 - Go to line, bookmarks, and a fuzzy file finder (telescope) with mouse
-  support, syntax-highlighted previews, matched-character highlighting and
-  per-language colored file icons in the results.
+  support. The picker is two boxes: the result list on the left (files only --
+  each row carries the dimmed path to the file and a dot that lights up when
+  the file already has a tab) and a small editor showing the selected file on
+  the right, with line numbers and the file name in its top border. The
+  selection is a filled band, followed by hover and click, so the row under the
+  pointer is the one the view shows.
 - Picker for project-wide text search, diagnostics, and document symbols, plus
   a persistent outline panel (`:outline`).
 
@@ -625,7 +629,10 @@ to editor
 
 Type to filter, `↑`/`↓` to move, `Home`/`End` to jump, `Enter` to accept,
 `Backspace` to edit, `Esc` to close. In LSP completion, `Enter` or `Tab`
-applies and `Esc` closes. The typed characters light up in each item's
+applies and `Esc` closes. In the file finder, `Backspace` on an empty query
+walks up a folder, but it floors at the workspace the picker opened in -- the
+workspace is the folder root, and `:find src` scopes the picker to a subfolder
+of it instead of a second way out. The typed characters light up in each item's
 label (nvim-cmp's abbr-match highlight), and the selected item's remaining
 insert text previews dimmed at the caret as ghost text
 (`lsp_completion_ghost_text` to disable).

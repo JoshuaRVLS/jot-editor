@@ -274,6 +274,7 @@ void Editor::handle_terminal_event(const Event &ev)
 
     if (telescope.is_active())
     {
+      const bool is_telescope_motion = (button & 0x20) != 0 && !ev.mouse.pressed;
       bool is_click = ev.mouse.pressed && ((button & 0x03) == 0);
       static long long last_telescope_click_ms = 0;
       static int last_telescope_click_x = -1;
@@ -295,7 +296,8 @@ void Editor::handle_terminal_event(const Event &ev)
                                    is_click,
                                    is_double_click,
                                    wheel_base == 64,
-                                   wheel_base == 65))
+                                   wheel_base == 65,
+                                   is_telescope_motion))
       {
         return;
       }

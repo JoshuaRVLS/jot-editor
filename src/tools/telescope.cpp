@@ -167,37 +167,56 @@ telescope_layout_for(int render_width, int screen_height, int top_bound, int bot
   const int top = std::clamp(top_bound, 0, std::max(0, h - 1));
   const int bottom = std::clamp(bottom_bound, top + 1, h);
   const int usable_h = std::max(1, bottom - top);
-  if (w < 4 || usable_h < 4)
+  if (w < 6 || usable_h < 5)
     return layout;
 
-  layout.w = std::clamp(w * 9 / 10, std::min(w, 42), w);
+  // The whole picker, centred. The list box owns this width when there is no
+  // file view; otherwise the two boxes split it with one column between them.
+  const int total_w = std::clamp(w * 9 / 10, std::min(w, 44), w);
   layout.h = std::clamp(usable_h * 5 / 6, std::min(usable_h, 10), usable_h);
-  layout.x = std::max(0, (w - layout.w) / 2);
+  layout.x = std::max(0, (w - total_w) / 2);
   layout.y = top + std::max(0, (usable_h - layout.h) / 2);
+
+  // A file view needs a readable code column next to a readable list, so the
+  // split only happens when both fit. Below that the picker is just the list.
+  const int kGap = 1;
+  const int kMinFileViewW = 30;
+  const int left_w = std::max(34, total_w * 45 / 100);
+  layout.show_preview =
+      total_w >= 76 && layout.h >= 8 && (total_w - left_w - kGap) >= kMinFileViewW;
+  layout.w = layout.show_preview ? left_w : total_w;
+  layout.region_w = layout.show_preview ? total_w : layout.w;
+
   layout.inner_x = layout.x + 1;
   layout.inner_y = layout.y + 1;
   layout.inner_w = std::max(1, layout.w - 2);
   layout.inner_h = std::max(1, layout.h - 2);
+
+  // Input row first, then one clear row of air, then the results -- the input
+  // reads as a field of its own instead of another row of the list.
   layout.query_x = layout.inner_x + 1;
-  layout.query_y = layout.inner_y + 2;
+  layout.query_y = layout.inner_y;
   layout.query_w = std::max(1, layout.inner_w - 2);
-  layout.footer_y = layout.y + layout.h - 2;
-  layout.body_y = layout.inner_y + 4;
+  layout.body_y = layout.inner_y + 2;
+  layout.footer_y = layout.y + layout.h - 1;
   layout.body_h = std::max(1, layout.footer_y - layout.body_y);
-  layout.show_preview = layout.inner_w >= 64 && layout.body_h >= 4;
-  const int list_panel_w =
-      layout.show_preview ? std::max(26, layout.inner_w * 42 / 100) : layout.inner_w;
-  layout.list_x = layout.inner_x + 1;
+  layout.list_x = layout.inner_x;
   layout.list_y = layout.body_y;
-  layout.list_w =
-      layout.show_preview ? std::max(1, list_panel_w - 2) : std::max(1, layout.inner_w - 2);
+  layout.list_w = layout.inner_w;
   layout.list_h = layout.body_h;
+
   if (layout.show_preview)
   {
-    layout.preview_x = layout.inner_x + list_panel_w + 2;
-    layout.preview_y = layout.body_y;
-    layout.preview_w = std::max(1, layout.inner_x + layout.inner_w - layout.preview_x - 1);
-    layout.preview_h = layout.body_h;
+    layout.preview_x = layout.x + layout.w + kGap;
+    layout.preview_y = layout.y;
+    layout.preview_w = layout.region_w - layout.w - kGap;
+    layout.preview_h = layout.h;
+    layout.preview_inner_x = layout.preview_x + 1;
+    layout.preview_inner_y = layout.preview_y + 1;
+    layout.preview_inner_w = std::max(1, layout.preview_w - 2);
+    layout.preview_inner_h = std::max(1, layout.preview_h - 2);
+    layout.preview_text_y = layout.preview_inner_y;
+    layout.preview_status_y = layout.preview_y + layout.preview_h - 1;
   }
   layout.valid = true;
   return layout;
@@ -212,7 +231,7 @@ Telescope::Telescope()
   root_dir = fs::current_path();
 }
 
-void Telescope::open(const std::string &root)
+void Telescope::open(const std::string &root, const std::string &floor)
 {
   cancel_scan();
   active = true;
@@ -232,6 +251,21 @@ void Telescope::open(const std::string &root)
   else if (!fs::exists(root_dir, ec) || !fs::is_directory(root_dir, ec))
   {
     root_dir = fs::current_path();
+  }
+  // The floor is the workspace the find belongs to, but only when the scope
+  // being opened really sits inside it: `:find /elsewhere` is its own floor,
+  // so nothing can walk from one tree into another.
+  floor_dir_ = root_dir;
+  if (!floor.empty())
+  {
+    std::error_code floor_ec;
+    const fs::path candidate = fs::weakly_canonical(fs::absolute(fs::path(floor), floor_ec), floor_ec);
+    const fs::path root_c = fs::weakly_canonical(root_dir, floor_ec);
+    if (!floor_ec && !candidate.empty() && root_c.native().size() >= candidate.native().size()
+        && root_c.native().compare(0, candidate.native().size(), candidate.native()) == 0)
+    {
+      floor_dir_ = candidate;
+    }
   }
   query.clear();
   selected_index = 0;
@@ -300,6 +334,14 @@ void Telescope::publish_filtered()
 
   for (auto match : all_entries_)
   {
+    // Folders are walked, never listed: the picker's result rows are files,
+    // and where a file lives is carried by its (dimmed) path on the row. The
+    // walk still descends through them, so a query that names a folder is how
+    // you scope to one.
+    if (match.is_directory)
+    {
+      continue;
+    }
     if (!query_lc.empty() && !fuzzy_match(match.name, query_lc)
         && !fuzzy_match(match.relative_path, query_lc))
     {
@@ -320,23 +362,11 @@ void Telescope::publish_filtered()
             filtered.end(),
             [&](const FileMatch &a, const FileMatch &b)
             {
-              if (query_lc.empty())
+              if (query_lc.empty() || a.score == b.score)
               {
-                if (a.is_directory != b.is_directory)
-                {
-                  return a.is_directory;
-                }
                 return string_util::lower_copy(a.name) < string_util::lower_copy(b.name);
               }
-              if (a.score != b.score)
-              {
-                return a.score > b.score;
-              }
-              if (a.is_directory != b.is_directory)
-              {
-                return !a.is_directory;
-              }
-              return string_util::lower_copy(a.name) < string_util::lower_copy(b.name);
+              return a.score > b.score;
             });
 
   if ((int)filtered.size() > kMaxResults)
@@ -520,35 +550,60 @@ void Telescope::ensure_selected_visible(int visible_rows)
 
 void Telescope::select()
 {
-  if (selected_index >= 0 && selected_index < (int)results.size())
+  // Every row is a file now, so accepting one is the caller's job (open it and
+  // close the picker). Folders are reached by typing their path, not by
+  // accepting a row.
+}
+
+bool Telescope::can_go_parent() const
+{
+  if (!root_dir.has_parent_path())
   {
-    if (results[selected_index].is_directory)
-    {
-      root_dir = fs::path(results[selected_index].path);
-      query.clear();
-      selected_index = 0;
-      list_scroll_offset = 0;
-      preview_scroll_offset = 0;
-      all_entries_.clear();
-      entries_valid_ = false;
-      invalidate_preview_cache();
-    }
+    return false;
   }
+  std::error_code ec;
+  const fs::path parent = fs::weakly_canonical(root_dir.parent_path(), ec);
+  const fs::path floor = ec ? floor_dir_ : fs::weakly_canonical(floor_dir_, ec);
+  if (ec)
+  {
+    return false;
+  }
+  // Inside the floor ("floor/sub") the parent is still reachable; at the floor
+  // it is not.
+  return parent.native().size() >= floor.native().size()
+         && parent.native().compare(0, floor.native().size(), floor.native()) == 0;
 }
 
 void Telescope::go_parent()
 {
-  if (root_dir.has_parent_path())
+  if (!can_go_parent())
   {
-    root_dir = root_dir.parent_path();
-    query.clear();
-    selected_index = 0;
-    list_scroll_offset = 0;
-    preview_scroll_offset = 0;
-    all_entries_.clear();
-    entries_valid_ = false;
-    invalidate_preview_cache();
+    return;
   }
+  root_dir = root_dir.parent_path();
+  query.clear();
+  selected_index = 0;
+  list_scroll_offset = 0;
+  preview_scroll_offset = 0;
+  all_entries_.clear();
+  entries_valid_ = false;
+  invalidate_preview_cache();
+}
+
+std::string Telescope::get_relative_root() const
+{
+  if (floor_dir_.empty())
+  {
+    return "";
+  }
+  std::error_code ec;
+  fs::path rel = fs::relative(root_dir, floor_dir_, ec);
+  if (ec)
+  {
+    return "";
+  }
+  const std::string out = rel.generic_string();
+  return out == "." ? "" : out;
 }
 
 void Telescope::invalidate_cache()

@@ -247,13 +247,19 @@ class Screen:
 
 def run_in_pty(binary: str, args, keys: bytes, settle: float = 2.5, after: float = 3.0,
                cols: int = 100, rows: int = 30, cfg: str = "/tmp/jot_probe_cfg",
-               cwd: str = None):
+               cwd: str = None, phases=None):
     """Runs `binary args...` in a pty, sends `keys`, and returns the Screen.
 
     `settle` is how long the editor gets to start before the keys are sent (LSP
     servers need seconds to attach), `after` how long to keep reading afterwards.
     `cwd` sets the child's working directory, which is what decides the workspace
     root the file explorer and telescope open on.
+
+    `phases` sends further input once the screen has settled: a list of
+    (delay, bytes) pairs, each written after draining for `delay` seconds and
+    followed by a short drain so its frame arrives. A probe that needs the UI to
+    finish something asynchronous first -- a mouse hover over a picker whose file
+    scan is still running, say -- uses this instead of racing one key blob.
     """
     os.makedirs(cfg, exist_ok=True)
     # Resolve before forking: the child may chdir to `cwd`, and a relative
@@ -291,22 +297,32 @@ def run_in_pty(binary: str, args, keys: bytes, settle: float = 2.5, after: float
         if not data:
             break
         screen.feed(data)
+    def drain(seconds: float) -> None:
+        end = time.time() + seconds
+        while time.time() < end:
+            r, _, _ = select.select([fd], [], [], 0.1)
+            if not r:
+                continue
+            try:
+                data = os.read(fd, 65536)
+            except OSError:
+                return
+            if not data:
+                return
+            screen.feed(data)
+
     try:
         os.write(fd, keys)
     except OSError:
         pass
-    end = time.time() + after
-    while time.time() < end:
-        r, _, _ = select.select([fd], [], [], 0.1)
-        if not r:
-            continue
+    drain(after)
+    for delay, extra in phases or []:
+        drain(delay)
         try:
-            data = os.read(fd, 65536)
+            os.write(fd, extra)
         except OSError:
-            break
-        if not data:
-            break
-        screen.feed(data)
+            pass
+        drain(0.4)
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:

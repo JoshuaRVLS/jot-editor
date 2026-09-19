@@ -734,43 +734,60 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   lua_pop(L, 1);
 
   // --- telescope ---
+  // The two-box layout telescope_layout_for() produces for a 120x32 screen: the
+  // float is the whole region (both boxes plus the column between them), w is
+  // the list box and preview_x/... the file view.
   push_module_field(L, 1, "telescope");
-  push_box(L, 0, 1, 60, 18);
+  push_box(L, 0, 1, 58, 18);
+  lua_pushinteger(L, 88);
+  lua_setfield(L, -2, "region_w");
   lua_pushinteger(L, 1);
   lua_setfield(L, -2, "inner_x");
   lua_pushinteger(L, 2);
   lua_setfield(L, -2, "inner_y");
-  lua_pushinteger(L, 58);
+  lua_pushinteger(L, 56);
   lua_setfield(L, -2, "inner_w");
   lua_pushinteger(L, 16);
   lua_setfield(L, -2, "inner_h");
-  lua_pushinteger(L, 1);
+  lua_pushinteger(L, 2);
   lua_setfield(L, -2, "query_x");
   lua_pushinteger(L, 2);
   lua_setfield(L, -2, "query_y");
-  lua_pushinteger(L, 56);
+  lua_pushinteger(L, 54);
   lua_setfield(L, -2, "query_w");
-  lua_pushinteger(L, 3);
+  lua_pushinteger(L, 4);
   lua_setfield(L, -2, "body_y");
-  lua_pushinteger(L, 15);
+  lua_pushinteger(L, 14);
   lua_setfield(L, -2, "body_h");
-  lua_pushinteger(L, 2);
+  lua_pushinteger(L, 1);
   lua_setfield(L, -2, "list_x");
   lua_pushinteger(L, 4);
   lua_setfield(L, -2, "list_y");
   lua_pushinteger(L, 56);
   lua_setfield(L, -2, "list_w");
-  lua_pushinteger(L, 12);
+  lua_pushinteger(L, 14);
   lua_setfield(L, -2, "list_h");
-  lua_pushinteger(L, 30);
+  lua_pushinteger(L, 59);
   lua_setfield(L, -2, "preview_x");
-  lua_pushinteger(L, 4);
+  lua_pushinteger(L, 1);
   lua_setfield(L, -2, "preview_y");
-  lua_pushinteger(L, 28);
+  lua_pushinteger(L, 29);
   lua_setfield(L, -2, "preview_w");
-  lua_pushinteger(L, 12);
+  lua_pushinteger(L, 18);
   lua_setfield(L, -2, "preview_h");
-  lua_pushinteger(L, 17);
+  lua_pushinteger(L, 60);
+  lua_setfield(L, -2, "preview_inner_x");
+  lua_pushinteger(L, 2);
+  lua_setfield(L, -2, "preview_inner_y");
+  lua_pushinteger(L, 27);
+  lua_setfield(L, -2, "preview_inner_w");
+  lua_pushinteger(L, 16);
+  lua_setfield(L, -2, "preview_inner_h");
+  lua_pushinteger(L, 2);
+  lua_setfield(L, -2, "preview_text_y");
+  lua_pushinteger(L, 18);
+  lua_setfield(L, -2, "preview_status_y");
+  lua_pushinteger(L, 18);
   lua_setfield(L, -2, "footer_y");
   lua_pushboolean(L, 1);
   lua_setfield(L, -2, "show_preview");
@@ -778,6 +795,8 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   lua_setfield(L, -2, "query");
   lua_pushstring(L, "/home/user");
   lua_setfield(L, -2, "root");
+  lua_pushstring(L, "");
+  lua_setfield(L, -2, "folder");
   lua_pushstring(L, " Find Files ");
   lua_setfield(L, -2, "title");
   lua_pushinteger(L, 0);
@@ -796,6 +815,8 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   lua_setfield(L, -2, "parent_path");
   lua_pushboolean(L, 0);
   lua_setfield(L, -2, "is_directory");
+  lua_pushboolean(L, 0);
+  lua_setfield(L, -2, "opened");
   lua_rawseti(L, -2, 1);
   lua_setfield(L, -2, "results");
   lua_newtable(L); // preview
@@ -820,7 +841,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
   REQUIRE(g.open_count == 10);
-  REQUIRE(g.lines_count == 16);     // h-2 body rows
+  REQUIRE(g.lines_count == 18);     // the borderless float's whole height
   REQUIRE(g.set_cursor_count == 1); // query focus caret
   REQUIRE(g.last_cursor_y == 2);
   REQUIRE(g.last_cursor_x >= 1);

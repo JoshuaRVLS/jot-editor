@@ -613,7 +613,9 @@ bool Editor::execute_ex_command(const std::string &input_line)
     {
       target = telescope_launch_root();
     }
-    telescope.open(target);
+    // A scope given by hand still belongs to the workspace: the folder walk
+    // stops there instead of climbing out of the project.
+    telescope.open(target, telescope_launch_root());
     telescope.scan_async(task_queue_.get(), [this] { needs_redraw = true; });
     show_command_palette = false;
     command_palette_query.clear();

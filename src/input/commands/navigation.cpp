@@ -16,14 +16,6 @@ void Editor::accept_telescope_selection()
   {
     return;
   }
-  if (fs::is_directory(path))
-  {
-    auto scan_tq = task_queue_.get();
-    telescope.select();
-    telescope.scan_async(scan_tq, [this] { needs_redraw = true; });
-    needs_redraw = true;
-    return;
-  }
 
   // An image goes through open_file like any other file: that is what gives it
   // a tab and a pane to draw the picture in. Opening the viewer directly here
@@ -84,8 +76,14 @@ void Editor::handle_telescope(int ch)
     std::string q = telescope.get_query();
     if (q.empty())
     {
-      telescope.go_parent();
-      telescope.scan_async(scan_tq, [this] { needs_redraw = true; });
+      // Backspace with nothing to erase steps out of the current folder, but
+      // never above the scope the picker was opened at (there is no ".." to
+      // walk into past it).
+      if (telescope.can_go_parent())
+      {
+        telescope.go_parent();
+        telescope.scan_async(scan_tq, [this] { needs_redraw = true; });
+      }
     }
     else
     {
@@ -146,7 +144,7 @@ void Editor::handle_telescope(int ch)
       q.pop_back();
       telescope.set_query(q, scan_tq, [this] { needs_redraw = true; });
     }
-    else
+    else if (telescope.can_go_parent())
     {
       telescope.go_parent();
       telescope.scan_async(scan_tq, [this] { needs_redraw = true; });

@@ -233,6 +233,7 @@ void LuaAPI::set_theme_color(std::string name, int fg, int bg)
       {"TelescopeNormal", "telescope"},
       {"TelescopeSelection", "telescope_selected"},
       {"TelescopePreviewNormal", "telescope_preview"},
+      {"TelescopeQuery", "telescope_query"},
       {"Terminal", "terminal"},
       {"TerminalTab", "terminal_tab_inactive"},
       {"TerminalTabActive", "terminal_tab_active"},
@@ -609,6 +610,10 @@ void LuaAPI::set_theme_color(std::string name, int fg, int bg)
   else if (name == "telescope_preview")
   {
     set_pair(theme.fg_telescope_preview, theme.bg_telescope_preview);
+  }
+  else if (name == "telescope_query")
+  {
+    set_pair(theme.fg_telescope_query, theme.bg_telescope_query);
   }
   else if (name == "terminal" || name == "terminal_panel" || name == "fg_terminal"
            || name == "bg_terminal")
