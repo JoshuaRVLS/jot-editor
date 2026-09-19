@@ -16,7 +16,9 @@
 
 namespace
 {
-  std::vector<std::filesystem::path> theme_dirs()
+  // Directories the *user* owns: a theme file here is theirs, and a name it
+  // takes is theirs even if it is one jot used to bundle.
+  std::vector<std::filesystem::path> theme_user_dirs()
   {
     namespace fs = std::filesystem;
     std::vector<fs::path> out;
@@ -32,9 +34,23 @@ namespace
       out.push_back(root / "configs" / "colors");
       out.push_back(root / "themes");
     }
+    return out;
+  }
+
+  std::vector<std::filesystem::path> theme_dirs()
+  {
+    namespace fs = std::filesystem;
+    std::vector<fs::path> out = theme_user_dirs();
     const char *data = getenv("JOT_DATA_HOME");
     if (data && *data)
       out.push_back(fs::path(data) / "configs" / "colors");
+#ifdef JOT_LUA_SOURCE_DIR
+    // Developer source tree outranks an installed copy, the same way the Lua
+    // runtime does: the bundled themes are <repo>/.configs/configs/colors, so a
+    // build run from anywhere (a probe workspace, say) still finds them.
+    out.push_back(fs::path(JOT_LUA_SOURCE_DIR).parent_path().parent_path() / ".configs"
+                   / "configs" / "colors");
+#endif
 #ifdef JOT_DEFAULT_DATA_DIR
     out.push_back(fs::path(JOT_DEFAULT_DATA_DIR) / "configs" / "colors");
 #endif
@@ -125,6 +141,17 @@ bool LuaAPI::apply_theme_and_persist(const std::string &name)
   }
   return editor->apply_theme(name);
 }
+bool LuaAPI::theme_file_is_user_owned(const std::string &name) const
+{
+  for (const auto &dir : theme_user_dirs())
+  {
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(dir / (name + ".json"), ec))
+      return true;
+  }
+  return false;
+}
+
 std::vector<std::string> LuaAPI::list_themes()
 {
   std::vector<std::string> out;

@@ -124,6 +124,13 @@ install(TARGETS jot
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
+# The bundled colour schemes are replaced wholesale, not merged: jot ships two
+# themes of its own, so a merge would leave the palettes this build no longer
+# carries sitting in the install tree, where they would still be listed by the
+# theme chooser. Only the data directory's own copy is cleared -- themes the
+# user wrote live in their config directory and are never touched.
+install(CODE "file(REMOVE_RECURSE \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/jot/configs/colors\")")
+
 install(DIRECTORY .configs/configs
   DESTINATION ${CMAKE_INSTALL_DATADIR}/jot
 )

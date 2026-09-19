@@ -165,7 +165,9 @@ void Config::load_defaults()
   // count as defined when deciding (features/cpp_inactive.lua).
   settings["cpp_dim_inactive"] = "true";
   settings["cpp_defined_macros"] = "";
-  settings["color_scheme"] = "dark";
+  // jot's own theme (warm charcoal, amber keywords, teal functions) is what a
+  // fresh install opens in; jot-light is the same ink on warm paper.
+  settings["color_scheme"] = "jot-dark";
   settings["right_panel_width"] = "42";
   settings["zen_content_width"] = "100";
   settings["terminal_height"] = "10";

@@ -31,7 +31,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pty_screen import run_in_pty  # noqa: E402
 
-THEME = "space-light"
+THEME = "jot-light"
 # Key hints the surfaces used to spell out. The probe workspace files are named so
 # these strings cannot arrive as content by accident.
 STALE_HINTS = ["Enter open", "Esc close", "↑/↓ move", "type to filter files",

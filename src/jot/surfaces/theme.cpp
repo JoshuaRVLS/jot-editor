@@ -6,6 +6,20 @@
 
 namespace
 {
+  // jot ships two themes, both of them its own: `jot-dark` (warm charcoal,
+  // amber keywords, teal functions) and `jot-light` (the same ink on warm
+  // paper). The names they replaced -- `dark` and `light`, which the whole
+  // bundled catalog used to be keyed off -- still resolve, so a config written
+  // before the change keeps the colour scheme it asked for.
+  const char *legacy_theme_alias(const std::string &name)
+  {
+    const std::string needle = string_util::lower_copy(name);
+    if (needle == "dark" || needle == "jot-dark")
+      return "jot-dark";
+    if (needle == "light" || needle == "jot-light")
+      return "jot-light";
+    return nullptr;
+  }
 } // namespace
 
 std::vector<std::string> Editor::list_available_themes()
@@ -18,7 +32,8 @@ std::vector<std::string> Editor::list_available_themes()
 
   if (themes.empty())
   {
-    themes.push_back("dark");
+    themes.push_back("jot-dark");
+    themes.push_back("jot-light");
     return themes;
   }
 
@@ -53,6 +68,18 @@ bool Editor::apply_theme(const std::string &name, bool persist, bool announce)
     {
       resolved = theme_name;
       break;
+    }
+  }
+  // The two names the removed catalog was keyed on resolve to the jot theme
+  // that replaced them: a config written as `color_scheme = "light"` keeps
+  // working, including on an install that still has the old file lying in its
+  // data directory. A file the user wrote under that name is theirs, so their
+  // theme wins and the alias is left alone.
+  if (const char *alias = legacy_theme_alias(requested))
+  {
+    if (!lua_api || !lua_api->theme_file_is_user_owned(requested))
+    {
+      resolved = alias;
     }
   }
 

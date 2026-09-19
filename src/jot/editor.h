@@ -1358,6 +1358,23 @@ public:
   {
     return grid_height();
   }
+  // Applies a theme the way the chooser does, without persisting it: a test
+  // asserts the palette the engine produced, not the config write.
+  bool apply_theme_for_test(const std::string &name)
+  {
+    return apply_theme(name, false, false);
+  }
+  // What the theme chooser lists, sorted and de-duplicated.
+  std::vector<std::string> available_themes_for_test()
+  {
+    return list_available_themes();
+  }
+  // The name of the active theme, as the chooser reports it (the resolved
+  // name, so a legacy alias reads back as the theme it resolved to).
+  const std::string &theme_name_for_test() const
+  {
+    return current_theme_name;
+  }
   // The active theme, for tests that assert on painted colors.
   const Theme &theme_for_test() const
   {

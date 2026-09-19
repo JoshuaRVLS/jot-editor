@@ -52,6 +52,7 @@ add_executable(jot_tests
   test_mouse_hover.cpp
   test_zen_mode.cpp
   test_settings_menu.cpp
+  test_themes.cpp
   test_terminal_panel.cpp
   test_bottom_panel.cpp
   test_win_probe.cpp

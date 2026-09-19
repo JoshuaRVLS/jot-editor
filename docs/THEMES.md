@@ -2,13 +2,27 @@
 
 Themes are native JSON data. The primary location is
 `~/.config/jot/configs/colors/`; legacy `~/.config/jot/themes/` is also scanned.
-Bundled themes live in `.configs/configs/colors/` and currently ship `dark`,
-`light`, `tokyonight`, `nord`, `gruvbox`, `dracula`, `catppuccin`, `onedark`,
-`monokai`, and `solarized`. Colors are xterm 256 indices, so the popular
-palettes are faithful but coarse approximations of their original 24-bit
-colors; tune any slot by copying the file to `~/.config/jot/configs/colors/`.
 
-Apply with `:colorscheme light` or from Lua:
+jot ships two themes, both of them its own:
+
+| Theme | Look |
+|---|---|
+| `jot-dark` (default) | warm charcoal (`235`-family greys), cream ink, amber keywords, soft teal functions |
+| `jot-light` | the same ink on warm cream paper |
+
+The amber/teal pair is the palette's signature: keywords, the active pane
+border, the cursor line number and the search highlight all carry the accent,
+so the chrome reads as jot's own scheme rather than a neutral grey editor with
+a blue border.
+
+Colors are xterm 256 indices, so backgrounds land on the nearest grey and the
+palette is a close -- not exact -- 24-bit match; tune any slot by copying a file
+to `~/.config/jot/configs/colors/`. The names of the themes that used to be
+bundled (`dark` and `light`) still resolve to the jot theme that replaced them,
+so a `color_scheme` written before the change keeps working. Any other name now
+needs a file of its own.
+
+Apply with `:colorscheme jot-light` or from Lua:
 
 ```lua
 set_hl("Normal", { fg = 252, bg = 234 })
@@ -107,7 +121,7 @@ syntax — by extending it:
 
 ```json
 {
-  "extends": "tokyonight",
+  "extends": "jot-dark",
   "Comment": {"fg": 244},
   "keyword.control": {"fg": 214},
   "StatusLine": {"fg": 188, "bg": 236}
@@ -126,7 +140,7 @@ then tune the syntax slots:
 
 ```bash
 mkdir -p ~/.config/jot/configs/colors
-cp .configs/configs/colors/dark.json ~/.config/jot/configs/colors/mine.json
+cp .configs/configs/colors/jot-dark.json ~/.config/jot/configs/colors/mine.json
 ```
 
 A minimal annotated theme:
@@ -149,6 +163,13 @@ A minimal annotated theme:
 }
 ```
 
+### Bringing in a VSCode pack
+
+`tools/vscode_themes_import.py <pack-dir> <output-dir>` converts a VSCode theme
+pack (colors + TextMate scopes) into jot schemes; point the output at
+`~/.config/jot/configs/colors` so the imports stay yours. jot's own two themes
+are never overwritten by an import.
+
 Rules:
 
 - Colors are xterm 256 indices (0-255). `fg`/`bg` of `-1` leaves that side
@@ -161,5 +182,5 @@ Rules:
   leading `@` is ignored so tree-sitter capture names can be used as-is.
 - `:colorscheme <name>` switches live; the choice persists in the settings
   file (`color_scheme`). Names resolve case-insensitively.
-- After editing a theme file, switch away and back (`:colorscheme dark`,
+- After editing a theme file, switch away and back (`:colorscheme jot-dark`,
   `:colorscheme mine`) or restart to reload it.

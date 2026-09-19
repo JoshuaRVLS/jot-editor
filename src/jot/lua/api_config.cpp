@@ -157,7 +157,7 @@ void LuaAPI::push_theme_current(lua_State *L)
     lua_pushnil(L);
     return;
   }
-  lua_pushstring(L, editor->config.get("color_scheme", "dark").c_str());
+  lua_pushstring(L, editor->config.get("color_scheme", "jot-dark").c_str());
 }
 
 void LuaAPI::push_editor_info(lua_State *L)
@@ -165,7 +165,7 @@ void LuaAPI::push_editor_info(lua_State *L)
   lua_newtable(L);
   if (!editor)
     return;
-  lua_push_str_field(L, "theme", editor->config.get("color_scheme", "dark"));
+  lua_push_str_field(L, "theme", editor->config.get("color_scheme", "jot-dark"));
   lua_push_str_field(L, "path", current_file());
   lua_push_int_field(L, "buffers", (long long)editor->buffers.size());
   int line = 1, column = 1, line_count = 0;

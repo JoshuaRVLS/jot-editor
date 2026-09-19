@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""Import VSCode color themes into jot's bundled color scheme set.
+"""Import VSCode color themes as jot color schemes.
 
-Usage:  python3 tools/vscode_themes_import.py [dir-of-vscode-themes]
+Usage:  python3 tools/vscode_themes_import.py [dir-of-vscode-themes] [output-dir]
 
 Reads VSCode theme JSONs (colors + tokenColors, hex values) from the given
 directory (default: ~/VSCode-Ultimate-Themes-Pack/multi-bg-extension/themes)
 and writes one self-contained jot theme per input file into
 .configs/configs/colors/<name>.json.
+
+The output directory defaults to jot's bundled set. jot ships only its own two
+schemes (jot-dark, jot-light) and never overwrites them, so pass your own
+config directory -- `~/.config/jot/configs/colors` -- to keep imports personal
+instead of adding them to the tree.
 
 jot themes are flat maps of highlight group -> {fg, bg} where fg/bg are ANSI
 256 palette indices (-1 = unset). VSCode themes are converted in two steps:
@@ -497,20 +502,20 @@ def output_name(path):
     return name or "unnamed"
 
 
-# Hand-maintained bundled themes that predate this importer. They keep
-# their bespoke palettes; source themes that would overwrite them are skipped.
+# jot's own themes: hand-maintained, and never replaced by an import whose
+# name happens to collide. Everything else in the output directory is fair game.
 BUNDLED_THEMES = {
-    "catppuccin", "dark", "dracula", "gruvbox", "light", "monokai",
-    "nord", "onedark", "solarized", "tokyonight",
+    "jot-dark", "jot-light",
 }
 
 
 def main():
     src = sys.argv[1] if len(sys.argv) > 1 else THEME_DIR_DEFAULT
+    out_dir = sys.argv[2] if len(sys.argv) > 2 else OUT_DIR
     if not os.path.isdir(src):
         print("theme directory not found:", src)
         return 1
-    os.makedirs(OUT_DIR, exist_ok=True)
+    os.makedirs(out_dir, exist_ok=True)
 
     existing = set(BUNDLED_THEMES)
     written, skipped = 0, []
@@ -528,12 +533,12 @@ def main():
         body = ",\n".join(
             "  \"%s\": {\"fg\": %d, \"bg\": %d}" % (g, groups[g]["fg"], groups[g]["bg"])
             for g in GROUP_ORDER)
-        with open(os.path.join(OUT_DIR, name + ".json"), "w") as f:
+        with open(os.path.join(out_dir, name + ".json"), "w") as f:
             f.write("{\n%s\n}\n" % body)
         written += 1
         existing.add(name)
 
-    print("wrote %d themes to %s" % (written, OUT_DIR))
+    print("wrote %d themes to %s" % (written, out_dir))
     if skipped:
         print("skipped %d:" % len(skipped))
         for name, why in skipped:

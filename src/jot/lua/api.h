@@ -830,6 +830,9 @@ public:
   // Applies a theme and persists it to the config file (jot.theme.apply).
   bool apply_theme_and_persist(const std::string &name);
   std::vector<std::string> list_themes();
+  // True when a theme file of this name lives in a directory the user owns, so
+  // a scheme the user wrote wins over the editor's legacy-name alias.
+  bool theme_file_is_user_owned(const std::string &name) const;
 
   // Plugin system
   void load_plugins();
