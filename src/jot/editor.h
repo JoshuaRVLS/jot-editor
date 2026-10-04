@@ -87,6 +87,16 @@ private:
     return (kTopBarVisible ? 1 : 0) + (tabline_shown() ? 1 : 0);
   }
 
+  // The first row the full-height side columns (the explorer and the right
+  // dock) start on. Only the retired menu bar costs them a row: the workspace
+  // strip spans the pane area between the columns, so their top row is theirs
+  // even while the strip is up (the panes pay the strip through
+  // topbar_height, the columns do not).
+  int side_column_top() const
+  {
+    return kTopBarVisible ? 1 : 0;
+  }
+
   // Whether the workspace strip owns row 0 right now: it can be turned off, and
   // `tabline_auto_hide` keeps it out of the way with only a few tabs open.
   bool tabline_shown() const

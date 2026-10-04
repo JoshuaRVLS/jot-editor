@@ -37,7 +37,12 @@ private:
     int h = 0;
   };
   ContentColumn content_column() const;
-  // Rows the sidebar's list can show: the content column minus its own header,
+  // The same span for the full-height side columns: they start on the row the
+  // workspace strip leaves them (side_column_top) instead of below it, so the
+  // explorer and the dock own their top row and the strip only spans the pane
+  // area between them.
+  ContentColumn side_column() const;
+  // Rows the sidebar's list can show: the side column minus its own header,
   // footer and bottom-border rows.
   int sidebar_list_rows() const;
   int sidebar_activity_rail_width() const

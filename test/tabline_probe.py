@@ -89,6 +89,11 @@ def run(binary: str, paths: list[str], root: str, cfg: str, keys: bytes = b""):
         (2.0, b"gamma"),
         (2.0, ENTER),
     ]
+    # Let the editor go idle before the next input: after the last accept it is
+    # still finishing work of its own (the git status refresh, the bundled
+    # query load), and a key that lands in the middle of it is sometimes never
+    # delivered -- the strip then looks like it ignored the click.
+    phases.append((3.0, b""))
     if keys:
         phases.append((1.5, keys))
     return run_in_pty(binary, [paths[0]], b"", settle=3.5, after=3.0,

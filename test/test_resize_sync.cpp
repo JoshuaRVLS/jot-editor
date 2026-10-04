@@ -293,10 +293,11 @@ TEST_CASE("Explorer clicks work below the terminal's row count", "[jot]")
   REQUIRE(e.sidebar_visible_for_test());
 
   // Explorer rows start at y = 1 (row 0 is the header), so the filename index
-  // is y - 1. Opening the first file puts a tab on the workspace strip, which
-  // claims row 0: from then on the column starts a row lower (and one row
-  // shorter), so the index is y - 2. The hit test reads the same
-  // `y - topbar_height() - 1`, which is what keeps it on the painted row.
+  // is y - 1, and it stays y - 1 once a tab appears: the workspace strip spans
+  // the pane area between the explorer and the dock, so the full-height
+  // explorer keeps its own top row and the column does not shift. The hit test
+  // reads the same `y - side_column_top() - 1`, which is what keeps it on the
+  // painted row.
   const auto click_row = [&](int y)
   {
     e.mouse_event_for_test(5, y, /*bstate=*/1); // press
@@ -309,15 +310,22 @@ TEST_CASE("Explorer clicks work below the terminal's row count", "[jot]")
   REQUIRE(click_row(1) == "f00.txt");
 
   // The regression: row 22 is the first row the old terminal-derived gate
-  // rejected, so a click there used to be dropped entirely. With the strip up
-  // the same file now sits one row lower.
-  REQUIRE(click_row(23) == "f21.txt");
+  // rejected, so a click there used to be dropped entirely.
+  REQUIRE(click_row(23) == "f22.txt");
 
   // The last row of the explorer that is actually painted. It is the column's
   // last list row: the panel has no bottom border row, and the footer takes the
-  // row under the tree, so the painted list ends here (index 35 -- the strip
-  // cost the column one row, so f36 is below the fold until the tree scrolls).
-  REQUIRE(click_row(37) == "f35.txt");
+  // row under the tree, so the painted list ends here (index 36).
+  REQUIRE(click_row(37) == "f36.txt");
+
+  // The header is the explorer's row 0, and the strip no longer steals it: the
+  // click guard reads side_column_top(), so this row selects the root even
+  // though a tab is up. It used to be rejected and left the tree selection on
+  // the last file clicked.
+  REQUIRE_FALSE(e.sidebar_root_selected_for_test());
+  e.mouse_event_for_test(5, 0, /*bstate=*/1);
+  e.render_for_test();
+  REQUIRE(e.sidebar_root_selected_for_test());
 
   // The row below that is the footer, and the one under it the status line:
   // neither may open anything (the footer is not a tree row, and the status

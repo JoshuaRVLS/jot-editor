@@ -115,9 +115,15 @@ def main() -> int:
     top = row_text(screen, 0)
     if "a.txt" not in top or "b.txt" not in top:
         failures.append("the workspace strip lost a tab (%r)" % top)
-    elif screen.bg[0][screen.cols - 1] != TAB_BG:
-        failures.append("row 0 is not the strip's background (%s)"
-                        % screen.bg[0][screen.cols - 1])
+    else:
+        # The strip paints only its tabs: past the last one the row keeps the
+        # editor background, not a full-width TabLine band (which used to run
+        # to the screen edge and read as a gap beside the last tab).
+        band_cells = [x for x, c in enumerate(screen.bg[0]) if c == TAB_BG]
+        tail = screen.bg[0][band_cells[-1] + 1:] if band_cells else []
+        if set(tail) - {BODY_BG}:
+            failures.append("row 0 keeps a TabLine band right of the tabs (%s)"
+                            % sorted(set(tail)))
     second = find_row(screen, "a.txt", 1, 5)
     if second >= 0:
         failures.append("a lone pane painted a second strip on row %d (%r)"

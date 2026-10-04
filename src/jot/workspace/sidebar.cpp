@@ -881,7 +881,7 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click, bool is_double_cl
   if (!is_click)
     return;
 
-  int rel_y = y - topbar_height();
+  int rel_y = y - side_column_top();
   if (rel_y < 0)
     return;
   if (!explorer_only() && x < sidebar_activity_rail_width())
@@ -903,7 +903,7 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click, bool is_double_cl
   if (!explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT)
   {
     std::vector<GitSidebarRow> git_rows = build_git_sidebar_rows();
-    int sidebar_row = y - topbar_height() - 1;
+    int sidebar_row = y - side_column_top() - 1;
     // Header above, footer on the column's last row: only the rows between them
     // hold list entries, so a click on either must not select one.
     if (sidebar_row < 0 || sidebar_row >= sidebar_list_rows())
@@ -936,7 +936,7 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click, bool is_double_cl
   flatten_nodes_mut(file_tree, flat);
 
   // Sidebar now has 1-line header, so tree rows begin after that.
-  int sidebar_row = y - topbar_height() - 1;
+  int sidebar_row = y - side_column_top() - 1;
   // Header above, footer on the column's last row: only the rows between them
   // hold tree entries, so a click on either must not open the next file.
   if (sidebar_row < 0 || sidebar_row >= sidebar_list_rows())

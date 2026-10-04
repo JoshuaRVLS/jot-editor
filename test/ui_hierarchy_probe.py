@@ -46,12 +46,27 @@ def main():
                 results.append(("80 columns retain sidebar", any("│" in line[:26] for line in lines[2:-1])))
                 results.append(("tooling outranks social chrome", "TOOLING_READY" in lines[-1]
                                 and "SOCIAL_SECONDARY" not in lines[-1]))
-                # One Dark Pro's active tab is the editor's own surface on the strip's
-                # panel grey, so the check is that the strip row carries both.
-                results.append(("selected tab wears the editor band",
-                                any(1000 + 0x282C34 in screen.bg[0])
-                                and any(1000 + 0x21252B in screen.bg[0])))
-                results.append(("separator uses visible ink", any(1000 + 0x747D91 in row for row in screen.fg)))
+                # The explorer owns row 0 now: the strip spans only the pane area
+                # between the side columns, so the workspace header sits on the
+                # row the tabs are on instead of being covered by the strip's
+                # band (which used to start at column 0).
+                results.append(("explorer keeps its header on row 0",
+                                "workspace" in lines[0].split("│")[0]))
+                # The strip paints only its tabs: the selected one wears the
+                # editor's own surface, and past its close cell the row is the
+                # editor background, not a full-width TabLine band.
+                text0 = "".join(screen.cells[0])
+                close_x = text0.rfind("×")
+                tab_bg = 1000 + 0x282C34
+                band_bg = 1000 + 0x21252B
+                results.append(("selected tab wears the editor surface",
+                                close_x >= 0 and screen.bg[0][close_x] == tab_bg))
+                results.append(("no TabLine band right of the last tab",
+                                close_x >= 0 and band_bg not in screen.bg[0][close_x + 1:]))
+                # The explorer's right edge is the separator between the side
+                # column and the pane; it is inked with the theme's chrome
+                # border colour (SidebarBorder), not left at the background.
+                results.append(("separator uses visible ink", any(1000 + 0x3E4452 in row for row in screen.fg)))
             if "--dump" in sys.argv:
                 print(text)
     for label, passed in results:

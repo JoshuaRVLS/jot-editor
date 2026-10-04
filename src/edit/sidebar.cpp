@@ -532,16 +532,16 @@ void Editor::render_sidebar()
   ensure_sidebar_render_cache();
 
   int w = effective_sidebar_width();
-  // Full height, aligned with the editor pane: the buffer-tab strip is
-  // pane-local (rendered inside the pane frame), so no row belongs above
-  // the explorer's top border. The column also reserves the terminal's real
+  // Full height: the side column starts on the row the workspace strip would
+  // otherwise take, because the strip spans only the pane area between the
+  // explorer and the dock. The column also reserves the terminal's real
   // footprint (not the old 50% cap): the panel can grow to nearly the full
   // window, and the explorer must shrink accordingly instead of sliding
   // underneath it.
   //
   // No bottom border row: the column's last row is a tree row, and the break
   // against the status line is the background change alone.
-  const ContentColumn col = content_column();
+  const ContentColumn col = side_column();
   int h = col.h;
   int y = col.top;
   if (w < 2 || h < 1)
@@ -1093,12 +1093,12 @@ void Editor::render_sidebar()
 
 void Editor::render_collapsed_sidebar_handle()
 {
-  if (!collapsed_sidebar_handle_hit_test(0, topbar_height()))
+  if (!collapsed_sidebar_handle_hit_test(0, side_column_top()))
   {
     return;
   }
 
-  const ContentColumn col = content_column();
+  const ContentColumn col = side_column();
   if (col.h <= 0)
   {
     return;

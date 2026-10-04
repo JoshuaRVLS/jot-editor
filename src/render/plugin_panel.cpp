@@ -17,7 +17,7 @@ TerminalBox Editor::plugin_panel_body() const
   }
   const int panel_w = effective_right_panel_width();
   const int panel_x = std::max(0, ui->get_render_width() - panel_w);
-  const int panel_y = topbar_height();
+  const int panel_y = side_column_top();
   const int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
   body.x = panel_x + 1;
   // The tab strip owns the dock's first interior row (the native strip and the
@@ -43,7 +43,7 @@ void Editor::render_plugin_panel()
   }
 
   int panel_x = std::max(0, ui->get_render_width() - panel_w);
-  int panel_y = topbar_height();
+  int panel_y = side_column_top();
   int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
   UIRect panel = {panel_x, panel_y, panel_w, panel_h};
 
@@ -153,7 +153,7 @@ bool Editor::handle_plugin_panel_mouse(int x, int y, bool is_click)
     return false;
   }
   const int panel_x = std::max(0, ui->get_render_width() - panel_w);
-  const int panel_y = topbar_height();
+  const int panel_y = side_column_top();
   const int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
   if (x < panel_x || x >= panel_x + panel_w || y < panel_y || y >= panel_y + panel_h)
   {

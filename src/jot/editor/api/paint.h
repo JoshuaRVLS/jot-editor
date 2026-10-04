@@ -19,10 +19,16 @@ private:
   {
     return ui && ui->full_repaint_pending();
   }
-  // The workspace tab strip (row 0): the order reconciliation, the layout the
-  // painter and the hit-tests share, and the operations on it (src/render/tabs.cpp).
+  // The workspace tab strip (one row of the pane area): the order
+  // reconciliation, the layout the painter and the hit-tests share, and the
+  // operations on it (src/render/tabs.cpp).
   void sync_tab_order();
   FileTabLayout build_tabline_layout();
+  // The columns the strip spans on its row: between the explorer and the right
+  // dock when they are up (full width when neither is; a zoomed terminal covers
+  // them), so the side columns keep their own top row.
+  void tabline_span(int &x, int &w) const;
+  bool tabline_contains_x(int x) const;
   void render_tabline();
   bool handle_tabline_mouse(int x,
                             int y,

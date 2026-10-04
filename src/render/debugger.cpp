@@ -38,7 +38,7 @@ void Editor::render_debugger_panel()
     return;
   }
   int panel_x = std::max(0, ui->get_render_width() - panel_w);
-  int panel_y = topbar_height();
+  int panel_y = side_column_top();
   int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
   UIRect panel = {panel_x, panel_y, panel_w, panel_h};
 

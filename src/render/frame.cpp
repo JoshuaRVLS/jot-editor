@@ -701,12 +701,12 @@ std::vector<UIRect> Editor::pane_neighbours(const SplitPane &pane, int draw_w) c
   const int total_w = std::max(1, ui->get_render_width());
   const int total_h = std::max(1, ui->get_height());
 
-  // The pane area stops above the status line and any bottom panel, and is
-  // inset by the sidebar and the right dock -- the same arithmetic
-  // update_pane_layout uses, so adjacency lines up with the layout.
-  const int menu_h = topbar_height();
+  // The pane area stops above the status line and any bottom panel; the sidebar
+  // and dock rects pushed below are their full-height columns instead -- they
+  // start on the row the strip leaves them (side_column_top), one row above the
+  // panes while the strip is up.
   const int bottom_h = status_height + integrated_terminal_reserved_h();
-  const int area_y = menu_h;
+  const int area_y = side_column_top();
   const int area_h = std::max(1, total_h - bottom_h - area_y);
 
   for (size_t i = 0; i < panes.size(); i++)

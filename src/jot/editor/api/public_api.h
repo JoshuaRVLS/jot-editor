@@ -72,6 +72,12 @@ public:
   {
     return topbar_height();
   }
+  // The row the full-height side columns (explorer, dock) start on: the
+  // workspace strip leaves it to them, so it is not always topbar_height().
+  int side_column_top_for_test() const
+  {
+    return side_column_top();
+  }
   // Headless tests: enables the workspace session subsystem for a fake root
   // so save_workspace_session / restore_workspace_session can round-trip
   // through a JOT_CONFIG_HOME-backed session file.

@@ -1,4 +1,7 @@
-// The workspace tab strip: row 0, the open buffers in the workspace's order.
+// The workspace tab strip: one row of the pane area, the open buffers in the
+// workspace's order. It spans the columns between the explorer and the right
+// dock (the full width when neither is up): the side columns are full height
+// and own their top row, so the strip owns that row only between them.
 //
 // This used to be a per-pane strip, built and painted inside each pane. The
 // strip is now one row for the whole editor (the row the native menu bar gave
@@ -71,15 +74,34 @@ void Editor::sync_tab_order()
   tab_order.sync(buffers, current_uid, tabline_insert);
 }
 
+// The side columns are full height, so the strip is not allowed to paint under
+// them or take their clicks; it spans the columns between the explorer and the
+// dock. A zoomed terminal covers both columns, so its strip takes the row back.
+void Editor::tabline_span(int &x, int &w) const
+{
+  const int screen_w = ui ? std::max(1, ui->get_render_width()) : 0;
+  const bool covered = terminal_zoom_active;
+  const int left = (!covered && show_sidebar) ? effective_sidebar_width() : 0;
+  const int right = covered ? 0 : effective_right_panel_width();
+  x = std::min(left, screen_w);
+  w = std::max(1, screen_w - x - right);
+}
+
+bool Editor::tabline_contains_x(int x) const
+{
+  int left = 0;
+  int w = 0;
+  tabline_span(left, w);
+  return x >= left && x < left + w;
+}
+
 Editor::FileTabLayout Editor::build_tabline_layout()
 {
   sync_tab_order();
 
   FileTabLayout layout;
-  const int screen_w = ui ? std::max(1, ui->get_render_width()) : 0;
-  layout.x = 0;
   layout.y = tabline_y();
-  layout.w = screen_w;
+  tabline_span(layout.x, layout.w);
 
   const std::vector<int> ids = tab_order.indices(buffers);
   const int total = (int)ids.size();
@@ -131,7 +153,7 @@ Editor::FileTabLayout Editor::build_tabline_layout()
   std::vector<int> widths;
   int end = total;
   const std::vector<int> full(naturals.begin() + start, naturals.end());
-  if (!TabStrip::allocate_widths(full, std::max(1, screen_w - left_cells), kMinTabCells, widths))
+  if (!TabStrip::allocate_widths(full, std::max(1, layout.w - left_cells), kMinTabCells, widths))
   {
     end = start + 1;
     for (int count = (int)full.size(); count >= 1; count--)
@@ -141,7 +163,7 @@ Editor::FileTabLayout Editor::build_tabline_layout()
           remaining > 0 ? ("›+" + std::to_string(remaining)) : std::string();
       const int right_cells = remaining > 0 ? ui_cell_count(right_label) + 1 : 0;
       std::vector<int> window(naturals.begin() + start, naturals.begin() + start + count);
-      if (TabStrip::allocate_widths(window, std::max(1, screen_w - left_cells - right_cells),
+      if (TabStrip::allocate_widths(window, std::max(1, layout.w - left_cells - right_cells),
                                     kMinTabCells, widths))
       {
         end = start + count;
@@ -156,18 +178,18 @@ Editor::FileTabLayout Editor::build_tabline_layout()
   if (start > 0)
   {
     layout.scroll_left_label = left_label;
-    layout.scroll_left_x = 0;
-    layout.scroll_left_end_x = left_cells;
+    layout.scroll_left_x = layout.x;
+    layout.scroll_left_end_x = layout.x + left_cells;
   }
   if (layout.hidden_after > 0)
   {
     layout.overflow_label = "›+" + std::to_string(layout.hidden_after);
-    layout.scroll_right_end_x = screen_w;
-    layout.scroll_right_x = screen_w - ui_cell_count(layout.overflow_label) - 1;
+    layout.scroll_right_end_x = layout.x + layout.w;
+    layout.scroll_right_x = layout.x + layout.w - ui_cell_count(layout.overflow_label) - 1;
     layout.overflow_x = layout.scroll_right_x;
   }
 
-  int x = left_cells;
+  int x = layout.x + left_cells;
   for (int i = start; i < end; i++)
   {
     const int id = ids[(size_t)i];
@@ -177,7 +199,7 @@ Editor::FileTabLayout Editor::build_tabline_layout()
     segment.buffer_id = id;
     segment.tab_index = i;
     segment.x = x;
-    segment.end_x = std::min(screen_w, x + width);
+    segment.end_x = std::min(layout.x + layout.w, x + width);
     segment.active = id == current_buffer;
     segment.modified = buffer.modified;
     segment.preview = buffer.is_preview;
@@ -234,12 +256,19 @@ void Editor::render_tabline()
   }
   const FileTabLayout layout = build_tabline_layout();
   const int y = layout.y;
-  const int w = std::max(1, ui->get_render_width());
 
-  ui->fill_rect({0, y, w, 1}, " ", theme.fg_tab_inactive, theme.bg_tab_inactive);
-
+  // No band across the row: the strip paints only the tabs themselves, and the
+  // cells between them and to the right of the last one keep the background the
+  // frame was cleared with. Filling the whole row with TabLine's background
+  // read as a gap beside the last tab (and painted under the explorer and the
+  // dock, which own their own columns now).
   if (layout.scroll_left_x >= 0)
   {
+    ui->fill_rect(
+        {layout.scroll_left_x, y, layout.scroll_left_end_x - layout.scroll_left_x, 1},
+        " ",
+        theme.fg_comment,
+        theme.bg_tab_inactive);
     ui->draw_text(layout.scroll_left_x, y, layout.scroll_left_label, theme.fg_comment,
                   theme.bg_tab_inactive);
   }
@@ -258,6 +287,10 @@ void Editor::render_tabline()
       fg = theme.fg_tab_hover;
       bg = theme.bg_tab_hover;
     }
+    // The tab's whole rectangle gets its background first: the label is padded
+    // and the close cell is drawn separately, so without it the cleared
+    // background showed through as a stray cell inside the tab's right edge.
+    ui->fill_rect({tab.x, y, std::max(1, tab.end_x - tab.x), 1}, " ", fg, bg);
     // The leading edge: inked on the active tab, a separator on the others.
     ui->draw_text(tab.x, y, "▌", tab.active ? theme.fg_active_border : theme.fg_tab_separator, bg,
                   tab.active);
@@ -288,6 +321,11 @@ void Editor::render_tabline()
   }
   if (!layout.overflow_label.empty())
   {
+    ui->fill_rect(
+        {layout.scroll_right_x, y, layout.scroll_right_end_x - layout.scroll_right_x, 1},
+        " ",
+        theme.fg_comment,
+        theme.bg_tab_inactive);
     ui->draw_text(layout.overflow_x, y, layout.overflow_label, theme.fg_comment,
                   theme.bg_tab_inactive);
   }
@@ -296,7 +334,7 @@ void Editor::render_tabline()
     // A drop marker between the two tabs the pointer is between: the strip is
     // showing where the dragged tab would land.
     const int drop_x = tabline_drop_position_x(layout);
-    if (drop_x >= 0 && drop_x < w)
+    if (drop_x >= layout.x && drop_x < layout.x + layout.w)
     {
       ui->draw_text(drop_x, y, "│", theme.fg_tab_drop, theme.bg_tab_active);
     }
@@ -314,15 +352,16 @@ int Editor::tabline_drop_position_x(const FileTabLayout &layout) const
   }
   if (drop >= (int)layout.segments.size())
   {
-    return std::min(layout.w - 1, layout.segments.back().end_x);
+    return std::min(layout.x + layout.w - 1, layout.segments.back().end_x);
   }
   return layout.segments[(size_t)drop].x;
 }
 
 // Clicks, the close control, the middle button, the wheel chips and a drag
-// along the strip. Called before any pane sees the event: row 0 belongs to the
-// strip, and a motion here only ever changes the hover highlight -- a tab is
-// switched by an actual press (the lesson the Problems tab learned the hard way).
+// along the strip. Called before any pane sees the event: the strip's row
+// belongs to it between the side columns, and a motion here only ever changes
+// the hover highlight -- a tab is switched by an actual press (the lesson the
+// Problems tab learned the hard way).
 bool Editor::handle_tabline_mouse(int x,
                                   int y,
                                   bool is_click,

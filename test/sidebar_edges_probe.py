@@ -96,16 +96,21 @@ def main() -> int:
     # background: the status line is one row and the break is the background
     # change alone. In the status colour it read as the status line's own top
     # edge, made the bar look two rows tall and hid that the row was the panes'.
-    for name, keys in [("single pane", b""), ("sidebar", b"\x1b[98;5u"), ("dock", b"\x1b[98;6u")]:
+    # The sample column has to land in the pane area in every case: the sidebar
+    # and the dock have their own surfaces, and in the dark theme the sidebar's
+    # surface is the same #21252b as the status line's, so a sample inside the
+    # sidebar cannot tell the pane's last row from the status bar.
+    for name, keys, col in [("single pane", b"", 10), ("sidebar", b"\x1b[98;5u", 40),
+                            ("dock", b"\x1b[98;6u", 10)]:
         screen = run_in_pty(binary, [path], keys, settle=2.5, after=1.5,
                             cols=80, rows=20, cfg="/tmp/jot_edges_probe_cfg")
         # The bar is the pane area's last row: status_height(1) + 1 above the end.
         bar_row = 20 - 2
         status_row = 20 - 1
         panel_row = 20 - 5
-        bar_bg = screen.bg[bar_row][10]
-        panel_bg = screen.bg[panel_row][10]
-        status_bg = screen.bg[status_row][10]
+        bar_bg = screen.bg[bar_row][col]
+        panel_bg = screen.bg[panel_row][col]
+        status_bg = screen.bg[status_row][col]
         ok = bar_bg == panel_bg and bar_bg != status_bg
         if not ok:
             failures += 1

@@ -417,9 +417,9 @@ void Editor::handle_mouse(void *event_ptr)
     return;
   }
 
-  // Row 0 is the workspace tab strip, not a pane row: it sees the event first
-  // so a press, a close, a middle click or a drag can never fall through to the
-  // text underneath.
+  // The workspace tab strip row sees the event first, between the side columns
+  // that own their top row: a press, a close, a middle click or a drag on a tab
+  // can never fall through to the text underneath.
   if ((is_click || is_click_release || is_middle_click || is_motion)
       && handle_tabline_mouse(event->x, event->y, is_click, is_click_release, is_middle_click,
                               is_motion))
@@ -884,7 +884,7 @@ void Editor::handle_mouse(void *event_ptr)
 
   if (show_sidebar && is_click)
   {
-    const ContentColumn col = content_column();
+    const ContentColumn col = side_column();
     int sidebar_w = effective_sidebar_width();
     if (event->x < sidebar_w && event->y >= col.top && event->y < col.bottom)
     {

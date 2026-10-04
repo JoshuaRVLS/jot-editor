@@ -17,7 +17,7 @@ bool Editor::collapsed_sidebar_handle_hit_test(int x, int y) const
   {
     return false;
   }
-  const ContentColumn col = content_column();
+  const ContentColumn col = side_column();
   return y >= col.top && y < col.bottom;
 }
 
@@ -36,7 +36,7 @@ bool Editor::sidebar_resize_hit_test(int x, int y) const
   {
     return false;
   }
-  const ContentColumn col = content_column();
+  const ContentColumn col = side_column();
   return y >= col.top && y < col.bottom;
 }
 
@@ -342,7 +342,7 @@ bool Editor::right_panel_resize_hit_test(int x, int y) const
   {
     return false;
   }
-  int top = 1;
+  int top = side_column_top();
   int bottom = ui->get_height() - status_height;
   return y >= top && y < bottom;
 }

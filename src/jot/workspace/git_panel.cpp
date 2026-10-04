@@ -267,7 +267,7 @@ TerminalBox Editor::git_panel_body() const
   }
   const int panel_w = effective_right_panel_width();
   const int panel_x = std::max(0, ui->get_render_width() - panel_w);
-  const int panel_y = topbar_height();
+  const int panel_y = side_column_top();
   const int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
   body.x = panel_x;
   body.y = panel_y + 4;
@@ -805,7 +805,7 @@ bool Editor::handle_git_panel_mouse(int x, int y, bool is_click, bool is_double_
     return false;
   }
   const int panel_x = std::max(0, ui->get_render_width() - panel_w);
-  const int panel_y = topbar_height();
+  const int panel_y = side_column_top();
   const int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
   if (x < panel_x || x >= panel_x + panel_w || y < panel_y || y >= panel_y + panel_h)
   {

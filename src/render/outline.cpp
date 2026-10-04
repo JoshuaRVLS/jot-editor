@@ -155,7 +155,7 @@ void Editor::render_outline_panel()
     return;
   }
   const int panel_x = std::max(0, ui->get_render_width() - panel_w);
-  const int panel_y = topbar_height();
+  const int panel_y = side_column_top();
   const int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
   UIRect panel = {panel_x, panel_y, panel_w, panel_h};
 

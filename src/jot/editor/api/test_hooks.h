@@ -499,11 +499,12 @@ public:
   {
     return floating_terminal_rect();
   }
-  // Sidebar panel height as render_sidebar() computes it: the pane area
-  // minus the terminal's real reserved footprint.
+  // Sidebar panel height as render_sidebar() computes it: the side column
+  // (full height, so the strip does not shorten it) minus the terminal's real
+  // reserved footprint.
   int sidebar_panel_h_for_test() const
   {
-    return content_column().h;
+    return side_column().h;
   }
   bool terminal_resize_dragging_for_test() const
   {

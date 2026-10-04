@@ -237,7 +237,7 @@ void Editor::handle_mouse_input(int x,
   {
     int panel_w = effective_right_panel_width();
     int panel_x = std::max(0, ui->get_render_width() - panel_w);
-    int panel_y = topbar_height();
+    int panel_y = side_column_top();
     int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
     bool inside = x >= panel_x && x < panel_x + panel_w && y >= panel_y && y < panel_y + panel_h;
     if (inside && (is_scroll_up || is_scroll_down))
@@ -251,7 +251,7 @@ void Editor::handle_mouse_input(int x,
   {
     int panel_w = effective_right_panel_width();
     int panel_x = std::max(0, ui->get_render_width() - panel_w);
-    int panel_y = topbar_height();
+    int panel_y = side_column_top();
     int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
     bool inside = x >= panel_x && x < panel_x + panel_w && y >= panel_y && y < panel_y + panel_h;
     if (inside)
@@ -276,7 +276,7 @@ void Editor::handle_mouse_input(int x,
   {
     int panel_w = effective_right_panel_width();
     int panel_x = std::max(0, ui->get_render_width() - panel_w);
-    int panel_y = topbar_height();
+    int panel_y = side_column_top();
     int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
     bool inside = x >= panel_x && x < panel_x + panel_w && y >= panel_y && y < panel_y + panel_h;
     if (inside)
@@ -311,7 +311,7 @@ void Editor::handle_mouse_input(int x,
   {
     int panel_w = effective_right_panel_width();
     int panel_x = std::max(0, ui->get_render_width() - panel_w);
-    int panel_y = topbar_height();
+    int panel_y = side_column_top();
     int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
     bool inside = x >= panel_x && x < panel_x + panel_w && y >= panel_y && y < panel_y + panel_h;
     if (inside)
@@ -373,9 +373,11 @@ void Editor::handle_mouse_input(int x,
     return;
   }
 
-  // The wheel over the workspace strip scrolls it, wherever the pointer is
-  // horizontally: the strip spans the whole row and belongs to no pane.
-  if ((is_scroll_up || is_scroll_down) && tabline_shown() && y == tabline_y())
+  // The wheel over the workspace strip scrolls it. The strip spans the columns
+  // between the explorer and the dock, not the whole row, so the notch only
+  // goes to it where it actually paints.
+  if ((is_scroll_up || is_scroll_down) && tabline_shown() && y == tabline_y()
+      && tabline_contains_x(x))
   {
     if (tabline_scroll(is_scroll_up ? -1 : 1))
     {

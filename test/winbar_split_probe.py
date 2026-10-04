@@ -25,7 +25,10 @@ from pty_screen import run_in_pty  # noqa: E402
 
 COLS, ROWS = 100, 30
 SPLIT_DOWN = b"\x1b[74;4u"  # Alt+Shift+J
-SPLIT_RIGHT = b"\x1b[76;4u"  # Alt+Shift+L
+# Alt+Shift+L is a documented split key, but the bundled LeetCode feature claims
+# it as a leader (Alt+Shift+L L / D / R / ...), so the side-by-side split is
+# driven through the palette command the feature cannot capture.
+SPLIT_RIGHT = b"\x10vsp\r"  # Ctrl+P, "vsp", Enter
 CLOSE_PANE = b"\x1b[81;4u"  # Alt+Shift+Q
 # The crumb row's own glyph: the separator the layout puts between crumbs.
 SEPARATOR = "\u203a"
@@ -51,8 +54,12 @@ def workspace(tmp: str) -> str:
 
 
 def run(binary: str, tmp: str, path: str, keys: bytes, phases=None):
+    # The startup query notice floats in the top-right corner, over the second
+    # pane's breadcrumb row: wait it out before reading the screen.
+    wait_toast = [(0.0, lambda s: "Tree-sitter" not in s.text())]
     return run_in_pty(binary, [path], keys, settle=2.5, after=1.0,
-                      cfg=tmp + "_cfg", cwd=tmp, cols=COLS, rows=ROWS, phases=phases)
+                      cfg=tmp + "_cfg", cwd=tmp, cols=COLS, rows=ROWS,
+                      phases=wait_toast + list(phases or []))
 
 
 def crumb_rows(screen) -> list[int]:

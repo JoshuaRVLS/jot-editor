@@ -1039,13 +1039,15 @@ it just left.
 
 ### The workspace tab strip
 
-The strip owns row 0, above the panes: every open buffer appears once, in the
-workspace's own order, whichever pane is showing it. That is the one place the
-buffers are addressable -- `Alt+1..9` and a click pick a *position on the strip*,
-while `Ctrl+Tab` keeps walking the focused pane's history. Clicking a tab whose
-buffer another pane already shows takes focus to that pane; the dot next to such
-a tab is that marker, and the pin glyph marks a tab held at the front of the
-order.
+The strip shares row 0 with the full-height side columns: it spans the pane
+area between the explorer and the right dock (the whole width when neither is
+up), and paints only its tabs, so the cells beside the last tab keep the
+editor's own background. Every open buffer appears once, in the workspace's own
+order, whichever pane is showing it. That is the one place the buffers are
+addressable -- `Alt+1..9` and a click pick a *position on the strip*, while
+`Ctrl+Tab` keeps walking the focused pane's history. Clicking a tab whose buffer
+another pane already shows takes focus to that pane; the dot next to such a tab
+is that marker, and the pin glyph marks a tab held at the front of the order.
 
 `Alt+R` arms the letter picker: every tab is painted with the letter it answers
 to (the file's initials first, then the home row), and the next key switches to

@@ -203,7 +203,7 @@ bool Editor::handle_right_panel_tab_strip_mouse(int x, int y, bool is_click)
     return false;
   }
   const int panel_x = std::max(0, ui->get_render_width() - panel_w);
-  const int panel_y = topbar_height();
+  const int panel_y = side_column_top();
   if (y != panel_y + 1)
   {
     // Pointer left the strip row: drop the hover highlight.

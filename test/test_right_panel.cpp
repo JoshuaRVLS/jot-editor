@@ -152,8 +152,20 @@ TEST_CASE("Right dock: a tab's × closes where the strip paints it", "[jot]")
   e.apply_resize_for_test(120, 32);
   e.open_right_panel_tab(RIGHT_PANEL_GIT);
 
+  // A file open puts the workspace strip up. The dock is full height: the strip
+  // does not push it down a row, so its top border stays on row 0 and its tab
+  // strip stays on row 1 (side_column_top() + 1). Reading the row off
+  // topbar_height() used to be right only while no strip was shown.
+  char ws[] = "/tmp/jot_right_panel_strip_XXXXXX";
+  REQUIRE(mkdtemp(ws) != nullptr);
+  std::ofstream(std::string(ws) + "/probe.txt") << "probe\n";
+  e.host().io.open_workspace(ws);
+  e.mouse_event_for_test(5, 1, /*bstate=*/1); // click the file in the tree
+  REQUIRE(e.topbar_height_for_test() == 1);   // the strip is up
+  REQUIRE(e.side_column_top_for_test() == 0);
+
   const int panel_x = e.ui_width_for_test() - e.right_panel_width_for_test();
-  const int strip_y = e.topbar_height_for_test() + 1;
+  const int strip_y = e.side_column_top_for_test() + 1;
   std::vector<std::string> labels = e.right_panel_tab_labels_for_test();
   REQUIRE(labels.size() == 1);
   const int tab_x = panel_x + 1;

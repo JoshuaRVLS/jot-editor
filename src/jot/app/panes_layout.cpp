@@ -72,12 +72,25 @@ Editor::ContentColumn Editor::content_column() const
   return col;
 }
 
+Editor::ContentColumn Editor::side_column() const
+{
+  // The explorer and the right dock do not pay for the workspace strip: it is
+  // confined to the pane area between them, so their column starts on the row
+  // the strip would otherwise take.
+  const ContentColumn pane = content_column();
+  ContentColumn col;
+  col.top = side_column_top();
+  col.bottom = pane.bottom;
+  col.h = std::max(0, col.bottom - col.top);
+  return col;
+}
+
 int Editor::sidebar_list_rows() const
 {
   // Header row and footer row sit inside the column; the column's last row is
   // a tree row (a region's bottom row is content, marked off from the status
   // line by its background alone -- see pane_edges.h).
-  return std::max(0, content_column().h - 2);
+  return std::max(0, side_column().h - 2);
 }
 
 Editor::PaneArea Editor::compute_pane_area() const

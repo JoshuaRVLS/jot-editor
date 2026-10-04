@@ -96,7 +96,7 @@ bool Editor::open_context_menu_for_mouse(int x, int y)
 
   if (show_sidebar)
   {
-    const ContentColumn col = content_column();
+    const ContentColumn col = side_column();
     int sidebar_w = effective_sidebar_width();
     if (x < sidebar_w && y >= col.top && y < col.bottom)
     {
@@ -130,7 +130,7 @@ bool Editor::open_context_menu_for_mouse(int x, int y)
       {
         std::vector<FileNode *> flat;
         flatten_nodes_for_mouse(file_tree, flat);
-        int sidebar_row = y - topbar_height() - 1;
+        int sidebar_row = y - side_column_top() - 1;
         int row = sidebar_row + file_tree_scroll;
         FileNode *node = nullptr;
         if (sidebar_row >= 0 && row >= 0 && row < (int)flat.size())
@@ -191,10 +191,12 @@ bool Editor::open_context_menu_for_mouse(int x, int y)
   auto &buf = get_buffer(pane.buffer_id);
   context_menu_target_pane = current_pane;
 
-  // The workspace strip (row 0) carries the tab actions; a tab that is on
-  // screen somewhere else gets its menu there too, so the target buffer is the
-  // one the pointer is over rather than the focused pane's.
-  if (y == tabline_y() && tabline_shown())
+  // The workspace strip carries the tab actions; a tab that is on screen
+  // somewhere else gets its menu there too, so the target buffer is the one the
+  // pointer is over rather than the focused pane's. The strip only spans the
+  // columns between the explorer and the dock, so a right-click on their top
+  // row falls through to them.
+  if (y == tabline_y() && tabline_shown() && tabline_contains_x(x))
   {
     const FileTabLayout tabs = build_tabline_layout();
     for (const auto &tab : tabs.segments)
