@@ -205,7 +205,9 @@ TEST_CASE("LeetCode tabs, yank and judge console keep the opened question usable
     local body = json.encode({data={problemsetQuestionList={total=1, questions={
       {frontend_id='1', title='Easy One', title_slug='easy-one', difficulty='Easy', status='ac'},
     }}}})
-    ui.list('')
+    -- The unfiltered list is a group-picker entry now, so page=1 is the
+    -- filter-free path that goes straight to it.
+    ui.list('page=1')
     -- The resolver requires the filters variable even when empty; omitting it
     -- fails the request with "resolve_question_list() missing ... 'filters'".
     local unfiltered = json.decode(calls.request.body).variables
@@ -299,6 +301,131 @@ TEST_CASE("LeetCode list load-more accumulates pages instead of stopping at one"
   )LUA") == "true|true|true|true|true");
 }
 
+TEST_CASE("LeetCode list groups filter by difficulty, tag, company and favorite", "[leetcode][lua]")
+{
+  // :LeetList without filters opens five groups instead of dumping every
+  // problem: all problems, a difficulty level, one topic tag, one company, or
+  // a favorite list. The tag and company sources are the public queries the
+  // live API answers anonymously; favorites carry the session when one is
+  // stored and stay anonymous (empty) when it is not.
+  State state;
+  REQUIRE(state.run(R"LUA(
+    local ui = package.loaded['jot_lc.ui']
+    local json = package.loaded['jot_lc.json']
+    jot.theme.palette = function() return {git_added={fg=2}, status_warning={fg=3}} end
+    local failures = {}
+    local function check(name, value)
+      if not value then failures[#failures + 1] = name end
+    end
+    local function respond(payload)
+      calls.callback({ok=true, status=200, body=json.encode(payload), error=''})
+    end
+    local function list_payload(rows)
+      return {data={problemsetQuestionList={total=#rows, questions=rows}}}
+    end
+    local function row(slug, title, difficulty, status)
+      return {frontend_id='1', title=title, title_slug=slug, difficulty=difficulty, status=status}
+    end
+
+    -- No filters: five groups instead of every problem.
+    ui.list('')
+    local groups = calls.picker.items()
+    check('five groups', calls.picker.title == 'LeetCode problems' and #groups == 5)
+    check('group labels', groups[1].label == 'All problems' and groups[2].label == 'Difficulty'
+                          and groups[3].label == 'Tag' and groups[4].label == 'By company'
+                          and groups[5].label == 'Favorites')
+
+    -- Difficulty -> all levels -> the chosen one becomes the filter.
+    calls.picker.callback('difficulty')
+    local levels = calls.picker.items()
+    check('difficulty levels', #levels == 4 and levels[1].value == 'all'
+                               and levels[2].value == 'easy' and levels[3].value == 'medium'
+                               and levels[4].value == 'hard')
+    calls.picker.callback('medium')
+    local medium_sent = json.decode(calls.request.body).variables
+    check('difficulty filter', medium_sent.filters.difficulty == 'MEDIUM')
+    respond(list_payload({row('medium-one', 'Medium One', 'Medium')}))
+    check('difficulty list', calls.picker.items()[1].value == 'medium-one'
+                             and calls.picker.title:find('Medium') ~= nil)
+
+    -- Tag -> one public tag query, then the list carries the slug.
+    ui.list('')
+    calls.picker.callback('tag')
+    check('tag query', json.decode(calls.request.body).query:find('questionTopicTags', 1, true) ~= nil)
+    respond({data={topicTags={edges={{node={name='Backtracking', slug='backtracking'}},
+                                    {node={name='Array', slug='array'}}}}}})
+    local tags = calls.picker.items()
+    check('tags sorted', tags[1].label == 'Array' and tags[2].label == 'Backtracking')
+    calls.picker.callback('array')
+    local tag_sent = json.decode(calls.request.body).variables
+    respond(list_payload({row('tag-one', 'Tag One', 'Easy')}))
+    check('tag filter', tag_sent.filters.tags[1] == 'array'
+                        and calls.picker.title:find('Array') ~= nil)
+
+    -- By company -> the public company query, then the list carries it too.
+    ui.list('')
+    calls.picker.callback('company')
+    check('company query', json.decode(calls.request.body).query:find('companyTags', 1, true) ~= nil)
+    respond({data={companyTags={{name='Google', slug='google'}, {name='Amazon', slug='amazon'}}}})
+    local companies = calls.picker.items()
+    check('companies sorted', companies[1].label == 'Amazon' and companies[2].label == 'Google')
+    calls.picker.callback('amazon')
+    local company_sent = json.decode(calls.request.body).variables
+    respond(list_payload({row('amazon-one', 'Amazon One', 'Hard')}))
+    check('company filter', company_sent.filters.companies[1] == 'amazon'
+                            and calls.picker.title:find('Amazon') ~= nil)
+
+    -- Favorites -> the stored session makes the list query carry the cookie;
+    -- the chosen list's questions render as a list with its marks and pages.
+    ui.list('')
+    calls.picker.callback('favorite')
+    local favorite_request = json.decode(calls.request.body)
+    check('favorite lists query', favorite_request.query:find('myCreatedFavoriteList', 1, true) ~= nil)
+    check('favorite lists authed', calls.request.headers[6] ~= nil
+                                   and calls.request.headers[6].name == 'Cookie')
+    respond({data={myCreatedFavoriteList={favorites={{name='My List', slug='my-list'}}}}})
+    check('favorite list picker', calls.picker.items()[1].label == 'My List')
+    calls.picker.callback('my-list')
+    local favorite_sent = json.decode(calls.request.body).variables
+    respond({data={favoriteQuestionList={total=2, has_more=true, questions={
+      row('favorite-one', 'Favorite One', 'Easy', 'ac')}}}})
+    local favorite_items = calls.picker.items()
+    check('favorite query', favorite_sent.favoriteSlug == 'my-list' and favorite_sent.skip == 0
+                            and favorite_sent.limit == 100)
+    check('favorite rows', favorite_items[1].value == 'favorite-one'
+                           and favorite_items[1].label:find(string.char(0xE2, 0x9C, 0x93), 1, true) == 1
+                           and favorite_items[1].fg == 2)
+    check('favorite more', favorite_items[2].value == '__more__'
+                           and favorite_items[2].label == 'Load more favorites')
+    check('favorite title', calls.picker.title:find('My List') ~= nil)
+    calls.picker.callback('__more__')
+    local favorite_next = json.decode(calls.request.body).variables
+    respond({data={favoriteQuestionList={total=2, has_more=false, questions={
+      row('favorite-two', 'Favorite Two', 'Medium')}}}})
+    check('favorite next page', favorite_next.skip == 100 and #calls.picker.items() == 2
+                                and calls.picker.items()[2].value == 'favorite-two')
+
+    -- Signed out: the list query stays anonymous and the empty answer points
+    -- at the sign-in command instead of failing.
+    local credentials = jot.leetcode.credential_get
+    jot.leetcode.credential_get = function() return {ok=true, available=true, value=''} end
+    ui.list('')
+    calls.picker.callback('favorite')
+    check('signed-out favorite anonymous', calls.request.headers[6] == nil)
+    respond({data={myCreatedFavoriteList={favorites={}}}})
+    check('signed-out favorite message', tostring(calls.message):find('No favorite lists found') ~= nil)
+    jot.leetcode.credential_get = credentials
+
+    -- The company filter also has the direct command form.
+    ui.list('company=amazon')
+    local direct = json.decode(calls.request.body).variables
+    respond(list_payload({row('direct-one', 'Direct One', 'Easy')}))
+    check('company command', direct.filters.companies[1] == 'amazon')
+
+    return #failures == 0 and 'ok' or table.concat(failures, ', ')
+  )LUA") == "ok");
+}
+
 TEST_CASE("LeetCode status filter maps to the API enum", "[leetcode][lua]")
 {
   // solved maps to AC, the enum the live API accepts; an unsupported status
@@ -367,7 +494,7 @@ TEST_CASE("LeetCode dock panel rows carry actions and colored judge outcomes", "
     local body = json.encode({data={problemsetQuestionList={total=1, questions={
       {frontend_id='1', title='Easy One', title_slug='easy-one', difficulty='Easy'},
     }}}})
-    ui.list('')
+    ui.list('page=1')
     calls.callback({ok=true, status=200, body=body, error=''})
     calls.picker.callback('easy-one')
     calls.callback({ok=true, status=200, body=json.encode({data={question={
@@ -448,7 +575,7 @@ TEST_CASE("LeetCode panel shows the statement and bordered examples", "[leetcode
                       testcase_list={'[2,7,11,15]' .. string.char(10) .. '9', '[3,2,4]' .. string.char(10) .. '6'},
                       code_snippets={{lang='C++', lang_slug='cpp', code='class Solution {};'}}}
     local ui = package.loaded['jot_lc.ui']
-    ui.list('')
+    ui.list('page=1')
     calls.callback({ok=true, status=200, body=json.encode({data={problemsetQuestionList={total=1, questions={question}}}}), error=''})
     calls.picker.callback('two-sum')
     calls.callback({ok=true, status=200, body=json.encode({data={question=question}}), error=''})

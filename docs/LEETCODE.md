@@ -7,7 +7,7 @@ Jot includes a bundled, jot-native LeetCode workflow inspired by the feature set
 | Command | Action |
 | --- | --- |
 | `:Leet` / `:LeetActions` | Open the action picker |
-| `:LeetList` | Browse problems (supports `page=`, `difficulty=`, `status=`, `tags=`) |
+| `:LeetList` | Browse problems by group or filter (supports `page=`, `difficulty=`, `status=`, `tags=`, `company=`) |
 | `:LeetDaily` | Fetch today's problem |
 | `:LeetRandom` | Fetch a random problem (supports `difficulty=`, `status=`, `tags=`) |
 | `:LeetProfile` | Show solved counts for the signed-in account |
@@ -32,21 +32,33 @@ Keymap family: `Alt+Shift+L`, followed by `L` for the list, `D` for daily, `R` f
 
 ## Problem list and filters
 
-`:LeetList` fetches one page through the paginated GraphQL question list. LeetCode caps a single page at 100 questions, so the picker's last row, **Load more problems**, fetches the next page and reopens the picker with everything loaded so far. The row's detail shows how many questions are loaded out of the total. `page=n` starts directly on a page instead (the picker then still offers load-more from there).
+`:LeetList` without filters opens five groups instead of dumping the whole problem set:
+
+- **All problems** - the unfiltered list
+- **Difficulty** - all difficulties, Easy, Medium or Hard
+- **Tag** - every topic the API reports (Array, Backtracking, ...), fetched from the public tag query
+- **By company** - the company list, sorted by name, then a list filter by that company
+- **Favorites** - the signed-in account's LeetCode favorite lists and the problems in the chosen one. Favorite lists are per-user: the request carries the stored session when there is one and stays anonymous (and empty) when there is not, in which case the answer points at `:LeetCookie`.
+
+Passing any filter goes straight to the list, skipping the groups.
+
+`:LeetList` fetches one page through the paginated GraphQL question list. LeetCode caps a single page at 100 questions, so the picker's last row, **Load more problems**, fetches the next page and reopens the picker with everything loaded so far. The row's detail shows how many questions are loaded out of the total. `page=n` starts directly on a page instead (the picker then still offers load-more from there). The same pagination applies to a favorite list's problems.
 
 Filters are given as `name=value` pairs:
 
 - `difficulty=easy|medium|hard` - passed through uppercased
 - `status=solved|todo` - mapped to the API's `UserQuestionStatus` enum (`AC` / `NOT_STARTED`). LeetCode has no server-side "attempted" filter, so that value is reported as unsupported and dropped instead of failing the request.
 - `tags=array,hash-table` - tag slugs, comma or space separated
+- `company=amazon` - a company slug; company problem lists may require a premium session and an empty result reports that
 - `page=n` - starting page
 
 ```vim
 :LeetList difficulty=easy, tags=array
+:LeetList company=amazon
 :LeetRandom difficulty=hard, status=todo
 ```
 
-Rows show the frontend id, title, difficulty and, when the account has progress, solved/attempted/todo. The list doubles as a checklist: a solved problem leads with a green check, an attempted one with an amber dot, and a fresh one carries no mark so what is left to do stands out. Public list requests never carry the stored session cookie.
+Rows show the frontend id, title, difficulty and, when the account has progress, solved/attempted/todo. The list doubles as a checklist: a solved problem leads with a green check, an attempted one with an amber dot, and a fresh one carries no mark so what is left to do stands out. Public list requests never carry the stored session cookie; tag and company-picker queries are public too.
 
 ## Task feedback
 
@@ -100,7 +112,7 @@ When the operating-system store is unavailable, sign-in reports that state and d
 
 ## Current scope and limits
 
-The real-binary PTY probe covers the list loading indicator and completion feedback, pagination through the load-more row, credential-free public requests, the masked sign-in prompt and stored session, the refusal to send a session to a non-official domain, selecting a problem from the list, the solution template being written to disk and opened, and the dock panel: its question, the Run test / Submit rows, the hover highlight on an actionable row, a click on Run test starting the judge, and the console reporting the outcome. The probe's API fixture is not an official LeetCode domain, so its judge request is refused before it leaves the process by design; the success-report rendering (green check, passing case counts, status, output, errors) is pinned by the Lua unit tests instead.
+The real-binary PTY probe covers the five problem groups, the difficulty, tag and company pickers filtering the list, the signed-out favorite-list answer, the list loading indicator and completion feedback, pagination through the load-more row, credential-free public requests, the masked sign-in prompt and stored session, the refusal to send a session to a non-official domain, selecting a problem from the list, the solution template being written to disk and opened, and the dock panel: its question, the Run test / Submit rows, the hover highlight on an actionable row, a click on Run test starting the judge, and the console reporting the outcome. The probe's API fixture is not an official LeetCode domain, so its judge request is refused before it leaves the process by design; the success-report rendering (green check, passing case counts, status, output, errors) is pinned by the Lua unit tests instead.
 
 The full online account/judge workflow requires a stored session and the official domain, and has not been exercised end-to-end from this repository's CI. On Linux, the Secret Service prompt is skipped when there is no D-Bus session. Endpoint schemas are undocumented by LeetCode and may change. Reference features not implemented here: inject, fold/toggle, stats, menu and exit.
 

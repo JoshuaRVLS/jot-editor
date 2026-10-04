@@ -59,6 +59,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "topic_tags": [{"name": "Array"}],
                 "code_snippets": [{"lang": "C++", "lang_slug": "cpp", "code": "class Solution { public: int twoSum(vector<int>& nums, int target) {} };"}],
             }}}
+        elif "questionTopicTags" in query:
+            # The tag group's picker source: the live API returns every topic
+            # in one public unpaginated page.
+            payload = {"data": {"topicTags": {"edges": [
+                {"node": {"name": "Backtracking", "slug": "backtracking"}},
+                {"node": {"name": "Array", "slug": "array"}},
+            ]}}}
+        elif "companyTags" in query:
+            payload = {"data": {"companyTags": [
+                {"name": "Google", "slug": "google"},
+                {"name": "Amazon", "slug": "amazon"},
+            ]}}
+        elif "myCreatedFavoriteList" in query:
+            # Anonymous, like the live API: no session means no created lists,
+            # so the probe pins the "no favorites yet" answer.
+            payload = {"data": {"myCreatedFavoriteList": {"favorites": []}}}
         elif "problemsetQuestionList" in query:
             # Slow enough that the probe can observe the live status indicator
             # while the request is in flight. Page two is served from the same
@@ -119,6 +135,26 @@ def command_phase(command: str):
 
 def on_screen(fragment: str):
     return lambda screen: fragment in screen.text()
+
+
+def list_phase(command: str = "LeetList"):
+    """Open the plain problem list through the group picker.
+
+    `:LeetList` without filters opens five groups now, so a phase that wants
+    the unfiltered list picks its first row (All problems) and waits for the
+    fetch that row starts.
+    """
+    return command_phase(command) + [(4.0, on_screen("All problems")), (0.3, b"\r")]
+
+
+def list_filters(request: dict):
+    """The QuestionListFilterInput a /graphql/ request sent, or None."""
+    if not request["path"].endswith("/graphql/"):
+        return None
+    try:
+        return (json.loads(request["body"]).get("variables") or {}).get("filters")
+    except (ValueError, TypeError):
+        return None
 
 
 def cell_of(screen, needle: str) -> tuple[int, int]:
@@ -194,6 +230,24 @@ def main() -> int:
 
     loading_seen = {"value": False}
     feedback_seen = {"value": False}
+    groups_seen = {"value": False}
+    favorites_seen = {"value": False}
+
+    def mark_favorites(screen):
+        # The empty-favorites answer is a message-line notice, which fades; the
+        # run has to remember seeing it, not the final screen.
+        if "No favorite lists found" in screen.text():
+            favorites_seen["value"] = True
+            return True
+        return False
+
+    def mark_groups(screen):
+        # :LeetList without filters is the five groups, not every problem.
+        if all(label in screen.text()
+               for label in ("All problems", "Difficulty", "Tag", "By company", "Favorites")):
+            groups_seen["value"] = True
+            return True
+        return False
 
     def mark_loading(screen):
         if "leet: loading list" in screen.text():
@@ -209,9 +263,16 @@ def main() -> int:
 
     screen = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
                         cfg=CFG, cwd=ROOT, env=env,
-                        phases=command_phase("LeetList") + [(0.0, mark_loading),
+                        phases=command_phase("LeetList") + [(4.0, mark_groups),
+                                                            (0.3, b"\r"),
+                                                            (0.0, mark_loading),
                                                             (0.0, mark_feedback),
                                                             (4.0, on_screen(TITLE))])
+    if not groups_seen["value"]:
+        print("leetcode probe: FAIL - :LeetList did not offer the five problem groups")
+        print(screen.text())
+        server.shutdown()
+        return 1
     if not RESPONDED:
         print("leetcode probe: FAIL - HTTP request did not complete")
         server.shutdown()
@@ -250,7 +311,7 @@ def main() -> int:
     load_start = len(REQUESTS)
     more = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
                       cfg=CFG, cwd=ROOT, env=env,
-                      phases=command_phase("LeetList") + [
+                      phases=list_phase() + [
                           (6.0, on_screen("Load more problems")),
                           (0.3, b"load"),
                           # Wait for the query to filter the list down to the
@@ -274,6 +335,141 @@ def main() -> int:
         server.shutdown()
         return 1
 
+    # The groups are real filters: difficulty, tag and company each open a
+    # second picker and the chosen value becomes the list's filter. The tag and
+    # company sources are public queries, like the live API's.
+    levels_start = len(REQUESTS)
+    levels = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
+                        cfg=CFG, cwd=ROOT, env=env,
+                        phases=command_phase("LeetList") + [
+                            # The groups are navigated by arrows: row 2 is
+                            # Difficulty, and its row 3 is Medium.
+                            (4.0, on_screen("All problems")),
+                            (0.5, b"\x1b[B"),
+                            (0.5, b"\r"),
+                            (4.0, on_screen("All difficulties")),
+                            (0.5, b"\x1b[B\x1b[B"),
+                            (0.5, b"\r"),
+                            (8.0, on_screen(TITLE)),
+                        ], until_timeout=20.0)
+    if TITLE not in levels.text():
+        print("leetcode probe: FAIL - the difficulty group did not open the problem list")
+        print(levels.text())
+        server.shutdown()
+        return 1
+    if not any((list_filters(request) or {}).get("difficulty") == "MEDIUM"
+               for request in REQUESTS[levels_start:]):
+        print("leetcode probe: FAIL - the difficulty group did not filter the list")
+        print("requests:", REQUESTS[levels_start:])
+        server.shutdown()
+        return 1
+
+    tag_start = len(REQUESTS)
+    tagged = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
+                        cfg=CFG, cwd=ROOT, env=env,
+                        phases=command_phase("LeetList") + [
+                            # Row 3 is Tag; its picker is sorted, so row 2 is
+                            # Backtracking.
+                            (4.0, on_screen("All problems")),
+                            (0.5, b"\x1b[B\x1b[B"),
+                            (0.5, b"\r"),
+                            (4.0, on_screen("Backtracking")),
+                            (0.5, b"\x1b[B"),
+                            (0.5, b"\r"),
+                            (8.0, on_screen(TITLE)),
+                        ], until_timeout=20.0)
+    if TITLE not in tagged.text():
+        print("leetcode probe: FAIL - the tag group did not open the problem list")
+        print(tagged.text())
+        server.shutdown()
+        return 1
+    recent = REQUESTS[tag_start:]
+    if not any(b"questionTopicTags" in request["body"] for request in recent):
+        print("leetcode probe: FAIL - the tag group did not fetch the tag list")
+        print("requests:", recent)
+        server.shutdown()
+        return 1
+    if not any((list_filters(request) or {}).get("tags") == ["backtracking"] for request in recent):
+        print("leetcode probe: FAIL - the tag group did not filter the list by tag")
+        print("requests:", recent)
+        server.shutdown()
+        return 1
+    if any(request["cookie"] for request in recent):
+        print("leetcode probe: FAIL - a public tag query carried credentials")
+        print("requests:", recent)
+        server.shutdown()
+        return 1
+
+    company_start = len(REQUESTS)
+    company = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
+                         cfg=CFG, cwd=ROOT, env=env,
+                         phases=command_phase("LeetList") + [
+                             # Row 4 is By company; its picker is sorted, so row
+                             # 1 is already Amazon.
+                             (4.0, on_screen("All problems")),
+                             (0.5, b"\x1b[B\x1b[B\x1b[B"),
+                             (0.5, b"\r"),
+                             (4.0, on_screen("Google")),
+                             (0.5, b"\r"),
+                             (8.0, on_screen(TITLE)),
+                         ], until_timeout=20.0)
+    if TITLE not in company.text():
+        print("leetcode probe: FAIL - the company group did not open the problem list")
+        print(company.text())
+        server.shutdown()
+        return 1
+    recent = REQUESTS[company_start:]
+    if not any(b"companyTags" in request["body"] for request in recent):
+        print("leetcode probe: FAIL - the company group did not fetch the company list")
+        print("requests:", recent)
+        server.shutdown()
+        return 1
+    if not any((list_filters(request) or {}).get("companies") == ["amazon"] for request in recent):
+        print("leetcode probe: FAIL - the company group did not filter the list by company")
+        print("requests:", recent)
+        server.shutdown()
+        return 1
+    if any(request["cookie"] for request in recent):
+        print("leetcode probe: FAIL - a public company query carried credentials")
+        print("requests:", recent)
+        server.shutdown()
+        return 1
+
+    # Favorites with no stored session stay anonymous (the live API answers an
+    # empty list) and the answer points at the sign-in command instead of
+    # failing; no credential may reach the local fixture either way. The stub
+    # credential environment pins "no session" here: the real OS store could
+    # hold one, and then the request would be refused for the non-official
+    # domain before it ever reached the fixture.
+    favorite_start = len(REQUESTS)
+    favorites = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
+                           cfg=CFG, cwd=ROOT, env=cookie_env,
+                           phases=command_phase("LeetList") + [
+                               # Row 5 is Favorites.
+                               (4.0, on_screen("All problems")),
+                               (0.5, b"\x1b[B\x1b[B\x1b[B\x1b[B"),
+                               (0.5, b"\r"),
+                               # Poll at once: the empty-favorites notice is a
+                               # toast that fades on its own.
+                               (0.0, mark_favorites),
+                           ], until_timeout=20.0)
+    if not favorites_seen["value"]:
+        print("leetcode probe: FAIL - the favorite group did not report an empty signed-out list")
+        print(favorites.text())
+        server.shutdown()
+        return 1
+    recent = REQUESTS[favorite_start:]
+    if not any(b"myCreatedFavoriteList" in request["body"] for request in recent):
+        print("leetcode probe: FAIL - the favorite group did not ask for the favorite lists")
+        print("requests:", recent)
+        server.shutdown()
+        return 1
+    if any(request["cookie"] for request in recent):
+        print("leetcode probe: FAIL - a signed-out favorite query carried credentials")
+        print("requests:", recent)
+        server.shutdown()
+        return 1
+
     # Choosing a problem from the list: the language picker opens the template
     # for real (the missing-file read used to leave the buffer empty, so the
     # user saw "loading" and then nothing), and the dock's LeetCode panel comes
@@ -285,7 +481,7 @@ def main() -> int:
     judge_start = len(REQUESTS)
     judge = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
                        cfg=CFG, cwd=ROOT, env=env,
-                       phases=command_phase("LeetList") + [
+                       phases=list_phase() + [
                            (6.0, on_screen(TITLE)),
                            (0.5, b"\r"),
                            (6.0, on_screen("C++")),
@@ -333,7 +529,7 @@ def main() -> int:
     click_start = len(REQUESTS)
     opened = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
                         cfg=CFG, cwd=ROOT, env=env,
-                        phases=command_phase("LeetList") + [
+                        phases=list_phase() + [
                             (6.0, on_screen(TITLE)),
                             (0.5, b"\r"),
                             (6.0, on_screen("C++")),
@@ -355,7 +551,7 @@ def main() -> int:
         return 1
     hovered = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
                          cfg=CFG, cwd=ROOT, env=env,
-                         phases=command_phase("LeetList") + [
+                         phases=list_phase() + [
                              (6.0, on_screen(TITLE)),
                              (0.5, b"\r"),
                              (6.0, on_screen("C++")),
@@ -374,7 +570,7 @@ def main() -> int:
 
     clicked = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
                          cfg=CFG, cwd=ROOT, env=env,
-                         phases=command_phase("LeetList") + [
+                         phases=list_phase() + [
                              (6.0, on_screen(TITLE)),
                              (0.5, b"\r"),
                              (6.0, on_screen("C++")),
@@ -402,7 +598,7 @@ def main() -> int:
     # in the explorer column would keep the focus in the tree.
     editing = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
                          cfg=CFG, cwd=ROOT, env=env,
-                         phases=command_phase("LeetList") + [
+                         phases=list_phase() + [
                              (6.0, on_screen(TITLE)),
                              (0.5, b"\r"),
                              (6.0, on_screen("C++")),
@@ -511,7 +707,7 @@ def main() -> int:
         server.shutdown()
         return 1
     server.shutdown()
-    print("leetcode probe: PASS - problem list, cookie-free public requests and masked sign-in")
+    print("leetcode probe: PASS - problem groups, list, cookie-free public requests and masked sign-in")
     return 0
 
 

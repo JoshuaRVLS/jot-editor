@@ -32,6 +32,10 @@ M.queries = {
   daily = [[query questionOfToday { today: activeDailyCodingChallengeQuestion { question { title_slug: titleSlug } } }]],
   random = [[query randomQuestion($categorySlug: String, $filters: QuestionListFilterInput) { question: randomQuestion(categorySlug: $categorySlug, filters: $filters) { title_slug: titleSlug paid_only: isPaidOnly } }]],
   list = [[query problemsetQuestionList($categorySlug: String, $limit: Int, $skip: Int, $filters: QuestionListFilterInput) { problemsetQuestionList: questionList(categorySlug: $categorySlug, limit: $limit, skip: $skip, filters: $filters) { total: totalNum questions: data { frontend_id: questionFrontendId title title_slug: titleSlug difficulty status paid_only: isPaidOnly topic_tags: topicTags { name slug } } } }]],
+  tags = [[query questionTopicTags { topicTags: questionTopicTags { edges { node { name slug } } } }]],
+  companies = [[query companyTags { companyTags { name slug } }]],
+  favorite_lists = [[query favoriteLists { myCreatedFavoriteList { favorites { name slug } } }]],
+  favorite_questions = [[query favoriteQuestionList($favoriteSlug: String!, $limit: Int, $skip: Int) { favoriteQuestionList(favoriteSlug: $favoriteSlug, limit: $limit, skip: $skip) { total: totalLength has_more: hasMore questions { frontend_id: questionFrontendId title title_slug: titleSlug difficulty status paid_only: paidOnly topic_tags: topicTags { name slug } } } }]],
   question = [[query questionData($titleSlug: String!) { question(titleSlug: $titleSlug) { id: questionId frontend_id: questionFrontendId title title_slug: titleSlug is_paid_only: isPaidOnly difficulty status content code_snippets: codeSnippets { lang lang_slug: langSlug code } testcase_list: exampleTestcaseList stats topic_tags: topicTags { name slug } hints } }]],
   profile = [[query userStats($username: String!) { matchedUser(username: $username) { username submit_stats: submitStatsGlobal { acSubmissionNum { difficulty count } } } }]],
 }
@@ -56,6 +60,15 @@ local function session_cookie()
   if not result.ok then return nil, result.error ~= "" and result.error or "sign in first" end
   if result.value == "" then return nil, "sign in first" end
   return result.value
+end
+
+-- Favorites are per-user, but the list query is public and simply comes back
+-- empty without a session. Sending it anonymously when nothing is stored keeps
+-- a signed-out user on a custom api_base from seeing a domain refusal instead
+-- of the plain "sign in to see your favorites" answer.
+local function has_session()
+  local result = jot.leetcode.credential_get()
+  return result.ok and result.available and result.value ~= ""
 end
 
 local function request(method, url, body, authenticated, callback)
@@ -221,6 +234,69 @@ function M.list(filters, skip, callback)
         title_slug=item.title_slug,
         difficulty=item.difficulty or "Unknown",
         status=status,
+        paid_only=item.paid_only == true,
+        topic_tags=item.topic_tags,
+      }
+    end
+    callback(rows, page.total or #rows, nil)
+  end)
+end
+
+-- The tag and company pickers fetch their whole choice list in one public
+-- query (the live API returns all 75 topics and all companies unpaginated).
+function M.tags(callback)
+  return graphql(M.queries.tags, {}, false, function(data, err)
+    if err then callback(nil, err); return end
+    local rows = {}
+    for _, edge in ipairs((data and data.topicTags and data.topicTags.edges) or {}) do
+      local node = edge.node or {}
+      if node.slug then rows[#rows + 1] = {name=node.name or node.slug, slug=node.slug} end
+    end
+    callback(rows, nil)
+  end)
+end
+
+function M.companies(callback)
+  return graphql(M.queries.companies, {}, false, function(data, err)
+    if err then callback(nil, err); return end
+    local rows = {}
+    for _, company in ipairs((data and data.companyTags) or {}) do
+      if company.slug then rows[#rows + 1] = {name=company.name or company.slug, slug=company.slug} end
+    end
+    callback(rows, nil)
+  end)
+end
+
+function M.favorite_lists(callback)
+  return graphql(M.queries.favorite_lists, {}, has_session(), function(data, err)
+    if err then callback(nil, err); return end
+    local lists = data and data.myCreatedFavoriteList and data.myCreatedFavoriteList.favorites
+    local rows = {}
+    for _, list in ipairs(lists or {}) do
+      if list.slug then rows[#rows + 1] = {name=list.name or list.slug, slug=list.slug} end
+    end
+    callback(rows, nil)
+  end)
+end
+
+-- One page of a favorite list's questions, shaped like M.list rows so the
+-- picker renders and paginates it the same way.
+function M.favorite_questions(slug, skip, callback)
+  local variables = {favoriteSlug=slug, limit=config.get("list_limit"), skip=skip or 0}
+  return graphql(M.queries.favorite_questions, variables, has_session(), function(data, err)
+    if err then callback(nil, nil, err); return end
+    local page = data and data.favoriteQuestionList
+    local questions = page and page.questions
+    if type(questions) ~= "table" then callback(nil, nil, err or "favorite list unavailable"); return end
+    local rows = {}
+    for _, item in ipairs(questions) do
+      rows[#rows + 1] = {
+        id=item.frontend_id,
+        frontend_id=item.frontend_id,
+        title=item.title,
+        title_slug=item.title_slug,
+        difficulty=item.difficulty or "Unknown",
+        status=normalize_status(item.status),
         paid_only=item.paid_only == true,
         topic_tags=item.topic_tags,
       }

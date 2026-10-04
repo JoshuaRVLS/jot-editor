@@ -43,6 +43,10 @@ local function parse_filters(value)
     if name == "difficulty" then filters.difficulty = setting
     elseif name == "status" then filters.status = setting
     elseif name == "tags" or name == "tag" then filters.tags = setting
+    elseif name == "company" or name == "companies" then
+      local companies = {}
+      for company in setting:gmatch("[^,%s]+") do companies[#companies + 1] = company end
+      if #companies > 0 then filters.companies = companies end
     elseif name == "page" then filters.page = tonumber(setting)
     end
   end
@@ -69,6 +73,7 @@ local function graphql_filters(filters)
     for tag in tostring(filters.tags):gmatch("[^,%s]+") do tags[#tags + 1] = tag end
     if #tags > 0 then input.tags = tags end
   end
+  if filters.companies and next(filters.companies) ~= nil then input.companies = filters.companies end
   if next(input) == nil then return nil, unsupported end
   return input, unsupported
 end
@@ -209,7 +214,8 @@ local function show_list()
   end
   local total = tonumber(state.total) or #state.rows
   if #state.rows < total then
-    items[#items + 1] = {label="Load more problems", value="__more__",
+    items[#items + 1] = {label=state.favorite and "Load more favorites" or "Load more problems",
+                         value="__more__",
                          detail=tostring(#state.rows) .. " of " .. tostring(total) .. " loaded"}
   end
   if #items == 0 then notify("No problems in this result"); return end
@@ -238,7 +244,12 @@ local function fetch_list_page(page, replace)
     end
     if not rows or #rows == 0 then
       jot.picker.close()
-      popup("LeetCode", "No problem matches that page or filter.")
+      if state.filters.companies then
+        popup("LeetCode companies", "No problems were returned for this company.\n\n"
+              .. "Company problem lists can require a LeetCode premium account.")
+      else
+        popup("LeetCode", "No problem matches that page or filter.")
+      end
       return
     end
     if replace then state.rows = rows
@@ -249,6 +260,166 @@ local function fetch_list_page(page, replace)
     state.total = total or state.total or #state.rows
     notify("Loaded " .. #state.rows .. " of " .. tostring(state.total) .. " problem(s)")
     show_list()
+  end)
+end
+
+-- The list command without filters opens five groups instead of dumping every
+-- problem: all problems, one difficulty level, one topic tag, one company, or
+-- a saved favorite list. Each group answers with a second picker (levels, the
+-- tag list, the company list, the favorite lists) whose choice becomes the
+-- filter of the usual paginated list.
+local function start_list(filters, title)
+  if M.busy then notify("A request is already running"); return end
+  local page = math.max(1, math.floor(filters.page or 1))
+  list_state = {filters=filters, page=page, rows={}, title=title or "LeetCode problems"}
+  fetch_list_page(page, true)
+end
+
+local difficulty_levels = {
+  {label="All difficulties", value="all", detail="No difficulty filter"},
+  {label="Easy", value="easy", detail="Show only easy problems"},
+  {label="Medium", value="medium", detail="Show only medium problems"},
+  {label="Hard", value="hard", detail="Show only hard problems"},
+}
+
+local function choose_difficulty()
+  local rows = {}
+  for _, level in ipairs(difficulty_levels) do rows[#rows + 1] = level end
+  jot.ui.picker("LeetCode difficulty", function() return rows end, function(value)
+    if value == "all" then start_list({}); return end
+    local label = value
+    for _, level in ipairs(difficulty_levels) do
+      if level.value == value then label = level.label end
+    end
+    start_list({difficulty=value}, "LeetCode problems · " .. label)
+  end)
+end
+
+-- The tag and company pickers fetch their choices first: the items callback
+-- runs once, when the picker opens, so the list has to be in hand by then.
+-- Both sources come back in no particular order, so sort them for browsing.
+local function sort_names(rows)
+  table.sort(rows, function(a, b)
+    return tostring(a.name or a.slug):lower() < tostring(b.name or b.slug):lower()
+  end)
+end
+
+local function choose_tag()
+  if M.busy then notify("A request is already running"); return end
+  M.busy = true
+  begin_work("loading tags")
+  notify("Loading LeetCode tags...")
+  client.tags(function(rows, err)
+    M.busy = false
+    end_work()
+    if err then popup("LeetCode error", "Tags failed to load.\n\n" .. tostring(err)); return end
+    if not rows or #rows == 0 then notify("No LeetCode tags were returned"); return end
+    sort_names(rows)
+    local names, items = {}, {}
+    for _, tag in ipairs(rows) do
+      names[tag.slug] = tag.name or tag.slug
+      items[#items + 1] = {label=tostring(tag.name or tag.slug), value=tag.slug}
+    end
+    jot.ui.picker("LeetCode tag", function() return items end, function(slug)
+      if not slug or slug == "" then return end
+      start_list({tags=slug}, "LeetCode problems · " .. tostring(names[slug] or slug))
+    end)
+  end)
+end
+
+local function choose_company()
+  if M.busy then notify("A request is already running"); return end
+  M.busy = true
+  begin_work("loading companies")
+  notify("Loading LeetCode companies...")
+  client.companies(function(rows, err)
+    M.busy = false
+    end_work()
+    if err then popup("LeetCode error", "Companies failed to load.\n\n" .. tostring(err)); return end
+    if not rows or #rows == 0 then notify("No LeetCode companies were returned"); return end
+    sort_names(rows)
+    local names, items = {}, {}
+    for _, company in ipairs(rows) do
+      names[company.slug] = company.name or company.slug
+      items[#items + 1] = {label=tostring(company.name or company.slug), value=company.slug}
+    end
+    jot.ui.picker("LeetCode company", function() return items end, function(slug)
+      if not slug or slug == "" then return end
+      start_list({companies={slug}}, "LeetCode problems · " .. tostring(names[slug] or slug))
+    end)
+  end)
+end
+
+local function fetch_favorite_page(page, replace)
+  local state = list_state
+  local page_size = math.min(100, tonumber(config.get("list_limit")) or 100)
+  M.busy = true
+  begin_work("loading favorites page " .. page)
+  notify("Loading favorite problems (page " .. page .. ")...")
+  client.favorite_questions(state.favorite, (page - 1) * page_size, function(rows, total, err)
+    M.busy = false
+    end_work()
+    if err then
+      jot.picker.close()
+      popup("LeetCode error", "Favorite problems failed to load.\n\n" .. tostring(err))
+      return
+    end
+    if not rows or #rows == 0 then
+      jot.picker.close()
+      popup("LeetCode favorites", "That favorite list has no problems.")
+      return
+    end
+    if replace then state.rows = rows
+    else
+      for _, row in ipairs(rows) do state.rows[#state.rows + 1] = row end
+    end
+    state.page = page
+    state.total = total or state.total or #state.rows
+    notify("Loaded " .. #state.rows .. " of " .. tostring(state.total) .. " favorite problem(s)")
+    show_list()
+  end)
+end
+
+local function start_favorites(list)
+  if M.busy then notify("A request is already running"); return end
+  list_state = {filters={}, page=1, rows={},
+                title="LeetCode favorites · " .. tostring(list.name or list.slug),
+                favorite=list.slug}
+  fetch_favorite_page(1, true)
+end
+
+local function choose_favorite()
+  if M.busy then notify("A request is already running"); return end
+  M.busy = true
+  begin_work("loading favorite lists")
+  notify("Loading LeetCode favorite lists...")
+  client.favorite_lists(function(rows, err)
+    M.busy = false
+    end_work()
+    if err then
+      if tostring(err):find("sign in") then
+        notify("Sign in first (:LeetCookie) to see your LeetCode favorites")
+      else
+        popup("LeetCode favorites", "Favorite lists failed to load.\n\n" .. tostring(err))
+      end
+      return
+    end
+    if not rows or #rows == 0 then
+      notify("No favorite lists found; add one on leetcode.com or sign in with :LeetCookie")
+      return
+    end
+    local items = {}
+    for _, list in ipairs(rows) do
+      items[#items + 1] = {label=tostring(list.name or list.slug), value=list.slug}
+    end
+    jot.ui.picker("LeetCode favorites", function() return items end, function(slug)
+      if not slug or slug == "" then return end
+      local chosen = {slug=slug}
+      for _, list in ipairs(rows) do
+        if list.slug == slug then chosen = list end
+      end
+      start_favorites(chosen)
+    end)
   end)
 end
 
@@ -276,9 +447,26 @@ end
 function M.list(value)
   if M.busy then notify("A request is already running"); return end
   local filters = parse_filters(value)
-  local page = math.max(1, math.floor(filters.page or 1))
-  list_state = {filters=filters, page=page, rows={}, title="LeetCode problems"}
-  fetch_list_page(page, true)
+  if next(filters) ~= nil then
+    start_list(filters)
+    return
+  end
+  -- The details stay clear of the second-level pickers' own row names, so a
+  -- filtered search in the group list cannot look like one of them.
+  local groups = {
+    {label="All problems", value="all", detail="Every problem in the set"},
+    {label="Difficulty", value="difficulty", detail="Choose a level"},
+    {label="Tag", value="tag", detail="Pick a topic"},
+    {label="By company", value="company", detail="Pick a company"},
+    {label="Favorites", value="favorite", detail="Your saved lists"},
+  }
+  jot.ui.picker("LeetCode problems", function() return groups end, function(group)
+    if group == "all" then start_list({})
+    elseif group == "difficulty" then choose_difficulty()
+    elseif group == "tag" then choose_tag()
+    elseif group == "company" then choose_company()
+    elseif group == "favorite" then choose_favorite() end
+  end)
 end
 
 function M.load_more()
@@ -286,7 +474,8 @@ function M.load_more()
   if not state or M.busy then return end
   local total = tonumber(state.total) or #state.rows
   if #state.rows >= total then notify("All problems are already loaded"); return end
-  fetch_list_page(state.page + 1, false)
+  if state.favorite then fetch_favorite_page(state.page + 1, false)
+  else fetch_list_page(state.page + 1, false) end
 end
 
 function M.daily()
