@@ -35,6 +35,13 @@ function(jot_configure_object_target target_name)
   if(LIBUV_INCLUDE_DIRS)
     target_include_directories(${target_name} SYSTEM PRIVATE ${LIBUV_INCLUDE_DIRS})
   endif()
+  # A system curl lives in the compiler's own include path; a fetched one does
+  # not, and its static archive also needs CURL_STATICLIB on the consumers.
+  # The object libraries take the usage requirements only -- an object library
+  # has no link step of its own, and jot_engine links the library itself.
+  if(TARGET CURL::libcurl)
+    target_link_libraries(${target_name} PRIVATE CURL::libcurl)
+  endif()
 endfunction()
 
 # Every dependency below is folded into the one jot executable, so each is asked
@@ -115,7 +122,34 @@ else()
   endif()
 endif()
 
-find_package(CURL REQUIRED)
+# libcurl drives the REST surfaces (the LeetCode bridge, the .http client,
+# the provider adapters). A Linux install finds it as a system package; the
+# mingw-w64 cross build has no curl of its own to install, so it is fetched the
+# way libuv and utf8proc are (JOT_FETCH_DEPS). curl's CMake build makes the
+# same CURL::libcurl target either way.
+find_package(CURL QUIET)
+if(NOT CURL_FOUND)
+  if(WIN32 AND JOT_FETCH_DEPS)
+    include(FetchContent)
+    set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
+    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(BUILD_LIBCURL_DOCS OFF CACHE BOOL "" FORCE)
+    set(BUILD_MISC_DOCS OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_SCHANNEL ON CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+      curl
+      GIT_REPOSITORY https://github.com/curl/curl.git
+      GIT_TAG curl-8_11_1
+      GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(curl)
+    if(NOT TARGET CURL::libcurl)
+      message(FATAL_ERROR "libcurl was fetched but no CURL::libcurl target was produced.")
+    endif()
+  else()
+    message(FATAL_ERROR "libcurl is required. Install libcurl development files or set JOT_FETCH_DEPS=ON.")
+  endif()
+endif()
 
 find_path(LUA_INCLUDE_DIR lua.h PATH_SUFFIXES lua5.4 lua54 lua5.3 lua53)
 find_library(LUA_LIBRARY NAMES lua5.4 lua54 lua5.3 lua53 lua)

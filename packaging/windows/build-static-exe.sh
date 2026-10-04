@@ -49,16 +49,17 @@ fi
 
 # Import table gate. Everything here ships with Windows itself: KERNEL32/USER32/
 # ADVAPI32/SHELL32/ole32 are the Win32 API, WS2_32/IPHLPAPI/USERENV/dbghelp come
-# from libuv's networking, stack traces and environment handling, and the C
-# runtime is one of the two Windows carries -- msvcrt.dll on the mingw builds
-# that target it, ucrtbase.dll plus the api-ms-win-crt-* forwarders on the ones
-# that target the Universal CRT (Windows 10 and newer). Neither is something a
-# user installs. What must never appear is a library of jot's own: libuv,
-# utf8proc, tree-sitter, Lua, libstdc++, libgcc, libwinpthread.
+# from libuv's networking, stack traces and environment handling, CRYPT32/
+# bcrypt/WLDAP32 from curl's Schannel and WinLDAP support, and the C runtime is
+# one of the two Windows carries -- msvcrt.dll on the mingw builds that target
+# it, ucrtbase.dll plus the api-ms-win-crt-* forwarders on the ones that target
+# the Universal CRT (Windows 10 and newer). Neither is something a user
+# installs. What must never appear is a library of jot's own: libuv, utf8proc,
+# tree-sitter, Lua, curl, libstdc++, libgcc, libwinpthread.
 echo "windows build: checking the exe's imports"
 imports=$("${toolchain_prefix}-objdump" -p "${exe}" | sed -n 's/^\s*DLL Name: //p' | sort -u)
 unexpected=$(printf '%s\n' "${imports}" \
-  | grep -viE '^(kernel32|user32|advapi32|shell32|ole32|ws2_32|iphlpapi|userenv|dbghelp|msvcrt|ucrtbase)\.dll$' \
+  | grep -viE '^(kernel32|user32|advapi32|shell32|ole32|ws2_32|iphlpapi|userenv|dbghelp|msvcrt|ucrtbase|crypt32|bcrypt|wldap32)\.dll$' \
   | grep -viE '^api-ms-win-crt-[a-z0-9-]+\.dll$' || true)
 if [ -n "${unexpected}" ]; then
   echo "windows build: FAIL - the exe needs libraries of its own:" >&2

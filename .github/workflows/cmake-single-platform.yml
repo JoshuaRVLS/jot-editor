@@ -35,7 +35,8 @@ jobs:
           libtermkey-dev \
           libuv1-dev \
           libutf8proc-dev \
-          libtree-sitter-dev
+          libtree-sitter-dev \
+          libcurl4-openssl-dev
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.

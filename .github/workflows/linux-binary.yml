@@ -28,11 +28,12 @@ jobs:
             ninja-build \
             ccache \
             pkg-config \
-            libvterm-dev \
-            libtermkey-dev \
-            libuv1-dev \
-            libutf8proc-dev \
-            libtree-sitter-dev
+          libvterm-dev \
+          libtermkey-dev \
+          libuv1-dev \
+          libutf8proc-dev \
+          libtree-sitter-dev \
+          libcurl4-openssl-dev
 
       - name: Configure
         run: |

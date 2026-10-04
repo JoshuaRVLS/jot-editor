@@ -41,7 +41,7 @@ jobs:
           sudo apt-get install --yes \
             cmake ninja-build pkg-config \
             libvterm-dev libtermkey-dev libuv1-dev libutf8proc-dev \
-            libtree-sitter-dev
+            libtree-sitter-dev libcurl4-openssl-dev
 
       - name: Install Windows cross toolchain
         if: matrix.platform == 'windows'

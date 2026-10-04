@@ -948,22 +948,22 @@ install_required_native_deps() {
     fi
   elif command -v apt-get >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via apt-get" \
-      run_maybe_sudo bash -lc "apt-get update && apt-get install -y libvterm-dev libtermkey-dev libuv1-dev libutf8proc-dev" && return 0
+      run_maybe_sudo bash -lc "apt-get update && apt-get install -y libvterm-dev libtermkey-dev libuv1-dev libutf8proc-dev libcurl4-openssl-dev" && return 0
   elif command -v dnf >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via dnf" \
-      run_maybe_sudo dnf install -y libvterm-devel libtermkey-devel libuv-devel utf8proc-devel && return 0
+      run_maybe_sudo dnf install -y libvterm-devel libtermkey-devel libuv-devel utf8proc-devel libcurl-devel && return 0
   elif command -v yum >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via yum" \
-      run_maybe_sudo yum install -y libvterm-devel libtermkey-devel libuv-devel utf8proc-devel && return 0
+      run_maybe_sudo yum install -y libvterm-devel libtermkey-devel libuv-devel utf8proc-devel libcurl-devel && return 0
   elif command -v zypper >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via zypper" \
-      run_maybe_sudo zypper --non-interactive install libvterm-devel libtermkey-devel libuv-devel utf8proc-devel && return 0
+      run_maybe_sudo zypper --non-interactive install libvterm-devel libtermkey-devel libuv-devel utf8proc-devel libcurl-devel && return 0
   elif command -v brew >/dev/null 2>&1; then
     attempt_cmd "Installing required native packages via brew" \
       brew install libvterm libtermkey libuv utf8proc && return 0
   fi
 
-  log_error "Install libvterm, libtermkey, libuv, and utf8proc development packages, then rerun install.sh"
+  log_error "Install libvterm, libtermkey, libuv, utf8proc and libcurl development packages, then rerun install.sh"
   log_info "Arch note: libtermkey may be available from AUR as 'libtermkey'."
   return 1
 }
