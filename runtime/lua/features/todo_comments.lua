@@ -23,10 +23,12 @@
 -- The comment gate uses jot.syntax.highlight, the regex fallback the renderer
 -- keeps for languages without a tree-sitter grammar, so a keyword is only
 -- painted when that line's own spans say comment. Two limits come with it: an
--- extension the fallback has no rules for fails open (painted anywhere, which
--- is where upstream stands without a parser), and a multi-line block comment's
--- continuation lines are not recognized, because the fallback sees one line at
--- a time.
+-- extension the fallback has no rules for fails open (the keyword is banded
+-- anywhere, which is where upstream stands without a parser), and a multi-line
+-- block comment's continuation lines are not recognized, because the fallback
+-- sees one line at a time. The fail-open band does not carry: the family ink
+-- runs into the lines below only while those lines' own spans call them
+-- comments, so an unknown extension never re-inks the code under a TODO.
 
 local jot = jot
 
@@ -399,7 +401,13 @@ local function scan_lines(lines, ext, keywords, matcher, accents, conceal)
       else
         carried = nil
       end
-    elseif carried and line ~= "" and comment_start_at(ext, line, carried.col) ~= false then
+    -- The run continues only into a line the highlighter itself confirms is a
+    -- comment (a start offset; 0 is truthy in Lua). A false answer means the
+    -- line's spans hold no comment, and nil means the extension has no rules
+    -- to tell: either way the run stops. The keyword's own fail-open band is
+    -- one word, but a carried run repaints a whole line, and "we cannot tell"
+    -- must not ink the code below every TODO.
+    elseif carried and line ~= "" and comment_start_at(ext, line, carried.col) then
       specs[#specs + 1] = {
         row = index,
         col = 1,

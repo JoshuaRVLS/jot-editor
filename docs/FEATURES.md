@@ -305,7 +305,9 @@ TODO-style comments wear the colour of what they mean (a port of
   colours contrasts most with it.
 - A comment run carries its colour onto the following comment lines, and only
   text the syntax highlighter calls a comment is painted - `TODO:` inside a
-  string stays plain.
+  string stays plain, and the run stops at a line the highlighter cannot
+  confirm (a file type the fallback has no rules for still gets the keyword
+  chip, but not an inked line under it).
 - `Alt+] T` / `Alt+[ T` jump to the next/previous comment (the same family as
   function, class and diagnostic jumps).
 - `:Todo` lists every TODO-style comment across the workspace in the picker,

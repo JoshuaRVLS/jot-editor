@@ -281,6 +281,36 @@ def main() -> int:
                 failures.append("the chip survived the colon's deletion")
                 break
 
+    # Scene 4: a file the syntax fallback has no rules for. The keyword's band
+    # is still painted (the feature fails open without a parser, as upstream
+    # does), but the family colour must stop at the end of that line: nothing
+    # says the line below belongs to the comment, and re-inking it makes the
+    # whole next line read as highlighted. The plain text under the TODO is the
+    # assertion, the band on the keyword the control.
+    plain = os.path.join(work, "notes.txt")
+    with open(plain, "w") as fh:
+        fh.write("-- TODO: fix this later\nplain text below\n")
+    screen = run_in_pty(binary, [plain], b"", settle=2.5, after=1.5, cols=100, rows=30,
+                        cfg=cfg, cwd=work, phases=[(0.5, b"")])
+    if dump:
+        print(screen.text())
+        print("-" * 70)
+    todo_row, todo_text = find_row(screen, "-- TODO: fix this later")
+    below_row, below_text = find_row(screen, "plain text below")
+    if todo_row is None or below_row is None:
+        failures.append("the no-rules scene never painted both lines")
+    else:
+        x = todo_text.find("TODO")
+        if band_at(screen, todo_row, x) != INFO:
+            failures.append("the keyword band is missing in a file with no syntax rules")
+        first = below_text.index("plain")
+        inked = [col for col in range(first, first + len("plain text below"))
+                 if screen.fg[below_row][col] in (INFO, ERROR)
+                 or screen.bg[below_row][col] in (INFO, ERROR)]
+        if inked:
+            failures.append("the line under the TODO kept the family colour "
+                            "(cells %s)" % inked[:5])
+
     if failures:
         print("todo comments probe: FAIL")
         for failure in failures:

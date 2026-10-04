@@ -731,6 +731,19 @@ TEST_CASE("Bundled todo comments only bands inside comments")
   REQUIRE(specs[1].width == 1);
   REQUIRE(specs[2].col == 17);
   REQUIRE(specs[2].width == 9); // " anywhere"
+
+  // The fail-open band stays on its own line. Nothing here says the line below
+  // belongs to the comment, so the carry stops: otherwise every TODO in a file
+  // type the fallback does not know re-inks the code under it in the family
+  // colour, which reads as the whole next line being highlighted.
+  const std::vector<std::string> plain_block = {
+      "TODO: one",
+      "this line keeps its own ink",
+  };
+  specs = call_scan_lines(L, plain_block, ".txt", accents);
+  REQUIRE(specs.size() == 3);
+  for (const DecoSpec &spec : specs)
+    REQUIRE(spec.row == 1);
   g.no_rules = false;
 
   lua_close(L);
