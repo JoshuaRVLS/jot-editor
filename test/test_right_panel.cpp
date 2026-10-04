@@ -5,6 +5,7 @@
 // legacy alias), Ctrl+B the primary sidebar and Ctrl+J the bottom panel.
 #include "editor.h"
 #include "jot/keybind_catalog.h"
+#include "ui/text.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
 #include <filesystem>
@@ -132,6 +133,63 @@ TEST_CASE("Right dock: the plugin tab is named after the panel it shows", "[jot]
   REQUIRE(labels[0].find("probe_panel") != std::string::npos);
   REQUIRE(labels[1].find("Git") != std::string::npos);
   REQUIRE(labels[1].find("probe_panel") == std::string::npos);
+}
+
+// The strip paints in terminal cells but its close zone used to be counted in
+// bytes: a label carries a Nerd Font glyph and a two-byte ×, so every tab
+// measured a couple of cells wider than it drew. Clicking the drawn × landed
+// on the tab body (the tab re-opened) while a click past the tab's last glyph
+// landed in the byte shadow and closed it.
+TEST_CASE("Right dock: a tab's × closes where the strip paints it", "[jot]")
+{
+  char home[] = "/tmp/jot_right_panel_close_XXXXXX";
+  mkdtemp(home);
+  setenv("JOT_CONFIG_HOME", home, 1);
+  setenv("JOT_CACHE_HOME", home, 1);
+
+  Editor e;
+  e.set_home_menu_visible(false);
+  e.apply_resize_for_test(120, 32);
+  e.open_right_panel_tab(RIGHT_PANEL_GIT);
+
+  const int panel_x = e.ui_width_for_test() - e.right_panel_width_for_test();
+  const int strip_y = e.topbar_height_for_test() + 1;
+  std::vector<std::string> labels = e.right_panel_tab_labels_for_test();
+  REQUIRE(labels.size() == 1);
+  const int tab_x = panel_x + 1;
+  const int tab_w = ui_cell_count(labels[0]);
+
+  // The first cell past the painted tab is not the close button: on the byte
+  // walk it used to be, so this click closed a tab nobody aimed at.
+  e.mouse_event_for_test(tab_x + tab_w, strip_y, /*bstate=*/1);
+  REQUIRE(e.right_panel_tab_open(RIGHT_PANEL_GIT));
+  REQUIRE(e.right_panel_visible());
+
+  // The drawn × is: its cell is the suffix's middle one (the label ends
+  // with " × ", three cells).
+  e.mouse_event_for_test(tab_x + tab_w - 2, strip_y, /*bstate=*/1);
+  REQUIRE_FALSE(e.right_panel_tab_open(RIGHT_PANEL_GIT));
+  REQUIRE_FALSE(e.right_panel_visible()); // the last tab closed hides the dock
+
+  // A click on a tab's body switches the dock to it without closing it, and
+  // the × then closes the tab it belongs to, not a neighbor.
+  e.open_right_panel_tab(RIGHT_PANEL_GIT);
+  e.open_right_panel_tab(RIGHT_PANEL_GIT_DIFF);
+  labels = e.right_panel_tab_labels_for_test();
+  REQUIRE(labels.size() == 2);
+  const int git_x = panel_x + 1;
+  const int diff_w = ui_cell_count(labels[1]);
+  e.mouse_event_for_test(git_x + 3, strip_y, /*bstate=*/1);
+  REQUIRE(e.active_right_panel_tab_for_test() == RIGHT_PANEL_GIT);
+  REQUIRE(e.right_panel_tab_open(RIGHT_PANEL_GIT_DIFF));
+  // The active suffix moved to the tab that just took the focus, so the close
+  // cell is recomputed from the labels as they are painted now.
+  labels = e.right_panel_tab_labels_for_test();
+  const int git_w_now = ui_cell_count(labels[0]);
+  REQUIRE(ui_cell_count(labels[1]) == diff_w - 2); // Diff lost its ×
+  e.mouse_event_for_test(git_x + git_w_now - 2, strip_y, /*bstate=*/1);
+  REQUIRE_FALSE(e.right_panel_tab_open(RIGHT_PANEL_GIT));
+  REQUIRE(e.right_panel_tab_open(RIGHT_PANEL_GIT_DIFF));
 }
 
 TEST_CASE("Right dock: toggle opens with the last active tab", "[jot]")

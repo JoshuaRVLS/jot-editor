@@ -286,6 +286,37 @@ def main() -> int:
         server.shutdown()
         return 1
 
+    # The × on that tab closes the panel. Its cell is read off the screen the
+    # run above painted (same geometry, so the same cell), not recomputed from
+    # the strip's layout: a hit test that counts its close zone differently
+    # from the paint lands the click beside the × and the panel stays up.
+    close_at = None
+    for y, line in enumerate(panel.text().split("\n")):
+        if "\uf12e LeetCode" in line and "\u00d7" in line:
+            close_at = (line.index("\u00d7") + 1, y + 1)  # SGR mouse is 1-based
+            break
+    if close_at is None:
+        print("leetcode probe: FAIL - no × on the LeetCode tab to click")
+        print(panel.text())
+        server.shutdown()
+        return 1
+
+    def click_cell(col, row):
+        return ("\x1b[<0;%d;%dM\x1b[<0;%d;%dm" % (col, row, col, row)).encode()
+
+    closed = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
+                        cfg=CFG, cwd=ROOT, env=env,
+                        phases=command_phase("LeetPanel") + [
+                            (3.0, on_screen("No problem open")),
+                            (0.2, click_cell(*close_at)),
+                            (1.5, lambda s: "No problem open" not in s.text()),
+                        ], until_timeout=15.0)
+    if "No problem open" in closed.text() or "\uf12e LeetCode" in closed.text():
+        print("leetcode probe: FAIL - clicking the tab's x did not close the panel")
+        print(closed.text())
+        server.shutdown()
+        return 1
+
     screen = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
                         cfg=CFG, cwd=ROOT, env=env,
                         phases=command_phase("LeetList") + [(4.0, mark_groups),

@@ -62,6 +62,16 @@ public:
   // handler reads from view.panel_tabs), so the suite can pin what a tab says
   // without a pty.
   std::vector<std::string> right_panel_tab_labels_for_test() const;
+  // The dock's rendered width and the strip row, so a test can click a tab at
+  // the cells the renderer paints it on.
+  int right_panel_width_for_test() const
+  {
+    return effective_right_panel_width();
+  }
+  int topbar_height_for_test() const
+  {
+    return topbar_height();
+  }
   // Headless tests: enables the workspace session subsystem for a fake root
   // so save_workspace_session / restore_workspace_session can round-trip
   // through a JOT_CONFIG_HOME-backed session file.

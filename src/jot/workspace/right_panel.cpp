@@ -18,6 +18,7 @@
 
 #include "editor.h"
 #include "jot/lua/api.h"
+#include "ui/text.h"
 
 #include <algorithm>
 #include <string>
@@ -170,7 +171,9 @@ void Editor::render_right_panel_tab_strip(int panel_x, int panel_y, int panel_w)
     const RightPanelTab tab = right_panel_tabs[(size_t)i];
     const bool active = tab == active_right_panel_tab;
     const std::string label = tab_label(tab, active, active_plugin_panel);
-    const int w = (int)label.size();
+    // Cells, not bytes: the label carries a Nerd Font glyph and a two-byte
+    // ×, so a byte walk lays each tab a couple of cells wider than it paints.
+    const int w = ui_cell_count(label);
     if (x + w >= panel_x + panel_w)
     {
       break;
@@ -231,7 +234,7 @@ bool Editor::handle_right_panel_tab_strip_mouse(int x, int y, bool is_click)
       const std::string label = tab_label(right_panel_tabs[(size_t)i],
                                           right_panel_tabs[(size_t)i] == active_right_panel_tab,
                                           active_plugin_panel);
-      const int w = (int)label.size();
+      const int w = ui_cell_count(label);
       if (x >= cx && x < cx + w)
       {
         hovered = i;
@@ -254,14 +257,17 @@ bool Editor::handle_right_panel_tab_strip_mouse(int x, int y, bool is_click)
   {
     const RightPanelTab tab = right_panel_tabs[(size_t)i];
     const std::string label = tab_label(tab, tab == active_right_panel_tab, active_plugin_panel);
-    const int w = (int)label.size();
+    const int w = ui_cell_count(label);
     if (x >= cx && x < cx + w)
     {
+      // The " × " suffix is the active label's last three cells, and x is a
+      // cell column: the close zone has to be counted the way the strip
+      // paints it, or the × cell falls outside it (and the cell past the
+      // tab's last glyph falls inside).
       if (tab == active_right_panel_tab && x >= cx + w - 3)
       {
-        // The " × " suffix (3 bytes) of the active tab closes it. Route
-        // through the panel-specific closer so per-panel state (e.g. the
-        // git diff's return-to-panel flag) is honored.
+        // Route through the panel-specific closer so per-panel state (e.g.
+        // the git diff's return-to-panel flag) is honored.
         if (tab == RIGHT_PANEL_GIT_DIFF)
         {
           close_git_diff_panel();
