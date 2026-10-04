@@ -266,6 +266,11 @@ void Config::load_defaults()
   // symbol chain of the cursor's line on it. "auto" keeps it for code files
   // ("on" shows it for every named file, "off" never).
   settings["winbar"] = "auto";
+  // The pane's own tab strip (a VSCode editor group, painted on the pane's
+  // first row): "auto" spends that row only in a split or with `tabline` off,
+  // so a lone pane keeps the layout it had and never paints its list twice;
+  // "always" / "off" force the row on or off.
+  settings["pane_tabs"] = "auto";
   settings["right_panel_width"] = "42";
   settings["zen_content_width"] = "100";
   settings["terminal_height"] = "10";

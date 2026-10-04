@@ -61,6 +61,82 @@ enum PaneLayoutMode
   PANE_LAYOUT_HORIZONTAL
 };
 
+// When a pane draws its own tab strip (a VSCode editor group). `auto` keeps
+// the strip off until a pane holds a second buffer, so a single-buffer pane
+// keeps the layout it had before the strip existed; `always` shows it for
+// every pane that holds a buffer; `off` disables it everywhere.
+enum PaneTabStripMode
+{
+  PANE_TABS_AUTO,
+  PANE_TABS_ALWAYS,
+  PANE_TABS_OFF
+};
+
+// One tab on a pane's own strip: the buffer it shows, where it was measured,
+// and the state the painter draws (active, modified, preview, hovered). This is
+// the FileTabSegment shape per pane; the workspace strip (row 0) stays the
+// window-wide list it has been since e1c23d3.
+struct PaneTabSegment
+{
+  int buffer_id = -1;
+  int tab_index = -1;
+  int x = 0;
+  int end_x = 0;
+  int label_x = 0;
+  int close_x = 0;
+  // The × only earns a cell while it lands on the label's padding, the rule
+  // the workspace strip's tabs follow.
+  bool hidden_close = false;
+  bool active = false;
+  bool modified = false;
+  bool preview = false;
+  bool hovered = false;
+  std::string label;
+  std::string icon;
+  int icon_fg = -1;
+};
+
+// A pane's strip as the last frame laid it out. The painter and the mouse
+// hit-tests read the same struct, so a tab's pixels and its clickable extent
+// cannot drift.
+struct PaneTabLayout
+{
+  int pane = -1;
+  int x = 0;
+  int y = 0;
+  int w = 0;
+  std::vector<PaneTabSegment> segments;
+  int first_index = 0;   // pane.tab_scroll_index this layout was built from
+  int hidden_before = 0; // tabs scrolled off the left edge
+  int hidden_after = 0;  // tabs that do not fit on the right
+  std::string scroll_left_label;
+  int scroll_left_x = -1;
+  int scroll_left_end_x = -1;
+  std::string overflow_label;
+  int overflow_x = -1;
+};
+
+// Where a dragged pane tab would land. `insert` moves the tab into the target
+// pane's list at `slot` (its strip row, or anywhere in its body); `edge` splits
+// the pane and plants the tab in the new group (edge: 1 left, 2 right, 3 up,
+// 4 down). `on_strip` says the pointer is on the target's strip row, where the
+// painter draws a slot marker instead of the pane-wide body hint.
+enum PaneTabDropKind
+{
+  PANE_TAB_DROP_NONE,
+  PANE_TAB_DROP_INSERT,
+  PANE_TAB_DROP_EDGE
+};
+
+struct PaneTabDrop
+{
+  PaneTabDropKind kind = PANE_TAB_DROP_NONE;
+  int pane = -1;
+  int slot = 0;
+  int edge = 0;
+  bool on_strip = false;
+};
+
 // One tab on the workspace strip (row 0). The strip is the only consumer now
 // that panes have no strip of their own, so these fields answer what the strip
 // draws and what the mouse hit-tests against.

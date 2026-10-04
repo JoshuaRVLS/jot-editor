@@ -81,7 +81,36 @@ private:
 
   int create_pane(int x, int y, int w, int h, int buffer_id);
   void update_pane_layout();
+  // `pane_tabs`: auto / always / off, read here so the ctor, :reload and a live
+  // settings edit all land on the same answer (the strip's height is part of
+  // the pane geometry, so the next frame's layout pass picks it up).
+  void apply_pane_tabs_setting();
+  // Re-reads every pane's header from its own buffer list and winbar. Called by
+  // update_pane_layout (which owns the geometry) and by the tab moves that can
+  // turn a pane's strip on or off without changing its box.
+  void refresh_pane_headers();
   void split_pane_direction(int dx, int dy);
+  // Splits `target_pane` along dx/dy and shows `buffer_id` in the new group,
+  // returning its index (-1 on failure). `inherit_tabs` copies the target's tab
+  // list (the keyboard split); the drag-and-drop path passes false so the new
+  // group holds only the dropped tab. `announce` writes the status message.
+  int split_pane_at(
+      int target_pane, int dx, int dy, int buffer_id, bool inherit_tabs, bool announce);
+  // Per-pane tab moves (src/jot/app/panes_tabs.cpp): the drag that carries a tab
+  // between panes (`move_pane_tab`), the insert form on its own, and the tab
+  // list repair both use (a pane whose last tab left closes, the VSCode merge).
+  void move_pane_tab(int buffer_id, int source_pane, const PaneTabDrop &drop);
+  bool move_buffer_to_pane(int buffer_id, int source_pane, int target_pane, int slot);
+  bool split_pane_with_buffer(int buffer_id, int source_pane, int target_pane, int edge);
+  // Removes `buffer_id` from `pane`'s tab list, returning true when that left
+  // the pane empty (the caller closes it or keeps it, depending on context).
+  bool detach_pane_tab(int pane, int buffer_id);
+  // Moves the active tab of `pane` to `target_index` in its own list, which is
+  // what a click on its strip does (the pane-aware switch_to_local_tab).
+  bool switch_pane_to_local_tab(int pane, int target_index);
+  // Steps a pane's strip window by `delta` when its tabs overflow; false when
+  // there is nothing hidden to scroll to.
+  bool scroll_pane_tabs(int pane, int delta);
   void refresh_command_palette();
   // The GUI frontend, or nullptr when this build has no GUI (JOT_GUI=OFF) or the
   // terminal frontend is in use. Every GUI call goes through here so the

@@ -17,6 +17,7 @@ set(JOT_ENGINE_SOURCES
   jot/app/folding.cpp
   jot/app/panes_layout.cpp
   jot/app/panes_navigate.cpp
+  jot/app/panes_tabs.cpp
   jot/app/panes_resize.cpp
   jot/app/process_job.cpp
   jot/app/relaunch.cpp

@@ -364,6 +364,15 @@ void Editor::handle_mouse_input(int x,
     return;
   }
 
+  // The wheel over a pane's own strip scrolls its tab window, the way the
+  // workspace strip below scrolls: the strip owns the notch whether or not
+  // anything is hidden, so it can never fall through and scroll the buffer
+  // under the pointer.
+  if (handle_pane_tab_scroll(x, y, is_scroll_up, is_scroll_down))
+  {
+    return;
+  }
+
   // The wheel over the workspace strip scrolls it, wherever the pointer is
   // horizontally: the strip spans the whole row and belongs to no pane.
   if ((is_scroll_up || is_scroll_down) && tabline_shown() && y == tabline_y())

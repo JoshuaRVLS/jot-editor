@@ -559,6 +559,8 @@ void Editor::render_panes()
   {
     render_pane_resize_guides();
   }
+  // Last, so the drop hint reads over every pane's paint.
+  render_pane_tab_drag_hint();
 }
 
 void Editor::render_pane_resize_guides()
@@ -757,6 +759,11 @@ void Editor::render_pane(const SplitPane &pane, int pane_index)
   int draw_w = std::max(1, pane.w);
   if (pane.h <= 0)
     return;
+
+  // The pane's own tab strip, when it has one: its first chrome row, above the
+  // winbar and the text (pane_tabs=auto gives the row to split panes and to
+  // panes whose workspace strip is off; a lone pane leaves the tabs to row 0).
+  render_pane_tab_strip(pane_index);
 
   // An inactive pane draws from its own remembered view (cursor, scroll,
   // selection) so two panes sharing one buffer can be scrolled and edited at

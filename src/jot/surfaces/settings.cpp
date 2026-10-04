@@ -308,12 +308,18 @@ const char *const kEditorKeys[] = {
     "word_wrap",
 };
 const char *const kAppearanceKeys[] = {
-    "color_scheme",          "cursor_blink_ms",       "cursor_style",       "gui_font_family",
-    "gui_font_size",         "highlight_cursor_line", "minimap_width",      "rainbow_brackets",
-    "relative_line_numbers", "render_margin",         "show_indent_guides", "show_line_numbers",
-    "show_minimap",          "smooth_scroll",         "status_clock",       "status_coding_time",
-    "tabline",               "tabline_auto_hide",     "tabline_insert",     "truecolor",
-    "winbar",                "word_highlight",     "zen_content_width",
+    "color_scheme",       "cursor_blink_ms",
+    "cursor_style",       "gui_font_family",
+    "gui_font_size",      "highlight_cursor_line",
+    "minimap_width",      "pane_tabs",
+    "rainbow_brackets",   "relative_line_numbers",
+    "render_margin",      "show_indent_guides",
+    "show_line_numbers",  "show_minimap",
+    "smooth_scroll",      "status_clock",
+    "status_coding_time", "tabline",
+    "tabline_auto_hide",  "tabline_insert",
+    "truecolor",          "winbar",
+    "word_highlight",     "zen_content_width",
 };
 const char *const kAppearanceFamilies[] = {"smooth_scroll_"};
 const char *const kColorPreviewKeys[] = {"colorizer", "colorizer_mode"};

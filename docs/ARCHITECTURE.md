@@ -35,7 +35,7 @@ exactly as it was when this was one 500-line struct.
 
 | file | holds |
 | --- | --- |
-| `state/pane_state.h` | buffers, split tree, tabs, pane/scrollbar drags |
+| `state/pane_state.h` | buffers, split tree, tabs, pane tab strips/drags, scrollbar drags |
 | `state/workspace_state.h` | sidebar, workspace session, git summary and panel |
 | `state/panel_state.h` | bottom/right docks, minimap, terminal selection |
 | `state/surface_state.h` | palette, pickers, prompts, menus, popup |

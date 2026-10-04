@@ -292,6 +292,66 @@ public:
   {
     return winbar_height;
   }
+  // --- per-pane tab strips (test) ---
+  // The strip mode (`pane_tabs`), the window a pane's strip last measured, and
+  // the drag session, so a case can carry a tab between panes without a pty
+  // (test_pane_tabs.cpp).
+  void set_pane_tabs_mode_for_test(int mode)
+  {
+    pane_tabs_mode = (PaneTabStripMode)mode;
+    refresh_pane_headers();
+    needs_redraw = true;
+  }
+  bool pane_shows_tab_strip_for_test(int pane_index) const
+  {
+    return pane_index >= 0 && pane_index < (int)panes.size()
+           && pane_shows_tab_strip(panes[(size_t)pane_index]);
+  }
+  PaneTabLayout pane_tab_layout_for_test(int pane_index) const
+  {
+    return build_pane_tab_layout(pane_index);
+  }
+  bool pane_tab_mouse_for_test(
+      int x, int y, bool click, bool release = false, bool middle = false, bool motion = false)
+  {
+    return handle_pane_tab_mouse(x, y, click, release, middle, motion);
+  }
+  bool pane_tab_wheel_for_test(int x, int y, bool up, bool down)
+  {
+    return handle_pane_tab_scroll(x, y, up, down);
+  }
+  bool pane_tab_drag_active_for_test() const
+  {
+    return pane_tab_drag_active;
+  }
+  int pane_tab_drop_kind_for_test() const
+  {
+    return (int)pane_tab_drop.kind;
+  }
+  int pane_tab_drop_pane_for_test() const
+  {
+    return pane_tab_drop.pane;
+  }
+  int pane_tab_drop_slot_for_test() const
+  {
+    return pane_tab_drop.slot;
+  }
+  int pane_tab_drop_edge_for_test() const
+  {
+    return pane_tab_drop.edge;
+  }
+  bool pane_tab_drop_on_strip_for_test() const
+  {
+    return pane_tab_drop.on_strip;
+  }
+  int pane_tab_scroll_index_for_test(int pane_index) const
+  {
+    if (pane_index < 0 || pane_index >= (int)panes.size())
+    {
+      return -1;
+    }
+    return panes[(size_t)pane_index].tab_scroll_index;
+  }
   // The breadcrumb winbar (test_winbar.cpp): the row the active pane spends on
   // it, the chain it shows, and the menu a crumb opens. The mouse and key entry
   // points are the ones the real dispatcher calls, so a case can press a crumb

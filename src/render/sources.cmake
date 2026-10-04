@@ -4,6 +4,7 @@ set(JOT_RENDER_SOURCES
   render/diagnostics.cpp
   render/debugger.cpp
   render/pane_edges.cpp
+  render/pane_tabs.cpp
   render/easter.cpp
   render/frame.cpp
   render/minimap.cpp

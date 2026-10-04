@@ -672,6 +672,11 @@ void Editor::handle_mouse(void *event_ptr)
 
   if (is_right_click)
   {
+    if (pane_tab_drag_active)
+    {
+      cancel_pane_tab_drag();
+      return;
+    }
     if (right_panel_resize_dragging)
     {
       end_right_panel_resize_drag();
@@ -692,6 +697,18 @@ void Editor::handle_mouse(void *event_ptr)
       close_context_menu();
     }
     return;
+  }
+
+  // A pane-tab drag owns the pointer until the button is released: the target
+  // may be another pane's strip, its body or one of its edges, so it cannot be
+  // handled where the press happened (the workspace strip's rule, per pane).
+  if (pane_tab_drag_active && (is_motion || is_click || is_click_release || is_middle_click))
+  {
+    if (handle_pane_tab_mouse(
+            event->x, event->y, is_click, is_click_release, is_middle_click, is_motion))
+    {
+      return;
+    }
   }
 
   if (pane_resize_dragging)
@@ -819,6 +836,20 @@ void Editor::handle_mouse(void *event_ptr)
 
   if ((is_click || is_motion) && handle_plugin_panel_mouse(event->x, event->y, is_click))
   {
+    return;
+  }
+
+  // A pane's own strip (a VSCode editor group) before the resize grab: a strip
+  // row can sit exactly on the shared border of two stacked panes, and the tab
+  // is what the pointer means when it is on one.
+  if ((is_click || is_click_release || is_middle_click || is_motion)
+      && handle_pane_tab_mouse(
+          event->x, event->y, is_click, is_click_release, is_middle_click, is_motion))
+  {
+    if (is_motion)
+    {
+      clear_debugger_breakpoint_hover();
+    }
     return;
   }
 

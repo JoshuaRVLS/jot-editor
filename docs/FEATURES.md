@@ -163,7 +163,10 @@ settles, so scrolling a long way does not grow the process.
 
 - Any number of open buffers, saved or unsaved.
 - Pane-local file tabs with click-to-switch and close buttons, plus reopen of
-  the last closed tab.
+  the last closed tab. In a split every pane draws its own strip
+  (`pane_tabs` = `auto` / `always` / `off`); drag a tab onto another pane's
+  strip to move it there, against a pane edge to split that pane around it, or
+  within its own strip to reorder.
 - Split panes in any direction; move focus or resize with keyboard or mouse.
 - A breadcrumb winbar over every code pane: the workspace root, the folders
   down to the file, then the symbols enclosing the caret. Every crumb opens its
@@ -1003,6 +1006,7 @@ it just left.
 | `Alt+1..9` / `Alt+0` | Switch to strip position 1..9 / the last tab |
 | `Alt+R`, then a letter | Jump to the tab painted with that letter |
 | `Alt+W` | Close current file tab |
+| drag a pane tab | Move it to another pane, split a pane around it, or reorder |
 | `Alt+N` | New buffer |
 | `Alt+S` | Save |
 | `Ctrl+B` or `Alt+B` | Toggle sidebar |
@@ -1051,6 +1055,25 @@ Settings: `tabline` (`true`) shows or hides the row, `tabline_auto_hide` (`0`)
 hides it again once there are that many buffers or fewer (`0` never hides it),
 and `tabline_insert` (`after_current`, or `start` / `end`) decides where a buffer
 the strip has not seen before lands in the order.
+
+### Pane tab strips (editor groups)
+
+When the pane area is split, every pane draws its own tab strip on its first
+row, below the workspace strip: its own list, with the file glyph, the modified
+dot and a close control on every tab. Clicking a tab switches that pane and
+focuses it, the wheel scrolls a window of tabs when they overflow (`‹N` /
+`›+N` chips report the rest), and the middle button closes a buffer. The strip
+spends its row only where the workspace strip cannot speak for the pane, so a
+lone pane with the workspace strip on top never paints the same list twice.
+`pane_tabs` picks: `auto` (the default) is that rule, `always` shows the row
+for every pane, and `off` never.
+
+Dragging a tab is how the layout gets arranged, VSCode-style: releasing over
+another pane's strip moves the tab into that pane's list, releasing over a
+pane's body joins it at the end, and releasing against a pane's edge splits
+that pane in that direction and opens the tab in the new group. A pane whose
+last tab leaves closes with it, and a drop back into the tab's own pane
+reorders the list.
 
 ### The breadcrumb winbar
 

@@ -158,18 +158,41 @@ private:
     return pane.y + pane_header_height(pane) - pane_winbar_height(pane);
   }
 
-  // The chrome rows a pane spends above its text: the winbar when this pane has
-  // one, nothing otherwise (the workspace strip is global and sits above the
-  // panes, not inside them). update_pane_layout stores the answer on the pane;
-  // everything else reads it back through pane_content_top / pane_viewport_h
-  // (jot/model/panes.h), so the rule lives in one place.
+  // Whether this pane draws its own tab strip (a VSCode editor group).
+  // `pane_tabs=auto` spends the row only where the workspace strip cannot
+  // speak for the pane: while the pane area is split (the workspace strip acts
+  // on the focused pane alone, so each group needs its own list), or when the
+  // workspace strip is turned off (`tabline = false`) and the pane's list is
+  // the only one left. A lone pane with the workspace strip on top paints no
+  // second row, because that would be the same list twice. `always` shows the
+  // row for every pane with a buffer, `off` for none.
+  bool pane_shows_tab_strip(const SplitPane &pane) const
+  {
+    if (pane_tabs_mode == PANE_TABS_OFF || pane.tab_buffer_ids.empty())
+    {
+      return false;
+    }
+    if (pane_tabs_mode == PANE_TABS_ALWAYS)
+    {
+      return true;
+    }
+    return pane.tab_buffer_ids.size() > 1 && (panes.size() > 1 || !tabline_visible);
+  }
+
+  // The row this pane spends on its own strip (0 when it shows none).
+  int pane_tab_strip_height(const SplitPane &pane) const
+  {
+    return pane_shows_tab_strip(pane) ? 1 : 0;
+  }
+
+  // The chrome rows a pane spends above its text: its own tab strip when it has
+  // one, plus the winbar when this pane has one (the workspace strip is global
+  // and sits above the panes, not inside them). update_pane_layout stores the
+  // answer on the pane; everything else reads it back through pane_content_top /
+  // pane_viewport_h (jot/model/panes.h), so the rule lives in one place.
   int pane_header_height(const SplitPane &pane) const
   {
-    if (!pane_has_winbar(pane))
-    {
-      return 0;
-    }
-    return tab_height + winbar_height;
+    return pane_tab_strip_height(pane) + (pane_has_winbar(pane) ? winbar_height : 0);
   }
 
   // The screen row a pane's chrome starts at, for the few things that anchor to

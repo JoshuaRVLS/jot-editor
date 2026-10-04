@@ -14,6 +14,7 @@ set(JOT_INPUT_SOURCES
   input/mouse/context_menu.cpp
   input/mouse/dispatcher.cpp
   input/mouse/menu_bar.cpp
+  input/mouse/pane_tabs.cpp
   input/mouse/panels.cpp
   input/mouse/telescope.cpp
   input/palette/input.cpp

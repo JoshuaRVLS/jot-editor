@@ -93,6 +93,7 @@ void Editor::apply_winbar_setting()
 void Editor::apply_config_live()
 {
   apply_winbar_setting();
+  apply_pane_tabs_setting();
   tab_size = std::clamp(config.get_int("tab_size", 2), 1, 16);
   show_indent_guides = config.get_bool("show_indent_guides", true);
   rainbow_brackets = config.get_bool("rainbow_brackets", true);
@@ -342,6 +343,8 @@ void Editor::initialize_state_defaults()
   }
   // The breadcrumb winbar (the row a pane spends on its symbol chain).
   apply_winbar_setting();
+  // Per-pane tab strips (VSCode editor groups).
+  apply_pane_tabs_setting();
   tab_size = config.get_int("tab_size", 2);
   show_indent_guides = config.get_bool("show_indent_guides", true);
   rainbow_brackets = config.get_bool("rainbow_brackets", true);

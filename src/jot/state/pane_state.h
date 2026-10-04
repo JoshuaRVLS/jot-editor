@@ -38,6 +38,22 @@ struct PaneState
   int tab_scroll_index = 0;
   int preview_buffer_index = 0;
 
+  // Per-pane tab strips (VSCode editor groups): when a pane shows one, which
+  // tab the pointer is over, and the live drag of one tab between panes. A drag
+  // starts on a strip tab and owns the pointer until the button is released;
+  // the drop is recomputed on every motion so the hint can name the pane, slot
+  // or edge the tab would land in.
+  PaneTabStripMode pane_tabs_mode = PANE_TABS_AUTO;
+  int pane_tab_hover_pane = -1;
+  int pane_tab_hover_index = -1;
+  bool pane_tab_drag_active = false;
+  int pane_tab_drag_pane = -1;
+  int pane_tab_drag_buffer = -1;
+  int pane_tab_drag_x = -1;
+  int pane_tab_drag_y = -1;
+  bool pane_tab_drag_moved = false;
+  PaneTabDrop pane_tab_drop;
+
   // Dragging a split boundary (pane_resize_*) and the zoom that expands one
   // pane over the others (VSCode's "maximize editor group").
   bool pane_resize_dragging = false;

@@ -156,10 +156,7 @@ void Editor::update_pane_layout()
   // is answered per pane by pane_header_height, so the height is published here
   // (like tab_height) and read back through pane_content_top.
   winbar_height = winbar_row_height();
-  for (SplitPane &pane : panes)
-  {
-    pane.header_height = pane_header_height(pane);
-  }
+  refresh_pane_headers();
 
   if (pane_zoom_active && panes.size() > 1 && current_pane >= 0
       && current_pane < (int)panes.size())
@@ -378,7 +375,12 @@ void Editor::split_pane_down()
   split_pane_direction(0, 1);
 }
 
-void Editor::split_pane_direction(int dx, int dy)
+// Splits `target_pane` along dx/dy and shows `buffer_id` in the new group. The
+// keyboard path (split_pane_direction below) inherits the target's tab list, so
+// both groups keep the same history; a drag-and-drop split passes false, so the
+// new group holds only the tab that was dropped on its edge.
+int Editor::split_pane_at(
+    int target_pane, int dx, int dy, int buffer_id, bool inherit_tabs, bool announce)
 {
   if (pane_zoom_active)
   {
@@ -392,6 +394,10 @@ void Editor::split_pane_direction(int dx, int dy)
     create_pane(0, 0, ui->get_render_width(), ui->get_height() - status_height, current_buffer);
   }
 
+  if (target_pane < 0 || target_pane >= (int)panes.size())
+  {
+    target_pane = current_pane;
+  }
   if (current_pane < 0 || current_pane >= (int)panes.size())
   {
     current_pane = 0;
@@ -416,15 +422,15 @@ void Editor::split_pane_direction(int dx, int dy)
     return find_leaf(node.second, pane_index);
   };
 
-  int leaf_node = find_leaf(pane_root, current_pane);
+  int leaf_node = find_leaf(pane_root, target_pane);
   if (leaf_node < 0)
   {
     set_message("Pane split failed: invalid pane tree");
-    return;
+    return -1;
   }
 
   const int old_pane = pane_tree[leaf_node].pane_index;
-  int new_buffer = panes[old_pane].buffer_id;
+  int new_buffer = buffer_id;
   if (new_buffer < 0 || new_buffer >= (int)buffers.size())
   {
     FileBuffer fb;
@@ -448,13 +454,22 @@ void Editor::split_pane_direction(int dx, int dy)
   new_pane.h = 1;
   new_pane.buffer_id = new_buffer;
   new_pane.active = false;
-  new_pane.tab_buffer_ids = panes[old_pane].tab_buffer_ids;
-  if (std::find(new_pane.tab_buffer_ids.begin(), new_pane.tab_buffer_ids.end(), new_buffer)
-      == new_pane.tab_buffer_ids.end())
+  if (inherit_tabs)
   {
+    new_pane.tab_buffer_ids = panes[old_pane].tab_buffer_ids;
+    if (std::find(new_pane.tab_buffer_ids.begin(), new_pane.tab_buffer_ids.end(), new_buffer)
+        == new_pane.tab_buffer_ids.end())
+    {
+      new_pane.tab_buffer_ids.push_back(new_buffer);
+    }
+    new_pane.tab_scroll_index = panes[old_pane].tab_scroll_index;
+  }
+  else
+  {
+    // A dropped tab arrives alone: the new group is the tab, not a copy of the
+    // group it was torn out of.
     new_pane.tab_buffer_ids.push_back(new_buffer);
   }
-  new_pane.tab_scroll_index = panes[old_pane].tab_scroll_index;
   panes.push_back(new_pane);
   int new_pane_index = (int)panes.size() - 1;
 
@@ -491,9 +506,15 @@ void Editor::split_pane_direction(int dx, int dy)
     node.second = new_leaf_id;
   }
 
-  // The new pane starts on the same view as the pane it was cut from; from
-  // here on both panes track their own cursor/scroll/selection.
-  capture_pane_view(current_pane);
+  // The new pane starts on the same view as the pane it was cut from when that
+  // pane is the focused one; from here on both panes track their own
+  // cursor/scroll/selection. A split of an unfocused pane (the drag-and-drop
+  // path) leaves the live view alone and lets restore_pane_view seed the new
+  // pane from the buffer's own position.
+  if (target_pane == current_pane)
+  {
+    capture_pane_view(current_pane);
+  }
   for (auto &pane : panes)
   {
     pane.active = false;
@@ -506,23 +527,44 @@ void Editor::split_pane_direction(int dx, int dy)
   pane_layout_mode = node.vertical ? PANE_LAYOUT_VERTICAL : PANE_LAYOUT_HORIZONTAL;
   update_pane_layout();
 
-  if (dx < 0)
+  if (announce)
   {
-    message = "Split pane left";
-  }
-  else if (dx > 0)
-  {
-    message = "Split pane right";
-  }
-  else if (dy < 0)
-  {
-    message = "Split pane up";
-  }
-  else
-  {
-    message = "Split pane down";
+    if (dx < 0)
+    {
+      message = "Split pane left";
+    }
+    else if (dx > 0)
+    {
+      message = "Split pane right";
+    }
+    else if (dy < 0)
+    {
+      message = "Split pane up";
+    }
+    else
+    {
+      message = "Split pane down";
+    }
   }
   needs_redraw = true;
+  return new_pane_index;
+}
+
+// The keyboard splits: the focused pane splits around its own buffer, and the
+// new group keeps the source's tab history.
+void Editor::split_pane_direction(int dx, int dy)
+{
+  if (panes.empty())
+  {
+    create_pane(0, 0, ui->get_render_width(), ui->get_height() - status_height, current_buffer);
+  }
+  if (current_pane < 0 || current_pane >= (int)panes.size())
+  {
+    current_pane = 0;
+  }
+  const int source = current_pane;
+  const int buffer_id = panes[(size_t)source].buffer_id;
+  (void)split_pane_at(source, dx, dy, buffer_id, true, true);
 }
 
 void Editor::close_pane()

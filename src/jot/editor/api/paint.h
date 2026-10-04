@@ -83,6 +83,37 @@ private:
   int tabline_scroll_chip_at(const FileTabLayout &layout, int x) const;
   int tabline_drop_position(const FileTabLayout &layout) const;
   int tabline_drop_position_x(const FileTabLayout &layout) const;
+  // The pane's own tab strip (a VSCode editor group, src/render/pane_tabs.cpp).
+  // build_pane_tab_layout measures which tabs fit and where; the painter, the
+  // mouse hit-tests and the drop markers all read that one layout. The strip
+  // only exists while pane_shows_tab_strip is true (pane_tabs=auto by default:
+  // a lone pane leaves the row to the workspace strip).
+  PaneTabLayout build_pane_tab_layout(int pane_index) const;
+  void render_pane_tab_strip(int pane_index);
+  // The drop target the live drag would land in, painted after every pane so it
+  // reads over the text: a slot marker rides in the target's strip (drawn by
+  // render_pane_tab_strip), a body insert outlines the pane, and an edge target
+  // inks the edge the split would take.
+  void render_pane_tab_drag_hint();
+  int pane_tab_position_at(const PaneTabLayout &layout, int x) const;
+  int pane_tab_scroll_chip_at(const PaneTabLayout &layout, int x) const;
+  int pane_tab_drop_x(const PaneTabLayout &layout) const;
+  // The strip's mouse input (src/input/mouse/pane_tabs.cpp), the tabline's
+  // shape per pane: which pane's strip row a point is on, the press that both
+  // switches a tab and arms a drag, the motions that recompute the drop target,
+  // and the release that performs it. A live drag owns every event until it
+  // ends, because the drop can land in another pane entirely.
+  bool pane_tab_strip_row_at(int x, int y, int &pane_index) const;
+  bool handle_pane_tab_mouse(
+      int x, int y, bool is_click, bool is_click_release, bool is_middle_click, bool is_motion);
+  // The wheel over a strip: scrolls its tab window and claims the notch either
+  // way (a strip with nothing hidden still eats it rather than scrolling the
+  // buffer behind the row).
+  bool handle_pane_tab_scroll(int x, int y, bool is_scroll_up, bool is_scroll_down);
+  PaneTabDrop pane_tab_drop_target_at(int x, int y) const;
+  void update_pane_tab_drag(int x, int y);
+  void finish_pane_tab_drag();
+  void cancel_pane_tab_drag();
   void render_panes();
   void render_pane_resize_guides();
   void render_easter_egg();
