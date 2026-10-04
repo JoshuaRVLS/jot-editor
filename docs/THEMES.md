@@ -3,41 +3,39 @@
 Themes are native JSON data. The primary location is
 `~/.config/jot/configs/colors/`; legacy `~/.config/jot/themes/` is also scanned.
 
-jot ships four themes: its own pair, and a port of kepano's Flexoki.
+jot ships four themes: a port of Binaryify's One Dark Pro, jot's own light
+scheme, and a port of kepano's Flexoki.
 
 | Theme | Look |
 |---|---|
-| `jot-dark` (default) - *obsidian* | pitch black (`#000000`) with a compact chrome ladder, a deep multi-hue ink for each syntax family and a single saturated blue accent |
+| `jot-dark` (default) - *One Dark Pro* | Atom's One Dark, taken slot by slot: the `#282c34` ground and `#abb2bf` ink, purple keywords, green strings, blue functions, orange numbers and the One Dark Pro panel grey |
 | `jot-light` - *mochi milk* | its own warm pastel pair - strawberry jam, matcha and ramune blue on cream paper (`#fffaf4`) |
 | `flexoki-dark` | Flexoki's ink palette: black (`#100f0f`) paper, base-200 text, green keywords, cyan strings |
 | `flexoki-light` | the same scheme on Flexoki paper (`#fffcf0`) with the 600-step accents |
 
-### jot-dark - "obsidian"
+### jot-dark - "One Dark Pro"
 
-A true black ground (`#000000`) - the deepest surface a terminal can paint, so
-the window is all code and no box - carrying a full-strength ink for each
-syntax family rather than a wash of one hue: **orchid** (`#c39cf7`) for
-keywords; **violet** (`#d0b0ff`) for control flow; **deep violet** (`#a98ee0`)
-for storage keywords; **ember** (`#f0a35e`) for numbers and constants;
-**jade** (`#8bd68f`) for strings and hints; **teal** (`#66d9c8`) for string
-escapes; **azure** (`#7ab8ff`) for functions, builtins and diagnostics info;
-**sky** (`#8cc4ff`) for method calls; **gold** (`#e6c069`) for types,
-constructors and namespaces; **pale gold** (`#f2cd82`) for builtin types;
-**coral** (`#f47a8d`) for tags and errors; **amber** (`#d9a95c`) for tag
-attributes; **cyan** (`#6fd3e0`) for members, imported modules and renames; and
-**ochre** (`#e3a95f`) for directives, macro constants and messages. Text is a
-cool near-white (`#e6ebf5`); comments (`#7d8799`), punctuation (`#8593a8`) and
-operators (`#93a1b5`) are one deep tint of it, so a file reads as ink with many
-quiet places for the eye to land.
+A port of Binaryify's [One Dark Pro](https://github.com/Binaryify/OneDark-Pro)
+for VS Code (MIT licensed), taken slot by slot from its default theme rather
+than approximated: the `#282c34` editor ground and `#abb2bf` ink, **purple**
+(`#c678dd`) keywords, **green** (`#98c379`) strings, **orange** (`#d19a66`)
+numbers, constants and attributes, **blue** (`#61afef`) functions and method
+calls, **yellow** (`#e5c07b`) types, constructors and imported modules,
+**red** (`#e06c75`) variables, parameters, properties and tags, **cyan**
+(`#56b6c2`) string escapes and builtins, and the dim grey (`#7f848e`) comments.
+Punctuation and operators wear the ink itself, as upstream leaves them.
 
-The chrome is deliberately compact and darker still: sidebar and winbar
-`#05060a`, status line `#070910`, floats and menus `#0a0c12`, the cursor row
-`#0b0d13`, the selected row `#263146`, each a few steps off the editor's own
-ground. The frame recedes into the page and the border colour (`#4f5c78`)
-remains visible against the black ground without adding outer boxes. The blue
-(`#58a6ff`) is the one saturated colour in the scheme, and it is spent where a
-hand goes: the active pane border, the cursor, the cursor line number, the
-focused terminal tab and the selected row of every list.
+The chrome trades the code's ground for the theme's own panel surface
+(`#21252b`): sidebar, winbar, tab strip and status line all sit one step behind
+the editor, with the cursor row on `#2c313c` and the picker's query field on
+`#1d1f23`. The selection grey (`#3e4452`) is the theme's panel border raised to
+a band - the sidebar, the completion menu, the file finder and the visual
+selection all share it. One Dark Pro's blue (`#61afef`) is spent where a hand
+goes: the active pane border, the cursor line number and the focused terminal
+tab, with the cursor itself on the editor's own `#528bff`. The frame stays
+visible against the ground through the `#747d91` separator rather than
+upstream's near-invisible `#181a1f` border, because a terminal window has no
+shadows to separate its panes.
 
 ### jot-light - "mochi milk"
 
@@ -51,12 +49,12 @@ The surfaces (sidebar `#fdf1f2`, status line
 `#fbe9e7`, selection `#f8d8e3`) are blush tints of the same cream, so the whole
 window reads as one pastel confection rather than white boxes on white.
 
-The two jot themes are one design on two grounds: each carries its own
-full-strength ink per syntax family and a single saturated accent - the blue on
-the black ground, the strawberry jam on paper - spent on the active pane
-border, the cursor, the cursor line number and the focused terminal tab. The
-chrome reads as jot's own scheme rather than a neutral grey editor with a blue
-border.
+Both jot themes are full-strength palettes rather than one design on two
+grounds. `jot-light` keeps its single saturated accent - the strawberry jam -
+spent on the active pane border, the cursor, the cursor line number and the
+focused terminal tab, and every ink is darkened until it clears 4.5:1 on the
+paper it sits on. `jot-dark` is One Dark Pro's own palette and its own blue, so
+switching between the two is a change of design language, not just of ground.
 
 The Flexoki pair is [Flexoki](https://stephango.com/flexoki) by kepano (MIT
 licensed), ported slot by slot from the official VS Code and Helix themes: the
@@ -77,7 +75,7 @@ the change keeps working. Any other name now needs a file of its own.
 Apply with `:colorscheme jot-light` or from Lua:
 
 ```lua
-set_hl("Normal", { fg = "#e6ebf5", bg = "#000000" })
+set_hl("Normal", { fg = "#abb2bf", bg = "#282c34" })
 set_hl("Keyword", { fg = 215 }) -- an xterm index still works
 ```
 
@@ -90,9 +88,9 @@ is neither is ignored, leaving the slot at whatever it inherited. Use `-1` or
 
 ```json
 {
-  "Normal": {"fg": "#e6ebf5", "bg": "#000000"},
-  "Comment": {"fg": "#7d8799", "bg": "#000000"},
-  "Keyword": {"fg": "#c39cf7", "bg": "#000000"},
+  "Normal": {"fg": "#abb2bf", "bg": "#282c34"},
+  "Comment": {"fg": "#7f848e", "bg": "#282c34"},
+  "Keyword": {"fg": "#c678dd", "bg": "#282c34"},
   "Visual": {"fg": 231, "bg": 240}
 }
 ```
@@ -249,19 +247,19 @@ A minimal annotated theme:
 
 ```json
 {
-  "Normal": {"fg": "#e6ebf5", "bg": "#000000"},         // plain text / editor background
-  "Comment": {"fg": "#7d8799", "bg": "#000000"},        // comments
-  "keyword": {"fg": "#c39cf7", "bg": "#000000"},        // all keywords
-  "keyword.control": {"fg": "#d0b0ff", "bg": "#000000"}, // if/for/while - override control
-  "string": {"fg": "#8bd68f", "bg": "#000000"},         // string literals
-  "number": {"fg": "#f0a35e", "bg": "#000000"},         // numbers, constants fall back here
-  "function": {"fg": "#7ab8ff", "bg": "#000000"},       // function names
-  "function.method": {"fg": "#8cc4ff", "bg": "#000000"}, // method names (optional: keep = function)
-  "type": {"fg": "#e6c069", "bg": "#000000"},           // type identifiers
-  "property": {"fg": "#6fd3e0", "bg": "#000000"},       // obj.field members
-  "punctuation": {"fg": "#8593a8", "bg": "#000000"},    // dim the brackets/semicolons
-  "tag": {"fg": "#f47a8d", "bg": "#000000"},            // HTML/JSX tags
-  "attribute": {"fg": "#d9a95c", "bg": "#000000"}       // HTML/JSX tag attributes
+  "Normal": {"fg": "#abb2bf", "bg": "#282c34"},         // plain text / editor background
+  "Comment": {"fg": "#7f848e", "bg": "#282c34"},        // comments
+  "keyword": {"fg": "#c678dd", "bg": "#282c34"},        // all keywords
+  "keyword.control": {"fg": "#c678dd", "bg": "#282c34"}, // if/for/while - override control
+  "string": {"fg": "#98c379", "bg": "#282c34"},         // string literals
+  "number": {"fg": "#d19a66", "bg": "#282c34"},         // numbers, constants fall back here
+  "function": {"fg": "#61afef", "bg": "#282c34"},       // function names
+  "function.method": {"fg": "#61afef", "bg": "#282c34"}, // method names (optional: keep = function)
+  "type": {"fg": "#e5c07b", "bg": "#282c34"},           // type identifiers
+  "property": {"fg": "#e06c75", "bg": "#282c34"},       // obj.field members
+  "punctuation": {"fg": "#abb2bf", "bg": "#282c34"},    // punctuation carries no hue
+  "tag": {"fg": "#e06c75", "bg": "#282c34"},            // HTML/JSX tags
+  "attribute": {"fg": "#d19a66", "bg": "#282c34"}       // HTML/JSX tag attributes
 }
 ```
 

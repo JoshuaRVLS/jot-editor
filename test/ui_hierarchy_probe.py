@@ -46,8 +46,12 @@ def main():
                 results.append(("80 columns retain sidebar", any("│" in line[:26] for line in lines[2:-1])))
                 results.append(("tooling outranks social chrome", "TOOLING_READY" in lines[-1]
                                 and "SOCIAL_SECONDARY" not in lines[-1]))
-                results.append(("selected tab has stronger band", any(1000 + 0x263146 in row for row in screen.bg)))
-                results.append(("separator uses visible ink", any(1000 + 0x4F5C78 in row for row in screen.fg)))
+                # One Dark Pro's active tab is the editor's own surface on the strip's
+                # panel grey, so the check is that the strip row carries both.
+                results.append(("selected tab wears the editor band",
+                                any(1000 + 0x282C34 in screen.bg[0])
+                                and any(1000 + 0x21252B in screen.bg[0])))
+                results.append(("separator uses visible ink", any(1000 + 0x747D91 in row for row in screen.fg)))
             if "--dump" in sys.argv:
                 print(text)
     for label, passed in results:

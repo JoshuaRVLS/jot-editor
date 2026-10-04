@@ -42,16 +42,16 @@ from pty_screen import run_in_pty  # noqa: E402
 
 # The jot-dark groups the feature resolves: DiagnosticInfo for TODO,
 # DiagnosticError for FIXME. A truecolour cell is tagged as 1000 + 0xRRGGBB.
-INFO = 1000 + 0x7AB8FF
-ERROR = 1000 + 0xFF7B8A
+INFO = 1000 + 0x61AFEF
+ERROR = 1000 + 0xE06C75
 # jot-dark's PmenuSel pair: the selected picker row keeps the theme's own
 # selection ink, because the family colours are too close to it to read.
-SELECTION_FG = 1000 + 0x000000
-SELECTION_BG = 1000 + 0x58A6FF
-# The theme's normal background. Both bands are mid-light, so the contrast
-# pick (upstream's maximize_contrast) lands on this dark ink, not on #e6ebf5.
+SELECTION_FG = 1000 + 0xD7DAE0
+SELECTION_BG = 1000 + 0x3E4452
+# The theme's normal background. Both bands are light enough that the contrast
+# pick (upstream's maximize_contrast) lands on this dark ink, not on #abb2bf.
 # Tagged like every truecolour cell (1000 + 0xRRGGBB).
-INK = 1000 + 0x000000
+INK = 1000 + 0x282C34
 
 SOURCE = """\
 local a = 1
@@ -273,7 +273,10 @@ def main() -> int:
     if row is None:
         failures.append("backspace on the hidden colon did not delete the colon")
     else:
-        for col in range(screen.cols):
+        # From the comment's own first column: the caret sits on this line, so
+        # the gutter's number wears the theme's accent blue - the same value
+        # DiagnosticInfo takes - and it is not evidence either way.
+        for col in range(text.index("--"), screen.cols):
             if screen.bg[row][col] == INFO or screen.fg[row][col] == INFO:
                 failures.append("the chip survived the colon's deletion")
                 break

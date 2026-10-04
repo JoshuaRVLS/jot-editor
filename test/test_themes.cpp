@@ -1,6 +1,6 @@
-// The bundled themes: jot-dark ("obsidian") and jot-light ("mochi milk"),
-// the schemes jot maintains, plus the flexoki pair ported from kepano's Flexoki
-// palette.
+// The bundled themes: jot-dark (Binaryify's One Dark Pro), jot-light ("mochi
+// milk"), the schemes jot maintains, plus the flexoki pair ported from kepano's
+// Flexoki palette.
 //
 // A theme is data that fails quietly. A typo'd group name paints nothing and is
 // invisible until someone notices one token type is the wrong colour; a name
@@ -12,7 +12,7 @@
 // that came out of the engine -- plus the two names that used to be bundled
 // (`dark`, `light`) and still have to work.
 //
-// Both shipped themes name exact 24-bit colours ("#c39cf7") rather than xterm
+// Both shipped themes name exact 24-bit colours ("#c678dd") rather than xterm
 // palette indices, so a case that wants a slot's colour reads it back through
 // the same conversion the renderer uses instead of comparing an index.
 #include "editor.h"
@@ -206,7 +206,7 @@ namespace
   };
 } // namespace
 
-TEST_CASE("jot-dark applies the obsidian scheme", "[jot][theme]")
+TEST_CASE("jot-dark carries One Dark Pro's palette", "[jot][theme]")
 {
   Editor &e = probe_editor();
   REQUIRE(e.apply_theme_for_test("jot-dark"));
@@ -216,27 +216,26 @@ TEST_CASE("jot-dark applies the obsidian scheme", "[jot][theme]")
   // Exact colours, not palette entries: the whole point of the hex form is that
   // the scheme is authored in 24-bit space.
   REQUIRE(jot_ui::is_exact_color(t.fg_default));
-  REQUIRE(rgb_of(t.fg_default) == 0xE6EBF5); // cool near-white ink, not paper white
-  REQUIRE(rgb_of(t.bg_default) == 0x000000); // pitch black, the deepest ground a theme can name
+  REQUIRE(rgb_of(t.fg_default) == 0xABB2BF); // One Dark Pro's grey ink
+  REQUIRE(rgb_of(t.bg_default) == 0x282C34); // its editor ground
   REQUIRE(jot_ui::is_exact_color(t.bg_default));
-  REQUIRE(rgb_of(t.fg_keyword) == 0xC39CF7); // orchid
-  REQUIRE(rgb_of(t.fg_string) == 0x8BD68F);  // jade
-  REQUIRE(rgb_of(t.fg_function_method) == 0x8CC4FF);
-  REQUIRE(rgb_of(t.fg_number) == 0xF0A35E); // ember
+  REQUIRE(rgb_of(t.fg_keyword) == 0xC678DD);         // purple
+  REQUIRE(rgb_of(t.fg_string) == 0x98C379);          // green
+  REQUIRE(rgb_of(t.fg_function_method) == 0x61AFEF); // blue
+  REQUIRE(rgb_of(t.fg_number) == 0xD19A66);          // orange
   // More of the palette is spoken for than the five inks the scheme used to
-  // carry: property/module and tag now have hues of their own rather than
-  // borrowing blue and orchid.
-  REQUIRE(rgb_of(t.fg_field) == 0x6FD3E0);
-  REQUIRE(rgb_of(t.fg_module) == 0x6FD3E0);
-  REQUIRE(rgb_of(t.fg_tag) == 0xF47A8D);
-  // The accent is the one saturated blue in the scheme, and it is spent where a
-  // hand goes: the active border, the cursor, the cursor line number.
-  REQUIRE(rgb_of(t.fg_active_border) == 0x58A6FF);
-  // The chrome sits a few steps off the editor's own ground, so the frame
-  // recedes and the code is the only thing with contrast. The status line is a
-  // hair above black rather than a grey band.
-  REQUIRE(rgb_of(t.bg_sidebar) == 0x05060A);
-  REQUIRE(rgb_of(t.bg_status) == 0x070910);
+  // carry: properties and tags take the variable red, modules and types the
+  // yellow.
+  REQUIRE(rgb_of(t.fg_field) == 0xE06C75);
+  REQUIRE(rgb_of(t.fg_module) == 0xE5C07B);
+  REQUIRE(rgb_of(t.fg_tag) == 0xE06C75);
+  // The accent is One Dark Pro's blue, spent where a hand goes: the active
+  // border, the cursor line number and the focused terminal tab.
+  REQUIRE(rgb_of(t.fg_active_border) == 0x61AFEF);
+  // The chrome sits on the theme's own panel surface, one step behind the
+  // editor's ground: the sidebar and the status line share it.
+  REQUIRE(rgb_of(t.bg_sidebar) == 0x21252B);
+  REQUIRE(rgb_of(t.bg_status) == 0x21252B);
 }
 
 TEST_CASE("Jot themes keep separators visible and selected rows distinct", "[jot][theme]")
@@ -279,13 +278,13 @@ TEST_CASE("The breadcrumb groups reach the Winbar slots", "[jot][theme]")
   REQUIRE(e.apply_theme_for_test("jot-dark"));
   const Theme &t = e.theme_for_test();
   REQUIRE(jot_ui::is_exact_color(t.bg_winbar));
-  REQUIRE(rgb_of(t.bg_winbar) == 0x05060A);
-  REQUIRE(rgb_of(t.fg_winbar) == 0xE6EBF5);
-  REQUIRE(rgb_of(t.fg_winbar_crumb) == 0x7D8799);
-  REQUIRE(rgb_of(t.bg_winbar_crumb) == 0x05060A);
-  REQUIRE(rgb_of(t.fg_winbar_separator) == 0x4F5C78);
-  REQUIRE(rgb_of(t.fg_winbar_hover) == 0xE6EBF5);
-  REQUIRE(rgb_of(t.bg_winbar_hover) == 0x263146);
+  REQUIRE(rgb_of(t.bg_winbar) == 0x21252B);
+  REQUIRE(rgb_of(t.fg_winbar) == 0xABB2BF);
+  REQUIRE(rgb_of(t.fg_winbar_crumb) == 0x7F848E);
+  REQUIRE(rgb_of(t.bg_winbar_crumb) == 0x21252B);
+  REQUIRE(rgb_of(t.fg_winbar_separator) == 0x515A6B);
+  REQUIRE(rgb_of(t.fg_winbar_hover) == 0xD7DAE0);
+  REQUIRE(rgb_of(t.bg_winbar_hover) == 0x323842);
 }
 
 TEST_CASE("jot-light is the same inks as jam and matcha on cream paper", "[jot][theme]")
@@ -376,9 +375,9 @@ TEST_CASE("Hex theme colours accept every documented form", "[jot][theme]")
   REQUIRE(rgb_of(t.fg_keyword) == 0xA0B0C0);
   REQUIRE(rgb_of(t.fg_cursor) == 0x00FF00);
   // Unparseable colours are ignored: the slot keeps what the base theme set.
-  REQUIRE(rgb_of(t.fg_comment) == 0x7D8799);
-  REQUIRE(rgb_of(t.fg_string) == 0x8BD68F);
-  REQUIRE(rgb_of(t.fg_number) == 0xF0A35E);
+  REQUIRE(rgb_of(t.fg_comment) == 0x7F848E);
+  REQUIRE(rgb_of(t.fg_string) == 0x98C379);
+  REQUIRE(rgb_of(t.fg_number) == 0xD19A66);
 }
 
 TEST_CASE("A hex and an index can name the same slot value", "[jot][theme]")
@@ -445,7 +444,7 @@ TEST_CASE("The names the removed catalog used still resolve", "[jot][theme]")
   // is actually painted.
   REQUIRE(e.apply_theme_for_test("dark"));
   REQUIRE(e.theme_name_for_test() == "jot-dark");
-  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0x000000);
+  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0x282C34);
 
   REQUIRE(e.apply_theme_for_test("light"));
   REQUIRE(e.theme_name_for_test() == "jot-light");
@@ -459,7 +458,7 @@ TEST_CASE("The names the removed catalog used still resolve", "[jot][theme]")
   // than half-applying a palette.
   REQUIRE_FALSE(e.apply_theme_for_test("gruvbox"));
   REQUIRE(e.theme_name_for_test() == "jot-dark");
-  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0x000000);
+  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0x282C34);
 }
 
 TEST_CASE("A file the user writes under a legacy name beats the alias", "[jot][theme]")

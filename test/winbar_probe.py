@@ -42,8 +42,8 @@ CHEVRON = "\uf054"
 # The Winbar group's background and Normal's in jot-dark (the default scheme),
 # as the harness records a truecolour cell (1000 + rgb). The first bug here was
 # the whole group resolving to nothing, which left the row on the struct default
-# (palette 0, black) -- no band at all on a near-black theme.
-WINBAR_BG, PANE_BG = 1000 + 0x05060A, 1000 + 0x000000
+# (palette 0, black) -- no band at all on the theme's panel surface.
+WINBAR_BG, PANE_BG = 1000 + 0x21252B, 1000 + 0x282C34
 
 SOURCE = """// winbar probe
 class Widget

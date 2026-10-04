@@ -252,9 +252,9 @@ void Config::load_defaults()
   // signatures with more than one: a workspace scan per open and per save,
   // published as diagnostics (features/cpp_definitions.*).
   settings["cpp_definitions"] = "true";
-  // jot's dark theme ("obsidian": a true black ground, a cool near-white ink and
-  // one saturated blue accent) is what a fresh install opens in; jot-light is
-  // its paper counterpart.
+  // jot's dark theme (a slot-by-slot port of Binaryify's One Dark Pro: the
+  // #282c34 ground, the #abb2bf ink and the palette's blue accent) is what a
+  // fresh install opens in; jot-light is its paper counterpart.
   settings["color_scheme"] = "jot-dark";
   // The workspace tab strip (row 0): shown by default, hidden once there are
   // this many buffers or fewer (0 = never hide), and where a buffer the strip

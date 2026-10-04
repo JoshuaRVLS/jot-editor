@@ -6,10 +6,11 @@
 
 namespace
 {
-  // jot ships its own pair -- `jot-dark` ("obsidian": a true black ground with a
-  // cool near-white ink, a disciplined multi-hue syntax set and one saturated
-  // blue accent) and `jot-light` ("mochi milk": jam,
-  // matcha and ramune blue on warm cream paper) -- plus the flexoki
+  // jot ships two pairs: `jot-dark`, a slot-by-slot port of Binaryify's One
+  // Dark Pro (the #282c34 ground and #abb2bf ink, the palette's purple keyword
+  // / green string / blue function / orange number inks; MIT licensed,
+  // https://github.com/Binaryify/OneDark-Pro) and `jot-light` ("mochi milk":
+  // jam, matcha and ramune blue on warm cream paper), plus the flexoki
   // pair ported from kepano's Flexoki palette (flexoki-dark / flexoki-light, MIT
   // licensed, https://stephango.com/flexoki). The names the two jot themes
   // replaced -- `dark` and `light`, which the whole bundled catalog used to be

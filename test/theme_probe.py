@@ -47,12 +47,11 @@ def truecolour(rgb: int) -> int:
 # The backgrounds the bundled themes set for the editor body and the status
 # line. Both themes name exact 24-bit colours, so what has to arrive on the wire
 # is a 48;2 sequence -- the themes are the one place a palette index would be a
-# silent downgrade of the whole scheme. jot-dark's ground is a true black, so
-# its body cell is the one value here that also decodes to a palette entry; the
-# harness still tags it 1000 + rgb, which is how the assertion tells a themed
-# black from the ANSI default an unthemed editor would paint.
-JOT_DARK_BODY = truecolour(0x000000)
-JOT_DARK_STATUS = truecolour(0x070910)
+# silent downgrade of the whole scheme. jot-dark's ground is One Dark Pro's
+# #282c34, so the harness's 1000 + rgb tag is also what tells the themed cell
+# from the ANSI default an unthemed editor would paint (0).
+JOT_DARK_BODY = truecolour(0x282C34)
+JOT_DARK_STATUS = truecolour(0x21252B)
 JOT_LIGHT_BODY = truecolour(0xFFFAF4)
 JOT_LIGHT_STATUS = truecolour(0xFBE9E7)
 # The ported Flexoki pair: `black` and `base-950` for the dark editor, `paper`
@@ -63,7 +62,7 @@ FLEXOKI_LIGHT_BODY = truecolour(0xFFFCF0)
 FLEXOKI_LIGHT_STATUS = truecolour(0xF2F0E5)
 # The accent each theme inks its active pane border with, as it must appear in
 # the escape stream: 38;2;r;g;b, never 38;5;n.
-JOT_DARK_ACCENT = b"\x1b[38;2;88;166;255m"  # #58a6ff
+JOT_DARK_ACCENT = b"\x1b[38;2;97;175;239m"  # #61afef
 JOT_LIGHT_ACCENT = b"\x1b[38;2;202;36;108m"  # #ca246c
 FLEXOKI_DARK_ACCENT = b"\x1b[38;2;58;169;159m"  # #3aa99f, cyan-400
 FLEXOKI_LIGHT_ACCENT = b"\x1b[38;2;35;127;119m"  # #237f77, cyan-600
