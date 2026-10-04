@@ -148,6 +148,76 @@ public:
   {
     return command_palette_query;
   }
+  // The palette's model as the last refresh left it: what the grid has to show,
+  // what the explanation box says about a row, and where the selection sits.
+  int command_palette_result_count_for_test() const
+  {
+    return (int)command_palette_results.size();
+  }
+  std::string command_palette_label_for_test(int index) const
+  {
+    if (index < 0 || index >= (int)command_palette_results.size())
+    {
+      return {};
+    }
+    return command_palette_results[(size_t)index].label;
+  }
+  // The explanation box's sentence for a row: the curated help when there is
+  // any, the one-line detail otherwise (the renderer's own fallback).
+  std::string command_palette_help_for_test(int index) const
+  {
+    if (index < 0 || index >= (int)command_palette_results.size())
+    {
+      return {};
+    }
+    const CommandPaletteSuggestion &suggestion = command_palette_results[(size_t)index];
+    return suggestion.help.empty() ? suggestion.detail : suggestion.help;
+  }
+  std::string command_palette_aliases_for_test(int index) const
+  {
+    if (index < 0 || index >= (int)command_palette_results.size())
+    {
+      return {};
+    }
+    return command_palette_results[(size_t)index].aliases;
+  }
+  std::string command_palette_args_for_test(int index) const
+  {
+    if (index < 0 || index >= (int)command_palette_results.size())
+    {
+      return {};
+    }
+    return command_palette_results[(size_t)index].args;
+  }
+  int command_palette_selected_for_test() const
+  {
+    return command_palette_selected;
+  }
+  bool command_palette_open_for_test() const
+  {
+    return show_command_palette;
+  }
+  // The painted geometry: the same builder the renderer, the cursor placement
+  // and the mouse hit-test read, so a test asserts what is on screen.
+  CommandPaletteLayout command_palette_layout_for_test()
+  {
+    return build_command_palette_layout();
+  }
+  // Grid navigation and the palette's mouse path, through the real handlers.
+  void command_palette_move_for_test(int delta_rows, int delta_cols)
+  {
+    move_command_palette_selection(delta_rows, delta_cols);
+  }
+  bool command_palette_mouse_for_test(
+      int x, int y, bool is_click, bool scroll_up = false, bool scroll_down = false)
+  {
+    return handle_palette_mouse(x, y, is_click, scroll_up, scroll_down);
+  }
+  // Drops the bundled UI kit's handler for one surface, so the native renderer
+  // paints it: the kit is what normally runs, and the native fallback (a kit
+  // that errors or is absent) still has to paint the same cells.
+  // Defined in test_hooks.cpp: editor.h only forward-declares LuaAPI.
+  void clear_lua_ui_handler_for_test(const std::string &name);
   bool sidebar_visible_for_test() const
   {
     return show_sidebar;

@@ -254,6 +254,141 @@ namespace
     return nullptr;
   }
 
+  // Curated help for the palette's explanation box: the commands people reach
+  // for most get a real sentence, their aliases and their argument shape here;
+  // everything else falls back to its one-line detail. The box only ever shows
+  // what this says, so the strings stay factual and short.
+  struct CommandHelpMeta
+  {
+    const char *name;
+    const char *help;
+    const char *aliases;
+    const char *args;
+  };
+
+  const std::vector<CommandHelpMeta> &command_palette_help()
+  {
+    static const std::vector<CommandHelpMeta> help = {
+        {"w", "Write the current buffer to disk, or to the path given.", "write, save", "[path]"},
+        {"q", "Quit the editor, prompting when a buffer has unsaved changes.", "quit", ""},
+        {"q!", "Quit without saving, discarding unsaved changes.", "quit!", ""},
+        {"wq", "Write the current buffer and quit.", "x, xit", ""},
+        {"e", "Open a file or folder; a new path creates the file first.", "edit, open", "<path>"},
+        {"new", "Create an empty buffer.", "enew", ""},
+        {"bd", "Close the current tab and show the pane's next tab.", "bdelete, close", ""},
+        {"sp",
+         "Split the focused pane in two, showing the same buffer in both halves.",
+         "split",
+         ""},
+        {"vsp", "Split the focused pane into left and right halves.", "splitv", ""},
+        {"term", "Open, focus or hide the integrated terminal panel.", "terminal", ""},
+        {"termnew", "Open a new terminal tab.", "", ""},
+        {"termzoom", "Toggle the terminal across the whole pane area.", "", ""},
+        {"termfloat", "Toggle the floating terminal.", "", ""},
+        {"task", "Run a terminal task by name, or pick one when no name is given.", "", "[name]"},
+        {"taskrerun", "Run the last terminal task again.", "", ""},
+        {"gitpanel", "Open the git dock with files, branches, commits and stash views.", "", ""},
+        {"gitcommit", "Commit the staged changes with a message.", "", "<message>"},
+        {"gitcheckout",
+         "Check out a branch or commit; -b creates a new branch first.",
+         "",
+         "<branch|commit>"},
+        {"gitstage", "Stage a file, or the current file when no path is given.", "", "[path]"},
+        {"gitdiff", "Open a file's diff against HEAD in the right dock.", "", "[path]"},
+        {"grep",
+         "Search text across the workspace with live results.",
+         "projectsearch, searchall",
+         "<query>"},
+        {"find", "Open the file finder.", "ff", "[path]"},
+        {"theme", "Apply a color scheme by name.", "colorscheme, colo", "[name]"},
+        {"settings", "Open the settings menu over every config key.", "", ""},
+        {"help", "Show the keybinding help or the command list.", "h", "[topic]"},
+        {"line", "Jump to a line, or a line:column pair.", "goto", "<line>[:col]"},
+        {"format", "Format the current document with its formatter.", "", ""},
+        {"trim", "Strip trailing whitespace from every line.", "", ""},
+        {"replace", "Replace every match in the buffer, case-sensitively.", "", "<find> <replace>"},
+        {"surround", "Surround the selection or word with a pair.", "", "<pair>"},
+        {"fold", "Collapse the block around the caret.", "collapse", ""},
+        {"unfold", "Expand the collapsed block around the caret.", "expand", ""},
+        {"foldall", "Collapse every block in the buffer.", "", ""},
+        {"unfoldall", "Expand every collapsed block in the buffer.", "", ""},
+        {"reload", "Reload config, Lua plugins and tree-sitter, applying settings live.", "", ""},
+        {"reloadconfig", "Reload config.lua and re-apply the settings it defines.", "", ""},
+        {"reloadplugins", "Reload init.lua and every plugin.", "", ""},
+        {"plugins", "List the loaded plugins and the APIs they registered.", "", ""},
+        {"outlinepanel", "Toggle the symbol outline in the right dock.", "", ""},
+        {"debug", "Start a debug session on a program with GDB.", "", "[program]"},
+        {"debugpanel", "Toggle the debugger panel.", "", ""},
+        {"rest",
+         "Run the .http request at the cursor, a named request, or the last one.",
+         "",
+         "[name|last]"},
+        {"mkfile", "Create a file in the workspace.", "", "<path>"},
+        {"mkdir", "Create a folder in the workspace.", "", "<path>"},
+        {"rename", "Rename a file or folder in the workspace.", "", "<old> <new>"},
+        {"rm", "Delete a file or folder in the workspace.", "", "<path>"},
+        {"cppimpl", "Generate the missing method implementations for the current class.", "", ""},
+        {"cpppair", "Create the matching C++ header and source files.", "", "<path>"},
+        {"copypath", "Copy the current file's path to the clipboard.", "", ""},
+        {"stats", "Show line, word and character counts for the buffer.", "", ""},
+        {"datetime", "Insert the current date and time at the caret.", "", ""},
+        {"zen", "Toggle zen focus mode, which hides the side panels and centers the text.", "", ""},
+        {"minimap", "Toggle the minimap.", "", ""},
+        {"lazygit", "Open lazygit in a terminal tab rooted at the workspace.", "", ""},
+        {"wsymbols", "Search symbols across the workspace.", "workspacesymbols", ""},
+        {"wproblems", "List the workspace diagnostics.", "workspacediagnostics", ""},
+        {"definition",
+         "Jump to the definition of the symbol under the caret.",
+         "gd, lspdefinition",
+         ""},
+        {"hover", "Show the hover card for the symbol under the caret.", "lsphover", ""},
+        {"jumpback", "Jump back in the jumplist.", "lspback", ""},
+        {"jumplist", "Open the jumplist picker.", "", ""},
+    };
+    return help;
+  }
+
+  const CommandHelpMeta *find_command_help(const std::string &name)
+  {
+    const std::string key = to_lower_copy(name);
+    if (key.empty())
+    {
+      return nullptr;
+    }
+    for (const auto &help : command_palette_help())
+    {
+      if (key == help.name)
+      {
+        return &help;
+      }
+    }
+    // An alias resolves to the entry that owns it, so `write` explains itself
+    // exactly like `w` does: the aliases column is the map, and a command with
+    // no entry of its own (an alias that is also an ex command, like `goto` or
+    // `collapse`) still gets the sentence rather than the bare detail line.
+    for (const auto &help : command_palette_help())
+    {
+      const std::string aliases = to_lower_copy(help.aliases);
+      size_t start = 0;
+      while (!aliases.empty())
+      {
+        const size_t comma = aliases.find(',', start);
+        const std::string alias = trim_copy(
+            aliases.substr(start, comma == std::string::npos ? std::string::npos : comma - start));
+        if (alias == key)
+        {
+          return &help;
+        }
+        if (comma == std::string::npos)
+        {
+          break;
+        }
+        start = comma + 1;
+      }
+    }
+    return nullptr;
+  }
+
   int fuzzy_score(const std::string &value, const std::string &query)
   {
     if (query.empty())
@@ -360,7 +495,10 @@ void Editor::refresh_command_palette()
                         std::string category,
                         std::string detail,
                         int score,
-                        std::vector<int> match = {})
+                        std::vector<int> match = {},
+                        std::string help = {},
+                        std::string aliases = {},
+                        std::string args = {})
   {
     if (insert_text.empty())
     {
@@ -375,6 +513,9 @@ void Editor::refresh_command_palette()
     suggestion.label = std::move(label);
     suggestion.category = std::move(category);
     suggestion.detail = std::move(detail);
+    suggestion.help = std::move(help);
+    suggestion.aliases = std::move(aliases);
+    suggestion.args = std::move(args);
     suggestion.score = score;
     suggestion.match = std::move(match);
     command_palette_results.push_back(std::move(suggestion));
@@ -456,12 +597,16 @@ void Editor::refresh_command_palette()
       if (needle.empty() || score >= 0)
       {
         const CommandMeta *meta = find_command_meta(c);
+        const CommandHelpMeta *help = find_command_help(c);
         add_result(c,
                    c,
                    meta ? meta->category : "Command",
                    meta ? meta->detail : "Run command",
                    score + (meta ? meta->priority : 40),
-                   needle.empty() ? std::vector<int>{} : fuzzy_match_positions(c, needle));
+                   needle.empty() ? std::vector<int>{} : fuzzy_match_positions(c, needle),
+                   help ? help->help : "",
+                   help ? help->aliases : "",
+                   help ? help->args : "");
       }
     }
     if (lua_api)

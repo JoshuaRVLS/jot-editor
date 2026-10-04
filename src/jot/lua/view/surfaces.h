@@ -35,9 +35,19 @@ struct PaletteItemView
   std::string label;
   std::string category;
   std::string detail;
+  // The explanation box's raw material for the selected row: the curated
+  // sentence, its aliases and its argument syntax (all may be empty; `detail`
+  // is the fallback sentence).
+  std::string help;
+  std::string aliases;
+  std::string args;
   std::vector<int> match; // 0-based byte offsets into label matched by query
 };
 
+// The command palette's computed geometry, shared by the native renderer and
+// the Lua UI kit so both paint the same cells: the results grid (filled column
+// by column), the explanation box above it and the prompt row at the bottom.
+// See CommandPaletteLayout (jot/model/quick_pick.h) for the field semantics.
 struct PaletteView
 {
   std::string query;
@@ -45,6 +55,16 @@ struct PaletteView
   std::vector<PaletteItemView> results;
   int x = 0, y = 0, w = 0, h = 0;
   int screen_w = 0, screen_h = 0;
+  int prompt_y = 0;
+  int grid_x = 0, grid_y = 0;
+  int grid_cols = 1, grid_col_w = 1;
+  int grid_rows = 0, grid_first_row = 0, rows_per_col = 0;
+  int help_x = 0, help_y = 0, help_w = 0, help_h = 0;
+  int help_for = -1;
+  std::vector<std::string> help_lines;
+  // The explanation box's ink, so the Lua kit's frame matches the native one
+  // instead of guessing a float theme slot for it.
+  int help_fg = -1, help_bg = -1, help_border_fg = -1;
 };
 
 struct QuickPickItemView

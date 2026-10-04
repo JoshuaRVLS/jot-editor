@@ -224,6 +224,29 @@ bool LuaAPI::emit_command_palette(const PaletteView &view)
                        lua_set_int_field(L, t, "h", view.h);
                        lua_set_int_field(L, t, "screen_w", view.screen_w);
                        lua_set_int_field(L, t, "screen_h", view.screen_h);
+                       lua_set_int_field(L, t, "prompt_y", view.prompt_y);
+                       lua_set_int_field(L, t, "grid_x", view.grid_x);
+                       lua_set_int_field(L, t, "grid_y", view.grid_y);
+                       lua_set_int_field(L, t, "grid_cols", view.grid_cols);
+                       lua_set_int_field(L, t, "grid_col_w", view.grid_col_w);
+                       lua_set_int_field(L, t, "grid_rows", view.grid_rows);
+                       lua_set_int_field(L, t, "grid_first_row", view.grid_first_row);
+                       lua_set_int_field(L, t, "rows_per_col", view.rows_per_col);
+                       lua_set_int_field(L, t, "help_x", view.help_x);
+                       lua_set_int_field(L, t, "help_y", view.help_y);
+                       lua_set_int_field(L, t, "help_w", view.help_w);
+                       lua_set_int_field(L, t, "help_h", view.help_h);
+                       lua_set_int_field(L, t, "help_for", view.help_for);
+                       lua_set_int_field(L, t, "help_fg", view.help_fg);
+                       lua_set_int_field(L, t, "help_bg", view.help_bg);
+                       lua_set_int_field(L, t, "help_border_fg", view.help_border_fg);
+                       lua_newtable(L);
+                       for (size_t i = 0; i < view.help_lines.size(); i++)
+                       {
+                         lua_pushstring(L, view.help_lines[i].c_str());
+                         lua_rawseti(L, -2, (lua_Integer)i + 1);
+                       }
+                       lua_setfield(L, t, "help_lines");
                        lua_newtable(L);
                        const int arr = lua_gettop(L);
                        for (size_t i = 0; i < view.results.size(); i++)
@@ -234,6 +257,9 @@ bool LuaAPI::emit_command_palette(const PaletteView &view)
                          lua_set_str_field(L, it, "label", item.label);
                          lua_set_str_field(L, it, "category", item.category);
                          lua_set_str_field(L, it, "detail", item.detail);
+                         lua_set_str_field(L, it, "help", item.help);
+                         lua_set_str_field(L, it, "aliases", item.aliases);
+                         lua_set_str_field(L, it, "args", item.args);
                          lua_newtable(L);
                          const int m = lua_gettop(L);
                          for (size_t k = 0; k < item.match.size(); k++)

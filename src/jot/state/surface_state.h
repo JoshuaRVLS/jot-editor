@@ -17,8 +17,9 @@
 struct SurfaceState
 {
   bool show_command_palette = false;
-  // Scroll anchor of the visible palette window: the window only moves when
-  // selection leaves it, so hover over a visible row never shifts the list.
+  // Scroll anchor of the palette grid: the first visible row of every column.
+  // The window only moves when the selection leaves it, so a hover over a
+  // visible row never shifts the grid under the pointer.
   int command_palette_scroll = 0;
   std::string command_palette_query;
   // Query text remembered when the palette closes with Esc, restored on the

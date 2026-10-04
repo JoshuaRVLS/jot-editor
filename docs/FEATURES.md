@@ -1199,10 +1199,19 @@ against and cut at the first character that cannot be part of it.
 
 ## Command reference
 
-Open the palette with `Ctrl+P` and type an ex-style command. The prompt
-lives in the statusline row at the bottom of the screen, like Neovim's
-cmdline, with the fuzzy command/argument completion list popping up above
-it -- the buffer stays fully visible while you type.
+Open the palette with `Ctrl+P` and type an ex-style command. The prompt lives
+in the statusline row at the bottom of the screen, like Neovim's cmdline, and
+the fuzzy command/argument matches fill the width above it as a grid of
+columns (Helix's command menu): each row carries several commands, filled
+column by column, so a screenful of commands is one glance instead of a
+scroll. `↑`/`↓` walk the column, `←`/`→` the row across its columns,
+`PageUp`/`PageDown` move a screenful, and `Home`/`End` reach the ends of the
+list; the wheel walks rows three at a time, hovering selects the row under the
+pointer, and a click runs it. Whichever row is selected, an explanation box
+stands on the grid's top edge saying what the command does, with its aliases
+and its argument shape (`Aliases: write, save`, `Args: [path]`); a command
+without a curated entry shows its one-line detail instead, so the box never
+goes blank. The buffer stays fully visible while you type.
 
 **Files & sessions:** `:q` `:w` `:wq` `:x` `:e` `:new` `:bd` `:home`
 `:resume` `:recent` `:reopen` `:autosave`

@@ -61,6 +61,24 @@ namespace
     int set_cursor_count = 0;
     int last_cursor_x = -1;
     int last_cursor_y = -1;
+    // Every float open, in call order, so a multi-float surface (the command
+    // palette's grid + explanation box) can assert each frame separately.
+    struct RecordedOpen
+    {
+      int x = 0;
+      int y = 0;
+      int w = 0;
+      int h = 0;
+      std::string border;
+      int fg = -1;
+      int bg = -1;
+      int border_fg = -1;
+      bool strip = false;
+    };
+    std::vector<RecordedOpen> opens;
+    // Every buffer.set_lines body, in call order: the same reason -- two
+    // floats mean two bodies and only the last one lands in `lines`.
+    std::vector<std::vector<std::string>> line_sets;
   };
 
   StubState g;
@@ -114,6 +132,7 @@ namespace
       g.last_row1 = lua_tostring(L, -1);
     }
     lua_pop(L, 1);
+    g.line_sets.push_back(g.lines);
     return 0;
   }
 
@@ -127,23 +146,40 @@ namespace
   {
     luaL_checktype(L, 2, LUA_TTABLE);
     g.open_count++;
+    g.opens.push_back({});
+    StubState::RecordedOpen &opened = g.opens.back();
+    lua_getfield(L, 2, "col");
+    opened.x = (int)lua_tointeger(L, -1);
+    lua_pop(L, 1);
+    lua_getfield(L, 2, "row");
+    opened.y = (int)lua_tointeger(L, -1);
+    lua_pop(L, 1);
     lua_getfield(L, 2, "width");
     g.last_width = (int)lua_tointeger(L, -1);
+    opened.w = g.last_width;
     lua_pop(L, 1);
     lua_getfield(L, 2, "height");
     g.last_height = (int)lua_tointeger(L, -1);
+    opened.h = g.last_height;
     lua_pop(L, 1);
     lua_getfield(L, 2, "border");
     g.last_border = lua_isnil(L, -1) ? "" : lua_tostring(L, -1);
+    opened.border = g.last_border;
     lua_pop(L, 1);
     lua_getfield(L, 2, "fg");
     g.last_fg = (int)lua_tointeger(L, -1);
+    opened.fg = g.last_fg;
     lua_pop(L, 1);
     lua_getfield(L, 2, "bg");
     g.last_bg = (int)lua_tointeger(L, -1);
+    opened.bg = g.last_bg;
     lua_pop(L, 1);
     lua_getfield(L, 2, "border_fg");
     g.last_border_fg = lua_isnil(L, -1) ? -1 : (int)lua_tointeger(L, -1);
+    opened.border_fg = g.last_border_fg;
+    lua_pop(L, 1);
+    lua_getfield(L, 2, "strip");
+    opened.strip = lua_toboolean(L, -1) != 0;
     lua_pop(L, 1);
     lua_getfield(L, 2, "title_fg");
     g.last_title_fg = lua_isnil(L, -1) ? -1 : (int)lua_tointeger(L, -1);
@@ -388,31 +424,76 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(has_winbar);
   REQUIRE(has_winbar_menu);
 
-  // --- command palette ---
+  // --- command palette: Helix-style grid + explanation box ---
   push_module_field(L, 1, "command_palette");
-  // Height is what command_palette_layout produces for 3 results: max_items + 1.
-  push_box(L, 20, 5, 60, 4);
+  // The payload carries the whole geometry now: a 60-cell screen split into
+  // two 30-cell columns, 5 results over three rows (filled column by column),
+  // the explanation box for the selected row above the grid, and the prompt on
+  // the box's last row.
+  push_box(L, 0, 20, 60, 7);
   lua_pushstring(L, "open");
   lua_setfield(L, -2, "query");
   lua_pushinteger(L, 0);
   lua_setfield(L, -2, "selected");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "grid_x");
+  lua_pushinteger(L, 23);
+  lua_setfield(L, -2, "grid_y");
+  lua_pushinteger(L, 2);
+  lua_setfield(L, -2, "grid_cols");
+  lua_pushinteger(L, 30);
+  lua_setfield(L, -2, "grid_col_w");
+  lua_pushinteger(L, 3);
+  lua_setfield(L, -2, "grid_rows");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "grid_first_row");
+  lua_pushinteger(L, 3);
+  lua_setfield(L, -2, "rows_per_col");
+  lua_pushinteger(L, 26);
+  lua_setfield(L, -2, "prompt_y");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "help_x");
+  lua_pushinteger(L, 19);
+  lua_setfield(L, -2, "help_y");
+  lua_pushinteger(L, 40);
+  lua_setfield(L, -2, "help_w");
+  lua_pushinteger(L, 4);
+  lua_setfield(L, -2, "help_h");
+  lua_pushinteger(L, 0);
+  lua_setfield(L, -2, "help_for");
+  lua_pushinteger(L, 250);
+  lua_setfield(L, -2, "help_fg");
+  lua_pushinteger(L, 236);
+  lua_setfield(L, -2, "help_bg");
+  lua_pushinteger(L, 240);
+  lua_setfield(L, -2, "help_border_fg");
+  lua_newtable(L); // help_lines
+  lua_pushstring(L, "Open a file or folder; a new path creates the file first.");
+  lua_rawseti(L, -2, 1);
+  lua_pushstring(L, "Aliases: edit, open");
+  lua_rawseti(L, -2, 2);
+  lua_setfield(L, -2, "help_lines");
   lua_newtable(L); // results
-  for (int i = 1; i <= 3; i++)
+  const char *palette_labels[] = {"open", "open buffer", "close all", "write", "quit"};
+  for (int i = 1; i <= 5; i++)
   {
     lua_newtable(L);
-    lua_pushstring(L, i == 1 ? "open file" : (i == 2 ? "open buffer" : "close all"));
+    lua_pushstring(L, palette_labels[i - 1]);
     lua_setfield(L, -2, "label");
     lua_pushstring(L, "file");
     lua_setfield(L, -2, "category");
     lua_pushstring(L, "detail text");
     lua_setfield(L, -2, "detail");
     lua_newtable(L);
-    lua_pushinteger(L, 0);
-    lua_rawseti(L, -2, 1);
-    lua_pushinteger(L, 1);
-    lua_rawseti(L, -2, 2);
-    lua_pushinteger(L, 2);
-    lua_rawseti(L, -2, 3);
+    if (i == 1)
+    {
+      // Two matched cells on the first result only, so the emphasis count is
+      // unambiguous.
+      lua_pushinteger(L, 0);
+      lua_rawseti(L, -2, 1);
+      lua_pushinteger(L, 1);
+      lua_rawseti(L, -2, 2);
+    }
     lua_setfield(L, -2, "match");
     lua_rawseti(L, -2, i);
   }
@@ -421,27 +502,51 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
 
-  REQUIRE(g.open_count == 1);
-  REQUIRE(g.last_width == 60);
-  REQUIRE(g.last_height == 4);
-  REQUIRE(g.last_border == "none"); // statusline-integrated: no popup box
-  REQUIRE(g.last_fg == 250);
-  REQUIRE(g.last_bg == 235);
-  REQUIRE(g.last_border_fg == 240);
-  REQUIRE(g.last_title_fg == 215); // accent
-  REQUIRE(g.lines_count == 4);     // 3 items + cmdline prompt row
-  // match spans: 3 items x 3 matched chars each
-  REQUIRE(g.set_spans_count >= 1);
-  REQUIRE(g.spans_total == 9);
+  // Two floats: the grid (borderless, sitting on the statusline slot) and the
+  // explanation box (bordered, standing on the grid's top edge).
+  REQUIRE(g.open_count == 2);
+  REQUIRE(g.opens.size() == 2);
+  REQUIRE(g.opens[0].border == "none");
+  REQUIRE(g.opens[0].x == 0);
+  REQUIRE(g.opens[0].y == 23);
+  REQUIRE(g.opens[0].w == 60);
+  REQUIRE(g.opens[0].h == 4); // three grid rows + the prompt
+  REQUIRE(g.opens[0].strip);
+  REQUIRE(g.opens[1].border == "single");
+  REQUIRE(g.opens[1].x == 0);
+  REQUIRE(g.opens[1].y == 19);
+  REQUIRE(g.opens[1].w == 40);
+  REQUIRE(g.opens[1].h == 4);
+  REQUIRE(g.opens[1].fg == 250);
+  REQUIRE(g.opens[1].bg == 236);
+  REQUIRE(g.opens[1].border_fg == 240);
 
-  // --- palette re-present replaces the float; nil closes it ---
+  // The grid body fills column by column (rows_per_col = 3): row 0 holds
+  // results 1 and 4 ("open" and "write"), row 1 holds 2 and 5, row 2 holds 3.
+  REQUIRE(g.line_sets.size() == 2);
+  REQUIRE(g.line_sets[0].size() == 4); // 3 grid rows + prompt
+  REQUIRE(g.line_sets[0][0].rfind(" open", 0) == 0);
+  REQUIRE(g.line_sets[0][0].rfind(" write", 30) == 30);
+  REQUIRE(g.line_sets[0][1].rfind(" open buffer", 0) == 0);
+  REQUIRE(g.line_sets[0][1].rfind(" quit", 30) == 30);
+  REQUIRE(g.line_sets[0][2].rfind(" close all", 0) == 0);
+  REQUIRE(g.line_sets[0][3].rfind(":open", 0) == 0); // the prompt is last
+  // The explanation box's own body: the sentence and the aliases line.
+  REQUIRE(g.line_sets[1].size() == 2);
+  REQUIRE(g.line_sets[1][0].rfind("Open a file or folder", 0) == 0);
+  REQUIRE(g.line_sets[1][1].rfind("Aliases: edit, open", 0) == 0);
+  // Match emphasis: only the first cell's two matched characters.
+  REQUIRE(g.set_spans_count >= 1);
+  REQUIRE(g.spans_total == 2);
+
+  // --- palette re-present replaces both floats; nil closes them ---
   push_module_field(L, 1, "command_palette");
   lua_pushnil(L);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.close_count == 1);
-  REQUIRE(g.delete_count == 1);
+  REQUIRE(g.close_count == 2);
+  REQUIRE(g.delete_count == 2);
 
   // --- quick pick ---
   push_module_field(L, 1, "quick_pick");
@@ -473,7 +578,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 2);
+  REQUIRE(g.open_count == 3);
   REQUIRE(g.lines_count >= 3);
   REQUIRE(g.last_title.find("Files") != std::string::npos);
   REQUIRE(g.last_title.find("2/2") != std::string::npos);
@@ -542,7 +647,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 3);
+  REQUIRE(g.open_count == 4);
   REQUIRE(g.last_width == 96);
   REQUIRE(g.last_height == 18);
   REQUIRE(g.last_border != "none"); // modal panel: bordered float
@@ -612,7 +717,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 4);
+  REQUIRE(g.open_count == 5);
   REQUIRE(g.lines_count == 6);        // h-2 rows windowed from scroll=2
   REQUIRE(g.last_footer == "3-8/10"); // scroll+1 .. scroll+inner_h
   REQUIRE(g.last_title.find("Help") != std::string::npos);
@@ -630,7 +735,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 5);
+  REQUIRE(g.open_count == 6);
   // One row: the filename input. "Save As" moved to the panel title, and the
   // line that spelled out Enter/Esc is gone. The box is taller than the content
   // because the native layout reserves the height.
@@ -676,7 +781,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 7);
+  REQUIRE(g.open_count == 8);
   REQUIRE(g.lines_count == 1);
   // The panel has no title, so the row has to carry the keys: "quit anyway?"
   // alone leaves the answer unguessable (and the native painter, which is the
@@ -687,7 +792,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   lua_pushnil(L);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);
-  REQUIRE(g.close_count == 7);
+  REQUIRE(g.close_count == 8);
 
   // --- tree-sitter status modal ---
   push_module_field(L, 1, "tree_sitter_status");
@@ -717,7 +822,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 8);
+  REQUIRE(g.open_count == 9);
   REQUIRE(g.last_title.find("Tree-sitter") != std::string::npos);
   REQUIRE(g.lines_count == 14); // h-2 padded rows
   // No key hints; this list fits without scrolling, so there is no counter
@@ -775,7 +880,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 9);
+  REQUIRE(g.open_count == 10);
   REQUIRE(g.last_title.find("LSP Manager") != std::string::npos);
   REQUIRE(g.last_footer == "1 servers");
   REQUIRE(g.lines_count == 10);
@@ -901,7 +1006,7 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.open_count == 10);
+  REQUIRE(g.open_count == 11);
   REQUIRE(g.lines_count == 18);     // the borderless float's whole height
   REQUIRE(g.set_cursor_count == 1); // query focus caret
   REQUIRE(g.last_cursor_y == 2);
@@ -2034,13 +2139,14 @@ TEST_CASE("Completion keeps the matched prefix readable on the selected row")
 }
 
 // The palette's prompt row is the box's LAST row -- the statusline slot, which
-// is where place_command_palette_cursor puts the caret. The layout reserves one
-// row of headroom above the prompt even with nothing to show (the native
-// renderer puts its "No matches" line there), so the surface has to fill the box
-// it is given. It used to emit one row per match plus the prompt, which meant
-// with no matches the prompt was drawn on the box's first row while the caret
-// sat on its last: the input field appeared to move up and leave the cursor
-// behind.
+// is where place_command_palette_cursor puts the caret. The surface paints the
+// geometry the payload carries (grid rows, column width, scroll window, help
+// box), and with nothing to show it still spends a row saying why -- the native
+// renderer puts its "No matches" line there -- so the prompt never drifts off
+// the row the caret is placed on. The module used to emit one row per match
+// plus the prompt, which meant with no matches the prompt was drawn on the
+// box's first row while the caret sat on its last: the input field appeared to
+// move up and leave the cursor behind.
 TEST_CASE("Palette keeps the prompt on the box's last row")
 {
   g = StubState{};
@@ -2054,15 +2160,72 @@ TEST_CASE("Palette keeps the prompt on the box's last row")
   REQUIRE(lua_pcall(L, 0, 1, 0) == LUA_OK);
   REQUIRE(lua_istable(L, 1));
 
-  // One call of the real handler with `count` results in a `box_h`-tall box.
-  auto emit = [&](int box_h, int count, const char *query)
+  // One call of the real handler with the geometry the native side computes:
+  // `count` results in `cols` columns of `rows_per_col`, a visible grid window
+  // of `grid_rows` rows starting at `first`, the prompt on the box's last row
+  // (so the box is grid_rows + 1 tall), and the explanation box when `help`.
+  auto emit = [&](int grid_rows,
+                  int cols,
+                  int rows_per_col,
+                  int first,
+                  int count,
+                  const char *query,
+                  bool help)
   {
+    const int w = 60;
+    const int col_w = w / cols;
     push_module_field(L, 1, "command_palette");
-    push_box(L, 0, 0, 60, box_h);
+    push_box(L, 0, 0, w, grid_rows + 1);
     lua_pushstring(L, query);
     lua_setfield(L, -2, "query");
     lua_pushinteger(L, 0);
     lua_setfield(L, -2, "selected");
+    lua_pushinteger(L, 0);
+    lua_setfield(L, -2, "grid_x");
+    lua_pushinteger(L, 20);
+    lua_setfield(L, -2, "grid_y");
+    lua_pushinteger(L, cols);
+    lua_setfield(L, -2, "grid_cols");
+    lua_pushinteger(L, col_w);
+    lua_setfield(L, -2, "grid_col_w");
+    lua_pushinteger(L, grid_rows);
+    lua_setfield(L, -2, "grid_rows");
+    lua_pushinteger(L, first);
+    lua_setfield(L, -2, "grid_first_row");
+    lua_pushinteger(L, rows_per_col);
+    lua_setfield(L, -2, "rows_per_col");
+    lua_pushinteger(L, 21);
+    lua_setfield(L, -2, "prompt_y");
+    if (help)
+    {
+      lua_pushinteger(L, 0);
+      lua_setfield(L, -2, "help_x");
+      lua_pushinteger(L, 16);
+      lua_setfield(L, -2, "help_y");
+      lua_pushinteger(L, 40);
+      lua_setfield(L, -2, "help_w");
+      lua_pushinteger(L, 4);
+      lua_setfield(L, -2, "help_h");
+      lua_pushinteger(L, 0);
+      lua_setfield(L, -2, "help_for");
+      lua_pushinteger(L, 250);
+      lua_setfield(L, -2, "help_fg");
+      lua_pushinteger(L, 236);
+      lua_setfield(L, -2, "help_bg");
+      lua_pushinteger(L, 240);
+      lua_setfield(L, -2, "help_border_fg");
+      lua_newtable(L);
+      lua_pushstring(L, "does the thing");
+      lua_rawseti(L, -2, 1);
+      lua_pushstring(L, "Aliases: m");
+      lua_rawseti(L, -2, 2);
+      lua_setfield(L, -2, "help_lines");
+    }
+    else
+    {
+      lua_pushinteger(L, -1);
+      lua_setfield(L, -2, "help_for");
+    }
     lua_newtable(L);
     for (int i = 1; i <= count; i++)
     {
@@ -2079,39 +2242,61 @@ TEST_CASE("Palette keeps the prompt on the box's last row")
     lua_pop(L, 1);
   };
 
-  // Nothing matches: the box keeps its headroom row and the prompt is on the
-  // last one, exactly where the caret goes. (command_palette_layout gives h=2
-  // for an empty result set.)
+  // Nothing matches: the box keeps its headroom row, that row says why it is
+  // empty, and the prompt is on the last one, exactly where the caret goes.
   g.lines.clear();
-  emit(2, 0, "zzz");
+  emit(0, 1, 0, 0, 0, "zzz", false);
   REQUIRE(g.lines_count == 2);
   REQUIRE(g.lines.size() == 2);
   REQUIRE(g.lines[1].find(":zzz") != std::string::npos);
-  REQUIRE(g.lines[0].find(":zzz") == std::string::npos); // the headroom row is blank
+  REQUIRE(g.lines[0].find("No matches for \"zzz\"") != std::string::npos);
+  REQUIRE(g.lines[0].find(":zzz") == std::string::npos); // not a prompt copy
 
-  // One match: prompt still last, and the match sits above it.
+  // A scrolled two-column window: the grid fills column by column (four rows per
+  // column here), and the prompt is still the last row.
   g.lines.clear();
-  emit(2, 1, "ma");
-  REQUIRE(g.lines_count == 2);
-  REQUIRE(g.lines[0].find("match 1") != std::string::npos);
-  REQUIRE(g.lines[1].find(":ma") != std::string::npos);
-
-  // A box too short for every match: the list is clamped so the prompt keeps its
-  // row, instead of the matches filling the box and dropping the prompt off the
-  // bottom.
-  g.lines.clear();
-  emit(3, 8, "m");
+  emit(2, 2, 4, 2, 8, "m", false);
   REQUIRE(g.lines_count == 3);
+  REQUIRE(g.opens.back().y == 20); // the grid float starts where the grid does
+  REQUIRE(g.opens.back().h == 3);
+  REQUIRE(g.lines[0].rfind(" match 3", 0) == 0);   // column 0, first visible row
+  REQUIRE(g.lines[0].rfind(" match 7", 30) == 30); // column 1 takes over after it
+  REQUIRE(g.lines[1].find("match 4") != std::string::npos);
+  REQUIRE(g.lines[1].find("match 8") != std::string::npos);
   REQUIRE(g.lines[2].find(":m") != std::string::npos);
-  // ...and the rows above are matches, not prompt copies.
-  REQUIRE(g.lines[0].find(":m") == std::string::npos);
-  REQUIRE(g.lines[1].find(":m") == std::string::npos);
+  REQUIRE(g.lines[2].find("match ") == std::string::npos); // the prompt is not a match row
 
-  // Closing still works.
+  // The explanation box is a second, bordered float standing on the grid's top
+  // edge; it carries the selected row's sentence and aliases.
+  const int opens_before = g.open_count;
+  const int closes_before = g.close_count;
+  emit(2, 2, 4, 0, 8, "m", true);
+  REQUIRE(g.open_count == opens_before + 2);
+  REQUIRE(g.opens.back().border == "single");
+  REQUIRE(g.opens.back().x == 0);
+  REQUIRE(g.opens.back().y == 16);
+  REQUIRE(g.opens.back().w == 40);
+  REQUIRE(g.opens.back().h == 4);
+  REQUIRE(g.opens.back().border_fg == 240);
+  REQUIRE(g.line_sets.back().size() == 2);
+  REQUIRE(g.line_sets.back()[0].rfind("does the thing", 0) == 0);
+  REQUIRE(g.line_sets.back()[1].rfind("Aliases: m", 0) == 0);
+
+  // Re-presenting without help closes the box and leaves just the grid (the
+  // grid float itself is closed and reopened -- that is present_panel's
+  // replace -- and the box is closed on its own).
+  emit(2, 2, 4, 0, 8, "m", false);
+  REQUIRE(g.open_count == opens_before + 3);
+  REQUIRE(g.close_count == closes_before + 3);
+  REQUIRE(g.line_sets.back().size() == 3);
+
+  // Closing still works, and takes both floats with it.
+  const int closes_at_close = g.close_count;
   push_module_field(L, 1, "command_palette");
   lua_pushnil(L);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);
+  REQUIRE(g.close_count == closes_at_close + 1);
 
   lua_close(L);
 }

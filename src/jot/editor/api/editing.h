@@ -64,6 +64,11 @@ private:
   void handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_alt);
 
   void handle_command_palette(int ch, bool is_ctrl, bool is_shift, bool is_alt);
+  // Moves the palette's selection by grid steps: +1 row is the next item down
+  // in the same column, +1 column the same row in the next column. The grid
+  // geometry decides where the column ends, so a step never lands on a cell the
+  // strip did not paint.
+  void move_command_palette_selection(int delta_rows, int delta_cols);
   // Mouse for the command palette / quick pick / search panel: hover selects
   // a row (follow-window keeps the list put), click activates it, wheel
   // moves the selection. Returns true when the event was consumed.

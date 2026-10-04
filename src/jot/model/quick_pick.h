@@ -9,10 +9,43 @@ struct CommandPaletteSuggestion
   std::string label;
   std::string category;
   std::string detail;
+  // The explanation box's sentence(s) for the selected row. Empty falls back
+  // to `detail`, so every command carries an explanation.
+  std::string help;
+  // Alternate spellings ("write, save") and argument syntax ("<path>"), each
+  // shown as its own box line when not empty.
+  std::string aliases;
+  std::string args;
   int score = 0;
   // 0-based byte offsets into `label` matched by the query; used to
   // emphasize matched characters while rendering. Empty when not computed.
   std::vector<int> match;
+};
+
+// The command palette's painted geometry: the results grid (filled column by
+// column, like Helix's command menu), the explanation box for the selected row
+// above it, and the prompt row at the bottom. Built once per frame by
+// Editor::build_command_palette_layout() and read by the renderer, the mouse
+// hit-test and the Lua view, so a click and a painted cell cannot disagree.
+struct CommandPaletteLayout
+{
+  int screen_w = 0, screen_h = 0;
+  // The whole painted region, from the help box's top (or the grid's when
+  // there is none) through the prompt row.
+  int x = 0, y = 0, w = 0, h = 0;
+  int prompt_y = 0;
+  int grid_x = 0, grid_y = 0;
+  int grid_cols = 1;
+  int grid_col_w = 1;
+  int grid_rows = 0;      // grid rows on screen
+  int grid_first_row = 0; // first visible row (the scroll window)
+  int rows_per_col = 0;   // items in a full column: ceil(count / cols)
+  int result_count = 0;
+  // The explanation box. help_for is -1 when the selected row has no help,
+  // and the box rect is empty then.
+  int help_x = 0, help_y = 0, help_w = 0, help_h = 0;
+  int help_for = -1;
+  std::vector<std::string> help_lines; // wrapped, without the border rows
 };
 
 enum QuickPickKind

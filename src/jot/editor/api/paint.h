@@ -185,6 +185,10 @@ private:
   // bar honest without a repaint timer or a repaint while the text is unchanged.
   bool status_time_due_soon();
   void render_command_palette();
+  // The palette's painted geometry: the explanation box, the results grid and
+  // the prompt row. One builder for the renderer, the mouse hit-test and the
+  // Lua view, so a click lands on the cell that was painted.
+  CommandPaletteLayout build_command_palette_layout();
   void render_quick_pick();
   // Multi-chord plugin keymaps ("Ctrl+T N"): a prefix chord starts a pending
   // sequence and handle_which_key_input advances it, runs the final chord, or

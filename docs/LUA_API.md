@@ -696,13 +696,17 @@ end)
 `jot.ui.command_palette([query])` opens the command palette (no-op when it
 is already open), optionally pre-filling the query - the same entry point as
 `Ctrl+P`, so a Lua keymap can hand off to command completion. The palette is
-a centered floating panel with a result counter, highlighted input row,
-accent-bar selection, and an empty state; `Tab` completes, `Esc` closes, and
-`Up`/`Down`/`PageUp`/`PageDown`/`Home`/`End` move the selection. Query
-characters that matched a result are emphasized (bold, accent color) inside
-each label. Closing the palette with `Esc` (or toggling it off) remembers
-the input text, so the next `Ctrl+P` resumes the search where it was left;
-closing with an empty input clears the memory.
+a bottom-anchored menu: the prompt row is the statusline slot, the results
+fill the width above it as a column-major grid, and the selected row's
+explanation box (its sentence, aliases and argument shape) stands on the
+grid's top edge; with no results the grid keeps a row saying why it is empty.
+`Tab` completes, `Esc` closes, `Enter` runs, `Up`/`Down`/`Left`/`Right` move
+by row and column, and `PageUp`/`PageDown`/`Home`/`End` page and jump the
+selection; a click runs the row under the pointer and the wheel walks rows.
+Query characters that matched a result are emphasized (bold, accent color)
+inside each label. Closing the palette with `Esc` (or toggling it off)
+remembers the input text, so the next `Ctrl+P` resumes the search where it
+was left; closing with an empty input clears the memory.
 
 The quick-pick panels share the same visual language: bordered panel with
 result counter, divider under the input, accent-bar selection, and matched

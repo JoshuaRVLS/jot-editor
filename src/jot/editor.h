@@ -217,6 +217,7 @@ private:
 
   using PaneTreeNode = ::PaneTreeNode;
   using CommandPaletteSuggestion = ::CommandPaletteSuggestion;
+  using CommandPaletteLayout = ::CommandPaletteLayout;
   using QuickPickKind = ::QuickPickKind;
   using QuickPickItem = ::QuickPickItem;
   using SearchMatch = ::SearchMatch;

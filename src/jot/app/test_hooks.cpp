@@ -33,6 +33,14 @@ void Editor::raw_key_for_test(int raw_ch)
   handle_input(ev.key, ev.ctrl, ev.shift, ev.alt, ev.key);
 }
 
+void Editor::clear_lua_ui_handler_for_test(const std::string &name)
+{
+  if (lua_api)
+  {
+    lua_api->clear_lua_ui_handler(name);
+  }
+}
+
 bool Editor::lsp_install_plan_for_test(const std::string &name,
                                        std::string *id,
                                        std::string *script,

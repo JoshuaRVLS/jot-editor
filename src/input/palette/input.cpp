@@ -120,44 +120,34 @@ void Editor::handle_command_palette(int ch, bool is_ctrl, bool is_shift, bool is
     close_palette();
   }
   else if (ch == 1008)
-  { // Up
+  { // Up: the row above, in the same column
     refresh_command_palette();
-    if (!command_palette_results.empty())
-    {
-      command_palette_selected =
-          (command_palette_selected - 1 + (int)command_palette_results.size())
-          % (int)command_palette_results.size();
-      needs_redraw = true;
-    }
+    move_command_palette_selection(-1, 0);
   }
   else if (ch == 1009)
   { // Down
     refresh_command_palette();
-    if (!command_palette_results.empty())
-    {
-      command_palette_selected =
-          (command_palette_selected + 1) % (int)command_palette_results.size();
-      needs_redraw = true;
-    }
+    move_command_palette_selection(1, 0);
+  }
+  else if (ch == 1010)
+  { // Right: the same row in the next column
+    refresh_command_palette();
+    move_command_palette_selection(0, 1);
+  }
+  else if (ch == 1011)
+  { // Left
+    refresh_command_palette();
+    move_command_palette_selection(0, -1);
   }
   else if (ch == 1015)
-  { // PageUp
+  { // PageUp: a screenful up the same column
     refresh_command_palette();
-    if (!command_palette_results.empty())
-    {
-      command_palette_selected = std::max(0, command_palette_selected - 8);
-      needs_redraw = true;
-    }
+    move_command_palette_selection(-std::max(1, build_command_palette_layout().grid_rows), 0);
   }
   else if (ch == 1016)
   { // PageDown
     refresh_command_palette();
-    if (!command_palette_results.empty())
-    {
-      command_palette_selected =
-          std::min((int)command_palette_results.size() - 1, command_palette_selected + 8);
-      needs_redraw = true;
-    }
+    move_command_palette_selection(std::max(1, build_command_palette_layout().grid_rows), 0);
   }
   else if (ch == 1012)
   { // Home
@@ -261,53 +251,66 @@ void Editor::handle_command_palette(int ch, bool is_ctrl, bool is_shift, bool is
   }
 }
 
+void Editor::move_command_palette_selection(int delta_rows, int delta_cols)
+{
+  if (command_palette_results.empty())
+  {
+    return;
+  }
+  const CommandPaletteLayout layout = build_command_palette_layout();
+  const int rows = std::max(1, layout.rows_per_col);
+  const int cols = std::max(1, layout.grid_cols);
+  const int count = (int)command_palette_results.size();
+  const int sel = std::clamp(command_palette_selected, 0, count - 1);
+  const int col = std::clamp(sel / rows + delta_cols, 0, cols - 1);
+  const int row = std::clamp(sel % rows + delta_rows, 0, rows - 1);
+  int idx = col * rows + row;
+  if (idx >= count)
+  {
+    idx = count - 1;
+  }
+  command_palette_selected = idx;
+  needs_redraw = true;
+}
+
 bool Editor::handle_palette_mouse(int x, int y, bool is_click, bool is_scroll_up, bool is_scroll_down)
 {
   if (!show_command_palette || !ui)
   {
     return false;
   }
-  // Mirrors command_palette_layout(): full-width bottom panel, the match
-  // list at the top rows and the prompt row as the last row.
-  const int screen_w = ui->get_render_width();
-  const int screen_h = ui->get_height();
-  const int max_items = std::min(8, (int)command_palette_results.size());
-  const int h = std::clamp(max_items + 1, 2, std::max(2, screen_h - 1));
-  const int list_y = screen_h - h;
-  if (y < list_y || y >= list_y + h || x < 0 || x >= screen_w)
+  const CommandPaletteLayout layout = build_command_palette_layout();
+  if (y < layout.y || y > layout.prompt_y || x < layout.x || x >= layout.x + layout.w)
   {
     return false;
   }
 
   if (is_scroll_up || is_scroll_down)
   {
-    if (!command_palette_results.empty())
-    {
-      const int delta = is_scroll_up ? -3 : 3;
-      const int sel = std::clamp(
-          command_palette_selected + delta, 0, (int)command_palette_results.size() - 1);
-      if (sel != command_palette_selected)
-      {
-        command_palette_selected = sel;
-        needs_redraw = true;
-      }
-    }
+    move_command_palette_selection(is_scroll_up ? -3 : 3, 0);
     return true;
   }
 
   // Prompt row: consume (typing is keyboard-only).
-  if (y == list_y + h - 1)
+  if (y == layout.prompt_y)
   {
     return true;
   }
 
-  const int row = y - list_y;
-  if (row < 0 || row >= max_items)
+  // The explanation box, and the empty state's row: consume without selecting.
+  if (y < layout.grid_y || layout.grid_rows <= 0)
   {
     return true;
   }
-  const int idx = command_palette_scroll + row;
-  if (idx < 0 || idx >= (int)command_palette_results.size())
+
+  const int row = y - layout.grid_y;
+  const int col = (x - layout.grid_x) / std::max(1, layout.grid_col_w);
+  if (row < 0 || row >= layout.grid_rows || col < 0 || col >= layout.grid_cols)
+  {
+    return true;
+  }
+  const int idx = col * layout.rows_per_col + layout.grid_first_row + row;
+  if (idx < 0 || idx >= layout.result_count)
   {
     return true;
   }
