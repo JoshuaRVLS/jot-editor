@@ -85,7 +85,10 @@ of rows. A row is a plain string, or a table with `text`, `detail`, `kind`,
 `icon`, `icon_fg`, `fg`, `bold`, `selected` and `action`. A row with an
 `action` is a button: the dock highlights it on hover and, when it is clicked,
 calls the same callback with `event.action` set (and `event.index`), so a panel
-can run its own actions without registering a command per button.
+can run its own actions without registering a command per button. Showing a
+panel opens the dock's plugin tab under that panel's name, so
+`jot.ui.panel("LeetCode")` puts `LeetCode` on the tab; with no panel shown the
+tab keeps the generic `Plugin` name.
 
 Use `:reloadplugins` while developing. `:plugins` lists loaded files, commands,
 keymaps, panels, and errors.

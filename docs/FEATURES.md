@@ -812,7 +812,9 @@ them for an inline rewrite.
 
 The chrome is yours to arrange: menu bar, pane tabs, editor panes, optional
 sidebar, optional minimap, a right-side tool dock, bottom terminal/debugger
-panels, and a two-row status/message area.
+panels, and a two-row status/message area. The dock's plugin tab hosts every
+Lua panel and is labelled after the one it is showing - opening `:LeetPanel`
+puts `LeetCode` on the tab - and falls back to `Plugin` when no panel is up.
 
 Borders mark where one region ends and another begins, and only there: a region
 draws a line only on the side facing another region, so the sidebar and the

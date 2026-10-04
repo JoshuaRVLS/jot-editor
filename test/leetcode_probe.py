@@ -276,6 +276,15 @@ def main() -> int:
         print(panel.text())
         server.shutdown()
         return 1
+    # The dock's plugin tab is one shared host, so it is labelled with the
+    # panel it is showing: the strip reads the puzzle glyph followed by
+    # "LeetCode", not a generic "Plugin". The panel title row carries the name
+    # too, so the glyph next to it is what pins this to the tab.
+    if "\uf12e LeetCode" not in panel.text():
+        print("leetcode probe: FAIL - the dock tab strip does not name the LeetCode panel")
+        print(panel.text())
+        server.shutdown()
+        return 1
 
     screen = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
                         cfg=CFG, cwd=ROOT, env=env,

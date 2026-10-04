@@ -7,6 +7,10 @@
 // (clicking its ×, or q/Esc while focused) removes it and, when it was the
 // active one, activates a neighbor. Closing the last tab hides the dock.
 //
+// The plugin tab is one shared host for every Lua panel, so its label carries
+// the name of the panel it is showing (`LeetCode`) and falls back to the
+// generic "Plugin" only while no panel is up.
+//
 // The strip lives on the panel's first interior row (panel_y + 1), so every
 // panel renderer draws it through render_right_panel_tab_strip() and the Lua
 // side_panel handler renders the same row from view.panel_tabs - the two
@@ -29,12 +33,14 @@ namespace
   constexpr const char *kIconDebug = "\uF121";  // bug
   constexpr const char *kIconPlugin = "\uF12E"; // puzzle-piece
 
-  // Label for a dock tab: " icon Name ". The active tab gets a " ×" close
+  // Label for a dock tab: " icon Name ". The plugin tab is named after the
+  // panel it is showing, so the strip says what the tab will bring back; with
+  // no panel up it keeps the generic name. The active tab gets a " ×" close
   // suffix (VSCode-style), hit-tested by the strip mouse handler.
-  std::string tab_label(RightPanelTab tab, bool active)
+  std::string tab_label(RightPanelTab tab, bool active, const std::string &plugin_panel)
   {
     const char *icon = kIconGit;
-    const char *name = "Git";
+    std::string name = "Git";
     switch (tab)
     {
     case RIGHT_PANEL_GIT_DIFF:
@@ -51,7 +57,7 @@ namespace
       break;
     case RIGHT_PANEL_PLUGIN:
       icon = kIconPlugin;
-      name = "Plugin";
+      name = plugin_panel.empty() ? "Plugin" : plugin_panel;
       break;
     default:
       break;
@@ -126,10 +132,26 @@ void Editor::build_right_panel_tab_strip_view(SidePanelView &view) const
   for (RightPanelTab tab : right_panel_tabs)
   {
     SidePanelTabView tab_view;
-    tab_view.label = tab_label(tab, tab == active_right_panel_tab);
+    tab_view.label = tab_label(tab, tab == active_right_panel_tab, active_plugin_panel);
     tab_view.active = tab == active_right_panel_tab;
     view.panel_tabs.push_back(std::move(tab_view));
   }
+}
+
+// The labels the strip paints right now (the same strings the Lua side_panel
+// handler reads from view.panel_tabs), so the suite can pin what a tab says
+// without a pty.
+std::vector<std::string> Editor::right_panel_tab_labels_for_test() const
+{
+  SidePanelView view;
+  build_right_panel_tab_strip_view(view);
+  std::vector<std::string> labels;
+  labels.reserve(view.panel_tabs.size());
+  for (const SidePanelTabView &tab : view.panel_tabs)
+  {
+    labels.push_back(tab.label);
+  }
+  return labels;
 }
 
 // Native fallback for the tab strip row; the Lua side_panel handler renders
@@ -147,7 +169,7 @@ void Editor::render_right_panel_tab_strip(int panel_x, int panel_y, int panel_w)
   {
     const RightPanelTab tab = right_panel_tabs[(size_t)i];
     const bool active = tab == active_right_panel_tab;
-    const std::string label = tab_label(tab, active);
+    const std::string label = tab_label(tab, active, active_plugin_panel);
     const int w = (int)label.size();
     if (x + w >= panel_x + panel_w)
     {
@@ -206,8 +228,9 @@ bool Editor::handle_right_panel_tab_strip_mouse(int x, int y, bool is_click)
     int cx = panel_x + 1;
     for (int i = 0; i < (int)right_panel_tabs.size(); i++)
     {
-      const std::string label =
-          tab_label(right_panel_tabs[(size_t)i], right_panel_tabs[(size_t)i] == active_right_panel_tab);
+      const std::string label = tab_label(right_panel_tabs[(size_t)i],
+                                          right_panel_tabs[(size_t)i] == active_right_panel_tab,
+                                          active_plugin_panel);
       const int w = (int)label.size();
       if (x >= cx && x < cx + w)
       {
@@ -230,7 +253,7 @@ bool Editor::handle_right_panel_tab_strip_mouse(int x, int y, bool is_click)
   for (int i = 0; i < (int)right_panel_tabs.size(); i++)
   {
     const RightPanelTab tab = right_panel_tabs[(size_t)i];
-    const std::string label = tab_label(tab, tab == active_right_panel_tab);
+    const std::string label = tab_label(tab, tab == active_right_panel_tab, active_plugin_panel);
     const int w = (int)label.size();
     if (x >= cx && x < cx + w)
     {

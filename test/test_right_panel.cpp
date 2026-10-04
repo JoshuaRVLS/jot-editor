@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -90,6 +91,47 @@ TEST_CASE("Right dock: closing the last tab hides the dock", "[jot]")
   e.close_right_panel_tab(RIGHT_PANEL_PLUGIN);
   REQUIRE_FALSE(e.right_panel_visible());
   REQUIRE(e.right_panel_tabs_for_test().empty());
+}
+
+// The Plugin tab is one shared host for every Lua panel, so it is labelled
+// with the name of the panel it is showing -- the strip said "Plugin" while
+// the LeetCode panel was up -- and falls back to the generic name only when
+// no panel is shown.
+TEST_CASE("Right dock: the plugin tab is named after the panel it shows", "[jot]")
+{
+  char home[] = "/tmp/jot_right_panel_plugin_name_XXXXXX";
+  mkdtemp(home);
+  setenv("JOT_CONFIG_HOME", home, 1);
+  setenv("JOT_CACHE_HOME", home, 1);
+
+  // No panel up: the tab opens generic, so the fallback is the first thing
+  // pinned rather than what is left after a close.
+  Editor e;
+  e.open_right_panel_tab(RIGHT_PANEL_PLUGIN);
+  std::vector<std::string> labels = e.right_panel_tab_labels_for_test();
+  REQUIRE(labels.size() == 1);
+  REQUIRE(labels[0].find("Plugin") != std::string::npos);
+
+  // Showing a panel renames the tab after it.
+  e.host().io.show_plugin_panel("LeetCode");
+  labels = e.right_panel_tab_labels_for_test();
+  REQUIRE(labels.size() == 1);
+  REQUIRE(labels[0].find("LeetCode") != std::string::npos);
+  REQUIRE(labels[0].find("Plugin") == std::string::npos);
+
+  // The name follows the panel, not the LeetCode feature specifically.
+  e.host().io.show_plugin_panel("probe_panel");
+  labels = e.right_panel_tab_labels_for_test();
+  REQUIRE(labels[0].find("probe_panel") != std::string::npos);
+
+  // Leaving the tab for another one keeps its name: the strip says what the
+  // tab will bring back when it is activated again.
+  e.open_right_panel_tab(RIGHT_PANEL_GIT);
+  labels = e.right_panel_tab_labels_for_test();
+  REQUIRE(labels.size() == 2);
+  REQUIRE(labels[0].find("probe_panel") != std::string::npos);
+  REQUIRE(labels[1].find("Git") != std::string::npos);
+  REQUIRE(labels[1].find("probe_panel") == std::string::npos);
 }
 
 TEST_CASE("Right dock: toggle opens with the last active tab", "[jot]")

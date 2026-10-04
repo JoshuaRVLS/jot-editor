@@ -58,6 +58,10 @@ public:
   {
     return active_right_panel_tab;
   }
+  // The dock strip's labels as painted (the same strings the Lua side_panel
+  // handler reads from view.panel_tabs), so the suite can pin what a tab says
+  // without a pty.
+  std::vector<std::string> right_panel_tab_labels_for_test() const;
   // Headless tests: enables the workspace session subsystem for a fake root
   // so save_workspace_session / restore_workspace_session can round-trip
   // through a JOT_CONFIG_HOME-backed session file.
