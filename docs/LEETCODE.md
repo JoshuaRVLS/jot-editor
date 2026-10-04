@@ -8,6 +8,7 @@ Jot includes a bundled, jot-native LeetCode workflow inspired by the feature set
 | --- | --- |
 | `:Leet` / `:LeetActions` | Open the action picker |
 | `:LeetList` | Browse problems by group or filter (supports `page=`, `difficulty=`, `status=`, `tags=`, `company=`) |
+| `:LeetPanel` | Open the LeetCode panel in the right dock |
 | `:LeetDaily` | Fetch today's problem |
 | `:LeetRandom` | Fetch a random problem (supports `difficulty=`, `status=`, `tags=`) |
 | `:LeetProfile` | Show solved counts for the signed-in account |
@@ -78,7 +79,7 @@ Opening a problem brings up the LeetCode panel in the right dock (the secondary 
 - **Run test** and **Submit** as clickable rows with an icon, and **Next example** to cycle the example
 - the judge console below them: an in-flight line while the request runs, then the outcome with an icon and a colour per result - a green check for Accepted and passing case counts, a red cross for a failing status or case count, red compile and runtime error lines
 
-A row is highlighted on hover and runs on click through the panel's own callback, so no command has to be typed. `:LeetRun`, `:LeetSubmit` and `:LeetTest` (and the `Alt+Shift+L` keymaps) still work and drive the same panel; `:LeetConsole` brings the panel up. The panel's rows scroll with the wheel when the console is longer than the dock.
+A row is highlighted on hover and runs on click through the panel's own callback, so no command has to be typed. `:LeetRun`, `:LeetSubmit` and `:LeetTest` (and the `Alt+Shift+L` keymaps) still work and drive the same panel; `:LeetPanel` (or `:LeetConsole` for the judge console's section) brings the panel up on its own. The panel's rows scroll with the wheel when the console is longer than the dock.
 
 ## Configuration
 

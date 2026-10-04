@@ -261,6 +261,22 @@ def main() -> int:
             return True
         return False
 
+    # :LeetPanel brings the right dock's LeetCode panel up on its own, before a
+    # question or a run has. Nothing is open yet, so the panel's own empty state
+    # is the proof: the dock says no problem is open and points at the commands
+    # that choose one.
+    panel = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
+                       cfg=CFG, cwd=ROOT, env=env,
+                       phases=command_phase("LeetPanel") + [
+                           (3.0, on_screen("No problem open")),
+                           (0.4, lambda s: True),
+                       ], until_timeout=15.0)
+    if "No problem open" not in panel.text():
+        print("leetcode probe: FAIL - :LeetPanel did not open the dock panel")
+        print(panel.text())
+        server.shutdown()
+        return 1
+
     screen = run_in_pty(binary, [ROOT], b"", settle=3.5, after=0.4, cols=COLS, rows=ROWS,
                         cfg=CFG, cwd=ROOT, env=env,
                         phases=command_phase("LeetList") + [(4.0, mark_groups),

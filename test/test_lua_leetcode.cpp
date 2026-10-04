@@ -133,6 +133,7 @@ TEST_CASE("LeetCode runtime registers a complete command family", "[leetcode][lu
                     "type(calls.commands.LeetConsole)..'|'..type(calls.commands.LeetTabs)..'|'.."
                     "type(calls.commands.LeetYank)..'|'..type(calls.commands.LeetInfo)")
           == "function|function|function|function");
+  REQUIRE(state.run("return type(calls.commands.LeetPanel)") == "function");
   REQUIRE(state.run("return jot.leetcode_feature.config.get('endpoint')") == "leetcode.com");
   REQUIRE(state.run("return calls.status.name..'|'..calls.status.spec.side") == "leetcode|right");
 }
@@ -466,6 +467,22 @@ TEST_CASE("LeetCode testcase list accepts the live array shape", "[leetcode][lua
       tostring(#missing == 0 and #empty == 0),
     }, '|')
   )LUA") == "true|true|true");
+}
+
+TEST_CASE("LeetPanel opens the dock's LeetCode panel on its own", "[leetcode][lua]")
+{
+  // The dock comes up by itself when a question or a run needs it; :LeetPanel
+  // is the command for bringing it up first. It makes the same
+  // jot.ui.panel("LeetCode") call the rest of the feature does and asks for a
+  // repaint, and a second call is harmless (the host activates the tab that is
+  // already there), which is what makes it safe to reach for at any time.
+  State state;
+  REQUIRE(state.run("calls.panel_shown = nil; calls.redraw = 0; "
+                    "calls.commands.LeetPanel(); "
+                    "calls.commands.LeetPanel(); "
+                    "return tostring(calls.panel_shown) .. '|' .. "
+                    "tostring(calls.panel and calls.panel.name) .. '|' .. "
+                    "tostring((calls.redraw or 0) >= 2)") == "LeetCode|LeetCode|true");
 }
 
 TEST_CASE("LeetCode dock panel rows carry actions and colored judge outcomes", "[leetcode][lua]")

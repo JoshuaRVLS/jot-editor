@@ -8,6 +8,7 @@ end
 local commands = {
   {"Leet", ui.actions, "Open the LeetCode workspace"},
   {"LeetList", function(value) ui.list(value) end, "Browse problems by group or filter (difficulty=, status=, tags=, company=, page=)"},
+  {"LeetPanel", ui.show_panel, "Open the LeetCode panel in the right dock"},
   {"LeetDaily", ui.daily, "Open today's LeetCode problem"},
   {"LeetRandom", function(value) ui.random(value) end, "Open a random problem (difficulty=, status=, tags=)"},
   {"LeetProfile", ui.profile, "Show LeetCode profile statistics"},
