@@ -8,12 +8,18 @@ its aliases and its argument shape -- has to sit in a bordered box above the
 grid. The prompt keeps the last row, with the caret on it, and moving the
 selection has to move the box with it.
 
+The suggestion rows also have to sit on their own surface (the theme's Pmenu
+background), padded to the screen edge, instead of blending into the buffer
+behind them; only the selected cell keeps the selection band. Both render paths
+are checked: the shipped Lua kit and the native fallback.
+
 Usage: test/command_palette_grid_probe.py [path-to-jot-binary]
 Set JOT_PROBE_DUMP=1 to print the captured screen.
 Exit codes: 0 pass, 1 fail, 2 binary missing.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -29,6 +35,52 @@ RIGHT = b"\x1b[C"
 # digits, e.g. "q!" or "term2").
 TOKEN = re.compile(r"[a-z][a-z0-9]*")
 
+THEME = "jot-dark"
+CFG = "/tmp/jot_palette_grid_probe_cfg"
+
+
+def code(value) -> int:
+    """A theme colour as the screen records it: an index, or 1000+rgb for the
+    truecolor form the hex themes use."""
+    if isinstance(value, int):
+        return value
+    if not value:
+        return -1
+    if value.startswith("#"):
+        h = value[1:]
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        return 1000 + int(h[:6], 16)
+    return int(value)
+
+
+def theme_slots() -> dict:
+    """The three backgrounds this probe is about, from the pinned theme: the
+    suggestion rows (Pmenu -> the command surface), the selected cell
+    (PmenuSel) and the buffer behind the palette (Normal)."""
+    path = os.path.join(".configs", "configs", "colors", f"{THEME}.json")
+    data = json.load(open(path))
+    return {
+        "suggest": code(data["Pmenu"]["bg"]),
+        "selection": code(data["PmenuSel"]["bg"]),
+        "editor": code(data["Normal"]["bg"]),
+    }
+
+
+def config_dir(native: bool) -> str:
+    """A probe-owned config home pinned to the probe theme. `native` drops the
+    Lua palette and status line handlers so render/palette.cpp paints the
+    surface instead of the kit."""
+    cfg = f"{CFG}_{'native' if native else 'lua'}"
+    os.makedirs(os.path.join(cfg, "configs"), exist_ok=True)
+    with open(os.path.join(cfg, "configs", "settings.conf"), "w") as fh:
+        fh.write(f"color_scheme={THEME}\n")
+    with open(os.path.join(cfg, "init.lua"), "w") as fh:
+        if native:
+            fh.write('jot.ui.handler("command_palette", nil)\n')
+            fh.write('jot.ui.handler("status_line", nil)\n')
+    return cfg
+
 
 def dump(screen) -> None:
     if not os.environ.get("JOT_PROBE_DUMP"):
@@ -43,8 +95,10 @@ def lines_of(screen):
 
 
 def prompt_row(lines):
-    """The last row of the palette: the prompt, drawn as ":" plus the query."""
-    rows = [i for i, line in enumerate(lines) if line.startswith(":")]
+    """The last row of the palette: the prompt, drawn as ":" plus the query.
+    The native fallback insets the ":" one cell (statusline style) while the
+    Lua kit draws it from column 0, so the marker is read after the inset."""
+    rows = [i for i, line in enumerate(lines) if line.strip().startswith(":")]
     return max(rows) if rows else -1
 
 
@@ -71,6 +125,45 @@ def box_body(lines, bottom):
     return [lines[i].strip(" \u2502") for i in range(max(tops) + 1, bottom)]
 
 
+def surface_error(screen, lines) -> str:
+    """A message when the suggestion band is not on its own surface, else None.
+
+    Every cell of a result row -- the labels, the padding after the last column
+    and the selected row's unselected cells -- has to carry the Pmenu
+    background, so the grid reads as a pane instead of blending into the buffer.
+    Only the selected cell itself keeps the selection background.
+    """
+    slots = theme_slots()
+    if slots["suggest"] == slots["editor"]:
+        return f"the theme paints Pmenu and Normal the same ({slots['suggest']})"
+    prompt = prompt_row(lines)
+    bottom = box_bottom(lines, prompt)
+    if bottom < 0:
+        return "the explanation box never appeared"
+    grid_top = bottom + 1
+    if grid_top + 1 >= prompt:
+        return "the grid has too few rows to sample"
+    # The selected cell (column 0 of the top grid row) is the one block on the
+    # selection background; the rest of that row is already the pane.
+    if screen.bg[grid_top][0] != slots["selection"]:
+        return ("the selected cell is not on the selection background "
+                f"({screen.bg[grid_top][0]} != {slots['selection']})")
+    tokens = [m.start() for m in TOKEN.finditer(lines[grid_top])]
+    if len(tokens) < 2:
+        return "the selected row carries a single label"
+    if screen.bg[grid_top][tokens[1]] != slots["suggest"]:
+        return ("the rest of the selected row is not on the suggestion surface "
+                f"({screen.bg[grid_top][tokens[1]]} != {slots['suggest']})")
+    # A whole unselected row: every cell to the screen edge, including the
+    # padding after the last column, on the suggestion surface.
+    row = grid_top + 1
+    for x in range(screen.cols):
+        if screen.bg[row][x] != slots["suggest"]:
+            return (f"the suggestion row falls off its surface at column {x} "
+                    f"({screen.bg[row][x]} != {slots['suggest']})")
+    return None
+
+
 def main() -> int:
     binary = sys.argv[1] if len(sys.argv) > 1 else "build/apps/jot/jot"
     if not os.path.exists(binary):
@@ -89,7 +182,7 @@ def main() -> int:
     # carries several names spread across the width, which a one-name-per-row
     # list can never do.
     screen = run_in_pty(binary, [path], OPEN, settle=2.5, after=2.5, cols=140, rows=35,
-                        cfg="/tmp/jot_palette_grid_probe_cfg")
+                        cfg=config_dir(False))
     dump(screen)
     lines = lines_of(screen)
     prompt = prompt_row(lines)
@@ -129,11 +222,27 @@ def main() -> int:
         print("command palette grid probe: FAIL - the results are not filled column by column")
         return 1
 
+    # The suggestion band: labels and padding on the theme's command surface,
+    # the selected cell on the selection background. Checked on the shipped Lua
+    # renderer, then again with the kit's handlers dropped so render/palette.cpp
+    # is the one painting (its band fill has to agree cell for cell).
+    err = surface_error(screen, lines)
+    if err:
+        print(f"command palette grid probe: FAIL - {err} (Lua renderer)")
+        return 1
+    native = run_in_pty(binary, [path], OPEN, settle=2.5, after=2.5, cols=140, rows=35,
+                        cfg=config_dir(True))
+    dump(native)
+    err = surface_error(native, lines_of(native))
+    if err:
+        print(f"command palette grid probe: FAIL - {err} (native renderer)")
+        return 1
+
     # Scene 2: a query the curated help knows. The box has to show the sentence
     # and the aliases, and the prompt has to keep the last row with the caret on
     # it.
     screen = run_in_pty(binary, [path], OPEN + b"wq", settle=2.5, after=2.5, cols=140, rows=35,
-                        cfg="/tmp/jot_palette_grid_probe_cfg")
+                        cfg=config_dir(False))
     dump(screen)
     lines = lines_of(screen)
     if not any("Write the current buffer and quit." in line for line in lines):
@@ -154,9 +263,9 @@ def main() -> int:
     # command's sentence; moving right past its aliases (q -> quit -> q! ->
     # quit! -> wq) has to change the sentence to the newly selected command's.
     plain = run_in_pty(binary, [path], OPEN + b"q", settle=2.5, after=2.5, cols=140, rows=35,
-                       cfg="/tmp/jot_palette_grid_probe_cfg")
+                       cfg=config_dir(False))
     moved = run_in_pty(binary, [path], OPEN + b"q", settle=2.5, after=2.5, cols=140, rows=35,
-                       cfg="/tmp/jot_palette_grid_probe_cfg", phases=[(0.6, RIGHT * 4)])
+                       cfg=config_dir(False), phases=[(0.6, RIGHT * 4)])
     dump(moved)
     before = box_body(lines_of(plain), box_bottom(lines_of(plain), prompt_row(lines_of(plain))))
     after = box_body(lines_of(moved), box_bottom(lines_of(moved), prompt_row(lines_of(moved))))

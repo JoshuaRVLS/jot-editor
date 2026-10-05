@@ -289,13 +289,24 @@ void Editor::render_command_palette()
                 theme.bg_selection,
                 true);
 
+  // The suggestion surface: the whole grid band takes the theme's command
+  // background (the Pmenu slot), not the buffer's, so the results read as their
+  // own pane instead of blending into the text behind them. The fill covers
+  // every column of every grid row -- including the padding after the last
+  // result and the empty-state row -- because the Lua kit pads its rows to the
+  // full width and the two painters have to agree cell for cell.
+  ui->fill_rect({layout.grid_x, layout.grid_y, layout.w, std::max(1, layout.grid_rows)},
+                " ",
+                theme.fg_command,
+                theme.bg_command);
+
   if (layout.result_count == 0)
   {
     std::string empty = command_palette_query.empty()
                             ? "Type a command or search..."
                             : "No matches for \"" + command_palette_query + "\"";
     ui->draw_text(
-        x + 2, layout.grid_y, ui_truncate_cells(empty, w - 4), theme.fg_comment, theme.bg_default);
+        x + 2, layout.grid_y, ui_truncate_cells(empty, w - 4), theme.fg_comment, theme.bg_command);
     return;
   }
 
@@ -316,7 +327,7 @@ void Editor::render_command_palette()
       const int cell_y = layout.grid_y + row;
       const bool is_selected = idx == sel;
       const int fg = is_selected ? theme.fg_selection : theme.fg_command;
-      const int bg = is_selected ? theme.bg_selection : theme.bg_default;
+      const int bg = is_selected ? theme.bg_selection : theme.bg_command;
       ui->fill_rect({cell_x, cell_y, layout.grid_col_w, 1}, " ", fg, bg);
 
       const CommandPaletteSuggestion &suggestion = command_palette_results[(size_t)idx];

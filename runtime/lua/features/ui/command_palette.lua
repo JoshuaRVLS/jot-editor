@@ -23,7 +23,9 @@ local function command_palette(p)
   end
   local colors = p.colors or {}
   local fg = colors.fg or 7
-  local bg = colors.default_bg or colors.panel_bg or colors.bg or 0
+  -- The suggestion rows sit on the command surface (the Pmenu slot), not on
+  -- the buffer background they would otherwise blend into.
+  local bg = colors.bg or colors.panel_bg or colors.default_bg or 0
   local comment = colors.comment or 8
   local selection_fg = colors.selection_fg or 0
   local selection_bg = colors.selection_bg or 6

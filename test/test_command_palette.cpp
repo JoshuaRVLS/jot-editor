@@ -310,6 +310,13 @@ TEST_CASE("An empty result set keeps the prompt and clears the box", "[jot][pale
   REQUIRE(layout.help_for == -1);
   REQUIRE(layout.help_h == 0);
   REQUIRE(layout.help_lines.empty());
+
+  // The "No matches" row keeps the suggestion surface too: the empty state
+  // must not fall back to the buffer background either.
+  e.render_for_test();
+  const UICell *empty = e.ui_for_test()->cell_at(0, layout.grid_y);
+  REQUIRE(empty != nullptr);
+  REQUIRE(empty->bg == e.theme_for_test().bg_command);
 }
 
 TEST_CASE("The Lua kit owns the palette and the native painter matches it", "[jot][palette]")
@@ -359,11 +366,27 @@ TEST_CASE("The Lua kit owns the palette and the native painter matches it", "[jo
       " " + e.command_palette_label_for_test(layout.rows_per_col + layout.grid_first_row);
   REQUIRE(row_text(ui, layout.grid_y).rfind(second, layout.grid_col_w) == layout.grid_col_w);
 
-  // An unselected cell keeps the plain command ink on the buffer background.
+  // An unselected cell keeps the plain command ink, on the command surface
+  // (the Pmenu slot) rather than the buffer's own background.
   const UICell *plain = ui->cell_at(layout.grid_x + layout.grid_col_w + 1, layout.grid_y);
   REQUIRE(plain != nullptr);
   REQUIRE(plain->fg == e.theme_for_test().fg_command);
-  REQUIRE(plain->bg == e.theme_for_test().bg_default);
+  REQUIRE(plain->bg == e.theme_for_test().bg_command);
+
+  // And the surface covers the whole grid band: no cell -- a result, the
+  // padding after the last column, or the space left by a short final row --
+  // falls back to the buffer background, because the Lua kit pads its rows to
+  // the full width and the fallback has to paint the same pane.
+  REQUIRE(e.theme_for_test().bg_command != e.theme_for_test().bg_default);
+  for (int gy = layout.grid_y; gy < layout.prompt_y; gy++)
+  {
+    for (int gx = 0; gx < layout.screen_w; gx++)
+    {
+      const UICell *cell = ui->cell_at(gx, gy);
+      REQUIRE(cell != nullptr);
+      REQUIRE(cell->bg != e.theme_for_test().bg_default);
+    }
+  }
 
   // The explanation box: a border row standing on the grid's top edge, with
   // the selected row's sentence inside it.
