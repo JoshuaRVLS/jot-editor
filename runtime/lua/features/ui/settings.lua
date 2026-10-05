@@ -8,8 +8,8 @@ local pad_cells = h.pad_cells
 local title_with_count = h.title_with_count
 local present_panel = h.present_panel
 
-local CHECK = "\u{F00C}"   -- nf-fa-check: the choice the config holds
-local SEARCH = "\u{F002}"  -- nf-fa-search: the search bar's magnifier
+local CHECK = "\u{F00C}"  -- nf-fa-check: the choice the config holds
+local SEARCH = ">"        -- the search bar's prompt mark
 
 -- One row built out of positioned pieces, spans returned for the renderer.
 -- cut() marks a shortened label, as the native painter's truncate() does.
@@ -63,7 +63,12 @@ local function row_builder()
           }
         end
       end
-      start = start + cell_len(part.text)
+      -- Span offsets are bytes into the rendered line (the float renderer
+      -- maps them back to cells), so advance by the byte length: a multi-byte
+      -- glyph (a row chevron, an enum's, the prompt mark) is one cell but
+      -- three bytes, and a cell-based advance shifts every later span's ink
+      -- onto the wrong text.
+      start = start + #part.text
     end
     return pad_cells(text, width), spans
   end
@@ -100,8 +105,8 @@ local function settings(p)
 
   local rows = {}
 
-  -- Search bar: magnifier, the query (or what to type), match count on the
-  -- right once a query is narrowing the list.
+  -- Search bar: the prompt mark, the query (or what to type), match count on
+  -- the right once a query is narrowing the list.
   do
     local b = row_builder()
     b.text(" ")

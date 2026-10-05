@@ -82,19 +82,33 @@ def row_index_of(view: str, needle: str) -> int:
     return -1
 
 
-def first_list_row(view: str) -> str:
-    """The first row of the list, whichever chrome sits above it.
+def divider_row(view: str) -> int:
+    """The index of the rule between the search bar and the list, or -1.
 
-    Anchored on the divider under the search bar -- a long run of box rule
-    between two sides, with no corner glyph in it. Reading the search bar's
-    text instead would only work while it was showing its placeholder, which
-    is exactly what a query replaces.
+    A long run of box rule between two sides, with no corner glyph in it.
+    Reading the search bar's text instead would only work while it was showing
+    its placeholder, which is exactly what a query replaces.
     """
-    lines = view.splitlines()
-    for at, line in enumerate(lines):
+    for at, line in enumerate(view.splitlines()):
         if re.search("─{20,}", line) and not any(corner in line for corner in "┌┐└┘"):
-            return lines[at + 1] if at + 1 < len(lines) else ""
-    return ""
+            return at
+    return -1
+
+
+def search_row_of(view: str):
+    """(row index, text) of the search bar: the line above the divider."""
+    at = divider_row(view)
+    lines = view.splitlines()
+    if at <= 0:
+        return -1, ""
+    return at - 1, lines[at - 1]
+
+
+def first_list_row(view: str) -> str:
+    """The first row of the list, whichever chrome sits above it."""
+    at = divider_row(view)
+    lines = view.splitlines()
+    return lines[at + 1] if 0 <= at < len(lines) - 1 else ""
 
 
 def number_in(row: str, needle: str):
@@ -124,6 +138,7 @@ def main() -> int:
     failures: list[str] = []
     raws: dict[str, bytes] = {}
     cfgs: dict[str, str] = {}
+    screens: dict[str, object] = {}
 
     def scene(name: str, extra, tail: float = TAIL) -> str:
         # A fresh config home per scene per run: the panel *writes* settings
@@ -138,6 +153,7 @@ def main() -> int:
         # multi-byte glyph split across two reads of the pty lands in the grid
         # as "?" cells (a harness artifact, not something the editor did).
         raws[name] = bytes(screen.raw)
+        screens[name] = screen
         if dump:
             print(f"--- scene {name} ---")
             print(view)
@@ -161,6 +177,38 @@ def main() -> int:
     if not row_of(view, "Auto-detect indent"):
         fail("the unfiltered list does not open on the first config key")
 
+    # The search bar's ink: the prompt mark and the placeholder are one run of
+    # the panel's quiet colour. Spans are byte offsets into the line, so a
+    # multi-byte glyph before a span (the magnifier the bar used to carry) must
+    # not push it short -- the placeholder's tail then escaped its span and
+    # painted in the float's default ink (the "gs" of "settings" went white).
+    screen = screens["bar"]
+    lines = view.splitlines()
+    srow, sline = search_row_of(view)
+    placeholder = re.search(r"Search \d+ settings", sline)
+    if srow < 0 or not placeholder:
+        fail("the search bar is not on the panel")
+    else:
+        inks = {screen.fg[srow][x] for x in range(placeholder.start(), placeholder.end())}
+        if len(inks) != 1:
+            fail(f"the placeholder is painted in more than one ink: {sorted(inks)}")
+        elif screen.fg[srow][sline.index(">")] not in inks:
+            fail("the prompt mark and the placeholder do not share an ink")
+
+    # The selected row's toggle: one run of ink from the glyph through the
+    # state text. The row's chevron is a three-byte glyph, so a cell-advanced
+    # span started two bytes early and dropped the tail ("ff" of "off") into
+    # the panel's default ink.
+    value = TOGGLE_OFF + " off"
+    vrow = row_index_of(view, "Auto-detect indent")
+    if vrow < 0 or value not in lines[vrow]:
+        fail("the selected boolean row does not show its toggle")
+    else:
+        at = lines[vrow].index(value)
+        inks = {screen.fg[vrow][x] for x in range(at, at + len(value))}
+        if len(inks) != 1:
+            fail(f"the selected row's value is painted in more than one ink: {sorted(inks)}")
+
     # Scene 2: typing filters, and the count turns into matches/total.
     view = scene("filter", [(TYPE, b"tab")])
     print("scene 2: typing narrows the list and the count")
@@ -173,6 +221,23 @@ def main() -> int:
         fail("`tab` did not keep the Tab size row")
     if row_of(view, "Auto-detect indent"):
         fail("`tab` left a row that cannot match the query")
+
+    # The query and the match count own their inks in the search bar: the query
+    # in the accent ink, the count in the quiet one, and neither bleeding into
+    # the other (a span offset off by a few bytes swaps them).
+    screen = screens["filter"]
+    srow, sline = search_row_of(view)
+    at = sline.find("tab")
+    count_on_row = re.search(r"\d+/\d+", sline)
+    if srow < 0 or at < 0 or not count_on_row:
+        fail("the filtered search bar is not on the panel")
+    else:
+        query_inks = {screen.fg[srow][x] for x in range(at, at + 3)}
+        count_inks = {screen.fg[srow][x] for x in range(count_on_row.start(), count_on_row.end())}
+        if len(query_inks) != 1 or len(count_inks) != 1:
+            fail("the query or the match count is painted in more than one ink")
+        elif query_inks == count_inks:
+            fail("the query and the match count share one ink")
 
     # Scenes 3 and 4: an int row wears its steppers and Right moves the number
     # by exactly one notch.

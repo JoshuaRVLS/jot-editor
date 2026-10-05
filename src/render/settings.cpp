@@ -312,13 +312,13 @@ void Editor::render_settings_menu()
                 theme.fg_comment,
                 panel_theme.bg_command);
 
-  // --- Search bar: a magnifier, the query (or what to type), and the match
+  // --- Search bar: a prompt mark, the query (or what to type), and the match
   // count against the right edge once a query is actually narrowing the list.
   ui->fill_rect({x + 1, search_y, std::max(1, w - 2), 1},
                 " ",
                 theme.fg_command,
                 panel_theme.bg_command);
-  ui->draw_text(x + 2, search_y, "\uF002", theme.fg_comment, panel_theme.bg_command);
+  ui->draw_text(x + 2, search_y, ">", theme.fg_comment, panel_theme.bg_command);
   if (settings_query.empty())
   {
     ui->draw_text(x + 4,

@@ -685,14 +685,28 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(g.spans_by_line[header_line].front().fg == 244);
   REQUIRE(g.spans_by_line[setting_line].front().fg == 250);
   bool saw_edit_input = false;
+  bool edit_span_on_byte = false;
   for (int i = 0; i < g.lines_count; i++)
   {
     if (g.lines[i].find("> 8") != std::string::npos)
     {
       saw_edit_input = true;
+      // Span offsets are bytes into the rendered line (the float renderer maps
+      // them to cells). The selected row starts with a three-byte chevron, so
+      // an offset advanced by cells lands two bytes short and the renderer
+      // paints the input's tail in the float's default ink.
+      const size_t at = g.lines[i].find("> 8");
+      for (const auto &span : g.spans_by_line[i + 1])
+      {
+        if (span.start == (int)at && span.len == 3)
+        {
+          edit_span_on_byte = true;
+        }
+      }
     }
   }
   REQUIRE(saw_edit_input);
+  REQUIRE(edit_span_on_byte);
 
   push_module_field(L, 1, "settings");
   lua_pushnil(L);
