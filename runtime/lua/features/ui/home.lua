@@ -11,6 +11,13 @@
 -- burned the frame budget (and, because this module hand-rolled
 -- open/create without present_panel's registry, left one float per frame for
 -- render_floats() to repaint).
+--
+-- The header is the big wordmark: three rows of block letters, one accent per
+-- letter, then the tagline row (with the key legend at its right edge) and the
+-- context line. The native model owns that shape (src/jot/surfaces/home.cpp
+-- spends kHomeHeaderRows rows on it before the first section title); a payload
+-- without wordmark_art falls back to the old one-line wordmark, so a bare
+-- caller still gets a usable surface.
 local h = require("jot_ui.helpers")
 local cell_len = h.cell_len
 local trunc_cells = h.trunc_cells
@@ -53,11 +60,28 @@ local function row_sig(r)
     tostring(r.x or 0),
     tostring(r.y or 0),
     tostring(r.w or 0),
+    tostring(r.icon_fg or -1),
+    tostring(r.fg or -1),
+    r.icon or "",
     r.label or "",
     r.secondary or "",
     r.key or "",
   }, "\1")
 end
+
+-- Signature of the wordmark art: one part per row, one entry per letter.
+local function art_sig(art)
+  local rows = {}
+  for i = 1, #art do
+    rows[i] = table.concat(art[i], "\1")
+  end
+  return table.concat(rows, "\2")
+end
+
+-- "Filter  <query>" wraps the query in the screen's own label. The prefix is
+-- set off in the accent color so the line reads as state, not as text.
+local FILTER_PREFIX = "Filter"
+local CONTEXT_PREFIX = "Here"
 
 local function home_screen(p)
   if not p then
@@ -71,20 +95,37 @@ local function home_screen(p)
   local comment = colors.comment or 8
   local accent = colors.accent or colors.fg or 7
   local dir = colors.sidebar_dir or comment
+  local border = colors.border or comment
   local sel_fg = colors.sidebar_sel_fg or colors.selection_fg or 0
   local sel_bg = colors.sidebar_sel_bg or colors.selection_bg or 6
+  local key_fg = colors.accent or comment
 
   local panel_x = p.panel_x or 0
   local panel_y = p.panel_y or 0
   local panel_w = math.max(1, p.panel_w or 1)
   local panel_h = math.max(1, p.panel_h or 1)
   local rows = p.rows or {}
+  local art = p.wordmark_art or {}
+  local has_art = #art > 0
+  -- The header rows follow the art; with no art the wordmark and its tagline
+  -- share one line, exactly like the surface before the big mark.
+  local tagline_y = has_art and (panel_y + #art) or panel_y
+  local context_y = tagline_y + 1
+  -- One accent per wordmark letter. The mark spells the editor's initials, so
+  -- the letters read best in three different syntax slots instead of one flat
+  -- color; a theme that leaves one unset falls back to the accent.
+  local letter_fg = {
+    colors.keyword or accent,
+    colors["function"] or accent, -- `function` is a Lua keyword, so index it
+    colors.type or accent,
+  }
 
-  -- Composes one absolute screen row (wordmark/tagline, context line, section
-  -- label, or an item with its optional secondary path) into a line padded to
-  -- the panel width plus its byte-offset spans. Calls are ordered left to
-  -- right, exactly like the one-shot compositor this replaces: a screen row
-  -- can carry a row from the action column and one from the recent column.
+  -- Composes one absolute screen row (the big wordmark, the tagline row, the
+  -- context line, a section label, or an item with its optional secondary
+  -- path) into a line padded to the panel width plus its byte-offset spans.
+  -- Calls are ordered left to right, exactly like the one-shot compositor this
+  -- replaces: a screen row can carry a row from the action column and one from
+  -- the recent column.
   local function compose(y)
     local text = ""
     local line_spans = {}
@@ -117,7 +158,19 @@ local function home_screen(p)
       text = text .. label
     end
 
-    if y == panel_y then
+    if has_art and y >= panel_y and y < panel_y + #art then
+      -- One row of the big wordmark: every letter is its own span, so the
+      -- accents meet inside the row and the gaps stay on the panel background.
+      local letters = art[y - panel_y + 1]
+      local x = panel_x
+      for i = 1, #letters do
+        local letter = letters[i]
+        if letter ~= "" then
+          put(x, letter, letter_fg[i] or accent, default_bg)
+        end
+        x = x + cell_len(letter) + 1
+      end
+    elseif y == panel_y and not has_art then
       put(panel_x, p.wordmark or "", accent, default_bg)
       if p.tagline and p.tagline ~= "" then
         put(panel_x + (p.wordmark and cell_len(p.wordmark) or 0) + 1, p.tagline, comment, default_bg)
@@ -130,10 +183,42 @@ local function home_screen(p)
           put(hint_x, p.hint, comment, default_bg)
         end
       end
-    elseif y == panel_y + 1 then
-      local line = p.filter ~= nil and p.filter ~= "" and p.filter or p.context
+    elseif y == tagline_y then
+      -- The tagline row: a code glyph, the words, and the key legend pinned to
+      -- the right edge only when it still leaves the tagline room.
+      if p.tagline and p.tagline ~= "" then
+        put(panel_x, "\u{F121}", accent, default_bg)
+        put(panel_x + 2, p.tagline, comment, default_bg)
+      end
+      if p.hint and p.hint ~= "" then
+        local hint_x = panel_x + panel_w - cell_len(p.hint) - 1
+        if hint_x > panel_x + 26 then
+          put(hint_x, p.hint, comment, default_bg)
+        end
+      end
+    elseif y == context_y then
+      local filtering = p.filter ~= nil and p.filter ~= ""
+      local line = filtering and p.filter or p.context
       if line and line ~= "" then
-        put(panel_x, trunc_cells(line, math.max(1, panel_w - 2)), default_fg, default_bg)
+        if filtering and string.sub(line, 1, #FILTER_PREFIX) == FILTER_PREFIX then
+          put(panel_x, FILTER_PREFIX, accent, default_bg)
+          put(panel_x + #FILTER_PREFIX, string.sub(line, #FILTER_PREFIX + 1), default_fg, default_bg)
+        else
+          local x = panel_x
+          local icon = p.context_icon or ""
+          if icon ~= "" then
+            put(x, icon, accent, default_bg)
+            x = x + cell_len(icon) + 1
+          end
+          if string.sub(line, 1, #CONTEXT_PREFIX) == CONTEXT_PREFIX then
+            put(x, CONTEXT_PREFIX, default_fg, default_bg)
+            local rest = trunc_cells(string.sub(line, #CONTEXT_PREFIX + 1),
+                                     math.max(1, panel_w - (x - panel_x) - #CONTEXT_PREFIX))
+            put(x + #CONTEXT_PREFIX, rest, comment, default_bg)
+          else
+            put(x, trunc_cells(line, math.max(1, panel_w - (x - panel_x))), default_fg, default_bg)
+          end
+        end
       end
     else
       for _, r in ipairs(rows) do
@@ -141,9 +226,26 @@ local function home_screen(p)
           local row_w = r.w or panel_w
           local key_w = (r.key and r.key ~= "") and (cell_len(r.key) + 2) or 0
           if r.section then
-            put(r.x, trunc_cells(r.label or "", math.max(1, panel_w)), dir, default_bg)
+            -- Section titles carry their own glyph and accent, so the eye
+            -- finds the lists without reading their names.
+            local sx = r.x
+            if r.icon and r.icon ~= "" then
+              put(sx, r.icon, r.icon_fg or dir, default_bg)
+              sx = sx + cell_len(r.icon) + 1
+            end
+            put(sx,
+                trunc_cells(r.label or "", math.max(1, row_w - (sx - r.x))),
+                r.fg or dir,
+                default_bg)
           elseif r.selected then
-            select_label(r.x + 1, r.label or "")
+            local lx = r.x + 1
+            if r.icon and r.icon ~= "" then
+              -- The band covers the glyph too, but the glyph keeps its own
+              -- color: the row is highlighted, not repainted.
+              put(lx, r.icon .. " ", r.icon_fg or sel_fg, sel_bg)
+              lx = lx + cell_len(r.icon) + 1
+            end
+            select_label(lx, r.label or "")
             if r.secondary and r.secondary ~= "" then
               put(r.x + row_w - cell_len(r.secondary) - 1 - key_w,
                   trunc_cells(r.secondary, math.max(1, math.floor(row_w / 2))),
@@ -151,10 +253,15 @@ local function home_screen(p)
                   default_bg)
             end
             if r.key and r.key ~= "" then
-              put(r.x + row_w - cell_len(r.key) - 1, r.key, comment, default_bg)
+              put(r.x + row_w - cell_len(r.key) - 1, r.key, key_fg, default_bg)
             end
           else
-            put(r.x + 1, r.label or "", default_fg, default_bg)
+            local lx = r.x + 1
+            if r.icon and r.icon ~= "" then
+              put(lx, r.icon, r.icon_fg or r.fg or default_fg, default_bg)
+              lx = lx + cell_len(r.icon) + 1
+            end
+            put(lx, r.label or "", r.fg or default_fg, default_bg)
             if r.secondary and r.secondary ~= "" then
               put(r.x + row_w - cell_len(r.secondary) - 1 - key_w,
                   trunc_cells(r.secondary, math.max(1, math.floor(row_w / 2))),
@@ -162,7 +269,7 @@ local function home_screen(p)
                   default_bg)
             end
             if r.key and r.key ~= "" then
-              put(r.x + row_w - cell_len(r.key) - 1, r.key, comment, default_bg)
+              put(r.x + row_w - cell_len(r.key) - 1, r.key, key_fg, default_bg)
             end
           end
         end
@@ -179,8 +286,10 @@ local function home_screen(p)
     w = panel_w,
     h = panel_h,
     wordmark = p.wordmark or "",
+    art = art_sig(art),
     tagline = p.tagline or "",
     context = p.context or "",
+    context_icon = p.context_icon or "",
     filter = p.filter or "",
     hint = p.hint or "",
     fg = default_fg,
@@ -188,6 +297,11 @@ local function home_screen(p)
     comment = comment,
     accent = accent,
     dir = dir,
+    border = border,
+    key = key_fg,
+    letter_j = letter_fg[1],
+    letter_o = letter_fg[2],
+    letter_t = letter_fg[3],
     sel_fg = sel_fg,
     sel_bg = sel_bg,
   }

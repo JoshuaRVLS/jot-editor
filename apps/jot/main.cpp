@@ -142,13 +142,12 @@ int main(int argc, char *argv[])
     return 1;
   }
 
+  // A target opens it; a bare `jot` lands on the home screen. The last
+  // workspace stays one key away there (and `:resume` still restores it), but
+  // startup must not reopen a project the user did not ask for.
   if (target)
   {
     editor->set_home_menu_visible(false);
-  }
-  else
-  {
-    editor->resume_last_workspace_session();
   }
 
   if (target)

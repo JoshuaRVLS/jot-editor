@@ -194,7 +194,13 @@ settles, so scrolling a long way does not grow the process.
   on a row's name, its folder or the age it was last touched (`/` starts a
   query with a letter that is also a shortcut, `Esc` takes it back), `Enter`
   opens the top match, and `f` pins the selected folder or file to the top of
-  its list so it stays there even after the marker that found it is gone.
+  its list so it stays there even after the marker that found it is gone. The
+  header is a three-row block wordmark, one accent per letter; the lists lead
+  every row with the same per-language icons the explorer and the status line
+  use, each in its own color, and the section titles carry a glyph and an
+  accent too. A grid too short for the big mark falls back to a single-line
+  wordmark so the rows stay with the lists. A bare `jot` starts here, and
+  `:resume` still reopens the last workspace on demand.
 - C++ assist: create matching header/source pairs, or generate missing source
   implementations from declarations.
 

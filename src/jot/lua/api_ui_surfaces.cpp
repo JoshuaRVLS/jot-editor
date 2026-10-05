@@ -792,8 +792,23 @@ bool LuaAPI::emit_home(const HomeView &view)
                        lua_set_int_field(L, t, "panel_w", view.panel_w);
                        lua_set_int_field(L, t, "panel_h", view.panel_h);
                        lua_set_str_field(L, t, "wordmark", view.wordmark);
+                       lua_newtable(L); // wordmark_art: one row of letters each
+                       const int art = lua_gettop(L);
+                       for (size_t r = 0; r < view.wordmark_art.size(); r++)
+                       {
+                         lua_newtable(L);
+                         const int art_row = lua_gettop(L);
+                         for (size_t i = 0; i < view.wordmark_art[r].size(); i++)
+                         {
+                           lua_pushstring(L, view.wordmark_art[r][i].c_str());
+                           lua_rawseti(L, art_row, (lua_Integer)i + 1);
+                         }
+                         lua_rawseti(L, art, (lua_Integer)r + 1);
+                       }
+                       lua_setfield(L, t, "wordmark_art");
                        lua_set_str_field(L, t, "tagline", view.tagline);
                        lua_set_str_field(L, t, "context", view.context);
+                       lua_set_str_field(L, t, "context_icon", view.context_icon);
                        lua_set_str_field(L, t, "filter", view.filter);
                        lua_set_str_field(L, t, "hint", view.hint);
                        lua_newtable(L);
@@ -803,12 +818,15 @@ bool LuaAPI::emit_home(const HomeView &view)
                          const HomeEntryView &r = view.rows[i];
                          lua_newtable(L);
                          const int ri = lua_gettop(L);
+                         lua_set_str_field(L, ri, "icon", r.icon);
                          lua_set_str_field(L, ri, "label", r.label);
                          lua_set_str_field(L, ri, "secondary", r.secondary);
                          lua_set_str_field(L, ri, "key", r.key);
                          lua_set_int_field(L, ri, "x", r.x);
                          lua_set_int_field(L, ri, "y", r.y);
                          lua_set_int_field(L, ri, "w", r.w);
+                         lua_set_int_field(L, ri, "icon_fg", r.icon_fg);
+                         lua_set_int_field(L, ri, "fg", r.fg);
                          lua_set_bool_field(L, ri, "section", r.section);
                          lua_set_bool_field(L, ri, "selected", r.selected);
                          lua_rawseti(L, arr, (lua_Integer)i + 1);

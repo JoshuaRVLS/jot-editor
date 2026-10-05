@@ -123,7 +123,9 @@ namespace
   }
 
   // The panel's own geometry, as test_home_menu computes it: items start two
-  // rows under the header that sits four rows under the top of the panel.
+  // rows under the header that sits four rows under the top of the panel. The
+  // probe grid is 80x24, too short for the big wordmark, so the header is the
+  // compact one-line wordmark (the big art is asserted on a taller grid).
   struct HomeProbe
   {
     int content_x = 0;

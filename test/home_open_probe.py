@@ -18,11 +18,15 @@ the cells back out of the pty stream:
   * the first Esc takes the query back, the second closes the screen,
   * the digit a row prints is the digit that opens it,
   * '/' lets a shortcut letter start a query instead of firing,
+  * the header paints the big block wordmark with one accent per letter, and a
+    list row leads with a file icon inked on its own,
   * a query and its Enter in one read still open the row the query left, and a
     query that matches nothing opens nothing,
   * a click on a row opens what it names,
   * a file already open does not leave its tab on the home screen: the
-    workspace strip is workspace chrome, not part of the launcher.
+    workspace strip is workspace chrome, not part of the launcher,
+  * a bare `jot` lands on the home screen even when the recent-workspace list
+    would have something to resume.
 
 Usage: test/home_open_probe.py [path-to-jot] [--dump]
 Exit codes: 0 pass, 1 fail, 2 skipped (no binary).
@@ -173,6 +177,26 @@ def main() -> int:
     if not screen_has(base, "/ filter"):
         failures.append("the key legend is not on the screen")
 
+    # 1b. The header: three rows of block letters above the lists, one accent
+    # per letter, and a list row whose icon carries a color of its own.
+    left = content_x(base)
+    art_rows = [y for y in range(0, 6) if "\u2588" in row_text(base, y)]
+    accents = {base.fg[y][x] for y in art_rows for x in range(left, left + 12)
+               if base.cells[y][x] == "\u2588"}
+    print(f"wordmark rows {art_rows}, accents {len(accents)}")
+    if len(art_rows) != 3:
+        failures.append(f"the big wordmark is not three block rows (saw {len(art_rows)})")
+    elif len(accents) < 3:
+        failures.append(f"the wordmark letters share one color ({len(accents)} accents)")
+    notes_y = find_row(base, "notes.txt")
+    if notes_y > 0:
+        label_x = row_text(base, notes_y).index("notes.txt")
+        icon_x = label_x - 2
+        if base.cells[notes_y][icon_x] == " ":
+            failures.append("a list row has no icon before its name")
+        elif base.fg[notes_y][icon_x] == base.fg[notes_y][label_x]:
+            failures.append("the file icon does not carry a color of its own")
+
     # 2. The selection band hugs the label: the row's first cell and the key at
     # its far edge stay on the panel background. The selected row is the first
     # one whose label cell is not on the panel's own background.
@@ -299,6 +323,19 @@ def main() -> int:
     elif row_text(screen, 0).strip():
         failures.append("the opened file's tab is painted on the home screen "
                         f"(row 0: {row_text(screen, 0).strip()[:40]!r})")
+
+    # 10. A bare `jot` lands on the home screen even when the recent-workspace
+    # list would have something to resume: the previous session is offered as a
+    # row on the screen, not reopened under the user.
+    with open(os.path.join(cfg, "configs", "recent_workspaces.txt"), "w") as fh:
+        fh.write(os.path.join(ROOT, "beta") + "\n")
+    screen = run(binary, work, cfg, phases=[(0.2, toast_gone)])
+    shot(screen, "bare jot with a recent workspace on disk")
+    print(f"bare jot with a recent workspace: row 3 {row_text(screen, 3).strip()[:50]!r}")
+    if not screen_has(screen, "JOT Developer workspace"):
+        failures.append("a bare `jot` did not land on the home screen")
+    if screen_has(screen, "go.mod") or screen_has(screen, "package.json"):
+        failures.append("a bare `jot` reopened the recent workspace instead of home")
 
     if failures:
         print("home probe: FAIL")

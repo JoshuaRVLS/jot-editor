@@ -39,13 +39,18 @@ namespace
     std::string secondary;
     std::string path; // what the row opens, empty for the command rows
     char key = 0;     // the key that opens it while the screen is up
+    std::string icon; // leading glyph, in its own color (may be empty)
+    int icon_fg = -1; // -1: the row's own fg
   };
 
   // One column of the home screen: the title, the rows in it, and how many of
-  // them the layout below has room for.
+  // them the layout below has room for. The title carries its own glyph and
+  // accent so the eye finds the lists without reading their names.
   struct HomeSection
   {
     std::string title;
+    std::string icon;
+    int fg = -1;
     std::vector<HomeMenuRenderItem> items;
     std::string empty_label;
     int cap = 6;
@@ -55,9 +60,33 @@ namespace
   std::string icon_for_path(const std::string &path)
   {
     // Shared per-extension glyph map (core/file_icons.h) so the home screen,
-    // the file explorer and the status line agree on file icons.
-    return std::string(jot_icons::file_type_icon(path).glyph) + " ";
+    // the file explorer and the status line agree on file icons. The row keeps
+    // the glyph in its own field, so it can carry the file's brand color
+    // instead of the label's.
+    return std::string(jot_icons::file_type_icon(path).glyph);
   }
+
+  // The big wordmark: three rows of block letters, one run per letter so every
+  // letter can take its own accent (keyword / function / type), one blank
+  // column apart. kHomeHeaderRows is what the model spends on the whole header
+  // before the first section title: the art (three rows), the tagline row
+  // (with the key legend) and the context line, plus one blank.
+  const std::vector<std::vector<std::string>> &wordmark_art()
+  {
+    static const std::vector<std::vector<std::string>> art = {
+        {"  █", "███", "███"},
+        {"  █", "█ █", " █ "},
+        {"███", "███", " █ "},
+    };
+    return art;
+  }
+  constexpr int kHomeHeaderRows = 6;        // art + tagline + context + one blank
+  constexpr int kHomeCompactHeaderRows = 4; // wordmark + context + two blanks
+  // Usable rows at which the big wordmark is worth its two extra rows. Below
+  // it the compact one-line wordmark leaves the rows to the lists: on a short
+  // screen the actions column, the section titles and their items all have to
+  // fit under the header.
+  constexpr int kHomeBigWordmarkRows = 26;
 
   long long home_now_ms()
   {
@@ -383,9 +412,11 @@ namespace
     return text.substr(0, (size_t)(max_len - 3)) + "...";
   }
 
-  std::string workspace_icon()
+  // The folder glyph every directory row leads with; the color comes from the
+  // caller, so the same glyph works on the lists and in the actions column.
+  std::string folder_icon()
   {
-    return " ";
+    return "";
   }
 
   std::string display_parent(const std::string &path)
@@ -457,7 +488,11 @@ HomeView Editor::build_home_menu_model()
   const int recent_w = two_column ? std::max(1, content_w - action_w - gap) : content_w;
   const int action_x = content_x;
   const int recent_x = two_column ? content_x + action_w + gap : content_x;
-  const int section_y = content_y + 4;
+  // The big wordmark owns the top of the panel when the terminal can afford
+  // it; the section titles start below its header (kHomeHeaderRows), or below
+  // the compact one when it cannot.
+  const bool big_wordmark = usable_h >= kHomeBigWordmarkRows;
+  const int section_y = content_y + (big_wordmark ? kHomeHeaderRows : kHomeCompactHeaderRows);
   const int row_limit = usable_h - 1;
 
   home_menu_entries.clear();
@@ -511,20 +546,41 @@ HomeView Editor::build_home_menu_model()
     {
       resume.recent_workspace_index = 0;
       resume.path = recent_workspaces.front();
-      resume.label =
-          workspace_icon() + std::string("Resume ") + get_filename(recent_workspaces.front());
+      resume.icon = folder_icon();
+      resume.icon_fg = theme.fg_sidebar_directory;
+      resume.label = "Resume " + get_filename(recent_workspaces.front());
       resume.secondary = recent_workspaces.front();
     }
     else
     {
       resume.recent_index = 0;
       resume.path = recent_files.front();
-      resume.label =
-          icon_for_path(recent_files.front()) + " Resume " + get_filename(recent_files.front());
+      const jot_icons::FileTypeIcon type_icon = jot_icons::file_type_icon(recent_files.front());
+      resume.icon = type_icon.glyph;
+      resume.icon_fg = type_icon.color;
+      resume.label = "Resume " + get_filename(recent_files.front());
       resume.secondary = recent_files.front();
     }
     items.push_back(std::move(resume));
   }
+  // Every command row leads with its own glyph and accent; the letter at the
+  // right edge is the key that runs it while the screen is up.
+  auto action_row = [&](int action,
+                        const char *icon,
+                        int icon_fg,
+                        const std::string &label,
+                        const std::string &secondary,
+                        char key)
+  {
+    HomeMenuRenderItem row;
+    row.action = action;
+    row.icon = icon;
+    row.icon_fg = icon_fg;
+    row.label = label;
+    row.secondary = secondary;
+    row.key = key;
+    return row;
+  };
   items.push_back(
       {HOME_ACTION_OPEN_PATH_PROMPT, -1, -1, "  Open Folder / File", "open ", "", 'o'});
   items.push_back(
@@ -551,6 +607,8 @@ HomeView Editor::build_home_menu_model()
 
   HomeSection projects;
   projects.title = "Projects";
+  projects.icon = folder_icon();
+  projects.fg = theme.fg_function;
   projects.empty_label = "  Nothing found nearby";
   projects.cap = 6;
   for (const auto &dir : pinned_dirs)
@@ -558,7 +616,9 @@ HomeView Editor::build_home_menu_model()
     HomeMenuRenderItem row;
     row.action = HOME_ACTION_OPEN_PATH;
     row.path = dir;
-    row.label = "\u2605 " + get_filename(dir);
+    row.icon = "\u2605";
+    row.icon_fg = theme.fg_number;
+    row.label = get_filename(dir);
     row.secondary = join_meta(dir);
     if (keep(row.label, row.secondary, row.path))
     {
@@ -574,7 +634,9 @@ HomeView Editor::build_home_menu_model()
     HomeMenuRenderItem row;
     row.action = HOME_ACTION_OPEN_PATH;
     row.path = project.path;
-    row.label = workspace_icon() + get_filename(project.path);
+    row.icon = folder_icon();
+    row.icon_fg = theme.fg_sidebar_directory;
+    row.label = get_filename(project.path);
     row.secondary = join_meta(project.path);
     if (keep(row.label, row.secondary, row.path))
     {
@@ -589,6 +651,8 @@ HomeView Editor::build_home_menu_model()
 
   HomeSection here;
   here.title = launch.empty() ? "Here" : "Here  " + get_filename(launch);
+  here.icon = "\uf015";
+  here.fg = theme.fg_string;
   here.empty_label = "  This folder is empty";
   here.cap = 7;
   if (!launch.empty())
@@ -598,7 +662,10 @@ HomeView Editor::build_home_menu_model()
       HomeMenuRenderItem row;
       row.action = HOME_ACTION_OPEN_PATH;
       row.path = entry.path;
-      row.label = (entry.dir ? workspace_icon() : icon_for_path(entry.path)) + entry.name;
+      row.icon = entry.dir ? folder_icon() : icon_for_path(entry.path);
+      row.icon_fg =
+          entry.dir ? theme.fg_sidebar_directory : jot_icons::file_type_icon(entry.path).color;
+      row.label = entry.name;
       row.secondary = relative_age(entry.path);
       if (keep(row.label, row.secondary, row.path))
       {
@@ -614,6 +681,8 @@ HomeView Editor::build_home_menu_model()
 
   HomeSection folders;
   folders.title = "Recent Folders";
+  folders.icon = "\uf07c";
+  folders.fg = theme.fg_type;
   folders.empty_label = "  No recent folders";
   folders.cap = 5;
   for (int i = 0; i < (int)recent_workspaces.size() && (int)folders.items.size() < kCandidateCap;
@@ -628,7 +697,9 @@ HomeView Editor::build_home_menu_model()
     row.action = HOME_ACTION_OPEN_RECENT_WORKSPACE;
     row.recent_workspace_index = i;
     row.path = path;
-    row.label = workspace_icon() + get_filename(path);
+    row.icon = folder_icon();
+    row.icon_fg = theme.fg_sidebar_directory;
+    row.label = get_filename(path);
     row.secondary = join_meta(path);
     if (keep(row.label, row.secondary, row.path))
     {
@@ -639,6 +710,8 @@ HomeView Editor::build_home_menu_model()
 
   HomeSection files;
   files.title = "Recent Files";
+  files.icon = "\uf15b";
+  files.fg = theme.fg_number;
   files.empty_label = "  No recent files";
   files.cap = 5;
   for (const auto &pin : pinned_files)
@@ -646,7 +719,9 @@ HomeView Editor::build_home_menu_model()
     HomeMenuRenderItem row;
     row.action = HOME_ACTION_OPEN_PATH;
     row.path = pin;
-    row.label = "\u2605 " + get_filename(pin);
+    row.icon = "\u2605";
+    row.icon_fg = theme.fg_number;
+    row.label = get_filename(pin);
     row.secondary = join_meta(pin);
     if (keep(row.label, row.secondary, row.path))
     {
@@ -664,7 +739,10 @@ HomeView Editor::build_home_menu_model()
     row.action = HOME_ACTION_OPEN_RECENT;
     row.recent_index = i;
     row.path = path;
-    row.label = icon_for_path(path) + get_filename(path);
+    const jot_icons::FileTypeIcon type_icon = jot_icons::file_type_icon(path);
+    row.icon = type_icon.glyph;
+    row.icon_fg = type_icon.color;
+    row.label = get_filename(path);
     row.secondary = join_meta(path);
     if (keep(row.label, row.secondary, row.path))
     {
@@ -719,15 +797,47 @@ HomeView Editor::build_home_menu_model()
   view.panel_w = content_w;
   view.panel_h = content_h;
   view.wordmark = "JOT";
+  if (big_wordmark)
+  {
+    view.wordmark_art = wordmark_art();
+  }
   view.tagline = "Developer workspace";
   view.context = context;
+  view.context_icon = "\uf015";
   view.filter =
       home_filter_armed || !home_filter.empty() ? "Filter  " + home_filter : std::string();
   view.hint = home_filter.empty() && !home_filter_armed
                   ? "/ filter  f pin  j/k move  Enter open  Esc close"
                   : "Esc clear  Enter open  backspace edit";
 
-  auto add_section = [&](int x, int y, const std::string &title, int width)
+  // The command rows keep their glyph at the head of the label -- the label is
+  // what the filter reads -- so the view splits it back out here and gives it
+  // the row's accent. List rows bring their own icon and stay on the text
+  // color.
+  auto command_accent = [&](int action) -> int
+  {
+    switch (action)
+    {
+    case HOME_ACTION_OPEN_PATH_PROMPT:
+      return theme.fg_function;
+    case HOME_ACTION_OPEN_RECENT_PROMPT:
+      return theme.fg_type;
+    case HOME_ACTION_NEW_FILE:
+      return theme.fg_string;
+    case HOME_ACTION_COMMAND_PALETTE:
+      return theme.fg_keyword;
+    case HOME_ACTION_THEME_CHOOSER:
+      return theme.fg_number;
+    case HOME_ACTION_CONTINUE_EDITOR:
+      return theme.fg_function;
+    case HOME_ACTION_QUIT:
+      return theme.fg_diagnostic_error;
+    default:
+      return -1;
+    }
+  };
+
+  auto add_section = [&](int x, int y, const HomeSection &section, int width)
   {
     if (y >= row_limit || width <= 0)
     {
@@ -735,7 +845,10 @@ HomeView Editor::build_home_menu_model()
     }
     HomeEntryView r;
     r.section = true;
-    r.label = ellipsize_right(title, width);
+    r.icon = section.icon;
+    r.icon_fg = section.fg;
+    r.fg = section.fg;
+    r.label = ellipsize_right(section.title, width);
     r.x = x;
     r.y = y;
     r.w = width;
@@ -753,7 +866,13 @@ HomeView Editor::build_home_menu_model()
     r.y = y;
     r.w = width;
     r.selected = ((int)home_menu_entries.size() == home_menu_selected);
-    r.label = ellipsize_right(item.label, std::max(0, width - 2));
+    r.icon = item.icon;
+    r.icon_fg = item.icon_fg;
+    r.fg = command_accent(item.action);
+    // The icon takes its own column and the gap after it, so the label gives
+    // that width up before it is truncated.
+    const int icon_cells = item.icon.empty() ? 0 : ui_cell_count(item.icon) + 1;
+    r.label = ellipsize_right(item.label, std::max(0, width - 2 - icon_cells));
     if (!item.secondary.empty() && width > 34)
     {
       r.secondary = shorten_tail(item.secondary, width / 2);
@@ -774,8 +893,13 @@ HomeView Editor::build_home_menu_model()
     return true;
   };
 
+  // The actions column's own title: a play glyph in the green that says "go".
+  HomeSection start;
+  start.title = "Start";
+  start.icon = "\uf04b";
+  start.fg = theme.fg_string;
   int action_y = section_y;
-  add_section(action_x, action_y, "Start", action_w);
+  add_section(action_x, action_y, start, action_w);
   action_y += 2;
   for (const auto &item : items)
   {
@@ -795,7 +919,7 @@ HomeView Editor::build_home_menu_model()
       {
         continue;
       }
-      add_section(recent_x, list_y, section.title, recent_w);
+      add_section(recent_x, list_y, section, recent_w);
       list_y++;
       if (list_y >= row_limit)
       {
@@ -814,7 +938,7 @@ HomeView Editor::build_home_menu_model()
     {
       continue; // no room at all: a header on its own would say nothing
     }
-    add_section(recent_x, list_y, section.title, recent_w);
+    add_section(recent_x, list_y, section, recent_w);
     list_y++;
     for (int i = 0; i < section.show && list_y < row_limit; i++)
     {
@@ -854,49 +978,103 @@ void Editor::render_home_menu()
   }
 
   // Native fallback paint (no Lua handler registered): the Lua float paints
-  // the header itself, so the wordmark / tagline / context only need drawing
-  // on this path.
-  ui->draw_text(content_x, content_y, "JOT", theme.fg_keyword, theme.bg_default, true);
-  ui->draw_text(
-      content_x + 5, content_y, "Developer workspace", theme.fg_comment, theme.bg_default);
+  // the header itself, so the big wordmark, its tagline row and the context
+  // line only need drawing on this path. This mirrors the shape the Lua
+  // painter composes (features/ui/home.lua).
+  const int letter_fg[3] = {theme.fg_keyword, theme.fg_function, theme.fg_type};
+  int header_y = content_y;
+  for (const auto &letters : view.wordmark_art)
+  {
+    int x = content_x;
+    for (size_t i = 0; i < letters.size(); i++)
+    {
+      ui->draw_text(
+          x, header_y, letters[i], letter_fg[std::min(i, (size_t)2)], theme.bg_default, true);
+      x += ui_cell_count(letters[i]) + 1;
+    }
+    header_y++;
+  }
+  if (view.wordmark_art.empty())
+  {
+    ui->draw_text(content_x, header_y, view.wordmark, theme.fg_keyword, theme.bg_default, true);
+    header_y++;
+  }
+  if (!view.tagline.empty())
+  {
+    ui->draw_text(content_x, header_y, "\uf121", theme.fg_keyword, theme.bg_default);
+    ui->draw_text(content_x + 2, header_y, view.tagline, theme.fg_comment, theme.bg_default);
+  }
   const std::string hint = view.hint;
-  const int hint_x = content_x + content_w - (int)hint.size() - 1;
+  const int hint_x = content_x + content_w - ui_cell_count(hint) - 1;
   if (hint_x > content_x + 26)
   {
-    ui->draw_text(hint_x, content_y, hint, theme.fg_comment, theme.bg_default);
+    ui->draw_text(hint_x, header_y, hint, theme.fg_comment, theme.bg_default);
   }
-  ui->draw_text(
-      content_x,
-      content_y + 1,
-      ellipsize_right(view.filter.empty() ? view.context : view.filter, std::max(0, content_w - 2)),
-      theme.fg_default,
-      theme.bg_default);
+  const int context_y = header_y + 1;
+  if (view.filter.empty() && !view.context_icon.empty())
+  {
+    ui->draw_text(content_x, context_y, view.context_icon, theme.fg_keyword, theme.bg_default);
+    ui->draw_text(content_x + ui_cell_count(view.context_icon) + 1,
+                  context_y,
+                  ellipsize_right(view.context,
+                                  std::max(0, content_w - ui_cell_count(view.context_icon) - 3)),
+                  theme.fg_default,
+                  theme.bg_default);
+  }
+  else
+  {
+    ui->draw_text(content_x,
+                  context_y,
+                  ellipsize_right(view.filter.empty() ? view.context : view.filter,
+                                  std::max(0, content_w - 2)),
+                  theme.fg_default,
+                  theme.bg_default);
+  }
   for (const auto &row : view.rows)
   {
     if (row.section)
     {
-      ui->draw_text(row.x, row.y, row.label, theme.fg_sidebar_directory, theme.bg_default, true);
+      int x = row.x;
+      const int fg = row.fg >= 0 ? row.fg : theme.fg_sidebar_directory;
+      if (!row.icon.empty())
+      {
+        ui->draw_text(
+            x, row.y, row.icon, row.icon_fg >= 0 ? row.icon_fg : fg, theme.bg_default, true);
+        x += ui_cell_count(row.icon) + 1;
+      }
+      ui->draw_text(x,
+                    row.y,
+                    ellipsize_right(row.label, std::max(0, row.w - (x - row.x))),
+                    fg,
+                    theme.bg_default,
+                    true);
       continue;
     }
     const bool selected = row.selected;
-    const int fg = selected ? theme.fg_selection : theme.fg_default;
+    const int fg = selected ? theme.fg_selection : (row.fg >= 0 ? row.fg : theme.fg_default);
     const int bg = selected ? theme.bg_selection : theme.bg_default;
-    std::string label = row.label;
-    // The band hugs the label rather than the whole row: the panel is much
-    // wider than the names it lists, and a bar run edge to edge reads as a rule
-    // across the screen instead of a highlight on the row.
+    const int icon_cells = row.icon.empty() ? 0 : ui_cell_count(row.icon) + 1;
+    // The band hugs the label (and its icon) rather than the whole row: the
+    // panel is much wider than the names it lists, and a bar run edge to edge
+    // reads as a rule across the screen instead of a highlight on the row.
     if (selected)
     {
-      UIRect band = {row.x + 1, row.y, ui_cell_count(label), 1};
+      UIRect band = {row.x + 1, row.y, icon_cells + ui_cell_count(row.label), 1};
       ui->fill_rect(band, " ", fg, bg);
     }
-    ui->draw_text(row.x + 1, row.y, label, fg, bg, selected);
+    int label_x = row.x + 1;
+    if (!row.icon.empty())
+    {
+      ui->draw_text(label_x, row.y, row.icon, row.icon_fg >= 0 ? row.icon_fg : fg, bg);
+      label_x += icon_cells;
+    }
+    ui->draw_text(label_x, row.y, row.label, fg, bg, selected);
     const int key_gap = row.key.empty() ? 0 : 2;
     if (!row.secondary.empty())
     {
       std::string secondary = row.secondary;
       int sx = row.x + row.w - (int)secondary.size() - 1 - key_gap;
-      if (sx > row.x + (int)label.size() + 2)
+      if (sx > label_x + (int)row.label.size() + 2)
       {
         ui->draw_text(sx, row.y, secondary, theme.fg_comment, theme.bg_default);
       }
@@ -906,7 +1084,7 @@ void Editor::render_home_menu()
       ui->draw_text(row.x + row.w - (int)row.key.size() - 1,
                     row.y,
                     row.key,
-                    theme.fg_comment,
+                    theme.fg_keyword,
                     theme.bg_default);
     }
   }

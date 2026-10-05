@@ -50,8 +50,9 @@ namespace
   }
 
   // Mirrors the native home layout for the probe grid: the panel is centered,
-  // the section header sits four rows below its top, and items start two rows
-  // under the header.
+  // the section header sits four rows below its top (the 80x24 grid is too
+  // short for the big wordmark, so the header is the compact one-line one),
+  // and items start two rows under the header.
   struct HomeProbe
   {
     int content_x = 0;
@@ -197,6 +198,52 @@ TEST_CASE("Home screen owns the frame: the explorer float is torn down", "[jot]"
   e.render_for_test();
   REQUIRE(e.lua_float_count_for_test("sidebar") == 1);
   REQUIRE(ui->cell_at(separator_x, 1)->ch == "│");
+}
+
+TEST_CASE("The home header wears the big wordmark where the grid can hold it", "[jot]")
+{
+  Editor &e = probe_editor();
+  e.set_home_menu_visible(true);
+  e.apply_resize_for_test(120, 32);
+  e.render_for_test();
+
+  // The mark takes the panel's top three rows, one row of block letters each.
+  std::vector<int> art_rows;
+  std::vector<int> letter_fg;
+  for (int y = 0; y < 6; ++y)
+  {
+    if (cell_row(e, y).find("\u2588") == std::string::npos)
+    {
+      continue;
+    }
+    art_rows.push_back(y);
+    for (int x = 0; x < e.ui_width_for_test(); ++x)
+    {
+      const UICell *cell = e.ui_for_test()->cell_at(x, y);
+      if (cell && cell->ch == "\u2588")
+      {
+        letter_fg.push_back(cell->fg);
+      }
+    }
+  }
+  REQUIRE(art_rows.size() == 3);
+  // One accent per letter: J, O and T each carry their own color.
+  std::sort(letter_fg.begin(), letter_fg.end());
+  letter_fg.erase(std::unique(letter_fg.begin(), letter_fg.end()), letter_fg.end());
+  REQUIRE(letter_fg.size() == 3);
+
+  // A grid too short for the mark spends its rows on the lists instead: the
+  // compact one-line wordmark is back, and the sections still fit.
+  e.apply_resize_for_test(80, 24);
+  e.render_for_test();
+  for (int y = 0; y < 5; ++y)
+  {
+    REQUIRE(cell_row(e, y).find("\u2588") == std::string::npos);
+  }
+  REQUIRE(cell_row(e, 2).find("JOT") != std::string::npos);
+
+  e.set_home_menu_visible(false);
+  e.render_for_test();
 }
 
 TEST_CASE("Home screen owns row 0: the workspace strip is not part of it", "[jot]")
