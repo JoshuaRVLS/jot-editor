@@ -1048,6 +1048,9 @@ addressable -- `Alt+1..9` and a click pick a *position on the strip*, while
 `Ctrl+Tab` keeps walking the focused pane's history. Clicking a tab whose buffer
 another pane already shows takes focus to that pane; the dot next to such a tab
 is that marker, and the pin glyph marks a tab held at the front of the order.
+The strip is workspace chrome, not part of the home screen: while the launcher
+is up the row carries no tabs, and its cells answer no clicks, until the editor
+is back.
 
 `Alt+R` arms the letter picker: every tab is painted with the letter it answers
 to (the file's initials first, then the home row), and the next key switches to

@@ -20,7 +20,9 @@ the cells back out of the pty stream:
   * '/' lets a shortcut letter start a query instead of firing,
   * a query and its Enter in one read still open the row the query left, and a
     query that matches nothing opens nothing,
-  * a click on a row opens what it names.
+  * a click on a row opens what it names,
+  * a file already open does not leave its tab on the home screen: the
+    workspace strip is workspace chrome, not part of the launcher.
 
 Usage: test/home_open_probe.py [path-to-jot] [--dump]
 Exit codes: 0 pass, 1 fail, 2 skipped (no binary).
@@ -36,10 +38,17 @@ from pty_screen import run_in_pty  # noqa: E402
 
 ESC = b"\x1b"
 ENTER = b"\r"
+CTRL_P = b"\x10"
 
 # The launch folder, and the two projects beside it. The parent path holds no
 # letters the queries below use, so "beta" can only mean the project.
 ROOT = "/tmp/jhx"
+
+# The transient startup toast shown when a bundled highlight query cannot load
+# paints the top-right corner for a few seconds and covers the wordmark row's
+# "/ filter" legend. A machine whose queries all load never shows it, and the
+# wait returns at once.
+TRANSIENT_TOAST = "Tree-sitter:"
 
 
 def write_tree(root: str) -> str:
@@ -118,8 +127,12 @@ def click(col: int, y: int) -> bytes:
     return f"\x1b[<0;{col};{y}M\x1b[<0;{col};{y}m".encode()
 
 
-def run(binary: str, work: str, cfg: str, keys: bytes = b"", phases=None):
-    return run_in_pty(binary, [], keys, settle=3.5, after=2.5, cols=110, rows=30, cfg=cfg,
+def toast_gone(screen) -> bool:
+    return TRANSIENT_TOAST not in screen.text()
+
+
+def run(binary: str, work: str, cfg: str, keys: bytes = b"", phases=None, args=()):
+    return run_in_pty(binary, list(args), keys, settle=3.5, after=2.5, cols=110, rows=30, cfg=cfg,
                       cwd=work, phases=phases)
 
 
@@ -142,7 +155,7 @@ def main() -> int:
 
     # 1. The launch folder names itself, and the projects around it are listed
     # with a key on every row.
-    base = run(binary, work, cfg)
+    base = run(binary, work, cfg, phases=[(0.2, toast_gone)])
     shot(base, "startup")
     context_y = find_row(base, "Here")
     alpha_y = find_row(base, "alpha")
@@ -268,6 +281,24 @@ def main() -> int:
     print(f"click at ({click_col}, {click_y + 1}): {row_text(screen, 0).strip()[:60]!r}")
     if not screen_has(screen, "go.mod"):
         failures.append(f"the click at ({click_col}, {click_y + 1}) did not open the project")
+
+    # 9. The home screen is not the workspace: a file that is already open must
+    # not leave its tab painted on row 0. The screen is raised from the editor
+    # through the palette (Ctrl+P, "home"), so a buffer is on screen when it
+    # opens; the tab strip would sit on the top row, above the wordmark.
+    screen = run(binary, work, cfg,
+                 phases=[(0.6, CTRL_P),
+                         (1.0, b"home"),
+                         (0.8, ENTER),
+                         (1.0, lambda s: screen_has(s, "JOT Developer workspace"))],
+                 args=("notes.txt",))
+    shot(screen, "home raised with a file open")
+    print(f"row 0 with home up: {row_text(screen, 0).strip()[:50]!r}")
+    if not screen_has(screen, "JOT Developer workspace"):
+        failures.append("the home screen did not open over the open buffer")
+    elif row_text(screen, 0).strip():
+        failures.append("the opened file's tab is painted on the home screen "
+                        f"(row 0: {row_text(screen, 0).strip()[:40]!r})")
 
     if failures:
         print("home probe: FAIL")

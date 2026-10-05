@@ -35,6 +35,20 @@ namespace
     out << text;
   }
 
+  // One painted screen row, so a case reads what the frame actually shows
+  // instead of the model behind it.
+  std::string cell_row(Editor &e, int y)
+  {
+    UI *ui = e.ui_for_test();
+    std::string text;
+    for (int x = 0; x < e.ui_width_for_test(); ++x)
+    {
+      const UICell *cell = ui ? ui->cell_at(x, y) : nullptr;
+      text += cell ? cell->ch : " ";
+    }
+    return text;
+  }
+
   // Mirrors the native home layout for the probe grid: the panel is centered,
   // the section header sits four rows below its top, and items start two rows
   // under the header.
@@ -183,4 +197,44 @@ TEST_CASE("Home screen owns the frame: the explorer float is torn down", "[jot]"
   e.render_for_test();
   REQUIRE(e.lua_float_count_for_test("sidebar") == 1);
   REQUIRE(ui->cell_at(separator_x, 1)->ch == "│");
+}
+
+TEST_CASE("Home screen owns row 0: the workspace strip is not part of it", "[jot]")
+{
+  Editor &e = probe_editor();
+  char tmpl[] = "/tmp/jot_home_strip_XXXXXX";
+  REQUIRE(mkdtemp(tmpl) != nullptr);
+  const std::string root = tmpl;
+  write_file(root + "/alpha.txt", "alpha\n");
+  write_file(root + "/beta.txt", "beta\n");
+
+  e.set_home_menu_visible(false);
+  e.apply_resize_for_test(120, 30);
+  e.host().io.open_workspace(root);
+  e.load_file(root + "/alpha.txt");
+  e.load_file(root + "/beta.txt");
+  e.render_for_test();
+
+  // The workspace frame paints the strip on row 0, every open buffer on it.
+  const std::string strip_row = cell_row(e, 0);
+  REQUIRE(strip_row.find("alpha.txt") != std::string::npos);
+  REQUIRE(strip_row.find("beta.txt") != std::string::npos);
+  const int alpha_x = (int)strip_row.find("alpha.txt");
+  REQUIRE(e.buffer_for_test().filepath == root + "/beta.txt");
+
+  // The home screen owns the whole frame, so the strip is off it: row 0 is
+  // blank, and the cell that held a tab is not a live tab any more. The click
+  // belongs to the screen (outside its panel, so it dismisses it), and the
+  // buffer behind the launcher must not switch under the pointer.
+  e.set_home_menu_visible(true);
+  e.render_for_test();
+  REQUIRE(cell_row(e, 0).find_first_not_of(' ') == std::string::npos);
+  e.mouse_event_for_test(alpha_x, 0, 1);
+  REQUIRE(e.buffer_for_test().filepath == root + "/beta.txt");
+
+  // Closing home brings the strip back, and the tab it paints switches again.
+  e.render_for_test();
+  REQUIRE(cell_row(e, 0).find("alpha.txt") != std::string::npos);
+  e.mouse_event_for_test(alpha_x, 0, 1);
+  REQUIRE(e.buffer_for_test().filepath == root + "/alpha.txt");
 }

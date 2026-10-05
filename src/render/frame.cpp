@@ -274,7 +274,8 @@ void Editor::render()
       render_menu_bar();
       render_menu_dropdown();
     }
-    render_tabline();
+    // No workspace strip here: the home screen owns the frame, and
+    // tabline_shown() answers false while it is up.
     render_status_line();
     // The home screen returns before the shared tail, so its prompts take the
     // scrim here (quitting from the home menu raises the same panel).

@@ -98,10 +98,14 @@ private:
   }
 
   // Whether the workspace strip owns row 0 right now: it can be turned off, and
-  // `tabline_auto_hide` keeps it out of the way with only a few tabs open.
+  // `tabline_auto_hide` keeps it out of the way with only a few tabs open. The
+  // home screen owns the whole frame, and the strip is workspace chrome: it is
+  // not part of the launcher, so the row, its paint and its hit tests all stay
+  // with the workspace until the screen closes.
   bool tabline_shown() const
   {
-    return tabline_visible && (int)tab_order.indices(buffers).size() > tabline_auto_hide;
+    return !show_home_menu && tabline_visible
+           && (int)tab_order.indices(buffers).size() > tabline_auto_hide;
   }
 
   // The strip's first screen row (below the retired menu bar, when it ever
