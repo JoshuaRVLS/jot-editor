@@ -452,6 +452,16 @@ public:
   {
     return integrated_terminal_panel_w();
   }
+  // The docked shell's own content span, which the session list (and its
+  // divider gutter) narrows.
+  int docked_terminal_view_w_for_test()
+  {
+    return docked_terminal_view().w;
+  }
+  int docked_terminal_view_h_for_test()
+  {
+    return docked_terminal_view().h;
+  }
   // Floating terminal (Alt+Shift+T, :termfloat). The box is registered
   // shell-less (like add_terminal_for_test), so the geometry, the routing and
   // the selection math run against a live vterm without a process.
@@ -845,20 +855,44 @@ public:
   {
     return bottom_panel_view_label(view);
   }
+  int bottom_panel_view_tab_x_for_test(int view) const
+  {
+    return bottom_panel_view_tab_x(view);
+  }
   int bottom_panel_view_tab_y_for_test() const
   {
     return bottom_panel_view_tab_y();
   }
-  int bottom_panel_terminal_tab_y_for_test() const
+  int bottom_panel_shell_list_w_for_test() const
   {
-    return bottom_panel_terminal_tab_y();
+    return bottom_panel_shell_list_w();
   }
-  std::string integrated_terminal_tab_label_for_test(int index) const
+  int bottom_panel_shell_list_x_for_test() const
   {
-    return integrated_terminal_tab_label(index);
+    return bottom_panel_shell_list_x();
   }
-  // The terminal's own name (get_label), as opposed to the label the strip
-  // draws: the two differ once a custom name was elided for display.
+  int bottom_panel_shell_list_at_for_test(int x, int y) const
+  {
+    return bottom_panel_shell_list_at(x, y);
+  }
+  int integrated_terminal_count_for_test() const
+  {
+    return (int)integrated_terminals.size();
+  }
+  int current_integrated_terminal_for_test() const
+  {
+    return current_integrated_terminal;
+  }
+  std::string integrated_terminal_session_label_for_test(int index) const
+  {
+    return integrated_terminal_session_label(index);
+  }
+  std::string integrated_terminal_display_name_for_test(int index) const
+  {
+    return integrated_terminal_display_name(index);
+  }
+  // The terminal's own name (get_label), as opposed to the label the session
+  // list draws: the two differ once a custom name was elided for display.
   std::string integrated_terminal_name_for_test(int index) const
   {
     if (index < 0 || index >= (int)integrated_terminals.size() || !integrated_terminals[index])

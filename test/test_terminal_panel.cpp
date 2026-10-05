@@ -40,11 +40,12 @@ TEST_CASE("Terminal panel geometry: bottom panel vs fullscreen zoom", "[jot]")
   REQUIRE(panel_h >= 5);
   // The panel sits above the status line and never covers the tab strip.
   REQUIRE(panel_y >= 1);
-  // Its own rows start with the view tabs. The rule along its top is one row
-  // higher, inside the panel's reservation, so it costs the pane area a row
-  // only while the panel is up -- the pane's last row stays a code row.
+  // Its own rows start with the tab bar, and the content follows one row under
+  // it. The rule along its top is one row higher, inside the panel's
+  // reservation, so it costs the pane area a row only while the panel is up --
+  // the pane's last row stays a code row.
   REQUIRE(e.bottom_panel_view_tab_y_for_test() == panel_y);
-  REQUIRE(e.bottom_panel_terminal_tab_y_for_test() == panel_y + 1);
+  REQUIRE(e.bottom_panel_content_y_for_test() == panel_y + 1);
   REQUIRE(panel_y + panel_h <= screen_h - 1);
   REQUIRE(panel_w >= 1);
 
@@ -258,22 +259,26 @@ TEST_CASE("Terminal selection clears when the panel closes", "[jot]")
   REQUIRE_FALSE(e.terminal_sel_dragging_for_test());
 }
 
-TEST_CASE("Terminal clicks on the tab strip never start a selection", "[jot]")
+TEST_CASE("Terminal clicks on the session list never start a selection", "[jot]")
 {
   Editor &e = probe_editor();
   e.set_terminal_state_for_test(true, false, 10);
   e.add_terminal_for_test();
-  const int tab_y = e.bottom_panel_terminal_tab_y_for_test();
+  e.set_bottom_panel_view_for_test(BOTTOM_PANEL_TERMINAL);
+  const int list_x = e.bottom_panel_shell_list_x_for_test();
+  const int row_y = e.bottom_panel_content_y_for_test();
 
-  // The first tab starts at x=1 and leads with the shell glyph (x=2) before
-  // its "term 1" name; pressing it activates the terminal, and it must not
-  // anchor a selection in the content area.
-  REQUIRE(e.terminal_mouse_for_test(2, tab_y, true, false, false));
+  // A session row leads with the shell glyph one cell in from the column's
+  // edge; pressing it activates that shell, and it must not anchor a selection
+  // in the content beside it.
+  REQUIRE(list_x > 0);
+  REQUIRE(e.bottom_panel_shell_list_at_for_test(list_x + 1, row_y) >= 0);
+  REQUIRE(e.terminal_mouse_for_test(list_x + 1, row_y, true, false, false));
   REQUIRE_FALSE(e.terminal_sel_active_for_test());
   REQUIRE_FALSE(e.terminal_sel_dragging_for_test());
 
-  // Motions over the tab row are consumed but inert too.
-  e.terminal_mouse_for_test(3, tab_y, false, true, false);
+  // Motions over the list are consumed but inert too.
+  e.terminal_mouse_for_test(list_x + 1, row_y, false, true, false);
   REQUIRE_FALSE(e.terminal_sel_active_for_test());
 }
 

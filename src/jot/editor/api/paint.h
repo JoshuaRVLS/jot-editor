@@ -149,18 +149,37 @@ private:
   // hit-test walk the same two label offsets.
   int bottom_panel_view_tabs_width() const;
   static const char *bottom_panel_view_label(int view);
-  // The panel's rows: the view tabs, a second strip for the shell's own tabs
-  // (terminal view only), then content. Shared here so the renderer, the mouse
-  // hit-tests and the terminal's selection math cannot drift apart.
+  // A view label's first cell: the labels run down the left end of the tab bar
+  // with a fixed gap between them, measured by both the renderer and the click
+  // hit-test.
+  int bottom_panel_view_tab_x(int view) const;
+  // The panel's rows: the tab bar (view labels on the left, the action cluster
+  // on the right), then content. Both views share the same two rows now: the
+  // shell's sessions moved off the panel into the vertical list down its right
+  // side (see bottom_panel_shell_list_w), so neither view spends a row on tabs.
+  // Shared here so the renderer, the mouse hit-tests and the terminal's
+  // selection math cannot drift apart.
   int bottom_panel_view_tab_y() const;
-  int bottom_panel_terminal_tab_y() const;
-  // One shell tab's label (leading pad, shell glyph, name, trailing pad), built
-  // here so the strip's renderer and every hit-test measure the same string. A
-  // long custom name is elided to a share of the strip so it cannot push the
-  // tabs after it (and the "+") off the row.
-  std::string integrated_terminal_tab_label(int index) const;
   int bottom_panel_content_y() const;
   int bottom_panel_content_h() const;
+  // The session list's column: one row per shell session down the right side of
+  // the terminal view, the way the editor's docks carry their own tab strips.
+  // The width follows the names (within bounds) and the shell keeps a minimum
+  // span beside it; 0 means the panel is too narrow and the shell takes the row
+  // instead. bottom_panel_shell_list_at maps a cell to a terminal index, or -1
+  // when the cell is outside the list.
+  int bottom_panel_shell_list_w() const;
+  int bottom_panel_shell_list_x() const;
+  int bottom_panel_shell_list_at(int x, int y) const;
+  void render_bottom_panel_session_list();
+  // The name a session list row draws (the generated "term N" or the custom
+  // label), as opposed to get_label(), which is what the task runner and the
+  // Lua API match on.
+  std::string integrated_terminal_display_name(int index) const;
+  // One session's list label (the shell glyph, then the name), built here so
+  // the list's renderer and every hit-test measure the same string. A long
+  // custom name is elided to the column's share with an ellipsis.
+  std::string integrated_terminal_session_label(int index) const;
   void render_debugger_panel();
   void render_git_diff_panel();
   void render_git_panel();

@@ -51,11 +51,15 @@ NEW_TERM = b"termnew"
 CWD = b'echo "cwd:$PWD"\r'
 CWD2 = b'echo "cwd2:$PWD"\r'
 EXIT = b"exit\r"
-# A click inside the terminal panel's content, below the tab bar and above the
+# A click inside the terminal panel's content, below its bar and above the
 # status line at 36 rows. A shell that has exited hands the focus back, so
 # typing no longer reaches it: the click is what refocuses the panel and
 # restarts the shell.
 PANEL_CLICK = b"\x1b[<0;5;31M\x1b[<0;5;31m"
+# The shell the palette's command creates, as the session list names it. Waiting
+# for this row is waiting for a terminal to exist at all: the bar is drawn for an
+# empty view too, and a click landing on that one focuses nothing.
+SHELL_ROW = "term 1"
 
 
 def rows(screen) -> list[str]:
@@ -67,14 +71,19 @@ def cwd_report(prefix: str, expect: str, into: dict):
 
     The answer is read here rather than off the final screen: the panel
     scrolls, and by the end of a scene the line a phase waited for may have
-    gone, which would read as a shell that never answered.
+    gone, which would read as a shell that never answered. A row is read by
+    the marker it carries, not matched whole: the session list's divider runs
+    down the panel's right side, so the shell's own rows carry it too.
     """
-    wanted = {prefix + expect, prefix + LAUNCH}
+    wanted = {expect, LAUNCH}
 
     def phase(screen) -> bool:
         for row in rows(screen):
-            if row in wanted:
-                into[prefix] = row
+            if prefix not in row:
+                continue
+            answer = row.split(prefix, 1)[1].split()[0]
+            if answer in wanted:
+                into[prefix] = prefix + answer
                 return True
         return False
 
@@ -105,11 +114,19 @@ def open_terminal(binary: str, args, cwd: str, cfg: str, marker: str, expect: st
         (0.6, PALETTE),
         (0.8, NEW_TERM),
         (0.6, ENTER),
+        # The shell has to exist before the click can refocus it: a click
+        # landing on the panel while it has no terminal focuses nothing, and
+        # the echo below never reaches a shell.
+        (0.4, lambda s: any(SHELL_ROW in row for row in rows(s))),
         # The click is what hands the keys to the panel: the command that
         # creates the terminal and the panel's own focus have to have settled,
         # and a click states it instead of racing the palette's close.
-        (1.0, PANEL_CLICK),
-        (1.0, CWD),
+        (0.6, PANEL_CLICK),
+        # A shell flushes what is already in the pty when it takes the terminal
+        # over (tcsetattr TCSAFLUSH at startup), so the echo waits for the
+        # prompt to be on screen: a line typed before that is simply lost.
+        (0.3, lambda s: any("$" in row for row in rows(s))),
+        (0.2, CWD),
         (0.2, cwd_report("cwd:", expect, report)),
     ]
     if restart:

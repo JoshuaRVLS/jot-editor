@@ -56,29 +56,15 @@ bool Editor::open_context_menu_for_mouse(int x, int y)
     int panel_h = integrated_terminal_panel_h();
     int panel_y = integrated_terminal_panel_y();
     int panel_w = integrated_terminal_panel_w();
-    int tab_y = panel_y + 1;
     if (x >= 0 && x < panel_w && y >= panel_y && y < panel_y + panel_h)
     {
-      int target_terminal = current_integrated_terminal;
-      bool on_tab = (y == tab_y || y == panel_y);
-      if (on_tab)
-      {
-        int tab_x = 1;
-        for (int i = 0; i < (int)integrated_terminals.size(); i++)
-        {
-          // Reuse the strip's own label and measurement (cells) so the tab a
-          // right-click targets is the tab that was drawn there.
-          int tab_w = ui_cell_count(integrated_terminal_tab_label(i)) + 2;
-          if (x >= tab_x && x < tab_x + tab_w)
-          {
-            target_terminal = i;
-            break;
-          }
-          tab_x += tab_w;
-          if (tab_x >= panel_w - 4)
-            break;
-        }
-      }
+      // The session list is where the shells are named now: a right-click on a
+      // row targets that shell, and only there does "Close Terminal" apply. The
+      // list's own hit-test is reused, so the row a right-click targets is the
+      // row that was drawn there.
+      const int list_index = bottom_panel_shell_list_at(x, y);
+      const bool on_tab = list_index >= 0;
+      int target_terminal = on_tab ? list_index : current_integrated_terminal;
       context_menu_target_terminal = target_terminal;
       std::vector<ContextMenuItem> items = {
           {"Focus Terminal", CONTEXT_ACTION_TERMINAL_FOCUS, target_terminal >= 0},

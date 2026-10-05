@@ -47,6 +47,11 @@ ESC = b"\x1b"
 ENTER = b"\r"
 FLOAT_OK = "FLOAT_OK_123"
 TITLE = "Floating terminal"
+# The docked panel's bar: its view labels on the left, its action cluster on
+# the right. The close action's glyph is what tells the bar apart from anything
+# the shell prints inside the panel's own rows.
+VIEW_LABEL = "PROBLEMS"
+CLOSE_GLYPH = "\uf00d"
 
 
 def rows(screen) -> list[str]:
@@ -121,14 +126,14 @@ def box_content_lines(lines: list[str], edges) -> list[str]:
 
 
 def docked_content_lines(lines: list[str]) -> list[str]:
-    """The docked panel's rows under its tab strip, up to the status line.
+    """The docked panel's rows under its bar, up to the status line.
 
-    The strip is found by its close marker and `+` tab: nothing a shell prints
-    inside the panel's rows looks like both of those at that depth from the
-    bottom.
+    The bar is found by its whole shape: the view labels at its left and the
+    close action at its right, a row nothing a shell prints inside the panel's
+    own rows looks like at that depth from the bottom.
     """
     for y in range(len(lines) - 1, max(0, len(lines) - 14), -1):
-        if "x|" in lines[y] and "+" in lines[y]:
+        if VIEW_LABEL in lines[y] and CLOSE_GLYPH in lines[y]:
             return lines[y + 1 : len(lines) - 1]
     return []
 

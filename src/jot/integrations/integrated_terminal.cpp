@@ -7,25 +7,66 @@
 
 namespace
 {
-// A shell tab leads with nf-dev-terminal, the glyph the file tree already uses
-// for shell scripts: it says "this tab is a shell session" without repeating
-// the view tab's fa-terminal two rows above it.
-constexpr const char *kShellTabIcon = "\uE795";
+  // A session row leads with nf-dev-terminal, the glyph the file tree already
+  // uses for shell scripts: it says "this row is a shell session" without
+  // repeating the view label on the bar above it.
+  constexpr const char *kShellSessionIcon = "\uE795";
 
-// Cells the label spends around the name itself: the leading pad, the glyph,
-// the space after it and the trailing pad.
-constexpr int kShellTabFrameCells = 4;
+  // Cells a session row spends around the name itself: the leading pad, the
+  // glyph, the space after it and the trailing pad.
+  constexpr int kShellSessionFrameCells = 4;
 
-// A single tab's cell allowance. The renderer drops every tab that no longer
-// fits on the row, so before this one long custom name (a task, an install
-// job, a plugin's label) hid the tabs after it and the "+" with them. A
-// quarter of the strip keeps several names visible at any width; the floor
-// keeps the name readable on a narrow panel instead of collapsing it to one
-// character.
-int shell_tab_label_cells(int panel_w)
-{
-  return std::max(12, panel_w / 4);
-}
+  // The session list's bounds: wide enough for a readable name, never more than a
+  // third of the panel, and gone entirely when the shell would be squeezed below
+  // a usable width (the shell takes the full row then).
+  constexpr int kShellListMinCells = 12;
+  constexpr int kShellListMinShellCells = 24;
+
+  // The gap between the two view labels, and between the action cluster and the
+  // labels it must clear.
+  constexpr int kViewTabGap = 3;
+
+  // The panel's own actions, in the order the cluster draws them left to right.
+  // One cell each, with a two-cell gap, anchored to the panel's right edge.
+  enum BottomPanelAction
+  {
+    BOTTOM_PANEL_ACTION_NEW = 0,
+    BOTTOM_PANEL_ACTION_ZOOM,
+    BOTTOM_PANEL_ACTION_CLOSE,
+    BOTTOM_PANEL_ACTION_COUNT,
+  };
+
+  // The cell an action's glyph sits on, or -1 when it would run into the view
+  // labels: the cluster sheds actions from the inside out as the panel narrows.
+  int bottom_panel_action_x(int action, int panel_w, int cluster_left)
+  {
+    const int x = panel_w - 2 - 3 * (BOTTOM_PANEL_ACTION_CLOSE - action);
+    return x >= cluster_left ? x : -1;
+  }
+
+  // The action owning a cell of the tab bar, or -1 for none.
+  int bottom_panel_action_at(int x, int panel_w, int cluster_left)
+  {
+    for (int action = 0; action < BOTTOM_PANEL_ACTION_COUNT; action++)
+    {
+      if (bottom_panel_action_x(action, panel_w, cluster_left) == x)
+      {
+        return action;
+      }
+    }
+    return -1;
+  }
+
+  // The first session the list shows, so the focused shell stays visible when the
+  // sessions outnumber the rows.
+  int shell_list_first_row(int count, int rows, int current)
+  {
+    if (count <= rows)
+    {
+      return 0;
+    }
+    return std::clamp(current - rows / 2, 0, count - rows);
+  }
 
 // The selected run in reading order. Each end carries its own row's column, so
 // a drag kept inside a single row still has two distinct ends.
@@ -50,28 +91,30 @@ terminal_selection_range(int anchor_row, int anchor_col, int cur_row, int cur_co
 }
 } // namespace
 
-std::string Editor::integrated_terminal_tab_label(int index) const
+std::string Editor::integrated_terminal_display_name(int index) const
 {
   if (index < 0 || index >= (int)integrated_terminals.size() || !integrated_terminals[index])
   {
     return {};
   }
   const std::string &custom = integrated_terminals[index]->get_label();
-  std::string base;
-  if (custom.empty())
+  // A generated name is bounded by construction; draw it exactly.
+  return custom.empty() ? "term " + std::to_string(index + 1) : custom;
+}
+
+std::string Editor::integrated_terminal_session_label(int index) const
+{
+  const std::string name = integrated_terminal_display_name(index);
+  if (name.empty())
   {
-    // A generated name is bounded by construction; draw it exactly.
-    base = "term " + std::to_string(index + 1);
+    return {};
   }
-  else
-  {
-    // A custom name is unbounded, so elide it to the tab's share with an
-    // ellipsis. Only the drawn label shrinks: get_label() keeps the full name,
-    // which is what the task runner, lazygit reuse and the Lua API match on.
-    base = ui_truncate_cells_ellipsis(
-        custom, shell_tab_label_cells(integrated_terminal_panel_w()) - kShellTabFrameCells);
-  }
-  return " " + std::string(kShellTabIcon) + " " + base + " ";
+  // The column is sized from the longest name, so this elides only when the
+  // panel-wide cap bit: the drawn name gives way before the column does. Only
+  // the drawn label shrinks: get_label() keeps the full name, which is what the
+  // task runner, lazygit reuse and the Lua API match on.
+  const int budget = std::max(1, bottom_panel_shell_list_w() - kShellSessionFrameCells);
+  return " " + std::string(kShellSessionIcon) + " " + ui_truncate_cells_ellipsis(name, budget);
 }
 
 IntegratedTerminal *Editor::get_integrated_terminal(int index)
@@ -450,10 +493,12 @@ TerminalView Editor::docked_terminal_view()
   TerminalView view;
   view.term = get_integrated_terminal();
   // The dock inks no left border, so its content starts one cell in; the last
-  // cell is left to the panel's own edge.
+  // cell is left to the panel's own edge. The session list takes its column (and
+  // the divider gutter in front of it) off the shell's width when it is up.
+  const int list_w = bottom_panel_shell_list_w();
   view.x = 1;
   view.y = bottom_panel_content_y();
-  view.w = std::max(1, integrated_terminal_panel_w() - 2);
+  view.w = std::max(1, integrated_terminal_panel_w() - 2 - (list_w > 0 ? list_w + 1 : 0));
   view.h = std::max(1, bottom_panel_content_h());
   view.floating = false;
   return view;
@@ -696,7 +741,6 @@ bool Editor::handle_integrated_terminal_mouse(int x,
   const int panel_h = integrated_terminal_panel_h();
   const int panel_y = integrated_terminal_panel_y();
   const int panel_w = integrated_terminal_panel_w();
-  const int tab_y = bottom_panel_terminal_tab_y();
   const bool inside = x >= 0 && x < panel_w && y >= panel_y && y < panel_y + panel_h;
 
   // While a selection drag is in flight every motion/release belongs to the
@@ -721,70 +765,44 @@ bool Editor::handle_integrated_terminal_mouse(int x,
     return false;
   }
 
-  // The view tab row is the panel's first row, above the shell's own strip.
-  // The tabs are hit-tested by handle_bottom_panel_mouse, which runs first;
-  // whatever it declines up there is consumed inertly so a stray click can
-  // never fall through and focus a shell.
+  // The tab row is the panel's first row. Its labels and actions are hit-tested
+  // by handle_bottom_panel_mouse, which runs first; whatever it declines up
+  // there is consumed inertly so a stray click can never fall through and focus
+  // a shell.
   if (y == bottom_panel_view_tab_y())
   {
     return true;
   }
 
-  if (y == tab_y)
+  // The session list owns its column: a press focuses that shell. It is drawn
+  // over the content rows, so it is hit-tested before the terminal below it.
+  if (bottom_panel_shell_list_at(x, y) >= 0)
   {
-    // Only presses act on the tab strip; motions/releases over it (e.g.
-    // dragging a selection up past the content) are consumed but inert.
     if (!is_click)
     {
       return true;
     }
-    // The shell's strip spans the full panel width: the view tabs moved to
-    // their own row above it.
-    int tab_x = 1;
-    for (int i = 0; i < (int)integrated_terminals.size(); i++)
-    {
-      // The same builder the renderer used, measured the same way (cells).
-      const std::string label = integrated_terminal_tab_label(i);
-      int close_x = tab_x + ui_cell_count(label);
-      int tab_w = ui_cell_count(label) + 2;
-
-      if (x >= tab_x && x < tab_x + tab_w)
-      {
-        // The close "x" always closes its terminal, even the last one:
-        // closing the final terminal hides the whole panel (Esc-like).
-        if (x == close_x)
-        {
-          close_integrated_terminal(i);
-        }
-        else
-        {
-          show_integrated_terminal = true;
-          activate_integrated_terminal(i, true);
-          integrated_terminals[i]->poll_output();
-          set_message("Focused terminal " + std::to_string(i + 1));
-          needs_redraw = true;
-        }
-        return true;
-      }
-
-      tab_x += tab_w;
-      if (tab_x >= panel_w - 4)
-      {
-        break;
-      }
-    }
-
-    std::string plus_tab = " + ";
-    if (x >= tab_x && x < tab_x + (int)plus_tab.size())
-    {
-      create_integrated_terminal();
-      return true;
-    }
-    tab_x += (int)plus_tab.size();
-
+    const int index = bottom_panel_shell_list_at(x, y);
     show_integrated_terminal = true;
-    activate_integrated_terminal(current_integrated_terminal, true);
+    // A live shell is polled so its latest output is on screen the moment it
+    // is selected; a session the poll finds exited closes here, and its exit
+    // path clears the focus flag, so the press has to land after the poll.
+    if (integrated_terminals[(size_t)index]->is_active())
+    {
+      integrated_terminals[(size_t)index]->poll_output();
+    }
+    activate_integrated_terminal(index, true);
+    set_message("Focused terminal " + std::to_string(index + 1));
     needs_redraw = true;
+    return true;
+  }
+
+  // The panel's own cells around the shell -- the gutter in front of the list
+  // and the border columns -- are chrome: a press there focuses nothing and
+  // opens no selection, while a motion still falls through for link hovers.
+  const TerminalView view = docked_terminal_view();
+  if (is_click && (x < view.x || x >= view.x + view.w || y < view.y || y >= view.y + view.h))
+  {
     return true;
   }
 
@@ -960,53 +978,58 @@ void Editor::place_integrated_terminal_cursor()
     return;
   }
 
-  const int panel_w = integrated_terminal_panel_w();
-  int content_w = std::max(1, panel_w - 2);
-  int content_h = std::max(1, bottom_panel_content_h());
+  const TerminalView view = docked_terminal_view();
+  int content_w = std::max(1, view.w);
+  int content_h = std::max(1, view.h);
   term->resize(content_h, content_w);
 
-  int cursor_y = bottom_panel_content_y() + std::clamp(term->get_cursor_row(), 0, content_h - 1);
-  int cursor_x = 1 + (int)std::min((size_t)(content_w - 1), term->get_cursor_column());
+  int cursor_y = view.y + std::clamp(term->get_cursor_row(), 0, content_h - 1);
+  int cursor_x = view.x + (int)std::min((size_t)(content_w - 1), term->get_cursor_column());
 
   ui->set_cursor(cursor_x, cursor_y);
 }
 
 const char *Editor::bottom_panel_view_label(int view)
 {
-  // A glyph per view, so the strip says which view it is at a glance: the
-  // classic FontAwesome terminal for the shell, and the warning triangle the
-  // status line already uses for diagnostics. Nerd Fonts codepoints, like the
-  // rest of the chrome (see file_icons.h and git_panel.cpp).
-  return view == BOTTOM_PANEL_PROBLEMS ? " \uF071 Problems " : " \uF120 Terminal ";
+  // Flat uppercase labels, the way the panel's own tabs read in VS Code: no
+  // glyphs, no chips. The active one carries the brighter colour and an
+  // underline; the inactive one stays muted.
+  return view == BOTTOM_PANEL_PROBLEMS ? "PROBLEMS" : "TERMINAL";
+}
+
+int Editor::bottom_panel_view_tab_x(int view) const
+{
+  // The labels run Problems then Terminal, the way the panel's tabs read in VS
+  // Code. That is not the enum's own order, so the offsets are keyed off the
+  // label rather than the index.
+  if (view == BOTTOM_PANEL_PROBLEMS)
+  {
+    return 1;
+  }
+  return 1 + ui_cell_count(bottom_panel_view_label(BOTTOM_PANEL_PROBLEMS)) + kViewTabGap;
 }
 
 int Editor::bottom_panel_view_tabs_width() const
 {
-  // Both labels plus the one-cell gap before the shell's own tab strip. Cell
-  // count, not byte count: the labels carry a multi-byte glyph, and the
-  // renderer lays the labels out by rendered width.
+  // The two labels plus the gap between them: cell count, not byte count, so
+  // the renderer and the click hit-test walk the same offsets.
   return ui_cell_count(bottom_panel_view_label(BOTTOM_PANEL_TERMINAL))
-         + ui_cell_count(bottom_panel_view_label(BOTTOM_PANEL_PROBLEMS)) + 1;
+         + ui_cell_count(bottom_panel_view_label(BOTTOM_PANEL_PROBLEMS)) + kViewTabGap;
 }
 
 // The panel has no border row of its own: the pane area above owns the
 // separator along its top (see pane_edges.h), so the panel's first row carries
-// the view tabs -- which is also what stops the two rules from stacking.
+// the tab bar -- which is also what stops the two rules from stacking.
 int Editor::bottom_panel_view_tab_y() const
 {
   return integrated_terminal_panel_y();
 }
 
-int Editor::bottom_panel_terminal_tab_y() const
-{
-  return integrated_terminal_panel_y() + 1;
-}
-
 int Editor::bottom_panel_content_y() const
 {
-  // The shell spends a second row on its own tab strip; the list has only the
-  // view tabs above it.
-  return bottom_panel_terminal_tab_y() + (bottom_panel_view == BOTTOM_PANEL_TERMINAL ? 1 : 0);
+  // Both views start right under the tab bar: the shell's sessions moved out of
+  // the row and into the list down the panel's right side.
+  return bottom_panel_view_tab_y() + 1;
 }
 
 int Editor::bottom_panel_content_h() const
@@ -1014,6 +1037,93 @@ int Editor::bottom_panel_content_h() const
   // Everything between the content row and the panel's bottom border.
   const int bottom = integrated_terminal_panel_y() + integrated_terminal_panel_h() - 1;
   return std::max(0, bottom - bottom_panel_content_y());
+}
+
+int Editor::bottom_panel_shell_list_w() const
+{
+  if (!ui || !show_integrated_terminal || bottom_panel_view != BOTTOM_PANEL_TERMINAL
+      || integrated_terminals.empty())
+  {
+    return 0;
+  }
+  int longest = 0;
+  for (int i = 0; i < (int)integrated_terminals.size(); i++)
+  {
+    longest = std::max(longest, ui_cell_count(integrated_terminal_display_name(i)));
+  }
+  const int panel_w = integrated_terminal_panel_w();
+  const int cap = std::max(kShellListMinCells, panel_w / 3);
+  const int want = std::clamp(longest + kShellSessionFrameCells, kShellListMinCells, cap);
+  // The divider column is the list's own, so the shell pays for it too.
+  if (panel_w - want - 3 < kShellListMinShellCells)
+  {
+    return 0;
+  }
+  return want;
+}
+
+int Editor::bottom_panel_shell_list_x() const
+{
+  // The list hugs the panel's right edge, leaving the last cell to the panel
+  // frame (which inks the shared edge when the right dock is up).
+  const int list_w = bottom_panel_shell_list_w();
+  return list_w > 0 ? integrated_terminal_panel_w() - 1 - list_w : -1;
+}
+
+int Editor::bottom_panel_shell_list_at(int x, int y) const
+{
+  const int list_w = bottom_panel_shell_list_w();
+  if (list_w <= 0)
+  {
+    return -1;
+  }
+  const int list_x = bottom_panel_shell_list_x();
+  const int content_y = bottom_panel_content_y();
+  const int rows = bottom_panel_content_h();
+  if (x < list_x || x >= list_x + list_w || y < content_y || y >= content_y + rows)
+  {
+    return -1;
+  }
+  const int count = (int)integrated_terminals.size();
+  const int first = shell_list_first_row(count, rows, current_integrated_terminal);
+  const int index = first + (y - content_y);
+  return index < count ? index : -1;
+}
+
+void Editor::render_bottom_panel_session_list()
+{
+  const int list_w = bottom_panel_shell_list_w();
+  if (list_w <= 0)
+  {
+    return;
+  }
+  const int list_x = bottom_panel_shell_list_x();
+  const int content_y = bottom_panel_content_y();
+  const int rows = bottom_panel_content_h();
+  const int count = (int)integrated_terminals.size();
+  const int first = shell_list_first_row(count, rows, current_integrated_terminal);
+  for (int row = 0; row < rows; row++)
+  {
+    const int y = content_y + row;
+    // A one-cell divider in the gutter turns the column into its own region the
+    // way a dock's border does, without spending a border row.
+    ui->draw_text(list_x - 1, y, "\u2502", theme.fg_terminal_tab_separator, theme.bg_terminal);
+    const int index = first + row;
+    if (index >= count)
+    {
+      continue;
+    }
+    const bool active = index == current_integrated_terminal;
+    const bool focused = active && integrated_terminals[(size_t)index]->is_focused();
+    // Focused (the shell that owns the keyboard) takes the theme's chip; the
+    // merely-selected one keeps the panel background with the brighter text.
+    const int fg = focused
+                       ? theme.fg_terminal_tab_focused
+                       : (active ? theme.fg_terminal_tab_active : theme.fg_terminal_tab_inactive);
+    const int bg = focused ? theme.bg_terminal_tab_focused : theme.bg_terminal;
+    ui->fill_rect(UIRect{list_x, y, list_w, 1}, " ", fg, bg);
+    ui->draw_text(list_x, y, integrated_terminal_session_label(index), fg, bg, active);
+  }
 }
 
 void Editor::render_integrated_terminal()
@@ -1078,23 +1188,54 @@ void Editor::render_integrated_terminal()
   }
   ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal, edges);
 
-  // View tabs (which of the panel's views is showing) get their own row, so
-  // the shell's tab strip below can use the full width instead of sharing the
-  // row with them. Drawing walks the same two labels the click handler
-  // hit-tests, so the offsets cannot drift.
+  // The tab bar: the panel's views on the left, its actions on the right, all
+  // on the panel's own background. Flat labels (no chips) are what let one row
+  // serve both views; the active one reads by its brighter text and its
+  // underline. Drawing walks the same geometry the click handler hit-tests, so
+  // the offsets cannot drift.
   const int view_tab_y = bottom_panel_view_tab_y();
-  if (panel_w >= bottom_panel_view_tabs_width())
+  const int cluster_left = bottom_panel_view_tabs_width() + 2;
+  const BottomPanelView view_order[2] = {BOTTOM_PANEL_PROBLEMS, BOTTOM_PANEL_TERMINAL};
+  for (int i = 0; i < 2; i++)
   {
-    int view_tab_x = 1;
-    for (int view = 0; view < 2; view++)
+    const BottomPanelView view = view_order[i];
+    const int view_tab_x = bottom_panel_view_tab_x(view);
+    const std::string label = bottom_panel_view_label(view);
+    if (view_tab_x + ui_cell_count(label) > panel_w)
     {
-      const std::string label = bottom_panel_view_label(view);
-      const bool active = ((int)bottom_panel_view == view);
-      const int fg = active ? theme.fg_terminal_tab_focused : theme.fg_terminal_tab_inactive;
-      const int bg = active ? theme.bg_terminal_tab_focused : theme.bg_terminal_tab_inactive;
-      ui->draw_text(view_tab_x, view_tab_y, label, fg, bg, active);
-      view_tab_x += ui_cell_count(label);
+      break;
     }
+    const bool active = ((int)bottom_panel_view == view);
+    const int fg = active ? theme.fg_terminal_tab_active : theme.fg_terminal_tab_inactive;
+    // The underline in the accent colour marks the showing view without
+    // spending a chip's background on it.
+    ui->draw_text(view_tab_x,
+                  view_tab_y,
+                  label,
+                  fg,
+                  term_bg,
+                  false,
+                  false,
+                  active ? 1 : 0,
+                  active ? theme.fg_terminal_tab_focused : -1);
+  }
+  for (int action = 0; action < BOTTOM_PANEL_ACTION_COUNT; action++)
+  {
+    const int action_x = bottom_panel_action_x(action, panel_w, cluster_left);
+    if (action_x < 0)
+    {
+      continue;
+    }
+    // The "+" and the red close keep the colours the shell's tab strip used
+    // for them; the zoom toggle stays muted chrome.
+    const int fg = action == BOTTOM_PANEL_ACTION_NEW     ? theme.fg_terminal_tab_plus
+                   : action == BOTTOM_PANEL_ACTION_CLOSE ? theme.fg_terminal_tab_close
+                                                         : theme.fg_terminal_tab_inactive;
+    const char *glyph = action == BOTTOM_PANEL_ACTION_NEW ? "+"
+                        : action == BOTTOM_PANEL_ACTION_ZOOM
+                            ? (terminal_zoom_active ? "\uF066" : "\uF065")
+                            : "\uF00D";
+    ui->draw_text(action_x, view_tab_y, glyph, fg, term_bg);
   }
 
   if (bottom_panel_view == BOTTOM_PANEL_PROBLEMS)
@@ -1103,48 +1244,13 @@ void Editor::render_integrated_terminal()
     return;
   }
 
-  const int tab_y = bottom_panel_terminal_tab_y();
-  int tab_x = 1;
-
-  for (int i = 0; i < (int)integrated_terminals.size(); i++)
-  {
-    const std::string label = integrated_terminal_tab_label(i);
-    // Cells, not bytes: the label carries a multi-byte glyph and may also carry
-    // a user-set name, and the renderer lays the strip out by rendered width.
-    const int label_w = ui_cell_count(label);
-    bool active = (i == current_integrated_terminal);
-    bool focused = active && integrated_terminals[i]->is_focused();
-    int fg = focused ? theme.fg_terminal_tab_focused
-                     : (active ? theme.fg_terminal_tab_active : theme.fg_terminal_tab_inactive);
-    int bg = focused ? theme.bg_terminal_tab_focused
-                     : (active ? theme.bg_terminal_tab_active : theme.bg_terminal_tab_inactive);
-
-    if (tab_x + label_w + 2 >= panel_w)
-    {
-      break;
-    }
-
-    ui->draw_text(tab_x, tab_y, label, fg, bg, active);
-    int close_x = tab_x + label_w;
-    // Always render the close marker in the close color so it reads as a
-    // button even when it is the only tab (clicking it closes the panel).
-    ui->draw_text(close_x, tab_y, "x", theme.fg_terminal_tab_close, bg);
-    ui->draw_text(close_x + 1, tab_y, "|", theme.fg_terminal_tab_separator, theme.bg_terminal);
-    tab_x += label_w + 2;
-  }
-
-  if (tab_x + 3 < panel_w)
-  {
-    ui->draw_text(
-        tab_x, tab_y, " + ", theme.fg_terminal_tab_plus, theme.bg_terminal_tab_plus, true);
-  }
-
   const TerminalView view = docked_terminal_view();
   if (view.term)
   {
     view.term->resize(view.h, view.w);
   }
   render_terminal_rows(view, term_fg, term_bg);
+  render_bottom_panel_session_list();
 }
 
 void Editor::render_terminal_rows(const TerminalView &view, int term_fg, int term_bg)
@@ -1432,9 +1538,9 @@ bool Editor::handle_bottom_panel_mouse(int x, int y, bool is_click)
     {
       return true;
     }
-    int tab_x = 1;
     for (int view = 0; view < 2; view++)
     {
+      const int tab_x = bottom_panel_view_tab_x(view);
       const int label_w = ui_cell_count(bottom_panel_view_label(view));
       if (x >= tab_x && x < tab_x + label_w)
       {
@@ -1456,10 +1562,41 @@ bool Editor::handle_bottom_panel_mouse(int x, int y, bool is_click)
         }
         return true;
       }
-      tab_x += label_w;
     }
-    // Past the view tabs: the rest of the row is inert (the shell's own tab
-    // strip lives on the row below), while the Problems view owns the row.
+    // The action cluster at the right end of the bar: the new shell, the zoom
+    // toggle and the panel close, all of which used to be buried in the shell's
+    // tab strip.
+    const int action = bottom_panel_action_at(x, panel_w, bottom_panel_view_tabs_width() + 2);
+    if (action == BOTTOM_PANEL_ACTION_NEW)
+    {
+      // A new shell is a terminal-view action: show it where it lands. The view
+      // moves only once the shell is up, so a failed spawn cannot leave the
+      // panel pointing at an empty terminal view (which reserves no rows).
+      create_integrated_terminal();
+      if (!integrated_terminals.empty())
+      {
+        bottom_panel_view = BOTTOM_PANEL_TERMINAL;
+        focus_state = FOCUS_EDITOR;
+      }
+      return true;
+    }
+    if (action == BOTTOM_PANEL_ACTION_ZOOM)
+    {
+      if (integrated_terminals.empty())
+      {
+        bottom_panel_view = BOTTOM_PANEL_TERMINAL;
+      }
+      toggle_terminal_zoom();
+      return true;
+    }
+    if (action == BOTTOM_PANEL_ACTION_CLOSE)
+    {
+      // The panel's own close: the same path Ctrl+J takes when the panel is up.
+      toggle_bottom_panel();
+      return true;
+    }
+    // Past the labels and the actions the rest of the row is inert (the shell's
+    // sessions live in the list now), while the Problems view owns the row.
     return bottom_panel_view == BOTTOM_PANEL_PROBLEMS;
   }
 

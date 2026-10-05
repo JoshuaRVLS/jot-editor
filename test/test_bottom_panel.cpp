@@ -1,9 +1,9 @@
 // The bottom panel is one dock that hosts two views: the shell and the
-// diagnostics list. They share its frame, its height and its view tabs, so
-// these cases pin the parts that are easy to get wrong when a terminal-only
-// panel grows a second tenant: the height reservation, the tab-strip
-// hit-testing (the view tabs get their own row, the shell's strip the next
-// one), and the focus handoff between the two.
+// diagnostics list. They share its frame, its tab bar and its height, so these
+// cases pin the parts that are easy to get wrong: the height reservation, the
+// bar's labels and action cluster (hit-tested, drawn and measured from the same
+// geometry), the shell's session list down the panel's right side, and the
+// focus handoff between the two views.
 #include "editor.h"
 #include "ui/text.h"
 #include "ui/ui.h"
@@ -52,26 +52,36 @@ TEST_CASE("Bottom panel: view tabs switch the view and hand off focus", "[jot]")
   e.add_terminal_for_test();
   e.set_bottom_panel_view_for_test(BOTTOM_PANEL_TERMINAL);
 
-  // " Terminal " then " Problems ", then one gap cell before the shell's tabs.
-  const int terminal_tab_w = ui_cell_count(Editor::bottom_panel_view_label_for_test(BOTTOM_PANEL_TERMINAL));
-  const int problems_tab_w = ui_cell_count(Editor::bottom_panel_view_label_for_test(BOTTOM_PANEL_PROBLEMS));
-  REQUIRE(e.bottom_panel_view_tabs_width_for_test() == terminal_tab_w + problems_tab_w + 1);
+  // Flat uppercase labels with a fixed gap between them: the bar is measured in
+  // cells, and the two labels plus the gap are the whole strip.
+  const int problems_w =
+      ui_cell_count(Editor::bottom_panel_view_label_for_test(BOTTOM_PANEL_PROBLEMS));
+  const int terminal_w =
+      ui_cell_count(Editor::bottom_panel_view_label_for_test(BOTTOM_PANEL_TERMINAL));
+  REQUIRE(problems_w == 8);
+  REQUIRE(terminal_w == 8);
+  REQUIRE(e.bottom_panel_view_tabs_width_for_test() == problems_w + terminal_w + 3);
+
+  const int problems_x = e.bottom_panel_view_tab_x_for_test(BOTTOM_PANEL_PROBLEMS);
+  const int terminal_x = e.bottom_panel_view_tab_x_for_test(BOTTOM_PANEL_TERMINAL);
+  REQUIRE(problems_x == 1);
+  REQUIRE(terminal_x == 1 + problems_w + 3);
 
   const int tab_y = e.bottom_panel_view_tab_y_for_test();
 
-  // Clicking the second view tab switches the panel and moves focus to the
-  // list, so the shell stops swallowing keys.
-  REQUIRE(e.bottom_panel_mouse_for_test(1 + terminal_tab_w, tab_y, true));
+  // Clicking the Problems label moves focus to the list, so the shell stops
+  // swallowing keys.
+  REQUIRE(e.bottom_panel_mouse_for_test(problems_x, tab_y, true));
   REQUIRE(e.bottom_panel_view_for_test() == (int)BOTTOM_PANEL_PROBLEMS);
   REQUIRE_FALSE(e.terminal_focused_for_test());
   REQUIRE(e.focus_state_for_test() == (int)FOCUS_BOTTOM_PANEL);
 
-  // ...and back again.
-  REQUIRE(e.bottom_panel_mouse_for_test(2, tab_y, true));
+  // ...and the Terminal label brings the shell back.
+  REQUIRE(e.bottom_panel_mouse_for_test(terminal_x, tab_y, true));
   REQUIRE(e.bottom_panel_view_for_test() == (int)BOTTOM_PANEL_TERMINAL);
 }
 
-TEST_CASE("Bottom panel: the shell's own tabs get their own row", "[jot]")
+TEST_CASE("Bottom panel: one bar row serves both views", "[jot]")
 {
   seed_config_home();
   Editor e;
@@ -81,42 +91,36 @@ TEST_CASE("Bottom panel: the shell's own tabs get their own row", "[jot]")
   e.set_bottom_panel_view_for_test(BOTTOM_PANEL_TERMINAL);
   e.set_terminal_state_for_test(true, false, 10);
 
-  const int view_tab_y = e.bottom_panel_view_tab_y_for_test();
-  const int shell_tab_y = e.bottom_panel_terminal_tab_y_for_test();
+  const int bar_y = e.bottom_panel_view_tab_y_for_test();
   const int view_tabs_w = e.bottom_panel_view_tabs_width_for_test();
 
-  // The shell's content starts below both strips, and its second strip costs
-  // one body row compared with the list (two strips, content, frame -- the top
-  // frame is the pane area's rule, which the panel does not spend a row on).
-  REQUIRE(e.bottom_panel_content_y_for_test() == shell_tab_y + 1);
-  REQUIRE(e.bottom_panel_content_h_for_test() == e.terminal_panel_h_for_test() - 3);
-
-  // The list spends the row on content instead, so it keeps one strip, content,
-  // frame.
+  // Content starts right under the bar in both views, and the panel spends
+  // frame + bar + content now: the shell's old strip row is a content row.
+  REQUIRE(e.bottom_panel_content_y_for_test() == bar_y + 1);
+  REQUIRE(e.bottom_panel_content_h_for_test() == e.terminal_panel_h_for_test() - 2);
   e.set_bottom_panel_view_for_test(BOTTOM_PANEL_PROBLEMS);
-  REQUIRE(e.bottom_panel_content_y_for_test() == view_tab_y + 1);
+  REQUIRE(e.bottom_panel_content_y_for_test() == bar_y + 1);
   REQUIRE(e.bottom_panel_content_h_for_test() == e.terminal_panel_h_for_test() - 2);
   e.set_bottom_panel_view_for_test(BOTTOM_PANEL_TERMINAL);
 
-  // The first cell of the view row is the panel's: it is the "Terminal" view
-  // tab, consumed before the shell's strip ever sees the click.
-  REQUIRE(e.bottom_panel_mouse_for_test(1, view_tab_y, true));
+  // The bar's first cell is the Problems label: a press there switches the view
+  // instead of being inert chrome.
+  REQUIRE(e.bottom_panel_mouse_for_test(1, bar_y, true));
+  REQUIRE(e.bottom_panel_view_for_test() == (int)BOTTOM_PANEL_PROBLEMS);
+  REQUIRE(e.focus_state_for_test() == (int)FOCUS_BOTTOM_PANEL);
+  REQUIRE(e.bottom_panel_mouse_for_test(
+      e.bottom_panel_view_tab_x_for_test(BOTTOM_PANEL_TERMINAL), bar_y, true));
   REQUIRE(e.bottom_panel_view_for_test() == (int)BOTTOM_PANEL_TERMINAL);
 
-  // Past the view labels that row is inert chrome: the panel declines it and
-  // the shell consumes it without focusing anything, so a click above the
-  // shell's own strip can never activate it.
-  REQUIRE_FALSE(e.bottom_panel_mouse_for_test(1 + view_tabs_w, view_tab_y, true));
-  REQUIRE(e.terminal_mouse_for_test(1 + view_tabs_w, view_tab_y, true, false, false));
-  REQUIRE_FALSE(e.terminal_focused_for_test());
-
-  // The shell's strip spans the panel from the left edge of the row below, and
-  // the view row no longer steals clicks from it.
-  REQUIRE_FALSE(e.bottom_panel_mouse_for_test(1, shell_tab_y, true));
-  REQUIRE(e.terminal_mouse_for_test(1, shell_tab_y, true, false, false));
+  // Past the labels and before the action cluster the row is inert chrome: the
+  // panel declines it and the shell consumes it without focusing anything, so a
+  // stray click up there can never activate the shell.
+  REQUIRE_FALSE(e.bottom_panel_mouse_for_test(view_tabs_w + 1, bar_y, true));
+  REQUIRE(e.terminal_mouse_for_test(view_tabs_w + 1, bar_y, true, false, false));
+  REQUIRE(e.focus_state_for_test() == (int)FOCUS_EDITOR);
 }
 
-TEST_CASE("Bottom panel: the shell's tabs carry the shell glyph", "[jot]")
+TEST_CASE("Bottom panel: the session list carries one row per shell", "[jot]")
 {
   seed_config_home();
   Editor e;
@@ -129,47 +133,83 @@ TEST_CASE("Bottom panel: the shell's tabs carry the shell glyph", "[jot]")
   e.render_for_test();
 
   UI *ui = e.ui_for_test();
-  const int tab_y = e.bottom_panel_terminal_tab_y_for_test();
-  const std::string first = e.integrated_terminal_tab_label_for_test(0);
+  const Theme &th = e.theme_for_test();
+  const int panel_w = e.terminal_panel_w_for_test();
+  const int list_w = e.bottom_panel_shell_list_w_for_test();
+  const int list_x = e.bottom_panel_shell_list_x_for_test();
+  const int content_y = e.bottom_panel_content_y_for_test();
 
-  // The shell tab has the same shape as the view tabs one row up: a pad, the
-  // glyph, a space, then the name.
-  REQUIRE(first == " \uE795 term 1 ");
-  const UICell *pad = ui->cell_at(1, tab_y);
+  // The column is sized from the names ("term 1", 6 cells) with a 12-cell
+  // floor, and it hugs the panel's right edge, leaving the panel's own last cell
+  // free.
+  REQUIRE(list_w == 12);
+  REQUIRE(list_x == panel_w - 1 - list_w);
+  REQUIRE(list_x > 0);
+
+  // The shell beside it gives up exactly the column and its divider gutter.
+  REQUIRE(e.docked_terminal_view_w_for_test() == panel_w - 2 - (list_w + 1));
+  REQUIRE(e.docked_terminal_view_h_for_test() == e.bottom_panel_content_h_for_test());
+
+  // Each row carries the shell glyph and the name, on the panel background, and
+  // the gutter in front of the column marks it off from the shell.
+  const std::string first = e.integrated_terminal_session_label_for_test(0);
+  REQUIRE(first == " \uE795 term 1");
+  REQUIRE(ui_cell_count(first) == 9);
+
+  const UICell *pad = ui->cell_at(list_x, content_y);
   REQUIRE(pad != nullptr);
   REQUIRE(pad->ch == " ");
-  const UICell *icon = ui->cell_at(2, tab_y);
+  const UICell *icon = ui->cell_at(list_x + 1, content_y);
   REQUIRE(icon != nullptr);
   REQUIRE(icon->ch == "\uE795");
-  const UICell *name = ui->cell_at(4, tab_y);
+  const UICell *name = ui->cell_at(list_x + 3, content_y);
   REQUIRE(name != nullptr);
   REQUIRE(name->ch == "t");
-
-  // The label is 10 cells but 12 bytes: the glyph costs one cell, not three.
-  // The strip lays the tabs out by that cell count, so the second tab starts
-  // exactly where the first one's close marker ends, and the close marker of
-  // the first sits one cell past its label -- the same offset the click
-  // handler computes.
-  const int second_x = 1 + ui_cell_count(first) + 2;
-  REQUIRE(ui_cell_count(first) == 10);
-  REQUIRE((int)first.size() == 12);
-  const UICell *second_icon = ui->cell_at(second_x + 1, tab_y);
+  const UICell *second_icon = ui->cell_at(list_x + 1, content_y + 1);
   REQUIRE(second_icon != nullptr);
   REQUIRE(second_icon->ch == "\uE795");
-  const UICell *close = ui->cell_at(1 + ui_cell_count(first), tab_y);
-  REQUIRE(close != nullptr);
-  REQUIRE(close->ch == "x");
+  const UICell *divider = ui->cell_at(list_x - 1, content_y);
+  REQUIRE(divider != nullptr);
+  REQUIRE(divider->ch == "\u2502");
+  REQUIRE(divider->fg == th.fg_terminal_tab_separator);
+  REQUIRE(second_icon->bg == th.bg_terminal);
 
-  // Pressing that close marker closes the first terminal, which is what pins
-  // the glyph-inclusive width: a strip that still counted the label's bytes
-  // would put the marker three cells to the right of this one, and the click
-  // would land on the second tab instead.
-  REQUIRE(e.terminal_mouse_for_test(1 + ui_cell_count(first), tab_y, true, false, false));
-  REQUIRE(e.integrated_terminal_tab_label_for_test(0) == " \uE795 term 1 ");
-  REQUIRE(e.integrated_terminal_tab_label_for_test(1).empty());
+  // The list is rows, not tabs: its own hit-test maps a cell to a session, and
+  // a press on a row focuses that shell.
+  REQUIRE(e.bottom_panel_shell_list_at_for_test(list_x, content_y) == 0);
+  REQUIRE(e.bottom_panel_shell_list_at_for_test(list_x, content_y + 1) == 1);
+  REQUIRE(e.bottom_panel_shell_list_at_for_test(list_x - 1, content_y) == -1);
+  REQUIRE(e.bottom_panel_shell_list_at_for_test(list_x, content_y - 1) == -1);
+  REQUIRE(e.bottom_panel_shell_list_at_for_test(list_x + list_w, content_y) == -1);
+
+  REQUIRE(e.terminal_mouse_for_test(list_x + 1, content_y + 1, true, false, false));
+  REQUIRE(e.current_integrated_terminal_for_test() == 1);
+  REQUIRE(e.terminal_focused_for_test());
+  REQUIRE(e.terminal_mouse_for_test(list_x + 1, content_y, true, false, false));
+  REQUIRE(e.current_integrated_terminal_for_test() == 0);
+
+  // The focused shell wears the theme's chip; the merely-listed one stays on the
+  // panel background.
+  e.request_redraw_for_test();
+  e.render_for_test();
+  const UICell *focused = ui->cell_at(list_x + 1, content_y);
+  REQUIRE(focused != nullptr);
+  REQUIRE(focused->bg == th.bg_terminal_tab_focused);
+  REQUIRE(focused->fg == th.fg_terminal_tab_focused);
+  const UICell *idle = ui->cell_at(list_x + 1, content_y + 1);
+  REQUIRE(idle != nullptr);
+  REQUIRE(idle->bg == th.bg_terminal);
+  REQUIRE(idle->fg == th.fg_terminal_tab_inactive);
+
+  // The list is the terminal view's: with the Problems list showing, the shell
+  // keeps the whole row.
+  e.set_bottom_panel_view_for_test(BOTTOM_PANEL_PROBLEMS);
+  REQUIRE(e.bottom_panel_shell_list_w_for_test() == 0);
+  REQUIRE(e.bottom_panel_shell_list_at_for_test(list_x, content_y) == -1);
+  REQUIRE(e.docked_terminal_view_w_for_test() == panel_w - 2);
 }
 
-TEST_CASE("Bottom panel: a long custom tab name is elided to the strip's share", "[jot]")
+TEST_CASE("Bottom panel: a long custom name is elided to the column's share", "[jot]")
 {
   seed_config_home();
   Editor e;
@@ -182,45 +222,38 @@ TEST_CASE("Bottom panel: a long custom tab name is elided to the strip's share",
   e.request_redraw_for_test();
   e.render_for_test();
 
-  const int tab_y = e.bottom_panel_terminal_tab_y_for_test();
   const int panel_w = e.terminal_panel_w_for_test();
+  const int list_w = e.bottom_panel_shell_list_w_for_test();
+  const int list_x = e.bottom_panel_shell_list_x_for_test();
   UI *ui = e.ui_for_test();
 
-  // The name itself is untouched -- it is the identity the task runner, the
-  // lazygit reuse check and the Lua API match on -- and only the label the
-  // strip draws is shortened.
-  REQUIRE(e.integrated_terminal_name_for_test(0) == full_name);
+  // The column never takes more than a third of the panel, however long the
+  // name is.
+  REQUIRE(list_w == panel_w / 3);
 
-  // What is drawn is capped at the tab's share of the panel (a quarter, with a
-  // 12-cell floor) and marks the cut with an ellipsis rather than a dot pair.
-  const std::string label = e.integrated_terminal_tab_label_for_test(0);
-  REQUIRE(ui_cell_count(label) == std::max(12, panel_w / 4));
+  // The name itself is untouched -- it is the identity the task runner, the
+  // lazygit reuse check and the Lua API match on -- and only the row the list
+  // draws is shortened.
+  REQUIRE(e.integrated_terminal_display_name_for_test(0) == full_name);
+
+  // What is drawn fills the column: the pad, the glyph, the space, then the
+  // name elided with an ellipsis.
+  const std::string label = e.integrated_terminal_session_label_for_test(0);
+  REQUIRE(ui_cell_count(label) == list_w - 1);
   REQUIRE(label.substr(0, 5) == " \uE795 ");
   REQUIRE(label.find("\u2026") != std::string::npos);
   REQUIRE(label.find(full_name) == std::string::npos);
-  // The head of the name survives, so the tab is still recognisable.
+  // The head of the name survives, so the row is still recognisable.
   REQUIRE(label.find(full_name.substr(0, 5)) != std::string::npos);
 
-  // ...and the tabs after it are not squeezed out: the second tab (a generated
-  // "term 2") and the "+" both still sit on the row.
-  const std::string second = e.integrated_terminal_tab_label_for_test(1);
-  const int second_x = 1 + ui_cell_count(label) + 2;
-  const UICell *second_icon = ui->cell_at(second_x + 1, tab_y);
+  // ...and the sessions after it are not squeezed out: the second row (a
+  // generated "term 2") still sits under the first.
+  const UICell *second_icon = ui->cell_at(list_x + 1, e.bottom_panel_content_y_for_test() + 1);
   REQUIRE(second_icon != nullptr);
   REQUIRE(second_icon->ch == "\uE795");
-  const int plus_x = second_x + ui_cell_count(second) + 2;
-  const UICell *plus = ui->cell_at(plus_x + 1, tab_y);
-  REQUIRE(plus != nullptr);
-  REQUIRE(plus->ch == "+");
-
-  // Hit-testing walks the elided label too: the ellipsis moved the close marker
-  // left, and pressing it closes this tab rather than landing on a neighbour.
-  REQUIRE(e.terminal_mouse_for_test(1 + ui_cell_count(label), tab_y, true, false, false));
-  REQUIRE(e.integrated_terminal_tab_label_for_test(0) == " \uE795 term 1 ");
-  REQUIRE(ui_cell_count(e.integrated_terminal_tab_label_for_test(0)) == 10);
 }
 
-TEST_CASE("Bottom panel: a custom tab name that fits is drawn in full", "[jot]")
+TEST_CASE("Bottom panel: a custom name that fits is drawn in full", "[jot]")
 {
   seed_config_home();
   Editor e;
@@ -231,22 +264,125 @@ TEST_CASE("Bottom panel: a custom tab name that fits is drawn in full", "[jot]")
   e.request_redraw_for_test();
   e.render_for_test();
 
-  // A name inside its share is drawn exactly as set: no ellipsis, no padding
-  // out to the budget.
-  const std::string label = e.integrated_terminal_tab_label_for_test(0);
-  REQUIRE(label == " \uE795 lazygit ");
+  // A name inside its share is drawn exactly as set: no ellipsis, no padding out
+  // to the budget.
+  const std::string label = e.integrated_terminal_session_label_for_test(0);
+  REQUIRE(label == " \uE795 lazygit");
 
-  const int tab_y = e.bottom_panel_terminal_tab_y_for_test();
+  const int list_x = e.bottom_panel_shell_list_x_for_test();
+  const int row_y = e.bottom_panel_content_y_for_test();
   UI *ui = e.ui_for_test();
-  const UICell *first = ui->cell_at(4, tab_y);
+  const UICell *first = ui->cell_at(list_x + 3, row_y);
   REQUIRE(first != nullptr);
   REQUIRE(first->ch == "l");
-  const UICell *last = ui->cell_at(10, tab_y);
+  const UICell *last = ui->cell_at(list_x + 3 + 6, row_y);
   REQUIRE(last != nullptr);
   REQUIRE(last->ch == "t");
-  const UICell *close = ui->cell_at(1 + ui_cell_count(label), tab_y);
+}
+
+TEST_CASE("Bottom panel: the bar's action cluster draws and hits its actions", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_home_menu_visible(false);
+  e.add_terminal_for_test();
+  e.set_bottom_panel_view_for_test(BOTTOM_PANEL_TERMINAL);
+  e.set_terminal_state_for_test(true, false, 10);
+  e.request_redraw_for_test();
+  e.render_for_test();
+
+  UI *ui = e.ui_for_test();
+  const Theme &th = e.theme_for_test();
+  const int panel_w = e.terminal_panel_w_for_test();
+  REQUIRE(panel_w >= 40);
+
+  // The "+" (new shell), the zoom toggle and the close "x", right-aligned with a
+  // two-cell gap. The colours are the ones the old strip used for the same
+  // actions.
+  const UICell *plus = ui->cell_at(panel_w - 8, e.bottom_panel_view_tab_y_for_test());
+  REQUIRE(plus != nullptr);
+  REQUIRE(plus->ch == "+");
+  REQUIRE(plus->fg == th.fg_terminal_tab_plus);
+  const UICell *zoom = ui->cell_at(panel_w - 5, e.bottom_panel_view_tab_y_for_test());
+  REQUIRE(zoom != nullptr);
+  REQUIRE(zoom->ch == "\uF065");
+  REQUIRE(zoom->fg == th.fg_terminal_tab_inactive);
+  const UICell *close = ui->cell_at(panel_w - 2, e.bottom_panel_view_tab_y_for_test());
   REQUIRE(close != nullptr);
-  REQUIRE(close->ch == "x");
+  REQUIRE(close->ch == "\uF00D");
+  REQUIRE(close->fg == th.fg_terminal_tab_close);
+
+  // The gaps between the actions are not actions: the panel declines them, the
+  // shell consumes them inertly.
+  REQUIRE_FALSE(
+      e.bottom_panel_mouse_for_test(panel_w - 6, e.bottom_panel_view_tab_y_for_test(), true));
+  REQUIRE(e.terminal_mouse_for_test(
+      panel_w - 6, e.bottom_panel_view_tab_y_for_test(), true, false, false));
+  REQUIRE(e.terminal_visible_for_test());
+  REQUIRE_FALSE(e.terminal_zoom_active_for_test());
+
+  // Pressing the toggle maximizes the panel, and the glyph flips to the compress
+  // double arrow.
+  REQUIRE(e.bottom_panel_mouse_for_test(panel_w - 5, e.bottom_panel_view_tab_y_for_test(), true));
+  REQUIRE(e.terminal_zoom_active_for_test());
+  e.request_redraw_for_test();
+  e.render_for_test();
+  const UICell *compress = ui->cell_at(panel_w - 5, e.bottom_panel_view_tab_y_for_test());
+  REQUIRE(compress != nullptr);
+  REQUIRE(compress->ch == "\uF066");
+  REQUIRE(e.bottom_panel_mouse_for_test(panel_w - 5, e.bottom_panel_view_tab_y_for_test(), true));
+  REQUIRE_FALSE(e.terminal_zoom_active_for_test());
+
+  // ...and the "x" closes the panel, exactly like Ctrl+J with it up.
+  REQUIRE(e.bottom_panel_mouse_for_test(panel_w - 2, e.bottom_panel_view_tab_y_for_test(), true));
+  REQUIRE_FALSE(e.terminal_visible_for_test());
+}
+
+TEST_CASE("Bottom panel: the action cluster sheds actions on a narrow panel", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_home_menu_visible(false);
+  e.add_terminal_for_test();
+  e.set_bottom_panel_view_for_test(BOTTOM_PANEL_TERMINAL);
+  e.set_terminal_state_for_test(true, false, 10);
+
+  // A panel too narrow for the shell beside a session column folds the column
+  // away rather than squeezing the shell to nothing.
+  e.ui_for_test()->resize(30, 24);
+  e.request_redraw_for_test();
+  e.render_for_test();
+  REQUIRE(e.terminal_panel_w_for_test() == 30);
+  REQUIRE(e.bottom_panel_shell_list_w_for_test() == 0);
+  REQUIRE(e.docked_terminal_view_w_for_test() == 30 - 2);
+
+  // The actions shed from the inside out as the width shrinks: the cluster stops
+  // where the labels it must clear are.
+  const int bar_y = e.bottom_panel_view_tab_y_for_test();
+  UI *ui = e.ui_for_test();
+  REQUIRE(ui->cell_at(30 - 8, bar_y)->ch == "+");
+  REQUIRE(ui->cell_at(30 - 5, bar_y)->ch == "\uF065");
+  REQUIRE(ui->cell_at(30 - 2, bar_y)->ch == "\uF00D");
+
+  e.ui_for_test()->resize(23, 24);
+  e.request_redraw_for_test();
+  e.render_for_test();
+  // The labels never give way, so the cluster sheds from the inside out: both
+  // the new-shell and the zoom action are gone, their cells now carrying the
+  // TERMINAL label instead of an action.
+  for (int x = 1; x < 23; x++)
+  {
+    REQUIRE(ui->cell_at(x, bar_y)->ch != "+");
+    REQUIRE(ui->cell_at(x, bar_y)->ch != "\uF065");
+  }
+  // What is left between the last label and the close is inert, not an action.
+  REQUIRE(ui->cell_at(20, bar_y)->ch == " ");
+  REQUIRE_FALSE(e.bottom_panel_mouse_for_test(20, bar_y, true));
+  REQUIRE(e.terminal_visible_for_test());
+  // Only the close still fits, and pressing it closes the panel.
+  REQUIRE(ui->cell_at(23 - 2, bar_y)->ch == "\uF00D");
+  REQUIRE(e.bottom_panel_mouse_for_test(23 - 2, bar_y, true));
+  REQUIRE_FALSE(e.terminal_visible_for_test());
 }
 
 TEST_CASE("Bottom panel: hovering the view tabs leaves the view alone", "[jot]")
@@ -259,13 +395,13 @@ TEST_CASE("Bottom panel: hovering the view tabs leaves the view alone", "[jot]")
   e.set_terminal_state_for_test(true, false, 10);
 
   const int tab_y = e.bottom_panel_view_tab_y_for_test();
-  const int problems_x =
-      1 + ui_cell_count(Editor::bottom_panel_view_label_for_test(BOTTOM_PANEL_TERMINAL));
+  const int problems_x = e.bottom_panel_view_tab_x_for_test(BOTTOM_PANEL_PROBLEMS);
+  const int terminal_x = e.bottom_panel_view_tab_x_for_test(BOTTOM_PANEL_TERMINAL);
 
   // The dispatcher passes is_click=false for both a motion and a release, so
   // this is what sweeping the pointer across the labels used to do: switch the
-  // panel under the cursor, and hand focus to the list while the shell was
-  // still being used.
+  // panel under the cursor, and hand focus to the list while the shell was still
+  // being used.
   REQUIRE(e.bottom_panel_mouse_for_test(problems_x, tab_y, false));
   REQUIRE(e.bottom_panel_view_for_test() == (int)BOTTOM_PANEL_TERMINAL);
 
@@ -275,10 +411,54 @@ TEST_CASE("Bottom panel: hovering the view tabs leaves the view alone", "[jot]")
 
   // ...and the same holds on the way back, so a hover cannot bounce the view
   // back and forth either.
-  REQUIRE(e.bottom_panel_mouse_for_test(1, tab_y, false));
+  REQUIRE(e.bottom_panel_mouse_for_test(terminal_x, tab_y, false));
   REQUIRE(e.bottom_panel_view_for_test() == (int)BOTTOM_PANEL_PROBLEMS);
-  REQUIRE(e.bottom_panel_mouse_for_test(1, tab_y, true));
+  REQUIRE(e.bottom_panel_mouse_for_test(terminal_x, tab_y, true));
   REQUIRE(e.bottom_panel_view_for_test() == (int)BOTTOM_PANEL_TERMINAL);
+}
+
+TEST_CASE("Bottom panel: the view labels are flat, with the active one underlined", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_home_menu_visible(false);
+  e.add_terminal_for_test();
+  e.set_bottom_panel_view_for_test(BOTTOM_PANEL_TERMINAL);
+  e.set_terminal_state_for_test(true, false, 10);
+  e.request_redraw_for_test();
+  e.render_for_test();
+
+  UI *ui = e.ui_for_test();
+  const Theme &th = e.theme_for_test();
+  const int bar_y = e.bottom_panel_view_tab_y_for_test();
+  const int problems_x = e.bottom_panel_view_tab_x_for_test(BOTTOM_PANEL_PROBLEMS);
+  const int terminal_x = e.bottom_panel_view_tab_x_for_test(BOTTOM_PANEL_TERMINAL);
+
+  // Neither label wears a chip: both sit on the panel's own background, and the
+  // inactive one is the muted colour with no underline.
+  const UICell *inactive = ui->cell_at(problems_x, bar_y);
+  REQUIRE(inactive != nullptr);
+  REQUIRE(inactive->ch == "P");
+  REQUIRE(inactive->fg == th.fg_terminal_tab_inactive);
+  REQUIRE(inactive->bg == th.bg_terminal);
+  REQUIRE(inactive->underline == 0);
+
+  // The showing view reads by its brighter text and the accent underline.
+  const UICell *active = ui->cell_at(terminal_x, bar_y);
+  REQUIRE(active != nullptr);
+  REQUIRE(active->ch == "T");
+  REQUIRE(active->fg == th.fg_terminal_tab_active);
+  REQUIRE(active->bg == th.bg_terminal);
+  REQUIRE(active->underline == 1);
+  REQUIRE(active->underline_fg == th.fg_terminal_tab_focused);
+
+  // The gap between the labels is the panel's, not a label's: no underline, no
+  // chip, no text.
+  const UICell *gap = ui->cell_at(problems_x + 8, bar_y);
+  REQUIRE(gap != nullptr);
+  REQUIRE(gap->ch == " ");
+  REQUIRE(gap->bg == th.bg_terminal);
+  REQUIRE(gap->underline == 0);
 }
 
 TEST_CASE("Bottom panel: one rule along its top, none at its bottom", "[jot]")
@@ -311,34 +491,25 @@ TEST_CASE("Bottom panel: one rule along its top, none at its bottom", "[jot]")
   REQUIRE(pane_last != nullptr);
   REQUIRE(pane_last->ch != "─");
 
-  // The panel's first row carries the view tabs, so nothing draws a second
-  // rule (or a corner) directly under the first.
+  // The panel's first row carries the tab bar, so nothing draws a second rule
+  // (or a corner) directly under the first: it leads with the Problems label.
   const UICell *first_col = ui->cell_at(0, panel_y);
   REQUIRE(first_col != nullptr);
   REQUIRE(first_col->ch != "┌");
   REQUIRE(first_col->ch != "─");
-  // The label keeps the one-cell pad the strip used before the glyphs, then the
-  // view's icon, then the name: column 1 is blank, column 2 is the terminal
-  // icon, and the "T" of " Terminal " is two cells past it.
   const UICell *pad = ui->cell_at(1, panel_y);
   REQUIRE(pad != nullptr);
-  REQUIRE(pad->ch == " ");
-  const UICell *icon = ui->cell_at(2, panel_y);
-  REQUIRE(icon != nullptr);
-  REQUIRE(icon->ch == "\uF120");
-  const UICell *label = ui->cell_at(4, panel_y);
-  REQUIRE(label != nullptr);
-  REQUIRE(label->ch == "T");
+  REQUIRE(pad->ch == "P");
+  const UICell *second = ui->cell_at(2, panel_y);
+  REQUIRE(second != nullptr);
+  REQUIRE(second->ch == "R");
 
-  // The fullscreen toggle glyph is gone from the shell's tab strip; zooming is
-  // keyboard-only (:termzoom, Alt+Shift+Z).
-  const int tab_y = e.bottom_panel_terminal_tab_y_for_test();
-  for (int x = 0; x < panel_w; x++)
-  {
-    const UICell *cell = ui->cell_at(x, tab_y);
-    REQUIRE(cell != nullptr);
-    REQUIRE(cell->ch != "□");
-  }
+  // The shell's content starts on the row under the bar: no second strip, no
+  // rule.
+  const UICell *content = ui->cell_at(1, panel_y + 1);
+  REQUIRE(content != nullptr);
+  REQUIRE(content->ch != "─");
+  REQUIRE(content->ch != "┌");
 
   // The panel does not end in a rule: its last row is content, marked off from
   // the status line by its own background (see pane_edges.h). The rule it does
@@ -386,10 +557,9 @@ TEST_CASE("Bottom panel: the rule along its top is the dock's own row", "[jot]")
   UI *ui = e.ui_for_test();
   const Theme &theme = e.theme_for_test();
 
-  // The rule is the panel's own first row and spans exactly the panel's
-  // columns; the right dock beside it makes the separator run up through the
-  // rule row, so the two meet in a corner instead of the rule running into the
-  // dock.
+  // The rule is the panel's own first row and spans exactly the panel's columns;
+  // the right dock beside it makes the separator run up through the rule row, so
+  // the two meet in a corner instead of the rule running into the dock.
   for (int x = 0; x < panel_w - 1; x++)
   {
     const UICell *cell = ui->cell_at(x, rule_y);
@@ -563,10 +733,10 @@ TEST_CASE("Bottom panel: the list answers only over its own rows", "[jot]")
   const int code_y = pane_content_top(pane);
   REQUIRE(code_y < e.bottom_panel_view_tab_y_for_test());
 
-  // The list is a dock, not a mode: a press or a motion in the buffer is not
-  // its to claim, so the event reaches the editor instead of dying on the
-  // panel -- and the keys stay with the buffer, which is what made it
-  // uneditable while the list was up.
+  // The list is a dock, not a mode: a press or a motion in the buffer is not its
+  // to claim, so the event reaches the editor instead of dying on the panel --
+  // and the keys stay with the buffer, which is what made it uneditable while
+  // the list was up.
   REQUIRE_FALSE(e.bottom_panel_mouse_for_test(code_x, code_y, true));
   REQUIRE_FALSE(e.bottom_panel_mouse_for_test(code_x, code_y, false));
 
@@ -605,38 +775,11 @@ TEST_CASE("Bottom panel: a press on a list row still opens the file", "[jot]")
   e.seed_lsp_diagnostic_for_test("cpp|/tmp/bp_rows", path, 1, 1, "only one");
   e.show_problems_panel_for_test();
 
-  // The list's own rows are still the list's: the first finding under the
-  // header row opens the file behind it, through the same accept path the
-  // picker uses.
+  // The list's own rows are still the list's: the first finding under the header
+  // row opens the file behind it, through the same accept path the picker uses.
   REQUIRE(e.bottom_panel_mouse_for_test(2, e.bottom_panel_content_y_for_test() + 1, true));
   REQUIRE(e.buffer_for_test().filepath == path);
   REQUIRE(e.focus_state_for_test() == (int)FOCUS_EDITOR);
-}
-
-TEST_CASE("Bottom panel: the view tabs lead with an icon", "[jot]")
-{
-  seed_config_home();
-  Editor e;
-  e.set_home_menu_visible(false);
-
-  const std::string terminal = Editor::bottom_panel_view_label_for_test(BOTTOM_PANEL_TERMINAL);
-  const std::string problems = Editor::bottom_panel_view_label_for_test(BOTTOM_PANEL_PROBLEMS);
-
-  // A Nerd Fonts glyph, then the view's name: the classic FontAwesome terminal
-  // for the shell, and the warning triangle the status line already uses for
-  // diagnostics.
-  REQUIRE(terminal == std::string(" \uF120 Terminal "));
-  REQUIRE(problems == std::string(" \uF071 Problems "));
-
-  // The strip is measured in cells -- what the renderer lays the labels out by
-  // -- and not in bytes: each glyph is three bytes, so a byte count would
-  // report the strip two cells wider than it is drawn and put the second
-  // label's hit-test past its text.
-  REQUIRE(e.bottom_panel_view_tabs_width_for_test() == 25);
-  REQUIRE(e.bottom_panel_view_tabs_width_for_test()
-          == ui_cell_count(terminal) + ui_cell_count(problems) + 1);
-  REQUIRE(e.bottom_panel_view_tabs_width_for_test()
-          < (int)(terminal.size() + problems.size()) + 1);
 }
 
 TEST_CASE("Bottom panel: the Problems list keeps its text on the panel background", "[jot]")
@@ -657,8 +800,8 @@ TEST_CASE("Bottom panel: the Problems list keeps its text on the panel backgroun
   // The findings start under the header row, which the tally owns.
   const int first_row = e.bottom_panel_content_y_for_test() + 1;
 
-  // Otherwise the check below could pass on a theme whose selection color is
-  // the panel's own background.
+  // Otherwise the check below could pass on a theme whose selection color is the
+  // panel's own background.
   REQUIRE(th.bg_selection != th.bg_terminal);
 
   // The selected row is marked by an accent sliver in a column of its own, the
