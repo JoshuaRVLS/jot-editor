@@ -26,7 +26,6 @@ struct SidebarRenderRow
   std::string normalized_path;
   std::string name;
   std::string label;
-  std::string footer_label;
   bool is_dir = false;
   bool expanded = false;
   int depth = 0;

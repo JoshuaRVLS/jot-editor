@@ -318,8 +318,6 @@ void Editor::rebuild_sidebar_tree_cache()
       row.icon = fti.glyph;
       row.icon_fg = fti.color;
     }
-    row.footer_label = workspace_relative_display(node.path, root_dir);
-
     if (!row.normalized_path.empty())
     {
       sidebar_render_cache_.path_to_row[row.normalized_path] =
@@ -1266,12 +1264,11 @@ void Editor::render_sidebar()
     }
   }
 
+  // The footer belongs to the column, not to a section: it spells the
+  // workspace's git summary and never the selected row's name, which read as a
+  // stray file label under the timeline.
   std::string footer;
-  if (!rows.empty() && file_tree_selected >= 0 && file_tree_selected < (int)rows.size())
-  {
-    footer = " " + rows[(size_t)file_tree_selected].footer_label;
-  }
-  else if (has_git_repo())
+  if (has_git_repo())
   {
     footer = " " + git_branch;
     if (git_staged_count > 0)

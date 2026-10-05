@@ -1,11 +1,58 @@
 // The sidebar's stacked sections (EXPLORER / OUTLINE / TIMELINE) and the
 // timeline model behind them: the one geometry the painter, the mouse
-// hit-test and the keyboard walk read, the git log parser, and the compact
-// relative ages the timeline rows show.
+// hit-test and the keyboard walk read, the git log parser, the compact
+// relative ages the timeline rows show, and the footer the sections leave on
+// the column's last row.
+#include "editor.h"
 #include "jot/model/sidebar_sections.h"
 #include "jot/workspace/timeline.h"
+#include "ui/ui.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <string>
+
+namespace fs = std::filesystem;
+
+namespace
+{
+  Editor &probe_editor()
+  {
+    static bool seeded = false;
+    if (!seeded)
+    {
+      char cfgdir[] = "/tmp/jot_sidebar_sections_test_XXXXXX";
+      mkdtemp(cfgdir);
+      setenv("JOT_CONFIG_HOME", cfgdir, 1);
+      setenv("JOT_CACHE_HOME", cfgdir, 1);
+      seeded = true;
+    }
+    static Editor e;
+    return e;
+  }
+
+  void write_file(const std::string &path, const std::string &text)
+  {
+    std::ofstream out(path);
+    out << text;
+  }
+
+  // One painted row of the grid, read back from the UI's cells: what the eye
+  // sees, not what the model holds.
+  std::string row_text(Editor &e, int y)
+  {
+    const UI *ui = e.ui_for_test();
+    std::string text;
+    for (int x = 0; x < e.ui_width_for_test(); ++x)
+    {
+      const UICell *cell = ui->cell_at(x, y);
+      text += cell ? cell->ch : " ";
+    }
+    return text;
+  }
+} // namespace
 
 TEST_CASE("The sidebar stacks explorer, outline and timeline under their headers", "[jot]")
 {
@@ -105,4 +152,34 @@ TEST_CASE("The timeline parses git log output and compacts ages", "[jot]")
   REQUIRE(jot_timeline::relative_age(now - 40 * 86400, now) == "1 mo");
   REQUIRE(jot_timeline::relative_age(now - 400 * 86400, now) == "1 yr");
   REQUIRE(jot_timeline::relative_age(0, now) == "");
+}
+
+TEST_CASE("The sidebar footer speaks for the workspace, not the selected row", "[jot]")
+{
+  Editor &e = probe_editor();
+  char tmpl[] = "/tmp/jot_footer_ws_XXXXXX";
+  mkdtemp(tmpl);
+  const std::string root = tmpl;
+  write_file(root + "/alpha.txt", "alpha\n");
+  write_file(root + "/beta.txt", "beta\n");
+
+  e.host().io.open_workspace(root);
+  e.apply_resize_for_test(120, 40);
+  e.render_for_test();
+
+  // Row 2 is the first tree row (0 is the EXPLORER header, 1 the pinned root):
+  // a click opens alpha.txt and leaves it selected, which is the state the
+  // footer used to echo.
+  e.mouse_event_for_test(5, 2, /*bstate=*/1);
+  e.render_for_test();
+  REQUIRE(fs::path(e.buffer_for_test().filepath).filename().string() == "alpha.txt");
+  REQUIRE_FALSE(e.sidebar_root_selected_for_test());
+
+  // The footer is the column's last row, under the TIMELINE section. It used
+  // to repeat the selected row's glyph and name, which read as a stray file
+  // label there; it belongs to the workspace instead. This folder is not a
+  // repository, so the summary is the item count.
+  const std::string footer = row_text(e, e.ui_height_for_test() - 2);
+  REQUIRE(footer.find("alpha.txt") == std::string::npos);
+  REQUIRE(footer.find("items") != std::string::npos);
 }

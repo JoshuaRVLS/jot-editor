@@ -7,13 +7,17 @@ git repo in a pty and checks that the three headers stack in the column with the
 explorer's file row between the first two and the outline's kind-icon symbol
 rows between the outline and the timeline; that the timeline lists both commits
 newest first with a compact age on each row ("now" for the fresh one, "3 wks"
-for the backdated one); that clicking an outline row lands the caret on the
-symbol's line; and that clicking a timeline row opens that commit's diff in the
-right dock. Each of those is a step the layout could get right on paper and
-still get wrong on screen.
+for the backdated one); that the footer on the column's last row speaks for the
+workspace (the git summary) and never repeats the selected file, whose glyph and
+name read as a stray label under the timeline; that clicking an outline row
+lands the caret on the symbol's line; and that clicking a timeline row opens
+that commit's diff in the right dock. Each of those is a step the layout could
+get right on paper and still get wrong on screen.
 
 Every scene is its own session (one screen read per run), because a click needs
-the row the previous screen actually painted.
+the row the previous screen actually painted. A scene that clicks after opening
+the file first waits out the transient Tree-sitter toast, which is up for a few
+seconds and would otherwise swallow the click.
 
 Usage: test/sidebar_sections_probe.py [path-to-jot] [--dump]
 Exit codes: 0 pass, 1 fail, 2 skipped (no binary).
@@ -94,6 +98,20 @@ def wait_for(*needles: str):
     def check(screen) -> bool:
         text = screen.text()
         return all(needle in text for needle in needles)
+    return check
+
+
+# The transient startup toast shown when a bundled highlight query cannot load.
+# It swallows a click while it is on screen, and it appears a moment after the
+# buffer is first highlighted, so a scene that clicks just after opening the
+# file waits it out (a machine whose queries all load never shows it, and the
+# wait returns at once).
+TRANSIENT_TOAST = "Tree-sitter:"
+
+
+def wait_for_toast_gone():
+    def check(screen) -> bool:
+        return TRANSIENT_TOAST not in screen.text()
     return check
 
 
@@ -193,6 +211,17 @@ def main() -> int:
             if "No symbols found" in text or "Not a Git repository" in text:
                 fail("a section fell back to its empty note")
 
+            # The footer is the column's last row, directly under the timeline:
+            # it used to echo the selected row (a glyph and the file name), which
+            # read as a stray label there. It belongs to the workspace now.
+            if len(lines) > ROWS - 2:
+                footer = lines[ROWS - 2].split("\u2502")[0]
+                if "probe.cpp" in footer:
+                    fail("the footer repeats the selected file's name under the timeline",
+                         repr(footer))
+                elif "\ue725" not in footer:
+                    fail("the footer lost the workspace's git summary", repr(footer))
+
         # Scene 2: a click on the outline's alpha row lands the caret there.
         if layout.get("alpha", -1) >= 0:
             status: dict = {}
@@ -204,6 +233,7 @@ def main() -> int:
             scene(binary, root, cfg, [
                 (0.3, click(5, 2)),
                 (0.4, wait_for("alpha", FIRST_NEEDLE, SECOND_NEEDLE)),
+                (0.2, wait_for_toast_gone()),
                 (0.2, click(5, layout["alpha"])),
                 (0.8, capture_status),
             ])
@@ -231,6 +261,7 @@ def main() -> int:
             screen = scene(binary, root, cfg, [
                 (0.3, click(5, 2)),
                 (0.4, wait_for(FIRST_NEEDLE, SECOND_NEEDLE)),
+                (0.2, wait_for_toast_gone()),
                 (0.2, click(5, layout[SECOND_NEEDLE])),
                 (1.0, wait_for("commit " + head)),
                 (0.3, capture_diff),
