@@ -398,9 +398,23 @@ void Editor::handle_mouse_input(int x,
           if (git_sidebar_scroll > 0)
             git_sidebar_scroll--;
         }
-        else if (file_tree_scroll > 0)
+        else
         {
-          file_tree_scroll--;
+          // The wheel scrolls the section it is over; the render clamps the
+          // window to the section's rows.
+          const SidebarHit hit = sidebar_hit_test(y);
+          if (hit.section == jot_sidebar::SECTION_OUTLINE)
+          {
+            sidebar_outline_scroll = std::max(0, sidebar_outline_scroll - 1);
+          }
+          else if (hit.section == jot_sidebar::SECTION_TIMELINE)
+          {
+            sidebar_timeline_scroll = std::max(0, sidebar_timeline_scroll - 1);
+          }
+          else if (file_tree_scroll > 0)
+          {
+            file_tree_scroll--;
+          }
         }
         needs_redraw = true;
       }
@@ -415,7 +429,19 @@ void Editor::handle_mouse_input(int x,
         }
         else
         {
-          file_tree_scroll++;
+          const SidebarHit hit = sidebar_hit_test(y);
+          if (hit.section == jot_sidebar::SECTION_OUTLINE)
+          {
+            sidebar_outline_scroll++;
+          }
+          else if (hit.section == jot_sidebar::SECTION_TIMELINE)
+          {
+            sidebar_timeline_scroll++;
+          }
+          else
+          {
+            file_tree_scroll++;
+          }
         }
         needs_redraw = true;
       }

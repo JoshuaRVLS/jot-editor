@@ -68,6 +68,7 @@ set(JOT_ENGINE_SOURCES
   jot/workspace/git_panel.cpp
   jot/workspace/right_panel.cpp
   jot/workspace/tasks.cpp
+  jot/workspace/timeline.cpp
   jot/workspace/workspace.cpp
   jot/workspace/file_tree.cpp
   jot/workspace/sidebar.cpp

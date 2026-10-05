@@ -92,8 +92,10 @@ void Editor::render_git_diff_panel()
   ui->fill_rect(panel, " ", theme.fg_terminal, theme.bg_terminal);
   ui->draw_border(panel, border_fg, theme.bg_terminal, pane_layout::kNoEdges);
 
-  const std::string title = std::string(" \uF1C9 Git Diff: ")
-                            + (git_diff_panel.staged ? "staged " : "unstaged");
+  const std::string title =
+      std::string(" \uF1C9 Git Diff: ")
+      + (git_diff_panel.revision.empty() ? (git_diff_panel.staged ? "staged" : "unstaged")
+                                         : "commit " + git_diff_panel.revision);
   ui->draw_text(panel_x + 1,
                 panel_y,
                 title,

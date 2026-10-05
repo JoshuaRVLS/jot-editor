@@ -11,9 +11,10 @@ themselves.
 Both halves are layout agreements that no model test can see, so this drives the
 real binary and reads the cells back:
 
-  * scene 1 - a file open with the explorer up: the workspace header sits on
-    row 0, the strip's first tab starts right of the explorer's border, and past
-    the last tab the row is the editor background, not the TabLine band;
+  * scene 1 - a file open with the explorer up: the explorer's EXPLORER header
+    sits on row 0 with its root row under it, the strip's first tab starts right
+    of the explorer's border, and past the last tab the row is the editor
+    background, not the TabLine band;
   * scene 2 - the right dock opened with the strip up: the dock's title row is
     row 0 and its tab strip is row 1 (the strip does not push the dock down a
     row), while the workspace tabs stay left of the dock.
@@ -96,8 +97,12 @@ def main() -> int:
     if sep < 0 or tab_x < 0 or tab_x <= sep:
         failures.append("the strip starts at %d, not right of the explorer's border %d (%r)"
                         % (tab_x, sep, r0))
-    if os.path.basename(work) not in r0[:max(0, sep)]:
-        failures.append("the explorer header is not on row 0 (%r)" % r0[:50])
+    if "EXPLORER" not in r0[:max(0, sep)]:
+        failures.append("the explorer's section header is not on row 0 (%r)" % r0[:50])
+    # The pinned root row under the header carries the workspace's name.
+    if os.path.basename(work) not in row_text(screen, 1)[:max(0, sep)]:
+        failures.append("the explorer root row is not under the header (%r)"
+                        % row_text(screen, 1)[:50])
     # Past the tab's close cell the row keeps the editor background: the old
     # full-width TabLine band ran to the screen edge and read as a gap.
     close_x = r0.rfind("×")

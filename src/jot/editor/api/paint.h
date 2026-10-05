@@ -188,12 +188,19 @@ private:
   {
     return show_right_panel && active_right_panel_tab == RIGHT_PANEL_SYMBOLS;
   }
+  // The sidebar's outline section keeps the same symbol list fresh: the model
+  // is shared, only the cursor and the window differ.
+  bool sidebar_outline_visible() const
+  {
+    return show_sidebar && sidebar_outline_open;
+  }
   void toggle_outline_panel();
   void close_outline_panel();
   void note_outline_edit();
   void ensure_outline_fresh(bool force = false);
   void outline_move_selection(int delta);
   void outline_jump_selected();
+  void outline_jump_to(int index);
   void render_plugin_panel();
   // The plugin panel's row area: the dock minus its border, tab strip and
   // title row. Shared by the renderer and the mouse hit-test so a row's pixels

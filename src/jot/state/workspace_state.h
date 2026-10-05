@@ -4,8 +4,10 @@
 #include "jot/model/buffer.h"   // GlobalMark
 #include "jot/model/explorer.h" // FileNode, SidebarView, SidebarRenderCache
 #include "jot/model/session.h"  // ClosedBufferSnapshot
+#include "jot/model/sidebar_sections.h"     // jot_sidebar::Section
 #include "jot/workspace/git_panel_models.h" // jot_git_panel::State
 #include "jot/workspace/git_run.h"          // jot_git::StatusSnapshot
+#include "jot/workspace/timeline.h"         // jot_timeline::Commit
 #include <atomic>
 #include <map>
 #include <string>
@@ -40,6 +42,26 @@ struct WorkspaceState
   bool zen_saved_panel_ = false;
   int zen_saved_status_height_ = 1;
   SidebarView active_sidebar_view = SIDEBAR_VIEW_EXPLORER;
+  // The left column's stacked sections (explorer tree, outline, timeline):
+  // which ones are collapsed, which owns the sidebar cursor, and the outline
+  // and timeline cursors/windows. The tree keeps file_tree_selected/scroll,
+  // which live in the display space that now starts at the root row.
+  bool sidebar_explorer_open = true;
+  bool sidebar_outline_open = true;
+  bool sidebar_timeline_open = true;
+  jot_sidebar::Section sidebar_section = jot_sidebar::SECTION_EXPLORER;
+  int sidebar_outline_selected = 0;
+  int sidebar_outline_scroll = 0;
+  int sidebar_timeline_selected = 0;
+  int sidebar_timeline_scroll = 0;
+  // The file timeline: the commits touching the buffer on screen, loaded
+  // asynchronously and cached per file (the sidebar is the only surface that
+  // shows them).
+  std::vector<jot_timeline::Commit> timeline_commits;
+  std::string timeline_path;
+  bool timeline_loading = false;
+  long long timeline_loaded_ms = 0;
+  bool timeline_dirty = true;
   int sidebar_width = 0;
   std::string root_dir;
   bool workspace_session_enabled = false;

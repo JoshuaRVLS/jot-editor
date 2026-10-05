@@ -42,9 +42,41 @@ private:
   // explorer and the dock own their top row and the strip only spans the pane
   // area between them.
   ContentColumn side_column() const;
-  // Rows the sidebar's list can show: the side column minus its own header,
-  // footer and bottom-border rows.
+  // Rows the sidebar's list can show: the explorer section's content rows,
+  // less the pinned root row.
   int sidebar_list_rows() const;
+  // The left column's stacked sections (explorer, outline, timeline): the one
+  // geometry model the painter, the hit-test and the cursor walk all read.
+  jot_sidebar::Layout sidebar_sections_layout() const;
+  // The section a sidebar row belongs to and the data-row index it carries:
+  // -1 is the section's header, -2 the footer or the empty space under a
+  // section.
+  struct SidebarHit
+  {
+    int section = -1;
+    int index = -2;
+    bool header = false;
+  };
+  SidebarHit sidebar_hit_test(int y) const;
+  // The per-section cursors and row counts, shared by the keyboard walk, the
+  // page/home/end keys and the render's clamps.
+  int sidebar_section_row_count(jot_sidebar::Section section) const;
+  int sidebar_section_cursor(jot_sidebar::Section section) const;
+  int sidebar_section_view_rows(jot_sidebar::Section section) const;
+  void sidebar_set_cursor(jot_sidebar::Section section, int index);
+  // Keyboard cursor: moves inside the current section and across the section
+  // boundaries; an empty section is skipped over.
+  void sidebar_move_cursor(int delta);
+  void sidebar_activate_cursor();
+  void sidebar_toggle_section(int section);
+  // Jumps the buffer to the symbol the sidebar's outline row shows, and opens
+  // the commit's file diff from a timeline row.
+  void sidebar_jump_outline(int index);
+  void sidebar_open_timeline_commit(int index);
+  // Reloads the file timeline (async, cached per file). The sidebar render
+  // calls it so the section always describes the buffer on screen.
+  void refresh_timeline(bool force = false);
+  std::string timeline_current_path() const;
   int sidebar_activity_rail_width() const
   {
     return 5;

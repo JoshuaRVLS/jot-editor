@@ -113,6 +113,9 @@ local function sidebar(p)
         place(r.icon_x, r.y, r.icon, r.icon_fg or r.fg, r.bg or bg, false)
       end
       place(r.text_x or (r.x + 1), r.y, r.text or "", r.fg or fg, r.bg or bg, r.bold)
+      if r.detail and r.detail ~= "" and r.detail_x and r.detail_x >= 0 then
+        place(r.detail_x, r.y, r.detail, r.detail_fg or comment, r.bg or bg)
+      end
       if r.badge and r.badge ~= "" and r.badge_x and r.badge_x >= 0 then
         place(r.badge_x, r.y, r.badge, r.badge_fg or r.fg, r.bg or bg, true)
       end
@@ -153,15 +156,17 @@ local function sidebar(p)
     end
   end
 
-  -- Header: the workspace root (icon first) on the panel's first row. Placed as
-  -- an op so it composes with the right-edge separator like any other row --
-  -- there is no border row to bake it into.
+  -- Header: the workspace root (icon first) on the row the payload names (the
+  -- explorer section's first content row, under the EXPLORER header). Placed
+  -- as an op so it composes with the right-edge separator like any other row
+  -- -- there is no border row to bake it into.
   local hcol = math.max(1, (p.header_x or (content_x + 1)) - x)
+  local header_y = p.header_y or y
   if p.header and p.header ~= "" then
     local header_bg = p.header_bg and p.header_bg >= 0 and p.header_bg or bg
-    place_fill(content_x, y, math.max(1, content_w - 1), p.header_fg or dir, header_bg)
+    place_fill(content_x, header_y, math.max(1, content_w - 1), p.header_fg or dir, header_bg)
     place(x + hcol - 1,
-          y,
+          header_y,
           trunc_cells(p.header, math.max(1, content_w)),
           p.header_fg or dir,
           header_bg,

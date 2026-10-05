@@ -1,9 +1,11 @@
 #include "editor.h"
+#include "features/winbar.h"
 #include "jot/file_icons.h"
 #include "jot/lua/api.h"
 #include "sidebar_guides.h"
 #include <algorithm>
 #include <cctype>
+#include <ctime>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -530,6 +532,11 @@ void Editor::render_sidebar()
     return;
 
   ensure_sidebar_render_cache();
+  // Both stacked sections describe the buffer on screen: the outline shares the
+  // symbol model (its rebuild is throttled) and the timeline loads on the git
+  // task queue.
+  ensure_outline_fresh();
+  refresh_timeline();
 
   int w = effective_sidebar_width();
   // Full height: the side column starts on the row the workspace strip would
@@ -814,29 +821,84 @@ void Editor::render_sidebar()
                    + (sidebar_render_cache_.root_label.empty()
                           ? ""
                           : " " + sidebar_render_cache_.root_label);
+  // The column's stacked sections. The geometry comes from the one model the
+  // hit-test and the keyboard walk also read, so a click can never land on a
+  // row the painter did not draw.
+  const jot_sidebar::Layout sections = sidebar_sections_layout();
+  const bool sidebar_focused = focus_state == FOCUS_SIDEBAR;
+  const bool explorer_focused = sidebar_focused && sidebar_section == jot_sidebar::SECTION_EXPLORER;
+
+  // One header style for all three sections: a chevron, the uppercase label,
+  // and an optional muted detail on the right (the timeline names the file it
+  // describes).
+  auto paint_section_header =
+      [&](int header_y, bool open, const std::string &label, const std::string &detail)
+  {
+    if (header_y < 0 || content_w < 3)
+    {
+      return;
+    }
+    const int fg = theme.fg_comment;
+    ui->fill_rect({content_x, header_y, std::max(1, content_w - 1), 1}, " ", fg, theme.bg_sidebar);
+    ui->draw_text(content_x + 1, header_y, open ? "\u25BE" : "\u25B8", fg, theme.bg_sidebar);
+    const int label_max = std::max(0, content_w - 3);
+    ui->draw_text(
+        content_x + 3, header_y, truncate_cells(label, label_max), fg, theme.bg_sidebar, true);
+
+    SidebarPanelRowView r;
+    r.x = content_x;
+    r.y = header_y;
+    r.w = std::max(1, content_w - 1);
+    r.fg = fg;
+    r.bg = theme.bg_sidebar;
+    r.section = true;
+    r.section_open = open;
+    r.symbol = open ? "\u25BE" : "\u25B8";
+    r.symbol_x = content_x + 1;
+    r.symbol_fg = fg;
+    r.text = truncate_cells(label, label_max);
+    r.text_x = content_x + 3;
+    r.bold = true;
+    if (!detail.empty())
+    {
+      const std::string shown = truncate_cells(detail, std::max(0, content_w - 3));
+      const int detail_x = content_x + content_w - cell_count(shown);
+      if (detail_x > content_x + 3 + cell_count(r.text) + 1)
+      {
+        ui->draw_text(detail_x, header_y, shown, fg, theme.bg_sidebar);
+        r.detail = shown;
+        r.detail_x = detail_x;
+        r.detail_fg = fg;
+      }
+    }
+    view.rows.push_back(std::move(r));
+  };
+
+  // The explorer's root row stays pinned on the section's first content row
+  // (file_tree_selected == -1) and the tree scrolls beneath it.
+  paint_section_header(sections.explorer.header_y, sidebar_explorer_open, "EXPLORER", "");
+  const int root_y = sections.explorer.y;
   int header_w = std::min(std::max(6, cell_count(header_label) + 2), std::max(1, content_w - 1));
-  if (header_w > 2)
+  if (root_y >= 0 && header_w > 2)
   {
     view.header = truncate_cells(header_label, header_w - 2);
     view.header_x = content_x + 1;
-    view.header_y = y;
+    view.header_y = root_y;
     const bool root_selected = file_tree_selected == -1;
-    const bool focused = focus_state == FOCUS_SIDEBAR;
-    view.header_fg =
-        root_selected ? (focused ? theme.fg_sidebar_selected : theme.fg_sidebar_selected_inactive)
-                      : theme.fg_sidebar_directory;
-    view.header_bg =
-        root_selected ? (focused ? theme.bg_sidebar_selected : theme.bg_sidebar_selected_inactive)
-                      : theme.bg_sidebar;
+    view.header_fg = root_selected ? (explorer_focused ? theme.fg_sidebar_selected
+                                                       : theme.fg_sidebar_selected_inactive)
+                                   : theme.fg_sidebar_directory;
+    view.header_bg = root_selected ? (explorer_focused ? theme.bg_sidebar_selected
+                                                       : theme.bg_sidebar_selected_inactive)
+                                   : theme.bg_sidebar;
     ui->fill_rect(
-        {content_x, y, std::max(0, content_w - 1), 1}, " ", view.header_fg, view.header_bg);
-    ui->draw_text(content_x + 1, y, view.header, view.header_fg, view.header_bg, true);
+        {content_x, root_y, std::max(0, content_w - 1), 1}, " ", view.header_fg, view.header_bg);
+    ui->draw_text(content_x + 1, root_y, view.header, view.header_fg, view.header_bg, true);
   }
 
-  int tree_y = y + 1;
-  // The header is row 0 and the footer takes the column's last row, so the tree
-  // fills everything between them -- its last row sits directly above the
-  // status line.
+  int tree_y = root_y + 1;
+  // The tree fills its section under the pinned root; the footer takes the
+  // column's last row and the sections stack above it.
   int tree_h = sidebar_list_rows();
   const auto &rows = sidebar_render_cache_.rows;
 
@@ -892,7 +954,7 @@ void Editor::render_sidebar()
 
     if (selected)
     {
-      if (focus_state == FOCUS_SIDEBAR)
+      if (explorer_focused)
       {
         row_fg = theme.fg_sidebar_selected;
         row_bg = theme.bg_sidebar_selected;
@@ -1045,6 +1107,163 @@ void Editor::render_sidebar()
       r.badge_fg = badge_fg;
     }
     view.rows.push_back(std::move(r));
+  }
+
+  // One outline / timeline row: fill, optional kind icon, the text, and a muted
+  // right-aligned detail. The same fields go to the Lua kit, so a click lands
+  // on the row the painter drew.
+  auto paint_section_row = [&](int row_y,
+                               bool selected,
+                               bool focused,
+                               int fg_plain,
+                               const std::string &icon,
+                               int icon_fg,
+                               const std::string &text,
+                               const std::string &detail)
+  {
+    const int fg = selected
+                       ? (focused ? theme.fg_sidebar_selected : theme.fg_sidebar_selected_inactive)
+                       : fg_plain;
+    const int row_bg =
+        selected ? (focused ? theme.bg_sidebar_selected : theme.bg_sidebar_selected_inactive)
+                 : theme.bg_sidebar;
+    ui->fill_rect({content_x, row_y, std::max(1, content_w - 1), 1}, " ", fg, row_bg);
+
+    SidebarPanelRowView r;
+    r.x = content_x;
+    r.y = row_y;
+    r.w = std::max(1, content_w - 1);
+    r.fg = fg;
+    r.bg = row_bg;
+    r.bold = selected;
+    int text_x = content_x + 1;
+    if (!icon.empty())
+    {
+      ui->draw_text(content_x + 1, row_y, icon, icon_fg, row_bg);
+      r.icon = icon;
+      r.icon_x = content_x + 1;
+      r.icon_fg = icon_fg;
+      text_x = content_x + 1 + cell_count(icon) + 1;
+    }
+    const int detail_w = detail.empty() ? 0 : cell_count(detail);
+    const int text_max =
+        std::max(0, (content_x + content_w - (detail_w > 0 ? detail_w + 2 : 0)) - text_x);
+    const std::string shown_text = truncate_cells(text, text_max);
+    ui->draw_text(text_x, row_y, shown_text, fg, row_bg);
+    r.text = shown_text;
+    r.text_x = text_x;
+    if (detail_w > 0)
+    {
+      const int detail_x = content_x + content_w - detail_w;
+      ui->draw_text(detail_x, row_y, detail, theme.fg_comment, row_bg);
+      r.detail = detail;
+      r.detail_x = detail_x;
+      r.detail_fg = theme.fg_comment;
+    }
+    view.rows.push_back(std::move(r));
+  };
+
+  // Keep a section's cursor inside its data and its window over the cursor.
+  auto clamp_section_window = [&](int count, int view_h, int &selected, int &scroll)
+  {
+    selected = std::clamp(selected, 0, std::max(0, count - 1));
+    if (selected < scroll)
+    {
+      scroll = selected;
+    }
+    else if (selected >= scroll + view_h)
+    {
+      scroll = std::max(0, selected - view_h + 1);
+    }
+    scroll = std::clamp(scroll, 0, std::max(0, count - view_h));
+  };
+
+  // --- OUTLINE: the active file's symbols, sharing the outline model with the
+  // right dock but keeping its own cursor and window. ---
+  paint_section_header(sections.outline.header_y, sidebar_outline_open, "OUTLINE", "");
+  if (sections.outline.h > 0)
+  {
+    const std::vector<SymbolMatch> &symbols = outline_panel.symbols;
+    const int view_h = sections.outline.h;
+    const bool outline_focused = sidebar_focused && sidebar_section == jot_sidebar::SECTION_OUTLINE;
+    clamp_section_window(
+        (int)symbols.size(), view_h, sidebar_outline_selected, sidebar_outline_scroll);
+    if (symbols.empty())
+    {
+      const std::string note =
+          timeline_current_path().empty() ? "Open a file to see its symbols" : "No symbols found";
+      paint_section_row(sections.outline.y, false, false, theme.fg_comment, "", -1, note, "");
+    }
+    else
+    {
+      for (int row = 0; row < view_h; row++)
+      {
+        const int index = sidebar_outline_scroll + row;
+        if (index < 0 || index >= (int)symbols.size())
+        {
+          break;
+        }
+        const SymbolMatch &symbol = symbols[(size_t)index];
+        const int kind_fg = Winbar::symbol_color(theme, symbol.kind);
+        paint_section_row(sections.outline.y + row,
+                          index == sidebar_outline_selected,
+                          outline_focused,
+                          kind_fg,
+                          Winbar::symbol_icon(symbol.kind),
+                          kind_fg,
+                          symbol.name,
+                          std::to_string(symbol.line + 1));
+      }
+    }
+  }
+
+  // --- TIMELINE: the commits touching the file on screen, newest first, with
+  // each commit's compact age. Enter / click opens the commit's file diff. ---
+  std::string timeline_file;
+  {
+    const std::string path = timeline_current_path();
+    if (!path.empty())
+    {
+      timeline_file = std::filesystem::path(path).filename().string();
+    }
+  }
+  paint_section_header(
+      sections.timeline.header_y, sidebar_timeline_open, "TIMELINE", timeline_file);
+  if (sections.timeline.h > 0)
+  {
+    const int view_h = sections.timeline.h;
+    const bool timeline_focused =
+        sidebar_focused && sidebar_section == jot_sidebar::SECTION_TIMELINE;
+    clamp_section_window(
+        (int)timeline_commits.size(), view_h, sidebar_timeline_selected, sidebar_timeline_scroll);
+    if (timeline_commits.empty())
+    {
+      const std::string note = !has_git_repo()
+                                   ? "Not a Git repository"
+                                   : (timeline_loading ? "Loading..." : "No commits for this file");
+      paint_section_row(sections.timeline.y, false, false, theme.fg_comment, "", -1, note, "");
+    }
+    else
+    {
+      const long long now_epoch = (long long)::time(nullptr);
+      for (int row = 0; row < view_h; row++)
+      {
+        const int index = sidebar_timeline_scroll + row;
+        if (index < 0 || index >= (int)timeline_commits.size())
+        {
+          break;
+        }
+        const jot_timeline::Commit &commit = timeline_commits[(size_t)index];
+        paint_section_row(sections.timeline.y + row,
+                          index == sidebar_timeline_selected,
+                          timeline_focused,
+                          theme.fg_sidebar,
+                          "\uF1C9",
+                          theme.fg_comment,
+                          commit.subject,
+                          jot_timeline::relative_age(commit.epoch, now_epoch));
+      }
+    }
   }
 
   std::string footer;

@@ -47,11 +47,14 @@ def main():
                 results.append(("tooling outranks social chrome", "TOOLING_READY" in lines[-1]
                                 and "SOCIAL_SECONDARY" not in lines[-1]))
                 # The explorer owns row 0 now: the strip spans only the pane area
-                # between the side columns, so the workspace header sits on the
-                # row the tabs are on instead of being covered by the strip's
-                # band (which used to start at column 0).
+                # between the side columns, so the EXPLORER section header sits
+                # on the row the tabs are on instead of being covered by the
+                # strip's band (which used to start at column 0), and the
+                # pinned root row under it names the workspace.
                 results.append(("explorer keeps its header on row 0",
-                                "workspace" in lines[0].split("│")[0]))
+                                "EXPLORER" in lines[0].split("│")[0]))
+                results.append(("explorer root sits under the header",
+                                "workspace" in lines[1].split("│")[0]))
                 # The strip paints only its tabs: the selected one wears the
                 # editor's own surface, and past its close cell the row is the
                 # editor background, not a full-width TabLine band.

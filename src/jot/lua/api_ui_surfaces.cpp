@@ -931,6 +931,11 @@ bool LuaAPI::emit_sidebar(const SidebarPanelView &view)
                          lua_set_int_field(L, ri, "bg", r.bg);
                          lua_set_bool_field(L, ri, "bold", r.bold);
                          lua_set_bool_field(L, ri, "active_file", r.active_file);
+                         lua_set_bool_field(L, ri, "section", r.section);
+                         lua_set_bool_field(L, ri, "section_open", r.section_open);
+                         lua_set_str_field(L, ri, "detail", r.detail);
+                         lua_set_int_field(L, ri, "detail_x", r.detail_x);
+                         lua_set_int_field(L, ri, "detail_fg", r.detail_fg);
                          lua_set_int_field(L, ri, "badge_x", r.badge_x);
                          lua_set_str_field(L, ri, "badge", r.badge);
                          lua_set_int_field(L, ri, "badge_fg", r.badge_fg);

@@ -347,56 +347,44 @@ void Editor::handle_sidebar_input(int ch)
   file_tree_selected = std::clamp(file_tree_selected, -1, std::max(-1, (int)flat.size() - 1));
   clamp_scroll();
 
-  if (ch == 1008 || ch == 'k')
-  { // Up
-    if (file_tree_selected >= 0)
+  // Cursor keys walk the whole column: inside the current section, and across
+  // into the outline and the timeline at the section edges. The column ends
+  // stop the cursor (no wrap).
+  if (ch == 1008 || ch == 'k' || ch == 1009 || ch == 'j')
+  {
+    sidebar_move_cursor((ch == 1008 || ch == 'k') ? -1 : 1);
+    return;
+  }
+
+  // Page / Home / End stay inside the section the cursor is in, so a long
+  // explorer list does not fling the cursor into the timeline.
+  if (ch == 1012 || ch == 1013 || ch == 1015 || ch == 1016)
+  {
+    const jot_sidebar::Section section = sidebar_section;
+    const int count = sidebar_section_row_count(section);
+    if (count <= 0)
     {
-      file_tree_selected--;
-      ensure_selected_visible();
-      needs_redraw = true;
+      return;
     }
-    return;
-  }
-
-  if (ch == 1009 || ch == 'j')
-  { // Down
-    if (file_tree_selected < (int)flat.size() - 1)
+    int index = std::clamp(sidebar_section_cursor(section), 0, count - 1);
+    const int page = std::max(1, sidebar_section_view_rows(section));
+    if (ch == 1012)
     {
-      file_tree_selected++;
-      ensure_selected_visible();
-      needs_redraw = true;
+      index = 0;
     }
-    return;
-  }
-
-  if (ch == 1015)
-  { // Page Up
-    file_tree_selected = std::max(-1, file_tree_selected - view_h);
-    ensure_selected_visible();
-    needs_redraw = true;
-    return;
-  }
-
-  if (ch == 1016)
-  { // Page Down
-    file_tree_selected = std::min(std::max(0, (int)flat.size() - 1), file_tree_selected + view_h);
-    ensure_selected_visible();
-    needs_redraw = true;
-    return;
-  }
-
-  if (ch == 1012)
-  { // Home
-    file_tree_selected = -1;
-    ensure_selected_visible();
-    needs_redraw = true;
-    return;
-  }
-
-  if (ch == 1013)
-  { // End
-    file_tree_selected = std::max(0, (int)flat.size() - 1);
-    ensure_selected_visible();
+    else if (ch == 1013)
+    {
+      index = count - 1;
+    }
+    else if (ch == 1015)
+    {
+      index = std::max(0, index - page);
+    }
+    else
+    {
+      index = std::min(count - 1, index + page);
+    }
+    sidebar_set_cursor(section, index);
     needs_redraw = true;
     return;
   }
@@ -511,28 +499,40 @@ void Editor::handle_sidebar_input(int ch)
     return;
   }
 
-  if (ch == '\n' || ch == 13 || ch == 'l' || ch == 1010)
+  if (ch == '\n' || ch == 13)
   {
+    sidebar_activate_cursor();
+    return;
+  }
+
+  if (ch == 'l' || ch == 1010)
+  {
+    if (sidebar_section != jot_sidebar::SECTION_EXPLORER)
+    {
+      // Right expands the section the cursor is in (it only opens: a second
+      // press leaves an open section alone).
+      const bool closed = sidebar_section == jot_sidebar::SECTION_OUTLINE ? !sidebar_outline_open
+                          : sidebar_section == jot_sidebar::SECTION_TIMELINE
+                              ? !sidebar_timeline_open
+                              : !sidebar_explorer_open;
+      if (closed)
+      {
+        sidebar_toggle_section(sidebar_section);
+      }
+      return;
+    }
     flatten_nodes_mut(file_tree, flat);
     if (file_tree_selected >= 0 && file_tree_selected < (int)flat.size())
     {
       FileNode *node = flat[file_tree_selected];
-      if (node->is_dir)
+      if (node->is_dir && !node->expanded)
       {
-        if (!node->expanded)
-        {
-          node->expanded = true;
-          refresh_tree_children(*node);
-          invalidate_sidebar_tree_cache();
-        }
-        else if (ch == '\n' || ch == 13)
-        {
-          node->expanded = false;
-          invalidate_sidebar_tree_cache();
-        }
+        node->expanded = true;
+        refresh_tree_children(*node);
+        invalidate_sidebar_tree_cache();
         needs_redraw = true;
       }
-      else
+      else if (!node->is_dir)
       {
         load_file(node->path);
         focus_state = FOCUS_EDITOR;
@@ -545,6 +545,24 @@ void Editor::handle_sidebar_input(int ch)
 
   if (ch == 'h' || ch == 1011)
   {
+    if (sidebar_section != jot_sidebar::SECTION_EXPLORER)
+    {
+      // Left collapses the section the cursor is in; Right brings it back.
+      const bool open = sidebar_section == jot_sidebar::SECTION_OUTLINE    ? sidebar_outline_open
+                        : sidebar_section == jot_sidebar::SECTION_TIMELINE ? sidebar_timeline_open
+                                                                           : sidebar_explorer_open;
+      if (open)
+      {
+        sidebar_toggle_section(sidebar_section);
+      }
+      return;
+    }
+    if (file_tree_selected == -1)
+    {
+      // The root row is the explorer's own folder: Left closes the section.
+      sidebar_toggle_section(jot_sidebar::SECTION_EXPLORER);
+      return;
+    }
     flatten_nodes_mut(file_tree, flat);
     if (file_tree_selected >= 0 && file_tree_selected < (int)flat.size())
     {
@@ -876,6 +894,241 @@ void Editor::handle_sidebar_input(int ch)
     return;
   }
 }
+Editor::SidebarHit Editor::sidebar_hit_test(int y) const
+{
+  SidebarHit hit;
+  const jot_sidebar::Layout sections = sidebar_sections_layout();
+  const int section = jot_sidebar::section_at(sections, y);
+  if (section < 0)
+  {
+    return hit;
+  }
+  const jot_sidebar::SectionLayout &layout =
+      section == jot_sidebar::SECTION_EXPLORER  ? sections.explorer
+      : section == jot_sidebar::SECTION_OUTLINE ? sections.outline
+                                                : sections.timeline;
+  bool header = false;
+  const int index = jot_sidebar::index_in_section(layout, y, &header);
+  if (index == -2)
+  {
+    return hit;
+  }
+  hit.section = section;
+  hit.index = index;
+  hit.header = header;
+  return hit;
+}
+
+int Editor::sidebar_section_row_count(jot_sidebar::Section section) const
+{
+  switch (section)
+  {
+  case jot_sidebar::SECTION_EXPLORER:
+    return sidebar_explorer_open ? 1 + (int)sidebar_render_cache_.rows.size() : 0;
+  case jot_sidebar::SECTION_OUTLINE:
+    return sidebar_outline_open ? (int)outline_panel.symbols.size() : 0;
+  case jot_sidebar::SECTION_TIMELINE:
+    return sidebar_timeline_open ? (int)timeline_commits.size() : 0;
+  default:
+    return 0;
+  }
+}
+
+int Editor::sidebar_section_cursor(jot_sidebar::Section section) const
+{
+  switch (section)
+  {
+  case jot_sidebar::SECTION_EXPLORER:
+    return file_tree_selected + 1; // display space: 0 is the pinned root row
+  case jot_sidebar::SECTION_OUTLINE:
+    return sidebar_outline_selected;
+  case jot_sidebar::SECTION_TIMELINE:
+    return sidebar_timeline_selected;
+  default:
+    return 0;
+  }
+}
+
+int Editor::sidebar_section_view_rows(jot_sidebar::Section section) const
+{
+  const jot_sidebar::Layout sections = sidebar_sections_layout();
+  switch (section)
+  {
+  case jot_sidebar::SECTION_EXPLORER:
+    return sections.explorer.h;
+  case jot_sidebar::SECTION_OUTLINE:
+    return std::max(1, sections.outline.h);
+  case jot_sidebar::SECTION_TIMELINE:
+    return std::max(1, sections.timeline.h);
+  default:
+    return 1;
+  }
+}
+
+void Editor::sidebar_set_cursor(jot_sidebar::Section section, int index)
+{
+  sidebar_section = section;
+  switch (section)
+  {
+  case jot_sidebar::SECTION_EXPLORER:
+    file_tree_selected = index - 1;
+    break;
+  case jot_sidebar::SECTION_OUTLINE:
+    sidebar_outline_selected = index;
+    break;
+  case jot_sidebar::SECTION_TIMELINE:
+    sidebar_timeline_selected = index;
+    break;
+  default:
+    break;
+  }
+}
+
+void Editor::sidebar_move_cursor(int delta)
+{
+  if (delta == 0 || !show_sidebar)
+  {
+    return;
+  }
+  int section = (int)sidebar_section;
+  int index = sidebar_section_cursor(sidebar_section);
+  int remaining = delta;
+  while (remaining != 0)
+  {
+    const int count = sidebar_section_row_count((jot_sidebar::Section)section);
+    if (remaining > 0)
+    {
+      if (index + 1 < count)
+      {
+        index++;
+        remaining--;
+        continue;
+      }
+      int next = -1;
+      for (int s = section + 1; s < jot_sidebar::SECTION_COUNT; s++)
+      {
+        if (sidebar_section_row_count((jot_sidebar::Section)s) > 0)
+        {
+          next = s;
+          break;
+        }
+      }
+      if (next < 0)
+      {
+        break; // the column ends here; the cursor does not wrap around
+      }
+      section = next;
+      index = 0;
+      remaining--;
+    }
+    else
+    {
+      if (index > 0)
+      {
+        index--;
+        remaining++;
+        continue;
+      }
+      int previous = -1;
+      for (int s = section - 1; s >= 0; s--)
+      {
+        if (sidebar_section_row_count((jot_sidebar::Section)s) > 0)
+        {
+          previous = s;
+          break;
+        }
+      }
+      if (previous < 0)
+      {
+        break;
+      }
+      section = previous;
+      index = sidebar_section_row_count((jot_sidebar::Section)section) - 1;
+      remaining++;
+    }
+  }
+  sidebar_set_cursor((jot_sidebar::Section)section, index);
+  focus_state = FOCUS_SIDEBAR;
+  needs_redraw = true;
+}
+
+void Editor::sidebar_toggle_section(int section)
+{
+  switch (section)
+  {
+  case jot_sidebar::SECTION_EXPLORER:
+    sidebar_explorer_open = !sidebar_explorer_open;
+    break;
+  case jot_sidebar::SECTION_OUTLINE:
+    sidebar_outline_open = !sidebar_outline_open;
+    break;
+  case jot_sidebar::SECTION_TIMELINE:
+    sidebar_timeline_open = !sidebar_timeline_open;
+    break;
+  default:
+    return;
+  }
+  needs_redraw = true;
+}
+
+void Editor::sidebar_activate_cursor()
+{
+  if (sidebar_section == jot_sidebar::SECTION_OUTLINE)
+  {
+    sidebar_jump_outline(sidebar_outline_selected);
+    return;
+  }
+  if (sidebar_section == jot_sidebar::SECTION_TIMELINE)
+  {
+    sidebar_open_timeline_commit(sidebar_timeline_selected);
+    return;
+  }
+
+  // Explorer: the pinned root row toggles the whole section, a directory
+  // opens or closes, and a file opens in the editor.
+  if (file_tree_selected == -1)
+  {
+    sidebar_toggle_section(jot_sidebar::SECTION_EXPLORER);
+    return;
+  }
+  std::vector<FileNode *> flat;
+  flatten_nodes_mut(file_tree, flat);
+  if (file_tree_selected < 0 || file_tree_selected >= (int)flat.size())
+  {
+    return;
+  }
+  FileNode *node = flat[(size_t)file_tree_selected];
+  if (node->is_dir)
+  {
+    node->expanded = !node->expanded;
+    if (node->expanded)
+    {
+      refresh_tree_children(*node);
+    }
+    invalidate_sidebar_tree_cache();
+  }
+  else
+  {
+    load_file(node->path);
+    focus_state = FOCUS_EDITOR;
+    record_jump();
+  }
+  needs_redraw = true;
+}
+
+void Editor::sidebar_jump_outline(int index)
+{
+  ensure_outline_fresh(true);
+  if (index < 0 || index >= (int)outline_panel.symbols.size())
+  {
+    return;
+  }
+  sidebar_outline_selected = index;
+  // The shared jump keeps the right dock's cursor in step with the sidebar's.
+  outline_panel.selected = index;
+  outline_jump_to(index);
+}
+
 void Editor::handle_sidebar_mouse(int x, int y, bool is_click, bool is_double_click)
 {
   if (!is_click)
@@ -922,29 +1175,57 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click, bool is_double_cl
     return;
   }
 
-  // The root has no FileNode: -1 selects its fixed header without opening a child.
-  if (rel_y == 0)
+  // The stacked sections: a header toggles its section, an outline row jumps
+  // to the symbol, a timeline row opens the commit's file diff, and the
+  // explorer keeps its click behavior with the root row pinned on top.
+  const SidebarHit hit = sidebar_hit_test(y);
+  if (hit.section < 0)
+  {
+    return;
+  }
+  if (hit.header)
+  {
+    focus_state = FOCUS_SIDEBAR;
+    sidebar_toggle_section(hit.section);
+    return;
+  }
+  if (hit.section == jot_sidebar::SECTION_OUTLINE)
+  {
+    focus_state = FOCUS_SIDEBAR;
+    sidebar_section = jot_sidebar::SECTION_OUTLINE;
+    sidebar_jump_outline(hit.index);
+    if (is_double_click)
+    {
+      focus_state = FOCUS_EDITOR;
+    }
+    return;
+  }
+  if (hit.section == jot_sidebar::SECTION_TIMELINE)
+  {
+    focus_state = FOCUS_SIDEBAR;
+    sidebar_section = jot_sidebar::SECTION_TIMELINE;
+    sidebar_open_timeline_commit(hit.index);
+    return;
+  }
+
+  // Explorer rows: index 0 is the pinned root, the rows under it are the
+  // scrolled tree.
+  focus_state = FOCUS_SIDEBAR;
+  sidebar_section = jot_sidebar::SECTION_EXPLORER;
+  if (hit.index == 0)
   {
     file_tree_selected = -1;
     file_tree_scroll = 0;
-    focus_state = FOCUS_SIDEBAR;
     needs_redraw = true;
     return;
   }
 
   std::vector<FileNode *> flat;
   flatten_nodes_mut(file_tree, flat);
-
-  // Sidebar now has 1-line header, so tree rows begin after that.
-  int sidebar_row = y - side_column_top() - 1;
-  // Header above, footer on the column's last row: only the rows between them
-  // hold tree entries, so a click on either must not open the next file.
-  if (sidebar_row < 0 || sidebar_row >= sidebar_list_rows())
-    return;
-  int row = sidebar_row + file_tree_scroll;
+  const int row = hit.index - 1 + file_tree_scroll;
   if (row >= 0 && row < (int)flat.size())
   {
-    FileNode *node = flat[row];
+    FileNode *node = flat[(size_t)row];
     file_tree_selected = row;
 
     if (node->is_dir)

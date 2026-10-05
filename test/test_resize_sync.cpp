@@ -292,12 +292,12 @@ TEST_CASE("Explorer clicks work below the terminal's row count", "[jot]")
   REQUIRE(e.terminal_height_for_test() == 24);
   REQUIRE(e.sidebar_visible_for_test());
 
-  // Explorer rows start at y = 1 (row 0 is the header), so the filename index
-  // is y - 1, and it stays y - 1 once a tab appears: the workspace strip spans
-  // the pane area between the explorer and the dock, so the full-height
-  // explorer keeps its own top row and the column does not shift. The hit test
-  // reads the same `y - side_column_top() - 1`, which is what keeps it on the
-  // painted row.
+  // The column stacks an EXPLORER header on row 0, the pinned root on row 1
+  // and the tree from row 2 down, so the filename index is y - 2, and it stays
+  // y - 2 once a tab appears: the workspace strip spans the pane area between
+  // the explorer and the dock, so the full-height explorer keeps its own top
+  // rows and the column does not shift. The hit test walks the same section
+  // layout, which is what keeps it on the painted row.
   const auto click_row = [&](int y)
   {
     e.mouse_event_for_test(5, y, /*bstate=*/1); // press
@@ -306,30 +306,30 @@ TEST_CASE("Explorer clicks work below the terminal's row count", "[jot]")
   };
 
   // Control: a row above the old cutoff must keep working. No buffer is open
-  // yet, so the strip is hidden and the tree still starts at row 1.
-  REQUIRE(click_row(1) == "f00.txt");
+  // yet, so the outline and timeline sections only carry their one-row notes.
+  REQUIRE(click_row(2) == "f00.txt");
 
-  // The regression: row 22 is the first row the old terminal-derived gate
+  // The regression: row 24 is the first row the old terminal-derived gate
   // rejected, so a click there used to be dropped entirely.
-  REQUIRE(click_row(23) == "f22.txt");
+  REQUIRE(click_row(24) == "f22.txt");
 
-  // The last row of the explorer that is actually painted. It is the column's
-  // last list row: the panel has no bottom border row, and the footer takes the
-  // row under the tree, so the painted list ends here (index 36).
-  REQUIRE(click_row(37) == "f36.txt");
+  // The last row the explorer paints (index 32): the outline and timeline
+  // sections split the rest of the column with their one-row notes, and the
+  // footer closes it on row 38.
+  REQUIRE(click_row(33) == "f31.txt");
 
-  // The header is the explorer's row 0, and the strip no longer steals it: the
-  // click guard reads side_column_top(), so this row selects the root even
-  // though a tab is up. It used to be rejected and left the tree selection on
-  // the last file clicked.
+  // The root row, under the section header, and it is not stolen by the strip:
+  // the click guard reads side_column_top(), so it selects the root even though
+  // a tab is up. It used to be rejected and left the selection on the last file
+  // clicked.
   REQUIRE_FALSE(e.sidebar_root_selected_for_test());
-  e.mouse_event_for_test(5, 0, /*bstate=*/1);
+  e.mouse_event_for_test(5, 1, /*bstate=*/1);
   e.render_for_test();
   REQUIRE(e.sidebar_root_selected_for_test());
 
-  // The row below that is the footer, and the one under it the status line:
-  // neither may open anything (the footer is not a tree row, and the status
-  // line is outside the column the click guard accepts).
+  // The footer on the column's last row, and the status line under it: neither
+  // may open anything (the footer is not a list row, and the status line is
+  // outside the column the click guard accepts).
   const std::string before = e.buffer_for_test().filepath;
   e.mouse_event_for_test(5, 38, /*bstate=*/1);
   e.render_for_test();
@@ -487,7 +487,7 @@ TEST_CASE("Sidebar root selection works by mouse and keyboard and survives refre
   e.set_home_menu_visible(false);
   e.open_workspace(scratch_workspace(), false);
   e.render_for_test();
-  e.mouse_event_for_test(8, 0, 1);
+  e.mouse_event_for_test(8, 1, 1); // the root row, under the EXPLORER header
   REQUIRE(e.sidebar_root_selected_for_test());
   e.editor_input_for_test('R');
   REQUIRE(e.sidebar_root_selected_for_test());

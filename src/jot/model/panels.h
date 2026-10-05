@@ -25,6 +25,9 @@ struct GitDiffPanel
   bool visible = false;
   bool staged = false;
   std::string path;
+  // Set when the diff is one commit's version of the file (a timeline row):
+  // the header names the revision instead of staged/unstaged.
+  std::string revision;
   std::vector<std::string> lines;
   int scroll = 0;
 };

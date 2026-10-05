@@ -122,32 +122,32 @@ def main() -> int:
     # split chords share these letters, and Shift is what separates them). The
     # divider row is the proof: the same file then draws twice, one pane per
     # half of the editor column.
-    screen = run(binary, tmp, [(0.3, click(4, 1)), (0.5, csi(ord("J"), 4))])
+    screen = run(binary, tmp, [(0.3, click(4, 2)), (0.5, csi(ord("J"), 4))])
     body = rows_of(screen)
     check(any(row.count("─") > 40 for row in body),
           "Alt+Shift+J left no rule between the stacked panes while the explorer had focus")
 
     # --- a file is open and the explorer still has focus (clicking leaves it) ----
-    opened = run(binary, tmp, [(0.3, click(4, 1))])
+    opened = run(binary, tmp, [(0.3, click(4, 2))])
     check("alpha" in pane_text(opened), "clicking the tree row did not open the file")
     check(len(tab_strip(opened)) > 0, "the tab strip lost the open file's tab")
 
     # Alt+W closes that tab from the explorer, which is the gesture that used to
     # be swallowed whole. The explorer keeps the file open in its own tab strip
     # afterwards, so what is asserted is the file's text leaving the pane.
-    screen = run(binary, tmp, [(0.3, click(4, 1)), (0.5, csi(ord("w")))])
+    screen = run(binary, tmp, [(0.3, click(4, 2)), (0.5, csi(ord("w")))])
     check("alpha" not in pane_text(screen),
           "Alt+W did not close the buffer while the explorer had focus")
 
     # --- the explorer keeps its own plain keys --------------------------------
     # A chord is a shortcut; a bare letter belongs to the tree. Forwarding Alt
     # must not have opened the door for typing under the explorer's cursor.
-    screen = run(binary, tmp, [(0.3, click(4, 1)), (0.5, b"x")])
+    screen = run(binary, tmp, [(0.3, click(4, 2)), (0.5, b"x")])
     check("xalpha" not in pane_text(screen),
           "a plain letter typed into the buffer while the explorer had focus")
 
     # --- an unclaimed Alt chord must not type either ---------------------------
-    screen = run(binary, tmp, [(0.3, click(4, 1)), (0.5, csi(ord("x")))])
+    screen = run(binary, tmp, [(0.3, click(4, 2)), (0.5, csi(ord("x")))])
     check("xalpha" not in pane_text(screen),
           "Alt+X typed a letter into the buffer while the explorer had focus")
 
@@ -163,7 +163,7 @@ def main() -> int:
 
     # --- the Problems panel is not a keyboard dead zone -------------------------
     problems = csi(ord("m"), 6)  # Ctrl+Shift+M
-    screen = run(binary, tmp, [(0.3, click(4, 1)), (0.5, problems), (0.5, csi(ord("n")))])
+    screen = run(binary, tmp, [(0.3, click(4, 2)), (0.5, problems), (0.5, csi(ord("n")))])
     check("[No Name]" in tab_strip(screen),
           "Alt+N did not open a buffer while the Problems list had focus")
 

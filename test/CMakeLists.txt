@@ -100,6 +100,7 @@ add_executable(jot_tests
   test_inlay_hints.cpp
   test_commenting.cpp
   test_sidebar_guides.cpp
+  test_sidebar_sections.cpp
   test_blank_guides.cpp
   test_bracket_match.cpp
   test_replace_inside.cpp

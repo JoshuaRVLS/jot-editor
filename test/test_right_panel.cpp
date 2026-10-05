@@ -160,7 +160,9 @@ TEST_CASE("Right dock: a tab's × closes where the strip paints it", "[jot]")
   REQUIRE(mkdtemp(ws) != nullptr);
   std::ofstream(std::string(ws) + "/probe.txt") << "probe\n";
   e.host().io.open_workspace(ws);
-  e.mouse_event_for_test(5, 1, /*bstate=*/1); // click the file in the tree
+  // The explorer stacks its header on row 0, the pinned root on row 1 and the
+  // tree from row 2, so the file is the third row of the column.
+  e.mouse_event_for_test(5, 2, /*bstate=*/1); // click the file in the tree
   REQUIRE(e.topbar_height_for_test() == 1);   // the strip is up
   REQUIRE(e.side_column_top_for_test() == 0);
 

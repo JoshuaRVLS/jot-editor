@@ -85,12 +85,29 @@ Editor::ContentColumn Editor::side_column() const
   return col;
 }
 
+jot_sidebar::Layout Editor::sidebar_sections_layout() const
+{
+  const ContentColumn col = side_column();
+  // The explorer's display rows: the pinned root row plus the cached tree.
+  const int tree_count = 1 + (int)sidebar_render_cache_.rows.size();
+  const int outline_count = (int)outline_panel.symbols.size();
+  const int timeline_count = (int)timeline_commits.size();
+  return jot_sidebar::compute(col.top,
+                              col.h,
+                              tree_count,
+                              outline_count,
+                              timeline_count,
+                              sidebar_explorer_open,
+                              sidebar_outline_open,
+                              sidebar_timeline_open,
+                              /*show_footer=*/true);
+}
+
 int Editor::sidebar_list_rows() const
 {
-  // Header row and footer row sit inside the column; the column's last row is
-  // a tree row (a region's bottom row is content, marked off from the status
-  // line by its background alone -- see pane_edges.h).
-  return std::max(0, side_column().h - 2);
+  // The tree's scrolling rows: everything under the pinned root row, in a
+  // region whose bottom row is content (see pane_edges.h).
+  return std::max(0, sidebar_sections_layout().explorer.h - 1);
 }
 
 Editor::PaneArea Editor::compute_pane_area() const

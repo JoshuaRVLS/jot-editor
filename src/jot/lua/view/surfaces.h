@@ -458,6 +458,14 @@ struct SidebarPanelRowView
   int fg = 0, bg = 0;
   bool bold = false;
   bool active_file = false; // draw the ▌ marker at the left edge
+  // A stacked section header (EXPLORER / OUTLINE / TIMELINE): the chevron is
+  // in `symbol`, the uppercase label in `text`, and the optional muted suffix
+  // (the timeline's file name) in `detail`.
+  bool section = false;
+  bool section_open = true;
+  std::string detail; // muted right-aligned suffix, may be empty
+  int detail_x = -1;  // absolute column for `detail`, -1 = none
+  int detail_fg = 0;
   int badge_x = -1;         // right badge column (absolute), -1 = none
   std::string badge;        // badge glyph (git symbol)
   int badge_fg = 0;

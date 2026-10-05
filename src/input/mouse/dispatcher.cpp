@@ -892,10 +892,11 @@ void Editor::handle_mouse(void *event_ptr)
       long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now().time_since_epoch())
                              .count();
-      int sidebar_scroll = !explorer_only() && active_sidebar_view == SIDEBAR_VIEW_GIT
-                               ? git_sidebar_scroll
-                               : file_tree_scroll;
-      int sidebar_row = event->y - col.top - 1 + sidebar_scroll;
+      // The double-click id is the section plus the row inside it, so a click
+      // on the same screen row in two different sections is not a double
+      // click, and a scroll between clicks cannot fake one.
+      const SidebarHit sidebar_hit = sidebar_hit_test(event->y);
+      const int sidebar_row = (sidebar_hit.section + 1) * 4096 + (sidebar_hit.index + 2);
       bool sidebar_double = (last_sidebar_click_ms > 0) && (now_ms - last_sidebar_click_ms <= 350)
                             && (last_sidebar_click_row == sidebar_row);
       last_sidebar_click_ms = now_ms;

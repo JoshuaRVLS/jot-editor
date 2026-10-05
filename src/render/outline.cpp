@@ -30,7 +30,7 @@ void Editor::note_outline_edit()
 
 void Editor::ensure_outline_fresh(bool force)
 {
-  if (!outline_active())
+  if (!outline_active() && !sidebar_outline_visible())
   {
     return;
   }
@@ -117,13 +117,18 @@ void Editor::outline_move_selection(int delta)
 
 void Editor::outline_jump_selected()
 {
+  outline_jump_to(outline_panel.selected);
+}
+
+void Editor::outline_jump_to(int index)
+{
   ensure_outline_fresh(true);
   if (outline_panel.symbols.empty())
   {
     set_message("Outline: no symbols in this file");
     return;
   }
-  const int index = std::clamp(outline_panel.selected, 0, (int)outline_panel.symbols.size() - 1);
+  index = std::clamp(index, 0, (int)outline_panel.symbols.size() - 1);
   const SymbolMatch &symbol = outline_panel.symbols[(size_t)index];
   FileBuffer &buf = get_buffer();
   if (buf.line_count() == 0)
