@@ -110,7 +110,9 @@ def main() -> int:
             break
         screen.feed(data)
         text = screen.text()
-        saw_lsp = saw_lsp or "cpp @" in text or "clangd" in text
+        # The statusline's LSP chip names the language (it dropped the server's
+        # root path), so the language glyph is the attach signal.
+        saw_lsp = saw_lsp or re.search(r"\uf085\s*cpp\b", text) is not None
         saw_spinner = any(ch in text for ch in SPINNER)
 
     try:

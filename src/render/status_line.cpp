@@ -333,27 +333,10 @@ void Editor::render_status_line()
   if (has_git_repo())
   {
     // Branch chip: the git glyph is drawn in a warm accent (visible on both
-    // dark and light status bars), the branch + change counts keep the
-    // status-info tone. Symbols survive width truncation, the branch text
-    // is the part that shortens first.
-    std::string git = " " + ui_truncate_cells(git_branch, 18);
-    if (git_staged_count > 0)
-    {
-      git += " +" + std::to_string(git_staged_count);
-    }
-    if (git_unstaged_count > 0)
-    {
-      git += " ~" + std::to_string(git_unstaged_count);
-    }
-    if (git_untracked_count > 0)
-    {
-      git += " ?" + std::to_string(git_untracked_count);
-    }
-    if (git_conflict_count > 0)
-    {
-      git += " !" + std::to_string(git_conflict_count);
-    }
-    git += " ";
+    // dark and light status bars), the branch keeps the status-info tone. The
+    // change counts live in the git panel, not here; the glyph survives width
+    // truncation while the branch text is the part that shortens.
+    std::string git = " " + ui_truncate_cells(git_branch, 18) + " ";
     right_segments.push_back({git,
                               theme.fg_status_info,
                               theme.bg_status_info,
@@ -367,15 +350,17 @@ void Editor::render_status_line()
   if (!lsp_clients.empty())
   {
     int running_clients = 0;
-    std::string first_running;
+    std::string first_language;
     for (const auto &client : lsp_clients)
     {
       if (client && client->is_running())
       {
         running_clients++;
-        if (first_running.empty())
+        if (first_language.empty())
         {
-          first_running = client->describe();
+          // Language alone: the server's root path used to ride here, a long
+          // static string the workspace label already answers for.
+          first_language = client->get_language();
         }
       }
     }
@@ -384,7 +369,7 @@ void Editor::render_status_line()
     int lsp_bg = theme.bg_status_muted;
     if (running_clients > 0)
     {
-      lsp_text = "  " + ui_truncate_cells(first_running.empty() ? "LSP" : first_running, 18);
+      lsp_text = "  " + ui_truncate_cells(first_language.empty() ? "LSP" : first_language, 18);
       if (running_clients > 1)
       {
         lsp_text += " x" + std::to_string(running_clients);

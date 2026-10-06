@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 import shutil
 import sys
 
@@ -41,6 +42,10 @@ WORK = "/tmp/jot_payload_probe_work"
 CFG_INSTALL = "/tmp/jot_payload_probe_cfg_install"
 CFG_SERVE = "/tmp/jot_payload_probe_cfg_serve"
 SHIM_PATH = "/tmp/jot_payload_probe_path"
+# The statusline's LSP chip: the language glyph (nf-fa-laptop_code) followed by
+# the language name. The chip dropped the server's root path, so the language is
+# what proves a server attached.
+LSP_CHIP = re.compile(r"\uf085\s+cpp\b")
 VERSION_DIR = "clangd_22.1.8"
 # Only what the payload install script itself shells out to; deliberately no
 # clangd.
@@ -127,16 +132,17 @@ def main() -> int:
           log_text.strip() or repr(text[-300:]))
     # The buffer that asked for the server must attach in this same run: the
     # install completion heals it, which is what makes first use seamless.
-    check("buffer attached after the install", "cpp @" in text,
-          "status shows the server" if "cpp @" in text else repr(text[-300:]))
+    attached = LSP_CHIP.search(text) is not None
+    check("buffer attached after the install", attached,
+          "status shows the server" if attached else repr(text[-300:]))
 
     # Run 2: the installed link is the only clangd reachable, so the status
-    # segment ("cpp @ ...") proves the payload copy is the one serving.
+    # chip naming the language proves the payload copy is the one serving.
     if have_clangd:
         screen = run_in_pty(staged_binary, [os.path.join(WORK, "probe.cpp")], b"",
                             settle=4.0, after=4.0, cfg=CFG_SERVE, cwd=WORK)
         text = screen.text()
-        attached = "cpp @" in text or "clangd" in text
+        attached = LSP_CHIP.search(text) is not None
         check("payload clangd serves the buffer without PATH", attached,
               "status shows the server" if attached else repr(text[-300:]))
     else:
