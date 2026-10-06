@@ -47,7 +47,7 @@ struct LuaFloatWindow
   bool hide = false;
   bool style_minimal = false;
   bool strip = false; // strips into the status area (bottom rows) instead of
-                      // being clamped above it - used by the status line UI
+  // being clamped above it - used by the status line UI
   int fg = 7, bg = 0;
   int border_fg = -1; // -1 = fall back to fg
   int title_fg = -1;  // -1 = fall back to fg

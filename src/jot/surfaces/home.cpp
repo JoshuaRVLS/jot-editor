@@ -27,8 +27,7 @@ namespace
     HOME_ACTION_RESUME = 8,
     HOME_ACTION_CONTINUE_EDITOR = 9,
     HOME_ACTION_QUIT = 10,
-    HOME_ACTION_OPEN_PATH = 11,
-    HOME_ACTION_BIBLE_VOTD = 12
+    HOME_ACTION_OPEN_PATH = 11
   };
 
   struct HomeMenuRenderItem
@@ -88,6 +87,9 @@ namespace
   // screen the actions column, the section titles and their items all have to
   // fit under the header.
   constexpr int kHomeBigWordmarkRows = 26;
+  // Usable rows below which the bottom strip is dropped: on a short terminal the
+  // lists need the rows more than the quote does.
+  constexpr int kHomeStripMinRows = 18;
 
   long long home_now_ms()
   {
@@ -413,6 +415,86 @@ namespace
     return text.substr(0, (size_t)(max_len - 3)) + "...";
   }
 
+  // The verse of the day, wrapped to the panel and capped at `max_lines`: the
+  // bottom strip is a hint, so a long passage is cut with an ellipsis rather
+  // than read as the screen's own text. Whitespace runs (the API sends the text
+  // with newlines in it) fold to single spaces.
+  std::vector<std::string> wrap_quote(const std::string &text, int width, int max_lines)
+  {
+    std::vector<std::string> lines;
+    if (width <= 0 || max_lines <= 0)
+    {
+      return lines;
+    }
+    std::string line;
+    bool more = false;
+    size_t i = 0;
+    while (i < text.size())
+    {
+      while (i < text.size() && std::isspace((unsigned char)text[i]))
+      {
+        i++;
+      }
+      const size_t start = i;
+      while (i < text.size() && !std::isspace((unsigned char)text[i]))
+      {
+        i++;
+      }
+      if (start == i)
+      {
+        break;
+      }
+      const std::string word = text.substr(start, i - start);
+      if (!line.empty() && ui_cell_count(line) + 1 + ui_cell_count(word) > width)
+      {
+        lines.push_back(line);
+        line.clear();
+        if ((int)lines.size() >= max_lines)
+        {
+          more = true;
+          break;
+        }
+      }
+      if (!line.empty())
+      {
+        line += " ";
+      }
+      line += word;
+    }
+    if (more)
+    {
+      if (!lines.empty())
+      {
+        lines.back() = ellipsize_right(lines.back() + " ...", width);
+      }
+      return lines;
+    }
+    if (!line.empty())
+    {
+      lines.push_back(line);
+    }
+    return lines;
+  }
+
+  // The day this binary was built, spelled for the footer: __DATE__ is
+  // "Mmm dd yyyy" with a space-padded day, and the strip reads better without
+  // the pad. It is the only "last updated" a self-contained binary can honestly
+  // report about itself.
+  std::string build_date_label()
+  {
+    const std::string raw = __DATE__;
+    if (raw.size() < 11)
+    {
+      return raw;
+    }
+    std::string day = raw.substr(4, 2);
+    if (!day.empty() && day[0] == ' ')
+    {
+      day.erase(0, 1);
+    }
+    return raw.substr(0, 3) + " " + day + ", " + raw.substr(7, 4);
+  }
+
   // The folder glyph every directory row leads with; the color comes from the
   // caller, so the same glyph works on the lists and in the actions column.
   std::string folder_icon()
@@ -494,7 +576,21 @@ HomeView Editor::build_home_menu_model()
   // the compact one when it cannot.
   const bool big_wordmark = usable_h >= kHomeBigWordmarkRows;
   const int section_y = content_y + (big_wordmark ? kHomeHeaderRows : kHomeCompactHeaderRows);
-  const int row_limit = usable_h - 1;
+
+  // The bottom strip: the verse of the day centered over its reference, with the
+  // footer on the panel's last row. The verse is wrapped here so `strip_rows`
+  // counts the rows it really takes -- its lines plus the reference under them;
+  // the `- 1` in `row_limit` reserves the footer row, which the strip always
+  // owns. A terminal too short to spare those rows keeps the lists and drops the
+  // verse instead.
+  const std::string votd_text = bible_verse_of_the_day();
+  std::vector<std::string> votd_lines;
+  if (usable_h >= kHomeStripMinRows && !votd_text.empty())
+  {
+    votd_lines = wrap_quote(votd_text, std::max(8, content_w - 6), 2);
+  }
+  const int strip_rows = votd_lines.empty() ? 0 : (int)votd_lines.size() + 1;
+  const int row_limit = std::max(section_y + 1, usable_h - 1 - strip_rows);
 
   home_menu_entries.clear();
 
@@ -605,32 +701,6 @@ HomeView Editor::build_home_menu_model()
   // row the layout would not have had room for.
   const int kCandidateCap = 24;
   std::vector<HomeSection> sections;
-
-  // ---- The verse of the day: one row above the lists ----
-  // The text comes from the worker queue and is cached for the whole day, so
-  // the fetch here is a no-op after the day's first frame. While it is in
-  // flight the row is simply absent; the delivery repaints and the next build
-  // picks it up.
-  const std::string votd_text = bible_verse_of_the_day();
-  if (!votd_text.empty())
-  {
-    HomeSection votd;
-    votd.title = "Verse of the Day";
-    votd.icon = "\uf02d";
-    votd.fg = theme.fg_keyword;
-    votd.cap = 1;
-    HomeMenuRenderItem row;
-    row.action = HOME_ACTION_BIBLE_VOTD;
-    row.icon = "\uf02d";
-    row.icon_fg = theme.fg_keyword;
-    row.label = votd_text;
-    row.secondary = bible_votd_label;
-    if (keep(row.label, row.secondary, row.path))
-    {
-      votd.items.push_back(std::move(row));
-    }
-    sections.push_back(std::move(votd));
-  }
 
   HomeSection projects;
   projects.title = "Projects";
@@ -837,6 +907,18 @@ HomeView Editor::build_home_menu_model()
                   ? "/ filter  f pin  j/k move  Enter open  Esc close"
                   : "Esc clear  Enter open  backspace edit";
 
+  // The bottom strip's content. The verse is wrapped above, so both painters
+  // only center what they are handed; the reference sits under it, and the
+  // footer -- the build's own date and the credit line -- is always on the
+  // panel's last row. The verse comes from the worker queue and is cached for
+  // the whole day, so the fetch this triggers is a no-op after the day's first
+  // frame: while it is in flight the strip is simply absent, and the delivery
+  // repaints into the next build.
+  view.quote_lines = std::move(votd_lines);
+  view.quote_ref = view.quote_lines.empty() ? std::string() : bible_votd_label;
+  view.last_updated = "Last updated " + build_date_label();
+  view.developed_by = "Developed by Joshua Ravael";
+
   // The command rows keep their glyph at the head of the label -- the label is
   // what the filter reads -- so the view splits it back out here and gives it
   // the row's accent. List rows bring their own icon and stay on the text
@@ -999,6 +1081,7 @@ void Editor::render_home_menu()
   const int content_x = view.panel_x;
   const int content_y = view.panel_y;
   const int content_w = view.panel_w;
+  const int content_h = view.panel_h;
   if (lua_api && lua_api->has_lua_ui_handler("home_screen") && lua_api->emit_home(view))
   {
     return;
@@ -1114,6 +1197,41 @@ void Editor::render_home_menu()
                     theme.fg_keyword,
                     theme.bg_default);
     }
+  }
+
+  // The bottom strip's rows, painted the shape the Lua kit composes
+  // (features/ui/home.lua): the verse centered over its reference, the footer on
+  // the panel's last row. The model leaves these rows to the lists, so nothing
+  // above paints into them.
+  const auto centered_x = [&](const std::string &text)
+  { return content_x + std::max(0, (content_w - ui_cell_count(text)) / 2); };
+  int strip_y = content_y + content_h - 1; // the panel's last row
+  if (!view.last_updated.empty() || !view.developed_by.empty())
+  {
+    if (!view.last_updated.empty())
+    {
+      ui->draw_text(content_x + 2, strip_y, view.last_updated, theme.fg_comment, theme.bg_default);
+    }
+    if (!view.developed_by.empty())
+    {
+      ui->draw_text(content_x + content_w - ui_cell_count(view.developed_by) - 2,
+                    strip_y,
+                    view.developed_by,
+                    theme.fg_comment,
+                    theme.bg_default);
+    }
+    strip_y--;
+  }
+  if (!view.quote_ref.empty())
+  {
+    ui->draw_text(
+        centered_x(view.quote_ref), strip_y, view.quote_ref, theme.fg_keyword, theme.bg_default);
+    strip_y--;
+  }
+  for (auto it = view.quote_lines.rbegin(); it != view.quote_lines.rend(); ++it)
+  {
+    ui->draw_text(centered_x(*it), strip_y, *it, theme.fg_comment, theme.bg_default);
+    strip_y--;
   }
 }
 
@@ -1311,11 +1429,6 @@ bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift, bool is
       needs_redraw = true;
       return true;
     }
-    case HOME_ACTION_BIBLE_VOTD:
-      dismiss_home();
-      bible_open_verse_of_the_day(true);
-      needs_redraw = true;
-      return true;
     case HOME_ACTION_QUIT:
       running = false;
       return true;

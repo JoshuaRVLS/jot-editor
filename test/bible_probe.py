@@ -313,10 +313,12 @@ def main() -> int:
     if TAG not in view:
         failures.append(":bible random did not render the served verse")
 
-    # 10. The home screen's verse of the day: the row is fetched from the
-    # fixture and cached for the day, without opening the `[Bible]` tab.
+    # 10. The home screen's verse of the day: a bare launch lands on the home
+    # screen, the verse is fetched from the fixture (cached for the day) and
+    # centered on the bottom strip, and the footer names the build date and the
+    # author. It must not open the `[Bible]` tab.
     print("scene: the home screen's verse of the day")
-    home = run_in_pty(binary, [ROOT], b"", settle=9.0, after=1.0, cols=COLS, rows=ROWS,
+    home = run_in_pty(binary, [], b"", settle=9.0, after=1.0, cols=COLS, rows=ROWS,
                       cfg=CFG, cwd=ROOT,
                       env={"JOT_CONFIG_HOME": CFG, "JOT_CACHE_HOME": CFG},
                       phases=[(6.0, lambda screen: TAG in screen.text())])
@@ -324,10 +326,23 @@ def main() -> int:
     if dump:
         print(home_view)
         print("-" * 70)
-    if "Verse of the Day" not in home_view:
-        failures.append("the home screen does not show a verse of the day")
-    if TAG not in home_view:
+    home_rows = home_view.splitlines()
+    tag_row = next((i for i, line in enumerate(home_rows) if TAG in line), None)
+    if tag_row is None:
         failures.append("the home screen's verse of the day never arrived")
+    else:
+        if tag_row < ROWS * 6 // 10:
+            failures.append("the verse of the day is not on the bottom strip")
+        line = home_rows[tag_row]
+        left = len(line) - len(line.lstrip())
+        right = len(line.rstrip())
+        # Centered within a few cells of the window's middle.
+        if abs(left + right - COLS) > 12:
+            failures.append("the verse of the day is not centered")
+    if "Last updated" not in home_view:
+        failures.append("the home screen does not show when it was last updated")
+    if "Developed by Joshua Ravael" not in home_view:
+        failures.append("the home screen does not carry the credit line")
     if "[Bible]" in home_view:
         failures.append("the home screen's verse of the day stole the pane")
 

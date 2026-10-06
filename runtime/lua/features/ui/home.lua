@@ -111,6 +111,28 @@ local function home_screen(p)
   -- share one line, exactly like the surface before the big mark.
   local tagline_y = has_art and (panel_y + #art) or panel_y
   local context_y = tagline_y + 1
+  -- The bottom strip: the verse of the day centered over its reference, with the
+  -- footer on the panel's last row. The model leaves these rows to the lists, so
+  -- nothing else composes into them.
+  local quote_lines = p.quote_lines or {}
+  local quote_ref = p.quote_ref or ""
+  local last_updated = p.last_updated or ""
+  local developed_by = p.developed_by or ""
+  local footer_y = nil
+  if last_updated ~= "" or developed_by ~= "" then
+    footer_y = panel_y + panel_h - 1
+  end
+  local strip_below = footer_y and (footer_y - 1) or (panel_y + panel_h - 1)
+  local ref_y = nil
+  if quote_ref ~= "" then
+    ref_y = strip_below
+    strip_below = strip_below - 1
+  end
+  local quote_first, quote_last = nil, nil
+  if #quote_lines > 0 then
+    quote_last = strip_below
+    quote_first = strip_below - #quote_lines + 1
+  end
   -- One accent per wordmark letter. The mark spells the editor's initials, so
   -- the letters read best in three different syntax slots instead of one flat
   -- color; a theme that leaves one unset falls back to the accent.
@@ -158,7 +180,26 @@ local function home_screen(p)
       text = text .. label
     end
 
-    if has_art and y >= panel_y and y < panel_y + #art then
+    if footer_y and y == footer_y then
+      -- The footer: the build's date at the left, the credit at the right.
+      if last_updated ~= "" then
+        put(panel_x + 2, last_updated, comment, default_bg)
+      end
+      if developed_by ~= "" then
+        put(panel_x + panel_w - cell_len(developed_by) - 2, developed_by, comment, default_bg)
+      end
+    elseif ref_y and y == ref_y then
+      put(panel_x + math.max(0, math.floor((panel_w - cell_len(quote_ref)) / 2)),
+          quote_ref,
+          accent,
+          default_bg)
+    elseif quote_first and y >= quote_first and y <= quote_last then
+      local line = quote_lines[y - quote_first + 1]
+      put(panel_x + math.max(0, math.floor((panel_w - cell_len(line)) / 2)),
+          line,
+          comment,
+          default_bg)
+    elseif has_art and y >= panel_y and y < panel_y + #art then
       -- One row of the big wordmark: every letter is its own span, so the
       -- accents meet inside the row and the gaps stay on the panel background.
       local letters = art[y - panel_y + 1]
@@ -292,6 +333,10 @@ local function home_screen(p)
     context_icon = p.context_icon or "",
     filter = p.filter or "",
     hint = p.hint or "",
+    quote = table.concat(quote_lines, "\2"),
+    quote_ref = quote_ref,
+    last_updated = last_updated,
+    developed_by = developed_by,
     fg = default_fg,
     bg = default_bg,
     comment = comment,

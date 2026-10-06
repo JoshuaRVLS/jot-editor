@@ -4,9 +4,11 @@
 // pinned together. Opening a row runs the real action, which is why the tests
 // assert on where the editor ended up rather than on the model alone.
 #include "editor.h"
+#include "features/bible.h"
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -491,6 +493,60 @@ TEST_CASE("A pinned folder stays on home after its project marker is gone", "[jo
   e.home_scan_cache_clear_for_test();
   e.render_for_test();
   REQUIRE_FALSE(has_path(e, tree.base + "/alpha"));
+
+  e.set_home_menu_visible(false);
+  e.render_for_test();
+}
+
+TEST_CASE("Home centers the verse of the day on the bottom strip", "[jot]")
+{
+  // Its own config and cache home: the day's chapter is pre-seeded in the cache
+  // the Bible reader reads, so the model gets the verse synchronously and the
+  // strip lands on the first painted frame.
+  char home[] = "/tmp/jot_home_votd_XXXXXX";
+  REQUIRE(mkdtemp(home) != nullptr);
+  setenv("JOT_CONFIG_HOME", home, 1);
+  setenv("JOT_CACHE_HOME", home, 1);
+
+  const long long day = (long long)(std::time(nullptr) / 86400);
+  const Bible::Reference chapter = Bible::chapter_for_day(day);
+  const std::string url =
+      Bible::chapter_url("https://bible.helloao.org/api", "BSB", chapter.book->id, chapter.chapter);
+  const fs::path cache_dir = fs::path(home) / "bible";
+  fs::create_directories(cache_dir);
+  {
+    std::ofstream out(cache_dir / Bible::cache_file_name(url));
+    out << "{\"translation\":{\"id\":\"BSB\",\"englishName\":\"Berean Standard Bible\"},"
+           "\"book\":{\"id\":\"JHN\",\"commonName\":\"John\"},"
+           "\"chapter\":{\"number\":1,\"content\":[{\"type\":\"verse\",\"number\":1,"
+           "\"text\":\"For God so loved the world that he gave his one and only Son, that "
+           "whoever believes in him shall not perish but have eternal life.\"}]}}";
+  }
+
+  Editor e;
+  e.apply_resize_for_test(120, 32);
+  e.set_home_menu_visible(true);
+  e.render_for_test();
+
+  // The verse wraps to two centered lines on the bottom strip, the reference sits
+  // under them, and the footer row carries the build date and the credit.
+  const int first_row = row_containing(e, "For God so loved");
+  REQUIRE(first_row > 0);
+  REQUIRE(first_row > e.ui_height_for_test() * 6 / 10);
+  const std::string line = row_text(e, first_row);
+  const size_t left = line.find_first_not_of(' ');
+  const size_t right = line.find_last_not_of(' ');
+  REQUIRE(left != std::string::npos);
+  REQUIRE(std::abs((int)(left + right + 1) - e.ui_width_for_test()) <= 12);
+  REQUIRE(row_containing(e, "eternal life") == first_row + 1);
+
+  Bible::Reference shown = chapter;
+  shown.has_verse = true;
+  shown.verse_first = Bible::verse_for_day(day, 1);
+  shown.verse_last = shown.verse_first;
+  REQUIRE(row_containing(e, Bible::reference_label(shown)) == first_row + 2);
+  REQUIRE(row_containing(e, "Last updated") > 0);
+  REQUIRE(row_containing(e, "Developed by Joshua Ravael") > 0);
 
   e.set_home_menu_visible(false);
   e.render_for_test();
