@@ -385,6 +385,9 @@ bool Editor::insert_char(char c)
 
   buf.modified = true;
   buf.is_placeholder = false;
+  // A typed character can push the caret past the pane's right edge, and on a
+  // line longer than the pane it would keep typing off screen without this.
+  ensure_cursor_visible();
   needs_redraw = true;
   if (lua_api)
     lua_api->on_buffer_change(buf.filepath, "");
@@ -444,6 +447,9 @@ void Editor::insert_string(const std::string &str)
   }
   buf.modified = true;
   buf.is_placeholder = false;
+  // An inserted block can be taller or wider than the pane; the caret it lands
+  // on has to be on screen, as it is after every other edit.
+  ensure_cursor_visible();
   if (lua_api)
     lua_api->on_buffer_change(buf.filepath, "");
   if (!buf.filepath.empty())

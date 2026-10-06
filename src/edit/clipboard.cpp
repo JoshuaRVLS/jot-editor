@@ -491,6 +491,7 @@ void Editor::paste_text(const std::string &text)
       c.start = c.end;
     }
     buf.modified = true;
+    ensure_cursor_visible();
     needs_redraw = true;
     if (lua_api)
       lua_api->on_buffer_change(buf.filepath, "");
@@ -531,6 +532,9 @@ void Editor::paste_text(const std::string &text)
   }
 
   buf.modified = true;
+  // A pasted block is routinely taller than the pane, so the viewport has to
+  // follow the caret to the end of it rather than leave it below the fold.
+  ensure_cursor_visible();
   needs_redraw = true;
   if (lua_api)
     lua_api->on_buffer_change(buf.filepath, "");

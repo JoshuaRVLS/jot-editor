@@ -53,6 +53,38 @@ namespace
     // A grid big enough that the caret has cells to occupy.
     e.apply_resize_for_test(120, 40);
   }
+
+  void load_short_file(Editor &e, int lines)
+  {
+    static int counter = 0;
+    const std::string path = "/tmp/jot_caret_follow_" + std::to_string(::getpid()) + "_"
+                             + std::to_string(counter++) + ".txt";
+    std::ofstream out(path);
+    for (int i = 0; i < lines; i++)
+    {
+      out << "line " << i << "\n";
+    }
+    out.close();
+    e.load_file(path);
+  }
+
+  // Every cell of the grid as text, for the cases that assert what the caret
+  // did or did not bring into view.
+  std::string screen_text(Editor &e)
+  {
+    UI *ui = e.ui_for_test();
+    std::string out;
+    for (int y = 0; y < e.ui_height_for_test(); y++)
+    {
+      for (int x = 0; x < e.ui_width_for_test(); x++)
+      {
+        const UICell *cell = ui->cell_at(x, y);
+        out += cell ? cell->ch : " ";
+      }
+      out += "\n";
+    }
+    return out;
+  }
 } // namespace
 
 TEST_CASE("A caret scrolled out of view is hidden, not parked", "[jot]")
@@ -108,4 +140,61 @@ TEST_CASE("Scrolling the viewport away from the caret never reveals it", "[jot]"
   e.render_for_test();
   REQUIRE(e.buffer_for_test().cursor.y == cursor_line_before);
   REQUIRE_FALSE(e.ui_for_test()->cursor_is_hidden());
+}
+
+TEST_CASE("Typing past the pane's right edge pans the viewport with the caret", "[jot]")
+{
+  Editor &e = probe_editor();
+  load_short_file(e, 3);
+  e.apply_resize_for_test(60, 24);
+  e.scroll_cursor_to_for_test(0, 0);
+  REQUIRE(e.buffer_for_test().scroll_x == 0);
+
+  // More characters than the widest pane this grid can give the code area.
+  for (int i = 0; i < 200; i++)
+  {
+    e.insert_char_for_test('a');
+  }
+  REQUIRE(e.buffer_for_test().scroll_x > 0);
+
+  // The character just typed still has a cell on screen: without the reveal the
+  // viewport stayed at column 0 and everything from the pane's edge on was
+  // typed off screen.
+  e.insert_char_for_test('Z');
+  e.request_redraw_for_test();
+  e.render_for_test();
+  REQUIRE(screen_text(e).find('Z') != std::string::npos);
+}
+
+TEST_CASE("A block pasted below the fold leaves the caret on screen", "[jot]")
+{
+  Editor &e = probe_editor();
+  load_short_file(e, 3);
+  e.apply_resize_for_test(80, 24);
+  e.scroll_cursor_to_for_test(0, 0);
+
+  std::string block;
+  for (int i = 0; i < 60; i++)
+  {
+    block += "row " + std::to_string(i) + "\n";
+  }
+
+  // The paste path (bracketed paste lands here): the caret ends up well below
+  // the fold, and the viewport has to travel with it.
+  e.paste_text_for_test(block);
+  const int pasted_at = e.buffer_for_test().cursor.y;
+  REQUIRE(pasted_at > 20);
+  e.request_redraw_for_test();
+  e.render_for_test();
+  REQUIRE(e.buffer_for_test().scroll_offset > 0);
+  REQUIRE_FALSE(e.ui_for_test()->cursor_is_hidden());
+
+  // The host API's insert path (a plugin, the AI pane) lands its text without
+  // going through the paste branch, and a run wider than the pane has to push
+  // the viewport the same way a keypress does.
+  e.insert_string_for_test(std::string(200, 'b') + "TAIL");
+  e.request_redraw_for_test();
+  e.render_for_test();
+  REQUIRE(e.buffer_for_test().scroll_x > 0);
+  REQUIRE(screen_text(e).find("TAIL") != std::string::npos);
 }

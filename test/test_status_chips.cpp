@@ -86,15 +86,15 @@ TEST_CASE("Status bar: the git chip is the branch, without the change counts",
   Editor e;
   e.set_home_menu_visible(false);
   e.open_workspace(root.string(), false);
-  REQUIRE(e.has_git_repo());
-  REQUIRE(e.git_staged_count == 1);
-  REQUIRE(e.git_unstaged_count == 1);
+  REQUIRE_FALSE(e.git_branch_for_test().empty());
+  REQUIRE(e.git_staged_count_for_test() == 1);
+  REQUIRE(e.git_unstaged_count_for_test() == 1);
   REQUIRE(e.git_untracked_count_for_test() == 1);
 
   e.apply_resize_for_test(120, 30);
   e.render_for_test();
   const std::string row = status_row(e);
-  REQUIRE(row.find(e.git_branch) != std::string::npos);
+  REQUIRE(row.find(e.git_branch_for_test()) != std::string::npos);
   REQUIRE(row.find(" +1") == std::string::npos);
   REQUIRE(row.find(" ~1") == std::string::npos);
   REQUIRE(row.find(" ?1") == std::string::npos);

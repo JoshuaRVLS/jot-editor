@@ -57,6 +57,16 @@ public:
   void delete_selection_for_test();
   void delete_char_for_test(bool forward);
   void insert_string_for_test(const std::string &str);
+  // The two key paths a typed character and a bracketed paste take, so a case
+  // can pin where each leaves the viewport without driving a terminal.
+  bool insert_char_for_test(char c)
+  {
+    return insert_char(c);
+  }
+  void paste_text_for_test(const std::string &text)
+  {
+    paste_text(text);
+  }
   // Enter, as the keymaps spell it (see Editor::new_line), so a case can pin
   // the line it creates and where the caret lands.
   void new_line_for_test()
@@ -1124,6 +1134,18 @@ public:
   int git_untracked_count_for_test() const
   {
     return git_untracked_count;
+  }
+  int git_staged_count_for_test() const
+  {
+    return git_staged_count;
+  }
+  int git_unstaged_count_for_test() const
+  {
+    return git_unstaged_count;
+  }
+  std::string git_branch_for_test() const
+  {
+    return git_branch;
   }
   // The poll the 1.5 s timer runs, inline so a test does not wait for it; and
   // the repo drop the open-file / workspace paths make.
