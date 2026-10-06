@@ -309,7 +309,13 @@ namespace
     return out;
   }
 
+  // Rebases a pasted block onto the caret's own context. Where it lands is
+  // where Enter would open a line (EditorFeatures::indent_for_new_line), so
+  // paste and Enter agree about bodies, argument lists and each language's
+  // brace style; the block's own common indent is what is rebased, so the
+  // relative indentation inside it survives.
   std::string smart_indent_paste_text(const std::string &text,
+                                      const std::string &path,
                                       const std::string &target_line,
                                       int cursor_x,
                                       int tab_size)
@@ -325,16 +331,20 @@ namespace
       return text;
     }
 
+    const int at = std::clamp(cursor_x, 0, (int)target_line.size());
+    const std::string before_cursor = target_line.substr(0, at);
+    const std::string after_cursor = target_line.substr(at);
     const std::string base_indent = leading_indent(target_line);
-    const std::string before_cursor =
-        target_line.substr(0, std::clamp(cursor_x, 0, (int)target_line.size()));
     const bool prefer_tabs = base_indent.find('\t') != std::string::npos;
-    int base_columns = indent_columns(base_indent, tab_size);
+    const int step = std::max(1, tab_size);
 
-    if (EditorFeatures::should_auto_indent(before_cursor))
-    {
-      base_columns += std::max(1, tab_size);
-    }
+    const int context_columns =
+        EditorFeatures::indent_for_new_line(path, target_line, at, tab_size);
+    // A block pasted where Enter would step in starts on a line of its own:
+    // pasting after `{` or `if x:` belongs inside the body, not glued to the
+    // line the caret is on. Everywhere else the first line continues that line.
+    const bool starts_new_line = trim_left_copy(after_cursor).empty()
+                                 && context_columns > EditorFeatures::get_indent_level(target_line);
 
     std::string first_meaningful;
     for (const auto &line : lines)
@@ -345,27 +355,53 @@ namespace
         break;
       }
     }
+
+    int base_columns = context_columns;
+    // A block that closes the body it is pasted into belongs one level out.
     if (!first_meaningful.empty()
         && (first_meaningful[0] == '}' || first_meaningful[0] == ')' || first_meaningful[0] == ']'))
     {
-      base_columns -= std::max(1, tab_size);
+      base_columns -= step;
+    }
+
+    // The first pasted line continues the caret's own line, so it only takes
+    // the indent the caret has not already passed; after other text it takes
+    // none at all.
+    int first_columns = 0;
+    if (!starts_new_line && trim_left_copy(before_cursor).empty())
+    {
+      first_columns = std::max(0, base_columns - indent_columns(before_cursor, tab_size));
     }
 
     const std::string common_indent = common_paste_indent(lines);
-    const std::string rebased_indent = indent_from_columns(base_columns, tab_size, prefer_tabs);
+    const std::string block_indent = indent_from_columns(base_columns, tab_size, prefer_tabs);
+    const std::string first_indent = indent_from_columns(first_columns, tab_size, prefer_tabs);
 
-    for (auto &line : lines)
+    if (starts_new_line)
     {
-      if (trim_left_copy(line).empty())
+      lines.insert(lines.begin(), std::string());
+    }
+
+    for (size_t i = 0; i < lines.size(); i++)
+    {
+      if (trim_left_copy(lines[i]).empty())
       {
-        line.clear();
+        lines[i].clear();
         continue;
       }
-      if (starts_with_indent(line, common_indent))
+      if (starts_with_indent(lines[i], common_indent))
       {
-        line.erase(0, common_indent.size());
+        lines[i].erase(0, common_indent.size());
       }
-      line = rebased_indent + line;
+      lines[i] = (i == 0 ? first_indent : block_indent) + lines[i];
+    }
+
+    // The caret lands on the last line, and a block copied with its trailing
+    // newline ends it blank: it keeps the block's indent, the way a line
+    // opened with Enter does.
+    if (!lines.empty() && lines.back().empty())
+    {
+      lines.back() = block_indent;
     }
 
     return join_paste_lines(lines);
@@ -466,7 +502,8 @@ void Editor::paste_text(const std::string &text)
 
   const std::string paste_text =
       (auto_indent && smart_paste_indent)
-          ? smart_indent_paste_text(text, buf.line(buf.cursor.y), buf.cursor.x, tab_size)
+          ? smart_indent_paste_text(
+                text, buf.filepath, buf.line(buf.cursor.y), buf.cursor.x, tab_size)
           : text;
 
   std::vector<std::string> paste_lines = split_paste_lines(paste_text);

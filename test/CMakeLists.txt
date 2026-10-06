@@ -4,6 +4,7 @@ add_executable(jot_tests
   test_smooth_scroll.cpp
   test_status_clock.cpp
   test_status_chips.cpp
+  test_paste_indent.cpp
   test_coding_time.cpp
   test_wakatime.cpp
   test_folding.cpp
