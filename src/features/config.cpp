@@ -104,6 +104,12 @@ void Config::load_defaults()
   // such line is meant to stay as it is; a file where the spaces are content
   // (markdown's hard line break) is left alone either way.
   settings["trim_trailing_whitespace_on_save"] = "true";
+  // The built-in reindent (features/save_hygiene.cpp): a save rebases a code
+  // file's leading whitespace on `tab_size`, using the editor's own block rules
+  // rather than an external formatter. Off is the escape hatch for a file whose
+  // indentation is deliberately unusual; a language with no block rules here,
+  // or a body inside a multi-line string, is left alone either way.
+  settings["reindent_on_save"] = "true";
   settings["auto_save"] = "false";
   settings["auto_save_interval_ms"] = "2000";
   settings["prettier_on_save"] = "true";

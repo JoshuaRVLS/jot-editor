@@ -57,9 +57,11 @@ def run_scene(binary: str, root: str, scene) -> str:
     cfg = os.path.join(work, "cfg")
     os.makedirs(os.path.join(cfg, "configs"))
     # The save must be the paste and nothing else: no trailing-space trim (the
-    # block's landing line carries the indent) and no external formatter.
+    # block's landing line carries the indent), no external formatter, and no
+    # on-save reindent (that one owns the leading whitespace this probe pins).
     with open(os.path.join(cfg, "configs", "settings.conf"), "w") as fh:
         fh.write("trim_trailing_whitespace_on_save=false\n")
+        fh.write("reindent_on_save=false\n")
         fh.write("clang_format_on_save=false\nprettier_on_save=false\n")
 
     path = os.path.join(work, "probe.cpp" if not name.startswith("python") else "probe.py")

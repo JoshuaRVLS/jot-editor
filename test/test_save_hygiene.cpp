@@ -100,6 +100,17 @@ namespace
     return e;
   }
 
+  // A save with the built-in reindent on or off at a known step, the external
+  // formatters always off: what lands on disk is the reindent's own output.
+  Editor &reindent_editor(bool on, int tab_size)
+  {
+    Editor &e = saving_editor(true);
+    e.set_config_for_test("tab_size", std::to_string(tab_size));
+    e.set_config_for_test("reindent_on_save", on ? "true" : "false");
+    e.apply_config_live_for_test();
+    return e;
+  }
+
   int buffer_index_for(Editor &e, const std::string &path)
   {
     for (int i = 0; i < e.buffer_count_for_test(); i++)
@@ -263,6 +274,139 @@ TEST_CASE("Save: the setting off leaves every space where it was", "[jot][save]"
   Editor &e = saving_editor(false);
   const std::string path = scratch_path("keep.cpp");
   const std::string text = "int a = 1;   \n";
+  write_text(path, text);
+  e.load_file(path);
+
+  const int index = buffer_index_for(e, path);
+  REQUIRE(index >= 0);
+  REQUIRE(e.save_buffer_for_test(index, true));
+
+  REQUIRE(read_back(path) == text);
+  std::remove(path.c_str());
+}
+
+TEST_CASE("Reindent: the languages with block rules, and no others", "[jot][save]")
+{
+  REQUIRE(SaveHygiene::supports_reindent("a.cpp"));
+  REQUIRE(SaveHygiene::supports_reindent("/tmp/deep/a.HPP"));
+  REQUIRE(SaveHygiene::supports_reindent("a.py"));
+  REQUIRE(SaveHygiene::supports_reindent("a.lua"));
+  REQUIRE_FALSE(SaveHygiene::supports_reindent("notes.md"));
+  REQUIRE_FALSE(SaveHygiene::supports_reindent("data.json"));
+  REQUIRE_FALSE(SaveHygiene::supports_reindent("Makefile"));
+  // A dot in a directory name is not an extension.
+  REQUIRE_FALSE(SaveHygiene::supports_reindent("/tmp/a.cpp/README"));
+}
+
+TEST_CASE("Reindent: a C++ body written one level out is pulled back in", "[jot][save]")
+{
+  const std::vector<std::string> lines = {
+      "void f()", "{", "foo();", "if (x)", "{", "bar();", "}", "}"};
+  const std::vector<std::string> want = {
+      "void f()", "{", "  foo();", "  if (x)", "  {", "    bar();", "  }", "}"};
+  REQUIRE(SaveHygiene::reindent_lines(lines, "a.cpp", 2) == want);
+}
+
+TEST_CASE("Reindent: a body at another width is rebased on the settings step", "[jot][save]")
+{
+  const std::vector<std::string> lines = {
+      "void f()", "{", "    foo();", "    if (x)", "    {", "        bar();", "    }", "}"};
+  const std::vector<std::string> want = {
+      "void f()", "{", "  foo();", "  if (x)", "  {", "    bar();", "  }", "}"};
+  REQUIRE(SaveHygiene::reindent_lines(lines, "a.cpp", 2) == want);
+}
+
+TEST_CASE("Reindent: a fragment keeps the column it opens at", "[jot][save]")
+{
+  const std::vector<std::string> lines = {"    if (x)", "    {", "        foo();", "    }"};
+  const std::vector<std::string> want = {"    if (x)", "    {", "      foo();", "    }"};
+  REQUIRE(SaveHygiene::reindent_lines(lines, "a.cpp", 2) == want);
+}
+
+TEST_CASE("Reindent: a wrapped expression keeps its own column", "[jot][save]")
+{
+  const std::vector<std::string> lines = {"int total = 1 +", "    2;", "int y = 3;"};
+  REQUIRE(SaveHygiene::reindent_lines(lines, "a.cpp", 2) == lines);
+}
+
+TEST_CASE("Reindent: a multi-line comment's own text is left alone", "[jot][save]")
+{
+  const std::vector<std::string> lines = {"void f()", "{", "  /* note", "     keep", "  */", "}"};
+  REQUIRE(SaveHygiene::reindent_lines(lines, "a.cpp", 2) == lines);
+}
+
+TEST_CASE("Reindent: a Lua block follows the same rules", "[jot][save]")
+{
+  const std::vector<std::string> lines = {"function f()", "return 1", "end"};
+  const std::vector<std::string> want = {"function f()", "  return 1", "end"};
+  REQUIRE(SaveHygiene::reindent_lines(lines, "a.lua", 2) == want);
+}
+
+TEST_CASE("Reindent: a Lua long string's body is text", "[jot][save]")
+{
+  const std::vector<std::string> lines = {"local s = [[", "   keep   it", "]]"};
+  REQUIRE(SaveHygiene::reindent_lines(lines, "a.lua", 2) == lines);
+}
+
+TEST_CASE("Reindent: a Python block is rebased on the settings step", "[jot][save]")
+{
+  const std::vector<std::string> lines = {
+      "def f():", "    if x:", "        return 1", "    return 2"};
+  const std::vector<std::string> want = {"def f():", "  if x:", "    return 1", "  return 2"};
+  REQUIRE(SaveHygiene::reindent_lines(lines, "a.py", 2) == want);
+}
+
+TEST_CASE("Reindent: a Python file already at the settings step is unchanged", "[jot][save]")
+{
+  const std::vector<std::string> lines = {"def f():", "  if x:", "    return 1", "  return 2"};
+  REQUIRE(SaveHygiene::reindent_lines(lines, "a.py", 2) == lines);
+}
+
+TEST_CASE("Reindent: a Python triple-quoted body is text, not indentation", "[jot][save]")
+{
+  const std::vector<std::string> lines = {
+      "x = 1", "text = \"\"\"", "    keep   this", "\"\"\"", "y = 2"};
+  REQUIRE(SaveHygiene::reindent_lines(lines, "a.py", 4) == lines);
+}
+
+TEST_CASE("Save: the built-in reindent lands in the buffer and the file", "[jot][save]")
+{
+  Editor &e = reindent_editor(true, 2);
+  const std::string path = scratch_path("reindent.cpp");
+  write_text(path, "void f()\n{\nfoo();\n}\n");
+  e.load_file(path);
+
+  const int index = buffer_index_for(e, path);
+  REQUIRE(index >= 0);
+  REQUIRE(e.save_buffer_for_test(index, true));
+
+  const std::string want = "void f()\n{\n  foo();\n}\n";
+  REQUIRE(read_back(path) == want);
+  // What is on screen is what landed on disk.
+  REQUIRE(buffer_text(e.buffer_for_test(index)) == want);
+  std::remove(path.c_str());
+}
+
+TEST_CASE("Save: the reindent uses the step in settings", "[jot][save]")
+{
+  Editor &e = reindent_editor(true, 4);
+  const std::string path = scratch_path("reindent-width.cpp");
+  write_text(path, "void f()\n{\n  foo();\n}\n");
+  e.load_file(path);
+
+  const int index = buffer_index_for(e, path);
+  REQUIRE(index >= 0);
+  REQUIRE(e.save_buffer_for_test(index, true));
+
+  REQUIRE(read_back(path) == "void f()\n{\n    foo();\n}\n");
+  std::remove(path.c_str());
+}
+
+TEST_CASE("Save: the reindent setting off leaves the indentation alone", "[jot][save]")
+{
+  Editor &e = reindent_editor(false, 2);
+  const std::string path = scratch_path("reindent-off.cpp");
+  const std::string text = "void f()\n{\nfoo();\n}\n";
   write_text(path, text);
   e.load_file(path);
 

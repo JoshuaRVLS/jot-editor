@@ -700,44 +700,64 @@ bool Editor::save_buffer_at(int index, bool announce)
     buf.materialize();
   }
 
-  // Trailing whitespace is stray blanks in everything but the formats where it
-  // is a line break, so the save drops it -- in the buffer as well as in the
-  // bytes, so what is on screen is what landed on disk.
+  // What a save cleans on its way to the disk. The built-in reindent
+  // (features/save_hygiene.cpp) rebases the leading whitespace on the indent
+  // size in settings, then the trailing-space rule drops the stray blanks -
+  // both in the buffer as well as in the bytes, so what is on screen is what
+  // landed on disk. The two run in one pass through the edit hooks below, so a
+  // save that does both is still one undo step.
+  const bool rebase_indent =
+      config.get_bool("reindent_on_save", true) && SaveHygiene::supports_reindent(buf.filepath);
+  const bool trim_whitespace = config.get_bool("trim_trailing_whitespace_on_save", true)
+                               && !SaveHygiene::preserves_trailing_whitespace(buf.filepath);
   int trimmed_lines = 0;
-  int first_trimmed = -1;
-  if (config.get_bool("trim_trailing_whitespace_on_save", true)
-      && !SaveHygiene::preserves_trailing_whitespace(buf.filepath))
+  if (rebase_indent || trim_whitespace)
   {
-    for (int i = 0; i < (int)buf.lines.size(); i++)
+    std::vector<std::string> cleaned = buf.lines;
+    if (rebase_indent)
     {
-      auto &line = buf.lines[(size_t)i];
-      if (!SaveHygiene::has_trailing_whitespace(line))
+      std::vector<std::string> rebased =
+          SaveHygiene::reindent_lines(cleaned, buf.filepath, tab_size);
+      if (rebased.size() == cleaned.size())
       {
-        continue;
+        cleaned.swap(rebased);
       }
-      if (trimmed_lines == 0)
-      {
-        // Both hooks below snapshot the text that is about to change, the way
-        // every edit path takes them, so they belong before the first rewrite
-        // and only once. Without the first, the tree-sitter tree keeps
-        // describing the untrimmed lines while the byte offsets are rebuilt
-        // from the trimmed ones, so every highlight past a trimmed line comes
-        // from the wrong place - and save_state below cannot repair that, since
-        // it runs after the trim and snapshots the trimmed text itself.
-        first_trimmed = i;
-#ifdef JOT_TREESITTER
-        ts_begin_edit(buf);
-#endif
-        decoration_rebase_begin(buf);
-      }
-      line = SaveHygiene::trim_trailing_whitespace(line);
-      trimmed_lines++;
     }
-    if (trimmed_lines > 0)
+    if (trim_whitespace)
     {
+      for (std::string &line : cleaned)
+      {
+        if (!SaveHygiene::has_trailing_whitespace(line))
+        {
+          continue;
+        }
+        line = SaveHygiene::trim_trailing_whitespace(line);
+        trimmed_lines++;
+      }
+    }
+    if (cleaned != buf.lines)
+    {
+      int first_changed = 0;
+      while (first_changed < (int)buf.lines.size()
+             && buf.lines[(size_t)first_changed] == cleaned[(size_t)first_changed])
+      {
+        first_changed++;
+      }
+      // Both hooks below snapshot the text that is about to change, the way
+      // every edit path takes them, so they belong before the first rewrite
+      // and only once. Without the first, the tree-sitter tree keeps
+      // describing the old lines while the byte offsets are rebuilt from the
+      // changed ones, so every highlight past a changed line comes from the
+      // wrong place - and save_state below cannot repair that, since it runs
+      // after the change and snapshots the changed text itself.
+#ifdef JOT_TREESITTER
+      ts_begin_edit(buf);
+#endif
+      decoration_rebase_begin(buf);
+      buf.lines = std::move(cleaned);
       // The content changed under the caches the renderer reads, and the lines
-      // got shorter under the carets that were past the trim.
-      buf.mark_edited(first_trimmed);
+      // moved under the carets.
+      buf.mark_edited(first_changed);
       save_state();
       clamp_carets(buf);
     }

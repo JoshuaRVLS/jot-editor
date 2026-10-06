@@ -107,6 +107,12 @@ settles, so scrolling a long way does not grow the process.
   (`trim_trailing_whitespace_on_save`, on by default), in the buffer as well as
   in the bytes; a file where those spaces are content (markdown's hard line
   break) keeps them, and `:trim` still cleans it on request.
+- Saves that rebase indentation on `tab_size` with the editor's own block
+  rules (`reindent_on_save`, on by default), no external formatter involved: a
+  body written one level out is pulled back in, and a file at another width
+  lands at the configured one. The file's first line is the baseline, a wrapped
+  expression keeps the column its author gave it, and a line inside a
+  multi-line string or comment is left alone.
 - Smart multi-line paste that re-indents to the cursor.
 - Auto-indent, bracket matching and jumping, rainbow bracket colors
   (`rainbow_brackets`), an active bracket guide, and a highlight on the bracket

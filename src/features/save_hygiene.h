@@ -2,6 +2,7 @@
 #define SAVE_HYGIENE_H
 
 #include <string>
+#include <vector>
 
 // What a save cleans up on its way to the disk, and what it has to leave
 // alone. The rules live here, free of the buffer and of the filesystem, so they
@@ -20,6 +21,26 @@ public:
   // blanks. Markdown reads two of them as a hard line break, so a save has to
   // leave those exactly as they are; `:trim` still cleans them on request.
   static bool preserves_trailing_whitespace(const std::string &path);
+
+  // Whether the save may rebase this file's indentation at all: the languages
+  // the editor has its own block rules for, and never a format whose
+  // whitespace is data (see the note on reindent_lines).
+  static bool supports_reindent(const std::string &path);
+
+  // The document with its leading whitespace rebased on the indent size in
+  // settings. C-family and Lua files have their nesting recomputed with the
+  // same rules Enter and paste read (EditorFeatures::indent_for_new_line), so a
+  // body written one level out is pulled back in; a Python file gets the same
+  // treatment with each block's depth read from the file's own indentation,
+  // since a Python block is its indentation and nothing else in the file says
+  // where it ends. The first line is the baseline, so a fragment that opens at
+  // column four keeps its four and only the nesting under it moves. Lines
+  // inside a multi-line string or comment, and lines whose column is a wrapped
+  // expression's alignment rather than a block's indent, are left exactly as
+  // they are, and a file whose indentation is already right comes back
+  // unchanged.
+  static std::vector<std::string>
+  reindent_lines(const std::vector<std::string> &lines, const std::string &path, int tab_size);
 };
 
 #endif
