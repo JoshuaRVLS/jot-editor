@@ -287,15 +287,21 @@ TEST_CASE("Save: the setting off leaves every space where it was", "[jot][save]"
 
 TEST_CASE("Reindent: the languages with block rules, and no others", "[jot][save]")
 {
-  REQUIRE(SaveHygiene::supports_reindent("a.cpp"));
-  REQUIRE(SaveHygiene::supports_reindent("/tmp/deep/a.HPP"));
-  REQUIRE(SaveHygiene::supports_reindent("a.py"));
-  REQUIRE(SaveHygiene::supports_reindent("a.lua"));
-  REQUIRE_FALSE(SaveHygiene::supports_reindent("notes.md"));
-  REQUIRE_FALSE(SaveHygiene::supports_reindent("data.json"));
-  REQUIRE_FALSE(SaveHygiene::supports_reindent("Makefile"));
-  // A dot in a directory name is not an extension.
-  REQUIRE_FALSE(SaveHygiene::supports_reindent("/tmp/a.cpp/README"));
+  for (const char *path :
+       {"a.cpp",  "/tmp/deep/a.HPP", "a.py",     "a.lua",   "a.rs",     "a.go",  "a.swift",
+        "a.js",   "a.jsx",           "a.ts",     "a.tsx",   "a.java",   "a.cs",  "a.kt",
+        "a.dart", "a.scala",         "a.groovy", "a.proto", "a.thrift", "a.zig", "a.css",
+        "a.scss", "a.less",          "a.json",   "a.jsonc"})
+  {
+    REQUIRE(SaveHygiene::supports_reindent(path));
+  }
+  // A keyword block (ruby, shell), a markup tree and a title comment are not
+  // braces, so these rules do not read them.
+  for (const char *path :
+       {"notes.md", "a.rb", "a.sh", "a.html", "a.yaml", "a.toml", "Makefile", "/tmp/a.cpp/README"})
+  {
+    REQUIRE_FALSE(SaveHygiene::supports_reindent(path));
+  }
 }
 
 TEST_CASE("Reindent: a C++ body written one level out is pulled back in", "[jot][save]")
@@ -333,6 +339,59 @@ TEST_CASE("Reindent: a multi-line comment's own text is left alone", "[jot][save
 {
   const std::vector<std::string> lines = {"void f()", "{", "  /* note", "     keep", "  */", "}"};
   REQUIRE(SaveHygiene::reindent_lines(lines, "a.cpp", 2) == lines);
+}
+
+TEST_CASE("Reindent: a JavaScript switch keeps its labels inside the braces", "[jot][save]")
+{
+  const std::vector<std::string> lines = {
+      "switch (x) {", "case 1:", "foo();", "break;", "default:", "bar();", "}"};
+  const std::vector<std::string> want = {
+      "switch (x) {", "  case 1:", "    foo();", "    break;", "  default:", "    bar();", "}"};
+  REQUIRE(SaveHygiene::reindent_lines(lines, "a.js", 2) == want);
+}
+
+TEST_CASE("Reindent: JSX markup keeps the nesting its author gave it", "[jot][save]")
+{
+  const std::vector<std::string> lines = {"function App() {",
+                                          "  return (",
+                                          "    <div>",
+                                          "      <span>hi</span>",
+                                          "    </div>",
+                                          "  );",
+                                          "}"};
+  REQUIRE(SaveHygiene::reindent_lines(lines, "a.jsx", 2) == lines);
+}
+
+TEST_CASE("Reindent: a Go switch pulls its labels out to the switch", "[jot][save]")
+{
+  const std::vector<std::string> lines = {
+      "switch x {", "case 1:", "foo()", "default:", "bar()", "}"};
+  const std::vector<std::string> want = {
+      "switch x {", "case 1:", "    foo()", "default:", "    bar()", "}"};
+  REQUIRE(SaveHygiene::reindent_lines(lines, "a.go", 4) == want);
+}
+
+TEST_CASE("Reindent: a Rust where clause keeps its bound list", "[jot][save]")
+{
+  const std::vector<std::string> lines = {
+      "fn f<T>(x: T) -> T", "where", "  T: Clone,", "{", "  x", "}"};
+  const std::vector<std::string> want = {
+      "fn f<T>(x: T) -> T", "where", "  T: Clone,", "{", "  x", "}"};
+  REQUIRE(SaveHygiene::reindent_lines(lines, "a.rs", 2) == want);
+}
+
+TEST_CASE("Reindent: a stylesheet and a JSON document step in at the braces", "[jot][save]")
+{
+  const std::vector<std::string> css = {
+      ".card {", "color: red;", ".title {", "font-size: 1rem;", "}", "}"};
+  const std::vector<std::string> css_want = {
+      ".card {", "  color: red;", "  .title {", "    font-size: 1rem;", "  }", "}"};
+  REQUIRE(SaveHygiene::reindent_lines(css, "a.css", 2) == css_want);
+
+  const std::vector<std::string> json = {"{", "\"a\": {", "\"b\": [", "1,", "2", "],", "},", "}"};
+  const std::vector<std::string> json_want = {
+      "{", "  \"a\": {", "    \"b\": [", "      1,", "      2", "    ],", "  },", "}"};
+  REQUIRE(SaveHygiene::reindent_lines(json, "a.json", 2) == json_want);
 }
 
 TEST_CASE("Reindent: a Lua block follows the same rules", "[jot][save]")

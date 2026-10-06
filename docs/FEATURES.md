@@ -110,9 +110,14 @@ settles, so scrolling a long way does not grow the process.
 - Saves that rebase indentation on `tab_size` with the editor's own block
   rules (`reindent_on_save`, on by default), no external formatter involved: a
   body written one level out is pulled back in, and a file at another width
-  lands at the configured one. The file's first line is the baseline, a wrapped
-  expression keeps the column its author gave it, and a line inside a
-  multi-line string or comment is left alone.
+  lands at the configured one. The languages are the C family, Lua, Python,
+  JavaScript and TypeScript (JSX included), Java, C#, Kotlin, Scala, Dart,
+  Groovy, Go, Swift, Rust, Zig, proto, thrift, CSS/SCSS/LESS and JSON; a
+  language whose blocks are keywords or tags (Ruby, shell, the markup formats)
+  has no brace rules here and is left alone. The file's first line is the
+  baseline, so a fragment keeps its column; a wrapped expression keeps the
+  column its author gave it, a braceless body keeps its step in, and a line
+  inside a multi-line string or comment is left alone.
 - Smart multi-line paste that re-indents to the cursor.
 - Auto-indent, bracket matching and jumping, rainbow bracket colors
   (`rainbow_brackets`), an active bracket guide, and a highlight on the bracket

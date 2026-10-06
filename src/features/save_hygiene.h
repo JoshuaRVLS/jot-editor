@@ -28,17 +28,15 @@ public:
   static bool supports_reindent(const std::string &path);
 
   // The document with its leading whitespace rebased on the indent size in
-  // settings. C-family and Lua files have their nesting recomputed with the
-  // same rules Enter and paste read (EditorFeatures::indent_for_new_line), so a
-  // body written one level out is pulled back in; a Python file gets the same
-  // treatment with each block's depth read from the file's own indentation,
-  // since a Python block is its indentation and nothing else in the file says
-  // where it ends. The first line is the baseline, so a fragment that opens at
-  // column four keeps its four and only the nesting under it moves. Lines
-  // inside a multi-line string or comment, and lines whose column is a wrapped
-  // expression's alignment rather than a block's indent, are left exactly as
-  // they are, and a file whose indentation is already right comes back
-  // unchanged.
+  // settings. A brace language has its nesting recomputed from the file's own
+  // braces, brackets and labels; a Python file has each block's depth read from
+  // its own indentation, since a Python block is that indentation and nothing
+  // else in the file says where it ends. The first line is the baseline, so a
+  // fragment that opens at column four keeps its four and only the nesting
+  // under it moves. Lines inside a multi-line comment, string or long bracket,
+  // and lines whose column is a wrapped expression's alignment or a braceless
+  // body, are left exactly as they are, and a file whose indentation is already
+  // right comes back unchanged.
   static std::vector<std::string>
   reindent_lines(const std::vector<std::string> &lines, const std::string &path, int tab_size);
 };

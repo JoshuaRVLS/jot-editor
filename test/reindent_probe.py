@@ -11,6 +11,11 @@ Cases:
   * a C++ body written one level out is pulled back in,
   * the step in settings is what the nesting is measured in (2 -> 4),
   * a Python file's blocks are re-based the same way (4 -> 2),
+  * a JavaScript switch steps its labels in under the switch and its bodies
+    under the labels,
+  * a Go switch pulls the labels back out to the switch's own column,
+  * a Rust `where` clause keeps its bound list one step in,
+  * a stylesheet and a JSON document step in at their braces,
   * the setting off leaves every leading space where it was.
 
 Usage: test/reindent_probe.py [path-to-jot] [--dump]
@@ -72,6 +77,20 @@ def main() -> int:
          "void f()\n{\n    foo();\n}\n"),
         ("python narrowed", "a.py", "def f():\n    if x:\n        return 1\n", "",
          "def f():\n  if x:\n    return 1\n"),
+        ("javascript switch", "a.js",
+         "switch (x) {\ncase 1:\nfoo();\nbreak;\n}\n", "",
+         "switch (x) {\n  case 1:\n    foo();\n    break;\n}\n"),
+        ("go labels pulled out", "a.go",
+         "switch x {\n  case 1:\n  foo()\n}\n", "tab_size=4\n",
+         "switch x {\ncase 1:\n    foo()\n}\n"),
+        ("rust where clause", "a.rs",
+         "fn f<T>(x: T) -> T\nwhere\nT: Clone,\n{\nx\n}\n", "",
+         "fn f<T>(x: T) -> T\nwhere\n  T: Clone,\n{\n  x\n}\n"),
+        ("stylesheet", "a.css",
+         ".card {\ncolor: red;\n.title {\nfont-size: 1rem;\n}\n}\n", "",
+         ".card {\n  color: red;\n  .title {\n    font-size: 1rem;\n  }\n}\n"),
+        ("json document", "a.json", "{\n\"a\": 1,\n\"b\": {\n\"c\": 2\n}\n}\n", "",
+         "{\n  \"a\": 1,\n  \"b\": {\n    \"c\": 2\n  }\n}\n"),
         ("setting off", "a.cpp", "void f()\n{\nfoo();\n}\n",
          "reindent_on_save=false\n", "void f()\n{\nfoo();\n}\n"),
     ]
