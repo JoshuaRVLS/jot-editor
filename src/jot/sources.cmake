@@ -5,6 +5,7 @@ set(JOT_ENGINE_SOURCES
   jot/app/editor.cpp
   jot/app/emmet.cpp
   jot/app/auto_save.cpp
+  jot/app/bible_client.cpp
   jot/app/buffers.cpp
   jot/app/coding_time.cpp
   jot/app/cpp_definitions.cpp

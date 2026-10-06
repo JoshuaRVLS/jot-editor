@@ -27,7 +27,8 @@ namespace
     HOME_ACTION_RESUME = 8,
     HOME_ACTION_CONTINUE_EDITOR = 9,
     HOME_ACTION_QUIT = 10,
-    HOME_ACTION_OPEN_PATH = 11
+    HOME_ACTION_OPEN_PATH = 11,
+    HOME_ACTION_BIBLE_VOTD = 12
   };
 
   struct HomeMenuRenderItem
@@ -604,6 +605,32 @@ HomeView Editor::build_home_menu_model()
   // row the layout would not have had room for.
   const int kCandidateCap = 24;
   std::vector<HomeSection> sections;
+
+  // ---- The verse of the day: one row above the lists ----
+  // The text comes from the worker queue and is cached for the whole day, so
+  // the fetch here is a no-op after the day's first frame. While it is in
+  // flight the row is simply absent; the delivery repaints and the next build
+  // picks it up.
+  const std::string votd_text = bible_verse_of_the_day();
+  if (!votd_text.empty())
+  {
+    HomeSection votd;
+    votd.title = "Verse of the Day";
+    votd.icon = "\uf02d";
+    votd.fg = theme.fg_keyword;
+    votd.cap = 1;
+    HomeMenuRenderItem row;
+    row.action = HOME_ACTION_BIBLE_VOTD;
+    row.icon = "\uf02d";
+    row.icon_fg = theme.fg_keyword;
+    row.label = votd_text;
+    row.secondary = bible_votd_label;
+    if (keep(row.label, row.secondary, row.path))
+    {
+      votd.items.push_back(std::move(row));
+    }
+    sections.push_back(std::move(votd));
+  }
 
   HomeSection projects;
   projects.title = "Projects";
@@ -1284,6 +1311,11 @@ bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift, bool is
       needs_redraw = true;
       return true;
     }
+    case HOME_ACTION_BIBLE_VOTD:
+      dismiss_home();
+      bible_open_verse_of_the_day(true);
+      needs_redraw = true;
+      return true;
     case HOME_ACTION_QUIT:
       running = false;
       return true;

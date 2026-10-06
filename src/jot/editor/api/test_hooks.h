@@ -1034,6 +1034,37 @@ public:
   {
     return rest_request_running;
   }
+  // The Bible reader minus the network: the fetch is skipped by pre-seeding the
+  // cache (see test/test_bible_client.cpp), and the passage it paints is read
+  // back here. The verse-of-the-day accessors let a case assert the day's pick
+  // without depending on which chapter today happens to land on.
+  std::vector<std::string> bible_view_lines_for_test() const
+  {
+    for (const FileBuffer &buffer : buffers)
+    {
+      if (buffer.filepath.rfind("[Bible]", 0) == 0)
+      {
+        return buffer.lines;
+      }
+    }
+    return {};
+  }
+  std::string bible_verse_of_the_day_label_for_test() const
+  {
+    return bible_votd_label;
+  }
+  std::string bible_verse_of_the_day_text_for_test() const
+  {
+    return bible_votd_text;
+  }
+  std::string bible_verse_of_the_day_for_test()
+  {
+    return bible_verse_of_the_day();
+  }
+  bool bible_request_running_for_test() const
+  {
+    return bible_request_running;
+  }
   void run_ex_for_test(const std::string &line)
   {
     execute_ex_command(line);

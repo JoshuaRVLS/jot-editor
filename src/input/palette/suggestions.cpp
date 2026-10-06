@@ -1,5 +1,6 @@
 #include "commands/utils.h"
 #include "cpp_assist.h"
+#include "features/bible.h"
 #include "features/http_file.h"
 #include "editor.h"
 #include "jot/lua/api.h"
@@ -237,7 +238,15 @@ namespace
         {"pluginpanel", "Plugin", "Show a plugin panel", 75},
         {"gitdiffclose", "Git", "Close git diff panel", 68},
         {"gitdiffrefresh", "Git", "Refresh Open Git Diff", 68},
-        {"rest", "HTTP", "Run the request at the cursor (:rest <name> | last)", 80}};
+        {"rest", "HTTP", "Run the request at the cursor (:rest <name> | last)", 80},
+        {"bible",
+         "Bible",
+         // The argument examples are spelled out because the palette's matcher
+         // reads this text: typing `bible ps23` finds the entry through the
+         // abbreviation it names here.
+         "Open a passage (:bible John 3:16 | ps23 | 1cor13 4-7 | random | votd | "
+         "commentary | xref | translations)",
+         80}};
     return meta;
   }
 
@@ -765,6 +774,30 @@ void Editor::refresh_command_palette()
         {
           add_arg(request.name, "HTTP", "Named request in this file", 112);
         }
+      }
+    }
+    else if (lcmd == "bible")
+    {
+      // The reader's verbs, then the books by name. A bare chapter is the
+      // common case ("bible john 3"), and the names are what the reader would
+      // type into the argument, so they carry an argument's score.
+      static const std::vector<std::string> verbs = {"random",
+                                                     "next",
+                                                     "prev",
+                                                     "votd",
+                                                     "today",
+                                                     "translations",
+                                                     "versions",
+                                                     "commentary",
+                                                     "xref",
+                                                     "xrefs"};
+      for (const auto &verb : verbs)
+      {
+        add_arg(verb, "Bible", "Bible reader verb", 130);
+      }
+      for (const auto &book : Bible::books())
+      {
+        add_arg(book.name, "Bible", "Open a book, chapter or verse", 110);
       }
     }
     else if (lcmd == "gitdiff" || lcmd == "gitdiffstaged" || lcmd == "gitstage"

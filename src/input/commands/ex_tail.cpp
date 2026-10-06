@@ -685,6 +685,10 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     rest_run(trim_copy(arg));
   }
+  else if (lcmd == "bible")
+  {
+    bible_run(trim_copy(arg));
+  }
   else if (lcmd == "gitlog")
   {
     refresh_git_status(true);

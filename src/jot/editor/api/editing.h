@@ -135,6 +135,11 @@ private:
   void handle_mouse(void *event);
 
   void move_cursor(int dx, int dy, bool extend_selection = false);
+  // The read-only gate in front of every edit path: true for an ordinary
+  // buffer, false for a rendered view the user must not type into. A refusal
+  // says so on the message line (transiently, so holding a key does not stack
+  // toasts) and the caller leaves the text alone.
+  bool edit_allowed();
   bool insert_char(char c);
   // Carries the partner of the markup tag name the cursor sits in along with the
   // edit that just landed, so an opening tag and its closing tag rename together

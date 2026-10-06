@@ -1,5 +1,6 @@
 set(JOT_FEATURES_SOURCES
   features/autoclose.cpp
+  features/bible.cpp
   features/bracket.cpp
   features/bracket_text_object.cpp
   features/color_codes.cpp

@@ -110,6 +110,14 @@ void Config::load_defaults()
   // indentation is deliberately unusual; a language with no block rules here,
   // or a body inside a multi-line string, is left alone either way.
   settings["reindent_on_save"] = "true";
+  // The Bible reader (features/bible.h, app/bible_client.cpp): which
+  // translation and commentary `:bible` reads, the API root (pointed at a
+  // fixture server by tests), and how many verses of context one verse keeps
+  // on each side when a passage is shown verse by verse.
+  settings["bible_translation"] = "BSB";
+  settings["bible_commentary"] = "adam-clarke";
+  settings["bible_api_base"] = "https://bible.helloao.org/api";
+  settings["bible_context_verses"] = "2";
   settings["auto_save"] = "false";
   settings["auto_save_interval_ms"] = "2000";
   settings["prettier_on_save"] = "true";

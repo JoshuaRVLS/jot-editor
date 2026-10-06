@@ -16,6 +16,8 @@ add_executable(jot_tests
   test_web_completion.cpp
   test_html_preview.cpp
   test_http_file.cpp
+  test_bible.cpp
+  test_bible_client.cpp
   test_leetcode_services.cpp
   test_cpp_assist.cpp
   test_cpp_definitions.cpp

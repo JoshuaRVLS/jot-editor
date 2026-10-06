@@ -343,6 +343,8 @@ void Editor::save_state()
 
 void Editor::undo()
 {
+  if (!edit_allowed())
+    return;
   auto &buf = get_buffer();
 
   // A command that ends up changing nothing still takes its snapshot before it
@@ -397,6 +399,8 @@ void Editor::undo()
 
 void Editor::redo()
 {
+  if (!edit_allowed())
+    return;
   auto &buf = get_buffer();
   if (buf.redo_stack.empty())
   {

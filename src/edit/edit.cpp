@@ -134,8 +134,28 @@ void Editor::sync_markup_tag_name()
   needs_redraw = true;
 }
 
+bool Editor::edit_allowed()
+{
+  if (!get_buffer().read_only)
+  {
+    return true;
+  }
+  // The refusal has to reach the screen, and in a real session the status line
+  // is the Lua UI kit's surface: a plain message would be set and never
+  // painted. It rides the toast instead, once per burst -- while the notice is
+  // still up another keystroke in a rendered view stays quiet rather than
+  // stacking one toast per character of a held key.
+  if (transient_message_timer == 0)
+  {
+    set_transient_message("This view is read-only", 2000, true);
+  }
+  return false;
+}
+
 bool Editor::insert_char(char c)
 {
+  if (!edit_allowed())
+    return false;
   save_state();
   auto &buf = get_buffer();
 
@@ -399,6 +419,8 @@ bool Editor::insert_char(char c)
 
 void Editor::insert_string(const std::string &str)
 {
+  if (!edit_allowed())
+    return;
   save_state();
   auto &buf = get_buffer();
   if (buf.is_lazy())
@@ -458,6 +480,8 @@ void Editor::insert_string(const std::string &str)
 
 void Editor::delete_char(bool forward)
 {
+  if (!edit_allowed())
+    return;
   auto &buf = get_buffer();
   if (buf.is_lazy())
     buf.materialize();
@@ -544,6 +568,8 @@ void Editor::delete_char(bool forward)
 
 void Editor::delete_word_backward()
 {
+  if (!edit_allowed())
+    return;
   auto &buf = get_buffer();
   if (buf.is_lazy())
     buf.materialize();
@@ -606,6 +632,8 @@ void Editor::delete_word_backward()
 
 void Editor::delete_word_forward()
 {
+  if (!edit_allowed())
+    return;
   auto &buf = get_buffer();
   if (buf.is_lazy())
     buf.materialize();
@@ -660,6 +688,8 @@ void Editor::delete_word_forward()
 
 void Editor::delete_selection()
 {
+  if (!edit_allowed())
+    return;
   save_state();
   auto &buf = get_buffer();
   if (buf.is_lazy())
@@ -841,6 +871,8 @@ void Editor::delete_selection()
 
 void Editor::delete_line()
 {
+  if (!edit_allowed())
+    return;
   save_state();
   auto &buf = get_buffer();
   if (buf.is_lazy())
@@ -869,6 +901,8 @@ void Editor::delete_line()
 
 void Editor::new_line()
 {
+  if (!edit_allowed())
+    return;
   save_state();
   auto &buf = get_buffer();
   if (buf.is_lazy())

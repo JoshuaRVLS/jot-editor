@@ -25,11 +25,13 @@
 //   state/navigation_state.h  jump history and the armed jump
 //   state/engine_state.h      config, terminals, debugger, UI, Lua host
 //   state/rest_state.h        the HTTP client's session (:rest)
+//   state/bible_state.h       the Bible reader's session (:bible)
 //   state/web_index_state.h   the workspace's CSS vocabulary, for completions
 //
 // New code that needs one slice is encouraged to include that header directly
 // (the groups are independent: no group includes another).
 
+#include "jot/state/bible_state.h"
 #include "jot/state/cpp_defs_state.h"
 #include "jot/state/engine_state.h"
 #include "jot/state/input_state.h"
@@ -45,7 +47,8 @@
 #include "jot/state/winbar_state.h"
 #include "jot/state/workspace_state.h"
 
-struct EditorState : CppDefsState,
+struct EditorState : BibleState,
+                     CppDefsState,
                      EngineState,
                      InputState,
                      LspUiState,

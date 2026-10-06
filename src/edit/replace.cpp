@@ -69,6 +69,8 @@ void Editor::replace_all_text(const std::string &needle,
                               bool case_sensitive,
                               bool whole_word)
 {
+  if (!edit_allowed())
+    return;
   if (needle.empty())
   {
     set_message("Usage: needle cannot be empty");
@@ -108,6 +110,8 @@ void Editor::replace_all_text(const std::string &needle,
 
 void Editor::replace_all_regex(const std::string &pattern, const std::string &replacement)
 {
+  if (!edit_allowed())
+    return;
   if (pattern.empty())
   {
     set_message("Usage: regex pattern cannot be empty");

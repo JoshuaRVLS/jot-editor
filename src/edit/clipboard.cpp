@@ -482,6 +482,8 @@ void Editor::paste()
 
 void Editor::paste_text(const std::string &text)
 {
+  if (!edit_allowed())
+    return;
   // An image tab's buffer is an empty placeholder: pasting into it would fill
   // that placeholder, and a later save would write it over the picture.
   if (image_viewer.is_image_file(get_buffer().filepath))
@@ -581,6 +583,8 @@ void Editor::paste_text(const std::string &text)
 
 void Editor::move_line_up()
 {
+  if (!edit_allowed())
+    return;
   save_state();
   auto &buf = get_buffer();
   if (buf.is_lazy())
@@ -618,6 +622,8 @@ void Editor::move_line_up()
 
 void Editor::move_line_down()
 {
+  if (!edit_allowed())
+    return;
   save_state();
   auto &buf = get_buffer();
   if (buf.is_lazy())

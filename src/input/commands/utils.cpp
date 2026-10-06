@@ -200,6 +200,7 @@ namespace CommandLineUtils
                                                       "gitblame",
                                                       "gitrefresh",
                                                       "rest",
+                                                      "bible",
                                                       "recent",
                                                       "openrecent",
                                                       "reopen",
@@ -268,6 +269,7 @@ namespace CommandLineUtils
            || lc == "debugconfig" || lc == "debugattach" || lc == "debugmemory"
            || lc == "debugdisasm" || lc == "mkfile" || lc == "mkdir" || lc == "rename" || lc == "rm"
            || lc == "cppimpl" || lc == "cpppair" || lc == "cppcheck" || lc == "rest"
+           || lc == "bible"
            || lc == "tsinstall"
            || lc == "treesitterinstall"
            || lc == "replace" || lc == "replacei" || lc == "replaceword" || lc == "replacere"

@@ -32,6 +32,10 @@ const KnownSetting kKnownSettings[] = {
     {"auto_indent", "Auto indent", SettingsEntry::Type::Bool},
     {"auto_save", "Auto save", SettingsEntry::Type::Bool},
     {"auto_save_interval_ms", "Auto save interval (ms)", SettingsEntry::Type::Int},
+    {"bible_api_base", "Bible: API base", SettingsEntry::Type::String},
+    {"bible_commentary", "Bible: commentary", SettingsEntry::Type::String},
+    {"bible_context_verses", "Bible: context verses", SettingsEntry::Type::Int},
+    {"bible_translation", "Bible: translation", SettingsEntry::Type::String},
     {"clang_format_on_save", "Clang-format on save", SettingsEntry::Type::Bool},
     {"color_scheme", "Color scheme", SettingsEntry::Type::String},
     {"colorizer", "Color preview", SettingsEntry::Type::Bool},
@@ -258,6 +262,7 @@ struct IntRange
 
 const IntRange kIntRanges[] = {
     {"auto_save_interval_ms", 100, 100, 600000},
+    {"bible_context_verses", 1, 0, 10},
     {"cursor_blink_ms", 50, 0, 5000},
     {"debugger_height", 1, 6, 24},
     {"discord_idle_timeout", 5, 5, 3600},
@@ -347,11 +352,12 @@ const char *const kMarkdownPreviewFamilies[] = {"markdown_preview_"};
 const char *const kHtmlPreviewFamilies[] = {"html_preview_"};
 const char *const kSnippetFamilies[] = {"snippet_"};
 const char *const kDiscordFamilies[] = {"discord_"};
-// The Extensions category: integrations that bring their own keys. WakaTime is
-// the one so far, and its switch and credentials are what the name claims -- the
-// family keeps a future `wakatime_*` key in the same place.
+// The Extensions category: integrations that bring their own keys. WakaTime and
+// the Bible reader are what live here, and each family keeps its own `_*` keys
+// (credentials, endpoint, translation) in the same place -- `bible_` also
+// covers the keys state/bible_state.h reads.
 const char *const kExtensionKeys[] = {"wakatime"};
-const char *const kExtensionFamilies[] = {"wakatime_"};
+const char *const kExtensionFamilies[] = {"wakatime_", "bible_"};
 const char *const kToastFamilies[] = {"toast."};
 const char *const kUpdateFamilies[] = {"update."};
 

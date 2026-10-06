@@ -40,6 +40,8 @@ namespace
 
 void Editor::duplicate_line()
 {
+  if (!edit_allowed())
+    return;
   save_state();
   auto &buf = get_buffer();
   if (buf.is_lazy())
@@ -54,6 +56,8 @@ void Editor::duplicate_line()
 
 void Editor::insert_line_below()
 {
+  if (!edit_allowed())
+    return;
   save_state();
   auto &buf = get_buffer();
   if (buf.is_lazy())
@@ -80,6 +84,8 @@ void Editor::insert_line_below()
 
 void Editor::insert_line_above()
 {
+  if (!edit_allowed())
+    return;
   save_state();
   auto &buf = get_buffer();
   if (buf.is_lazy())
@@ -125,6 +131,8 @@ void Editor::apply_default_shift_tab()
 
 void Editor::indent_selection()
 {
+  if (!edit_allowed())
+    return;
   auto &buf = get_buffer();
   if (buf.is_lazy())
     buf.materialize();
@@ -158,6 +166,8 @@ void Editor::indent_selection()
 
 void Editor::outdent_selection()
 {
+  if (!edit_allowed())
+    return;
   auto &buf = get_buffer();
   if (buf.is_lazy())
     buf.materialize();
@@ -222,6 +232,8 @@ void Editor::outdent_selection()
 
 void Editor::toggle_comment()
 {
+  if (!edit_allowed())
+    return;
   save_state();
   auto &buf = get_buffer();
   if (buf.is_lazy())
