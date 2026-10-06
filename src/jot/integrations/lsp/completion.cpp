@@ -772,6 +772,7 @@ void Editor::rebuild_completion_context()
   {
     return;
   }
+  ++completion_context_rebuilds;
   completion_context.rebuild(buf.lines, buf.cursor.y);
 }
 void Editor::record_completion_use(const std::string &name)
@@ -802,15 +803,20 @@ void Editor::arm_lsp_completion(const std::string &filepath, bool manual)
 {
   auto &buf = get_buffer();
   completion_usage_language = lsp_internal::detect_lsp_language(filepath);
-  // The context is the words of the whole buffer, so it is read once per popup
+  // The context is the words of the whole buffer, so it is read once per word
   // rather than once per keystroke: another letter of the same word ranks against
-  // the text the list opened on, and accepting an item is what closes the list
-  // and makes the next popup read the buffer the item landed in. The check comes
-  // before the filepath below is overwritten, so a popup in another file always
-  // re-reads.
-  if (!lsp_completion_visible || lsp_completion_filepath != filepath)
+  // the text the session opened on, and accepting an item is what closes the
+  // session and makes the next word read the buffer the item landed in. The
+  // anchor is the start of the word being completed, and it is what says the
+  // word changed; gating on lsp_completion_visible instead read the whole window
+  // back on every keystroke, because the popup only becomes visible once the
+  // server has answered the request that keystroke made. The filepath check
+  // comes before the value below is overwritten, so another file always re-reads.
+  const Cursor anchor = current_completion_start(buf);
+  if (lsp_completion_filepath != filepath || !(anchor == completion_context_anchor))
   {
     rebuild_completion_context();
+    completion_context_anchor = anchor;
   }
   lsp_completion_anchor = buf.cursor;
   lsp_completion_replace_start = current_completion_start(buf);

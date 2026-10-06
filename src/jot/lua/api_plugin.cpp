@@ -20,6 +20,7 @@ namespace fs = std::filesystem;
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 void LuaAPI::register_command(const std::string &n, const std::string &c, const std::string &d)
@@ -112,30 +113,67 @@ namespace
     }
     return steps;
   }
+
+  // The next chord step of `key` at or past `pos`, in place of the list
+  // keymap_steps builds: the prefix check runs this over every registered keymap
+  // on every keystroke, and the vectors were most of what a keystroke allocated.
+  // Empty steps are skipped the same way keymap_steps skips them.
+  bool next_keymap_step(const std::string &key, std::size_t &pos, std::string_view &step)
+  {
+    while (pos <= key.size())
+    {
+      const std::size_t space = key.find(' ', pos);
+      const std::size_t end = (space == std::string::npos) ? key.size() : space;
+      if (end > pos)
+      {
+        step = std::string_view(key).substr(pos, end - pos);
+        pos = end + 1;
+        return true;
+      }
+      if (space == std::string::npos)
+      {
+        return false;
+      }
+      pos = space + 1;
+    }
+    return false;
+  }
 } // namespace
 bool LuaAPI::plugin_keymap_is_prefix(const std::string &chord, const std::string &m)
 {
-  const auto prefix = keymap_steps(chord);
-  if (prefix.empty())
+  std::size_t chord_pos = 0;
+  std::string_view chord_step;
+  if (!next_keymap_step(chord, chord_pos, chord_step))
+  {
     return false;
+  }
   for (const auto &x : plugin_keymaps)
   {
     if (x.mode != "global" && x.mode != m)
-      continue;
-    const auto steps = keymap_steps(x.key);
-    if (steps.size() <= prefix.size())
-      continue;
-    bool match = true;
-    for (size_t i = 0; i < prefix.size(); i++)
     {
-      if (steps[i] != prefix[i])
+      continue;
+    }
+    // Walk the typed chord against the registered one step by step: every typed
+    // step has to equal the registered step in its place, and the registered
+    // chord has to carry at least one step past the typed one. That is the same
+    // test as keymap_steps compared like for like, with neither list built.
+    std::size_t key_pos = 0;
+    std::string_view key_step;
+    bool match = true;
+    chord_pos = 0;
+    while (next_keymap_step(chord, chord_pos, chord_step))
+    {
+      if (!next_keymap_step(x.key, key_pos, key_step) || key_step != chord_step)
       {
         match = false;
         break;
       }
     }
-    if (match)
+    // A registered chord that is exactly the typed one is a leaf, not a group.
+    if (match && next_keymap_step(x.key, key_pos, key_step))
+    {
       return true;
+    }
   }
   return false;
 }

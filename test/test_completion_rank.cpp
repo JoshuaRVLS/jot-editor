@@ -519,3 +519,33 @@ TEST_CASE("Completion rank: learning off leaves the list and the disk alone",
   // The plain order, and the table is not even read.
   REQUIRE(e.lsp_completion_labels_for_test()[0] == "quick_scan");
 }
+
+TEST_CASE("Completion rank: the buffer is read once per word, not per keystroke",
+          "[jot][completion-rank]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_home_menu_visible(false);
+  open_with_caret(e, "int total_count = 0;\nint main() {\n  tot\n}\n", 2, 5);
+
+  // A response the typed word does not lead into leaves the popup off screen, so
+  // each seed below is the request behind one keystroke with the server still to
+  // answer, which is the window the read used to happen on every keystroke of the
+  // word.
+  const std::vector<LSPCompletionItem> other = {function_item("zzz")};
+  const unsigned long long before = e.completion_context_rebuilds_for_test();
+  REQUIRE(!e.seed_lsp_completion_for_test(other));
+  const unsigned long long first = e.completion_context_rebuilds_for_test();
+  REQUIRE(first == before + 1);
+
+  // Another letter of the same word: the words around the caret did not move, so
+  // the ranking reuses the read the word already has.
+  e.insert_char_for_test('a');
+  REQUIRE(!e.seed_lsp_completion_for_test(other));
+  REQUIRE(e.completion_context_rebuilds_for_test() == first);
+
+  // A word somewhere else is a new session and does read the buffer again.
+  e.scroll_cursor_to_for_test(0, 5);
+  REQUIRE(!e.seed_lsp_completion_for_test(other));
+  REQUIRE(e.completion_context_rebuilds_for_test() == first + 1);
+}

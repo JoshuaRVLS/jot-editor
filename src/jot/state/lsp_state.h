@@ -104,9 +104,18 @@ struct LspUiState
   // names accepted, counted per language, and the words of the buffer being
   // completed. The table is read from the config home on the first completion and
   // written back on shutdown, like the workspace session; the context is rebuilt
-  // once per popup, because accepting an item is what changes the words it reads.
+  // once per word, because accepting an item is what changes the words it reads.
   CompletionRank::Usage completion_usage;
   CompletionRank::Context completion_context;
+  // The word the context was read for: where the identifier being completed
+  // starts. Another letter of that word reuses the read -- the words around the
+  // caret have not changed in a way the ranking cares about -- and the next word
+  // makes the popup read the buffer again.
+  Cursor completion_context_anchor;
+  // How many times the words have been read back. The read is only needed once
+  // per word (see arm_lsp_completion), so a case can pin that a keystroke in the
+  // middle of one does not read the whole window again.
+  unsigned long long completion_context_rebuilds = 0;
   bool completion_usage_loaded = false;
   bool completion_usage_dirty = false;
   std::string completion_usage_language;

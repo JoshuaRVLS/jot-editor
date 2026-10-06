@@ -724,6 +724,13 @@ public:
   {
     return lsp_completion_visible;
   }
+  // How many times the ranking read the buffer's words back (see
+  // rebuild_completion_context): one per word being completed, not one per
+  // keystroke of it.
+  unsigned long long completion_context_rebuilds_for_test() const
+  {
+    return completion_context_rebuilds;
+  }
   // Asks for completions the way a typed key does, so a case can pin what is
   // offered where (the builtin tag list is only for a tag name, the word right
   // after the `<` that opens the tag).
