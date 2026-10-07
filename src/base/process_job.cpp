@@ -1,4 +1,4 @@
-#include "jot/app/process_job.h"
+#include "base/process_job.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -52,10 +52,10 @@ namespace process_job
     // monotonic counter instead of risking a collision on parallel installs.
     static unsigned long long counter = 0;
     counter++;
-    const long long now = static_cast<long long>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch())
-            .count());
+    const long long now =
+        static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   std::chrono::steady_clock::now().time_since_epoch())
+                                   .count());
     std::string name = kind;
     for (char &ch : name)
     {
@@ -64,8 +64,9 @@ namespace process_job
         ch = '-';
       }
     }
-    return (fs::path(dir) / ("install_" + name + "_" + std::to_string(now) + "_"
-                             + std::to_string(counter) + ".log"))
+    return (fs::path(dir)
+            / ("install_" + name + "_" + std::to_string(now) + "_" + std::to_string(counter)
+               + ".log"))
         .string();
   }
 

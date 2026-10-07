@@ -1,13 +1,13 @@
 #ifndef JOT_STATE_ENGINE_STATE_H
 #define JOT_STATE_ENGINE_STATE_H
 
+#include "base/event_loop.h"    // EventLoop
+#include "base/task_queue.h"    // TaskQueue
 #include "config.h"             // Config
-#include "event_loop.h"         // EventLoop
 #include "imageviewer.h"        // ImageViewer
 #include "jot/model/debugger.h" // DebuggerSessionState, DebuggerBreakpoint, DebuggerSessionConfig
 #include "jot/model/tasks.h"    // TerminalTask
 #include "syntax_highlighter.h" // SyntaxHighlighter
-#include "task_queue.h"         // TaskQueue
 #include "terminal.h"           // Terminal
 #include "tools/terminal/integrated.h" // IntegratedTerminal
 #include "tree_sitter/manager.h"       // TreeSitterManager

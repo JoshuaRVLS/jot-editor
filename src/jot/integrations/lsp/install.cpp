@@ -1,13 +1,13 @@
 // Editor-side LSP install/remove: background jobs (silent log-file transport
 // with an integrated-terminal fallback), live progress polling, and the
 // server-id usage hint built from the Lua registry.
+#include "lsp/install.h"
+#include "base/process_job.h"
 #include "editor.h"
-#include "jot/app/process_job.h"
 #include "jot/editor_models.h"
+#include "jot/integrations/lsp/common.h"
 #include "jot/lua/api.h"
 #include "lsp/client.h"
-#include "jot/integrations/lsp/common.h"
-#include "lsp/install.h"
 #include <algorithm>
 #include <sstream>
 #include <string>

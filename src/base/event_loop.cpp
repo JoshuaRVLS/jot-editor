@@ -1,4 +1,5 @@
-#include "event_loop.h"
+#include "base/event_loop.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
@@ -15,11 +16,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #endif
-
-#include "jot/keybind_catalog.h"
-#include "editor.h"
-#include "jot/lua/api.h"
-
 
 EventLoop::EventLoop()
 {
@@ -420,4 +416,3 @@ void EventLoop::close_delete_fs_event(uv_handle_t *handle)
 }
 
 // Editor Event Loop
-

@@ -20,7 +20,6 @@ set(JOT_ENGINE_SOURCES
   jot/app/panes_navigate.cpp
   jot/app/panes_tabs.cpp
   jot/app/panes_resize.cpp
-  jot/app/process_job.cpp
   jot/app/relaunch.cpp
   jot/app/rest_client.cpp
   tools/leetcode_credentials.cpp
@@ -49,13 +48,11 @@ set(JOT_ENGINE_SOURCES
   jot/integrations/lsp/status.cpp
   jot/integrations/syntax.cpp
   jot/integrations/tree_sitter_commands.cpp
-  jot/event/event_loop.cpp
   jot/event/main_loop.cpp
   jot/event/terminal_events.cpp
   jot/event/which_key.cpp
   jot/event/in_memory_line_provider.cpp
   jot/event/lazy_line_provider.cpp
-  jot/event/task_queue.cpp
   jot/markdown/http_message.cpp
   jot/markdown/preview_server.cpp
   jot/surfaces/home.cpp
