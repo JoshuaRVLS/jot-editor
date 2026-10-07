@@ -1,6 +1,6 @@
 // Save hygiene (src/features/save_hygiene.*, wired into Editor::save_buffer_at
 // in src/jot/app/file.cpp), and the atomic write under it
-// (src/tools/file_util.*).
+// (src/base/file_util.*).
 //
 // Three parts. The rules are pure, so each is asserted directly: what counts as
 // trailing whitespace, what comes off, and which files have to keep theirs. The

@@ -4,15 +4,18 @@ jot is one C++17 engine with three front ends over it (terminal UI, SDL3/OpenGL
 GUI, and Lua plugins). The directories under `src/` are the module boundaries.
 
 ```
+apps/jot/        the binary: argument parsing, terminal setup, main()
 src/
-  apps/jot/        the binary: argument parsing, terminal setup, main()
+  base/            primitives that depend on nothing above them: string and
+                   path helpers, atomic file writes, shell quoting, link
+                   detection, the event loop, the task queue, process jobs
   jot/             the editor engine
     model/         plain data types (buffer, panes, theme, panels, ...)
     state/         the editor's state, split by subsystem (see below)
     editor/        collaborators: behaviour that owns its state
     editor/api/    fragments of the Editor class body (see below)
     app/           editor behaviour: buffers, files, panes, undo, folding, ...
-    event/         the loop, input drains, timers, task queue
+    event/         input drains and timers
     integrations/  LSP, debugger, terminal and tree-sitter wiring
     workspace/     explorer, sidebar, git, right dock, tasks
     surfaces/      menus, popups, home screen, settings, theme chooser
@@ -26,6 +29,10 @@ src/
                    telescope, integrated terminal, workspace search)
   ui/              the cell grid, text handling, terminal + GUI backends
 ```
+
+`base/` is the floor: it may not include `editor.h`, a module header or a UI
+header, and it is the first directory the module order fixes. Everything above
+it may include it. Its include prefix is `base/` (`#include "base/string_util.h"`).
 
 ## The editor's state
 

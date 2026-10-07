@@ -2,7 +2,7 @@
 """Probe: a real save leaves the bytes the buffer was showing.
 
 The unit rules (src/features/save_hygiene.*) and the write helper
-(src/tools/file_util.*) are covered by test_save_hygiene.cpp; this drives the
+(src/base/file_util.*) are covered by test_save_hygiene.cpp; this drives the
 binary's own save (Ctrl+S in the modeless editing mode) and then reads the file
 off disk, because that is where a hygiene rule and the bytes on disk can still
 disagree: the buffer is text the editor holds, the file is what the next `git
