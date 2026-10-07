@@ -93,7 +93,7 @@ struct FileBuffer
   bool is_preview = false;
   bool is_placeholder = false;
   // A view the editor paints but the user does not type into: the Bible
-  // reader's `[Bible]` tab (app/bible_client.cpp) marks itself read-only, and
+  // reader's `[Bible]` tab (extras/bible_client.cpp) marks itself read-only, and
   // every interactive edit path opens with Editor::edit_allowed(). The flag
   // rides on the buffer, so a tab move or a pane switch keeps it, and a save
   // is refused for good measure (is_rendered_view_path already covers that).
@@ -102,7 +102,7 @@ struct FileBuffer
   // then a number that stays with it for the buffer's life. Buffer *indices*
   // shift whenever one closes to the left (buffers is a vector that is erased
   // from the middle), so the strip's order, its pinned set and its jump-to-
-  // buffer letters all key on this instead (see features/tab_order.h).
+  // buffer letters all key on this instead (see ui/tab_order.h).
   long long tab_uid = 0;
   std::stack<State> undo_stack;
   std::stack<State> redo_stack;
@@ -407,7 +407,7 @@ struct FileBuffer
 
 // A buffer named for something it renders rather than a file it holds: the REST
 // response tab (app/rest_client.cpp), the Bible reader's passage tab
-// (app/bible_client.cpp) and the AI chat (features/ai/chat.lua). There is
+// (extras/bible_client.cpp) and the AI chat (features/ai/chat.lua). There is
 // nothing behind the name, so a save is refused and a workspace session does
 // not reopen one.
 inline bool is_rendered_view_path(const std::string &path)

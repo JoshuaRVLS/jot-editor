@@ -38,8 +38,8 @@ namespace
     {
       ext.erase(ext.begin());
     }
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c)
-                   { return (char)std::tolower(c); });
+    std::transform(
+        ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
     return ext;
   }
 
@@ -123,12 +123,12 @@ void TabOrder::sync(std::vector<FileBuffer> &buffers, long long current_uid, Tab
   const auto alive = [&live](long long uid)
   { return std::find(live.begin(), live.end(), uid) != live.end(); };
 
-  order_.erase(std::remove_if(order_.begin(), order_.end(), [&](long long uid)
-                              { return !alive(uid); }),
-               order_.end());
-  pinned_.erase(std::remove_if(pinned_.begin(), pinned_.end(), [&](long long uid)
-                               { return !alive(uid); }),
-                pinned_.end());
+  order_.erase(
+      std::remove_if(order_.begin(), order_.end(), [&](long long uid) { return !alive(uid); }),
+      order_.end());
+  pinned_.erase(
+      std::remove_if(pinned_.begin(), pinned_.end(), [&](long long uid) { return !alive(uid); }),
+      pinned_.end());
   for (auto it = letters_.begin(); it != letters_.end();)
   {
     it = alive(it->first) ? std::next(it) : letters_.erase(it);
@@ -328,26 +328,30 @@ void TabOrder::sort(const std::vector<FileBuffer> &buffers, TabSort by)
   }
   const bool by_uid = by == TabSort::TAB_SORT_BUFFER;
   const bool by_index = by == TabSort::TAB_SORT_WINDOW;
-  std::stable_sort(rest.begin(), rest.end(), [&](long long a, long long b)
-  {
-    if (by_uid)
-    {
-      return a < b;
-    }
-    if (by_index)
-    {
-      return live_index(buffers, a) < live_index(buffers, b);
-    }
-    const int ia = live_index(buffers, a);
-    const int ib = live_index(buffers, b);
-    const std::string ka = ia >= 0 ? sort_key(buffers[(size_t)ia], by) : std::string();
-    const std::string kb = ib >= 0 ? sort_key(buffers[(size_t)ib], by) : std::string();
-    if (ka == kb)
-    {
-      return a < b;
-    }
-    return ka < kb;
-  });
+  std::stable_sort(rest.begin(),
+                   rest.end(),
+                   [&](long long a, long long b)
+                   {
+                     if (by_uid)
+                     {
+                       return a < b;
+                     }
+                     if (by_index)
+                     {
+                       return live_index(buffers, a) < live_index(buffers, b);
+                     }
+                     const int ia = live_index(buffers, a);
+                     const int ib = live_index(buffers, b);
+                     const std::string ka =
+                         ia >= 0 ? sort_key(buffers[(size_t)ia], by) : std::string();
+                     const std::string kb =
+                         ib >= 0 ? sort_key(buffers[(size_t)ib], by) : std::string();
+                     if (ka == kb)
+                     {
+                       return a < b;
+                     }
+                     return ka < kb;
+                   });
   std::vector<long long> merged = pinned;
   merged.insert(merged.end(), rest.begin(), rest.end());
   order_.swap(merged);
@@ -355,7 +359,9 @@ void TabOrder::sort(const std::vector<FileBuffer> &buffers, TabSort by)
 
 namespace TabStrip
 {
-  bool allocate_widths(const std::vector<int> &natural, int available, int min_cells,
+  bool allocate_widths(const std::vector<int> &natural,
+                       int available,
+                       int min_cells,
                        std::vector<int> &out)
   {
     out.clear();
@@ -427,9 +433,8 @@ namespace TabStrip
     bases.reserve(paths.size());
     for (const std::string &path : paths)
     {
-      const std::string base = path.empty()
-                                   ? std::string()
-                                   : std::filesystem::path(path).filename().string();
+      const std::string base =
+          path.empty() ? std::string() : std::filesystem::path(path).filename().string();
       bases.push_back(base.empty() ? "[No Name]" : base);
     }
 
@@ -438,8 +443,7 @@ namespace TabStrip
     // i.e. one file open twice) falls back to the whole path.
     const auto prefixed = [&](size_t i)
     {
-      const std::string parent =
-          std::filesystem::path(paths[i]).parent_path().filename().string();
+      const std::string parent = std::filesystem::path(paths[i]).parent_path().filename().string();
       if (paths[i].empty() || parent.empty())
       {
         return paths[i].empty() ? bases[i] : paths[i];

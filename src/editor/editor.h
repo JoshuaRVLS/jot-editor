@@ -51,7 +51,7 @@ class HostCoreAPI;
 class HostRenderAPI;
 class HostIOAPI;
 class UIGui;
-struct SidePanelView; // defined in jot/lua/api.h (included by renderers)
+struct SidePanelView; // defined in lua/api.h (included by renderers)
 struct HomeView;      // the home screen's rows, same header as SidePanelView
 
 class Editor : private EditorState
@@ -204,7 +204,7 @@ private:
   // one, plus the winbar when this pane has one (the workspace strip is global
   // and sits above the panes, not inside them). update_pane_layout stores the
   // answer on the pane; everything else reads it back through pane_content_top /
-  // pane_viewport_h (jot/model/panes.h), so the rule lives in one place.
+  // pane_viewport_h (editor/model/panes.h), so the rule lives in one place.
   int pane_header_height(const SplitPane &pane) const
   {
     return pane_tab_strip_height(pane) + (pane_has_winbar(pane) ? winbar_height : 0);

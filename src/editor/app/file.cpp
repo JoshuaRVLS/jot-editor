@@ -701,7 +701,7 @@ bool Editor::save_buffer_at(int index, bool announce)
   }
 
   // What a save cleans on its way to the disk. The built-in reindent
-  // (features/save_hygiene.cpp) rebases the leading whitespace on the indent
+  // (workspace/save_hygiene.cpp) rebases the leading whitespace on the indent
   // size in settings, then the trailing-space rule drops the stray blanks -
   // both in the buffer as well as in the bytes, so what is on screen is what
   // landed on disk. The two run in one pass through the edit hooks below, so a

@@ -12,7 +12,7 @@
 // calls) against a loaded buffer, which is where the splice and the caret
 // placement are decided.
 #include "editor.h"
-#include "features/emmet.h"
+#include "extras/emmet/expand.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

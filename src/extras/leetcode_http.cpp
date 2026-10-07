@@ -1,4 +1,4 @@
-#include "features/leetcode_http.h"
+#include "extras/leetcode_http.h"
 
 #include <curl/curl.h>
 
@@ -27,7 +27,8 @@ namespace LeetCodeHttp
     std::string trim(std::string value)
     {
       const size_t first = value.find_first_not_of(" \t\r\n");
-      if (first == std::string::npos) return {};
+      if (first == std::string::npos)
+        return {};
       const size_t last = value.find_last_not_of(" \t\r\n");
       return value.substr(first, last - first + 1);
     }
@@ -55,11 +56,10 @@ namespace LeetCodeHttp
 
     bool safe_header(const Header &header)
     {
-      return !header.name.empty()
-             && header.name.find_first_of("\r\n:") == std::string::npos
+      return !header.name.empty() && header.name.find_first_of("\r\n:") == std::string::npos
              && header.value.find_first_of("\r\n") == std::string::npos;
     }
-  }
+  } // namespace
 
   bool valid_request(const Request &request, std::string &error)
   {
@@ -69,8 +69,9 @@ namespace LeetCodeHttp
       return false;
     }
     if (request.method.empty()
-        || !std::all_of(request.method.begin(), request.method.end(), [](unsigned char c)
-                        { return std::isalpha(c) != 0; }))
+        || !std::all_of(request.method.begin(),
+                        request.method.end(),
+                        [](unsigned char c) { return std::isalpha(c) != 0; }))
     {
       error = "invalid HTTP method";
       return false;
@@ -94,7 +95,8 @@ namespace LeetCodeHttp
   Response perform(const Request &request)
   {
     Response response;
-    if (!valid_request(request, response.error)) return response;
+    if (!valid_request(request, response.error))
+      return response;
 
     static std::once_flag curl_init;
     static CURLcode init_result = CURLE_FAILED_INIT;

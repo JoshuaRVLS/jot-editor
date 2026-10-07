@@ -33,8 +33,8 @@ namespace Winbar
     std::string path;        // absolute path for path crumbs, empty for symbols
     int line = 0;            // symbol target (0-based), 0 for path crumbs
     int col = 0;
-    int depth = 0;           // symbol nesting depth, 0 for path crumbs
-    bool current = false;    // the innermost crumb (the cursor's own symbol)
+    int depth = 0;        // symbol nesting depth, 0 for path crumbs
+    bool current = false; // the innermost crumb (the cursor's own symbol)
   };
 
   struct Entry

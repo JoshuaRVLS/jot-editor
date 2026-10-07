@@ -1,4 +1,4 @@
-// The editor side of the HTTP client (see features/http_file.h for the request
+// The editor side of the HTTP client (see workspace/http_file.h for the request
 // format): what `:rest` does with a parsed request and where its answer lands.
 //
 // The run itself is a curl on the worker queue, for the same reason the git
@@ -15,7 +15,7 @@
 #include "base/shell_util.h"
 #include "base/string_util.h"
 #include "editor.h"
-#include "features/http_file.h"
+#include "workspace/http_file.h"
 
 #include <chrono>
 #include <cstdio>

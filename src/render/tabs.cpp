@@ -8,7 +8,7 @@
 // up), so a buffer that only another pane has open is still visible and
 // reachable; panes keep their local tab lists as history (Ctrl+Tab, close
 // focus) but draw no strip of their own. The order, its pins and the
-// jump-to-buffer letters live in features/tab_order.h.
+// jump-to-buffer letters live in ui/tab_order.h.
 #include "editor.h"
 #include "editor/file_icons.h"
 #include "lua/api.h"
@@ -62,7 +62,7 @@ namespace
 // The order is reconciled against the live buffers here, in the one place that
 // paints the strip: the model is fed the buffer vector, hands identities to
 // buffers it has not seen and drops the ones that are gone (see
-// features/tab_order.h for why it is a reconciliation rather than a set of
+// ui/tab_order.h for why it is a reconciliation rather than a set of
 // open/close notifications).
 void Editor::sync_tab_order()
 {

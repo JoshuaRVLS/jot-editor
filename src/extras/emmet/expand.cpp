@@ -16,7 +16,7 @@
 // leans on: a Tab over ordinary prose, a word in a comment, or a JSX expression
 // has to fall through to the editor's own indentation, so anything that does not
 // parse is left exactly as it was typed.
-#include "emmet.h"
+#include "extras/emmet/expand.h"
 #include "base/string_util.h"
 
 #include <algorithm>
@@ -132,9 +132,20 @@ namespace
 
   const std::vector<std::string> &void_elements()
   {
-    static const std::vector<std::string> tags = {"area",  "base",   "br",   "col",    "embed",
-                                                  "hr",    "img",    "input", "link",  "meta",
-                                                  "param", "source", "track", "wbr"};
+    static const std::vector<std::string> tags = {"area",
+                                                  "base",
+                                                  "br",
+                                                  "col",
+                                                  "embed",
+                                                  "hr",
+                                                  "img",
+                                                  "input",
+                                                  "link",
+                                                  "meta",
+                                                  "param",
+                                                  "source",
+                                                  "track",
+                                                  "wbr"};
     return tags;
   }
 
@@ -177,7 +188,7 @@ namespace
             {"time", {{"datetime", ""}}},
             {"td", {{"colspan", ""}, {"rowspan", ""}}},
             {"th", {{"colspan", ""}, {"rowspan", ""}}},
-        };
+    };
     return table;
   }
 
@@ -212,7 +223,9 @@ namespace
   class MarkupParser
   {
   public:
-    explicit MarkupParser(const std::string &text) : text_(text) {}
+    explicit MarkupParser(const std::string &text) : text_(text)
+    {
+    }
 
     bool run(std::vector<Node> &out)
     {
@@ -517,9 +530,9 @@ namespace
       for (const auto &pair : entry.second)
       {
         const bool named = std::any_of(node.attrs.begin(),
-                                      node.attrs.end(),
-                                      [&](const std::pair<std::string, std::string> &attr)
-                                      { return attr.first == pair.first; });
+                                       node.attrs.end(),
+                                       [&](const std::pair<std::string, std::string> &attr)
+                                       { return attr.first == pair.first; });
         if (named)
           continue;
         if (pair.first == "id" && !node.id.empty())
@@ -701,16 +714,29 @@ namespace
         {"position",
          {{"a", "absolute"}, {"f", "fixed"}, {"r", "relative"}, {"s", "static"}, {"st", "sticky"}}},
         {"text-align",
-         {{"c", "center"}, {"e", "end"}, {"j", "justify"}, {"l", "left"}, {"r", "right"}, {"s", "start"}}},
+         {{"c", "center"},
+          {"e", "end"},
+          {"j", "justify"},
+          {"l", "left"},
+          {"r", "right"},
+          {"s", "start"}}},
         {"overflow", {{"a", "auto"}, {"h", "hidden"}, {"s", "scroll"}, {"v", "visible"}}},
         {"overflow-x", {{"a", "auto"}, {"h", "hidden"}, {"s", "scroll"}, {"v", "visible"}}},
         {"overflow-y", {{"a", "auto"}, {"h", "hidden"}, {"s", "scroll"}, {"v", "visible"}}},
         {"float", {{"l", "left"}, {"n", "none"}, {"r", "right"}}},
         {"clear", {{"b", "both"}, {"l", "left"}, {"n", "none"}, {"r", "right"}}},
         {"align-items",
-         {{"b", "baseline"}, {"c", "center"}, {"fe", "flex-end"}, {"fs", "flex-start"}, {"s", "stretch"}}},
+         {{"b", "baseline"},
+          {"c", "center"},
+          {"fe", "flex-end"},
+          {"fs", "flex-start"},
+          {"s", "stretch"}}},
         {"align-self",
-         {{"a", "auto"}, {"c", "center"}, {"fe", "flex-end"}, {"fs", "flex-start"}, {"s", "stretch"}}},
+         {{"a", "auto"},
+          {"c", "center"},
+          {"fe", "flex-end"},
+          {"fs", "flex-start"},
+          {"s", "stretch"}}},
         {"align-content",
          {{"c", "center"}, {"sa", "space-around"}, {"sb", "space-between"}, {"s", "stretch"}}},
         {"justify-content",
@@ -752,8 +778,7 @@ namespace
         {"background-repeat",
          {{"nr", "no-repeat"}, {"r", "repeat"}, {"rx", "repeat-x"}, {"ry", "repeat-y"}}},
         {"background-size", {{"a", "auto"}, {"c", "cover"}, {"ct", "contain"}}},
-        {"vertical-align",
-         {{"b", "bottom"}, {"bl", "baseline"}, {"m", "middle"}, {"t", "top"}}},
+        {"vertical-align", {{"b", "bottom"}, {"bl", "baseline"}, {"m", "middle"}, {"t", "top"}}},
         {"flex", {{"a", "auto"}, {"i", "initial"}, {"n", "none"}}},
     };
     const auto found = table.find(property);
@@ -763,11 +788,21 @@ namespace
   // Properties whose bare number is not a length: `z-index: 10`, not `10px`.
   bool unitless_property(const std::string &property)
   {
-    static const std::vector<std::string> properties = {"aspect-ratio", "column-count", "flex",
-                                                        "flex-grow",    "flex-shrink",  "font-weight",
-                                                        "grid-column",  "grid-row",     "line-height",
-                                                        "opacity",      "order",        "orphans",
-                                                        "tab-size",     "widows",       "z-index",
+    static const std::vector<std::string> properties = {"aspect-ratio",
+                                                        "column-count",
+                                                        "flex",
+                                                        "flex-grow",
+                                                        "flex-shrink",
+                                                        "font-weight",
+                                                        "grid-column",
+                                                        "grid-row",
+                                                        "line-height",
+                                                        "opacity",
+                                                        "order",
+                                                        "orphans",
+                                                        "tab-size",
+                                                        "widows",
+                                                        "z-index",
                                                         "zoom"};
     return std::find(properties.begin(), properties.end(), property) != properties.end();
   }
@@ -1015,7 +1050,8 @@ namespace Emmet
     return token;
   }
 
-  bool expand_markup(const std::string &abbr, const std::string &indent_unit, bool jsx, Expansion &out)
+  bool
+  expand_markup(const std::string &abbr, const std::string &indent_unit, bool jsx, Expansion &out)
   {
     if (abbr.empty())
       return false;

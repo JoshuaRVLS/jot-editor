@@ -367,7 +367,7 @@ void Editor::pane_show_buffer(int buffer_index)
   current_buffer = buffer_index;
   restore_pane_view(current_pane);
   needs_redraw = true;
-  // A file change is activity in its own right (jot/app/coding_time.cpp): the
+  // A file change is activity in its own right (extras/coding_time/wiring.cpp): the
   // heartbeat for the file now in front of the user is what starts its clock, so
   // it goes out now rather than waiting for the first keystroke in it.
   note_editing_activity(false);

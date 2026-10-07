@@ -1,14 +1,14 @@
 #ifndef JOT_STATE_WINBAR_STATE_H
 #define JOT_STATE_WINBAR_STATE_H
 
-#include "features/winbar.h" // Winbar::Crumb, Winbar::Entry, WinbarMode
+#include "render/winbar_model.h" // Winbar::Crumb, Winbar::Entry, WinbarMode
 #include <string>
 #include <vector>
 
 // The winbar: the breadcrumb row a pane spends above its text and the drop-down
 // a crumb opens.
 //
-// The model it presents lives in features/winbar.h (where crumbs come from and
+// The model it presents lives in render/winbar_model.h (where crumbs come from and
 // what a crumb's menu offers); this is the state around it: the setting, the
 // symbol cache the chain is built from, and the open menu.
 //

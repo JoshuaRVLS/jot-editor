@@ -6,7 +6,7 @@
 // wakatime-cli, and a mistake in any of them shows up as an editor that quietly
 // stops tracking. The end-to-end path (a real spawn, the chip on the bar) is
 // test/wakatime_probe.py's job, on a pty with a stub cli.
-#include "features/wakatime.h"
+#include "extras/wakatime.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
 #include <string>

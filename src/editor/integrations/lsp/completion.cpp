@@ -128,7 +128,7 @@ namespace
   // tier the typed word puts it in (an exact hit, a word the typed text leads
   // into, or the open list with nothing typed) and the points the server's own
   // hints carry. The tier is compared first and the learned relevance
-  // (features/completion_rank.h) second, so a habit beats a shorter name and
+  // (lsp/completion_rank.h) second, so a habit beats a shorter name and
   // neither can lift a row over an exact match.
   //
   // The points are in the same units as a label character -- the length penalty
@@ -1007,7 +1007,7 @@ bool Editor::apply_selected_lsp_completion()
     return false;
   }
 
-  // One acceptance, kept for the next list (features/completion_rank.h): the user
+  // One acceptance, kept for the next list (lsp/completion_rank.h): the user
   // reaching for this name is the whole signal the model learns from.
   record_completion_use(completion_name(item));
 

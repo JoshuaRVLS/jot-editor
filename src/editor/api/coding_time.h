@@ -4,18 +4,18 @@
 //
 // One chip reports how long was coded today in the workspace in front of the
 // user, and two sources can answer for it: WakaTime's own total for today, read
-// out of wakatime-cli (features/wakatime.h), or the local store kept beside the
-// config (features/coding_time.h) for when the integration is off, has not
+// out of wakatime-cli (extras/wakatime.h), or the local store kept beside the
+// config (extras/coding_time/probe.h) for when the integration is off, has not
 // answered, or has no account to answer with. The Extensions category in
 // :settings is where WakaTime is turned on; the local store runs either way,
 // because it is what the chip falls back to.
 //
 // The cli behind all of it is installed on the first enable when PATH has none
-// (features/wakatime.h writes the script, the install runs off the keystroke
+// (extras/wakatime.h writes the script, the install runs off the keystroke
 // path, and the message line says what came of it), and every run after that
 // goes to the same managed copy until the user deletes it.
 //
-// This file is jot/app/coding_time.cpp -- the two sources share the ticks the
+// This file is extras/coding_time/wiring.cpp -- the two sources share the ticks the
 // editor hands out (a keypress, a save, a file switch, and the frame loop's
 // once-a-second pass), which is why they share a module.
 private:

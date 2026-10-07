@@ -26,5 +26,6 @@ set(JOT_RENDER_SOURCES
   render/sync.cpp
   render/tabs.cpp
   render/winbar.cpp
+  render/winbar_model.cpp
   render/outline.cpp
 )

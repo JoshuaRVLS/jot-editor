@@ -1,13 +1,9 @@
 set(JOT_EDITOR_SOURCES
   editor/app/bookmarks.cpp
   editor/app/decorations.cpp
-  editor/app/discord_session.cpp
   editor/app/editor.cpp
-  editor/app/emmet.cpp
   editor/app/auto_save.cpp
-  editor/app/bible_client.cpp
   editor/app/buffers.cpp
-  editor/app/coding_time.cpp
   editor/app/cpp_definitions.cpp
   editor/app/web_index.cpp
   editor/app/file.cpp

@@ -1,8 +1,8 @@
 // The Bible reader's pure half (src/features/bible.*): how a typed reference
 // becomes a chapter and a chapter's JSON becomes the `[Bible]` tab's lines.
-// No network here -- the editor side (jot/app/bible_client.cpp) is pinned by
+// No network here -- the editor side (extras/bible_client.cpp) is pinned by
 // test/bible_probe.py against a local fixture server.
-#include "features/bible.h"
+#include "extras/bible.h"
 
 #include <algorithm>
 #include <string>

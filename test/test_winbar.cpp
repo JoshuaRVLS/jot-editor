@@ -9,7 +9,7 @@
 // land where the native geometry says they do.
 #include "editor.h"
 #include "editor/model/panes.h"
-#include "features/winbar.h"
+#include "render/winbar_model.h"
 #include "syntax/index.h"
 #include "ui/ui.h"
 

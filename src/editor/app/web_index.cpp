@@ -1,5 +1,5 @@
 // The editor side of the workspace CSS vocabulary: when to scan for it, and
-// what to do with it (see features/web_completion.h for the scan itself).
+// what to do with it (see workspace/web_completion.h for the scan itself).
 //
 // The scan is a walk of the whole tree, so it runs on the worker queue and only
 // its result is applied here, on the main thread. The bookkeeping is the same
@@ -16,7 +16,7 @@
 // Unlike the C++ definition checks the index is not a diagnostic: nothing is
 // published anywhere, it is only read when a completion is being built.
 #include "editor.h"
-#include "features/web_completion.h"
+#include "workspace/web_completion.h"
 
 #include <utility>
 

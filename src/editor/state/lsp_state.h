@@ -100,7 +100,7 @@ struct LspUiState
   bool lsp_completion_preview_was_withheld = false;
   std::vector<LSPCompletionItem> lsp_completion_all_items;
   std::vector<LSPCompletionItem> lsp_completion_items;
-  // What the popup learned about this user (features/completion_rank.h): the
+  // What the popup learned about this user (lsp/completion_rank.h): the
   // names accepted, counted per language, and the words of the buffer being
   // completed. The table is read from the config home on the first completion and
   // written back on shutdown, like the workspace session; the context is rebuilt

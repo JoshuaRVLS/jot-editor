@@ -3,7 +3,7 @@
 
 // How much time was coded here, kept locally (the Extensions settings category
 // holds the switch that decides whether the statusline shows WakaTime's own
-// total instead -- features/wakatime.h is that other source).
+// total instead -- extras/wakatime.h is that other source).
 //
 // This is the fallback that makes the number worth showing with the integration
 // off: the totals are stored per workspace and day, so opening the editor again
@@ -69,7 +69,7 @@ namespace coding_time
   Totals parse(const std::string &text);
 
   // The store's own file, and the two calls that move it: the same shape as the
-  // completion table next to it (features/completion_rank.h).
+  // completion table next to it (lsp/completion_rank.h).
   std::string store_path();
   bool load_totals(const std::string &path, Totals &out);
   bool save_totals(const std::string &path, const Totals &totals);

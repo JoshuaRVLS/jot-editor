@@ -168,7 +168,7 @@ struct FileTabSegment
   bool visible_elsewhere = false;
   bool hovered = false;
   // The letter this tab answers to in jump-to-buffer mode, 0 when the mode is
-  // off (features/tab_order.h assigns it and keeps it stable).
+  // off (ui/tab_order.h assigns it and keeps it stable).
   char jump_letter = 0;
   // Where the state glyphs are drawn; -1 when the tab is too narrow for them.
   int marker_x = -1;

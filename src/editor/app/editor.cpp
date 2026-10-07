@@ -200,7 +200,7 @@ void Editor::apply_config_live()
       update_pane_layout();
     }
   }
-  // WakaTime (features/wakatime.h) mirrors its own switch here rather than
+  // WakaTime (extras/wakatime.h) mirrors its own switch here rather than
   // reading it per keystroke, and its one-time cli/api-key check waits for the
   // worker queue -- which does not exist yet when this runs from the
   // constructor, so run() calls in again once it does.
@@ -428,7 +428,7 @@ void Editor::initialize_state_defaults()
   blink_anchor_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now().time_since_epoch())
                         .count();
-  // The coding-time chip's own clock (features/coding_time.h): the local store`
+  // The coding-time chip's own clock (extras/coding_time/probe.h): the local store`
   // total for this workspace and day, carried over from earlier sessions today,
   // with the credit window opened at this session's start so the first minutes
   // count. The workspace this opens with may not be the one the user asks for

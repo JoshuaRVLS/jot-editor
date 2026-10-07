@@ -2,8 +2,8 @@
 #define JOT_STATE_VIEW_STATE_H
 
 #include "editor/model/theme.h"       // Theme
-#include "features/coding_time.h"     // coding_time::Counter, Totals
-#include "features/wakatime.h"        // jot_wakatime::Options (api/coding_time.h)
+#include "extras/coding_time/probe.h" // coding_time::Counter, Totals
+#include "extras/wakatime.h"          // jot_wakatime::Options (api/coding_time.h)
 #include "syntax/color_codes.h"       // jot_color::SpanCache
 #include "syntax/color_definitions.h" // jot_color::Definitions
 #include <cstdint>
@@ -34,7 +34,7 @@ struct ViewState
   Theme theme;
   std::string current_theme_name;
 
-  // Inline colour preview (features/color_codes.cpp): its options are read from
+  // Inline colour preview (syntax/color_codes.cpp): its options are read from
   // config at point of use in render_buffer_content, which is what makes a
   // settings change (or :reload) apply on the next frame with no plumbing. The
   // scan memo is content-hash validated, so it needs no invalidation and is
@@ -72,7 +72,7 @@ struct ViewState
   // the Editor::status_coding_label() that formats the label it holds.)
   std::string status_coding_text;
 
-  // The local coding-time store (features/coding_time.h): every workspace and
+  // The local coding-time store (extras/coding_time/probe.h): every workspace and
   // day it knows about, the running counter for the workspace in front of the
   // user, and the key that counter belongs to (which changes at midnight, and
   // when the workspace does). `coding_time_dirty` is set when the total has
@@ -83,7 +83,7 @@ struct ViewState
   bool coding_time_dirty = false;
   long long coding_time_flushed_ms = 0;
 
-  // WakaTime coding time (features/wakatime.h): the setting in force, the cli's
+  // WakaTime coding time (extras/wakatime.h): the setting in force, the cli's
   // answer for today's total and when it was last asked for one, the heartbeat
   // rule's two memories (the file it last sent and when), and the one-time
   // checks that keep the editor from spawning a cli it does not have. An empty
@@ -94,7 +94,7 @@ struct ViewState
   bool wakatime_cli_ready = false; // it passed, so spawning is worth it
   // The binary that check settled on: empty when PATH has a wakatime-cli of the
   // user's own, otherwise the absolute path of the one this editor installed
-  // into the WakaTime home (features/wakatime.h), which is what every spawn and
+  // into the WakaTime home (extras/wakatime.h), which is what every spawn and
   // every poll below is then run from.
   std::string wakatime_cli_path;
   // The wakatime_api_key the check above ran against, so typing a key in

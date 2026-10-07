@@ -246,7 +246,7 @@ namespace
   // The shapes the renderer spells out (render/frame.cpp); anything else is
   // read as the bar.
   const char *const kCursorStyles[] = {"block", "bar"};
-  // Upstream neoscroll's easing names (see features/smooth_scroll.h).
+  // Upstream neoscroll's easing names (see ui/smooth_scroll.h).
   const char *const kEasings[] = {
       "linear", "quadratic", "cubic", "quartic", "quintic", "circular", "sine"};
 

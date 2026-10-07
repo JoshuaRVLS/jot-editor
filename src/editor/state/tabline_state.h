@@ -1,13 +1,13 @@
 #ifndef JOT_STATE_TABLINE_STATE_H
 #define JOT_STATE_TABLINE_STATE_H
 
-#include "features/tab_order.h" // TabOrder, TabInsert
+#include "ui/tab_order.h" // TabOrder, TabInsert
 
 // The workspace tab strip: row 0, above the panes.
 //
 // The strip shows every buffer once, in the workspace's own order -- panes keep
 // their local tab lists as history (Ctrl+Tab, close-focus) but no longer draw a
-// strip of their own. See features/tab_order.h for the order itself; this is the
+// strip of their own. See ui/tab_order.h for the order itself; this is the
 // presentation state around it: the config knobs, where the strip is scrolled
 // to, and what the pointer is doing to it.
 //
@@ -16,7 +16,7 @@
 struct TablineState
 {
   // The workspace's buffer order, its pins and its jump letters
-  // (features/tab_order.h).
+  // (ui/tab_order.h).
   TabOrder tab_order;
   // `tabline` / `tabline_auto_hide`: the strip hides itself when there are this
   // many tabs or fewer (0 = never hide).

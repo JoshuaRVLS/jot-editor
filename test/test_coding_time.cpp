@@ -10,8 +10,8 @@
 // point of it is that reopening the editor later today continues the total
 // rather than restarting it.
 #include "editor.h"
-#include "features/coding_time.h"
-#include "features/status_clock.h"
+#include "extras/coding_time/probe.h"
+#include "extras/status_clock.h"
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdio>

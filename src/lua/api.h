@@ -2,7 +2,7 @@
 #define LUA_API_H
 
 #include "dap/client.h"
-#include "features/leetcode_http.h"
+#include "extras/leetcode_http.h"
 #include "lsp/client.h"
 #include "text_features.h"
 #include <array>
@@ -398,7 +398,7 @@ public:
   void push_mark_list(lua_State *L);
   void register_status_segment(lua_State *L);
   // Expands the Emmet abbreviation at the cursor through the snippet engine
-  // (jot/app/emmet.cpp). False when there was nothing to expand.
+  // (extras/emmet/wiring.cpp). False when there was nothing to expand.
   bool expand_emmet();
   void unregister_status_segment(lua_State *L);
   std::vector<RenderedStatusSegment> render_status_segments();

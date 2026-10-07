@@ -1,7 +1,7 @@
 #include "editor.h"
-#include "features/winbar.h"
 #include "lua/api.h"
 #include "render/pane_edges.h"
+#include "render/winbar_model.h"
 #include "syntax/index.h"
 #include "ui/text.h"
 
@@ -13,7 +13,7 @@
 namespace
 {
 
-  // The kind -> color mapping now lives with the winbar (features/winbar.h),
+  // The kind -> color mapping now lives with the winbar (render/winbar_model.h),
   // which paints the same kinds as breadcrumbs; the outline keeps its own name
   // for it so the call sites below read the same.
   int outline_symbol_color(const Theme &theme, const std::string &kind)

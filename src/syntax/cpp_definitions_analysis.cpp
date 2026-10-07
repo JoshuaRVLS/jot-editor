@@ -1,4 +1,4 @@
-// The checker half of src/features/cpp_definitions.*: what the parsed records
+// The checker half of src/syntax/cpp_definitions.*: what the parsed records
 // mean together.
 //
 // One signature is one key (scope, name, canonical parameters, cv/ref suffix),

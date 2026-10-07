@@ -512,7 +512,7 @@ void Editor::handle_mouse_input(int x,
   }
 
   // Vertical wheel over the code area: a viewport-only scroll, animated over a
-  // few frames (features/smooth_scroll.h). Scrolls arriving while the previous
+  // few frames (ui/smooth_scroll.h). Scrolls arriving while the previous
   // one is still easing extend it instead of restarting it, so a burst reads as
   // one continuous glide.
   if (is_scroll_up || is_scroll_down)

@@ -447,7 +447,7 @@ namespace lsp_internal
 
   // A style sheet: the file type whose completions the workspace's own CSS
   // vocabulary serves (`class="..."` names aside -- see
-  // features/web_completion.h). A style sheet usually has no server attached at
+  // workspace/web_completion.h). A style sheet usually has no server attached at
   // all, so this is also the type the request path seeds from the index before
   // it asks anyone.
   inline bool is_style_lsp_filepath(const std::string &filepath)

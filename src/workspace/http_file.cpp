@@ -6,7 +6,7 @@
 // body full of `#` lines, must survive untouched. The body therefore begins at
 // the first blank line after the request line (or at the first line that cannot
 // be a header) and runs to the next `###`.
-#include "features/http_file.h"
+#include "workspace/http_file.h"
 
 #include "base/shell_util.h"
 
@@ -36,15 +36,23 @@ namespace HttpFile
 
     std::string lower_copy(std::string s)
     {
-      std::transform(s.begin(), s.end(), s.begin(),
-                     [](unsigned char c) { return (char)std::tolower(c); });
+      std::transform(
+          s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
       return s;
     }
 
     bool is_method(const std::string &token)
     {
-      static const char *const kMethods[] = {"GET",    "POST",   "PUT",    "DELETE", "PATCH",
-                                             "HEAD",   "OPTIONS", "TRACE",  "CONNECT", "GRAPHQL"};
+      static const char *const kMethods[] = {"GET",
+                                             "POST",
+                                             "PUT",
+                                             "DELETE",
+                                             "PATCH",
+                                             "HEAD",
+                                             "OPTIONS",
+                                             "TRACE",
+                                             "CONNECT",
+                                             "GRAPHQL"};
       for (const char *m : kMethods)
       {
         if (token == m)
@@ -125,9 +133,7 @@ namespace HttpFile
     }
 
     // `GET https://host/path` (an optional trailing `HTTP/1.1` is dropped).
-    bool parse_request_line(const std::string &trimmed,
-                            std::string &method,
-                            std::string &url)
+    bool parse_request_line(const std::string &trimmed, std::string &method, std::string &url)
     {
       const size_t sp = trimmed.find_first_of(" \t");
       if (sp == std::string::npos)
@@ -194,8 +200,8 @@ namespace HttpFile
         if (var != file_vars.end())
         {
           // A var that references itself would spin; the depth cap stops it.
-          value = depth < 8 ? expand(var->second, file_vars, dynamic, depth + 1, missing)
-                            : var->second;
+          value =
+              depth < 8 ? expand(var->second, file_vars, dynamic, depth + 1, missing) : var->second;
           found = true;
         }
         else if (!name.empty() && name[0] == '$')
@@ -274,7 +280,8 @@ namespace HttpFile
     std::string pending_name;
     int section_start = 0;
 
-    auto flush = [&](int end_line) {
+    auto flush = [&](int end_line)
+    {
       if (have_request)
       {
         current.end_line = std::max(current.start_line, end_line);
@@ -359,8 +366,8 @@ namespace HttpFile
           continue;
         }
         const size_t colon = trimmed.find(':');
-        if (colon != std::string::npos && colon > 0
-            && trimmed.find_first_of(" \t") > colon && is_header_name(trimmed.substr(0, colon)))
+        if (colon != std::string::npos && colon > 0 && trimmed.find_first_of(" \t") > colon
+            && is_header_name(trimmed.substr(0, colon)))
         {
           Header header;
           header.name = trim_copy(trimmed.substr(0, colon));
@@ -428,9 +435,7 @@ namespace HttpFile
     return -1;
   }
 
-  DynamicVars make_dynamic_vars(unsigned long long now_ms,
-                                unsigned random_a,
-                                unsigned random_b)
+  DynamicVars make_dynamic_vars(unsigned long long now_ms, unsigned random_a, unsigned random_b)
   {
     DynamicVars vars;
 
@@ -463,9 +468,7 @@ namespace HttpFile
     return vars;
   }
 
-  Resolved resolve(const Request &request,
-                   const Vars &file_vars,
-                   const DynamicVars &dynamic)
+  Resolved resolve(const Request &request, const Vars &file_vars, const DynamicVars &dynamic)
   {
     Resolved out;
     out.name = request.name;
@@ -667,60 +670,60 @@ namespace HttpFile
       }
       switch (c)
       {
-        case '"':
-          in_string = true;
-          open_pending = false;
-          out.push_back(c);
-          break;
-        case '{':
-        case '[':
-          out.push_back(c);
-          depth++;
+      case '"':
+        in_string = true;
+        open_pending = false;
+        out.push_back(c);
+        break;
+      case '{':
+      case '[':
+        out.push_back(c);
+        depth++;
+        out.push_back('\n');
+        out.append((size_t)depth * indent_unit.size(), ' ');
+        open_pending = true;
+        break;
+      case '}':
+      case ']':
+        if (depth <= 0)
+        {
+          return std::nullopt;
+        }
+        depth--;
+        if (open_pending)
+        {
+          // `[]` and `{}` stay on one line instead of opening a blank row.
+          while (!out.empty() && (out.back() == ' ' || out.back() == '\n'))
+          {
+            out.pop_back();
+          }
+        }
+        else
+        {
           out.push_back('\n');
           out.append((size_t)depth * indent_unit.size(), ' ');
-          open_pending = true;
-          break;
-        case '}':
-        case ']':
-          if (depth <= 0)
-          {
-            return std::nullopt;
-          }
-          depth--;
-          if (open_pending)
-          {
-            // `[]` and `{}` stay on one line instead of opening a blank row.
-            while (!out.empty() && (out.back() == ' ' || out.back() == '\n'))
-            {
-              out.pop_back();
-            }
-          }
-          else
-          {
-            out.push_back('\n');
-            out.append((size_t)depth * indent_unit.size(), ' ');
-          }
-          out.push_back(c);
-          open_pending = false;
-          break;
-        case ',':
-          out.push_back(c);
-          out.push_back('\n');
-          out.append((size_t)depth * indent_unit.size(), ' ');
-          open_pending = false;
-          break;
-        case ':':
-          out.append(": ");
-          break;
-        case ' ':
-        case '\t':
-        case '\r':
-        case '\n':
-          break;
-        default:
-          open_pending = false;
-          out.push_back(c);
-          break;
+        }
+        out.push_back(c);
+        open_pending = false;
+        break;
+      case ',':
+        out.push_back(c);
+        out.push_back('\n');
+        out.append((size_t)depth * indent_unit.size(), ' ');
+        open_pending = false;
+        break;
+      case ':':
+        out.append(": ");
+        break;
+      case ' ':
+      case '\t':
+      case '\r':
+      case '\n':
+        break;
+      default:
+        open_pending = false;
+        out.push_back(c);
+        break;
       }
     }
     if (in_string || depth != 0)
@@ -739,8 +742,7 @@ namespace HttpFile
     return format_json(response.body) ? ".json" : ".txt";
   }
 
-  std::vector<std::string> format_response(const Resolved &request,
-                                           const Response &response)
+  std::vector<std::string> format_response(const Resolved &request, const Response &response)
   {
     const bool as_json = response_extension(response) == ".json";
     const char *prefix = as_json ? "// " : "";
@@ -750,8 +752,8 @@ namespace HttpFile
     if (response.ok)
     {
       const long ms = (long)(response.seconds * 1000.0 + 0.5);
-      lines.push_back(std::string(prefix) + status_reason(response) + " · "
-                      + std::to_string(ms) + " ms · " + std::to_string(response.bytes) + " B");
+      lines.push_back(std::string(prefix) + status_reason(response) + " · " + std::to_string(ms)
+                      + " ms · " + std::to_string(response.bytes) + " B");
     }
     else
     {

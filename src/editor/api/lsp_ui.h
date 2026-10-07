@@ -123,7 +123,7 @@ void record_completion_use(const std::string &name);
 // file's own words (which decay with distance from the caret). 0 when learning
 // is off, which is what leaves the list in its plain order.
 int completion_rank_points(const std::string &name);
-// The workspace's own CSS vocabulary (features/web_completion.h): the class
+// The workspace's own CSS vocabulary (workspace/web_completion.h): the class
 // names and custom properties every file in the tree declares, offered inside
 // `class="..."` and `var(--)`. The scan runs on the worker queue and its
 // result is applied on the main thread; a request that arrives before the

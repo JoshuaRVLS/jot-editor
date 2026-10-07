@@ -94,23 +94,23 @@ void Config::load_defaults()
   // independent of this.
   settings["rainbow_brackets"] = "true";
   settings["auto_indent"] = "true";
-  // Emmet abbreviations (features/emmet.cpp): Tab expands `div.box>p` in a
+  // Emmet abbreviations (extras/emmet/expand.cpp): Tab expands `div.box>p` in a
   // markup file and `m10-20` in a style sheet. Off is the escape hatch for code
   // that presses Tab at the end of a word that happens to parse.
   settings["emmet"] = "true";
   settings["smart_paste_indent"] = "true";
   // Trailing whitespace is stray blanks in most files, so a save drops it
-  // (features/save_hygiene.cpp). Off is the escape hatch for a tree where every
+  // (workspace/save_hygiene.cpp). Off is the escape hatch for a tree where every
   // such line is meant to stay as it is; a file where the spaces are content
   // (markdown's hard line break) is left alone either way.
   settings["trim_trailing_whitespace_on_save"] = "true";
-  // The built-in reindent (features/save_hygiene.cpp): a save rebases a code
+  // The built-in reindent (workspace/save_hygiene.cpp): a save rebases a code
   // file's leading whitespace on `tab_size`, using the editor's own block rules
   // rather than an external formatter. Off is the escape hatch for a file whose
   // indentation is deliberately unusual; a language with no block rules here,
   // or a body inside a multi-line string, is left alone either way.
   settings["reindent_on_save"] = "true";
-  // The Bible reader (features/bible.h, app/bible_client.cpp): which
+  // The Bible reader (extras/bible.h, extras/bible_client.cpp): which
   // translation and commentary `:bible` reads, the API root (pointed at a
   // fixture server by tests), and how many verses of context one verse keeps
   // on each side when a passage is shown verse by verse.
@@ -125,16 +125,16 @@ void Config::load_defaults()
   settings["auto_detect_indent"] = "false";
   settings["show_line_numbers"] = "true";
   settings["relative_line_numbers"] = "false";
-  // Statusline time chips (features/status_clock.cpp): the local wall clock and
+  // Statusline time chips (extras/status_clock.cpp): the local wall clock and
   // how long was coded today, in the workspace in front of the user. Both are
   // optional segments, so a narrow bar drops them before the diagnostics and git
-  // chips. The coding chip is fed by the local store (features/coding_time.h)
+  // chips. The coding chip is fed by the local store (extras/coding_time/probe.h)
   // and reports WakaTime's own total for today once that integration below is
   // on and has answered; the key keeps its historical name, and its label says
   // what it now shows.
   settings["status_clock"] = "true";
   settings["status_coding_time"] = "true";
-  // WakaTime (features/wakatime.h): the Extensions category's one integration so
+  // WakaTime (extras/wakatime.h): the Extensions category's one integration so
   // far. Off by default, because it starts talking to an account and to
   // wakatime-cli. On, the editor sends heartbeats on saves and file changes and
   // the coding chip above reports the cli's total for today instead of the local
@@ -143,7 +143,7 @@ void Config::load_defaults()
   // out of ~/.wakatime.cfg itself, so an existing WakaTime setup needs no key
   // here at all. wakatime_api_url points at a self-hosted or WakaTime-compatible
   // server. Turning it on with no cli on PATH installs one into ~/.wakatime
-  // (features/wakatime.h), which is why the default is off.
+  // (extras/wakatime.h), which is why the default is off.
   settings["wakatime"] = "false";
   settings["wakatime_api_key"] = "";
   settings["wakatime_api_url"] = "";
@@ -171,7 +171,7 @@ void Config::load_defaults()
   settings["ai_stream"] = "true";
   settings["ai_temperature"] = "0.2";
   settings["ai_max_tokens"] = "0";
-  // Inline colour preview (features/color_codes.cpp): paint colour literals in
+  // Inline colour preview (syntax/color_codes.cpp): paint colour literals in
   // the colour they name. mode is background | foreground | virtualtext.
   settings["colorizer"] = "true";
   settings["colorizer_mode"] = "background";
@@ -216,7 +216,7 @@ void Config::load_defaults()
   settings["word_highlight"] = "true";
   settings["render_fps"] = "120";
   settings["idle_fps"] = "60";
-  // Smooth scrolling (features/smooth_scroll.cpp, neoscroll.nvim's model): the
+  // Smooth scrolling (ui/smooth_scroll.cpp, neoscroll.nvim's model): the
   // wheel eases the viewport over a few frames instead of jumping a notch per
   // event. Off by default -- it changes how every wheel event feels, so it is
   // opted into rather than out of. `smooth_scroll_easing` takes upstream's
@@ -241,7 +241,7 @@ void Config::load_defaults()
   // redraws with every keystroke is a flicker; 0 previews at once.
   settings["lsp_completion_ghost_delay_ms"] = "150";
   // Rank the popup by the names this user accepts and the words the file already
-  // holds (features/completion_rank.h). Off means the plain order, and nothing is
+  // holds (lsp/completion_rank.h). Off means the plain order, and nothing is
   // read from or written to the config home.
   settings["lsp_completion_learn"] = "true";
   // How fast an accepted name fades: its count halves every half-life, so a habit
@@ -264,7 +264,7 @@ void Config::load_defaults()
   settings["cpp_defined_macros"] = "";
   // Check the workspace's C++ for declarations with no implementation and
   // signatures with more than one: a workspace scan per open and per save,
-  // published as diagnostics (features/cpp_definitions.*).
+  // published as diagnostics (syntax/cpp_definitions.*).
   settings["cpp_definitions"] = "true";
   // jot's dark theme (a slot-by-slot port of Binaryify's One Dark Pro: the
   // #282c34 ground, the #abb2bf ink and the palette's blue accent) is what a

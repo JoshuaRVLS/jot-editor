@@ -1,7 +1,7 @@
 // GENERATED FILE -- do not edit by hand.
 //
 // The CSS/X11 named-colour table behind the colour preview
-// (src/features/color_codes.cpp). Regenerate with:
+// (src/syntax/color_codes.cpp). Regenerate with:
 //
 //     python3 tools/gen_color_names.py
 //

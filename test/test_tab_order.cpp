@@ -7,7 +7,7 @@
 // its buffer for the buffer's life. The rest pins the rules the commands rely
 // on -- pinned leads the strip, a move never crosses the pin boundary, a sort
 // leaves the pinned block alone.
-#include "features/tab_order.h"
+#include "ui/tab_order.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <string>

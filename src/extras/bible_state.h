@@ -1,12 +1,12 @@
 #ifndef JOT_STATE_BIBLE_STATE_H
 #define JOT_STATE_BIBLE_STATE_H
 
-#include "features/bible.h"
+#include "extras/bible.h"
 #include <cstdint>
 #include <string>
 
-// The Bible reader's session (see features/bible.h for the pure half and
-// jot/app/bible_client.cpp for the runs): the passage `:bible` showed last, so
+// The Bible reader's session (see extras/bible.h for the pure half and
+// extras/bible_client.cpp for the runs): the passage `:bible` showed last, so
 // `:bible next` / `:bible prev` know where to go on, and whether one fetch is
 // still in flight. The passage itself lives in an ordinary `[Bible]` scratch
 // buffer -- closing it needs no cleanup beyond clearing the last reference.

@@ -17,9 +17,7 @@ the run. Existing edges have to be removed by moving the code, not here.
   tools/check_module_deps.py --list          list every violation, grouped
   tools/check_module_deps.py --write-baseline   re-record the baseline
 
-The module for a file is its first directory under src/. src/features/ is the
-one exception: the directory kept its old name while the module it holds is
-called extras in the order.
+The module for a file is its first directory under src/.
 """
 
 import argparse
@@ -60,7 +58,7 @@ INCLUDE_DIRS = [
     "src/input",
     "src/render",
     "src/text",
-    "src/features",
+    "src/extras",
     "src/syntax",
     "src/dap",
     "src/lsp",
@@ -75,6 +73,32 @@ INCLUDE_DIRS = [
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"')
 SOURCE_SUFFIXES = (".cpp", ".cc", ".cxx", ".h", ".hpp")
 
+# Quoted includes whose first path component belongs to a third-party library
+# rather than this tree, so they are not expected to resolve under src/. These
+# mirror the include roots CMake hands the compilers: third_party/glad,
+# third_party/libvterm/include, /usr/include/SDL2, /usr/include/freetype2 and
+# /usr/include/lua5.4. Nothing in the tree needs one, so the set is empty; it
+# exists so an exception can be named instead of loosening the check.
+#
+# Naming a directory that exists under src/ here would stop the rule in this
+# file from ever seeing that module, so _reject_shadowing_roots() refuses it.
+SYSTEM_INCLUDE_ROOTS = frozenset()
+
+
+def _reject_shadowing_roots():
+    """Refuse an exception that would hide a real module from the check."""
+    shadowing = sorted(
+        root for root in SYSTEM_INCLUDE_ROOTS if os.path.isdir(os.path.join(REPO, "src", root))
+    )
+    if shadowing:
+        print(
+            "module deps: FAIL, SYSTEM_INCLUDE_ROOTS names module directories: {}".format(
+                ", ".join(shadowing)
+            )
+        )
+        return False
+    return True
+
 
 def module_of(path):
     """The module a repository-relative path belongs to, or None."""
@@ -84,8 +108,6 @@ def module_of(path):
     if len(parts) == 1:
         return None
     top = parts[1]
-    if top == "features":
-        return "extras"
     return top if top in RANK else None
 
 
@@ -109,27 +131,37 @@ def walk_sources():
 
 
 def collect():
-    """Every upward edge: (source path, target path, source module, target module)."""
+    """Every upward edge: (source path, target path, source module, target module).
+
+    Also returns the includes that name no file at all. A bulk move that misses
+    a rewrite is exactly how those appear, and a build finds them one compiler
+    error at a time, so they are reported together here instead.
+    """
     edges = []
+    unresolved = []
     for rel in sorted(walk_sources()):
-        src_module = module_of(rel)
-        if src_module is None:
-            continue
         from_dir = os.path.dirname(rel)
+        src_module = module_of(rel)
         with open(os.path.join(REPO, rel), "r", encoding="utf-8", errors="replace") as handle:
             for line in handle:
                 match = INCLUDE_RE.match(line)
                 if not match:
                     continue
-                target = resolve(match.group(1), from_dir)
+                include = match.group(1)
+                if include.split("/", 1)[0] in SYSTEM_INCLUDE_ROOTS:
+                    continue
+                target = resolve(include, from_dir)
                 if target is None:
+                    unresolved.append((rel, include))
+                    continue
+                if src_module is None:
                     continue
                 dst_module = module_of(target)
                 if dst_module is None or dst_module == src_module:
                     continue
                 if RANK[dst_module] > RANK[src_module]:
                     edges.append((rel, target, src_module, dst_module))
-    return edges
+    return edges, unresolved
 
 
 def read_baseline():
@@ -154,7 +186,15 @@ def main():
     parser.add_argument("--write-baseline", action="store_true", help="record the current edges")
     args = parser.parse_args()
 
-    edges = collect()
+    if not _reject_shadowing_roots():
+        return 1
+
+    edges, unresolved = collect()
+    for rel, include in unresolved:
+        print("module deps: include names no file: {} includes \"{}\"".format(rel, include))
+    if unresolved:
+        print("module deps: FAIL, {} include(s) do not resolve".format(len(unresolved)))
+        return 1
 
     if args.write_baseline:
         os.makedirs(os.path.dirname(BASELINE), exist_ok=True)

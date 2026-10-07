@@ -250,7 +250,7 @@ void Editor::open_workspace(const std::string &path, bool restore_session)
   request_cpp_definitions_scan(false);
   // The same walk, for the other question a workspace answers offline: which
   // class names and custom properties this tree declares, offered inside
-  // class="..." and var(--) (features/web_completion.h).
+  // class="..." and var(--) (workspace/web_completion.h).
   request_web_index_scan();
   needs_redraw = true;
   if (lua_api)

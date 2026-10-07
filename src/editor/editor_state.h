@@ -31,7 +31,6 @@
 // New code that needs one slice is encouraged to include that header directly
 // (the groups are independent: no group includes another).
 
-#include "editor/state/bible_state.h"
 #include "editor/state/cpp_defs_state.h"
 #include "editor/state/engine_state.h"
 #include "editor/state/input_state.h"
@@ -46,6 +45,7 @@
 #include "editor/state/web_index_state.h"
 #include "editor/state/winbar_state.h"
 #include "editor/state/workspace_state.h"
+#include "extras/bible_state.h"
 
 struct EditorState : BibleState,
                      CppDefsState,

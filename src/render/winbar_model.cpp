@@ -1,6 +1,6 @@
 // The winbar's model: the breadcrumb chain and what each crumb's menu offers.
-// See features/winbar.h for the shape; render/winbar.cpp paints it.
-#include "winbar.h"
+// See render/winbar_model.h for the shape; render/winbar.cpp paints it.
+#include "render/winbar_model.h"
 #include "editor/file_icons.h"
 #include "editor/model/theme.h"
 
@@ -367,9 +367,8 @@ namespace Winbar
     return out;
   }
 
-  std::vector<Entry> menu_entries(const std::vector<Crumb> &crumbs,
-                                  int index,
-                                  const std::vector<SymbolMatch> &symbols)
+  std::vector<Entry>
+  menu_entries(const std::vector<Crumb> &crumbs, int index, const std::vector<SymbolMatch> &symbols)
   {
     std::vector<Entry> out;
     if (index < 0 || index >= (int)crumbs.size())

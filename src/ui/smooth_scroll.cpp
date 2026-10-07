@@ -158,8 +158,7 @@ namespace SmoothScroll
     }
     const int reference = std::max(1, std::abs(reference_distance));
     const int span = std::max(1, std::abs(distance));
-    const double ms =
-        (double)std::max(0, base_ms) * multiplier * (double)span / (double)reference;
+    const double ms = (double)std::max(0, base_ms) * multiplier * (double)span / (double)reference;
     if (!(ms >= 1.0))
     {
       // Never zero: a sub-millisecond duration would depend on the frame timer

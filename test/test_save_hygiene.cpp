@@ -11,7 +11,7 @@
 
 #include "base/file_util.h"
 #include "editor.h"
-#include "features/save_hygiene.h"
+#include "workspace/save_hygiene.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

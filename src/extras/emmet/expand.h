@@ -39,10 +39,8 @@ namespace Emmet
   // level of nesting. Returns false when the abbreviation does not parse, which
   // is what keeps a stray word from being swallowed by a Tab. `!` is the
   // doctype.
-  bool expand_markup(const std::string &abbr,
-                     const std::string &indent_unit,
-                     bool jsx,
-                     Expansion &out);
+  bool
+  expand_markup(const std::string &abbr, const std::string &indent_unit, bool jsx, Expansion &out);
 
   // CSS: `m10-20` -> `margin: 10px 20px;`, `d:f` -> `display: flex;`, `c#fff` ->
   // `color: #fff;`, and a `+` chain as one declaration per line, `indent` before

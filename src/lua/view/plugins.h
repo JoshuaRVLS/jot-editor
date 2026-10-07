@@ -9,7 +9,7 @@
 // records the plugin runtime keeps: commands, keymaps, autocmds, panels,
 // status segments and event-bus subscribers.
 //
-// Split out of jot/lua/api.h, which keeps the LuaAPI class itself and
+// Split out of lua/api.h, which keeps the LuaAPI class itself and
 // includes these headers in order; the structs are unchanged.
 
 #include "dap/client.h"

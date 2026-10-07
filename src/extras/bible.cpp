@@ -4,7 +4,7 @@
 // and comes out as a URL; a chapter's JSON goes in and comes out as the lines
 // the `[Bible]` tab shows. That is what makes the whole feature testable
 // without a server.
-#include "features/bible.h"
+#include "extras/bible.h"
 #include "base/string_util.h"
 #include "dap/client.h"
 
@@ -120,7 +120,8 @@ namespace Bible
 
     const std::unordered_map<std::string, const Book> &alias_index()
     {
-      static const std::unordered_map<std::string, const Book> index = [] {
+      static const std::unordered_map<std::string, const Book> index = []
+      {
         std::unordered_map<std::string, const Book> built;
         for (const Book &book : kBooks)
         {
@@ -494,11 +495,7 @@ namespace Bible
     return false;
   }
 
-  bool reference_at(const std::string &line,
-                    int col,
-                    int &start_col,
-                    int &end_col,
-                    Reference &out)
+  bool reference_at(const std::string &line, int col, int &start_col, int &end_col, Reference &out)
   {
     const int n = (int)line.size();
     if (n == 0)
@@ -506,9 +503,10 @@ namespace Bible
       return false;
     }
     col = std::clamp(col, 0, n - 1);
-    auto allowed = [](char c) {
-      return std::isalnum((unsigned char)c) != 0 || c == ' ' || c == ':' || c == '.'
-             || c == '-' || c == '\'';
+    auto allowed = [](char c)
+    {
+      return std::isalnum((unsigned char)c) != 0 || c == ' ' || c == ':' || c == '.' || c == '-'
+             || c == '\'';
     };
     int left = std::max(0, col - 40);
     int right = std::min(n, col + 41);
@@ -549,17 +547,17 @@ namespace Bible
             trimmed_end--;
           }
           int trimmed_start = start;
-          while (trimmed_start < trimmed_end
-                 && !std::isalnum((unsigned char)line[trimmed_start]))
+          while (trimmed_start < trimmed_end && !std::isalnum((unsigned char)line[trimmed_start]))
           {
             trimmed_start++;
           }
           // A reference that runs straight into more word characters
           // ("john3abc") is an identifier, not a citation.
-          if ((trimmed_end < n && (std::isalnum((unsigned char)line[trimmed_end]) != 0
-                                   || line[trimmed_end] == '_'))
-              || (trimmed_start > 0 && (std::isalnum((unsigned char)line[trimmed_start - 1]) != 0
-                                        || line[trimmed_start - 1] == '_')))
+          if ((trimmed_end < n
+               && (std::isalnum((unsigned char)line[trimmed_end]) != 0 || line[trimmed_end] == '_'))
+              || (trimmed_start > 0
+                  && (std::isalnum((unsigned char)line[trimmed_start - 1]) != 0
+                      || line[trimmed_start - 1] == '_')))
           {
             continue;
           }
@@ -706,13 +704,11 @@ namespace Bible
     return out.chapter > 0;
   }
 
-  std::vector<std::string> render_chapter(const Chapter &chapter,
-                                          const Reference &reference,
-                                          const RenderOptions &options)
+  std::vector<std::string>
+  render_chapter(const Chapter &chapter, const Reference &reference, const RenderOptions &options)
   {
     std::vector<std::string> lines;
-    const std::string title =
-        chapter.book_name.empty() ? std::string("Bible") : chapter.book_name;
+    const std::string title = chapter.book_name.empty() ? std::string("Bible") : chapter.book_name;
     std::string header = title + " " + std::to_string(chapter.chapter);
     if (!chapter.translation_name.empty())
     {
@@ -727,10 +723,10 @@ namespace Bible
     const int context = std::max(0, options.context);
     const int lo = reference.has_verse ? std::max(1, reference.verse_first - context) : 0;
     const int hi = reference.has_verse ? reference.verse_last + context : 0;
-    auto included = [&](int number) {
-      return !reference.has_verse || (number >= lo && number <= hi);
-    };
-    auto requested = [&](int number) {
+    auto included = [&](int number)
+    { return !reference.has_verse || (number >= lo && number <= hi); };
+    auto requested = [&](int number)
+    {
       return reference.has_verse && number >= reference.verse_first
              && number <= reference.verse_last;
     };
@@ -778,8 +774,7 @@ namespace Bible
       std::string prefix = requested(block.number) ? ">" : " ";
       prefix += std::string(number_width - number.size(), ' ');
       prefix += number + "  ";
-      std::vector<std::string> wrapped =
-          wrap_paragraph(block.text, prefix, indent, options.width);
+      std::vector<std::string> wrapped = wrap_paragraph(block.text, prefix, indent, options.width);
       lines.insert(lines.end(), wrapped.begin(), wrapped.end());
     }
 
@@ -796,9 +791,9 @@ namespace Bible
   {
     std::vector<std::string> lines;
     const std::string *text = verse_text(chapter, verse);
-    const std::string title =
-        chapter.book_name.empty() ? std::string("Bible") : chapter.book_name;
-    std::string header = title + " " + std::to_string(chapter.chapter) + ":" + std::to_string(verse);
+    const std::string title = chapter.book_name.empty() ? std::string("Bible") : chapter.book_name;
+    std::string header =
+        title + " " + std::to_string(chapter.chapter) + ":" + std::to_string(verse);
     if (!chapter.translation_id.empty())
     {
       header += " (" + chapter.translation_id + ")";
@@ -847,19 +842,21 @@ namespace Bible
         out.push_back(xref);
       }
     }
-    std::stable_sort(out.begin(), out.end(), [](const Xref &a, const Xref &b) {
-      if (a.verse != b.verse)
-      {
-        return a.verse < b.verse;
-      }
-      return a.score > b.score;
-    });
+    std::stable_sort(out.begin(),
+                     out.end(),
+                     [](const Xref &a, const Xref &b)
+                     {
+                       if (a.verse != b.verse)
+                       {
+                         return a.verse < b.verse;
+                       }
+                       return a.score > b.score;
+                     });
     return true;
   }
 
-  std::vector<std::string> render_xrefs(const std::vector<Xref> &xrefs,
-                                        const Reference &reference,
-                                        int width)
+  std::vector<std::string>
+  render_xrefs(const std::vector<Xref> &xrefs, const Reference &reference, int width)
   {
     std::vector<std::string> lines;
     const std::string title = reference.book ? reference.book->name : std::string("Bible");
@@ -881,8 +878,7 @@ namespace Bible
     {
       widest_verse = std::max(widest_verse, xref.verse);
     }
-    const std::string from_column =
-        from_name + " " + std::to_string(chapter) + ":";
+    const std::string from_column = from_name + " " + std::to_string(chapter) + ":";
     const std::string indent(from_column.size() + std::to_string(widest_verse).size(), ' ');
 
     int last_verse = -1;
@@ -936,17 +932,16 @@ namespace Bible
       Translation translation;
       translation.id = Dap::string_or_empty(object(item, "id"));
       std::string english = Dap::string_or_empty(object(item, "englishName"));
-      translation.name =
-          english.empty() ? Dap::string_or_empty(object(item, "name")) : english;
+      translation.name = english.empty() ? Dap::string_or_empty(object(item, "name")) : english;
       translation.language = Dap::string_or_empty(object(item, "language"));
       if (!translation.id.empty())
       {
         out.push_back(translation);
       }
     }
-    std::sort(out.begin(), out.end(), [](const Translation &a, const Translation &b) {
-      return a.id < b.id;
-    });
+    std::sort(out.begin(),
+              out.end(),
+              [](const Translation &a, const Translation &b) { return a.id < b.id; });
     return true;
   }
 
@@ -1149,8 +1144,8 @@ namespace Bible
                           const std::string &book_id,
                           int chapter)
   {
-    return trim_base(base) + "/" + translation + "/" + book_id + "/"
-           + std::to_string(chapter) + ".simple.json";
+    return trim_base(base) + "/" + translation + "/" + book_id + "/" + std::to_string(chapter)
+           + ".simple.json";
   }
 
   std::string commentary_url(const std::string &base,
@@ -1158,16 +1153,14 @@ namespace Bible
                              const std::string &book_id,
                              int chapter)
   {
-    return trim_base(base) + "/c/" + commentary + "/" + book_id + "/"
-           + std::to_string(chapter) + ".json";
+    return trim_base(base) + "/c/" + commentary + "/" + book_id + "/" + std::to_string(chapter)
+           + ".json";
   }
 
-  std::string xref_url(const std::string &base,
-                       const std::string &book_id,
-                       int chapter)
+  std::string xref_url(const std::string &base, const std::string &book_id, int chapter)
   {
-    return trim_base(base) + "/d/open-cross-ref/" + book_id + "/"
-           + std::to_string(chapter) + ".json";
+    return trim_base(base) + "/d/open-cross-ref/" + book_id + "/" + std::to_string(chapter)
+           + ".json";
   }
 
   std::string cache_file_name(const std::string &url)

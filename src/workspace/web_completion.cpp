@@ -4,7 +4,7 @@
 // extractors, no buffer, no server. The walk at the bottom reads the files and
 // hands each one to the same extractors a case can call directly, so the only
 // part a test cannot reach without a workspace is the walk itself.
-#include "features/web_completion.h"
+#include "workspace/web_completion.h"
 
 #include <algorithm>
 #include <cctype>

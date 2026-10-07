@@ -1,6 +1,6 @@
-// The local coding-time store (see features/coding_time.h for the rule and why
+// The local coding-time store (see extras/coding_time/probe.h for the rule and why
 // the store exists at all).
-#include "features/coding_time.h"
+#include "extras/coding_time/probe.h"
 #include "base/string_util.h"
 
 #include <algorithm>
@@ -17,7 +17,7 @@ namespace coding_time
   namespace
   {
     // The config home, resolved the way the rest of the app does it
-    // (features/config.cpp owns the same precedence): an override for tests,
+    // (workspace/config.cpp owns the same precedence): an override for tests,
     // then the platform's own directory.
     fs::path config_home()
     {

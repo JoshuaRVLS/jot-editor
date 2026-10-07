@@ -7,12 +7,12 @@
 // cursor's position on the line. The expander only knows about text, and refuses
 // anything it cannot parse -- which is the property the caller depends on, since
 // this runs from Tab and a refusal has to leave ordinary indentation alone.
-#include "features/emmet.h"
 #include "editor.h"
-#include "features/html.h"
+#include "extras/emmet/expand.h"
 #include "lua/api.h"
 #include "text_features.h"
 #include "ui/text.h"
+#include "workspace/html.h"
 
 bool Editor::expand_emmet_abbreviation()
 {

@@ -6,8 +6,8 @@
 // (rest.nvim's domain), `:rest <name>` a named one, `:rest last` sends the
 // previous request again. The curl runs on the worker queue so a slow endpoint
 // never stalls a keystroke; what comes back lands in a `[Response]` scratch
-// tab that later runs re-use (see jot/app/rest_client.cpp, and
-// features/http_file.h for the file format and the pure half).
+// tab that later runs re-use (see editor/app/rest_client.cpp, and
+// workspace/http_file.h for the file format and the pure half).
 //
 // A fragment of the Editor class body, included by src/editor/editor.h. It is
 // not a standalone header: no include guard, no includes, and the members

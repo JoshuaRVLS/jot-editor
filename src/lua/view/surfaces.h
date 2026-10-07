@@ -10,7 +10,7 @@
 // telescope, completion and signature popups, context menu, menu dropdown,
 // home screen, search panel, status line and the side panels.
 //
-// Split out of jot/lua/api.h, which keeps the LuaAPI class itself and
+// Split out of lua/api.h, which keeps the LuaAPI class itself and
 // includes these headers in order; the structs are unchanged.
 
 #include "dap/client.h"
@@ -47,7 +47,7 @@ struct PaletteItemView
 // The command palette's computed geometry, shared by the native renderer and
 // the Lua UI kit so both paint the same cells: the results grid (filled column
 // by column), the explanation box above it and the prompt row at the bottom.
-// See CommandPaletteLayout (jot/model/quick_pick.h) for the field semantics.
+// See CommandPaletteLayout (editor/model/quick_pick.h) for the field semantics.
 struct PaletteView
 {
   std::string query;
@@ -302,7 +302,7 @@ struct MenuItemView
   bool enabled = true;
 };
 
-// The breadcrumb winbar (features/winbar.h). The native layout is passed
+// The breadcrumb winbar (render/winbar_model.h). The native layout is passed
 // through column by column so a Lua painter draws the same row the mouse
 // hit-tests; `kind` picks the styling branch (a folder, the file, a symbol).
 struct WinbarCrumbView

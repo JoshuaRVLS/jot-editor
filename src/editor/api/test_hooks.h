@@ -684,7 +684,7 @@ bool seed_lsp_completion_for_test(std::vector<LSPCompletionItem> items)
   lsp_completion_all_items = std::move(items);
   return refresh_lsp_completion_filter();
 }
-// The workspace's CSS vocabulary (features/web_completion.h) as the editor
+// The workspace's CSS vocabulary (workspace/web_completion.h) as the editor
 // holds it, so a case can complete against a workspace without scanning one.
 void set_web_index_for_test(WebCompletion::Index index)
 {

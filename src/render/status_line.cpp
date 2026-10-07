@@ -3,7 +3,7 @@
 // status segments.
 #include "editor.h"
 #include "editor/file_icons.h"
-#include "features/status_clock.h"
+#include "extras/status_clock.h"
 #include "lsp/install.h"
 #include "lua/api.h"
 #include "ui/components.h"
@@ -145,12 +145,12 @@ namespace
 // that shows it -- the same shape as the completion preview's gate
 // (main_loop.cpp), except that this one is asked before the paint, because the
 // new label is already true and can go out on the frame that noticed it. The
-// labels are pure functions of the two clocks (features/status_clock.h), so "the
+// labels are pure functions of the two clocks (extras/status_clock.h), so "the
 // text would differ" is answered by formatting them, not by keeping a countdown
 // that could drift out of step with what is painted.
 //
 // This is also the editor's once-a-second pass, which is why the local coding
-// total is advanced here (features/coding_time.h) whether or not the bar is
+// total is advanced here (extras/coding_time/probe.h) whether or not the bar is
 // showing it: what it stores is time the user spent, not a label.
 bool Editor::status_time_due_soon()
 {
@@ -527,7 +527,7 @@ void Editor::render_status_line()
       // That chip reports WakaTime's total for today once the integration is on
       // and has an answer, and the locally stored total for this workspace until
       // then and whenever it is off -- one chip with two sources, not a second
-      // chip beside it (jot/app/coding_time.cpp). Which one is showing reads off
+      // chip beside it (extras/coding_time/wiring.cpp). Which one is showing reads off
       // the glyph: the clock outline the VS Code plugin leads its own status bar
       // with, against the timer the local store stands in with.
       const bool from_wakatime = wakatime_enabled && !wakatime_today_text.empty();

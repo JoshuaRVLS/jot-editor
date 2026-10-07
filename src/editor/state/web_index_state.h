@@ -1,15 +1,15 @@
 #ifndef JOT_STATE_WEB_INDEX_STATE_H
 #define JOT_STATE_WEB_INDEX_STATE_H
 
-#include "features/web_completion.h"
+#include "workspace/web_completion.h"
 #include <string>
 
 // The workspace's own CSS vocabulary -- the class names the markup uses and the
 // custom properties the style sheets declare -- kept so a completion inside
-// `class="..."` or `var(--)` can offer them (see features/web_completion.h for
+// `class="..."` or `var(--)` can offer them (see workspace/web_completion.h for
 // the scan itself).
 //
-// The scan runs on a worker thread (jot/app/web_index.cpp); what lives here is
+// The scan runs on a worker thread (editor/app/web_index.cpp); what lives here is
 // the index it leaves behind and the bookkeeping that keeps a result from a
 // workspace that has since changed out of it. The shape mirrors CppDefsState,
 // which is the same pattern over the same worker queue.

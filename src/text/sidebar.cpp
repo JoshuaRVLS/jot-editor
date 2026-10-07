@@ -1,7 +1,7 @@
 #include "editor.h"
 #include "editor/file_icons.h"
-#include "features/winbar.h"
 #include "lua/api.h"
+#include "render/winbar_model.h"
 #include "sidebar_guides.h"
 #include <algorithm>
 #include <cctype>

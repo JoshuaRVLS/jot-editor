@@ -10,23 +10,23 @@
 // not a standalone header: no include guard, no includes, and the members
 // sit in class scope exactly as if they were written in editor.h.
 private:
-// --- Smooth scrolling (features/smooth_scroll.h: neoscroll.nvim's model) ---
-// A viewport-only scroll animates scroll_offset toward its destination over
-// a few frames instead of jumping there. One animation at a time: it belongs
-// to the pane the wheel was over, and it is dropped the moment anything else
-// moves that viewport (see advance_smooth_scroll).
-struct SmoothScrollAnim
-{
-  bool active = false;
-  int buffer_id = -1;  // the pane's buffer when the animation started
-  int from = 0;        // offset the animation started from
-  int applied = -1;    // offset this animation wrote last (the drift probe)
-  int notch_lines = 1; // one wheel step: the duration's reference distance
-  SmoothScroll::Easing easing = SmoothScroll::Easing::Linear;
-  SmoothScroll::InFlight in_flight;
-  long long start_ms = 0;
-  long long duration_ms = 0;
-};
+  // --- Smooth scrolling (ui/smooth_scroll.h: neoscroll.nvim's model) ---
+  // A viewport-only scroll animates scroll_offset toward its destination over
+  // a few frames instead of jumping there. One animation at a time: it belongs
+  // to the pane the wheel was over, and it is dropped the moment anything else
+  // moves that viewport (see advance_smooth_scroll).
+  struct SmoothScrollAnim
+  {
+    bool active = false;
+    int buffer_id = -1;  // the pane's buffer when the animation started
+    int from = 0;        // offset the animation started from
+    int applied = -1;    // offset this animation wrote last (the drift probe)
+    int notch_lines = 1; // one wheel step: the duration's reference distance
+    SmoothScroll::Easing easing = SmoothScroll::Easing::Linear;
+    SmoothScroll::InFlight in_flight;
+    long long start_ms = 0;
+    long long duration_ms = 0;
+  };
 SmoothScrollAnim smooth_scroll_;
 // Off until the config says otherwise (see Config::load_defaults).
 bool smooth_scroll_enabled_ = false;

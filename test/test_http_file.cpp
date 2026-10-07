@@ -11,7 +11,7 @@
 // re-usable `[Response]` tab that `:w` cannot litter the workspace with.
 #include "base/shell_util.h"
 #include "editor.h"
-#include "features/http_file.h"
+#include "workspace/http_file.h"
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>

@@ -1,7 +1,7 @@
 // The editor side of the C++ definition checks: when to scan, and what to do
 // with what comes back.
 //
-// The scan itself (features/cpp_definitions.*) is pure -- a root in, issues out
+// The scan itself (syntax/cpp_definitions.*) is pure -- a root in, issues out
 // -- so it runs on the worker thread and only its result is applied here, on the
 // main thread. Three things have to hold for that to be safe:
 //

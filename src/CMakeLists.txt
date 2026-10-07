@@ -27,7 +27,7 @@ function(jot_configure_object_target target_name)
     ${PROJECT_SOURCE_DIR}/src/input
     ${PROJECT_SOURCE_DIR}/src/render
     ${PROJECT_SOURCE_DIR}/src/text
-    ${PROJECT_SOURCE_DIR}/src/features
+    ${PROJECT_SOURCE_DIR}/src/extras
     ${PROJECT_SOURCE_DIR}/src/syntax
     ${PROJECT_SOURCE_DIR}/src/dap
     ${PROJECT_SOURCE_DIR}/src/lsp
@@ -324,7 +324,7 @@ function(jot_expose_module_api target_name)
     ${PROJECT_SOURCE_DIR}/src/input
     ${PROJECT_SOURCE_DIR}/src/render
     ${PROJECT_SOURCE_DIR}/src/text
-    ${PROJECT_SOURCE_DIR}/src/features
+    ${PROJECT_SOURCE_DIR}/src/extras
     ${PROJECT_SOURCE_DIR}/src/syntax
     ${PROJECT_SOURCE_DIR}/src/dap
     ${PROJECT_SOURCE_DIR}/src/lsp
@@ -345,7 +345,7 @@ include(lsp/sources.cmake)
 include(terminal/sources.cmake)
 include(workspace/sources.cmake)
 include(git/sources.cmake)
-include(features/sources.cmake)
+include(extras/sources.cmake)
 include(input/sources.cmake)
 include(render/sources.cmake)
 include(tools/sources.cmake)
@@ -419,19 +419,8 @@ if(JOT_TREESITTER_ENABLED)
 endif()
 jot_configure_object_target(jot_syntax_obj)
 
-add_library(jot_features_obj OBJECT ${JOT_FEATURES_SOURCES})
-if(JOT_TREESITTER_ENABLED)
-  target_compile_definitions(jot_features_obj PRIVATE
-    JOT_TREESITTER=1
-  )
-  target_include_directories(jot_features_obj SYSTEM PRIVATE
-    ${TREE_SITTER_INCLUDE_DIRS}
-  )
-  target_compile_options(jot_features_obj PRIVATE
-    ${TREE_SITTER_CFLAGS_OTHER}
-  )
-endif()
-jot_configure_object_target(jot_features_obj)
+add_library(jot_extras_obj OBJECT ${JOT_EXTRAS_SOURCES})
+jot_configure_object_target(jot_extras_obj)
 
 add_library(jot_input_obj OBJECT ${JOT_INPUT_SOURCES})
 jot_configure_object_target(jot_input_obj)
@@ -516,7 +505,7 @@ add_library(jot_base STATIC $<TARGET_OBJECTS:jot_base_obj>)
 add_library(jot_editor STATIC $<TARGET_OBJECTS:jot_editor_obj>)
 add_library(jot_text STATIC $<TARGET_OBJECTS:jot_text_obj>)
 add_library(jot_syntax STATIC $<TARGET_OBJECTS:jot_syntax_obj>)
-add_library(jot_features STATIC $<TARGET_OBJECTS:jot_features_obj>)
+add_library(jot_extras STATIC $<TARGET_OBJECTS:jot_extras_obj>)
 add_library(jot_input STATIC $<TARGET_OBJECTS:jot_input_obj>)
 add_library(jot_render STATIC $<TARGET_OBJECTS:jot_render_obj>)
 add_library(jot_tools STATIC $<TARGET_OBJECTS:jot_tools_obj>)
@@ -539,7 +528,7 @@ jot_expose_module_api(jot_base)
 jot_expose_module_api(jot_editor)
 jot_expose_module_api(jot_text)
 jot_expose_module_api(jot_syntax)
-jot_expose_module_api(jot_features)
+jot_expose_module_api(jot_extras)
 jot_expose_module_api(jot_input)
 jot_expose_module_api(jot_render)
 jot_expose_module_api(jot_tools)
@@ -558,7 +547,7 @@ add_library(jot_engine STATIC
   $<TARGET_OBJECTS:jot_editor_obj>
   $<TARGET_OBJECTS:jot_text_obj>
   $<TARGET_OBJECTS:jot_syntax_obj>
-  $<TARGET_OBJECTS:jot_features_obj>
+  $<TARGET_OBJECTS:jot_extras_obj>
   $<TARGET_OBJECTS:jot_input_obj>
   $<TARGET_OBJECTS:jot_render_obj>
   $<TARGET_OBJECTS:jot_tools_obj>
@@ -581,7 +570,7 @@ target_include_directories(jot_engine SYSTEM PUBLIC ${LUA_INCLUDE_DIRS})
 
 jot_expose_module_api(jot_engine)
 if(JOT_TREESITTER_ENABLED)
-  foreach(target_name IN ITEMS jot_base_obj jot_editor_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_lsp_obj jot_workspace_obj jot_git_obj jot_terminal_obj jot_ui_obj jot_base jot_editor jot_text jot_syntax jot_features jot_input jot_render jot_tools jot_dap jot_lsp jot_workspace jot_git jot_terminal jot_lua_api jot_ui jot_engine)
+  foreach(target_name IN ITEMS jot_base_obj jot_editor_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_lsp_obj jot_workspace_obj jot_git_obj jot_terminal_obj jot_extras_obj jot_ui_obj jot_base jot_editor jot_text jot_syntax jot_extras jot_input jot_render jot_tools jot_dap jot_lsp jot_workspace jot_git jot_terminal jot_lua_api jot_ui jot_engine)
     target_compile_definitions(${target_name} PUBLIC JOT_TREESITTER=1)
   endforeach()
   foreach(target_name IN ITEMS jot_base_obj jot_editor_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_lsp_obj jot_workspace_obj jot_git_obj jot_terminal_obj jot_ui_obj)
@@ -611,7 +600,7 @@ endif()
 # targets *and* the libraries they are folded into, because $<TARGET_OBJECTS:>
 # does not carry usage requirements across.
 if(JOT_GUI_ENABLED)
-  foreach(target_name IN ITEMS jot_base_obj jot_editor_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_lsp_obj jot_workspace_obj jot_git_obj jot_terminal_obj jot_ui_obj jot_base jot_editor jot_text jot_syntax jot_features jot_input jot_render jot_tools jot_dap jot_lsp jot_workspace jot_git jot_terminal jot_lua_api jot_ui jot_engine)
+  foreach(target_name IN ITEMS jot_base_obj jot_editor_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_lsp_obj jot_workspace_obj jot_git_obj jot_terminal_obj jot_extras_obj jot_ui_obj jot_base jot_editor jot_text jot_syntax jot_extras jot_input jot_render jot_tools jot_dap jot_lsp jot_workspace jot_git jot_terminal jot_lua_api jot_ui jot_engine)
     target_compile_definitions(${target_name} PUBLIC JOT_GUI=1)
   endforeach()
 endif()

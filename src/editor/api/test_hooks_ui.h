@@ -133,7 +133,7 @@ void close_settings_menu_for_test()
   close_settings_menu();
 }
 bool mouse_selecting_for_test() const;
-// Grid resize plumbing (jot/app/resize.cpp) and the sidebar's width-driven
+// Grid resize plumbing (editor/app/resize.cpp) and the sidebar's width-driven
 // auto-hide: the same paths the terminal/GUI resize handlers drive.
 void apply_resize_for_test(int cols, int rows)
 {
@@ -246,7 +246,7 @@ void toggle_sidebar_for_test()
 {
   toggle_sidebar();
 }
-// Discord presence session (jot/editor/discord_controller.h) for headless
+// Discord presence session (editor/discord_controller.h) for headless
 // tests: the same entry points the 1s timer, focus reporting and :discord
 // use.
 void discord_poll_for_test(long long now_ms)
@@ -297,7 +297,7 @@ void request_redraw_for_test()
 {
   needs_redraw = true;
 }
-// The local coding total (features/coding_time.h): planting a number on it is
+// The local coding total (extras/coding_time/probe.h): planting a number on it is
 // how a test gets an hour on the chip without waiting an hour, and the window
 // is left long idle so nothing is credited on top of what was planted. The
 // last reading is cleared with it, so the next frame re-formats the label
@@ -309,7 +309,7 @@ void set_coding_time_ms_for_test(long long total_ms)
   coding_time.last_credit_ms = 0;
   status_time_checked_ms = 0;
 }
-// Points the local coding store at a workspace (features/coding_time.h). A
+// Points the local coding store at a workspace (extras/coding_time/probe.h). A
 // real session does this by opening one, and the store then reads that
 // workspace's own total for today instead of the one it was keyed on before.
 // The window is left long idle, so nothing is credited on top of what is
@@ -322,7 +322,7 @@ void set_workspace_root_for_test(const std::string &root)
   coding_time.last_activity_ms = 0;
   coding_time.last_credit_ms = 0;
 }
-// WakaTime's side of the chip (features/wakatime.h): the state the cli answers
+// WakaTime's side of the chip (extras/wakatime.h): the state the cli answers
 // into. A test sets it here because the real path needs a cli on PATH and a
 // worker queue -- the pty probe covers that end, and this covers what the bar
 // does with an answer.

@@ -1,5 +1,5 @@
 // The statusline's two time labels (see status_clock.h).
-#include "features/status_clock.h"
+#include "extras/status_clock.h"
 
 #include <cstdio>
 

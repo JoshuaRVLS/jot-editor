@@ -2,7 +2,7 @@
 #define JOT_FEATURES_BIBLE_H
 
 // The Bible reader (https://bible.helloao.org, the "free use" HelloAO API) as
-// pure text work, so the editor side (jot/app/bible_client.cpp) only has to
+// pure text work, so the editor side (extras/bible_client.cpp) only has to
 // choose a URL, run one curl on the worker queue and paint the answer into a
 // `[Bible]` scratch tab.
 //
@@ -74,11 +74,7 @@ namespace Bible
   // The reference a caret at `col` sits on inside `line`, if any. `start_col`
   // and `end_col` are the half-open byte span of the matched text, so a caller
   // can underline it or replace it.
-  bool reference_at(const std::string &line,
-                    int col,
-                    int &start_col,
-                    int &end_col,
-                    Reference &out);
+  bool reference_at(const std::string &line, int col, int &start_col, int &end_col, Reference &out);
 
   // A heading or a verse, in the order the chapter lists them.
   struct Block
@@ -124,9 +120,8 @@ namespace Bible
     bool show_headings = true;
     int context = 0;
   };
-  std::vector<std::string> render_chapter(const Chapter &chapter,
-                                          const Reference &reference,
-                                          const RenderOptions &options);
+  std::vector<std::string>
+  render_chapter(const Chapter &chapter, const Reference &reference, const RenderOptions &options);
   // The same body without the surrounding chapter: used for the hover popup,
   // where only a verse or two has room.
   std::vector<std::string> render_verse(const Chapter &chapter, int verse);
@@ -157,7 +152,7 @@ namespace Bible
 
   struct Xref
   {
-    int verse = 0; // the referring verse in this chapter
+    int verse = 0;    // the referring verse in this chapter
     std::string book; // "ROM"
     int chapter = 0;
     int verse_start = 0;
@@ -167,9 +162,8 @@ namespace Bible
 
   bool parse_xrefs(const std::string &json, std::vector<Xref> &out);
   // `John 3:16  ->  Romans 5:8`, strongest match first, grouped by verse.
-  std::vector<std::string> render_xrefs(const std::vector<Xref> &xrefs,
-                                        const Reference &reference,
-                                        int width);
+  std::vector<std::string>
+  render_xrefs(const std::vector<Xref> &xrefs, const Reference &reference, int width);
 
   struct Translation
   {
@@ -200,9 +194,7 @@ namespace Bible
                              const std::string &commentary,
                              const std::string &book_id,
                              int chapter);
-  std::string xref_url(const std::string &base,
-                       const std::string &book_id,
-                       int chapter);
+  std::string xref_url(const std::string &base, const std::string &book_id, int chapter);
 
   // A cache file name for a URL: a hex FNV-1a digest plus ".json". The same URL
   // always maps to the same name, so a cached chapter survives across runs.

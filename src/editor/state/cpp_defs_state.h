@@ -11,7 +11,7 @@
 // declaration with no body in the workspace, and a signature
 // implemented more than once (see syntax/cpp_definitions.h).
 //
-// The scan runs on a worker thread (jot/app/cpp_definitions.cpp), so what lives
+// The scan runs on a worker thread (editor/app/cpp_definitions.cpp), so what lives
 // here is the state around it: the per-file diagnostics every diagnostics
 // surface reads, and the bookkeeping that keeps a result from a workspace that
 // has since changed -- or from a scan an edit has made obsolete -- out of them.

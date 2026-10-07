@@ -47,7 +47,7 @@ void reveal_tabline_position(int position);
 void close_other_tabs(int keep_buffer);
 
 // The breadcrumb winbar: the row a code pane spends above its text, and the
-// drop-down a crumb opens (src/render/winbar.cpp, features/winbar.h). A crumb
+// drop-down a crumb opens (src/render/winbar.cpp, render/winbar_model.h). A crumb
 // is a click away from its siblings -- the file's folder, the folder's
 // children, the symbols sharing a scope -- and a folder row opens its own
 // listing *beside* the level that offered it, a cascade that keeps every
@@ -206,7 +206,7 @@ int effective_right_panel_width() const;
 void render_menu_bar();
 void render_menu_dropdown();
 void render_status_line();
-// Whether the statusline's time labels (features/status_clock.h) have moved
+// Whether the statusline's time labels (extras/status_clock.h) have moved
 // on since the last frame asked: the clock's minute, or the session
 // duration's next unit. The frame loop asks before the paint, so a label that
 // did move goes out on the frame that noticed it -- which is what keeps the

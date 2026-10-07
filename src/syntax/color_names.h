@@ -1,7 +1,7 @@
 #ifndef FEATURES_COLOR_NAMES_H
 #define FEATURES_COLOR_NAMES_H
 
-// CSS/X11 named colours, used by the colour preview (src/features/color_codes.cpp).
+// CSS/X11 named colours, used by the colour preview (src/syntax/color_codes.cpp).
 // The table itself is generated (tools/gen_color_names.py); this header only
 // declares the lookup so the generated file stays free of hand-written API.
 

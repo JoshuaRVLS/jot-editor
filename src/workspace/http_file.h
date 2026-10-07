@@ -3,7 +3,7 @@
 
 // The `.http` / `.rest` request files -- the HTTP-client syntax IntelliJ
 // invented and rest.nvim brought to editors -- parsed, resolved and executed
-// here, with the editor side (jot/app/rest_client.cpp) only feeding a buffer in
+// here, with the editor side (editor/app/rest_client.cpp) only feeding a buffer in
 // and painting a buffer out.
 //
 // Everything in this header is pure text work so it can be pinned by tests:
@@ -106,13 +106,9 @@ namespace HttpFile
   int request_index_at_line(const File &file, int line);
   int find_request(const File &file, const std::string &name); // -1 when absent
 
-  DynamicVars make_dynamic_vars(unsigned long long now_ms,
-                                unsigned random_a,
-                                unsigned random_b);
+  DynamicVars make_dynamic_vars(unsigned long long now_ms, unsigned random_a, unsigned random_b);
 
-  Resolved resolve(const Request &request,
-                   const Vars &file_vars,
-                   const DynamicVars &dynamic);
+  Resolved resolve(const Request &request, const Vars &file_vars, const DynamicVars &dynamic);
 
   // The sentinel `--write-out` appends after the response body.
   const char *write_out_marker();
@@ -129,8 +125,7 @@ namespace HttpFile
   // ".json" when the body is JSON (or claims to be), ".txt" otherwise. The
   // response tab takes its syntax highlighting from this extension.
   std::string response_extension(const Response &response);
-  std::vector<std::string> format_response(const Resolved &request,
-                                           const Response &response);
+  std::vector<std::string> format_response(const Resolved &request, const Response &response);
 } // namespace HttpFile
 
 #endif

@@ -2,7 +2,7 @@
 // the sidebar's width-driven auto-hide.
 //
 // The terminal and GUI resize handlers both funnel through Editor::apply_resize
-// (jot/app/resize.cpp), so exercising it here covers what a live window resize
+// (editor/app/resize.cpp), so exercising it here covers what a live window resize
 // does without needing a real terminal or display.
 #include "editor.h"
 #include "ui/ui.h"

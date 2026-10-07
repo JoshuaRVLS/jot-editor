@@ -1,4 +1,4 @@
-// The editor side of the Bible reader (see features/bible.h for the reference
+// The editor side of the Bible reader (see extras/bible.h for the reference
 // grammar, the URL builders and the renderers, and api/bible.h for the
 // commands). What is left here is plumbing:
 //
@@ -17,8 +17,8 @@
 #include "base/string_util.h"
 #include "editor.h"
 #include "editor/app/decorations.h"
-#include "features/bible.h"
-#include "features/leetcode_http.h"
+#include "extras/bible.h"
+#include "extras/leetcode_http.h"
 
 #include <cstdlib>
 #include <ctime>
@@ -32,7 +32,7 @@ namespace fs = std::filesystem;
 
 namespace
 {
-  // The repo's libcurl client (features/leetcode_http.*) is a plain HTTP
+  // The repo's libcurl client (extras/leetcode_http.*) is a plain HTTP
   // GET/POST client that happens to be named for its first caller; reusing it
   // keeps the Bible reader out of the shell (no command line to quote wrong)
   // and off the main thread.
@@ -57,7 +57,7 @@ namespace
     return true;
   }
 
-  // Mirrors the LeetCode cache's rules (features/leetcode/cache.lua): an
+  // Mirrors the LeetCode cache's rules (runtime/lua/features/leetcode/cache.lua): an
   // explicit JOT_CACHE_HOME wins, then the platform's cache dir, with "jot"
   // and then the feature under it.
   fs::path bible_cache_root()

@@ -1,6 +1,6 @@
-// The pure half of WakaTime tracking (see features/wakatime.h for what the
+// The pure half of WakaTime tracking (see extras/wakatime.h for what the
 // integration is and which half this is).
-#include "features/wakatime.h"
+#include "extras/wakatime.h"
 #include "base/shell_util.h"
 #include "base/string_util.h"
 

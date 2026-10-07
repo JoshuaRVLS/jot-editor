@@ -11,7 +11,7 @@
 // loop -- and not a timer of its own -- has to notice them move. Planting a
 // total on the local store is what stands in for having waited.
 #include "editor.h"
-#include "features/status_clock.h"
+#include "extras/status_clock.h"
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>

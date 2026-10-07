@@ -8,7 +8,7 @@
 // the names are *offered* -- inside `class="..."` and `var(--)` and nowhere
 // else, since a class list in a `printf` line is not a class list.
 #include "editor.h"
-#include "features/web_completion.h"
+#include "workspace/web_completion.h"
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>

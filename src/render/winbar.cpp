@@ -1,7 +1,7 @@
 // The breadcrumb winbar: the row a code pane spends above its text, and the
 // drop-down menu a crumb opens (dropbar.nvim's model, ported).
 //
-// The chain comes from features/winbar.h; this file turns it into cells, paints
+// The chain comes from render/winbar_model.h; this file turns it into cells, paints
 // it and owns the interaction (a press opens a crumb, motion only moves the
 // hover band).
 // A folder row opens its own listing beside the menu it is on, keeping the level

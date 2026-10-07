@@ -5,7 +5,7 @@
 // The workspace scan behind `:cppcheck` and the Problems list: every header and
 // source in the workspace is parsed for function signatures, and
 // a declaration with no body anywhere -- or a signature with more than one body
-// -- becomes a diagnostic (see features/cpp_definitions.h for the rules).
+// -- becomes a diagnostic (see syntax/cpp_definitions.h for the rules).
 //
 // The scan runs on the worker thread, once per workspace (on open, on save, when
 // an unsaved buffer's signatures change, and when asked); its result lands as one

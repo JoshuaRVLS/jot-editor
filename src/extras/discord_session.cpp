@@ -1,4 +1,4 @@
-// Discord Rich Presence session (jot/editor/discord_controller.h): turns live
+// Discord Rich Presence session (editor/discord_controller.h): turns live
 // editor state into presence content and drives the IPC client
 // (discord_rpc.cpp), plus the :discord command and the status chip's state.
 //
