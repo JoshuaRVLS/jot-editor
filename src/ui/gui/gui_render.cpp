@@ -736,14 +736,38 @@ void UIGui::paint_float_overlays(float dt)
   // Keys present this frame: surfaces re-emit every frame with a fresh
   // handle, so identity is the surface name (or the handle for standalone
   // floats like toasts).
-  std::unordered_set<std::string> cur_keys;
-  for (const FloatOverlay &ov : float_overlays)
+  //
+  // One surface can open more than one float in the same frame -- the command
+  // palette emits the results grid and, separately, the explanation box; the
+  // settings menu does the same with its value drop-down -- and every float an
+  // emit opens carries that emit's surface name, not the Lua registry name
+  // they were opened under. A bare surface key therefore made those sibling
+  // floats share one animation state and fight over its position: each frame
+  // the second float retargeted the first one's eased position, so neither
+  // ever settled (the palette grid drifted up over the buffer and the
+  // explanation box slid down over the grid's first rows). The ordinal
+  // separates them; it is stable because the overlay list is sorted by zindex
+  // then creation order, which is the order the emit opened them in.
+  std::vector<std::string> overlay_keys(float_overlays.size());
   {
+    std::unordered_map<std::string, int> seen;
+    for (size_t i = 0; i < float_overlays.size(); i++)
+    {
+      const std::string base = float_key(float_overlays[i].surface, float_overlays[i].handle);
+      int &count = seen[base];
+      overlay_keys[i] = count == 0 ? base : base + "#" + std::to_string(count);
+      count++;
+    }
+  }
+  std::unordered_set<std::string> cur_keys;
+  for (size_t i = 0; i < float_overlays.size(); i++)
+  {
+    const FloatOverlay &ov = float_overlays[i];
     if (ov.w <= 0 || ov.h <= 0 || ov.x < 0 || ov.y < 0)
     {
       continue;
     }
-    cur_keys.insert(float_key(ov.surface, ov.handle));
+    cur_keys.insert(overlay_keys[i]);
   }
 
   // A key that vanished since the last frame has closed: after a short
@@ -821,13 +845,12 @@ void UIGui::paint_float_overlays(float dt)
   // the open modal surface's own panel (quick pick, settings, telescope,
   // ...) paints bright on top -- the same order the terminal bakes into
   // the cell grid.
-  auto paint_one = [&](const FloatOverlay &ov)
+  auto paint_one = [&](const FloatOverlay &ov, const std::string &key)
   {
     if (ov.w <= 0 || ov.h <= 0 || ov.x < 0 || ov.y < 0)
     {
       return;
     }
-    const std::string key = float_key(ov.surface, ov.handle);
     const int n = std::min(ov.h, std::max(0, height - ov.y));
     GuiFloatAnim &anim = float_anims_[key];
     GuiFloatColors &fc = float_colors_[key];
@@ -1013,11 +1036,11 @@ void UIGui::paint_float_overlays(float dt)
            || s == "telescope" || s == "settings" || s == "save_prompt" || s == "rename_prompt"
            || s == "quit_prompt";
   };
-  for (const FloatOverlay &ov : float_overlays)
+  for (size_t i = 0; i < float_overlays.size(); i++)
   {
-    if (!is_modal_float(ov.surface))
+    if (!is_modal_float(float_overlays[i].surface))
     {
-      paint_one(ov);
+      paint_one(float_overlays[i], overlay_keys[i]);
     }
   }
   if (dim_alpha_ > 0.003f)
@@ -1037,11 +1060,11 @@ void UIGui::paint_float_overlays(float dt)
               dim_alpha_);
     end_batch();
   }
-  for (const FloatOverlay &ov : float_overlays)
+  for (size_t i = 0; i < float_overlays.size(); i++)
   {
-    if (is_modal_float(ov.surface))
+    if (is_modal_float(float_overlays[i].surface))
     {
-      paint_one(ov);
+      paint_one(float_overlays[i], overlay_keys[i]);
     }
   }
 
