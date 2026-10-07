@@ -67,8 +67,8 @@ void Editor::insert_line_below()
   if (auto_indent)
   {
     const std::string &line = buf.lines[buf.cursor.y];
-    const int indent = EditorFeatures::indent_for_new_line(
-        buf.filepath, line, (int)line.size(), tab_size);
+    const int indent =
+        EditorFeatures::indent_for_new_line(buf.filepath, line, (int)line.size(), tab_size);
     indent_str = EditorFeatures::get_indent_string(indent, tab_size);
   }
   buf.lines.insert(buf.lines.begin() + buf.cursor.y + 1, indent_str);
@@ -240,8 +240,7 @@ void Editor::toggle_comment()
     buf.materialize();
   const commenting::Style style = commenting::style_for(get_file_extension(buf.filepath));
 
-  const bool multi_line = buf.selection.active
-                          && buf.selection.start.y != buf.selection.end.y;
+  const bool multi_line = buf.selection.active && buf.selection.start.y != buf.selection.end.y;
   int start_y =
       buf.selection.active ? std::min(buf.selection.start.y, buf.selection.end.y) : buf.cursor.y;
   int end_y =

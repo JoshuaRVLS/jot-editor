@@ -235,13 +235,15 @@ bool Editor::insert_char(char c)
     edits.push_back({0, true, buf.cursor.y, buf.cursor.x});
     for (size_t i = 0; i < buf.extra_carets.size(); i++)
       edits.push_back({i, false, buf.extra_carets[i].end.y, buf.extra_carets[i].end.x});
-    std::sort(edits.begin(), edits.end(), [](const CaretEdit &a, const CaretEdit &b) {
-      return a.y > b.y || (a.y == b.y && a.x > b.x);
-    });
+    std::sort(edits.begin(),
+              edits.end(),
+              [](const CaretEdit &a, const CaretEdit &b)
+              { return a.y > b.y || (a.y == b.y && a.x > b.x); });
     // A closing character that already sits at a caret is stepped over rather
     // than doubled, and a pair character inserts its partner at every caret, so
     // the pairs a lone caret gets are the pairs a column gets.
-    auto move_caret = [&](const CaretEdit &edit, int x) {
+    auto move_caret = [&](const CaretEdit &edit, int x)
+    {
       if (edit.is_primary)
         buf.cursor.x = ui_clamp_to_utf8_boundary(buf.line(edit.y), x);
       else
@@ -252,9 +254,8 @@ bool Editor::insert_char(char c)
       }
     };
     const bool closing_domain = AutoClose::is_closing_bracket(c);
-    auto caret_x = [&](const CaretEdit &edit) {
-      return edit.is_primary ? buf.cursor.x : buf.extra_carets[edit.extra_idx].end.x;
-    };
+    auto caret_x = [&](const CaretEdit &edit)
+    { return edit.is_primary ? buf.cursor.x : buf.extra_carets[edit.extra_idx].end.x; };
 
     for (std::size_t i = 0; i < edits.size(); i++)
     {
@@ -451,9 +452,10 @@ void Editor::insert_string(const std::string &str)
     points.push_back({0, true, buf.cursor.y, buf.cursor.x});
     for (size_t i = 0; i < buf.extra_carets.size(); i++)
       points.push_back({i, false, buf.extra_carets[i].end.y, buf.extra_carets[i].end.x});
-    std::sort(points.begin(), points.end(), [](const CaretPoint &a, const CaretPoint &b) {
-      return a.y > b.y || (a.y == b.y && a.x > b.x);
-    });
+    std::sort(points.begin(),
+              points.end(),
+              [](const CaretPoint &a, const CaretPoint &b)
+              { return a.y > b.y || (a.y == b.y && a.x > b.x); });
     for (const auto &p : points)
     {
       int ix = std::clamp(p.x, 0, (int)buf.line(p.y).size());
@@ -749,123 +751,125 @@ void Editor::delete_selection()
     {
       int start_y, end_y, start_x, end_x;
     };
-    auto normalize = [&](const Selection &sel, Span &out) {
-    out.start_y = std::min(sel.start.y, sel.end.y);
-    out.end_y = std::max(sel.start.y, sel.end.y);
-    out.start_x = sel.start.y < sel.end.y
-                      ? sel.start.x
-                      : (sel.start.y == sel.end.y ? std::min(sel.start.x, sel.end.x)
-                                                 : sel.end.x);
-    out.end_x = sel.start.y < sel.end.y
-                    ? sel.end.x
-                    : (sel.start.y == sel.end.y ? std::max(sel.start.x, sel.end.x)
-                                               : sel.start.x);
-  };
-  std::vector<std::pair<Span, bool>> spans;
-  if (buf.selection.active)
-  {
-    Span s{};
-    normalize(buf.selection, s);
-    spans.push_back({s, true});
-  }
-  for (size_t i = 0; i < buf.extra_carets.size(); i++)
-  {
-    if (!buf.extra_carets[i].active)
-      continue;
-    Span s{};
-    normalize(buf.extra_carets[i], s);
-    spans.push_back({s, false});
-  }
-  if (spans.empty())
-    return;
-  struct SpanEdit
-  {
-    Span span;
-    bool is_primary;
-    size_t extra_idx;
-  };
-  std::vector<SpanEdit> ordered;
-  {
-    size_t extra_seen = 0;
-    for (size_t si = 0; si < spans.size(); si++)
+    auto normalize = [&](const Selection &sel, Span &out)
     {
-      if (spans[si].second)
+      out.start_y = std::min(sel.start.y, sel.end.y);
+      out.end_y = std::max(sel.start.y, sel.end.y);
+      out.start_x = sel.start.y < sel.end.y
+                        ? sel.start.x
+                        : (sel.start.y == sel.end.y ? std::min(sel.start.x, sel.end.x) : sel.end.x);
+      out.end_x = sel.start.y < sel.end.y
+                      ? sel.end.x
+                      : (sel.start.y == sel.end.y ? std::max(sel.start.x, sel.end.x) : sel.start.x);
+    };
+    std::vector<std::pair<Span, bool>> spans;
+    if (buf.selection.active)
+    {
+      Span s{};
+      normalize(buf.selection, s);
+      spans.push_back({s, true});
+    }
+    for (size_t i = 0; i < buf.extra_carets.size(); i++)
+    {
+      if (!buf.extra_carets[i].active)
+        continue;
+      Span s{};
+      normalize(buf.extra_carets[i], s);
+      spans.push_back({s, false});
+    }
+    if (spans.empty())
+      return;
+    struct SpanEdit
+    {
+      Span span;
+      bool is_primary;
+      size_t extra_idx;
+    };
+    std::vector<SpanEdit> ordered;
+    {
+      size_t extra_seen = 0;
+      for (size_t si = 0; si < spans.size(); si++)
       {
-        ordered.push_back({spans[si].first, true, 0});
-      }
-      else
-      {
-        while (extra_seen < buf.extra_carets.size() && !buf.extra_carets[extra_seen].active)
+        if (spans[si].second)
+        {
+          ordered.push_back({spans[si].first, true, 0});
+        }
+        else
+        {
+          while (extra_seen < buf.extra_carets.size() && !buf.extra_carets[extra_seen].active)
+            extra_seen++;
+          if (extra_seen >= buf.extra_carets.size())
+            continue;
+          ordered.push_back({spans[si].first, false, extra_seen});
           extra_seen++;
-        if (extra_seen >= buf.extra_carets.size())
-          continue;
-        ordered.push_back({spans[si].first, false, extra_seen});
-        extra_seen++;
+        }
       }
     }
-  }
-  if (ordered.empty())
-    return;
+    if (ordered.empty())
+      return;
 
-  std::sort(ordered.begin(), ordered.end(), [](const SpanEdit &a, const SpanEdit &b) {
-    return a.span.start_y > b.span.start_y
-           || (a.span.start_y == b.span.start_y && a.span.start_x > b.span.start_x);
-  });
-  for (const auto &item : ordered)
-  {
-    const Span &s = item.span;
-    bool is_primary = item.is_primary;
-    int start_x = ui_clamp_to_utf8_boundary(buf.line(s.start_y), s.start_x);
-    int end_x = ui_clamp_to_utf8_boundary(buf.line(s.end_y), s.end_x);
-    if (s.start_y == s.end_y)
+    std::sort(ordered.begin(),
+              ordered.end(),
+              [](const SpanEdit &a, const SpanEdit &b)
+              {
+                return a.span.start_y > b.span.start_y
+                       || (a.span.start_y == b.span.start_y && a.span.start_x > b.span.start_x);
+              });
+    for (const auto &item : ordered)
     {
-      buf.line_mut(s.start_y).erase(start_x, end_x - start_x);
-      if (is_primary)
+      const Span &s = item.span;
+      bool is_primary = item.is_primary;
+      int start_x = ui_clamp_to_utf8_boundary(buf.line(s.start_y), s.start_x);
+      int end_x = ui_clamp_to_utf8_boundary(buf.line(s.end_y), s.end_x);
+      if (s.start_y == s.end_y)
       {
-        buf.cursor.y = s.start_y;
-        buf.cursor.x = start_x;
+        buf.line_mut(s.start_y).erase(start_x, end_x - start_x);
+        if (is_primary)
+        {
+          buf.cursor.y = s.start_y;
+          buf.cursor.x = start_x;
+        }
+        else
+        {
+          buf.extra_carets[item.extra_idx].start = {start_x, s.start_y};
+          buf.extra_carets[item.extra_idx].end = {start_x, s.start_y};
+        }
       }
       else
       {
-        buf.extra_carets[item.extra_idx].start = {start_x, s.start_y};
-        buf.extra_carets[item.extra_idx].end = {start_x, s.start_y};
+        buf.line_mut(s.start_y) =
+            buf.line_mut(s.start_y).substr(0, start_x) + buf.line_mut(s.end_y).substr(end_x);
+        buf.lines.erase(buf.lines.begin() + s.start_y + 1, buf.lines.begin() + s.end_y + 1);
+        if (is_primary)
+        {
+          buf.cursor.y = s.start_y;
+          buf.cursor.x = start_x;
+        }
+        else
+        {
+          buf.extra_carets[item.extra_idx].start = {start_x, s.start_y};
+          buf.extra_carets[item.extra_idx].end = {start_x, s.start_y};
+        }
       }
     }
-    else
-    {
-      buf.line_mut(s.start_y) = buf.line_mut(s.start_y).substr(0, start_x)
-                                + buf.line_mut(s.end_y).substr(end_x);
-      buf.lines.erase(buf.lines.begin() + s.start_y + 1, buf.lines.begin() + s.end_y + 1);
-      if (is_primary)
-      {
-        buf.cursor.y = s.start_y;
-        buf.cursor.x = start_x;
-      }
-      else
-      {
-        buf.extra_carets[item.extra_idx].start = {start_x, s.start_y};
-        buf.extra_carets[item.extra_idx].end = {start_x, s.start_y};
-      }
-    }
-  }
 
-  buf.selection.active = false;
-  for (auto &c : buf.extra_carets)
-  {
-    if (c.active)
+    buf.selection.active = false;
+    for (auto &c : buf.extra_carets)
     {
-      c.end = c.start;
-      c.active = false;
+      if (c.active)
+      {
+        c.end = c.start;
+        c.active = false;
+      }
     }
-  }
-  buf.modified = true;
-  clamp_cursor(get_pane().buffer_id);
-  ensure_cursor_visible();
-  needs_redraw = true;
-  if (lua_api)
-    lua_api->on_buffer_change(buf.filepath, "");
-  if (!buf.filepath.empty())
-    notify_lsp_change(buf.filepath);
+    buf.modified = true;
+    clamp_cursor(get_pane().buffer_id);
+    ensure_cursor_visible();
+    needs_redraw = true;
+    if (lua_api)
+      lua_api->on_buffer_change(buf.filepath, "");
+    if (!buf.filepath.empty())
+      notify_lsp_change(buf.filepath);
   }
 }
 

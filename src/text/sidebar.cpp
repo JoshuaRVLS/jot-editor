@@ -13,7 +13,6 @@
 #include <unordered_map>
 #include <vector>
 
-
 static int utf8_cell_len(const std::string &text, size_t i)
 {
   if (i >= text.size())
@@ -160,7 +159,6 @@ static std::string get_file_icon(const FileNode &node)
   // home screen and the status line all agree on what a file looks like.
   return std::string(jot_icons::file_type_icon(node.name).glyph) + " ";
 }
-
 
 static int sidebar_severity_rank(int severity)
 {
@@ -815,10 +813,9 @@ void Editor::render_sidebar()
     return;
   }
 
-  std::string header_label = ""
-                   + (sidebar_render_cache_.root_label.empty()
-                          ? ""
-                          : " " + sidebar_render_cache_.root_label);
+  std::string header_label =
+      ""
+      + (sidebar_render_cache_.root_label.empty() ? "" : " " + sidebar_render_cache_.root_label);
   // The column's stacked sections. The geometry comes from the one model the
   // hit-test and the keyboard walk also read, so a click can never land on a
   // row the painter did not draw.
@@ -1044,8 +1041,7 @@ void Editor::render_sidebar()
       // Label = guide + folder glyph + name: draw the remainder after the
       // guides (which were painted above in the comment color).
       std::string rest = row_label;
-      if (rest.size() >= row.guide.size()
-          && rest.compare(0, row.guide.size(), row.guide) == 0)
+      if (rest.size() >= row.guide.size() && rest.compare(0, row.guide.size(), row.guide) == 0)
       {
         rest = rest.substr(row.guide.size());
       }

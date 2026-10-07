@@ -1582,7 +1582,8 @@ apps/jot/        CLI entrypoint and executable target
 benchmarks/      opt-in performance benchmark suite
 cmake/           reusable CMake modules
 src/jot/        editor state, buffers, panes, workspace, LSP, debugger, terminal
-src/edit/        text editing, cursor movement, selection, clipboard, search
+src/base/        primitives: strings, files, shells, the event loop, task queue
+src/text/        text editing, cursor movement, selection, clipboard, search
 src/features/    syntax, folding, config, bracket helpers, C++ assist
 src/input/       keyboard, mouse, command palette, command dispatch
 src/render/      buffer drawing, minimap, overlays, panels, UI views
@@ -1596,7 +1597,7 @@ test/           unit tests
 ```
 
 Build graph highlights: `jot_engine` is the aggregated static engine target;
-`jot_core`, `jot_edit`, `jot_features`, `jot_input`, `jot_render`,
+`jot_base`, `jot_core`, `jot_text`, `jot_features`, `jot_input`, `jot_render`,
 `jot_tools`, `jot_lua_bridge`, and `jot_ui` are the module libraries behind it.
 
 ## Notes and limitations

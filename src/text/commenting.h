@@ -15,10 +15,10 @@ namespace commenting
   // then wraps in one pair instead of commenting each line separately.
   struct Style
   {
-    std::string_view prefix;       // line comment prefix ("//", "#", "--", "%")
-    std::string_view suffix;       // per-line closer for pseudo-block langs (html "-->")
-    std::string_view block_open;   // block opener, or empty when none exists
-    std::string_view block_close;  // block closer, or empty when none exists
+    std::string_view prefix;      // line comment prefix ("//", "#", "--", "%")
+    std::string_view suffix;      // per-line closer for pseudo-block langs (html "-->")
+    std::string_view block_open;  // block opener, or empty when none exists
+    std::string_view block_close; // block closer, or empty when none exists
   };
 
   inline Style style_for(const std::string &ext)
@@ -107,8 +107,7 @@ namespace commenting
         // A range where every line carries its own marker (<!-- a --> on
         // each line) is per-line commenting, not one wrapped pair: unwrapping
         // must strip every line, or the middle lines keep half a marker.
-        && !all_line_commented
-        && range_is_block_commented(lines, start_y, end_y, style);
+        && !all_line_commented && range_is_block_commented(lines, start_y, end_y, style);
     const bool uncomment = wrapped_in_block || all_line_commented;
     // A lone blank line still gets its marker: with no range to comment there
     // is nothing else to stamp, and Ctrl+/ on an empty line is how a comment
@@ -135,8 +134,7 @@ namespace commenting
         std::string rest = body;
         const bool has_open = style.block_open.empty()
                                   ? false
-                                  : rest.compare(0, style.block_open.size(), style.block_open)
-                                        == 0;
+                                  : rest.compare(0, style.block_open.size(), style.block_open) == 0;
         if (has_open)
         {
           rest = rest.substr(style.block_open.size());

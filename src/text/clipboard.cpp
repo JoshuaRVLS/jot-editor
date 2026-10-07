@@ -34,7 +34,7 @@ bool write_wl_clipboard(const std::string &text)
   FILE *pipe = shell_util::open_command_pipe("wl-copy" + shell_util::detached_redirect(), "w");
   if (!pipe)
     return false;
-    
+
   fwrite(text.data(), 1, text.size(), pipe);
   return shell_util::close_command_pipe(pipe) == 0;
 }
@@ -514,9 +514,10 @@ void Editor::paste_text(const std::string &text)
     std::vector<Cursor> points = {buf.cursor};
     for (const auto &c : buf.extra_carets)
       points.push_back(c.end);
-    std::sort(points.begin(), points.end(), [](const Cursor &a, const Cursor &b) {
-      return a.y > b.y || (a.y == b.y && a.x > b.x);
-    });
+    std::sort(points.begin(),
+              points.end(),
+              [](const Cursor &a, const Cursor &b)
+              { return a.y > b.y || (a.y == b.y && a.x > b.x); });
     for (const auto &p : points)
     {
       std::string &line_ref = buf.line_mut(p.y);

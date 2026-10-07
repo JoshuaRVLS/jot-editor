@@ -45,7 +45,8 @@ namespace
 
   bool ranges_overlap(const Selection &a, const Selection &b)
   {
-    auto norm = [](const Selection &s, Cursor &lo, Cursor &hi) {
+    auto norm = [](const Selection &s, Cursor &lo, Cursor &hi)
+    {
       if (!s.active)
       {
         lo = s.start;
@@ -134,20 +135,20 @@ bool Editor::delete_at_all_carets(bool forward)
   {
     int start_y, end_y, start_x, end_x;
   };
-  auto normalize = [&](const Selection &sel, Span &out) {
+  auto normalize = [&](const Selection &sel, Span &out)
+  {
     out.start_y = std::min(sel.start.y, sel.end.y);
     out.end_y = std::max(sel.start.y, sel.end.y);
     out.start_x = sel.start.y < sel.end.y
                       ? sel.start.x
-                      : (sel.start.y == sel.end.y ? std::min(sel.start.x, sel.end.x)
-                                                  : sel.end.x);
+                      : (sel.start.y == sel.end.y ? std::min(sel.start.x, sel.end.x) : sel.end.x);
     out.end_x = sel.start.y < sel.end.y
                     ? sel.end.x
-                    : (sel.start.y == sel.end.y ? std::max(sel.start.x, sel.end.x)
-                                                : sel.start.x);
+                    : (sel.start.y == sel.end.y ? std::max(sel.start.x, sel.end.x) : sel.start.x);
   };
   // One grapheme around a point caret; line joins when it sits on a boundary.
-  auto point_span = [&](const Cursor &p, Span &out) {
+  auto point_span = [&](const Cursor &p, Span &out)
+  {
     const std::string &line = buf.line(p.y);
     const int x = ui_clamp_to_utf8_boundary(line, std::clamp(p.x, 0, (int)line.size()));
     if (forward)
@@ -214,13 +215,16 @@ bool Editor::delete_at_all_carets(bool forward)
   }
   // Bottom-up; ties (caret sharing its cell with the main cursor) go to the
   // primary so its cursor always lands on its own span start.
-  std::sort(ordered.begin(), ordered.end(), [](const SpanEdit &a, const SpanEdit &b) {
-    if (a.span.start_y != b.span.start_y)
-      return a.span.start_y > b.span.start_y;
-    if (a.span.start_x != b.span.start_x)
-      return a.span.start_x > b.span.start_x;
-    return a.is_primary && !b.is_primary;
-  });
+  std::sort(ordered.begin(),
+            ordered.end(),
+            [](const SpanEdit &a, const SpanEdit &b)
+            {
+              if (a.span.start_y != b.span.start_y)
+                return a.span.start_y > b.span.start_y;
+              if (a.span.start_x != b.span.start_x)
+                return a.span.start_x > b.span.start_x;
+              return a.is_primary && !b.is_primary;
+            });
 
   // Dedupe: a span fully covered by an earlier-applied (lower) span is a
   // duplicate of that deletion and would double-erase the same cells.
@@ -228,10 +232,9 @@ bool Editor::delete_at_all_carets(bool forward)
   // point span on row 0 never "overlaps" a join span that starts further
   // right on the same row just because the join spans two rows.
   std::vector<Span> applied;
-  auto overlaps_applied = [&](const Span &s) {
-    auto lex_less = [](int y1, int x1, int y2, int x2) {
-      return y1 < y2 || (y1 == y2 && x1 < x2);
-    };
+  auto overlaps_applied = [&](const Span &s)
+  {
+    auto lex_less = [](int y1, int x1, int y2, int x2) { return y1 < y2 || (y1 == y2 && x1 < x2); };
     for (const auto &k : applied)
     {
       if (lex_less(s.start_y, s.start_x, k.end_y, k.end_x)
@@ -339,8 +342,7 @@ void Editor::insert_string_for_test(const std::string &str)
   insert_string(str);
 }
 
-void Editor::set_inlay_hints_for_test(const std::string &filepath,
-                                      std::vector<LSPInlayHint> hints)
+void Editor::set_inlay_hints_for_test(const std::string &filepath, std::vector<LSPInlayHint> hints)
 {
   auto &cache = lsp_inlay_hint_caches[filepath];
   cache.hints = std::move(hints);

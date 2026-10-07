@@ -26,7 +26,7 @@ function(jot_configure_object_target target_name)
     ${PROJECT_SOURCE_DIR}/src/jot
     ${PROJECT_SOURCE_DIR}/src/input
     ${PROJECT_SOURCE_DIR}/src/render
-    ${PROJECT_SOURCE_DIR}/src/edit
+    ${PROJECT_SOURCE_DIR}/src/text
     ${PROJECT_SOURCE_DIR}/src/features
     ${PROJECT_SOURCE_DIR}/src/ui
     ${PROJECT_SOURCE_DIR}/src/jot/lua
@@ -317,7 +317,7 @@ function(jot_expose_module_api target_name)
     ${PROJECT_SOURCE_DIR}/src/jot
     ${PROJECT_SOURCE_DIR}/src/input
     ${PROJECT_SOURCE_DIR}/src/render
-    ${PROJECT_SOURCE_DIR}/src/edit
+    ${PROJECT_SOURCE_DIR}/src/text
     ${PROJECT_SOURCE_DIR}/src/features
     ${PROJECT_SOURCE_DIR}/src/ui
     ${PROJECT_SOURCE_DIR}/src/tools
@@ -326,7 +326,7 @@ endfunction()
 
 include(base/sources.cmake)
 include(jot/sources.cmake)
-include(edit/sources.cmake)
+include(text/sources.cmake)
 include(features/sources.cmake)
 include(input/sources.cmake)
 include(render/sources.cmake)
@@ -384,8 +384,8 @@ target_compile_options(jot_engine_obj PRIVATE ${LIBUV_CFLAGS_OTHER})
 # include ui/gui/gui.h, which pulls in glad/gl.h.
 target_link_libraries(jot_engine_obj PRIVATE jot_glad)
 
-add_library(jot_edit_obj OBJECT ${JOT_EDIT_SOURCES})
-jot_configure_object_target(jot_edit_obj)
+add_library(jot_text_obj OBJECT ${JOT_TEXT_SOURCES})
+jot_configure_object_target(jot_text_obj)
 
 add_library(jot_features_obj OBJECT ${JOT_FEATURES_SOURCES})
 if(JOT_TREESITTER_ENABLED)
@@ -459,7 +459,7 @@ jot_configure_object_target(jot_ui_obj)
 # Module static libraries (for larger-project style ownership and reuse)
 add_library(jot_base STATIC $<TARGET_OBJECTS:jot_base_obj>)
 add_library(jot_core STATIC $<TARGET_OBJECTS:jot_engine_obj>)
-add_library(jot_edit STATIC $<TARGET_OBJECTS:jot_edit_obj>)
+add_library(jot_text STATIC $<TARGET_OBJECTS:jot_text_obj>)
 add_library(jot_features STATIC $<TARGET_OBJECTS:jot_features_obj>)
 add_library(jot_input STATIC $<TARGET_OBJECTS:jot_input_obj>)
 add_library(jot_render STATIC $<TARGET_OBJECTS:jot_render_obj>)
@@ -476,7 +476,7 @@ add_library(jot_ui STATIC $<TARGET_OBJECTS:jot_ui_obj>)
 
 jot_expose_module_api(jot_base)
 jot_expose_module_api(jot_core)
-jot_expose_module_api(jot_edit)
+jot_expose_module_api(jot_text)
 jot_expose_module_api(jot_features)
 jot_expose_module_api(jot_input)
 jot_expose_module_api(jot_render)
@@ -489,7 +489,7 @@ jot_expose_module_api(jot_ui)
 add_library(jot_engine STATIC
   $<TARGET_OBJECTS:jot_base_obj>
   $<TARGET_OBJECTS:jot_engine_obj>
-  $<TARGET_OBJECTS:jot_edit_obj>
+  $<TARGET_OBJECTS:jot_text_obj>
   $<TARGET_OBJECTS:jot_features_obj>
   $<TARGET_OBJECTS:jot_input_obj>
   $<TARGET_OBJECTS:jot_render_obj>
@@ -508,10 +508,10 @@ target_include_directories(jot_engine SYSTEM PUBLIC ${LUA_INCLUDE_DIRS})
 
 jot_expose_module_api(jot_engine)
 if(JOT_TREESITTER_ENABLED)
-  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj jot_base jot_core jot_edit jot_features jot_input jot_render jot_tools jot_lua_api jot_ui jot_engine)
+  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_text_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj jot_base jot_core jot_text jot_features jot_input jot_render jot_tools jot_lua_api jot_ui jot_engine)
     target_compile_definitions(${target_name} PUBLIC JOT_TREESITTER=1)
   endforeach()
-  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj)
+  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_text_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj)
     target_include_directories(${target_name} SYSTEM PRIVATE ${TREE_SITTER_INCLUDE_DIRS})
   endforeach()
   target_link_libraries(jot_features PUBLIC
@@ -538,7 +538,7 @@ endif()
 # targets *and* the libraries they are folded into, because $<TARGET_OBJECTS:>
 # does not carry usage requirements across.
 if(JOT_GUI_ENABLED)
-  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj jot_base jot_core jot_edit jot_features jot_input jot_render jot_tools jot_lua_api jot_ui jot_engine)
+  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_text_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj jot_base jot_core jot_text jot_features jot_input jot_render jot_tools jot_lua_api jot_ui jot_engine)
     target_compile_definitions(${target_name} PUBLIC JOT_GUI=1)
   endforeach()
 endif()
@@ -578,6 +578,6 @@ if(WIN32)
       advapi32 user32 shell32 ole32)
   target_link_libraries(jot_core PUBLIC ${LIBUV_WIN32_SYSTEM_LIBS})
   target_link_libraries(jot_engine PUBLIC ${LIBUV_WIN32_SYSTEM_LIBS})
-  target_link_libraries(jot_edit PUBLIC user32)
+  target_link_libraries(jot_text PUBLIC user32)
   target_link_libraries(jot_engine PUBLIC user32)
 endif()

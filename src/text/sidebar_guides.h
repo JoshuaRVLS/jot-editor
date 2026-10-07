@@ -15,14 +15,10 @@ namespace sidebar_guides
   // Guide string for one row. `ancestor_guide` is the concatenation of the
   // ancestor slots (one 2-cell entry per ancestor level above this node,
   // starting at the parent's level); pass "" for top-level rows.
-  inline std::string row_guide(bool is_dir,
-                               bool expanded,
-                               bool is_last,
-                               int depth,
-                               const std::string &ancestor_guide)
+  inline std::string
+  row_guide(bool is_dir, bool expanded, bool is_last, int depth, const std::string &ancestor_guide)
   {
-    const std::string own = is_dir ? (expanded ? " " : " ")
-                                  : (is_last ? "└ " : "│ ");
+    const std::string own = is_dir ? (expanded ? " " : " ") : (is_last ? "└ " : "│ ");
     if (depth == 0)
     {
       return own;

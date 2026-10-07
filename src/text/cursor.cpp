@@ -162,9 +162,8 @@ void Editor::ensure_cursor_visible(bool adjust_horizontal)
   }
   else
   {
-    const int last_visible =
-        fold_view->buffer_line_for_visible_offset(buf.scroll_offset, viewport_h - 1,
-                                                 (int)buf.line_count());
+    const int last_visible = fold_view->buffer_line_for_visible_offset(
+        buf.scroll_offset, viewport_h - 1, (int)buf.line_count());
     if (buf.cursor.y > last_visible)
     {
       buf.scroll_offset = buf.cursor.y;
@@ -190,9 +189,9 @@ void Editor::ensure_cursor_visible(bool adjust_horizontal)
       // The caret sits after any inlay hints inserted before it, so the
       // viewport comparison runs in rendered (hint-shifted) coordinates:
       // scroll_x is the anchor and stays unshifted, matching the renderer.
-      int cursor_visual = compute_visual_column(line, buf.cursor.x, tab_size)
-                          + lsp_inlay_hint_cells_before(
-                              buf.filepath, buf.cursor.y, buf.cursor.x, line);
+      int cursor_visual =
+          compute_visual_column(line, buf.cursor.x, tab_size)
+          + lsp_inlay_hint_cells_before(buf.filepath, buf.cursor.y, buf.cursor.x, line);
       int scroll_visual = compute_visual_column(line, buf.scroll_x, tab_size);
       if (cursor_visual < scroll_visual)
       {
@@ -207,8 +206,7 @@ void Editor::ensure_cursor_visible(bool adjust_horizontal)
           if (next <= cur)
             next = cur + 1;
           int next_visual = compute_visual_column(line, next, tab_size)
-                            + lsp_inlay_hint_cells_before(
-                                buf.filepath, buf.cursor.y, next, line);
+                            + lsp_inlay_hint_cells_before(buf.filepath, buf.cursor.y, next, line);
           if (next_visual > cursor_visual - viewport_w + 1)
             break;
           cur = next;
@@ -253,10 +251,8 @@ void Editor::reveal_cursor_centered()
   // pinned to the last row -- which is where minimal scrolling used to leave it,
   // so half the function was still below the fold.
   const auto fold_view = Folding::view_of(buf.fold_ranges);
-  if (fold_view->visible_row_for_line(buf.scroll_offset,
-                                      buf.cursor.y,
-                                      viewport_h,
-                                      (int)buf.line_count())
+  if (fold_view->visible_row_for_line(
+          buf.scroll_offset, buf.cursor.y, viewport_h, (int)buf.line_count())
       >= 0)
   {
     ensure_cursor_visible();

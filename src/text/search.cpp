@@ -256,8 +256,8 @@ void SearchController::perform()
 
   if (query_.empty())
   {
-    editor_.set_message("Search cleared ["
-                + search_flags(case_sensitive_, whole_word_, regex_) + "]");
+    editor_.set_message("Search cleared [" + search_flags(case_sensitive_, whole_word_, regex_)
+                        + "]");
     editor_.needs_redraw = true;
     return;
   }
@@ -328,9 +328,8 @@ void SearchController::perform()
 
   if (results_.empty())
   {
-    editor_.set_message("No matches ["
-                + search_flags(case_sensitive_, whole_word_, regex_)
-                + (scoped_to_selection_ ? ",Sel" : "") + "]");
+    editor_.set_message("No matches [" + search_flags(case_sensitive_, whole_word_, regex_)
+                        + (scoped_to_selection_ ? ",Sel" : "") + "]");
     editor_.needs_redraw = true;
     return;
   }
@@ -345,8 +344,8 @@ void SearchController::perform()
   editor_.ensure_cursor_visible();
 
   editor_.set_message(std::to_string(results_.size()) + " match(es) ["
-              + search_flags(case_sensitive_, whole_word_, regex_)
-              + (scoped_to_selection_ ? ",Sel" : "") + "]");
+                      + search_flags(case_sensitive_, whole_word_, regex_)
+                      + (scoped_to_selection_ ? ",Sel" : "") + "]");
   editor_.needs_redraw = true;
 }
 
@@ -378,7 +377,7 @@ void SearchController::find_next()
 
   const bool wrapped = prev_index >= 0 && result_index_ <= prev_index;
   editor_.set_message(std::to_string(result_index_ + 1) + "/" + std::to_string(results_.size())
-              + (wrapped ? " (wrapped)" : ""));
+                      + (wrapped ? " (wrapped)" : ""));
 }
 
 void SearchController::find_prev()
@@ -409,7 +408,7 @@ void SearchController::find_prev()
 
   const bool wrapped = prev_index >= 0 && result_index_ >= prev_index;
   editor_.set_message(std::to_string(result_index_ + 1) + "/" + std::to_string(results_.size())
-              + (wrapped ? " (wrapped)" : ""));
+                      + (wrapped ? " (wrapped)" : ""));
 }
 
 bool SearchController::replace_current()
@@ -627,8 +626,8 @@ void SearchController::handle_panel_input(int ch, bool is_ctrl, bool is_shift)
       results_.clear();
       result_index_ = -1;
     }
-    editor_.set_message("Search cleared ["
-                + search_flags(case_sensitive_, whole_word_, regex_) + "]");
+    editor_.set_message("Search cleared [" + search_flags(case_sensitive_, whole_word_, regex_)
+                        + "]");
     editor_.needs_redraw = true;
     return;
   }
