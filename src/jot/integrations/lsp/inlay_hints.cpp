@@ -7,7 +7,7 @@
 #include "editor.h"
 #include "jot/integrations/lsp/common.h"
 #include "lsp/client.h"
-#include "features/column_utils.h"
+#include "text/column_utils.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <string>

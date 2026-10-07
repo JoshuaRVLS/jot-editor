@@ -7,7 +7,7 @@
 // contains the selection, shrink for the largest node strictly inside it -- so
 // there is no stack to keep in sync with edits, cursor moves or undo.
 #include "editor.h"
-#include "features/textobjects.h"
+#include "text/textobjects.h"
 
 #include <algorithm>
 

@@ -244,15 +244,8 @@ bool EditorFeatures::should_lua_auto_indent(const std::string &line)
     return true;
 
   // Blocks opened by the first word: function foo(), local function, if ...
-  static const std::vector<std::string> starters = {"function",
-                                                    "local function",
-                                                    "if",
-                                                    "for",
-                                                    "while",
-                                                    "repeat",
-                                                    "do",
-                                                    "else",
-                                                    "elseif"};
+  static const std::vector<std::string> starters = {
+      "function", "local function", "if", "for", "while", "repeat", "do", "else", "elseif"};
   for (const auto &kw : starters)
   {
     if (starts_with_keyword(trimmed, kw))
@@ -379,8 +372,10 @@ namespace
   }
 } // namespace
 
-int EditorFeatures::indent_for_new_line(
-    const std::string &path, const std::string &line, int caret_col, int tab_size)
+int EditorFeatures::indent_for_new_line(const std::string &path,
+                                        const std::string &line,
+                                        int caret_col,
+                                        int tab_size)
 {
   const int indent = get_indent_level(line);
   const int step = std::max(1, tab_size);

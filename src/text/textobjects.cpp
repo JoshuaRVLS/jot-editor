@@ -1,5 +1,5 @@
 // The per-language textobject node table. See textobjects.h for why it exists.
-#include "features/textobjects.h"
+#include "text/textobjects.h"
 
 #include <algorithm>
 #include <cctype>

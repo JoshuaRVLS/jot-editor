@@ -1,8 +1,6 @@
 set(JOT_FEATURES_SOURCES
-  features/autoclose.cpp
   features/bible.cpp
   features/bracket.cpp
-  features/bracket_text_object.cpp
   features/color_codes.cpp
   features/color_definitions.cpp
   features/color_functions.cpp
@@ -20,8 +18,6 @@ set(JOT_FEATURES_SOURCES
   features/cpp_definitions_analysis.cpp
   features/cpp_flags.cpp
   features/folding.cpp
-  features/text_features.cpp
-  features/textobjects.cpp
   features/syntax.cpp
   features/tree_sitter/install.cpp
   features/tree_sitter/manager.cpp
@@ -31,7 +27,6 @@ set(JOT_FEATURES_SOURCES
   features/http_file.cpp
   features/leetcode_http.cpp
   features/language.cpp
-  features/quote_text_object.cpp
   features/save_hygiene.cpp
   features/smooth_scroll.cpp
   features/status_clock.cpp

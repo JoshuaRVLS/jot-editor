@@ -5,32 +5,32 @@
 
 namespace
 {
-bool is_word_char(char c)
-{
-  const unsigned char u = static_cast<unsigned char>(c);
-  return std::isalnum(u) != 0 || c == '_';
-}
-
-bool is_quote(char c)
-{
-  return c == '"' || c == '\'';
-}
-
-// Whether an opener of this kind is still waiting for the closer at `pos`
-// somewhere to its left on the same line. Such a closer is already spoken for,
-// so a typed opener there has to bring a partner of its own.
-bool opener_unmatched_before(const std::string &line, int pos, char opener, char closer)
-{
-  int depth = 0;
-  for (int i = 0; i < pos; i++)
+  bool is_word_char(char c)
   {
-    if (line[i] == opener)
-      depth++;
-    else if (line[i] == closer && depth > 0)
-      depth--;
+    const unsigned char u = static_cast<unsigned char>(c);
+    return std::isalnum(u) != 0 || c == '_';
   }
-  return depth > 0;
-}
+
+  bool is_quote(char c)
+  {
+    return c == '"' || c == '\'';
+  }
+
+  // Whether an opener of this kind is still waiting for the closer at `pos`
+  // somewhere to its left on the same line. Such a closer is already spoken for,
+  // so a typed opener there has to bring a partner of its own.
+  bool opener_unmatched_before(const std::string &line, int pos, char opener, char closer)
+  {
+    int depth = 0;
+    for (int i = 0; i < pos; i++)
+    {
+      if (line[i] == opener)
+        depth++;
+      else if (line[i] == closer && depth > 0)
+        depth--;
+    }
+    return depth > 0;
+  }
 } // namespace
 
 bool AutoClose::should_auto_close(char c)

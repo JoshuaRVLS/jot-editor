@@ -8,7 +8,7 @@
 // the file's language is what selects the C-family rules.
 
 #include "editor.h"
-#include "features/text_features.h"
+#include "text/text_features.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

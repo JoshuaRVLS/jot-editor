@@ -8,7 +8,7 @@
 // to bypass the rules entirely.
 
 #include "editor.h"
-#include "features/autoclose.h"
+#include "text/autoclose.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

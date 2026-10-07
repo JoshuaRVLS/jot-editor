@@ -1,7 +1,7 @@
 #include "editor.h"
-#include "features/column_utils.h"
 #include "jot/lua/api.h"
 #include "lsp/client.h"
+#include "text/column_utils.h"
 extern "C"
 {
 #include <lauxlib.h>

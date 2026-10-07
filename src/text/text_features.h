@@ -32,8 +32,10 @@ public:
   // that opens a body steps in one level. A C-family control statement does
   // not: in the project's brace style its `{` stands on the next line at the
   // statement's own indent.
-  static int indent_for_new_line(
-      const std::string &path, const std::string &line, int caret_col, int tab_size);
+  static int indent_for_new_line(const std::string &path,
+                                 const std::string &line,
+                                 int caret_col,
+                                 int tab_size);
 
   // Whether a line that has just been typed is a label belonging one level out
   // from the body it introduces: `case ...:` and `default:`, which

@@ -1,4 +1,6 @@
 set(JOT_TEXT_SOURCES
+  text/autoclose.cpp
+  text/bracket_text_object.cpp
   text/clipboard.cpp
   text/cursor.cpp
   text/datetime.cpp
@@ -12,6 +14,7 @@ set(JOT_TEXT_SOURCES
   text/multicursor.cpp
   text/textobject.cpp
   text/path_clipboard.cpp
+  text/quote_text_object.cpp
   text/replace.cpp
   text/reverse_lines.cpp
   text/search.cpp
@@ -20,6 +23,8 @@ set(JOT_TEXT_SOURCES
   text/sort_desc.cpp
   text/stats.cpp
   text/surround.cpp
+  text/text_features.cpp
+  text/textobjects.cpp
   text/transform.cpp
   text/trim_blank.cpp
   text/unique_lines.cpp

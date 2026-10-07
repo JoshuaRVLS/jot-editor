@@ -8,7 +8,7 @@
 // cursor is inside. Machines without the cpp grammar installed skip (the tree is
 // simply absent), which is how the other tree-sitter tests guard too.
 #include "editor.h"
-#include "features/textobjects.h"
+#include "text/textobjects.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

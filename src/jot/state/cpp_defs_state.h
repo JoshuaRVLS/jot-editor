@@ -2,7 +2,7 @@
 #define JOT_STATE_CPP_DEFS_STATE_H
 
 #include "features/cpp_definitions.h" // ScanStats
-#include "features/text_features.h"   // Diagnostic
+#include "text/text_features.h"       // Diagnostic
 #include <map>
 #include <string>
 #include <vector>
