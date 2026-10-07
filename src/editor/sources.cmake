@@ -9,6 +9,7 @@ set(JOT_EDITOR_SOURCES
   editor/app/file.cpp
   editor/app/fold_state.cpp
   editor/app/jumplist.cpp
+  editor/app/line_commands.cpp
   editor/app/recent.cpp
   editor/app/test_hooks.cpp
   editor/app/folding.cpp

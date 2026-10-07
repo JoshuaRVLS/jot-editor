@@ -3,8 +3,9 @@
 Phase 0 measured the tree. This records what has moved since, what the tree looks
 like now, and what is deliberately not done yet. Phases 1 to 4 are committed, and
 the last of them is the one that removed `src/features/`. Phase 5 -- the `Editor`
-facade -- has started: the first collaborator is out of the fragments and
-`api/rest.h` is gone.
+facade -- has started: the first collaborator is out of the fragments, `api/rest.h`
+is gone, and the first batch of `Editor::` implementations has come out of a
+module below `editor/`.
 
 ## Modules that exist
 
@@ -46,13 +47,13 @@ shrink and never allowed to grow.
 
 - `tools/check_module_deps.py` resolves every quoted include the way the
   compiler does and fails on an include that points from a lower module to a
-  higher one. Today: **209 upward includes in 26 pairs**, recorded in
+  higher one. Today: **197 upward includes in 26 pairs**, recorded in
   `docs/refactor/module-dep-baseline.txt`. The pairs worth looking at first:
-  `render -> editor` 42, `editor -> lua` 27, `text -> editor` 25,
-  `input -> editor` 23, `render -> lua` 20, `text -> lua` 17, `git -> editor` 7,
+  `render -> editor` 42, `editor -> lua` 28, `input -> editor` 23,
+  `render -> lua` 20, `text -> editor` 18, `text -> lua` 11, `git -> editor` 7,
   `workspace -> editor` 7, `extras -> editor` 6.
 - `tools/check_headers.py` compiles every header alone with the flags from
-  `build/compile_commands.json`. Today: **152 of 167 stand alone**. The 15 that
+  `build/compile_commands.json`. Today: **154 of 169 stand alone**. The 15 that
   do not are the `src/editor/api/` fragments, which are pieces of a class body
   rather than headers, so they cannot compile alone by construction. That list
   only shrinks by taking members out of the `Editor` class; `api/rest.h` was the
@@ -75,7 +76,7 @@ Both checkers were checked with teeth: a `#include "jot/editor.h"` added to
 
 ## The one blocker, restated
 
-136 of 271 `.cpp` files in `src/` define `Editor::` methods. That is why no
+130 of 267 `.cpp` files in `src/` define `Editor::` methods. That is why no
 further module can be cut cleanly: moving those files relabels a directory
 without creating a boundary, because the moved file still includes `editor.h`
 and the module still points upward.
@@ -100,21 +101,30 @@ editor`, `text -> editor` and `input -> editor` dominate the baseline.
   piece left: until a caller can ask for what it needs instead of including
   `editor.h`, no module above `base` can be finished.
 
-  The 209 upward includes split three ways, and the split is what says how each
+  The 197 upward includes split three ways, and the split is what says how each
   one gets paid:
 
   | including file | what it is | edges |
   | --- | --- | --- |
-  | in `editor/` | `editor -> lua`, the bridge's own headers | 27 |
-  | below `editor/` | an `Editor::` method implementation | 156 |
+  | in `editor/` | `editor -> lua`, the bridge's own headers | 28 |
+  | below `editor/` | an `Editor::` method implementation | 143 |
   | below `editor/` | a real consumer of `Editor` | 26 |
 
-  The 156 are one shape: a file that defines `Editor::` methods is editor code,
+  The 143 are one shape: a file that defines `Editor::` methods is editor code,
   so it either moves into `editor/` (where `surfaces/` and `app/` already hold
   the paint and the commands) or it keeps a pure half in its own module and
   leaves a wrapper behind in `editor/`. The 26 want what the facade is for: a
   narrow header that answers the question the caller actually has, so the file
   never sees the class at all.
+
+  `text/` is the module this has been tried on first, and 14 of its 24 `.cpp`
+  files still define `Editor::` methods: `edit.cpp`, `cursor.cpp`,
+  `multicursor.cpp`, `clipboard.cpp`, `sidebar.cpp`, `lines.cpp`,
+  `textobject.cpp`, `surround.cpp`, `transform.cpp`, `replace.cpp`,
+  `increment.cpp`, `duplicate.cpp`, `datetime.cpp` and `path_clipboard.cpp`.
+  The small ones go the way the eight above did; the four big ones (`edit`,
+  `cursor`, `multicursor`, `clipboard`) are where the editor's own state is the
+  subject and want a different cut.
 
   The fragments go the way `SearchController` and `DiscordController` went --
   state and behaviour into one class with its own header, `Editor` keeps one of
@@ -134,29 +144,36 @@ editor`, `text -> editor` and `input -> editor` dominate the baseline.
 
 ## Verification of the latest change set
 
-Phase 5's first collaborator, the `RestClient` extraction.
+Phase 5's first cut at the `Editor::` implementations below `editor/`: the eight
+line commands that lived in `src/text/` are now a pure unit in `text/` and a
+wrapper in `editor/app/line_commands.cpp`.
 
 - `cmake --build build -j8` (Release, GUI and tree-sitter on) and
   `cmake --build build-tests -j8`: both clean.
-- `./build-tests/test/jot_tests`: 956 cases, 954 passed, 1 failed, 70591
-  assertions -- the same numbers as before the change, and the failure is the
-  `test_home_open.cpp:292` case below.
-- `test/rest_probe.py ./build/apps/jot/jot`: PASS. That is the interface a user
-  has rather than the class: a real pty, a real curl and a real server on a real
-  port, across three scenes (`:rest` at the cursor, `:rest echo` with a JSON
-  body, and an unresolved `{{var}}` that has to refuse the run).
-- `tools/check_module_deps.py`: 209 upward includes, all on the baseline -- the
-  same count, because the extraction moved nothing across a module boundary.
-- `tools/check_headers.py`: 152 of 167 stand alone, 15 on the baseline (was 16).
-  `editor/rest_client.h` stands alone, and `--write-baseline` regenerates the
-  baseline byte for byte, so the one line that left it is the only one that
-  moved.
-- `tools/leak_check.sh build-asan '[http]'`: no leaks reported, script exit 0.
-  That also builds the whole tree a second time under Debug + AddressSanitizer,
-  so it is a second independent check of every include path and target this
-  touched. The filter is the moved code's own tests -- the three REST cases
-  tagged `[http]`, which drive `prepare` and `show_response` through the test
-  hooks.
+- `./build-tests/test/jot_tests`: 966 cases, 964 passed, 1 failed, 70628
+  assertions. The one failure is the `test_home_open.cpp:292` case below, which
+  fails the same way on the tree before this change; the 10 cases and 37
+  assertions the run gained are `test/test_line_ops.cpp`.
+- That file is also the coverage this slice did not have before. The rules cases
+  assert the algorithms directly (case-folded stable sort either way round,
+  unique keeping the first of each line, trim never emptying the buffer, the
+  join spacing rule, the stats counts and the selection span). The editor cases
+  then run `:trimblank`, `:joinlines` and `:sortdesc` through a real editor and
+  assert the buffer that comes out, which is what pins the range the wrapper
+  works out from the selection. Writing them paid for itself immediately: the
+  first `:sortdesc` case selected one line and the command correctly refused, so
+  the case was wrong and the command was not.
+- `tools/check_module_deps.py`: 197 upward includes, all on the baseline (was
+  209). The baseline diff is exactly the move: 13 lines gone with the seven
+  `src/text/*.cpp` files that were deleted, and one line added for
+  `editor/app/line_commands.cpp -> lua/api.h`, the `lua_api->on_buffer_change`
+  call every one of those commands makes. `text -> editor` is 25 to 18 and
+  `text -> lua` 17 to 11.
+- `tools/check_headers.py`: 154 of 169 stand alone, 15 on the baseline. Both new
+  headers -- `text/line_ops.h` and `text/buffer_stats.h` -- stand alone.
+- `tools/leak_check.sh build-asan '[line_ops],[buffer_stats]'`: no leaks
+  reported, script exit 0, and it builds the changed targets a second time under
+  Debug + AddressSanitizer.
 
 ## Known red, verified not ours
 

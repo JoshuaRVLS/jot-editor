@@ -1,5 +1,6 @@
 add_executable(jot_tests
   test_string_util.cpp
+  test_line_ops.cpp
   test_productivity.cpp
   test_smooth_scroll.cpp
   test_status_clock.cpp

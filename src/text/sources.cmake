@@ -2,30 +2,25 @@ set(JOT_TEXT_SOURCES
   text/autoclose.cpp
   text/bracket_text_object.cpp
   text/clipboard.cpp
+  text/buffer_stats.cpp
   text/cursor.cpp
   text/datetime.cpp
   text/duplicate.cpp
   text/edit.cpp
   text/in_memory_line_provider.cpp
   text/increment.cpp
-  text/join_lines.cpp
   text/lazy_line_provider.cpp
+  text/line_ops.cpp
   text/lines.cpp
   text/multicursor.cpp
   text/textobject.cpp
   text/path_clipboard.cpp
   text/quote_text_object.cpp
   text/replace.cpp
-  text/reverse_lines.cpp
   text/search.cpp
-  text/shuffle_lines.cpp
   text/sidebar.cpp
-  text/sort_desc.cpp
-  text/stats.cpp
   text/surround.cpp
   text/text_features.cpp
   text/textobjects.cpp
   text/transform.cpp
-  text/trim_blank.cpp
-  text/unique_lines.cpp
 )
