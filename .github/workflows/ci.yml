@@ -34,6 +34,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      # Static, dependency-free, and the same answer on every platform, so it
+      # runs once and fails fast: a module may include itself and anything
+      # below it, never anything above. The tree is mid-refactor, so the
+      # existing upward includes are recorded in the baseline and only new
+      # ones fail here.
+      - name: Check module include direction
+        if: matrix.platform == 'linux'
+        run: python3 tools/check_module_deps.py
+
       - name: Install Linux dependencies
         if: matrix.platform == 'linux'
         run: |
