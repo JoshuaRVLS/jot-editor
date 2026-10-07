@@ -3,7 +3,7 @@
 // the LSP result parsers. Definitions live in json.cpp / protocol.cpp.
 #pragma once
 
-#include "tools/lsp/client.h"
+#include "lsp/client.h"
 #include <map>
 #include <string>
 #include <utility>
@@ -58,9 +58,9 @@ namespace lsp_detail
   std::vector<LSPInlayHint> inlay_hints_from_result(const JsonValue &result);
   // Expands a textDocument/rename WorkspaceEdit into per-file edit lists
   // ({filepath, edits}). Handles both `changes` and `documentChanges` forms.
-  void workspace_edit_from_result(
-      const JsonValue &result,
-      std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> &out);
+  void
+  workspace_edit_from_result(const JsonValue &result,
+                             std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> &out);
   // Parses a textDocument/codeAction response into actions that carry an
   // edit (command-only actions are dropped).
   void code_actions_from_result(const JsonValue &result, std::vector<LSPCodeAction> &out);

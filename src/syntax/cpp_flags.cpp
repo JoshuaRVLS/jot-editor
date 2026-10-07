@@ -17,7 +17,7 @@
 //      with no flags of its own would have had.
 #include "cpp_flags.h"
 #include "base/file_util.h"
-#include "tools/lsp/install.h"
+#include "lsp/install.h"
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>

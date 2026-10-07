@@ -1,7 +1,6 @@
 set(JOT_FEATURES_SOURCES
   features/bible.cpp
   features/coding_time.cpp
-  features/completion_rank.cpp
   features/config.cpp
   features/emmet.cpp
   features/web_completion.cpp

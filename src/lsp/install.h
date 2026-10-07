@@ -26,9 +26,9 @@ namespace LspInstall
   // side owns the package registry and the per-manager install scripts; this
   // side owns the install root on disk, the [jot:lsp] marker protocol that
   // the background-job poll loop parses, and receipt/binary lookups.
-  std::string install_root();   // <data>/lsp
-  std::string bin_dir();        // <data>/lsp/bin
-  std::string platform_tag();   // "linux" | "mac" | "win"
+  std::string install_root(); // <data>/lsp
+  std::string bin_dir();      // <data>/lsp/bin
+  std::string platform_tag(); // "linux" | "mac" | "win"
   // ScriptShell the current platform's install scripts use.
   ScriptShell default_shell();
   // Absolute path of a managed binary when installed there, else "".

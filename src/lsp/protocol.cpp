@@ -4,8 +4,8 @@
 // transport and request/response plumbing live in client.cpp and
 // messages.cpp.
 #include "base/string_util.h"
-#include "tools/lsp/client.h"
-#include "tools/lsp/internal.h"
+#include "lsp/client.h"
+#include "lsp/internal.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -460,8 +460,9 @@ namespace lsp_detail
             parsed_param.label_start = (int)label->array_value[0].number_value;
             parsed_param.label_end = (int)label->array_value[1].number_value;
             const size_t s = (size_t)std::max(0, parsed_param.label_start);
-            const size_t e = (size_t)std::min((int)parsed_sig.label.size(),
-                                              std::max(parsed_param.label_start, parsed_param.label_end));
+            const size_t e =
+                (size_t)std::min((int)parsed_sig.label.size(),
+                                 std::max(parsed_param.label_start, parsed_param.label_end));
             if (e > s)
             {
               parsed_param.label = parsed_sig.label.substr(s, e - s);
@@ -469,9 +470,8 @@ namespace lsp_detail
           }
           else
           {
-            parsed_param.label = label && label->type == JsonValue::String
-                                     ? label->string_value
-                                     : "";
+            parsed_param.label =
+                label && label->type == JsonValue::String ? label->string_value : "";
           }
           parsed_param.documentation =
               signature_doc_from_json(json_object_get(param, "documentation"));
@@ -505,14 +505,12 @@ namespace lsp_detail
       hint.line = json_int_or_default(json_object_get(*position, "line"), 0);
       hint.character = json_int_or_default(json_object_get(*position, "character"), 0);
       hint.kind = json_int_or_default(json_object_get(item, "kind"), 0);
-      hint.padding_left =
-          json_object_get(item, "paddingLeft")
-              && json_object_get(item, "paddingLeft")->type == JsonValue::Bool
-              && json_object_get(item, "paddingLeft")->bool_value;
-      hint.padding_right =
-          json_object_get(item, "paddingRight")
-              && json_object_get(item, "paddingRight")->type == JsonValue::Bool
-              && json_object_get(item, "paddingRight")->bool_value;
+      hint.padding_left = json_object_get(item, "paddingLeft")
+                          && json_object_get(item, "paddingLeft")->type == JsonValue::Bool
+                          && json_object_get(item, "paddingLeft")->bool_value;
+      hint.padding_right = json_object_get(item, "paddingRight")
+                           && json_object_get(item, "paddingRight")->type == JsonValue::Bool
+                           && json_object_get(item, "paddingRight")->bool_value;
       const JsonValue *label = json_object_get(item, "label");
       if (label && label->type == JsonValue::String)
       {
@@ -817,11 +815,7 @@ namespace lsp_detail
       return false;
     }
     const JsonValue *range = json_object_get(item, "range");
-    if (!parse_range_start(range,
-                           edit.start_line,
-                           edit.start_char,
-                           edit.end_line,
-                           edit.end_char))
+    if (!parse_range_start(range, edit.start_line, edit.start_char, edit.end_line, edit.end_char))
     {
       return false;
     }
@@ -834,8 +828,9 @@ namespace lsp_detail
   // `changes: {uri: [TextEdit]}` map and the v3 `documentChanges:` array of
   // {textDocument:{uri}, edits:[TextEdit]} entries (the form clangd and
   // rust-analyzer use for renames).
-  void workspace_edit_from_result(const JsonValue &result,
-                                  std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> &out)
+  void
+  workspace_edit_from_result(const JsonValue &result,
+                             std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> &out)
   {
     if (result.type != JsonValue::Object)
     {
@@ -1157,4 +1152,3 @@ std::string LSPClient::json_escape(const std::string &value) const
   }
   return out;
 }
-

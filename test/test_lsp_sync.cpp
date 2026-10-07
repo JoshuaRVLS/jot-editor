@@ -10,7 +10,7 @@
 // stale draft and reporting errors at lines the user already fixed. And a
 // publish discarded for being a version behind is not necessarily stale: the
 // server may have coalesced its parses, making it the freshest word there is.
-#include "tools/lsp/client.h"
+#include "lsp/client.h"
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 #include <vector>

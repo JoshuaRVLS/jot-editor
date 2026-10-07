@@ -6,7 +6,7 @@
 // window, the file format), and the last cases drive it through the editor the
 // way a user does: a table seeded on disk, an item accepted, a list re-ranked.
 #include "editor.h"
-#include "features/completion_rank.h"
+#include "lsp/completion_rank.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <cstdint>

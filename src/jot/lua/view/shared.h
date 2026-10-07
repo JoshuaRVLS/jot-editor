@@ -13,8 +13,8 @@
 // includes these headers in order; the structs are unchanged.
 
 #include "dap/client.h"
+#include "lsp/client.h"
 #include "text_features.h"
-#include "tools/lsp/client.h"
 #include <array>
 #include <chrono>
 #include <cstdint>

@@ -30,9 +30,11 @@ src/
   input/           key/mouse routing: modes, palette, commands
   render/          painting: frame, buffer, panels, popups, minimap
   dap/             the Debug Adapter Protocol client and its wire format
+  lsp/             the Language Server Protocol client, its wire format and
+                   the completion ranking it feeds
   terminal/        pty-backed terminal sessions and the panel that draws them
-  tools/           subprocess and protocol clients (LSP, discord, telescope,
-                   image viewer, workspace search)
+  tools/           subprocess and protocol clients (discord, telescope, image
+                   viewer, workspace search)
   ui/              the cell grid, text handling, terminal + GUI backends
 ```
 

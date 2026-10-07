@@ -104,7 +104,9 @@ namespace CompletionRank
   // The popup's ranking term for one row: the habit points plus the context
   // points. Zero when the row is neither, which is also the fast path -- the
   // ranker asks this of every row on every frame.
-  int relevance(const Usage &usage, const Context &context, const std::string &language,
+  int relevance(const Usage &usage,
+                const Context &context,
+                const std::string &language,
                 const std::string &name);
 
   // The two halves separately, so a case can pin them: 30 points per acceptance

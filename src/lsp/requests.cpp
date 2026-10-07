@@ -3,8 +3,8 @@
 // signature help, definition, document symbols, and formatting, plus
 // the consume_* accessors the editor drains results through.
 #include "base/string_util.h"
-#include "tools/lsp/client.h"
-#include "tools/lsp/internal.h"
+#include "lsp/client.h"
+#include "lsp/internal.h"
 #include <algorithm>
 #include <filesystem>
 #include <sstream>
@@ -318,13 +318,12 @@ bool LSPClient::request_inlay_hints(const std::string &filepath,
     return false;
   }
   int request_id = next_request_id++;
-  pending_inlay_hint_requests[request_id] = PendingInlayRequest{
-      abs_path,
-      std::max(0, start_line),
-      std::max(0, start_character),
-      std::max(0, end_line),
-      std::max(0, end_character),
-      file_versions[abs_path]};
+  pending_inlay_hint_requests[request_id] = PendingInlayRequest{abs_path,
+                                                                std::max(0, start_line),
+                                                                std::max(0, start_character),
+                                                                std::max(0, end_line),
+                                                                std::max(0, end_character),
+                                                                file_versions[abs_path]};
 
   std::ostringstream json;
   json << "{"
@@ -334,10 +333,10 @@ bool LSPClient::request_inlay_hints(const std::string &filepath,
        << "\"params\":{"
        << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path)) << "\"},"
        << "\"range\":{"
-       << "\"start\":{\"line\":" << std::max(0, start_line) << ",\"character\":"
-       << lsp_character(abs_path, start_line, start_character) << "},"
-       << "\"end\":{\"line\":" << std::max(0, end_line) << ",\"character\":"
-       << lsp_character(abs_path, end_line, end_character) << "}"
+       << "\"start\":{\"line\":" << std::max(0, start_line)
+       << ",\"character\":" << lsp_character(abs_path, start_line, start_character) << "},"
+       << "\"end\":{\"line\":" << std::max(0, end_line)
+       << ",\"character\":" << lsp_character(abs_path, end_line, end_character) << "}"
        << "}"
        << "}"
        << "}";
@@ -740,8 +739,7 @@ bool LSPClient::request_format(const std::string &filepath, int tab_size)
     return false;
   }
   int request_id = next_request_id++;
-  pending_format_requests[request_id] =
-      PendingDocumentRequest{abs_path, file_versions[abs_path]};
+  pending_format_requests[request_id] = PendingDocumentRequest{abs_path, file_versions[abs_path]};
 
   std::ostringstream json;
   json << "{"
@@ -750,8 +748,7 @@ bool LSPClient::request_format(const std::string &filepath, int tab_size)
        << "\"method\":\"textDocument/formatting\","
        << "\"params\":{"
        << "\"textDocument\":{\"uri\":\"" << json_escape(to_file_uri(abs_path)) << "\"},"
-       << "\"options\":{\"tabSize\":" << std::max(1, tab_size)
-       << ",\"insertSpaces\":true}"
+       << "\"options\":{\"tabSize\":" << std::max(1, tab_size) << ",\"insertSpaces\":true}"
        << "}"
        << "}";
 

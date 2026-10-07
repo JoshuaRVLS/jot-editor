@@ -2,7 +2,7 @@
 #define JOT_STATE_PANEL_STATE_H
 
 #include "jot/model/panels.h" // BottomPanelView, RightPanelTab, GitDiffPanel, OutlinePanelState
-#include "tools/lsp/client.h" // LSPCodeAction
+#include "lsp/client.h"       // LSPCodeAction
 #include <string>
 #include <vector>
 

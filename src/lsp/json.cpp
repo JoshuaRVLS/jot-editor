@@ -1,7 +1,7 @@
 // Minimal JSON parser for LSP messages (jsonrpc payloads). Owns the
 // JsonValue tree type and the recursive-descent parse; result parsers
 // live in protocol.cpp.
-#include "tools/lsp/internal.h"
+#include "lsp/internal.h"
 #include <cctype>
 #include <map>
 #include <string>

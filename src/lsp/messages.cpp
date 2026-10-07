@@ -1,8 +1,8 @@
 // Incoming LSP transport data: framing (Content-Length headers), JSON
 // dispatch, and fan-out of results to the pending-* queues the editor
 // drains through the consume_* accessors.
-#include "tools/lsp/internal.h"
-#include "tools/lsp/client.h"
+#include "lsp/client.h"
+#include "lsp/internal.h"
 #include <filesystem>
 #include <sstream>
 #include <string>
@@ -183,7 +183,8 @@ void LSPClient::handle_stdout_data(const std::string &data)
     if (method && method->type == JsonValue::String && method->string_value == "window/showMessage")
     {
       const JsonValue *params = json_object_get(root, "params");
-      const std::string text = params ? json_string_or_empty(json_object_get(*params, "message")) : "";
+      const std::string text =
+          params ? json_string_or_empty(json_object_get(*params, "message")) : "";
       if (!text.empty())
       {
         pending_show_messages.push_back(text);
@@ -231,7 +232,7 @@ void LSPClient::handle_stdout_data(const std::string &data)
       append_log_line("RECV ",
                       "window/workDoneProgress/create "
                           + (token && token->type == JsonValue::String ? token->string_value
-                                                                      : std::string("?")));
+                                                                       : std::string("?")));
       std::ostringstream ok;
       ok << "{\"jsonrpc\":\"2.0\",\"id\":" << (int)id->number_value << ",\"result\":null}";
       send_message(ok.str(), true);
@@ -269,7 +270,8 @@ void LSPClient::handle_stdout_data(const std::string &data)
       if (!library_dirs.empty())
       {
         send_message("{\"jsonrpc\":\"2.0\",\"method\":\"workspace/didChangeConfiguration\","
-                         "\"params\":{\"settings\":{\"Lua\":" + lua_settings_json() + "}}}",
+                     "\"params\":{\"settings\":{\"Lua\":"
+                         + lua_settings_json() + "}}}",
                      true);
       }
       auto queued = std::move(deferred_messages);
@@ -524,8 +526,7 @@ void LSPClient::handle_stdout_data(const std::string &data)
           {
             for (auto &edit : entry.second)
             {
-              edit.start_char = editor_character(
-                  entry.first, edit.start_line, edit.start_char);
+              edit.start_char = editor_character(entry.first, edit.start_line, edit.start_char);
               edit.end_char = editor_character(entry.first, edit.end_line, edit.end_char);
             }
           }
@@ -586,10 +587,10 @@ void LSPClient::handle_stdout_data(const std::string &data)
         text_edits_from_array(*result, edits);
         for (auto &edit : edits)
         {
-          edit.start_char = editor_character(
-              format_it->second.filepath, edit.start_line, edit.start_char);
-          edit.end_char = editor_character(
-              format_it->second.filepath, edit.end_line, edit.end_char);
+          edit.start_char =
+              editor_character(format_it->second.filepath, edit.start_line, edit.start_char);
+          edit.end_char =
+              editor_character(format_it->second.filepath, edit.end_line, edit.end_char);
         }
       }
       pending_formats.push_back({format_it->second.filepath, std::move(edits)});
@@ -615,8 +616,7 @@ void LSPClient::handle_stdout_data(const std::string &data)
         {
           for (auto &edit : entry.second)
           {
-            edit.start_char = editor_character(
-                entry.first, edit.start_line, edit.start_char);
+            edit.start_char = editor_character(entry.first, edit.start_line, edit.start_char);
             edit.end_char = editor_character(entry.first, edit.end_line, edit.end_char);
           }
           pending_renames.push_back(std::move(entry));
@@ -638,7 +638,6 @@ void LSPClient::handle_stderr_data(const std::string &data)
   }
   append_log_line("STDERR ", data);
 }
-
 
 void apply_lsp_progress(std::map<std::string, LSPProgress> &tokens,
                         const std::string &token,

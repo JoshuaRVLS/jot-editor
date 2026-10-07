@@ -14,8 +14,8 @@
 
 #include "dap/client.h"
 #include "jot/lua/view/shared.h"
+#include "lsp/client.h"
 #include "text_features.h"
-#include "tools/lsp/client.h"
 #include <array>
 #include <chrono>
 #include <cstdint>

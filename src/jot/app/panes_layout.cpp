@@ -1,10 +1,10 @@
 // Pane layout management: sizing, splitting, closing, and buffer placement.
 #include "editor.h"
+#include "jot/app/panes_internal.h"
 #include <algorithm>
 #include <cctype>
 #include <functional>
 #include <limits>
-#include "jot/app/panes_internal.h"
 
 using namespace pane_internal;
 int Editor::max_sidebar_width() const
@@ -56,8 +56,7 @@ int Editor::zen_content_margin(int available_w) const
   {
     return 0;
   }
-  const int zen_w =
-      std::clamp(config.get_int("zen_content_width", 100), 40, 240);
+  const int zen_w = std::clamp(config.get_int("zen_content_width", 100), 40, 240);
   return std::max(0, (available_w - zen_w) / 2);
 }
 
@@ -188,8 +187,7 @@ void Editor::update_pane_layout()
   winbar_height = winbar_row_height();
   refresh_pane_headers();
 
-  if (pane_zoom_active && panes.size() > 1 && current_pane >= 0
-      && current_pane < (int)panes.size())
+  if (pane_zoom_active && panes.size() > 1 && current_pane >= 0 && current_pane < (int)panes.size())
   {
     // Zoomed: the active pane owns the whole pane region; every other pane
     // is parked off-screen (w/h 1) and skipped by the renderer until the

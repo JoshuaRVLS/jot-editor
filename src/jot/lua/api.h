@@ -3,8 +3,8 @@
 
 #include "dap/client.h"
 #include "features/leetcode_http.h"
+#include "lsp/client.h"
 #include "text_features.h"
-#include "tools/lsp/client.h"
 #include <array>
 #include <chrono>
 #include <cstddef>

@@ -37,9 +37,9 @@
 #include "host_api.h"
 #include "jot/editor/discord_controller.h"
 #include "jot/editor/search_controller.h"
+#include "lsp/client.h"
 #include "smooth_scroll.h"
 #include "syntax/language.h"
-#include "tools/lsp/client.h"
 #include <algorithm>
 #include <string>
 #include <utility>

@@ -8,7 +8,7 @@
 // the bar, the root for the log lines.
 #include "base/shell_util.h"
 #include "editor.h"
-#include "tools/lsp/client.h"
+#include "lsp/client.h"
 #include "ui/ui.h"
 
 #include <catch2/catch_test_macros.hpp>

@@ -1,4 +1,4 @@
-#include "tools/lsp/install.h"
+#include "lsp/install.h"
 #include "base/shell_util.h"
 #include "base/string_util.h"
 
@@ -274,8 +274,8 @@ namespace LspInstall
     }
     // The body may carry its own `set -e` (fail-fast installs): run it in a
     // subshell so a failed step can never swallow the completion marker.
-    const std::string script = "printf '[jot:lsp] start " + server + "\\n'; ( "
-                               + body + " ); rc=$?; if [ \"$rc\" -eq 0 ]; then "
+    const std::string script = "printf '[jot:lsp] start " + server + "\\n'; ( " + body
+                               + " ); rc=$?; if [ \"$rc\" -eq 0 ]; then "
                                  "printf '[jot:lsp] success "
                                + server
                                + " exit=%s\\n' \"$rc\"; "

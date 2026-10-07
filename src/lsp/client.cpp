@@ -3,8 +3,8 @@
 // start / stop / restart, and the poll loop. Message parsing lives in
 // messages.cpp, protocol conversions in protocol.cpp, and outbound
 // request builders in requests.cpp.
-#include "tools/lsp/internal.h"
-#include "tools/lsp/client.h"
+#include "lsp/client.h"
+#include "lsp/internal.h"
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
@@ -208,10 +208,9 @@ LSPClient::LSPClient(const std::string &language_name,
                      const std::string &initialization_options_arg)
     : language(language_name), root_path(workspace_root), command(argv),
       library_dirs(library_dirs_arg), initialization_options(initialization_options_arg),
-      stdin_fd(-1), stdout_fd(-1), stderr_fd(-1),
-      child_pid(-1), running(false), initialized(false), uses_utf8_positions(false),
-      shutdown_complete(false), next_request_id(1), initialize_request_id(0),
-      shutdown_request_id(0)
+      stdin_fd(-1), stdout_fd(-1), stderr_fd(-1), child_pid(-1), running(false), initialized(false),
+      uses_utf8_positions(false), shutdown_complete(false), next_request_id(1),
+      initialize_request_id(0), shutdown_request_id(0)
 {
 }
 
@@ -564,8 +563,7 @@ bool LSPClient::start()
        << "\"jsonrpc\":\"2.0\","
        << "\"id\":" << initialize_request_id << ","
        << "\"method\":\"initialize\","
-       << "\"params\":" << initialize_params_json()
-       << "}";
+       << "\"params\":" << initialize_params_json() << "}";
   if (!send_message(init.str(), true))
   {
     stop();
@@ -585,50 +583,49 @@ std::string LSPClient::initialize_params_json() const
 {
   std::ostringstream params;
   params << "{"
-       << "\"processId\":" << current_process_id() << ","
-       << "\"rootUri\":\"" << json_escape(to_file_uri(root_path)) << "\","
-       << "\"rootPath\":\"" << json_escape(root_path) << "\","
-       << "\"capabilities\":{"
-       << "\"general\":{\"positionEncodings\":[\"utf-8\",\"utf-16\"]},"
-       << "\"textDocument\":{"
-       << completion_client_capabilities()
-       // The helper returns a single member, so the separator lives here: drop
-       // it and the whole initialize request becomes invalid JSON and the server
-       // refuses to start (clangd answers with a JSON parse error).
-       << ","
-       << "\"hover\":{\"dynamicRegistration\":false,"
-       << "\"contentFormat\":[\"markdown\",\"plaintext\"]},"
-       << "\"definition\":{\"dynamicRegistration\":false,"
-       << "\"linkSupport\":true},"
-       // The rest of the location lookups clangd offers. Declaring them is what
-       // makes clangd advertise the providers, and they share the definition
-       // reply path (Location | Location[] | LocationLink[]).
-       << "\"declaration\":{\"dynamicRegistration\":false,"
-       << "\"linkSupport\":true},"
-       << "\"typeDefinition\":{\"dynamicRegistration\":false,"
-       << "\"linkSupport\":true},"
-       << "\"implementation\":{\"dynamicRegistration\":false,"
-       << "\"linkSupport\":true},"
-       << "\"documentSymbol\":{\"dynamicRegistration\":false,"
-       << "\"hierarchicalDocumentSymbolSupport\":true,"       << "\"symbolKind\":{\"valueSet\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,"
-               "16,17,18,19,20,21,22,23,24,25,26]}},"
-       << "\"inlayHint\":{\"dynamicRegistration\":false}"
-       << "},"
-       << "\"workspace\":{\"configuration\":true}"
-       // Capabilities is still open here: the window block belongs to it, and
-       // the `},` below closes it. Placing it after that brace would make it a
-       // params member instead, which servers ignore -- and the extra brace made
-       // the whole request unparseable, so clangd answered with a JSON error and
-       // never reported progress at all.
-       << ","
-       << window_client_capabilities()
-       << "},"
-       << "\"workspaceFolders\":[{\"uri\":\"" << json_escape(to_file_uri(root_path))
-       << "\",\"name\":\"" << json_escape(fs::path(root_path).filename().string()) << "\"}]"
-       << (initialization_options.empty()
-               ? ""
-               : ",\"initializationOptions\":{" + initialization_options + "}")
-       << "}";
+         << "\"processId\":" << current_process_id() << ","
+         << "\"rootUri\":\"" << json_escape(to_file_uri(root_path)) << "\","
+         << "\"rootPath\":\"" << json_escape(root_path) << "\","
+         << "\"capabilities\":{"
+         << "\"general\":{\"positionEncodings\":[\"utf-8\",\"utf-16\"]},"
+         << "\"textDocument\":{"
+         << completion_client_capabilities()
+         // The helper returns a single member, so the separator lives here: drop
+         // it and the whole initialize request becomes invalid JSON and the server
+         // refuses to start (clangd answers with a JSON parse error).
+         << ","
+         << "\"hover\":{\"dynamicRegistration\":false,"
+         << "\"contentFormat\":[\"markdown\",\"plaintext\"]},"
+         << "\"definition\":{\"dynamicRegistration\":false,"
+         << "\"linkSupport\":true},"
+         // The rest of the location lookups clangd offers. Declaring them is what
+         // makes clangd advertise the providers, and they share the definition
+         // reply path (Location | Location[] | LocationLink[]).
+         << "\"declaration\":{\"dynamicRegistration\":false,"
+         << "\"linkSupport\":true},"
+         << "\"typeDefinition\":{\"dynamicRegistration\":false,"
+         << "\"linkSupport\":true},"
+         << "\"implementation\":{\"dynamicRegistration\":false,"
+         << "\"linkSupport\":true},"
+         << "\"documentSymbol\":{\"dynamicRegistration\":false,"
+         << "\"hierarchicalDocumentSymbolSupport\":true,"
+         << "\"symbolKind\":{\"valueSet\":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,"
+            "16,17,18,19,20,21,22,23,24,25,26]}},"
+         << "\"inlayHint\":{\"dynamicRegistration\":false}"
+         << "},"
+         << "\"workspace\":{\"configuration\":true}"
+         // Capabilities is still open here: the window block belongs to it, and
+         // the `},` below closes it. Placing it after that brace would make it a
+         // params member instead, which servers ignore -- and the extra brace made
+         // the whole request unparseable, so clangd answered with a JSON error and
+         // never reported progress at all.
+         << "," << window_client_capabilities() << "},"
+         << "\"workspaceFolders\":[{\"uri\":\"" << json_escape(to_file_uri(root_path))
+         << "\",\"name\":\"" << json_escape(fs::path(root_path).filename().string()) << "\"}]"
+         << (initialization_options.empty()
+                 ? ""
+                 : ",\"initializationOptions\":{" + initialization_options + "}")
+         << "}";
   return params.str();
 }
 
@@ -844,4 +841,3 @@ bool LSPClient::poll()
 
   return changed;
 }
-

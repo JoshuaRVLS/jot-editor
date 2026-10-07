@@ -1589,8 +1589,9 @@ src/features/    config, emmet, wakatime, http, leetcode, previews
 src/input/       keyboard, mouse, command palette, command dispatch
 src/render/      buffer drawing, minimap, overlays, panels, UI views
 src/dap/         the debug adapter protocol client
+src/lsp/         the language server protocol client and completion ranking
 src/terminal/    pty-backed terminal sessions and their panel
-src/tools/       LSP client, telescope, image viewer, search helpers
+src/tools/       telescope, image viewer, search helpers, discord presence
 src/jot/lua/  C++ bridge for the embedded Lua plugin/theme API
 src/ui/          raw terminal and UI abstraction
 runtime/lua/     bundled Lua features (ui kit, snippets, previews, the AI

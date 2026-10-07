@@ -1,10 +1,10 @@
 // Editor-side LSP completion: request triggering, client-side filtering and
 // ranking, and applying the selected item (including snippet expansion).
 #include "editor.h"
-#include "features/completion_rank.h"
 #include "jot/integrations/lsp/common.h"
 #include "jot/lua/api.h"
 #include "lsp/client.h"
+#include "lsp/completion_rank.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>

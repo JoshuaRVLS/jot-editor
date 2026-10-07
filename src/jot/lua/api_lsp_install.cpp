@@ -7,7 +7,7 @@
 #include "jot/lua/api.h"
 #include "jot/lua/api_internal.h"
 #include "jot/lua/lua_loader.h"
-#include "tools/lsp/install.h"
+#include "lsp/install.h"
 
 #include <filesystem>
 #include <iostream>

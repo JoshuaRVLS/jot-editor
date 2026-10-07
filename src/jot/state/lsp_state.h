@@ -1,10 +1,10 @@
 #ifndef JOT_STATE_LSP_STATE_H
 #define JOT_STATE_LSP_STATE_H
 
-#include "features/completion_rank.h" // what the popup learned
-#include "jot/model/buffer.h"         // Cursor
-#include "jot/model/tasks.h"          // LspInstallJob
-#include "tools/lsp/client.h" // LSPClient, Diagnostic, completion/signature/inlay models
+#include "jot/model/buffer.h"    // Cursor
+#include "jot/model/tasks.h"     // LspInstallJob
+#include "lsp/client.h"          // LSPClient, Diagnostic, completion/signature/inlay models
+#include "lsp/completion_rank.h" // what the popup learned
 #include <map>
 #include <memory>
 #include <set>

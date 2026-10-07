@@ -391,10 +391,8 @@ public:
   bool request_definition(const std::string &filepath, int line, int character);
   // The other position lookups clangd answers with locations. Same reply path
   // as request_definition, different method and label.
-  bool request_navigation(const std::string &filepath,
-                          int line,
-                          int character,
-                          LSPNavigationKind kind);
+  bool
+  request_navigation(const std::string &filepath, int line, int character, LSPNavigationKind kind);
   // clangd extension: the header paired with this source file (or the source
   // paired with this header). Params are the bare TextDocumentIdentifier, and
   // the reply is a URI string ("" or null when there is no pair).
@@ -420,10 +418,8 @@ public:
   // WorkspaceEdit is expanded into per-file edit lists (UTF-16 characters
   // converted to editor columns) and handed back through
   // consume_rename_results().
-  bool request_rename(const std::string &filepath,
-                      int line,
-                      int character,
-                      const std::string &new_name);
+  bool
+  request_rename(const std::string &filepath, int line, int character, const std::string &new_name);
   std::vector<std::pair<std::string, std::vector<LSPTextEdit>>> consume_rename_results();
   // Asks the server to format the whole document. Character offsets in the
   // returned edits are converted to editor (UTF-8 byte) columns before they

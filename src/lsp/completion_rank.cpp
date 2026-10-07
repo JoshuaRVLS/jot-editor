@@ -1,7 +1,7 @@
 // Ranking the completion popup by the user's own habits and by the file's own
 // words (see completion_rank.h). Every number the ranking is built from lives
 // here, so the tests can pin the model instead of describing it.
-#include "features/completion_rank.h"
+#include "lsp/completion_rank.h"
 
 #include <algorithm>
 #include <cctype>
@@ -380,7 +380,9 @@ namespace CompletionRank
     nearest_gap_.clear();
   }
 
-  int relevance(const Usage &usage, const Context &context, const std::string &language,
+  int relevance(const Usage &usage,
+                const Context &context,
+                const std::string &language,
                 const std::string &name)
   {
     if (name.empty())

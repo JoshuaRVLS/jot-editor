@@ -5,8 +5,8 @@
 #include "render/ui_internal.h"
 
 using namespace ui_internal;
+#include "lsp/install.h"
 #include "syntax/manager.h"
-#include "tools/lsp/install.h"
 #include "ui/components.h"
 #include "ui/text.h"
 #include <algorithm>
