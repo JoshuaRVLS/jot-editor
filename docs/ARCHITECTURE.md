@@ -14,6 +14,23 @@ src/
   base/            primitives that depend on nothing above them: string and
                    path helpers, atomic file writes, shell quoting, link
                    detection, the event loop, the task queue, process jobs
+  text/            pure text editing: cursor, lines, search, sort, the text
+                   objects, the line providers, the insertion rules
+  syntax/          language detection, highlighting, folding, the tree-sitter
+                   runtime, the C++ and colour scanners, the symbol index
+  ui/              the cell grid, text handling, terminal + GUI backends
+  render/          painting: frame, buffer, panels, popups, minimap
+  input/           key/mouse routing: modes, palette, commands
+  tools/           subprocess and protocol clients: discord, telescope, the
+                   image viewer, the LeetCode keyring
+  workspace/       explorer, sidebar, right dock, tasks, timeline, project search
+  lsp/             the Language Server Protocol client, its wire format and
+                   the completion ranking it feeds
+  dap/             the Debug Adapter Protocol client and its wire format
+  terminal/        pty-backed terminal sessions and the panel that draws them
+  git/             repository state, the git client, the panel and its painters
+  extras/          the optional features: WakaTime, coding time, the Bible,
+                   LeetCode, the status clock, with the emmet expander
   editor/          the editor engine, the class the whole tree is built around
     editor.h       the Editor itself, assembled from api/ (see below)
     model/         plain data types (buffer, panes, theme, panels, ...)
@@ -24,23 +41,6 @@ src/
     integrations/  LSP, debugger, terminal and tree-sitter wiring
     surfaces/      menus, popups, home screen, settings, theme chooser
     markdown/      the preview server (shared by the markdown and HTML previews)
-  text/            pure text editing: cursor, lines, search, sort, the text
-                   objects, the line providers, the insertion rules
-  syntax/          language detection, highlighting, folding, the tree-sitter
-                   runtime, the C++ and colour scanners, the symbol index
-  features/        self-contained features (config, emmet, wakatime, http,
-                   leetcode, previews)
-  input/           key/mouse routing: modes, palette, commands
-  render/          painting: frame, buffer, panels, popups, minimap
-  workspace/       explorer, sidebar, right dock, tasks, timeline, project search
-  git/             repository state, the git client, the panel and its painters
-  dap/             the Debug Adapter Protocol client and its wire format
-  lsp/             the Language Server Protocol client, its wire format and
-                   the completion ranking it feeds
-  terminal/        pty-backed terminal sessions and the panel that draws them
-  tools/           subprocess and protocol clients (discord, telescope, image
-                   viewer, workspace search)
-  ui/              the cell grid, text handling, terminal + GUI backends
   lua/             the Lua API surface and its bindings, above everything it
                    drives (view structs in lua/view/)
 ```
@@ -54,8 +54,8 @@ enough, because the module's own directory is on the include path.
 
 ## The editor's state
 
-`src/jot/editor_state.h` is an umbrella: `EditorState` inherits the domain
-groups in `src/jot/state/` and adds nothing of its own, so a member is reached
+`src/editor/editor_state.h` is an umbrella: `EditorState` inherits the domain
+groups in `src/editor/state/` and adds nothing of its own, so a member is reached
 exactly as it was when this was one 500-line struct.
 
 | file | holds |
@@ -74,7 +74,7 @@ exactly as it was when this was one 500-line struct.
 The groups are independent: no group includes another, so a translation unit
 that only needs one slice can include it directly.
 
-`PreviewServer` (`jot/markdown/preview_server.*`) is one HTTP/SSE server with two
+`PreviewServer` (`editor/markdown/preview_server.*`) is one HTTP/SSE server with two
 modes, chosen by whether a file root was set: a *stored page* (the markdown
 preview renders a document and serves it at `/`) or a *served tree* (the HTML
 preview points the browser at a real path, injects a reload client into HTML
@@ -86,22 +86,23 @@ worker queue: `cpp_defs_state.h` (declarations with no body, and signatures with
 two) and `web_index_state.h` (the class names and custom properties the tree
 declares). Both follow the same shape -- a running flag, a pending flag, and the
 root plus an epoch that decide whether a landing result is still wanted -- and
-both have their scan spelled out as a pure function in `src/features/` and their
-editor half in `src/jot/app/` (`cpp_definitions.cpp`, `web_index.cpp`).
+both have their scan spelled out as a pure function (`src/syntax/cpp_definitions.cpp`,
+`src/workspace/web_completion.cpp`) and their editor half in `src/editor/app/`
+(`cpp_definitions.cpp`, `web_index.cpp`).
 
 ## Collaborators
 
 State whose behaviour is cohesive enough to own itself lives in
-`src/jot/editor/*_controller.h` and is reached through the `Editor` it is built
-with (`Editor` declares it a friend). Search and Discord presence are the two
-so far; the state and the code that drives it sit in the same file (or, for
-Discord, in the corresponding `jot/app/*.cpp`).
+`src/editor/*_controller.h` and is reached through the `Editor` it is built
+with (`Editor` declares it a friend). Search and Discord presence are the two so
+far; the state and the code that drives it sit in the same file (or, for
+Discord, in `extras/discord_session.cpp`).
 
 ## The Editor class body
 
-`src/jot/editor.h` is also an umbrella now: it keeps the class head (type
+`src/editor/editor.h` is also an umbrella now: it keeps the class head (type
 aliases, constants, the collaborators) and includes one *fragment* per region
-of the class body from `src/jot/editor/api/`. A fragment is not a standalone
+of the class body from `src/editor/api/`. A fragment is not a standalone
 header -- no include guard, no includes -- it is class-scope text, exactly as if
 it were written in `editor.h`. Nothing was renamed or moved to another class,
 which is what keeps the ~200 files that call `Editor` unchanged.
@@ -121,7 +122,7 @@ panel); the pickers take the same two steps one at a time.
 Adding one is a multi-place change because the surface's *name* is what ties the
 scrim to the panel:
 
-- `is_modal_surface` / `modal_surface_open` in `jot/lua/api_float.cpp`: the
+- `is_modal_surface` / `modal_surface_open` in `lua/api_float.cpp`: the
   float opens on `kModalFloatZindex` (above the chrome floats, which are
   recreated every frame and would otherwise out-rank it by creation order) and
   the background floats lose their input.
@@ -138,8 +139,8 @@ scrim to the panel:
 
 ## Lua API surface
 
-`src/jot/lua/api.h` keeps the `LuaAPI` class; the view structs it hands to Lua
-surface handlers are in `src/jot/lua/view/` (surfaces, plugins, runtime
+`src/lua/api.h` keeps the `LuaAPI` class; the view structs it hands to Lua
+surface handlers are in `src/lua/view/` (surfaces, plugins, runtime
 records, shared helpers).
 
 ## Tests and probes

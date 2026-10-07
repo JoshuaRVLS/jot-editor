@@ -887,7 +887,7 @@ jot.status.register("branch", {
 ## AI assistant
 
 The bundled assistant (`runtime/lua/features/ai/*`, loaded by
-`src/jot/lua/api_runtime.cpp`) is a Lua module tree over `jot.job`,
+`src/lua/api_runtime.cpp`) is a Lua module tree over `jot.job`,
 `jot.timer`, `jot.ui` and `jot.buffer`, so a plugin can drive it or replace
 parts of it:
 

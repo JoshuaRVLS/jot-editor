@@ -1581,29 +1581,34 @@ per row or per cell is a per-frame cost. A few rules keep that honest:
 apps/jot/        CLI entrypoint and executable target
 benchmarks/      opt-in performance benchmark suite
 cmake/           reusable CMake modules
-src/jot/        editor state, buffers, panes, workspace, LSP, debugger, terminal
 src/base/        primitives: strings, files, shells, the event loop, task queue
 src/text/        text editing, cursor movement, selection, clipboard, search
 src/syntax/      languages, highlighting, folding, tree-sitter, colour scanners
-src/features/    config, emmet, wakatime, http, leetcode, previews
-src/input/       keyboard, mouse, command palette, command dispatch
-src/render/      buffer drawing, minimap, overlays, panels, UI views
-src/dap/         the debug adapter protocol client
-src/lsp/         the language server protocol client and completion ranking
-src/terminal/    pty-backed terminal sessions and their panel
-src/tools/       telescope, image viewer, search helpers, discord presence
-src/jot/lua/  C++ bridge for the embedded Lua plugin/theme API
 src/ui/          raw terminal and UI abstraction
+src/render/      buffer drawing, minimap, overlays, panels, UI views
+src/input/       keyboard, mouse, command palette, command dispatch
+src/tools/       subprocess and protocol clients: telescope, image viewer, discord
+src/workspace/   explorer, sidebar, right dock, tasks, timeline, project search
+src/lsp/         the language server protocol client and completion ranking
+src/dap/         the debug adapter protocol client
+src/terminal/    pty-backed terminal sessions and their panel
+src/git/         repository state, the git client, the panel and its painters
+src/extras/      optional features: WakaTime, coding time, the Bible, LeetCode
+src/editor/      the editor engine: state, buffers, panes, integrations, surfaces
+src/lua/         C++ bridge for the embedded Lua plugin/theme API
 runtime/lua/     bundled Lua features (ui kit, snippets, previews, the AI
                  assistant under features/ai/), embedded into the binary
 docs/            user-facing documentation
 test/           unit tests
 ```
 
-Build graph highlights: `jot_engine` is the aggregated static engine target;
-`jot_base`, `jot_core`, `jot_text`, `jot_syntax`, `jot_features`, `jot_input`,
-`jot_render`, `jot_tools`, `jot_lua_bridge`, and `jot_ui` are the module
-libraries behind it.
+Build graph highlights: `jot_engine` is the aggregated static engine target, and
+each module under `src/` is one static library behind it (`jot_base`, `jot_text`,
+`jot_syntax`, `jot_ui`, `jot_render`, `jot_input`, `jot_tools`, `jot_workspace`,
+`jot_lsp`, `jot_dap`, `jot_terminal`, `jot_git`, `jot_extras`, `jot_editor`,
+`jot_lua_api`), each compiled from its own object library. A source may include
+its own module and the modules below it in that list, never one above;
+`tools/check_module_deps.py` enforces the order in CI.
 
 ## Notes and limitations
 
