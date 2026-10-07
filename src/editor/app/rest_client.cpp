@@ -12,6 +12,11 @@
 // owned by the Lua UI kit in a real session, so a plain message would be
 // written and then never shown -- which is exactly how a refused run used to
 // look like a run that silently did nothing.
+//
+// The session and the behaviour are RestClient (editor/rest_client.h); this
+// file used to define them as Editor:: methods over a RestState block, and the
+// only change is that the shared editor state is reached through `editor_`.
+#include "editor/rest_client.h"
 #include "base/shell_util.h"
 #include "base/string_util.h"
 #include "editor.h"
@@ -27,6 +32,10 @@
 
 namespace
 {
+  // Requests are quick to time out by REST-client standards: this is an editor,
+  // and a hung endpoint must not hold the "one at a time" slot open.
+  constexpr int kRestTimeoutSeconds = 30;
+
   // A shell command's whole stdout, for the curl run below. Its stderr joins
   // the same stream at the command line (build_curl_command appends 2>&1), so
   // a transport error arrives as text in the response tab instead of scrolling
@@ -50,30 +59,30 @@ namespace
   }
 } // namespace
 
-void Editor::rest_run(const std::string &arg)
+void RestClient::run(const std::string &arg)
 {
   if (string_util::lower_copy(arg) == "last")
   {
-    if (!rest_has_last)
+    if (!has_last_)
     {
-      set_message("REST: nothing to re-run yet", true);
+      editor_.set_message("REST: nothing to re-run yet", true);
       return;
     }
-    rest_send(rest_last_request);
+    send(last_request_);
     return;
   }
 
   HttpFile::Resolved resolved;
-  if (!rest_prepare(arg, resolved))
+  if (!prepare(arg, resolved))
   {
     return;
   }
-  rest_send(std::move(resolved));
+  send(std::move(resolved));
 }
 
-bool Editor::rest_prepare(const std::string &name, HttpFile::Resolved &out)
+bool RestClient::prepare(const std::string &name, HttpFile::Resolved &out)
 {
-  const FileBuffer &buf = get_buffer();
+  const FileBuffer &buf = editor_.get_buffer();
   std::vector<std::string> lines;
   lines.reserve(buf.line_count());
   for (int i = 0; i < (int)buf.line_count(); i++)
@@ -83,7 +92,7 @@ bool Editor::rest_prepare(const std::string &name, HttpFile::Resolved &out)
   const HttpFile::File file = HttpFile::parse(lines);
   if (file.requests.empty())
   {
-    set_message("REST: no request in this buffer", true);
+    editor_.set_message("REST: no request in this buffer", true);
     return false;
   }
 
@@ -91,7 +100,7 @@ bool Editor::rest_prepare(const std::string &name, HttpFile::Resolved &out)
                                  : HttpFile::find_request(file, name);
   if (index < 0)
   {
-    set_message("REST: no request named \"" + name + "\"", true);
+    editor_.set_message("REST: no request named \"" + name + "\"", true);
     return false;
   }
 
@@ -112,7 +121,7 @@ bool Editor::rest_prepare(const std::string &name, HttpFile::Resolved &out)
     std::ifstream body_in(std::filesystem::path(base_dir) / request.body_file);
     if (!body_in)
     {
-      set_message("REST: cannot read body file " + request.body_file, true);
+      editor_.set_message("REST: cannot read body file " + request.body_file, true);
       return false;
     }
     std::ostringstream body_text;
@@ -139,59 +148,59 @@ bool Editor::rest_prepare(const std::string &name, HttpFile::Resolved &out)
       }
       names += "{{" + missing + "}}";
     }
-    set_message("REST: unresolved " + names + " -- define @" + out.missing.front() + " = ...",
-                true);
+    editor_.set_message(
+        "REST: unresolved " + names + " -- define @" + out.missing.front() + " = ...", true);
     return false;
   }
   return true;
 }
 
-void Editor::rest_send(HttpFile::Resolved resolved)
+void RestClient::send(HttpFile::Resolved resolved)
 {
-  if (rest_request_running)
+  if (request_running_)
   {
-    set_message("REST: still waiting on the previous request", true);
+    editor_.set_message("REST: still waiting on the previous request", true);
     return;
   }
-  if (!task_queue_)
+  if (!editor_.task_queue_)
   {
-    set_message("REST: no worker queue in this session", true);
+    editor_.set_message("REST: no worker queue in this session", true);
     return;
   }
 
   const std::string command = HttpFile::build_curl_command(resolved, kRestTimeoutSeconds);
-  rest_last_request = resolved;
-  rest_has_last = true;
-  rest_request_running = true;
-  set_transient_message("REST: " + resolved.method + " " + resolved.url + " ...", 4000);
+  last_request_ = resolved;
+  has_last_ = true;
+  request_running_ = true;
+  editor_.set_transient_message("REST: " + resolved.method + " " + resolved.url + " ...", 4000);
 
-  task_queue_->submit_val<std::string>([command]() { return capture_command(command); },
-                                       [this, resolved](std::string output)
-                                       {
-                                         rest_request_running = false;
-                                         if (!running)
-                                         {
-                                           return;
-                                         }
-                                         rest_show_response(resolved, output);
-                                         needs_redraw = true;
-                                       });
+  editor_.task_queue_->submit_val<std::string>([command]() { return capture_command(command); },
+                                               [this, resolved](std::string output)
+                                               {
+                                                 request_running_ = false;
+                                                 if (!editor_.running)
+                                                 {
+                                                   return;
+                                                 }
+                                                 show_response(resolved, output);
+                                                 editor_.needs_redraw = true;
+                                               });
 }
 
-void Editor::rest_show_response(const HttpFile::Resolved &resolved, const std::string &output)
+void RestClient::show_response(const HttpFile::Resolved &resolved, const std::string &output)
 {
   const HttpFile::Response response = HttpFile::parse_response(output);
-  const int index = rest_response_buffer(HttpFile::response_extension(response));
-  if (index < 0 || index >= (int)buffers.size())
+  const int index = response_buffer(HttpFile::response_extension(response));
+  if (index < 0 || index >= (int)editor_.buffers.size())
   {
     return;
   }
 
   // Show it first, then fill it: the pane switch restores a remembered view
   // position, and a response always starts at the top.
-  pane_show_buffer(index);
-  reveal_tab_for_buffer(index);
-  FileBuffer &buf = get_buffer();
+  editor_.pane_show_buffer(index);
+  editor_.reveal_tab_for_buffer(index);
+  FileBuffer &buf = editor_.get_buffer();
   buf.replace_lines(0, (int)buf.line_count(), HttpFile::format_response(resolved, response));
   buf.undo_stack = std::stack<State>();
   buf.redo_stack = std::stack<State>();
@@ -205,32 +214,32 @@ void Editor::rest_show_response(const HttpFile::Resolved &resolved, const std::s
   if (response.ok)
   {
     const long ms = (long)(response.seconds * 1000.0 + 0.5);
-    set_message("REST: " + std::to_string(response.status) + " in " + std::to_string(ms) + " ms ("
-                    + std::to_string(response.bytes) + " B)",
-                true);
+    editor_.set_message("REST: " + std::to_string(response.status) + " in " + std::to_string(ms)
+                            + " ms (" + std::to_string(response.bytes) + " B)",
+                        true);
   }
   else
   {
-    set_message(
+    editor_.set_message(
         "REST: " + (response.error.empty() ? std::string("request failed") : response.error), true);
   }
-  needs_redraw = true;
+  editor_.needs_redraw = true;
 }
 
-int Editor::rest_response_buffer(const std::string &extension)
+int RestClient::response_buffer(const std::string &extension)
 {
   const std::string name = "[Response]" + extension;
-  for (int i = 0; i < (int)buffers.size(); i++)
+  for (int i = 0; i < (int)editor_.buffers.size(); i++)
   {
-    if (buffers[(size_t)i].filepath.rfind("[Response]", 0) == 0)
+    if (editor_.buffers[(size_t)i].filepath.rfind("[Response]", 0) == 0)
     {
       // The payload type can change between runs (JSON one request, HTML the
       // next); the name carries the extension so the right ruleset colours it.
-      buffers[(size_t)i].filepath = name;
+      editor_.buffers[(size_t)i].filepath = name;
       return i;
     }
   }
-  create_new_buffer();
-  get_buffer().filepath = name;
-  return current_buffer;
+  editor_.create_new_buffer();
+  editor_.get_buffer().filepath = name;
+  return editor_.current_buffer;
 }

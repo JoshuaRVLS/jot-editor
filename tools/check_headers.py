@@ -169,7 +169,8 @@ def main():
             handle.write("# Pay these down by adding the missing include, never by deleting the line.\n")
             handle.write("# The src/editor/api/ entries are not headers at all: they are fragments of\n")
             handle.write("# the Editor class body, so they cannot compile alone by construction. They\n")
-            handle.write("# disappear when the Editor stops being assembled from fragments.\n")
+            handle.write("# disappear one collaborator at a time, as the Editor stops being\n")
+            handle.write("# assembled from fragments (api/rest.h went first, to editor/rest_client.h).\n")
             for rel in sorted(failures):
                 handle.write("{}\t{}\n".format(rel, failures[rel]))
         print(

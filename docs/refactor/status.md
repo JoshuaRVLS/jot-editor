@@ -2,7 +2,9 @@
 
 Phase 0 measured the tree. This records what has moved since, what the tree looks
 like now, and what is deliberately not done yet. Phases 1 to 4 are committed, and
-the last of them is the one that removed `src/features/`.
+the last of them is the one that removed `src/features/`. Phase 5 -- the `Editor`
+facade -- has started: the first collaborator is out of the fragments and
+`api/rest.h` is gone.
 
 ## Modules that exist
 
@@ -50,9 +52,11 @@ shrink and never allowed to grow.
   `input -> editor` 23, `render -> lua` 20, `text -> lua` 17, `git -> editor` 7,
   `workspace -> editor` 7, `extras -> editor` 6.
 - `tools/check_headers.py` compiles every header alone with the flags from
-  `build/compile_commands.json`. Today: **152 of 168 stand alone**. The 16 that
+  `build/compile_commands.json`. Today: **152 of 167 stand alone**. The 15 that
   do not are the `src/editor/api/` fragments, which are pieces of a class body
-  rather than headers, so they cannot compile alone by construction.
+  rather than headers, so they cannot compile alone by construction. That list
+  only shrinks by taking members out of the `Editor` class; `api/rest.h` was the
+  first to leave it.
 
 The first of the two also reports an include that resolves to no file at all,
 which is how a bulk move that misses a rewrite announces itself: the build
@@ -91,10 +95,35 @@ editor`, `text -> editor` and `input -> editor` dominate the baseline.
 
 ## Not done yet
 
-- **The `Editor` facade** and the 16 `editor/api/` fragments. This is the work
-  that unblocks everything else, and it is the largest single piece left: until
-  a caller can ask for what it needs instead of including `editor.h`, no module
-  above `base` can be finished.
+- **The `Editor` facade**, and the 15 `editor/api/` fragments still inside it.
+  This is the work that unblocks everything else, and it is the largest single
+  piece left: until a caller can ask for what it needs instead of including
+  `editor.h`, no module above `base` can be finished.
+
+  The 209 upward includes split three ways, and the split is what says how each
+  one gets paid:
+
+  | including file | what it is | edges |
+  | --- | --- | --- |
+  | in `editor/` | `editor -> lua`, the bridge's own headers | 27 |
+  | below `editor/` | an `Editor::` method implementation | 156 |
+  | below `editor/` | a real consumer of `Editor` | 26 |
+
+  The 156 are one shape: a file that defines `Editor::` methods is editor code,
+  so it either moves into `editor/` (where `surfaces/` and `app/` already hold
+  the paint and the commands) or it keeps a pure half in its own module and
+  leaves a wrapper behind in `editor/`. The 26 want what the facade is for: a
+  narrow header that answers the question the caller actually has, so the file
+  never sees the class at all.
+
+  The fragments go the way `SearchController` and `DiscordController` went --
+  state and behaviour into one class with its own header, `Editor` keeps one of
+  them, and the class reaches the shared editor state through the `Editor` it
+  was built with. `RestClient` (`editor/rest_client.h`) is the third
+  collaborator and the first whose header is not a fragment: `api/rest.h` and
+  `state/rest_state.h` are both gone, and `editor/app/rest_client.cpp` defines
+  `RestClient::` methods over `editor_` in place of the `Editor::` methods over
+  the state.
 - **`render/`, `ui/`, `input/`, `workspace/` and `lua/`** are cut as far as their
   `Editor::` files allow and no further.
 - **`.vscode/` and `CMakeSettings.json`** are still tracked: phase 0 marked them
@@ -105,18 +134,29 @@ editor`, `text -> editor` and `input -> editor` dominate the baseline.
 
 ## Verification of the latest change set
 
+Phase 5's first collaborator, the `RestClient` extraction.
+
 - `cmake --build build -j8` (Release, GUI and tree-sitter on) and
   `cmake --build build-tests -j8`: both clean.
 - `./build-tests/test/jot_tests`: 956 cases, 954 passed, 1 failed, 70591
-  assertions. The one failure is the `test_home_open.cpp:292` case below.
-- Probes run against the tree: `bible`, `emmet`, `autoclose`, `html_preview`,
-  `winbar`, `status_clock` and `wakatime` all pass, so the moved `extras/`,
-  `workspace/`, `render/` and `ui/` code is exercised on a real pty.
-- `tools/check_module_deps.py` and `tools/check_headers.py`: both pass at their
-  baselines (209 upward includes, 16 headers).
-- `tools/leak_check.sh`: no leaks reported, script exit 0. That also builds the
-  whole tree a second time under Debug + AddressSanitizer, so it is a second
-  independent check of every include path and target these moves touched.
+  assertions -- the same numbers as before the change, and the failure is the
+  `test_home_open.cpp:292` case below.
+- `test/rest_probe.py ./build/apps/jot/jot`: PASS. That is the interface a user
+  has rather than the class: a real pty, a real curl and a real server on a real
+  port, across three scenes (`:rest` at the cursor, `:rest echo` with a JSON
+  body, and an unresolved `{{var}}` that has to refuse the run).
+- `tools/check_module_deps.py`: 209 upward includes, all on the baseline -- the
+  same count, because the extraction moved nothing across a module boundary.
+- `tools/check_headers.py`: 152 of 167 stand alone, 15 on the baseline (was 16).
+  `editor/rest_client.h` stands alone, and `--write-baseline` regenerates the
+  baseline byte for byte, so the one line that left it is the only one that
+  moved.
+- `tools/leak_check.sh build-asan '[http]'`: no leaks reported, script exit 0.
+  That also builds the whole tree a second time under Debug + AddressSanitizer,
+  so it is a second independent check of every include path and target this
+  touched. The filter is the moved code's own tests -- the three REST cases
+  tagged `[http]`, which drive `prepare` and `show_response` through the test
+  hooks.
 
 ## Known red, verified not ours
 

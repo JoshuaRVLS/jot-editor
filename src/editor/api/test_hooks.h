@@ -1054,11 +1054,11 @@ bool lsp_install_plan_for_test(const std::string &name,
 // rest_response_lines_for_test reads the response tab back.
 bool rest_select_for_test(const std::string &name, HttpFile::Resolved &out)
 {
-  return rest_prepare(name, out);
+  return rest.prepare(name, out);
 }
 void rest_deliver_for_test(const HttpFile::Resolved &request, const std::string &output)
 {
-  rest_show_response(request, output);
+  rest.show_response(request, output);
 }
 std::vector<std::string> rest_response_lines_for_test() const
 {
@@ -1073,7 +1073,7 @@ std::vector<std::string> rest_response_lines_for_test() const
 }
 bool rest_request_running_for_test() const
 {
-  return rest_request_running;
+  return rest.running();
 }
 // The Bible reader minus the network: the fetch is skipped by pre-seeding the
 // cache (see test/test_bible_client.cpp), and the passage it paints is read

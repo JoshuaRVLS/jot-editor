@@ -24,7 +24,6 @@
 //   state/view_state.h        layout metrics, theme, paint caches, message line
 //   state/navigation_state.h  jump history and the armed jump
 //   state/engine_state.h      config, terminals, debugger, UI, Lua host
-//   state/rest_state.h        the HTTP client's session (:rest)
 //   state/bible_state.h       the Bible reader's session (:bible)
 //   state/web_index_state.h   the workspace's CSS vocabulary, for completions
 //
@@ -38,7 +37,6 @@
 #include "editor/state/navigation_state.h"
 #include "editor/state/pane_state.h"
 #include "editor/state/panel_state.h"
-#include "editor/state/rest_state.h"
 #include "editor/state/surface_state.h"
 #include "editor/state/tabline_state.h"
 #include "editor/state/view_state.h"
@@ -55,7 +53,6 @@ struct EditorState : BibleState,
                      NavigationState,
                      PaneState,
                      PanelState,
-                     RestState,
                      SurfaceState,
                      TablineState,
                      ViewState,

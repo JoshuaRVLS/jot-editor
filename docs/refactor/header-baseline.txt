@@ -3,7 +3,8 @@
 # Pay these down by adding the missing include, never by deleting the line.
 # The src/editor/api/ entries are not headers at all: they are fragments of
 # the Editor class body, so they cannot compile alone by construction. They
-# disappear when the Editor stops being assembled from fragments.
+# disappear one collaborator at a time, as the Editor stops being
+# assembled from fragments (api/rest.h went first, to editor/rest_client.h).
 src/editor/api/bible.h	src/editor/api/bible.h:21:1: error: expected unqualified-id before ‘private’
 src/editor/api/buffers.h	src/editor/api/buffers.h:12:1: error: expected unqualified-id before ‘private’
 src/editor/api/coding_time.h	src/editor/api/coding_time.h:21:1: error: expected unqualified-id before ‘private’
@@ -16,7 +17,6 @@ src/editor/api/paint.h	src/editor/api/paint.h:11:1: error: expected unqualified-
 src/editor/api/panels.h	src/editor/api/panels.h:12:1: error: expected unqualified-id before ‘private’
 src/editor/api/panes.h	src/editor/api/panes.h:11:1: error: expected unqualified-id before ‘private’
 src/editor/api/public_api.h	src/editor/api/public_api.h:12:1: error: expected unqualified-id before ‘public’
-src/editor/api/rest.h	src/editor/api/rest.h:15:1: error: expected unqualified-id before ‘private’
 src/editor/api/runtime.h	src/editor/api/runtime.h:12:1: error: expected unqualified-id before ‘private’
 src/editor/api/test_hooks.h	src/editor/api/test_hooks.h:12:1: error: expected unqualified-id before ‘public’
 src/editor/api/test_hooks_ui.h	src/editor/api/test_hooks_ui.h:12:1: error: expected unqualified-id before ‘public’

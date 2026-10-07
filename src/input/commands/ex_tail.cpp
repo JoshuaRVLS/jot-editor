@@ -683,7 +683,7 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   }
   else if (lcmd == "rest")
   {
-    rest_run(trim_copy(arg));
+    rest.run(trim_copy(arg));
   }
   else if (lcmd == "bible")
   {

@@ -21,19 +21,19 @@
 //   api/panels.h         minimap, bottom dock, terminal tasks, debugger
 //   api/panes.h          folds, pane commands and pane geometry
 //   api/commands.h       text commands, themes, setup, message line
-//   api/rest.h           the HTTP client (.http request files, `:rest`)
 //   api/bible.h          the Bible reader (`:bible`)
 //   api/coding_time.h    the coding-time chip: WakaTime and the local store
 //   api/test_hooks.h     the suite's headless hooks (core)
 //   api/test_hooks_ui.h  the suite's hooks (surfaces and lifecycle)
 //
 // Behaviour that owns its state lives in a collaborator instead
-// (jot/editor/*_controller.h); the state itself is split under
-// src/editor/state/ (see editor_state.h).
+// (editor/*_controller.h, editor/rest_client.h); the state itself is split
+// under src/editor/state/ (see editor_state.h).
 
 #include "autoclose.h"
 #include "bracket.h"
 #include "editor/discord_controller.h"
+#include "editor/rest_client.h"
 #include "editor/search_controller.h"
 #include "editor_state.h"
 #include "host_api.h"
@@ -62,9 +62,10 @@ class Editor : private EditorState
   friend class HostRenderAPI;
   friend class HostIOAPI;
   // The collaborators own their own state and reach the shared editor state
-  // through the Editor they were built with (jot/editor/*_controller.h), so
-  // each one has to be able to see it.
+  // through the Editor they were built with (editor/*_controller.h), so each
+  // one has to be able to see it.
   friend class DiscordController;
+  friend class RestClient;
   friend class SearchController;
 
 private:
@@ -229,6 +230,8 @@ private:
   // The Discord Rich Presence session: its IPC client, its idle clock, the
   // content it builds and the `:discord` command.
   DiscordController discord{*this};
+  // The HTTP client: the `:rest` runs and the `[Response]` tab they land in.
+  RestClient rest{*this};
 
   using PaneTreeNode = ::PaneTreeNode;
   using CommandPaletteSuggestion = ::CommandPaletteSuggestion;
@@ -385,7 +388,6 @@ private:
 #include "editor/api/explorer.h"
 #include "editor/api/panels.h"
 #include "editor/api/panes.h"
-#include "editor/api/rest.h"
 public:
 #include "editor/api/test_hooks.h"
 #include "editor/api/test_hooks_ui.h"
