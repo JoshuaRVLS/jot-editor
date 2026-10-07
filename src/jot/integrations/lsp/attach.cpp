@@ -3,9 +3,9 @@
 #include "editor.h"
 #include "jot/editor_models.h"
 #include "jot/integrations/lsp/common.h"
-#include "jot/lua/api.h"
-#include "jot/lua/lua_loader.h"
 #include "lsp/client.h"
+#include "lua/api.h"
+#include "lua/lua_loader.h"
 #include "syntax/cpp_flags.h"
 #include <algorithm>
 #include <memory>

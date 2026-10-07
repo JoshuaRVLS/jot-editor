@@ -1,7 +1,7 @@
 #include "editor.h"
 #include "host_api.h"
 #include "jot/app/relaunch.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 #include "ui/gui/gui.h"
 #include <algorithm>
 #include <chrono>

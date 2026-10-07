@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate src/features/color_tailwind.cpp -- the Tailwind colour class table.
+"""Generate src/syntax/color_tailwind.cpp -- the Tailwind colour class table.
 
 Upstream's Tailwind parser builds `prefix + "-" + colour` for every utility
 prefix and every palette entry, so the lookup in the scanner is a plain whole-

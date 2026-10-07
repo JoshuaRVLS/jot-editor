@@ -1,6 +1,6 @@
 #include "base/string_util.h"
 #include "editor.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 #include "syntax/index.h"
 #include "tools/workspace/search.h"
 #include "ui/gui/gui.h"

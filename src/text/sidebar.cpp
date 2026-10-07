@@ -1,7 +1,7 @@
 #include "editor.h"
 #include "features/winbar.h"
 #include "jot/file_icons.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 #include "sidebar_guides.h"
 #include <algorithm>
 #include <cctype>

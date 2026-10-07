@@ -1,5 +1,5 @@
 // The compile flags clangd is given for a C/C++ workspace
-// (src/features/cpp_flags.*).
+// (src/syntax/cpp_flags.*).
 //
 // These cases pin the cascade, because each step is a decision about how much
 // to trust the flags on disk: a database beside the sources must be left to

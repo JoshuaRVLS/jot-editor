@@ -1,4 +1,4 @@
-#include "jot/lua/api.h"
+#include "lua/api.h"
 #include <catch2/catch_test_macros.hpp>
 
 extern "C"

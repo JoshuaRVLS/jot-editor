@@ -66,7 +66,7 @@ INCLUDE_DIRS = [
     "src/lsp",
     "src/terminal",
     "src/ui",
-    "src/jot/lua",
+    "src/lua",
     "src/tools",
 ]
 

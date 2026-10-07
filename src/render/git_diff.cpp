@@ -8,9 +8,9 @@
 // native fallback stays byte-identical.
 
 #include "editor.h"
-#include "render/pane_edges.h"
 #include "jot/file_icons.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
+#include "render/pane_edges.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <filesystem>

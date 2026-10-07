@@ -3,7 +3,7 @@
 #include "editor.h"
 #include "folding.h"
 #include "jot/app/file_internal.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 
 #include <algorithm>
 #include <chrono>

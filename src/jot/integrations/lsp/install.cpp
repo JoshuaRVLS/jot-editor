@@ -6,8 +6,8 @@
 #include "editor.h"
 #include "jot/editor_models.h"
 #include "jot/integrations/lsp/common.h"
-#include "jot/lua/api.h"
 #include "lsp/client.h"
+#include "lua/api.h"
 #include <algorithm>
 #include <sstream>
 #include <string>

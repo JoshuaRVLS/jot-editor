@@ -2,7 +2,7 @@
 """Probe: a smart paste lands the block where Enter would open it.
 
 The paste re-bases a block onto the caret's own context with the editor's indent
-rules (src/edit/clipboard.cpp, smart_indent_paste_text), so what lands is a
+rules (src/text/clipboard.cpp, smart_indent_paste_text), so what lands is a
 question about real bytes, not about a painter: each scene pastes into a
 prepared file, saves with Ctrl+S (the on-save formatters and the trailing-space
 trim are off, so the file is the buffer), and compares the whole file.

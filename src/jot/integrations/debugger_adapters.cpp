@@ -1,8 +1,8 @@
 // Debug adapter resolution: binary lookup, command-line construction, and shell-word splitting.
 #include "commands/utils.h"
 #include "editor.h"
-#include "jot/lua/api.h"
 #include "jot/integrations/debugger_internal.h"
+#include "lua/api.h"
 
 #include <algorithm>
 #include <cstdlib>

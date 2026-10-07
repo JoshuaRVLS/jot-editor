@@ -1,4 +1,4 @@
-// The colour-literal scanner (src/features/color_codes.cpp).
+// The colour-literal scanner (src/syntax/color_codes.cpp).
 //
 // Ported from nvim-colorizer.lua, so these cases pin the rules that make the
 // port behave like the original: which spellings count as colours, and -- just

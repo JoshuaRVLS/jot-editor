@@ -1,6 +1,6 @@
 #include "editor.h"
 #include "jot/editor/search_controller.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 #include <algorithm>
 #include <cctype>
 #include <regex>

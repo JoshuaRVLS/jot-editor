@@ -3,6 +3,11 @@
 jot is one C++17 engine with three front ends over it (terminal UI, SDL3/OpenGL
 GUI, and Lua plugins). The directories under `src/` are the module boundaries.
 
+The module order, lowest first: `base`, `text`, `syntax`, `ui`, `render`,
+`input`, `tools`, `workspace`, `lsp`, `dap`, `terminal`, `git`, `extras`,
+`editor`, `lua`. A lower module may not include a higher one, and
+`tools/check_module_deps.py` enforces it in CI.
+
 ```
 apps/jot/        the binary: argument parsing, terminal setup, main()
 src/
@@ -19,7 +24,6 @@ src/
     integrations/  LSP, debugger, terminal and tree-sitter wiring
     workspace/     explorer, sidebar, git, right dock, tasks
     surfaces/      menus, popups, home screen, settings, theme chooser
-    lua/           the Lua API surface (view structs in lua/view/)
     markdown/      the preview server (shared by the markdown and HTML previews)
   text/            pure text editing: cursor, lines, search, sort, the text
                    objects, the line providers, the insertion rules
@@ -36,11 +40,9 @@ src/
   tools/           subprocess and protocol clients (discord, telescope, image
                    viewer, workspace search)
   ui/              the cell grid, text handling, terminal + GUI backends
+  lua/             the Lua API surface and its bindings, above everything it
+                   drives (view structs in lua/view/)
 ```
-
-The module order, lowest first: `base`, `text`, `syntax`, `ui`, `render`,
-`input`, `workspace`, `lsp`, `dap`, `terminal`, `git`, `extras`, `editor`,
-`lua`. A lower module may not include a higher one.
 
 `base/` is the floor: it may not include `editor.h`, a module header or a UI
 header, and it is the first directory the module order fixes. Everything above

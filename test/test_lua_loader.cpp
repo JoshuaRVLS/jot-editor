@@ -16,8 +16,8 @@
 #include <fstream>
 #include <string>
 
-#include "jot/lua/embedded_lua.h"
-#include "jot/lua/lua_loader.h"
+#include "lua/embedded_lua.h"
+#include "lua/lua_loader.h"
 
 namespace fs = std::filesystem;
 

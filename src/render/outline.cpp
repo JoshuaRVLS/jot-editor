@@ -1,6 +1,6 @@
 #include "editor.h"
 #include "features/winbar.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 #include "render/pane_edges.h"
 #include "syntax/index.h"
 #include "ui/text.h"

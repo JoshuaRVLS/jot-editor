@@ -1,6 +1,6 @@
 #include "commenting.h"
 #include "editor.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 #include "syntax/language.h"
 #include "text_features.h"
 #include <algorithm>

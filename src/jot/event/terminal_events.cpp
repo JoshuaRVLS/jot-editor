@@ -1,7 +1,7 @@
 // Terminal event dispatch: paste, resize, focus, key, mouse, and terminal-input events.
 #include "editor.h"
 #include "jot/event/keymap_candidates.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 
 void Editor::handle_terminal_event(const Event &ev)
 {

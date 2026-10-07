@@ -9,7 +9,7 @@
 // only the drains can see that several size changes arrived within one wake and
 // that only the last one matters.
 #include "editor.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 
 void Editor::apply_resize(int cols, int rows)
 {

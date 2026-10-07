@@ -1,4 +1,4 @@
-#include "jot/lua/embedded_lua.h"
+#include "lua/embedded_lua.h"
 #include "syntax/manager.h"
 #include "types.h"
 #include <catch2/catch_test_macros.hpp>

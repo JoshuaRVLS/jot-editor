@@ -1,16 +1,16 @@
 // Workspace lifecycle: opening a workspace, sidebar / zen toggles, and
 // session save / restore (recent-file lists, buffer set, layout).
 
+#include "cpp_assist.h"
 #include "editor.h"
 #include "folding.h"
-#include "jot/lua/api.h"
 #include "jot/workspace/workspace_internal.h"
+#include "lua/api.h"
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
-#include <functional>
-#include "cpp_assist.h"
 #include <fstream>
+#include <functional>
 #include <optional>
 #include <sstream>
 #include <unordered_set>

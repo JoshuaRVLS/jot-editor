@@ -1,5 +1,5 @@
 #include "editor.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 #include <unordered_set>
 
 void Editor::unique_selected_lines()

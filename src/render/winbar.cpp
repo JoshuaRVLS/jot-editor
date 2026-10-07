@@ -9,7 +9,7 @@
 // walked and deeper levels drop as soon as a level's selection moves.
 #include "editor.h"
 #include "jot/file_icons.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 #include "syntax/index.h"
 #include "ui/components.h"
 #include "ui/text.h"

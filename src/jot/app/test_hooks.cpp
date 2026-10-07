@@ -1,7 +1,7 @@
 // Headless test hooks for the Lua-rendered surfaces. Kept in their own file so
 // the production paths stay free of test-only logic.
 #include "editor.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 
 UI *Editor::ui_for_test()
 {

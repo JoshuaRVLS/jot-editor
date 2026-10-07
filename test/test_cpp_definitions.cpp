@@ -1,4 +1,4 @@
-// The C++ definition checks (src/features/cpp_definitions.*).
+// The C++ definition checks (src/syntax/cpp_definitions.*).
 //
 // The pure half drives parse_file/analyze on text, so each heuristic the parser
 // answers -- a call is not a declaration, an initializer is not a declaration,

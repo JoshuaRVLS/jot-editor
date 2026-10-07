@@ -7,10 +7,10 @@
 // single source of that geometry, shared with the mouse hit-test and the Lua
 // view.
 #include "editor.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
+#include "render/ui_internal.h"
 #include "ui/components.h"
 #include "ui/text.h"
-#include "render/ui_internal.h"
 
 using namespace ui_internal;
 #include <algorithm>

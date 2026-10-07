@@ -1,8 +1,8 @@
 // Debugger session lifecycle: start/attach, fd watching, stepping, thread/frame cycling, output polling.
 #include "commands/utils.h"
 #include "editor.h"
-#include "jot/lua/api.h"
 #include "jot/integrations/debugger_internal.h"
+#include "lua/api.h"
 
 #include <algorithm>
 #include <cstdlib>

@@ -10,7 +10,7 @@
 // editor.
 #include "editor.h"
 #include "input/commands/utils.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>

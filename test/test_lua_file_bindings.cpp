@@ -4,8 +4,8 @@
 // the file's text and every caller that only checks for nil skipped its
 // fallback -- the LeetCode solution template was never written because of it.
 #include "editor.h"
-#include "jot/lua/api.h"
-#include "jot/lua/bindings_internal.h"
+#include "lua/api.h"
+#include "lua/bindings_internal.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdio>
 #include <cstdlib>

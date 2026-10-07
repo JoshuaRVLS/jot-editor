@@ -3,8 +3,8 @@
 
 #include "editor.h"
 #include "folding.h"
-#include "jot/lua/api.h"
 #include "jot/workspace/workspace_internal.h"
+#include "lua/api.h"
 #include <algorithm>
 #include <chrono>
 #include <filesystem>

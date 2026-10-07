@@ -7,10 +7,10 @@
 // columns and affordances on the entries, so the mouse hit test reads exactly
 // what was drawn and the Lua surface paints into those same rects.
 #include "editor.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
+#include "render/ui_internal.h"
 #include "ui/components.h"
 #include "ui/text.h"
-#include "render/ui_internal.h"
 
 #include <algorithm>
 #include <string>

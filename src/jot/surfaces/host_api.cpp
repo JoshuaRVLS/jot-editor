@@ -1,6 +1,6 @@
 #include "host_api.h"
 #include "editor.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 
 #include <algorithm>
 #include <sstream>

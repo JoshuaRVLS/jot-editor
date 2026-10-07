@@ -3,7 +3,7 @@
 #include "jot/editor/search_controller.h"
 
 #include "editor.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 #include "ui/components.h"
 #include "ui/text.h"
 #include <algorithm>

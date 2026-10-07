@@ -1,4 +1,4 @@
-// Paste indent: where a pasted block lands (src/edit/clipboard.cpp,
+// Paste indent: where a pasted block lands (src/text/clipboard.cpp,
 // smart_indent_paste_text). The paste re-bases the block onto the caret's own
 // context, using the indent Enter would open there (EditorFeatures::
 // indent_for_new_line), so the cases pin what it must not do: glue the block to

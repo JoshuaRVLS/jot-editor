@@ -1,8 +1,8 @@
 // Debugger breakpoint toggling and the breakpoint hover state used by the editor panel.
 #include "commands/utils.h"
 #include "editor.h"
-#include "jot/lua/api.h"
 #include "jot/integrations/debugger_internal.h"
+#include "lua/api.h"
 
 #include <algorithm>
 #include <cstdlib>

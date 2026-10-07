@@ -5,8 +5,8 @@
 #include "commands/utils.h"
 #include "editor.h"
 #include "host_api.h"
-#include "jot/lua/api.h"
 #include "jot/workspace/git_run.h"
+#include "lua/api.h"
 
 #include <algorithm>
 #include <cctype>

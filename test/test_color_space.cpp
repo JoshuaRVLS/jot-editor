@@ -1,4 +1,4 @@
-// Colour-space conversions (src/features/color_space.cpp).
+// Colour-space conversions (src/syntax/color_space.cpp).
 //
 // These are the conversions behind hwb(), lab(), lch(), oklch(), hsluv() and
 // color(). A wrong matrix or a transposed constant produces colours that look

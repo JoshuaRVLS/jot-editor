@@ -8,8 +8,8 @@
 #include <map>
 #include <string>
 
-#include "jot/lua/api_internal.h"
-#include "jot/lua/embedded_lua.h"
+#include "lua/api_internal.h"
+#include "lua/embedded_lua.h"
 #include "ui/text.h"
 
 extern "C"

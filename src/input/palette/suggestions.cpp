@@ -3,7 +3,7 @@
 #include "editor.h"
 #include "features/bible.h"
 #include "features/http_file.h"
-#include "jot/lua/api.h"
+#include "lua/api.h"
 #include "syntax/install.h"
 #include <algorithm>
 #include <cctype>

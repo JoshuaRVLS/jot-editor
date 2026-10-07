@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Generate src/features/color_names.cpp -- the CSS/X11 named-colour table.
+"""Generate src/syntax/color_names.cpp -- the CSS/X11 named-colour table.
 
-The colour preview feature (src/features/color_codes.cpp) looks up words like
+The colour preview feature (src/syntax/color_codes.cpp) looks up words like
 "red" or "LightBlue"; this script owns the name -> RGB data so it stays
 reviewable and regenerable instead of being hand-typed into the source.
 
@@ -176,7 +176,7 @@ NAMED_COLORS: dict[str, int] = {
 HEADER = '''// GENERATED FILE -- do not edit by hand.
 //
 // The CSS/X11 named-colour table behind the colour preview
-// (src/features/color_codes.cpp). Regenerate with:
+// (src/syntax/color_codes.cpp). Regenerate with:
 //
 //     python3 tools/gen_color_names.py
 //

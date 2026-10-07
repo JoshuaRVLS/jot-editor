@@ -6,8 +6,8 @@
 #include "editor.h"
 #include "folding.h"
 #include "jot/app/file_internal.h"
-#include "jot/lua/api.h"
 #include "lazy_line_provider.h"
+#include "lua/api.h"
 #include "save_hygiene.h"
 #include <algorithm>
 #include <chrono>

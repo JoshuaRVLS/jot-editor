@@ -2,9 +2,9 @@
 // ranking, and applying the selected item (including snippet expansion).
 #include "editor.h"
 #include "jot/integrations/lsp/common.h"
-#include "jot/lua/api.h"
 #include "lsp/client.h"
 #include "lsp/completion_rank.h"
+#include "lua/api.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>

@@ -2,11 +2,11 @@
 // hover with a delay, cursor-triggered hover, the native popup (with
 // diagnostics leading the content), and jump-to-definition with a back stack.
 #include "editor.h"
-#include "render/gutter.h"
 #include "jot/editor_models.h"
-#include "jot/lua/api.h"
-#include "lsp/client.h"
 #include "jot/integrations/lsp/common.h"
+#include "lsp/client.h"
+#include "lua/api.h"
+#include "render/gutter.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <cctype>

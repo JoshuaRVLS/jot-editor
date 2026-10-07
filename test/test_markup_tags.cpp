@@ -1,6 +1,6 @@
 // Keeping a markup tag and its partner spelled the same while one of them is
 // edited (src/features/html.cpp, HtmlFeatures::find_tag_pair, driven from
-// Editor::sync_markup_tag_name in src/edit/edit.cpp).
+// Editor::sync_markup_tag_name in src/text/edit.cpp).
 //
 // The pair is found structurally: the cursor has to sit inside a tag *name*, and
 // the scan then walks the document counting tags until the nest closes. That is

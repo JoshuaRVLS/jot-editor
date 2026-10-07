@@ -33,7 +33,7 @@ function(jot_configure_object_target target_name)
     ${PROJECT_SOURCE_DIR}/src/lsp
     ${PROJECT_SOURCE_DIR}/src/terminal
     ${PROJECT_SOURCE_DIR}/src/ui
-    ${PROJECT_SOURCE_DIR}/src/jot/lua
+    ${PROJECT_SOURCE_DIR}/src/lua
     ${PROJECT_SOURCE_DIR}/src/tools
   )
 
@@ -343,7 +343,7 @@ include(features/sources.cmake)
 include(input/sources.cmake)
 include(render/sources.cmake)
 include(tools/sources.cmake)
-include(jot/lua/sources.cmake)
+include(lua/sources.cmake)
 include(ui/sources.cmake)
 
 # SDL2/OpenGL GUI frontend ("jot --gui"). The GUI sources are compiled

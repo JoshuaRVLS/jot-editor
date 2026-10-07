@@ -1,5 +1,5 @@
 // Smart indentation for the C family (src/features/text_features.*), as Enter
-// and the typing of a label reach it from src/edit/edit.cpp.
+// and the typing of a label reach it from src/text/edit.cpp.
 //
 // Most of this is the pure rule: the indent the next line starts at, for a
 // given line and caret, and which typed lines are labels. The editor cases then

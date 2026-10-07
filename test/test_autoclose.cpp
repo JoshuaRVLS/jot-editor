@@ -1,5 +1,5 @@
 // Auto-close: what a typed pair character does (src/features/autoclose.*,
-// driven from Editor::insert_char in src/edit/edit.cpp).
+// driven from Editor::insert_char in src/text/edit.cpp).
 //
 // Two halves. The rules are pure functions, so each one is asserted directly:
 // whether a character pairs at all, and whether it steps over the closer

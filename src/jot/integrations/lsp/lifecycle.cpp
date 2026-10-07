@@ -3,8 +3,8 @@
 // enable / disable.
 #include "editor.h"
 #include "jot/integrations/lsp/common.h"
-#include "jot/lua/api.h"
 #include "lsp/client.h"
+#include "lua/api.h"
 #include <algorithm>
 #include <string>
 #include <utility>
