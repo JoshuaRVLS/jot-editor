@@ -3,7 +3,7 @@
 // test accessors (no shell is spawned), and the panel rect + drag math is
 // exercised against a real UI instance.
 #include "editor.h"
-#include "tools/terminal/integrated.h"
+#include "terminal/integrated.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
 #include <string>

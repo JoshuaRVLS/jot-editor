@@ -6,7 +6,7 @@
 // without a server.
 #include "features/bible.h"
 #include "base/string_util.h"
-#include "tools/debugger/client.h"
+#include "dap/client.h"
 
 #include <algorithm>
 #include <cctype>

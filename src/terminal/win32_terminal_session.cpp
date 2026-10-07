@@ -5,7 +5,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
-#include "tools/terminal/win32_terminal_session.h"
+#include "terminal/win32_terminal_session.h"
 
 #include <windows.h>
 
@@ -64,8 +64,8 @@ namespace
             GetProcAddress(candidate, "CreatePseudoConsole"));
         auto resize_fn = reinterpret_cast<ResizePseudoConsoleFn>(
             GetProcAddress(candidate, "ResizePseudoConsole"));
-        auto close_fn = reinterpret_cast<ClosePseudoConsoleFn>(
-            GetProcAddress(candidate, "ClosePseudoConsole"));
+        auto close_fn =
+            reinterpret_cast<ClosePseudoConsoleFn>(GetProcAddress(candidate, "ClosePseudoConsole"));
         if (create_fn && resize_fn && close_fn)
         {
           module = candidate;
@@ -95,15 +95,20 @@ namespace
     {
       return {};
     }
-    int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
-                                     static_cast<int>(value.size()), nullptr, 0);
+    int length = MultiByteToWideChar(
+        CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()), nullptr, 0);
     if (length <= 0)
     {
       return {};
     }
     std::wstring result(static_cast<size_t>(length), L'\0');
-    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
-                            static_cast<int>(value.size()), result.data(), length) <= 0)
+    if (MultiByteToWideChar(CP_UTF8,
+                            MB_ERR_INVALID_CHARS,
+                            value.data(),
+                            static_cast<int>(value.size()),
+                            result.data(),
+                            length)
+        <= 0)
     {
       return {};
     }
@@ -206,8 +211,8 @@ bool Win32TerminalSession::open(const std::string &cwd, int rows, int cols)
   SetHandleInformation(output_read_, HANDLE_FLAG_INHERIT, 0);
 
   HPCON pseudo_console = nullptr;
-  HRESULT result = api.create(terminal_size(rows, cols), input_read, output_write, 0,
-                              &pseudo_console);
+  HRESULT result =
+      api.create(terminal_size(rows, cols), input_read, output_write, 0, &pseudo_console);
   close_handle(input_read);
   close_handle(output_write);
   if (FAILED(result) || !pseudo_console)
@@ -228,9 +233,13 @@ bool Win32TerminalSession::open(const std::string &cwd, int rows, int cols)
   std::vector<unsigned char> attributes(attribute_bytes);
   auto *attribute_list = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attributes.data());
   if (!InitializeProcThreadAttributeList(attribute_list, 1, 0, &attribute_bytes)
-      || !UpdateProcThreadAttribute(attribute_list, 0,
+      || !UpdateProcThreadAttribute(attribute_list,
+                                    0,
                                     PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
-                                    pseudo_console, sizeof(pseudo_console), nullptr, nullptr))
+                                    pseudo_console,
+                                    sizeof(pseudo_console),
+                                    nullptr,
+                                    nullptr))
   {
     DeleteProcThreadAttributeList(attribute_list);
     close();
@@ -251,10 +260,16 @@ bool Win32TerminalSession::open(const std::string &cwd, int rows, int cols)
   startup.StartupInfo.cb = sizeof(startup);
   startup.lpAttributeList = attribute_list;
   PROCESS_INFORMATION process{};
-  BOOL created = CreateProcessW(shell_wide.c_str(), command_line.data(), nullptr, nullptr,
-                                FALSE, EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
-                                nullptr, cwd_wide.empty() ? nullptr : cwd_wide.c_str(),
-                                &startup.StartupInfo, &process);
+  BOOL created = CreateProcessW(shell_wide.c_str(),
+                                command_line.data(),
+                                nullptr,
+                                nullptr,
+                                FALSE,
+                                EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+                                nullptr,
+                                cwd_wide.empty() ? nullptr : cwd_wide.c_str(),
+                                &startup.StartupInfo,
+                                &process);
   DeleteProcThreadAttributeList(attribute_list);
   if (!created)
   {
@@ -332,8 +347,11 @@ size_t Win32TerminalSession::write(const char *data, size_t size)
     return 0;
   }
   DWORD written = 0;
-  if (!WriteFile(static_cast<HANDLE>(input_write_), data,
-                 static_cast<DWORD>(std::min<size_t>(size, 0xFFFFFFFFu)), &written, nullptr))
+  if (!WriteFile(static_cast<HANDLE>(input_write_),
+                 data,
+                 static_cast<DWORD>(std::min<size_t>(size, 0xFFFFFFFFu)),
+                 &written,
+                 nullptr))
   {
     return 0;
   }
@@ -347,14 +365,14 @@ bool Win32TerminalSession::resize(int rows, int cols)
     return false;
   }
   ConPtyApi &api = conpty_api();
-  return api.load() && SUCCEEDED(api.resize(static_cast<HPCON>(pseudo_console_),
-                                             terminal_size(rows, cols)));
+  return api.load()
+         && SUCCEEDED(api.resize(static_cast<HPCON>(pseudo_console_), terminal_size(rows, cols)));
 }
 
 bool Win32TerminalSession::process_exited() const
 {
-  return process_handle_ && WaitForSingleObject(static_cast<HANDLE>(process_handle_), 0)
-         == WAIT_OBJECT_0;
+  return process_handle_
+         && WaitForSingleObject(static_cast<HANDLE>(process_handle_), 0) == WAIT_OBJECT_0;
 }
 
 bool Win32TerminalSession::active() const

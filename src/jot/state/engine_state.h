@@ -10,7 +10,7 @@
 #include "syntax/manager.h"     // TreeSitterManager
 #include "syntax_highlighter.h" // SyntaxHighlighter
 #include "terminal.h"           // Terminal
-#include "tools/terminal/integrated.h" // IntegratedTerminal
+#include "terminal/integrated.h"       // IntegratedTerminal
 #include "ui.h"                        // UI
 
 #include <map>

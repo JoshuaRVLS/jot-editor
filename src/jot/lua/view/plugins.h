@@ -12,9 +12,9 @@
 // Split out of jot/lua/api.h, which keeps the LuaAPI class itself and
 // includes these headers in order; the structs are unchanged.
 
+#include "dap/client.h"
 #include "jot/lua/view/shared.h"
 #include "text_features.h"
-#include "tools/debugger/client.h"
 #include "tools/lsp/client.h"
 #include <array>
 #include <chrono>

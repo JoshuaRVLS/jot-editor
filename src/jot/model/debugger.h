@@ -1,7 +1,7 @@
 #ifndef JOT_MODEL_DEBUGGER_H
 #define JOT_MODEL_DEBUGGER_H
 
-#include "tools/debugger/client.h"
+#include "dap/client.h"
 #include <string>
 #include <vector>
 struct DebuggerSessionState

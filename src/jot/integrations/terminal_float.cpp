@@ -9,7 +9,7 @@
 // next open, in the directory it was first started in.
 #include "editor.h"
 #include "jot/model/panes.h" // pane_content_top, pane_viewport_h
-#include "tools/terminal/integrated.h"
+#include "terminal/integrated.h"
 #include "ui/components.h"
 
 #include <algorithm>

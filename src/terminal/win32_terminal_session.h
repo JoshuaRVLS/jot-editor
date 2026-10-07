@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <string>
 
-#include "tools/terminal/terminal_session.h"
+#include "terminal/terminal_session.h"
 
 // ConPTY-backed terminal session for Windows. Modeled on Neovim's
 // pty_conpty_win.c: the pseudo console and process APIs are loaded

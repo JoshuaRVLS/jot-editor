@@ -1,4 +1,4 @@
-#include "tools/terminal/integrated.h"
+#include "terminal/integrated.h"
 #include "ui/terminal.h"
 #include <catch2/catch_test_macros.hpp>
 

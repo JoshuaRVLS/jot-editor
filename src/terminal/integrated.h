@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "tools/terminal/terminal_session.h"
+#include "terminal/terminal_session.h"
 
 typedef struct VTerm VTerm;
 typedef struct VTermScreen VTermScreen;

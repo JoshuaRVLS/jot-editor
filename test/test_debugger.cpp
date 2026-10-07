@@ -1,4 +1,4 @@
-#include "tools/debugger/client.h"
+#include "dap/client.h"
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>

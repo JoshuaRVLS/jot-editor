@@ -29,6 +29,8 @@ function(jot_configure_object_target target_name)
     ${PROJECT_SOURCE_DIR}/src/text
     ${PROJECT_SOURCE_DIR}/src/features
     ${PROJECT_SOURCE_DIR}/src/syntax
+    ${PROJECT_SOURCE_DIR}/src/dap
+    ${PROJECT_SOURCE_DIR}/src/terminal
     ${PROJECT_SOURCE_DIR}/src/ui
     ${PROJECT_SOURCE_DIR}/src/jot/lua
     ${PROJECT_SOURCE_DIR}/src/tools
@@ -321,6 +323,8 @@ function(jot_expose_module_api target_name)
     ${PROJECT_SOURCE_DIR}/src/text
     ${PROJECT_SOURCE_DIR}/src/features
     ${PROJECT_SOURCE_DIR}/src/syntax
+    ${PROJECT_SOURCE_DIR}/src/dap
+    ${PROJECT_SOURCE_DIR}/src/terminal
     ${PROJECT_SOURCE_DIR}/src/ui
     ${PROJECT_SOURCE_DIR}/src/tools
   )
@@ -330,6 +334,8 @@ include(base/sources.cmake)
 include(jot/sources.cmake)
 include(text/sources.cmake)
 include(syntax/sources.cmake)
+include(dap/sources.cmake)
+include(terminal/sources.cmake)
 include(features/sources.cmake)
 include(input/sources.cmake)
 include(render/sources.cmake)
@@ -431,10 +437,19 @@ else()
   target_sources(jot_tools_obj PRIVATE ${JOT_TOOLS_POSIX_SOURCES})
 endif()
 jot_configure_object_target(jot_tools_obj)
+
+add_library(jot_dap_obj OBJECT ${JOT_DAP_SOURCES})
+jot_configure_object_target(jot_dap_obj)
+
+add_library(jot_terminal_obj OBJECT ${JOT_TERMINAL_SOURCES})
+if(WIN32)
+  target_sources(jot_terminal_obj PRIVATE ${JOT_TERMINAL_WINDOWS_SOURCES})
+endif()
 # libvterm is vendored (third_party/libvterm) and used on every platform so
 # the integrated terminal renders identically on POSIX and Windows.
-target_include_directories(jot_tools_obj SYSTEM PRIVATE
+target_include_directories(jot_terminal_obj SYSTEM PRIVATE
   ${PROJECT_SOURCE_DIR}/third_party/libvterm/include)
+jot_configure_object_target(jot_terminal_obj)
 
 add_library(jot_lua_api_obj OBJECT ${JOT_LUA_SOURCES} "${JOT_LUA_EMBED_CPP}")
 target_include_directories(jot_lua_api_obj PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
@@ -482,6 +497,8 @@ add_library(jot_features STATIC $<TARGET_OBJECTS:jot_features_obj>)
 add_library(jot_input STATIC $<TARGET_OBJECTS:jot_input_obj>)
 add_library(jot_render STATIC $<TARGET_OBJECTS:jot_render_obj>)
 add_library(jot_tools STATIC $<TARGET_OBJECTS:jot_tools_obj>)
+add_library(jot_dap STATIC $<TARGET_OBJECTS:jot_dap_obj>)
+add_library(jot_terminal STATIC $<TARGET_OBJECTS:jot_terminal_obj>)
 add_library(jot_lua_api STATIC $<TARGET_OBJECTS:jot_lua_api_obj>)
 target_link_libraries(jot_lua_api PUBLIC ${LUA_LIBRARIES})
 # The bridge objects compile against the resolved Lua headers above; make
@@ -500,6 +517,8 @@ jot_expose_module_api(jot_features)
 jot_expose_module_api(jot_input)
 jot_expose_module_api(jot_render)
 jot_expose_module_api(jot_tools)
+jot_expose_module_api(jot_dap)
+jot_expose_module_api(jot_terminal)
 jot_expose_module_api(jot_lua_api)
 jot_expose_module_api(jot_ui)
 
@@ -514,6 +533,8 @@ add_library(jot_engine STATIC
   $<TARGET_OBJECTS:jot_input_obj>
   $<TARGET_OBJECTS:jot_render_obj>
   $<TARGET_OBJECTS:jot_tools_obj>
+  $<TARGET_OBJECTS:jot_dap_obj>
+  $<TARGET_OBJECTS:jot_terminal_obj>
   $<TARGET_OBJECTS:jot_lua_api_obj>
   $<TARGET_OBJECTS:jot_ui_obj>
 )
@@ -528,10 +549,10 @@ target_include_directories(jot_engine SYSTEM PUBLIC ${LUA_INCLUDE_DIRS})
 
 jot_expose_module_api(jot_engine)
 if(JOT_TREESITTER_ENABLED)
-  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj jot_base jot_core jot_text jot_syntax jot_features jot_input jot_render jot_tools jot_lua_api jot_ui jot_engine)
+  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_terminal_obj jot_ui_obj jot_base jot_core jot_text jot_syntax jot_features jot_input jot_render jot_tools jot_dap jot_terminal jot_lua_api jot_ui jot_engine)
     target_compile_definitions(${target_name} PUBLIC JOT_TREESITTER=1)
   endforeach()
-  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj)
+  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_terminal_obj jot_ui_obj)
     target_include_directories(${target_name} SYSTEM PRIVATE ${TREE_SITTER_INCLUDE_DIRS})
   endforeach()
   target_link_libraries(jot_syntax PUBLIC
@@ -558,11 +579,11 @@ endif()
 # targets *and* the libraries they are folded into, because $<TARGET_OBJECTS:>
 # does not carry usage requirements across.
 if(JOT_GUI_ENABLED)
-  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj jot_base jot_core jot_text jot_syntax jot_features jot_input jot_render jot_tools jot_lua_api jot_ui jot_engine)
+  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_terminal_obj jot_ui_obj jot_base jot_core jot_text jot_syntax jot_features jot_input jot_render jot_tools jot_dap jot_terminal jot_lua_api jot_ui jot_engine)
     target_compile_definitions(${target_name} PUBLIC JOT_GUI=1)
   endforeach()
 endif()
-target_link_libraries(jot_tools PUBLIC jot_vterm)
+target_link_libraries(jot_terminal PUBLIC jot_vterm)
 target_link_libraries(jot_engine PUBLIC jot_vterm)
 # Always propagated, not just when the GUI is enabled: ui/gui/gui.h is included
 # by engine sources that are always compiled (editor.cpp, settings.cpp) and its

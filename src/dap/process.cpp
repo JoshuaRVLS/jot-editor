@@ -1,6 +1,6 @@
 // Process spawn helpers for the DAP client: non-blocking fd setup, argv
 // quoting, and the debug log file used to trace adapter traffic.
-#include "tools/debugger/client.h"
+#include "dap/client.h"
 
 #include <algorithm>
 #include <cctype>

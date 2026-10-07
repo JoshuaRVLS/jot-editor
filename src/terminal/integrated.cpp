@@ -1,4 +1,4 @@
-#include "tools/terminal/integrated.h"
+#include "terminal/integrated.h"
 
 #include <algorithm>
 #include <cctype>
@@ -605,8 +605,7 @@ int IntegratedTerminal::get_top_visible_row(int visible_rows) const
   return std::max(0, total - offset - take);
 }
 
-std::vector<IntegratedTerminal::StyledCell>
-IntegratedTerminal::get_row_cells_at(int full_row) const
+std::vector<IntegratedTerminal::StyledCell> IntegratedTerminal::get_row_cells_at(int full_row) const
 {
   std::vector<StyledCell> cells;
   if (full_row < 0)

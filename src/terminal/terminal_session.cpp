@@ -1,9 +1,9 @@
-#include "tools/terminal/terminal_session.h"
+#include "terminal/terminal_session.h"
 
 #include <memory>
 
 #ifdef _WIN32
-#include "tools/terminal/win32_terminal_session.h"
+#include "terminal/win32_terminal_session.h"
 #else
 #include <cerrno>
 #include <chrono>
@@ -218,7 +218,7 @@ namespace
     int master_fd_ = -1;
     pid_t child_pid_ = -1;
   };
-}
+} // namespace
 #endif
 
 std::unique_ptr<TerminalSession> make_terminal_session()

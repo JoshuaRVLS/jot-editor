@@ -1,9 +1,9 @@
 #ifndef LUA_API_H
 #define LUA_API_H
 
-#include "text_features.h"
+#include "dap/client.h"
 #include "features/leetcode_http.h"
-#include "tools/debugger/client.h"
+#include "text_features.h"
 #include "tools/lsp/client.h"
 #include <array>
 #include <chrono>

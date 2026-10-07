@@ -29,8 +29,10 @@ src/
                    leetcode, previews)
   input/           key/mouse routing: modes, palette, commands
   render/          painting: frame, buffer, panels, popups, minimap
-  tools/           subprocess and protocol clients (LSP, debugger, discord,
-                   telescope, integrated terminal, workspace search)
+  dap/             the Debug Adapter Protocol client and its wire format
+  terminal/        pty-backed terminal sessions and the panel that draws them
+  tools/           subprocess and protocol clients (LSP, discord, telescope,
+                   image viewer, workspace search)
   ui/              the cell grid, text handling, terminal + GUI backends
 ```
 

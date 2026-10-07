@@ -1,15 +1,9 @@
 set(JOT_TOOLS_SOURCES
-  tools/debugger/client.cpp
-  tools/debugger/convert.cpp
-  tools/debugger/json.cpp
-  tools/debugger/process.cpp
   tools/discord_presence.cpp
   tools/imageviewer.cpp
   tools/lsp/install.cpp
   tools/telescope.cpp
   tools/telescope_async.cpp
-  tools/terminal/integrated.cpp
-  tools/terminal/terminal_session.cpp
   tools/workspace/search.cpp
 )
 
@@ -31,5 +25,4 @@ set(JOT_TOOLS_WINDOWS_SOURCES
   tools/lsp/messages.cpp
   tools/lsp/protocol.cpp
   tools/lsp/requests.cpp
-  tools/terminal/win32_terminal_session.cpp
 )

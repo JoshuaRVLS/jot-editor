@@ -1,5 +1,5 @@
-#include "tools/debugger/client.h"
-#include "tools/debugger/internal.h"
+#include "dap/client.h"
+#include "dap/internal.h"
 
 #include <algorithm>
 #include <cctype>
@@ -35,7 +35,6 @@ using ssize_t = intptr_t;
 #endif
 
 namespace fs = std::filesystem;
-
 
 using namespace dbg_internal;
 
@@ -460,8 +459,7 @@ bool DebuggerClient::evaluate_and_read_memory(const std::string &expression, int
 
 bool DebuggerClient::evaluate(const std::string &expression)
 {
-  return send_request("evaluate",
-                      "{\"expression\":\"" + Dap::json_escape(expression) + "\"}");
+  return send_request("evaluate", "{\"expression\":\"" + Dap::json_escape(expression) + "\"}");
 }
 
 bool DebuggerClient::disassemble(const std::string &memory_reference,
@@ -831,4 +829,3 @@ std::vector<DebuggerSessionConfig> parse_debugger_config_text(const std::string 
             { return a.name < b.name; });
   return out;
 }
-
