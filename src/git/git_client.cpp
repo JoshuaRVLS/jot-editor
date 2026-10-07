@@ -1,4 +1,4 @@
-// lazygit integration (src/workspace/git_client.cpp).
+// lazygit integration (src/git/git_client.cpp).
 //
 // A deliberately small file: :lazygit launches the lazygit TUI inside jot's
 // integrated terminal, rooted at the workspace (or the current file's

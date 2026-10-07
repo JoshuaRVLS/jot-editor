@@ -33,6 +33,7 @@ src/
   input/           key/mouse routing: modes, palette, commands
   render/          painting: frame, buffer, panels, popups, minimap
   workspace/       explorer, sidebar, right dock, tasks, timeline, project search
+  git/             repository state, the git client, the panel and its painters
   dap/             the Debug Adapter Protocol client and its wire format
   lsp/             the Language Server Protocol client, its wire format and
                    the completion ranking it feeds

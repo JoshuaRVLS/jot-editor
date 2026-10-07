@@ -1,4 +1,4 @@
-// Git panel renderer (src/render/git_panel.cpp).
+// Git panel renderer (src/git/git_panel_paint.cpp).
 //
 // Paints the lazygit-style git panel in the right dock: view tabs (Files /
 // Branches / Commits / Stash), a branch header, status-colored rows with
@@ -8,11 +8,11 @@
 // byte-identical.
 
 #include "editor.h"
+#include "git/git_panel_models.h"
 #include "jot/file_icons.h"
 #include "lua/api.h"
 #include "render/pane_edges.h"
 #include "ui/text.h"
-#include "workspace/git_panel_models.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -38,9 +38,8 @@ namespace
     {
       return theme.fg_git_conflict;
     }
-    const char primary = !xy.empty() && xy[0] != ' '
-                             ? xy[0]
-                             : (!xy.empty() && xy.size() > 1 ? xy[1] : ' ');
+    const char primary =
+        !xy.empty() && xy[0] != ' ' ? xy[0] : (!xy.empty() && xy.size() > 1 ? xy[1] : ' ');
     switch (primary)
     {
     case 'A':
@@ -188,8 +187,8 @@ void Editor::render_git_panel()
   view.header = ui_truncate_cells(header, content_w);
   view.header_fg = theme.fg_status_info;
   // Branch name + drift in accent, repo in the muted header color.
-  const int branch_cells = std::min((int)ui_cell_count(repo + " " + branch_part),
-                                    std::max(1, content_w));
+  const int branch_cells =
+      std::min((int)ui_cell_count(repo + " " + branch_part), std::max(1, content_w));
   ui->draw_text(content_x, panel_y + 3, view.header, view.header_fg, theme.bg_terminal);
   if (focused)
   {
@@ -208,8 +207,7 @@ void Editor::render_git_panel()
 
   if (flat.empty())
   {
-    view.note = files_view ? "No changes, clean working tree"
-                           : "Nothing here, press r to refresh";
+    view.note = files_view ? "No changes, clean working tree" : "Nothing here, press r to refresh";
     view.note_fg = theme.fg_comment;
     if (lua_api && lua_api->has_lua_ui_handler("side_panel") && lua_api->emit_side_panel(view))
     {
@@ -236,10 +234,10 @@ void Editor::render_git_panel()
     if (fr.section)
     {
       const SectionStyle style = section_style(theme, fr.label);
-      const int count = (int)std::count_if(
-          state.files.begin(),
-          state.files.end(),
-          [&](const FileRow &f) { return status_section(f.status) == fr.label; });
+      const int count = (int)std::count_if(state.files.begin(),
+                                           state.files.end(),
+                                           [&](const FileRow &f)
+                                           { return status_section(f.status) == fr.label; });
       r.kind = "git_section";
       r.text = std::string(style.glyph) + " " + fr.label + " (" + std::to_string(count) + ")";
       r.fg = style.fg;
@@ -368,12 +366,7 @@ void Editor::render_git_panel()
     {
       // Lead (commit hash / stash ref) is ASCII, so bytes == cells.
       const std::string lead = text.substr(0, (size_t)lead_bytes);
-      ui->draw_text(draw_x,
-                    body_y + row,
-                    lead,
-                    lead_fg,
-                    row_bg,
-                    r.bold);
+      ui->draw_text(draw_x, body_y + row, lead, lead_fg, row_bg, r.bold);
       draw_x += (int)ui_cell_count(lead);
       text = text.substr((size_t)lead_bytes);
     }

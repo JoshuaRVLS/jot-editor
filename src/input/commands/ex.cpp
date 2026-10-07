@@ -2,9 +2,9 @@
 #include "commands/utils.h"
 #include "cpp_assist.h"
 #include "editor.h"
+#include "git/git_run.h"
 #include "host_api.h"
 #include "lua/api.h"
-#include "workspace/git_run.h"
 
 #include <algorithm>
 #include <cctype>

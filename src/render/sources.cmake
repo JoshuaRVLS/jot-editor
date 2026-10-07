@@ -26,7 +26,5 @@ set(JOT_RENDER_SOURCES
   render/sync.cpp
   render/tabs.cpp
   render/winbar.cpp
-  render/git_diff.cpp
-  render/git_panel.cpp
   render/outline.cpp
 )

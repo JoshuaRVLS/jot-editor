@@ -1,13 +1,13 @@
 #ifndef JOT_STATE_WORKSPACE_STATE_H
 #define JOT_STATE_WORKSPACE_STATE_H
 
-#include "jot/model/buffer.h"   // GlobalMark
-#include "jot/model/explorer.h" // FileNode, SidebarView, SidebarRenderCache
-#include "jot/model/session.h"  // ClosedBufferSnapshot
-#include "jot/model/sidebar_sections.h"     // jot_sidebar::Section
-#include "workspace/git_panel_models.h"     // jot_git_panel::State
-#include "workspace/git_run.h"              // jot_git::StatusSnapshot
-#include "workspace/timeline.h"             // jot_timeline::Commit
+#include "git/git_panel_models.h"       // jot_git_panel::State
+#include "git/git_run.h"                // jot_git::StatusSnapshot
+#include "jot/model/buffer.h"           // GlobalMark
+#include "jot/model/explorer.h"         // FileNode, SidebarView, SidebarRenderCache
+#include "jot/model/session.h"          // ClosedBufferSnapshot
+#include "jot/model/sidebar_sections.h" // jot_sidebar::Section
+#include "workspace/timeline.h"         // jot_timeline::Commit
 #include <atomic>
 #include <map>
 #include <string>

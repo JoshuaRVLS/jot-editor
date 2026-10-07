@@ -1,4 +1,4 @@
-// Git diff panel renderer (src/render/git_diff.cpp).
+// Git diff panel renderer (src/git/git_diff.cpp).
 //
 // Paints the per-file diff in the right dock: a file icon (per-language
 // brand color) + path header with right-aligned +/- change stats, then the
@@ -231,10 +231,6 @@ void Editor::render_git_diff_panel()
     {
       ui->fill_rect({content_x, body_y + row, content_w, 1}, " ", r.fg, r.bg);
     }
-    ui->draw_text(content_x,
-                  body_y + row,
-                  ui_truncate_cells(r.text, content_w),
-                  r.fg,
-                  r.bg);
+    ui->draw_text(content_x, body_y + row, ui_truncate_cells(r.text, content_w), r.fg, r.bg);
   }
 }

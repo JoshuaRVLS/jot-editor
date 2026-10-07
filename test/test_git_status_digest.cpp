@@ -9,7 +9,7 @@
 // byte-for-byte the one the installed map was built from.
 #include "base/shell_util.h"
 #include "editor.h"
-#include "workspace/git_run.h"
+#include "git/git_run.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

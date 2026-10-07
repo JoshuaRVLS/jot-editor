@@ -67,6 +67,7 @@ INCLUDE_DIRS = [
     "src/terminal",
     "src/ui",
     "src/workspace",
+    "src/git",
     "src/lua",
     "src/tools",
 ]

@@ -1,4 +1,4 @@
-// Git panel models (src/workspace/git_panel_models.h).
+// Git panel models (src/git/git_panel_models.h).
 //
 // Header-only: the git panel's row structs, view state, and the pure
 // porcelain-status mapping helpers (section, rank, glyph). Kept free of
@@ -54,29 +54,29 @@ namespace jot_git_panel
     View view = View::Files;
     int selected = 0; // index into the current view's row vector
     int scroll = 0;
-  // Two-step confirmations (discard / delete / drop): the key that armed
-  // the pending action; pressing it again performs it.
-  std::string pending_confirm;
-  // When the panel opens a file diff, closing the diff panel returns to the
-  // git panel instead of dropping the right dock.
-  bool return_after_diff = false;
+    // Two-step confirmations (discard / delete / drop): the key that armed
+    // the pending action; pressing it again performs it.
+    std::string pending_confirm;
+    // When the panel opens a file diff, closing the diff panel returns to the
+    // git panel instead of dropping the right dock.
+    bool return_after_diff = false;
 
-  // Visible row count for the current view (selection clamping helper).
-  inline size_t row_count() const
-  {
-    switch (view)
+    // Visible row count for the current view (selection clamping helper).
+    inline size_t row_count() const
     {
-    case View::Branches:
-      return branches.size();
-    case View::Commits:
-      return commits.size();
-    case View::Stash:
-      return stashes.size();
-    case View::Files:
-    default:
-      return files.size();
+      switch (view)
+      {
+      case View::Branches:
+        return branches.size();
+      case View::Commits:
+        return commits.size();
+      case View::Stash:
+        return stashes.size();
+      case View::Files:
+      default:
+        return files.size();
+      }
     }
-  }
 
     std::vector<FileRow> files;
     std::vector<BranchRow> branches;

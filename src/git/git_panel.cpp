@@ -1,17 +1,17 @@
-// Git panel actions (src/workspace/git_panel.cpp).
+// Git panel actions (src/git/git_panel.cpp).
 //
 // The lazygit-style git panel's state transitions and git commands: view
 // switching (2 files / 3 branches / 4 commits / 5 stash, matching lazygit's
 // panel numbers), selection, staging, diffing, committing, discarding,
 // stashing, checkout/merge and push/pull/fetch. Rendering lives in
 // src/render/git_panel.cpp; the shared row model in
-// src/workspace/git_panel_models.h.
+// src/git/git_panel_models.h.
 
 #include "editor.h"
 
+#include "git/git_panel_models.h"
+#include "git/git_run.h"
 #include "ui/text.h" // ui_cell_count
-#include "workspace/git_panel_models.h"
-#include "workspace/git_run.h"
 
 #include <algorithm>
 #include <chrono>
@@ -197,8 +197,8 @@ void Editor::git_panel_refresh()
       }
       row.name = name;
       const size_t bracket = line.find('[');
-      const size_t end_bracket = bracket == std::string::npos ? std::string::npos
-                                                              : line.find(']', bracket);
+      const size_t end_bracket =
+          bracket == std::string::npos ? std::string::npos : line.find(']', bracket);
       if (bracket != std::string::npos && end_bracket != std::string::npos)
       {
         row.tracking = line.substr(bracket, end_bracket - bracket + 1);
@@ -210,8 +210,8 @@ void Editor::git_panel_refresh()
   // Recent commits: short hash, date, subject.
   git_panel.commits.clear();
   {
-    std::istringstream iss(jot_git::capture(
-        root, "log -n 30 --pretty=format:%h%x09%ad%x09%s --date=short"));
+    std::istringstream iss(
+        jot_git::capture(root, "log -n 30 --pretty=format:%h%x09%ad%x09%s --date=short"));
     std::string line;
     while (std::getline(iss, line))
     {
@@ -230,8 +230,7 @@ void Editor::git_panel_refresh()
   // Stash list.
   git_panel.stashes.clear();
   {
-    std::istringstream iss(
-        jot_git::capture(root, "stash list --pretty=format:%gd%x09%s"));
+    std::istringstream iss(jot_git::capture(root, "stash list --pretty=format:%gd%x09%s"));
     std::string line;
     while (std::getline(iss, line))
     {
@@ -246,13 +245,13 @@ void Editor::git_panel_refresh()
     }
   }
 
-  const size_t count = git_panel.view == jot_git_panel::View::Files
-                           ? git_panel.files.size()
-                           : (git_panel.view == jot_git_panel::View::Branches
-                                  ? git_panel.branches.size()
-                                  : (git_panel.view == jot_git_panel::View::Commits
-                                         ? git_panel.commits.size()
-                                         : git_panel.stashes.size()));
+  const size_t count =
+      git_panel.view == jot_git_panel::View::Files
+          ? git_panel.files.size()
+          : (git_panel.view == jot_git_panel::View::Branches
+                 ? git_panel.branches.size()
+                 : (git_panel.view == jot_git_panel::View::Commits ? git_panel.commits.size()
+                                                                   : git_panel.stashes.size()));
   git_panel.selected = std::clamp(git_panel.selected, 0, std::max(0, (int)count - 1));
   needs_redraw = true;
 }
@@ -334,9 +333,8 @@ void Editor::git_panel_move_selection(int delta)
                            ? git_panel.files.size()
                            : (git_panel.view == View::Branches
                                   ? git_panel.branches.size()
-                                  : (git_panel.view == View::Commits
-                                         ? git_panel.commits.size()
-                                         : git_panel.stashes.size()));
+                                  : (git_panel.view == View::Commits ? git_panel.commits.size()
+                                                                     : git_panel.stashes.size()));
   if (count == 0)
   {
     return;
@@ -362,9 +360,8 @@ void Editor::git_panel_jump_to_end(bool bottom)
                            ? git_panel.files.size()
                            : (git_panel.view == View::Branches
                                   ? git_panel.branches.size()
-                                  : (git_panel.view == View::Commits
-                                         ? git_panel.commits.size()
-                                         : git_panel.stashes.size()));
+                                  : (git_panel.view == View::Commits ? git_panel.commits.size()
+                                                                     : git_panel.stashes.size()));
   if (count == 0)
   {
     return;
@@ -878,7 +875,8 @@ bool Editor::handle_git_panel_mouse(int x, int y, bool is_click, bool is_double_
   git_panel_hover_row = hover_row;
   focus_state = FOCUS_RIGHT_PANEL;
   needs_redraw = true;
-  if (row_index < 0 || index < 0 || index >= (int)flat.size() || index >= git_panel.scroll + visible)
+  if (row_index < 0 || index < 0 || index >= (int)flat.size()
+      || index >= git_panel.scroll + visible)
   {
     return true;
   }
@@ -887,10 +885,9 @@ bool Editor::handle_git_panel_mouse(int x, int y, bool is_click, bool is_double_
   {
     // Double-click detection mirrors the sidebar's: two clicks on the
     // same row within 350 ms open the file's diff.
-    const long long now_ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch())
-            .count();
+    const long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 std::chrono::steady_clock::now().time_since_epoch())
+                                 .count();
     const bool dbl = is_double_click
                      || (last_git_panel_click_ms > 0 && now_ms - last_git_panel_click_ms <= 350
                          && last_git_panel_click_row == index);

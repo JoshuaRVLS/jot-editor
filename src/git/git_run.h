@@ -1,4 +1,4 @@
-// Git command runners (src/workspace/git_run.h).
+// Git command runners (src/git/git_run.h).
 //
 // Header-only helpers for running `git -C <root> <args...>` and capturing
 // stdout (git_capture), stdout plus exit status (git_capture_ex), or stdout
@@ -43,9 +43,8 @@ namespace jot_git
     inline Captured run_pipe(const std::string &cmd, bool merge_stderr)
     {
       Captured result;
-      std::FILE *pipe =
-          shell_util::open_command_pipe(cmd + (merge_stderr ? " 2>&1" : shell_util::null_redirect()),
-                                        "r");
+      std::FILE *pipe = shell_util::open_command_pipe(
+          cmd + (merge_stderr ? " 2>&1" : shell_util::null_redirect()), "r");
       if (!pipe)
       {
         return result;
