@@ -183,3 +183,127 @@ TEST_CASE("The sidebar footer speaks for the workspace, not the selected row", "
   REQUIRE(footer.find("alpha.txt") == std::string::npos);
   REQUIRE(footer.find("items") != std::string::npos);
 }
+
+TEST_CASE("The sidebar's sections come back as they were left", "[jot]")
+{
+  // One session file per workspace root; this case gets its own config home so
+  // it never collides with the tests that share probe_editor().
+  char home[] = "/tmp/jot_sections_session_XXXXXX";
+  mkdtemp(home);
+  setenv("JOT_CONFIG_HOME", home, 1);
+  setenv("JOT_CACHE_HOME", home, 1);
+  const std::string root = std::string(home) + "/ws";
+  fs::create_directories(root);
+
+  // Left behind: the timeline collapsed, the cursor down in the outline after
+  // it was scrolled off the top.
+  {
+    Editor e;
+    e.enable_workspace_session_for_test(root);
+    Editor::SidebarSectionsForTest state;
+    state.timeline_open = false;
+    state.section = jot_sidebar::SECTION_OUTLINE;
+    state.outline_cursor = 3;
+    state.outline_scroll = 1;
+    state.timeline_cursor = 2;
+    state.timeline_scroll = 1;
+    e.set_sidebar_sections_for_test(state);
+    e.save_workspace_session_for_test();
+  }
+
+  {
+    Editor e2;
+    e2.enable_workspace_session_for_test(root);
+    (void)e2.restore_workspace_session_for_test();
+    const Editor::SidebarSectionsForTest state = e2.sidebar_sections_for_test();
+    REQUIRE(state.explorer_open);
+    REQUIRE(state.outline_open);
+    REQUIRE_FALSE(state.timeline_open);
+    REQUIRE(state.section == (int)jot_sidebar::SECTION_OUTLINE);
+    REQUIRE(state.outline_cursor == 3);
+    REQUIRE(state.outline_scroll == 1);
+    REQUIRE(state.timeline_cursor == 2);
+    REQUIRE(state.timeline_scroll == 1);
+  }
+}
+
+TEST_CASE("The explorer's expanded folders come back open", "[jot]")
+{
+  char home[] = "/tmp/jot_explorer_expanded_XXXXXX";
+  mkdtemp(home);
+  setenv("JOT_CONFIG_HOME", home, 1);
+  setenv("JOT_CACHE_HOME", home, 1);
+  const std::string root = std::string(home) + "/ws";
+  fs::create_directories(root + "/pkg");
+  fs::create_directories(root + "/closed");
+  write_file(root + "/pkg/inside.txt", "one\n");
+  write_file(root + "/closed/shut.txt", "two\n");
+  write_file(root + "/top.txt", "three\n");
+
+  // Left behind with pkg open: a click on the first tree row opens it (folders
+  // sort before files), and closed is never touched.
+  {
+    Editor e;
+    e.host().io.open_workspace(root);
+    e.apply_resize_for_test(120, 40);
+    e.render_for_test();
+    int pkg_row = -1;
+    const SidebarRenderCache &cache = e.sidebar_render_cache();
+    for (int i = 0; i < (int)cache.rows.size(); i++)
+    {
+      if (cache.rows[i].name == "pkg")
+      {
+        pkg_row = i;
+      }
+    }
+    REQUIRE(pkg_row >= 0);
+    // Row 0 is the section header and row 1 the pinned root, so the tree's own
+    // rows start on row 2.
+    e.mouse_event_for_test(5, 2 + pkg_row, /*bstate=*/1);
+    e.render_for_test();
+    bool opened = false;
+    for (const SidebarRenderRow &row : e.sidebar_render_cache().rows)
+    {
+      opened = opened || row.name == "inside.txt";
+    }
+    REQUIRE(opened);
+    e.save_workspace_session_for_test();
+  }
+
+  // The next session opens the same workspace, which is what restores it.
+  {
+    Editor e2;
+    e2.host().io.open_workspace(root);
+    bool opened = false;
+    bool shut = false;
+    for (const SidebarRenderRow &row : e2.sidebar_render_cache().rows)
+    {
+      opened = opened || row.name == "inside.txt";
+      shut = shut || row.name == "shut.txt";
+    }
+    REQUIRE(opened);
+    REQUIRE_FALSE(shut);
+  }
+}
+
+TEST_CASE("A section's cursor waits for rows before it is clamped", "[jot]")
+{
+  Editor &e = probe_editor();
+  char tmpl[] = "/tmp/jot_sections_wait_XXXXXX";
+  mkdtemp(tmpl);
+  const std::string root = tmpl;
+  write_file(root + "/only.txt", "one\n");
+
+  // No file is open, so the outline has no symbols to clamp against: a cursor
+  // from a session (or from the file before this one) has to survive the gap.
+  e.host().io.open_workspace(root);
+  Editor::SidebarSectionsForTest state;
+  state.outline_cursor = 2;
+  state.outline_scroll = 1;
+  e.set_sidebar_sections_for_test(state);
+  e.apply_resize_for_test(120, 40);
+  e.render_for_test();
+  const Editor::SidebarSectionsForTest after = e.sidebar_sections_for_test();
+  REQUIRE(after.outline_cursor == 2);
+  REQUIRE(after.outline_scroll == 1);
+}

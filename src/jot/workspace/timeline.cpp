@@ -114,9 +114,10 @@ void Editor::refresh_timeline(bool force)
                                          timeline_path = path;
                                          const int last =
                                              std::max(0, (int)timeline_commits.size() - 1);
+                                         // The window is left where it was for the painter to
+                                         // clamp, so a carried-over cursor keeps its rows in view.
                                          sidebar_timeline_selected =
                                              std::clamp(sidebar_timeline_selected, 0, last);
-                                         sidebar_timeline_scroll = 0;
                                          needs_redraw = true;
                                        });
 }

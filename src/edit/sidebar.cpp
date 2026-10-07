@@ -1161,9 +1161,15 @@ void Editor::render_sidebar()
     view.rows.push_back(std::move(r));
   };
 
-  // Keep a section's cursor inside its data and its window over the cursor.
+  // Keep a section's cursor inside its data and its window over the cursor. An
+  // empty list cannot clamp anything: a cursor restored from the session waits
+  // for the rows that give it meaning instead of being flattened to the top.
   auto clamp_section_window = [&](int count, int view_h, int &selected, int &scroll)
   {
+    if (count <= 0)
+    {
+      return;
+    }
     selected = std::clamp(selected, 0, std::max(0, count - 1));
     if (selected < scroll)
     {

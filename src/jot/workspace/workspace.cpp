@@ -338,6 +338,37 @@ void Editor::save_workspace_session()
     out << "right_panel_active_tab\t" << right_panel_tab_name(active_right_panel_tab) << "\n";
   }
   out << "sidebar_show_hidden\t" << (sidebar_show_hidden ? 1 : 0) << "\n";
+  // The left column's stacked sections: which of them are collapsed, which one
+  // holds the cursor, and where that cursor and its window sat.
+  out << "sidebar_sections\t" << (sidebar_explorer_open ? 1 : 0) << "\t"
+      << (sidebar_outline_open ? 1 : 0) << "\t" << (sidebar_timeline_open ? 1 : 0) << "\n";
+  out << "sidebar_section\t" << (int)sidebar_section << "\n";
+  out << "sidebar_outline_cursor\t" << sidebar_outline_selected << "\t" << sidebar_outline_scroll
+      << "\n";
+  out << "sidebar_timeline_cursor\t" << sidebar_timeline_selected << "\t" << sidebar_timeline_scroll
+      << "\n";
+  // The explorer's expanded folders, relative to the root so the session file
+  // survives the workspace moving.
+  std::function<void(std::vector<FileNode> &)> save_expanded = [&](std::vector<FileNode> &nodes)
+  {
+    for (FileNode &node : nodes)
+    {
+      if (!node.is_dir || !node.expanded)
+      {
+        continue;
+      }
+      const std::string rel =
+          fs::path(node.path).lexically_relative(workspace_session_root).string();
+      if (!rel.empty() && rel != "." && rel != ".." && rel.rfind("../", 0) != 0
+          && rel.rfind("..\\", 0) != 0)
+      {
+        out << "explorer_expanded\t" << string_util::escape_field(fs::path(rel).generic_string())
+            << "\n";
+      }
+      save_expanded(node.children);
+    }
+  };
+  save_expanded(file_tree);
 
   std::string current_file;
   if (current_buffer >= 0 && current_buffer < (int)buffers.size())
@@ -397,6 +428,15 @@ bool Editor::restore_workspace_session()
   bool restored_show_sidebar = true;
   SidebarView restored_sidebar_view = SIDEBAR_VIEW_EXPLORER;
   bool restored_hidden = sidebar_show_hidden;
+  bool restored_explorer_open = sidebar_explorer_open;
+  bool restored_outline_open = sidebar_outline_open;
+  bool restored_timeline_open = sidebar_timeline_open;
+  std::vector<std::string> restored_expanded;
+  int restored_section = (int)sidebar_section;
+  int restored_outline_selected = sidebar_outline_selected;
+  int restored_outline_scroll = sidebar_outline_scroll;
+  int restored_timeline_selected = sidebar_timeline_selected;
+  int restored_timeline_scroll = sidebar_timeline_scroll;
   int restored_sidebar_width = sidebar_width;
   int restored_right_panel_width = right_panel_width;
   bool restored_show_right_panel = false;
@@ -450,6 +490,42 @@ bool Editor::restore_workspace_session()
     else if (key == "sidebar_show_hidden" && parts.size() >= 2)
     {
       restored_hidden = (parts[1] == "1");
+    }
+    else if (key == "sidebar_sections" && parts.size() >= 4)
+    {
+      restored_explorer_open = (parts[1] == "1");
+      restored_outline_open = (parts[2] == "1");
+      restored_timeline_open = (parts[3] == "1");
+    }
+    else if (key == "sidebar_section" && parts.size() >= 2)
+    {
+      if (std::optional<int> section = string_util::to_int(parts[1]))
+      {
+        restored_section = *section;
+      }
+    }
+    else if (key == "explorer_expanded" && parts.size() >= 2)
+    {
+      restored_expanded.push_back(string_util::unescape_field(parts[1]));
+    }
+    else if ((key == "sidebar_outline_cursor" || key == "sidebar_timeline_cursor")
+             && parts.size() >= 3)
+    {
+      const std::optional<int> selected = string_util::to_int(parts[1]);
+      const std::optional<int> scroll = string_util::to_int(parts[2]);
+      if (selected && scroll)
+      {
+        if (key == "sidebar_outline_cursor")
+        {
+          restored_outline_selected = *selected;
+          restored_outline_scroll = *scroll;
+        }
+        else
+        {
+          restored_timeline_selected = *selected;
+          restored_timeline_scroll = *scroll;
+        }
+      }
     }
     else if (key == "show_right_panel" && parts.size() >= 2)
     {
@@ -507,6 +583,54 @@ bool Editor::restore_workspace_session()
       }
     }
   }
+
+  // The column's sections, before the buffer list gets a say: a session with no
+  // files still comes back with the column it was left with.
+  sidebar_explorer_open = restored_explorer_open;
+  sidebar_outline_open = restored_outline_open;
+  sidebar_timeline_open = restored_timeline_open;
+  sidebar_section =
+      (jot_sidebar::Section)std::clamp(restored_section, 0, (int)jot_sidebar::SECTION_COUNT - 1);
+  sidebar_outline_selected = std::max(0, restored_outline_selected);
+  sidebar_outline_scroll = std::max(0, restored_outline_scroll);
+  sidebar_timeline_selected = std::max(0, restored_timeline_selected);
+  sidebar_timeline_scroll = std::max(0, restored_timeline_scroll);
+
+  // The explorer's folders: each saved path is walked down from the root,
+  // loading children as it goes, so a folder nested behind a collapsed one
+  // comes back open too. A folder that is gone is skipped.
+  for (const std::string &rel : restored_expanded)
+  {
+    if (rel.empty() || rel[0] == '/' || rel[0] == '\\')
+    {
+      continue;
+    }
+    std::vector<FileNode> *level = &file_tree;
+    for (const fs::path &part : fs::path(rel))
+    {
+      FileNode *dir = nullptr;
+      for (FileNode &node : *level)
+      {
+        if (node.is_dir && node.name == part.string())
+        {
+          dir = &node;
+          break;
+        }
+      }
+      if (!dir)
+      {
+        break;
+      }
+      dir->expanded = true;
+      if (dir->children.empty())
+      {
+        build_tree(dir->path, dir->children, dir->depth + 1);
+      }
+      level = &dir->children;
+    }
+  }
+  invalidate_sidebar_tree_cache();
+  refresh_file_tree_watch_baseline();
 
   // Restore the right dock tab strip as it was left: the same tabs in the
   // same order, the same active tab, and the dock open/closed state.

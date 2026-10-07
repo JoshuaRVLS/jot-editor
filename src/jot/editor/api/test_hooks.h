@@ -526,6 +526,43 @@ public:
   {
     return side_column().h;
   }
+  // The left column's stacked sections: which are collapsed, which one holds
+  // the cursor, and where that cursor and its window sit.
+  struct SidebarSectionsForTest
+  {
+    bool explorer_open = true;
+    bool outline_open = true;
+    bool timeline_open = true;
+    int section = 0;
+    int outline_cursor = 0;
+    int outline_scroll = 0;
+    int timeline_cursor = 0;
+    int timeline_scroll = 0;
+  };
+  SidebarSectionsForTest sidebar_sections_for_test() const
+  {
+    SidebarSectionsForTest state;
+    state.explorer_open = sidebar_explorer_open;
+    state.outline_open = sidebar_outline_open;
+    state.timeline_open = sidebar_timeline_open;
+    state.section = (int)sidebar_section;
+    state.outline_cursor = sidebar_outline_selected;
+    state.outline_scroll = sidebar_outline_scroll;
+    state.timeline_cursor = sidebar_timeline_selected;
+    state.timeline_scroll = sidebar_timeline_scroll;
+    return state;
+  }
+  void set_sidebar_sections_for_test(const SidebarSectionsForTest &state)
+  {
+    sidebar_explorer_open = state.explorer_open;
+    sidebar_outline_open = state.outline_open;
+    sidebar_timeline_open = state.timeline_open;
+    sidebar_section = (jot_sidebar::Section)state.section;
+    sidebar_outline_selected = state.outline_cursor;
+    sidebar_outline_scroll = state.outline_scroll;
+    sidebar_timeline_selected = state.timeline_cursor;
+    sidebar_timeline_scroll = state.timeline_scroll;
+  }
   bool terminal_resize_dragging_for_test() const
   {
     return terminal_resize_dragging;
