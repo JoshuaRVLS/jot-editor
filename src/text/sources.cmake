@@ -4,8 +4,10 @@ set(JOT_TEXT_SOURCES
   text/datetime.cpp
   text/duplicate.cpp
   text/edit.cpp
+  text/in_memory_line_provider.cpp
   text/increment.cpp
   text/join_lines.cpp
+  text/lazy_line_provider.cpp
   text/lines.cpp
   text/multicursor.cpp
   text/textobject.cpp

@@ -51,8 +51,6 @@ set(JOT_ENGINE_SOURCES
   jot/event/main_loop.cpp
   jot/event/terminal_events.cpp
   jot/event/which_key.cpp
-  jot/event/in_memory_line_provider.cpp
-  jot/event/lazy_line_provider.cpp
   jot/markdown/http_message.cpp
   jot/markdown/preview_server.cpp
   jot/surfaces/home.cpp
