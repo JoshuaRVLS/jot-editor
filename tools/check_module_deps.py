@@ -66,6 +66,7 @@ INCLUDE_DIRS = [
     "src/lsp",
     "src/terminal",
     "src/ui",
+    "src/workspace",
     "src/lua",
     "src/tools",
 ]
@@ -73,7 +74,6 @@ INCLUDE_DIRS = [
 # src/jot/ still carries most of the editor. These are provisional: each one
 # becomes a real top-level module as its files move out.
 JOT_SUBDIR_MODULE = {
-    "lua": "lua",
     "workspace": "workspace",
 }
 

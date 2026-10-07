@@ -5,8 +5,8 @@
 // the column's last row.
 #include "editor.h"
 #include "jot/model/sidebar_sections.h"
-#include "jot/workspace/timeline.h"
 #include "ui/ui.h"
+#include "workspace/timeline.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

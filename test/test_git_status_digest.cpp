@@ -1,4 +1,4 @@
-// Git status polling (src/jot/workspace/git_run.h, src/jot/workspace/git.cpp).
+// Git status polling (src/workspace/git_run.h, src/workspace/git.cpp).
 //
 // The poll runs every 1.5 s and used to re-parse the whole porcelain output
 // into a path -> status map on every tick. On a repo with tens of thousands of
@@ -9,7 +9,7 @@
 // byte-for-byte the one the installed map was built from.
 #include "base/shell_util.h"
 #include "editor.h"
-#include "jot/workspace/git_run.h"
+#include "workspace/git_run.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

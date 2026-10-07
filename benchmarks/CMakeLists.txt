@@ -5,7 +5,7 @@ add_executable(jot_benchmarks
   ${PROJECT_SOURCE_DIR}/src/syntax/folding.cpp
   ${PROJECT_SOURCE_DIR}/src/syntax/language.cpp
   ${PROJECT_SOURCE_DIR}/src/syntax/index.cpp
-  ${PROJECT_SOURCE_DIR}/src/tools/workspace/search.cpp
+  ${PROJECT_SOURCE_DIR}/src/workspace/search.cpp
   ${PROJECT_SOURCE_DIR}/src/ui/text.cpp
 )
 
@@ -18,6 +18,7 @@ target_include_directories(jot_benchmarks PRIVATE
   ${PROJECT_SOURCE_DIR}/src/text
   ${PROJECT_SOURCE_DIR}/src/tools
   ${PROJECT_SOURCE_DIR}/src/ui
+  ${PROJECT_SOURCE_DIR}/src/workspace
 )
 
 # ui/text.cpp is compiled straight into this target (not via the engine), so

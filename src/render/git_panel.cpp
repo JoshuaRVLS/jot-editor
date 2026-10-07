@@ -9,10 +9,10 @@
 
 #include "editor.h"
 #include "jot/file_icons.h"
-#include "jot/workspace/git_panel_models.h"
 #include "lua/api.h"
 #include "render/pane_edges.h"
 #include "ui/text.h"
+#include "workspace/git_panel_models.h"
 
 #include <algorithm>
 #include <filesystem>

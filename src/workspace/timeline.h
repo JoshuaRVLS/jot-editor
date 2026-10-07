@@ -1,4 +1,4 @@
-// The sidebar timeline's model (src/jot/workspace/timeline.h).
+// The sidebar timeline's model (src/workspace/timeline.h).
 //
 // Header-only and Editor-free: the commit list a file's `git log` yields, and
 // the compact relative ages its rows show. Keeping the parsing and the age

@@ -1,17 +1,17 @@
-// Git panel actions (src/jot/workspace/git_panel.cpp).
+// Git panel actions (src/workspace/git_panel.cpp).
 //
 // The lazygit-style git panel's state transitions and git commands: view
 // switching (2 files / 3 branches / 4 commits / 5 stash, matching lazygit's
 // panel numbers), selection, staging, diffing, committing, discarding,
 // stashing, checkout/merge and push/pull/fetch. Rendering lives in
 // src/render/git_panel.cpp; the shared row model in
-// src/jot/workspace/git_panel_models.h.
+// src/workspace/git_panel_models.h.
 
 #include "editor.h"
 
-#include "jot/workspace/git_panel_models.h"
-#include "jot/workspace/git_run.h"
 #include "ui/text.h" // ui_cell_count
+#include "workspace/git_panel_models.h"
+#include "workspace/git_run.h"
 
 #include <algorithm>
 #include <chrono>

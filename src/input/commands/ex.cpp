@@ -3,8 +3,8 @@
 #include "cpp_assist.h"
 #include "editor.h"
 #include "host_api.h"
-#include "jot/workspace/git_run.h"
 #include "lua/api.h"
+#include "workspace/git_run.h"
 
 #include <algorithm>
 #include <cctype>

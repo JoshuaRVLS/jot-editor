@@ -22,7 +22,6 @@ src/
     app/           editor behaviour: buffers, files, panes, undo, folding, ...
     event/         input drains and timers
     integrations/  LSP, debugger, terminal and tree-sitter wiring
-    workspace/     explorer, sidebar, git, right dock, tasks
     surfaces/      menus, popups, home screen, settings, theme chooser
     markdown/      the preview server (shared by the markdown and HTML previews)
   text/            pure text editing: cursor, lines, search, sort, the text
@@ -33,6 +32,7 @@ src/
                    leetcode, previews)
   input/           key/mouse routing: modes, palette, commands
   render/          painting: frame, buffer, panels, popups, minimap
+  workspace/       explorer, sidebar, right dock, tasks, timeline, project search
   dap/             the Debug Adapter Protocol client and its wire format
   lsp/             the Language Server Protocol client, its wire format and
                    the completion ranking it feeds

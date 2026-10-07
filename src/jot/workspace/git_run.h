@@ -1,4 +1,4 @@
-// Git command runners (src/jot/workspace/git_run.h).
+// Git command runners (src/workspace/git_run.h).
 //
 // Header-only helpers for running `git -C <root> <args...>` and capturing
 // stdout (git_capture), stdout plus exit status (git_capture_ex), or stdout

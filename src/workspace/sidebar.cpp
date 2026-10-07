@@ -6,8 +6,8 @@
 #include "cpp_assist.h"
 #include "editor.h"
 #include "folding.h"
-#include "jot/workspace/workspace_internal.h"
 #include "lua/api.h"
+#include "workspace/workspace_internal.h"
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
@@ -451,9 +451,8 @@ void Editor::handle_sidebar_input(int ch)
     {
       const std::string comp = part.string();
       walk /= comp;
-      auto it = std::find_if(level->begin(),
-                             level->end(),
-                             [&](const FileNode &n) { return n.name == comp; });
+      auto it = std::find_if(
+          level->begin(), level->end(), [&](const FileNode &n) { return n.name == comp; });
       if (it == level->end())
       {
         message = "Not in the tree (hidden?): " + comp;

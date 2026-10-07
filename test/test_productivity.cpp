@@ -1,5 +1,5 @@
 #include "syntax/index.h"
-#include "tools/workspace/search.h"
+#include "workspace/search.h"
 #include <catch2/catch_test_macros.hpp>
 
 #include <vector>

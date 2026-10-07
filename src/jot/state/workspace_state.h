@@ -5,9 +5,9 @@
 #include "jot/model/explorer.h" // FileNode, SidebarView, SidebarRenderCache
 #include "jot/model/session.h"  // ClosedBufferSnapshot
 #include "jot/model/sidebar_sections.h"     // jot_sidebar::Section
-#include "jot/workspace/git_panel_models.h" // jot_git_panel::State
-#include "jot/workspace/git_run.h"          // jot_git::StatusSnapshot
-#include "jot/workspace/timeline.h"         // jot_timeline::Commit
+#include "workspace/git_panel_models.h"     // jot_git_panel::State
+#include "workspace/git_run.h"              // jot_git::StatusSnapshot
+#include "workspace/timeline.h"             // jot_timeline::Commit
 #include <atomic>
 #include <map>
 #include <string>

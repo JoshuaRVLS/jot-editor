@@ -1,10 +1,10 @@
-// The file timeline (src/jot/workspace/timeline.cpp).
+// The file timeline (src/workspace/timeline.cpp).
 //
 // The sidebar's timeline section: the commits touching the buffer on screen,
 // loaded on the git task queue so a big repository never blocks a frame, and
 // cached per file. The parser and the age arithmetic live in timeline.h
 // (header-only) so unit tests can drive them without a repo.
-#include "jot/workspace/timeline.h"
+#include "workspace/timeline.h"
 #include "base/shell_util.h"
 #include "base/string_util.h"
 #include "editor.h"

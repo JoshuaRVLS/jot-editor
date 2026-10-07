@@ -1,4 +1,4 @@
-// Right dock tab management (src/jot/workspace/right_panel.cpp).
+// Right dock tab management (src/workspace/right_panel.cpp).
 //
 // The right dock behaves like VSCode's sidebar: panels open as tabs
 // (git, git diff, symbols, debug, plugin) and the tab strip at the top
@@ -28,11 +28,11 @@ namespace
 {
   // Nerd Fonts glyphs (classic FontAwesome / cod codepoints, present in
   // every Nerd Fonts build).
-  constexpr const char *kIconGit = "\uE725";    // cod git-branch
-  constexpr const char *kIconDiff = "\uF1C9";   // file-code
+  constexpr const char *kIconGit = "\uE725";     // cod git-branch
+  constexpr const char *kIconDiff = "\uF1C9";    // file-code
   constexpr const char *kIconSymbols = "\uF0CA"; // list-ul
-  constexpr const char *kIconDebug = "\uF121";  // bug
-  constexpr const char *kIconPlugin = "\uF12E"; // puzzle-piece
+  constexpr const char *kIconDebug = "\uF121";   // bug
+  constexpr const char *kIconPlugin = "\uF12E";  // puzzle-piece
 
   // Label for a dock tab: " icon Name ". The plugin tab is named after the
   // panel it is showing, so the strip says what the tab will bring back; with
@@ -121,8 +121,7 @@ void Editor::close_right_panel_tab(RightPanelTab tab)
 
 bool Editor::right_panel_tab_open(RightPanelTab tab) const
 {
-  return std::find(right_panel_tabs.begin(), right_panel_tabs.end(), tab)
-         != right_panel_tabs.end();
+  return std::find(right_panel_tabs.begin(), right_panel_tabs.end(), tab) != right_panel_tabs.end();
 }
 
 // Populates view.panel_tabs for the Lua side_panel handler; each panel

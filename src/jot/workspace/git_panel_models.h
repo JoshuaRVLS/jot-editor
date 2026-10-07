@@ -1,4 +1,4 @@
-// Git panel models (src/jot/workspace/git_panel_models.h).
+// Git panel models (src/workspace/git_panel_models.h).
 //
 // Header-only: the git panel's row structs, view state, and the pure
 // porcelain-status mapping helpers (section, rank, glyph). Kept free of

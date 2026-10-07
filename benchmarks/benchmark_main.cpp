@@ -3,8 +3,8 @@
 #include "lazy_line_provider.h"
 #include "syntax/folding.h"
 #include "syntax/index.h"
-#include "tools/workspace/search.h"
 #include "ui/text.h"
+#include "workspace/search.h"
 
 #include <algorithm>
 #include <chrono>

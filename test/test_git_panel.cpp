@@ -1,8 +1,8 @@
 // Git panel model tests: porcelain status -> section/rank/glyph mapping, the
 // flattened row layout shared by the renderer and mouse hit-testing, and the
 // tab / hint / scroll helpers both of those read.
-#include "jot/workspace/git_panel_models.h"
 #include "ui/text.h" // ui_cell_count
+#include "workspace/git_panel_models.h"
 #include <catch2/catch_test_macros.hpp>
 
 using namespace jot_git_panel;
