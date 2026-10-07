@@ -82,6 +82,23 @@ provisionally mapped to the `editor` module by both checkers, which is why
   (phase 0 section 7). Moving it to the keyring the way LeetCode works is a
   behaviour change and belongs in its own change set.
 
+## Verification of this change set
+
+- `cmake --build build -j8` (Release, GUI and tree-sitter on) and
+  `cmake --build build-tests -j8`: both clean.
+- `./build-tests/test/jot_tests`: 956 cases, 954 passed, 1 failed, 70591
+  assertions, 1 failed. The one failure is the `test_home_open.cpp:292` case
+  below.
+- `tools/leak_check.sh`: no leaks reported, script exit 0. That also builds the
+  whole tree a second time under Debug + AddressSanitizer, so it is a second
+  independent check of every include path and target these moves touched.
+- `tools/check_module_deps.py` and `tools/check_headers.py`: both pass at their
+  baselines.
+- Probes that pass and cover the moved code: `string_util`, `markdown_preview`,
+  `autoclose`, `cursor`, `comment_toggle`, `float_terminal`,
+  `colorizer_filetype`, `bracket_match`, `completion_label`, `diagnostic_quiet`,
+  `bundled_lsp_payload`.
+
 ## Known red, verified not ours
 
 `test/test_home_open.cpp:292` fails in every full run of the suite (956 cases,
