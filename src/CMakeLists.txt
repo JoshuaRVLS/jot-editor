@@ -364,6 +364,11 @@ set(JOT_GUI_ENABLED FALSE)
 if(JOT_GUI AND NOT WIN32)
   pkg_check_modules(SDL2 QUIET sdl2)
   pkg_check_modules(FREETYPE2 QUIET freetype2)
+  # Ligature shaping (ui/gui/gui_ligatures.cpp): optional, like the rest of the
+  # GUI. Without harfbuzz the frontend still builds and paints every cell with
+  # its own cmap glyph -- joins render as the plain characters, which is what
+  # the frontend always did.
+  pkg_check_modules(HARFBUZZ QUIET harfbuzz)
   if(SDL2_FOUND AND FREETYPE2_FOUND)
     set(JOT_GUI_ENABLED TRUE)
     set(JOT_GUI_ENABLED TRUE CACHE INTERNAL "GUI frontend compiled into the engine" FORCE)
@@ -372,6 +377,16 @@ if(JOT_GUI AND NOT WIN32)
     set(SDL2_INCLUDE_DIRS "${SDL2_INCLUDE_DIRS}" PARENT_SCOPE)
     # The font catalog test reads faces through FreeType directly.
     set(FREETYPE2_INCLUDE_DIRS "${FREETYPE2_INCLUDE_DIRS}" PARENT_SCOPE)
+    # Shaped glyph ids are public API of gui.h (ensure_shaped_glyph), so any
+    # target compiling against it needs harfbuzz's include dir too.
+    set(HARFBUZZ_INCLUDE_DIRS "${HARFBUZZ_INCLUDE_DIRS}" PARENT_SCOPE)
+    set(HARFBUZZ_LIBRARIES "${HARFBUZZ_LIBRARIES}" PARENT_SCOPE)
+    set(HARFBUZZ_CFLAGS_OTHER "${HARFBUZZ_CFLAGS_OTHER}" PARENT_SCOPE)
+    if(HARFBUZZ_FOUND)
+      message(STATUS "GUI ligature shaping enabled (harfbuzz ${HARFBUZZ_VERSION})")
+    else()
+      message(STATUS "harfbuzz not found; the GUI will not shape ligatures")
+    endif()
     list(APPEND JOT_UI_SOURCES
          ui/gui/font_catalog.cpp
          ui/gui/gui_setup.cpp
@@ -382,7 +397,8 @@ if(JOT_GUI AND NOT WIN32)
          ui/gui/gui_anim.cpp
          ui/gui/gui_render.cpp
          ui/gui/gui_cursor.cpp
-         ui/gui/gui_input.cpp)
+         ui/gui/gui_input.cpp
+         ui/gui/gui_ligatures.cpp)
     list(APPEND JOT_EDITOR_SOURCES editor/event/gui_events.cpp)
   else()
     message(STATUS "JOT_GUI requested but SDL2/freetype2 not found; building terminal-only")
@@ -487,15 +503,15 @@ if(NOT WIN32)
 endif()
 if(JOT_GUI_ENABLED)
   target_include_directories(jot_ui_obj SYSTEM PRIVATE
-    ${SDL2_INCLUDE_DIRS} ${FREETYPE2_INCLUDE_DIRS}
+    ${SDL2_INCLUDE_DIRS} ${FREETYPE2_INCLUDE_DIRS} ${HARFBUZZ_INCLUDE_DIRS}
   )
   target_compile_options(jot_ui_obj PRIVATE
-    ${SDL2_CFLAGS_OTHER} ${FREETYPE2_CFLAGS_OTHER}
+    ${SDL2_CFLAGS_OTHER} ${FREETYPE2_CFLAGS_OTHER} ${HARFBUZZ_CFLAGS_OTHER}
   )
   # jot_glad carries its own include dir (glad/gl.h) and the loader object, so
   # the GUI sources need nothing from the system's GL headers or library.
   target_link_libraries(jot_ui_obj PRIVATE
-    ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} jot_glad
+    ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} ${HARFBUZZ_LIBRARIES} jot_glad
   )
 endif()
 jot_configure_object_target(jot_ui_obj)
@@ -602,6 +618,12 @@ endif()
 if(JOT_GUI_ENABLED)
   foreach(target_name IN ITEMS jot_base_obj jot_editor_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_lsp_obj jot_workspace_obj jot_git_obj jot_terminal_obj jot_extras_obj jot_ui_obj jot_base jot_editor jot_text jot_syntax jot_extras jot_input jot_render jot_tools jot_dap jot_lsp jot_workspace jot_git jot_terminal jot_lua_api jot_ui jot_engine)
     target_compile_definitions(${target_name} PUBLIC JOT_GUI=1)
+    # A second switch, only when harfbuzz was found: the shaper compiles to a
+    # stub without it, and UIGui::ligatures_supported() answers for it at run
+    # time so the settings menu can say the toggle does nothing here.
+    if(HARFBUZZ_FOUND)
+      target_compile_definitions(${target_name} PUBLIC JOT_GUI_LIGATURES=1)
+    endif()
   endforeach()
 endif()
 target_link_libraries(jot_terminal PUBLIC jot_vterm)
@@ -621,9 +643,9 @@ target_link_directories(jot_ui PUBLIC ${UTF8PROC_LIBRARY_DIRS})
 target_link_libraries(jot_engine PUBLIC ${UTF8PROC_LIBRARIES})
 target_link_directories(jot_engine PUBLIC ${UTF8PROC_LIBRARY_DIRS})
 if(JOT_GUI_ENABLED)
-  target_link_libraries(jot_ui PUBLIC ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} jot_glad)
+  target_link_libraries(jot_ui PUBLIC ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} ${HARFBUZZ_LIBRARIES} jot_glad)
   target_link_directories(jot_ui PUBLIC ${SDL2_LIBRARY_DIRS} ${FREETYPE2_LIBRARY_DIRS})
-  target_link_libraries(jot_engine PUBLIC ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} jot_glad)
+  target_link_libraries(jot_engine PUBLIC ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} ${HARFBUZZ_LIBRARIES} jot_glad)
   target_link_directories(jot_engine PUBLIC ${SDL2_LIBRARY_DIRS} ${FREETYPE2_LIBRARY_DIRS})
 endif()
 target_link_libraries(jot_editor PUBLIC ${LIBUV_LIBRARIES})

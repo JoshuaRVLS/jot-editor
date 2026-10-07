@@ -17,8 +17,9 @@
 #ifndef UI_GUI_H
 #define UI_GUI_H
 
-#include "ui.h"
+#include "gui/gui_ligatures.h"
 #include "gui/gui_scroll_math.h"
+#include "ui.h"
 #include <cstdint>
 // glad provides every GL entry point the frontend calls. It must be included
 // before any other GL header (none is included alongside it), and its loader
@@ -96,7 +97,8 @@ public:
         int default_fg,
         int default_bg,
         int font_px = 16,
-        const std::string &font_family = std::string());
+        const std::string &font_family = std::string(),
+        bool ligatures = true);
   ~UIGui() override;
 
   void render() override;
@@ -131,6 +133,21 @@ public:
   // Names of every installed fixed-width family, sorted, for a picker. Reads
   // the font directories, so it is not something to call per frame.
   std::vector<std::string> available_font_families() const;
+
+  // Ligature shaping of punctuation runs (gui_ligatures.cpp). On by default;
+  // the gui_ligatures setting turns it off, in which case every cell paints
+  // with its own cmap glyph exactly as before.
+  void set_ligatures(bool on)
+  {
+    ligatures_ = on;
+  }
+  bool ligatures_enabled() const
+  {
+    return ligatures_;
+  }
+  // Whether the build found HarfBuzz. False means the setting is a no-op, so
+  // the settings menu can say why nothing changed.
+  static bool ligatures_supported();
 
   // Smooth-scroll hook: the editor reports each pane's body region and how
   // many visible rows it scrolled since the last frame. The pane's content
@@ -241,7 +258,26 @@ private:
   // Renders `codepoint` in `style` into the atlas if not already cached.
   // Returns false when the atlas is full (caller clears and retries once).
   bool ensure_glyph(uint32_t codepoint, int style);
+  // Same, for a glyph id HarfBuzz's shaping produced: a font's glyph id is not
+  // a codepoint (gid 65 is not 'A'), so it lives in its own key namespace --
+  // kGlyphIdBase sits above any Unicode codepoint and cannot collide with one.
+  bool ensure_glyph_id(uint32_t glyph_id, int style);
+  // Rasterizes a shaped glyph id into the atlas and returns its metrics, or
+  // null when the atlas is out of room even after one clear. The pointer is
+  // into glyphs_, so it must be used before the next ensure_* call (which may
+  // rehash or clear it).
+  const GuiGlyph *ensure_shaped_glyph(uint32_t glyph_id, int style);
+  // Shared body: `base` 0 selects the cmap (id is a codepoint), kGlyphIdBase
+  // selects a shaped glyph (id is a glyph id). The atlas key is
+  // ((base + id) << 2) | style either way.
+  bool ensure_glyph_key(uint64_t base, uint32_t id, int style);
   void clear_atlas();
+  // The style bits of `cell`, as the kStyle* slot the atlas indexes by.
+  int cell_style(const UICell &cell) const;
+  // Exclusive end of the ligature run starting at `c`: consecutive single-byte
+  // ASCII punctuation cells sharing one ink, or `c` when there is no run of at
+  // least two (see gui_ligatures.h for the rule).
+  int ligature_run_end(const std::vector<UICell> &src, int c, int col1) const;
   // Recomputes cell_w_/cell_h_/ascent_ from the regular face's metrics
   // (shared by init_freetype and apply_font_zoom).
   void refresh_cell_metrics();
@@ -345,6 +381,12 @@ private:
   int atlas_y_ = 0;
   int atlas_row_h_ = 0;
   std::unordered_map<uint64_t, GuiGlyph> glyphs_;
+
+  // Ligature shaping of punctuation runs; see gui_ligatures.h. The cache it
+  // keeps is scoped to the faces it shaped against, so a font change or a size
+  // change drops it (apply_font_family / apply_font_size).
+  jot_gui::LigatureShaper lig_shaper_;
+  bool ligatures_ = true;
 
   float cell_w_ = 10.0f;
   float cell_h_ = 20.0f;

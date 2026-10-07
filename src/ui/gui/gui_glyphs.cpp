@@ -1,5 +1,6 @@
-// Glyph atlas: renders codepoints with FreeType into the shared R8 atlas
-// texture on demand, caching UV rects + pen metrics per (codepoint, style).
+// Glyph atlas: renders codepoints (and shaped glyph ids, for ligature runs)
+// with FreeType into the shared R8 atlas texture on demand, caching UV rects
+// + pen metrics per (codepoint, style).
 // Each glyph is uploaded from FreeType's own bitmap, so there is no CPU-side
 // copy of the atlas to carry. The atlas is one 2048-wide row band at a time;
 // when a glyph would overflow it, ensure_glyph returns false and the caller
@@ -14,9 +15,28 @@
 #include <cstdio>
 #include <cstdlib>
 
+namespace
+{
+  // Shaped glyphs get their own slice of the key space: a font's glyph id is
+  // not a Unicode codepoint, so without a fence gid 65 would answer for 'A'.
+  // Any value above 0x10FFFF works; this one leaves room for the ids a large
+  // symbol font hands out.
+  constexpr uint64_t kGlyphIdBase = 0x200000ull;
+} // namespace
+
 bool UIGui::ensure_glyph(uint32_t codepoint, int style)
 {
-  const uint64_t key = ((uint64_t)codepoint << 2) | (uint64_t)(style & 3);
+  return ensure_glyph_key(0, codepoint, style);
+}
+
+bool UIGui::ensure_glyph_id(uint32_t glyph_id, int style)
+{
+  return ensure_glyph_key(kGlyphIdBase, glyph_id, style);
+}
+
+bool UIGui::ensure_glyph_key(uint64_t base, uint32_t id, int style)
+{
+  const uint64_t key = ((uint64_t)(base + id) << 2) | (uint64_t)(style & 3);
   if (glyphs_.find(key) != glyphs_.end())
   {
     return true;
@@ -26,7 +46,11 @@ bool UIGui::ensure_glyph(uint32_t codepoint, int style)
   {
     return false;
   }
-  if (FT_Load_Char(face, (FT_ULong)codepoint, FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL) != 0)
+  // A codepoint goes through the cmap, a shaped id does not; FT_Load_Char is
+  // exactly FT_Get_Char_Index + FT_Load_Glyph, so both paths rasterize the
+  // same way and cache under the same key shape.
+  const FT_ULong gid = base ? (FT_ULong)id : (FT_ULong)FT_Get_Char_Index(face, (FT_ULong)id);
+  if (FT_Load_Glyph(face, gid, FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL) != 0)
   {
     return false;
   }
@@ -35,8 +59,14 @@ bool UIGui::ensure_glyph(uint32_t codepoint, int style)
   const int gh = slot->bitmap.rows;
   if (std::getenv("JOT_GUI_DEBUG") && glyphs_.size() < 12)
   {
-    std::fprintf(stderr, "jot-gui: glyph cp=%u style=%d bmp=%dx%d pitch=%d advance=%.1f\n",
-                 codepoint, style, gw, gh, slot->bitmap.pitch,
+    std::fprintf(stderr,
+                 "jot-gui: glyph cp=%u gid=%lu style=%d bmp=%dx%d pitch=%d advance=%.1f\n",
+                 id,
+                 (unsigned long)gid,
+                 style,
+                 gw,
+                 gh,
+                 slot->bitmap.pitch,
                  (float)slot->advance.x / 64.0f);
   }
   if (gw <= 0 || gh <= 0)
@@ -82,4 +112,19 @@ bool UIGui::ensure_glyph(uint32_t codepoint, int style)
   atlas_x_ += gw + 1;
   atlas_row_h_ = std::max(atlas_row_h_, gh);
   return true;
+}
+
+const GuiGlyph *UIGui::ensure_shaped_glyph(uint32_t glyph_id, int style)
+{
+  if (!ensure_glyph_id(glyph_id, style))
+  {
+    clear_atlas();
+    if (!ensure_glyph_id(glyph_id, style))
+    {
+      return nullptr;
+    }
+  }
+  const uint64_t key = ((uint64_t)(kGlyphIdBase + glyph_id) << 2) | (uint64_t)(style & 3);
+  auto it = glyphs_.find(key);
+  return it == glyphs_.end() ? nullptr : &it->second;
 }

@@ -276,6 +276,69 @@ void UIGui::paint_row_bg(const std::vector<UICell> &src,
 }
 
 // Pushes the glyph quads of one row slice (same geometry as paint_row_bg).
+int UIGui::cell_style(const UICell &cell) const
+{
+  static_assert(jot_gui::LigatureShaper::kStyleCount == kStyleCount,
+                "the ligature shaper caches one slot per style face");
+  int style = kStyleRegular;
+  if (cell.bold)
+  {
+    style |= kStyleBold;
+  }
+  if (cell.italic)
+  {
+    style |= kStyleItalic;
+  }
+  return style;
+}
+
+namespace
+{
+  // One cell of a ligature run: a single-byte ASCII punctuation mark, which is
+  // the only shape a font's join rules are written for. Letters and CJK end a
+  // run, so `a->b` shapes `->` and never the word around it.
+  bool ligature_cell(const UICell &cell)
+  {
+    if (cell.ch.size() != 1)
+    {
+      return false;
+    }
+    const unsigned char c = (unsigned char)cell.ch[0];
+    if (c >= 0x80)
+    {
+      return false;
+    }
+    const bool alnum = (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+    return !alnum && c != ' ';
+  }
+
+  // The ink two cells share. A join must not straddle a colour seam, a style
+  // change or a dimmed cell: the merged glyph is drawn in one colour, so
+  // crossing the seam would repaint one of the two cells.
+  bool same_ink(const UICell &a, const UICell &b)
+  {
+    return a.fg == b.fg && a.bg == b.bg && a.fg_rgb == b.fg_rgb && a.bg_rgb == b.bg_rgb
+           && a.bold == b.bold && a.italic == b.italic && a.dim == b.dim && a.reverse == b.reverse;
+  }
+} // namespace
+
+int UIGui::ligature_run_end(const std::vector<UICell> &src, int c, int col1) const
+{
+  // Ligatures off (the gui_ligatures setting, or a build without HarfBuzz):
+  // every run is "no run", and the painter keeps its per-cell path.
+  if (!ligatures_ || c >= col1 || !ligature_cell(src[(size_t)c]))
+  {
+    return c;
+  }
+  const UICell &first = src[(size_t)c];
+  int end = c + 1;
+  while (end < col1 && ligature_cell(src[(size_t)end]) && same_ink(first, src[(size_t)end]))
+  {
+    end++;
+  }
+  return end - c >= 2 ? end : c;
+}
+
 void UIGui::paint_row_glyphs(const std::vector<UICell> &src,
                              int col0,
                              int col1,
@@ -288,39 +351,9 @@ void UIGui::paint_row_glyphs(const std::vector<UICell> &src,
   col0 = std::max(0, col0);
   col1 = std::min(col1, (int)src.size());
   const float py = y_top + dy;
-  for (int c = col0; c < col1; c++)
+  // Draws one already-atlas'd glyph at cell `c`'s pen, clipped to the pane.
+  auto draw_glyph = [&](int c, const GuiGlyph &g, float fr, float fg_, float fb)
   {
-    const UICell &cell = src[(size_t)c];
-    if (cell.ch.empty() || cell.ch == " ")
-    {
-      continue;
-    }
-    size_t i = 0;
-    uint32_t cp = decode_utf8(cell.ch.c_str(), cell.ch.size(), i);
-    if (cp == 0)
-    {
-      continue;
-    }
-    int style = kStyleRegular;
-    if (cell.bold)
-    {
-      style |= kStyleBold;
-    }
-    if (cell.italic)
-    {
-      style |= kStyleItalic;
-    }
-    if (!ensure_glyph(cp, style))
-    {
-      clear_atlas();
-      if (!ensure_glyph(cp, style))
-      {
-        continue;
-      }
-    }
-    const GuiGlyph &g = glyphs_[((uint64_t)cp << 2) | (uint64_t)(style & 3)];
-    float fr, fg_, fb, br, bg_, bb;
-    cell_colors(cell, fr, fg_, fb, br, bg_, bb);
     // Pen: cell origin + baseline, then glyph bearing (y down).
     const float gx = x0px + (float)c * cell_w_ + g.bearing_x;
     const float gy = py + ascent_ - g.bearing_top;
@@ -332,11 +365,95 @@ void UIGui::paint_row_glyphs(const std::vector<UICell> &src,
     const float gbottom = std::min(gy + gh, clip_bottom);
     if (gtop >= gbottom)
     {
-      continue;
+      return;
     }
     const float nv0 = g.v0 + (gtop - gy) / gh * (g.v1 - g.v0);
     const float nv1 = g.v1 - (gy + gh - gbottom) / gh * (g.v1 - g.v0);
     push_quad(gx, gtop, gx + gw, gbottom, g.u0, nv0, g.u1, nv1, fr, fg_, fb, 1.0f);
+  };
+  // The cell's own cmap glyph: what every cell outside a join paints.
+  auto plain_cell = [&](int c)
+  {
+    const UICell &cell = src[(size_t)c];
+    if (cell.ch.empty() || cell.ch == " ")
+    {
+      return;
+    }
+    size_t i = 0;
+    const uint32_t cp = decode_utf8(cell.ch.c_str(), cell.ch.size(), i);
+    if (cp == 0)
+    {
+      return;
+    }
+    const int style = cell_style(cell);
+    if (!ensure_glyph(cp, style))
+    {
+      clear_atlas();
+      if (!ensure_glyph(cp, style))
+      {
+        return;
+      }
+    }
+    const GuiGlyph &g = glyphs_[((uint64_t)cp << 2) | (uint64_t)(style & 3)];
+    float fr, fg_, fb, br, bg_, bb;
+    cell_colors(cell, fr, fg_, fb, br, bg_, bb);
+    draw_glyph(c, g, fr, fg_, fb);
+  };
+
+  for (int c = col0; c < col1;)
+  {
+    // A run of adjacent punctuation the font's tables can join. It is shaped
+    // once per distinct text (see gui_ligatures.h) and painted as the clusters
+    // that came back; a run the tables left alone paints exactly as it did
+    // before, cell by cell.
+    const int run_end = ligature_run_end(src, c, col1);
+    if (run_end > c + 1)
+    {
+      const UICell &first = src[(size_t)c];
+      const int style = cell_style(first);
+      std::string run;
+      run.reserve((size_t)(run_end - c));
+      for (int k = c; k < run_end; k++)
+      {
+        run += src[(size_t)k].ch;
+      }
+      const std::vector<jot_gui::ShapedCluster> *shaped =
+          lig_shaper_.shape(style, run, faces_[style], font_px_);
+      bool drawn = shaped != nullptr && !shaped->empty();
+      if (drawn)
+      {
+        float fr, fg_, fb, br, bg_, bb;
+        cell_colors(first, fr, fg_, fb, br, bg_, bb);
+        for (const jot_gui::ShapedCluster &cluster : *shaped)
+        {
+          // A cluster's glyph sits at the pen of its first cell; a ligature
+          // (cells > 1) is drawn once and the cells it covers are skipped, so
+          // the join's own ink is never overdrawn by the parts it replaced.
+          const GuiGlyph *g = ensure_shaped_glyph(cluster.glyph, style);
+          if (!g)
+          {
+            drawn = false;
+            break;
+          }
+          draw_glyph(c + cluster.cell, *g, fr, fg_, fb);
+        }
+      }
+      if (drawn)
+      {
+        c = run_end;
+        continue;
+      }
+      // No shaper, no substitutions, or an atlas that ran out of room even
+      // after a clear: the run still has to be painted, cell by cell.
+      for (int k = c; k < run_end; k++)
+      {
+        plain_cell(k);
+      }
+      c = run_end;
+      continue;
+    }
+    plain_cell(c);
+    c++;
   }
 }
 
@@ -1246,4 +1363,3 @@ void UIGui::paint_float_cells(int x, int y, int w, int h, float dx_px, float dy_
     end_batch();
   }
 }
-

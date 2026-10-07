@@ -598,7 +598,8 @@ void Editor::initialize_gui_ui()
                  theme.fg_default,
                  theme.bg_default,
                  std::clamp(config.get_int("gui_font_size", 16), 8, 40),
-                 config.get("gui_font_family", ""));
+                 config.get("gui_font_family", ""),
+                 config.get_bool("gui_ligatures", true));
   ui->set_default_colors(theme.fg_default, theme.bg_default);
   ui->set_cursor_colors(theme.fg_cursor, theme.bg_cursor);
 

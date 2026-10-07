@@ -72,8 +72,10 @@ bool compile_shader(unsigned int type, const char *src, unsigned int &out)
 } // namespace
 
 UIGui::UIGui(
-    int cols, int rows, int default_fg, int default_bg, int font_px, const std::string &font_family)
-    : UI(nullptr), font_px_(std::clamp(font_px, 8, 40)), font_family_(font_family)
+    int cols, int rows, int default_fg, int default_bg, int font_px, const std::string &font_family,
+    bool ligatures)
+    : UI(nullptr), font_px_(std::clamp(font_px, 8, 40)), font_family_(font_family),
+      ligatures_(ligatures)
 {
   init_sdl_and_gl();
   init_freetype();
@@ -156,6 +158,9 @@ UIGui::~UIGui()
   {
     SDL_DestroyWindow(window_);
   }
+  // The shaper holds its own reference on every face it shaped against, so it
+  // has to go first or the face object would outlive this teardown.
+  lig_shaper_.clear();
   for (FT_Face face : faces_)
   {
     if (face)
@@ -410,6 +415,10 @@ bool UIGui::apply_font_family(const std::string &family)
   // offers a way back from a family the user does not want after all. The
   // faces are only replaced once the switch succeeded, so a name that does
   // not resolve leaves the current font on screen.
+  // The shaper caches glyph ids from the faces now being replaced, and holds
+  // a HarfBuzz reference on each of them; drop both before the switch so a
+  // rejected family is not what keeps an old face alive.
+  lig_shaper_.clear();
   bool switched = false;
   std::string resolved;
   if (family.empty())
@@ -467,10 +476,21 @@ void UIGui::apply_font_size(int px)
     }
   }
   // The atlas holds glyphs rendered at the old size; drop it wholesale and
-  // let the next paint rebuild it lazily.
+  // let the next paint rebuild it lazily. The shaper caches glyph ids from the
+  // same faces, so it goes with it.
   clear_atlas();
+  lig_shaper_.clear();
   refresh_cell_metrics();
   refit_grid();
+}
+
+bool UIGui::ligatures_supported()
+{
+#ifdef JOT_GUI_LIGATURES
+  return true;
+#else
+  return false;
+#endif
 }
 
 bool UIGui::load_face(int style, const std::vector<std::string> &paths)
