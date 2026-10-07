@@ -148,6 +148,13 @@ void render_for_test();
 // One full frame-loop step (the per-frame blink/scheduling logic plus a
 // render), for tests that need to observe behaviour over time.
 void render_frame_for_test();
+// The frame loop's ask for the repaint that ends the occurrence highlight's
+// typing hold (the method itself is private in api/paint.h): a case drives an
+// edit, winds the hold's clock, and reads whether the frame was asked for.
+bool word_highlight_due_soon_for_test()
+{
+  return word_highlight_due_soon();
+}
 // --- home screen (test) ---
 // The rows the model built for the last frame, in layout order: what a digit
 // press walks, the key it prints, and the query the screen is filtered by.

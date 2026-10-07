@@ -71,6 +71,11 @@ struct ViewState
   // (`status_coding_text` rather than `..._label` so it cannot be mistaken for
   // the Editor::status_coding_label() that formats the label it holds.)
   std::string status_coding_text;
+  // The frame loop's latch for the occurrence highlight's typing hold: true
+  // while the last painted frame withheld the highlight, so the first frame
+  // after the hold ends is the one asked for (Editor::word_highlight_due_soon,
+  // the same pattern the completion preview's reveal uses).
+  bool word_highlight_was_withheld = false;
 
   // The local coding-time store (extras/coding_time/probe.h): every workspace and
   // day it knows about, the running counter for the workspace in front of the

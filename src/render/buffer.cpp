@@ -11,6 +11,7 @@
 #include "ui/text.h"
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -66,6 +67,13 @@ namespace
     int col = 0;
     int len = 0;
   };
+
+  long long steady_now_ms()
+  {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+  }
 
   // The full-width background a line wears for its severity: the error and
   // warning slots a theme can set. -1 (a diagnostic that is only info or a
@@ -169,6 +177,46 @@ namespace
 
 } // namespace
 
+// The typing hold on the occurrence highlight: while the buffer was edited more
+// recently than word_highlight_delay_ms ago, the needle stays down. The user
+// asked for VS Code's occurrencesHighlightDelay -- a tint that re-lights on
+// every keystroke's repaint is noise while the hands are still on the keys, and
+// the word being typed is usually not the word being looked for anyway. The
+// clock is the buffer's own stamp (FileBuffer::word_highlight_last_edit_ms, set
+// by mark_edited), so every edit path -- typing, paste, undo, format, a bulk
+// replace -- restarts the hold, and a cursor move does not, so landing on a
+// word lights it at once. 0 disables the hold (the old paint-at-once), and a
+// stamp of 0 means nothing has edited this buffer yet.
+bool Editor::word_highlight_withheld(const FileBuffer &buf) const
+{
+  const int delay_ms = std::clamp(config.get_int("word_highlight_delay_ms", 500), 0, 10000);
+  if (delay_ms <= 0 || buf.word_highlight_last_edit_ms == 0)
+  {
+    return false;
+  }
+  return steady_now_ms() < buf.word_highlight_last_edit_ms + delay_ms;
+}
+
+// Nothing else asks for the frame that ends the hold, so the frame loop does,
+// and this is the query for it: the highlight was withheld on an earlier frame
+// and is due now. The same latch pattern the completion preview uses -- frames
+// do not tick while the editor is busy, so the wait can end with no frame in
+// sight, and asking once on the first sight of the clock past the delay is the
+// only ask that cannot be missed however late that sight is. The buffer that
+// matters is the one the hands are on (current_buffer): that is where typing
+// edits land, and the only pane that paints the highlight is the focused one.
+bool Editor::word_highlight_due_soon()
+{
+  bool withheld = false;
+  if (current_buffer >= 0 && current_buffer < (int)buffers.size())
+  {
+    withheld = word_highlight_withheld(buffers[(size_t)current_buffer]);
+  }
+  const bool due = !withheld && word_highlight_was_withheld;
+  word_highlight_was_withheld = withheld;
+  return due;
+}
+
 void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int buffer_id)
 {
   auto &buf = get_buffer(buffer_id);
@@ -193,10 +241,16 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
   const bool inlay_hints_enabled = config.get_bool("lsp_inlay_hints", true);
   const bool inlay_type_hints_enabled = config.get_bool("lsp_inlay_type_hints", true);
   // The occurrence highlight, resolved once for the frame. The row walk below
-  // only looks for this needle, and only the focused pane paints it.
+  // only looks for this needle, and only the focused pane paints it. A buffer
+  // inside its typing hold (word_highlight_withheld) resolves to no needle at
+  // all: the whole walk below then sees an empty needle and pays nothing for
+  // the occurrence scan the hold is suppressing.
   const bool word_highlight_on = config.get_bool("word_highlight", true);
-  WordHighlightNeedle word_needle =
-      word_highlight_on && pane.active ? word_highlight_needle(buf) : WordHighlightNeedle{};
+  WordHighlightNeedle word_needle = WordHighlightNeedle{};
+  if (word_highlight_on && pane.active && !word_highlight_withheld(buf))
+  {
+    word_needle = word_highlight_needle(buf);
+  }
 
   UIRect pane_rect = {x, y, w, h};
   ui->fill_rect(pane_rect, " ", theme.fg_default, theme.bg_default);

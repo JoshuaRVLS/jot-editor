@@ -149,6 +149,13 @@ void Editor::render_frame()
   {
     needs_redraw = true;
   }
+  // The occurrence highlight holds back while typing (word_highlight_delay_ms
+  // past the buffer's last edit) and is revealed by the frame clock the same
+  // way: when the hold ends, ask for the frame that draws it again.
+  if (word_highlight_due_soon())
+  {
+    needs_redraw = true;
+  }
 }
 
 void Editor::run()

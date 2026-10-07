@@ -8,6 +8,7 @@
 #include "syntax/color_definitions.h"
 #include "syntax/index.h" // SymbolMatch (the winbar's symbol cache)
 #include "text_features.h"
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -30,6 +31,20 @@ namespace
   constexpr int kDeltaWindowHalfSize = 50;
   constexpr int kMaxFullSnapshotLines = 5000;
 } // namespace
+
+// The clock FileBuffer's own stamps are read on: the occurrence highlight's
+// typing hold measures the pause since the last edit with it. In its own
+// namespace (like lsp_internal::now_ms) because every .cpp here keeps a
+// private steady_now_ms() and the two must be able to coexist.
+namespace model_clock
+{
+  inline long long now_ms()
+  {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+  }
+} // namespace model_clock
 
 struct Cursor
 {
@@ -195,6 +210,12 @@ struct FileBuffer
   // Bumped by every content mutation (mark_edited); lets render-side memos
   // reuse work across frames without any edit path knowing about them.
   std::uint64_t edit_generation = 0;
+  // Steady-clock ms of the last content mutation (mark_edited): the occurrence
+  // highlight stays down for word_highlight_delay_ms past it, so the tint does
+  // not flicker along with the typing that keeps restarting the clock (VS
+  // Code's occurrencesHighlightDelay). Cursor moves do not touch it, so landing
+  // on a word lights it at once. 0 = nothing edited yet.
+  long long word_highlight_last_edit_ms = 0;
   // Memoized bracket-pair guide for the caret's row (see
   // buffer_internal::build_active_bracket_guide). Finding the partner bracket
   // walks up to kBracketMatchSearchLimitLines lines and the builder tries
@@ -246,6 +267,10 @@ struct FileBuffer
   {
     folds_dirty = true;
     edit_generation++;
+    // The typing hold on the occurrence highlight restarts here: every edit
+    // path funnels through this one call, and typing is what the hold waits
+    // out (see word_highlight_last_edit_ms above).
+    word_highlight_last_edit_ms = model_clock::now_ms();
     ts_line_offsets.clear();
     // A header that does not look like C++ yet may be getting filled in, so
     // re-probe it on the next highlight. Once the answer is "C++" it is

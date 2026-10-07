@@ -101,6 +101,7 @@ namespace
       {"explorer_width", "Explorer width", SettingsEntry::Type::Int},
       {"gui_font_family", "GUI font family", SettingsEntry::Type::String},
       {"gui_font_size", "GUI font size (px)", SettingsEntry::Type::Int},
+      {"gui_ligatures", "GUI ligatures", SettingsEntry::Type::Bool},
       {"highlight_cursor_line", "Highlight cursor line", SettingsEntry::Type::Bool},
       {"idle_fps", "Idle FPS", SettingsEntry::Type::Int},
       {"image_viewer_backend", "Image viewer backend", SettingsEntry::Type::String},
@@ -225,6 +226,9 @@ namespace
       {"update.build_dir", "Update build dir", SettingsEntry::Type::String},
       {"update.check_on_startup", "Check updates on startup", SettingsEntry::Type::Bool},
       {"word_highlight", "Highlight word occurrences", SettingsEntry::Type::Bool},
+      {"word_highlight_delay_ms",
+       "Word highlight: delay after typing (ms)",
+       SettingsEntry::Type::Int},
       {"word_wrap", "Word wrap", SettingsEntry::Type::Bool},
       {"zen_content_width", "Zen content width", SettingsEntry::Type::Int},
   };
@@ -302,6 +306,7 @@ namespace
       {"toast.margin", 1, 0, 20},
       {"toast.max_visible", 1, 1, 20},
       {"toast.max_width", 5, 20, 500},
+      {"word_highlight_delay_ms", 50, 0, 5000},
       {"zen_content_width", 10, 40, 400},
   };
 
@@ -335,7 +340,8 @@ namespace
   const char *const kAppearanceKeys[] = {
       "color_scheme",       "cursor_blink_ms",
       "cursor_style",       "gui_font_family",
-      "gui_font_size",      "highlight_cursor_line",
+      "gui_font_size",      "gui_ligatures",
+      "highlight_cursor_line",
       "minimap_width",      "pane_tabs",
       "rainbow_brackets",   "relative_line_numbers",
       "render_margin",      "show_indent_guides",
@@ -344,7 +350,8 @@ namespace
       "status_coding_time", "tabline",
       "tabline_auto_hide",  "tabline_insert",
       "truecolor",          "winbar",
-      "word_highlight",     "zen_content_width",
+      "word_highlight",     "word_highlight_delay_ms",
+      "word_wrap",          "zen_content_width",
   };
   const char *const kAppearanceFamilies[] = {"smooth_scroll_"};
   const char *const kColorPreviewKeys[] = {"colorizer", "colorizer_mode"};
@@ -762,6 +769,18 @@ void Editor::apply_settings_value(const std::string &key, const std::string &val
     // One place rejects an unknown name, and writes back the family that took
     // effect so the file cannot keep a name that resolves to nothing.
     apply_gui_font_family(config.get("gui_font_family", ""));
+  }
+  else if (key == "gui_ligatures")
+  {
+    // Shaping is a draw-time decision, so the next frame is the whole apply;
+    // on a build without harfbuzz the switch changes nothing and
+    // ligatures_supported() is what the settings menu shows for it.
+#ifdef JOT_GUI
+    if (auto *gui = gui_ui())
+    {
+      gui->set_ligatures(config.get_bool("gui_ligatures", true));
+    }
+#endif
   }
   apply_config_live();
   config.save();

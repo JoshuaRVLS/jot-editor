@@ -210,10 +210,19 @@ void Config::load_defaults()
   // Empty keeps the built-in font; any installed family name switches the
   // GUI to it (:font lists what is available).
   settings["gui_font_family"] = "";
+  // Shape the punctuation runs the font joins ("->", "!=" ...) in the GUI.
+  // Terminal frontends do this themselves, so this is only about jot's own
+  // window; needs harfbuzz at build time (UIGui::ligatures_supported()).
+  settings["gui_ligatures"] = "true";
   settings["highlight_cursor_line"] = "true";
   // Tint every place the identifier under the caret shows in the viewport, VS
   // Code's occurrencesHighlight: a rename's blast radius without a search.
   settings["word_highlight"] = "true";
+  // How long the typing has to pause before that tint shows again. A highlight
+  // that re-lights on every keystroke's repaint is noise while the hands are
+  // still on the keys (VS Code's occurrencesHighlightDelay); the tint waits for
+  // the pause instead. 0 paints it at once (the old behaviour).
+  settings["word_highlight_delay_ms"] = "500";
   settings["render_fps"] = "120";
   settings["idle_fps"] = "60";
   // Smooth scrolling (ui/smooth_scroll.cpp, neoscroll.nvim's model): the

@@ -8,6 +8,12 @@
 // caret sitting in the middle of a run of whitespace is on nothing at all. The
 // tint is a band only: the token keeps the colour its syntax gave it, which is
 // why the theme's fg slot is -1 unless a theme asks otherwise.
+//
+// The other question is when. A tint that re-lights on every keystroke's
+// repaint is noise while the hands are still on the keys, so a buffer inside
+// word_highlight_delay_ms of its last edit holds the highlight down (VS Code's
+// occurrencesHighlightDelay); the frame loop asks for the repaint that ends the
+// hold. Cursor moves and file opens are not edits, so they light it at once.
 #include "editor.h"
 #include "editor/model/panes.h" // pane_content_top
 #include "render/gutter.h"
@@ -92,9 +98,12 @@ TEST_CASE("Word highlight: every occurrence is tinted, the caret's own strongest
 {
   seed_config_home();
   Editor e;
-  load_lines(e,
-             {"int alpha = 1;", "int beta = alpha + 1;", "int gamma = alpha * beta;"},
-             "occurrences");
+  // The typing hold (word_highlight_delay_ms) defaults to 500 ms and every case
+  // here paints right after driving the caret, so the cases that do not test
+  // the hold itself turn it off to stay deterministic.
+  e.set_config_for_test("word_highlight_delay_ms", "0");
+  load_lines(
+      e, {"int alpha = 1;", "int beta = alpha + 1;", "int gamma = alpha * beta;"}, "occurrences");
   e.apply_resize_for_test(100, 30);
 
   e.scroll_cursor_to_for_test(0, 4); // on the first `alpha`
@@ -120,6 +129,7 @@ TEST_CASE("Word highlight: only a whole word is an occurrence", "[jot]")
 {
   seed_config_home();
   Editor e;
+  e.set_config_for_test("word_highlight_delay_ms", "0");
   load_lines(e, {"int print = 1;", "int printf = 2;", "int sprint = 3;"}, "wholeword");
   e.apply_resize_for_test(100, 30);
 
@@ -135,6 +145,7 @@ TEST_CASE("Word highlight: a caret on whitespace lights nothing", "[jot]")
 {
   seed_config_home();
   Editor e;
+  e.set_config_for_test("word_highlight_delay_ms", "0");
   load_lines(e, {"int  value = 1;", "int  value = value;"}, "noword");
   e.apply_resize_for_test(100, 30);
 
@@ -159,6 +170,7 @@ TEST_CASE("Word highlight: the setting turns it off", "[jot]")
 {
   seed_config_home();
   Editor e;
+  e.set_config_for_test("word_highlight_delay_ms", "0");
   load_lines(e, {"int alpha = 1;", "int beta = alpha + 1;"}, "setting");
   e.apply_resize_for_test(100, 30);
 
@@ -177,6 +189,7 @@ TEST_CASE("Word highlight: a selection's own text drives it", "[jot]")
 {
   seed_config_home();
   Editor e;
+  e.set_config_for_test("word_highlight_delay_ms", "0");
   load_lines(e, {"int alpha = 1;", "int beta = alpha + 1;", "int gamma = alpha * 2;"}, "selection");
   e.apply_resize_for_test(100, 30);
 
@@ -207,6 +220,7 @@ TEST_CASE("Word highlight: a selection matches the text it marks, not a word", "
 {
   seed_config_home();
   Editor e;
+  e.set_config_for_test("word_highlight_delay_ms", "0");
   load_lines(e, {"int alpha = 1;", "int alpha_beta = 2;"}, "partial");
   e.apply_resize_for_test(100, 30);
 
@@ -224,4 +238,100 @@ TEST_CASE("Word highlight: a selection matches the text it marks, not a word", "
   repaint(e);
   REQUIRE(wears(e, 0, 4, 5, true));
   REQUIRE_FALSE(tinted(e, 1, 4, 5));
+}
+
+TEST_CASE("Word highlight: typing holds the tint until the pause", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_config_for_test("word_highlight_delay_ms", "500");
+  load_lines(e, {"int alpha = 1;", "int beta = alpha + 1;", "int gamma = alpha * beta;"}, "hold");
+  e.apply_resize_for_test(100, 30);
+
+  // Nothing has edited the buffer (opening a file is not an edit): the caret's
+  // word and its occurrences light the moment the frame paints.
+  e.scroll_cursor_to_for_test(1, 11);
+  repaint(e);
+  REQUIRE(wears(e, 1, 11, 5, true));
+  REQUIRE(wears(e, 2, 12, 5, false));
+
+  // A keystroke restarts the hold, and the next frame leaves the highlight
+  // down -- the caret's own band included, which after typing into the word is
+  // the only band the new word (`Xalpha`, here and below) could wear.
+  e.editor_input_for_test('X');
+  repaint(e);
+  REQUIRE_FALSE(tinted(e, 1, 11, 6));
+
+  // The hold is a clock, not a keystroke count: winding the stamp back past the
+  // delay is the pause, and the next frame lights the caret's word again.
+  e.buffer_for_test().word_highlight_last_edit_ms -= 1000;
+  repaint(e);
+  REQUIRE(wears(e, 1, 11, 6, true));
+}
+
+TEST_CASE("Word highlight: an edit elsewhere holds the occurrences too", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_config_for_test("word_highlight_delay_ms", "500");
+  load_lines(
+      e, {"int alpha = 1;", "int beta = alpha + 1;", "int gamma = alpha * beta;"}, "elsewhere");
+  e.apply_resize_for_test(100, 30);
+
+  // The caret stays on `alpha` while the edit goes through the bulk path
+  // (replace_lines, the path undo's snapshot replacement uses) on the row
+  // above, so the needle survives the edit and only the hold can hold the tint
+  // back -- the plain-band occurrences and the caret's own strong band alike.
+  e.scroll_cursor_to_for_test(1, 11);
+  repaint(e);
+  REQUIRE(wears(e, 2, 12, 5, false));
+
+  e.buffer_for_test().replace_lines(0, 1, {"int alpha = 1; // touched"});
+  repaint(e);
+  REQUIRE_FALSE(tinted(e, 0, 4, 5));
+  REQUIRE_FALSE(tinted(e, 1, 11, 5));
+  REQUIRE_FALSE(tinted(e, 2, 12, 5));
+
+  e.buffer_for_test().word_highlight_last_edit_ms -= 1000;
+  repaint(e);
+  REQUIRE(wears(e, 0, 4, 5, false));
+  REQUIRE(wears(e, 1, 11, 5, true));
+  REQUIRE(wears(e, 2, 12, 5, false));
+}
+
+TEST_CASE("Word highlight: a zero delay paints on the keystroke's frame", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  // 0 is the setting that keeps the old behaviour: the tint is up on the very
+  // frame the keystroke lands on, no pause asked for. Same keystroke the hold
+  // case above withholds.
+  e.set_config_for_test("word_highlight_delay_ms", "0");
+  load_lines(e, {"int alpha = 1;", "int beta = alpha + 1;"}, "nodelay");
+  e.apply_resize_for_test(100, 30);
+
+  e.scroll_cursor_to_for_test(1, 11);
+  e.editor_input_for_test('X');
+  repaint(e);
+  REQUIRE(wears(e, 1, 11, 6, true));
+}
+
+TEST_CASE("Word highlight: the frame after the hold is asked for", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_config_for_test("word_highlight_delay_ms", "500");
+  load_lines(e, {"int alpha = 1;", "int beta = alpha + 1;"}, "reveal");
+  e.apply_resize_for_test(100, 30);
+
+  // A keystroke opens the hold; the frame loop asks for nothing while it runs.
+  e.scroll_cursor_to_for_test(1, 21);
+  e.editor_input_for_test('X');
+  REQUIRE_FALSE(e.word_highlight_due_soon_for_test());
+
+  // The first sight of the clock past the delay is the one ask that cannot be
+  // missed, however late the frame loop looks -- and it asks exactly once.
+  e.buffer_for_test().word_highlight_last_edit_ms -= 1000;
+  REQUIRE(e.word_highlight_due_soon_for_test());
+  REQUIRE_FALSE(e.word_highlight_due_soon_for_test());
 }

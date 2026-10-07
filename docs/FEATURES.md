@@ -80,6 +80,17 @@ directories), and an unknown name is reported and ignored, leaving the
 current font in place. `JOT_GUI_FONT` still overrides the regular face with
 an explicit font file.
 
+The GUI also shapes what the font joins. A programming face inks `->` and `!=`
+through its own OpenType lookups, and a cell grid that resolves one codepoint
+at a time never asks for them, so those runs are shaped as runs instead (with
+HarfBuzz, the same shaping a terminal does) and painted as the glyph the font
+returned - a ligature where the font has one, its connected alternates where it
+has not. Only runs of adjacent punctuation sharing one colour are candidates;
+identifiers, CJK and a colour seam between two spans keep the per-cell path.
+`gui_ligatures` (on by default, also in `:settings`) turns it off, and a build
+without harfbuzz simply never had it: `:settings` reports that rather than
+swallowing the toggle.
+
 Scrolling is a pixel slide, not a jump: a wheel notch retargets the slide and
 the content carries on from the velocity it already has, so a burst reads as
 one glide and turning the wheel around decelerates through the stop rather than
@@ -133,7 +144,12 @@ settles, so scrolling a long way does not grow the process.
   renamed lights the identifiers that carry it) rather than as a whole word. The
   highlight also leaves a row that carries a diagnostic band alone, which stays
   edge to edge rather than having a word clipped out of it, and
-  `word_highlight=false` turns it off.
+  `word_highlight=false` turns it off. While you are typing, the tint holds
+  back until the typing pauses (`word_highlight_delay_ms`, VS Code's
+  occurrencesHighlightDelay): a highlight that re-lights on every keystroke's
+  repaint is noise, so it waits for the pause and the frame loop asks for the
+  repaint that ends the wait. Moving the caret or opening a file is not typing,
+  so the highlight comes up at once there; `0` restores paint-on-every-frame.
 - Smart indent on Enter. A bracket left open on the line lines the new line up
   under the argument after it, so a wrapped call stays aligned:
   `res = call(arg,` continues at `arg`'s column. In the C family a control

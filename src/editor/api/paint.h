@@ -281,6 +281,15 @@ bool handle_settings_input(int ch);
 bool handle_settings_paste(const std::string &text);
 bool handle_settings_mouse(int x, int y, bool is_click);
 void render_buffer_content(const SplitPane &pane, int pane_index, int buffer_id);
+// The typing hold on the occurrence highlight: true while the buffer was edited
+// more recently than word_highlight_delay_ms ago (see render/buffer.cpp). The
+// renderer asks it before building the needle, and the frame loop below asks
+// word_highlight_due_soon for the frame that reveals the highlight again.
+bool word_highlight_withheld(const FileBuffer &buf) const;
+// True exactly once, on the first frame after the typing hold ends: the frame
+// loop's ask for the repaint that shows the highlight, mirroring the
+// completion preview's lsp_completion_preview_due_soon.
+bool word_highlight_due_soon();
 // The regions that share a separator with this pane: the other visible panes
 // (skipping the ones zoom hides), the sidebar when it is up, the right dock,
 // and whatever occupies the rows below the pane area. Used to decide which
