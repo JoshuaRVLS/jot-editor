@@ -713,10 +713,20 @@ void LuaAPI::render_float_layer(int min_zindex, int max_zindex)
         if (e <= s)
           continue;
         const int span_bg = sp.bg >= 0 ? sp.bg : line_bg;
+        // A span without a colour of its own is -1 ("the screen's default
+        // fg", surfaces.h), exactly what a float's title and footer already
+        // fall back for, and what the span table itself means when the field
+        // is absent (see set_float_spans). Passing the sentinel through gave
+        // the two backends two different colours for one cell: the terminal
+        // wrote SGR 38;5;-1, which the emulator discards, so the row kept the
+        // fill's foreground, while the GUI resolved a negative palette index
+        // to black -- the home screen's list rows (fg -1 by design) came out
+        // unreadable there.
+        const int span_fg = sp.fg >= 0 ? sp.fg : f->fg;
         if (s > pos)
           editor->ui->draw_text(
               ix + cell_col(pos), iy + i, clipped.substr(pos, s - pos), f->fg, line_bg);
-        editor->ui->draw_text(ix + cell_col(s), iy + i, clipped.substr(s, e - s), sp.fg, span_bg);
+        editor->ui->draw_text(ix + cell_col(s), iy + i, clipped.substr(s, e - s), span_fg, span_bg);
         // Never rewind: glyph spans that start inside an already-painted
         // background fill overdraw their own extent, but the bytes between
         // them and the next span must keep the fill's background. Rewinding
