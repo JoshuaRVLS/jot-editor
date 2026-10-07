@@ -11,13 +11,18 @@ for the backdated one); that the footer on the column's last row speaks for the
 workspace (the git summary) and never repeats the selected file, whose glyph and
 name read as a stray label under the timeline; that clicking an outline row
 lands the caret on the symbol's line; and that clicking a timeline row opens
-that commit's diff in the right dock. Each of those is a step the layout could
-get right on paper and still get wrong on screen.
+that commit's diff in the right dock. It ends on the state that outlives the
+session: a column left with the outline collapsed, a folder open and the cursor
+down in the timeline has to come back that way on the next launch, which is only
+visible in a second real session. Each of those is a step the layout could get
+right on paper and still get wrong on screen.
 
 Every scene is its own session (one screen read per run), because a click needs
 the row the previous screen actually painted. A scene that clicks after opening
 the file first waits out the transient Tree-sitter toast, which is up for a few
-seconds and would otherwise swallow the click.
+seconds and would otherwise swallow the click. The restart scene quits with
+Ctrl+Q instead of being killed: the session file is only written on a clean
+exit.
 
 Usage: test/sidebar_sections_probe.py [path-to-jot] [--dump]
 Exit codes: 0 pass, 1 fail, 2 skipped (no binary).
@@ -92,6 +97,51 @@ def row_of(text: str, needle: str) -> int:
         if needle in line.split("\u2502")[0]:
             return index
     return -1
+
+
+# The cell the section rows carry their text on, so a probe can read the
+# colours a row is painted with: a section's own selected row is a band, and a
+# band is invisible in the text. A section that does not own the cursor paints
+# its selected row in the muted pair instead (the theme's SidebarSelNC, which
+# on this theme's sidebar is the plain background with a different fg), so both
+# colours are read.
+ROW_X = 5
+
+
+def band_in(text: str, bg, needle: str) -> int:
+    """The row background the sidebar row carrying `needle` is filled with."""
+    row = row_of(text, needle)
+    return bg[row][ROW_X] if row >= 0 else -2
+
+
+def band(screen, needle: str) -> int:
+    return band_in(screen.text(), screen.bg, needle)
+
+
+def fg_in(text: str, fg, needle: str) -> int:
+    """The row foreground: how a section without the cursor shows its row."""
+    row = row_of(text, needle)
+    return fg[row][ROW_X] if row >= 0 else -2
+
+
+def snapshot(screen) -> dict:
+    """The screen's text and its cell colours copied out of it.
+
+    A Screen keeps taking the frames that arrive after the read, so the phase
+    that captures has to copy: a reference read later describes the state after
+    whatever the next phase typed.
+    """
+    return {"text": screen.text(),
+            "bg": [list(row) for row in screen.bg],
+            "fg": [list(row) for row in screen.fg]}
+
+
+def timeline_cursor_check():
+    """Waits for the cursor walk to band the older commit's timeline row."""
+    def check(screen) -> bool:
+        plain = band(screen, "TIMELINE")
+        return plain != -2 and band(screen, FIRST_NEEDLE) != plain
+    return check
 
 
 def wait_for(*needles: str):
@@ -272,10 +322,125 @@ def main() -> int:
             if ("commit " + head) not in diff.get("text", ""):
                 fail("the timeline click opened no commit diff", "%r missing" % ("commit " + head))
 
+        # The restart scenes need folders to open: one left open and one left
+        # shut. They land in the fixture only now, so the rows the scenes above
+        # were written against cannot move under them.
+        os.makedirs(os.path.join(root, "nested"))
+        os.makedirs(os.path.join(root, "closed"))
+        with open(os.path.join(root, "nested", "inside.txt"), "w") as fh:
+            fh.write("in\n")
+        with open(os.path.join(root, "closed", "shut.txt"), "w") as fh:
+            fh.write("shut\n")
+
+        folders: dict = {}
+
+        def capture_folders(screen) -> bool:
+            text = screen.text()
+            folders["nested"] = row_of(text, "nested")
+            folders["probe"] = row_of(text, "probe.cpp")
+            return folders["nested"] >= 0 and folders["probe"] >= 0
+
+        # Scene 4: the rows of the tree with the folders on disk, none open.
+        scene(binary, root, cfg, [(0.8, capture_folders)])
+
+        # Scene 5: leave a column behind. The session file is written on a clean
+        # exit only, so the scene quits with Ctrl+Q (nothing is modified)
+        # instead of being killed: the nested folder open, the outline collapsed,
+        # the cursor walked down onto the older commit.
+        if folders.get("nested", -1) >= 0 and folders.get("probe", -1) >= 0:
+            scene(binary, root, cfg, [
+                (0.3, click(5, folders["nested"])),        # open the nested folder
+                (0.4, click(5, folders["probe"] + 1)),     # its child row moved probe.cpp down
+                (0.4, wait_for("alpha", FIRST_NEEDLE, SECOND_NEEDLE)),
+                (0.2, wait_for_toast_gone()),
+                (0.2, click(5, layout["OUTLINE"])),        # collapse the outline
+                (0.4, b"jj"),                              # into the timeline, onto the older commit
+                (0.5, timeline_cursor_check()),
+                (0.4, b"\x11"),                            # Ctrl+Q: quit, writing the session
+                (0.8, lambda s: True),
+            ])
+
+            # Scene 6: the same workspace, a fresh process. Everything left
+            # behind has to be on screen again: the collapsed outline with its
+            # symbols gone, the timeline's cursor on the older commit, the
+            # folder open with its file, and the one left shut still shut.
+            restored: dict = {}
+            collapsed: dict = {}
+
+            def capture(into: dict):
+                def check(screen) -> bool:
+                    into.update(snapshot(screen))
+                    return True
+                return check
+
+            screen = scene(binary, root, cfg, [
+                (0.6, wait_for(FIRST_NEEDLE, SECOND_NEEDLE, "inside.txt")),
+                (0.4, capture(restored)),
+                (0.4, b"h"),                               # collapse the section the cursor is in
+                (0.5, capture(collapsed)),
+            ])
+            if dump:
+                print(screen.text())
+                print("-" * 70)
+
+            if not restored:
+                fail("the resumed session painted nothing to read the sections from")
+            else:
+                text = restored["text"]
+                bg = restored["bg"]
+                lines = text.splitlines()
+                rows = {name: row_of(text, name) for name in ("EXPLORER", "OUTLINE", "TIMELINE")}
+                if any(row < 0 for row in rows.values()):
+                    fail("the resumed column lost a section header", "%s" % rows)
+                else:
+                    if "\u25be" not in lines[rows["EXPLORER"]]:
+                        fail("the explorer came back collapsed",
+                             repr(lines[rows["EXPLORER"]].split("\u2502")[0]))
+                    if "\u25be" not in lines[rows["TIMELINE"]]:
+                        fail("the timeline came back collapsed",
+                             repr(lines[rows["TIMELINE"]].split("\u2502")[0]))
+                    if "\u25b8" not in lines[rows["OUTLINE"]]:
+                        fail("the collapsed outline came back open",
+                             repr(lines[rows["OUTLINE"]].split("\u2502")[0]))
+                    if row_of(text, "alpha") >= 0:
+                        fail("the collapsed outline painted its symbols")
+                    if row_of(text, "inside.txt") < 0:
+                        fail("the folder that was left open came back collapsed")
+                    if row_of(text, "shut.txt") >= 0:
+                        fail("the folder that was left shut came back open")
+                    # The cursor stayed in the timeline, which kept its rows: its
+                    # selected row is the banded one.
+                    plain = band_in(text, bg, "TIMELINE")
+                    older = band_in(text, bg, FIRST_NEEDLE)
+                    if older == plain:
+                        fail("the timeline's cursor did not come back on the older commit",
+                             "band %d against the header's %d" % (older, plain))
+                    elif band_in(text, bg, SECOND_NEEDLE) != plain:
+                        fail("a second timeline row came back banded")
+
+            if not collapsed:
+                fail("the resumed session painted nothing to collapse a section in")
+            else:
+                text = collapsed["text"]
+                lines = text.splitlines()
+                outline_row = row_of(text, "OUTLINE")
+                explorer_row = row_of(text, "EXPLORER")
+                timeline_row = row_of(text, "TIMELINE")
+                if outline_row < 0 or explorer_row < 0 or timeline_row < 0:
+                    fail("a section header left the screen after h")
+                elif "\u25b8" not in lines[timeline_row]:
+                    fail("h collapsed another section than the one the cursor came back in",
+                         repr(lines[timeline_row].split("\u2502")[0]))
+                elif "\u25be" not in lines[explorer_row]:
+                    fail("h collapsed the explorer too", repr(lines[explorer_row].split("\u2502")[0]))
+                elif "\u25be" in lines[outline_row]:
+                    fail("h reopened the outline", repr(lines[outline_row].split("\u2502")[0]))
+
     if failures:
         print("sidebar sections probe: FAIL")
         return 1
-    print("sidebar sections probe: PASS - headers, outline rows, commit ages, jump and diff")
+    print("sidebar sections probe: PASS - headers, outline rows, commit ages, jump, diff and "
+          "the column across a restart")
     return 0
 
 
