@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate src/jot/integrations/comment_style_data.h.
+"""Generate src/editor/integrations/comment_style_data.h.
 
 The per-extension comment style table is derived from comment.nvim's
 ft.lua (https://github.com/numtostr/comment.nvim, MIT) - the de-facto
@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "runtime/lua/treesitter/registry.lua"
-OUT = ROOT / "src/jot/integrations/comment_style_data.h"
+OUT = ROOT / "src/editor/integrations/comment_style_data.h"
 FT_LUA = Path(sys.argv[1] if len(sys.argv) > 1 else "/tmp/comment.nvim/lua/Comment/ft.lua")
 
 # Registry language id -> comment.nvim filetype (ids differ for a few).

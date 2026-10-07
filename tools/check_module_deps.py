@@ -17,9 +17,9 @@ the run. Existing edges have to be removed by moving the code, not here.
   tools/check_module_deps.py --list          list every violation, grouped
   tools/check_module_deps.py --write-baseline   re-record the baseline
 
-The module for a file is its first directory under src/, except under src/jot/,
-which still holds most of the editor: its subdirectories are provisionally
-mapped below and are refined as later phases move the files out.
+The module for a file is its first directory under src/. src/features/ is the
+one exception: the directory kept its old name while the module it holds is
+called extras in the order.
 """
 
 import argparse
@@ -56,7 +56,7 @@ RANK = {name: i for i, name in enumerate(MODULE_ORDER)}
 INCLUDE_DIRS = [
     "src",
     "src/base",
-    "src/jot",
+    "src/editor",
     "src/input",
     "src/render",
     "src/text",
@@ -72,12 +72,6 @@ INCLUDE_DIRS = [
     "src/tools",
 ]
 
-# src/jot/ still carries most of the editor. These are provisional: each one
-# becomes a real top-level module as its files move out.
-JOT_SUBDIR_MODULE = {
-    "workspace": "workspace",
-}
-
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"')
 SOURCE_SUFFIXES = (".cpp", ".cc", ".cxx", ".h", ".hpp")
 
@@ -90,10 +84,6 @@ def module_of(path):
     if len(parts) == 1:
         return None
     top = parts[1]
-    if top == "jot":
-        if len(parts) < 3:
-            return "editor"
-        return JOT_SUBDIR_MODULE.get(parts[2], "editor")
     if top == "features":
         return "extras"
     return top if top in RANK else None

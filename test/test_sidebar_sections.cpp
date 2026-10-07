@@ -4,7 +4,7 @@
 // relative ages the timeline rows show, and the footer the sections leave on
 // the column's last row.
 #include "editor.h"
-#include "jot/model/sidebar_sections.h"
+#include "editor/model/sidebar_sections.h"
 #include "ui/ui.h"
 #include "workspace/timeline.h"
 

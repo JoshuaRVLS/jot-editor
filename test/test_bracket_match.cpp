@@ -11,8 +11,8 @@
 // pair -- both are pinned here, because they are the cases that look like
 // highlights in the wrong place.
 #include "editor.h"
+#include "editor/model/panes.h" // pane_content_top
 #include "render/gutter.h"
-#include "jot/model/panes.h" // pane_content_top
 #include "ui/ui.h"
 
 #include <catch2/catch_test_macros.hpp>

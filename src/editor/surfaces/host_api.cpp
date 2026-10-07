@@ -1,0 +1,602 @@
+#include "host_api.h"
+#include "editor.h"
+#include "lua/api.h"
+
+#include <algorithm>
+#include <sstream>
+
+EditorHostAPI::EditorHostAPI(Editor &editor) : core(editor), render(editor), io(editor)
+{
+}
+
+std::string HostCoreAPI::current_file() const
+{
+  if (editor.buffers.empty())
+  {
+    return "";
+  }
+  return editor.get_buffer().filepath;
+}
+
+std::vector<HostBufferInfo> HostCoreAPI::list_buffers() const
+{
+  std::vector<HostBufferInfo> out;
+  out.reserve(editor.buffers.size());
+  for (int i = 0; i < (int)editor.buffers.size(); i++)
+  {
+    const FileBuffer &buf = editor.buffers[(size_t)i];
+    HostBufferInfo info;
+    info.index = i;
+    info.filepath = buf.filepath;
+    info.modified = buf.modified;
+    info.active = (i == editor.current_buffer);
+    info.preview = (i == editor.preview_buffer_index);
+    out.push_back(info);
+  }
+  return out;
+}
+
+bool HostCoreAPI::switch_buffer(int index)
+{
+  if (index < 0 || index >= (int)editor.buffers.size())
+  {
+    return false;
+  }
+
+  editor.current_buffer = index;
+  if (!editor.panes.empty())
+  {
+    auto &pane = editor.get_pane();
+    editor.capture_pane_view(editor.current_pane);
+    pane.buffer_id = index;
+    editor.restore_pane_view(editor.current_pane);
+    if (std::find(pane.tab_buffer_ids.begin(), pane.tab_buffer_ids.end(), index)
+        == pane.tab_buffer_ids.end())
+    {
+      pane.tab_buffer_ids.push_back(index);
+    }
+    editor.reveal_tab_for_buffer(index);
+  }
+
+  editor.focus_state = Editor::FOCUS_EDITOR;
+  editor.ensure_cursor_visible();
+  editor.needs_redraw = true;
+  return true;
+}
+
+bool HostCoreAPI::close_buffer(int index)
+{
+  if (index < 0 || index >= (int)editor.buffers.size())
+  {
+    return false;
+  }
+  const std::string path = editor.buffers[(size_t)index].filepath;
+  editor.close_buffer_at(index);
+  if (editor.lua_api)
+  {
+    editor.lua_api->fire_autocmd("BufClose", path, index);
+    editor.lua_api->emit_buffer_event("buffer.close", path);
+  }
+  editor.needs_redraw = true;
+  return true;
+}
+
+void HostCoreAPI::new_buffer(const std::string &name)
+{
+  editor.create_new_buffer();
+  if (!name.empty())
+  {
+    FileBuffer &buf = editor.get_buffer();
+    buf.filepath = name;
+    // The ruleset is chosen from the extension, and the buffer was created
+    // without one, so the cache built for "no name" must go.
+    editor.invalidate_syntax_cache(buf);
+  }
+  editor.needs_redraw = true;
+}
+
+std::string HostCoreAPI::buffer_content() const
+{
+  if (editor.buffers.empty())
+  {
+    return "";
+  }
+  return editor.get_buffer_text(editor.get_buffer());
+}
+
+void HostCoreAPI::set_buffer_content(const std::string &text)
+{
+  if (editor.buffers.empty())
+  {
+    return;
+  }
+
+  editor.save_state();
+  FileBuffer &buf = editor.get_buffer();
+  if (buf.is_lazy())
+    buf.materialize();
+  buf.lines.clear();
+
+  size_t start = 0;
+  while (start <= text.size())
+  {
+    size_t end = text.find('\n', start);
+    if (end == std::string::npos)
+    {
+      std::string line = text.substr(start);
+      if (!line.empty() && line.back() == '\r')
+      {
+        line.pop_back();
+      }
+      buf.lines.push_back(line);
+      break;
+    }
+    std::string line = text.substr(start, end - start);
+    if (!line.empty() && line.back() == '\r')
+    {
+      line.pop_back();
+    }
+    buf.lines.push_back(line);
+    start = end + 1;
+    if (start == text.size())
+    {
+      buf.lines.push_back("");
+      break;
+    }
+  }
+
+  if (buf.lines.empty())
+  {
+    buf.lines.push_back("");
+  }
+
+  buf.cursor = {0, 0};
+  buf.preferred_x = 0;
+  buf.selection = {{0, 0}, {0, 0}, false};
+  buf.extra_carets.clear();
+  buf.scroll_offset = 0;
+  buf.scroll_x = 0;
+  buf.modified = true;
+
+  editor.invalidate_syntax_cache(buf);
+  editor.ensure_cursor_visible();
+  editor.needs_redraw = true;
+
+  if (editor.lua_api)
+  {
+    editor.lua_api->on_buffer_change(buf.filepath, editor.get_buffer_text(buf));
+  }
+}
+
+std::string HostCoreAPI::selected_text() const
+{
+  if (editor.buffers.empty())
+  {
+    return "";
+  }
+
+  const FileBuffer &buf = editor.get_buffer();
+  if (!buf.selection.active)
+  {
+    return "";
+  }
+  return selected_text_for(buf.selection);
+}
+
+size_t HostCoreAPI::extra_caret_count() const
+{
+  if (editor.buffers.empty())
+  {
+    return 0;
+  }
+  return editor.get_buffer().extra_carets.size();
+}
+
+std::string HostCoreAPI::extra_caret_text(size_t index) const
+{
+  if (editor.buffers.empty())
+  {
+    return "";
+  }
+  const auto &carets = editor.get_buffer().extra_carets;
+  if (index >= carets.size() || !carets[index].active)
+  {
+    return "";
+  }
+  return selected_text_for(carets[index]);
+}
+
+std::string HostCoreAPI::selected_text_for(const Selection &sel) const
+{
+  const FileBuffer &buf = editor.get_buffer();
+  Cursor start = sel.start;
+  Cursor end = sel.end;
+  if (start.y > end.y || (start.y == end.y && start.x > end.x))
+  {
+    std::swap(start, end);
+  }
+
+  std::string out;
+  for (int y = start.y; y <= end.y && y < (int)buf.line_count(); y++)
+  {
+    const std::string &line = buf.line(y);
+    int from = (y == start.y) ? std::max(0, start.x) : 0;
+    int to = (y == end.y) ? std::min((int)line.size(), end.x) : (int)line.size();
+    if (from < to)
+    {
+      out += line.substr((size_t)from, (size_t)(to - from));
+    }
+    if (y != end.y)
+    {
+      out.push_back('\n');
+    }
+  }
+  return out;
+}
+
+void HostCoreAPI::replace_selection(const std::string &text)
+{
+  if (editor.buffers.empty())
+  {
+    return;
+  }
+
+  FileBuffer &buf = editor.get_buffer();
+  if (!buf.selection.active && buf.extra_carets.empty())
+  {
+    insert_text(text);
+    return;
+  }
+
+  editor.save_state();
+  editor.delete_selection();
+  editor.insert_string(text);
+}
+
+void HostCoreAPI::insert_text(const std::string &text)
+{
+  if (editor.buffers.empty())
+  {
+    return;
+  }
+  editor.insert_string(text);
+}
+
+bool HostCoreAPI::apply_edit(
+    int start_line, int start_col, int end_line, int end_col, const std::string &text)
+{
+  if (editor.buffers.empty())
+  {
+    return false;
+  }
+  FileBuffer &buf = editor.get_buffer();
+  if (buf.is_lazy())
+  {
+    buf.materialize();
+  }
+  const int line_count = (int)buf.line_count();
+  if (line_count == 0)
+  {
+    return false;
+  }
+
+  auto clamp_pos = [&](int line, int col, Cursor &out)
+  {
+    out.y = std::clamp(line, 0, line_count - 1);
+    out.x = std::clamp(col, 0, (int)buf.line(out.y).size());
+  };
+  Cursor start{0, 0};
+  Cursor end{0, 0};
+  clamp_pos(start_line - 1, start_col - 1, start);
+  clamp_pos(end_line - 1, end_col - 1, end);
+  if (end.y < start.y || (end.y == start.y && end.x < start.x))
+  {
+    std::swap(start, end);
+  }
+
+  editor.save_state();
+
+  // Split the replacement into lines, then splice: head of the first line is
+  // kept, tail of the last line is kept, everything between is replaced.
+  std::vector<std::string> pieces;
+  size_t from = 0;
+  while (true)
+  {
+    const size_t nl = text.find('\n', from);
+    if (nl == std::string::npos)
+    {
+      pieces.push_back(text.substr(from));
+      break;
+    }
+    pieces.push_back(text.substr(from, nl - from));
+    from = nl + 1;
+  }
+
+  const std::string head = buf.line(start.y).substr(0, (size_t)start.x);
+  const std::string tail = buf.line(end.y).substr((size_t)end.x);
+  pieces.front() = head + pieces.front();
+  pieces.back() += tail;
+
+  buf.lines.erase(buf.lines.begin() + start.y, buf.lines.begin() + end.y + 1);
+  buf.lines.insert(buf.lines.begin() + start.y, pieces.begin(), pieces.end());
+
+  buf.cursor.y = start.y + (int)pieces.size() - 1;
+  buf.cursor.x = (int)(pieces.back().size() - tail.size());
+  buf.preferred_x = buf.cursor.x;
+  buf.selection.active = false;
+  buf.modified = true;
+  buf.is_placeholder = false;
+  editor.ensure_cursor_visible();
+  editor.needs_redraw = true;
+  if (editor.lua_api)
+  {
+    editor.lua_api->on_buffer_change(buf.filepath, "");
+  }
+  if (!buf.filepath.empty())
+  {
+    editor.notify_lsp_change(buf.filepath);
+  }
+  return true;
+}
+
+void HostCoreAPI::insert_char_at_carets(char c)
+{
+  if (editor.buffers.empty())
+  {
+    return;
+  }
+  editor.insert_char(c);
+}
+
+void HostCoreAPI::undo()
+{
+  editor.undo();
+}
+
+void HostCoreAPI::redo()
+{
+  editor.redo();
+}
+
+bool HostCoreAPI::multicursor_active()
+{
+  return editor.multicursor_active();
+}
+
+void HostCoreAPI::clear_extra_carets()
+{
+  editor.clear_extra_carets();
+}
+
+bool HostCoreAPI::add_caret_at(int line, int col)
+{
+  return editor.add_caret_at(line, col);
+}
+
+bool HostCoreAPI::select_next_occurrence()
+{
+  return editor.select_next_occurrence();
+}
+
+std::pair<int, int> HostCoreAPI::cursor() const
+{
+  if (editor.buffers.empty())
+  {
+    return {0, 0};
+  }
+  const FileBuffer &buf = editor.get_buffer();
+  return {buf.cursor.y, buf.cursor.x};
+}
+
+void HostCoreAPI::set_cursor(int line, int col)
+{
+  if (editor.buffers.empty())
+  {
+    return;
+  }
+  FileBuffer &buf = editor.get_buffer();
+  if (buf.line_count() == 0)
+  {
+    buf.cursor = {0, 0};
+    return;
+  }
+  buf.cursor.y = std::clamp(line, 0, (int)buf.line_count() - 1);
+  buf.cursor.x = std::clamp(col, 0, (int)buf.line(buf.cursor.y).size());
+  buf.preferred_x = buf.cursor.x;
+  editor.clear_selection();
+  editor.ensure_cursor_visible();
+  editor.needs_redraw = true;
+  if (editor.lua_api)
+  {
+    editor.lua_api->fire_autocmd("CursorMoved", buf.filepath, editor.current_buffer);
+  }
+}
+
+HostLayoutInfo HostRenderAPI::layout() const
+{
+  HostLayoutInfo info{};
+  // The grid the editor is drawing into (UI), not the hosting terminal: under
+  // --gui there is no terminal, so its size would be the 80x24 default and Lua
+  // would lay out against a window that does not exist.
+  info.width = editor.grid_width();
+  info.height = editor.grid_height();
+  info.sidebar_visible = editor.show_sidebar;
+  info.sidebar_width = editor.effective_sidebar_width();
+  info.minimap_visible = editor.show_minimap;
+  info.terminal_visible = editor.show_integrated_terminal;
+  info.terminal_height = editor.integrated_terminal_height;
+  return info;
+}
+
+std::vector<HostPaneInfo> HostRenderAPI::list_panes() const
+{
+  std::vector<HostPaneInfo> out;
+  out.reserve(editor.panes.size());
+  for (int i = 0; i < (int)editor.panes.size(); i++)
+  {
+    const SplitPane &pane = editor.panes[(size_t)i];
+    HostPaneInfo info;
+    info.index = i;
+    info.buffer_id = pane.buffer_id;
+    info.x = pane.x;
+    info.y = pane.y;
+    info.w = pane.w;
+    info.h = pane.h;
+    info.focused = (i == editor.current_pane);
+    out.push_back(info);
+  }
+  return out;
+}
+
+void HostRenderAPI::split_horizontal()
+{
+  editor.split_pane_horizontal();
+}
+
+void HostRenderAPI::split_vertical()
+{
+  editor.split_pane_vertical();
+}
+
+void HostRenderAPI::focus_next_pane()
+{
+  editor.next_pane();
+}
+
+void HostRenderAPI::focus_prev_pane()
+{
+  editor.prev_pane();
+}
+
+bool HostRenderAPI::resize_focused_pane(int delta)
+{
+  return editor.resize_current_pane(delta);
+}
+
+bool HostRenderAPI::resize_focused_pane_direction(char dir, int step)
+{
+  return editor.resize_current_pane_direction(dir, step);
+}
+
+void HostRenderAPI::equalize_panes()
+{
+  editor.equalize_panes();
+}
+
+void HostRenderAPI::toggle_pane_zoom()
+{
+  editor.toggle_pane_zoom();
+}
+
+void HostRenderAPI::swap_panes()
+{
+  editor.swap_panes();
+}
+
+void HostRenderAPI::request_redraw()
+{
+  editor.needs_redraw = true;
+}
+
+void HostIOAPI::open_file(const std::string &path)
+{
+  editor.open_file(path);
+}
+
+void HostIOAPI::save_current_file()
+{
+  editor.save_file();
+}
+
+bool HostIOAPI::save_buffer(int index)
+{
+  return editor.save_buffer_at(index, false);
+}
+
+void HostIOAPI::open_workspace(const std::string &path)
+{
+  editor.open_workspace(path);
+}
+
+void HostIOAPI::open_command_palette(const std::string &query)
+{
+  editor.open_command_palette(query);
+}
+void HostIOAPI::toggle_sidebar()
+{
+  editor.toggle_sidebar();
+}
+
+bool HostIOAPI::toggle_zen()
+{
+  return editor.toggle_zen_mode();
+}
+
+void HostIOAPI::toggle_terminal()
+{
+  editor.toggle_integrated_terminal();
+}
+
+void HostIOAPI::execute_command(const std::string &command)
+{
+  editor.execute_command(command);
+}
+
+void HostIOAPI::run_job(const std::string &command,
+                        const std::string &cwd,
+                        const std::string &label)
+{
+  if (command.empty())
+  {
+    editor.set_message("Plugin job requires a command");
+    return;
+  }
+  std::string job_label = label.empty() ? "plugin" : label;
+  editor.create_integrated_terminal("plugin:" + job_label, cwd.empty() ? editor.root_dir : cwd);
+  IntegratedTerminal *term = editor.get_integrated_terminal();
+  if (!term)
+  {
+    return;
+  }
+  term->send_text(command);
+  term->send_text("\n");
+}
+
+void HostIOAPI::show_plugin_picker(const std::string &title,
+                                   const std::string &items_callback,
+                                   const std::string &select_callback)
+{
+  if (!editor.lua_api)
+  {
+    return;
+  }
+  std::vector<Editor::QuickPickItem> items;
+  for (const auto &row : editor.lua_api->plugin_picker_items(items_callback))
+  {
+    Editor::QuickPickItem item;
+    item.label = row.label;
+    item.value = row.value;   // empty for plain string rows
+    item.detail = row.detail; // empty unless the row asks for a right-hand label
+    item.fg = row.fg;
+    item.filepath.clear();
+    item.line = 0;
+    item.col = 0;
+    items.push_back(std::move(item));
+  }
+  editor.plugin_quick_pick_select_callback = select_callback;
+  editor.open_quick_pick(
+      Editor::QUICK_PICK_PLUGIN, title.empty() ? "Plugin Picker" : title, std::move(items));
+}
+
+void HostIOAPI::show_plugin_panel(const std::string &name)
+{
+  if (name.empty())
+  {
+    return;
+  }
+  editor.active_plugin_panel = name;
+  editor.open_right_panel_tab(Editor::RIGHT_PANEL_PLUGIN);
+  editor.show_home_menu = false;
+  editor.update_pane_layout();
+  editor.needs_redraw = true;
+}

@@ -68,7 +68,7 @@ jobs:
 
       # Every header has to compile as the only include of an empty translation
       # unit, using the flags from the configure step just above. Same ratchet
-      # as the module check: the sixteen src/jot/editor/api/ files are class-body
+      # as the module check: the sixteen src/editor/editor/api/ files are class-body
       # fragments rather than headers and stay on the baseline until the Editor
       # stops being assembled from them.
       - name: Check headers stand alone

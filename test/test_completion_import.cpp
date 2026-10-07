@@ -1,5 +1,5 @@
 // Accepting a completion that carries additionalTextEdits: the auto-import
-// path (src/jot/integrations/lsp/completion.cpp).
+// path (src/editor/integrations/lsp/completion.cpp).
 //
 // A server pairs the item that names a symbol with the edits that make the name
 // resolvable elsewhere in the same file -- an `import { Widget } from "./widget"`

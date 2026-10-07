@@ -6,7 +6,7 @@
 // The workspace strip on row 0 is untouched by any of this: these cases pin the
 // pane-local strip, its row budget, and the drag session
 // (src/render/pane_tabs.cpp, src/input/mouse/pane_tabs.cpp,
-// src/jot/app/panes_tabs.cpp).
+// src/editor/app/panes_tabs.cpp).
 #include "editor.h"
 
 #include <algorithm>

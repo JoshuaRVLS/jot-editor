@@ -3,7 +3,7 @@
 // selection. Headless: add_floating_terminal_for_test carries a live vterm with
 // no process behind it, the way the docked panel's tests do.
 #include "editor.h"
-#include "jot/model/panes.h" // pane_content_top, pane_viewport_h
+#include "editor/model/panes.h" // pane_content_top, pane_viewport_h
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
 #include <fstream>

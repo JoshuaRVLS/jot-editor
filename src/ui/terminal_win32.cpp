@@ -5,8 +5,8 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
+#include "editor/keybind_catalog.h"
 #include "terminal.h"
-#include "jot/keybind_catalog.h"
 #include "ui/xterm_palette.h"
 
 #include <windows.h>

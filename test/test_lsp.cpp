@@ -1,5 +1,5 @@
 #include "editor.h"
-#include "jot/model/panes.h" // pane_viewport_h
+#include "editor/model/panes.h" // pane_viewport_h
 #include "lsp/client.h"
 #include "lsp/internal.h"
 #include <catch2/catch_test_macros.hpp>

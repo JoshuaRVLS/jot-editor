@@ -1,5 +1,5 @@
 // The builtin tag list in a markup buffer: the rows
-// src/jot/integrations/lsp/common.h appends, and the two paths that decide when
+// src/editor/integrations/lsp/common.h appends, and the two paths that decide when
 // they are shown and what accepting one writes (completion.cpp).
 //
 // Every row is a whole opening element (`<div>|</div>`), so the list completes a

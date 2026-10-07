@@ -8,7 +8,7 @@
 // that offered it on screen, so the cascade shows the whole path the pointer
 // walked and deeper levels drop as soon as a level's selection moves.
 #include "editor.h"
-#include "jot/file_icons.h"
+#include "editor/file_icons.h"
 #include "lua/api.h"
 #include "syntax/index.h"
 #include "ui/components.h"

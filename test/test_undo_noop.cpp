@@ -1,5 +1,5 @@
 // Undo after a command that changed nothing (Editor::undo in
-// src/jot/app/undo.cpp).
+// src/editor/app/undo.cpp).
 //
 // Every command takes its snapshot before it runs, because save_state cannot
 // know the outcome: a command that ends up changing nothing - "Format Document"

@@ -2,8 +2,8 @@
 // cursor position, the local time and session clock, and the plugin-registered
 // status segments.
 #include "editor.h"
+#include "editor/file_icons.h"
 #include "features/status_clock.h"
-#include "jot/file_icons.h"
 #include "lsp/install.h"
 #include "lua/api.h"
 #include "ui/components.h"

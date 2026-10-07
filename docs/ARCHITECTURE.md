@@ -14,11 +14,11 @@ src/
   base/            primitives that depend on nothing above them: string and
                    path helpers, atomic file writes, shell quoting, link
                    detection, the event loop, the task queue, process jobs
-  jot/             the editor engine
+  editor/          the editor engine, the class the whole tree is built around
+    editor.h       the Editor itself, assembled from api/ (see below)
     model/         plain data types (buffer, panes, theme, panels, ...)
     state/         the editor's state, split by subsystem (see below)
-    editor/        collaborators: behaviour that owns its state
-    editor/api/    fragments of the Editor class body (see below)
+    api/           fragments of the Editor class body (see below)
     app/           editor behaviour: buffers, files, panes, undo, folding, ...
     event/         input drains and timers
     integrations/  LSP, debugger, terminal and tree-sitter wiring

@@ -14,7 +14,7 @@
 // corner); the painter and the hit-tests both add them back, so neither can
 // drift from the other.
 #include "editor.h"
-#include "jot/file_icons.h"
+#include "editor/file_icons.h"
 #include "render/pane_edges.h"
 #include "ui/components.h"
 #include "ui/text.h"

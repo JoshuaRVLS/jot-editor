@@ -2,8 +2,8 @@
 // sorted-vector invariants maintained by the decoration helpers. The Lua API
 // surface is exercised end-to-end by test/runtime_smoke.lua (real editor);
 // here the pure pieces run without one.
-#include "jot/app/decorations.h"
-#include "jot/types.h"
+#include "editor/app/decorations.h"
+#include "editor/types.h"
 
 #include <catch2/catch_test_macros.hpp>
 

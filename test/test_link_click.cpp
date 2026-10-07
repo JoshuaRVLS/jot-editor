@@ -6,8 +6,8 @@
 // PATH and read the URL from the file it records, then put nothing on PATH to
 // pin the no-opener report.
 #include "editor.h"
+#include "editor/model/panes.h" // pane_content_top
 #include "render/gutter.h"
-#include "jot/model/panes.h" // pane_content_top
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>

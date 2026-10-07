@@ -1,5 +1,5 @@
 #include "terminal.h"
-#include "jot/keybind_catalog.h"
+#include "editor/keybind_catalog.h"
 #include "ui/input_reader.h"
 #include "ui/xterm_palette.h"
 

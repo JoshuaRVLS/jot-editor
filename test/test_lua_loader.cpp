@@ -1,4 +1,4 @@
-// Headless tests of the bundled-runtime loader (src/jot/lua/lua_loader.cpp).
+// Headless tests of the bundled-runtime loader (src/editor/lua/lua_loader.cpp).
 // Pins the override contract:
 //   - the user config dir is user territory: unmarked files always win and
 //     are never rewritten (the original stale-copy bug),

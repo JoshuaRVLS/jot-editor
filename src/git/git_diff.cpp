@@ -8,7 +8,7 @@
 // native fallback stays byte-identical.
 
 #include "editor.h"
-#include "jot/file_icons.h"
+#include "editor/file_icons.h"
 #include "lua/api.h"
 #include "render/pane_edges.h"
 #include "ui/text.h"

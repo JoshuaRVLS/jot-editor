@@ -7,7 +7,7 @@
 // Folding itself is untouched: the context menu's Toggle Fold, the fold
 // commands and the keyboard paths all still call toggle_fold_at_line.
 #include "editor.h"
-#include "jot/model/panes.h" // pane_content_top
+#include "editor/model/panes.h" // pane_content_top
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

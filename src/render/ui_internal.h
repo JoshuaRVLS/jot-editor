@@ -3,8 +3,8 @@
 // drawer used by the palette rows.
 #pragma once
 
-#include "jot/model/buffer.h"
-#include "jot/model/theme.h"
+#include "editor/model/buffer.h"
+#include "editor/model/theme.h"
 #include "syntax/manager.h"
 #include "syntax/syntax_highlighter.h"
 #include "ui/components.h"

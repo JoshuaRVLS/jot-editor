@@ -1,6 +1,6 @@
 #include "editor.h"
+#include "editor/file_icons.h"
 #include "features/winbar.h"
-#include "jot/file_icons.h"
 #include "lua/api.h"
 #include "sidebar_guides.h"
 #include <algorithm>

@@ -9,7 +9,7 @@
 // Editor::update_pane_layout) against the rows actually painted, so a change
 // that only updates some of the call sites fails here instead of on screen.
 #include "editor.h"
-#include "jot/model/panes.h"
+#include "editor/model/panes.h"
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

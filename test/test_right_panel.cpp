@@ -4,7 +4,7 @@
 // The dock is the secondary sidebar: Ctrl+Alt+B toggles it (Ctrl+Shift+B is a
 // legacy alias), Ctrl+B the primary sidebar and Ctrl+J the bottom panel.
 #include "editor.h"
-#include "jot/keybind_catalog.h"
+#include "editor/keybind_catalog.h"
 #include "ui/text.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

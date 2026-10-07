@@ -12,8 +12,8 @@
 // inventing a tint out of the severity colour. Info and hint rows carry no band
 // at all.
 #include "editor.h"
-#include "jot/app/decorations.h"
-#include "jot/model/panes.h" // pane_content_top
+#include "editor/app/decorations.h"
+#include "editor/model/panes.h" // pane_content_top
 #include "render/gutter.h"
 #include "ui/ui.h"
 

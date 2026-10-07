@@ -1,0 +1,916 @@
+// Pane layout management: sizing, splitting, closing, and buffer placement.
+#include "editor.h"
+#include "editor/app/panes_internal.h"
+#include <algorithm>
+#include <cctype>
+#include <functional>
+#include <limits>
+
+using namespace pane_internal;
+int Editor::max_sidebar_width() const
+{
+  if (!ui)
+  {
+    return sidebar_width;
+  }
+  return std::max(min_sidebar_width(), ui->get_render_width() - 20);
+}
+
+int Editor::effective_sidebar_width() const
+{
+  if (ui && ui->get_render_width() < min_sidebar_width() + kMinPaneWidth)
+  {
+    return 0;
+  }
+  return std::clamp(sidebar_width, min_sidebar_width(), max_sidebar_width());
+}
+
+int Editor::effective_right_panel_width() const
+{
+  if (!ui || !show_right_panel)
+  {
+    return 0;
+  }
+  int max_w = max_right_panel_width();
+  if (max_w < min_right_panel_width())
+  {
+    return std::max(0, max_w);
+  }
+  return std::clamp(right_panel_width, min_right_panel_width(), max_w);
+}
+
+int Editor::max_right_panel_width() const
+{
+  if (!ui)
+  {
+    return std::max(min_right_panel_width(), right_panel_width);
+  }
+  int total_w = std::max(1, ui->get_render_width());
+  int left_w = show_sidebar ? effective_sidebar_width() : 0;
+  return std::max(0, total_w - left_w - kMinPaneWidth);
+}
+
+int Editor::zen_content_margin(int available_w) const
+{
+  if (!zen_mode)
+  {
+    return 0;
+  }
+  const int zen_w = std::clamp(config.get_int("zen_content_width", 100), 40, 240);
+  return std::max(0, (available_w - zen_w) / 2);
+}
+
+Editor::ContentColumn Editor::content_column() const
+{
+  // The bottom panel reserves its height from the pane area; 0 while the shell
+  // is zoomed (the zoomed panel paints over the full region).
+  ContentColumn col;
+  col.top = topbar_height();
+  col.bottom = grid_height() - status_height - integrated_terminal_reserved_h();
+  col.h = std::max(0, col.bottom - col.top);
+  return col;
+}
+
+Editor::ContentColumn Editor::side_column() const
+{
+  // The explorer and the right dock do not pay for the workspace strip: it is
+  // confined to the pane area between them, so their column starts on the row
+  // the strip would otherwise take.
+  const ContentColumn pane = content_column();
+  ContentColumn col;
+  col.top = side_column_top();
+  col.bottom = pane.bottom;
+  col.h = std::max(0, col.bottom - col.top);
+  return col;
+}
+
+jot_sidebar::Layout Editor::sidebar_sections_layout() const
+{
+  const ContentColumn col = side_column();
+  // The explorer's display rows: the pinned root row plus the cached tree.
+  const int tree_count = 1 + (int)sidebar_render_cache_.rows.size();
+  const int outline_count = (int)outline_panel.symbols.size();
+  const int timeline_count = (int)timeline_commits.size();
+  return jot_sidebar::compute(col.top,
+                              col.h,
+                              tree_count,
+                              outline_count,
+                              timeline_count,
+                              sidebar_explorer_open,
+                              sidebar_outline_open,
+                              sidebar_timeline_open,
+                              /*show_footer=*/true);
+}
+
+int Editor::sidebar_list_rows() const
+{
+  // The tree's scrolling rows: everything under the pinned root row, in a
+  // region whose bottom row is content (see pane_edges.h).
+  return std::max(0, sidebar_sections_layout().explorer.h - 1);
+}
+
+Editor::PaneArea Editor::compute_pane_area() const
+{
+  const int total_w = std::max(1, ui->get_render_width());
+  const ContentColumn col = content_column();
+  const int total_h = std::max(1, col.h);
+  int origin_x = show_sidebar ? effective_sidebar_width() : 0;
+  const int right_w = effective_right_panel_width();
+  int available_w = std::max(1, total_w - origin_x - right_w);
+  // Zen focus mode narrows the pane area to zen_content_width and centers it.
+  const int zen_margin = zen_content_margin(available_w);
+  origin_x += zen_margin;
+  available_w = std::max(1, available_w - zen_margin * 2);
+  return PaneArea{origin_x, col.top, available_w, total_h};
+}
+
+int Editor::create_pane(int x, int y, int w, int h, int buffer_id)
+{
+  SplitPane pane;
+  pane.x = x;
+  pane.y = y;
+  pane.w = w;
+  pane.h = h;
+  pane.buffer_id = buffer_id == -1 ? std::max(0, (int)buffers.size() - 1) : buffer_id;
+  pane.active = panes.empty();
+  if (pane.buffer_id >= 0)
+  {
+    pane.tab_buffer_ids.push_back(pane.buffer_id);
+  }
+  panes.push_back(pane);
+
+  if (panes.size() == 1)
+  {
+    pane_tree.clear();
+    PaneTreeNode leaf;
+    leaf.leaf = true;
+    leaf.pane_index = 0;
+    leaf.parent = -1;
+    pane_tree.push_back(leaf);
+    pane_root = 0;
+  }
+
+  return (int)panes.size() - 1;
+}
+
+void Editor::update_pane_layout()
+{
+  if (panes.empty())
+  {
+    pane_layout_mode = PANE_LAYOUT_SINGLE;
+    return;
+  }
+
+  if (pane_root < 0 || pane_root >= (int)pane_tree.size())
+  {
+    pane_tree.clear();
+    PaneTreeNode leaf;
+    leaf.leaf = true;
+    leaf.pane_index = 0;
+    leaf.parent = -1;
+    pane_tree.push_back(leaf);
+    pane_root = 0;
+  }
+
+  const PaneArea area = compute_pane_area();
+  const int total_h = area.h;
+  const int origin_x = area.x;
+  const int available_w = area.w;
+  const int origin_y = area.y;
+
+  // The chrome each pane spends above its text, resolved here because this is
+  // the one pass that owns every pane's geometry: the zoomed branch below sets
+  // the active pane's rows and parks the others, and both get the same header.
+  // The winbar is one row for a pane that shows it, and which panes those are
+  // is answered per pane by pane_header_height, so the height is published here
+  // (like tab_height) and read back through pane_content_top.
+  winbar_height = winbar_row_height();
+  refresh_pane_headers();
+
+  if (pane_zoom_active && panes.size() > 1 && current_pane >= 0 && current_pane < (int)panes.size())
+  {
+    // Zoomed: the active pane owns the whole pane region; every other pane
+    // is parked off-screen (w/h 1) and skipped by the renderer until the
+    // zoom is toggled off, at which point the ratios restore the layout.
+    for (size_t i = 0; i < panes.size(); i++)
+    {
+      if ((int)i == current_pane)
+      {
+        panes[i].x = origin_x;
+        panes[i].y = origin_y;
+        panes[i].w = available_w;
+        panes[i].h = total_h;
+      }
+      else
+      {
+        panes[i].x = origin_x + available_w;
+        panes[i].y = origin_y;
+        panes[i].w = 1;
+        panes[i].h = 1;
+      }
+    }
+    pane_layout_mode = PANE_LAYOUT_SINGLE;
+    return;
+  }
+
+  std::function<void(int, int, int, int, int)> layout_node =
+      [&](int node_index, int x, int y, int w, int h)
+  {
+    if (node_index < 0 || node_index >= (int)pane_tree.size())
+    {
+      return;
+    }
+
+    PaneTreeNode &node = pane_tree[node_index];
+    if (node.leaf)
+    {
+      if (node.pane_index < 0 || node.pane_index >= (int)panes.size())
+      {
+        return;
+      }
+      panes[node.pane_index].x = x;
+      panes[node.pane_index].y = y;
+      panes[node.pane_index].w = std::max(1, w);
+      panes[node.pane_index].h = std::max(1, h);
+      return;
+    }
+
+    node.ratio = std::clamp(node.ratio, 0.1f, 0.9f);
+
+    if (node.vertical)
+    {
+      int first_w = std::max(1, (int)(w * node.ratio));
+      if (w >= 2)
+      {
+        first_w = std::min(first_w, w - 1);
+      }
+      int second_w = std::max(1, w - first_w);
+      layout_node(node.first, x, y, first_w, h);
+      layout_node(node.second, x + first_w, y, second_w, h);
+    }
+    else
+    {
+      int first_h = std::max(1, (int)(h * node.ratio));
+      if (h >= 2)
+      {
+        first_h = std::min(first_h, h - 1);
+      }
+      int second_h = std::max(1, h - first_h);
+      layout_node(node.first, x, y, w, first_h);
+      layout_node(node.second, x, y + first_h, w, second_h);
+    }
+  };
+
+  layout_node(pane_root, origin_x, origin_y, available_w, total_h);
+
+  if (pane_root >= 0 && pane_root < (int)pane_tree.size() && !pane_tree[pane_root].leaf)
+  {
+    pane_layout_mode =
+        pane_tree[pane_root].vertical ? PANE_LAYOUT_VERTICAL : PANE_LAYOUT_HORIZONTAL;
+  }
+  else
+  {
+    pane_layout_mode = PANE_LAYOUT_SINGLE;
+  }
+
+  if (current_pane < 0 || current_pane >= (int)panes.size())
+  {
+    current_pane = 0;
+  }
+}
+
+void Editor::capture_pane_view(int pane_index)
+{
+  if (pane_index < 0 || pane_index >= (int)panes.size())
+  {
+    return;
+  }
+  SplitPane &pane = panes[(size_t)pane_index];
+  if (pane.buffer_id < 0 || pane.buffer_id >= (int)buffers.size())
+  {
+    return;
+  }
+  FileBuffer &buf = buffers[(size_t)pane.buffer_id];
+  pane.view_buffer_id = pane.buffer_id;
+  pane.view_cursor = buf.cursor;
+  pane.view_preferred_x = buf.preferred_x;
+  pane.view_selection = buf.selection;
+  pane.view_scroll_offset = buf.scroll_offset;
+  pane.view_scroll_x = buf.scroll_x;
+}
+
+void Editor::restore_pane_view(int pane_index)
+{
+  if (pane_index < 0 || pane_index >= (int)panes.size())
+  {
+    return;
+  }
+  SplitPane &pane = panes[(size_t)pane_index];
+  if (pane.buffer_id < 0 || pane.buffer_id >= (int)buffers.size())
+  {
+    return;
+  }
+  FileBuffer &buf = buffers[(size_t)pane.buffer_id];
+  if (pane.view_buffer_id != pane.buffer_id)
+  {
+    pane.view_buffer_id = pane.buffer_id;
+    pane.view_cursor = buf.cursor;
+    pane.view_preferred_x = buf.preferred_x;
+    pane.view_selection = buf.selection;
+    pane.view_scroll_offset = buf.scroll_offset;
+    pane.view_scroll_x = buf.scroll_x;
+    return;
+  }
+  buf.cursor = pane.view_cursor;
+  buf.preferred_x = pane.view_preferred_x;
+  buf.selection = pane.view_selection;
+  buf.scroll_offset = pane.view_scroll_offset;
+  buf.scroll_x = pane.view_scroll_x;
+  // The shared content may have been edited while this pane was inactive, so
+  // the remembered position must be re-validated against the current text.
+  clamp_cursor(pane.buffer_id);
+  const int line_count = (int)buf.line_count();
+  buf.scroll_offset = std::clamp(buf.scroll_offset, 0, std::max(0, line_count - 1));
+  buf.scroll_x = std::max(0, buf.scroll_x);
+}
+
+void Editor::activate_pane(int pane_index)
+{
+  if (panes.empty() || pane_index < 0 || pane_index >= (int)panes.size())
+  {
+    return;
+  }
+  if (pane_index == current_pane)
+  {
+    current_buffer = panes[(size_t)pane_index].buffer_id;
+    return;
+  }
+  capture_pane_view(current_pane);
+  panes[(size_t)current_pane].active = false;
+  current_pane = pane_index;
+  panes[(size_t)current_pane].active = true;
+  restore_pane_view(current_pane);
+  current_buffer = panes[(size_t)current_pane].buffer_id;
+  restart_blink();
+  needs_redraw = true;
+}
+
+void Editor::pane_show_buffer(int buffer_index)
+{
+  if (panes.empty() || buffer_index < 0 || buffer_index >= (int)buffers.size())
+  {
+    return;
+  }
+  capture_pane_view(current_pane);
+  SplitPane &pane = panes[(size_t)current_pane];
+  pane.buffer_id = buffer_index;
+  current_buffer = buffer_index;
+  restore_pane_view(current_pane);
+  needs_redraw = true;
+  // A file change is activity in its own right (jot/app/coding_time.cpp): the
+  // heartbeat for the file now in front of the user is what starts its clock, so
+  // it goes out now rather than waiting for the first keystroke in it.
+  note_editing_activity(false);
+}
+
+void Editor::split_pane_horizontal()
+{
+  split_pane_down();
+}
+
+void Editor::split_pane_vertical()
+{
+  split_pane_right();
+}
+
+void Editor::split_pane_left()
+{
+  split_pane_direction(-1, 0);
+}
+
+void Editor::split_pane_right()
+{
+  split_pane_direction(1, 0);
+}
+
+void Editor::split_pane_up()
+{
+  split_pane_direction(0, -1);
+}
+
+void Editor::split_pane_down()
+{
+  split_pane_direction(0, 1);
+}
+
+// Splits `target_pane` along dx/dy and shows `buffer_id` in the new group. The
+// keyboard path (split_pane_direction below) inherits the target's tab list, so
+// both groups keep the same history; a drag-and-drop split passes false, so the
+// new group holds only the tab that was dropped on its edge.
+int Editor::split_pane_at(
+    int target_pane, int dx, int dy, int buffer_id, bool inherit_tabs, bool announce)
+{
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+    update_pane_layout();
+  }
+
+  if (panes.empty())
+  {
+    create_pane(0, 0, ui->get_render_width(), ui->get_height() - status_height, current_buffer);
+  }
+
+  if (target_pane < 0 || target_pane >= (int)panes.size())
+  {
+    target_pane = current_pane;
+  }
+  if (current_pane < 0 || current_pane >= (int)panes.size())
+  {
+    current_pane = 0;
+  }
+
+  std::function<int(int, int)> find_leaf = [&](int node_index, int pane_index) -> int
+  {
+    if (node_index < 0 || node_index >= (int)pane_tree.size())
+    {
+      return -1;
+    }
+    const PaneTreeNode &node = pane_tree[node_index];
+    if (node.leaf)
+    {
+      return node.pane_index == pane_index ? node_index : -1;
+    }
+    int left = find_leaf(node.first, pane_index);
+    if (left >= 0)
+    {
+      return left;
+    }
+    return find_leaf(node.second, pane_index);
+  };
+
+  int leaf_node = find_leaf(pane_root, target_pane);
+  if (leaf_node < 0)
+  {
+    set_message("Pane split failed: invalid pane tree");
+    return -1;
+  }
+
+  const int old_pane = pane_tree[leaf_node].pane_index;
+  int new_buffer = buffer_id;
+  if (new_buffer < 0 || new_buffer >= (int)buffers.size())
+  {
+    FileBuffer fb;
+    fb.lines.push_back("");
+    fb.cursor = {0, 0};
+    fb.preferred_x = 0;
+    fb.selection = {{0, 0}, {0, 0}, false};
+    fb.scroll_offset = 0;
+    fb.scroll_x = 0;
+    fb.modified = false;
+    fb.is_preview = false;
+    fb.is_placeholder = true;
+    buffers.push_back(std::move(fb));
+    new_buffer = (int)buffers.size() - 1;
+  }
+
+  SplitPane new_pane{};
+  new_pane.x = 0;
+  new_pane.y = 0;
+  new_pane.w = 1;
+  new_pane.h = 1;
+  new_pane.buffer_id = new_buffer;
+  new_pane.active = false;
+  if (inherit_tabs)
+  {
+    new_pane.tab_buffer_ids = panes[old_pane].tab_buffer_ids;
+    if (std::find(new_pane.tab_buffer_ids.begin(), new_pane.tab_buffer_ids.end(), new_buffer)
+        == new_pane.tab_buffer_ids.end())
+    {
+      new_pane.tab_buffer_ids.push_back(new_buffer);
+    }
+    new_pane.tab_scroll_index = panes[old_pane].tab_scroll_index;
+  }
+  else
+  {
+    // A dropped tab arrives alone: the new group is the tab, not a copy of the
+    // group it was torn out of.
+    new_pane.tab_buffer_ids.push_back(new_buffer);
+  }
+  panes.push_back(new_pane);
+  int new_pane_index = (int)panes.size() - 1;
+
+  PaneTreeNode old_leaf;
+  old_leaf.leaf = true;
+  old_leaf.pane_index = old_pane;
+  old_leaf.parent = leaf_node;
+
+  PaneTreeNode new_leaf;
+  new_leaf.leaf = true;
+  new_leaf.pane_index = new_pane_index;
+  new_leaf.parent = leaf_node;
+
+  int old_leaf_id = (int)pane_tree.size();
+  pane_tree.push_back(old_leaf);
+  int new_leaf_id = (int)pane_tree.size();
+  pane_tree.push_back(new_leaf);
+
+  PaneTreeNode &node = pane_tree[leaf_node];
+  node.leaf = false;
+  node.pane_index = -1;
+  node.vertical = (dx != 0);
+  node.ratio = 0.5f;
+
+  bool new_first = (dx < 0 || dy < 0);
+  if (new_first)
+  {
+    node.first = new_leaf_id;
+    node.second = old_leaf_id;
+  }
+  else
+  {
+    node.first = old_leaf_id;
+    node.second = new_leaf_id;
+  }
+
+  // The new pane starts on the same view as the pane it was cut from when that
+  // pane is the focused one; from here on both panes track their own
+  // cursor/scroll/selection. A split of an unfocused pane (the drag-and-drop
+  // path) leaves the live view alone and lets restore_pane_view seed the new
+  // pane from the buffer's own position.
+  if (target_pane == current_pane)
+  {
+    capture_pane_view(current_pane);
+  }
+  for (auto &pane : panes)
+  {
+    pane.active = false;
+  }
+  current_pane = new_pane_index;
+  panes[current_pane].active = true;
+  restore_pane_view(current_pane);
+  current_buffer = panes[current_pane].buffer_id;
+
+  pane_layout_mode = node.vertical ? PANE_LAYOUT_VERTICAL : PANE_LAYOUT_HORIZONTAL;
+  update_pane_layout();
+
+  if (announce)
+  {
+    if (dx < 0)
+    {
+      message = "Split pane left";
+    }
+    else if (dx > 0)
+    {
+      message = "Split pane right";
+    }
+    else if (dy < 0)
+    {
+      message = "Split pane up";
+    }
+    else
+    {
+      message = "Split pane down";
+    }
+  }
+  needs_redraw = true;
+  return new_pane_index;
+}
+
+// The keyboard splits: the focused pane splits around its own buffer, and the
+// new group keeps the source's tab history.
+void Editor::split_pane_direction(int dx, int dy)
+{
+  if (panes.empty())
+  {
+    create_pane(0, 0, ui->get_render_width(), ui->get_height() - status_height, current_buffer);
+  }
+  if (current_pane < 0 || current_pane >= (int)panes.size())
+  {
+    current_pane = 0;
+  }
+  const int source = current_pane;
+  const int buffer_id = panes[(size_t)source].buffer_id;
+  (void)split_pane_at(source, dx, dy, buffer_id, true, true);
+}
+
+void Editor::close_pane()
+{
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+    update_pane_layout();
+  }
+
+  if (panes.size() <= 1)
+  {
+    message = "Can't close the last pane";
+    return;
+  }
+
+  if (current_pane < 0 || current_pane >= (int)panes.size())
+  {
+    current_pane = 0;
+  }
+
+  std::function<int(int, int)> find_leaf = [&](int node_index, int pane_index) -> int
+  {
+    if (node_index < 0 || node_index >= (int)pane_tree.size())
+    {
+      return -1;
+    }
+    const PaneTreeNode &node = pane_tree[node_index];
+    if (node.leaf)
+    {
+      return node.pane_index == pane_index ? node_index : -1;
+    }
+    int left = find_leaf(node.first, pane_index);
+    if (left >= 0)
+    {
+      return left;
+    }
+    return find_leaf(node.second, pane_index);
+  };
+
+  std::function<int(int)> first_pane_in_node = [&](int node_index) -> int
+  {
+    if (node_index < 0 || node_index >= (int)pane_tree.size())
+    {
+      return -1;
+    }
+    const PaneTreeNode &node = pane_tree[node_index];
+    if (node.leaf)
+    {
+      return (node.pane_index >= 0 && node.pane_index < (int)panes.size()) ? node.pane_index : -1;
+    }
+    int first = first_pane_in_node(node.first);
+    if (first >= 0)
+    {
+      return first;
+    }
+    return first_pane_in_node(node.second);
+  };
+
+  int leaf = find_leaf(pane_root, current_pane);
+  if (leaf < 0)
+  {
+    message = "Pane close failed: invalid pane tree";
+    return;
+  }
+
+  int parent = pane_tree[leaf].parent;
+  if (parent < 0 || parent >= (int)pane_tree.size())
+  {
+    message = "Pane close failed: invalid parent";
+    return;
+  }
+
+  int sibling =
+      (pane_tree[parent].first == leaf) ? pane_tree[parent].second : pane_tree[parent].first;
+  int preferred_next = first_pane_in_node(sibling);
+  int grand = pane_tree[parent].parent;
+
+  if (grand >= 0 && grand < (int)pane_tree.size())
+  {
+    if (pane_tree[grand].first == parent)
+    {
+      pane_tree[grand].first = sibling;
+    }
+    else
+    {
+      pane_tree[grand].second = sibling;
+    }
+    if (sibling >= 0 && sibling < (int)pane_tree.size())
+    {
+      pane_tree[sibling].parent = grand;
+    }
+  }
+  else
+  {
+    pane_root = sibling;
+    if (pane_root >= 0 && pane_root < (int)pane_tree.size())
+    {
+      pane_tree[pane_root].parent = -1;
+    }
+  }
+
+  int removed = current_pane;
+  panes.erase(panes.begin() + removed);
+
+  for (auto &node : pane_tree)
+  {
+    if (node.leaf)
+    {
+      if (node.pane_index == removed)
+      {
+        node.pane_index = -1;
+      }
+      else if (node.pane_index > removed)
+      {
+        node.pane_index--;
+      }
+    }
+  }
+
+  int next = preferred_next;
+  if (next > removed)
+  {
+    next--;
+  }
+  if (next < 0 || next >= (int)panes.size())
+  {
+    next = first_pane_in_node(pane_root);
+  }
+  if (next < 0 && !panes.empty())
+  {
+    next = 0;
+  }
+
+  current_pane = std::clamp(next, 0, std::max(0, (int)panes.size() - 1));
+  restore_pane_view(current_pane);
+  for (auto &pane : panes)
+  {
+    pane.active = false;
+  }
+  panes[current_pane].active = true;
+  current_buffer = panes[current_pane].buffer_id;
+
+  update_pane_layout();
+  message = "Pane closed";
+  needs_redraw = true;
+}
+
+void Editor::equalize_panes()
+{
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+  }
+  if (panes.size() < 2)
+  {
+    message = "No panes to equalize";
+    needs_redraw = true;
+    return;
+  }
+  for (auto &node : pane_tree)
+  {
+    if (!node.leaf)
+    {
+      node.ratio = 0.5f;
+    }
+  }
+  update_pane_layout();
+  message = "Panes equalized";
+  needs_redraw = true;
+}
+
+void Editor::toggle_pane_zoom()
+{
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+    message = "Pane zoomed out";
+  }
+  else
+  {
+    if (panes.size() < 2)
+    {
+      message = "No other pane to zoom over";
+      needs_redraw = true;
+      return;
+    }
+    pane_zoom_active = true;
+    pane_zoom_pane = current_pane;
+    message = "Pane zoomed";
+  }
+  update_pane_layout();
+  needs_redraw = true;
+}
+
+void Editor::swap_panes()
+{
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+    update_pane_layout();
+  }
+  if (panes.size() < 2)
+  {
+    message = "No other pane to swap with";
+    needs_redraw = true;
+    return;
+  }
+
+  std::function<int(int, int)> find_leaf = [&](int node_index, int pane_index) -> int
+  {
+    if (node_index < 0 || node_index >= (int)pane_tree.size())
+    {
+      return -1;
+    }
+    const PaneTreeNode &node = pane_tree[node_index];
+    if (node.leaf)
+    {
+      return node.pane_index == pane_index ? node_index : -1;
+    }
+    int first = find_leaf(node.first, pane_index);
+    return first >= 0 ? first : find_leaf(node.second, pane_index);
+  };
+
+  const int target = (current_pane + 1) % (int)panes.size();
+  int leaf_a = find_leaf(pane_root, current_pane);
+  int leaf_b = find_leaf(pane_root, target);
+  if (leaf_a < 0 || leaf_b < 0)
+  {
+    message = "Pane swap failed: invalid pane tree";
+    needs_redraw = true;
+    return;
+  }
+
+  std::swap(pane_tree[(size_t)leaf_a].pane_index, pane_tree[(size_t)leaf_b].pane_index);
+
+  // Focus stays on the window position, which now shows the swapped content;
+  // the swap hands focus to the pane that arrived at this location.
+  const int now_at_focused_location = pane_tree[(size_t)leaf_a].pane_index;
+  activate_pane(std::clamp(now_at_focused_location, 0, (int)panes.size() - 1));
+  update_pane_layout();
+  message = "Panes swapped";
+  needs_redraw = true;
+}
+
+int Editor::pane_split_at_position(int x, int y) const
+{
+  if (pane_root < 0 || pane_root >= (int)pane_tree.size())
+  {
+    return -1;
+  }
+
+  int best = -1;
+  int best_score = std::numeric_limits<int>::max();
+
+  std::function<void(int, int, int, int, int)> visit =
+      [&](int node_index, int nx, int ny, int nw, int nh)
+  {
+    if (node_index < 0 || node_index >= (int)pane_tree.size() || nw <= 1 || nh <= 1)
+    {
+      return;
+    }
+    const PaneTreeNode &node = pane_tree[node_index];
+    if (node.leaf)
+    {
+      return;
+    }
+
+    float ratio = std::clamp(node.ratio, 0.1f, 0.9f);
+    if (node.vertical)
+    {
+      int first_w = std::max(1, (int)(nw * ratio));
+      if (nw >= 2)
+      {
+        first_w = std::min(first_w, nw - 1);
+      }
+      int border_x = nx + first_w;
+      if ((x == border_x || x == border_x - 1) && y >= ny && y < ny + nh)
+      {
+        int score = nh;
+        if (score < best_score)
+        {
+          best_score = score;
+          best = node_index;
+        }
+      }
+      int second_w = std::max(1, nw - first_w);
+      visit(node.first, nx, ny, first_w, nh);
+      visit(node.second, nx + first_w, ny, second_w, nh);
+    }
+    else
+    {
+      int first_h = std::max(1, (int)(nh * ratio));
+      if (nh >= 2)
+      {
+        first_h = std::min(first_h, nh - 1);
+      }
+      int border_y = ny + first_h;
+      if ((y == border_y || y == border_y - 1) && x >= nx && x < nx + nw)
+      {
+        int score = nw;
+        if (score < best_score)
+        {
+          best_score = score;
+          best = node_index;
+        }
+      }
+      int second_h = std::max(1, nh - first_h);
+      visit(node.first, nx, ny, nw, first_h);
+      visit(node.second, nx, ny + first_h, nw, second_h);
+    }
+  };
+
+  const PaneArea area = compute_pane_area();
+  visit(pane_root, area.x, area.y, area.w, area.h);
+  return best;
+}

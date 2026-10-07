@@ -7,7 +7,7 @@
 // exactly the URL the click would open. The launch is real, so these cases put
 // a stub `xdg-open` first on PATH and read the URL from the file it records.
 #include "editor.h"
-#include "jot/model/panels.h" // TerminalBox
+#include "editor/model/panels.h" // TerminalBox
 #include "terminal/integrated.h"
 
 #include <catch2/catch_test_macros.hpp>

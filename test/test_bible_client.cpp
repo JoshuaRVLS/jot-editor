@@ -1,4 +1,4 @@
-// The editor side of the Bible reader (`:bible`, src/jot/app/bible_client.cpp).
+// The editor side of the Bible reader (`:bible`, src/editor/app/bible_client.cpp).
 //
 // There is no server here: every case pre-seeds the on-disk cache for the URL
 // the command will ask for, so a cache hit drives the whole editor path --

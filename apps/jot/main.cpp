@@ -1,5 +1,5 @@
-#include "jot/app/relaunch.h"
-#include "jot/editor.h"
+#include "editor/app/relaunch.h"
+#include "editor/editor.h"
 
 #include <cstdio>
 #include <cstdlib>

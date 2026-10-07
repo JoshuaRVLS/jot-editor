@@ -9,8 +9,8 @@
 // tint is a band only: the token keeps the colour its syntax gave it, which is
 // why the theme's fg slot is -1 unless a theme asks otherwise.
 #include "editor.h"
+#include "editor/model/panes.h" // pane_content_top
 #include "render/gutter.h"
-#include "jot/model/panes.h" // pane_content_top
 #include "ui/ui.h"
 
 #include <catch2/catch_test_macros.hpp>

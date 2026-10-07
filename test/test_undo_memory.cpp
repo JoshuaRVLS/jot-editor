@@ -1,4 +1,4 @@
-// Undo history memory (src/jot/app/undo.cpp).
+// Undo history memory (src/editor/app/undo.cpp).
 //
 // A snapshot used to hold a copy of every line of the buffer and the history
 // keeps 500 of them, so one keystroke in a 2000-line file put ~190 KB on the

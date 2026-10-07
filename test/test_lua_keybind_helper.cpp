@@ -1,4 +1,4 @@
-#include "jot/keybind_catalog.h"
+#include "editor/keybind_catalog.h"
 #include "lua/api.h"
 #include <catch2/catch_test_macros.hpp>
 

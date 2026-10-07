@@ -1,0 +1,1070 @@
+#include "base/string_util.h"
+#include "editor.h"
+#include "lua/api.h"
+#include "syntax/index.h"
+#include "ui/gui/gui.h"
+#include "ui/text.h"
+#include "workspace/search.h"
+
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <map>
+#include <sstream>
+#include <utility>
+
+namespace fs = std::filesystem;
+
+namespace
+{
+  std::string trim_preview(std::string s)
+  {
+    for (char &c : s)
+    {
+      if (c == '\t' || c == '\r' || c == '\n')
+      {
+        c = ' ';
+      }
+    }
+    size_t start = s.find_first_not_of(' ');
+    if (start == std::string::npos)
+    {
+      return "";
+    }
+    s.erase(0, start);
+    if (s.size() > 220)
+    {
+      s = s.substr(0, 217) + "...";
+    }
+    return s;
+  }
+
+  bool same_path(const std::string &a, const std::string &b)
+  {
+    if (a == b)
+    {
+      return true;
+    }
+    if (a.empty() || b.empty())
+    {
+      return false;
+    }
+    std::error_code ec;
+    return fs::exists(a, ec) && fs::exists(b, ec) && fs::equivalent(a, b, ec) && !ec;
+  }
+
+  std::string diagnostic_label(int severity)
+  {
+    switch (severity)
+    {
+    case 1:
+      return "Error";
+    case 2:
+      return "Warning";
+    case 3:
+      return "Info";
+    case 4:
+      return "Hint";
+    default:
+      return "Diagnostic";
+    }
+  }
+
+  // Which finding a jump from the caret lands on: the next one in the same
+  // file, else the first one in a file that sorts after this one -- or, going
+  // back, the last one in a file that sorts before it -- wrapping around the
+  // list when there is none in that direction. Shared by `:diagnext` (the
+  // buffer's diagnostics) and the C++ definition checks (the workspace's), so
+  // both walk a list the same way.
+  //
+  // A template because `Editor::QuickPickItem` is private: the callers are
+  // members, so they can hand the type in without this helper naming it.
+  template <typename Item>
+  int finding_for_jump(const std::vector<Item> &items,
+                       const std::string &file,
+                       const Cursor &cursor,
+                       int direction)
+  {
+    int selected = -1;
+    if (direction >= 0)
+    {
+      for (int i = 0; i < (int)items.size(); i++)
+      {
+        const Item &item = items[(size_t)i];
+        if (same_path(item.filepath, file))
+        {
+          if (item.line > cursor.y || (item.line == cursor.y && item.col > cursor.x))
+          {
+            selected = i;
+            break;
+          }
+        }
+        else if (selected < 0 && item.filepath > file)
+        {
+          selected = i;
+        }
+      }
+      return selected < 0 ? 0 : selected;
+    }
+    for (int i = (int)items.size() - 1; i >= 0; i--)
+    {
+      const Item &item = items[(size_t)i];
+      if (same_path(item.filepath, file))
+      {
+        if (item.line < cursor.y || (item.line == cursor.y && item.col < cursor.x))
+        {
+          selected = i;
+          break;
+        }
+      }
+      else if (selected < 0 && item.filepath < file)
+      {
+        selected = i;
+      }
+    }
+    return selected < 0 ? (int)items.size() - 1 : selected;
+  }
+
+  int diagnostic_rank(int severity)
+  {
+    switch (severity)
+    {
+    case 1:
+      return 0;
+    case 2:
+      return 1;
+    case 3:
+      return 2;
+    case 4:
+      return 3;
+    default:
+      return 4;
+    }
+  }
+} // namespace
+
+int Editor::quick_pick_match_score(const std::string &query, const QuickPickItem &item) const
+{
+  if (query.empty())
+  {
+    return 1;
+  }
+  const std::string needle = string_util::lower_copy(query);
+  const std::string hay =
+      string_util::lower_copy(item.label + " " + item.detail + " " + item.preview);
+  size_t exact = hay.find(needle);
+  if (exact != std::string::npos)
+  {
+    return 10000 - (int)exact;
+  }
+
+  size_t pos = 0;
+  int score = 2000;
+  for (char qc : needle)
+  {
+    bool found = false;
+    for (; pos < hay.size(); pos++)
+    {
+      if (hay[pos] == qc)
+      {
+        score -= (int)pos;
+        pos++;
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+    {
+      return 0;
+    }
+  }
+  return std::max(1, score);
+}
+
+void Editor::open_quick_pick(QuickPickKind kind,
+                             const std::string &title,
+                             std::vector<QuickPickItem> items,
+                             const std::string &query)
+{
+  quick_pick_kind = kind;
+  quick_pick_title = title;
+  quick_pick_query = query;
+  quick_pick_all_items = std::move(items);
+  quick_pick_selected = 0;
+  show_quick_pick = true;
+  refresh_quick_pick();
+  needs_redraw = true;
+}
+
+void Editor::close_quick_pick()
+{
+  show_quick_pick = false;
+  quick_pick_kind = QUICK_PICK_NONE;
+  quick_pick_title.clear();
+  quick_pick_query.clear();
+  quick_pick_all_items.clear();
+  quick_pick_items.clear();
+  quick_pick_selected = 0;
+  plugin_quick_pick_select_callback.clear();
+  needs_redraw = true;
+}
+
+void Editor::refresh_quick_pick()
+{
+  std::vector<std::pair<int, QuickPickItem>> ranked;
+  ranked.reserve(quick_pick_all_items.size());
+  for (const auto &item : quick_pick_all_items)
+  {
+    int score = quick_pick_match_score(quick_pick_query, item);
+    if (quick_pick_query.empty() || score > 0)
+    {
+      ranked.push_back({score, item});
+    }
+  }
+  std::stable_sort(ranked.begin(),
+                   ranked.end(),
+                   [](const auto &a, const auto &b)
+                   {
+                     if (a.first != b.first)
+                     {
+                       return a.first > b.first;
+                     }
+                     if (a.second.filepath != b.second.filepath)
+                     {
+                       return a.second.filepath < b.second.filepath;
+                     }
+                     if (a.second.line != b.second.line)
+                     {
+                       return a.second.line < b.second.line;
+                     }
+                     return a.second.col < b.second.col;
+                   });
+
+  quick_pick_items.clear();
+  const int max_items = quick_pick_kind == QUICK_PICK_PROJECT_SEARCH ? 1000 : 500;
+  for (int i = 0; i < (int)ranked.size() && i < max_items; i++)
+  {
+    quick_pick_items.push_back(std::move(ranked[(size_t)i].second));
+  }
+  quick_pick_selected =
+      std::clamp(quick_pick_selected, 0, std::max(0, (int)quick_pick_items.size() - 1));
+}
+
+void Editor::accept_quick_pick()
+{
+  if (quick_pick_items.empty())
+  {
+    return;
+  }
+  QuickPickItem item = quick_pick_items[(size_t)std::clamp(
+      quick_pick_selected, 0, (int)quick_pick_items.size() - 1)];
+  if (quick_pick_kind == QUICK_PICK_PLUGIN)
+  {
+    std::string callback = plugin_quick_pick_select_callback;
+    // A row may carry its payload in `value` (a location the Lua side has to
+    // resolve); a plain string row is its own value.
+    std::string value = item.value.empty() ? item.label : item.value;
+    close_quick_pick();
+    if (lua_api && !callback.empty())
+    {
+      lua_api->run_plugin_callback(callback, value);
+    }
+    needs_redraw = true;
+    return;
+  }
+  if (quick_pick_kind == QUICK_PICK_FONT)
+  {
+    const std::string chosen = item.value;
+    close_quick_pick();
+    apply_gui_font_family(chosen);
+    needs_redraw = true;
+    return;
+  }
+  if (quick_pick_kind == QUICK_PICK_CODE_ACTIONS)
+  {
+    close_quick_pick();
+    apply_selected_lsp_code_action();
+    needs_redraw = true;
+    return;
+  }
+  if (item.filepath.empty())
+  {
+    return;
+  }
+
+  close_quick_pick();
+
+  // Land the way every other jump does: arm the location, then open the file.
+  // Placing the cursor inline here only worked when the buffer already existed
+  // -- a file the worker thread still has to read comes back later, and by then
+  // the picker's target had been forgotten, so the file opened at line 1 (or
+  // wherever the previous buffer's cursor was). finish_open_file applies the
+  // armed jump for exactly that case.
+  JumpLocation loc;
+  loc.filepath = item.filepath;
+  loc.cursor = {item.col, item.line};
+  const bool landed = jump_to(loc);
+  set_message(get_filename(item.filepath) + ":" + std::to_string(std::max(0, item.line) + 1));
+  if (landed)
+  {
+    // A jump like any other: Ctrl+O comes back here. Only when it landed -- an
+    // armed jump that the file open will apply later leaves the cursor where it
+    // is, and recording that would file the place we never left.
+    record_jump();
+  }
+  needs_redraw = true;
+}
+
+bool Editor::handle_quick_pick_input(int ch)
+{
+  if (!show_quick_pick)
+  {
+    return false;
+  }
+
+  if (ch == 27)
+  {
+    close_quick_pick();
+    return true;
+  }
+  if (ch == '\n' || ch == 13)
+  {
+    if (quick_pick_kind == QUICK_PICK_PROJECT_SEARCH && quick_pick_items.empty()
+        && !quick_pick_query.empty())
+    {
+      show_project_search(quick_pick_query);
+      return true;
+    }
+    accept_quick_pick();
+    return true;
+  }
+  if (ch == 1008)
+  {
+    quick_pick_selected = std::max(0, quick_pick_selected - 1);
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 1009)
+  {
+    quick_pick_selected =
+        std::min(std::max(0, (int)quick_pick_items.size() - 1), quick_pick_selected + 1);
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 1015)
+  {
+    quick_pick_selected = std::max(0, quick_pick_selected - 8);
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 1016)
+  {
+    quick_pick_selected =
+        std::min(std::max(0, (int)quick_pick_items.size() - 1), quick_pick_selected + 8);
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 1012)
+  {
+    quick_pick_selected = 0;
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 1013)
+  {
+    quick_pick_selected = std::max(0, (int)quick_pick_items.size() - 1);
+    needs_redraw = true;
+    return true;
+  }
+  if (ch == 127 || ch == 8)
+  {
+    if (!quick_pick_query.empty())
+    {
+      quick_pick_query.pop_back();
+      quick_pick_selected = 0;
+      if (quick_pick_kind == QUICK_PICK_PROJECT_SEARCH)
+      {
+        show_project_search(quick_pick_query);
+      }
+      else
+      {
+        refresh_quick_pick();
+        needs_redraw = true;
+      }
+    }
+    return true;
+  }
+  if (ch >= 32 && ch < 1000)
+  {
+    quick_pick_query.push_back((char)ch);
+    quick_pick_selected = 0;
+    if (quick_pick_kind == QUICK_PICK_PROJECT_SEARCH)
+    {
+      show_project_search(quick_pick_query);
+    }
+    else
+    {
+      refresh_quick_pick();
+      needs_redraw = true;
+    }
+    return true;
+  }
+  return true;
+}
+
+bool Editor::handle_quick_pick_mouse(
+    int x, int y, bool is_click, bool is_scroll_up, bool is_scroll_down)
+{
+  if (!show_quick_pick || !ui)
+  {
+    return false;
+  }
+  // Mirrors render_quick_pick(): centered modal panel, list below the
+  // title / input / divider rows.
+  const int screen_w = ui->get_render_width();
+  const int screen_h = ui->get_height();
+  int w = std::min(std::max(56, screen_w - 10), 112);
+  int h = std::min(std::max(12, screen_h - 8), 26);
+  if (screen_w < 62)
+  {
+    w = std::max(22, screen_w - 2);
+  }
+  if (screen_h < 16)
+  {
+    h = std::max(8, screen_h - 2);
+  }
+  const int x0 = std::max(0, (screen_w - w) / 2);
+  const int y0 = std::max(1, (screen_h - h) / 3);
+  if (x < x0 || x >= x0 + w || y < y0 || y >= y0 + h)
+  {
+    return false;
+  }
+
+  if (is_scroll_up || is_scroll_down)
+  {
+    if (!quick_pick_items.empty())
+    {
+      const int delta = is_scroll_up ? -3 : 3;
+      const int sel = std::clamp(quick_pick_selected + delta, 0, (int)quick_pick_items.size() - 1);
+      if (sel != quick_pick_selected)
+      {
+        quick_pick_selected = sel;
+        needs_redraw = true;
+      }
+    }
+    return true;
+  }
+
+  const int list_y = y0 + 3;
+  const int list_h = std::max(0, h - 5);
+  const int row = y - list_y;
+  if (row < 0 || row >= list_h)
+  {
+    return true; // title / input rows: consume, no action
+  }
+  const int idx = quick_pick_scroll + row;
+  if (idx < 0 || idx >= (int)quick_pick_items.size())
+  {
+    return true;
+  }
+
+  if (!is_click)
+  {
+    // Hover selects; the follow-window keeps the visible list in place.
+    if (quick_pick_selected != idx)
+    {
+      quick_pick_selected = idx;
+      needs_redraw = true;
+    }
+    return true;
+  }
+
+  // Click accepts the item under the pointer (same path as Enter).
+  quick_pick_selected = idx;
+  needs_redraw = true;
+  return handle_quick_pick_input('\n');
+}
+
+void Editor::show_project_search(const std::string &query)
+{
+  search.clear_scope();
+  std::vector<QuickPickItem> items;
+  if (!query.empty())
+  {
+    const std::string root = root_dir.empty() ? "." : root_dir;
+    for (const auto &result : WorkspaceSearch::search(root, query))
+    {
+      QuickPickItem item;
+      item.filepath = result.path;
+      item.line = result.line;
+      item.col = result.column;
+      item.label = result.relative_path + ":" + std::to_string(result.line + 1) + ":"
+                   + std::to_string(result.column + 1);
+      item.detail = result.line_text;
+      item.preview = result.line_text;
+      items.push_back(std::move(item));
+    }
+  }
+  open_quick_pick(QUICK_PICK_PROJECT_SEARCH, "Project Search", std::move(items), query);
+  if (query.empty())
+  {
+    set_message("Type to search workspace");
+  }
+  else
+  {
+    set_message("Project search: " + std::to_string(quick_pick_all_items.size()) + " result(s)");
+  }
+}
+
+void Editor::show_diagnostics_picker()
+{
+  auto items = diagnostic_quick_pick_items();
+  open_quick_pick(QUICK_PICK_DIAGNOSTICS, "Diagnostics", std::move(items));
+  if (quick_pick_all_items.empty())
+  {
+    set_message("No diagnostics");
+  }
+}
+
+bool Editor::goto_next_diagnostic(int direction)
+{
+  auto items = diagnostic_quick_pick_items();
+  if (items.empty())
+  {
+    set_message("No diagnostics");
+    return false;
+  }
+
+  auto &buf = get_buffer();
+  const int selected = finding_for_jump(items, buf.filepath, buf.cursor, direction);
+
+  open_quick_pick(QUICK_PICK_DIAGNOSTICS, "Diagnostics", std::move(items));
+  quick_pick_selected = std::clamp(selected, 0, std::max(0, (int)quick_pick_items.size() - 1));
+  accept_quick_pick();
+  return true;
+}
+
+std::vector<Editor::QuickPickItem> Editor::cpp_definition_quick_pick_items() const
+{
+  // The definition checks' own rows, ordered the way a jump walks the
+  // workspace: by file, then line. `workspace_diagnostic_quick_pick_items`
+  // merges the servers in and sorts by severity, which is what the list wants
+  // and not what "next finding" means.
+  std::vector<QuickPickItem> items;
+  for (const auto &file_entry : cpp_def_diags)
+  {
+    for (const Diagnostic &diag : file_entry.second)
+    {
+      QuickPickItem item;
+      item.filepath = file_entry.first;
+      item.line = std::max(0, diag.line);
+      item.col = std::max(0, diag.col);
+      item.severity = diag.severity;
+      item.label = diagnostic_label(diag.severity) + ": " + diag.message;
+      item.detail = fs::path(file_entry.first).filename().string() + ":"
+                    + std::to_string(item.line + 1) + ":" + std::to_string(item.col + 1);
+      items.push_back(std::move(item));
+    }
+  }
+  std::stable_sort(items.begin(),
+                   items.end(),
+                   [](const QuickPickItem &a, const QuickPickItem &b)
+                   {
+                     if (a.filepath != b.filepath)
+                     {
+                       return a.filepath < b.filepath;
+                     }
+                     if (a.line != b.line)
+                     {
+                       return a.line < b.line;
+                     }
+                     return a.col < b.col;
+                   });
+  return items;
+}
+
+bool Editor::goto_next_cpp_definition_issue(int direction)
+{
+  std::vector<QuickPickItem> items = cpp_definition_quick_pick_items();
+  if (items.empty())
+  {
+    set_message("No C++ definition findings", true);
+    return false;
+  }
+
+  FileBuffer &buf = get_buffer();
+  const int selected = finding_for_jump(items, buf.filepath, buf.cursor, direction);
+  const QuickPickItem landed = items[(size_t)selected];
+
+  // Point the Problems list at the row that was jumped to, so opening the panel
+  // lands on what the editor is showing. The panel's list carries the servers'
+  // rows too and sorts by severity, so the row is found by what it points at
+  // rather than by index.
+  const std::vector<QuickPickItem> all = workspace_diagnostic_quick_pick_items();
+  for (int i = 0; i < (int)all.size(); i++)
+  {
+    if (same_path(all[(size_t)i].filepath, landed.filepath) && all[(size_t)i].line == landed.line
+        && all[(size_t)i].col == landed.col)
+    {
+      problems_selected = i;
+      break;
+    }
+  }
+
+  // Reuse the picker's accept path so opening the file and placing the cursor
+  // stays in one place; the picker is opened only to be accepted immediately.
+  open_quick_pick(QUICK_PICK_WORKSPACE_DIAGNOSTICS, "Workspace Diagnostics", std::move(items));
+  quick_pick_selected = selected;
+  accept_quick_pick();
+  focus_state = FOCUS_EDITOR;
+  needs_redraw = true;
+  return true;
+}
+
+std::string Editor::problems_summary_header(int max_width) const
+{
+  const std::vector<QuickPickItem> items = workspace_diagnostic_quick_pick_items();
+  if (items.empty() || max_width <= 0)
+  {
+    return std::string();
+  }
+
+  int errors = 0;
+  int warnings = 0;
+  int hints = 0;
+  std::map<std::string, int> per_file;
+  for (const QuickPickItem &item : items)
+  {
+    if (item.severity == 1)
+    {
+      errors++;
+    }
+    else if (item.severity == 2)
+    {
+      warnings++;
+    }
+    else
+    {
+      hints++;
+    }
+    per_file[fs::path(item.filepath).filename().string()]++;
+  }
+
+  auto plural = [](int count, const char *one, const char *many)
+  { return std::to_string(count) + " " + (count == 1 ? one : many); };
+
+  std::string severities;
+  auto add_severity = [&](int count, const char *one, const char *many)
+  {
+    if (count <= 0)
+    {
+      return;
+    }
+    if (!severities.empty())
+    {
+      severities += ", ";
+    }
+    severities += plural(count, one, many);
+  };
+  add_severity(errors, "error", "errors");
+  add_severity(warnings, "warning", "warnings");
+  add_severity(hints, "hint", "hints");
+
+  // Most-affected file first, then by name: the file with the most rows is the
+  // one worth opening, and the name breaks ties so the header does not shuffle
+  // between scans.
+  std::vector<std::pair<std::string, int>> files(per_file.begin(), per_file.end());
+  std::stable_sort(files.begin(),
+                   files.end(),
+                   [](const std::pair<std::string, int> &a, const std::pair<std::string, int> &b)
+                   {
+                     if (a.second != b.second)
+                     {
+                       return a.second > b.second;
+                     }
+                     return a.first < b.first;
+                   });
+  std::string tally;
+  for (const auto &entry : files)
+  {
+    if (!tally.empty())
+    {
+      tally += " \u00b7 ";
+    }
+    tally += entry.first + " " + std::to_string(entry.second);
+  }
+
+  std::string header = "Problems \u00b7 " + plural((int)items.size(), "finding in ", "findings in ")
+                       + plural((int)files.size(), "file", "files");
+  if (!severities.empty())
+  {
+    header += " \u00b7 " + severities;
+  }
+  if (!tally.empty())
+  {
+    header += " \u00b7 " + tally;
+  }
+  return ui_truncate_cells_ellipsis(header, max_width);
+}
+
+std::vector<Editor::QuickPickItem> Editor::diagnostic_quick_pick_items() const
+{
+  std::vector<QuickPickItem> items;
+  for (const auto &buf : buffers)
+  {
+    if (buf.filepath.empty())
+    {
+      continue;
+    }
+    for (const auto &diag : buf.diagnostics)
+    {
+      QuickPickItem item;
+      item.filepath = buf.filepath;
+      item.line = std::max(0, diag.line);
+      item.col = std::max(0, diag.col);
+      item.severity = diag.severity;
+      item.label = diagnostic_label(diag.severity) + ": " + diag.message;
+      item.detail = fs::path(buf.filepath).filename().string() + ":" + std::to_string(item.line + 1)
+                    + ":" + std::to_string(item.col + 1);
+      if (item.line >= 0 && item.line < (int)buf.line_count())
+      {
+        item.preview = trim_preview(buf.line(item.line));
+      }
+      items.push_back(std::move(item));
+    }
+  }
+  std::stable_sort(items.begin(),
+                   items.end(),
+                   [](const auto &a, const auto &b)
+                   {
+                     if (diagnostic_rank(a.severity) != diagnostic_rank(b.severity))
+                     {
+                       return diagnostic_rank(a.severity) < diagnostic_rank(b.severity);
+                     }
+                     if (a.filepath != b.filepath)
+                     {
+                       return a.filepath < b.filepath;
+                     }
+                     if (a.line != b.line)
+                     {
+                       return a.line < b.line;
+                     }
+                     return a.col < b.col;
+                   });
+  return items;
+}
+
+std::vector<Editor::QuickPickItem> Editor::fallback_symbol_items()
+{
+  std::vector<QuickPickItem> items;
+  if (buffers.empty() || current_buffer < 0 || current_buffer >= (int)buffers.size())
+  {
+    return items;
+  }
+  const auto &buf = get_buffer();
+  if (buf.is_lazy())
+  {
+    return items;
+  }
+  for (const auto &symbol : SymbolIndex::extract_document_symbols(buf.lines, buf.filepath))
+  {
+    QuickPickItem item;
+    item.filepath = buf.filepath;
+    item.line = symbol.line;
+    item.col = symbol.column;
+    item.label = symbol.name;
+    item.detail = symbol.kind + "  " + std::to_string(symbol.line + 1);
+    item.preview = symbol.detail;
+    items.push_back(std::move(item));
+  }
+  return items;
+}
+
+void Editor::show_symbol_picker()
+{
+  auto items = fallback_symbol_items();
+  open_quick_pick(QUICK_PICK_SYMBOLS, "Document Symbols", std::move(items));
+  request_document_symbols();
+  if (quick_pick_all_items.empty())
+  {
+    set_message("No symbols found yet");
+  }
+}
+
+bool Editor::apply_gui_font_family(const std::string &family)
+{
+#ifdef JOT_GUI
+  auto *gui = gui_ui();
+  if (gui)
+  {
+    if (!gui->apply_font_family(family))
+    {
+      set_message("Unknown font family: " + family + " (:font lists them)");
+      return false;
+    }
+    config.set("gui_font_family", gui->font_family());
+    config.save();
+    set_message(gui->font_family().empty() ? "Font: built-in default"
+                                           : "Font: " + gui->font_family());
+    return true;
+  }
+#endif
+  // Either the terminal frontend is in use, or this build has no GUI at all.
+  set_message("Fonts apply to the GUI frontend only");
+  return false;
+}
+
+std::string Editor::gui_font_family_name() const
+{
+#ifdef JOT_GUI
+  const auto *gui = gui_ui();
+  return gui ? gui->font_family() : std::string();
+#else
+  return {};
+#endif
+}
+
+std::vector<std::string> Editor::gui_font_families() const
+{
+#ifdef JOT_GUI
+  const auto *gui = gui_ui();
+  return gui ? gui->available_font_families() : std::vector<std::string>();
+#else
+  return {};
+#endif
+}
+
+void Editor::open_font_picker()
+{
+  if (!gui_ui())
+  {
+    set_message("Fonts apply to the GUI frontend only");
+    return;
+  }
+  const std::string current = gui_font_family_name();
+  std::vector<QuickPickItem> items;
+  // The built-in chain comes first so the picker can always get back to it.
+  QuickPickItem default_item;
+  default_item.label = "Default";
+  default_item.detail = current.empty() ? "current" : "the font jot ships with";
+  items.push_back(std::move(default_item));
+
+  for (const std::string &name : gui_font_families())
+  {
+    QuickPickItem item;
+    item.label = name;
+    item.detail = (name == current) ? "current" : "";
+    item.value = name;
+    items.push_back(std::move(item));
+  }
+  if (items.size() == 1)
+  {
+    set_message("No font families found (looked in ~/.local/share/fonts and /usr/share/fonts)");
+    return;
+  }
+  open_quick_pick(QUICK_PICK_FONT, "Font", std::move(items));
+}
+
+void Editor::request_document_symbols()
+{
+  if (buffers.empty() || current_buffer < 0 || current_buffer >= (int)buffers.size())
+  {
+    return;
+  }
+  auto &buf = get_buffer();
+  if (buf.is_lazy() || buf.filepath.empty())
+  {
+    return;
+  }
+  LSPClient *client = ensure_lsp_for_file(buf.filepath);
+  if (!client)
+  {
+    return;
+  }
+  lsp_pending_changes.erase(buf.filepath);
+  client->did_change(buf.filepath, get_buffer_text(buf));
+  client->request_document_symbols(buf.filepath);
+}
+
+void Editor::show_workspace_symbols_picker()
+{
+  // Unlike the document picker there is nothing to show before the server
+  // answers: the native symbol index only knows the open buffer. An empty query
+  // asks for everything, which is what opening the picker should mean.
+  open_quick_pick(QUICK_PICK_WORKSPACE_SYMBOLS, "Workspace Symbols", {});
+  request_workspace_symbols(quick_pick_query);
+  set_message("Querying workspace symbols...");
+}
+
+void Editor::request_workspace_symbols(const std::string &query)
+{
+  if (buffers.empty() || current_buffer < 0 || current_buffer >= (int)buffers.size())
+  {
+    return;
+  }
+  auto &buf = get_buffer();
+  if (buf.filepath.empty())
+  {
+    set_message("Save file first to use LSP");
+    return;
+  }
+  LSPClient *client = ensure_lsp_for_file(buf.filepath);
+  if (!client)
+  {
+    set_message("No LSP server for this file");
+    return;
+  }
+  client->did_change(buf.filepath, get_buffer_text(buf));
+  if (!client->request_workspace_symbols(query))
+  {
+    set_message("Workspace symbol request failed");
+  }
+}
+
+void Editor::handle_workspace_symbols_result(const LSPDocumentSymbolResult &result)
+{
+  if (!show_quick_pick || quick_pick_kind != QUICK_PICK_WORKSPACE_SYMBOLS)
+  {
+    return;
+  }
+  if (result.symbols.empty())
+  {
+    set_message("No workspace symbols found");
+    needs_redraw = true;
+    return;
+  }
+  std::vector<QuickPickItem> items;
+  for (const auto &symbol : result.symbols)
+  {
+    QuickPickItem item;
+    item.filepath = symbol.filepath;
+    item.line = symbol.line;
+    item.col = symbol.character;
+    item.label = symbol.name;
+    item.detail = symbol.kind + "  " + fs::path(symbol.filepath).filename().string();
+    // The container ("Class::", "module.") is the useful tie-breaker between
+    // same-named symbols from different files.
+    item.preview = symbol.detail;
+    items.push_back(std::move(item));
+  }
+  quick_pick_all_items = std::move(items);
+  quick_pick_selected = 0;
+  refresh_quick_pick();
+  set_message("Workspace symbols: " + std::to_string(quick_pick_all_items.size()));
+  needs_redraw = true;
+}
+
+void Editor::show_workspace_diagnostics_picker()
+{
+  open_quick_pick(QUICK_PICK_WORKSPACE_DIAGNOSTICS,
+                  "Workspace Diagnostics",
+                  workspace_diagnostic_quick_pick_items());
+}
+
+std::vector<Editor::QuickPickItem> Editor::workspace_diagnostic_quick_pick_items() const
+{
+  // Straight from the diagnostics stores rather than from the open buffers: a
+  // workspace view is supposed to include the files the servers (and the C++
+  // definition checks, which publish in the same per-file shape) have reported
+  // on, whether or not they are open right now.
+  std::vector<QuickPickItem> items;
+  std::set<std::string> seen;
+  auto push_file = [&](const std::string &path, const std::vector<Diagnostic> &diagnostics)
+  {
+    for (const auto &diag : diagnostics)
+    {
+      // Two servers can report the same problem for one file; the key is the
+      // whole visible row.
+      const std::string key = path + "|" + std::to_string(diag.line) + "|"
+                              + std::to_string(diag.col) + "|" + std::to_string(diag.severity) + "|"
+                              + diag.message;
+      if (!seen.insert(key).second)
+      {
+        continue;
+      }
+      QuickPickItem item;
+      item.filepath = path;
+      item.line = std::max(0, diag.line);
+      item.col = std::max(0, diag.col);
+      item.severity = diag.severity;
+      item.label = diagnostic_label(diag.severity) + ": " + diag.message;
+      item.detail = fs::path(path).filename().string() + ":" + std::to_string(item.line + 1) + ":"
+                    + std::to_string(item.col + 1);
+      // The source line for an open buffer; a closed file would mean reading it
+      // from disk on every item, so those rows go without a preview.
+      for (const auto &buf : buffers)
+      {
+        if (same_path(buf.filepath, path) && item.line < (int)buf.line_count())
+        {
+          item.preview = trim_preview(buf.line(item.line));
+          break;
+        }
+      }
+      items.push_back(std::move(item));
+    }
+  };
+  for (const auto &by_client : lsp_diag_slices_)
+  {
+    for (const auto &file_entry : by_client.second)
+    {
+      push_file(file_entry.first, file_entry.second);
+    }
+  }
+  for (const auto &file_entry : cpp_def_diags)
+  {
+    push_file(file_entry.first, file_entry.second);
+  }
+  std::stable_sort(items.begin(),
+                   items.end(),
+                   [](const QuickPickItem &a, const QuickPickItem &b)
+                   {
+                     if (diagnostic_rank(a.severity) != diagnostic_rank(b.severity))
+                     {
+                       return diagnostic_rank(a.severity) < diagnostic_rank(b.severity);
+                     }
+                     if (a.filepath != b.filepath)
+                     {
+                       return a.filepath < b.filepath;
+                     }
+                     return a.line < b.line;
+                   });
+  return items;
+}
+
+void Editor::handle_document_symbols_result(const LSPDocumentSymbolResult &result)
+{
+  // A Lua one-shot sink (jot.lsp.request_symbols) consumes the result first;
+  // otherwise it only feeds the native symbols picker when one is open.
+  if (lua_api && lua_api->try_deliver_lsp_symbols(result))
+  {
+    return;
+  }
+  if (!show_quick_pick || quick_pick_kind != QUICK_PICK_SYMBOLS || buffers.empty()
+      || current_buffer < 0 || current_buffer >= (int)buffers.size())
+  {
+    return;
+  }
+  const auto &buf = get_buffer();
+  if (!same_path(buf.filepath, result.filepath) || result.symbols.empty())
+  {
+    return;
+  }
+
+  std::vector<QuickPickItem> items;
+  for (const auto &symbol : result.symbols)
+  {
+    QuickPickItem item;
+    item.filepath = symbol.filepath.empty() ? result.filepath : symbol.filepath;
+    item.line = symbol.line;
+    item.col = symbol.character;
+    item.label = symbol.name;
+    item.detail = symbol.kind + "  " + std::to_string(symbol.line + 1);
+    item.preview = symbol.detail;
+    items.push_back(std::move(item));
+  }
+  quick_pick_all_items = std::move(items);
+  quick_pick_selected = 0;
+  refresh_quick_pick();
+  set_message("LSP symbols loaded: " + std::to_string(quick_pick_all_items.size()));
+  needs_redraw = true;
+}

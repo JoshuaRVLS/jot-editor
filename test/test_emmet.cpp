@@ -1,5 +1,5 @@
 // Emmet abbreviations (src/features/emmet.cpp) and the editor entry point that
-// feeds them to the snippet engine (src/jot/app/emmet.cpp).
+// feeds them to the snippet engine (src/editor/app/emmet.cpp).
 //
 // The expander cases are pure text in, snippet text out, so they can pin the
 // shape of an expansion exactly -- the tree an operator builds, the numbering a

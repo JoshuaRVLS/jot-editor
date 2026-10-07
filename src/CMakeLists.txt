@@ -23,7 +23,7 @@ function(jot_configure_object_target target_name)
   target_include_directories(${target_name} PRIVATE
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/src/base
-    ${PROJECT_SOURCE_DIR}/src/jot
+    ${PROJECT_SOURCE_DIR}/src/editor
     ${PROJECT_SOURCE_DIR}/src/input
     ${PROJECT_SOURCE_DIR}/src/render
     ${PROJECT_SOURCE_DIR}/src/text
@@ -313,14 +313,14 @@ endif()
 
 function(jot_expose_module_api target_name)
   # Every consumer (app, tests, benchmarks) sees src/ and each module dir, so
-  # headers are included as either "jot/<module>/<file>.h" or bare "<file>.h"
+  # headers are included by their module name ("syntax/folding.h") or bare
   # depending on the module. There is deliberately no separate include/ tree:
   # it used to hold three empty shims that only renamed headers already here,
-  # while making the "jot/" prefix resolve to two different roots.
+  # into two roots at once.
   target_include_directories(${target_name} PUBLIC
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/src/base
-    ${PROJECT_SOURCE_DIR}/src/jot
+    ${PROJECT_SOURCE_DIR}/src/editor
     ${PROJECT_SOURCE_DIR}/src/input
     ${PROJECT_SOURCE_DIR}/src/render
     ${PROJECT_SOURCE_DIR}/src/text
@@ -337,7 +337,7 @@ function(jot_expose_module_api target_name)
 endfunction()
 
 include(base/sources.cmake)
-include(jot/sources.cmake)
+include(editor/sources.cmake)
 include(text/sources.cmake)
 include(syntax/sources.cmake)
 include(dap/sources.cmake)
@@ -383,7 +383,7 @@ if(JOT_GUI AND NOT WIN32)
          ui/gui/gui_render.cpp
          ui/gui/gui_cursor.cpp
          ui/gui/gui_input.cpp)
-    list(APPEND JOT_ENGINE_SOURCES jot/event/gui_events.cpp)
+    list(APPEND JOT_EDITOR_SOURCES editor/event/gui_events.cpp)
   else()
     message(STATUS "JOT_GUI requested but SDL2/freetype2 not found; building terminal-only")
     set(JOT_GUI_ENABLED FALSE CACHE INTERNAL "GUI frontend compiled into the engine" FORCE)
@@ -394,13 +394,13 @@ endif()
 add_library(jot_base_obj OBJECT ${JOT_BASE_SOURCES})
 jot_configure_object_target(jot_base_obj)
 
-add_library(jot_engine_obj OBJECT ${JOT_ENGINE_SOURCES})
-jot_configure_object_target(jot_engine_obj)
-target_include_directories(jot_engine_obj SYSTEM PRIVATE ${LIBUV_INCLUDE_DIRS})
-target_compile_options(jot_engine_obj PRIVATE ${LIBUV_CFLAGS_OTHER})
+add_library(jot_editor_obj OBJECT ${JOT_EDITOR_SOURCES})
+jot_configure_object_target(jot_editor_obj)
+target_include_directories(jot_editor_obj SYSTEM PRIVATE ${LIBUV_INCLUDE_DIRS})
+target_compile_options(jot_editor_obj PRIVATE ${LIBUV_CFLAGS_OTHER})
 # Unconditional (not tied to JOT_GUI): engine sources that are always compiled
 # include ui/gui/gui.h, which pulls in glad/gl.h.
-target_link_libraries(jot_engine_obj PRIVATE jot_glad)
+target_link_libraries(jot_editor_obj PRIVATE jot_glad)
 
 add_library(jot_text_obj OBJECT ${JOT_TEXT_SOURCES})
 jot_configure_object_target(jot_text_obj)
@@ -513,7 +513,7 @@ jot_configure_object_target(jot_ui_obj)
 
 # Module static libraries (for larger-project style ownership and reuse)
 add_library(jot_base STATIC $<TARGET_OBJECTS:jot_base_obj>)
-add_library(jot_core STATIC $<TARGET_OBJECTS:jot_engine_obj>)
+add_library(jot_editor STATIC $<TARGET_OBJECTS:jot_editor_obj>)
 add_library(jot_text STATIC $<TARGET_OBJECTS:jot_text_obj>)
 add_library(jot_syntax STATIC $<TARGET_OBJECTS:jot_syntax_obj>)
 add_library(jot_features STATIC $<TARGET_OBJECTS:jot_features_obj>)
@@ -536,7 +536,7 @@ target_include_directories(jot_lua_api SYSTEM PUBLIC ${LUA_INCLUDE_DIRS})
 add_library(jot_ui STATIC $<TARGET_OBJECTS:jot_ui_obj>)
 
 jot_expose_module_api(jot_base)
-jot_expose_module_api(jot_core)
+jot_expose_module_api(jot_editor)
 jot_expose_module_api(jot_text)
 jot_expose_module_api(jot_syntax)
 jot_expose_module_api(jot_features)
@@ -555,7 +555,7 @@ jot_expose_module_api(jot_ui)
 # Built from the same object libraries to avoid duplicate compilation.
 add_library(jot_engine STATIC
   $<TARGET_OBJECTS:jot_base_obj>
-  $<TARGET_OBJECTS:jot_engine_obj>
+  $<TARGET_OBJECTS:jot_editor_obj>
   $<TARGET_OBJECTS:jot_text_obj>
   $<TARGET_OBJECTS:jot_syntax_obj>
   $<TARGET_OBJECTS:jot_features_obj>
@@ -581,10 +581,10 @@ target_include_directories(jot_engine SYSTEM PUBLIC ${LUA_INCLUDE_DIRS})
 
 jot_expose_module_api(jot_engine)
 if(JOT_TREESITTER_ENABLED)
-  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_lsp_obj jot_workspace_obj jot_git_obj jot_terminal_obj jot_ui_obj jot_base jot_core jot_text jot_syntax jot_features jot_input jot_render jot_tools jot_dap jot_lsp jot_workspace jot_git jot_terminal jot_lua_api jot_ui jot_engine)
+  foreach(target_name IN ITEMS jot_base_obj jot_editor_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_lsp_obj jot_workspace_obj jot_git_obj jot_terminal_obj jot_ui_obj jot_base jot_editor jot_text jot_syntax jot_features jot_input jot_render jot_tools jot_dap jot_lsp jot_workspace jot_git jot_terminal jot_lua_api jot_ui jot_engine)
     target_compile_definitions(${target_name} PUBLIC JOT_TREESITTER=1)
   endforeach()
-  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_lsp_obj jot_workspace_obj jot_git_obj jot_terminal_obj jot_ui_obj)
+  foreach(target_name IN ITEMS jot_base_obj jot_editor_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_lsp_obj jot_workspace_obj jot_git_obj jot_terminal_obj jot_ui_obj)
     target_include_directories(${target_name} SYSTEM PRIVATE ${TREE_SITTER_INCLUDE_DIRS})
   endforeach()
   target_link_libraries(jot_syntax PUBLIC
@@ -611,7 +611,7 @@ endif()
 # targets *and* the libraries they are folded into, because $<TARGET_OBJECTS:>
 # does not carry usage requirements across.
 if(JOT_GUI_ENABLED)
-  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_lsp_obj jot_workspace_obj jot_git_obj jot_terminal_obj jot_ui_obj jot_base jot_core jot_text jot_syntax jot_features jot_input jot_render jot_tools jot_dap jot_lsp jot_workspace jot_git jot_terminal jot_lua_api jot_ui jot_engine)
+  foreach(target_name IN ITEMS jot_base_obj jot_editor_obj jot_text_obj jot_syntax_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_dap_obj jot_lsp_obj jot_workspace_obj jot_git_obj jot_terminal_obj jot_ui_obj jot_base jot_editor jot_text jot_syntax jot_features jot_input jot_render jot_tools jot_dap jot_lsp jot_workspace jot_git jot_terminal jot_lua_api jot_ui jot_engine)
     target_compile_definitions(${target_name} PUBLIC JOT_GUI=1)
   endforeach()
 endif()
@@ -637,8 +637,8 @@ if(JOT_GUI_ENABLED)
   target_link_libraries(jot_engine PUBLIC ${SDL2_LIBRARIES} ${FREETYPE2_LIBRARIES} jot_glad)
   target_link_directories(jot_engine PUBLIC ${SDL2_LIBRARY_DIRS} ${FREETYPE2_LIBRARY_DIRS})
 endif()
-target_link_libraries(jot_core PUBLIC ${LIBUV_LIBRARIES})
-target_link_directories(jot_core PUBLIC ${LIBUV_LIBRARY_DIRS})
+target_link_libraries(jot_editor PUBLIC ${LIBUV_LIBRARIES})
+target_link_directories(jot_editor PUBLIC ${LIBUV_LIBRARY_DIRS})
 target_link_libraries(jot_engine PUBLIC ${LIBUV_LIBRARIES})
 target_link_directories(jot_engine PUBLIC ${LIBUV_LIBRARY_DIRS})
 if(WIN32)
@@ -649,7 +649,7 @@ if(WIN32)
   set(LIBUV_WIN32_SYSTEM_LIBS
       ws2_32 psapi userenv iphlpapi dbghelp
       advapi32 user32 shell32 ole32)
-  target_link_libraries(jot_core PUBLIC ${LIBUV_WIN32_SYSTEM_LIBS})
+  target_link_libraries(jot_editor PUBLIC ${LIBUV_WIN32_SYSTEM_LIBS})
   target_link_libraries(jot_engine PUBLIC ${LIBUV_WIN32_SYSTEM_LIBS})
   target_link_libraries(jot_text PUBLIC user32)
   target_link_libraries(jot_engine PUBLIC user32)

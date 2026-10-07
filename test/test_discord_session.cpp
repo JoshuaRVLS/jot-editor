@@ -1,4 +1,4 @@
-// Discord presence session lifecycle (src/jot/app/discord_session.cpp): the
+// Discord presence session lifecycle (src/editor/app/discord_session.cpp): the
 // enabled / excluded / idle gating around the IPC client, driven through the
 // same entry points the editor's timer, focus reporting and :discord use.
 //

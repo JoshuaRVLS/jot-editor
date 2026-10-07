@@ -99,7 +99,7 @@ jobs:
         run: |
           # Only the runtime tree goes in: bin/jot.exe and share/jot, the layout
           # the exe resolves its own data directory from (see the _WIN32 fallback
-          # in src/jot/lua/lua_loader.cpp). The staged include/ and lib/ hold
+          # in src/editor/lua/lua_loader.cpp). The staged include/ and lib/ hold
           # development files the package does not need, and the build gate left
           # no DLL of its own for the exe to find.
           cd "${GITHUB_WORKSPACE}/dist/jot-windows-x86_64"

@@ -1,6 +1,6 @@
 // Search panel rendering and cursor placement. The panel's state and the rest
 // of its behaviour live in SearchController (jot/editor/search_controller.h).
-#include "jot/editor/search_controller.h"
+#include "editor/search_controller.h"
 
 #include "editor.h"
 #include "lua/api.h"

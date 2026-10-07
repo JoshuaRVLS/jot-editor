@@ -4,7 +4,7 @@
 #pragma once
 
 #include "base/string_util.h"
-#include "jot/editor_models.h"
+#include "editor/editor_models.h"
 #include <string>
 #include <vector>
 

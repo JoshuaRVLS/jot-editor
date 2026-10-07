@@ -318,9 +318,9 @@ TEST_CASE("Telescope Lua render: straight separator, bounded rows, byte-aligned 
                          "ui.lua",
                          "test_lua_ui_kit.cpp",
                          "telescope.cpp"};
-  const char *parents[] = {"src/jot/lua",
-                           "src/jot/lua",
-                           "src/jot/lua",
+  const char *parents[] = {"src/editor/lua",
+                           "src/editor/lua",
+                           "src/editor/lua",
                            "src",
                            ".",
                            "src/库",

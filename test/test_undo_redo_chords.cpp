@@ -10,7 +10,7 @@
 // report the shift case is driven with.
 
 #include "editor.h"
-#include "jot/keybind_catalog.h"
+#include "editor/keybind_catalog.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

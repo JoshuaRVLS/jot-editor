@@ -3,7 +3,7 @@
 // here. Positions are 1-based line/column like the rest of the API, and are
 // converted to the 0-based byte-offset model of core/app/decorations.cpp.
 #include "editor.h"
-#include "jot/app/decorations.h"
+#include "editor/app/decorations.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 

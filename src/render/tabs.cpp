@@ -10,7 +10,7 @@
 // focus) but draw no strip of their own. The order, its pins and the
 // jump-to-buffer letters live in features/tab_order.h.
 #include "editor.h"
-#include "jot/file_icons.h"
+#include "editor/file_icons.h"
 #include "lua/api.h"
 #include "ui/components.h"
 #include "ui/text.h"
