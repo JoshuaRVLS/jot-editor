@@ -24,19 +24,13 @@ namespace jot_color
 
   // True when an xterm/ANSI colour code starts at `i`; on success `rgb` holds
   // the colour and `end` is the index just past the code.
-  bool parse_xterm_code(const std::string &line,
-                        size_t i,
-                        size_t limit,
-                        std::uint32_t &rgb,
-                        size_t &end);
+  bool parse_xterm_code(
+      const std::string &line, size_t i, size_t limit, std::uint32_t &rgb, size_t &end);
 
   // True when an LS_COLORS/SGR snippet starts at `i` (which must be the '=');
   // on success `rgb` holds the colour and `end` is just past the snippet.
-  bool parse_ls_colors(const std::string &line,
-                       size_t i,
-                       size_t limit,
-                       std::uint32_t &rgb,
-                       size_t &end);
+  bool
+  parse_ls_colors(const std::string &line, size_t i, size_t limit, std::uint32_t &rgb, size_t &end);
 } // namespace jot_color
 
 #endif // FEATURES_COLOR_TERMINAL_CODES_H

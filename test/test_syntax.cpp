@@ -1,5 +1,5 @@
 #include "jot/lua/embedded_lua.h"
-#include "tree_sitter/manager.h"
+#include "syntax/manager.h"
 #include "types.h"
 #include <catch2/catch_test_macros.hpp>
 #include <fstream>

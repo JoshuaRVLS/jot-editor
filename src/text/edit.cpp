@@ -1,8 +1,8 @@
 #include "autoclose.h"
 #include "editor.h"
-#include "features/language.h"
 #include "html.h"
 #include "jot/lua/api.h"
+#include "syntax/language.h"
 #include "text_features.h"
 #include "ui/text.h"
 #include <algorithm>

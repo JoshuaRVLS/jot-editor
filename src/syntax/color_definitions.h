@@ -16,7 +16,7 @@
 // defined in a file that is not open resolves to nothing rather than to a
 // stale or missing colour.
 
-#include "features/color_codes.h"
+#include "syntax/color_codes.h"
 
 #include <cstdint>
 #include <string>

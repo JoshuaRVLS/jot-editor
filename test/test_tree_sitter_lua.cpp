@@ -1,5 +1,5 @@
-#include "tree_sitter/install.h"
-#include "tree_sitter/manager.h"
+#include "syntax/install.h"
+#include "syntax/manager.h"
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>

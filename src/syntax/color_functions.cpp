@@ -1,6 +1,6 @@
-#include "features/color_functions.h"
+#include "syntax/color_functions.h"
 
-#include "features/color_space.h"
+#include "syntax/color_space.h"
 
 #include <algorithm>
 #include <cctype>

@@ -10,7 +10,7 @@
 #include "editor.h"
 #include "features/winbar.h"
 #include "jot/model/panes.h"
-#include "tools/symbols/index.h"
+#include "syntax/index.h"
 #include "ui/ui.h"
 
 #include <catch2/catch_test_macros.hpp>

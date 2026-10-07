@@ -7,7 +7,7 @@
 #include "folding.h"
 #include "render/buffer_internal.h"
 #include "render/gutter.h"
-#include "tree_sitter/manager.h"
+#include "syntax/manager.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <cctype>

@@ -2,9 +2,9 @@ add_executable(jot_benchmarks
   benchmark_main.cpp
   ${PROJECT_SOURCE_DIR}/src/text/in_memory_line_provider.cpp
   ${PROJECT_SOURCE_DIR}/src/text/lazy_line_provider.cpp
-  ${PROJECT_SOURCE_DIR}/src/features/folding.cpp
-  ${PROJECT_SOURCE_DIR}/src/features/language.cpp
-  ${PROJECT_SOURCE_DIR}/src/tools/symbols/index.cpp
+  ${PROJECT_SOURCE_DIR}/src/syntax/folding.cpp
+  ${PROJECT_SOURCE_DIR}/src/syntax/language.cpp
+  ${PROJECT_SOURCE_DIR}/src/syntax/index.cpp
   ${PROJECT_SOURCE_DIR}/src/tools/workspace/search.cpp
   ${PROJECT_SOURCE_DIR}/src/ui/text.cpp
 )
@@ -14,6 +14,7 @@ target_include_directories(jot_benchmarks PRIVATE
   ${PROJECT_SOURCE_DIR}/src
   ${PROJECT_SOURCE_DIR}/src/jot
   ${PROJECT_SOURCE_DIR}/src/features
+  ${PROJECT_SOURCE_DIR}/src/syntax
   ${PROJECT_SOURCE_DIR}/src/text
   ${PROJECT_SOURCE_DIR}/src/tools
   ${PROJECT_SOURCE_DIR}/src/ui

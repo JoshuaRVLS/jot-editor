@@ -1,8 +1,8 @@
 #include "editor.h"
 #include "jot/lua/api.h"
 #include "jot/lua/lua_loader.h"
-#include "tree_sitter/install.h"
-#include "tree_sitter/manager.h"
+#include "syntax/install.h"
+#include "syntax/manager.h"
 
 #include <cstdint>
 #include <filesystem>

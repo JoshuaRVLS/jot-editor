@@ -1,6 +1,6 @@
-#include "tree_sitter/manager.h"
+#include "syntax/manager.h"
 #include "base/string_util.h"
-#include "tree_sitter/install.h"
+#include "syntax/install.h"
 
 #include <algorithm>
 #include <cctype>

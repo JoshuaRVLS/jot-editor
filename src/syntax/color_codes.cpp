@@ -1,10 +1,10 @@
-#include "features/color_codes.h"
+#include "syntax/color_codes.h"
 
-#include "features/color_definitions.h"
-#include "features/color_functions.h"
-#include "features/color_names.h"
-#include "features/color_tailwind.h"
-#include "features/color_terminal_codes.h"
+#include "syntax/color_definitions.h"
+#include "syntax/color_functions.h"
+#include "syntax/color_names.h"
+#include "syntax/color_tailwind.h"
+#include "syntax/color_terminal_codes.h"
 
 #include <algorithm>
 #include <cmath>
@@ -41,12 +41,12 @@ namespace
   }
 
   // True when a token starting at `i` is a whole word (nothing word-ish before it).
-inline bool at_word_start(const std::string &line, size_t i)
-{
-  return i == 0 || !is_word_char(line[i - 1]);
-}
+  inline bool at_word_start(const std::string &line, size_t i)
+  {
+    return i == 0 || !is_word_char(line[i - 1]);
+  }
 
-inline std::uint32_t pack(int r, int g, int b)
+  inline std::uint32_t pack(int r, int g, int b)
   {
     return ((std::uint32_t)(r & 0xFF) << 16) | ((std::uint32_t)(g & 0xFF) << 8)
            | (std::uint32_t)(b & 0xFF);
@@ -662,9 +662,7 @@ namespace jot_color
           {
             const double t = pct / 100.0;
             const auto mix = [&](int shift)
-            {
-              return (int)std::lround(((base >> shift) & 0xFF) * t + 255.0 * (1.0 - t));
-            };
+            { return (int)std::lround(((base >> shift) & 0xFF) * t + 255.0 * (1.0 - t)); };
             spans.push_back(ColorSpan{(int)i,
                                       (int)(n - i),
                                       pack(std::clamp(mix(16), 0, 255),

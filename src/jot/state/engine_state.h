@@ -7,10 +7,10 @@
 #include "imageviewer.h"        // ImageViewer
 #include "jot/model/debugger.h" // DebuggerSessionState, DebuggerBreakpoint, DebuggerSessionConfig
 #include "jot/model/tasks.h"    // TerminalTask
+#include "syntax/manager.h"     // TreeSitterManager
 #include "syntax_highlighter.h" // SyntaxHighlighter
 #include "terminal.h"           // Terminal
 #include "tools/terminal/integrated.h" // IntegratedTerminal
-#include "tree_sitter/manager.h"       // TreeSitterManager
 #include "ui.h"                        // UI
 
 #include <map>

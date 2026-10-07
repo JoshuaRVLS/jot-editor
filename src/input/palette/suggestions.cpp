@@ -1,10 +1,10 @@
 #include "commands/utils.h"
 #include "cpp_assist.h"
+#include "editor.h"
 #include "features/bible.h"
 #include "features/http_file.h"
-#include "editor.h"
 #include "jot/lua/api.h"
-#include "tree_sitter/install.h"
+#include "syntax/install.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>

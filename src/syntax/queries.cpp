@@ -1,4 +1,4 @@
-#include "tree_sitter/manager.h"
+#include "syntax/manager.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -135,9 +135,11 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension)
   {
     uint32_t error_offset = 0;
     TSQueryError error_type = TSQueryErrorNone;
-    TSQuery *query = ts_query_new(
-        lang, source.source.c_str(), static_cast<uint32_t>(source.source.size()),
-        &error_offset, &error_type);
+    TSQuery *query = ts_query_new(lang,
+                                  source.source.c_str(),
+                                  static_cast<uint32_t>(source.source.size()),
+                                  &error_offset,
+                                  &error_type);
     if (query)
     {
       query_cache_[language_id] = query;
@@ -147,9 +149,8 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension)
           source.runtime ? ("runtime query loaded: " + source.path) : "Lua query loaded";
       return query;
     }
-    const std::string error =
-        "query failed: error " + std::to_string((int)error_type) + " at offset "
-        + std::to_string(error_offset);
+    const std::string error = "query failed: error " + std::to_string((int)error_type)
+                              + " at offset " + std::to_string(error_offset);
     std::string message;
     if (source.runtime)
     {
@@ -243,39 +244,39 @@ TreeSitterManager::captures_for_handles(TreeSitterHandle query_handle,
 }
 
 std::string tree_sitter_query_compile_error(uint32_t offset,
-                                             TSQueryError query_error,
-                                             const std::string &source)
+                                            TSQueryError query_error,
+                                            const std::string &source)
 {
   const char *kind = "invalid query";
   switch (query_error)
   {
-    case TSQueryErrorSyntax:
-      kind = "syntax error";
-      break;
-    case TSQueryErrorNodeType:
-      kind = "unknown node type";
-      break;
-    case TSQueryErrorField:
-      kind = "unknown field";
-      break;
-    case TSQueryErrorCapture:
-      kind = "unknown capture";
-      break;
-    case TSQueryErrorStructure:
-      kind = "invalid structure";
-      break;
-    case TSQueryErrorLanguage:
-      kind = "language mismatch";
-      break;
-    default:
-      break;
+  case TSQueryErrorSyntax:
+    kind = "syntax error";
+    break;
+  case TSQueryErrorNodeType:
+    kind = "unknown node type";
+    break;
+  case TSQueryErrorField:
+    kind = "unknown field";
+    break;
+  case TSQueryErrorCapture:
+    kind = "unknown capture";
+    break;
+  case TSQueryErrorStructure:
+    kind = "invalid structure";
+    break;
+  case TSQueryErrorLanguage:
+    kind = "language mismatch";
+    break;
+  default:
+    break;
   }
-  std::string message = std::string("query compilation failed (") + kind + " at byte "
-                        + std::to_string(offset);
+  std::string message =
+      std::string("query compilation failed (") + kind + " at byte " + std::to_string(offset);
   if (offset < source.size())
   {
-    std::string near = source.substr(
-        offset, std::min<std::string::size_type>(48, source.size() - offset));
+    std::string near =
+        source.substr(offset, std::min<std::string::size_type>(48, source.size() - offset));
     const auto newline = near.find('\n');
     if (newline != std::string::npos)
       near.erase(newline);
@@ -312,10 +313,8 @@ bool TreeSitterManager::set_query_source(const std::string &extension,
     // return success immediately. The worker compiles it (or records the
     // precise failure) off the main thread.
     std::lock_guard<std::mutex> lock(deferred_mutex_);
-    deferred_query_jobs_.push_back({language_id,
-                                    entry_it->second.symbol,
-                                    entry_it->second.library_names,
-                                    source});
+    deferred_query_jobs_.push_back(
+        {language_id, entry_it->second.symbol, entry_it->second.library_names, source});
     return true;
   }
 

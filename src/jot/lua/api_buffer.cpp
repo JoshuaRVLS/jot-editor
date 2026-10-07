@@ -17,7 +17,7 @@ using namespace jot_lua;
 
 namespace fs = std::filesystem;
 
-#include "features/syntax_highlighter.h"
+#include "syntax/syntax_highlighter.h"
 #include "ui/components.h"
 #include <algorithm>
 #include <string>

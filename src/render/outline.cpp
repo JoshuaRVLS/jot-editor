@@ -1,8 +1,8 @@
 #include "editor.h"
 #include "features/winbar.h"
-#include "render/pane_edges.h"
 #include "jot/lua/api.h"
-#include "tools/symbols/index.h"
+#include "render/pane_edges.h"
+#include "syntax/index.h"
 #include "ui/text.h"
 
 #include <algorithm>

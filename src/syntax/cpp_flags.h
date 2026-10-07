@@ -22,18 +22,18 @@
 //     the first configure -- where the standard has to come from somewhere.
 namespace CppFlags
 {
-// Extra clangd arguments for this file: `--compile-commands-dir=<dir>` aimed at
-// the project's database, or at a generated one when the project has neither.
-// Empty when clangd's own search already finds the flags.
-std::vector<std::string> clangd_args_for(const std::string &root, const std::string &filepath);
+  // Extra clangd arguments for this file: `--compile-commands-dir=<dir>` aimed at
+  // the project's database, or at a generated one when the project has neither.
+  // Empty when clangd's own search already finds the flags.
+  std::vector<std::string> clangd_args_for(const std::string &root, const std::string &filepath);
 
-// Directory holding the generated database for a workspace. It lives under the
-// data directory, so a project is never written to.
-std::string fallback_database_dir(const std::string &root);
+  // Directory holding the generated database for a workspace. It lives under the
+  // data directory, so a project is never written to.
+  std::string fallback_database_dir(const std::string &root);
 
-// The C and C++ sources under `root`, output directories skipped, sorted.
-// Exposed for the tests.
-std::vector<std::string> source_files_under(const std::string &root);
+  // The C and C++ sources under `root`, output directories skipped, sorted.
+  // Exposed for the tests.
+  std::vector<std::string> source_files_under(const std::string &root);
 } // namespace CppFlags
 
 #endif

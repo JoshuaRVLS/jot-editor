@@ -1,4 +1,4 @@
-#include "tree_sitter/install.h"
+#include "syntax/install.h"
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdlib>

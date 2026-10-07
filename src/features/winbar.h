@@ -2,7 +2,7 @@
 #define JOT_FEATURES_WINBAR_H
 
 #include "jot/model/theme.h" // Theme (symbol colors, shared with the outline)
-#include "tools/symbols/index.h"
+#include "syntax/index.h"
 #include <string>
 #include <vector>
 

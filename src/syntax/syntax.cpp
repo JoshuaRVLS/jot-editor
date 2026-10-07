@@ -1,5 +1,5 @@
+#include "syntax/manager.h"
 #include "syntax_highlighter.h"
-#include "tree_sitter/manager.h"
 #include <algorithm>
 #include <cstring>
 #include <regex>
@@ -465,13 +465,12 @@ void SyntaxHighlighter::set_language(const std::string &ext)
     rules.push_back({std::regex("^[A-Za-z0-9-]+(?=\\s*:)"), 5});    // Header names
     rules.push_back({std::regex("^@[A-Za-z_][A-Za-z0-9_.-]*"), 6}); // @vars
     rules.push_back({std::regex("\\b-?[0-9]+(\\.[0-9]+)?\\b"), 4});
-    rules.push_back({std::regex("https?://[^\\s\\\"']+"), 6});    // URLs
-    rules.push_back(
-        {std::regex("^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|TRACE|GRAPHQL)\\b"), 1});
+    rules.push_back({std::regex("https?://[^\\s\\\"']+"), 6}); // URLs
+    rules.push_back({std::regex("^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|TRACE|GRAPHQL)\\b"), 1});
     rules.push_back({std::regex("\\{\\{[^}]*\\}\\}"), 6}); // {{vars}}
     rules.push_back({std::regex("\"([^\"\\\\]|\\\\.)*\"|'([^'\\\\]|\\\\.)*'"), 2});
-    rules.push_back({std::regex("^\\s*#[^#].*"), 3});   // Line comments
-    rules.push_back({std::regex("^###.*"), 5});         // Separators (not comments)
+    rules.push_back({std::regex("^\\s*#[^#].*"), 3}); // Line comments
+    rules.push_back({std::regex("^###.*"), 5});       // Separators (not comments)
   }
 }
 

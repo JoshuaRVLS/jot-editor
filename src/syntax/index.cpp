@@ -1,4 +1,4 @@
-#include "tools/symbols/index.h"
+#include "syntax/index.h"
 #include "base/string_util.h"
 
 #include <algorithm>

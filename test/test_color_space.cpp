@@ -7,7 +7,7 @@
 // coordinates in every one of these spaces (CSS Color 4, Björn Ottosson's OKLab
 // article, the HSLuv reference), and an achromatic input must stay achromatic in
 // any space that shares the sRGB white point.
-#include "features/color_space.h"
+#include "syntax/color_space.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>

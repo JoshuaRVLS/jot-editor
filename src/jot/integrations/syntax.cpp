@@ -1,7 +1,7 @@
 #include "base/string_util.h"
 #include "editor.h"
 #include "lsp_attach_data.h"
-#include "tree_sitter/manager.h"
+#include "syntax/manager.h"
 #include <algorithm>
 #include <filesystem>
 

@@ -1,13 +1,13 @@
 #ifndef JOT_MODEL_BUFFER_H
 #define JOT_MODEL_BUFFER_H
 
-#include "line_provider.h"
-#include "text_features.h"
-#include "features/color_definitions.h"
 #include "jot/model/decorations.h"
 #include "jot/model/fold_ranges.h"
 #include "jot/model/syntax.h"
-#include "tools/symbols/index.h" // SymbolMatch (the winbar's symbol cache)
+#include "line_provider.h"
+#include "syntax/color_definitions.h"
+#include "syntax/index.h" // SymbolMatch (the winbar's symbol cache)
+#include "text_features.h"
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -148,7 +148,7 @@ struct FileBuffer
   FoldRanges fold_ranges;
   bool folds_dirty = true;
   // The document-symbol index the breadcrumb winbar cuts its symbol crumbs from
-  // (tools/symbols/index.h). Validated by edit_generation the way the fold index
+  // (syntax/index.h). Validated by edit_generation the way the fold index
   // is, and rebuilt by the winbar at most every ~250 ms while the buffer is
   // being typed in: a symbol that appears one keystroke late beats a full-buffer
   // scan per keystroke, and the row is a breadcrumb, not an outline.

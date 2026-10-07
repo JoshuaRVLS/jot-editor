@@ -1,7 +1,7 @@
 #include "commenting.h"
 #include "editor.h"
-#include "features/language.h"
 #include "jot/lua/api.h"
+#include "syntax/language.h"
 #include "text_features.h"
 #include <algorithm>
 #include <cctype>

@@ -1,4 +1,4 @@
-#include "features/color_definitions.h"
+#include "syntax/color_definitions.h"
 
 #include <algorithm>
 #include <cctype>

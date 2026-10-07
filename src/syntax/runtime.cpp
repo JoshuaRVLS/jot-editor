@@ -1,4 +1,4 @@
-#include "tree_sitter/manager.h"
+#include "syntax/manager.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -493,9 +493,11 @@ void TreeSitterManager::deferred_query_compile_worker()
 
     uint32_t offset = 0;
     TSQueryError query_error = TSQueryErrorNone;
-    TSQuery *query = ts_query_new(
-        result.language, result.source.c_str(),
-        static_cast<uint32_t>(result.source.size()), &offset, &query_error);
+    TSQuery *query = ts_query_new(result.language,
+                                  result.source.c_str(),
+                                  static_cast<uint32_t>(result.source.size()),
+                                  &offset,
+                                  &query_error);
     if (!query)
     {
       result.error = tree_sitter_query_compile_error(offset, query_error, result.source);

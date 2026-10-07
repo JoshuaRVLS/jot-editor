@@ -1,4 +1,4 @@
-#include "tree_sitter/install.h"
+#include "syntax/install.h"
 #include "base/shell_util.h"
 
 #include <algorithm>

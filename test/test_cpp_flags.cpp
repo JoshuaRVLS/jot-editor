@@ -8,7 +8,7 @@
 // workspace with none must get a generated one rather than nothing -- the
 // "nothing" case being the one that made a C++20 project read as a syntax
 // error.
-#include "features/cpp_flags.h"
+#include "syntax/cpp_flags.h"
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>

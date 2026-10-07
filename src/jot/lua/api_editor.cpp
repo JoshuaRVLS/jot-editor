@@ -17,7 +17,7 @@ using namespace jot_lua;
 
 namespace fs = std::filesystem;
 
-#include "tools/symbols/index.h"
+#include "syntax/index.h"
 #include "tools/workspace/search.h"
 #include "ui/components.h"
 #include "ui/text.h"

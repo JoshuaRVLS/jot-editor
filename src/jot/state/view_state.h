@@ -1,11 +1,11 @@
 #ifndef JOT_STATE_VIEW_STATE_H
 #define JOT_STATE_VIEW_STATE_H
 
-#include "features/coding_time.h"       // coding_time::Counter, Totals
-#include "features/color_codes.h"       // jot_color::SpanCache
-#include "features/color_definitions.h" // jot_color::Definitions
-#include "features/wakatime.h"          // jot_wakatime::Options (api/coding_time.h)
-#include "jot/model/theme.h"            // Theme
+#include "features/coding_time.h"     // coding_time::Counter, Totals
+#include "features/wakatime.h"        // jot_wakatime::Options (api/coding_time.h)
+#include "jot/model/theme.h"          // Theme
+#include "syntax/color_codes.h"       // jot_color::SpanCache
+#include "syntax/color_definitions.h" // jot_color::Definitions
 #include <cstdint>
 #include <string>
 

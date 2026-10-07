@@ -1,8 +1,8 @@
 #include "column_utils.h"
-#include "features/folding.h"
 #include "in_memory_line_provider.h"
 #include "lazy_line_provider.h"
-#include "tools/symbols/index.h"
+#include "syntax/folding.h"
+#include "syntax/index.h"
 #include "tools/workspace/search.h"
 #include "ui/text.h"
 

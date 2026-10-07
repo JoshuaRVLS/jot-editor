@@ -10,7 +10,7 @@
 // appears in the buffer. UPPERCASE is folded at lookup time instead of being
 // stored, since it is off by default and would double the table again.
 
-#include "features/color_names.h"
+#include "syntax/color_names.h"
 
 #include <algorithm>
 #include <cstring>

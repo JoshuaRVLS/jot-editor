@@ -3,10 +3,10 @@
 // drawer used by the palette rows.
 #pragma once
 
-#include "features/syntax_highlighter.h"
 #include "jot/model/buffer.h"
 #include "jot/model/theme.h"
-#include "tree_sitter/manager.h"
+#include "syntax/manager.h"
+#include "syntax/syntax_highlighter.h"
 #include "ui/components.h"
 #include "ui/text.h"
 #include <algorithm>

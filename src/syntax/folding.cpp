@@ -1,5 +1,5 @@
-#include "features/language.h"
 #include "folding.h"
+#include "syntax/language.h"
 
 #include <algorithm>
 #include <cctype>
@@ -307,9 +307,8 @@ namespace Folding
     {
       return false;
     }
-    auto it = std::upper_bound(spans_.begin(),
-                               spans_.end(),
-                               std::make_pair(line, std::numeric_limits<int>::max()));
+    auto it = std::upper_bound(
+        spans_.begin(), spans_.end(), std::make_pair(line, std::numeric_limits<int>::max()));
     if (it == spans_.begin())
     {
       return false;
@@ -324,9 +323,8 @@ namespace Folding
     {
       return 0;
     }
-    auto it = std::lower_bound(spans_.begin(),
-                               spans_.end(),
-                               std::make_pair(limit, std::numeric_limits<int>::min()));
+    auto it = std::lower_bound(
+        spans_.begin(), spans_.end(), std::make_pair(limit, std::numeric_limits<int>::min()));
     size_t idx = (size_t)(it - spans_.begin());
     if (idx == 0)
     {
@@ -343,11 +341,11 @@ namespace Folding
 
   bool FoldView::folded_header(int line, int *range_index) const
   {
-    auto it = std::lower_bound(headers_.begin(),
-                               headers_.end(),
-                               line,
-                               [](const Header &header, int value)
-                               { return header.start_line < value; });
+    auto it =
+        std::lower_bound(headers_.begin(),
+                         headers_.end(),
+                         line,
+                         [](const Header &header, int value) { return header.start_line < value; });
     if (it == headers_.end() || it->start_line != line)
     {
       return false;
@@ -361,11 +359,11 @@ namespace Folding
 
   int FoldView::hidden_count_for_header(int line) const
   {
-    auto it = std::lower_bound(headers_.begin(),
-                               headers_.end(),
-                               line,
-                               [](const Header &header, int value)
-                               { return header.start_line < value; });
+    auto it =
+        std::lower_bound(headers_.begin(),
+                         headers_.end(),
+                         line,
+                         [](const Header &header, int value) { return header.start_line < value; });
     if (it == headers_.end() || it->start_line != line)
     {
       return 0;
@@ -384,9 +382,8 @@ namespace Folding
     {
       // Jump to the end of the span hiding `current` instead of stepping one
       // line at a time: a collapsed block can cover most of the buffer.
-      auto it = std::upper_bound(spans_.begin(),
-                                 spans_.end(),
-                                 std::make_pair(current, std::numeric_limits<int>::max()));
+      auto it = std::upper_bound(
+          spans_.begin(), spans_.end(), std::make_pair(current, std::numeric_limits<int>::max()));
       --it;
       current = it->second + 1;
     }
@@ -497,9 +494,8 @@ namespace Folding
     int prev = std::max(0, line - 1);
     while (prev > 0 && hidden(prev))
     {
-      auto it = std::upper_bound(spans_.begin(),
-                                 spans_.end(),
-                                 std::make_pair(prev, std::numeric_limits<int>::max()));
+      auto it = std::upper_bound(
+          spans_.begin(), spans_.end(), std::make_pair(prev, std::numeric_limits<int>::max()));
       --it;
       prev = it->first - 1;
     }
@@ -512,8 +508,8 @@ namespace Folding
     const int steps = std::abs(delta);
     for (int i = 0; i < steps; i++)
     {
-      const int next = delta > 0 ? next_visible_line(current, line_count)
-                                 : previous_visible_line(current);
+      const int next =
+          delta > 0 ? next_visible_line(current, line_count) : previous_visible_line(current);
       if (next == current)
       {
         break;
@@ -816,8 +812,7 @@ namespace Folding
                            int visible_rows,
                            int line_count)
   {
-    return FoldView(ranges).visible_row_for_line(
-        first_line, target_line, visible_rows, line_count);
+    return FoldView(ranges).visible_row_for_line(first_line, target_line, visible_rows, line_count);
   }
 
   int buffer_line_for_visible_offset(const std::vector<FoldRange> &ranges,
@@ -878,11 +873,8 @@ namespace Folding
     return view_of(folds)->buffer_line_for_visible_index(visible_index, line_count);
   }
 
-  int visible_row_for_line(const FoldRanges &folds,
-                           int first_line,
-                           int target_line,
-                           int visible_rows,
-                           int line_count)
+  int visible_row_for_line(
+      const FoldRanges &folds, int first_line, int target_line, int visible_rows, int line_count)
   {
     return view_of(folds)->visible_row_for_line(first_line, target_line, visible_rows, line_count);
   }
@@ -895,10 +887,7 @@ namespace Folding
     return view_of(folds)->buffer_line_for_visible_offset(first_line, offset, line_count);
   }
 
-  int clamp_scroll_offset(const FoldRanges &folds,
-                          int scroll,
-                          int visible_rows,
-                          int line_count)
+  int clamp_scroll_offset(const FoldRanges &folds, int scroll, int visible_rows, int line_count)
   {
     return view_of(folds)->clamp_scroll_offset(scroll, visible_rows, line_count);
   }

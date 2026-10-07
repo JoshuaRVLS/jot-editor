@@ -1,12 +1,12 @@
 // Editor-side LSP attachment: resolving the server for a file, launching and
 // reusing clients, and broadcasting document lifecycle notifications.
 #include "editor.h"
-#include "features/cpp_flags.h"
 #include "jot/editor_models.h"
+#include "jot/integrations/lsp/common.h"
 #include "jot/lua/api.h"
 #include "jot/lua/lua_loader.h"
 #include "lsp/client.h"
-#include "jot/integrations/lsp/common.h"
+#include "syntax/cpp_flags.h"
 #include <algorithm>
 #include <memory>
 #include <string>

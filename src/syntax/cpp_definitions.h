@@ -40,8 +40,8 @@ namespace CppDefinitions
   struct FunctionRecord
   {
     std::string file;
-    int line = 0;    // 0-based, at the first token of the name
-    int col = 0;     // 0-based
+    int line = 0; // 0-based, at the first token of the name
+    int col = 0;  // 0-based
     int end_line = 0;
     int end_col = 0; // 0-based, one past the closing paren
     // The declared name on its own (no `ns::` in front of it), which is what a
@@ -135,13 +135,14 @@ namespace CppDefinitions
   std::string signature_of(const std::string &path, const std::string &text);
 
   // Pairs the records of a workspace up and reports what is missing or repeated.
-  std::vector<Issue> analyze(const std::vector<FunctionRecord> &records, ScanStats *stats = nullptr);
+  std::vector<Issue> analyze(const std::vector<FunctionRecord> &records,
+                             ScanStats *stats = nullptr);
 
   // Unsaved workspace text replaces disk text so declarations need not be saved
   // before they can produce findings; the same scan limits apply to both.
   ScanResult scan_workspace(const std::string &root,
                             const ScanLimits &limits = ScanLimits{},
                             const std::map<std::string, std::string> &unsaved = {});
-}
+} // namespace CppDefinitions
 
 #endif // JOT_FEATURES_CPP_DEFINITIONS_H

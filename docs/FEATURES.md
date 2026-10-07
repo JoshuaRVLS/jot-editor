@@ -1584,7 +1584,8 @@ cmake/           reusable CMake modules
 src/jot/        editor state, buffers, panes, workspace, LSP, debugger, terminal
 src/base/        primitives: strings, files, shells, the event loop, task queue
 src/text/        text editing, cursor movement, selection, clipboard, search
-src/features/    syntax, folding, config, bracket helpers, C++ assist
+src/syntax/      languages, highlighting, folding, tree-sitter, colour scanners
+src/features/    config, emmet, wakatime, http, leetcode, previews
 src/input/       keyboard, mouse, command palette, command dispatch
 src/render/      buffer drawing, minimap, overlays, panels, UI views
 src/tools/       integrated terminal, DAP client, LSP client, search helpers
@@ -1597,8 +1598,9 @@ test/           unit tests
 ```
 
 Build graph highlights: `jot_engine` is the aggregated static engine target;
-`jot_base`, `jot_core`, `jot_text`, `jot_features`, `jot_input`, `jot_render`,
-`jot_tools`, `jot_lua_bridge`, and `jot_ui` are the module libraries behind it.
+`jot_base`, `jot_core`, `jot_text`, `jot_syntax`, `jot_features`, `jot_input`,
+`jot_render`, `jot_tools`, `jot_lua_bridge`, and `jot_ui` are the module
+libraries behind it.
 
 ## Notes and limitations
 

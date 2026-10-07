@@ -21,8 +21,12 @@ src/
     surfaces/      menus, popups, home screen, settings, theme chooser
     lua/           the Lua API surface (view structs in lua/view/)
     markdown/      the preview server (shared by the markdown and HTML previews)
-  edit/            pure text editing (cursor, lines, search, sort, ...)
-  features/        self-contained features (folding, colors, config, syntax)
+  text/            pure text editing: cursor, lines, search, sort, the text
+                   objects, the line providers, the insertion rules
+  syntax/          language detection, highlighting, folding, the tree-sitter
+                   runtime, the C++ and colour scanners, the symbol index
+  features/        self-contained features (config, emmet, wakatime, http,
+                   leetcode, previews)
   input/           key/mouse routing: modes, palette, commands
   render/          painting: frame, buffer, panels, popups, minimap
   tools/           subprocess and protocol clients (LSP, debugger, discord,
@@ -30,9 +34,16 @@ src/
   ui/              the cell grid, text handling, terminal + GUI backends
 ```
 
+The module order, lowest first: `base`, `text`, `syntax`, `ui`, `render`,
+`input`, `workspace`, `lsp`, `dap`, `terminal`, `git`, `extras`, `editor`,
+`lua`. A lower module may not include a higher one.
+
 `base/` is the floor: it may not include `editor.h`, a module header or a UI
 header, and it is the first directory the module order fixes. Everything above
 it may include it. Its include prefix is `base/` (`#include "base/string_util.h"`).
+`text/` and `syntax/` are included with their directory name when the caller is
+outside them (`#include "syntax/folding.h"`); inside a module a bare basename is
+enough, because the module's own directory is on the include path.
 
 ## The editor's state
 

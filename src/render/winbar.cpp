@@ -10,7 +10,7 @@
 #include "editor.h"
 #include "jot/file_icons.h"
 #include "jot/lua/api.h"
-#include "tools/symbols/index.h"
+#include "syntax/index.h"
 #include "ui/components.h"
 #include "ui/text.h"
 #include <algorithm>

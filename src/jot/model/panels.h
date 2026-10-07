@@ -1,7 +1,7 @@
 #ifndef JOT_MODEL_PANELS_H
 #define JOT_MODEL_PANELS_H
 
-#include "tools/symbols/index.h"
+#include "syntax/index.h"
 enum PanelType
 {
   PANEL_EDITOR,

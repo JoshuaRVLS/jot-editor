@@ -9,7 +9,7 @@
 // nvim-colorizer.lua builds at setup time, so the scanner's lookup is a plain
 // whole-identifier binary search. Sorted by name (strcmp order).
 
-#include "features/color_tailwind.h"
+#include "syntax/color_tailwind.h"
 
 #include <cstdlib>
 #include <cstring>

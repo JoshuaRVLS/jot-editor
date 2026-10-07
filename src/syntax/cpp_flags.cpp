@@ -67,8 +67,8 @@ namespace
 
   bool is_source_extension(const std::string &extension)
   {
-    static const char *const kExtensions[] = {".c", ".cc",  ".cpp", ".cxx", ".h",
-                                              ".hh", ".hpp", ".hxx", ".inl", ".ipp", ".tpp"};
+    static const char *const kExtensions[] = {
+        ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl", ".ipp", ".tpp"};
     for (const char *const candidate : kExtensions)
     {
       if (extension == candidate)
@@ -128,7 +128,8 @@ namespace
     for (int depth = 0; depth < 64; depth++)
     {
       std::error_code iterate_error;
-      for (fs::directory_iterator it(directory, fs::directory_options::skip_permission_denied, iterate_error);
+      for (fs::directory_iterator it(
+               directory, fs::directory_options::skip_permission_denied, iterate_error);
            !iterate_error && it != fs::directory_iterator();
            it.increment(iterate_error))
       {
@@ -184,11 +185,21 @@ namespace
     {
       switch (c)
       {
-      case '"': out += "\\\""; break;
-      case '\\': out += "\\\\"; break;
-      case '\n': out += "\\n"; break;
-      case '\r': out += "\\r"; break;
-      case '\t': out += "\\t"; break;
+      case '"':
+        out += "\\\"";
+        break;
+      case '\\':
+        out += "\\\\";
+        break;
+      case '\n':
+        out += "\\n";
+        break;
+      case '\r':
+        out += "\\r";
+        break;
+      case '\t':
+        out += "\\t";
+        break;
       default:
         if (static_cast<unsigned char>(c) < 0x20)
         {
@@ -366,75 +377,75 @@ namespace
 
 namespace CppFlags
 {
-std::vector<std::string> clangd_args_for(const std::string &root, const std::string &filepath)
-{
-  if (root.empty() || filepath.empty())
+  std::vector<std::string> clangd_args_for(const std::string &root, const std::string &filepath)
   {
-    return {};
+    if (root.empty() || filepath.empty())
+    {
+      return {};
+    }
+    if (flags_are_findable_from(filepath))
+    {
+      return {};
+    }
+    const std::string build = database_in_build_directory(root, filepath);
+    if (!build.empty())
+    {
+      return {"--compile-commands-dir=" + build};
+    }
+    const std::string generated = ensure_fallback_database(root, filepath);
+    if (generated.empty())
+    {
+      return {};
+    }
+    return {"--compile-commands-dir=" + generated};
   }
-  if (flags_are_findable_from(filepath))
-  {
-    return {};
-  }
-  const std::string build = database_in_build_directory(root, filepath);
-  if (!build.empty())
-  {
-    return {"--compile-commands-dir=" + build};
-  }
-  const std::string generated = ensure_fallback_database(root, filepath);
-  if (generated.empty())
-  {
-    return {};
-  }
-  return {"--compile-commands-dir=" + generated};
-}
 
-std::string fallback_database_dir(const std::string &root)
-{
-  if (root.empty())
+  std::string fallback_database_dir(const std::string &root)
   {
-    return {};
+    if (root.empty())
+    {
+      return {};
+    }
+    const std::string install_root = LspInstall::install_root();
+    if (install_root.empty())
+    {
+      return {};
+    }
+    return (fs::path(install_root) / "clangd-cdb" / workspace_slug(root)).string();
   }
-  const std::string install_root = LspInstall::install_root();
-  if (install_root.empty())
-  {
-    return {};
-  }
-  return (fs::path(install_root) / "clangd-cdb" / workspace_slug(root)).string();
-}
 
-std::vector<std::string> source_files_under(const std::string &root)
-{
-  std::vector<std::string> files;
-  std::error_code ec;
-  const fs::path start(root);
-  if (!directory_exists(start))
+  std::vector<std::string> source_files_under(const std::string &root)
   {
+    std::vector<std::string> files;
+    std::error_code ec;
+    const fs::path start(root);
+    if (!directory_exists(start))
+    {
+      return files;
+    }
+
+    fs::recursive_directory_iterator it(start, fs::directory_options::skip_permission_denied, ec);
+    for (; !ec && it != fs::recursive_directory_iterator(); it.increment(ec))
+    {
+      std::error_code entry_error;
+      if (it->is_directory(entry_error))
+      {
+        if (entry_error || is_output_directory(it->path().filename().string()))
+        {
+          it.disable_recursion_pending();
+        }
+        continue;
+      }
+      if (!it->is_regular_file(entry_error) || entry_error)
+      {
+        continue;
+      }
+      if (is_source_extension(it->path().extension().string()))
+      {
+        files.push_back(it->path().string());
+      }
+    }
+    std::sort(files.begin(), files.end());
     return files;
   }
-
-  fs::recursive_directory_iterator it(start, fs::directory_options::skip_permission_denied, ec);
-  for (; !ec && it != fs::recursive_directory_iterator(); it.increment(ec))
-  {
-    std::error_code entry_error;
-    if (it->is_directory(entry_error))
-    {
-      if (entry_error || is_output_directory(it->path().filename().string()))
-      {
-        it.disable_recursion_pending();
-      }
-      continue;
-    }
-    if (!it->is_regular_file(entry_error) || entry_error)
-    {
-      continue;
-    }
-    if (is_source_extension(it->path().extension().string()))
-    {
-      files.push_back(it->path().string());
-    }
-  }
-  std::sort(files.begin(), files.end());
-  return files;
-}
 } // namespace CppFlags

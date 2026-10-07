@@ -1,32 +1,13 @@
 set(JOT_FEATURES_SOURCES
   features/bible.cpp
-  features/bracket.cpp
-  features/color_codes.cpp
-  features/color_definitions.cpp
-  features/color_functions.cpp
-  features/color_names.cpp
-  features/color_space.cpp
-  features/color_tailwind.cpp
-  features/color_terminal_codes.cpp
   features/coding_time.cpp
   features/completion_rank.cpp
   features/config.cpp
   features/emmet.cpp
   features/web_completion.cpp
-  features/cpp_assist.cpp
-  features/cpp_definitions.cpp
-  features/cpp_definitions_analysis.cpp
-  features/cpp_flags.cpp
-  features/folding.cpp
-  features/syntax.cpp
-  features/tree_sitter/install.cpp
-  features/tree_sitter/manager.cpp
-  features/tree_sitter/queries.cpp
-  features/tree_sitter/runtime.cpp
   features/html.cpp
   features/http_file.cpp
   features/leetcode_http.cpp
-  features/language.cpp
   features/save_hygiene.cpp
   features/smooth_scroll.cpp
   features/status_clock.cpp

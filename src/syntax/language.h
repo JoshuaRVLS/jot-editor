@@ -22,6 +22,6 @@ namespace Language
   // Indentation-significant languages (blocks are spelled with indentation
   // rather than braces): used by folding and auto-indent.
   bool is_indentation_language(const std::string &extension);
-}
+} // namespace Language
 
 #endif // JOT_FEATURES_LANGUAGE_H

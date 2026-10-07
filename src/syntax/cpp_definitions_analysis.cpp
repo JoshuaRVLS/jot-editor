@@ -47,9 +47,22 @@ namespace CppDefinitions
     // tagged files is not a duplicate. Two files with the *same* tag still are.
     std::string platform_tag(const std::string &path)
     {
-      static const std::set<std::string> tags = {
-          "win32", "win64", "windows", "unix", "posix", "linux", "mac",   "macos",
-          "darwin", "apple", "bsd",   "freebsd", "android", "ios",  "wasm", "emscripten"};
+      static const std::set<std::string> tags = {"win32",
+                                                 "win64",
+                                                 "windows",
+                                                 "unix",
+                                                 "posix",
+                                                 "linux",
+                                                 "mac",
+                                                 "macos",
+                                                 "darwin",
+                                                 "apple",
+                                                 "bsd",
+                                                 "freebsd",
+                                                 "android",
+                                                 "ios",
+                                                 "wasm",
+                                                 "emscripten"};
       const fs::path file(path);
       const std::string stem = string_util::lower_copy(file.stem().string());
       for (size_t at = stem.find('_'); at != std::string::npos;)
@@ -86,8 +99,8 @@ namespace CppDefinitions
       for (size_t at = 0; at <= a.size();)
       {
         const size_t end = a.find("::", at);
-        const std::string component = a.substr(at, end == std::string::npos ? std::string::npos
-                                                                           : end - at);
+        const std::string component =
+            a.substr(at, end == std::string::npos ? std::string::npos : end - at);
         for (size_t bat = 0; bat <= b.size();)
         {
           const size_t bend = b.find("::", bat);
@@ -144,9 +157,20 @@ namespace CppDefinitions
       {
         return true;
       }
-      static const std::set<std::string> skipped = {
-          "node_modules", "dist", "build", "out", "bin", "obj", "target", "venv",
-          "external", "third_party", "vendor", "deps", "CMakeFiles", "__pycache__"};
+      static const std::set<std::string> skipped = {"node_modules",
+                                                    "dist",
+                                                    "build",
+                                                    "out",
+                                                    "bin",
+                                                    "obj",
+                                                    "target",
+                                                    "venv",
+                                                    "external",
+                                                    "third_party",
+                                                    "vendor",
+                                                    "deps",
+                                                    "CMakeFiles",
+                                                    "__pycache__"};
       if (skipped.count(name) != 0)
       {
         return true;
@@ -303,8 +327,8 @@ namespace CppDefinitions
             const std::string other_scope_name =
                 other_scope->scope.empty() ? std::string("file scope") : other_scope->scope;
             issue.severity = 3;
-            issue.message = "\"" + decl->display + "\" has no definition in scope \""
-                            + decl->scope + "\" (defined in \"" + other_scope_name + "\" at "
+            issue.message = "\"" + decl->display + "\" has no definition in scope \"" + decl->scope
+                            + "\" (defined in \"" + other_scope_name + "\" at "
                             + location(*other_scope) + ")";
           }
           else
@@ -322,8 +346,8 @@ namespace CppDefinitions
             issue.message = "No definition found for \"" + decl->display + "\"";
             if (other_params != nullptr)
             {
-              issue.message += " (a definition with different parameters is at "
-                               + location(*other_params) + ")";
+              issue.message +=
+                  " (a definition with different parameters is at " + location(*other_params) + ")";
             }
           }
           issues.push_back(std::move(issue));
@@ -410,8 +434,8 @@ namespace CppDefinitions
           Issue issue = issue_at(*strong[k]);
           issue.severity = 1;
           issue.message = "\"" + strong[k]->display
-                          + "\" is defined more than once (first definition"
-                          + " at " + location(*strong[0]) + ")";
+                          + "\" is defined more than once (first definition" + " at "
+                          + location(*strong[0]) + ")";
           issues.push_back(std::move(issue));
           stats.duplicates++;
         }
@@ -528,8 +552,8 @@ namespace CppDefinitions
     }
 
     std::vector<std::string> paths;
-    fs::recursive_directory_iterator it(root_path, fs::directory_options::skip_permission_denied,
-                                        ec);
+    fs::recursive_directory_iterator it(
+        root_path, fs::directory_options::skip_permission_denied, ec);
     const fs::recursive_directory_iterator end;
     for (; !ec && it != end && (int)paths.size() < limits.max_files; it.increment(ec))
     {
@@ -614,15 +638,15 @@ namespace CppDefinitions
       result.stats.files_scanned++;
       result.stats.bytes_read += (long long)text.size();
       std::vector<FunctionRecord> parsed = parse_file(path, text);
-      records.insert(records.end(), std::make_move_iterator(parsed.begin()),
+      records.insert(records.end(),
+                     std::make_move_iterator(parsed.begin()),
                      std::make_move_iterator(parsed.end()));
     }
 
     result.issues = analyze(records, &result.stats);
-    result.stats.elapsed_ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - started)
-            .count();
+    result.stats.elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  std::chrono::steady_clock::now() - started)
+                                  .count();
     return result;
   }
 } // namespace CppDefinitions

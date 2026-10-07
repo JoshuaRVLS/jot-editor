@@ -3,16 +3,16 @@
 // the single init() pass that registers every l_* binding into the
 // jot.* namespaces. The bindings themselves live in bindings_*.cpp.
 #include "editor.h"
-#include "features/syntax_highlighter.h"
-#include "features/tree_sitter/manager.h"
 #include "host_api.h"
 #include "jot/lua/api.h"
-#include "jot/lua/bindings_internal.h"
 #include "jot/lua/api_internal.h"
+#include "jot/lua/bindings_internal.h"
 #include "jot/lua/embedded_lua.h"
 #include "jot/lua/lua_loader.h"
 #include "markdown/preview_server.h"
-#include "tools/symbols/index.h"
+#include "syntax/index.h"
+#include "syntax/manager.h"
+#include "syntax/syntax_highlighter.h"
 #include "ui/components.h"
 #include "ui/text.h"
 

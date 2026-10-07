@@ -1,4 +1,4 @@
-#include "features/color_terminal_codes.h"
+#include "syntax/color_terminal_codes.h"
 
 #include "ui/xterm_palette.h"
 

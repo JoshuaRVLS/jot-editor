@@ -26,11 +26,8 @@ namespace jot_color
   // Rejects malformed calls (missing arguments, unbalanced parens, mixed comma
   // and space separators, unknown colour spaces), so a rejected candidate can
   // fall through to the next parser.
-  bool parse_css_function(const std::string &line,
-                          size_t name_start,
-                          size_t limit,
-                          std::uint32_t &rgb,
-                          size_t &end);
+  bool parse_css_function(
+      const std::string &line, size_t name_start, size_t limit, std::uint32_t &rgb, size_t &end);
 } // namespace jot_color
 
 #endif // FEATURES_COLOR_FUNCTIONS_H

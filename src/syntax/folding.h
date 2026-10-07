@@ -26,10 +26,8 @@ namespace Folding
     int visible_rank_of_line(int line) const;
     int buffer_line_for_visible_index(int visible_index, int line_count) const;
     int buffer_line_for_visible_offset(int first_line, int offset, int line_count) const;
-    int visible_row_for_line(int first_line,
-                             int target_line,
-                             int visible_rows,
-                             int line_count) const;
+    int
+    visible_row_for_line(int first_line, int target_line, int visible_rows, int line_count) const;
     int next_visible_line(int line, int line_count) const;
     int previous_visible_line(int line) const;
     // Moves `delta` visible lines from `line` (a scroll step, so `delta` can be
@@ -125,19 +123,13 @@ namespace Folding
   int advance_visible_lines(const FoldRanges &folds, int line, int delta, int line_count);
   int visible_line_count(const FoldRanges &folds, int line_count);
   int buffer_line_for_visible_index(const FoldRanges &folds, int visible_index, int line_count);
-  int visible_row_for_line(const FoldRanges &folds,
-                           int first_line,
-                           int target_line,
-                           int visible_rows,
-                           int line_count);
+  int visible_row_for_line(
+      const FoldRanges &folds, int first_line, int target_line, int visible_rows, int line_count);
   int buffer_line_for_visible_offset(const FoldRanges &folds,
                                      int first_line,
                                      int offset,
                                      int line_count);
-  int clamp_scroll_offset(const FoldRanges &folds,
-                          int scroll,
-                          int visible_rows,
-                          int line_count);
+  int clamp_scroll_offset(const FoldRanges &folds, int scroll, int visible_rows, int line_count);
 } // namespace Folding
 
 #endif

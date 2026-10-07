@@ -1,7 +1,7 @@
 #ifndef JOT_STATE_CPP_DEFS_STATE_H
 #define JOT_STATE_CPP_DEFS_STATE_H
 
-#include "features/cpp_definitions.h" // ScanStats
+#include "syntax/cpp_definitions.h"   // ScanStats
 #include "text/text_features.h"       // Diagnostic
 #include <map>
 #include <string>
@@ -9,7 +9,7 @@
 
 // The C++ definition checks and the diagnostics they leave behind: a
 // declaration with no body in the workspace, and a signature
-// implemented more than once (see features/cpp_definitions.h).
+// implemented more than once (see syntax/cpp_definitions.h).
 //
 // The scan runs on a worker thread (jot/app/cpp_definitions.cpp), so what lives
 // here is the state around it: the per-file diagnostics every diagnostics

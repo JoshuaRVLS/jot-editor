@@ -2,7 +2,7 @@
 // (one bounded ts_tree_edit + parse, see TreeSitterManager::reparse_incremental
 // and Editor::reparse_tree) produces trees and highlights identical to a fresh
 // whole-file parse. Requires an installed cpp parser; skipped otherwise.
-#include "tree_sitter/manager.h"
+#include "syntax/manager.h"
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdio>

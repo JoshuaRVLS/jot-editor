@@ -1,4 +1,4 @@
-#include "features/color_space.h"
+#include "syntax/color_space.h"
 
 #include <algorithm>
 #include <cmath>

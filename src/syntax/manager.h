@@ -59,9 +59,8 @@ void tree_sitter_set_capture_color(const std::string &name, int color);
 #ifdef JOT_TREESITTER
 // Precise compile-failure wording shared by the synchronous and the
 // background query-compile paths, so both report identical messages.
-std::string tree_sitter_query_compile_error(uint32_t offset,
-                                             TSQueryError error,
-                                             const std::string &source);
+std::string
+tree_sitter_query_compile_error(uint32_t offset, TSQueryError error, const std::string &source);
 #endif
 
 struct TSLanguageEntry
@@ -256,7 +255,7 @@ private:
   {
     std::string language_id;
     std::string source;
-    std::string error; // empty on success
+    std::string error;          // empty on success
     bool parser_absent = false; // no installed parser: stored, not a failure
     void *handle = nullptr;
     const TSLanguage *language = nullptr;
@@ -266,7 +265,6 @@ private:
   void deferred_query_compile_worker();
   void async_parse_worker(AsyncParseJob job);
 #endif
-
 
   std::unordered_map<std::string, std::string> ext_to_lang_;
   std::unordered_set<std::string> language_override_extensions_;

@@ -81,8 +81,7 @@ namespace CppDefinitions
         // GLSL, SQL -- as code, so it is handled here. The prefix (R, uR, UR,
         // LR, u8R) ends in the `R` directly before the quote.
         if (c == '"' && i > 0 && text[i - 1] == 'R'
-            && (i < 2
-                || (std::isalnum((unsigned char)text[i - 2]) == 0 && text[i - 2] != '_')))
+            && (i < 2 || (std::isalnum((unsigned char)text[i - 2]) == 0 && text[i - 2] != '_')))
         {
           const size_t open = text.find('(', i + 1);
           // The delimiter is at most 16 characters and may be empty.
@@ -313,17 +312,78 @@ namespace CppDefinitions
     {
       static const std::unordered_set<std::string> words = {
           // statements, and words whose paren group is not a parameter list
-          "if", "else", "for", "while", "do", "switch", "case", "default", "break",
-          "continue", "return", "goto", "sizeof", "alignof", "alignas", "decltype",
-          "typeid", "static_assert", "noexcept", "throw", "new", "delete", "this",
-          "co_await", "co_return", "co_yield", "requires", "concept", "asm",
+          "if",
+          "else",
+          "for",
+          "while",
+          "do",
+          "switch",
+          "case",
+          "default",
+          "break",
+          "continue",
+          "return",
+          "goto",
+          "sizeof",
+          "alignof",
+          "alignas",
+          "decltype",
+          "typeid",
+          "static_assert",
+          "noexcept",
+          "throw",
+          "new",
+          "delete",
+          "this",
+          "co_await",
+          "co_return",
+          "co_yield",
+          "requires",
+          "concept",
+          "asm",
           // types and declaration specifiers
-          "void", "bool", "char", "char8_t", "char16_t", "char32_t", "wchar_t", "short",
-          "int", "long", "float", "double", "signed", "unsigned", "auto", "typename",
-          "class", "struct", "union", "enum", "namespace", "template", "using",
-          "typedef", "const", "volatile", "mutable", "static", "register",
-          "thread_local", "extern", "inline", "virtual", "explicit", "friend",
-          "public", "private", "protected", "true", "false", "nullptr", "override",
+          "void",
+          "bool",
+          "char",
+          "char8_t",
+          "char16_t",
+          "char32_t",
+          "wchar_t",
+          "short",
+          "int",
+          "long",
+          "float",
+          "double",
+          "signed",
+          "unsigned",
+          "auto",
+          "typename",
+          "class",
+          "struct",
+          "union",
+          "enum",
+          "namespace",
+          "template",
+          "using",
+          "typedef",
+          "const",
+          "volatile",
+          "mutable",
+          "static",
+          "register",
+          "thread_local",
+          "extern",
+          "inline",
+          "virtual",
+          "explicit",
+          "friend",
+          "public",
+          "private",
+          "protected",
+          "true",
+          "false",
+          "nullptr",
+          "override",
           "final"};
       // The context-sensitive keywords (`module`, `import`, `export`, `concept`)
       // deliberately stay out of the list: they are legal parameter names, and a
@@ -335,9 +395,17 @@ namespace CppDefinitions
     // that group is skipped rather than read as a parameter list.
     bool is_paren_head_word(const std::string &w)
     {
-      static const std::unordered_set<std::string> words = {
-          "static_assert", "sizeof", "alignof", "decltype", "typeid", "__typeof__",
-          "__attribute__", "__declspec", "requires", "assert", "alignas"};
+      static const std::unordered_set<std::string> words = {"static_assert",
+                                                            "sizeof",
+                                                            "alignof",
+                                                            "decltype",
+                                                            "typeid",
+                                                            "__typeof__",
+                                                            "__attribute__",
+                                                            "__declspec",
+                                                            "requires",
+                                                            "assert",
+                                                            "alignas"};
       return words.count(w) != 0;
     }
 
@@ -348,9 +416,18 @@ namespace CppDefinitions
 
     bool is_leading_specifier(const std::string &w)
     {
-      static const std::unordered_set<std::string> words = {
-          "inline", "constexpr", "consteval", "constinit", "static", "virtual", "explicit",
-          "friend", "extern", "mutable", "thread_local", "register"};
+      static const std::unordered_set<std::string> words = {"inline",
+                                                            "constexpr",
+                                                            "consteval",
+                                                            "constinit",
+                                                            "static",
+                                                            "virtual",
+                                                            "explicit",
+                                                            "friend",
+                                                            "extern",
+                                                            "mutable",
+                                                            "thread_local",
+                                                            "register"};
       return words.count(w) != 0;
     }
 
@@ -358,9 +435,9 @@ namespace CppDefinitions
     bool is_operator_symbol(const std::string &t)
     {
       static const std::unordered_set<std::string> symbols = {
-          "+", "-", "*", "/", "%", "^", "&", "|", "~", "!", "=", "<", ">", "+=", "-=",
-          "*=", "/=", "%=", "^=", "&=", "|=", "==", "!=", "<=", ">=", "&&", "||", "++",
-          "--", ",", "->", "->*"};
+          "+",  "-",  "*",  "/",  "%",  "^",  "&",  "|",  "~",  "!",  "=",
+          "<",  ">",  "+=", "-=", "*=", "/=", "%=", "^=", "&=", "|=", "==",
+          "!=", "<=", ">=", "&&", "||", "++", "--", ",",  "->", "->*"};
       return symbols.count(t) != 0;
     }
 
@@ -962,9 +1039,8 @@ namespace CppDefinitions
     };
 
     // Splits the list at top-level commas, dropping each default value.
-    std::vector<std::pair<size_t, size_t>> split_params(const std::vector<Token> &s,
-                                                        size_t open,
-                                                        size_t close)
+    std::vector<std::pair<size_t, size_t>>
+    split_params(const std::vector<Token> &s, size_t open, size_t close)
     {
       std::vector<std::pair<size_t, size_t>> out;
       size_t begin = open + 1;
@@ -1046,28 +1122,44 @@ namespace CppDefinitions
     std::string normalize_type_aliases(const std::string &text)
     {
       static const std::vector<std::pair<std::string, std::string>> aliases = {
-          {"std::uint8_t", "unsigned char"},   {"std::int8_t", "signed char"},
-          {"std::uint16_t", "unsigned short"},  {"std::int16_t", "short"},
-          {"std::uint32_t", "unsigned int"},    {"std::int32_t", "int"},
-          {"std::uint64_t", "unsigned long long"}, {"std::int64_t", "long long"},
-          {"std::uintptr_t", "size_t"},         {"std::intptr_t", "size_t"},
-          {"std::size_t", "size_t"},            {"uintptr_t", "size_t"},
-          {"intptr_t", "size_t"},               {"uint8_t", "unsigned char"},
-          {"int8_t", "signed char"},            {"uint16_t", "unsigned short"},
-          {"int16_t", "short"},                {"uint32_t", "unsigned int"},
-          {"int32_t", "int"},                   {"uint64_t", "unsigned long long"},
-          {"int64_t", "long long"},             {"DWORD", "unsigned long"},
-          {"ULONG", "unsigned long"},           {"LONG", "long"},
-          {"UINT", "unsigned int"},             {"INT", "int"},
-          {"BOOL", "int"},                      {"BYTE", "unsigned char"},
-          {"WORD", "unsigned short"},           {"WCHAR", "wchar_t"},
+          {"std::uint8_t", "unsigned char"},
+          {"std::int8_t", "signed char"},
+          {"std::uint16_t", "unsigned short"},
+          {"std::int16_t", "short"},
+          {"std::uint32_t", "unsigned int"},
+          {"std::int32_t", "int"},
+          {"std::uint64_t", "unsigned long long"},
+          {"std::int64_t", "long long"},
+          {"std::uintptr_t", "size_t"},
+          {"std::intptr_t", "size_t"},
+          {"std::size_t", "size_t"},
+          {"uintptr_t", "size_t"},
+          {"intptr_t", "size_t"},
+          {"uint8_t", "unsigned char"},
+          {"int8_t", "signed char"},
+          {"uint16_t", "unsigned short"},
+          {"int16_t", "short"},
+          {"uint32_t", "unsigned int"},
+          {"int32_t", "int"},
+          {"uint64_t", "unsigned long long"},
+          {"int64_t", "long long"},
+          {"DWORD", "unsigned long"},
+          {"ULONG", "unsigned long"},
+          {"LONG", "long"},
+          {"UINT", "unsigned int"},
+          {"INT", "int"},
+          {"BOOL", "int"},
+          {"BYTE", "unsigned char"},
+          {"WORD", "unsigned short"},
+          {"WCHAR", "wchar_t"},
           {"CHAR", "char"}};
       std::string out = text;
       for (const auto &alias : aliases)
       {
         const std::string &from = alias.first;
         const std::string &to = alias.second;
-        for (size_t at = out.find(from); at != std::string::npos; at = out.find(from, at + to.size()))
+        for (size_t at = out.find(from); at != std::string::npos;
+             at = out.find(from, at + to.size()))
         {
           const bool left_ok = at == 0 || !word_char(out[at - 1]);
           const size_t after = at + from.size();
@@ -1093,8 +1185,7 @@ namespace CppDefinitions
         if (!out.empty() && !tokens[i].empty() && !tokens[i - 1].empty()
             && ((word_start(tokens[i - 1][0]) && word_start(tokens[i][0]))
                 || (spaced_pointers && word_start(tokens[i][0])
-                    && (tokens[i - 1] == "*" || tokens[i - 1] == "&"
-                        || tokens[i - 1] == "&&"))))
+                    && (tokens[i - 1] == "*" || tokens[i - 1] == "&" || tokens[i - 1] == "&&"))))
         {
           out += ' ';
         }
@@ -1103,10 +1194,8 @@ namespace CppDefinitions
       return out;
     }
 
-    std::string canonical_param(const std::vector<Token> &s,
-                                size_t begin,
-                                size_t end,
-                                bool keep_name)
+    std::string
+    canonical_param(const std::vector<Token> &s, size_t begin, size_t end, bool keep_name)
     {
       std::vector<std::string> tokens;
       for (size_t i = begin; i < end; i++)
@@ -1170,8 +1259,7 @@ namespace CppDefinitions
           {
             continue;
           }
-          const bool after_scope =
-              i > begin && (s[i - 1].text == "::" || s[i - 1].text == ".");
+          const bool after_scope = i > begin && (s[i - 1].text == "::" || s[i - 1].text == ".");
           const bool before_scope = i + 1 < end && s[i + 1].text == "::";
           if (after_scope || before_scope)
           {
@@ -1270,13 +1358,12 @@ namespace CppDefinitions
           {
             continue;
           }
-          const bool value = s[i].kind == Token::Number || s[i].kind == Token::Literal
-                             || (s[i].kind == Token::Word
-                                 && (t == "true" || t == "false" || t == "nullptr"));
-          const bool operator_at_top = t == "+" || t == "-" || t == "/" || t == "%"
-                                       || t == "|" || t == "^" || t == "!" || t == "?"
-                                       || t == "." || t == ".*" || t == "->*" || t == "++"
-                                       || t == "--" || t == "=";
+          const bool value =
+              s[i].kind == Token::Number || s[i].kind == Token::Literal
+              || (s[i].kind == Token::Word && (t == "true" || t == "false" || t == "nullptr"));
+          const bool operator_at_top = t == "+" || t == "-" || t == "/" || t == "%" || t == "|"
+                                       || t == "^" || t == "!" || t == "?" || t == "." || t == ".*"
+                                       || t == "->*" || t == "++" || t == "--" || t == "=";
           if (value || operator_at_top)
           {
             out.looks_like_declaration = false;
@@ -1781,9 +1868,8 @@ namespace CppDefinitions
 
     // Turns one statement that parsed as a function signature into a record,
     // after the ambiguity tests that decide whether it really is one.
-    auto record_signature = [&](const Signature &sig,
-                                const std::vector<Token> &statement_tokens,
-                                bool body)
+    auto record_signature =
+        [&](const Signature &sig, const std::vector<Token> &statement_tokens, bool body)
     {
       // A parameter list written with values in it belongs to an initializer.
       if (!sig.params_look_like_declaration)
@@ -1831,8 +1917,7 @@ namespace CppDefinitions
       const bool scoped = !sig.scope.empty();
       const bool conversion = is_operator_name(sig.name);
       const bool constructor = !klass.empty() && sig.scope.empty() && sig.name == klass;
-      const bool destructor = !klass.empty() && sig.scope.empty()
-                              && sig.name == "~" + klass;
+      const bool destructor = !klass.empty() && sig.scope.empty() && sig.name == "~" + klass;
       const bool in_class = in_class_scope();
 
       // Nothing that looks like a type before the name means this is not a
@@ -1865,14 +1950,14 @@ namespace CppDefinitions
       record.params = sig.params;
       record.params_display = sig.params_display;
       record.suffix = sig.suffix;
-      record.key = scope + (scope.empty() ? "" : "::") + sig.name + "(" + sig.params + ")"
-                   + sig.suffix;
-      record.display = (scope.empty() ? "" : scope + "::") + sig.name + "("
-                       + sig.params_display + ")" + sig.suffix;
+      record.key =
+          scope + (scope.empty() ? "" : "::") + sig.name + "(" + sig.params + ")" + sig.suffix;
+      record.display = (scope.empty() ? "" : scope + "::") + sig.name + "(" + sig.params_display
+                       + ")" + sig.suffix;
       record.definition = body;
       record.in_class_definition = body && in_class && sig.scope.empty();
-      record.deleted_or_default = sig.terminator == Signature::Deleted
-                                  || sig.terminator == Signature::Defaulted;
+      record.deleted_or_default =
+          sig.terminator == Signature::Deleted || sig.terminator == Signature::Defaulted;
       record.pure_virtual = sig.terminator == Signature::Pure;
       record.template_function = sig.templated;
       record.inline_function = sig.inline_hint || record.in_class_definition;
@@ -1985,10 +2070,9 @@ namespace CppDefinitions
       {
         const std::vector<Token> &statement_view = statement_tokens(scratch);
         const std::optional<Signature> sig = parse_signature(statement_view, false);
-        if (sig && (sig->terminator == Signature::Declaration
-                    || sig->terminator == Signature::Deleted
-                    || sig->terminator == Signature::Defaulted
-                    || sig->terminator == Signature::Pure))
+        if (sig
+            && (sig->terminator == Signature::Declaration || sig->terminator == Signature::Deleted
+                || sig->terminator == Signature::Defaulted || sig->terminator == Signature::Pure))
         {
           record_signature(*sig, statement_view, false);
         }

@@ -16,8 +16,8 @@
 // The diagnostics land in cpp_def_diags, one slice per file, in the same shape
 // the LSP slices use: the per-buffer merge, the explorer's badges and the
 // Problems list read all three stores the same way.
+#include "syntax/cpp_definitions.h"
 #include "editor.h"
-#include "features/cpp_definitions.h"
 
 #include <chrono>
 #include <string>
