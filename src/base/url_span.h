@@ -1,4 +1,4 @@
-// Link detection for Ctrl+click (src/tools/url_span.h).
+// Link detection for Ctrl+click (src/base/url_span.h).
 //
 // A text question with no editor state in it, kept apart from the mouse
 // dispatcher so a unit test can feed it lines: a URL ends where the prose

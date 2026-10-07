@@ -1,6 +1,6 @@
+#include "base/string_util.h"
 #include "editor.h"
 #include "lsp_attach_data.h"
-#include "tools/string_util.h"
 #include "tree_sitter/manager.h"
 #include <algorithm>
 #include <filesystem>

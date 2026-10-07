@@ -1,7 +1,7 @@
 // The local coding-time store (see features/coding_time.h for the rule and why
 // the store exists at all).
 #include "features/coding_time.h"
-#include "tools/string_util.h"
+#include "base/string_util.h"
 
 #include <algorithm>
 #include <cstdlib>

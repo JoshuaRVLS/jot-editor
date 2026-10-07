@@ -1,10 +1,10 @@
+#include "base/string_util.h"
 #include "commands/utils.h"
 #include "cpp_assist.h"
 #include "editor.h"
 #include "host_api.h"
 #include "jot/lua/api.h"
 #include "jot/workspace/git_run.h"
-#include "tools/string_util.h"
 
 #include <algorithm>
 #include <cctype>

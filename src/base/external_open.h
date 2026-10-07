@@ -1,4 +1,4 @@
-// Handing a link to the desktop (src/tools/external_open.h).
+// Handing a link to the desktop (src/base/external_open.h).
 //
 // Which browser a URL means is the desktop's decision, not an editor setting.
 // The opener is backgrounded with its output dropped: xdg-open can sit there
@@ -7,7 +7,7 @@
 #ifndef EXTERNAL_OPEN_H
 #define EXTERNAL_OPEN_H
 
-#include "tools/shell_util.h"
+#include "base/shell_util.h"
 
 #include <cstdlib>
 #include <string>

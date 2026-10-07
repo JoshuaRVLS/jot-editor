@@ -2,7 +2,7 @@
 // box).
 //
 // The rows are a shell's own output, but the link rules are the editor's
-// (src/tools/url_span.h): a URL under the pointer opens in the desktop's
+// (src/base/url_span.h): a URL under the pointer opens in the desktop's
 // handler and the click leaves no selection behind, while Ctrl+hover underlines
 // exactly the URL the click would open. The launch is real, so these cases put
 // a stub `xdg-open` first on PATH and read the URL from the file it records.

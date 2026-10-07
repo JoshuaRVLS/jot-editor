@@ -1,4 +1,4 @@
-// Shell command helpers (src/tools/shell_util.h).
+// Shell command helpers (src/base/shell_util.h).
 //
 // Header-only, dependency-free helpers for building and running shell
 // commands: argument quoting (shell_quote), stderr silencing

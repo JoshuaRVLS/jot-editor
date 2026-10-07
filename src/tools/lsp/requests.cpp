@@ -2,9 +2,9 @@
 // didSave/didClose) and the request builders for completion, hover,
 // signature help, definition, document symbols, and formatting, plus
 // the consume_* accessors the editor drains results through.
-#include "tools/lsp/internal.h"
+#include "base/string_util.h"
 #include "tools/lsp/client.h"
-#include "tools/string_util.h"
+#include "tools/lsp/internal.h"
 #include <algorithm>
 #include <filesystem>
 #include <sstream>

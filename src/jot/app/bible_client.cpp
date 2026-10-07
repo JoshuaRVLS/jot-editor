@@ -14,11 +14,11 @@
 // Reports are toasts (`set_message(..., true)`), the same reason the REST
 // client uses them: the status line belongs to the Lua UI kit in a real
 // session, and a plain message would be written but never seen.
+#include "base/string_util.h"
 #include "editor.h"
 #include "features/bible.h"
 #include "features/leetcode_http.h"
 #include "jot/app/decorations.h"
-#include "tools/string_util.h"
 
 #include <cstdlib>
 #include <ctime>

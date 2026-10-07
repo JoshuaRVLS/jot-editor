@@ -1,12 +1,12 @@
 // Ex-command dispatch for the advanced commands (git, LSP, debugger, tasks,
 // terminals, ...): the second half of the :command table that
 // execute_ex_command hands off to.
+#include "base/string_util.h"
 #include "commands/utils.h"
 #include "editor.h"
 #include "host_api.h"
 #include "jot/lua/api.h"
 #include "jot/workspace/git_run.h"
-#include "tools/string_util.h"
 
 #include <algorithm>
 #include <cctype>

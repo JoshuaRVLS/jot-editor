@@ -6,9 +6,9 @@
 // chip only exists while a server runs, which is a pty run and not a unit test;
 // what is pinned here is the pair of labels it is drawn from -- the language for
 // the bar, the root for the log lines.
+#include "base/shell_util.h"
 #include "editor.h"
 #include "tools/lsp/client.h"
-#include "tools/shell_util.h"
 #include "ui/ui.h"
 
 #include <catch2/catch_test_macros.hpp>

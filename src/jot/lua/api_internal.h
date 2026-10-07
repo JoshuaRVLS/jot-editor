@@ -4,9 +4,9 @@
 // as inline functions instead of being duplicated per translation unit.
 #pragma once
 
+#include "base/shell_util.h"
 #include "jot/lua/embedded_lua.h"
 #include "jot/lua/lua_loader.h"
-#include "tools/shell_util.h"
 #include "ui/xterm_palette.h"
 
 #include <array>

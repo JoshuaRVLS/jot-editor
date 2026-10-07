@@ -1,14 +1,14 @@
 // Core file open/save: load, finish-open, new buffers, save (with formatter
 // detection and external-edit normalization), and save-as.
+#include "base/file_util.h"
+#include "base/shell_util.h"
+#include "cpp_assist.h"
 #include "editor.h"
 #include "folding.h"
 #include "jot/app/file_internal.h"
 #include "jot/lua/api.h"
-#include "cpp_assist.h"
 #include "lazy_line_provider.h"
 #include "save_hygiene.h"
-#include "tools/file_util.h"
-#include "tools/shell_util.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -771,7 +771,7 @@ bool Editor::save_buffer_at(int index, bool announce)
     text += '\n';
   }
 
-  // Through a temporary and a rename (tools/file_util.h): a save that fails
+  // Through a temporary and a rename (base/file_util.h): a save that fails
   // part way must leave the file that was on disk intact, not truncated to
   // whatever got through before the disk filled or the process died.
   const std::string write_error = file_util::write_file_atomic(buf.filepath, text);

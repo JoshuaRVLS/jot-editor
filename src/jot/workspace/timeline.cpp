@@ -5,9 +5,9 @@
 // cached per file. The parser and the age arithmetic live in timeline.h
 // (header-only) so unit tests can drive them without a repo.
 #include "jot/workspace/timeline.h"
+#include "base/shell_util.h"
+#include "base/string_util.h"
 #include "editor.h"
-#include "tools/shell_util.h"
-#include "tools/string_util.h"
 
 #include <algorithm>
 #include <chrono>

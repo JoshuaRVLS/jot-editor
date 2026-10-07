@@ -7,12 +7,12 @@
 // Editor dependencies so any workspace code can use them; this is the single
 // source of truth for running git commands used by the git panel, the git
 // status refresh, and the git ex-commands. Shell quoting and pipe primitives
-// come from tools/shell_util.h.
+// come from base/shell_util.h.
 
 #ifndef GIT_RUN_H
 #define GIT_RUN_H
 
-#include "tools/shell_util.h"
+#include "base/shell_util.h"
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>

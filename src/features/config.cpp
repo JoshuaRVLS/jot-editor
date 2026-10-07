@@ -1,5 +1,5 @@
 #include "config.h"
-#include "tools/string_util.h"
+#include "base/string_util.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>

@@ -16,7 +16,7 @@
 //      project, and it carries the standards and include directories a project
 //      with no flags of its own would have had.
 #include "cpp_flags.h"
-#include "tools/file_util.h"
+#include "base/file_util.h"
 #include "tools/lsp/install.h"
 #include <algorithm>
 #include <cstdint>

@@ -1,17 +1,17 @@
 // Sidebar interaction: tree navigation, git view, tab / buffer actions,
 // context keys, and mouse clicks.
 
+#include "base/shell_util.h"
+#include "base/string_util.h"
+#include "cpp_assist.h"
 #include "editor.h"
 #include "folding.h"
 #include "jot/lua/api.h"
 #include "jot/workspace/workspace_internal.h"
-#include "tools/shell_util.h"
-#include "tools/string_util.h"
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <functional>
-#include "cpp_assist.h"
 #include <sstream>
 #include <unordered_set>
 

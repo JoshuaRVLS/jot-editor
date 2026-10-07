@@ -1,6 +1,6 @@
 #include "imageviewer.h"
-#include "tools/shell_util.h"
-#include "tools/string_util.h"
+#include "base/shell_util.h"
+#include "base/string_util.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>

@@ -1,6 +1,6 @@
+#include "base/string_util.h"
 #include "editor.h"
 #include "jot/lua/api.h"
-#include "tools/string_util.h"
 #include <algorithm>
 #include <cctype>
 #include <regex>

@@ -1,4 +1,4 @@
-// Link detection for Ctrl+click (src/tools/url_span.h).
+// Link detection for Ctrl+click (src/base/url_span.h).
 //
 // The editor opens the URL under the pointer, so the span has to be the URL
 // and nothing else: the dot that ends the sentence around it is the sentence's,
@@ -6,7 +6,7 @@
 // looks like a host (`example.com`, `www.example.com`) is not a link at all.
 // These are the cases that decide whether a click opens the browser or asks the
 // language server about a token.
-#include "tools/url_span.h"
+#include "base/url_span.h"
 
 #include <catch2/catch_test_macros.hpp>
 

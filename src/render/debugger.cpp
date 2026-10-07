@@ -1,7 +1,7 @@
+#include "base/string_util.h"
 #include "editor.h"
-#include "render/pane_edges.h"
 #include "jot/lua/api.h"
-#include "tools/string_util.h"
+#include "render/pane_edges.h"
 
 #include <algorithm>
 #include <string_view>

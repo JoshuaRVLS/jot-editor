@@ -9,8 +9,8 @@
 // The history is a list plus a cursor (`jump_index`). Recording a jump truncates
 // anything ahead of the cursor first, so jumping after going back forks the
 // history instead of leaving a stale forward tail.
+#include "base/string_util.h"
 #include "editor.h"
-#include "tools/string_util.h"
 
 #include <algorithm>
 #include <filesystem>

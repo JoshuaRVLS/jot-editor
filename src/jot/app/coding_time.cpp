@@ -15,11 +15,11 @@
 //   * the local store writes a file, so it is written on a timer of its own
 //     rather than per keystroke, and flushed for good when the editor goes away.
 #include "features/coding_time.h"
+#include "base/shell_util.h"
+#include "base/string_util.h"
 #include "editor.h"
 #include "features/status_clock.h"
 #include "features/wakatime.h"
-#include "tools/shell_util.h"
-#include "tools/string_util.h"
 
 #include <chrono>
 #include <cstdio>

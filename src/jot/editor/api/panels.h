@@ -51,7 +51,7 @@ private:
   TerminalView docked_terminal_view();
   TerminalView floating_terminal_view() const;
   // The URL under a screen cell in a terminal view, detected with the editor's
-  // own rules (src/tools/url_span.h) on the row's text; the out-params take
+  // own rules (src/base/url_span.h) on the row's text; the out-params take
   // the half-open cell range it covers ("" when the cell is not on a link).
   std::string terminal_link_at(
       const TerminalView &view, int x, int y, int &start_col, int &end_col);

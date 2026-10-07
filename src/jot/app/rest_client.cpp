@@ -12,10 +12,10 @@
 // owned by the Lua UI kit in a real session, so a plain message would be
 // written and then never shown -- which is exactly how a refused run used to
 // look like a run that silently did nothing.
+#include "base/shell_util.h"
+#include "base/string_util.h"
 #include "editor.h"
 #include "features/http_file.h"
-#include "tools/shell_util.h"
-#include "tools/string_util.h"
 
 #include <chrono>
 #include <cstdio>

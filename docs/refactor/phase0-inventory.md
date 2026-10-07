@@ -447,9 +447,9 @@ the standalone compile.
 | `src/tools/discord_rpc_transport.h` | extras | `extras/discord_rpc_transport.h` | extras (hooks, core must not include it) |
 | `src/tools/discord_rpc_transport_unix.cpp` | extras | `extras/discord_rpc_transport_unix.cpp` | extras (hooks, core must not include it) |
 | `src/tools/discord_rpc_win32.cpp` | base | `base/discord_rpc_win32.cpp` |  |
-| `src/tools/external_open.h` | base | `base/external_open.h` |  |
+| `src/base/external_open.h` | base | `base/external_open.h` |  |
 | `src/tools/file_util.cpp` | base | `base/file_util.cpp` |  |
-| `src/tools/file_util.h` | base | `base/file_util.h` |  |
+| `src/base/file_util.h` | base | `base/file_util.h` |  |
 | `src/tools/imageviewer.cpp` | render | `render/imageviewer.cpp` | ambiguous: render (the preview paints it) or base (decode only) |
 | `src/tools/imageviewer.h` | render | `render/imageviewer.h` |  |
 | `src/tools/leetcode_credentials.cpp` | extras | `extras/leetcode_credentials.cpp` | extras (hooks, core must not include it) |
@@ -463,8 +463,8 @@ the standalone compile.
 | `src/tools/lsp/messages.cpp` | lsp | `lsp/messages.cpp` |  |
 | `src/tools/lsp/protocol.cpp` | lsp | `lsp/protocol.cpp` |  |
 | `src/tools/lsp/requests.cpp` | lsp | `lsp/requests.cpp` |  |
-| `src/tools/shell_util.h` | base | `base/shell_util.h` |  |
-| `src/tools/string_util.h` | base | `base/string_util.h` |  |
+| `src/base/shell_util.h` | base | `base/shell_util.h` |  |
+| `src/base/string_util.h` | base | `base/string_util.h` |  |
 | `src/tools/symbols/index.cpp` | syntax | `syntax/index.cpp` | ambiguous: syntax (it parses text) vs text |
 | `src/tools/symbols/index.h` | syntax | `syntax/index.h` |  |
 | `src/tools/telescope.cpp` | input | `input/telescope.cpp` | ambiguous: input (the picker model) or render (its popup) |
@@ -476,7 +476,7 @@ the standalone compile.
 | `src/tools/terminal/terminal_session.h` | terminal | `terminal/terminal_session.h` |  |
 | `src/tools/terminal/win32_terminal_session.cpp` | terminal | `terminal/win32_terminal_session.cpp` |  |
 | `src/tools/terminal/win32_terminal_session.h` | terminal | `terminal/win32_terminal_session.h` |  |
-| `src/tools/url_span.h` | base | `base/url_span.h` |  |
+| `src/base/url_span.h` | base | `base/url_span.h` |  |
 | `src/tools/workspace/search.cpp` | workspace | `workspace/search.cpp` | ambiguous: workspace (project walk) vs text (the matcher) |
 | `src/tools/workspace/search.h` | workspace | `workspace/search.h` |  |
 | `src/ui/components.cpp` | ui | `ui/components.cpp` |  |

@@ -1,4 +1,4 @@
-// The shared text helpers (src/tools/string_util.h).
+// The shared text helpers (src/base/string_util.h).
 //
 // These replaced a copy of each transform in every module that needed one, so
 // the point of most of these cases is that the shared version still behaves
@@ -6,7 +6,7 @@
 // std::getline split: the view helpers exist to avoid building that vector, so
 // it is the honest thing to compare them to.
 
-#include "tools/string_util.h"
+#include "base/string_util.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <optional>

@@ -5,8 +5,8 @@
 // the `[Bible]` tab shows. That is what makes the whole feature testable
 // without a server.
 #include "features/bible.h"
+#include "base/string_util.h"
 #include "tools/debugger/client.h"
-#include "tools/string_util.h"
 
 #include <algorithm>
 #include <cctype>

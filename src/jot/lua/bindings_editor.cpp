@@ -1,9 +1,9 @@
 // Lua host bindings: Editor actions and queries exposed to Lua (messages, cursor, buffer switching, file open/save, job launch, pickers, panels, capabilities).
 
+#include "base/file_util.h"
 #include "editor.h"
 #include "jot/lua/api.h"
 #include "jot/lua/bindings_internal.h"
-#include "tools/file_util.h"
 
 #include <filesystem>
 

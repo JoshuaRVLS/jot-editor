@@ -3,9 +3,9 @@
 // client supports. The LSPClient members here are pure conversions;
 // transport and request/response plumbing live in client.cpp and
 // messages.cpp.
-#include "tools/lsp/internal.h"
+#include "base/string_util.h"
 #include "tools/lsp/client.h"
-#include "tools/string_util.h"
+#include "tools/lsp/internal.h"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>

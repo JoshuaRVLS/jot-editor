@@ -1,5 +1,5 @@
 #include "ui/xterm_palette.h"
-#include "string_util.h"
+#include "base/string_util.h"
 #include "terminal.h"
 
 #include <algorithm>

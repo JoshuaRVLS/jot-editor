@@ -2,13 +2,13 @@
 // cancellation, modal / menu / panel routing, and the buffer
 // interaction path (click, drag-select, double/triple click, ctrl
 // hover, breakpoint and fold toggles, minimap and tab clicks).
+#include "base/external_open.h"
+#include "base/url_span.h"
 #include "column_utils.h"
 #include "editor.h"
-#include "render/gutter.h"
 #include "folding.h"
 #include "input/mouse/mouse_internal.h"
-#include "tools/external_open.h"
-#include "tools/url_span.h"
+#include "render/gutter.h"
 
 using namespace mouse_internal;
 #include <algorithm>

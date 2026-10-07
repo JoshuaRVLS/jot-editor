@@ -17,7 +17,7 @@
 // has to fall through to the editor's own indentation, so anything that does not
 // parse is left exactly as it was typed.
 #include "emmet.h"
-#include "tools/string_util.h"
+#include "base/string_util.h"
 
 #include <algorithm>
 #include <cctype>

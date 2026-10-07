@@ -222,9 +222,8 @@ namespace string_util
 
   // The `count` lines that end `skip` lines before the end. A short text gives
   // back fewer; nothing is copied, so only the window costs anything.
-  [[nodiscard]] inline std::vector<std::string_view> tail_lines(std::string_view text,
-                                                               size_t count,
-                                                               size_t skip = 0)
+  [[nodiscard]] inline std::vector<std::string_view>
+  tail_lines(std::string_view text, size_t count, size_t skip = 0)
   {
     std::vector<std::string_view> out;
     const size_t total = line_count(text);

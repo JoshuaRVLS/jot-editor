@@ -10,7 +10,7 @@
 // here means the status line (which had only a generic file glyph before)
 // now shows the same per-language icon as the sidebar, colored.
 
-#include "tools/string_util.h"
+#include "base/string_util.h"
 #include <string>
 
 namespace jot_icons

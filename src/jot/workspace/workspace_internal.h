@@ -3,8 +3,8 @@
 // rows, and the empty-scratch-buffer probe used by session restore.
 #pragma once
 
+#include "base/string_util.h"
 #include "jot/editor_models.h"
-#include "tools/string_util.h"
 #include <string>
 #include <vector>
 

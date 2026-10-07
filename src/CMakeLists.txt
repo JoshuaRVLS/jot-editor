@@ -22,6 +22,7 @@ add_custom_command(
 function(jot_configure_object_target target_name)
   target_include_directories(${target_name} PRIVATE
     ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/base
     ${PROJECT_SOURCE_DIR}/src/jot
     ${PROJECT_SOURCE_DIR}/src/input
     ${PROJECT_SOURCE_DIR}/src/render
@@ -312,6 +313,7 @@ function(jot_expose_module_api target_name)
   # while making the "jot/" prefix resolve to two different roots.
   target_include_directories(${target_name} PUBLIC
     ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/base
     ${PROJECT_SOURCE_DIR}/src/jot
     ${PROJECT_SOURCE_DIR}/src/input
     ${PROJECT_SOURCE_DIR}/src/render
@@ -322,6 +324,7 @@ function(jot_expose_module_api target_name)
   )
 endfunction()
 
+include(base/sources.cmake)
 include(jot/sources.cmake)
 include(edit/sources.cmake)
 include(features/sources.cmake)
@@ -370,6 +373,9 @@ if(JOT_GUI AND NOT WIN32)
 endif()
 
 # Module object libraries
+add_library(jot_base_obj OBJECT ${JOT_BASE_SOURCES})
+jot_configure_object_target(jot_base_obj)
+
 add_library(jot_engine_obj OBJECT ${JOT_ENGINE_SOURCES})
 jot_configure_object_target(jot_engine_obj)
 target_include_directories(jot_engine_obj SYSTEM PRIVATE ${LIBUV_INCLUDE_DIRS})
@@ -451,6 +457,7 @@ endif()
 jot_configure_object_target(jot_ui_obj)
 
 # Module static libraries (for larger-project style ownership and reuse)
+add_library(jot_base STATIC $<TARGET_OBJECTS:jot_base_obj>)
 add_library(jot_core STATIC $<TARGET_OBJECTS:jot_engine_obj>)
 add_library(jot_edit STATIC $<TARGET_OBJECTS:jot_edit_obj>)
 add_library(jot_features STATIC $<TARGET_OBJECTS:jot_features_obj>)
@@ -467,6 +474,7 @@ target_link_libraries(jot_lua_api PUBLIC ${LUA_LIBRARIES})
 target_include_directories(jot_lua_api SYSTEM PUBLIC ${LUA_INCLUDE_DIRS})
 add_library(jot_ui STATIC $<TARGET_OBJECTS:jot_ui_obj>)
 
+jot_expose_module_api(jot_base)
 jot_expose_module_api(jot_core)
 jot_expose_module_api(jot_edit)
 jot_expose_module_api(jot_features)
@@ -479,6 +487,7 @@ jot_expose_module_api(jot_ui)
 # Aggregated engine library consumed by the app target.
 # Built from the same object libraries to avoid duplicate compilation.
 add_library(jot_engine STATIC
+  $<TARGET_OBJECTS:jot_base_obj>
   $<TARGET_OBJECTS:jot_engine_obj>
   $<TARGET_OBJECTS:jot_edit_obj>
   $<TARGET_OBJECTS:jot_features_obj>
@@ -499,10 +508,10 @@ target_include_directories(jot_engine SYSTEM PUBLIC ${LUA_INCLUDE_DIRS})
 
 jot_expose_module_api(jot_engine)
 if(JOT_TREESITTER_ENABLED)
-  foreach(target_name IN ITEMS jot_engine_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj jot_core jot_edit jot_features jot_input jot_render jot_tools jot_lua_api jot_ui jot_engine)
+  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj jot_base jot_core jot_edit jot_features jot_input jot_render jot_tools jot_lua_api jot_ui jot_engine)
     target_compile_definitions(${target_name} PUBLIC JOT_TREESITTER=1)
   endforeach()
-  foreach(target_name IN ITEMS jot_engine_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj)
+  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj)
     target_include_directories(${target_name} SYSTEM PRIVATE ${TREE_SITTER_INCLUDE_DIRS})
   endforeach()
   target_link_libraries(jot_features PUBLIC
@@ -529,7 +538,7 @@ endif()
 # targets *and* the libraries they are folded into, because $<TARGET_OBJECTS:>
 # does not carry usage requirements across.
 if(JOT_GUI_ENABLED)
-  foreach(target_name IN ITEMS jot_engine_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj jot_core jot_edit jot_features jot_input jot_render jot_tools jot_lua_api jot_ui jot_engine)
+  foreach(target_name IN ITEMS jot_base_obj jot_engine_obj jot_edit_obj jot_input_obj jot_render_obj jot_lua_api_obj jot_tools_obj jot_ui_obj jot_base jot_core jot_edit jot_features jot_input jot_render jot_tools jot_lua_api jot_ui jot_engine)
     target_compile_definitions(${target_name} PUBLIC JOT_GUI=1)
   endforeach()
 endif()

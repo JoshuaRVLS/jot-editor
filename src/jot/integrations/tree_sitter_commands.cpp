@@ -1,7 +1,7 @@
-#include "jot/app/process_job.h"
+#include "base/string_util.h"
 #include "editor.h"
+#include "jot/app/process_job.h"
 #include "jot/lua/api.h"
-#include "tools/string_util.h"
 #include "tree_sitter/install.h"
 
 #include <algorithm>

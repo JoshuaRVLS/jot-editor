@@ -9,9 +9,9 @@
 // actually does: which request the cursor picks, that an unresolved variable
 // refuses the run instead of sending it wrong, and that an answer lands in one
 // re-usable `[Response]` tab that `:w` cannot litter the workspace with.
+#include "base/shell_util.h"
 #include "editor.h"
 #include "features/http_file.h"
-#include "tools/shell_util.h"
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>

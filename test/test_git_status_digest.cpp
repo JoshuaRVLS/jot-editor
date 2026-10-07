@@ -7,9 +7,9 @@
 // the report that started this. The digest cases are pure; the editor case runs
 // a real repo and checks the poll skips a parse only while the output is
 // byte-for-byte the one the installed map was built from.
+#include "base/shell_util.h"
 #include "editor.h"
 #include "jot/workspace/git_run.h"
-#include "tools/shell_util.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

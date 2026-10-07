@@ -1,7 +1,7 @@
+#include "base/shell_util.h"
 #include "editor.h"
 #include "jot/lua/api.h"
 #include "text_features.h"
-#include "tools/shell_util.h"
 #include <algorithm>
 #include <array>
 #include <cstdio>

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Probe: a git popup marks its own truncation, and nothing else.
 
-The shared helper (src/tools/string_util.h) is pinned by test_string_util.cpp.
+The shared helper (src/base/string_util.h) is pinned by test_string_util.cpp.
 What only the real binary shows is the popup it feeds. `:gitstatus` runs
 `limit_lines(status, 18)`, and that helper used to exist three times over, once
 behind each popup that needed one; the copies disagreed on the shape that ends

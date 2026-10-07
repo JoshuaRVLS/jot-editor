@@ -17,8 +17,8 @@
 // entry point per translation unit and they are compiled one by one. When
 // *every* source file in the workspace holds its own entry point the whole
 // cross-file check goes quiet, since no two of those files can share a link.
+#include "base/string_util.h"
 #include "cpp_definitions.h"
-#include "tools/string_util.h"
 
 #include <algorithm>
 #include <chrono>

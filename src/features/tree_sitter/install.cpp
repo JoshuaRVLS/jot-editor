@@ -1,5 +1,5 @@
 #include "tree_sitter/install.h"
-#include "tools/shell_util.h"
+#include "base/shell_util.h"
 
 #include <algorithm>
 #include <cctype>

@@ -9,9 +9,9 @@
 // write that cannot happen leaves it exactly as it was. The editor cases pin
 // the save itself, since the buffer and the bytes have to agree afterwards.
 
+#include "base/file_util.h"
 #include "editor.h"
 #include "features/save_hygiene.h"
-#include "tools/file_util.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

@@ -4,11 +4,11 @@
 // in the anonymous namespace of the module that owns them.
 #pragma once
 
+#include "base/shell_util.h"
+#include "base/string_util.h"
 #include "jot/integrations/lsp_attach_data.h"
 #include "lsp/client.h"
 #include "lsp/install.h"
-#include "tools/shell_util.h"
-#include "tools/string_util.h"
 #include <algorithm>
 #include <cctype>
 #include <chrono>

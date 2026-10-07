@@ -17,7 +17,7 @@
 // the same way. Preprocessor lines are blanked before tokenizing, so a macro
 // body never leaks into the declarations around it.
 #include "cpp_definitions.h"
-#include "tools/string_util.h"
+#include "base/string_util.h"
 
 #include <algorithm>
 #include <cctype>
