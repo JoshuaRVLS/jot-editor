@@ -263,6 +263,38 @@ TEST_CASE("Settings menu covers Lua-registered and LSP keys", "[jot]")
           == "Check updates on startup");
 }
 
+TEST_CASE("Settings menu disables LSP globally and live", "[jot]")
+{
+  Editor &e = probe_editor();
+  // Start from a known state: the probe editor is shared with the cases above.
+  e.set_config_for_test("lsp_enabled", "true");
+  e.apply_config_live_for_test();
+  open_menu(e);
+
+  const int idx = entry_index(e, "lsp_enabled");
+  REQUIRE(idx >= 0);
+  REQUIRE(e.settings_entries_for_test()[(size_t)idx].type == SettingsEntry::Type::Bool);
+  REQUIRE(e.settings_entries_for_test()[(size_t)idx].label == "LSP (language servers)");
+  // The lsp_ family files it beside the other server keys.
+  REQUIRE(e.settings_section_for_test("lsp_enabled") == "Code intelligence");
+  REQUIRE(e.lsp_enabled_for_test());
+
+  // Enter flips the row and the editor acts on it: the global switch is down,
+  // nothing attaches a server, and the client list is empty.
+  e.settings_select_for_test(idx);
+  REQUIRE(e.settings_input_for_test('\n'));
+  REQUIRE(e.config_value_for_test("lsp_enabled") == "false");
+  REQUIRE_FALSE(e.lsp_enabled_for_test());
+  REQUIRE(e.ensure_lsp_for_file_for_test("/tmp/jot_lsp_off_probe/main.cpp") == nullptr);
+  REQUIRE(e.lsp_client_count_for_test() == 0);
+
+  // Left/Right move it back, and the gate opens with it.
+  e.settings_select_for_test(idx);
+  REQUIRE(e.settings_input_for_test(1010));
+  REQUIRE(e.config_value_for_test("lsp_enabled") == "true");
+  REQUIRE(e.lsp_enabled_for_test());
+}
+
 TEST_CASE("Settings menu edits a toast key and persists it", "[jot]")
 {
   Editor &e = probe_editor();

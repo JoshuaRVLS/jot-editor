@@ -236,6 +236,12 @@ void Config::load_defaults()
   settings["smooth_scroll"] = "false";
   settings["smooth_scroll_easing"] = "linear";
   settings["smooth_scroll_duration_multiplier"] = "1.0";
+  // The global LSP switch (editor/integrations/lsp/*): off means no language
+  // server is started and every running one is stopped. It is the one setting
+  // for a machine that cannot spare the servers, or a tree where they should
+  // not run at all, and it lives under Code intelligence in :settings. The
+  // per-server switch (jot.lsp.set_enabled) still applies while this is on.
+  settings["lsp_enabled"] = "true";
   settings["lsp_change_debounce_ms"] = "120";
   // How long the typing has to pause before a server's fresh findings paint.
   // While it is typing, the squiggle, the row band and the inline message

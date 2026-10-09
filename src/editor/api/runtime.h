@@ -134,6 +134,10 @@ void restart_all_lsp_clients();
 // has unsaved changes unless `force`. Returns whether a restart started.
 bool restart_editor(bool force = false);
 void set_lsp_server_enabled(const std::string &server, bool enabled);
+// The global `lsp_enabled` switch: off stops every client (the same sweep
+// :lspstop does) and keeps new ones from attaching, on re-attaches every
+// already-open buffer. Called from apply_config_live on a change only.
+void set_lsp_globally_enabled(bool enabled);
 bool install_lsp_server(const std::string &name);
 bool remove_lsp_server(const std::string &name);
 // One-shot toolkit presets from the Lua policy (currently "web": the

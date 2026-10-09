@@ -30,6 +30,11 @@ struct LspUiState
   // try instead of re-running on every buffer open.
   std::set<std::string> lsp_bundled_auto_installs;
   std::set<std::string> lsp_disabled_servers;
+  // The global switch (the `lsp_enabled` setting, mirrored by
+  // Editor::apply_config_live and Editor::set_lsp_globally_enabled): while it
+  // is false ensure_lsp_for_file() starts nothing, and every client that was
+  // running has been stopped.
+  bool lsp_enabled = true;
   // LSP published diagnostics kept per (server|root -> filepath) so several
   // servers attached to one buffer merge instead of clobbering each other.
   std::map<std::string, std::map<std::string, std::vector<Diagnostic>>> lsp_diag_slices_;

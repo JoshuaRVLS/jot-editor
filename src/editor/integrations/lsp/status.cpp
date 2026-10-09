@@ -39,7 +39,13 @@ void Editor::show_lsp_status()
   }
 
   std::string message;
-  if (running_clients == 0 && attaching == 0)
+  if (!lsp_enabled)
+  {
+    // The switch, not the servers, is why nothing is attached: say which one to
+    // flip rather than leaving the empty modal to speak for it.
+    message = "LSP disabled: lsp_enabled=false in :settings";
+  }
+  else if (running_clients == 0 && attaching == 0)
   {
     message = "LSP inactive: no language servers running";
   }

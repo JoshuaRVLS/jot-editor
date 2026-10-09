@@ -404,6 +404,24 @@ std::string config_value_for_test(const std::string &key)
 {
   return config.get(key, "");
 }
+// The global LSP switch as the editor last applied it. The state is private and
+// the live apply is an action (stop the clients), so a test pins the flag it
+// left behind rather than a client it never had a server to watch.
+bool lsp_enabled_for_test() const
+{
+  return lsp_enabled;
+}
+// The gate the global switch closes: with lsp_enabled off this refuses a file
+// before it looks at the language (so a test can call it with a path that has
+// no server at all), and no client is on the list to have started.
+LSPClient *ensure_lsp_for_file_for_test(const std::string &filepath)
+{
+  return ensure_lsp_for_file(filepath);
+}
+int lsp_client_count_for_test() const
+{
+  return (int)lsp_clients.size();
+}
 int config_int_for_test(const std::string &key)
 {
   return config.get_int(key, 0);

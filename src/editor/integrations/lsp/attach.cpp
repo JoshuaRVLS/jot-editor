@@ -131,6 +131,12 @@ LSPClient *Editor::ensure_lsp_for_file(const std::string &filepath)
   {
     return nullptr;
   }
+  // The global switch (lsp_enabled): while it is off nothing attaches, and the
+  // setting's live apply already stopped whatever was running.
+  if (!lsp_enabled)
+  {
+    return nullptr;
+  }
 
   std::string language = lsp_internal::detect_lsp_language(filepath);
   if (language.empty())

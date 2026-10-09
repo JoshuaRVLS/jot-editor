@@ -118,6 +118,17 @@ void Editor::apply_config_live()
   }
   lsp_change_debounce_ms = std::clamp(config.get_int("lsp_change_debounce_ms", 120), 25, 1000);
   lsp_diagnostics_quiet_ms = std::clamp(config.get_int("lsp_diagnostics_quiet_ms", 700), 0, 5000);
+  // The global LSP switch. It is mirrored rather than read per use because
+  // turning it off is an action -- every running client is stopped, and the
+  // findings they published go with them -- and turning it back on re-attaches
+  // what is open. Read per use, those two halves would never happen.
+  {
+    const bool lsp_wanted = config.get_bool("lsp_enabled", true);
+    if (lsp_wanted != lsp_enabled)
+    {
+      set_lsp_globally_enabled(lsp_wanted);
+    }
+  }
   integrated_terminal_height = std::clamp(config.get_int("terminal_height", 10), 5, 20);
   floating_terminal_width = std::clamp(config.get_int("terminal_float_width", 85), 20, 100);
   floating_terminal_height = std::clamp(config.get_int("terminal_float_height", 75), 20, 100);
@@ -425,6 +436,11 @@ void Editor::initialize_state_defaults()
   idle_fps = std::clamp(config.get_int("idle_fps", 60), 5, 240);
   lsp_change_debounce_ms = std::clamp(config.get_int("lsp_change_debounce_ms", 120), 25, 1000);
   lsp_diagnostics_quiet_ms = std::clamp(config.get_int("lsp_diagnostics_quiet_ms", 700), 0, 5000);
+  // The global LSP switch, read here as well as in apply_config_live() so a
+  // configured off is in effect before the first buffer opens and asks for a
+  // server. No message and no sweep belong at construction time: nothing has
+  // been started yet.
+  lsp_enabled = config.get_bool("lsp_enabled", true);
   last_cursor_shape = -1;
   cancel_smooth_scroll();
   blink_anchor_ms = std::chrono::duration_cast<std::chrono::milliseconds>(

@@ -329,6 +329,11 @@ void Editor::stop_all_lsp_clients()
 
 void Editor::restart_all_lsp_clients()
 {
+  if (!lsp_enabled)
+  {
+    set_message("LSP is disabled: turn lsp_enabled on in :settings");
+    return;
+  }
   lsp_pending_changes.clear();
   // Old diagnostics belong to the pre-restart documents; refresh re-opens
   // every file below and servers re-publish fresh ones.
@@ -400,5 +405,36 @@ void Editor::set_lsp_server_enabled(const std::string &server, bool enabled)
     invalidate_sidebar_diagnostics_cache();
   }
   save_workspace_session();
+  needs_redraw = true;
+}
+
+void Editor::set_lsp_globally_enabled(bool enabled)
+{
+  if (enabled == lsp_enabled)
+  {
+    return;
+  }
+  lsp_enabled = enabled;
+  if (!enabled)
+  {
+    // Off means the servers are gone, not merely unattached: stop all of them
+    // (their processes, their fd watches and the findings they published), the
+    // same sweep :lspstop runs. ensure_lsp_for_file() refuses to start a new
+    // one while the flag is down, so nothing comes back before it is raised.
+    stop_all_lsp_clients();
+    set_message("LSP disabled (lsp_enabled=false)");
+    needs_redraw = true;
+    return;
+  }
+  // Back on: attach what is already open, so a user who flipped the switch back
+  // does not have to touch a buffer for the servers to return.
+  for (const auto &buf : buffers)
+  {
+    if (!buf.filepath.empty() && !buf.is_lazy())
+    {
+      notify_lsp_open(buf.filepath);
+    }
+  }
+  set_message("LSP enabled");
   needs_redraw = true;
 }

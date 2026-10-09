@@ -448,7 +448,12 @@ keywords of your own, each taking the default family colour, the way upstream's
 - Document symbols via LSP with regex fallback - as a picker or a persistent
   outline.
 - Status, start/stop/restart, a manager, and install/remove helpers for 100+
-  servers (`:lspinstall <server>`, `:lspremove <server>`).
+  servers (`:lspinstall <server>`, `:lspremove <server>`). One global switch,
+  `lsp_enabled` (default true, a row under Code intelligence in `:settings`):
+  off stops every running server and keeps new ones from attaching until it is
+  turned back on, which re-attaches the buffers already open. It is the one
+  setting for a machine that cannot spare the servers, or a tree where they
+  should not run at all.
 - **Windows installs use the catalog too**: there is no POSIX shell there, so
   every manager family in the catalog renders a second script out of cmd.exe
   steps - `github`, `payload`, `npm`, `pypi`, `golang`, `cargo`, `nuget`, `gem`,
@@ -1363,7 +1368,8 @@ Built-in defaults include `explorer_width=25`, `minimap_width=15`,
 `tab_size=2`, `show_line_numbers=true`, `rainbow_brackets=true`,
 `relative_line_numbers=true`, `cursor_style=block`, `cursor_blink_ms=500`,
 `render_fps=120`, `idle_fps=60`, `word_highlight=true`,
-`auto_save=false`, `auto_save_interval_ms=2000`, `lsp_change_debounce_ms=120`,
+`auto_save=false`, `auto_save_interval_ms=2000`, `lsp_enabled=true`,
+`lsp_change_debounce_ms=120`,
 `lsp_diagnostics_quiet_ms=700`, `lsp_inlay_hints=true`,
 `lsp_inlay_type_hints=true`, `cpp_definitions=true`
 (the C++ declaration/definition checks), `terminal_height=10`,

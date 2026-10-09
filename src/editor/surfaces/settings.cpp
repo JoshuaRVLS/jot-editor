@@ -105,6 +105,7 @@ namespace
       {"highlight_cursor_line", "Highlight cursor line", SettingsEntry::Type::Bool},
       {"idle_fps", "Idle FPS", SettingsEntry::Type::Int},
       {"image_viewer_backend", "Image viewer backend", SettingsEntry::Type::String},
+      {"lsp_enabled", "LSP (language servers)", SettingsEntry::Type::Bool},
       {"lsp_change_debounce_ms", "LSP change debounce (ms)", SettingsEntry::Type::Int},
       {"lsp_completion_ghost_delay_ms", "LSP ghost text delay (ms)", SettingsEntry::Type::Int},
       {"lsp_diagnostics_quiet_ms", "Diagnostics quiet time (ms)", SettingsEntry::Type::Int},
