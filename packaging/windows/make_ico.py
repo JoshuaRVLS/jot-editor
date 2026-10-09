@@ -2,8 +2,8 @@
 """Generate packaging/windows/jot.ico from packaging/windows/icon.png.
 
 Pure Python (no PIL): decodes the PNG by hand (zlib + scanline filters),
-locates the rounded icon tile via its cream border, cuts transparent corners,
-and box-downsamples to the classic multi-size ICO set (16..128px).
+treats the whole canvas as the icon tile, rounds its corners off to
+transparent, and box-downsamples to the classic multi-size ICO set (16..128px).
 
 Usage: python3 make_ico.py
 """
@@ -100,24 +100,6 @@ def clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
 
-def find_tile_bounds(rgba, w, h):
-    """Locate the rounded tile via its bright cream border."""
-    x0, y0, x1, y1 = w, h, -1, -1
-    for y in range(h):
-        row = y * w * 4
-        for x in range(w):
-            i = row + x * 4
-            r, g, b = rgba[i], rgba[i + 1], rgba[i + 2]
-            if r > 170 and g > 170 and b > 150:  # cream-ish
-                x0 = min(x0, x)
-                y0 = min(y0, y)
-                x1 = max(x1, x)
-                y1 = max(y1, y)
-    if x1 < 0:
-        return 0, 0, w, h
-    return x0, y0, x1 - x0 + 1, y1 - y0 + 1
-
-
 def rounded_rect_alpha(x, y, bx, by, bw, bh, r):
     """Coverage (0..1) of a rounded rect, 1 inside, soft 1px edge."""
     cx = bx + bw / 2.0 - 0.5
@@ -166,8 +148,12 @@ def downsample(rgba, sw, sh, n):
 
 
 def render(size, rgba, sw, sh):
-    """Downsample, then apply rounded-tile alpha in the target space."""
-    bx, by, bw, bh = find_tile_bounds(rgba, sw, sh)
+    """Downsample, then apply rounded-tile alpha in the target space.
+
+    The artwork is a full-bleed square, so the tile IS the canvas: the
+    corners are the only thing cut away.
+    """
+    bx, by, bw, bh = 0, 0, sw, sh
     radius = bw * 0.18
     px = downsample(rgba, sw, sh, size)
     out = bytearray()

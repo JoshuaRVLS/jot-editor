@@ -372,6 +372,22 @@ if(JOT_GUI AND NOT WIN32)
   if(SDL2_FOUND AND FREETYPE2_FOUND)
     set(JOT_GUI_ENABLED TRUE)
     set(JOT_GUI_ENABLED TRUE CACHE INTERNAL "GUI frontend compiled into the engine" FORCE)
+    # Official window icon: the raw RGBA bytes (packaging/jot-icon-128.rgba,
+    # produced by packaging/make_gui_icon.py from packaging/windows/icon.png)
+    # are embedded at build time so SDL_SetWindowIcon never needs an installed
+    # data file. The script validates the byte count against SIZE.
+    set(JOT_GUI_ICON_RGRA "${PROJECT_SOURCE_DIR}/packaging/jot-icon-128.rgba")
+    set(JOT_GUI_ICON_CPP "${CMAKE_CURRENT_BINARY_DIR}/gui_icon_data.cpp")
+    add_custom_command(
+      OUTPUT "${JOT_GUI_ICON_CPP}"
+      COMMAND ${CMAKE_COMMAND}
+        -DINPUT=${JOT_GUI_ICON_RGRA}
+        -DSIZE=128
+        -DOUTPUT=${JOT_GUI_ICON_CPP}
+        -P ${PROJECT_SOURCE_DIR}/cmake/embed_icon.cmake
+      DEPENDS "${JOT_GUI_ICON_RGRA}" "${PROJECT_SOURCE_DIR}/cmake/embed_icon.cmake"
+      COMMENT "Embedding the jot window icon"
+      VERBATIM)
     # The test suite has a GUI keysym test that needs SDL's key constants; hand
     # the include dirs up the way TREE_SITTER_INCLUDE_DIRS is handed up above.
     set(SDL2_INCLUDE_DIRS "${SDL2_INCLUDE_DIRS}" PARENT_SCOPE)
@@ -398,7 +414,8 @@ if(JOT_GUI AND NOT WIN32)
          ui/gui/gui_render.cpp
          ui/gui/gui_cursor.cpp
          ui/gui/gui_input.cpp
-         ui/gui/gui_ligatures.cpp)
+         ui/gui/gui_ligatures.cpp
+         "${JOT_GUI_ICON_CPP}")
     list(APPEND JOT_EDITOR_SOURCES editor/event/gui_events.cpp)
   else()
     message(STATUS "JOT_GUI requested but SDL2/freetype2 not found; building terminal-only")

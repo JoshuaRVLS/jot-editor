@@ -4,6 +4,7 @@
 // animation state in gui_anim.cpp.
 #include "gui/gui.h"
 #include "gui/gui_fit.h"
+#include "gui/gui_icon.h"
 #include "ui/gui/font_catalog.h"
 
 #include <SDL2/SDL.h>
@@ -95,6 +96,22 @@ UIGui::UIGui(
   if (!window_)
   {
     throw std::runtime_error(std::string("jot-gui: SDL_CreateWindow failed: ") + SDL_GetError());
+  }
+  // Official window icon: the same artwork as packaging/windows/jot.ico,
+  // embedded at build time (cmake/embed_icon.cmake) so no data file is
+  // needed at runtime. Failure is cosmetic -- the window manager keeps its
+  // default icon -- so it never aborts startup. The surface does not own the
+  // pixels, so SDL_FreeSurface only releases the surface itself.
+  if (SDL_Surface *icon = SDL_CreateRGBSurfaceWithFormatFrom(
+          const_cast<unsigned char *>(jot_gui::kWindowIconPixels),
+          jot_gui::kWindowIconSize,
+          jot_gui::kWindowIconSize,
+          32,
+          jot_gui::kWindowIconSize * 4,
+          SDL_PIXELFORMAT_RGBA32))
+  {
+    SDL_SetWindowIcon(window_, icon);
+    SDL_FreeSurface(icon);
   }
   gl_context_ = SDL_GL_CreateContext(window_);
   if (!gl_context_)
