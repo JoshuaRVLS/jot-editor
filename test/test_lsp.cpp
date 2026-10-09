@@ -81,6 +81,43 @@ TEST_CASE("An LSP edit takes its undo step in the buffer it names", "[lsp][undo]
   std::remove(b.c_str());
 }
 
+TEST_CASE("Tab after an LSP edit that shortens the file stays inside it", "[lsp]")
+{
+  Editor &e = probe_editor();
+  e.set_home_menu_visible(false);
+  const std::string path = write_temp_source(e, "alpha\nbeta\ngamma\ndelta\n");
+  FileBuffer &buf = e.buffer_for_test();
+
+  // The last four rows are selected, so both ends of the selection address the
+  // file as it stands now.
+  const int last_row = (int)buf.lines.size() - 1;
+  REQUIRE(buf.lines[last_row] == "delta");
+  buf.selection = {{0, 0}, {(int)buf.lines[last_row].size(), last_row}, true};
+  buf.cursor = buf.selection.end;
+
+  // A format answer rewrites rows 1-3 into one empty row: the file shrinks, and
+  // the end of the selection has no row under it any more.
+  LSPTextEdit edit;
+  edit.start_line = 1;
+  edit.start_char = 0;
+  edit.end_line = 3;
+  edit.end_char = 5;
+  edit.new_text = "";
+  e.apply_lsp_text_edits_for_test(path, {edit});
+  REQUIRE(e.buffer_for_test().lines.size() == 2);
+
+  // The selection comes back onto the file it addresses...
+  const FileBuffer &after = e.buffer_for_test();
+  REQUIRE(after.selection.end.y == 1);
+  REQUIRE(after.selection.end.x == 0);
+
+  // ...so Tab indents the rows that exist. Left stale, the walk over the
+  // selected rows indexed the line list past its end.
+  e.apply_default_tab();
+  REQUIRE(e.host().core.buffer_content() == "  alpha\n  ");
+  std::remove(path.c_str());
+}
+
 TEST_CASE("LSP file URI encodes reserved path characters", "[lsp]")
 {
   const std::filesystem::path input = std::filesystem::temp_directory_path() / "jot lsp#%.cpp";

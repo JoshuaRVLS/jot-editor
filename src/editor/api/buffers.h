@@ -35,6 +35,12 @@ void clamp_cursor(int buffer_id);
 // it once the text changed: a column past the end of its line is not a
 // position the insert paths can index with.
 void clamp_carets(FileBuffer &buf);
+// Everything that points into the buffer comes back onto text that exists: the
+// carets, the selection and the scroll. The wholesale rewrites -- an external
+// file change, a formatter's rewrite, an LSP format or rename answer -- can
+// drop rows under positions that were valid a moment ago, and the selection is
+// not covered by clamp_carets: Tab walks the selected rows and indexes them.
+void clamp_buffer_positions(FileBuffer &buf);
 void move_word_forward(bool extend_selection = false);
 void move_word_backward(bool extend_selection = false);
 void move_to_line_smart_start(bool extend_selection = false);

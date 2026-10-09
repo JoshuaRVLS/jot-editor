@@ -151,12 +151,11 @@ void Editor::apply_lsp_text_edits(const std::string &filepath,
   {
     target->modified = true;
     invalidate_syntax_cache(*target);
-    if (target->cursor.y >= (int)target->lines.size())
-    {
-      target->cursor.y = std::max(0, (int)target->lines.size() - 1);
-    }
-    target->cursor.x =
-        std::clamp(target->cursor.x, 0, (int)target->lines[(size_t)target->cursor.y].size());
+    // The edits drop rows and shorten the ones that stay, so every position
+    // pointing into the buffer comes back onto the text that is left. A stale
+    // selection is not just drawn wrong: Tab walks the selected rows and
+    // indexes the line list with them, which read (and wrote) past its end.
+    clamp_buffer_positions(*target);
     needs_redraw = true;
     if (!target->filepath.empty())
     {

@@ -183,36 +183,38 @@ namespace
     return exts.find(ext) != exts.end();
   }
 
-  void normalize_buffer_after_external_edit(FileBuffer &buf)
-  {
-    if (buf.is_lazy())
-      return;
-
-    if (buf.line_count() == 0)
-    {
-      buf.lines.push_back("");
-    }
-
-    buf.cursor.y = std::clamp(buf.cursor.y, 0, std::max(0, (int)buf.line_count() - 1));
-    buf.cursor.x = std::clamp(buf.cursor.x, 0, (int)buf.line(buf.cursor.y).size());
-    buf.preferred_x = buf.cursor.x;
-
-    buf.scroll_offset = std::clamp(buf.scroll_offset, 0, std::max(0, (int)buf.line_count() - 1));
-    buf.scroll_x = std::max(0, buf.scroll_x);
-
-    if (buf.selection.active)
-    {
-      buf.selection.start.y =
-          std::clamp(buf.selection.start.y, 0, std::max(0, (int)buf.line_count() - 1));
-      buf.selection.end.y =
-          std::clamp(buf.selection.end.y, 0, std::max(0, (int)buf.line_count() - 1));
-      buf.selection.start.x =
-          std::clamp(buf.selection.start.x, 0, (int)buf.line(buf.selection.start.y).size());
-      buf.selection.end.x =
-          std::clamp(buf.selection.end.x, 0, (int)buf.line(buf.selection.end.y).size());
-    }
-  }
 } // namespace
+
+void Editor::clamp_buffer_positions(FileBuffer &buf)
+{
+  if (buf.is_lazy())
+    return;
+
+  if (buf.line_count() == 0)
+  {
+    buf.lines.push_back("");
+  }
+
+  // The carets (cursor and extras) come back through clamp_carets; the
+  // selection needs the same treatment, and it is the one that gets walked row
+  // by row (Tab, Shift+Tab, a comment toggle), so a row past the end is not
+  // just drawn wrong -- it is indexed.
+  clamp_carets(buf);
+
+  buf.scroll_offset = std::clamp(buf.scroll_offset, 0, std::max(0, (int)buf.line_count() - 1));
+  buf.scroll_x = std::max(0, buf.scroll_x);
+
+  if (buf.selection.active)
+  {
+    const int last_line = std::max(0, (int)buf.line_count() - 1);
+    buf.selection.start.y = std::clamp(buf.selection.start.y, 0, last_line);
+    buf.selection.end.y = std::clamp(buf.selection.end.y, 0, last_line);
+    buf.selection.start.x =
+        std::clamp(buf.selection.start.x, 0, (int)buf.line(buf.selection.start.y).size());
+    buf.selection.end.x =
+        std::clamp(buf.selection.end.x, 0, (int)buf.line(buf.selection.end.y).size());
+  }
+}
 void Editor::load_file(const std::string &fname)
 {
   open_file(fname, false);
@@ -811,7 +813,7 @@ bool Editor::save_buffer_at(int index, bool announce)
       save_state_for(buf, true);
     }
     buf.lines.swap(refreshed_lines);
-    normalize_buffer_after_external_edit(buf);
+    clamp_buffer_positions(buf);
     buf.fold_ranges.clear();
     invalidate_syntax_cache(buf);
     return true;
@@ -879,7 +881,7 @@ bool Editor::save_buffer_at(int index, bool announce)
           {
             b.lines.swap(refreshed);
           }
-          normalize_buffer_after_external_edit(b);
+          clamp_buffer_positions(b);
           b.fold_ranges.clear();
           invalidate_syntax_cache(b);
           b.modified = false;
