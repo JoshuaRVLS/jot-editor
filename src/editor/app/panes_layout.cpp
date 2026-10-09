@@ -99,7 +99,9 @@ jot_sidebar::Layout Editor::sidebar_sections_layout() const
                               sidebar_explorer_open,
                               sidebar_outline_open,
                               sidebar_timeline_open,
-                              /*show_footer=*/true);
+                              /*show_footer=*/true,
+                              sidebar_outline_height,
+                              sidebar_timeline_height);
 }
 
 int Editor::sidebar_list_rows() const

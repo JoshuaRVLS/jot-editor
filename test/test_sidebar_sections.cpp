@@ -142,6 +142,40 @@ TEST_CASE("A sidebar row maps to the section and index it paints", "[jot]")
   REQUIRE(jot_sidebar::index_in_section(layout.outline, layout.footer_y, &header) == -2);
 }
 
+TEST_CASE("A dragged section height overrides the automatic share", "[jot]")
+{
+  // The outline asked for 12 rows on a column tall enough: it gets them past
+  // the automatic cap, the timeline keeps its own share, and the explorer is
+  // still the flex that takes what is left.
+  const auto dragged = jot_sidebar::compute(0, 30, 12, 30, 20, true, true, true, true, 12, 0);
+  REQUIRE(dragged.outline.h == 12);
+  REQUIRE(dragged.timeline.h == 8); // the automatic share (kSectionCap)
+  REQUIRE(dragged.explorer.h == 6);
+
+  // Dragged down to a single row: everything the outline gave up lands in the
+  // tree, and the timeline is untouched.
+  const auto shrunk = jot_sidebar::compute(0, 20, 12, 4, 3, true, true, true, true, 1, 0);
+  REQUIRE(shrunk.outline.h == 1);
+  REQUIRE(shrunk.explorer.h == 12);
+  REQUIRE(shrunk.timeline.h == 3);
+
+  // A height asked for past the section's own rows is honored as asked: the
+  // rows the user bought stay theirs. A collapsed section ignores its height
+  // (its header is the way back, and reopening finds it again).
+  const auto bought = jot_sidebar::compute(0, 30, 12, 3, 5, true, true, true, true, 10, 0);
+  REQUIRE(bought.outline.h == 10);
+  const auto closed = jot_sidebar::compute(0, 30, 12, 3, 5, true, false, true, true, 10, 0);
+  REQUIRE(closed.outline.h == 0);
+  REQUIRE(closed.outline.y == -1);
+
+  // The tree's floor still beats a dragged height when the column shrinks:
+  // the outline is trimmed (bottom section first) rather than the explorer
+  // squeezed under kTreeMinRows.
+  const auto tight = jot_sidebar::compute(0, 8, 12, 4, 3, true, true, true, true, 6, 2);
+  REQUIRE(tight.explorer.h >= jot_sidebar::kTreeMinRows);
+  REQUIRE(tight.explorer.h + tight.outline.h + tight.timeline.h + 3 + 1 == 8);
+}
+
 TEST_CASE("The timeline parses git log output and compacts ages", "[jot]")
 {
   const std::string log = "abc1234\t1700000000\tMake the status line one row\n"
@@ -299,6 +333,131 @@ TEST_CASE("The explorer's expanded folders come back open", "[jot]")
     }
     REQUIRE(opened);
     REQUIRE_FALSE(shut);
+  }
+}
+
+TEST_CASE("A press on a section header resizes the boundary instead of toggling", "[jot]")
+{
+  Editor &e = probe_editor();
+  char tmpl[] = "/tmp/jot_section_drag_XXXXXX";
+  mkdtemp(tmpl);
+  const std::string root = tmpl;
+  write_file(root + "/a.txt", "one\n");
+
+  e.host().io.open_workspace(root);
+  e.set_sidebar_sections_for_test(Editor::SidebarSectionsForTest()); // all open
+  e.set_sidebar_section_heights_for_test(0, 0);
+  e.apply_resize_for_test(120, 40);
+  e.render_for_test();
+
+  const auto start = e.sidebar_layout_for_test();
+  REQUIRE(start.outline.header_y >= 0);
+  const int x = 10; // inside the column: not the rail, not its right border
+
+  // The press alone only arms the gesture -- the section stays open and no
+  // rows move yet.
+  e.mouse_event_for_test(x, start.outline.header_y, /*bstate=*/1);
+  REQUIRE(e.sidebar_section_resize_pending_for_test());
+  REQUIRE_FALSE(e.sidebar_section_resize_dragging_for_test());
+  REQUIRE(e.sidebar_sections_for_test().outline_open);
+
+  // The first row of movement starts the resize; the outline grows upward
+  // into the explorer's rows with every step, and the release ends the drag
+  // without ever toggling the section.
+  e.mouse_event_for_test(x, start.outline.header_y - 1, /*bstate=*/32);
+  REQUIRE(e.sidebar_section_resize_dragging_for_test());
+  REQUIRE_FALSE(e.sidebar_section_resize_pending_for_test());
+  e.mouse_event_for_test(x, start.outline.header_y - 4, /*bstate=*/32);
+  e.mouse_event_for_test(x, start.outline.header_y - 4, /*bstate=*/2);
+  REQUIRE_FALSE(e.sidebar_section_resize_dragging_for_test());
+  REQUIRE_FALSE(e.sidebar_section_resize_pending_for_test());
+
+  const auto dragged = e.sidebar_layout_for_test();
+  REQUIRE(e.sidebar_sections_for_test().outline_open);
+  REQUIRE(e.sidebar_outline_height_for_test() == start.outline.h + 4);
+  REQUIRE(dragged.outline.h == start.outline.h + 4);
+  REQUIRE(dragged.explorer.h == start.explorer.h - 4);
+  REQUIRE(dragged.timeline.h == start.timeline.h); // the far boundary stays put
+
+  // A press that never moves is still the toggle: the release closes the
+  // section the same click always did.
+  e.mouse_event_for_test(x, dragged.outline.header_y, /*bstate=*/1);
+  REQUIRE(e.sidebar_section_resize_pending_for_test());
+  e.mouse_event_for_test(x, dragged.outline.header_y, /*bstate=*/2);
+  REQUIRE_FALSE(e.sidebar_section_resize_pending_for_test());
+  REQUIRE_FALSE(e.sidebar_sections_for_test().outline_open);
+
+  // The explorer's own header has no boundary above it: it toggles on the
+  // press, as always.
+  const auto closed_layout = e.sidebar_layout_for_test();
+  e.mouse_event_for_test(x, closed_layout.explorer.header_y, /*bstate=*/1);
+  REQUIRE_FALSE(e.sidebar_section_resize_pending_for_test());
+  REQUIRE_FALSE(e.sidebar_sections_for_test().explorer_open);
+  e.mouse_event_for_test(x, closed_layout.explorer.header_y, /*bstate=*/1);
+  REQUIRE(e.sidebar_sections_for_test().explorer_open);
+
+  // Leave the column as the next case finds it.
+  e.mouse_event_for_test(x, e.sidebar_layout_for_test().outline.header_y, /*bstate=*/1);
+  REQUIRE(e.sidebar_sections_for_test().outline_open);
+  e.set_sidebar_section_heights_for_test(0, 0);
+}
+
+TEST_CASE("Dragging the timeline's header trades rows with the outline only", "[jot]")
+{
+  Editor &e = probe_editor();
+  e.set_sidebar_sections_for_test(Editor::SidebarSectionsForTest()); // all open
+  e.set_sidebar_section_heights_for_test(6, 4);
+  e.apply_resize_for_test(120, 40);
+  e.render_for_test();
+
+  const auto start = e.sidebar_layout_for_test();
+  REQUIRE(start.outline.h == 6);
+  REQUIRE(start.timeline.h == 4);
+  const int x = 10;
+
+  // Boundary two moves: the timeline shrinks by the drag, the outline absorbs
+  // every row it gave up, and the explorer above neither grows nor shrinks.
+  e.mouse_event_for_test(x, start.timeline.header_y, /*bstate=*/1);
+  REQUIRE(e.sidebar_section_resize_pending_for_test());
+  e.mouse_event_for_test(x, start.timeline.header_y + 2, /*bstate=*/32);
+  REQUIRE(e.sidebar_section_resize_dragging_for_test());
+  e.mouse_event_for_test(x, start.timeline.header_y + 3, /*bstate=*/32);
+  e.mouse_event_for_test(x, start.timeline.header_y + 3, /*bstate=*/2);
+  REQUIRE_FALSE(e.sidebar_section_resize_dragging_for_test());
+
+  REQUIRE(e.sidebar_timeline_height_for_test() == 1); // one row is the floor
+  REQUIRE(e.sidebar_outline_height_for_test() == 9);
+  const auto dragged = e.sidebar_layout_for_test();
+  REQUIRE(dragged.timeline.h == 1);
+  REQUIRE(dragged.outline.h == 9);
+  REQUIRE(dragged.explorer.h == start.explorer.h);
+  REQUIRE(dragged.outline.h + dragged.timeline.h == start.outline.h + start.timeline.h);
+  REQUIRE(e.sidebar_sections_for_test().timeline_open);
+
+  e.set_sidebar_section_heights_for_test(0, 0);
+}
+
+TEST_CASE("The dragged section heights come back as they were left", "[jot]")
+{
+  char home[] = "/tmp/jot_sections_heights_XXXXXX";
+  mkdtemp(home);
+  setenv("JOT_CONFIG_HOME", home, 1);
+  setenv("JOT_CACHE_HOME", home, 1);
+  const std::string root = std::string(home) + "/ws";
+  fs::create_directories(root);
+
+  {
+    Editor e;
+    e.enable_workspace_session_for_test(root);
+    e.set_sidebar_section_heights_for_test(7, 3);
+    e.save_workspace_session_for_test();
+  }
+  {
+    Editor e2;
+    e2.enable_workspace_session_for_test(root);
+    (void)e2.restore_workspace_session_for_test();
+    REQUIRE(e2.sidebar_outline_height_for_test() == 7);
+    REQUIRE(e2.sidebar_timeline_height_for_test() == 3);
   }
 }
 

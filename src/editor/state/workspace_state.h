@@ -54,6 +54,12 @@ struct WorkspaceState
   int sidebar_outline_scroll = 0;
   int sidebar_timeline_selected = 0;
   int sidebar_timeline_scroll = 0;
+  // The section heights the user dragged the column's boundaries to, in rows;
+  // 0 leaves the section on the layout's automatic share. The explorer has no
+  // field of its own: it is the flex, so these two fully describe where its
+  // bottom edge sits. Saved with the rest of the section state.
+  int sidebar_outline_height = 0;
+  int sidebar_timeline_height = 0;
   // The row under the pointer (-1 = none): the hover highlight, the section it
   // sits in, and its display row inside that section (-1 = the header row).
   // Motion sets it; the render paints it and never lets it outrank a cursor.

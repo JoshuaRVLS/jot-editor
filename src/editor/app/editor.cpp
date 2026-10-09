@@ -405,6 +405,8 @@ void Editor::initialize_state_defaults()
   sidebar_resize_opening = false;
   sidebar_resize_start_x = 0;
   sidebar_resize_start_width = sidebar_width;
+  sidebar_section_resize_pending = false;
+  sidebar_section_resize_dragging = false;
   right_panel_resize_dragging = false;
   right_panel_resize_start_x = 0;
   right_panel_resize_start_width = right_panel_width;

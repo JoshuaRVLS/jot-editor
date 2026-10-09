@@ -1199,8 +1199,18 @@ void Editor::render_sidebar()
   // the right dock but keeping its own cursor and window. ---
   const bool outline_header_hover = sidebar_hover_section == (int)jot_sidebar::SECTION_OUTLINE
                                     && sidebar_hover_index == -1;
+  // While the boundary is being dragged, the header wears the hover highlight
+  // whether or not the pointer's cell still sits on it (the motion belongs to
+  // the drag, not to the hover band).
+  const bool outline_header_dragged =
+      sidebar_section_resize_dragging
+      && sidebar_section_resize_boundary == jot_sidebar::SECTION_OUTLINE;
   paint_section_header(
-      sections.outline.header_y, sidebar_outline_open, "OUTLINE", "", outline_header_hover);
+      sections.outline.header_y,
+      sidebar_outline_open,
+      "OUTLINE",
+      "",
+      outline_header_hover || outline_header_dragged);
   if (sections.outline.h > 0)
   {
     const std::vector<SymbolMatch> &tree = outline_panel.symbols;
@@ -1280,8 +1290,14 @@ void Editor::render_sidebar()
   }
   const bool timeline_header_hover = sidebar_hover_section == (int)jot_sidebar::SECTION_TIMELINE
                                      && sidebar_hover_index == -1;
-  paint_section_header(
-      sections.timeline.header_y, sidebar_timeline_open, "TIMELINE", timeline_file, timeline_header_hover);
+  const bool timeline_header_dragged =
+      sidebar_section_resize_dragging
+      && sidebar_section_resize_boundary == jot_sidebar::SECTION_TIMELINE;
+  paint_section_header(sections.timeline.header_y,
+                       sidebar_timeline_open,
+                       "TIMELINE",
+                       timeline_file,
+                       timeline_header_hover || timeline_header_dragged);
   if (sections.timeline.h > 0)
   {
     const int view_h = sections.timeline.h;

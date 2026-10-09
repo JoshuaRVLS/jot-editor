@@ -50,7 +50,11 @@ namespace jot_sidebar
   // `top`/`height` is the side column. `tree_count` is the explorer's display
   // rows (the root row plus the tree rows), and `outline_count`/`timeline_count`
   // are the data rows each section wants -- an empty section still wants the
-  // one-row note that says so.
+  // one-row note that says so. `outline_height`/`timeline_height` are the
+  // heights the user dragged the boundaries to (0 = take the automatic share):
+  // an asked-for height is honored as asked, past the cap and past the row
+  // count alike -- a section the user sized shows the rows they bought, and a
+  // column the window shrank trims it below (see the floor trim).
   inline Layout compute(int top,
                         int height,
                         int tree_count,
@@ -59,7 +63,9 @@ namespace jot_sidebar
                         bool explorer_open,
                         bool outline_open,
                         bool timeline_open,
-                        bool show_footer)
+                        bool show_footer,
+                        int outline_height = 0,
+                        int timeline_height = 0)
   {
     Layout layout;
     if (height <= 0)
@@ -86,8 +92,14 @@ namespace jot_sidebar
 
     const int content = budget - kHeaderRows;
     const int cap = std::clamp(content / 3, 2, kSectionCap);
-    int outline_h = outline_open ? std::min(std::max(1, outline_count), cap) : 0;
-    int timeline_h = timeline_open ? std::min(std::max(1, timeline_count), cap) : 0;
+    int outline_h = outline_open
+                        ? (outline_height > 0 ? outline_height
+                                              : std::min(std::max(1, outline_count), cap))
+                        : 0;
+    int timeline_h = timeline_open
+                         ? (timeline_height > 0 ? timeline_height
+                                                : std::min(std::max(1, timeline_count), cap))
+                         : 0;
     int tree_h = content - outline_h - timeline_h;
 
     // The tree is the column's flex -- it keeps whatever the other two do not
@@ -100,13 +112,15 @@ namespace jot_sidebar
     if (tree_h > tree_want)
     {
       int spare = tree_h - tree_want;
-      if (outline_open)
+      // A section with a dragged height keeps exactly the rows it was given;
+      // only the automatic ones still grow into the spare.
+      if (outline_open && outline_height <= 0)
       {
         const int take = std::min(spare, std::max(0, outline_count - outline_h));
         outline_h += take;
         spare -= take;
       }
-      if (timeline_open)
+      if (timeline_open && timeline_height <= 0)
       {
         const int take = std::min(spare, std::max(0, timeline_count - timeline_h));
         timeline_h += take;
@@ -128,6 +142,17 @@ namespace jot_sidebar
     if (!explorer_open)
     {
       tree_h = 0;
+      // With no tree to absorb them, dragged heights from a taller column can
+      // sum past the budget: give the excess back, bottom row first, so the
+      // sections can never spill over the footer.
+      if (outline_h + timeline_h > content)
+      {
+        int need = outline_h + timeline_h - content;
+        const int cut_timeline = std::min(need, timeline_h);
+        timeline_h -= cut_timeline;
+        need -= cut_timeline;
+        outline_h -= std::min(need, outline_h);
+      }
     }
 
     int row = top;

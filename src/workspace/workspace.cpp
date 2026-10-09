@@ -347,6 +347,9 @@ void Editor::save_workspace_session()
       << "\n";
   out << "sidebar_timeline_cursor\t" << sidebar_timeline_selected << "\t" << sidebar_timeline_scroll
       << "\n";
+  // The section heights the user dragged the boundaries to (0 = automatic).
+  out << "sidebar_section_heights\t" << sidebar_outline_height << "\t" << sidebar_timeline_height
+      << "\n";
   // The explorer's expanded folders, relative to the root so the session file
   // survives the workspace moving.
   std::function<void(std::vector<FileNode> &)> save_expanded = [&](std::vector<FileNode> &nodes)
@@ -437,6 +440,8 @@ bool Editor::restore_workspace_session()
   int restored_outline_scroll = sidebar_outline_scroll;
   int restored_timeline_selected = sidebar_timeline_selected;
   int restored_timeline_scroll = sidebar_timeline_scroll;
+  int restored_outline_height = sidebar_outline_height;
+  int restored_timeline_height = sidebar_timeline_height;
   int restored_sidebar_width = sidebar_width;
   int restored_right_panel_width = right_panel_width;
   bool restored_show_right_panel = false;
@@ -502,6 +507,19 @@ bool Editor::restore_workspace_session()
       if (std::optional<int> section = string_util::to_int(parts[1]))
       {
         restored_section = *section;
+      }
+    }
+    else if (key == "sidebar_section_heights" && parts.size() >= 3)
+    {
+      // 0 is the automatic share; a negative or unparsable value is a corrupt
+      // session line and stays on it.
+      if (std::optional<int> outline_h = string_util::to_int(parts[1]))
+      {
+        restored_outline_height = std::max(0, *outline_h);
+      }
+      if (std::optional<int> timeline_h = string_util::to_int(parts[2]))
+      {
+        restored_timeline_height = std::max(0, *timeline_h);
       }
     }
     else if (key == "explorer_expanded" && parts.size() >= 2)
@@ -595,6 +613,8 @@ bool Editor::restore_workspace_session()
   sidebar_outline_scroll = std::max(0, restored_outline_scroll);
   sidebar_timeline_selected = std::max(0, restored_timeline_selected);
   sidebar_timeline_scroll = std::max(0, restored_timeline_scroll);
+  sidebar_outline_height = restored_outline_height;
+  sidebar_timeline_height = restored_timeline_height;
 
   // The explorer's folders: each saved path is walked down from the root,
   // loading children as it goes, so a folder nested behind a collapsed one

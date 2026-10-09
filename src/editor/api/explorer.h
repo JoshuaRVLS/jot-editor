@@ -107,6 +107,16 @@ bool sidebar_resize_hit_test(int x, int y) const;
 bool begin_sidebar_resize_drag(int x, int y);
 bool update_sidebar_resize_drag(int x);
 void end_sidebar_resize_drag();
+// Vertical resize of the stacked sections. A press on a boundary header
+// (OUTLINE's or TIMELINE's -- the rows between two sections) arms the gesture
+// with sidebar_section_resize_press instead of toggling on the spot: the
+// first row of movement starts the drag, a release without movement is still
+// the toggle click. The heights land in sidebar_outline_height /
+// sidebar_timeline_height (0 = the automatic share).
+void sidebar_section_resize_press(int y);
+bool begin_sidebar_section_resize_drag(int y);
+bool update_sidebar_section_resize_drag(int y);
+void end_sidebar_section_resize_drag();
 int min_right_panel_width() const
 {
   return 28;

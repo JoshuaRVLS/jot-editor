@@ -687,6 +687,14 @@ void Editor::handle_mouse(void *event_ptr)
       end_sidebar_resize_drag();
       return;
     }
+    if (sidebar_section_resize_pending || sidebar_section_resize_dragging)
+    {
+      // A right click drops the armed press or the live drag the way the other
+      // border drags do -- and with the press gone, so no toggle fires later.
+      sidebar_section_resize_pending = false;
+      end_sidebar_section_resize_drag();
+      return;
+    }
     if (mouse_selecting)
     {
       mouse_selecting = false;
@@ -751,6 +759,48 @@ void Editor::handle_mouse(void *event_ptr)
     if (is_click_release)
     {
       end_sidebar_resize_drag();
+      return;
+    }
+    return;
+  }
+
+  // The section-header drag owns the pointer from the moment the armed press
+  // moves: every motion is one more step of the resize, and the release ends
+  // it without toggling the section (the toggle only survives a press that
+  // never moved).
+  if (sidebar_section_resize_dragging)
+  {
+    if (is_motion || is_click)
+    {
+      update_sidebar_section_resize_drag(event->y);
+      return;
+    }
+    if (is_click_release)
+    {
+      end_sidebar_section_resize_drag();
+      return;
+    }
+    return;
+  }
+  if (sidebar_section_resize_pending)
+  {
+    if (is_motion)
+    {
+      // The threshold is a row of movement: a press that only slid sideways
+      // stays the click its release will perform.
+      if (event->y != sidebar_section_resize_start_y
+          && begin_sidebar_section_resize_drag(event->y))
+      {
+        update_sidebar_section_resize_drag(event->y);
+        needs_redraw = true;
+      }
+      return;
+    }
+    if (is_click_release)
+    {
+      sidebar_section_resize_pending = false;
+      sidebar_toggle_section((int)sidebar_section_resize_boundary);
+      needs_redraw = true;
       return;
     }
     return;
@@ -923,6 +973,21 @@ void Editor::handle_mouse(void *event_ptr)
       // click on the same screen row in two different sections is not a double
       // click, and a scroll between clicks cannot fake one.
       const SidebarHit sidebar_hit = sidebar_hit_test(event->y);
+      // A press on a boundary header (OUTLINE's or TIMELINE's, in the
+      // explorer view and not on the activity rail) is also the start of the
+      // vertical resize: arm it and let the movement -- or the release, which
+      // is the toggle -- decide what the press meant.
+      const bool on_rail = !explorer_only() && event->x < sidebar_activity_rail_width();
+      const bool sections_view = explorer_only() || active_sidebar_view != SIDEBAR_VIEW_GIT;
+      if (sidebar_hit.header && !on_rail && sections_view)
+      {
+        sidebar_section_resize_press(event->y);
+        if (sidebar_section_resize_pending)
+        {
+          needs_redraw = true;
+          return;
+        }
+      }
       const int sidebar_index = sidebar_hit.header ? -1 : sidebar_data_index(sidebar_hit);
       const int sidebar_row = (sidebar_hit.section + 1) * 4096 + (sidebar_index + 2);
       bool sidebar_double = (last_sidebar_click_ms > 0) && (now_ms - last_sidebar_click_ms <= 350)

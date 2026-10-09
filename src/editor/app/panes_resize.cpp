@@ -271,6 +271,148 @@ void Editor::end_sidebar_resize_drag()
   needs_redraw = true;
 }
 
+// --- Sidebar section boundaries -------------------------------------------
+// The column stacks EXPLORER / OUTLINE / TIMELINE under a header row each, so
+// the OUTLINE and TIMELINE headers sit on the two boundaries between them.
+// Each of those rows is both the toggle and the splitter: a press arms the
+// gesture (the toggle moves to the release), and the first vertical row of
+// movement makes it a resize -- the boundary follows the pointer, the section
+// above and the section below trade rows, and the heights are remembered in
+// sidebar_outline_height / sidebar_timeline_height (0 = automatic share).
+void Editor::sidebar_section_resize_press(int y)
+{
+  sidebar_section_resize_pending = false;
+  const SidebarHit hit = sidebar_hit_test(y);
+  if (!hit.header || hit.section == jot_sidebar::SECTION_EXPLORER)
+  {
+    return;
+  }
+  // Both sections the boundary separates have to be open: a closed one owns
+  // no rows to trade, and its header stays a plain toggle.
+  if (hit.section == jot_sidebar::SECTION_OUTLINE)
+  {
+    if (!sidebar_explorer_open || !sidebar_outline_open)
+    {
+      return;
+    }
+  }
+  else if (!sidebar_outline_open || !sidebar_timeline_open)
+  {
+    return;
+  }
+  sidebar_section_resize_pending = true;
+  sidebar_section_resize_boundary = (jot_sidebar::Section)hit.section;
+  sidebar_section_resize_start_y = y;
+}
+
+bool Editor::begin_sidebar_section_resize_drag(int y)
+{
+  if (!sidebar_section_resize_pending)
+  {
+    return false;
+  }
+  const jot_sidebar::Layout sections = sidebar_sections_layout();
+  const bool boundary_one = sidebar_section_resize_boundary == jot_sidebar::SECTION_OUTLINE;
+  // Rebase on the header's current row: rows above may have shifted between
+  // the press and this first movement (an async tree or symbol rebuild), and
+  // starting from a stale row would jump the boundary.
+  const int header_y = boundary_one ? sections.outline.header_y : sections.timeline.header_y;
+  if (header_y < 0)
+  {
+    // Not laid out (column too short for three sections): keep the press
+    // pending so the release is still the toggle, and try again on a later
+    // movement.
+    return false;
+  }
+  const int upper = boundary_one ? sections.explorer.h : sections.outline.h;
+  const int lower = boundary_one ? sections.outline.h : sections.timeline.h;
+  if (boundary_one)
+  {
+    // Boundary one moves the outline against the explorer; the timeline keeps
+    // its rows, so the outline may grow until the explorer would hit its floor.
+    const int content = side_column().h - 1 - jot_sidebar::kHeaderRows;
+    const int hi = content - sections.timeline.h - jot_sidebar::kTreeMinRows;
+    if (hi < 1)
+    {
+      return false;
+    }
+  }
+  else if (upper + lower < 2)
+  {
+    // Boundary two trades rows between outline and timeline only: with fewer
+    // than two rows between them there is nothing to move.
+    return false;
+  }
+  sidebar_section_resize_dragging = true;
+  sidebar_section_resize_pending = false;
+  sidebar_section_resize_start_y = header_y;
+  sidebar_section_resize_start_upper = upper;
+  sidebar_section_resize_start_lower = lower;
+  mouse_selecting = false;
+  mouse_drag_started = false;
+  focus_state = FOCUS_SIDEBAR;
+  needs_redraw = true;
+  return true;
+}
+
+bool Editor::update_sidebar_section_resize_drag(int y)
+{
+  if (!sidebar_section_resize_dragging)
+  {
+    return false;
+  }
+  const int d = y - sidebar_section_resize_start_y;
+  if (d == 0)
+  {
+    return false;
+  }
+  if (sidebar_section_resize_boundary == jot_sidebar::SECTION_OUTLINE)
+  {
+    // Boundary one: only the outline's height is stored -- the explorer is
+    // the column's flex and takes the difference itself. The timeline is read
+    // off the live layout so a section that changed while the drag was on
+    // still keeps its rows.
+    const jot_sidebar::Layout sections = sidebar_sections_layout();
+    const int content = side_column().h - 1 - jot_sidebar::kHeaderRows;
+    const int hi = content - sections.timeline.h - jot_sidebar::kTreeMinRows;
+    const int next =
+        std::clamp(sidebar_section_resize_start_lower - d, 1, std::max(1, hi));
+    if (next == sidebar_outline_height)
+    {
+      return false;
+    }
+    sidebar_outline_height = next;
+  }
+  else
+  {
+    // Boundary two: outline and timeline trade rows between themselves while
+    // the explorer above stays put, so their sum is the constant this drag
+    // started with -- storing both heights is what keeps the upper boundary
+    // from creeping along with the lower one.
+    const int sum = sidebar_section_resize_start_upper + sidebar_section_resize_start_lower;
+    const int timeline = std::clamp(sidebar_section_resize_start_lower - d, 1, sum - 1);
+    if (timeline == sidebar_timeline_height && (sum - timeline) == sidebar_outline_height)
+    {
+      return false;
+    }
+    sidebar_timeline_height = timeline;
+    sidebar_outline_height = sum - timeline;
+  }
+  needs_redraw = true;
+  return true;
+}
+
+void Editor::end_sidebar_section_resize_drag()
+{
+  if (!sidebar_section_resize_dragging)
+  {
+    return;
+  }
+  sidebar_section_resize_dragging = false;
+  set_message("Sidebar sections resized");
+  needs_redraw = true;
+}
+
 bool Editor::begin_terminal_resize_drag(int x, int y)
 {
   if (terminal_zoom_active || !show_integrated_terminal || !ui)

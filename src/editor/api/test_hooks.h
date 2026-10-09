@@ -666,6 +666,46 @@ void terminal_resize_end_for_test()
 {
   end_terminal_resize_drag();
 }
+// The section-header drag: a press on the OUTLINE / TIMELINE header arms it
+// (the toggle moves to the release), the first movement begins the resize, and
+// the heights it stores land in sidebar_outline_height / sidebar_timeline_height.
+void sidebar_section_resize_press_for_test(int y)
+{
+  sidebar_section_resize_press(y);
+}
+bool sidebar_section_resize_pending_for_test() const
+{
+  return sidebar_section_resize_pending;
+}
+bool sidebar_section_resize_dragging_for_test() const
+{
+  return sidebar_section_resize_dragging;
+}
+bool sidebar_section_resize_begin_for_test(int y)
+{
+  return begin_sidebar_section_resize_drag(y);
+}
+bool sidebar_section_resize_update_for_test(int y)
+{
+  return update_sidebar_section_resize_drag(y);
+}
+void sidebar_section_resize_end_for_test()
+{
+  end_sidebar_section_resize_drag();
+}
+int sidebar_outline_height_for_test() const
+{
+  return sidebar_outline_height;
+}
+int sidebar_timeline_height_for_test() const
+{
+  return sidebar_timeline_height;
+}
+void set_sidebar_section_heights_for_test(int outline_height, int timeline_height)
+{
+  sidebar_outline_height = outline_height;
+  sidebar_timeline_height = timeline_height;
+}
 int ui_width_for_test() const
 {
   return grid_width();
