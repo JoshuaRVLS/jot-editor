@@ -55,6 +55,7 @@ add_executable(jot_tests
   test_undo_noop.cpp
   test_undo_memory.cpp
   test_syntax_tree_memory.cpp
+  test_syntax_tree_rewrites.cpp
   test_lsp.cpp
   test_lsp_sync.cpp
   test_lsp_quiet_diagnostics.cpp

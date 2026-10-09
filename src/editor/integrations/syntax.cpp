@@ -760,6 +760,17 @@ void Editor::invalidate_syntax_cache(FileBuffer &buf)
   buf.syntax_engine = SYNTAX_ENGINE_UNKNOWN;
 #ifdef JOT_TREESITTER
   buf.syntax_query = nullptr;
+  // The tree goes with the colours. This is the invalidation the paths that
+  // rewrite a buffer from outside the edit hooks call -- the on-save external
+  // formatters (prettier, clang-format), an LSP format, a Lua buffer write --
+  // and they swap `lines` without ever snapshotting the text the tree was
+  // parsed from. Leaving ts_tree_in_sync true would have the next paint believe
+  // the tree still matches, skip the reparse and query it against the new bytes:
+  // every highlight past the rewrite would come from the old offsets and stay
+  // wrong, since nothing marks the tree out of sync again. Callers that did
+  // snapshot first (ts_begin_edit) keep their ts_edit_base, so the rebuild is
+  // the incremental one.
+  buf.ts_tree_in_sync = false;
 #endif
   buf.syntax_language_label.clear();
 }

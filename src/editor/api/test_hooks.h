@@ -1130,6 +1130,13 @@ bool syntax_tree_ready_for_test()
   return false; // no tree-sitter in this build, so no buffer ever has a tree
 #endif
 }
+// The invalidation the paths that rewrite a buffer from outside the edit hooks
+// call (the on-save formatters, LSP formats, Lua buffer writes): a headless
+// test drives the rewrite through this instead of the external tool.
+void invalidate_syntax_cache_for_test()
+{
+  invalidate_syntax_cache(get_buffer());
+}
 // The parse-tree retention budget (see kMaxCachedSyntaxTrees): a headless test
 // cannot drive the render loop, so it parses and stamps buffers through these
 // seams and then runs the sweep the loop runs at the end of a frame.

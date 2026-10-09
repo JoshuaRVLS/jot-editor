@@ -797,6 +797,13 @@ bool Editor::save_buffer_at(int index, bool announce)
     std::vector<std::string> refreshed_lines;
     if (!read_file_lines(buf.filepath, refreshed_lines))
       return false;
+#ifdef JOT_TREESITTER
+    // The formatter rewrote the file under the buffer. Snapshot the text the
+    // tree was parsed from before the swap: the invalidation below only marks
+    // the tree stale, it cannot hand it the old bytes, so without this the
+    // reparse is a whole-file one.
+    ts_begin_edit(buf);
+#endif
     buf.lines.swap(refreshed_lines);
     normalize_buffer_after_external_edit(buf);
     buf.fold_ranges.clear();
@@ -856,6 +863,12 @@ bool Editor::save_buffer_at(int index, bool announce)
 
           if (!refreshed.empty())
           {
+#ifdef JOT_TREESITTER
+            // Same contract as the synchronous path above: the formatter
+            // replaced the bytes the tree describes, so snapshot the text
+            // before the swap or the reparse has to be a whole-file one.
+            ts_begin_edit(b);
+#endif
             b.lines.swap(refreshed);
           }
           normalize_buffer_after_external_edit(b);
