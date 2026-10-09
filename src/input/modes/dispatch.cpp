@@ -712,6 +712,16 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
       outline_move_selection(-1);
       return;
     }
+    if (ch == 1003)
+    { // Left: fold the selection's own subtree
+      outline_collapse_or_expand(false);
+      return;
+    }
+    if (ch == 1004)
+    { // Right: expand it, or walk down into it when already open
+      outline_collapse_or_expand(true);
+      return;
+    }
     if (ch == 1012)
     { // Home
       outline_panel.selected = 0;
@@ -720,7 +730,7 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     }
     if (ch == 1013)
     { // End
-      outline_panel.selected = std::max(0, (int)outline_panel.symbols.size() - 1);
+      outline_panel.selected = std::max(0, (int)outline_panel.visible.size() - 1);
       needs_redraw = true;
       return;
     }

@@ -46,6 +46,18 @@ bool select_byte_range(uint32_t start, uint32_t end);
 // (main thread only; see init_ts_for_buffer for the queue side).
 void install_finished_parses();
 int buffer_index_of(const FileBuffer &buf) const;
+// Drops the parse trees of buffers the renderer has not drawn recently,
+// keeping the newest kMaxCachedSyntaxTrees of them (see syntax.cpp). A buffer
+// shown again re-parses on demand, through the same lazy path every large
+// file already takes on open, so the CST of a file left in the background
+// does not sit in memory for the rest of the session. Called once per painted
+// frame, after the panes have stamped the buffers they drew.
+void evict_stale_syntax_trees();
+// Recency counter behind FileBuffer::ts_last_use_seq, bumped once per drawn
+// buffer; syntax_sweep_seq_ is where the previous sweep left it, so the
+// sweep can tell what was on screen since it last ran.
+std::uint64_t ts_use_seq_ = 0;
+std::uint64_t syntax_sweep_seq_ = 0;
 #endif
 
 void handle_input(

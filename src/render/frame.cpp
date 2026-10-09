@@ -535,6 +535,13 @@ void Editor::render()
     }
 
     ui->set_cursor_blink_visible(blink_visible);
+    // The panes have stamped everything they drew, so this is where a tree a
+    // file no longer on screen is holding gets released (see
+    // evict_stale_syntax_trees). Before ui->render() so the sweep is part of
+    // the same frame that fed it, never racing the next repaint.
+#ifdef JOT_TREESITTER
+    evict_stale_syntax_trees();
+#endif
     ui->render();
     needs_redraw = frame_needs_repaint();
   }
@@ -760,6 +767,16 @@ void Editor::render_pane(const SplitPane &pane, int pane_index)
   int draw_w = std::max(1, pane.w);
   if (pane.h <= 0)
     return;
+
+#ifdef JOT_TREESITTER
+  // This buffer is on screen this frame, so its parse tree is worth keeping:
+  // the stamp is the recency evict_stale_syntax_trees() orders by, and it also
+  // protects the pane from being evicted on a frame that draws it.
+  if (pane.buffer_id >= 0 && pane.buffer_id < (int)buffers.size())
+  {
+    buffers[(size_t)pane.buffer_id].ts_last_use_seq = ++ts_use_seq_;
+  }
+#endif
 
   // The pane's own tab strip, when it has one: its first chrome row, above the
   // winbar and the text (pane_tabs=auto gives the row to split panes and to

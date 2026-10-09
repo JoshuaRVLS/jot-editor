@@ -58,6 +58,17 @@ struct SidebarHit
   bool header = false;
 };
 SidebarHit sidebar_hit_test(int y) const;
+// The data-row index a hit names: the hit-test maps a screen row to its place
+// in the section's window, so the section's scroll offset has to be added back
+// (and the explorer's window skips its pinned root row).
+int sidebar_data_index(const SidebarHit &hit) const;
+// Where the sidebar's content starts: past the left border and the activity
+// rail when one is shown. The renderer and the row hit-tests (the outline's
+// chevron) read the same column.
+int sidebar_content_x() const;
+// Pointer motion in the sidebar: moves the hover band to the row under the
+// pointer, or drops it when the pointer is anywhere else.
+void sidebar_update_hover(int x, int y);
 // The per-section cursors and row counts, shared by the keyboard walk, the
 // page/home/end keys and the render's clamps.
 int sidebar_section_row_count(jot_sidebar::Section section) const;

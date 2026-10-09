@@ -180,6 +180,10 @@ void render_debugger_panel();
 void render_git_diff_panel();
 void render_git_panel();
 void render_outline_panel();
+// Mouse for the dock's outline: motion moves the hover highlight, a press on a
+// group's chevron folds it, and a press on a row selects and jumps. Consumes
+// every event inside the dock, so a click can never fall through to the panes.
+bool handle_outline_panel_mouse(int x, int y, bool is_click);
 bool outline_active() const
 {
   return show_right_panel && active_right_panel_tab == RIGHT_PANEL_SYMBOLS;
@@ -195,6 +199,13 @@ void close_outline_panel();
 void note_outline_edit();
 void ensure_outline_fresh(bool force = false);
 void outline_move_selection(int delta);
+// The tree's fold: fold/unfold the selection's own subtree (Left/Right in the
+// panel), or expand the flat-indexed node directly (a chevron click).
+void outline_collapse_or_expand(bool expand);
+void outline_toggle_expanded(int flat_index);
+// Recomputes the visible-row order after the expanded marks changed, keeping
+// the selection and scroll in range (the one mutation path for them).
+void outline_refresh_visible();
 void outline_jump_selected();
 void outline_jump_to(int index);
 void render_plugin_panel();

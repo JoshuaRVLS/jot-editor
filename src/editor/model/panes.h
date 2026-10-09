@@ -91,6 +91,10 @@ struct PaneTabSegment
   bool modified = false;
   bool preview = false;
   bool hovered = false;
+  // The letter this tab answers to in jump-to-buffer mode, 0 while the mode is
+  // off. The same workspace-wide letter the row-0 strip would paint: a pane
+  // strip is a slice of that order, so the letters agree on both.
+  char jump_letter = 0;
   std::string label;
   std::string icon;
   int icon_fg = -1;

@@ -431,6 +431,17 @@ namespace CppDefinitions
       return words.count(w) != 0;
     }
 
+    // The fractional kinds a return-type display drops with the specifiers:
+    // cv-qualifiers and the struct/class/enum heads that tag a forward type
+    // ("struct S *p" shows as "S *p"). Used by both outline enrichments, which
+    // is why it sits next to is_leading_specifier.
+    bool is_display_dropped_specifier(const std::string &w)
+    {
+      static const std::unordered_set<std::string> words = {
+          "const", "volatile", "mutable", "inline", "struct", "class", "union", "enum"};
+      return words.count(w) != 0;
+    }
+
     // The spellings an overloaded operator can be written with.
     bool is_operator_symbol(const std::string &t)
     {
@@ -738,7 +749,8 @@ namespace CppDefinitions
       {
         File,
         Namespace,
-        Class
+        Class,
+        Enum
       };
       Kind kind = File;
       std::string name;
@@ -839,6 +851,31 @@ namespace CppDefinitions
           }
         }
         frame.kind = ScopeFrame::Class;
+        frame.name = name;
+        frame.anonymous = name.empty();
+        return frame;
+      }
+      if (head == "enum")
+      {
+        // `enum class Color : std::uint8_t {`, `enum Kind {`, `enum {`: the
+        // name is the last word before the underlying type or the body, and
+        // the `class`/`struct` of a scoped enum is a keyword, not a name. An
+        // enum body is read into (like a class body) so the outline can list
+        // its enumerators.
+        std::string name;
+        for (size_t k = i + 1; k < s.size(); k++)
+        {
+          const std::string &t = s[k].text;
+          if (t == ":")
+          {
+            break; // the underlying type is not this enum's name
+          }
+          if (s[k].kind == Token::Word && !is_keyword(t))
+          {
+            name = t;
+          }
+        }
+        frame.kind = ScopeFrame::Enum;
         frame.name = name;
         frame.anonymous = name.empty();
         return frame;
@@ -1730,7 +1767,8 @@ namespace CppDefinitions
     return is_header_file(path) || is_source_file(path);
   }
 
-  std::vector<FunctionRecord> parse_file(const std::string &path, const std::string &text)
+  std::vector<FunctionRecord>
+  parse_file(const std::string &path, const std::string &text, std::vector<SymbolRecord> *extras)
   {
     const bool header = is_header_file(path);
     const std::string masked = mask_non_code(text);
@@ -1755,6 +1793,9 @@ namespace CppDefinitions
     int brace_depth = 0;
     bool skipping = false;
     int skip_depth = 0;
+    // The outline's side channel (fields and type statements), collected only
+    // when the caller asked for it.
+    const bool collect_extras = extras != nullptr;
 
     auto conditional_now = [&]()
     {
@@ -1836,6 +1877,41 @@ namespace CppDefinitions
         }
       }
       return false;
+    };
+
+    // The scope chain for the outline's tree keys: like scope_prefix, but an
+    // anonymous namespace reads "(anonymous namespace)" and an anonymous class
+    // "(anonymous)", so two nested anonymous scopes keep distinct keys and the
+    // outline can show a row for each. Only asked for when extras are being
+    // collected, and defined before both of its users below.
+    auto outline_scope_now = [&]() -> std::string
+    {
+      std::string out;
+      for (const ScopeFrame &frame : scopes)
+      {
+        if (frame.kind == ScopeFrame::File)
+        {
+          continue;
+        }
+        if (!out.empty())
+        {
+          out += "::";
+        }
+        if (!frame.name.empty())
+        {
+          out += frame.name;
+        }
+        else
+        {
+          // The placeholder has to be the one the `{` branch gives the same
+          // frame's own record, or an anonymous enum's members hang under a
+          // node of their own instead of under the enum.
+          out += frame.kind == ScopeFrame::Namespace ? "(anonymous namespace)"
+                 : frame.kind == ScopeFrame::Enum     ? "(anonymous enum)"
+                                                      : "(anonymous)";
+        }
+      }
+      return out;
     };
 
     auto in_class_scope = [&]()
@@ -1955,6 +2031,35 @@ namespace CppDefinitions
       record.display = (scope.empty() ? "" : scope + "::") + sig.name + "(" + sig.params_display
                        + ")" + sig.suffix;
       record.definition = body;
+      // Outline enrichments. The return type is the text between the statement's
+      // start and the name: storage-class and cv specifiers stripped, the rest
+      // joined (pointers, `::`, template angles intact). The outline scope
+      // spells an anonymous namespace out, unlike `scope`, whose anonymous
+      // components read as empty and would make two nested ones collide.
+      if (collect_extras)
+      {
+        std::string type;
+        for (size_t k = 0; k < sig.name_begin; k++)
+        {
+          const Token &t = statement_tokens[k];
+          if (is_leading_specifier(t.text) || is_display_dropped_specifier(t.text)
+              || t.text == "template")
+          {
+            continue;
+          }
+          if (!type.empty() && t.text != "::" && t.text != "<" && t.text != ">" && t.text != "*"
+              && t.text != "&" && t.text != "&&" && type.back() != ':' && type.back() != '<'
+              && type.back() != '>' && type.back() != '*' && type.back() != '&'
+              && type.back() != '~')
+          {
+            type += " ";
+          }
+          type += t.text;
+        }
+        record.return_type = type;
+        record.outline_scope = outline_scope_now();
+        record.outline_method = in_class;
+      }
       record.in_class_definition = body && in_class && sig.scope.empty();
       record.deleted_or_default =
           sig.terminator == Signature::Deleted || sig.terminator == Signature::Defaulted;
@@ -1965,6 +2070,301 @@ namespace CppDefinitions
       record.conditional = conditional_now();
       record.is_header = header;
       out.push_back(std::move(record));
+    };
+
+    // One `;`-ended statement that is not a function signature: is it something
+    // the outline lists (a non-static data member, an enum's bodyless
+    // declaration, a using-declaration)? The statement view holds the tokens
+    // *before* the `;` -- the `;` itself is never in it -- so a member's name is
+    // the view's last token and its type is everything in front. Fields ride
+    // under their class; the detail is what the outline shows after the name.
+    auto collect_symbol_extra = [&](const std::vector<Token> &s)
+    {
+      if (s.empty() || conditional_now())
+      {
+        return;
+      }
+      const bool in_class = in_class_scope();
+
+      // An enum body: the enumerators are what the outline lists under it, one
+      // row each. The whole list arrives as one statement (a `,` does not end
+      // one), so walk its comma-separated segments at the top level; each
+      // segment's name is the word that opens it and a `= value` becomes the
+      // row's detail.
+      auto in_enum_scope = [&]()
+      {
+        for (size_t i = scopes.size(); i-- > 0;)
+        {
+          if (scopes[i].kind == ScopeFrame::Enum)
+          {
+            return true;
+          }
+          if (scopes[i].kind == ScopeFrame::Class || scopes[i].kind == ScopeFrame::Namespace)
+          {
+            return false;
+          }
+        }
+        return false;
+      };
+      if (in_enum_scope())
+      {
+        for (size_t k = 0; k < s.size();)
+        {
+          if (s[k].text == ",")
+          {
+            k++;
+            continue;
+          }
+          const Token &name_tok = s[k];
+          // Not an enumerator: an expression token (a value wrapping onto the
+          // next line), a keyword, or a call -- none of them name a row.
+          if (name_tok.kind != Token::Word || is_keyword(name_tok.text)
+              || (k + 1 < s.size() && s[k + 1].text == "("))
+          {
+            k++;
+            continue;
+          }
+          size_t end = k + 1;
+          int depth = 0;
+          bool assigned = false;
+          std::string value;
+          for (; end < s.size(); end++)
+          {
+            const std::string &x = s[end].text;
+            if (x == "(" || x == "[" || x == "{")
+            {
+              depth++;
+            }
+            else if (x == ")" || x == "]" || x == "}")
+            {
+              depth--;
+            }
+            else if (x == "," && depth == 0)
+            {
+              break;
+            }
+            else if (x == "=" && depth == 0)
+            {
+              assigned = true;
+            }
+            else if (assigned)
+            {
+              if (!value.empty())
+              {
+                value += " ";
+              }
+              value += x;
+            }
+          }
+          SymbolRecord extra;
+          extra.line = name_tok.line;
+          extra.col = name_tok.col;
+          extra.end_col = name_tok.col + (int)name_tok.text.size();
+          extra.kind = "enum_member";
+          extra.name = name_tok.text;
+          extra.detail = value;
+          extra.scope = outline_scope_now();
+          extras->push_back(std::move(extra));
+          k = end;
+        }
+        return;
+      }
+
+      // `enum Foo` / `enum class Color : std::uint8_t` -- a bodyless (opaque)
+      // enum declaration. The bodyful form (`enum Foo {`) is recorded in the
+      // `{` branch instead; a class/struct with a body never reaches a `;`.
+      if (s.front().text == "enum")
+      {
+        std::string name;
+        for (size_t k = 1; k < s.size(); k++)
+        {
+          if (s[k].kind == Token::Word && !is_keyword(s[k].text))
+          {
+            name = s[k].text;
+            break;
+          }
+        }
+        if (!name.empty())
+        {
+          SymbolRecord extra;
+          extra.kind = "enum";
+          extra.name = name;
+          extra.detail = "enum";
+          extra.scope = outline_scope_now();
+          // The name's own position (it may sit under a trailing `: type`).
+          for (const Token &t : s)
+          {
+            if (t.kind == Token::Word && t.text == name)
+            {
+              extra.line = t.line;
+              extra.col = t.col;
+              extra.end_col = t.col + (int)t.text.size();
+              break;
+            }
+          }
+          extras->push_back(std::move(extra));
+        }
+        return;
+      }
+
+      // `using Alias = Type` names the alias; `using ns::Widget` inside a
+      // class or namespace brings a name across. Either way the outline lists
+      // the declared name with what it stands for after it.
+      if (s.front().text == "using" && s.size() >= 2)
+      {
+        if (s[1].text == "namespace")
+        {
+          return; // a using-directive declares no name
+        }
+        size_t assign = s.size();
+        for (size_t k = 2; k < s.size(); k++)
+        {
+          if (s[k].text == "=")
+          {
+            assign = k;
+            break;
+          }
+        }
+        const Token &name_tok = assign < s.size() ? s[assign - 1] : s.back();
+        if (name_tok.kind == Token::Word && !is_keyword(name_tok.text))
+        {
+          std::string aliased;
+          const size_t begin = assign < s.size() ? assign + 1 : 1;
+          const size_t end = assign < s.size() ? s.size() : s.size() - 1;
+          for (size_t k = begin; k < end; k++)
+          {
+            aliased += s[k].text;
+          }
+          SymbolRecord extra;
+          extra.line = name_tok.line;
+          extra.col = name_tok.col;
+          extra.end_col = name_tok.col + (int)name_tok.text.size();
+          extra.kind = "type_alias";
+          extra.name = name_tok.text;
+          extra.detail = aliased;
+          extra.scope = outline_scope_now();
+          extras->push_back(std::move(extra));
+        }
+        return;
+      }
+
+      // `typedef int MyInt;`, `typedef struct Node Node;`: the outline lists
+      // the name it declares with the type it stands for. A declarator that
+      // does not end in its own name (a function pointer, an array) is left
+      // out rather than guessed at.
+      if (s.front().text == "typedef" && s.size() >= 3)
+      {
+        const Token &name_tok = s.back();
+        if (name_tok.kind == Token::Word && !is_keyword(name_tok.text))
+        {
+          std::string type;
+          for (size_t k = 1; k + 1 < s.size(); k++)
+          {
+            const Token &t = s[k];
+            if (is_leading_specifier(t.text) || is_display_dropped_specifier(t.text))
+            {
+              continue;
+            }
+            if (!type.empty() && t.text != "::" && t.text != "<" && t.text != ">"
+                && t.text != "*" && t.text != "&" && type.back() != ':' && type.back() != '<'
+                && type.back() != '>' && type.back() != '*' && type.back() != '&')
+            {
+              type += " ";
+            }
+            type += t.text;
+          }
+          SymbolRecord extra;
+          extra.line = name_tok.line;
+          extra.col = name_tok.col;
+          extra.end_col = name_tok.col + (int)name_tok.text.size();
+          extra.kind = "typedef";
+          extra.name = name_tok.text;
+          extra.detail = type;
+          extra.scope = outline_scope_now();
+          extras->push_back(std::move(extra));
+        }
+        return;
+      }
+
+      // A non-static data member: `Type name`, `Type name = init`,
+      // `Type name[N]`, `Type name : bits` -- inside a class body, whose last
+      // token (or the word in front of the first `=` / `:` / `[`) is the name
+      // and which carries a type before it. The walk never enters a function
+      // body, so a local variable cannot get this far; a statement that parsed
+      // as a function signature never gets here either.
+      if (!in_class || s.size() < 2)
+      {
+        return;
+      }
+      if (s.front().text == "friend" || s.front().text == "using" || s.front().text == "typedef"
+          || s.front().text == "template")
+      {
+        return;
+      }
+      // The name: the last token, unless an initializer, a bit-field width or
+      // an array bound follows it -- then the word in front of that.
+      size_t name_at = s.size() - 1;
+      for (size_t k = 1; k < s.size(); k++)
+      {
+        if (s[k].text == "=" || (s[k].text == ":" && k > 0 && s[k - 1].text != ":")
+            || s[k].text == "[")
+        {
+          name_at = k - 1;
+          break;
+        }
+      }
+      const Token &name_tok = s[name_at];
+      if (name_tok.kind != Token::Word || is_keyword(name_tok.text) || name_at == 0)
+      {
+        return;
+      }
+      // A static member is a class-scope declaration, not a per-object field;
+      // the outline keeps it out of the field group with the members.
+      bool is_static = false;
+      for (size_t k = 0; k < name_at; k++)
+      {
+        if (s[k].text == "static")
+        {
+          is_static = true;
+          break;
+        }
+      }
+      if (is_static)
+      {
+        return;
+      }
+      // The declared type: the tokens before the name, minus the specifiers
+      // the display does not need (storage class, cv, the struct/class/enum
+      // heads that tag a forward type).
+      std::string type;
+      for (size_t k = 0; k < name_at; k++)
+      {
+        const Token &t = s[k];
+        if (is_leading_specifier(t.text) || is_display_dropped_specifier(t.text))
+        {
+          continue;
+        }
+        if (!type.empty() && t.text != "::" && t.text != "<" && t.text != ">" && t.text != "*"
+            && t.text != "&" && t.text != "&&" && type.back() != ':' && type.back() != '<'
+            && type.back() != '>' && type.back() != '*' && type.back() != '&' && type.back() != '~')
+        {
+          type += " ";
+        }
+        type += t.text;
+      }
+      if (type.empty())
+      {
+        return;
+      }
+      SymbolRecord extra;
+      extra.line = name_tok.line;
+      extra.col = name_tok.col;
+      extra.end_col = name_tok.col + (int)name_tok.text.size();
+      extra.kind = "field";
+      extra.name = name_tok.text;
+      extra.detail = type;
+      extra.scope = outline_scope_now();
+      extras->push_back(std::move(extra));
     };
 
     auto statement_tokens = [&](std::vector<Token> &storage) -> std::vector<Token> &
@@ -2015,6 +2415,54 @@ namespace CppDefinitions
         else
         {
           ScopeFrame frame = describe_scope(statement_view);
+          if (collect_extras
+              && (frame.kind == ScopeFrame::Class || frame.kind == ScopeFrame::Namespace
+                  || frame.kind == ScopeFrame::Enum))
+          {
+            // A type statement the walk is about to read into: its name is what
+            // the outline groups members under. An anonymous aggregate keeps a
+            // placeholder name so the outline can still show one.
+            std::string type_name = frame.name;
+            if (type_name.empty())
+            {
+              type_name = frame.kind == ScopeFrame::Namespace ? "(anonymous namespace)"
+                          : frame.kind == ScopeFrame::Enum     ? "(anonymous enum)"
+                                                              : "(anonymous)";
+            }
+            SymbolRecord extra;
+            extra.line = -1; // filled from the name token below
+            extra.kind = frame.kind == ScopeFrame::Namespace ? "namespace"
+                         : frame.kind == ScopeFrame::Enum    ? "enum"
+                         : (statement_view.empty() ? "struct" : statement_view.front().text);
+            extra.name = type_name;
+            extra.detail = extra.kind;
+            extra.conditional = conditional_now();
+            // The name's position: the last non-keyword word in the statement
+            // (describe_scope's own rule), or the head keyword when none.
+            for (size_t k = statement_view.size(); k-- > 0;)
+            {
+              const Token &t = statement_view[k];
+              if (t.kind == Token::Word && !is_keyword(t.text))
+              {
+                extra.line = t.line;
+                extra.col = t.col;
+                extra.end_col = t.col + (int)t.text.size();
+                break;
+              }
+            }
+            if (extra.line < 0 && !statement_view.empty())
+            {
+              extra.line = statement_view.front().line;
+              extra.col = statement_view.front().col;
+              extra.end_col = statement_view.front().col + (int)statement_view.front().text.size();
+            }
+            if (extra.line >= 0)
+            {
+              extra.scope = outline_scope_now();
+              extra.detail = extra.kind;
+              extras->push_back(std::move(extra));
+            }
+          }
           if (frame.kind == ScopeFrame::File)
           {
             // Not a scope we can read into (an enum body, a brace initializer, a
@@ -2037,6 +2485,15 @@ namespace CppDefinitions
       if (t.text == "}")
       {
         brace_depth--;
+        // An enum's last enumerator can sit right before the `}` -- a trailing
+        // comma ends the list without a `;` -- so the leftover statement is
+        // collected while the enum's own scope is still the innermost one.
+        if (collect_extras && !statement.empty() && !scopes.empty()
+            && scopes.back().kind == ScopeFrame::Enum)
+        {
+          const std::vector<Token> &statement_view = statement_tokens(scratch);
+          collect_symbol_extra(statement_view);
+        }
         while (scopes.size() > 1 && scopes.back().open_depth == brace_depth)
         {
           scopes.pop_back();
@@ -2047,21 +2504,27 @@ namespace CppDefinitions
       }
 
       if ((t.text == "public" || t.text == "private" || t.text == "protected")
-          && i + 1 < tokens.size() && tokens[i + 1].text == ":" && brace_depth == 0
-          && !in_class_scope())
+          && i + 1 < tokens.size() && tokens[i + 1].text == ":")
       {
-        // An access label at file scope: this header is a *fragment* meant to be
-        // included inside a class body (the editor's api/ fragments are), so
-        // what follows is class scope. The class name belongs to the includer
-        // and stays unknown, which is enough: members defined here are inline,
-        // and a declaration whose body lives in the real class is matched by
-        // signature rather than by scope.
+        // An access label labels what follows and declares nothing, so it is
+        // dropped out of the statement it would otherwise glue itself onto --
+        // `public:` in front of a field used to leave `public : int a` to read,
+        // whose name is `public`, and the field never got collected.
         statement.clear();
-        ScopeFrame fragment;
-        fragment.kind = ScopeFrame::Class;
-        fragment.anonymous = true;
-        fragment.open_depth = -1; // closed by the includer, never by this file
-        scopes.push_back(fragment);
+        if (brace_depth == 0 && !in_class_scope())
+        {
+          // At file scope the label means this header is a *fragment* meant to
+          // be included inside a class body (the editor's api/ fragments are),
+          // so what follows is class scope. The class name belongs to the
+          // includer and stays unknown, which is enough: members defined here
+          // are inline, and a declaration whose body lives in the real class is
+          // matched by signature rather than by scope.
+          ScopeFrame fragment;
+          fragment.kind = ScopeFrame::Class;
+          fragment.anonymous = true;
+          fragment.open_depth = -1; // closed by the includer, never by this file
+          scopes.push_back(fragment);
+        }
         i += 2;
         continue;
       }
@@ -2075,6 +2538,10 @@ namespace CppDefinitions
                 || sig->terminator == Signature::Defaulted || sig->terminator == Signature::Pure))
         {
           record_signature(*sig, statement_view, false);
+        }
+        else if (collect_extras && !statement_view.empty())
+        {
+          collect_symbol_extra(statement_view);
         }
         statement.clear();
         i++;

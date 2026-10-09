@@ -4,20 +4,24 @@
 `pane_tabs=auto` spends a pane's first row on its own strip only where the
 workspace strip cannot speak for the pane - a split, or `tabline = false` - so
 a lone pane keeps row 0 as its only strip and never paints the same list twice.
-The browser drives the real binary over a pty and reads the truecolour cells
-back, so the renderer's paint and the mouse routing are checked, not a model:
+A split is the other half of that rule: the groups' strips take row 0 over from
+the workspace strip, which would otherwise ink the same files a second time one
+row above them. The browser drives the real binary over a pty and reads the
+truecolour cells back, so the renderer's paint and the mouse routing are
+checked, not a model:
 
   * scene 1 - one pane, two files: only the workspace strip on row 0 lists
     them, and the active file's text starts on row 1 with no second strip;
-  * scene 2 - after a split both groups paint their own strip on row 1; a click
-    on the left strip's first tab switches that group alone (its text and inks
-    swap) while the right group keeps the file it had;
+  * scene 2 - after a split both groups paint their own strip on row 0 (the
+    workspace strip has stepped aside) with the text on row 1; a click on the
+    left strip's first tab switches that group alone (its text and inks swap)
+    while the right group keeps the file it had;
   * scene 3 - a drag of pane 0's `b.txt` tab onto pane 1's strip tail moves it
-    (the source group falls back to one tab and hides its strip, the target
-    shows the tab it received as the active one);
+    (the source group falls back to one tab and keeps a strip showing just
+    that tab, the target shows the tab it received as the active one);
   * scene 4 - the same drag onto pane 1's right edge splits it instead: the
-    third group holds only the dragged tab, so the source's text row and the
-    new group's text both appear beside the middle group.
+    third group holds only the dragged tab, so all three strips sit on row 0
+    and all three files' text on row 1.
 
 Usage: test/pane_tabs_probe.py [path-to-jot-binary] [--dump]
 Exit codes: 0 pass, 1 fail, 2 skipped (no binary).
@@ -143,16 +147,17 @@ def main() -> int:
     def split_phases():
         return two_files_phases() + [
             (0.6, ex("vsp")),
-            # Both groups carry the same pair, so row 1 holds the name twice
-            # once the split has landed.
-            (0.0, lambda s: s.rows > 1 and row_text(s, 1).count("a.txt") >= 2),
+            # Both groups carry the same pair, so row 0 - where the workspace
+            # strip stood before the split - holds the name twice once the
+            # groups have taken it over.
+            (0.0, lambda s: s.rows > 1 and row_text(s, 0).count("a.txt") >= 2),
             (0.0, toast_gone),
             (0.6, b"")]
 
     def drags_phases():
         return split_phases()[:-1] + [
             (0.6, ex("e c.txt")),
-            (0.0, lambda s: find_row(s, "c.txt", 1, 5) >= 0),
+            (0.0, lambda s: find_row(s, "c.txt", 0, 5) >= 0),
             (0.0, toast_gone),
             (0.6, b"")]
 
@@ -161,10 +166,10 @@ def main() -> int:
     if dump:
         print(screen.text())
         print("-" * 70)
-    strip = find_row(screen, "a.txt", 1, 5)
+    strip = find_row(screen, "a.txt", 0, 5)
     if strip < 0:
         failures.append("the split never painted both pane strips")
-        strip = 1
+        strip = 0
     row = row_text(screen, strip)
     if row.count("a.txt") < 2:
         failures.append("the split did not give each group its own strip (%r)" % row)
@@ -212,10 +217,10 @@ def main() -> int:
     if dump:
         print(screen.text())
         print("-" * 70)
-    strip = find_row(screen, "a.txt", 1, 5)
+    strip = find_row(screen, "a.txt", 0, 5)
     if strip < 0:
         failures.append("the split never painted both pane strips")
-        strip = 1
+        strip = 0
     left = row_text(screen, strip)[:50]
     src = left.find("b.txt")
     if src < 0:
@@ -233,11 +238,16 @@ def main() -> int:
         print(screen.text())
         print("-" * 70)
     row = row_text(screen, strip)
-    if "alpha" not in row[:50]:
+    # The source keeps its strip row with one tab left on it: with the
+    # workspace strip gone, that row is where its file is named.
+    if "a.txt" not in row[:50]:
         failures.append("the emptied pane did not fall back to its remaining tab (%r)"
                         % row[:50])
     if "b.txt" in row[:50]:
         failures.append("the source pane still draws the moved tab (%r)" % row[:50])
+    if "alpha" not in row_text(screen, strip + 1)[:50]:
+        failures.append("the source pane does not show its remaining file (%r)"
+                        % row_text(screen, strip + 1)[:50])
     if "beta" not in row_text(screen, strip + 1)[50:]:
         failures.append("the target pane does not show the moved tab (%r)"
                         % row_text(screen, strip + 1)[50:])
@@ -260,16 +270,20 @@ def main() -> int:
     if dump:
         print(screen.text())
         print("-" * 70)
-    # The source and the new group fell back to one tab each, so their text
-    # (not a strip) owns row `strip` on the far left and far right; the middle
-    # group still has its strip, so its own text sits a row below.
+    # All three groups keep their own strip on row `strip`, the two that fell
+    # back to a single tab included, so the three files' text all sit on the row
+    # below it.
     first = row_text(screen, strip)
-    if "alpha" not in first[:50]:
+    if "a.txt" not in first[:50]:
         failures.append("the source group lost its remaining tab (%r)" % first[:50])
-    if "beta" not in first[75:]:
+    if "b.txt" not in first[75:]:
         failures.append("the dropped tab's own group did not land on the right (%r)"
                         % first[75:])
-    gamma_x = row_text(screen, strip + 1).find("gamma")
+    second = row_text(screen, strip + 1)
+    if "alpha" not in second[:50]:
+        failures.append("the source group does not show its remaining file (%r)"
+                        % second[:50])
+    gamma_x = second.find("gamma")
     if not (50 <= gamma_x < 75):
         failures.append("the middle group is not the middle one (%d)" % gamma_x)
 

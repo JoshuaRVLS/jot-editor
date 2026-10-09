@@ -10,9 +10,9 @@
 // pair them up so that
 //
 //   * a function declared with no definition anywhere becomes a
-//     "missing implementation" diagnostic -- underlined on the leading half of
-//     the name, so it lands on the unresolved symbol and not on the whole
-//     signature -- and
+//     "missing implementation" diagnostic -- underlined on the declared name
+//     itself (the whole token, clangd-style), so it lands on the unresolved
+//     symbol and not on the whole signature -- and
 //   * a signature implemented more than once becomes a "multiple definitions"
 //     one (the linker's classic `multiple definition of f`), except a file-scope
 //     `main`, which a folder of standalone programs repeats on purpose -- and
@@ -51,8 +51,15 @@ namespace CppDefinitions
     int name_end_line = 0;
     int name_end_col = 0; // 0-based, one past the name's last character
 
-    std::string scope;          // "ns::Class", empty at file scope
-    std::string name;           // last component: "f", "~Widget", "Widget", "operator bool"
+    std::string scope; // "ns::Class", empty at file scope
+    std::string name;  // last component: "f", "~Widget", "Widget", "operator bool"
+    // Outline-only enrichments (filled when the caller passes `extras`):
+    // the declared return type (words before the name, specifiers stripped),
+    // the scope chain with anonymous namespaces spelled out, and whether the
+    // record was read in or under a class (the method-vs-function split).
+    std::string return_type;
+    std::string outline_scope;
+    bool outline_method = false;
     std::string params;         // canonical parameter list, parameter names dropped
     std::string params_display; // canonical parameter list with the names kept
     std::string suffix;         // canonical trailing " const&" (empty when none)
@@ -93,6 +100,25 @@ namespace CppDefinitions
     std::string message;
   };
 
+  // One outline extra the function checker records on the side: a non-static
+  // data member ("field", with its declared type as the detail) or a type
+  // statement (struct/class/union/enum, detail = the keyword). These never pair
+  // up with definitions, so they ride next to FunctionRecord rather than in it;
+  // the outline panel (SymbolIndex::extract_outline) is their only consumer.
+  // `conditional` marks anything under a `#if` that is not an include guard, for
+  // the same reason FunctionRecord carries it.
+  struct SymbolRecord
+  {
+    int line = 0;     // 0-based, at the first token of the name
+    int col = 0;      // 0-based
+    int end_col = 0;  // 0-based, one past the name's last character
+    std::string kind; // "field", "struct", "class", "union", "enum", "using"
+    std::string name;
+    std::string detail; // the declared type for a field, the keyword for a type
+    std::string scope;  // the scope the symbol sits in ("ns::Class", "" at file scope)
+    bool conditional = false;
+  };
+
   struct ScanStats
   {
     int files_scanned = 0;
@@ -127,8 +153,12 @@ namespace CppDefinitions
   bool is_parseable_file(const std::string &path);
 
   // Every function signature in one file's text. Pure: no filesystem access, so
-  // a test can run whole workspaces through it from memory.
-  std::vector<FunctionRecord> parse_file(const std::string &path, const std::string &text);
+  // a test can run whole workspaces through it from memory. Hand a non-null
+  // `extras` to also collect the outline's fields and type statements in the
+  // same walk.
+  std::vector<FunctionRecord> parse_file(const std::string &path,
+                                         const std::string &text,
+                                         std::vector<SymbolRecord> *extras = nullptr);
 
   // Include finding positions as well as match keys so moving a declaration
   // refreshes its squiggle, while editing only a body's text avoids another walk.

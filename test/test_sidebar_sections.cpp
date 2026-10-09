@@ -88,6 +88,22 @@ TEST_CASE("The sidebar stacks explorer, outline and timeline under their headers
   REQUIRE(no_tree.outline.h == 4);
   REQUIRE(no_tree.timeline.h == 3);
 
+  // The cap only holds rows back for a tree that wants them. A folded explorer
+  // and a tree shorter than its share hand the surplus to the outline, so a
+  // file with more symbols than the cap shows them instead of sitting above
+  // blank rows: the section grows past kSectionCap, and the timeline keeps its
+  // own rows above the footer.
+  const auto wide_open_tree = jot_sidebar::compute(0, 20, 2, 30, 3, true, true, true, true);
+  REQUIRE(wide_open_tree.outline.h > jot_sidebar::kSectionCap);
+  REQUIRE(wide_open_tree.explorer.h >= jot_sidebar::kTreeMinRows);
+  REQUIRE(wide_open_tree.timeline.h == 2); // one row went to the tree's floor
+  REQUIRE(wide_open_tree.timeline.y + wide_open_tree.timeline.h == wide_open_tree.footer_y);
+
+  const auto wide_no_tree = jot_sidebar::compute(0, 20, 12, 30, 3, false, true, true, true);
+  REQUIRE(wide_no_tree.outline.h > jot_sidebar::kSectionCap);
+  REQUIRE(wide_no_tree.timeline.h == 3);
+  REQUIRE(wide_no_tree.timeline.y + wide_no_tree.timeline.h == wide_no_tree.footer_y);
+
   // The tree's floor beats the other sections: on a short column they shrink
   // to nothing rather than squeezing the explorer under its minimum.
   const auto tight = jot_sidebar::compute(0, 8, 12, 4, 3, true, true, true, true);

@@ -41,6 +41,15 @@ struct OutlinePanelState
   std::vector<SymbolMatch> symbols;
   int selected = 0;
   int scroll = 0;
+  // The tree view: which subtree is open (a symbol may have children -- a
+  // namespace's members, a class's fields and methods -- and a chevron shows
+  // when it does), plus the visible-row order that selection, scrolling and
+  // hit-testing all read so they agree on what a row means.
+  std::vector<char> expanded;
+  std::vector<int> visible;
+  // Visible-row index under the pointer in the dock's outline (-1 = none):
+  // the hover highlight, and the row a click lands on.
+  int hover_row = -1;
 };
 
 enum EditorFocus

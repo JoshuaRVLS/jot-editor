@@ -293,10 +293,25 @@ void Editor::handle_mouse_input(int x,
       {
         ensure_outline_fresh();
         int row = y - (panel_y + 4) + outline_panel.scroll;
-        if (row >= 0 && row < (int)outline_panel.symbols.size())
+        if (row >= 0 && row < (int)outline_panel.visible.size())
         {
-          outline_panel.selected = row;
-          outline_jump_selected();
+          const int flat = outline_panel.visible[(size_t)row];
+          // A click on the chevron folds/unfolds; anywhere else selects+jumps.
+          const int text_x = panel_x + 1;
+          const SymbolMatch &symbol = outline_panel.symbols[(size_t)flat];
+          const int chevron_span = symbol.has_children() ? 2 : 0;
+          const bool on_chevron = chevron_span > 0 && x >= text_x + symbol.depth * 2
+                                  && x < text_x + symbol.depth * 2 + chevron_span;
+          if (on_chevron)
+          {
+            outline_panel.selected = row;
+            outline_toggle_expanded(flat);
+          }
+          else
+          {
+            outline_panel.selected = row;
+            outline_jump_selected();
+          }
         }
         else
         {
@@ -400,16 +415,21 @@ void Editor::handle_mouse_input(int x,
         }
         else
         {
-          // The wheel scrolls the section it is over; the render clamps the
-          // window to the section's rows.
+          // The wheel walks the section's own cursor (the dock's outline does
+          // the same with its selection): the renderer keeps the cursor on
+          // screen, so the window follows it. Scrolling the window alone was
+          // undone by that clamp on the next frame -- a wheel over the outline
+          // did nothing while the cursor sat at the top, and the rows under it
+          // could not be reached.
           const SidebarHit hit = sidebar_hit_test(y);
           if (hit.section == jot_sidebar::SECTION_OUTLINE)
           {
-            sidebar_outline_scroll = std::max(0, sidebar_outline_scroll - 1);
+            sidebar_outline_selected = std::max(0, sidebar_outline_selected - 1);
+            outline_panel.selected = sidebar_outline_selected;
           }
           else if (hit.section == jot_sidebar::SECTION_TIMELINE)
           {
-            sidebar_timeline_scroll = std::max(0, sidebar_timeline_scroll - 1);
+            sidebar_timeline_selected = std::max(0, sidebar_timeline_selected - 1);
           }
           else if (file_tree_scroll > 0)
           {
@@ -432,11 +452,16 @@ void Editor::handle_mouse_input(int x,
           const SidebarHit hit = sidebar_hit_test(y);
           if (hit.section == jot_sidebar::SECTION_OUTLINE)
           {
-            sidebar_outline_scroll++;
+            const int count = sidebar_section_row_count(jot_sidebar::SECTION_OUTLINE);
+            sidebar_outline_selected =
+                std::clamp(sidebar_outline_selected + 1, 0, std::max(0, count - 1));
+            outline_panel.selected = sidebar_outline_selected;
           }
           else if (hit.section == jot_sidebar::SECTION_TIMELINE)
           {
-            sidebar_timeline_scroll++;
+            const int count = sidebar_section_row_count(jot_sidebar::SECTION_TIMELINE);
+            sidebar_timeline_selected =
+                std::clamp(sidebar_timeline_selected + 1, 0, std::max(0, count - 1));
           }
           else
           {
@@ -525,4 +550,3 @@ void Editor::handle_mouse_input(int x,
     return;
   }
 }
-

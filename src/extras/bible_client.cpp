@@ -675,8 +675,7 @@ void Editor::bible_show_lines(const std::string &label,
   reveal_tab_for_buffer(index);
   FileBuffer &buf = get_buffer();
   buf.replace_lines(0, (int)buf.line_count(), lines);
-  buf.undo_stack = std::stack<State>();
-  buf.redo_stack = std::stack<State>();
+  buf.clear_undo_history();
   buf.cursor = {0, 0};
   buf.preferred_x = 0;
   buf.selection = {{0, 0}, {0, 0}, false};

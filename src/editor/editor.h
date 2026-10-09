@@ -99,14 +99,37 @@ private:
     return kTopBarVisible ? 1 : 0;
   }
 
+  // Whether the pane strips have taken the tab row over from the workspace
+  // strip: the pane area is split and `pane_tabs` draws the groups' own lists,
+  // so the workspace strip would paint the same files a second time on the row
+  // above them. `pane_tabs = off` keeps the workspace strip, because the panes
+  // draw none of their own and it is the only list left.
+  bool pane_strips_own_tabs() const
+  {
+    return panes.size() > 1 && pane_tabs_mode != PANE_TABS_OFF;
+  }
+
+  // Whether the workspace tab order is live. The home screen owns the frame,
+  // and the strip is workspace chrome: it is not part of the launcher, so the
+  // order's keys and hit tests stay with the workspace until the screen closes.
+  // With the launcher out of the way the order exists as soon as a buffer is
+  // open -- whether or not the row that lists it is on screen. The strip's
+  // keys ask this rather than tabline_shown, so Alt+1..9 and friends keep
+  // working while the panes have taken the row over (a split) or while
+  // `tabline_auto_hide` is keeping it out of sight.
+  bool tabline_active() const
+  {
+    return !show_home_menu && (int)tab_order.indices(buffers).size() > 0;
+  }
+
   // Whether the workspace strip owns row 0 right now: it can be turned off, and
-  // `tabline_auto_hide` keeps it out of the way with only a few tabs open. The
-  // home screen owns the whole frame, and the strip is workspace chrome: it is
-  // not part of the launcher, so the row, its paint and its hit tests all stay
-  // with the workspace until the screen closes.
+  // `tabline_auto_hide` keeps it out of the way with only a few tabs open. It
+  // also steps aside while the pane area is split, where every pane draws its
+  // own list (see pane_shows_tab_strip): a workspace strip on top of those
+  // would be the same files inked twice.
   bool tabline_shown() const
   {
-    return !show_home_menu && tabline_visible
+    return tabline_active() && tabline_visible && !pane_strips_own_tabs()
            && (int)tab_order.indices(buffers).size() > tabline_auto_hide;
   }
 
@@ -177,9 +200,11 @@ private:
   // Whether this pane draws its own tab strip (a VSCode editor group).
   // `pane_tabs=auto` spends the row only where the workspace strip cannot
   // speak for the pane: while the pane area is split (the workspace strip acts
-  // on the focused pane alone, so each group needs its own list), or when the
-  // workspace strip is turned off (`tabline = false`) and the pane's list is
-  // the only one left. A lone pane with the workspace strip on top paints no
+  // on the focused pane alone, and steps aside for the groups then, so each one
+  // needs its own list -- a group holding a single tab included, since that
+  // strip is where its file is named and where a dragged tab lands), or when
+  // the workspace strip is turned off (`tabline = false`) and the pane's list
+  // is the only one left. A lone pane with the workspace strip on top paints no
   // second row, because that would be the same list twice. `always` shows the
   // row for every pane with a buffer, `off` for none.
   bool pane_shows_tab_strip(const SplitPane &pane) const
@@ -192,7 +217,11 @@ private:
     {
       return true;
     }
-    return pane.tab_buffer_ids.size() > 1 && (panes.size() > 1 || !tabline_visible);
+    if (pane_strips_own_tabs())
+    {
+      return true;
+    }
+    return !tabline_visible && pane.tab_buffer_ids.size() > 1;
   }
 
   // The row this pane spends on its own strip (0 when it shows none).

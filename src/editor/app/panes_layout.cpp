@@ -89,7 +89,7 @@ jot_sidebar::Layout Editor::sidebar_sections_layout() const
   const ContentColumn col = side_column();
   // The explorer's display rows: the pinned root row plus the cached tree.
   const int tree_count = 1 + (int)sidebar_render_cache_.rows.size();
-  const int outline_count = (int)outline_panel.symbols.size();
+  const int outline_count = (int)outline_panel.visible.size();
   const int timeline_count = (int)timeline_commits.size();
   return jot_sidebar::compute(col.top,
                               col.h,

@@ -918,6 +918,55 @@ Editor::SidebarHit Editor::sidebar_hit_test(int y) const
   return hit;
 }
 
+int Editor::sidebar_data_index(const SidebarHit &hit) const
+{
+  switch (hit.section)
+  {
+  case jot_sidebar::SECTION_EXPLORER:
+    return hit.index - 1 + file_tree_scroll; // row 0 is the pinned root
+  case jot_sidebar::SECTION_OUTLINE:
+    return hit.index + sidebar_outline_scroll;
+  case jot_sidebar::SECTION_TIMELINE:
+    return hit.index + sidebar_timeline_scroll;
+  default:
+    return hit.index;
+  }
+}
+
+int Editor::sidebar_content_x() const
+{
+  const int w = effective_sidebar_width();
+  const int rail_w =
+      explorer_only() ? 0 : std::min(sidebar_activity_rail_width(), std::max(1, w - 1));
+  return std::max(1, rail_w);
+}
+
+void Editor::sidebar_update_hover(int x, int y)
+{
+  int section = -1;
+  int index = -2;
+  if (show_sidebar && !sidebar_hidden_for_width_ && x >= 0 && x < effective_sidebar_width())
+  {
+    const ContentColumn col = side_column();
+    // The activity rail is not a row: it switches views, so it never takes a
+    // row highlight (the click path reads it the same way).
+    const bool on_rail = !explorer_only() && x < sidebar_activity_rail_width();
+    if (!on_rail && y >= col.top && y < col.bottom)
+    {
+      const SidebarHit hit = sidebar_hit_test(y);
+      section = hit.section;
+      index = hit.index;
+    }
+  }
+  if (sidebar_hover_section == section && sidebar_hover_index == index)
+  {
+    return;
+  }
+  sidebar_hover_section = section;
+  sidebar_hover_index = index;
+  needs_redraw = true;
+}
+
 int Editor::sidebar_section_row_count(jot_sidebar::Section section) const
 {
   switch (section)
@@ -925,7 +974,7 @@ int Editor::sidebar_section_row_count(jot_sidebar::Section section) const
   case jot_sidebar::SECTION_EXPLORER:
     return sidebar_explorer_open ? 1 + (int)sidebar_render_cache_.rows.size() : 0;
   case jot_sidebar::SECTION_OUTLINE:
-    return sidebar_outline_open ? (int)outline_panel.symbols.size() : 0;
+    return sidebar_outline_open ? (int)outline_panel.visible.size() : 0;
   case jot_sidebar::SECTION_TIMELINE:
     return sidebar_timeline_open ? (int)timeline_commits.size() : 0;
   default:
@@ -1118,7 +1167,7 @@ void Editor::sidebar_activate_cursor()
 void Editor::sidebar_jump_outline(int index)
 {
   ensure_outline_fresh(true);
-  if (index < 0 || index >= (int)outline_panel.symbols.size())
+  if (index < 0 || index >= (int)outline_panel.visible.size())
   {
     return;
   }
@@ -1192,7 +1241,26 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click, bool is_double_cl
   {
     focus_state = FOCUS_SIDEBAR;
     sidebar_section = jot_sidebar::SECTION_OUTLINE;
-    sidebar_jump_outline(hit.index);
+    const int index = sidebar_data_index(hit);
+    // The chevron sits after the row's indent; a press on it folds the group
+    // (the dock's outline does the same), anywhere else jumps.
+    if (index >= 0 && index < (int)outline_panel.visible.size())
+    {
+      const int flat = outline_panel.visible[(size_t)index];
+      const SymbolMatch &symbol = outline_panel.symbols[(size_t)flat];
+      const int chevron_x = sidebar_content_x() + 1 + std::max(0, symbol.depth) * 2;
+      if (symbol.has_children() && x >= chevron_x && x < chevron_x + 2)
+      {
+        sidebar_outline_selected = index;
+        outline_panel.selected = index;
+        outline_toggle_expanded(flat);
+        sidebar_outline_selected = std::clamp(
+            sidebar_outline_selected, 0, std::max(0, (int)outline_panel.visible.size() - 1));
+        needs_redraw = true;
+        return;
+      }
+    }
+    sidebar_jump_outline(index);
     if (is_double_click)
     {
       focus_state = FOCUS_EDITOR;
@@ -1203,7 +1271,7 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click, bool is_double_cl
   {
     focus_state = FOCUS_SIDEBAR;
     sidebar_section = jot_sidebar::SECTION_TIMELINE;
-    sidebar_open_timeline_commit(hit.index);
+    sidebar_open_timeline_commit(sidebar_data_index(hit));
     return;
   }
 
@@ -1221,7 +1289,7 @@ void Editor::handle_sidebar_mouse(int x, int y, bool is_click, bool is_double_cl
 
   std::vector<FileNode *> flat;
   flatten_nodes_mut(file_tree, flat);
-  const int row = hit.index - 1 + file_tree_scroll;
+  const int row = sidebar_data_index(hit);
   if (row >= 0 && row < (int)flat.size())
   {
     FileNode *node = flat[(size_t)row];

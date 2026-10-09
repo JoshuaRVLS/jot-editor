@@ -4,6 +4,9 @@
 #include "syntax/manager.h"
 #include <algorithm>
 #include <filesystem>
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
 
 #ifdef JOT_TREESITTER
 #include <tree_sitter/api.h>
@@ -70,6 +73,22 @@ namespace
   // is a few hundred thousand highlighted lines' worth of colour data; past it
   // the cache is dropped wholesale and refilled from the visible viewport.
   constexpr std::size_t kSyntaxCacheByteBudget = 8u * 1024u * 1024u;
+
+  // Hands the memory a dropped tree just returned back to the OS. Freeing a
+  // tree gives its chunks back to malloc, but glibc keeps them in its arenas,
+  // and the whole-file parses that built those trees ran on background
+  // threads -- each of which gets its own arena -- so the chunks freed by the
+  // sweep are not the chunks the next parse asks for, and RSS parks at the
+  // sum of every arena's high-water mark (twelve 3000-line files held ~120 MB
+  // this way even with only three trees left alive). malloc_trim walks the
+  // arenas and releases what they can give back; it is a no-op on platforms
+  // whose allocator already does that itself.
+  void release_free_heap()
+  {
+#if defined(__GLIBC__)
+    malloc_trim(0);
+#endif
+  }
 
 #ifdef JOT_TREESITTER
   bool contains_any(const std::string &text, const std::vector<std::string> &needles)
@@ -475,6 +494,66 @@ void Editor::install_finished_parses()
   {
     needs_redraw = true;
   }
+}
+
+void Editor::evict_stale_syntax_trees()
+{
+  std::vector<FileBuffer *> holders;
+  for (auto &buf : buffers)
+  {
+    if (buf.ts_tree)
+    {
+      holders.push_back(&buf);
+    }
+  }
+  if (holders.size() <= kMaxCachedSyntaxTrees)
+  {
+    syntax_sweep_seq_ = ts_use_seq_;
+    return;
+  }
+
+  // Newest first, so the tail of this list is what goes.
+  std::sort(holders.begin(), holders.end(), [](const FileBuffer *a, const FileBuffer *b) {
+    return a->ts_last_use_seq > b->ts_last_use_seq;
+  });
+  // Everything drawn since the previous sweep is the on-screen set: it keeps
+  // its trees however large that set is (a split layout must never evict a pane
+  // it is about to redraw, which would make every frame re-parse).
+  std::vector<FileBuffer *> stale;
+  for (FileBuffer *buf : holders)
+  {
+    if (buf->ts_last_use_seq > syntax_sweep_seq_)
+    {
+      continue;
+    }
+    stale.push_back(buf);
+  }
+  // The newest stale trees fill the cache up to the budget; the rest are
+  // dropped. When the on-screen set already fills the budget nothing else is
+  // kept, which is the point: the visible buffers are the ones that matter.
+  const std::size_t protected_count = holders.size() - stale.size();
+  const std::size_t keep = protected_count >= kMaxCachedSyntaxTrees
+                               ? 0
+                               : kMaxCachedSyntaxTrees - protected_count;
+  bool dropped_any = false;
+  for (std::size_t i = keep; i < stale.size(); i++)
+  {
+    FileBuffer &buf = *stale[i];
+    buf.release_syntax();
+    // The buffer now holds no parser at all, so clear the incremental-parse
+    // bookkeeping with it: leaving a stale ts_edit_base behind would make the
+    // next rebuild diff against a tree that no longer exists.
+    buf.ts_parse_pending = false;
+    buf.ts_edit_base_valid = false;
+    buf.ts_edit_base.clear();
+    buf.ts_tree_in_sync = true;
+    dropped_any = true;
+  }
+  if (dropped_any)
+  {
+    release_free_heap();
+  }
+  syntax_sweep_seq_ = ts_use_seq_;
 }
 
 std::string Editor::tree_sitter_extension_for_buffer(FileBuffer &buf)

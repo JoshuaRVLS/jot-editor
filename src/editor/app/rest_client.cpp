@@ -202,8 +202,7 @@ void RestClient::show_response(const HttpFile::Resolved &resolved, const std::st
   editor_.reveal_tab_for_buffer(index);
   FileBuffer &buf = editor_.get_buffer();
   buf.replace_lines(0, (int)buf.line_count(), HttpFile::format_response(resolved, response));
-  buf.undo_stack = std::stack<State>();
-  buf.redo_stack = std::stack<State>();
+  buf.clear_undo_history();
   buf.cursor = {0, 0};
   buf.preferred_x = 0;
   buf.selection = {{0, 0}, {0, 0}, false};

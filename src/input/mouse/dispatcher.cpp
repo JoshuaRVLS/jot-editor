@@ -823,6 +823,17 @@ void Editor::handle_mouse(void *event_ptr)
     return;
   }
 
+  // The dock's outline body, under the strip: motion paints the hover band, a
+  // press takes the row (fold on the chevron, jump anywhere else). This is the
+  // live click path -- the wheel reaches the panel through handle_mouse_input,
+  // but a press or a motion never did, so the list was inert. A live selection
+  // drag keeps its motions: they pan the viewport past the dock's edge.
+  if ((is_click || (is_motion && !mouse_selecting && !mouse_drag_started))
+      && handle_outline_panel_mouse(event->x, event->y, is_click))
+  {
+    return;
+  }
+
   if ((is_click || is_click_release || is_motion)
       && handle_debugger_mouse(event->x, event->y, is_click))
   {
@@ -882,21 +893,38 @@ void Editor::handle_mouse(void *event_ptr)
     }
   }
 
+  // A motion over the sidebar moves its hover band. The rows' own actions stay
+  // on the press below; this only paints, and it runs before the pane path so a
+  // motion over the column never touches the buffer under it. A selection drag
+  // keeps its own motions (they edge-pan the viewport).
+  if (show_sidebar && is_motion && !mouse_selecting && !mouse_drag_started)
+  {
+    sidebar_update_hover(event->x, event->y);
+    return;
+  }
+  // Anywhere else, a motion means the pointer left the column: drop the band.
+  if (is_motion && !mouse_selecting && !mouse_drag_started)
+  {
+    sidebar_update_hover(-1, -1);
+  }
+
   if (show_sidebar && is_click)
   {
     const ContentColumn col = side_column();
     int sidebar_w = effective_sidebar_width();
     if (event->x < sidebar_w && event->y >= col.top && event->y < col.bottom)
     {
+      sidebar_update_hover(event->x, event->y);
       focus_state = FOCUS_SIDEBAR;
       long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                              std::chrono::steady_clock::now().time_since_epoch())
                              .count();
-      // The double-click id is the section plus the row inside it, so a click
-      // on the same screen row in two different sections is not a double
+      // The double-click id is the section plus the data row inside it, so a
+      // click on the same screen row in two different sections is not a double
       // click, and a scroll between clicks cannot fake one.
       const SidebarHit sidebar_hit = sidebar_hit_test(event->y);
-      const int sidebar_row = (sidebar_hit.section + 1) * 4096 + (sidebar_hit.index + 2);
+      const int sidebar_index = sidebar_hit.header ? -1 : sidebar_data_index(sidebar_hit);
+      const int sidebar_row = (sidebar_hit.section + 1) * 4096 + (sidebar_index + 2);
       bool sidebar_double = (last_sidebar_click_ms > 0) && (now_ms - last_sidebar_click_ms <= 350)
                             && (last_sidebar_click_row == sidebar_row);
       last_sidebar_click_ms = now_ms;

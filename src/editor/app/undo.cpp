@@ -9,8 +9,6 @@
 
 namespace
 {
-  constexpr std::size_t kMaxUndoHistory = 500;
-
   // One line of a full snapshot: the previous state's copy of it when the text
   // has not changed, so an untouched line costs a pointer instead of a copy.
   // `prev` is the state the new one is about to sit on top of, or null when
@@ -208,9 +206,57 @@ namespace
     return true;
   }
 
-  void trim_stack(std::stack<State> &stack, std::size_t max_items)
+  // What pushing `s` costs the history: its own line-pointer array plus the
+  // text of every line it created rather than shared with `prev`. Lines shared
+  // with the state underneath cost nothing, which is the whole point of the
+  // sharing in capture_state.
+  std::size_t push_cost(const State &s, const State *prev)
   {
-    if (stack.size() <= max_items)
+    std::size_t total = s.old_lines.size() * sizeof(SnapshotLine);
+    for (std::size_t i = 0; i < s.old_lines.size(); i++)
+    {
+      const SnapshotLine &line = s.old_lines[i];
+      const bool shared = prev != nullptr && i < prev->old_lines.size()
+                          && prev->old_lines[i] == line;
+      if (!shared && line)
+      {
+        total += sizeof(std::string) + line->size();
+      }
+    }
+    return total;
+  }
+
+  // What dropping `s` releases: its pointer array, plus the text of the lines
+  // nothing else holds any more (use_count() == 1 is this state's own
+  // reference). A line a newer state still shares was paid for once, by the
+  // state that created it; releasing the creator keeps it charged, so the
+  // accounting can only overstate what is held, never understate it.
+  std::size_t release_cost(const State &s)
+  {
+    std::size_t total = s.old_lines.size() * sizeof(SnapshotLine);
+    for (const SnapshotLine &line : s.old_lines)
+    {
+      if (line && line.use_count() == 1)
+      {
+        total += sizeof(std::string) + line->size();
+      }
+    }
+    return total;
+  }
+
+  void subtract_bytes(std::size_t &bytes, std::size_t amount)
+  {
+    bytes = amount >= bytes ? 0 : bytes - amount;
+  }
+
+  // Drops the oldest states until the stack fits both the state cap and the
+  // byte budget, never going below kMinUndoStates. Undo pops the top, so the
+  // oldest state is the one to give up: the depth it costs is the one nobody
+  // walks to, and the newest states -- what undo actually reaches for -- stay.
+  void trim_stack(std::stack<State> &stack, std::size_t &bytes)
+  {
+    if (stack.size() <= kMaxUndoHistory
+        && (bytes <= kUndoHistoryBytes || stack.size() <= kMinUndoStates))
     {
       return;
     }
@@ -221,13 +267,45 @@ namespace
       items.push_back(std::move(stack.top()));
       stack.pop();
     }
+    // items is top-first: the newest state is items[0], the oldest is back().
+    // The drop walks the oldest states and releases each as it credits it: a
+    // line shared only by states of this same drop is credited when the last
+    // of them goes, so what the stacks hold stays an exact count rather than
+    // one inflated by states this pass is already letting go -- an inflation
+    // the state or byte cap could never spend its way back out of.
+    std::size_t keep = items.size();
+    while (keep > kMinUndoStates && (keep > kMaxUndoHistory || bytes > kUndoHistoryBytes))
+    {
+      keep--;
+      subtract_bytes(bytes, release_cost(items[keep]));
+      items[keep] = State();
+    }
     std::stack<State> rebuilt;
-    const std::size_t kept = std::min(max_items, items.size());
-    for (std::size_t i = kept; i > 0; --i)
+    for (std::size_t i = keep; i > 0; --i)
     {
       rebuilt.push(std::move(items[i - 1]));
     }
     stack = std::move(rebuilt);
+  }
+
+  // Pushes a state and charges the history for what it holds.
+  void push_state(std::stack<State> &stack, std::size_t &bytes, State s, const State *prev)
+  {
+    bytes += push_cost(s, prev);
+    stack.push(std::move(s));
+    trim_stack(stack, bytes);
+  }
+
+  // Pops the newest state, crediting the history for what it releases. The
+  // moved-out state still holds the lines, so the credit is measured on it
+  // after the pop (a line another state shares is not released, and stays
+  // charged).
+  State pop_state(std::stack<State> &stack, std::size_t &bytes)
+  {
+    State s = std::move(stack.top());
+    stack.pop();
+    subtract_bytes(bytes, release_cost(s));
+    return s;
   }
 
   void apply_state(FileBuffer &buf, const State &prev)
@@ -329,16 +407,18 @@ void Editor::save_state()
 
   // The snapshot shares its unchanged lines with the state it is pushed on
   // top of, so it is taken against the live top of the stack.
-  State s = capture_state(buf, buf.undo_stack.empty() ? nullptr : &buf.undo_stack.top());
-  if (!buf.undo_stack.empty() && same_state(buf, buf.undo_stack.top(), s))
+  const State *prev = buf.undo_stack.empty() ? nullptr : &buf.undo_stack.top();
+  State s = capture_state(buf, prev);
+  if (prev != nullptr && same_state(buf, *prev, s))
   {
     return;
   }
 
-  buf.undo_stack.push(std::move(s));
-  trim_stack(buf.undo_stack, kMaxUndoHistory);
+  push_state(buf.undo_stack, buf.undo_stack_bytes, std::move(s), prev);
+  // A new edit forks the history: whatever the redo branch held is released.
   while (!buf.redo_stack.empty())
   {
+    subtract_bytes(buf.redo_stack_bytes, release_cost(buf.redo_stack.top()));
     buf.redo_stack.pop();
   }
 }
@@ -360,19 +440,18 @@ void Editor::undo()
   // from what the restore leaves behind.
   while (!buf.undo_stack.empty() && state_matches_buffer(buf, buf.undo_stack.top()))
   {
-    buf.undo_stack.pop();
+    pop_state(buf.undo_stack, buf.undo_stack_bytes);
   }
   if (buf.undo_stack.empty())
   {
     return;
   }
 
-  State redo_delta = capture_state(buf, buf.redo_stack.empty() ? nullptr : &buf.redo_stack.top());
-  buf.redo_stack.push(std::move(redo_delta));
-  trim_stack(buf.redo_stack, kMaxUndoHistory);
+  const State *redo_prev = buf.redo_stack.empty() ? nullptr : &buf.redo_stack.top();
+  State redo_delta = capture_state(buf, redo_prev);
+  push_state(buf.redo_stack, buf.redo_stack_bytes, std::move(redo_delta), redo_prev);
 
-  State prev = std::move(buf.undo_stack.top());
-  buf.undo_stack.pop();
+  State prev = pop_state(buf.undo_stack, buf.undo_stack_bytes);
 
 #ifdef JOT_TREESITTER
   ts_begin_edit(buf);
@@ -409,12 +488,11 @@ void Editor::redo()
     return;
   }
 
-  State undo_delta = capture_state(buf, buf.undo_stack.empty() ? nullptr : &buf.undo_stack.top());
-  buf.undo_stack.push(std::move(undo_delta));
-  trim_stack(buf.undo_stack, kMaxUndoHistory);
+  const State *undo_prev = buf.undo_stack.empty() ? nullptr : &buf.undo_stack.top();
+  State undo_delta = capture_state(buf, undo_prev);
+  push_state(buf.undo_stack, buf.undo_stack_bytes, std::move(undo_delta), undo_prev);
 
-  State next = std::move(buf.redo_stack.top());
-  buf.redo_stack.pop();
+  State next = pop_state(buf.redo_stack, buf.redo_stack_bytes);
 
 #ifdef JOT_TREESITTER
   ts_begin_edit(buf);

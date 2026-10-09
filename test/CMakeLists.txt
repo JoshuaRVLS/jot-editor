@@ -54,6 +54,7 @@ add_executable(jot_tests
   test_undo_redo_chords.cpp
   test_undo_noop.cpp
   test_undo_memory.cpp
+  test_syntax_tree_memory.cpp
   test_lsp.cpp
   test_lsp_sync.cpp
   test_lsp_quiet_diagnostics.cpp
@@ -110,6 +111,8 @@ add_executable(jot_tests
   test_bracket_match.cpp
   test_replace_inside.cpp
   test_word_highlight.cpp
+  test_outline_tree.cpp
+  test_outline_mouse.cpp
   test_diagnostic_line_bg.cpp
   test_right_panel.cpp
   test_markdown_http.cpp

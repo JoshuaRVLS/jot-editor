@@ -1,11 +1,12 @@
 // Per-pane tab strips (VSCode editor groups): a pane draws its own strip once
-// it holds a second buffer, clicking a tab switches that pane, and a tab can be
+// the pane area is split, clicking a tab switches that pane, and a tab can be
 // dragged into another pane's strip (a move), onto one of its edges (a split)
 // or back into its own list (a reorder).
 //
-// The workspace strip on row 0 is untouched by any of this: these cases pin the
-// pane-local strip, its row budget, and the drag session
-// (src/render/pane_tabs.cpp, src/input/mouse/pane_tabs.cpp,
+// The workspace strip on row 0 stays for the whole pane area and yields it
+// while the groups draw their own lists (so the files are never inked twice);
+// these cases pin that handover, the pane-local strip, its row budget, and the
+// drag session (src/render/pane_tabs.cpp, src/input/mouse/pane_tabs.cpp,
 // src/editor/app/panes_tabs.cpp).
 #include "editor.h"
 
@@ -19,6 +20,9 @@
 
 namespace
 {
+  // The input path's Alt modifier bit (see src/ui/terminal.h).
+  const int ALT = 0x40000;
+
   void seed_config_home()
   {
     char home[] = "/tmp/jot_pane_tabs_XXXXXX";
@@ -152,6 +156,115 @@ TEST_CASE("A lone pane leaves the tab row to the workspace strip", "[jot][paneta
   REQUIRE(e.pane_for_test().header_height == 0);
   e.set_pane_tabs_mode_for_test(PANE_TABS_ALWAYS);
   REQUIRE(e.pane_shows_tab_strip_for_test(0));
+}
+
+TEST_CASE("A split gives every group a strip and the workspace strip yields",
+          "[jot][panetabs]")
+{
+  // The pair of rules that keeps one row of tabs on screen: the workspace strip
+  // owns row 0 while the pane area is whole, and steps aside the moment the
+  // groups draw their own lists -- drawing both would be the same files inked
+  // twice, one row above the other. Every group then draws a strip, a group
+  // holding a single tab included, because that strip is where its file is
+  // named and where a dragged tab lands to join it.
+  seed_config_home();
+  Editor e;
+  prepare(e);
+  const std::string a = write_file("a.txt", "alpha\n");
+  e.load_file(a);
+  e.render_for_test();
+
+  // Lone pane: the workspace strip is the whole tab UI, and the pane spends no
+  // row of its own on the same list.
+  REQUIRE(e.panes_for_test().size() == 1);
+  REQUIRE(e.topbar_height_for_test() == 1); // the strip owns row 0
+  REQUIRE_FALSE(e.pane_shows_tab_strip_for_test(0));
+  REQUIRE(e.pane_for_test().header_height == 0);
+  REQUIRE(e.pane_for_test().y == 1);
+
+  // Split: the workspace strip gives the row to the groups (the topbar is the
+  // strip's height here -- the retired menu bar costs nothing -- so 0 is what
+  // "the strip stepped aside" looks like), and both panes start on row 0.
+  e.split_pane_for_test(true);
+  e.render_for_test();
+  REQUIRE(e.panes_for_test().size() == 2);
+  REQUIRE(e.topbar_height_for_test() == 0);
+  REQUIRE(e.panes_for_test()[0].y == 0);
+
+  // Both groups pay their strip row -- the second one holds a single tab, and
+  // still has to be the place its file is named and a dragged tab is dropped.
+  REQUIRE(e.pane_shows_tab_strip_for_test(0));
+  REQUIRE(e.pane_shows_tab_strip_for_test(1));
+  REQUIRE(e.panes_for_test()[1].tab_buffer_ids.size() == 1);
+  REQUIRE(e.pane_tab_layout_for_test(1).segments.size() == 1);
+  REQUIRE(e.pane_tab_layout_for_test(1).segments[0].active);
+  REQUIRE(e.panes_for_test()[1].header_height == 1);
+  REQUIRE(pane_content_top(e.panes_for_test()[1]) == e.panes_for_test()[1].y + 1);
+  REQUIRE(pane_viewport_h(e.panes_for_test()[1]) == e.panes_for_test()[1].h - 1);
+
+  // `pane_tabs = off` hands the row back to the workspace strip: the panes draw
+  // none of their own, so it is the only list left.
+  e.set_pane_tabs_mode_for_test(PANE_TABS_OFF);
+  e.render_for_test();
+  REQUIRE(e.topbar_height_for_test() == 1);
+  REQUIRE_FALSE(e.pane_shows_tab_strip_for_test(0));
+  REQUIRE_FALSE(e.pane_shows_tab_strip_for_test(1));
+  REQUIRE(e.panes_for_test()[1].header_height == 0);
+}
+
+TEST_CASE("In a split the tab keys drive the focused group's own list", "[jot][panetabs]")
+{
+  // The workspace strip hands row 0 to the groups, but its keys are not part of
+  // that handover: Alt+1..9 stays live and addresses the strip the user can
+  // see -- the focused group's own list, exactly where a click on it lands.
+  seed_config_home();
+  Editor e;
+  prepare(e);
+  const std::string a = write_file("a.txt", "alpha\n");
+  const std::string b = write_file("b.txt", "beta\n");
+  const std::string c = write_file("c.txt", "gamma\n");
+  e.load_file(a);
+  e.load_file(b);
+  e.split_pane_for_test(true);
+  e.load_file(c); // a third file lands in the focused group only
+  e.render_for_test();
+
+  REQUIRE(e.panes_for_test().size() == 2);
+  REQUIRE(e.topbar_height_for_test() == 0); // the strip yielded the row
+  REQUIRE(e.panes_for_test()[1].tab_buffer_ids.size() == 3);
+  const std::vector<int> tabs = e.panes_for_test()[1].tab_buffer_ids;
+
+  // The position is on the focused group's strip: Alt+2 and Alt+0 walk it.
+  e.raw_key_for_test('2' | ALT);
+  REQUIRE(e.pane_for_test().buffer_id == tabs[1]);
+  e.raw_key_for_test('0' | ALT);
+  REQUIRE(e.pane_for_test().buffer_id == tabs[2]);
+
+  // Focus the first group (two tabs) and ask for a third position: the key
+  // names its own list, so it is inert -- the workspace order has three tabs,
+  // and reaching across would have switched this pane instead.
+  const int x = tab_center_x(e, 0, 0);
+  const int y = e.panes_for_test()[0].y;
+  REQUIRE(e.pane_tab_mouse_for_test(x, y, true /*click*/));
+  e.pane_tab_mouse_for_test(x, y, false, true /*release*/);
+  REQUIRE(e.panes_for_test()[0].tab_buffer_ids.size() == 2);
+  const int held = e.panes_for_test()[0].buffer_id;
+  e.raw_key_for_test('3' | ALT);
+  REQUIRE(e.pane_for_test().buffer_id == held);
+
+  // Alt+R arms jump mode here too, and the group's strip is where the letters
+  // appear (the row-0 strip that used to carry them is not on screen).
+  e.raw_key_for_test('r' | ALT);
+  e.render_for_test();
+  const PaneTabLayout layout = e.pane_tab_layout_for_test(0);
+  REQUIRE(layout.segments.size() == 2);
+  for (const PaneTabSegment &tab : layout.segments)
+  {
+    REQUIRE(tab.jump_letter != 0);
+  }
+  const PaneTabSegment &pick = layout.segments[1];
+  e.raw_key_for_test(pick.jump_letter);
+  REQUIRE(e.pane_for_test().buffer_id == pick.buffer_id);
 }
 
 TEST_CASE("With the workspace strip off, the pane's own row carries the tabs", "[jot][panetabs]")

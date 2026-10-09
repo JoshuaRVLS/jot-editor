@@ -572,9 +572,12 @@ void Editor::finish_open_file(FileBuffer fb, const std::string &path_to_open, bo
 
   highlighter.set_language(get_file_extension(path_to_open));
 
-#ifdef JOT_TREESITTER
-  init_ts_for_buffer(buffers.back());
-#endif
+  // The parse tree is built by the first paint, not here (get_line_syntax_colors
+  // -> init_ts_for_buffer): a buffer that is opened but never shown -- one
+  // opened straight from a script, or a tab the user never visits -- does not
+  // need a CST (megabytes for a mid-size source file) parked in memory. A file
+  // that is shown gets its tree on the frame that draws it, through the same
+  // lazy path every large file already takes on open.
 
   restore_file_fold_state(buffers.back());
 

@@ -87,11 +87,10 @@ TEST_CASE("C++ definitions: a header declaration with no body is reported", "[jo
   REQUIRE(issue_for(issues, "\"reset()\"") != nullptr);
   REQUIRE(issue_for(issues, "\"count() const\"") != nullptr);
   REQUIRE(issues[0].end_line == 0);
-  REQUIRE(issues[0].end_col == 8); // leading half of reset
+  REQUIRE(issues[0].end_col == 10); // one past `reset`, the whole name
 }
 
-TEST_CASE("C++ definitions: source declarations without a body are reported at half the name",
-          "[jot]")
+TEST_CASE("C++ definitions: source declarations without a body are reported at the name", "[jot]")
 {
   const std::vector<Issue> issues =
       check({{"linkedlist.c", "#include <stdio.h>\nvoid render();\n"}});
@@ -100,7 +99,7 @@ TEST_CASE("C++ definitions: source declarations without a body are reported at h
   REQUIRE(issues[0].line == 1);
   REQUIRE(issues[0].col == 5);
   REQUIRE(issues[0].end_line == 1);
-  REQUIRE(issues[0].end_col == 8);
+  REQUIRE(issues[0].end_col == 11);
   REQUIRE(issues[0].message.find("No definition found") != std::string::npos);
 }
 
@@ -120,7 +119,7 @@ TEST_CASE("C++ definitions: another standalone program cannot implement triangle
   REQUIRE(issues[0].file == "game/triangle.c");
   REQUIRE(issues[0].line == 2);
   REQUIRE(issues[0].col == 5);
-  REQUIRE(issues[0].end_col == 8);
+  REQUIRE(issues[0].end_col == 11); // one past `render`, the whole name
   REQUIRE(issues[0].message.find("No definition found") != std::string::npos);
 
   REQUIRE(
@@ -140,7 +139,7 @@ TEST_CASE("C++ definitions: qualified missing declarations underline the final n
   REQUIRE(issues[0].line == 0);
   REQUIRE(issues[0].col == 21);
   REQUIRE(issues[0].end_line == 0);
-  REQUIRE(issues[0].end_col == 28); // "render_", the leading half of render_widget
+  REQUIRE(issues[0].end_col == 34); // one past `render_widget`, the whole name
 }
 
 TEST_CASE("C++ definitions: parameter names do not have to match", "[jot]")
@@ -735,7 +734,7 @@ TEST_CASE("C++ definitions: an unsaved buffer's text is what the scan reads", "[
   REQUIRE(result.issues[0].file == (root / "linkedlist.c").string());
   REQUIRE(result.issues[0].line == 2);
   REQUIRE(result.issues[0].col == 5);
-  REQUIRE(result.issues[0].end_col == 8); // "ren", the leading half of render
+  REQUIRE(result.issues[0].end_col == 11); // one past `render`, the whole name
 
   // A buffer whose file the walk never reached -- written into existence -- is
   // part of the workspace all the same, and one outside it is not.

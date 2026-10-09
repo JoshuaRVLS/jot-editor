@@ -5,11 +5,13 @@
 
 // The workspace tab strip: row 0, above the panes.
 //
-// The strip shows every buffer once, in the workspace's own order -- panes keep
-// their local tab lists as history (Ctrl+Tab, close-focus) but no longer draw a
-// strip of their own. See ui/tab_order.h for the order itself; this is the
-// presentation state around it: the config knobs, where the strip is scrolled
-// to, and what the pointer is doing to it.
+// The strip shows every buffer once, in the workspace's own order. A lone pane
+// draws no strip of its own, so the workspace strip is the tab UI there; when
+// the pane area is split the groups draw their own lists on that row and the
+// workspace strip steps aside (see Editor::pane_shows_tab_strip), while the
+// order -- and the keys that walk it -- stay live. See ui/tab_order.h for the
+// order itself; this is the presentation state around it: the config knobs,
+// where the strip is scrolled to, and what the pointer is doing to it.
 //
 // Split out of editor_state.h (the umbrella over src/editor/state/), like the
 // other domain groups.

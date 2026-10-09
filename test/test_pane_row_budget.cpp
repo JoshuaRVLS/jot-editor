@@ -98,9 +98,14 @@ TEST_CASE("The header is charged to every pane, whatever the layout", "[jot][pan
   e.split_pane_for_test(true);
   e.render_for_test();
   REQUIRE(e.panes_for_test().size() == 2);
-  for (const SplitPane &pane : e.panes_for_test())
+  for (size_t i = 0; i < e.panes_for_test().size(); i++)
   {
-    REQUIRE(pane.header_height == e.tab_height_for_test());
+    const SplitPane &pane = e.panes_for_test()[i];
+    // The header a split pane pays is its own strip row -- the workspace strip
+    // yields row 0 to the groups then, so every one of them draws a strip,
+    // single-tab group included. The winbar is not in play: a .txt buffer never
+    // takes a breadcrumb row.
+    REQUIRE(pane.header_height == (e.pane_shows_tab_strip_for_test((int)i) ? 1 : 0));
     REQUIRE(pane_viewport_h(pane) == pane.h - pane.header_height);
     REQUIRE(pane_content_top(pane) == pane.y + pane.header_height);
   }

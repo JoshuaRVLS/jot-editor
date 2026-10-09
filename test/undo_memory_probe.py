@@ -9,10 +9,12 @@ with the snapshot underneath, which puts the same keystroke at one pointer per
 line (~32 KB).
 
 This drives the real binary, types into a 2000-line file and reads the
-process's own RSS around it. Two scenes: the growth per keystroke has to stay
-under half of what a per-keystroke copy would cost, and an undo after typing
-has to put the text back, which is what tells the sharing never aliased the
-live buffer.
+process's own RSS around it. Three scenes: the growth per keystroke has to
+stay under half of what a per-keystroke copy would cost, a long typing run has
+to stop growing once the byte budget is reached instead of climbing to the
+500-state cap (a 4000-line file held ~32 MB of such states), and an undo after
+typing has to put the text back, which is what tells the sharing never aliased
+the live buffer.
 
 Usage: test/undo_memory_probe.py [path-to-jot] [--dump]
 Exit codes: 0 pass, 1 fail, 2 skipped (no binary, no /proc).
@@ -33,6 +35,15 @@ from pty_screen import run_in_pty  # noqa: E402
 LINES = 2000
 KEYS = 300
 MAX_KB_PER_KEY = 96.0
+
+# The history also has a byte budget, and this scene is what pins it: a
+# 4000-line snapshot is ~64 KB of line pointers alone, so a long typing run
+# used to fill the 500-state cap with ~32 MB per file and keep it. The budget
+# holds the whole history to a couple of megabytes; 12 MB leaves room for the
+# editor's ordinary ramp while staying far below what the cap reached.
+SOAK_LINES = 4000
+SOAK_KEYS = 600
+MAX_HISTORY_MB = 12.0
 
 CTRL_Z = b"\x1a"
 
@@ -96,6 +107,30 @@ def growth_scene(binary: str, work: str) -> float:
     return (seen[-1] - seen[0]) / float(KEYS)
 
 
+def history_soak_scene(binary: str, work: str) -> float:
+    """Types a long run into a big file and returns the total RSS growth, in MB."""
+    path = os.path.join(work, "soak.txt")
+    write_file(path, SOAK_LINES)
+    seen = []
+
+    def sample(_screen) -> bool:
+        pid = child_pid()
+        if pid:
+            seen.append(rss_kb(pid))
+        return True
+
+    run_in_pty(binary, [path], b"", settle=4.0, after=1.0, cols=110, rows=34,
+               cfg=os.path.join(work, "cfg_soak"), phases=[
+                   (2.0, sample),
+                   (0.0, b"x" * SOAK_KEYS),
+                   (3.0, sample),
+                   (2.0, sample),
+               ])
+    if len(seen) < 3 or seen[0] < 0 or seen[-1] < 0:
+        return -1.0
+    return (seen[-1] - seen[0]) / 1024.0
+
+
 def undo_scene(binary: str, work: str):
     """One edit, one undo: the typed text has to be gone from the screen."""
     path = os.path.join(work, "undo.txt")
@@ -132,6 +167,15 @@ def main() -> int:
           % (KEYS, LINES, per_key, MAX_KB_PER_KEY))
     if per_key > MAX_KB_PER_KEY:
         failures.append("typing grew the history by %.1f KB per keystroke" % per_key)
+
+    soaked = history_soak_scene(binary, work)
+    if soaked < 0:
+        print("undo memory probe: SKIP - the process's RSS could not be read")
+        return 2
+    print("soak:   %d keys in a %d-line file, %.1f MB total (bound %.0f)"
+          % (SOAK_KEYS, SOAK_LINES, soaked, MAX_HISTORY_MB))
+    if soaked > MAX_HISTORY_MB:
+        failures.append("a %d-key run grew the process by %.1f MB" % (SOAK_KEYS, soaked))
 
     undone, view = undo_scene(binary, work)
     print("undo:    %s" % ("ok" if undone else "FAIL"))

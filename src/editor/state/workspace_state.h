@@ -54,6 +54,11 @@ struct WorkspaceState
   int sidebar_outline_scroll = 0;
   int sidebar_timeline_selected = 0;
   int sidebar_timeline_scroll = 0;
+  // The row under the pointer (-1 = none): the hover highlight, the section it
+  // sits in, and its display row inside that section (-1 = the header row).
+  // Motion sets it; the render paints it and never lets it outrank a cursor.
+  int sidebar_hover_section = -1;
+  int sidebar_hover_index = -2;
   // The file timeline: the commits touching the buffer on screen, loaded
   // asynchronously and cached per file (the sidebar is the only surface that
   // shows them).

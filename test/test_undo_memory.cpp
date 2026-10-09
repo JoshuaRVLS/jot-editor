@@ -6,11 +6,15 @@
 // share the lines they did not change with the snapshot below them: a keystroke
 // holds the line it changed plus one pointer per line.
 //
-// Two things are pinned here. The first is the sharing itself, measured as the
-// bytes the history holds with each shared line counted once. The second is
+// Three things are pinned here. The first is the sharing itself, measured as
+// the bytes the history holds with each shared line counted once. The second is
 // that sharing never aliases live text: a line an early edit changed still has
 // to restore correctly after many later snapshots, and the windowed path (files
-// past the full-snapshot line count) still has to restore its lines.
+// past the full-snapshot line count) still has to restore its lines. The third
+// is the byte budget that bounds the history when the line pointers themselves
+// are the cost: 500 states of a 4000-line buffer is ~32 MB of pointers no
+// matter how well the lines are shared, so the history is trimmed by accounted
+// bytes as well as by state count.
 
 #include "editor.h"
 
@@ -68,6 +72,33 @@ namespace
     {
       while (!stack.empty())
       {
+        for (const SnapshotLine &line : stack.top().old_lines)
+        {
+          if (line && seen.insert(line.get()).second)
+          {
+            total += line->size() + sizeof(std::string);
+          }
+        }
+        stack.pop();
+      }
+    };
+    walk(buf.undo_stack);
+    walk(buf.redo_stack);
+    return total;
+  }
+
+  // Bytes the history really holds, arrays included: every state's line-pointer
+  // array plus each line's text counted once however many states share it. The
+  // number the byte budget has to be an upper bound of.
+  std::size_t history_bytes_with_arrays(const FileBuffer &buf)
+  {
+    std::size_t total = 0;
+    std::set<const std::string *> seen;
+    const auto walk = [&seen, &total](std::stack<State> stack)
+    {
+      while (!stack.empty())
+      {
+        total += stack.top().old_lines.size() * sizeof(SnapshotLine);
         for (const SnapshotLine &line : stack.top().old_lines)
         {
           if (line && seen.insert(line.get()).second)
@@ -156,6 +187,48 @@ TEST_CASE("Undo history: an early edit still restores after many later snapshots
 
   e.raw_key_for_test(kUndo);
   REQUIRE(core.buffer_content().rfind("line 0:", 0) == 0);
+}
+
+TEST_CASE("Undo history: the byte budget bounds a big buffer's history", "[jot][undo]")
+{
+  // 4000 lines is under kMaxFullSnapshotLines, so every state here is a full
+  // snapshot: what it adds is one line pointer per line (~64 KB) plus the one
+  // line its command changed. 300 keystrokes are ~19 MB of pointers alone, past
+  // the byte budget, which therefore has to trim long before the 500-state cap
+  // would -- and that is the memory the RSS soak was climbing by.
+  Editor &e = probe_editor();
+  seed(e, 4000);
+  auto &core = e.host().core;
+  FileBuffer &buf = e.buffer_for_test();
+  buf.clear_undo_history();
+
+  for (int i = 0; i < 300; i++)
+  {
+    core.set_cursor((i * 7) % 4000, 0);
+    core.insert_char_at_carets('k');
+  }
+
+  REQUIRE(buf.undo_stack.size() < kMaxUndoHistory);
+  REQUIRE(buf.undo_stack.size() >= kMinUndoStates);
+  REQUIRE(buf.undo_stack_bytes <= kUndoHistoryBytes);
+  // The accounting may overstate what is held (a line still shared by a newer
+  // state keeps its creator's charge) but never understate it.
+  REQUIRE(buf.undo_stack_bytes >= history_bytes_with_arrays(buf));
+
+  // Undo still reaches the states the trim kept. The oldest states -- the ones
+  // holding the seeded text -- were dropped, so walking the retained history
+  // ends at the oldest state kept, not at the seed; what has to hold is that
+  // the newest edits come back and the walk never over-runs the stack.
+  const std::size_t depth = buf.undo_stack.size();
+  for (std::size_t i = 0; i < depth; i++)
+  {
+    e.raw_key_for_test(kUndo);
+  }
+  REQUIRE(buf.undo_stack.empty());
+  // The newest keystroke was on line 299 * 7 % 4000 = 2093, well inside what
+  // the budget keeps.
+  REQUIRE(core.buffer_content().find("kline 2093:") == std::string::npos);
+  REQUIRE(core.buffer_content().find("line 2093:") != std::string::npos);
 }
 
 TEST_CASE("Undo history: a windowed snapshot past the full-snapshot size still restores",

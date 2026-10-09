@@ -25,14 +25,43 @@ namespace
 
   // The install tree the managed bins and generated Windows scripts live in.
   // XDG_DATA_HOME is what data_root() reads first, so the real HOME is never
-  // touched.
-  std::string seed_data_home()
+  // touched. Held for the duration of the case and restored on destruction:
+  // leaving it pointed at the scratch directory past the end of a case left
+  // every later test that resolves a data root -- the tree-sitter parser
+  // install root among them -- looking in a directory that had been deleted.
+  struct SeedDataHome
   {
-    char data[] = "/tmp/jot_lsp_install_data_XXXXXX";
-    mkdtemp(data);
-    setenv("XDG_DATA_HOME", data, 1);
-    return data;
-  }
+    SeedDataHome()
+    {
+      const char *previous = std::getenv("XDG_DATA_HOME");
+      had_ = previous != nullptr;
+      if (had_)
+      {
+        old_ = previous;
+      }
+      char data[] = "/tmp/jot_lsp_install_data_XXXXXX";
+      mkdtemp(data);
+      path = data;
+      setenv("XDG_DATA_HOME", path.c_str(), 1);
+    }
+    ~SeedDataHome()
+    {
+      if (had_)
+      {
+        setenv("XDG_DATA_HOME", old_.c_str(), 1);
+      }
+      else
+      {
+        unsetenv("XDG_DATA_HOME");
+      }
+    }
+    SeedDataHome(const SeedDataHome &) = delete;
+    SeedDataHome &operator=(const SeedDataHome &) = delete;
+
+    std::string path;
+    std::string old_;
+    bool had_ = false;
+  };
 
   std::string read_file(const fs::path &path)
   {
@@ -153,7 +182,8 @@ TEST_CASE("LSP install plan prefers a bundled payload over a download", "[lsp]")
 
 TEST_CASE("LSP install wrapper renders a cmd.exe script for Windows", "[lsp]")
 {
-  const std::string data = seed_data_home();
+  SeedDataHome data_home;
+  const std::string data = data_home.path;
   setenv("JOT_INSTALL_PLATFORM", "win", 1);
 
   const std::string command = LspInstall::wrap_script(
@@ -211,7 +241,8 @@ TEST_CASE("LSP install wrapper renders a cmd.exe script for Windows", "[lsp]")
 
 TEST_CASE("LSP managed bin resolves Windows launcher extensions", "[lsp]")
 {
-  const std::string data = seed_data_home();
+  SeedDataHome data_home;
+  const std::string data = data_home.path;
   const fs::path bin = fs::path(data) / "jot" / "lsp" / "bin";
   std::error_code ec;
   fs::create_directories(bin, ec);
@@ -239,7 +270,8 @@ TEST_CASE("LSP managed bin resolves Windows launcher extensions", "[lsp]")
 TEST_CASE("LSP install plan renders cmd.exe steps on Windows", "[lsp]")
 {
   seed_config_home();
-  const std::string data = seed_data_home();
+  SeedDataHome data_home;
+  const std::string data = data_home.path;
   // No payload in sight, so the plan has to come from the download manager: the
   // renderer is what this covers.
   setenv("JOT_LSP_PAYLOAD_DIR", "/nonexistent/jot-payload", 1);
@@ -283,7 +315,8 @@ TEST_CASE("LSP install plan renders cmd.exe steps on Windows", "[lsp]")
 TEST_CASE("LSP install plan renders every manager family on Windows", "[lsp]")
 {
   seed_config_home();
-  const std::string data = seed_data_home();
+  SeedDataHome data_home;
+  const std::string data = data_home.path;
   // No payload in sight: every id here has to come from its own manager.
   setenv("JOT_LSP_PAYLOAD_DIR", "/nonexistent/jot-payload", 1);
   setenv("JOT_INSTALL_PLATFORM", "win", 1);

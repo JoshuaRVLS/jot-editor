@@ -35,8 +35,11 @@ namespace jot_sidebar
     int footer_y = -1;
   };
 
-  // A section's body never takes more than this many rows, so the tree keeps
-  // the column's bulk however many symbols or commits a file has.
+  // A section's body never takes more than this many rows while the tree has
+  // rows of its own to show, so the tree keeps the column's bulk however many
+  // symbols or commits a file has. A short tree frees those rows: the sections
+  // grow into them (up to what they actually have) rather than leaving the
+  // column blank above a list that is hiding entries.
   constexpr int kSectionCap = 8;
   // ...and the tree itself never drops below this many rows while its section
   // is open, so the other two cannot squeeze the explorer out.
@@ -86,6 +89,30 @@ namespace jot_sidebar
     int outline_h = outline_open ? std::min(std::max(1, outline_count), cap) : 0;
     int timeline_h = timeline_open ? std::min(std::max(1, timeline_count), cap) : 0;
     int tree_h = content - outline_h - timeline_h;
+
+    // The tree is the column's flex -- it keeps whatever the other two do not
+    // want -- but only while it has rows of its own to spend it on. What it
+    // cannot use goes back to the sections the cap trimmed, so a file with more
+    // symbols than the cap shows them instead of sitting above blank rows, and
+    // a folded explorer hands the whole column back. Whatever the other
+    // sections do not want either stays as the column's trailing blank.
+    const int tree_want = explorer_open ? std::min(tree_h, tree_count) : 0;
+    if (tree_h > tree_want)
+    {
+      int spare = tree_h - tree_want;
+      if (outline_open)
+      {
+        const int take = std::min(spare, std::max(0, outline_count - outline_h));
+        outline_h += take;
+        spare -= take;
+      }
+      if (timeline_open)
+      {
+        const int take = std::min(spare, std::max(0, timeline_count - timeline_h));
+        timeline_h += take;
+      }
+      tree_h = content - outline_h - timeline_h;
+    }
 
     // The tree's floor wins over the other sections: trim from the bottom up.
     if (explorer_open && tree_h < kTreeMinRows)

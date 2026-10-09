@@ -30,6 +30,17 @@ namespace
   constexpr std::uintmax_t kFileSizeLazyThreshold = 10ULL * 1024ULL * 1024ULL;
   constexpr int kDeltaWindowHalfSize = 50;
   constexpr int kMaxFullSnapshotLines = 5000;
+  // Undo/redo history budgets, per stack and per buffer. The state count alone
+  // is not a memory bound: a full snapshot carries one line pointer per line of
+  // the buffer (~64 KB for a 4000-line file) plus a fresh copy of every line its
+  // command changed, so 500 states of a mid-size buffer is tens of megabytes
+  // per buffer, and a shot that replaces the whole text (a formatter, a
+  // plugin's set_text, :%s) makes every line fresh on top of that. The history
+  // is therefore trimmed by accounted bytes as well, never dropping below
+  // kMinUndoStates so undo stays useful however large the edits were.
+  constexpr std::size_t kMaxUndoHistory = 500;
+  constexpr std::size_t kUndoHistoryBytes = 2u * 1024u * 1024u;
+  constexpr std::size_t kMinUndoStates = 16;
 } // namespace
 
 // The clock FileBuffer's own stamps are read on: the occurrence highlight's
@@ -121,6 +132,24 @@ struct FileBuffer
   long long tab_uid = 0;
   std::stack<State> undo_stack;
   std::stack<State> redo_stack;
+  // Bytes the two histories hold, maintained by undo.cpp as states are pushed,
+  // popped and trimmed (see kUndoHistoryBytes). Counts each state's line
+  // pointers plus the text of the lines it created; lines still shared by a
+  // newer state stay counted until the last holder goes, so the total is an
+  // upper bound on what the stacks retain.
+  std::size_t undo_stack_bytes = 0;
+  std::size_t redo_stack_bytes = 0;
+
+  // Drops the recorded history: the two stacks and the byte accounting that
+  // bounds them, which every path that resets the stacks has to clear with
+  // them or the next push is charged against a budget that was never freed.
+  void clear_undo_history()
+  {
+    undo_stack = std::stack<State>();
+    redo_stack = std::stack<State>();
+    undo_stack_bytes = 0;
+    redo_stack_bytes = 0;
+  }
   std::set<int> bookmarks;
   // Range of the last multi-line comment toggle (both comment and uncomment
   // directions). A no-selection Ctrl+/ with the cursor inside this range
@@ -325,6 +354,13 @@ struct FileBuffer
   bool ts_tree_in_sync = true;
   bool ts_edit_base_valid = false;
   std::string ts_edit_base;
+  // Recency stamp of the last painted frame this buffer was drawn on. The
+  // renderer bumps one counter per pane (Editor::render_pane) and
+  // Editor::evict_stale_syntax_trees drops the trees of buffers that are not
+  // recent, so a source file left in the background does not keep its parse
+  // tree -- ~1.3-3.5 KB of CST per line of C++, see kMaxCachedSyntaxTrees --
+  // alive just because it is open.
+  std::uint64_t ts_last_use_seq = 0;
 
   // Drops this buffer's parse tree and parser. They are raw pointers into
   // tree-sitter memory that nothing else owns, so every path that discards a

@@ -582,10 +582,13 @@ bool Editor::show_buffer_in_current_pane(int buffer_id)
   return true;
 }
 
-// The keyboard face of the strip. Alt+<digit> is a strip *position* now, not an
-// index into the focused pane's own history: the number you press is the tab you
-// can see, which is the only thing a workspace-wide strip can promise. Ctrl+Tab
-// still walks the pane's history (see cycle_local_tab).
+// The keyboard face of the strip. Alt+<digit> is a strip *position*: the number
+// you press is the tab you can see. While the workspace strip is the list on
+// screen (a lone pane), that position is a workspace position; once the pane
+// area is split the groups draw their own lists, so the focused group's list is
+// the one on screen and the position lands there (the same place a click on
+// that strip goes, switch_pane_to_local_tab). Ctrl+Tab still walks the pane's
+// history either way (see cycle_local_tab).
 bool Editor::handle_tabline_key(int ch, bool is_ctrl, bool is_shift, bool is_alt)
 {
   (void)is_shift;
@@ -601,37 +604,62 @@ bool Editor::handle_tabline_key(int ch, bool is_ctrl, bool is_shift, bool is_alt
       const int buffer_id = tab_order.buffer_for_letter(buffers, want);
       if (buffer_id >= 0)
       {
-        if (buffer_id != current_buffer)
+        // The letter picks the buffer, not the pane: one already showing it
+        // takes the focus, otherwise it opens in the pane you are in. This is
+        // the number keys' rule, so a split behaves like the strip it draws.
+        const int position = tab_order.position_of(buffers, buffer_id);
+        if (position < 0 || !tabline_activate(position))
         {
-          show_buffer_in_current_pane(buffer_id);
+          if (buffer_id != current_buffer)
+          {
+            show_buffer_in_current_pane(buffer_id);
+          }
+          reveal_tab_for_buffer(buffer_id);
         }
-        reveal_tab_for_buffer(buffer_id);
       }
     }
     return true;
   }
 
-  if (!tabline_shown())
+  if (!tabline_active())
   {
     return false;
   }
 
+  // Which list the position keys address: the workspace strip while it owns the
+  // row, the focused group's own list while the panes have taken it over.
+  const bool local_strips = pane_strips_own_tabs();
+
   if (is_alt && ch >= '1' && ch <= '9')
   {
-    return tabline_activate(ch - '1');
+    const int position = ch - '1';
+    if (!local_strips)
+    {
+      return tabline_activate(position);
+    }
+    if (position >= (int)get_pane().tab_buffer_ids.size())
+    {
+      return false;
+    }
+    return switch_pane_to_local_tab(current_pane, position);
   }
   if (is_alt && ch == '0')
   {
-    const int total = (int)tab_order.indices(buffers).size();
-    return total > 0 && tabline_activate(total - 1);
+    if (!local_strips)
+    {
+      const int total = (int)tab_order.indices(buffers).size();
+      return total > 0 && tabline_activate(total - 1);
+    }
+    const int total = (int)get_pane().tab_buffer_ids.size();
+    return total > 0 && switch_pane_to_local_tab(current_pane, total - 1);
   }
   if (is_alt && (ch == ',' || ch == '<'))
   {
-    return cycle_tabline_tab(-1);
+    return local_strips ? cycle_local_tab(-1) : cycle_tabline_tab(-1);
   }
   if (is_alt && (ch == '.' || ch == '>'))
   {
-    return cycle_tabline_tab(1);
+    return local_strips ? cycle_local_tab(1) : cycle_tabline_tab(1);
   }
   // Alt+R (lowercase: Alt+Shift+<letter> is the pane-split family, and
   // Alt+h/j/k/l is pane focus).

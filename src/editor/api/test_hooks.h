@@ -567,6 +567,88 @@ void set_sidebar_sections_for_test(const SidebarSectionsForTest &state)
   sidebar_timeline_selected = state.timeline_cursor;
   sidebar_timeline_scroll = state.timeline_scroll;
 }
+// The sidebar's stacked-section geometry, the model the painter, the hit-test
+// and the keyboard walk all read, so a case can aim a click at a row that is
+// really painted there.
+jot_sidebar::Layout sidebar_layout_for_test() const
+{
+  return sidebar_sections_layout();
+}
+// The data-row index a sidebar hit names (see sidebar_data_index): the case
+// checks the offset the sections' scroll windows add back.
+int sidebar_data_index_for_test(int section, int index) const
+{
+  SidebarHit hit;
+  hit.section = section;
+  hit.index = index;
+  return sidebar_data_index(hit);
+}
+// The row the pointer sits on in the sidebar: `section` is the section enum,
+// `index` its display row inside it (-1 = the header, -2 = no row).
+struct SidebarHoverForTest
+{
+  int section = -1;
+  int index = -2;
+};
+SidebarHoverForTest sidebar_hover_for_test() const
+{
+  SidebarHoverForTest hover;
+  hover.section = sidebar_hover_section;
+  hover.index = sidebar_hover_index;
+  return hover;
+}
+// The column a sidebar row's icon slot sits in (the outline's chevron).
+int sidebar_content_x_for_test() const
+{
+  return sidebar_content_x();
+}
+// The dock's outline as the render and the mouse read it: the row the pointer
+// highlights (-1 = none), the cursor's visible row, the visible-row order
+// (flat symbol indices, depth-first), whether a container is open, and where
+// the body's rows sit.
+int outline_selected_for_test() const
+{
+  return outline_panel.selected;
+}
+int outline_scroll_for_test() const
+{
+  return outline_panel.scroll;
+}
+int outline_hover_row_for_test() const
+{
+  return outline_panel.hover_row;
+}
+std::vector<int> outline_visible_for_test() const
+{
+  return outline_panel.visible;
+}
+// The tree the outline was built from, in flat order.
+std::vector<SymbolMatch> outline_symbols_for_test() const
+{
+  return outline_panel.symbols;
+}
+bool outline_expanded_for_test(int flat_index) const
+{
+  return flat_index >= 0 && flat_index < (int)outline_panel.expanded.size()
+         && outline_panel.expanded[(size_t)flat_index];
+}
+// The first body row of the dock's outline and how many it shows (the
+// renderer's own arithmetic: panel_y + 3, panel_h - 3).
+int outline_body_y_for_test() const
+{
+  return side_column_top() + 3;
+}
+int outline_body_h_for_test() const
+{
+  const int panel_h = std::max(1, grid_height() - status_height - side_column_top());
+  return std::max(0, panel_h - 3);
+}
+// Runs the outline's rebuild gate directly, so a case can prove a fold survives
+// the rebuild a keystroke schedules without typing into the buffer.
+void ensure_outline_fresh_for_test(bool force)
+{
+  ensure_outline_fresh(force);
+}
 bool terminal_resize_dragging_for_test() const
 {
   return terminal_resize_dragging;
@@ -1036,15 +1118,48 @@ bool goto_function_for_test(int direction)
   return goto_relative_function(direction);
 }
 // True when the buffer has a parsed syntax tree, so a test can skip rather
-// than fail on a machine with no grammar installed.
+// than fail on a machine with no grammar installed. Parses on demand: the
+// editor builds a buffer's tree when a frame first paints it, and a headless
+// test draws nothing, so this asks for the parse the way the renderer would.
 bool syntax_tree_ready_for_test()
 {
 #ifdef JOT_TREESITTER
+  init_ts_for_buffer(get_buffer());
   return get_buffer().ts_tree != nullptr;
 #else
   return false; // no tree-sitter in this build, so no buffer ever has a tree
 #endif
 }
+// The parse-tree retention budget (see kMaxCachedSyntaxTrees): a headless test
+// cannot drive the render loop, so it parses and stamps buffers through these
+// seams and then runs the sweep the loop runs at the end of a frame.
+#ifdef JOT_TREESITTER
+void init_syntax_for_buffer_for_test(int id)
+{
+  init_ts_for_buffer(buffers[(size_t)id]);
+}
+// The stamp render_pane gives a buffer it drew this frame.
+void mark_syntax_buffer_shown_for_test(int id)
+{
+  buffers[(size_t)id].ts_last_use_seq = ++ts_use_seq_;
+}
+void run_syntax_tree_sweep_for_test()
+{
+  evict_stale_syntax_trees();
+}
+int syntax_tree_holder_count_for_test() const
+{
+  int holders = 0;
+  for (const FileBuffer &buf : buffers)
+  {
+    if (buf.ts_tree)
+    {
+      holders++;
+    }
+  }
+  return holders;
+}
+#endif
 // Runs an ex command line the way the palette does, so command plumbing can
 // be asserted without typing into a prompt.
 // The plan the installer would run for a language server: its id, the shell

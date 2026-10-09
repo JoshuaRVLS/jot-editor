@@ -29,6 +29,8 @@ struct Scratch
 {
   fs::path root;
   fs::path data;
+  std::string old_data_home;
+  bool had_data_home = false;
 
   Scratch()
   {
@@ -36,11 +38,31 @@ struct Scratch
     root = mkdtemp(workspace);
     char data_dir[] = "/tmp/jot_cpp_flags_data_XXXXXX";
     data = mkdtemp(data_dir);
+    const char *previous = std::getenv("XDG_DATA_HOME");
+    had_data_home = previous != nullptr;
+    if (had_data_home)
+    {
+      old_data_home = previous;
+    }
     setenv("XDG_DATA_HOME", data.string().c_str(), 1);
   }
 
   ~Scratch()
   {
+    // Put XDG_DATA_HOME back before removing the directory it named. Leaving
+    // it behind pointed every later test that resolves a data root -- the
+    // tree-sitter parser install root among them, read from XDG_DATA_HOME
+    // first -- at a path this destructor had just deleted, which silently
+    // turned every grammar lookup into "not installed" and skipped those
+    // cases depending on the run order.
+    if (had_data_home)
+    {
+      setenv("XDG_DATA_HOME", old_data_home.c_str(), 1);
+    }
+    else
+    {
+      unsetenv("XDG_DATA_HOME");
+    }
     std::error_code ec;
     fs::remove_all(root, ec);
     fs::remove_all(data, ec);

@@ -13,6 +13,11 @@
 #include <unordered_map>
 #include <vector>
 
+// The cells an outline row keeps for the symbol's own name: its kind icon and
+// the declared type beside it yield to the name, so a narrow column or a deeply
+// nested row never paints as an icon with no name next to it.
+static constexpr int kOutlineNameCells = 8;
+
 static int utf8_cell_len(const std::string &text, size_t i)
 {
   if (i >= text.size())
@@ -572,7 +577,7 @@ void Editor::render_sidebar()
   // Content geometry: the Lua handler truncates the baked-in header/footer
   // against content_w, so it must be populated before emit (defaults to 0
   // otherwise, silently clipping the header to nothing).
-  view.content_x = std::max(1, rail_w);
+  view.content_x = sidebar_content_x();
   view.content_w = std::max(0, w - view.content_x - 1);
 
   auto emit_sidebar_view = [&]() -> bool
@@ -826,26 +831,28 @@ void Editor::render_sidebar()
   // One header style for all three sections: a chevron, the uppercase label,
   // and an optional muted detail on the right (the timeline names the file it
   // describes).
-  auto paint_section_header =
-      [&](int header_y, bool open, const std::string &label, const std::string &detail)
-  {
+  auto paint_section_header = [&](int header_y,
+                                  bool open,
+                                  const std::string &label,
+                                  const std::string &detail,
+                                  bool hovered) {
     if (header_y < 0 || content_w < 3)
     {
       return;
     }
     const int fg = theme.fg_comment;
-    ui->fill_rect({content_x, header_y, std::max(1, content_w - 1), 1}, " ", fg, theme.bg_sidebar);
-    ui->draw_text(content_x + 1, header_y, open ? "\u25BE" : "\u25B8", fg, theme.bg_sidebar);
+    const int bg = hovered ? theme.bg_sidebar_selected_inactive : theme.bg_sidebar;
+    ui->fill_rect({content_x, header_y, std::max(1, content_w - 1), 1}, " ", fg, bg);
+    ui->draw_text(content_x + 1, header_y, open ? "\u25BE" : "\u25B8", fg, bg);
     const int label_max = std::max(0, content_w - 3);
-    ui->draw_text(
-        content_x + 3, header_y, truncate_cells(label, label_max), fg, theme.bg_sidebar, true);
+    ui->draw_text(content_x + 3, header_y, truncate_cells(label, label_max), fg, bg, true);
 
     SidebarPanelRowView r;
     r.x = content_x;
     r.y = header_y;
     r.w = std::max(1, content_w - 1);
     r.fg = fg;
-    r.bg = theme.bg_sidebar;
+    r.bg = bg;
     r.section = true;
     r.section_open = open;
     r.symbol = open ? "\u25BE" : "\u25B8";
@@ -860,7 +867,7 @@ void Editor::render_sidebar()
       const int detail_x = content_x + content_w - cell_count(shown);
       if (detail_x > content_x + 3 + cell_count(r.text) + 1)
       {
-        ui->draw_text(detail_x, header_y, shown, fg, theme.bg_sidebar);
+        ui->draw_text(detail_x, header_y, shown, fg, bg);
         r.detail = shown;
         r.detail_x = detail_x;
         r.detail_fg = fg;
@@ -871,7 +878,10 @@ void Editor::render_sidebar()
 
   // The explorer's root row stays pinned on the section's first content row
   // (file_tree_selected == -1) and the tree scrolls beneath it.
-  paint_section_header(sections.explorer.header_y, sidebar_explorer_open, "EXPLORER", "");
+  const bool explorer_header_hover = sidebar_hover_section == (int)jot_sidebar::SECTION_EXPLORER
+                                     && sidebar_hover_index == -1;
+  paint_section_header(
+      sections.explorer.header_y, sidebar_explorer_open, "EXPLORER", "", explorer_header_hover);
   const int root_y = sections.explorer.y;
   int header_w = std::min(std::max(6, cell_count(header_label) + 2), std::max(1, content_w - 1));
   if (root_y >= 0 && header_w > 2)
@@ -1113,14 +1123,14 @@ void Editor::render_sidebar()
                                const std::string &icon,
                                int icon_fg,
                                const std::string &text,
-                               const std::string &detail)
-  {
+                               const std::string &detail,
+                               bool hovered) {
     const int fg = selected
                        ? (focused ? theme.fg_sidebar_selected : theme.fg_sidebar_selected_inactive)
                        : fg_plain;
     const int row_bg =
         selected ? (focused ? theme.bg_sidebar_selected : theme.bg_sidebar_selected_inactive)
-                 : theme.bg_sidebar;
+                 : (hovered ? theme.bg_sidebar_selected_inactive : theme.bg_sidebar);
     ui->fill_rect({content_x, row_y, std::max(1, content_w - 1), 1}, " ", fg, row_bg);
 
     SidebarPanelRowView r;
@@ -1139,7 +1149,14 @@ void Editor::render_sidebar()
       r.icon_fg = icon_fg;
       text_x = content_x + 1 + cell_count(icon) + 1;
     }
-    const int detail_w = detail.empty() ? 0 : cell_count(detail);
+    // The name is the row; the detail is a hint beside it. Capping the detail
+    // keeps a long declared type (`unsigned long long`) from pushing the name
+    // and its kind icon out of a narrow column, where the row used to end up
+    // as nothing but the type -- the same rule the dock's outline rows follow.
+    const std::string shown_detail =
+        detail.empty() ? std::string()
+                       : truncate_cells(detail, std::clamp(std::max(1, content_w) / 3, 3, 9));
+    const int detail_w = cell_count(shown_detail);
     const int text_max =
         std::max(0, (content_x + content_w - (detail_w > 0 ? detail_w + 2 : 0)) - text_x);
     const std::string shown_text = truncate_cells(text, text_max);
@@ -1149,8 +1166,8 @@ void Editor::render_sidebar()
     if (detail_w > 0)
     {
       const int detail_x = content_x + content_w - detail_w;
-      ui->draw_text(detail_x, row_y, detail, theme.fg_comment, row_bg);
-      r.detail = detail;
+      ui->draw_text(detail_x, row_y, shown_detail, theme.fg_comment, row_bg);
+      r.detail = shown_detail;
       r.detail_x = detail_x;
       r.detail_fg = theme.fg_comment;
     }
@@ -1178,41 +1195,75 @@ void Editor::render_sidebar()
     scroll = std::clamp(scroll, 0, std::max(0, count - view_h));
   };
 
-  // --- OUTLINE: the active file's symbols, sharing the outline model with the
-  // right dock but keeping its own cursor and window. ---
-  paint_section_header(sections.outline.header_y, sidebar_outline_open, "OUTLINE", "");
+  // --- OUTLINE: the active file's symbol tree, sharing the outline model with
+  // the right dock but keeping its own cursor and window. ---
+  const bool outline_header_hover = sidebar_hover_section == (int)jot_sidebar::SECTION_OUTLINE
+                                    && sidebar_hover_index == -1;
+  paint_section_header(
+      sections.outline.header_y, sidebar_outline_open, "OUTLINE", "", outline_header_hover);
   if (sections.outline.h > 0)
   {
-    const std::vector<SymbolMatch> &symbols = outline_panel.symbols;
+    const std::vector<SymbolMatch> &tree = outline_panel.symbols;
+    const std::vector<int> &visible = outline_panel.visible;
     const int view_h = sections.outline.h;
     const bool outline_focused = sidebar_focused && sidebar_section == jot_sidebar::SECTION_OUTLINE;
     clamp_section_window(
-        (int)symbols.size(), view_h, sidebar_outline_selected, sidebar_outline_scroll);
-    if (symbols.empty())
+        (int)visible.size(), view_h, sidebar_outline_selected, sidebar_outline_scroll);
+    if (tree.empty())
     {
       const std::string note =
           timeline_current_path().empty() ? "Open a file to see its symbols" : "No symbols found";
-      paint_section_row(sections.outline.y, false, false, theme.fg_comment, "", -1, note, "");
+      paint_section_row(sections.outline.y, false, false, theme.fg_comment, "", -1, note, "", false);
     }
     else
     {
       for (int row = 0; row < view_h; row++)
       {
         const int index = sidebar_outline_scroll + row;
-        if (index < 0 || index >= (int)symbols.size())
+        if (index < 0 || index >= (int)visible.size())
         {
           break;
         }
-        const SymbolMatch &symbol = symbols[(size_t)index];
+        const int flat = visible[(size_t)index];
+        const SymbolMatch &symbol = tree[(size_t)flat];
         const int kind_fg = Winbar::symbol_color(theme, symbol.kind);
+        const bool open = symbol.has_children() && (int)outline_panel.expanded.size() > flat
+                          && outline_panel.expanded[(size_t)flat];
+        // The row reads indent, chevron, kind icon, name: the icon sits beside
+        // the name it belongs to instead of being pinned to the column's left
+        // edge, away from a nested row's indent. The chevron's two cells are
+        // spent whether or not the row has one, so the icons of a group and of
+        // its members line up in one column (the dock's outline rows match).
+        std::string label;
+        for (int d = 0; d < symbol.depth; d++)
+        {
+          label += "  ";
+        }
+        label += symbol.has_children() ? (open ? "\u25bc " : "\u25b6 ") : "  ";
+        label += Winbar::symbol_icon(symbol.kind);
+        label += " ";
+        label += symbol.name;
+        const bool hovered = sidebar_hover_section == (int)jot_sidebar::SECTION_OUTLINE
+                             && sidebar_hover_index == row;
+        // The name is the row and the declared type is a hint beside it: the
+        // type (or the line number when there is none) only gets the cells the
+        // indent and the name do not need. A row used to end up as an icon and
+        // a long type with its name squeezed to ".." -- and a deep row's
+        // indent could leave the name nothing at all.
+        const std::string wanted =
+            symbol.detail.empty() ? std::to_string(symbol.line + 1) : symbol.detail;
+        const int prefix = std::max(0, cell_count(label) - cell_count(symbol.name));
+        const int detail_max = std::min(std::clamp(content_w / 3, 3, 9),
+                                        std::max(0, content_w - 1 - prefix - kOutlineNameCells - 2));
         paint_section_row(sections.outline.y + row,
                           index == sidebar_outline_selected,
                           outline_focused,
                           kind_fg,
-                          Winbar::symbol_icon(symbol.kind),
-                          kind_fg,
-                          symbol.name,
-                          std::to_string(symbol.line + 1));
+                          /*icon=*/"",
+                          /*icon_fg=*/-1,
+                          label,
+                          detail_max >= 3 ? truncate_cells(wanted, detail_max) : std::string(),
+                          hovered);
       }
     }
   }
@@ -1227,8 +1278,10 @@ void Editor::render_sidebar()
       timeline_file = std::filesystem::path(path).filename().string();
     }
   }
+  const bool timeline_header_hover = sidebar_hover_section == (int)jot_sidebar::SECTION_TIMELINE
+                                     && sidebar_hover_index == -1;
   paint_section_header(
-      sections.timeline.header_y, sidebar_timeline_open, "TIMELINE", timeline_file);
+      sections.timeline.header_y, sidebar_timeline_open, "TIMELINE", timeline_file, timeline_header_hover);
   if (sections.timeline.h > 0)
   {
     const int view_h = sections.timeline.h;
@@ -1241,7 +1294,7 @@ void Editor::render_sidebar()
       const std::string note = !has_git_repo()
                                    ? "Not a Git repository"
                                    : (timeline_loading ? "Loading..." : "No commits for this file");
-      paint_section_row(sections.timeline.y, false, false, theme.fg_comment, "", -1, note, "");
+      paint_section_row(sections.timeline.y, false, false, theme.fg_comment, "", -1, note, "", false);
     }
     else
     {
@@ -1254,6 +1307,8 @@ void Editor::render_sidebar()
           break;
         }
         const jot_timeline::Commit &commit = timeline_commits[(size_t)index];
+        const bool hovered = sidebar_hover_section == (int)jot_sidebar::SECTION_TIMELINE
+                             && sidebar_hover_index == row;
         paint_section_row(sections.timeline.y + row,
                           index == sidebar_timeline_selected,
                           timeline_focused,
@@ -1261,7 +1316,8 @@ void Editor::render_sidebar()
                           "\uF1C9",
                           theme.fg_comment,
                           commit.subject,
-                          jot_timeline::relative_age(commit.epoch, now_epoch));
+                          jot_timeline::relative_age(commit.epoch, now_epoch),
+                          hovered);
       }
     }
   }

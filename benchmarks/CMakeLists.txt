@@ -4,6 +4,9 @@ add_executable(jot_benchmarks
   ${PROJECT_SOURCE_DIR}/src/text/lazy_line_provider.cpp
   ${PROJECT_SOURCE_DIR}/src/syntax/folding.cpp
   ${PROJECT_SOURCE_DIR}/src/syntax/language.cpp
+  # index.cpp builds the C-family outline from CppDefinitions::parse_file, so
+  # the parser has to come along or the benchmark target fails to link.
+  ${PROJECT_SOURCE_DIR}/src/syntax/cpp_definitions.cpp
   ${PROJECT_SOURCE_DIR}/src/syntax/index.cpp
   ${PROJECT_SOURCE_DIR}/src/workspace/search.cpp
   ${PROJECT_SOURCE_DIR}/src/ui/text.cpp

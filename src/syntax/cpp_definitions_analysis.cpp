@@ -333,13 +333,14 @@ namespace CppDefinitions
           }
           else
           {
-            // Mark the leading half of the declared function name, rather than
-            // the full signature: the name is the unresolved symbol to act on.
+            // Mark the whole declared function name, clangd-style: the name is
+            // the unresolved symbol to act on, and a truncation (the old
+            // leading-half rule) cut an identifier mid-word and underlined a
+            // different amount of every name.
             issue.line = decl->name_line;
             issue.col = decl->name_col;
             issue.end_line = decl->name_end_line;
-            issue.end_col =
-                decl->name_col + std::max(1, (decl->name_end_col - decl->name_col + 1) / 2);
+            issue.end_col = decl->name_end_col;
             // A template body may live in a file that is not scanned, and a
             // conditional declaration may not be compiled at all: both are hints.
             issue.severity = (decl->template_function || decl->conditional) ? 3 : 2;

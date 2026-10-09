@@ -163,6 +163,17 @@ PaneTabLayout Editor::build_pane_tab_layout(int pane_index) const
     segment.hovered = pane_index == pane_tab_hover_pane && i == pane_tab_hover_index;
     segment.icon = icons[(size_t)i];
     segment.icon_fg = icon_colors[(size_t)i];
+    // Jump mode trades the file glyph for the letter the tab answers to, the
+    // same trade the workspace strip makes (tabs.cpp): the letters come from
+    // the workspace order, so a letter shown here picks the same buffer it
+    // would pick there (ui/tab_order.h). `letters()` is the read-only face of
+    // the assignment, which the key handler already ran for every tab.
+    if (tabline_jump_mode)
+    {
+      const auto &letters = tab_order.letters();
+      const auto letter = letters.find(buffer.tab_uid);
+      segment.jump_letter = letter != letters.end() ? letter->second : 0;
+    }
 
     const int icon_cells = ui_cell_count(segment.icon);
     const int label_cells = std::max(1, width - icon_cells - 4);
@@ -219,7 +230,13 @@ void Editor::render_pane_tab_strip(int pane_index)
                   tab.active ? theme.fg_active_border : theme.fg_tab_separator,
                   bg,
                   tab.active);
-    if (!tab.icon.empty())
+    // Jump mode trades the file glyph for the letter the tab answers to.
+    if (tab.jump_letter)
+    {
+      ui->draw_text(layout.x + tab.x + 1, y, std::string(1, tab.jump_letter),
+                    theme.fg_tab_target, bg);
+    }
+    else if (!tab.icon.empty())
     {
       ui->draw_text(layout.x + tab.x + 1,
                     y,

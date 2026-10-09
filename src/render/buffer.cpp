@@ -71,7 +71,7 @@ namespace
   long long steady_now_ms()
   {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::steady_clock::now().time_since_epoch())
+      std::chrono::steady_clock::now().time_since_epoch())
         .count();
   }
 
@@ -235,7 +235,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
   // a caret/selection.
   std::string cursor_style_raw = config.get("cursor_style", "block");
   std::transform(
-      cursor_style_raw.begin(), cursor_style_raw.end(), cursor_style_raw.begin(), ::tolower);
+    cursor_style_raw.begin(), cursor_style_raw.end(), cursor_style_raw.begin(), ::tolower);
   const bool block_cursor = cursor_style_raw == "block" || cursor_style_raw == "steady_block"
                             || cursor_style_raw == "steadyblock";
   const bool inlay_hints_enabled = config.get_bool("lsp_inlay_hints", true);
@@ -306,7 +306,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
   if (gui_mode && ui)
   {
     const int new_top = fold_view->buffer_line_for_visible_offset(
-        buf.scroll_offset, 0, (int)buf.line_count());
+      buf.scroll_offset, 0, (int)buf.line_count());
     if ((int)gui_pane_top_lines_.size() <= pane_index)
     {
       gui_pane_top_lines_.resize(pane_index + 1, -1);
@@ -351,7 +351,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
     // tab-bar and bottom-border rows excluded, border columns excluded --
     // exactly what scrolls with the content.
     ui->notify_pane_scroll(
-        pane_index, pane.x + 1, y, std::max(0, pane.w - 2), h, delta, jumped_x);
+      pane_index, pane.x + 1, y, std::max(0, pane.w - 2), h, delta, jumped_x);
   }
 
   // Re-anchor decorations through the pending edit (if any) once, before any
@@ -722,7 +722,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
                                    [](const Decoration &d, int row)
                                    {
                                      return d.row < row;
-                                   });
+        });
         row_deco_lo = (int)(it - buf.decorations.begin());
         row_deco_hi = row_deco_lo;
         while (row_deco_hi < (int)buf.decorations.size()
@@ -839,7 +839,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
           const jot_color::Definitions *defs = colorizer_wants_defs ? &buf.color_defs : nullptr;
           const std::uint64_t defs_version = colorizer_wants_defs ? buf.color_defs_version : 0;
           color_spans = colorizer_cache.spans_for(
-              line_idx, line, render_limit, colorizer_options, scope_ptr, defs, defs_version);
+            line_idx, line, render_limit, colorizer_options, scope_ptr, defs, defs_version);
         }
         size_t color_span_cursor = 0;
         int line_bracket_depth = bracket_depth;
@@ -848,7 +848,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
         if (search.visible() && !search.query().empty())
         {
           auto it = std::lower_bound(
-              search_matches.begin(), search_matches.end(), SearchMatch{line_idx, 0, 0});
+            search_matches.begin(), search_matches.end(), SearchMatch{line_idx, 0, 0});
           while (it != search_matches.end() && it->line == line_idx)
           {
             search_hits.push_back(*it);
@@ -1549,7 +1549,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
               if (!caret.active && caret.end.y == line_idx)
               {
                 point_caret_visuals.push_back(
-                    compute_visual_column(line, caret.end.x, tab_size)
+                  compute_visual_column(line, caret.end.x, tab_size)
                     + hint_cells_at_byte(caret.end.x) - start_visual);
               }
             }
@@ -1561,7 +1561,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
                                      && cell_visual == cursor_cell_visual;
             const bool blink_hidden =
                 std::find(point_caret_visuals.begin(), point_caret_visuals.end(), cell_visual)
-                != point_caret_visuals.end();
+            != point_caret_visuals.end();
             if (cursor_cell || blink_hidden)
             {
               ui->draw_text(tail_x + fill,
@@ -1602,7 +1602,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
         if (guide_vis_idx >= 0 && guide_vis_idx < visible_len)
         {
           ui->draw_text(
-              current_x + guide_vis_idx, draw_y, "│", theme.fg_bracket_match, row_bg);
+            current_x + guide_vis_idx, draw_y, "│", theme.fg_bracket_match, row_bg);
         }
       }
 
@@ -1616,7 +1616,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
       if (show_indent_guides && tab_size > 0 && line.empty())
       {
         const int src_idx = blank_guides::guide_source_line(
-            (int)buf.line_count(), [&](int i) -> const std::string & { return buf.line(i); },
+          (int)buf.line_count(), [&](int i) -> const std::string & { return buf.line(i); },
             line_idx);
         if (src_idx >= 0)
         {
@@ -1642,7 +1642,7 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
                 break;
               }
               ui->draw_text(
-                  current_x + vis_idx, draw_y, "│", theme.fg_line_num, row_bg);
+                current_x + vis_idx, draw_y, "│", theme.fg_line_num, row_bg);
             }
           }
         }
@@ -1777,13 +1777,13 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
           // severity band when the theme gives it one instead of punching a
           // hole through it with the pane background.
           int inline_bg = severity_band_background(
-              theme, line_diagnostic_severity(buf, cursor_line));
+            theme, line_diagnostic_severity(buf, cursor_line));
           if (inline_bg < 0)
           {
             inline_bg = theme.bg_default;
           }
           ui->draw_text(inline_x, inline_y, inline_text, theme.fg_comment, inline_bg);
-        }      }
+      }      }
     }
   }
- }
+}

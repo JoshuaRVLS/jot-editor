@@ -510,7 +510,7 @@ Install helpers also cover Rust, Go, Lua, and Bash.
   servers feed, so the Problems dock, the explorer's per-file badges, the
   workspace diagnostics picker (`:diagnostics`), the inline decorations and the
   gutter all show them with no extra wiring. A missing body's row sits on the
-  leading half of the declared name, so the squiggle lands on the unresolved
+  whole declared name (clangd-style), so the squiggle lands on the unresolved
   symbol rather than on the whole signature.
 - The rules are C++'s own: `= 0`, `= delete` and `= default` need no body, and
   a class-body, `inline`, `constexpr`, template or `static`/anonymous-namespace
@@ -1083,7 +1083,10 @@ another pane already shows takes focus to that pane; the dot next to such a tab
 is that marker, and the pin glyph marks a tab held at the front of the order.
 The strip is workspace chrome, not part of the home screen: while the launcher
 is up the row carries no tabs, and its cells answer no clicks, until the editor
-is back.
+is back. It is also a lone-pane affordance: split the pane area and the strip
+steps aside, because every pane then draws its own list on row 0 (see below) and
+a workspace strip over the groups would be the same files inked twice.
+`pane_tabs = off` keeps it up in a split, as the only list left.
 
 `Alt+R` arms the letter picker: every tab is painted with the letter it answers
 to (the file's initials first, then the home row), and the next key switches to
@@ -1099,14 +1102,19 @@ the strip has not seen before lands in the order.
 ### Pane tab strips (editor groups)
 
 When the pane area is split, every pane draws its own tab strip on its first
-row, below the workspace strip: its own list, with the file glyph, the modified
-dot and a close control on every tab. Clicking a tab switches that pane and
+row, and that row is row 0 itself: the workspace strip hands it over, since a
+strip above the groups would list the same files a second time. Each pane gets
+its own list, with the file glyph, the modified dot and a close control on
+every tab. Clicking a tab switches that pane and
 focuses it, the wheel scrolls a window of tabs when they overflow (`‹N` /
 `›+N` chips report the rest), and the middle button closes a buffer. The strip
 spends its row only where the workspace strip cannot speak for the pane, so a
-lone pane with the workspace strip on top never paints the same list twice.
-`pane_tabs` picks: `auto` (the default) is that rule, `always` shows the row
-for every pane, and `off` never.
+lone pane with the workspace strip on top never paints the same list twice --
+and in a split every group takes the row, a group holding a single tab
+included, because that is where its file is named and where a dragged tab lands
+to join it. `pane_tabs` picks: `auto` (the default) is that rule, `always`
+shows the row for every pane, and `off` never (which leaves row 0 to the
+workspace strip).
 
 Dragging a tab is how the layout gets arranged, VSCode-style: releasing over
 another pane's strip moves the tab into that pane's list, releasing over a

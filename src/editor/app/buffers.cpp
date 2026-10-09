@@ -72,8 +72,7 @@ void Editor::close_buffer_at(int index)
     buf.modified = false;
     buf.is_preview = false;
     buf.is_placeholder = true;
-    buf.undo_stack = std::stack<State>();
-    buf.redo_stack = std::stack<State>();
+    buf.clear_undo_history();
     buf.bookmarks.clear();
     buf.diagnostics.clear();
     buf.diag_severity_dirty = true;
