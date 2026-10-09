@@ -39,6 +39,48 @@ namespace
   }
 } // namespace
 
+TEST_CASE("An LSP edit takes its undo step in the buffer it names", "[lsp][undo]")
+{
+  Editor &e = probe_editor();
+  e.set_home_menu_visible(false);
+  const std::string a = write_temp_source(e, "int alpha = 1;\n");
+  const std::string b = write_temp_source(e, "int beta = 2;\n");
+  // b is the buffer in front; a is open behind it.
+  REQUIRE(e.host().core.buffer_content() == "int beta = 2;");
+  int a_index = -1;
+  for (int i = 0; i < e.buffer_count_for_test(); i++)
+  {
+    if (e.buffer_for_test(i).filepath == a)
+    {
+      a_index = i;
+      break;
+    }
+  }
+  REQUIRE(a_index >= 0);
+
+  // A format (or rename) answer for a arrives while b is the buffer on screen.
+  LSPTextEdit edit;
+  edit.start_line = 0;
+  edit.start_char = 0;
+  edit.end_line = 0;
+  edit.end_char = 3;
+  edit.new_text = "long";
+  e.apply_lsp_text_edits_for_test(a, {edit});
+  REQUIRE(e.buffer_for_test(a_index).lines[0] == "long alpha = 1;");
+  // The buffer in front is not the one the answer was for, and it is untouched.
+  REQUIRE(e.host().core.buffer_content() == "int beta = 2;");
+
+  // The edit's step belongs to that buffer's own history: Ctrl+Z in its window
+  // takes it back, rather than having been pushed onto whatever buffer the
+  // pane happened to be showing.
+  e.load_file(a);
+  REQUIRE(e.host().core.buffer_content() == "long alpha = 1;");
+  e.host().core.undo();
+  REQUIRE(e.host().core.buffer_content() == "int alpha = 1;");
+  std::remove(a.c_str());
+  std::remove(b.c_str());
+}
+
 TEST_CASE("LSP file URI encodes reserved path characters", "[lsp]")
 {
   const std::filesystem::path input = std::filesystem::temp_directory_path() / "jot lsp#%.cpp";

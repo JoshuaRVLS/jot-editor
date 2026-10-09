@@ -422,6 +422,14 @@ int lsp_client_count_for_test() const
 {
   return (int)lsp_clients.size();
 }
+// The LSP text-edit path, so a case can land an answer on a buffer no pane is
+// showing (a format or rename reply arrives after the user moved on) and pin
+// which buffer's history took the step.
+void apply_lsp_text_edits_for_test(const std::string &filepath,
+                                   const std::vector<LSPTextEdit> &edits)
+{
+  apply_lsp_text_edits(filepath, edits);
+}
 int config_int_for_test(const std::string &key)
 {
   return config.get_int(key, 0);

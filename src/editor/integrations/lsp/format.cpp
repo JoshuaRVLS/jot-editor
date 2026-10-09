@@ -87,7 +87,13 @@ void Editor::apply_lsp_text_edits(const std::string &filepath,
 
     if (!applied_any)
     {
-      save_state();
+      // The step belongs to the buffer the answer named, which is not
+      // necessarily the one in front: a format or rename reply arrives after
+      // the user may have moved on, and a rename's workspace edit lands on
+      // files no pane is showing at all. Snapshotting get_buffer() here put the
+      // step on the wrong history and left this edit with none, so Ctrl+Z in
+      // the file that changed jumped straight past it.
+      save_state_for(*target);
       applied_any = true;
     }
 
