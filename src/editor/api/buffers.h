@@ -19,6 +19,13 @@ void paste();
 void paste_text(const std::string &text);
 
 void save_state();
+// The snapshot for one buffer, whatever pane is in front: the save paths clean
+// buffers that are not the focused one (auto-save, save-all), and their step
+// belongs in that buffer's own history rather than the pane's. `as_modified`
+// records the state as an unsaved change, which is what a save's own rewrite
+// needs -- the bytes on disk hold the rewritten text, so the text an undo
+// restores disagrees with the file and has to read as modified.
+void save_state_for(FileBuffer &buf, bool as_modified = false);
 void undo();
 void redo();
 

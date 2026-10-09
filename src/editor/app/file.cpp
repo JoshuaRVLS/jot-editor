@@ -746,22 +746,24 @@ bool Editor::save_buffer_at(int index, bool announce)
       {
         first_changed++;
       }
-      // Both hooks below snapshot the text that is about to change, the way
-      // every edit path takes them, so they belong before the first rewrite
-      // and only once. Without the first, the tree-sitter tree keeps
-      // describing the old lines while the byte offsets are rebuilt from the
-      // changed ones, so every highlight past a changed line comes from the
-      // wrong place - and save_state below cannot repair that, since it runs
-      // after the change and snapshots the changed text itself.
-#ifdef JOT_TREESITTER
-      ts_begin_edit(buf);
-#endif
-      decoration_rebase_begin(buf);
+      // The cleanup is an edit like any other, so it takes the usual prologue
+      // before the first rewrite. save_state_for() both snapshots the text the
+      // tree was parsed from (without that, the tree keeps describing the old
+      // lines while the byte offsets are rebuilt from the changed ones, so
+      // every highlight past a changed line comes from the wrong place) and
+      // pushes the lines this rewrite is about to replace. That push is the
+      // undo step: taken after the rewrite it would snapshot the cleaned text
+      // and Ctrl+Z would be a no-op, which is how a save that reindented a file
+      // could not be taken back. The buffer is the one being saved rather than
+      // the pane's, because auto-save and save-all clean buffers that are not
+      // in front, and the step belongs in their own history. as_modified: the
+      // bytes that just went to disk hold the cleaned text, so the restored
+      // text disagrees with the file and has to read as an unsaved change.
+      save_state_for(buf, true);
       buf.lines = std::move(cleaned);
       // The content changed under the caches the renderer reads, and the lines
       // moved under the carets.
       buf.mark_edited(first_changed);
-      save_state();
       clamp_carets(buf);
     }
   }
@@ -797,13 +799,17 @@ bool Editor::save_buffer_at(int index, bool announce)
     std::vector<std::string> refreshed_lines;
     if (!read_file_lines(buf.filepath, refreshed_lines))
       return false;
-#ifdef JOT_TREESITTER
-    // The formatter rewrote the file under the buffer. Snapshot the text the
-    // tree was parsed from before the swap: the invalidation below only marks
-    // the tree stale, it cannot hand it the old bytes, so without this the
-    // reparse is a whole-file one.
-    ts_begin_edit(buf);
-#endif
+    if (refreshed_lines != buf.lines)
+    {
+      // The formatter rewrote the file under the buffer, so the swap is an
+      // edit: save_state_for() snapshots the text the tree was parsed from
+      // (the invalidation below only marks the tree stale, it cannot hand it
+      // the old bytes, so without this the reparse is a whole-file one) and
+      // leaves the format its own undo step, as_modified for the same reason
+      // the built-in cleanup above does. A run that changed nothing is not an
+      // edit and takes no step.
+      save_state_for(buf, true);
+    }
     buf.lines.swap(refreshed_lines);
     normalize_buffer_after_external_edit(buf);
     buf.fold_ranges.clear();
@@ -861,14 +867,16 @@ bool Editor::save_buffer_at(int index, bool announce)
           if (b.filepath.empty())
             return;
 
-          if (!refreshed.empty())
+          if (!refreshed.empty() && refreshed != b.lines)
           {
-#ifdef JOT_TREESITTER
             // Same contract as the synchronous path above: the formatter
             // replaced the bytes the tree describes, so snapshot the text
-            // before the swap or the reparse has to be a whole-file one.
-            ts_begin_edit(b);
-#endif
+            // before the swap (which also gives the format its own undo step)
+            // or the reparse has to be a whole-file one.
+            save_state_for(b, true);
+          }
+          if (!refreshed.empty())
+          {
             b.lines.swap(refreshed);
           }
           normalize_buffer_after_external_edit(b);

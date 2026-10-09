@@ -477,6 +477,103 @@ TEST_CASE("Save: the reindent setting off leaves the indentation alone", "[jot][
   std::remove(path.c_str());
 }
 
+TEST_CASE("Save: the built-in reindent is one undo step", "[jot][save][undo]")
+{
+  Editor &e = reindent_editor(true, 2);
+  const std::string path = scratch_path("undo-reindent.cpp");
+  const std::string original = "void f()\n{\nfoo();\n}\n";
+  write_text(path, original);
+  e.load_file(path);
+
+  const int index = buffer_index_for(e, path);
+  REQUIRE(index >= 0);
+  // The loaded buffer is the one the keys and the undo command act on
+  // (core.buffer_content() joins the lines without a trailing newline).
+  REQUIRE(e.host().core.buffer_content() == "void f()\n{\nfoo();\n}");
+
+  // One typed edit ahead of the save, so the step the save takes is not the
+  // only thing on the stack.
+  e.host().core.set_cursor(2, 0);
+  e.host().core.insert_char_at_carets('x');
+  const std::string typed = "void f()\n{\nxfoo();\n}\n";
+  REQUIRE(buffer_text(e.buffer_for_test(index)) == typed);
+
+  REQUIRE(e.save_buffer_for_test(index, true));
+  const std::string cleaned = "void f()\n{\n  xfoo();\n}\n";
+  REQUIRE(read_back(path) == cleaned);
+  REQUIRE(buffer_text(e.buffer_for_test(index)) == cleaned);
+
+  // Ctrl+Z takes the save's own rewrite back first: the buffer holds the text
+  // as it was typed, the file keeps what the save wrote, and the buffer reads
+  // as unsaved because the two now disagree.
+  e.host().core.undo();
+  REQUIRE(buffer_text(e.buffer_for_test(index)) == typed);
+  REQUIRE(e.buffer_for_test(index).modified);
+  REQUIRE(read_back(path) == cleaned);
+
+  // The press after that reaches the typed character: the cleanup took one
+  // step rather than hiding the edit underneath it.
+  e.host().core.undo();
+  REQUIRE(buffer_text(e.buffer_for_test(index)) == original);
+  std::remove(path.c_str());
+}
+
+TEST_CASE("Save: a clean file reindented on save is still undoable", "[jot][save][undo]")
+{
+  Editor &e = reindent_editor(true, 2);
+  const std::string path = scratch_path("undo-clean.cpp");
+  const std::string original = "void f()\n{\nfoo();\n}\n";
+  write_text(path, original);
+  e.load_file(path);
+
+  const int index = buffer_index_for(e, path);
+  REQUIRE(index >= 0);
+  REQUIRE(e.host().core.buffer_content() == "void f()\n{\nfoo();\n}");
+  REQUIRE_FALSE(e.buffer_for_test(index).modified);
+
+  // Ctrl+S on a file nobody has edited: the reindent still lands in the buffer
+  // and on disk, and it still has to be takeable back.
+  REQUIRE(e.save_buffer_for_test(index, true));
+  const std::string cleaned = "void f()\n{\n  foo();\n}\n";
+  REQUIRE(read_back(path) == cleaned);
+  REQUIRE(buffer_text(e.buffer_for_test(index)) == cleaned);
+  REQUIRE_FALSE(e.buffer_for_test(index).modified);
+
+  e.host().core.undo();
+  REQUIRE(buffer_text(e.buffer_for_test(index)) == original);
+  // The file holds the cleaned bytes, so what came back is an unsaved change:
+  // without the dot a user could close the tab and drop the text they just
+  // recovered without being asked, since the save had cleared the flag.
+  REQUIRE(e.buffer_for_test(index).modified);
+  REQUIRE(read_back(path) == cleaned);
+  std::remove(path.c_str());
+}
+
+TEST_CASE("Save: the reindent setting off takes no undo step", "[jot][save][undo]")
+{
+  Editor &e = reindent_editor(false, 2);
+  const std::string path = scratch_path("undo-reindent-off.cpp");
+  const std::string original = "void f()\n{\nfoo();\n}\n";
+  write_text(path, original);
+  e.load_file(path);
+
+  const int index = buffer_index_for(e, path);
+  REQUIRE(index >= 0);
+  e.host().core.set_cursor(2, 0);
+  e.host().core.insert_char_at_carets('x');
+  REQUIRE(buffer_text(e.buffer_for_test(index)) == "void f()\n{\nxfoo();\n}\n");
+
+  REQUIRE(e.save_buffer_for_test(index, true));
+  REQUIRE(read_back(path) == "void f()\n{\nxfoo();\n}\n");
+
+  // Nothing was rewritten, so the first press is the typed character's own
+  // step: a save that changes no text must not push a state of its own and
+  // swallow it.
+  e.host().core.undo();
+  REQUIRE(buffer_text(e.buffer_for_test(index)) == original);
+  std::remove(path.c_str());
+}
+
 TEST_CASE("Save: markdown keeps the trailing spaces even with the setting on", "[jot][save]")
 {
   Editor &e = saving_editor(true);

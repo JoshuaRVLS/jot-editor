@@ -370,9 +370,26 @@ namespace
 
 void Editor::save_state()
 {
+  auto &buf = get_buffer();
+  // A preview stops being one the moment it is edited (typing into the picker's
+  // buffer makes it a real one). The flag and the pane's record of it live on
+  // the buffer in front, so the bookkeeping stays here rather than in
+  // save_state_for, which also serves buffers no pane is showing.
+  if (buf.is_preview)
+  {
+    buf.is_preview = false;
+    if (preview_buffer_index == current_buffer)
+    {
+      preview_buffer_index = -1;
+    }
+  }
+  save_state_for(buf);
+}
+
+void Editor::save_state_for(FileBuffer &buf, bool as_modified)
+{
   search.clear_results();
 
-  auto &buf = get_buffer();
   // Anchor the bracket-depth prefix invalidation at the first line the
   // pending command can touch (cursor, or the selection span when one is
   // active). Prefix entries below this stay valid, so typing deep in a file
@@ -396,19 +413,14 @@ void Editor::save_state()
 #endif
   decoration_rebase_begin(buf);
 
-  if (buf.is_preview)
-  {
-    buf.is_preview = false;
-    if (preview_buffer_index == current_buffer)
-    {
-      preview_buffer_index = -1;
-    }
-  }
-
   // The snapshot shares its unchanged lines with the state it is pushed on
   // top of, so it is taken against the live top of the stack.
   const State *prev = buf.undo_stack.empty() ? nullptr : &buf.undo_stack.top();
   State s = capture_state(buf, prev);
+  if (as_modified)
+  {
+    s.modified = true;
+  }
   if (prev != nullptr && same_state(buf, *prev, s))
   {
     return;

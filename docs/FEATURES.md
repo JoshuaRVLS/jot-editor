@@ -128,7 +128,13 @@ settles, so scrolling a long way does not grow the process.
   has no brace rules here and is left alone. The file's first line is the
   baseline, so a fragment keeps its column; a wrapped expression keeps the
   column its author gave it, a braceless body keeps its step in, and a line
-  inside a multi-line string or comment is left alone.
+  inside a multi-line string or comment is left alone. Both cleanups are edits
+  like any other, so an undo takes the save's own rewrite back first: Ctrl+Z
+  after a save that reindented (or trimmed) a file restores the text as it was
+  written while the file keeps what the save put on disk, and the buffer then
+  reads as modified because the two disagree. A save that changed no text takes
+  no step, and on-save formatting (`prettier_on_save`,
+  `clang_format_on_save`) works the same way.
 - Smart multi-line paste that re-indents to the cursor.
 - Auto-indent, bracket matching and jumping, rainbow bracket colors
   (`rainbow_brackets`), an active bracket guide, and a highlight on the bracket
