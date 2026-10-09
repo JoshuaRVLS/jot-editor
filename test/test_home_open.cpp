@@ -276,8 +276,11 @@ TEST_CASE("The home selection band hugs the label instead of the row", "[jot]")
   REQUIRE(after->bg != band_bg);
   REQUIRE(last - first < 40); // the row is much wider than its label
 
-  // The key and the dimmed tail no longer sit on the band, so they keep the
-  // colours they have on every other row instead of the selection foreground.
+  // The cells past the band keep the colours they wear on every other row
+  // rather than the selection foreground. A row's right edge is its key or --
+  // on a row the model gave no key to, the resume entry's path -- its dimmed
+  // tail, so the two rows are not necessarily painting the same slot and the
+  // cell is bounded to the two colours those slots have everywhere else.
   int key_x = -1;
   for (int x = probe.content_x + probe.content_w - 1; x >= probe.content_x; --x)
   {
@@ -289,7 +292,13 @@ TEST_CASE("The home selection band hugs the label instead of the row", "[jot]")
     }
   }
   REQUIRE(key_x > last);
-  REQUIRE(ui->cell_at(key_x, y)->fg == ui->cell_at(key_x, y + 1)->fg);
+  const Theme &th = e.theme_for_test();
+  for (const UICell *edge : {ui->cell_at(key_x, y), ui->cell_at(key_x, y + 1)})
+  {
+    REQUIRE(edge->fg != th.fg_selection);
+    REQUIRE((edge->fg == th.fg_keyword || edge->fg == th.fg_comment));
+    REQUIRE(edge->bg != band_bg);
+  }
 
   e.set_home_menu_visible(false);
   e.render_for_test();
