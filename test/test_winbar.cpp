@@ -365,12 +365,17 @@ TEST_CASE("Every pane of a split paints its own breadcrumb row", "[jot][winbar]"
   const std::vector<SplitPane> &panes = e.panes_for_test();
   REQUIRE(panes.size() == 2);
   REQUIRE(panes[0].y != panes[1].y);
-  for (const SplitPane &pane : panes)
+  for (int i = 0; i < (int)panes.size(); i++)
   {
-    REQUIRE(pane.header_height == 1);
-    REQUIRE(pane_viewport_h(pane) == pane.h - 1);
+    const SplitPane &pane = panes[(size_t)i];
+    // A split gives every pane its own tab strip (pane_tabs=auto), which owns
+    // the pane's first chrome row; the breadcrumb is the row below it, and the
+    // pane pays for both.
+    const int strip = e.pane_shows_tab_strip_for_test(i) ? 1 : 0;
+    REQUIRE(pane.header_height == 1 + strip);
+    REQUIRE(pane_viewport_h(pane) == pane.h - 1 - strip);
     // The chain on this pane's own row, and the file's first line below it.
-    const std::string crumb_row = pane_row_text(e, pane, pane.y);
+    const std::string crumb_row = pane_row_text(e, pane, pane.y + strip);
     INFO("pane at y " << pane.y << ": [" << crumb_row << "]");
     REQUIRE(crumb_row.find("tabs.cpp") != std::string::npos);
     REQUIRE(crumb_row.find("\u203A") != std::string::npos);
