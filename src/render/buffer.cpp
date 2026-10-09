@@ -9,6 +9,7 @@
 #include "render/gutter.h"
 #include "syntax/manager.h"
 #include "ui/text.h"
+#include "ui/xterm_palette.h"
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -87,6 +88,61 @@ namespace
       return theme.bg_diagnostic_warning;
     return -1;
   }
+
+  // How much of an indent guide's ink survives in the row it is drawn on, as a
+  // percentage of the theme's own colour. Guides sit at every tab stop of every
+  // indented line, so at full strength the theme's grey reads as a grid of solid
+  // bars, and the active bracket scope's guide -- which wears BracketMatch's
+  // near-white ink -- as a bright ruler down the block: both louder than the code
+  // between them, which is the opposite of what a guide is for. Mixed this far
+  // each one is a hairline, and the active guide keeps its rank by being mixed
+  // further than the plain ones -- the same hierarchy VS Code gives its active
+  // pair, a shade over its neighbours rather than a colour of its own.
+  constexpr int kGuideInkPercent = 35;
+  constexpr int kActiveGuideInkPercent = 45;
+
+  // A guide colour: the theme's ink pulled part of the way into the background it
+  // is drawn on (so a guide keeps its distance from whatever band it crosses, a
+  // severity fill or a selection as much as the plain row). The mix is interned
+  // as an exact colour, which is what lets a palette-index slot -- a theme that
+  // named no hex -- and a hex one land on the same quiet shade. Memoized, because
+  // the leading-indent walk asks for the same pair once per whitespace cell of
+  // every row and interning scans the exact-colour table.
+  class GuideInk
+  {
+  public:
+    int mix(int ink, int background, int percent = kGuideInkPercent)
+    {
+      if (ink == cached_ink_ && background == cached_background_ && percent == cached_percent_)
+      {
+        return cached_;
+      }
+      unsigned char ink_rgb[3] = {0, 0, 0};
+      unsigned char background_rgb[3] = {0, 0, 0};
+      jot_ui::palette_rgb(ink, ink_rgb[0], ink_rgb[1], ink_rgb[2]);
+      jot_ui::palette_rgb(background, background_rgb[0], background_rgb[1], background_rgb[2]);
+      cached_ink_ = ink;
+      cached_background_ = background;
+      cached_percent_ = percent;
+      cached_ = jot_ui::exact_color_id(blend(ink_rgb[0], background_rgb[0], percent),
+                                       blend(ink_rgb[1], background_rgb[1], percent),
+                                       blend(ink_rgb[2], background_rgb[2], percent));
+      return cached_;
+    }
+
+  private:
+    // `percent` of `ink`, the rest `background`.
+    static unsigned char blend(unsigned char ink, unsigned char background, int percent)
+    {
+      const int value = (int)background + ((int)ink - (int)background) * percent / 100;
+      return (unsigned char)std::clamp(value, 0, 255);
+    }
+
+    int cached_ink_ = -2;
+    int cached_background_ = -2;
+    int cached_percent_ = -1;
+    int cached_ = -1;
+  };
 
   // A word byte: what an identifier is made of. The edit commands keep the same
   // set, and each file carries its own copy of it.
@@ -476,6 +532,12 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
   // Second scratch for the blank-line indent-guide source walk (it needs the
   // target row's columns at the same time as `visual_cols`).
   std::vector<int> guide_source_visual_cols;
+  // The frame's two guide inks: the plain one and the active bracket scope's.
+  // Both are memoized, so every row that shares a background -- all of them but
+  // a selection, a search hit, a severity band or a word-highlight tint -- asks
+  // for one already-mixed colour instead of re-mixing per cell.
+  GuideInk plain_guide_ink;
+  GuideInk active_guide_ink;
 
   int prev_line_idx = buf.scroll_offset - 1;
   for (int i = 0; i < h; i++)
@@ -1067,7 +1129,11 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
             bool in_leading_indent = char_idx < leading_ws_end;
             if (in_leading_indent)
             {
-              int guide_fg = in_sel ? theme.fg_selection : theme.fg_line_num;
+              // Mixed against this cell's own background rather than the pane's,
+              // so a guide crossing a selection, a search hit or a severity band
+              // stays the same whisper there as it is on the plain row.
+              int guide_fg = in_sel ? theme.fg_selection
+                                    : plain_guide_ink.mix(theme.fg_line_num, bg);
               int char_visual = visual_cols[char_idx];
               for (int fill = 0; fill < char_w && vis_idx + hint_offset + fill < visible_len; fill++)
               {
@@ -1075,7 +1141,8 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
                 const bool active_guide =
                     active_guide_on_row() && cell_visual == bracket_guide.visual_column;
                 int cell_guide_fg = (show_indent_guides && active_guide && !in_sel)
-                                        ? theme.fg_bracket_match
+                                        ? active_guide_ink.mix(
+                                            theme.fg_bracket_match, bg, kActiveGuideInkPercent)
                                         : guide_fg;
                 std::string guide = " ";
                 if (show_indent_guides
@@ -1601,8 +1668,12 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
             + hint_cells_before_visual(bracket_guide.visual_column);
         if (guide_vis_idx >= 0 && guide_vis_idx < visible_len)
         {
-          ui->draw_text(
-            current_x + guide_vis_idx, draw_y, "│", theme.fg_bracket_match, row_bg);
+          ui->draw_text(current_x + guide_vis_idx,
+                        draw_y,
+                        "│",
+                        active_guide_ink.mix(
+                          theme.fg_bracket_match, row_bg, kActiveGuideInkPercent),
+                        row_bg);
         }
       }
 
@@ -1641,8 +1712,11 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
               {
                 break;
               }
-              ui->draw_text(
-                current_x + vis_idx, draw_y, "│", theme.fg_line_num, row_bg);
+              ui->draw_text(current_x + vis_idx,
+                            draw_y,
+                            "│",
+                            plain_guide_ink.mix(theme.fg_line_num, row_bg),
+                            row_bg);
             }
           }
         }

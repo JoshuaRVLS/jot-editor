@@ -138,7 +138,10 @@ settles, so scrolling a long way does not grow the process.
 - Smart multi-line paste that re-indents to the cursor.
 - Auto-indent, bracket matching and jumping, rainbow bracket colors
   (`rainbow_brackets`), an active bracket guide, and a highlight on the bracket
-  under the caret together with its partner (the `BracketMatch` theme group).
+  under the caret together with its partner (the `BracketMatch` theme group). The
+  indent guides (`show_indent_guides`) are hairlines mixed into the row's own
+  background -- the active scope's guide a shade firmer than the rest -- so the
+  indent column reads as a continuous line rather than a grid of bars.
 - The identifier under the caret is highlighted at every other place it
   appears in the viewport, VS Code's occurrence highlight: the caret's own word
   wears the strong band and the rest of the uses the plain one, from the

@@ -10,10 +10,15 @@
 // unmatched bracket under the caret must not fall through to a neighbour's
 // pair -- both are pinned here, because they are the cases that look like
 // highlights in the wrong place.
+//
+// The same pair decides where the active indent guide hangs, so its ink is
+// pinned here too: a guide is a hairline over the row, not the theme colour at
+// full strength.
 #include "editor.h"
 #include "editor/model/panes.h" // pane_content_top
 #include "render/gutter.h"
 #include "ui/ui.h"
+#include "ui/xterm_palette.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
@@ -74,6 +79,27 @@ namespace
     const Theme &theme = e.theme_for_test();
     return cell != nullptr && cell->fg == theme.fg_bracket_match
            && cell->bg == theme.bg_bracket_match;
+  }
+
+  // A theme colour as 0xRRGGBB: the bundled themes name exact colours, a
+  // built-in default is a palette index.
+  std::uint32_t theme_rgb(int value)
+  {
+    unsigned char r = 0;
+    unsigned char g = 0;
+    unsigned char b = 0;
+    jot_ui::palette_rgb(value, r, g, b);
+    return ((std::uint32_t)r << 16) | ((std::uint32_t)g << 8) | b;
+  }
+
+  // Squared RGB distance: enough for "is this shade nearer the background than
+  // that one", without pulling a colour-space library into a render test.
+  long long rgb_distance(std::uint32_t a, std::uint32_t b)
+  {
+    const long long dr = (long long)((a >> 16) & 0xFF) - (long long)((b >> 16) & 0xFF);
+    const long long dg = (long long)((a >> 8) & 0xFF) - (long long)((b >> 8) & 0xFF);
+    const long long db = (long long)(a & 0xFF) - (long long)(b & 0xFF);
+    return dr * dr + dg * dg + db * db;
   }
 } // namespace
 
@@ -158,4 +184,59 @@ TEST_CASE("Bracket match: the highlight does not need rainbow brackets", "[jot]"
   repaint(e);
   REQUIRE(is_match_cell(e, 0, 10));
   REQUIRE(is_match_cell(e, 2, 0));
+}
+
+// Indent guides run down every leading tab stop of every row, so both inks are
+// mixed into the row's background: what used to be the theme's own grey on
+// every one of them read as a grid of bars, and the active scope's guide --
+// wearing the near-white BracketMatch ink -- as the loudest thing on the screen.
+TEST_CASE("Indent guides: hairlines over the row, the active scope a shade firmer", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_config_for_test("show_indent_guides", "true");
+  e.set_config_for_test("tab_size", "2");
+  e.apply_config_live_for_test();
+  load_lines(e,
+             {"int run() {", "  if (inner) {", "    return inner;", "  }", "}",
+              "int tail() {", "  return 1;", "}"},
+             "guides");
+  e.apply_resize_for_test(100, 30);
+
+  // Caret on run()'s opening brace: the pair's inner rows hang the active guide
+  // at column 0, and the deeper row's second tab stop is a plain one.
+  e.scroll_cursor_to_for_test(0, 10);
+  repaint(e);
+
+  const Theme &theme = e.theme_for_test();
+  const std::uint32_t row_bg = theme_rgb(theme.bg_default);
+
+  const UICell *plain_ink = cell_at(e, 2, 2);
+  const UICell *active_ink = cell_at(e, 2, 0);
+  REQUIRE(plain_ink != nullptr);
+  REQUIRE(active_ink != nullptr);
+  REQUIRE(plain_ink->ch == "\u2502");
+  REQUIRE(active_ink->ch == "\u2502");
+
+  // Neither guide wears its theme colour at full strength any more, and the two
+  // are different shades: the hierarchy is inside the mix, not a colour apart.
+  REQUIRE(plain_ink->fg_rgb != theme_rgb(theme.fg_line_num));
+  REQUIRE(active_ink->fg_rgb != theme_rgb(theme.fg_bracket_match));
+  REQUIRE(plain_ink->fg_rgb != active_ink->fg_rgb);
+
+  // Both are quieter than the ink they are built from -- under half its distance
+  // from the row's background -- while the active one still leads its neighbours.
+  REQUIRE(rgb_distance(plain_ink->fg_rgb, row_bg)
+          < rgb_distance(theme_rgb(theme.fg_line_num), row_bg) / 2);
+  REQUIRE(rgb_distance(active_ink->fg_rgb, row_bg)
+          < rgb_distance(theme_rgb(theme.fg_bracket_match), row_bg) / 2);
+  REQUIRE(rgb_distance(active_ink->fg_rgb, row_bg)
+          > rgb_distance(plain_ink->fg_rgb, row_bg));
+
+  // A row outside the caret's scope draws the plain ink, so the active shade is
+  // the scope's own paint and not the guide's colour everywhere.
+  const UICell *outside_ink = cell_at(e, 6, 0);
+  REQUIRE(outside_ink != nullptr);
+  REQUIRE(outside_ink->ch == "\u2502");
+  REQUIRE(outside_ink->fg_rgb == plain_ink->fg_rgb);
 }
