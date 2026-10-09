@@ -1,6 +1,7 @@
-// The bundled themes: jot-dark (Binaryify's One Dark Pro), jot-light ("mochi
-// milk"), the schemes jot maintains, plus the flexoki pair ported from kepano's
-// Flexoki palette.
+// The bundled themes: jot-dark ("amber lamp": warm brown-black neutrals with
+// amber as the one hero hue and a single teal complement), jot-light ("amber
+// paper": the same inks on warm paper), the schemes jot maintains, plus the
+// flexoki pair ported from kepano's Flexoki palette.
 //
 // A theme is data that fails quietly. A typo'd group name paints nothing and is
 // invisible until someone notices one token type is the wrong colour; a name
@@ -12,7 +13,7 @@
 // that came out of the engine -- plus the two names that used to be bundled
 // (`dark`, `light`) and still have to work.
 //
-// Both shipped themes name exact 24-bit colours ("#c678dd") rather than xterm
+// Both shipped themes name exact 24-bit colours ("#FFB454") rather than xterm
 // palette indices, so a case that wants a slot's colour reads it back through
 // the same conversion the renderer uses instead of comparing an index.
 #include "editor.h"
@@ -206,7 +207,7 @@ namespace
   };
 } // namespace
 
-TEST_CASE("jot-dark carries One Dark Pro's palette", "[jot][theme]")
+TEST_CASE("jot-dark is the amber lamp palette", "[jot][theme]")
 {
   Editor &e = probe_editor();
   REQUIRE(e.apply_theme_for_test("jot-dark"));
@@ -216,26 +217,28 @@ TEST_CASE("jot-dark carries One Dark Pro's palette", "[jot][theme]")
   // Exact colours, not palette entries: the whole point of the hex form is that
   // the scheme is authored in 24-bit space.
   REQUIRE(jot_ui::is_exact_color(t.fg_default));
-  REQUIRE(rgb_of(t.fg_default) == 0xABB2BF); // One Dark Pro's grey ink
-  REQUIRE(rgb_of(t.bg_default) == 0x282C34); // its editor ground
+  REQUIRE(rgb_of(t.fg_default) == 0xEDE4D1); // warm ivory ink
+  REQUIRE(rgb_of(t.bg_default) == 0x14100B); // brown-black ground, hue-locked to amber
   REQUIRE(jot_ui::is_exact_color(t.bg_default));
-  REQUIRE(rgb_of(t.fg_keyword) == 0xC678DD);         // purple
-  REQUIRE(rgb_of(t.fg_string) == 0x98C379);          // green
-  REQUIRE(rgb_of(t.fg_function_method) == 0x61AFEF); // blue
-  REQUIRE(rgb_of(t.fg_number) == 0xD19A66);          // orange
-  // More of the palette is spoken for than the five inks the scheme used to
-  // carry: properties and tags take the variable red, modules and types the
-  // yellow.
-  REQUIRE(rgb_of(t.fg_field) == 0xE06C75);
-  REQUIRE(rgb_of(t.fg_module) == 0xE5C07B);
-  REQUIRE(rgb_of(t.fg_tag) == 0xE06C75);
-  // The accent is One Dark Pro's blue, spent where a hand goes: the active
+  // The amber family is the scheme's spine: keywords burn amber, types and
+  // modules take the paler gold, numbers and tags the hot coral.
+  REQUIRE(rgb_of(t.fg_keyword) == 0xFFB454);
+  REQUIRE(rgb_of(t.fg_type) == 0xFFD98A);
+  REQUIRE(rgb_of(t.fg_number) == 0xFF8066);
+  // One cool complement carries the actions: functions and builtins are teal,
+  // strings sit warm sage beside them, properties a softer rose.
+  REQUIRE(rgb_of(t.fg_function_method) == 0x5FD3D8);
+  REQUIRE(rgb_of(t.fg_string) == 0xA9C97A);
+  REQUIRE(rgb_of(t.fg_field) == 0xFF9EB5);
+  REQUIRE(rgb_of(t.fg_module) == 0xFFD98A);
+  REQUIRE(rgb_of(t.fg_tag) == 0xFF8066);
+  // The accent is the amber itself, spent where a hand goes: the active
   // border, the cursor line number and the focused terminal tab.
-  REQUIRE(rgb_of(t.fg_active_border) == 0x61AFEF);
-  // The chrome sits on the theme's own panel surface, one step behind the
+  REQUIRE(rgb_of(t.fg_active_border) == 0xFFB454);
+  // The chrome sits on the theme's own lamp-lit surface, one step behind the
   // editor's ground: the sidebar and the status line share it.
-  REQUIRE(rgb_of(t.bg_sidebar) == 0x21252B);
-  REQUIRE(rgb_of(t.bg_status) == 0x21252B);
+  REQUIRE(rgb_of(t.bg_sidebar) == 0x1C1710);
+  REQUIRE(rgb_of(t.bg_status) == 0x1C1710);
 }
 
 TEST_CASE("Jot themes keep separators visible and selected rows distinct", "[jot][theme]")
@@ -278,16 +281,16 @@ TEST_CASE("The breadcrumb groups reach the Winbar slots", "[jot][theme]")
   REQUIRE(e.apply_theme_for_test("jot-dark"));
   const Theme &t = e.theme_for_test();
   REQUIRE(jot_ui::is_exact_color(t.bg_winbar));
-  REQUIRE(rgb_of(t.bg_winbar) == 0x21252B);
-  REQUIRE(rgb_of(t.fg_winbar) == 0xABB2BF);
-  REQUIRE(rgb_of(t.fg_winbar_crumb) == 0x7F848E);
-  REQUIRE(rgb_of(t.bg_winbar_crumb) == 0x21252B);
-  REQUIRE(rgb_of(t.fg_winbar_separator) == 0x515A6B);
-  REQUIRE(rgb_of(t.fg_winbar_hover) == 0xD7DAE0);
-  REQUIRE(rgb_of(t.bg_winbar_hover) == 0x323842);
+  REQUIRE(rgb_of(t.bg_winbar) == 0x1C1710);
+  REQUIRE(rgb_of(t.fg_winbar) == 0xEDE4D1);
+  REQUIRE(rgb_of(t.fg_winbar_crumb) == 0x8F8168);
+  REQUIRE(rgb_of(t.bg_winbar_crumb) == 0x1C1710);
+  REQUIRE(rgb_of(t.fg_winbar_separator) == 0x3A3020);
+  REQUIRE(rgb_of(t.fg_winbar_hover) == 0xEDE4D1);
+  REQUIRE(rgb_of(t.bg_winbar_hover) == 0x33291A);
 }
 
-TEST_CASE("jot-light is the same inks as jam and matcha on cream paper", "[jot][theme]")
+TEST_CASE("jot-light is the amber lamp seen on paper", "[jot][theme]")
 {
   Editor &e = probe_editor();
   REQUIRE(e.apply_theme_for_test("jot-light"));
@@ -295,13 +298,15 @@ TEST_CASE("jot-light is the same inks as jam and matcha on cream paper", "[jot][
 
   const Theme &t = e.theme_for_test();
   REQUIRE(jot_ui::is_exact_color(t.fg_default));
-  REQUIRE(rgb_of(t.fg_default) == 0x3A2C3F);
-  REQUIRE(rgb_of(t.bg_default) == 0xFFFAF4); // warm milk, not white
-  REQUIRE(rgb_of(t.fg_keyword) == 0xCA246C);
-  REQUIRE(rgb_of(t.fg_string) == 0x0D7C64);
-  REQUIRE(rgb_of(t.fg_function_method) == 0x186F9F);
-  REQUIRE(rgb_of(t.fg_type) == 0x7B4BD1); // taro purple
-  REQUIRE(rgb_of(t.fg_active_border) == 0xCA246C);
+  REQUIRE(rgb_of(t.fg_default) == 0x2A2118);
+  REQUIRE(rgb_of(t.bg_default) == 0xFCF4E3); // warm paper, not white
+  // The dark scheme's inks darkened until they clear 4.5:1 on the paper:
+  // burnt amber keywords, olive-gold types, sage strings, deep teal functions.
+  REQUIRE(rgb_of(t.fg_keyword) == 0xA85A00);
+  REQUIRE(rgb_of(t.fg_string) == 0x5A7A2E);
+  REQUIRE(rgb_of(t.fg_function_method) == 0x0F7A7E);
+  REQUIRE(rgb_of(t.fg_type) == 0x82631A);
+  REQUIRE(rgb_of(t.fg_active_border) == 0xA85A00);
 }
 
 TEST_CASE("flexoki carries kepano's palette, not an approximation", "[jot][theme]")
@@ -375,9 +380,9 @@ TEST_CASE("Hex theme colours accept every documented form", "[jot][theme]")
   REQUIRE(rgb_of(t.fg_keyword) == 0xA0B0C0);
   REQUIRE(rgb_of(t.fg_cursor) == 0x00FF00);
   // Unparseable colours are ignored: the slot keeps what the base theme set.
-  REQUIRE(rgb_of(t.fg_comment) == 0x7F848E);
-  REQUIRE(rgb_of(t.fg_string) == 0x98C379);
-  REQUIRE(rgb_of(t.fg_number) == 0xD19A66);
+  REQUIRE(rgb_of(t.fg_comment) == 0x8F8168);
+  REQUIRE(rgb_of(t.fg_string) == 0xA9C97A);
+  REQUIRE(rgb_of(t.fg_number) == 0xFF8066);
 }
 
 TEST_CASE("A hex and an index can name the same slot value", "[jot][theme]")
@@ -444,11 +449,11 @@ TEST_CASE("The names the removed catalog used still resolve", "[jot][theme]")
   // is actually painted.
   REQUIRE(e.apply_theme_for_test("dark"));
   REQUIRE(e.theme_name_for_test() == "jot-dark");
-  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0x282C34);
+  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0x14100B);
 
   REQUIRE(e.apply_theme_for_test("light"));
   REQUIRE(e.theme_name_for_test() == "jot-light");
-  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0xFFFAF4);
+  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0xFCF4E3);
 
   // Case does not matter, the same way it never did for a real theme name.
   REQUIRE(e.apply_theme_for_test("DARK"));
@@ -458,7 +463,7 @@ TEST_CASE("The names the removed catalog used still resolve", "[jot][theme]")
   // than half-applying a palette.
   REQUIRE_FALSE(e.apply_theme_for_test("gruvbox"));
   REQUIRE(e.theme_name_for_test() == "jot-dark");
-  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0x282C34);
+  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0x14100B);
 }
 
 TEST_CASE("A file the user writes under a legacy name beats the alias", "[jot][theme]")
@@ -480,13 +485,13 @@ TEST_CASE("A file the user writes under a legacy name beats the alias", "[jot][t
   REQUIRE(e.theme_for_test().bg_default == 17);
   // The base it extends is still jot-light, so everything the user did not
   // override keeps the shipped look.
-  REQUIRE(rgb_of(e.theme_for_test().fg_keyword) == 0xCA246C);
+  REQUIRE(rgb_of(e.theme_for_test().fg_keyword) == 0xA85A00);
 
   const std::string name = mine.name();
   fs::remove(fs::path(getenv("JOT_CONFIG_HOME")) / "configs" / "colors" / (name + ".json"));
   REQUIRE(e.apply_theme_for_test("light"));
   REQUIRE(e.theme_name_for_test() == "jot-light");
-  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0xFFFAF4);
+  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0xFCF4E3);
 }
 
 TEST_CASE("The chooser lists the schemes jot bundles and nothing else", "[jot][theme]")

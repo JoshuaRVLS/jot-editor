@@ -36,8 +36,8 @@ ENTER = b"\r"
 DOCK = b"\x1b[98;6u"  # Ctrl+Shift+B, the right dock toggle
 
 # jot-dark's chrome pair, tagged as truecolour cells (1000 + 0xRRGGBB).
-TAB_BG = 1000 + 0x282C34  # TabLineSel / the editor's own surface
-BAND_BG = 1000 + 0x21252B  # TabLine / the sidebar's chrome surface
+TAB_BG = 1000 + 0x14100B  # TabLineSel / the editor's own surface
+BAND_BG = 1000 + 0x1C1710  # TabLine / the sidebar's chrome surface
 
 
 def row_text(screen, y: int) -> str:

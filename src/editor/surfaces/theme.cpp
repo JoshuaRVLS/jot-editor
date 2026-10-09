@@ -6,12 +6,11 @@
 
 namespace
 {
-  // jot ships two pairs: `jot-dark`, a slot-by-slot port of Binaryify's One
-  // Dark Pro (the #282c34 ground and #abb2bf ink, the palette's purple keyword
-  // / green string / blue function / orange number inks; MIT licensed,
-  // https://github.com/Binaryify/OneDark-Pro) and `jot-light` ("mochi milk":
-  // jam, matcha and ramune blue on warm cream paper), plus the flexoki
-  // pair ported from kepano's Flexoki palette (flexoki-dark / flexoki-light, MIT
+  // jot ships two pairs: `jot-dark` ("amber lamp": brown-black neutrals that
+  // share the amber's hue, one hero amber and its gold/coral family for the
+  // words, a single teal complement for the actions) and `jot-light` ("amber
+  // paper": the same inks darkened until they clear 4.5:1 on warm paper),
+  // plus the flexoki pair ported from kepano's Flexoki palette (flexoki-dark / flexoki-light, MIT
   // licensed, https://stephango.com/flexoki). The names the two jot themes
   // replaced -- `dark` and `light`, which the whole bundled catalog used to be
   // keyed off -- still resolve, so a config written before the change keeps the

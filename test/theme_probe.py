@@ -47,13 +47,13 @@ def truecolour(rgb: int) -> int:
 # The backgrounds the bundled themes set for the editor body and the status
 # line. Both themes name exact 24-bit colours, so what has to arrive on the wire
 # is a 48;2 sequence -- the themes are the one place a palette index would be a
-# silent downgrade of the whole scheme. jot-dark's ground is One Dark Pro's
-# #282c34, so the harness's 1000 + rgb tag is also what tells the themed cell
+# silent downgrade of the whole scheme. jot-dark's ground is the amber scheme's
+# #14100b, so the harness's 1000 + rgb tag is also what tells the themed cell
 # from the ANSI default an unthemed editor would paint (0).
-JOT_DARK_BODY = truecolour(0x282C34)
-JOT_DARK_STATUS = truecolour(0x21252B)
-JOT_LIGHT_BODY = truecolour(0xFFFAF4)
-JOT_LIGHT_STATUS = truecolour(0xFBE9E7)
+JOT_DARK_BODY = truecolour(0x14100B)
+JOT_DARK_STATUS = truecolour(0x1C1710)
+JOT_LIGHT_BODY = truecolour(0xFCF4E3)
+JOT_LIGHT_STATUS = truecolour(0xF7ECDA)
 # The ported Flexoki pair: `black` and `base-950` for the dark editor, `paper`
 # and `base-50` for the light one (see .configs/configs/colors/flexoki-*.json).
 FLEXOKI_DARK_BODY = truecolour(0x100F0F)
@@ -62,8 +62,8 @@ FLEXOKI_LIGHT_BODY = truecolour(0xFFFCF0)
 FLEXOKI_LIGHT_STATUS = truecolour(0xF2F0E5)
 # The accent each theme inks its active pane border with, as it must appear in
 # the escape stream: 38;2;r;g;b, never 38;5;n.
-JOT_DARK_ACCENT = b"\x1b[38;2;97;175;239m"  # #61afef
-JOT_LIGHT_ACCENT = b"\x1b[38;2;202;36;108m"  # #ca246c
+JOT_DARK_ACCENT = b"\x1b[38;2;255;180;84m"  # #ffb454, the amber
+JOT_LIGHT_ACCENT = b"\x1b[38;2;168;90;0m"  # #a85a00, burnt amber
 FLEXOKI_DARK_ACCENT = b"\x1b[38;2;58;169;159m"  # #3aa99f, cyan-400
 FLEXOKI_LIGHT_ACCENT = b"\x1b[38;2;35;127;119m"  # #237f77, cyan-600
 # A decoration's underline colour as SGR 58's 24-bit colon form.
