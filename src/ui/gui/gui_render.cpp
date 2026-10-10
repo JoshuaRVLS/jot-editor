@@ -3,7 +3,8 @@
 // FreeType atlas, and underline quads. An animating pane draws as translated
 // sprites of its retained viewports, so both pane edges always have content;
 // every static row paints on top afterward so borders, tab strips and
-// neighbouring panes win where sliding content crossed them.
+// neighbouring panes win where sliding content crossed them. The composing
+// (IME) text and the caret paint last, over everything (gui_cursor.cpp).
 #include "gui/gui.h"
 
 #include <SDL2/SDL.h>
@@ -152,6 +153,11 @@ void UIGui::render()
   dim_active_ = false;
 
   paint_float_overlays(dt);
+  // The input method's candidate window has to follow the caret, and the
+  // composing text sits on it; the caret block paints last, so it stays visible
+  // on the composition's first cell.
+  note_text_input_rect();
+  paint_preedit();
   paint_cursor();
 
   // Keep a copy of this frame's pane bodies so the next scroll can slide

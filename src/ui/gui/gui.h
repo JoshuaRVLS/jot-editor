@@ -48,6 +48,24 @@ uint32_t decode_utf8(const char *s, size_t len, size_t &i);
 // keystroke twice (a typed space became two cells, reading as a tab stop).
 int translate_sdl_keysym(long keysym);
 
+// Applies one SDL_TEXTEDITING payload to the composing (IME) text. SDL re-sends
+// the whole composition on every step and never a delta, so the update replaces
+// what is there (an empty update ends the composition). Returns true when the
+// text changed -- a composition arrives with no editor action behind it, and
+// that flag is what asks for the frame that shows it.
+bool apply_text_editing(std::string &text, const char *update);
+
+// The composing text as grid cells: one cell per codepoint, underlined so it
+// reads as not-yet-committed, in the given colors. An empty composition yields
+// no cells.
+void preedit_cells(const std::string &text, int fg, int bg, std::vector<UICell> &out);
+
+// The window title for the editor's current state: the active file, marked with
+// an asterisk while it has unsaved changes; the workspace folder when no file is
+// open; plain "jot" when there is neither. Only the last path component is used
+// -- the directories are what the title bar has no room for.
+std::string window_title_for(const std::string &filepath, bool modified, const std::string &workspace);
+
 // RAII guard for glyph-atlas uploads. Glyph rows live in a 2048-wide CPU
 // buffer, so GL must be told rows are kAtlasW bytes apart (UNPACK_ROW_LENGTH)
 // with 1-byte alignment. That pixel-store state is context-global, so it must
@@ -191,6 +209,22 @@ public:
     return font_px_;
   }
 
+  // The window's title, as the window manager, taskbar and window list show it.
+  // The editor reports the active file every pump tick; SDL is touched only
+  // when the title actually changes, so the window's name property is not
+  // rewritten at the pump's rate.
+  void set_window_title(const std::string &title);
+
+  // True once after the composing (IME) text changed; see poll_event. The pump
+  // turns it into a repaint, since a composition carries no editor action of
+  // its own to trigger one.
+  bool consume_preedit_change();
+
+  // The system clipboard, served by SDL's own connection to the display: yank
+  // still lands where the rest of the desktop can paste from on a machine with
+  // no xclip/wl-copy installed (see UI::set_clipboard_text).
+  bool set_clipboard_text(const std::string &text) override;
+
   // Live window size in points (SDL_GetWindowSize): the same source the
   // resize-event handler grids from, used by the pump's defensive re-sync.
   void window_size(int &w, int &h) const;
@@ -252,6 +286,10 @@ private:
   // Re-fits the cell grid to the window after a font change (size or family)
   // and reports it under JOT_GUI_DEBUG.
   void refit_grid();
+  // The window's minimum size, in cells (see kMinWindowCols/kMinWindowRows):
+  // applied at creation and again after every font change, since the minimum
+  // the window manager enforces is expressed in pixels.
+  void apply_window_minimum();
   // JOT_GUI_DEBUG: the frontend's own buffers (batch scratch, atlas, diff
   // baseline) after a grid change, so a probe can pin what the GUI allocates.
   void report_buffers();
@@ -326,6 +364,19 @@ private:
                          const std::vector<float> &rgb,
                          float alpha = 1.0f);
   void paint_cursor();
+  // Composing (IME) text, painted inline on the caret cell after the content
+  // passes: the buffer holds nothing until the composition commits, so this is
+  // the only place it can show. The caret block paints after it, which is also
+  // where committed text lands.
+  void paint_preedit();
+  // The caret's top-left corner in device pixels: its glide position while the
+  // glide is live, its cell otherwise. Shared by the caret paint, the composing
+  // text (which starts on the caret) and the input method's focus rectangle.
+  void cursor_origin_px(float &x0, float &y0) const;
+  // Tells SDL where the caret is, so the input method opens its candidate
+  // window next to it instead of at the window's origin. Skipped when the caret
+  // has not moved: the X11 backend turns this into an XSetICValues round trip.
+  void note_text_input_rect();
   // Push the bg/glyph/underline quads of one row slice. `src` holds the
   // row's cells (a grid row or a retained pane row); draws columns
   // [col0, col1) of it, source column 0 at pixel x `x0px`, top edge at
@@ -534,6 +585,16 @@ private:
   std::vector<Event> pending_events_;
   // Storage for the last synthesized paste payload (EVENT_PASTE text).
   std::string pending_paste_text_;
+  // Composing (IME) text; see apply_text_editing and paint_preedit. Empty when
+  // no input method is composing, which is also when nothing extra is painted.
+  std::string preedit_text_;
+  bool preedit_change_ = false;
+  // Caret rect last handed to the input method (device pixels), so an unmoved
+  // caret does not re-issue the request every frame.
+  int text_rect_x_ = -1;
+  int text_rect_y_ = -1;
+  // The window title currently set; see set_window_title.
+  std::string window_title_ = "jot";
 
   // Scroll slide and cursor glide (neovide-style).
   // The grid the current frame's content passes paint from: the pre-float

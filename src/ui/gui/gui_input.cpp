@@ -9,6 +9,9 @@
 //           0x08) with x/y in cells.
 //  Paste:   Ctrl+V synthesizes EVENT_PASTE from the SDL clipboard, the GUI
 //           analogue of bracketed paste.
+//  Compose: SDL_TEXTEDITING replaces the composing (IME) text, which is
+//           painted at the caret until it commits (SDL_TEXTINPUT, which ends
+//           it). The composition never reaches the editor's buffer.
 //  Resize:  SDL window (points) -> cell grid; pixel size feeds the GL
 //           viewport.
 #include "gui/gui.h"
@@ -92,6 +95,20 @@ int translate_sdl_keysym(long keysym)
     }
     return 0;
   }
+}
+
+bool apply_text_editing(std::string &text, const char *update)
+{
+  // SDL hands the whole composition on every step, so there is nothing to
+  // merge: the update IS the state. Comparing first keeps a repeated payload
+  // (an input method re-sending the same composition) from asking for a frame.
+  std::string next = update ? update : "";
+  if (next == text)
+  {
+    return false;
+  }
+  text = std::move(next);
+  return true;
 }
 
 bool UIGui::poll_event(Event &out)
@@ -242,8 +259,28 @@ bool UIGui::poll_event(Event &out)
     return true;
   }
 
+  case SDL_TEXTEDITING:
+  {
+    // Composing (IME) text. An input method holds it until it commits, so it
+    // is not in the buffer at all -- it is kept here and painted at the caret,
+    // and the pending-change flag is what gets it on screen.
+    if (apply_text_editing(preedit_text_, ev.edit.text))
+    {
+      preedit_change_ = true;
+    }
+    return false;
+  }
+
   case SDL_TEXTINPUT:
   {
+    // A commit ends the composition: what was painted as composing text is in
+    // the buffer now. SDL sends an empty SDL_TEXTEDITING around the commit as
+    // well, but this is the event that must never leave it on screen.
+    if (!preedit_text_.empty())
+    {
+      preedit_text_.clear();
+      preedit_change_ = true;
+    }
     // Text input carries composed characters (IME). With Ctrl/Alt held the
     // chord is delivered via KEY_DOWN; only plain typing lands here.
     if (ctrl || alt)
@@ -425,6 +462,28 @@ bool UIGui::poll_event(Event &out)
   default:
     return false;
   }
+}
+
+bool UIGui::set_clipboard_text(const std::string &text)
+{
+  // SDL serves the clipboard itself -- the X11/Wayland selection, or the
+  // Windows clipboard -- so a yank still lands somewhere the rest of the
+  // desktop can paste from on a machine with neither xclip nor wl-copy
+  // installed, and without spawning a helper per yank. An empty write is
+  // declined: clearing stays the fallback path's business, and a helper keeps
+  // serving the selection after jot exits, which SDL's owner cannot.
+  if (text.empty())
+  {
+    return false;
+  }
+  return SDL_SetClipboardText(text.c_str()) == 0;
+}
+
+bool UIGui::consume_preedit_change()
+{
+  const bool changed = preedit_change_;
+  preedit_change_ = false;
+  return changed;
 }
 
 void UIGui::window_size(int &w, int &h) const

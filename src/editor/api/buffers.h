@@ -147,3 +147,6 @@ bool handle_git_panel_mouse(int x, int y, bool is_click, bool is_double_click);
 // action through the panel callback. Declines outside the dock.
 bool handle_plugin_panel_mouse(int x, int y, bool is_click);
 void set_clipboard_text(const std::string &text);
+// Puts a yank on the system clipboard, by whichever path this session has:
+// the external helper tools, else the frontend's own connection.
+void write_system_clipboard(const std::string &text);

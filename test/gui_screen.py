@@ -6,6 +6,8 @@ run_in_pty's keystrokes. The shape is otherwise the house one: the real
 binary, real rendering, real input, and the screen read back and asserted
 on. A probe starts a private Xvfb display (never the user's), runs jot on
 it, injects wheel input with XTEST, and samples window pixels and RSS.
+JOT_GUI_PROBE_DISPLAY=<display> borrows an X server that is already running
+instead of starting an Xvfb, for hosts that have none installed.
 
 Usage sketch:
     session = GuiSession(binary, [file], cfg=tmp, env_extra=env)
@@ -45,18 +47,28 @@ class GuiSession:
     def __init__(self, binary, args=(), cfg="/tmp/jot_gui_probe_cfg", env_extra=None,
                  screen=(1600, 1200)):
         self.binary = binary
-        self.display_no = _free_display()
-        self.display_name = ":%d" % self.display_no
         self.stderr_path = os.path.join(cfg, "gui_stderr.log")
         os.makedirs(cfg, exist_ok=True)
-        self.xvfb = subprocess.Popen(
-            ["Xvfb", self.display_name, "-screen", "0", "%dx%dx24" % screen],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        deadline = time.time() + 5.0
-        while time.time() < deadline:
-            if os.path.exists("/tmp/.X11-unix/X%d" % self.display_no):
-                break
-            time.sleep(0.05)
+        # JOT_GUI_PROBE_DISPLAY borrows an X server that already exists (a host
+        # without Xvfb), instead of starting a private one. A borrowed display
+        # is shared, so a probe on one has to find its own window rather than
+        # take the harness's first: see the window-title probe.
+        borrowed = os.environ.get("JOT_GUI_PROBE_DISPLAY")
+        if borrowed:
+            self.display_no = None
+            self.display_name = borrowed
+            self.xvfb = None
+        else:
+            self.display_no = _free_display()
+            self.display_name = ":%d" % self.display_no
+            self.xvfb = subprocess.Popen(
+                ["Xvfb", self.display_name, "-screen", "0", "%dx%dx24" % screen],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            deadline = time.time() + 5.0
+            while time.time() < deadline:
+                if os.path.exists("/tmp/.X11-unix/X%d" % self.display_no):
+                    break
+                time.sleep(0.05)
         env = dict(os.environ)
         env["DISPLAY"] = self.display_name
         # SDL must open the private display, not whatever the host session

@@ -94,12 +94,29 @@ void Editor::pump_gui_events()
     handle_terminal_event(rsz);
   }
 
+  // A composition (IME preedit) arrives as an SDL event with no editor action
+  // behind it -- nothing else in this tick would ask for the frame that shows
+  // it -- so the frontend reports the change and the pump paints it.
+  if (gui->consume_preedit_change())
+  {
+    needs_redraw = true;
+  }
+
   // While a scroll/cursor animation is in flight the GUI keeps repainting
   // on its own (no input needed) so the animation advances at the monitor's
   // refresh rate; once it settles, the editor goes back to idle repaints.
   if (gui->needs_repaint())
   {
     needs_redraw = true;
+  }
+
+  // The window's title: the active file, which is what the window list, the
+  // taskbar and a screen reader call this window. The frontend only renames the
+  // window when the title actually changes, so this is safe to recompute at the
+  // pump's rate.
+  {
+    const FileBuffer &buf = get_buffer();
+    gui->set_window_title(window_title_for(buf.filepath, buf.modified, root_dir));
   }
 
   // Defensive resize re-sync. Compositors can coalesce or drop resize

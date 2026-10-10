@@ -3,8 +3,15 @@
 // glyph redrawn on top in the background color so it stays legible inside
 // the block. invalidate() resets all paint state -- the next render snaps
 // instead of sliding stale animation offsets.
+//
+// The composing (IME) text is painted here as well, since it lives on the
+// caret: the buffer holds nothing until the composition commits, so this is
+// the only place it can appear.
 #include "gui/gui.h"
+#include "gui/gui_fit.h"
 #include "ui/xterm_palette.h"
+
+#include <SDL2/SDL.h>
 
 #include <algorithm>
 #include <cmath>
@@ -35,13 +42,8 @@ void UIGui::paint_cursor()
   // Cursor is drawn in the cursor colour (inverse video); with a block cursor
   // the glyph is re-drawn on top in the ink colour. The glide position eases
   // toward the cursor cell (+ pane scroll offset).
-  float x0 = cursor_x * cell_w_;
-  float y0 = cursor_y * cell_h_;
-  if (cursor_px_ >= 0.0f)
-  {
-    x0 = cursor_px_;
-    y0 = cursor_py_;
-  }
+  float x0 = 0.0f, y0 = 0.0f;
+  cursor_origin_px(x0, y0);
 
   begin_batch(white_tex_);
   if (cursor_shape == UICursorShape::Block)
@@ -87,6 +89,118 @@ void UIGui::paint_cursor()
     }
     end_batch();
   }
+}
+
+// The caret's top-left corner in device pixels: the glide position while the
+// glide is live, the cell's own corner before the first one (and after
+// invalidate(), which drops it).
+void UIGui::cursor_origin_px(float &x0, float &y0) const
+{
+  x0 = (float)cursor_x * cell_w_;
+  y0 = (float)cursor_y * cell_h_;
+  if (cursor_px_ >= 0.0f)
+  {
+    x0 = cursor_px_;
+    y0 = cursor_py_;
+  }
+}
+
+// The composing text as cells: one per codepoint, underlined so it reads as
+// not-yet-committed. Invalid UTF-8 ends the run (decode_utf8 reports 0), which
+// is also where the painter stops -- a half-written sequence has no glyph.
+void preedit_cells(const std::string &text, int fg, int bg, std::vector<UICell> &out)
+{
+  out.clear();
+  for (size_t i = 0; i < text.size();)
+  {
+    const size_t start = i;
+    if (decode_utf8(text.c_str(), text.size(), i) == 0)
+    {
+      break;
+    }
+    UICell cell;
+    cell.ch = text.substr(start, i - start);
+    cell.fg = fg;
+    cell.bg = bg;
+    cell.underline = 1;
+    out.push_back(std::move(cell));
+  }
+}
+
+// Composing (IME) text, painted inline over the content pass: the composition
+// starts on the caret cell, which is where the text it commits to lands, and
+// the caret block paints over its first cell afterwards. Nothing here touches
+// the grid -- the composition is not part of the buffer -- so the next frame
+// that repaints the band (any key, scroll or resize) takes it back.
+void UIGui::paint_preedit()
+{
+  if (preedit_text_.empty() || cursor_hidden)
+  {
+    return;
+  }
+  if (cursor_x < 0 || cursor_y < 0 || cursor_x >= width || cursor_y >= height)
+  {
+    return;
+  }
+  std::vector<UICell> cells;
+  preedit_cells(preedit_text_, default_fg, default_bg, cells);
+  // Only the columns the row has room for: a composition longer than the rest
+  // of the line would otherwise paint over the furniture to the right of the
+  // pane. Clipping (rather than wrapping) is what a one-line composition does
+  // in a text field, and the input method's own candidate window shows it all.
+  const int cols = std::min((int)cells.size(), width - cursor_x);
+  if (cols <= 0)
+  {
+    return;
+  }
+  float x0 = 0.0f, y0 = 0.0f;
+  cursor_origin_px(x0, y0);
+  size_t quads = 0;
+  begin_batch(white_tex_);
+  paint_row_bg(cells, 0, cols, x0, y0, 0.0f, quads);
+  if (quads)
+  {
+    end_batch();
+  }
+  begin_batch(atlas_tex_);
+  paint_row_glyphs(cells, 0, cols, x0, y0, 0.0f);
+  end_batch();
+  bool any = false;
+  begin_batch(white_tex_);
+  paint_row_underlines(cells, 0, cols, x0, y0, 0.0f, any);
+  if (any)
+  {
+    end_batch();
+  }
+}
+
+// Keeps the input method's candidate window anchored to the caret. SDL takes
+// points (the window's coordinate space) while the caret is in device pixels,
+// and the X11 backend turns each call into an XSetICValues round trip, so an
+// unmoved caret re-issues nothing.
+void UIGui::note_text_input_rect()
+{
+  if (cursor_x < 0 || cursor_y < 0 || cursor_x >= width || cursor_y >= height)
+  {
+    return;
+  }
+  float x0 = 0.0f, y0 = 0.0f;
+  cursor_origin_px(x0, y0);
+  const float scale = scale_ > 0.0f ? scale_ : 1.0f;
+  const int x = (int)(x0 / scale);
+  const int y = (int)(y0 / scale);
+  if (x == text_rect_x_ && y == text_rect_y_)
+  {
+    return;
+  }
+  text_rect_x_ = x;
+  text_rect_y_ = y;
+  SDL_Rect rect;
+  rect.x = x;
+  rect.y = y;
+  rect.w = (int)std::max(1.0f, jot_gui::point_cell_size(cell_w_, scale));
+  rect.h = (int)std::max(1.0f, jot_gui::point_cell_size(cell_h_, scale));
+  SDL_SetTextInputRect(&rect);
 }
 
 void UIGui::invalidate()

@@ -185,6 +185,23 @@ bool read_xclip_clipboard(std::string &out)
 #endif
 }
 
+// The external tools stay first where the session has them: they hand the
+// selection to a helper process that keeps serving it after jot exits, which a
+// frontend owning the selection itself cannot. The frontend's own connection is
+// the fallback, so a GUI on a machine with neither xclip nor wl-copy still
+// yanks somewhere the rest of the desktop can paste from.
+void Editor::write_system_clipboard(const std::string &text)
+{
+  if (write_xclip_clipboard(text))
+  {
+    return;
+  }
+  if (ui)
+  {
+    ui->set_clipboard_text(text);
+  }
+}
+
 namespace
 {
   bool has_newline(const std::string &text)
@@ -450,13 +467,15 @@ void Editor::copy()
       clipboard += buf.line(i) + "\n";
     }
   }
-  write_xclip_clipboard(clipboard);
+  write_system_clipboard(clipboard);
 }
 
 void Editor::set_clipboard_text(const std::string &text)
 {
   clipboard = text;
-  write_xclip_clipboard(text);
+  // The register and the system clipboard both carry it; see
+  // write_system_clipboard for which one owns the selection.
+  write_system_clipboard(text);
 }
 
 void Editor::cut()

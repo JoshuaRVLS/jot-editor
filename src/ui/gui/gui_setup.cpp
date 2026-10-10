@@ -97,6 +97,7 @@ UIGui::UIGui(
   {
     throw std::runtime_error(std::string("jot-gui: SDL_CreateWindow failed: ") + SDL_GetError());
   }
+  apply_window_minimum();
   // Official window icon: the same artwork as packaging/windows/jot.ico,
   // embedded at build time (cmake/embed_icon.cmake) so no data file is
   // needed at runtime. Failure is cosmetic -- the window manager keeps its
@@ -378,6 +379,7 @@ void UIGui::refit_grid()
   // (same math as the SDL resize handler). The editor is told via a
   // synthesized EVENT_RESIZE by the pump, which relayouts the panes.
   refresh_scale();
+  apply_window_minimum();
   const jot_gui::GridFit fit = jot_gui::fit_grid(pixel_w_, pixel_h_, cell_w_, cell_h_);
   resize(fit.cols, fit.rows);
   if (std::getenv("JOT_GUI_DEBUG"))
@@ -393,6 +395,83 @@ void UIGui::refit_grid()
                  font_family_.empty() ? "(default)" : font_family_.c_str());
   }
   report_buffers();
+}
+
+// Smallest window the layout is usable in, in cells: a split pane, the tab
+// strip and the status line all need room, and past a point the panes are
+// furniture with no text left in them. The window manager enforces this from
+// the window's own size hints, so it is what the user's drag hits; it is in
+// pixels because the cell size scales with the font, hence the re-apply on
+// every font change (refit_grid).
+namespace
+{
+  constexpr int kMinWindowCols = 20;
+  constexpr int kMinWindowRows = 5;
+} // namespace
+
+void UIGui::apply_window_minimum()
+{
+  if (!window_)
+  {
+    return;
+  }
+  SDL_SetWindowMinimumSize(window_,
+                           (int)std::ceil(cell_w_ * (float)kMinWindowCols),
+                           (int)std::ceil(cell_h_ * (float)kMinWindowRows));
+}
+
+namespace
+{
+  // The last path component: the window title names the file or the folder, not
+  // the directories above it. Trailing separators are dropped first, so a
+  // workspace path written as "/home/me/proj/" still names itself "proj"; a
+  // path with nothing but separators is the root and is left as it is.
+  std::string title_leaf(const std::string &path)
+  {
+    size_t end = path.size();
+    while (end > 0 && (path[end - 1] == '/' || path[end - 1] == '\\'))
+    {
+      end--;
+    }
+    if (end == 0)
+    {
+      return path;
+    }
+    const size_t cut = path.find_last_of("/\\", end - 1);
+    if (cut == std::string::npos)
+    {
+      return path.substr(0, end);
+    }
+    return path.substr(cut + 1, end - cut - 1);
+  }
+} // namespace
+
+std::string window_title_for(const std::string &filepath, bool modified, const std::string &workspace)
+{
+  if (!filepath.empty())
+  {
+    return title_leaf(filepath) + (modified ? " *" : "") + " - jot";
+  }
+  // No file open: the window is on a workspace, and that folder is what names
+  // it. "." is the current directory rather than a chosen workspace.
+  if (!workspace.empty() && workspace != ".")
+  {
+    return title_leaf(workspace) + " - jot";
+  }
+  return "jot";
+}
+
+void UIGui::set_window_title(const std::string &title)
+{
+  // Cached: the editor reports the active file every pump tick (a few ms
+  // apart), and rewriting the window's name property at that rate is pure
+  // noise for the window manager.
+  if (title == window_title_)
+  {
+    return;
+  }
+  window_title_ = title;
+  SDL_SetWindowTitle(window_, window_title_.c_str());
 }
 
 void UIGui::report_buffers()

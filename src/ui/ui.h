@@ -266,6 +266,16 @@ public:
   // the dim fades in/out smoothly.
   virtual void dim_rect(const UIRect &rect);
 
+  // The system clipboard, for a frontend that owns a connection to the display
+  // and can serve the selection itself (the GUI's SDL). False means "not mine
+  // to write", which leaves the copy to the external tools (wl-copy/xclip) the
+  // session has to provide -- what the terminal backend always answers, since
+  // it has no such connection. True means the text is on the clipboard.
+  virtual bool set_clipboard_text(const std::string & /*text*/)
+  {
+    return false;
+  }
+
   // GUI smooth-scroll hook: the editor reports each pane's body region
   // (grid cells, border columns excluded) and how many visible rows the
   // pane scrolled since the previous frame (positive = content moved up).
