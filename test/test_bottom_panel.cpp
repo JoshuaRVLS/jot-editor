@@ -81,6 +81,61 @@ TEST_CASE("Bottom panel: view tabs switch the view and hand off focus", "[jot]")
   REQUIRE(e.bottom_panel_view_for_test() == (int)BOTTOM_PANEL_TERMINAL);
 }
 
+TEST_CASE("Bottom panel: a view label takes the hover while the pointer is on it", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_home_menu_visible(false);
+  e.add_terminal_for_test();
+  e.set_bottom_panel_view_for_test(BOTTOM_PANEL_TERMINAL);
+  e.set_terminal_state_for_test(true, false, 10);
+
+  const int bar_y = e.bottom_panel_view_tab_y_for_test();
+  const int problems_x = e.bottom_panel_view_tab_x_for_test(BOTTOM_PANEL_PROBLEMS);
+
+  REQUIRE(e.bottom_panel_view_hover_for_test() == -1);
+  // Motion over the label sets the hover, and a motion alone never switches the view.
+  REQUIRE(e.bottom_panel_mouse_for_test(problems_x, bar_y, false));
+  REQUIRE(e.bottom_panel_view_hover_for_test() == (int)BOTTOM_PANEL_PROBLEMS);
+  REQUIRE(e.bottom_panel_view_for_test() == (int)BOTTOM_PANEL_TERMINAL);
+
+  // Moving off the bar onto the content row drops the hover. The shell declines
+  // motion on its own content (the terminal handler takes it), so the return value
+  // is not what this case pins -- only the hover is.
+  e.bottom_panel_mouse_for_test(problems_x, bar_y + 1, false);
+  REQUIRE(e.bottom_panel_view_hover_for_test() == -1);
+}
+
+TEST_CASE("Tabline: the hover drops when the pointer leaves the strip row", "[jot]")
+{
+  seed_config_home();
+  char dir[] = "/tmp/jot_tabline_hover_XXXXXX";
+  REQUIRE(mkdtemp(dir) != nullptr);
+  const std::string first = std::string(dir) + "/a.txt";
+  const std::string second = std::string(dir) + "/b.txt";
+  {
+    std::ofstream(first) << "a\n";
+    std::ofstream(second) << "b\n";
+  }
+
+  Editor e;
+  e.set_home_menu_visible(false);
+  e.load_file(first);
+  e.load_file(second);
+  e.apply_resize_for_test(120, 32);
+
+  const int strip_y = e.tabline_y_for_test();
+  REQUIRE(e.tabline_hover_index_for_test() == -1);
+
+  // Hovering a tab on the strip row highlights it...
+  e.mouse_event_for_test(3, strip_y, /*bstate=*/32);
+  REQUIRE(e.tabline_hover_index_for_test() != -1);
+
+  // ...and moving down off the row clears it, rather than leaving it lit.
+  e.mouse_event_for_test(3, strip_y + 3, /*bstate=*/32);
+  REQUIRE(e.tabline_hover_index_for_test() == -1);
+}
+
 TEST_CASE("Bottom panel: one bar row serves both views", "[jot]")
 {
   seed_config_home();

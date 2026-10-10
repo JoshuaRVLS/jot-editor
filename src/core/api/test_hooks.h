@@ -1001,6 +1001,10 @@ int bottom_panel_view_tab_x_for_test(int view) const
 {
   return bottom_panel_view_tab_x(view);
 }
+int bottom_panel_view_hover_for_test() const
+{
+  return bottom_panel_view_hover;
+}
 int bottom_panel_view_tab_y_for_test() const
 {
   return bottom_panel_view_tab_y();

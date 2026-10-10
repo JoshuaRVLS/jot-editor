@@ -238,6 +238,14 @@ void terminal_key_for_test(int ch, bool ctrl = false, bool shift = false, bool a
   ev.key = {ch, ctrl, shift, alt};
   handle_terminal_event(ev);
 }
+int tabline_y_for_test() const
+{
+  return tabline_y();
+}
+int tabline_hover_index_for_test() const
+{
+  return tabline_hover_index;
+}
 bool sidebar_auto_hidden_for_test() const
 {
   return sidebar_hidden_for_width_;

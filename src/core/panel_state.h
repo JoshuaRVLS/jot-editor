@@ -24,6 +24,8 @@ struct PanelState
   BottomPanelView bottom_panel_view = BOTTOM_PANEL_TERMINAL;
   int problems_selected = 0;
   int problems_scroll = 0;
+  // The view label under the pointer (a BottomPanelView value), -1 for none.
+  int bottom_panel_view_hover = -1;
   // True while the terminal fills the whole pane area (like pane zoom);
   // panes stay laid out underneath but are covered and their clicks route
   // to the terminal until the zoom is toggled off.

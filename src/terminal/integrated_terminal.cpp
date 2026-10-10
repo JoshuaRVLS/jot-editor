@@ -1210,7 +1210,11 @@ void Editor::render_integrated_terminal()
       break;
     }
     const bool active = ((int)bottom_panel_view == view);
-    const int fg = active ? theme.fg_terminal_tab_active : theme.fg_terminal_tab_inactive;
+    // A hovered label brightens to the active colour without taking the
+    // underline: it says the label is clickable, not that it is showing.
+    const bool hovered = bottom_panel_view_hover == (int)view;
+    const int fg = (active || hovered) ? theme.fg_terminal_tab_active
+                                       : theme.fg_terminal_tab_inactive;
     // The underline in the accent colour marks the showing view without
     // spending a chip's background on it.
     ui->draw_text(view_tab_x,
@@ -1525,6 +1529,16 @@ bool Editor::handle_bottom_panel_input(int ch, bool is_ctrl, bool is_shift, bool
 
 bool Editor::handle_bottom_panel_mouse(int x, int y, bool is_click)
 {
+  // The label hover lasts only while the pointer is on the tab row inside the
+  // panel; leaving the row, the panel or the window's columns drops it.
+  const bool on_view_tabs = show_integrated_terminal && y == bottom_panel_view_tab_y() && x >= 0
+                            && x < integrated_terminal_panel_w();
+  if (!on_view_tabs && bottom_panel_view_hover != -1)
+  {
+    bottom_panel_view_hover = -1;
+    needs_redraw = true;
+  }
+
   if (!show_integrated_terminal)
   {
     return false;
@@ -1550,6 +1564,22 @@ bool Editor::handle_bottom_panel_mouse(int x, int y, bool is_click)
   {
     if (!is_click)
     {
+      // Motion over the labels paints the hover band; the press switches.
+      int hovered = -1;
+      for (int view = 0; view < 2; view++)
+      {
+        const int tab_x = bottom_panel_view_tab_x(view);
+        if (x >= tab_x && x < tab_x + ui_cell_count(bottom_panel_view_label(view)))
+        {
+          hovered = view;
+          break;
+        }
+      }
+      if (bottom_panel_view_hover != hovered)
+      {
+        bottom_panel_view_hover = hovered;
+        needs_redraw = true;
+      }
       return true;
     }
     for (int view = 0; view < 2; view++)

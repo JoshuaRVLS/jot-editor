@@ -375,6 +375,15 @@ bool Editor::handle_tabline_mouse(int x,
                                   bool is_middle_click,
                                   bool is_motion)
 {
+  // The hover band belongs to the strip row under the pointer: a pointer that
+  // leaves the row (or a strip that is no longer shown) drops it, rather than
+  // leaving the last tab lit.
+  if ((!tabline_shown() || y != tabline_y()) && tabline_hover_index != -1)
+  {
+    tabline_hover_index = -1;
+    needs_redraw = true;
+  }
+
   if (!tabline_shown() || y != tabline_y())
   {
     if (is_click_release && tabline_drag_index >= 0)
