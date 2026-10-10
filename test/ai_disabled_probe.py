@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Probe: the bundled AI assistant stays unregistered while it is disabled.
 
-The AI runtime is loaded from src/editor/lua/api_bindings.cpp, and every surface it
+The AI runtime is loaded from src/lua/api/api_bindings.cpp, and every surface it
 owns - the command palette's rows, the :CodeCompanion* commands and the
 Alt+Shift+A keymap family - is registered by features/ai/init.lua. Skipping the
 load has to leave all of them absent, because a surface that still answers would

@@ -7,6 +7,12 @@ facade -- has started: the first collaborator is out of the fragments, `api/rest
 is gone, and the first batch of `Editor::` implementations has come out of a
 module below `editor/`.
 
+Since then the tree was flattened: `src/editor/` and `src/tools/` are gone, and
+their contents are top-level domains (`core/`, `buffers/`, `panes/`, `commands/`,
+`events/`, `surfaces/`, and additions to `lsp/`, `dap/`, `syntax/`, `terminal/`
+and `extras/`). Nothing under `src/` is deeper than two levels. See **The
+flattening** below for what moved where and what it cost.
+
 ## Modules that exist
 
 Every directory under `src/` is a module, every module has one static library,
@@ -20,20 +26,66 @@ and the libraries are aggregated into `jot_engine`.
 | `ui/` | `jot_ui` | the cell grid, terminal and GUI backends, smooth scrolling, the tab order |
 | `render/` | `jot_render` | frame, buffer, panels, popups, minimap, the winbar model |
 | `input/` | `jot_input` | modes, mouse routing, the palette, command dispatch |
-| `tools/` | `jot_tools` | discord presence, telescope, the image viewer, the LeetCode keyring |
+| `buffers/` | `jot_editor` | opening, saving and reloading files, the buffer list, undo, autosave, recent files, fold state |
+| `panes/` | `jot_editor` | the split layout, navigation, resizing and pane tabs |
+| `commands/` | `jot_editor` | the ex command line and everything it runs |
+| `events/` | `jot_editor` | the main loop, terminal and GUI events, which-key |
+| `surfaces/` | `jot_editor` | home screen, popups, pickers, settings, theme chooser |
+| `gui/` | `jot_ui` | the SDL3/OpenGL front end (moved out of `ui/`) |
 | `workspace/` | `jot_workspace` | explorer, sidebar, right dock, tasks, timeline, project search, config, the HTML and HTTP file helpers |
 | `lsp/` | `jot_lsp` | the language server protocol client, its wire format, the completion ranking |
 | `dap/` | `jot_dap` | the debug adapter protocol client and its wire format |
 | `terminal/` | `jot_terminal` | pty-backed sessions and their panel (libvterm lives here) |
 | `git/` | `jot_git` | repository state, the git client, the panel and both painters |
 | `extras/` | `jot_extras` | WakaTime, coding time, the Bible, LeetCode, the status clock, the emmet expander |
-| `editor/` | `jot_editor` | the editor engine: `model/`, `state/`, `api/`, `app/`, `event/`, `integrations/`, `surfaces/`, `markdown/` |
-| `lua/` | `jot_lua_api` | the Lua API surface, its bindings and the view structs under `lua/view/` |
+| `core/` | `jot_editor` | the `Editor` class, its state groups (`core/*_state.h`), its model types and the fragments of the class body |
+| `lua/` | `jot_lua_api` | the Lua API surface (`lua/api/`), its bindings (`lua/bindings/`) and the view structs under `lua/view/` |
+
+## The flattening
+
+`src/editor/` had become a second `src/`: it carried its own `app/`, `model/`,
+`state/`, `event/`, `surfaces/`, `integrations/` and `markdown/`, so the tree was
+deep in the one place it should be flat, and half the modules could not be cut
+because the file that belonged on one side of the boundary sat inside `editor/`.
+It is gone. Its contents went to the domain that owns them, `src/tools/` went
+into `extras/`, and `editor/` and `tools/` no longer exist:
+
+- the class, `host_api`, the two outside-collaborator headers and every
+  `model/` and `state/` type became `core/`, with the debugger model going to
+  `dap/` and the LSP and web-index state to `lsp/` and `extras/`;
+- `app/` split into `buffers/`, `panes/` and `commands/`, and `event/` and
+  `surfaces/` became domains of their own;
+- `integrations/` split four ways: the LSP glue to `lsp/`, the debugger to
+  `dap/`, the syntax and tree-sitter wiring to `syntax/`, the terminal to
+  `terminal/`;
+- `markdown/`, the REST client, the symbol index, the discord controller and the
+  Bible and coding-time fragments joined `extras/`, along with everything the
+  old `tools/` held;
+- the fragments of the class body left `api/` for the domain that implements
+  them (`render/paint.h`, `lsp/lsp_ui.h`, `commands/commands.h`,
+  `workspace/explorer.h`, `buffers/buffers.h`, `panes/panes.h`), except
+  `public_api.h` and the two test-hook headers, which are the deliberate public
+  surface and stay together in `core/api/`;
+- `lua/` split into `lua/api/` and `lua/bindings/`, and the nine `color_*` pairs
+  moved to `syntax/color/`.
+
+The moves were done by a script that rewrote every quoted include the way the
+compiler resolves it, in the same pass as the move, so a step either built or
+failed to resolve -- never half-moved. Each step was built and tested before the
+next one started. `src/CMakeLists.txt` keeps its targets; what changed is that
+the one `JOT_EDITOR_SOURCES` list is now one list per domain, each in the
+`sources.cmake` of the directory it names, compiled into the same object library
+as before.
 
 The renames that came with the moves: `src/edit/` became `src/text/` (`jot_edit`
 to `jot_text`), `src/features/` was distributed and deleted, `src/jot/` became
 `src/editor/` and `jot_core` became `jot_editor`, so no target is named after a
 directory that does not exist.
+
+One exception is left, and it is deliberate: `jot_tools`, with its
+`JOT_TOOLS_SOURCES` list, still exists although `src/tools/` does not, because
+the change set that dissolved the directory was scoped to paths and targets, and
+renaming a target is not a path. Folding it into `jot_extras` is a follow-up.
 
 Every move that crossed a directory also rewrote the callers' include strings to
 name the module (`base/string_util.h`, `syntax/folding.h`, `lsp/client.h`,
@@ -47,17 +99,29 @@ shrink and never allowed to grow.
 
 - `tools/check_module_deps.py` resolves every quoted include the way the
   compiler does and fails on an include that points from a lower module to a
-  higher one. Today: **197 upward includes in 26 pairs**, recorded in
-  `docs/refactor/module-dep-baseline.txt`. The pairs worth looking at first:
-  `render -> editor` 42, `editor -> lua` 28, `input -> editor` 23,
-  `render -> lua` 20, `text -> editor` 18, `text -> lua` 11, `git -> editor` 7,
-  `workspace -> editor` 7, `extras -> editor` 6.
+  higher one. Today: **228 upward includes**, recorded in
+  `docs/refactor/module-dep-baseline.txt`.
+
+  The number went **up** from the 197 this file used to report, and the honest
+  reason is that the check was blind: `MODULE_ORDER` had no entry for `core/`,
+  `buffers/`, `panes/`, `commands/`, `events/`, `surfaces/` or `gui/`, and
+  `module_of` returns `None` for a directory that is not in the order, so every
+  file in them -- and every edge into them -- was skipped. Half the tree was
+  passing the check by not being seen, the same failure mode as the `lua` entry
+  in `SYSTEM_INCLUDE_ROOTS` recorded below. With the modules ranked, the 228 are
+  mostly one shape: a file in `buffers/`, `panes/`, `commands/`, `events/` or
+  `surfaces/` that includes `core/editor.h`, which is the `Editor::` method
+  implementations the facade is meant to remove from the callers' reach.
 - `tools/check_headers.py` compiles every header alone with the flags from
-  `build/compile_commands.json`. Today: **154 of 169 stand alone**. The 15 that
-  do not are the `src/editor/api/` fragments, which are pieces of a class body
-  rather than headers, so they cannot compile alone by construction. That list
-  only shrinks by taking members out of the `Editor` class; `api/rest.h` was the
-  first to leave it.
+  `build/compile_commands.json`. Today: **156 of 171 stand alone**. The 15 that
+  do not are the fragments of the class body (`core/editing.h`,
+  `core/panels_api.h`, `core/runtime.h`, `core/api/*`, `buffers/buffers.h`,
+  `commands/commands.h`, `commands/cpp.h`, `panes/panes.h`, `render/paint.h`,
+  `workspace/explorer.h`, `lsp/lsp_ui.h`, `extras/bible_api.h`,
+  `extras/coding_time.h`), which are pieces of a class body rather than
+  headers, so they cannot compile alone by construction. That list only shrinks
+  by taking members out of the `Editor` class; `api/rest.h` was the first to
+  leave it.
 
 The first of the two also reports an include that resolves to no file at all,
 which is how a bulk move that misses a rewrite announces itself: the build

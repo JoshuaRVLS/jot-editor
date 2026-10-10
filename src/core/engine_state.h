@@ -28,7 +28,7 @@ class LuaAPI;
 // manager, the event loop and its task queue, the UI backend (terminal or GUI)
 // and the Lua host. Also the flag that says the main loop is running.
 //
-// Split out of editor_state.h (which is now the umbrella over src/editor/state/);
+// Split out of editor_state.h (which is now the umbrella over src/core/);
 // the members and their comments moved verbatim.
 struct EngineState
 {

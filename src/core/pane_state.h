@@ -10,7 +10,7 @@
 // pane and buffer are current, the tab strip above them, and the live drags
 // that resize or zoom the layout.
 //
-// Split out of editor_state.h (which is now the umbrella over src/editor/state/);
+// Split out of editor_state.h (which is now the umbrella over src/core/);
 // the members and their comments moved verbatim.
 struct PaneState
 {

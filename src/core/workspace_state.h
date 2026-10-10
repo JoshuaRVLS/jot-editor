@@ -17,7 +17,7 @@
 // status line and Discord read, the lazygit-style git panel, and the
 // session-scoped lists (recent files/workspaces, closed buffers, global marks).
 //
-// Split out of editor_state.h (which is now the umbrella over src/editor/state/);
+// Split out of editor_state.h (which is now the umbrella over src/core/);
 // the members and their comments moved verbatim.
 struct WorkspaceState
 {

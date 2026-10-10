@@ -19,7 +19,7 @@
 // rows, selection, scroll and rect, so a deeper panel is hit-tested where it is
 // drawn and the level a key acts on is the one it was opened from.
 //
-// Split out of editor_state.h (the umbrella over src/editor/state/), like the
+// Split out of editor_state.h (the umbrella over src/core/), like the
 // other domain groups.
 struct WinbarMenuLevel
 {

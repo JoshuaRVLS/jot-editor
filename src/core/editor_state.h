@@ -1,7 +1,7 @@
 #ifndef EDITOR_STATE_H
 #define EDITOR_STATE_H
 
-// The editor's state, split by domain under src/editor/state/ and gathered here by
+// The editor's state, split by domain under src/core/ and gathered here by
 // inheritance: EditorState *is* every one of those groups, so a member is
 // reached exactly as before (state.show_sidebar, state.lsp_clients, ...) and
 // the 195 files that include this header did not have to change.

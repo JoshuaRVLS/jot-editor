@@ -16,7 +16,7 @@
 // surface reads, and the bookkeeping that keeps a result from a workspace that
 // has since changed -- or from a scan an edit has made obsolete -- out of them.
 //
-// Split out of editor_state.h (which is now the umbrella over src/editor/state/).
+// Split out of editor_state.h (which is now the umbrella over src/core/).
 struct CppDefsState
 {
   // filepath -> diagnostics from the definition checks, in the same per-file

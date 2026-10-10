@@ -10,7 +10,7 @@
 // Problems in one tabbed dock), the right dock (debugger, git panel, outline,
 // plugin panels), the minimap, and the live drags that resize them.
 //
-// Split out of editor_state.h (which is now the umbrella over src/editor/state/);
+// Split out of editor_state.h (which is now the umbrella over src/core/);
 // the members and their comments moved verbatim.
 struct PanelState
 {

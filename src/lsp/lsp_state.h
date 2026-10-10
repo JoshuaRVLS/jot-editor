@@ -18,7 +18,7 @@
 // affordance, the inlay-hint cache, the armed go-to-definition jump, and the
 // LSP status modal.
 //
-// Split out of editor_state.h (which is now the umbrella over src/editor/state/);
+// Split out of editor_state.h (which is now the umbrella over src/core/);
 // the members and their comments moved verbatim.
 struct LspUiState
 {

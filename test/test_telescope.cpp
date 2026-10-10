@@ -5,7 +5,7 @@
 
 TEST_CASE("Telescope Fuzzy Match", "[jot]")
 {
-  REQUIRE(Telescope::fuzzy_match("src/tools/telescope.cpp", "tsp"));
+  REQUIRE(Telescope::fuzzy_match("src/extras/telescope.cpp", "tsp"));
   REQUIRE(Telescope::fuzzy_match("RenderOverlay", "ro"));
   REQUIRE_FALSE(Telescope::fuzzy_match("README.md", "xyz"));
 }
@@ -14,7 +14,7 @@ TEST_CASE("Telescope Fuzzy Score Ranking", "[jot]")
 {
   int exact = Telescope::fuzzy_score("telescope.cpp", "telescope.cpp");
   int substring = Telescope::fuzzy_score("telescope_preview.cpp", "preview");
-  int scattered = Telescope::fuzzy_score("src/tools/telescope.cpp", "tsp");
+  int scattered = Telescope::fuzzy_score("src/extras/telescope.cpp", "tsp");
 
   REQUIRE(exact > substring);
   REQUIRE(substring > scattered);
@@ -48,18 +48,18 @@ TEST_CASE("Telescope Apply Results Selection And Display", "[jot]")
 {
   Telescope telescope;
   std::vector<FileMatch> matches;
-  matches.push_back({"/repo/src/tools/telescope.cpp",
+  matches.push_back({"/repo/src/extras/telescope.cpp",
                      "telescope.cpp",
-                     "src/tools/telescope.cpp",
-                     "src/tools",
+                     "src/extras/telescope.cpp",
+                     "src/extras",
                      100,
                      false});
   matches.push_back({"/repo/src/render", "render", "src/render", "src", 90, true});
 
   telescope.apply_results(matches);
   REQUIRE(telescope.get_result_count() == 2);
-  REQUIRE(telescope.get_selected_path() == "/repo/src/tools/telescope.cpp");
-  REQUIRE(telescope.get_selected_relative_path() == "src/tools/telescope.cpp");
+  REQUIRE(telescope.get_selected_path() == "/repo/src/extras/telescope.cpp");
+  REQUIRE(telescope.get_selected_relative_path() == "src/extras/telescope.cpp");
 
   telescope.move_down();
   REQUIRE(telescope.get_selected_path() == "/repo/src/render");
@@ -103,10 +103,10 @@ TEST_CASE("Telescope Caches Entries And Refilters Queries Instantly", "[jot]")
 {
   Telescope telescope;
   std::vector<FileMatch> entries;
-  entries.push_back({"/repo/src/tools/telescope.cpp",
+  entries.push_back({"/repo/src/extras/telescope.cpp",
                      "telescope.cpp",
-                     "src/tools/telescope.cpp",
-                     "src/tools",
+                     "src/extras/telescope.cpp",
+                     "src/extras",
                      0,
                      false});
   entries.push_back({"/repo/src/render.cpp", "render.cpp", "src/render.cpp", "src", 0, false});
@@ -118,14 +118,14 @@ TEST_CASE("Telescope Caches Entries And Refilters Queries Instantly", "[jot]")
   // or change the candidate pool.
   telescope.set_query("tel");
   REQUIRE(telescope.get_result_count() == 1);
-  REQUIRE(telescope.get_selected_path() == "/repo/src/tools/telescope.cpp");
+  REQUIRE(telescope.get_selected_path() == "/repo/src/extras/telescope.cpp");
 
   telescope.set_query("render");
   REQUIRE(telescope.get_result_count() == 1);
   REQUIRE(telescope.get_selected_path() == "/repo/src/render.cpp");
 
   // Path-aware subsequence match still works through the cache.
-  telescope.set_query("tools/te");
+  telescope.set_query("extras/te");
   REQUIRE(telescope.get_result_count() == 1);
 
   telescope.set_query("zzzz");

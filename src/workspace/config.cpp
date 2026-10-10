@@ -238,7 +238,7 @@ void Config::load_defaults()
   settings["smooth_scroll"] = "false";
   settings["smooth_scroll_easing"] = "linear";
   settings["smooth_scroll_duration_multiplier"] = "1.0";
-  // The global LSP switch (editor/integrations/lsp/*): off means no language
+  // The global LSP switch (lsp/*): off means no language
   // server is started and every running one is stopped. It is the one setting
   // for a machine that cannot spare the servers, or a tree where they should
   // not run at all, and it lives under Code intelligence in :settings. The

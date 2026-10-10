@@ -4,9 +4,15 @@ jot is one C++17 engine with three front ends over it (terminal UI, SDL3/OpenGL
 GUI, and Lua plugins). The directories under `src/` are the module boundaries.
 
 The module order, lowest first: `base`, `text`, `syntax`, `ui`, `render`,
-`input`, `tools`, `workspace`, `lsp`, `dap`, `terminal`, `git`, `extras`,
-`editor`, `lua`. A lower module may not include a higher one, and
-`tools/check_module_deps.py` enforces it in CI.
+`input`, `workspace`, `lsp`, `dap`, `terminal`, `git`, `extras`, `core`,
+`buffers`, `panes`, `commands`, `events`, `surfaces`, `gui`, `lua`. A lower
+module may not include a higher one, and `tools/check_module_deps.py` enforces
+it in CI.
+
+`core/` is the `Editor` class and its state and model types; `buffers`,
+`panes`, `commands`, `events` and `surfaces` are the parts of the editor that
+`core/` used to hold inside itself, so each sits just above it. `lua/` is
+topmost: it drives everything below it.
 
 ```
 apps/jot/        the binary: argument parsing, terminal setup, main()
@@ -20,29 +26,33 @@ src/
                    runtime, the C++ and colour scanners, the symbol index
   ui/              the cell grid, text handling, terminal + GUI backends
   render/          painting: frame, buffer, panels, popups, minimap
-  input/           key/mouse routing: modes, palette, commands
-  tools/           subprocess and protocol clients: discord, telescope, the
-                   image viewer, the LeetCode keyring
+  input/           key/mouse routing: modes, palette, menus
   workspace/       explorer, sidebar, right dock, tasks, project search
-  lsp/             the Language Server Protocol client, its wire format and
-                   the completion ranking it feeds
-  dap/             the Debug Adapter Protocol client and its wire format
-  terminal/        pty-backed terminal sessions and the panel that draws them
+  lsp/             the Language Server Protocol client, its wire format, the
+                   completion ranking it feeds, and the editor-side glue
+  dap/             the Debug Adapter Protocol client, its wire format, and the
+                   editor-side debugger and its session model
+  terminal/        pty-backed terminal sessions, the panel that draws them and
+                   the commands that open and float one
   git/             repository state, the git client, the panel and its painters
   extras/          the optional features: WakaTime, coding time, the Bible,
-                   LeetCode, the status clock, with the emmet expander
-  editor/          the editor engine, the class the whole tree is built around
-    editor.h       the Editor itself, assembled from api/ (see below)
-    model/         plain data types (buffer, panes, theme, panels, ...)
-    state/         the editor's state, split by subsystem (see below)
-    api/           fragments of the Editor class body (see below)
-    app/           editor behaviour: buffers, files, panes, undo, folding, ...
-    event/         input drains and timers
-    integrations/  LSP, debugger, terminal and tree-sitter wiring
-    surfaces/      menus, popups, home screen, settings, theme chooser
-    markdown/      the preview server (shared by the markdown and HTML previews)
-  lua/             the Lua API surface and its bindings, above everything it
-                   drives (view structs in lua/view/)
+                   LeetCode, the status clock, the emmet expander, the discord
+                   presence, the telescope finder, the image viewer, the REST
+                   client, the symbol index, the markdown preview server
+  core/            the editor engine, the class the whole tree is built around
+    editor.h       the Editor itself, assembled from fragments (see below)
+    *_state.h      the editor's state, split by subsystem (see below)
+    *.h            plain data types (buffer, panes, theme, panels, ...)
+    api/           the public and test-hook fragments (see below)
+  buffers/         opening, saving and reloading files, the buffer list, undo,
+                   autosave, recent files, fold state
+  panes/           the split layout, navigation, resizing and pane tabs
+  commands/        the ex command line and everything it runs
+  events/          the main loop, terminal and GUI events, which-key
+  surfaces/        home screen, popups, pickers, settings, theme chooser
+  gui/             the SDL3/OpenGL front end
+  lua/             the Lua API surface (api/) and its bindings (bindings/),
+                   above everything it drives (view structs in lua/view/)
 ```
 
 `base/` is the floor: it may not include `editor.h`, a module header or a UI
@@ -54,27 +64,27 @@ enough, because the module's own directory is on the include path.
 
 ## The editor's state
 
-`src/editor/editor_state.h` is an umbrella: `EditorState` inherits the domain
-groups in `src/editor/state/` and adds nothing of its own, so a member is reached
-exactly as it was when this was one 500-line struct.
+`src/core/editor_state.h` is an umbrella: `EditorState` inherits the domain
+groups and adds nothing of its own, so a member is reached exactly as it was
+when this was one 500-line struct.
 
 | file | holds |
 | --- | --- |
-| `state/pane_state.h` | buffers, split tree, tabs, pane tab strips/drags, scrollbar drags |
-| `state/workspace_state.h` | sidebar, workspace session, git summary and panel |
-| `state/panel_state.h` | bottom/right docks, minimap, terminal selection |
-| `state/surface_state.h` | palette, pickers, prompts, menus, popup |
-| `state/lsp_state.h` | clients, diagnostics, completion/hover/inlay |
-| `state/input_state.h` | mouse selection, click/hover, keystroke bookkeeping |
-| `state/view_state.h` | layout metrics, theme, paint caches, message line |
-| `state/navigation_state.h` | jump history and the armed jump |
-| `state/engine_state.h` | config, terminals, debugger, UI, Lua host |
-| `state/web_index_state.h` | the workspace's CSS vocabulary and its scan's bookkeeping |
+| `core/pane_state.h` | buffers, split tree, tabs, pane tab strips/drags, scrollbar drags |
+| `core/workspace_state.h` | sidebar, workspace session, git summary and panel |
+| `core/panel_state.h` | bottom/right docks, minimap, terminal selection |
+| `core/surface_state.h` | palette, pickers, prompts, menus, popup |
+| `lsp/lsp_state.h` | clients, diagnostics, completion/hover/inlay |
+| `core/input_state.h` | mouse selection, click/hover, keystroke bookkeeping |
+| `core/view_state.h` | layout metrics, theme, paint caches, message line |
+| `core/navigation_state.h` | jump history and the armed jump |
+| `core/engine_state.h` | config, terminals, debugger, UI, Lua host |
+| `extras/web_index_state.h` | the workspace's CSS vocabulary and its scan's bookkeeping |
 
 The groups are independent: no group includes another, so a translation unit
 that only needs one slice can include it directly.
 
-`PreviewServer` (`editor/markdown/preview_server.*`) is one HTTP/SSE server with two
+`PreviewServer` (`extras/markdown/preview_server.*`) is one HTTP/SSE server with two
 modes, chosen by whether a file root was set: a *stored page* (the markdown
 preview renders a document and serves it at `/`) or a *served tree* (the HTML
 preview points the browser at a real path, injects a reload client into HTML
@@ -82,30 +92,33 @@ responses, and can override one document with a buffer's text). Both modes are
 driven entirely from Lua over `jot.preview.*`; the server holds no policy.
 
 Two of the groups hold the state around a workspace-wide scan that runs on the
-worker queue: `cpp_defs_state.h` (declarations with no body, and signatures with
-two) and `web_index_state.h` (the class names and custom properties the tree
-declares). Both follow the same shape -- a running flag, a pending flag, and the
-root plus an epoch that decide whether a landing result is still wanted -- and
-both have their scan spelled out as a pure function (`src/syntax/cpp_definitions.cpp`,
-`src/workspace/web_completion.cpp`) and their editor half in `src/editor/app/`
-(`cpp_definitions.cpp`, `web_index.cpp`).
+worker queue: `core/cpp_defs_state.h` (declarations with no body, and signatures
+with two) and `extras/web_index_state.h` (the class names and custom properties
+the tree declares). Both follow the same shape -- a running flag, a pending flag,
+and the root plus an epoch that decide whether a landing result is still wanted
+-- and both have their scan spelled out as a pure function
+(`src/syntax/cpp_definitions.cpp`, `src/workspace/web_completion.cpp`) and their
+editor half in `src/commands/cpp_definitions.cpp` and `src/extras/web_index.cpp`.
 
 ## Collaborators
 
 State whose behaviour is cohesive enough to own itself lives in
-`src/editor/*_controller.h` and is reached through the `Editor` it is built
+`src/core/*_controller.h` and is reached through the `Editor` it is built
 with (`Editor` declares it a friend). Search and Discord presence are the two so
 far; the state and the code that drives it sit in the same file (or, for
 Discord, in `extras/discord_session.cpp`).
 
 ## The Editor class body
 
-`src/editor/editor.h` is also an umbrella now: it keeps the class head (type
+`src/core/editor.h` is also an umbrella now: it keeps the class head (type
 aliases, constants, the collaborators) and includes one *fragment* per region
-of the class body from `src/editor/api/`. A fragment is not a standalone
-header -- no include guard, no includes -- it is class-scope text, exactly as if
-it were written in `editor.h`. Nothing was renamed or moved to another class,
-which is what keeps the ~200 files that call `Editor` unchanged.
+of the class body. Each fragment sits with the domain that implements it --
+`render/paint.h`, `lsp/lsp_ui.h`, `commands/commands.h`, `workspace/explorer.h`,
+`buffers/buffers.h`, `panes/panes.h` and the `core/` ones -- rather than in a
+separate `api/` directory. A fragment is not a standalone header: no include
+guard, no includes, class-scope text exactly as if it were written in
+`editor.h`. Nothing was renamed or moved to another class, which is what keeps
+the ~200 files that call `Editor` unchanged.
 
 Add to a fragment by opening the one whose banner names the subsystem; the map
 is at the top of `editor.h`.
@@ -122,7 +135,7 @@ panel); the pickers take the same two steps one at a time.
 Adding one is a multi-place change because the surface's *name* is what ties the
 scrim to the panel:
 
-- `is_modal_surface` / `modal_surface_open` in `lua/api_float.cpp`: the
+- `is_modal_surface` / `modal_surface_open` in `lua/api/api_float.cpp`: the
   float opens on `kModalFloatZindex` (above the chrome floats, which are
   recreated every frame and would otherwise out-rank it by creation order) and
   the background floats lose their input.
@@ -139,7 +152,7 @@ scrim to the panel:
 
 ## Lua API surface
 
-`src/lua/api.h` keeps the `LuaAPI` class; the view structs it hands to Lua
+`src/lua/api/api.h` keeps the `LuaAPI` class; the view structs it hands to Lua
 surface handlers are in `src/lua/view/` (surfaces, plugins, runtime
 records, shared helpers).
 

@@ -5,30 +5,33 @@
 //
 // What is left here is the class itself: its collaborators, the type aliases
 // and constants every part uses, and the includes below, one per region of the
-// class body. Each region lives in src/editor/editor/api/ as a *fragment* (no
-// include guard and no includes of its own) that is textually included inside
-// the class, so the members keep the exact scoping they had when this header
-// was 1800 lines -- no declaration moved to another class, nothing was renamed.
+// class body. Each region is a *fragment* (no include guard and no includes of
+// its own) that is textually included inside the class, so the members keep the
+// exact scoping they had when this header was 1800 lines -- no declaration
+// moved to another class, nothing was renamed.
 //
-//   api/paint.h          render entry points, GUI per-pane scratch
-//   api/runtime.h        smooth scroll, timers/pollers, LSP lifecycle
-//   api/lsp_ui.h         pickers, completion/signature/hover, navigation
-//   api/cpp.h            the C++ definition checks (`:cppcheck`)
-//   api/editing.h        syntax/decorations, input dispatch, edit commands
-//   api/public_api.h     the public command surface
-//   api/explorer.h       file tree, sidebar caches and resize
-//   api/buffers.h        clipboard, undo, buffer/file lifecycle, git
-//   api/panels.h         minimap, bottom dock, terminal tasks, debugger
-//   api/panes.h          folds, pane commands and pane geometry
-//   api/commands.h       text commands, themes, setup, message line
-//   api/bible.h          the Bible reader (`:bible`)
-//   api/coding_time.h    the coding-time chip: WakaTime and the local store
-//   api/test_hooks.h     the suite's headless hooks (core)
-//   api/test_hooks_ui.h  the suite's hooks (surfaces and lifecycle)
+// The fragments sit with the domain that implements them, so the class body is
+// assembled from every layer of the tree:
+//
+//   render/paint.h              render entry points, GUI per-pane scratch
+//   core/runtime.h              smooth scroll, timers/pollers, LSP lifecycle
+//   lsp/lsp_ui.h                pickers, completion/signature/hover, navigation
+//   commands/cpp.h              the C++ definition checks (`:cppcheck`)
+//   core/editing.h              syntax/decorations, input dispatch, edit commands
+//   core/api/public_api.h       the public command surface
+//   workspace/explorer.h        file tree, sidebar caches and resize
+//   buffers/buffers.h           clipboard, undo, buffer/file lifecycle, git
+//   core/panels_api.h           minimap, bottom dock, terminal tasks, debugger
+//   panes/panes.h               folds, pane commands and pane geometry
+//   commands/commands.h         text commands, themes, setup, message line
+//   extras/bible_api.h          the Bible reader (`:bible`)
+//   extras/coding_time.h        the coding-time chip: WakaTime and the local store
+//   core/api/test_hooks.h       the suite's headless hooks (core)
+//   core/api/test_hooks_ui.h    the suite's hooks (surfaces and lifecycle)
 //
 // Behaviour that owns its state lives in a collaborator instead
-// (editor/*_controller.h, extras/rest_client.h); the state itself is split
-// under src/editor/state/ (see editor_state.h).
+// (core/*_controller.h, extras/rest_client.h); the state itself is split
+// under src/core/ (see editor_state.h).
 
 #include "autoclose.h"
 #include "bracket.h"

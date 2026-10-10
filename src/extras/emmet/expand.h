@@ -9,7 +9,7 @@
 // The engine is split in two so both halves are testable without an editor. The
 // tokenizer answers "what did the author just type", the two expanders answer
 // "what does it mean", and neither touches a buffer: the editor hands over a
-// line and a cursor and gets back the snippet body (src/editor/lua/api/api_emmet.cpp
+// line and a cursor and gets back the snippet body (src/lua/api/api_emmet.cpp
 // splices it in through the snippet engine, which is what makes the result
 // tabbable).
 //

@@ -12,7 +12,7 @@
 // its own (`jump_index`), and a new jump drops whatever was ahead of it, the
 // way a new branch replaces a redo tail.
 //
-// Split out of editor_state.h (which is now the umbrella over src/editor/state/);
+// Split out of editor_state.h (which is now the umbrella over src/core/);
 // the members and their comments moved verbatim.
 struct NavigationState
 {

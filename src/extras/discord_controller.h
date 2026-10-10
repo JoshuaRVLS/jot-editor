@@ -19,7 +19,7 @@ struct FileBuffer;
 // state through the Editor it was built with.
 //
 // The pure content model (placeholder templates, asset-key tables, the
-// activity shape) stays in tools/discord_presence.* and knows nothing about the
+// activity shape) stays in extras/discord_presence.* and knows nothing about the
 // editor; this class is the glue that feeds it.
 class DiscordController
 {

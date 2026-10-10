@@ -1,5 +1,5 @@
 // Internal helpers shared by the LSP integration modules
-// (src/editor/integrations/lsp/*.cpp). Kept inline so every translation unit
+// (src/lsp/*.cpp). Kept inline so every translation unit
 // that needs them gets them without extra TUs; theme-specific helpers stay
 // in the anonymous namespace of the module that owns them.
 #pragma once

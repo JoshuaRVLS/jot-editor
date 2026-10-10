@@ -13,7 +13,7 @@
 // order itself; this is the presentation state around it: the config knobs,
 // where the strip is scrolled to, and what the pointer is doing to it.
 //
-// Split out of editor_state.h (the umbrella over src/editor/state/), like the
+// Split out of editor_state.h (the umbrella over src/core/), like the
 // other domain groups.
 struct TablineState
 {

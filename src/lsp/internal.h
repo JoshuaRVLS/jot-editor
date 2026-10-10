@@ -1,4 +1,4 @@
-// Internal helpers shared by the LSP client modules (src/tools/lsp/*.cpp):
+// Internal helpers shared by the LSP client modules (src/lsp/*.cpp):
 // the JSON value + parser, file-URI / offset / language-id conversions, and
 // the LSP result parsers. Definitions live in json.cpp / protocol.cpp.
 #pragma once

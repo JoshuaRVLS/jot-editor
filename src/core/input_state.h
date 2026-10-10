@@ -10,7 +10,7 @@
 // resting pointer into a highlight, and the keystroke bookkeeping (the recent
 // keys the keymap chords are matched against, and the press counter).
 //
-// Split out of editor_state.h (which is now the umbrella over src/editor/state/);
+// Split out of editor_state.h (which is now the umbrella over src/core/);
 // the members and their comments moved verbatim.
 struct InputState
 {

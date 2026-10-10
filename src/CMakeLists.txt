@@ -24,7 +24,6 @@ function(jot_configure_object_target target_name)
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/src/base
     ${PROJECT_SOURCE_DIR}/src/core
-    ${PROJECT_SOURCE_DIR}/src/editor
     ${PROJECT_SOURCE_DIR}/src/input
     ${PROJECT_SOURCE_DIR}/src/render
     ${PROJECT_SOURCE_DIR}/src/text
@@ -43,7 +42,6 @@ function(jot_configure_object_target target_name)
     ${PROJECT_SOURCE_DIR}/src/events
     ${PROJECT_SOURCE_DIR}/src/surfaces
     ${PROJECT_SOURCE_DIR}/src/gui
-    ${PROJECT_SOURCE_DIR}/src/tools
   )
 
   if(LIBUV_INCLUDE_DIRS)
@@ -328,7 +326,6 @@ function(jot_expose_module_api target_name)
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/src/base
     ${PROJECT_SOURCE_DIR}/src/core
-    ${PROJECT_SOURCE_DIR}/src/editor
     ${PROJECT_SOURCE_DIR}/src/input
     ${PROJECT_SOURCE_DIR}/src/render
     ${PROJECT_SOURCE_DIR}/src/text
@@ -347,14 +344,18 @@ function(jot_expose_module_api target_name)
     ${PROJECT_SOURCE_DIR}/src/events
     ${PROJECT_SOURCE_DIR}/src/surfaces
     ${PROJECT_SOURCE_DIR}/src/gui
-    ${PROJECT_SOURCE_DIR}/src/tools
   )
 endfunction()
 
 include(base/sources.cmake)
-include(editor/sources.cmake)
+include(core/sources.cmake)
 include(text/sources.cmake)
 include(syntax/sources.cmake)
+include(buffers/sources.cmake)
+include(panes/sources.cmake)
+include(commands/sources.cmake)
+include(events/sources.cmake)
+include(surfaces/sources.cmake)
 include(dap/sources.cmake)
 include(lsp/sources.cmake)
 include(terminal/sources.cmake)
@@ -363,7 +364,6 @@ include(git/sources.cmake)
 include(extras/sources.cmake)
 include(input/sources.cmake)
 include(render/sources.cmake)
-include(tools/sources.cmake)
 include(lua/sources.cmake)
 include(ui/sources.cmake)
 
@@ -431,7 +431,7 @@ if(JOT_GUI AND NOT WIN32)
          gui/gui_input.cpp
          gui/gui_ligatures.cpp
          "${JOT_GUI_ICON_CPP}")
-    list(APPEND JOT_EDITOR_SOURCES events/gui_events.cpp)
+    list(APPEND JOT_EVENTS_SOURCES events/gui_events.cpp)
   else()
     message(STATUS "JOT_GUI requested but SDL2/freetype2 not found; building terminal-only")
     set(JOT_GUI_ENABLED FALSE CACHE INTERNAL "GUI frontend compiled into the engine" FORCE)
@@ -442,7 +442,17 @@ endif()
 add_library(jot_base_obj OBJECT ${JOT_BASE_SOURCES})
 jot_configure_object_target(jot_base_obj)
 
-add_library(jot_editor_obj OBJECT ${JOT_EDITOR_SOURCES})
+# What used to be one JOT_EDITOR_SOURCES list is now one list per domain, and
+# they are still compiled into the same object library: the module boundary is
+# the directory and its sources.cmake, not the archive it lands in.
+add_library(jot_editor_obj OBJECT
+  ${JOT_CORE_SOURCES}
+  ${JOT_BUFFERS_SOURCES}
+  ${JOT_PANES_SOURCES}
+  ${JOT_COMMANDS_SOURCES}
+  ${JOT_EVENTS_SOURCES}
+  ${JOT_SURFACES_SOURCES}
+)
 jot_configure_object_target(jot_editor_obj)
 target_include_directories(jot_editor_obj SYSTEM PRIVATE ${LIBUV_INCLUDE_DIRS})
 target_compile_options(jot_editor_obj PRIVATE ${LIBUV_CFLAGS_OTHER})

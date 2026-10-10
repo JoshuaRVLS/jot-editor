@@ -3,7 +3,7 @@
 
 // Umbrella for the editor's core model types: the plain data the editor state
 // and the render/edit layers exchange. Each one now lives in the file that owns
-// it, under src/editor/model/ -- this header is what keeps the old include working
+// it, under src/core/ -- this header is what keeps the old include working
 // (and is what a module that wants the whole core model should still include).
 //
 // The split is by domain, not by size: a reader looking for the theme walks to

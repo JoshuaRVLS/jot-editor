@@ -14,7 +14,7 @@
 // (inline colour spans and their variable definitions), the blink clock, the
 // theme in force, the message line and the dirty flag a frame waits on.
 //
-// Split out of editor_state.h (which is now the umbrella over src/editor/state/);
+// Split out of editor_state.h (which is now the umbrella over src/core/);
 // the members and their comments moved verbatim.
 struct ViewState
 {

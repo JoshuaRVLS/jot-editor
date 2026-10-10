@@ -1,13 +1,4 @@
 set(JOT_INPUT_SOURCES
-  commands/actions.cpp
-  commands/execute.cpp
-  commands/help.cpp
-  commands/navigation.cpp
-  commands/save_prompt.cpp
-  commands/rename_prompt.cpp
-  commands/utils.cpp
-  commands/ex.cpp
-  commands/ex_tail.cpp
   input/menu_bar.cpp
   input/modes/dispatch.cpp
   input/modes/modeless.cpp

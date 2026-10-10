@@ -37,7 +37,8 @@ MODULE_ORDER = [
     "ui",
     "render",
     "input",
-    "tools",
+    # tools/ was absorbed by extras/ and no longer exists; the name is gone
+    # from the order so nothing can hide behind it again.
     "workspace",
     "lsp",
     "dap",

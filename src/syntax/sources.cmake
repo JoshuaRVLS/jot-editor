@@ -21,4 +21,6 @@ set(JOT_SYNTAX_SOURCES
   syntax/queries.cpp
   syntax/runtime.cpp
   syntax/syntax.cpp
+  syntax/syntax_editor.cpp
+  syntax/tree_sitter_commands.cpp
 )

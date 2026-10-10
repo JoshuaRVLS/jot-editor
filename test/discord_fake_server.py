@@ -2,7 +2,7 @@
 """Fake Discord IPC server for the presence smoke test.
 
 Speaks just enough of the protocol to exercise the real client in
-src/tools/discord_rpc.cpp: answers the handshake with READY, records every frame
+src/extras/discord_rpc.cpp: answers the handshake with READY, records every frame
 it receives as JSON lines, and can answer with an error reply (to check that the
 editor surfaces Discord's rejections).
 
