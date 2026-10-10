@@ -43,6 +43,14 @@ jobs:
         if: matrix.platform == 'linux'
         run: python3 tools/check_module_deps.py
 
+      # SDL2, freetype and harfbuzz are the GUI frontend's dependencies, and the
+      # header check needs them for a reason beyond building the GUI: font_catalog.h
+      # includes ft2build.h, and src/CMakeLists.txt adds freetype's include dirs
+      # only when the GUI is enabled. Without these packages the configure step
+      # cannot find freetype, so the header check compiles font_catalog.h with no
+      # way to reach ft2build.h and fails it as a header that does not stand alone.
+      # Installing them also means CI finally compiles src/ui/gui, which nothing
+      # here did before: the frontend shipped unbuilt and unchecked.
       - name: Install Linux dependencies
         if: matrix.platform == 'linux'
         run: |
@@ -50,7 +58,8 @@ jobs:
           sudo apt-get install --yes \
             cmake ninja-build pkg-config \
             libvterm-dev libtermkey-dev libuv1-dev libutf8proc-dev \
-            libtree-sitter-dev libcurl4-openssl-dev
+            libtree-sitter-dev libcurl4-openssl-dev \
+            libsdl2-dev libfreetype-dev libharfbuzz-dev
 
       - name: Install Windows cross toolchain
         if: matrix.platform == 'windows'
@@ -68,7 +77,7 @@ jobs:
 
       # Every header has to compile as the only include of an empty translation
       # unit, using the flags from the configure step just above. Same ratchet
-      # as the module check: the sixteen src/editor/editor/api/ files are class-body
+      # as the module check: the fifteen src/editor/api/ files are class-body
       # fragments rather than headers and stay on the baseline until the Editor
       # stops being assembled from them.
       - name: Check headers stand alone

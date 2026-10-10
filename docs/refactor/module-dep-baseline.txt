@@ -194,7 +194,6 @@ src/workspace/right_panel.cpp	src/lua/api.h
 src/workspace/sidebar.cpp	src/editor/editor.h
 src/workspace/sidebar.cpp	src/lua/api.h
 src/workspace/tasks.cpp	src/editor/editor.h
-src/workspace/timeline.cpp	src/editor/editor.h
 src/workspace/workspace.cpp	src/editor/editor.h
 src/workspace/workspace.cpp	src/lua/api.h
 src/workspace/workspace_internal.h	src/editor/editor_models.h
