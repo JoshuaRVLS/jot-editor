@@ -644,17 +644,6 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
       int scroll_x = ui_clamp_to_utf8_boundary(line, buf.scroll_x);
       int current_x = x + 1 + line_num_width;
       int visible_len = w - 2 - line_num_width;
-      if (folded_header)
-      {
-        int hidden_count = fold_view->hidden_count_for_header(line_idx);
-        std::string suffix = "  … " + std::to_string(hidden_count) + " lines";
-        int suffix_x = current_x + std::max(0, visible_len - (int)suffix.size());
-        if (suffix_x > current_x)
-        {
-          ui->draw_text(suffix_x, draw_y, suffix, theme.fg_comment, row_bg);
-          visible_len = std::max(0, suffix_x - current_x - 1);
-        }
-      }
       int clamped_scroll_x =
           ui_clamp_to_utf8_boundary(line, std::clamp(scroll_x, 0, (int)line.size()));
       // Only the visible window (plus a wide-glyph margin) needs per-frame
@@ -1527,6 +1516,27 @@ void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int bu
         for (char c : line)
         {
           apply_bracket_depth_delta(c, bracket_depth);
+        }
+      }
+      // The count rides just past the header's own text, like the line's other
+      // end-of-line adornments, so a popup over the pane edge cannot hide it.
+      if (folded_header)
+      {
+        int line_vis_end = visible_len;
+        if ((int)line.size() < (int)visual_cols.size())
+        {
+          line_vis_end = std::max(0, visual_cols[line.size()] - start_visual);
+        }
+        line_vis_end += hint_cells_at_byte((int)line.size());
+        if (line_vis_end < visible_len)
+        {
+          line_vis_end += 1; // one cell between the header and its count
+        }
+        const std::string suffix =
+            "… " + std::to_string(fold_view->hidden_count_for_header(line_idx)) + " lines";
+        if (line_vis_end + (int)suffix.size() <= visible_len)
+        {
+          ui->draw_text(current_x + line_vis_end, draw_y, suffix, theme.fg_comment, row_bg);
         }
       }
       // Bracket color must depend on file position only, and the walk above can

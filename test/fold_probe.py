@@ -47,6 +47,19 @@ def command(name: str) -> bytes:
     return CTRL_P + name.encode() + ENTER
 
 
+def count_gap(screen: str, header: str, count: str) -> int:
+    """Cells between the header text's end and its count, or -1 when absent.
+
+    Right-aligned, a count answers with the width of the pane; the checks pin
+    the small number that means it sits with the header it describes.
+    """
+    for line in screen.splitlines():
+        if header in line:
+            at = line.find(count)
+            return -1 if at < 0 else at - (line.find(header) + len(header))
+    return -1
+
+
 def main() -> int:
     binary = sys.argv[1] if len(sys.argv) > 1 else "build/apps/jot/jot"
     if not os.path.exists(binary):
@@ -81,6 +94,12 @@ def main() -> int:
     check("fold keeps the header", "int helper_one() {" in text)
     check("fold shows the hidden count", "\u2026 4 lines" in text,
           "no '... 4 lines' suffix on the header row")
+    # The count rides on the header's own row, a cell or two past its text. It
+    # was right-aligned to the pane instead, where the startup notice popup
+    # covered it and where the header's text had to be clipped to make room.
+    check("the count sits with its header",
+          count_gap(text, "int helper_one() {", "\u2026 4 lines") in range(0, 4),
+          f"count is {count_gap(text, 'int helper_one() {', '\u2026 4 lines')} past the header's text")
     check("the other block is untouched",
           "int helper_two() {" in text and "int c = 3;" in text)
 
@@ -95,6 +114,9 @@ def main() -> int:
     text = session(command("foldall") + PAGE_DOWN * 3)
     check("fold-all hides every body", "int a = 1;" not in text and "int c = 3;" not in text)
     check("fold-all counts each block", "\u2026 4 lines" in text and "\u2026 3 lines" in text)
+    check("every count sits with its own header",
+          count_gap(text, "int helper_one() {", "\u2026 4 lines") in range(0, 4)
+          and count_gap(text, "int helper_two() {", "\u2026 3 lines") in range(0, 4))
 
     # 4. Unfold-all after that scroll: the bodies return, so the last write is
     #    what the new frame answers from.
