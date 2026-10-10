@@ -8,7 +8,7 @@
 #include <map>
 #include <string>
 
-#include "lua/api_internal.h"
+#include "lua/api/api_internal.h"
 #include "lua/embedded_lua.h"
 #include "ui/text.h"
 

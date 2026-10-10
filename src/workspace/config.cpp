@@ -173,7 +173,7 @@ void Config::load_defaults()
   settings["ai_stream"] = "true";
   settings["ai_temperature"] = "0.2";
   settings["ai_max_tokens"] = "0";
-  // Inline colour preview (syntax/color_codes.cpp): paint colour literals in
+  // Inline colour preview (syntax/color/color_codes.cpp): paint colour literals in
   // the colour they name. mode is background | foreground | virtualtext.
   settings["colorizer"] = "true";
   settings["colorizer_mode"] = "background";

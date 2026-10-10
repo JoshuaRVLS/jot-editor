@@ -3,7 +3,7 @@
 #include "column_utils.h"
 #include "core/editor.h"
 #include "folding.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "render/gutter.h"
 #include "render/overlay_internal.h"
 #include "ui/text.h"

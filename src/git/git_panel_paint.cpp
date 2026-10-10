@@ -10,7 +10,7 @@
 #include "core/editor.h"
 #include "core/file_icons.h"
 #include "git/git_panel_models.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "render/pane_edges.h"
 #include "ui/text.h"
 

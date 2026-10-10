@@ -15,8 +15,8 @@
 #include <unistd.h>
 
 #include "core/editor.h"
-#include "lua/api.h"
-#include "lua/api_internal.h"
+#include "lua/api/api.h"
+#include "lua/api/api_internal.h"
 #include "ui/ui.h"
 
 extern "C"

@@ -4,7 +4,7 @@
 #include "core/editor.h"
 #include "lsp/common.h"
 #include "lsp/client.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include <algorithm>
 #include <string>
 #include <utility>

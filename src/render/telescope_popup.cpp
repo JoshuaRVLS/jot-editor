@@ -9,7 +9,7 @@
 #include "core/editor.h"
 #include "core/file_icons.h"
 #include "folding.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "render/overlay_internal.h"
 #include "ui/text.h"
 #include <algorithm>

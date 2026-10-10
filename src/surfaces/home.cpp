@@ -1,6 +1,6 @@
 #include "core/editor.h"
 #include "core/file_icons.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "ui/text.h"
 
 #include <algorithm>

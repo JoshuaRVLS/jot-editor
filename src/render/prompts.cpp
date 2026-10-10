@@ -1,6 +1,6 @@
 // Save and quit confirmation prompts.
 #include "core/editor.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "ui/components.h"
 #include "ui/text.h"
 #include <algorithm>
@@ -147,7 +147,7 @@ void Editor::render_prompt_modal()
   //
   // When a Lua handler owns the panel, render_*_prompt() only opens its float:
   // the panel lands in the float pass that follows this call, undimmed, because
-  // a prompt surface is in the modal set (lua/api_float.cpp) and only the modal
+  // a prompt surface is in the modal set (lua/api/api_float.cpp) and only the modal
   // surface's own float is spared the pass's re-dim.
   ui->dim_rect({0, 0, ui->get_render_width(), ui->get_height()});
   if (show_save_prompt)

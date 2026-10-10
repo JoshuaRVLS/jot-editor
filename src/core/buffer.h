@@ -5,7 +5,7 @@
 #include "core/fold_ranges.h"
 #include "core/syntax.h"
 #include "line_provider.h"
-#include "syntax/color_definitions.h"
+#include "syntax/color/color_definitions.h"
 #include "syntax/index.h" // SymbolMatch (the winbar's symbol cache)
 #include "text_features.h"
 #include <chrono>

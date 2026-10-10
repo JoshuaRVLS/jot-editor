@@ -1,7 +1,7 @@
 #include "core/editor.h"
 #include "core/relaunch.h"
 #include "core/host_api.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "gui/gui.h"
 #include <algorithm>
 #include <chrono>

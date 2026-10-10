@@ -6,7 +6,7 @@
 // text colour becomes on a filled swatch, how the display modes differ, and
 // that the switches and the exclusion list take effect without a restart.
 #include "core/editor.h"
-#include "syntax/color_codes.h"
+#include "syntax/color/color_codes.h"
 #include "ui/ui.h"
 #include "ui/xterm_palette.h"
 

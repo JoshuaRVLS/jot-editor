@@ -7,7 +7,7 @@
 #include "buffers/file_internal.h"
 #include "folding.h"
 #include "lazy_line_provider.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "save_hygiene.h"
 #include <algorithm>
 #include <chrono>

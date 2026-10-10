@@ -3,7 +3,7 @@
 
 #include "core/editor.h"
 #include "folding.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "workspace/workspace_internal.h"
 #include <algorithm>
 #include <chrono>

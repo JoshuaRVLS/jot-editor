@@ -1,10 +1,10 @@
-// The colour-literal scanner (src/syntax/color_codes.cpp).
+// The colour-literal scanner (src/syntax/color/color_codes.cpp).
 //
 // Ported from nvim-colorizer.lua, so these cases pin the rules that make the
 // port behave like the original: which spellings count as colours, and -- just
 // as important -- which near-misses must NOT match. A preview that lights up
 // the wrong substrings is worse than none, because it misreports the value.
-#include "syntax/color_codes.h"
+#include "syntax/color/color_codes.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <string>

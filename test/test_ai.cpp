@@ -647,7 +647,7 @@ TEST_CASE("Bundled AI runtime is not loaded while disabled", "[ai]")
   // to load_ai_runtime, and uncommenting it is what brings the feature back, so
   // this pins the disable against an accidental re-enable and fails at the
   // moment someone does restore it (retire this case with that commit).
-  std::ifstream in(std::string(JOT_SOURCE_DIR) + "/src/lua/api_bindings.cpp");
+  std::ifstream in(std::string(JOT_SOURCE_DIR) + "/src/lua/api/api_bindings.cpp");
   REQUIRE(in.good());
   std::string line;
   bool loaded = false;

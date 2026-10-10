@@ -1,6 +1,6 @@
 // Quick-pick list rendering (Lua-driven pickers with match highlighting).
 #include "core/editor.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "render/ui_internal.h"
 #include "ui/components.h"
 #include "ui/text.h"

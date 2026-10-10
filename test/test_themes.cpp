@@ -17,8 +17,8 @@
 // palette indices, so a case that wants a slot's colour reads it back through
 // the same conversion the renderer uses instead of comparing an index.
 #include "core/editor.h"
-#include "lua/api.h"
-#include "lua/api_internal.h"
+#include "lua/api/api.h"
+#include "lua/api/api_internal.h"
 #include "ui/xterm_palette.h"
 
 #include <algorithm>

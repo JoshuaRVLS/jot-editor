@@ -1,5 +1,5 @@
 -- The AI assistant, registered as `jot.ai` (features/ai/*.lua, loaded by
--- src/jot/lua/api_runtime.cpp).
+-- src/jot/lua/api/api_runtime.cpp).
 --
 -- A port of CodeCompanion.nvim's shape onto jot: a chat buffer you type into
 -- and send from, `/` commands and `#` context references inside a prompt, an

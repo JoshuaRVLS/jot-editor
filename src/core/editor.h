@@ -52,7 +52,7 @@ class HostCoreAPI;
 class HostRenderAPI;
 class HostIOAPI;
 class UIGui;
-struct SidePanelView; // defined in lua/api.h (included by renderers)
+struct SidePanelView; // defined in lua/api/api.h (included by renderers)
 struct HomeView;      // the home screen's rows, same header as SidePanelView
 
 class Editor : private EditorState

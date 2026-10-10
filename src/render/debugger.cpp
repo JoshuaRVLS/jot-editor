@@ -1,6 +1,6 @@
 #include "base/string_util.h"
 #include "core/editor.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "render/pane_edges.h"
 
 #include <algorithm>

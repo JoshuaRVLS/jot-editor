@@ -9,7 +9,7 @@
 // in-memory buffer the snippet/preview APIs edit) and FloatSpan (one styled
 // run inside a LuaFloatWindow's line).
 //
-// Split out of lua/api.h, which keeps the LuaAPI class itself and
+// Split out of lua/api/api.h, which keeps the LuaAPI class itself and
 // includes these headers in order; the structs are unchanged.
 
 #include "dap/client.h"

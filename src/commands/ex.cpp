@@ -4,7 +4,7 @@
 #include "core/editor.h"
 #include "git/git_run.h"
 #include "core/host_api.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 
 #include <algorithm>
 #include <cctype>

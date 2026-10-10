@@ -13,7 +13,7 @@
 // editor.h. Moving the commands here and the algorithms there is what lets each
 // half live where it belongs.
 #include "core/editor.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "text/buffer_stats.h"
 #include "text/line_ops.h"
 

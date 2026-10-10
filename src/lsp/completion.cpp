@@ -4,7 +4,7 @@
 #include "lsp/common.h"
 #include "lsp/client.h"
 #include "lsp/completion_rank.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>

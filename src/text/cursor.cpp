@@ -1,7 +1,7 @@
 #include "column_utils.h"
 #include "core/editor.h"
 #include "folding.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "ui/text.h"
 #include <cctype>
 

@@ -3,7 +3,7 @@
 #include "core/search_controller.h"
 
 #include "core/editor.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "ui/components.h"
 #include "ui/text.h"
 #include <algorithm>

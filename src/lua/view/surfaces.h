@@ -10,7 +10,7 @@
 // telescope, completion and signature popups, context menu, menu dropdown,
 // home screen, search panel, status line and the side panels.
 //
-// Split out of lua/api.h, which keeps the LuaAPI class itself and
+// Split out of lua/api/api.h, which keeps the LuaAPI class itself and
 // includes these headers in order; the structs are unchanged.
 
 #include "dap/client.h"

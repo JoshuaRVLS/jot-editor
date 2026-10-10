@@ -1,4 +1,4 @@
-// Colour-space conversions (src/syntax/color_space.cpp).
+// Colour-space conversions (src/syntax/color/color_space.cpp).
 //
 // These are the conversions behind hwb(), lab(), lch(), oklch(), hsluv() and
 // color(). A wrong matrix or a transposed constant produces colours that look
@@ -7,7 +7,7 @@
 // coordinates in every one of these spaces (CSS Color 4, Björn Ottosson's OKLab
 // article, the HSLuv reference), and an achromatic input must stay achromatic in
 // any space that shares the sRGB white point.
-#include "syntax/color_space.h"
+#include "syntax/color/color_space.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>

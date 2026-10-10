@@ -1,6 +1,6 @@
 // Plain-text popup rendering (LSP hover fallback, git commit help, ...).
 #include "core/editor.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "render/ui_internal.h"
 
 using namespace ui_internal;

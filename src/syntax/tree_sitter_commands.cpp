@@ -1,7 +1,7 @@
 #include "base/process_job.h"
 #include "base/string_util.h"
 #include "core/editor.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "syntax/install.h"
 
 #include <algorithm>

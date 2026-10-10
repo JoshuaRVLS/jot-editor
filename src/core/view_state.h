@@ -4,8 +4,8 @@
 #include "core/theme.h"       // Theme
 #include "extras/coding_time/probe.h" // coding_time::Counter, Totals
 #include "extras/wakatime.h"          // jot_wakatime::Options (api/coding_time.h)
-#include "syntax/color_codes.h"       // jot_color::SpanCache
-#include "syntax/color_definitions.h" // jot_color::Definitions
+#include "syntax/color/color_codes.h"       // jot_color::SpanCache
+#include "syntax/color/color_definitions.h" // jot_color::Definitions
 #include <cstdint>
 #include <string>
 
@@ -34,7 +34,7 @@ struct ViewState
   Theme theme;
   std::string current_theme_name;
 
-  // Inline colour preview (syntax/color_codes.cpp): its options are read from
+  // Inline colour preview (syntax/color/color_codes.cpp): its options are read from
   // config at point of use in render_buffer_content, which is what makes a
   // settings change (or :reload) apply on the next frame with no plumbing. The
   // scan memo is content-hash validated, so it needs no invalidation and is

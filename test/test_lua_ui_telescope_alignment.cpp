@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-#include "lua/api_internal.h"
+#include "lua/api/api_internal.h"
 
 extern "C"
 {

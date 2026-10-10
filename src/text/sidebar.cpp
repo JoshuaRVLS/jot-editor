@@ -1,6 +1,6 @@
 #include "core/editor.h"
 #include "core/file_icons.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "render/winbar_model.h"
 #include "sidebar_guides.h"
 #include <algorithm>

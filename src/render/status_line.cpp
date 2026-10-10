@@ -5,7 +5,7 @@
 #include "core/file_icons.h"
 #include "extras/status_clock.h"
 #include "lsp/install.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "ui/components.h"
 #include "ui/text.h"
 #include "ui/xterm_palette.h"

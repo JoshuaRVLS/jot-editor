@@ -1,6 +1,6 @@
 #include "core/editor.h"
 #include "lsp/client.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "text/column_utils.h"
 extern "C"
 {

@@ -9,7 +9,7 @@
 // this runs from Tab and a refusal has to leave ordinary indentation alone.
 #include "core/editor.h"
 #include "extras/emmet/expand.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "text_features.h"
 #include "ui/text.h"
 #include "workspace/html.h"

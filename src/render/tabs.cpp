@@ -11,7 +11,7 @@
 // jump-to-buffer letters live in ui/tab_order.h.
 #include "core/editor.h"
 #include "core/file_icons.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "ui/components.h"
 #include "ui/text.h"
 #include "ui_internal.h"

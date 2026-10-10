@@ -1,7 +1,7 @@
 #include "base/string_util.h"
 #include "core/editor.h"
 #include "git/git_run.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>

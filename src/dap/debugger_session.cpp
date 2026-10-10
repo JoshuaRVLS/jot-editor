@@ -3,7 +3,7 @@
 #include "commands/utils.h"
 #include "core/editor.h"
 #include "dap/debugger_internal.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 
 #include <algorithm>
 #include <cstdlib>

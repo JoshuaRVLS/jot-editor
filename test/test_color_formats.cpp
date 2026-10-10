@@ -5,9 +5,9 @@
 // Each case is written the way the parser is wired into the scanner (same
 // Options flags), so a parser that is implemented but not reachable still fails
 // here.
-#include "syntax/color_codes.h"
-#include "syntax/color_functions.h"
-#include "syntax/color_terminal_codes.h"
+#include "syntax/color/color_codes.h"
+#include "syntax/color/color_functions.h"
+#include "syntax/color/color_terminal_codes.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <string>

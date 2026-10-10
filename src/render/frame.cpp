@@ -3,7 +3,7 @@
 #include "core/editor.h"
 #include "core/file_icons.h"
 #include "folding.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "render/gutter.h"
 #include "render/pane_edges.h"
 #include "ui/text.h"

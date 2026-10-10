@@ -1,7 +1,7 @@
 // Tree-sitter status and LSP status modals: install-job progress rows
 // and per-server state tables.
 #include "core/editor.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "render/ui_internal.h"
 
 using namespace ui_internal;

@@ -4,7 +4,7 @@
 #include "core/editor_models.h"
 #include "lsp/common.h"
 #include "lsp/client.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "lua/lua_loader.h"
 #include "syntax/cpp_flags.h"
 #include <algorithm>

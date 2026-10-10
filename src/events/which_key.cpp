@@ -1,7 +1,7 @@
 // Which-key chord panel: open/close and prefix-group input handling.
 #include "core/editor.h"
 #include "events/keymap_candidates.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 
 #include <algorithm>
 #include <cctype>

@@ -1,5 +1,5 @@
 -- Adapters and settings for the AI assistant (features/ai/*, loaded by
--- src/jot/lua/api_runtime.cpp).
+-- src/jot/lua/api/api_runtime.cpp).
 --
 -- Everything provider-specific lives in the table below: how to speak to it
 -- (`kind`), where it is (`base`), which environment variable holds the token

@@ -1,5 +1,5 @@
 #include "core/editor.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include <algorithm>
 #include <cstddef>
 #include <memory>

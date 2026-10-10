@@ -1,7 +1,7 @@
 #include "autoclose.h"
 #include "core/editor.h"
 #include "html.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "syntax/language.h"
 #include "text_features.h"
 #include "ui/text.h"

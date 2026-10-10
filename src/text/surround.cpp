@@ -1,6 +1,6 @@
 #include "bracket_text_object.h"
 #include "core/editor.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "quote_text_object.h"
 #include <algorithm>
 #include <cctype>

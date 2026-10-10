@@ -1,6 +1,6 @@
 #include "base/shell_util.h"
 #include "core/editor.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "text_features.h"
 #include <algorithm>
 #include <array>

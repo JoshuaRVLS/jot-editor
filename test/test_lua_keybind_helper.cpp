@@ -1,5 +1,5 @@
 #include "events/keybind_catalog.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include <catch2/catch_test_macros.hpp>
 
 // Regression tests for the which-key style helper: keymaps registered with

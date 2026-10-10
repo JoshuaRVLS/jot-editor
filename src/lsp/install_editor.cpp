@@ -7,7 +7,7 @@
 #include "core/editor_models.h"
 #include "lsp/common.h"
 #include "lsp/client.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include <algorithm>
 #include <sstream>
 #include <string>

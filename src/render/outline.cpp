@@ -1,5 +1,5 @@
 #include "core/editor.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "render/pane_edges.h"
 #include "render/winbar_model.h"
 #include "syntax/index.h"

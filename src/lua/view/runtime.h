@@ -8,7 +8,7 @@
 // The records the Lua runtime itself keeps: event-loop timers, pending edit
 // deltas and the LSP install policy descriptions (:lspinstall reports).
 //
-// Split out of lua/api.h, which keeps the LuaAPI class itself and
+// Split out of lua/api/api.h, which keeps the LuaAPI class itself and
 // includes these headers in order; the structs are unchanged.
 
 #include <string>

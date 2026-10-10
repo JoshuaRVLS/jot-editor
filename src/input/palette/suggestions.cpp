@@ -2,7 +2,7 @@
 #include "cpp_assist.h"
 #include "core/editor.h"
 #include "extras/bible.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "syntax/install.h"
 #include "workspace/http_file.h"
 #include <algorithm>

@@ -4,7 +4,7 @@
 #include "core/editor.h"
 #include "lsp/matching.h"
 #include "folding.h"
-#include "lua/api.h"
+#include "lua/api/api.h"
 #include "render/gutter.h"
 #include "render/overlay_internal.h"
 #include "ui/text.h"
