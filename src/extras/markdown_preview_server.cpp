@@ -1,8 +1,8 @@
-// libuv-backed markdown preview HTTP/SSE server (see preview_server.h).
-#include "markdown/preview_server.h"
+// libuv-backed markdown preview HTTP/SSE server (see markdown_preview_server.h).
+#include "extras/markdown_preview_server.h"
 
 #include "base/event_loop.h"
-#include "markdown/http_message.h"
+#include "extras/markdown_http_message.h"
 
 #include <algorithm>
 #include <cstdio>

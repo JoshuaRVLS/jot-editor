@@ -14,7 +14,7 @@
 --
 -- The header is the big wordmark: three rows of block letters, one accent per
 -- letter, then the tagline row (with the key legend at its right edge) and the
--- context line. The native model owns that shape (src/jot/surfaces/home.cpp
+-- context line. The native model owns that shape (src/surfaces/home.cpp
 -- spends kHomeHeaderRows rows on it before the first section title); a payload
 -- without wordmark_art falls back to the old one-line wordmark, so a bare
 -- caller still gets a usable surface.

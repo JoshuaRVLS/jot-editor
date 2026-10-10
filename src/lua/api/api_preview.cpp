@@ -3,11 +3,11 @@
 // The Lua markdown feature (runtime/lua/features/markdown/) owns all of the
 // content policy - parsing, the page template, config, commands. This file
 // owns only the transport: it wraps PreviewServer (see
-// markdown/preview_server.h) and exposes it as jot.preview.*.
+// markdown_preview_server.h) and exposes it as jot.preview.*.
 #include "core/editor.h"
 #include "lua/api/api.h"
 #include "lua/api/api_internal.h"
-#include "markdown/preview_server.h"
+#include "extras/markdown_preview_server.h"
 
 extern "C"
 {

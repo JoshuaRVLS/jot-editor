@@ -700,7 +700,7 @@ public:
   void render_floats();
   void clear_floats();
 
-  // Markdown preview transport (markdown/preview_server.h): a libuv HTTP/SSE
+  // Markdown preview transport (markdown_preview_server.h): a libuv HTTP/SSE
   // server the Lua markdown feature drives. Every entry point is main-thread
   // and maps 1:1 onto one Lua function in the jot.preview namespace.
   void preview_start_from_lua(lua_State *L);

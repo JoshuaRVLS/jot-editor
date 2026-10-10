@@ -14,8 +14,8 @@ set(JOT_EXTRAS_SOURCES
   extras/emmet/wiring.cpp
   extras/leetcode_credentials.cpp
   extras/leetcode_http.cpp
-  extras/markdown/http_message.cpp
-  extras/markdown/preview_server.cpp
+  extras/markdown_http_message.cpp
+  extras/markdown_preview_server.cpp
   extras/rest_client.cpp
   extras/status_clock.cpp
   extras/wakatime.cpp

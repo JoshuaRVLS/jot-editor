@@ -84,7 +84,7 @@ when this was one 500-line struct.
 The groups are independent: no group includes another, so a translation unit
 that only needs one slice can include it directly.
 
-`PreviewServer` (`extras/markdown/preview_server.*`) is one HTTP/SSE server with two
+`PreviewServer` (`extras/markdown_preview_server.*`) is one HTTP/SSE server with two
 modes, chosen by whether a file root was set: a *stored page* (the markdown
 preview renders a document and serves it at `/`) or a *served tree* (the HTML
 preview points the browser at a real path, injects a reload client into HTML

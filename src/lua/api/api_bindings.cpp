@@ -9,7 +9,7 @@
 #include "lua/bindings/bindings_internal.h"
 #include "lua/embedded_lua.h"
 #include "lua/lua_loader.h"
-#include "markdown/preview_server.h"
+#include "extras/markdown_preview_server.h"
 #include "syntax/index.h"
 #include "syntax/manager.h"
 #include "syntax/syntax_highlighter.h"

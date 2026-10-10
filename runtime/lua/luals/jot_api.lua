@@ -3,7 +3,7 @@
 -- This file is NEVER executed by jot. It exists so lua-language-server can
 -- offer completions, hover docs and type checks for the jot.* API in user
 -- scripts (init.lua, config.lua, plugins). It mirrors docs/LUA_API.md and
--- the bindings in src/jot/lua/; keep the three in sync.
+-- the bindings in src/lua/; keep the three in sync.
 --
 -- The editor registers the directory containing this file as
 -- `Lua.workspace.library` for the lua language server, which turns the

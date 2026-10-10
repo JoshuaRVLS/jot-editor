@@ -2,7 +2,7 @@
 // parse one request head + body, build one response, stream Server-Sent
 // Events. These tests pin that slice, since the browser is the only real
 // client and a parsing regression shows up as a blank preview page.
-#include "markdown/http_message.h"
+#include "extras/markdown_http_message.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <string>
