@@ -1,7 +1,7 @@
 // Small geometry helpers shared by the pane layout/resize/navigation modules.
 #pragma once
 
-#include "editor/editor_models.h"
+#include "core/editor_models.h"
 #include <algorithm>
 
 namespace pane_internal

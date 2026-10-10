@@ -7,7 +7,7 @@
 // resolved drop here. Every move keeps the one-buffer-per-pane invariant: a
 // group whose last tab leaves closes (the VSCode merge), and a pane that loses
 // its active tab falls back to a neighbour in its own list.
-#include "editor.h"
+#include "core/editor.h"
 #include <algorithm>
 #include <string>
 

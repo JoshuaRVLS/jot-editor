@@ -1,5 +1,5 @@
 // Terminal event dispatch: paste, resize, focus, key, mouse, and terminal-input events.
-#include "editor.h"
+#include "core/editor.h"
 #include "editor/event/keymap_candidates.h"
 #include "lua/api.h"
 

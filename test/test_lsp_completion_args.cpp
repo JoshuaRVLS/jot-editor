@@ -8,7 +8,7 @@
 // an empty argument list and the caret between the parens, so the parameters are
 // the user's to type. A declaration-shaped snippet (a body after the parens) is
 // not a call and keeps its text.
-#include "editor.h"
+#include "core/editor.h"
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

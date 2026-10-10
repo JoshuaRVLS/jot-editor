@@ -6,8 +6,8 @@
 // a file lives is the dimmed folder path on its row.
 #include "bracket.h"
 #include "column_utils.h"
-#include "editor.h"
-#include "editor/file_icons.h"
+#include "core/editor.h"
+#include "core/file_icons.h"
 #include "folding.h"
 #include "lua/api.h"
 #include "render/overlay_internal.h"

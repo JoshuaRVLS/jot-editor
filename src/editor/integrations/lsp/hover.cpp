@@ -1,8 +1,8 @@
 // Editor-side LSP hover and definition navigation: dwell-triggered mouse
 // hover with a delay, cursor-triggered hover, the native popup (with
 // diagnostics leading the content), and jump-to-definition with a back stack.
-#include "editor.h"
-#include "editor/editor_models.h"
+#include "core/editor.h"
+#include "core/editor_models.h"
 #include "editor/integrations/lsp/common.h"
 #include "lsp/client.h"
 #include "lua/api.h"

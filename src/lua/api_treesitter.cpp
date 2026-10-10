@@ -1,4 +1,4 @@
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/lua_loader.h"
 #include "syntax/install.h"

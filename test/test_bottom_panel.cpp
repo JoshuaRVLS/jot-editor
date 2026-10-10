@@ -4,7 +4,7 @@
 // bar's labels and action cluster (hit-tested, drawn and measured from the same
 // geometry), the shell's session list down the panel's right side, and the
 // focus handoff between the two views.
-#include "editor.h"
+#include "core/editor.h"
 #include "ui/text.h"
 #include "ui/ui.h"
 #include <algorithm>

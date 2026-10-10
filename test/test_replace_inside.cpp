@@ -9,7 +9,7 @@
 // comment bracket is not one, and the innermost pair is the one that counts),
 // and it needs no editor to exercise.
 #include "bracket_text_object.h"
-#include "editor.h"
+#include "core/editor.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

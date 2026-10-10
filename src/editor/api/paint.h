@@ -5,7 +5,7 @@
 // The render entry points and the per-pane scratch the GUI caret placement
 // reads back from a frame.
 //
-// A fragment of the Editor class body, included by src/editor/editor.h. It is
+// A fragment of the Editor class body, included by src/core/editor.h. It is
 // not a standalone header: no include guard, no includes, and the members
 // sit in class scope exactly as if they were written in editor.h.
 private:

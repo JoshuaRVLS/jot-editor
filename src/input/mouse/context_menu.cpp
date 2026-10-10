@@ -1,6 +1,6 @@
 // Right-click context menu: hit-testing the file tree / sidebar rows
 // and opening the menu at the click position.
-#include "editor.h"
+#include "core/editor.h"
 #include "render/gutter.h"
 #include "column_utils.h"
 #include "folding.h"

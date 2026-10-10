@@ -1,6 +1,6 @@
 #include "base/process_job.h"
 #include "base/string_util.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "syntax/install.h"
 

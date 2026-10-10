@@ -9,8 +9,8 @@
 // reachable; panes keep their local tab lists as history (Ctrl+Tab, close
 // focus) but draw no strip of their own. The order, its pins and the
 // jump-to-buffer letters live in ui/tab_order.h.
-#include "editor.h"
-#include "editor/file_icons.h"
+#include "core/editor.h"
+#include "core/file_icons.h"
 #include "lua/api.h"
 #include "ui/components.h"
 #include "ui/text.h"

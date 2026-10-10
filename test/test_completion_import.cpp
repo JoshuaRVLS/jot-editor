@@ -9,7 +9,7 @@
 // the insertion point follows the lines the insert added. An edit that cannot
 // be placed honestly (it overlaps the text being completed) is dropped rather
 // than written at a guessed column.
-#include "editor.h"
+#include "core/editor.h"
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

@@ -1,5 +1,5 @@
 #include "commands/utils.h"
-#include "editor.h"
+#include "core/editor.h"
 
 #include <sstream>
 

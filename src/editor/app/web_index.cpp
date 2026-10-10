@@ -15,7 +15,7 @@
 //
 // Unlike the C++ definition checks the index is not a diagnostic: nothing is
 // published anywhere, it is only read when a completion is being built.
-#include "editor.h"
+#include "core/editor.h"
 #include "workspace/web_completion.h"
 
 #include <utility>

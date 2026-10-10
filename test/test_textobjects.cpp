@@ -7,7 +7,7 @@
 // a real file with a real grammar and assert the selection lands on the node the
 // cursor is inside. Machines without the cpp grammar installed skip (the tree is
 // simply absent), which is how the other tree-sitter tests guard too.
-#include "editor.h"
+#include "core/editor.h"
 #include "text/textobjects.h"
 
 #include <catch2/catch_test_macros.hpp>

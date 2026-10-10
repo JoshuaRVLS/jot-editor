@@ -1,8 +1,8 @@
 // The winbar's model: the breadcrumb chain and what each crumb's menu offers.
 // See render/winbar_model.h for the shape; render/winbar.cpp paints it.
 #include "render/winbar_model.h"
-#include "editor/file_icons.h"
-#include "editor/model/theme.h"
+#include "core/file_icons.h"
+#include "core/theme.h"
 
 #include <algorithm>
 #include <cctype>

@@ -7,7 +7,7 @@
 // what is pinned here is the pair of labels it is drawn from -- the language for
 // the bar, the root for the log lines.
 #include "base/shell_util.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "lsp/client.h"
 #include "ui/ui.h"
 

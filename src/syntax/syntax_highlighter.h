@@ -1,7 +1,7 @@
 #ifndef SYNTAX_HIGHLIGHTER_H
 #define SYNTAX_HIGHLIGHTER_H
 
-#include "types.h"
+#include "core/types.h"
 #include <string>
 #include <utility>
 #include <vector>

@@ -1,6 +1,6 @@
 #include "commands/utils.h"
 #include "cpp_assist.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "extras/bible.h"
 #include "lua/api.h"
 #include "syntax/install.h"

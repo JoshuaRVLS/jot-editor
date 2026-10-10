@@ -3,9 +3,9 @@
 // execute_ex_command hands off to.
 #include "base/string_util.h"
 #include "commands/utils.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "git/git_run.h"
-#include "host_api.h"
+#include "core/host_api.h"
 #include "lua/api.h"
 
 #include <algorithm>

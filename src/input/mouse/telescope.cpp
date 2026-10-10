@@ -1,7 +1,7 @@
 // Telescope mouse support: hover highlights the row under the pointer, clicks
 // select (double-click opens), and the wheel moves the list or scrolls the file
 // view, depending on which box it is over.
-#include "editor.h"
+#include "core/editor.h"
 #include <algorithm>
 
 bool Editor::handle_telescope_mouse(int x,

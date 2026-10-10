@@ -3,7 +3,7 @@
 // inline input row, and changes flow through config.set + save so they
 // survive the session. The menu is cell-based, so the same surface serves
 // the terminal and GUI frontends.
-#include "editor.h"
+#include "core/editor.h"
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

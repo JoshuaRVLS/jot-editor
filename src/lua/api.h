@@ -24,7 +24,7 @@ class PreviewServer;
 
 // SnapshotLine, the edit snapshots below (see model/buffer.h). Kept in its own
 // block so the view includes above keep the order they have to be read in.
-#include "editor/model/buffer.h"
+#include "core/buffer.h"
 
 // Forward declaration
 class Editor;

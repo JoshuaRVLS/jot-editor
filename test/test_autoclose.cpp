@@ -7,7 +7,7 @@
 // carets actually end up as -- including at several carets at once, which used
 // to bypass the rules entirely.
 
-#include "editor.h"
+#include "core/editor.h"
 #include "text/autoclose.h"
 
 #include <catch2/catch_test_macros.hpp>

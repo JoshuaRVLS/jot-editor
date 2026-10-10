@@ -1,5 +1,5 @@
 // Menu bar, dropdowns, and the right-click context menu.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "ui/components.h"
 #include "ui/text.h"

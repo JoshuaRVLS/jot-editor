@@ -16,7 +16,7 @@
 // The case drives the rewrite on a real buffer and compares the colours it
 // produces with a fresh parse of the same bytes.
 
-#include "editor.h"
+#include "core/editor.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

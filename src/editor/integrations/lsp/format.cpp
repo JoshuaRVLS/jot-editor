@@ -1,6 +1,6 @@
 // Editor-side LSP formatting: requesting a format and applying the returned
 // text edits to the buffer (highest-first so earlier positions stay valid).
-#include "editor.h"
+#include "core/editor.h"
 #include "editor/integrations/lsp/common.h"
 #include "lsp/client.h"
 #include <algorithm>

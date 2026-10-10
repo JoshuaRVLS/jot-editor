@@ -17,7 +17,7 @@
 // (`Editor::sync_tab_order`) instead of trusting eight different `push_back`s.
 //
 // Pure logic, no editor state: see test/test_tab_order.cpp.
-#include "editor/model/buffer.h"
+#include "core/buffer.h"
 #include <string>
 #include <unordered_map>
 #include <vector>

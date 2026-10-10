@@ -11,7 +11,7 @@
 // carries across an unchanged list by index, and a genuinely new list follows
 // the symbol (label plus the parameter list in labelDetails) rather than the
 // label alone.
-#include "editor.h"
+#include "core/editor.h"
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

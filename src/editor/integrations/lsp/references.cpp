@@ -2,7 +2,7 @@
 // under the cursor (textDocument/references) and shows them in the quick
 // pick, one entry per location with the source line as preview. Selecting an
 // entry jumps to it via the generic quick-pick handler.
-#include "editor.h"
+#include "core/editor.h"
 #include "editor/integrations/lsp/common.h"
 #include "lsp/client.h"
 #include <fstream>

@@ -10,7 +10,7 @@
 // it is dimmed, and the panel is the one thing that is not. Plus the panel's own
 // sentence, which the Lua kit renders -- the native painter and the Lua handler
 // are two renderings of the same prompt and have to ask the same question.
-#include "editor.h"
+#include "core/editor.h"
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

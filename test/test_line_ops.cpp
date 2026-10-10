@@ -8,7 +8,7 @@
 // themselves -- `:trimblank`, `:joinlines`, `:sortdesc` -- through a real
 // editor, so the range worked out from the selection and the buffer the user
 // ends up with are asserted rather than assumed.
-#include "editor.h"
+#include "core/editor.h"
 #include "text/buffer_stats.h"
 #include "text/line_ops.h"
 

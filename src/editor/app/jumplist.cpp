@@ -10,7 +10,7 @@
 // anything ahead of the cursor first, so jumping after going back forks the
 // history instead of leaving a stale forward tail.
 #include "base/string_util.h"
-#include "editor.h"
+#include "core/editor.h"
 
 #include <algorithm>
 #include <filesystem>

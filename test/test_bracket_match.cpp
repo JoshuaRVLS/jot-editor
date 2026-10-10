@@ -14,8 +14,8 @@
 // The same pair decides where the active indent guide hangs, so its ink is
 // pinned here too: a guide is a hairline over the row, not the theme colour at
 // full strength.
-#include "editor.h"
-#include "editor/model/panes.h" // pane_content_top
+#include "core/editor.h"
+#include "core/panes.h" // pane_content_top
 #include "render/gutter.h"
 #include "ui/ui.h"
 #include "ui/xterm_palette.h"

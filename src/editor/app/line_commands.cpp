@@ -12,7 +12,7 @@
 // src/text/, one module below this one, which has no business including
 // editor.h. Moving the commands here and the algorithms there is what lets each
 // half live where it belongs.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "text/buffer_stats.h"
 #include "text/line_ops.h"

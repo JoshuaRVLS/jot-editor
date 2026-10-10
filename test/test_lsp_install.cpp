@@ -1,7 +1,7 @@
 // The LSP installer's host half: the [jot:lsp] marker protocol, the managed
 // bin/receipt lookups, and the bundled-payload lookup a release package uses to
 // install a server it already ships (clangd) with no network.
-#include "editor.h"
+#include "core/editor.h"
 #include "lsp/install.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

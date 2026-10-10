@@ -1,5 +1,5 @@
 // The editor main loop: run(), the frame render step, and idle drain.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "ui/cursor_blink.h"
 

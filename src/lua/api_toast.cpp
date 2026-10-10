@@ -1,7 +1,7 @@
 // jot.toast API bridge: keeps a single reference to the Lua toast module
 // table (runtime/lua/features/ui/toast.lua) and forwards the native calls to it.
 // All toast logic lives in Lua; this file only marshals the calls.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 
 #include <iostream>

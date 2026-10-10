@@ -9,7 +9,7 @@
 // So a case asserts the buffer's diagnostics -- the list the gutter, the
 // squiggles, the band and the message are all drawn from -- and ages the
 // keystroke stamp instead of sleeping through the quiet window.
-#include "editor.h"
+#include "core/editor.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

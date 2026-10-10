@@ -1,5 +1,5 @@
 #include "base/string_util.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "git/git_run.h"
 #include "lua/api.h"
 #include <algorithm>

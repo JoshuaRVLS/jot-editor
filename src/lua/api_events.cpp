@@ -1,7 +1,7 @@
 // Lua event bus + native timers: subscribe/unsubscribe/broadcast, the typed
 // emit helpers (git.refreshed, buffer events, theme.switched) and the native
 // event-loop timer runtime with Lua callbacks. Split out of api_core.cpp.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 

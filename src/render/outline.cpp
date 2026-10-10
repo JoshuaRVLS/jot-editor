@@ -1,4 +1,4 @@
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "render/pane_edges.h"
 #include "render/winbar_model.h"

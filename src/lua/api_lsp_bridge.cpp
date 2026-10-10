@@ -2,7 +2,7 @@
 // completion results to Lua callbacks, the hover popup runtime, the per-server
 // payload pushers (clients, diagnostics, last results, emit_* events) and the
 // runtime lsp.*_from_lua commands. Split out of api_core.cpp.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 

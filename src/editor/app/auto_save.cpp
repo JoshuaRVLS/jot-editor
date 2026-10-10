@@ -1,6 +1,6 @@
 // Auto-save: enabled flag, interval, and the periodic flush of modified
 // buffers.
-#include "editor.h"
+#include "core/editor.h"
 #include "editor/app/file_internal.h"
 #include "folding.h"
 #include "lua/api.h"

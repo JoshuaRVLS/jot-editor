@@ -17,7 +17,7 @@
 // the LSP slices use: the per-buffer merge, the explorer's badges and the
 // Problems list read all three stores the same way.
 #include "syntax/cpp_definitions.h"
-#include "editor.h"
+#include "core/editor.h"
 
 #include <chrono>
 #include <string>

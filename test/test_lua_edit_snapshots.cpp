@@ -3,7 +3,7 @@
 // large open buffers would otherwise keep tens of MB alive for deltas a plugin
 // may never read. This drives the real on_buffer_change path with a BufChange
 // listener registered and pins both the accounting and the eviction.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

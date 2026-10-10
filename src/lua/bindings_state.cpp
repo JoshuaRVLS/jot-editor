@@ -1,7 +1,7 @@
 // Lua host bindings: Editor state queries (symbols, clipboard, terminals, recent files, search,
 // picker, motions, sidebar, memory).
 
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/bindings_internal.h"
 

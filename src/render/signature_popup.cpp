@@ -1,7 +1,7 @@
 // The LSP signature-help popup overlay.
 #include "bracket.h"
 #include "column_utils.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "folding.h"
 #include "lua/api.h"
 #include "render/gutter.h"

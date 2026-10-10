@@ -8,7 +8,7 @@
 // a real repo and checks the poll skips a parse only while the output is
 // byte-for-byte the one the installed map was built from.
 #include "base/shell_util.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "git/git_run.h"
 
 #include <catch2/catch_test_macros.hpp>

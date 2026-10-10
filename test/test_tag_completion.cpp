@@ -11,7 +11,7 @@
 // docs promise falls through to indentation. And accepting a row never covered
 // the `<` the author had already typed, because the replacement site is the word
 // after it: `<` + Tab wrote `<<a href=""></a>`.
-#include "editor.h"
+#include "core/editor.h"
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

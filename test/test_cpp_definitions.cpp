@@ -6,7 +6,7 @@
 // editor half (at the bottom) runs a real scan over a throwaway workspace and
 // checks what lands in the diagnostics every surface reads.
 #include "cpp_definitions.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>

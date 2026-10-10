@@ -4,7 +4,7 @@
 // row is edited the way its type asks to be, and a search bar filters rows by
 // label or key. Changes flow through apply_settings_value -> config.set +
 // apply_config_live + save, the same live-apply pipeline Lua uses.
-#include "editor.h"
+#include "core/editor.h"
 #include "gui/gui.h"
 
 #include <algorithm>

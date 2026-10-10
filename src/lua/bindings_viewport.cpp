@@ -1,6 +1,6 @@
 // Lua host bindings: Viewport, file tree, and buffer reveal bindings.
 
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/bindings_internal.h"
 

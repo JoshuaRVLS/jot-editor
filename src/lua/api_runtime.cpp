@@ -1,8 +1,8 @@
 // LuaAPI runtime lifecycle: state cleanup, config and plugin loading,
 // callback dispatch, the UI-kit runtime bootstrap, and process-memory
 // reporting.
-#include "editor.h"
-#include "host_api.h"
+#include "core/editor.h"
+#include "core/host_api.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 

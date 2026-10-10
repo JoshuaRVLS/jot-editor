@@ -1,7 +1,7 @@
 // The picture an image tab shows, drawn inside the pane that holds it.
 #include "bracket.h"
 #include "column_utils.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "folding.h"
 #include "lua/api.h"
 #include "render/overlay_internal.h"

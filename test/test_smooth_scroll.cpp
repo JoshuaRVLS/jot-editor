@@ -1,5 +1,5 @@
 // Smooth scrolling: features/smooth_scroll.h is neoscroll.nvim's animation
-// model, and editor/app/smooth_scroll.cpp drives it off the frame clock.
+// model, and core/smooth_scroll.cpp drives it off the frame clock.
 //
 // The model half is upstream's, so it is asserted against upstream's own
 // numbers: neoscroll schedules the k-th of n lines at
@@ -10,7 +10,7 @@
 // The editor half is asserted on explicit timestamps (the advance hook takes
 // the clock as an argument), so the curve is checked without waiting on a real
 // frame timer.
-#include "editor.h"
+#include "core/editor.h"
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>

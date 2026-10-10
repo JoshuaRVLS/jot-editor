@@ -6,7 +6,7 @@
 // binary - jot never vendors it - so when it is missing the command says so
 // and points at the official install paths.
 
-#include "editor.h"
+#include "core/editor.h"
 
 #include <cstdlib>
 #include <filesystem>

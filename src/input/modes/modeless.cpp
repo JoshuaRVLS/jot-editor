@@ -1,4 +1,4 @@
-#include "editor.h"
+#include "core/editor.h"
 #include <cctype>
 
 void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_alt)

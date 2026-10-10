@@ -12,7 +12,7 @@
 // The cases pin both halves: the no-op state is skipped, and a state that
 // restores different text (or only a different view) is still a step.
 
-#include "editor.h"
+#include "core/editor.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

@@ -5,7 +5,7 @@
 // pushed to, so Ctrl+O came back from a definition and nothing else had any
 // history. These tests pin the general behaviour: recording, walking back and
 // forward, forking (a jump after going back drops the forward tail), and the cap.
-#include "editor.h"
+#include "core/editor.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

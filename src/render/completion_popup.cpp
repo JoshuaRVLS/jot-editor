@@ -1,7 +1,7 @@
 // The LSP completion popup overlay.
 #include "bracket.h"
 #include "column_utils.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "editor/integrations/lsp/matching.h"
 #include "folding.h"
 #include "lua/api.h"

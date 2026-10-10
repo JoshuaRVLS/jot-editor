@@ -9,7 +9,7 @@
 // Same shape as the Save As prompt (commands/save_prompt.cpp): one string, five
 // branches, no list filtering. Rendering lives in render/prompts.cpp, matching
 // how save_prompt is split.
-#include "editor.h"
+#include "core/editor.h"
 
 #include <algorithm>
 #include <cctype>

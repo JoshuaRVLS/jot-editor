@@ -1,6 +1,6 @@
 // Lua host bindings: Mark set/get/jump/delete/list bindings.
 
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/bindings_internal.h"
 

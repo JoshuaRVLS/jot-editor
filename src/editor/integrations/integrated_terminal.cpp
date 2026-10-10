@@ -1,6 +1,6 @@
 #include "base/external_open.h"
 #include "base/url_span.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "render/pane_edges.h"
 #include "ui/text.h"
 #include <algorithm>

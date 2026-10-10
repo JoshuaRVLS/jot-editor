@@ -1,5 +1,5 @@
 #include "base/exe_path.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "ui/xterm_palette.h"
 

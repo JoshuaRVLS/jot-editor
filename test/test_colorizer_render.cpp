@@ -5,7 +5,7 @@
 // the parts that a scan-only test cannot: which cells get painted, what the
 // text colour becomes on a filled swatch, how the display modes differ, and
 // that the switches and the exclusion list take effect without a restart.
-#include "editor.h"
+#include "core/editor.h"
 #include "syntax/color_codes.h"
 #include "ui/ui.h"
 #include "ui/xterm_palette.h"

@@ -9,7 +9,7 @@
 // terminals that report modifiers distinctly (kitty protocol), which is the
 // report the shift case is driven with.
 
-#include "editor.h"
+#include "core/editor.h"
 #include "editor/keybind_catalog.h"
 
 #include <catch2/catch_test_macros.hpp>

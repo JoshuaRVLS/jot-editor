@@ -2,7 +2,7 @@
 // clamping in the buffer interaction paths.
 #pragma once
 
-#include "editor/types.h"
+#include "core/types.h"
 
 namespace mouse_internal
 {

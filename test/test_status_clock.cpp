@@ -11,7 +11,7 @@
 // are the only labels on the bar that move with no input at all, so the frame
 // loop -- and not a timer of its own -- has to notice them move. Planting a
 // total on the local store is what stands in for having waited.
-#include "editor.h"
+#include "core/editor.h"
 #include "extras/status_clock.h"
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>

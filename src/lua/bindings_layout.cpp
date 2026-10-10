@@ -1,6 +1,6 @@
 // Lua host bindings: Pane layout bindings (split, focus, resize, zoom, swap, equalize).
 
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/bindings_internal.h"
 

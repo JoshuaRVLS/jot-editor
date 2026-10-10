@@ -4,7 +4,7 @@
 //
 // No Discord is involved: the tests point XDG_RUNTIME_DIR at a scratch
 // directory, so nothing can reach a real client running on the machine.
-#include "editor.h"
+#include "core/editor.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>

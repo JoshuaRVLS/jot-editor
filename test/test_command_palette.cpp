@@ -8,7 +8,7 @@
 // hit-test, so a click and a painted cell cannot disagree
 // (src/render/palette.cpp, src/input/palette/input.cpp,
 // src/input/palette/suggestions.cpp).
-#include "editor.h"
+#include "core/editor.h"
 #include "ui/ui.h"
 
 #include <algorithm>

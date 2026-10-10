@@ -3,7 +3,7 @@
 // this file is the thin native host: it loads the Lua module at boot, calls
 // back into it for install/remove plans, and exposes jot.lsp.list /
 // installed / root to plugins.
-#include "editor.h"
+#include "core/editor.h"
 #include "lsp/install.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"

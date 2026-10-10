@@ -6,7 +6,7 @@
 // deliberately stateless -- expand looks for the smallest node that strictly
 // contains the selection, shrink for the largest node strictly inside it -- so
 // there is no stack to keep in sync with edits, cursor moves or undo.
-#include "editor.h"
+#include "core/editor.h"
 #include "text/textobjects.h"
 
 #include <algorithm>

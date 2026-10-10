@@ -16,7 +16,7 @@
 //     rather than per keystroke, and flushed for good when the editor goes away.
 #include "base/shell_util.h"
 #include "base/string_util.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "extras/coding_time/probe.h"
 #include "extras/status_clock.h"
 #include "extras/wakatime.h"

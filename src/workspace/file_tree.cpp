@@ -1,7 +1,7 @@
 // File tree: recursive build, lazy child refresh, and the fs-watch
 // baseline / polling that keeps the sidebar in sync with disk.
 
-#include "editor.h"
+#include "core/editor.h"
 #include "folding.h"
 #include "lua/api.h"
 #include "workspace/workspace_internal.h"

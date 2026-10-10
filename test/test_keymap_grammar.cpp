@@ -8,7 +8,7 @@
 // asserts the tree which-key will render, runs the operator actions to see which
 // commands they invoke, and then checks every one of those names against a real
 // editor.
-#include "editor.h"
+#include "core/editor.h"
 #include "input/commands/utils.h"
 #include "lua/api.h"
 

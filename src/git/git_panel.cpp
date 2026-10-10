@@ -7,7 +7,7 @@
 // src/render/git_panel.cpp; the shared row model in
 // src/git/git_panel_models.h.
 
-#include "editor.h"
+#include "core/editor.h"
 
 #include "git/git_panel_models.h"
 #include "git/git_run.h"

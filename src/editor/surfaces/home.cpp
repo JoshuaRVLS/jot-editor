@@ -1,5 +1,5 @@
-#include "editor.h"
-#include "editor/file_icons.h"
+#include "core/editor.h"
+#include "core/file_icons.h"
 #include "lua/api.h"
 #include "ui/text.h"
 

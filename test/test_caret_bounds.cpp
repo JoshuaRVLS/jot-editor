@@ -12,7 +12,7 @@
 // by appending instead of throwing, and the undo step a trim that trims
 // nothing must not consume.
 
-#include "editor.h"
+#include "core/editor.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

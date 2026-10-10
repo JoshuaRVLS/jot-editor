@@ -3,7 +3,7 @@
 // read off the painted grid, so the model and the Lua kit that draws it are
 // pinned together. Opening a row runs the real action, which is why the tests
 // assert on where the editor ended up rather than on the model alone.
-#include "editor.h"
+#include "core/editor.h"
 #include "extras/bible.h"
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>

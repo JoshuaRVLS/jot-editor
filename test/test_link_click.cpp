@@ -5,8 +5,8 @@
 // pointer. The launch is real, so these cases put a stub `xdg-open` first on
 // PATH and read the URL from the file it records, then put nothing on PATH to
 // pin the no-opener report.
-#include "editor.h"
-#include "editor/model/panes.h" // pane_content_top
+#include "core/editor.h"
+#include "core/panes.h" // pane_content_top
 #include "render/gutter.h"
 
 #include <catch2/catch_test_macros.hpp>

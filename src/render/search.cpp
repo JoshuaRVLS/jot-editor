@@ -1,8 +1,8 @@
 // Search panel rendering and cursor placement. The panel's state and the rest
-// of its behaviour live in SearchController (editor/search_controller.h).
-#include "editor/search_controller.h"
+// of its behaviour live in SearchController (core/search_controller.h).
+#include "core/search_controller.h"
 
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "ui/components.h"
 #include "ui/text.h"

@@ -1,7 +1,7 @@
 #ifndef JOT_FEATURES_WINBAR_H
 #define JOT_FEATURES_WINBAR_H
 
-#include "editor/model/theme.h" // Theme (symbol colors, shared with the outline)
+#include "core/theme.h" // Theme (symbol colors, shared with the outline)
 #include "syntax/index.h"
 #include <string>
 #include <vector>

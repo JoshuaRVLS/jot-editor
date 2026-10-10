@@ -1,4 +1,4 @@
-#include "editor.h"
+#include "core/editor.h"
 #include "text_features.h"
 #include <utility>
 #include <vector>

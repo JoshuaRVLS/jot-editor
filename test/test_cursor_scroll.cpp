@@ -6,7 +6,7 @@
 // bottom edge and ride it, which read as the caret being dragged along. The
 // caret is now hidden when it has no cell on screen, and the GUI glide places it
 // (instead of easing it on a second curve) while its pane is sliding.
-#include "editor.h"
+#include "core/editor.h"
 #include "ui/ui.h"
 
 #include <catch2/catch_test_macros.hpp>

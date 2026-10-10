@@ -1,7 +1,7 @@
 // Zen focus mode: toggle hides sidebar / right panel and suppresses the
 // status line (reclaiming its rows), then restores the exact pre-zen layout;
 // the pane area narrows to zen_content_width and centers while active.
-#include "editor.h"
+#include "core/editor.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
 

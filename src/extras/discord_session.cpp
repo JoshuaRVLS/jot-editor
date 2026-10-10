@@ -12,7 +12,7 @@
 // the message line and the redraw flag) is reached through `editor_`.
 #include "editor/discord_controller.h"
 
-#include "editor.h"
+#include "core/editor.h"
 
 #include <algorithm>
 #include <ctime>

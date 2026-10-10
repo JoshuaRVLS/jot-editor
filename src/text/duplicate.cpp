@@ -1,4 +1,4 @@
-#include "editor.h"
+#include "core/editor.h"
 
 void Editor::duplicate_selection_or_line()
 {

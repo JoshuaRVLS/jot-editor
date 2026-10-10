@@ -1,5 +1,5 @@
 // Menu bar mouse support: hover highlighting and item clicks.
-#include "editor.h"
+#include "core/editor.h"
 #include <algorithm>
 
 bool Editor::handle_menu_bar_mouse(int x, int y, bool is_click, bool is_motion)

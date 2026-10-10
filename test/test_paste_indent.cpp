@@ -5,7 +5,7 @@
 // an opener line, repeat the indent the caret already sits after, or ignore the
 // language's own step. The probe for the same behavior on a real terminal is
 // test/paste_indent_probe.py.
-#include "editor.h"
+#include "core/editor.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

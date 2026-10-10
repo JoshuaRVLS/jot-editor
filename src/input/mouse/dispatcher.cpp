@@ -5,7 +5,7 @@
 #include "base/external_open.h"
 #include "base/url_span.h"
 #include "column_utils.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "folding.h"
 #include "input/mouse/mouse_internal.h"
 #include "render/gutter.h"

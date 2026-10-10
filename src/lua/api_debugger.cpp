@@ -1,7 +1,7 @@
 // LuaAPI debugger surface: session state, breakpoints, stack /
 // variables / threads delivery, and the debugger request dispatcher.
-#include "editor.h"
-#include "host_api.h"
+#include "core/editor.h"
+#include "core/host_api.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 

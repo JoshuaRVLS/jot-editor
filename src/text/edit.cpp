@@ -1,5 +1,5 @@
 #include "autoclose.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "html.h"
 #include "lua/api.h"
 #include "syntax/language.h"

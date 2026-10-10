@@ -2,7 +2,7 @@
 // frames, so hover repaints stay cheap) and the frame ownership rule (the
 // menu owns the frame while it is up, so the explorer/dock floats from the
 // last workspace frame are torn down with it).
-#include "editor.h"
+#include "core/editor.h"
 #include "ui/ui.h"
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>

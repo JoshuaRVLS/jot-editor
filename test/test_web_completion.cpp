@@ -7,7 +7,7 @@
 // as a class, a custom property inside a string. The editor cases then pin where
 // the names are *offered* -- inside `class="..."` and `var(--)` and nowhere
 // else, since a class list in a `printf` line is not a class list.
-#include "editor.h"
+#include "core/editor.h"
 #include "workspace/web_completion.h"
 
 #include <algorithm>

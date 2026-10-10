@@ -1,7 +1,7 @@
 // Lua git payloads + commands: repository info/status pushers (with the
 // xy-flag decoder and absolute-path helpers), stage/unstage/commit/refresh
 // commands and the git-diff panel opener. Split out of api_core.cpp.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 

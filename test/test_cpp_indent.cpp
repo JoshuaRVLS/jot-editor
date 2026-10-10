@@ -7,7 +7,7 @@
 // happens while a label is being typed -- against a real .cpp on disk, because
 // the file's language is what selects the C-family rules.
 
-#include "editor.h"
+#include "core/editor.h"
 #include "text/text_features.h"
 
 #include <catch2/catch_test_macros.hpp>

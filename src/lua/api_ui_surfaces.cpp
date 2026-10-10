@@ -1,7 +1,7 @@
 // Lua UI surface bridge: the jot.ui.handler registry (which surface renders
 // through Lua) and every emit_* method that serializes native state into a
 // payload table for those handlers. Split out of api_core.cpp.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 #include "ui/components.h"

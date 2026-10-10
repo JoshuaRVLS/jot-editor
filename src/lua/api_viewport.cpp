@@ -1,7 +1,7 @@
 // Viewport + file-tree Lua payloads: editor/window geometry, scroll/reveal
 // controls, the file-tree root/tree/children pushers and buffer selection
 // setters/clearers. Split out of api_core.cpp.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 

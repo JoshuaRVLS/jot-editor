@@ -1,4 +1,4 @@
-#include "editor.h"
+#include "core/editor.h"
 #include <cstdio>
 #include <sstream>
 

@@ -16,7 +16,7 @@
 // Both shipped themes name exact 24-bit colours ("#FFB454") rather than xterm
 // palette indices, so a case that wants a slot's colour reads it back through
 // the same conversion the renderer uses instead of comparing an index.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 #include "ui/xterm_palette.h"

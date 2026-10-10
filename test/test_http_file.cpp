@@ -10,7 +10,7 @@
 // refuses the run instead of sending it wrong, and that an answer lands in one
 // re-usable `[Response]` tab that `:w` cannot litter the workspace with.
 #include "base/shell_util.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "workspace/http_file.h"
 
 #include <algorithm>

@@ -1,7 +1,7 @@
 // LuaAPI integrated-terminal surface: listing, writing, closing,
 // activating, and spawning terminal sessions.
-#include "editor.h"
-#include "host_api.h"
+#include "core/editor.h"
+#include "core/host_api.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 

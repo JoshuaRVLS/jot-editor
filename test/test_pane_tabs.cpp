@@ -8,7 +8,7 @@
 // these cases pin that handover, the pane-local strip, its row budget, and the
 // drag session (src/render/pane_tabs.cpp, src/input/mouse/pane_tabs.cpp,
 // src/editor/app/panes_tabs.cpp).
-#include "editor.h"
+#include "core/editor.h"
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>

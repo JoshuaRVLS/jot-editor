@@ -3,7 +3,7 @@
 // that keep the 2-cells-per-level layout of the old indent scheme. The
 // connector under an expanded folder comes from the children's own markers,
 // so it stays visible even when the folder is the last child.
-#include "editor.h"
+#include "core/editor.h"
 #include "sidebar_guides.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

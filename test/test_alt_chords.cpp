@@ -17,7 +17,7 @@
 // what is asserted is the key as the terminal delivers it: the Alt bit is
 // 0x40000, exactly what a kitty CSI-u report and a legacy ESC-prefixed letter
 // both decode to.
-#include "editor.h"
+#include "core/editor.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

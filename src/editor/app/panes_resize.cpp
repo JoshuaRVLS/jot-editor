@@ -1,5 +1,5 @@
 // Pane and sidebar resize interactions: hit tests, drag tracking, and split-ratio adjustment.
-#include "editor.h"
+#include "core/editor.h"
 #include "editor/app/panes_internal.h"
 #include <algorithm>
 #include <cctype>

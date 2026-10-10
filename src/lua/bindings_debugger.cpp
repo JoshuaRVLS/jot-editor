@@ -1,7 +1,7 @@
 // Lua host bindings: Debugger bindings (state, breakpoints, stack/variables/threads requests,
 // output scrolling).
 
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/bindings_internal.h"
 

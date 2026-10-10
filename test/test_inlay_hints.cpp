@@ -1,4 +1,4 @@
-#include "editor.h"
+#include "core/editor.h"
 #include "lsp/client.h"
 #include "lua/api.h"
 #include "text/column_utils.h"

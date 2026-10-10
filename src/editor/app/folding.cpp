@@ -1,5 +1,5 @@
 #include "folding.h"
-#include "editor.h"
+#include "core/editor.h"
 
 #include <algorithm>
 #include <vector>

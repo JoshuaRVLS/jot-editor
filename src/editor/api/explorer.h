@@ -5,7 +5,7 @@
 // The file tree and its watcher, the sidebar render caches, the sidebar
 // geometry and its resize drag.
 //
-// A fragment of the Editor class body, included by src/editor/editor.h. It is
+// A fragment of the Editor class body, included by src/core/editor.h. It is
 // not a standalone header: no include guard, no includes, and the members
 // sit in class scope exactly as if they were written in editor.h.
 private:

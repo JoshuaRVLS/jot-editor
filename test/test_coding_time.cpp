@@ -9,7 +9,7 @@
 // nothing produces a number nobody can use. And the storage, because the whole
 // point of it is that reopening the editor later today continues the total
 // rather than restarting it.
-#include "editor.h"
+#include "core/editor.h"
 #include "extras/coding_time/probe.h"
 #include "extras/status_clock.h"
 #include "ui/ui.h"

@@ -47,7 +47,7 @@ struct PaletteItemView
 // The command palette's computed geometry, shared by the native renderer and
 // the Lua UI kit so both paint the same cells: the results grid (filled column
 // by column), the explanation box above it and the prompt row at the bottom.
-// See CommandPaletteLayout (editor/model/quick_pick.h) for the field semantics.
+// See CommandPaletteLayout (core/quick_pick.h) for the field semantics.
 struct PaletteView
 {
   std::string query;

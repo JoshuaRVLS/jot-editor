@@ -4,7 +4,7 @@
 // Runs on the 4ms repeating timer installed by run() while gui_mode is set,
 // so input-to-paint latency is a few milliseconds and the vsync'd swap
 // paces the actual presentation to the monitor refresh.
-#include "editor.h"
+#include "core/editor.h"
 #include "gui/gui.h"
 #include "gui/gui_fit.h"
 

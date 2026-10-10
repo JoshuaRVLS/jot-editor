@@ -1,4 +1,4 @@
-#include "editor.h"
+#include "core/editor.h"
 #include <ctime>
 
 void Editor::insert_current_datetime()

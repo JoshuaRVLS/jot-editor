@@ -14,7 +14,7 @@
 // kMaxCachedSyntaxTrees of the rest, and a buffer dropped this way parses again
 // when it is shown again.
 
-#include "editor.h"
+#include "core/editor.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

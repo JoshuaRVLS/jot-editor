@@ -1,7 +1,7 @@
 // Lua float-window / scratch-buffer bridge: the model backing jot.ui.float and
 // jot.buffer scratch surfaces, plus key/mouse dispatch to Lua callbacks and the
 // render pass that paints floats over the editor. Split out of api_core.cpp.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 #include "ui/components.h"

@@ -6,7 +6,7 @@
 // keymaps.lua calls it from Tab, after the triggers and before the editor's own
 // indentation). All this layer does is answer whether the expansion happened:
 // true consumes the Tab, false lets it fall through.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/bindings_internal.h"
 

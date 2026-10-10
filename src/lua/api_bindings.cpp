@@ -2,8 +2,8 @@
 // destructor, active-instance tracking), the inject/field helpers, and
 // the single init() pass that registers every l_* binding into the
 // jot.* namespaces. The bindings themselves live in bindings_*.cpp.
-#include "editor.h"
-#include "host_api.h"
+#include "core/editor.h"
+#include "core/host_api.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 #include "lua/bindings_internal.h"

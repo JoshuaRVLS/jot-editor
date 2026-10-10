@@ -3,12 +3,12 @@
 //
 // It is a second view of the same machinery: the rows come from
 // IntegratedTerminal, the painting from Editor::render_terminal_rows and the
-// selection from the shared anchors (see src/editor/model/panels.h TerminalView),
+// selection from the shared anchors (see src/core/panels.h TerminalView),
 // so the two views cannot drift apart. Hiding it leaves the shell and its
 // scrollback running; a shell that has exited restarts on the next key or the
 // next open, in the directory it was first started in.
-#include "editor.h"
-#include "editor/model/panes.h" // pane_content_top, pane_viewport_h
+#include "core/editor.h"
+#include "core/panes.h" // pane_content_top, pane_viewport_h
 #include "terminal/integrated.h"
 #include "ui/components.h"
 

@@ -1,8 +1,8 @@
 // The left column: one tree under its header, with the sidebar's footer kept on
 // the column's last row -- the single geometry the painter, the mouse hit-test
 // and the keyboard walk all read.
-#include "editor.h"
-#include "editor/model/sidebar_sections.h"
+#include "core/editor.h"
+#include "core/sidebar_sections.h"
 #include "ui/ui.h"
 
 #include <catch2/catch_test_macros.hpp>

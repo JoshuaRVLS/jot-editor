@@ -5,7 +5,7 @@
 // reference parsing, buffer landing, re-use and the save refusal -- without a
 // socket. The one live run (against a local fixture server, including
 // `:bible random`, which cannot be pre-seeded) is test/bible_probe.py.
-#include "editor.h"
+#include "core/editor.h"
 #include "extras/bible.h"
 
 #include <algorithm>

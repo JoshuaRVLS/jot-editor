@@ -1,6 +1,6 @@
 // Lua host bindings: Syntax highlighting bindings (token kind names + highlight query).
 
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/bindings_internal.h"
 

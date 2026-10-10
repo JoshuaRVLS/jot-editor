@@ -1,6 +1,6 @@
 #include "lua/embedded_lua.h"
 #include "syntax/manager.h"
-#include "types.h"
+#include "core/types.h"
 #include <catch2/catch_test_macros.hpp>
 #include <fstream>
 #include <iterator>

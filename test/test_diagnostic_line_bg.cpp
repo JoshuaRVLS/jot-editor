@@ -11,9 +11,9 @@
 // a theme that never mentions a band gets plain rows instead of the editor
 // inventing a tint out of the severity colour. Info and hint rows carry no band
 // at all.
-#include "editor.h"
-#include "editor/app/decorations.h"
-#include "editor/model/panes.h" // pane_content_top
+#include "core/editor.h"
+#include "core/decorations_rebase.h"
+#include "core/panes.h" // pane_content_top
 #include "render/gutter.h"
 #include "ui/ui.h"
 

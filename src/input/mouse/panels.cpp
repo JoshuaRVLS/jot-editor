@@ -1,6 +1,6 @@
 // Mouse handling that runs before the buffer interaction path: git
 // panel, integrated terminal, pane resizing, and scroll-wheel routing.
-#include "editor.h"
+#include "core/editor.h"
 #include "folding.h"
 #include "smooth_scroll.h"
 #include <algorithm>

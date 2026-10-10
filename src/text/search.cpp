@@ -1,5 +1,5 @@
-#include "editor.h"
-#include "editor/search_controller.h"
+#include "core/editor.h"
+#include "core/search_controller.h"
 #include "lua/api.h"
 #include <algorithm>
 #include <cctype>

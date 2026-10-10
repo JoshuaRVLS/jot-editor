@@ -1,5 +1,5 @@
 #include "bracket.h"
-#include "editor.h"
+#include "core/editor.h"
 #include <cctype>
 #include <cstdio>
 #include <sstream>

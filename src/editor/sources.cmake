@@ -1,7 +1,7 @@
 set(JOT_EDITOR_SOURCES
   editor/app/bookmarks.cpp
-  editor/app/decorations.cpp
-  editor/app/editor.cpp
+  core/decorations_rebase.cpp
+  core/editor.cpp
   editor/app/auto_save.cpp
   editor/app/buffers.cpp
   editor/app/cpp_definitions.cpp
@@ -11,19 +11,19 @@ set(JOT_EDITOR_SOURCES
   editor/app/jumplist.cpp
   editor/app/line_commands.cpp
   editor/app/recent.cpp
-  editor/app/test_hooks.cpp
+  core/test_hooks.cpp
   editor/app/folding.cpp
   editor/app/panes_layout.cpp
   editor/app/panes_navigate.cpp
   editor/app/panes_tabs.cpp
   editor/app/panes_resize.cpp
-  editor/app/relaunch.cpp
+  core/relaunch.cpp
   editor/app/rest_client.cpp
   tools/leetcode_credentials.cpp
-  editor/app/resize.cpp
-  editor/app/smooth_scroll.cpp
+  core/resize.cpp
+  core/smooth_scroll.cpp
   editor/app/undo.cpp
-  editor/app/utils.cpp
+  core/utils.cpp
   editor/integrations/debugger_adapters.cpp
   editor/integrations/debugger_breakpoints.cpp
   editor/integrations/debugger_config.cpp
@@ -51,7 +51,7 @@ set(JOT_EDITOR_SOURCES
   editor/markdown/http_message.cpp
   editor/markdown/preview_server.cpp
   editor/surfaces/home.cpp
-  editor/surfaces/host_api.cpp
+  core/host_api.cpp
   editor/surfaces/popup.cpp
   editor/surfaces/quick_pick.cpp
   editor/surfaces/settings.cpp

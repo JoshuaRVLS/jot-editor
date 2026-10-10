@@ -1,4 +1,4 @@
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "ui/text.h"
 #include <algorithm>

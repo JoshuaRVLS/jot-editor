@@ -1,5 +1,5 @@
-#include "editor/app/relaunch.h"
-#include "editor/editor.h"
+#include "core/relaunch.h"
+#include "core/editor.h"
 
 #include <cstdio>
 #include <cstdlib>

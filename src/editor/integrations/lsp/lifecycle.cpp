@@ -1,7 +1,7 @@
 // Editor-side LSP client lifecycle: the poll loop that pumps every client and
 // fans results out to the feature modules, fd watching, and stop / restart /
 // enable / disable.
-#include "editor.h"
+#include "core/editor.h"
 #include "editor/integrations/lsp/common.h"
 #include "lsp/client.h"
 #include "lua/api.h"

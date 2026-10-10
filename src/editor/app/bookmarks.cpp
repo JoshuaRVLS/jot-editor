@@ -1,4 +1,4 @@
-#include "editor.h"
+#include "core/editor.h"
 
 void Editor::toggle_bookmark()
 {

@@ -1,7 +1,7 @@
 // LuaAPI mark surface: set / query / delete / jump marks and the mark
 // list the buffer-local mark popup renders.
-#include "editor.h"
-#include "host_api.h"
+#include "core/editor.h"
+#include "core/host_api.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 

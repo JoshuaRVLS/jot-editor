@@ -16,7 +16,7 @@
 // matter how well the lines are shared, so the history is trimmed by accounted
 // bytes as well as by state count.
 
-#include "editor.h"
+#include "core/editor.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

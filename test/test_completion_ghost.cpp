@@ -16,7 +16,7 @@
 // The cases drive a real Editor: the prefix comes out of the buffer's own token
 // under the caret, through the same arm/filter path a real response runs, and
 // the render cases read the cells the painter produced.
-#include "editor.h"
+#include "core/editor.h"
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

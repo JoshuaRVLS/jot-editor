@@ -1,8 +1,8 @@
 // LuaAPI buffer surface: open/change/save hooks, edit-delta computation,
 // cursor/selection accessors, buffer vars, diagnostics, folds,
 // bookmarks, syntax tokens, and per-line text queries.
-#include "editor.h"
-#include "host_api.h"
+#include "core/editor.h"
+#include "core/host_api.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 

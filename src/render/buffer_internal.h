@@ -3,7 +3,7 @@
 // consumed by the main render pass in buffer.cpp.
 #pragma once
 
-#include "editor.h"
+#include "core/editor.h"
 
 namespace buffer_internal
 {

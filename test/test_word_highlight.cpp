@@ -14,8 +14,8 @@
 // word_highlight_delay_ms of its last edit holds the highlight down (VS Code's
 // occurrencesHighlightDelay); the frame loop asks for the repaint that ends the
 // hold. Cursor moves and file opens are not edits, so they light it at once.
-#include "editor.h"
-#include "editor/model/panes.h" // pane_content_top
+#include "core/editor.h"
+#include "core/panes.h" // pane_content_top
 #include "render/gutter.h"
 #include "ui/ui.h"
 

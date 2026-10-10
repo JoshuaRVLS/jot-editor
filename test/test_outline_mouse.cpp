@@ -2,7 +2,7 @@
 // but reached by the dispatcher's handle_mouse -- the live press/motion path,
 // which used to route nothing to it (only the wheel entry point did), so the
 // list was inert: no hover band, no click, and the chevrons could not fold.
-#include "editor.h"
+#include "core/editor.h"
 #include "render/winbar_model.h"
 #include "ui/ui.h"
 

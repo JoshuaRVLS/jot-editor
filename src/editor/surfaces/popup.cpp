@@ -1,6 +1,6 @@
 #include "base/shell_util.h"
 #include "base/string_util.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "ui/text.h"
 #include <algorithm>
 #include <cctype>

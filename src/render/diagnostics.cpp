@@ -1,7 +1,7 @@
 // Diagnostic decoration helpers for buffer rendering: severity colors,
 // per-line lookup, dense-span coalescing, and compact label text.
 #include "column_utils.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "render/buffer_internal.h"
 #include "ui/text.h"
 #include <algorithm>

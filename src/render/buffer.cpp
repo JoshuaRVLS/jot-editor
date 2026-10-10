@@ -3,7 +3,7 @@
 // live in bracket.cpp and diagnostics.cpp.
 #include "blank_guides.h"
 #include "column_utils.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "folding.h"
 #include "render/buffer_internal.h"
 #include "render/gutter.h"

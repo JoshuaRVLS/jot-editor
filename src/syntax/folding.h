@@ -1,7 +1,7 @@
 #ifndef FOLDING_H
 #define FOLDING_H
 
-#include "types.h"
+#include "core/types.h"
 #include <string>
 #include <utility>
 #include <vector>

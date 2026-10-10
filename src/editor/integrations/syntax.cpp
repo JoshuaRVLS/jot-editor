@@ -1,5 +1,5 @@
 #include "base/string_util.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "lsp_attach_data.h"
 #include "syntax/manager.h"
 #include <algorithm>

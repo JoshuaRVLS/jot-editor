@@ -4,7 +4,7 @@
 // already-written code (clangd-style). Hints refresh when the file changes
 // (debounced through the normal did_change flow) or when scrolling leaves
 // the cached range.
-#include "editor.h"
+#include "core/editor.h"
 #include "editor/integrations/lsp/common.h"
 #include "lsp/client.h"
 #include "text/column_utils.h"

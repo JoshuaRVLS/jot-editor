@@ -1,6 +1,6 @@
 // Shared overlay text helpers: single-line normalization, clipping, and
 // syntax-preview colors.
-#include "editor.h"
+#include "core/editor.h"
 #include "render/overlay_internal.h"
 #include "ui/text.h"
 #include <cctype>

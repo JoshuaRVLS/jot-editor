@@ -16,7 +16,7 @@
 // side_panel handler renders the same row from view.panel_tabs - the two
 // paths stay byte-identical.
 
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "ui/text.h"
 

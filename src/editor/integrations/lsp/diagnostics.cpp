@@ -2,7 +2,7 @@
 // checks, which publish in the same per-file shape -- into per-buffer
 // diagnostics, dropping a server's contributions when it goes away, and holding
 // fresh findings back while the user is typing in the file they describe.
-#include "editor.h"
+#include "core/editor.h"
 #include "editor/integrations/lsp/common.h"
 #include <iterator>
 #include <string>

@@ -2,7 +2,7 @@
 // telescope, image viewer), defined in overlay_shared.cpp.
 #pragma once
 
-#include "editor.h"
+#include "core/editor.h"
 #include <string>
 
 namespace overlay_internal

@@ -13,8 +13,8 @@
 // Everything inside a PaneTabLayout is relative to its own x/y (the pane's
 // corner); the painter and the hit-tests both add them back, so neither can
 // drift from the other.
-#include "editor.h"
-#include "editor/file_icons.h"
+#include "core/editor.h"
+#include "core/file_icons.h"
 #include "render/pane_edges.h"
 #include "ui/components.h"
 #include "ui/text.h"

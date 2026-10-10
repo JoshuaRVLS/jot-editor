@@ -6,7 +6,7 @@
 // floats over the space above the grid. build_command_palette_layout() is the
 // single source of that geometry, shared with the mouse hit-test and the Lua
 // view.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "render/ui_internal.h"
 #include "ui/components.h"

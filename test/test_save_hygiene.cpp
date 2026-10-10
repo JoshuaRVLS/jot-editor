@@ -10,7 +10,7 @@
 // the save itself, since the buffer and the bytes have to agree afterwards.
 
 #include "base/file_util.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "workspace/save_hygiene.h"
 
 #include <catch2/catch_test_macros.hpp>

@@ -14,7 +14,7 @@
 #include <vector>
 #include <unistd.h>
 
-#include "editor/editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 #include "ui/ui.h"

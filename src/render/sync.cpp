@@ -1,6 +1,6 @@
 // Push native UI state into the Lua layer once per frame so Lua-rendered
 // surfaces (palette, side panels, ...) always see fresh editor state.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "ui/components.h"
 #include <string>

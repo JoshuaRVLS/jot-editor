@@ -1,7 +1,7 @@
 // Bracket-pair helpers for buffer rendering: rainbow depth scanning, pair
 // matching at the cursor, and the active bracket guide.
 #include "column_utils.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "render/buffer_internal.h"
 #include "ui/text.h"
 #include <algorithm>

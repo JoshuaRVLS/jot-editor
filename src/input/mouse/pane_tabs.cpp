@@ -7,7 +7,7 @@
 // workspace strip the drag can leave the strip entirely -- that is the point:
 // the drop may land in another pane's strip, in its body, or against one of its
 // edges -- so a live drag owns every motion and release, wherever they happen.
-#include "editor.h"
+#include "core/editor.h"
 #include <algorithm>
 
 bool Editor::pane_tab_strip_row_at(int x, int y, int &pane_index) const

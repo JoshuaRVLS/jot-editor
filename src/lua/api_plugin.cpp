@@ -1,7 +1,7 @@
 // LuaAPI plugin surface: commands, keymaps, autocmds, plugin panels and
 // pickers - everything user scripts register and the editor dispatches.
-#include "editor.h"
-#include "host_api.h"
+#include "core/editor.h"
+#include "core/host_api.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 

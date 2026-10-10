@@ -6,7 +6,7 @@
 // cursor_blink_ms setting was dead config in both frontends -- the caret never
 // blinked at all. These cases drive the real frame loop and watch the caret's
 // terminal state, which is what the setting is supposed to change.
-#include "editor.h"
+#include "core/editor.h"
 #include "ui/ui.h"
 
 #include <catch2/catch_test_macros.hpp>

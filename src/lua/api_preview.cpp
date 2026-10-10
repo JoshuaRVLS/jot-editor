@@ -4,7 +4,7 @@
 // content policy - parsing, the page template, config, commands. This file
 // owns only the transport: it wraps PreviewServer (see
 // markdown/preview_server.h) and exposes it as jot.preview.*.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 #include "markdown/preview_server.h"

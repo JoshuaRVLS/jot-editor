@@ -15,7 +15,7 @@
 // gesture: type into an opening tag and the closing tag follows; backspace and it
 // shrinks; do it in a file that is not markup, or anywhere that is not a tag
 // name, and nothing moves.
-#include "editor.h"
+#include "core/editor.h"
 #include "html.h"
 
 #include <catch2/catch_test_macros.hpp>

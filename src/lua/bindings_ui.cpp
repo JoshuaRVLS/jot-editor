@@ -1,7 +1,7 @@
 // Lua host bindings: UI bindings: scratch buffers, float windows, decorations, handlers, popup,
 // palette, toasts.
 
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/bindings_internal.h"
 

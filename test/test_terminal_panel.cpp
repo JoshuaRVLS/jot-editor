@@ -2,7 +2,7 @@
 // top-border resize drag. Headless: the terminal state is configured via
 // test accessors (no shell is spawned), and the panel rect + drag math is
 // exercised against a real UI instance.
-#include "editor.h"
+#include "core/editor.h"
 #include "terminal/integrated.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

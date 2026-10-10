@@ -1,5 +1,5 @@
 // Pane layout management: sizing, splitting, closing, and buffer placement.
-#include "editor.h"
+#include "core/editor.h"
 #include "editor/app/panes_internal.h"
 #include <algorithm>
 #include <cctype>

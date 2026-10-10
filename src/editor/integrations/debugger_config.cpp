@@ -1,6 +1,6 @@
 // Debugger launch-config loading and per-config run commands, plus the state-file path helpers.
 #include "commands/utils.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "editor/integrations/debugger_internal.h"
 #include "lua/api.h"
 

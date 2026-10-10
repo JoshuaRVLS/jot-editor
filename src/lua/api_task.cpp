@@ -1,7 +1,7 @@
 // LuaAPI task surface: background job launching, job-result delivery,
 // and the task list shown in the tasks panel.
-#include "editor.h"
-#include "host_api.h"
+#include "core/editor.h"
+#include "core/host_api.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 

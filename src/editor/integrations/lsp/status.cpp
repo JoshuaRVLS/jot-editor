@@ -1,6 +1,6 @@
 // Editor-side LSP status: the modal listing running/starting clients, its
 // input handling, the install-usage hint, and per-language diagnostic counts.
-#include "editor.h"
+#include "core/editor.h"
 #include "editor/integrations/lsp/common.h"
 #include <algorithm>
 #include <string>

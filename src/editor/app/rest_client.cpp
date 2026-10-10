@@ -19,7 +19,7 @@
 #include "editor/rest_client.h"
 #include "base/shell_util.h"
 #include "base/string_util.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "workspace/http_file.h"
 
 #include <chrono>

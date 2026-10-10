@@ -7,8 +7,8 @@
 // pays and paints -- the row comes out of the pane's own height, the file's
 // first line starts below it -- and that a crumb press opens a menu whose rows
 // land where the native geometry says they do.
-#include "editor.h"
-#include "editor/model/panes.h"
+#include "core/editor.h"
+#include "core/panes.h"
 #include "render/winbar_model.h"
 #include "syntax/index.h"
 #include "ui/ui.h"

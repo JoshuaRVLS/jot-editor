@@ -3,7 +3,7 @@
 #include "base/file_util.h"
 #include "base/shell_util.h"
 #include "cpp_assist.h"
-#include "editor.h"
+#include "core/editor.h"
 #include "editor/app/file_internal.h"
 #include "folding.h"
 #include "lazy_line_provider.h"

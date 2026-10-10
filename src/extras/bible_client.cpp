@@ -15,8 +15,8 @@
 // client uses them: the status line belongs to the Lua UI kit in a real
 // session, and a plain message would be written but never seen.
 #include "base/string_util.h"
-#include "editor.h"
-#include "editor/app/decorations.h"
+#include "core/editor.h"
+#include "core/decorations_rebase.h"
 #include "extras/bible.h"
 #include "extras/leetcode_http.h"
 

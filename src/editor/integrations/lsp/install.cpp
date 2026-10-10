@@ -3,8 +3,8 @@
 // server-id usage hint built from the Lua registry.
 #include "lsp/install.h"
 #include "base/process_job.h"
-#include "editor.h"
-#include "editor/editor_models.h"
+#include "core/editor.h"
+#include "core/editor_models.h"
 #include "editor/integrations/lsp/common.h"
 #include "lsp/client.h"
 #include "lua/api.h"

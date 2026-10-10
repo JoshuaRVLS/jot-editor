@@ -1,7 +1,7 @@
 // Lua config + editor-info payloads: typed config get/set/unset/has, the
 // config keys/path pushers, the current-theme pusher and the editor status
 // summary. Split out of api_core.cpp.
-#include "editor.h"
+#include "core/editor.h"
 #include "lua/api.h"
 #include "lua/api_internal.h"
 

@@ -11,7 +11,7 @@
 // The editor cases drive the real entry point (the same one the snippet keymap
 // calls) against a loaded buffer, which is where the splice and the caret
 // placement are decided.
-#include "editor.h"
+#include "core/editor.h"
 #include "extras/emmet/expand.h"
 
 #include <catch2/catch_test_macros.hpp>
