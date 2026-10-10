@@ -413,28 +413,9 @@ void Editor::handle_mouse_input(int x,
           if (git_sidebar_scroll > 0)
             git_sidebar_scroll--;
         }
-        else
+        else if (file_tree_scroll > 0)
         {
-          // The wheel walks the section's own cursor (the dock's outline does
-          // the same with its selection): the renderer keeps the cursor on
-          // screen, so the window follows it. Scrolling the window alone was
-          // undone by that clamp on the next frame -- a wheel over the outline
-          // did nothing while the cursor sat at the top, and the rows under it
-          // could not be reached.
-          const SidebarHit hit = sidebar_hit_test(y);
-          if (hit.section == jot_sidebar::SECTION_OUTLINE)
-          {
-            sidebar_outline_selected = std::max(0, sidebar_outline_selected - 1);
-            outline_panel.selected = sidebar_outline_selected;
-          }
-          else if (hit.section == jot_sidebar::SECTION_TIMELINE)
-          {
-            sidebar_timeline_selected = std::max(0, sidebar_timeline_selected - 1);
-          }
-          else if (file_tree_scroll > 0)
-          {
-            file_tree_scroll--;
-          }
+          file_tree_scroll--;
         }
         needs_redraw = true;
       }
@@ -449,24 +430,7 @@ void Editor::handle_mouse_input(int x,
         }
         else
         {
-          const SidebarHit hit = sidebar_hit_test(y);
-          if (hit.section == jot_sidebar::SECTION_OUTLINE)
-          {
-            const int count = sidebar_section_row_count(jot_sidebar::SECTION_OUTLINE);
-            sidebar_outline_selected =
-                std::clamp(sidebar_outline_selected + 1, 0, std::max(0, count - 1));
-            outline_panel.selected = sidebar_outline_selected;
-          }
-          else if (hit.section == jot_sidebar::SECTION_TIMELINE)
-          {
-            const int count = sidebar_section_row_count(jot_sidebar::SECTION_TIMELINE);
-            sidebar_timeline_selected =
-                std::clamp(sidebar_timeline_selected + 1, 0, std::max(0, count - 1));
-          }
-          else
-          {
-            file_tree_scroll++;
-          }
+          file_tree_scroll++;
         }
         needs_redraw = true;
       }

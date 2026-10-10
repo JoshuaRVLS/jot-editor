@@ -32,8 +32,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$WORK/runtime" "$WORK/home" "$WORK/project/src"
+mkdir -p "$WORK/runtime" "$WORK/home" "$WORK/home/configs" "$WORK/project/src"
 printf 'fn main() {\n    println!("hi");\n}\n' > "$WORK/project/src/main.rs"
+
+# The presence chip is off on a fresh install (the bar carries the file's news,
+# not the session's plumbing), so the check that reads it turns it on first.
+printf 'discord_show_status=true\n' > "$WORK/home/configs/settings.conf"
 
 # init.lua exercises the command path in the real editor: jot.execute() runs the
 # same entry point the `:` prompt uses (the leading colon selects the ex path),

@@ -10,9 +10,11 @@ dir there -- so this drives the real binary with only the shipped themes on disk
 and reads the cell backgrounds back out of the pty stream.
 
 Both themes name exact 24-bit colours, so the same run also pins the depth: the
-backgrounds must arrive as 48;2 and the accent (the active pane border) as 38;2.
-A slot that fell back to a palette index would still paint, just not the colour
-the scheme was authored with -- exactly the quiet downgrade this catches.
+backgrounds must arrive as 48;2 and the accent (the active pane's tab-strip
+edge, which a split puts on screen -- the workspace strip no longer inks the
+accent) as 38;2. A slot that fell back to a palette index would still paint,
+just not the colour the scheme was authored with -- exactly the quiet downgrade
+this catches.
 
 The same value domain carries a decoration's colours, so one scene places a
 wavy underline with a hex colour through init.lua and reads the SGR 58 sequence
@@ -21,7 +23,8 @@ hardest to notice and easiest to ship.
 
 Scenes: the default scheme (jot-dark), jot-light, the ported flexoki pair, the
 legacy `dark` name, the theme chooser's list, and a decoration's exact underline
-colour.
+colour. Every scheme scene opens a split, which is what pins the pane strip's
+accent ink; the surfaces it reads (body and status backgrounds) do not move.
 
 Usage: test/theme_probe.py [path-to-jot] [--dump]
 Exit codes: 0 pass, 1 fail, 2 skipped (no binary).
@@ -36,6 +39,18 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pty_screen import run_in_pty  # noqa: E402
 
 PALETTE = b"\x1b[112;6u"  # Ctrl+Shift+P
+# Ex commands go through the command palette (Ctrl+P, the query, Enter): the
+# editor has no `:` command line of its own.
+CTRL_P = b"\x10"
+ENTER = b"\r"
+
+
+def ex(command: str) -> bytes:
+    return CTRL_P + command.encode() + ENTER
+
+
+def row_text(screen, row: int) -> str:
+    return "".join(screen.cells[row])
 
 
 # pty_screen tags a 24-bit background as 1000 + its rgb, so it cannot be
@@ -60,8 +75,8 @@ FLEXOKI_DARK_BODY = truecolour(0x100F0F)
 FLEXOKI_DARK_STATUS = truecolour(0x1C1B1A)
 FLEXOKI_LIGHT_BODY = truecolour(0xFFFCF0)
 FLEXOKI_LIGHT_STATUS = truecolour(0xF2F0E5)
-# The accent each theme inks its active pane border with, as it must appear in
-# the escape stream: 38;2;r;g;b, never 38;5;n.
+# The accent each theme inks its active pane tab strip's leading edge with, as
+# it must appear in the escape stream: 38;2;r;g;b, never 38;5;n.
 JOT_DARK_ACCENT = b"\x1b[38;2;255;180;84m"  # #ffb454, the amber
 JOT_LIGHT_ACCENT = b"\x1b[38;2;168;90;0m"  # #a85a00, burnt amber
 FLEXOKI_DARK_ACCENT = b"\x1b[38;2;58;169;159m"  # #3aa99f, cyan-400
@@ -117,17 +132,23 @@ def body_background(screen) -> int:
 
 
 def status_background(screen) -> int:
-    """The background of the status line, found by its memory chip."""
-    for y in range(screen.rows):
-        row = "".join(screen.cells[y])
-        if "mem " in row:
-            return screen.bg[y][row.index("mem ")]
-    return -1
+    """The background of the status line, found by its caret-position chip.
+
+    The bar is the last row, and the position chip is painted on StatusLine's
+    own background -- the file label beside it wears the file chip's, so the
+    position is what identifies the plain bar.
+    """
+    y = screen.rows - 1
+    row = "".join(screen.cells[y])
+    colon = row.find(":")
+    if colon < 0:
+        return -1
+    return screen.bg[y][colon]
 
 
-def run(binary: str, path: str, root: str, cfg: str, keys: bytes = b""):
+def run(binary: str, path: str, root: str, cfg: str, keys: bytes = b"", phases=None):
     return run_in_pty(binary, [path], keys, settle=3.0, after=3.0,
-                      cols=100, rows=30, cfg=cfg, cwd=root)
+                      cols=100, rows=30, cfg=cfg, cwd=root, phases=phases)
 
 
 def main() -> int:
@@ -165,7 +186,12 @@ def main() -> int:
         cfg = f"/tmp/jot_theme_probe_cfg_{index}"
         if scheme is not None:
             write_config(cfg, scheme)
-        screen = run(binary, path, root, cfg)
+        # A split, so the pane strip's active edge inks the theme's accent where
+        # the surfaces below can still be read from the same screen.
+        screen = run(binary, path, root, cfg, phases=[
+            (0.6, ex("vsp")),
+            (0.8, lambda s: row_text(s, 0).count("notes.txt") >= 2),
+        ])
         if dump:
             print(screen.text())
             print("-" * 70)

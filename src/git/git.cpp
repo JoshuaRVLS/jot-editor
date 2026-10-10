@@ -314,61 +314,6 @@ bool Editor::open_git_diff_panel(const std::string &path, bool staged)
   return true;
 }
 
-bool Editor::open_commit_diff_panel(const std::string &hash, const std::string &path)
-{
-  if (!has_git_repo() || hash.empty() || path.empty())
-  {
-    set_message("Git: Not a repo");
-    return false;
-  }
-
-  const std::string rel = to_git_relative_path(path);
-  if (rel.empty() || rel[0] == '/' || string_util::starts_with(rel, "../"))
-  {
-    set_message("Git diff: path outside repo");
-    return false;
-  }
-
-  // `--format=` drops the commit header, so the panel shows the file's patch
-  // alone (and `git show` still works for a root commit).
-  std::string diff = run_git_capture("show --format= --no-color " + shell_util::shell_quote(hash)
-                                     + " -- " + shell_util::shell_quote(rel));
-  while (!diff.empty() && (diff[0] == '\n' || diff[0] == '\r'))
-  {
-    diff.erase(0, 1);
-  }
-  if (diff.empty())
-  {
-    set_message("Timeline: " + hash + " did not touch " + rel);
-    return false;
-  }
-
-  git_diff_panel.visible = true;
-  git_diff_panel.staged = false;
-  git_diff_panel.revision = hash;
-  git_diff_panel.path = rel;
-  git_diff_panel.lines.clear();
-  git_diff_panel.scroll = 0;
-  git_panel.return_after_diff = false;
-
-  std::istringstream stream(diff);
-  std::string line;
-  while (std::getline(stream, line))
-  {
-    if (!line.empty() && line.back() == '\r')
-    {
-      line.pop_back();
-    }
-    git_diff_panel.lines.push_back(line);
-  }
-
-  open_right_panel_tab(RIGHT_PANEL_GIT_DIFF);
-  show_debugger_panel = false;
-  needs_redraw = true;
-  set_message("Commit diff: " + hash + "  " + rel);
-  return true;
-}
-
 void Editor::close_git_diff_panel()
 {
   git_diff_panel = GitDiffPanel();
@@ -530,8 +475,6 @@ std::string Editor::git_commit_message(const std::string &message)
   if (result.ok())
   {
     refresh_git_status(true);
-    // The commit landed: the timeline's commit list is stale now.
-    timeline_dirty = true;
     return "";
   }
   std::string err = result.output;

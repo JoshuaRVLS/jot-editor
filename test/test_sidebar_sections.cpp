@@ -1,12 +1,9 @@
-// The sidebar's stacked sections (EXPLORER / OUTLINE / TIMELINE) and the
-// timeline model behind them: the one geometry the painter, the mouse
-// hit-test and the keyboard walk read, the git log parser, the compact
-// relative ages the timeline rows show, and the footer the sections leave on
-// the column's last row.
+// The left column: one tree under its header, with the sidebar's footer kept on
+// the column's last row -- the single geometry the painter, the mouse hit-test
+// and the keyboard walk all read.
 #include "editor.h"
 #include "editor/model/sidebar_sections.h"
 #include "ui/ui.h"
-#include "workspace/timeline.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
@@ -54,154 +51,95 @@ namespace
   }
 } // namespace
 
-TEST_CASE("The sidebar stacks explorer, outline and timeline under their headers", "[jot]")
+TEST_CASE("The sidebar is one tree under its header, the footer on the last row", "[jot]")
 {
-  // A 20-row column with a 12-row tree, 4 symbols and 3 commits: the tree
-  // fills what the other two leave, each section keeps its own header, and the
-  // footer stays on the last row.
-  const auto layout = jot_sidebar::compute(0, 20, 12, 4, 3, true, true, true, true);
+  // A 20-row column: the header takes row 0, the footer the last row, and the
+  // tree every row between them.
+  const auto layout = jot_sidebar::compute(0, 20, /*explorer_open=*/true, /*show_footer=*/true);
   REQUIRE(layout.explorer.header_y == 0);
   REQUIRE(layout.explorer.y == 1);
-  REQUIRE(layout.explorer.h == 9);
-  REQUIRE(layout.outline.header_y == layout.explorer.y + layout.explorer.h);
-  REQUIRE(layout.outline.y == layout.outline.header_y + 1);
-  REQUIRE(layout.outline.h == 4);
-  REQUIRE(layout.timeline.header_y == layout.outline.y + layout.outline.h);
-  REQUIRE(layout.timeline.y == layout.timeline.header_y + 1);
-  REQUIRE(layout.timeline.h == 3);
+  REQUIRE(layout.explorer.h == 18);
   REQUIRE(layout.footer_y == 19);
-  REQUIRE(layout.timeline.y + layout.timeline.h == layout.footer_y);
+  REQUIRE(layout.explorer.y + layout.explorer.h == layout.footer_y);
 
-  // A collapsed section keeps its header (the click that reopens it) and gives
-  // its rows to the tree.
-  const auto collapsed = jot_sidebar::compute(0, 20, 12, 4, 3, true, false, true, true);
-  REQUIRE(collapsed.outline.header_y >= 0);
-  REQUIRE(collapsed.outline.h == 0);
-  REQUIRE(collapsed.outline.y == -1);
-  REQUIRE(collapsed.timeline.h == 3);
-  REQUIRE(collapsed.explorer.h == 9 + 4);
+  // The offset is the column's own: a sidebar pushed down by a tab strip keeps
+  // its rows in place.
+  const auto offset = jot_sidebar::compute(2, 10, true, true);
+  REQUIRE(offset.explorer.header_y == 2);
+  REQUIRE(offset.explorer.y == 3);
+  REQUIRE(offset.explorer.h == 8);
+  REQUIRE(offset.footer_y == 11);
 
-  // A collapsed explorer gives its rows away and stops being navigable.
-  const auto no_tree = jot_sidebar::compute(0, 20, 12, 4, 3, false, true, true, true);
-  REQUIRE(no_tree.explorer.h == 0);
-  REQUIRE(no_tree.explorer.y == -1);
-  REQUIRE(no_tree.outline.h == 4);
-  REQUIRE(no_tree.timeline.h == 3);
+  // A collapsed tree keeps its header (the click that reopens it) and shows no
+  // rows at all.
+  const auto collapsed = jot_sidebar::compute(0, 20, /*explorer_open=*/false, true);
+  REQUIRE(collapsed.explorer.header_y == 0);
+  REQUIRE(collapsed.explorer.h == 0);
+  REQUIRE(collapsed.explorer.y == -1);
+  REQUIRE(collapsed.footer_y == 19);
 
-  // The cap only holds rows back for a tree that wants them. A folded explorer
-  // and a tree shorter than its share hand the surplus to the outline, so a
-  // file with more symbols than the cap shows them instead of sitting above
-  // blank rows: the section grows past kSectionCap, and the timeline keeps its
-  // own rows above the footer.
-  const auto wide_open_tree = jot_sidebar::compute(0, 20, 2, 30, 3, true, true, true, true);
-  REQUIRE(wide_open_tree.outline.h > jot_sidebar::kSectionCap);
-  REQUIRE(wide_open_tree.explorer.h >= jot_sidebar::kTreeMinRows);
-  REQUIRE(wide_open_tree.timeline.h == 2); // one row went to the tree's floor
-  REQUIRE(wide_open_tree.timeline.y + wide_open_tree.timeline.h == wide_open_tree.footer_y);
+  // With no footer the tree takes the last row too.
+  const auto no_footer = jot_sidebar::compute(0, 20, true, /*show_footer=*/false);
+  REQUIRE(no_footer.footer_y == -1);
+  REQUIRE(no_footer.explorer.h == 19);
 
-  const auto wide_no_tree = jot_sidebar::compute(0, 20, 12, 30, 3, false, true, true, true);
-  REQUIRE(wide_no_tree.outline.h > jot_sidebar::kSectionCap);
-  REQUIRE(wide_no_tree.timeline.h == 3);
-  REQUIRE(wide_no_tree.timeline.y + wide_no_tree.timeline.h == wide_no_tree.footer_y);
-
-  // The tree's floor beats the other sections: on a short column they shrink
-  // to nothing rather than squeezing the explorer under its minimum.
-  const auto tight = jot_sidebar::compute(0, 8, 12, 4, 3, true, true, true, true);
-  REQUIRE(tight.explorer.h >= jot_sidebar::kTreeMinRows);
-  REQUIRE(tight.explorer.h + tight.outline.h + tight.timeline.h + 3 + 1 == 8);
-
-  // Too short for three sections and the tree's floor together: the explorer
-  // keeps the column alone.
-  const auto tiny = jot_sidebar::compute(0, 6, 12, 4, 3, true, true, true, true);
-  REQUIRE(tiny.explorer.header_y == 0);
-  REQUIRE(tiny.explorer.h == 4);
-  REQUIRE(tiny.outline.header_y == -1);
-  REQUIRE(tiny.timeline.header_y == -1);
-  REQUIRE(tiny.footer_y == 5);
+  // The footer owns the last row, so a one-row column is the footer and the
+  // header gets no row at all; the same single row is the header when there is
+  // no footer to take it. A column with no rows lays out nothing.
+  const auto footer_only = jot_sidebar::compute(0, 1, true, true);
+  REQUIRE(footer_only.explorer.header_y == -1);
+  REQUIRE(footer_only.explorer.h == 0);
+  REQUIRE(footer_only.footer_y == 0);
+  const auto header_only = jot_sidebar::compute(0, 1, true, /*show_footer=*/false);
+  REQUIRE(header_only.explorer.header_y == 0);
+  REQUIRE(header_only.explorer.h == 0);
+  REQUIRE(header_only.footer_y == -1);
+  const auto empty = jot_sidebar::compute(0, 0, true, true);
+  REQUIRE(empty.explorer.header_y == -1);
+  REQUIRE(empty.footer_y == -1);
 }
 
-TEST_CASE("A sidebar row maps to the section and index it paints", "[jot]")
+TEST_CASE("A sidebar row maps to the tree index it paints", "[jot]")
 {
-  const auto layout = jot_sidebar::compute(0, 20, 12, 4, 3, true, true, true, true);
-  REQUIRE(jot_sidebar::section_at(layout, layout.explorer.header_y)
-          == jot_sidebar::SECTION_EXPLORER);
-  REQUIRE(jot_sidebar::section_at(layout, layout.explorer.y) == jot_sidebar::SECTION_EXPLORER);
-  REQUIRE(jot_sidebar::section_at(layout, layout.outline.header_y) == jot_sidebar::SECTION_OUTLINE);
-  REQUIRE(jot_sidebar::section_at(layout, layout.timeline.header_y)
-          == jot_sidebar::SECTION_TIMELINE);
-  REQUIRE(jot_sidebar::section_at(layout, layout.footer_y) == -1);
-
+  const auto layout = jot_sidebar::compute(0, 20, true, true);
   bool header = false;
-  REQUIRE(jot_sidebar::index_in_section(layout.outline, layout.outline.header_y, &header) == -1);
+  REQUIRE(jot_sidebar::index_in_section(layout.explorer, layout.explorer.header_y, &header) == -1);
   REQUIRE(header);
-  REQUIRE(jot_sidebar::index_in_section(layout.outline, layout.outline.y, &header) == 0);
+  REQUIRE(jot_sidebar::index_in_section(layout.explorer, layout.explorer.y, &header) == 0);
   REQUIRE_FALSE(header);
   REQUIRE(jot_sidebar::index_in_section(
-              layout.outline, layout.outline.y + layout.outline.h - 1, &header)
-          == layout.outline.h - 1);
-  REQUIRE(jot_sidebar::index_in_section(layout.outline, layout.footer_y, &header) == -2);
+              layout.explorer, layout.explorer.y + layout.explorer.h - 1, &header)
+          == layout.explorer.h - 1);
+  REQUIRE(jot_sidebar::index_in_section(layout.explorer, layout.footer_y, &header) == -2);
+  REQUIRE(jot_sidebar::index_in_section(layout.explorer, 999, &header) == -2);
 }
 
-TEST_CASE("A dragged section height overrides the automatic share", "[jot]")
+TEST_CASE("The explorer header toggles the tree", "[jot]")
 {
-  // The outline asked for 12 rows on a column tall enough: it gets them past
-  // the automatic cap, the timeline keeps its own share, and the explorer is
-  // still the flex that takes what is left.
-  const auto dragged = jot_sidebar::compute(0, 30, 12, 30, 20, true, true, true, true, 12, 0);
-  REQUIRE(dragged.outline.h == 12);
-  REQUIRE(dragged.timeline.h == 8); // the automatic share (kSectionCap)
-  REQUIRE(dragged.explorer.h == 6);
+  Editor &e = probe_editor();
+  char tmpl[] = "/tmp/jot_sidebar_header_XXXXXX";
+  mkdtemp(tmpl);
+  const std::string root = tmpl;
+  write_file(root + "/a.txt", "one\n");
 
-  // Dragged down to a single row: everything the outline gave up lands in the
-  // tree, and the timeline is untouched.
-  const auto shrunk = jot_sidebar::compute(0, 20, 12, 4, 3, true, true, true, true, 1, 0);
-  REQUIRE(shrunk.outline.h == 1);
-  REQUIRE(shrunk.explorer.h == 12);
-  REQUIRE(shrunk.timeline.h == 3);
+  e.host().io.open_workspace(root);
+  e.apply_resize_for_test(120, 40);
+  e.render_for_test();
 
-  // A height asked for past the section's own rows is honored as asked: the
-  // rows the user bought stay theirs. A collapsed section ignores its height
-  // (its header is the way back, and reopening finds it again).
-  const auto bought = jot_sidebar::compute(0, 30, 12, 3, 5, true, true, true, true, 10, 0);
-  REQUIRE(bought.outline.h == 10);
-  const auto closed = jot_sidebar::compute(0, 30, 12, 3, 5, true, false, true, true, 10, 0);
-  REQUIRE(closed.outline.h == 0);
-  REQUIRE(closed.outline.y == -1);
+  const int header_y = e.sidebar_layout_for_test().explorer.header_y;
+  REQUIRE(header_y == 0);
+  REQUIRE(e.sidebar_sections_for_test().explorer_open);
 
-  // The tree's floor still beats a dragged height when the column shrinks:
-  // the outline is trimmed (bottom section first) rather than the explorer
-  // squeezed under kTreeMinRows.
-  const auto tight = jot_sidebar::compute(0, 8, 12, 4, 3, true, true, true, true, 6, 2);
-  REQUIRE(tight.explorer.h >= jot_sidebar::kTreeMinRows);
-  REQUIRE(tight.explorer.h + tight.outline.h + tight.timeline.h + 3 + 1 == 8);
-}
+  // A click on the header folds the tree away; the same click brings it back.
+  e.mouse_event_for_test(10, header_y, /*bstate=*/1);
+  REQUIRE_FALSE(e.sidebar_sections_for_test().explorer_open);
+  e.render_for_test();
+  REQUIRE(e.sidebar_layout_for_test().explorer.y == -1);
 
-TEST_CASE("The timeline parses git log output and compacts ages", "[jot]")
-{
-  const std::string log = "abc1234\t1700000000\tMake the status line one row\n"
-                          "def5678\t1600000000\tChrome: draw borders only where two panes meet\n"
-                          "\n"
-                          "not-a-commit-line\n"
-                          "9999999\tnot-a-time\tSubject with a bad timestamp\n";
-  const std::vector<jot_timeline::Commit> commits = jot_timeline::parse_log(log);
-  REQUIRE(commits.size() == 3);
-  REQUIRE(commits[0].hash == "abc1234");
-  REQUIRE(commits[0].epoch == 1700000000);
-  REQUIRE(commits[0].subject == "Make the status line one row");
-  REQUIRE(commits[1].subject == "Chrome: draw borders only where two panes meet");
-  REQUIRE(commits[2].epoch == 0);
-  REQUIRE(jot_timeline::parse_log("").empty());
-
-  const long long now = 1700000000;
-  REQUIRE(jot_timeline::relative_age(now - 30, now) == "now");
-  REQUIRE(jot_timeline::relative_age(now - 5 * 60, now) == "5m");
-  REQUIRE(jot_timeline::relative_age(now - 3 * 3600, now) == "3h");
-  REQUIRE(jot_timeline::relative_age(now - 2 * 86400, now) == "2d");
-  REQUIRE(jot_timeline::relative_age(now - 14 * 86400, now) == "2 wks");
-  REQUIRE(jot_timeline::relative_age(now - 21 * 86400, now) == "3 wks");
-  REQUIRE(jot_timeline::relative_age(now - 40 * 86400, now) == "1 mo");
-  REQUIRE(jot_timeline::relative_age(now - 400 * 86400, now) == "1 yr");
-  REQUIRE(jot_timeline::relative_age(0, now) == "");
+  e.mouse_event_for_test(10, header_y, /*bstate=*/1);
+  REQUIRE(e.sidebar_sections_for_test().explorer_open);
+  e.render_for_test();
+  REQUIRE(e.sidebar_layout_for_test().explorer.h > 0);
 }
 
 TEST_CASE("The sidebar footer speaks for the workspace, not the selected row", "[jot]")
@@ -218,63 +156,18 @@ TEST_CASE("The sidebar footer speaks for the workspace, not the selected row", "
   e.render_for_test();
 
   // Row 2 is the first tree row (0 is the EXPLORER header, 1 the pinned root):
-  // a click opens alpha.txt and leaves it selected, which is the state the
-  // footer used to echo.
+  // a click opens alpha.txt and leaves it selected.
   e.mouse_event_for_test(5, 2, /*bstate=*/1);
   e.render_for_test();
   REQUIRE(fs::path(e.buffer_for_test().filepath).filename().string() == "alpha.txt");
   REQUIRE_FALSE(e.sidebar_root_selected_for_test());
 
-  // The footer is the column's last row, under the TIMELINE section. It used
-  // to repeat the selected row's glyph and name, which read as a stray file
-  // label there; it belongs to the workspace instead. This folder is not a
-  // repository, so the summary is the item count.
+  // The footer is the column's last row. It used to repeat the selected row's
+  // glyph and name, which read as a stray file label there; it belongs to the
+  // workspace instead. This folder is not a repository, so it stays clean.
   const std::string footer = row_text(e, e.ui_height_for_test() - 2);
   REQUIRE(footer.find("alpha.txt") == std::string::npos);
-  REQUIRE(footer.find("items") != std::string::npos);
-}
-
-TEST_CASE("The sidebar's sections come back as they were left", "[jot]")
-{
-  // One session file per workspace root; this case gets its own config home so
-  // it never collides with the tests that share probe_editor().
-  char home[] = "/tmp/jot_sections_session_XXXXXX";
-  mkdtemp(home);
-  setenv("JOT_CONFIG_HOME", home, 1);
-  setenv("JOT_CACHE_HOME", home, 1);
-  const std::string root = std::string(home) + "/ws";
-  fs::create_directories(root);
-
-  // Left behind: the timeline collapsed, the cursor down in the outline after
-  // it was scrolled off the top.
-  {
-    Editor e;
-    e.enable_workspace_session_for_test(root);
-    Editor::SidebarSectionsForTest state;
-    state.timeline_open = false;
-    state.section = jot_sidebar::SECTION_OUTLINE;
-    state.outline_cursor = 3;
-    state.outline_scroll = 1;
-    state.timeline_cursor = 2;
-    state.timeline_scroll = 1;
-    e.set_sidebar_sections_for_test(state);
-    e.save_workspace_session_for_test();
-  }
-
-  {
-    Editor e2;
-    e2.enable_workspace_session_for_test(root);
-    (void)e2.restore_workspace_session_for_test();
-    const Editor::SidebarSectionsForTest state = e2.sidebar_sections_for_test();
-    REQUIRE(state.explorer_open);
-    REQUIRE(state.outline_open);
-    REQUIRE_FALSE(state.timeline_open);
-    REQUIRE(state.section == (int)jot_sidebar::SECTION_OUTLINE);
-    REQUIRE(state.outline_cursor == 3);
-    REQUIRE(state.outline_scroll == 1);
-    REQUIRE(state.timeline_cursor == 2);
-    REQUIRE(state.timeline_scroll == 1);
-  }
+  REQUIRE(footer.find("beta.txt") == std::string::npos);
 }
 
 TEST_CASE("The explorer's expanded folders come back open", "[jot]")
@@ -334,151 +227,4 @@ TEST_CASE("The explorer's expanded folders come back open", "[jot]")
     REQUIRE(opened);
     REQUIRE_FALSE(shut);
   }
-}
-
-TEST_CASE("A press on a section header resizes the boundary instead of toggling", "[jot]")
-{
-  Editor &e = probe_editor();
-  char tmpl[] = "/tmp/jot_section_drag_XXXXXX";
-  mkdtemp(tmpl);
-  const std::string root = tmpl;
-  write_file(root + "/a.txt", "one\n");
-
-  e.host().io.open_workspace(root);
-  e.set_sidebar_sections_for_test(Editor::SidebarSectionsForTest()); // all open
-  e.set_sidebar_section_heights_for_test(0, 0);
-  e.apply_resize_for_test(120, 40);
-  e.render_for_test();
-
-  const auto start = e.sidebar_layout_for_test();
-  REQUIRE(start.outline.header_y >= 0);
-  const int x = 10; // inside the column: not the rail, not its right border
-
-  // The press alone only arms the gesture -- the section stays open and no
-  // rows move yet.
-  e.mouse_event_for_test(x, start.outline.header_y, /*bstate=*/1);
-  REQUIRE(e.sidebar_section_resize_pending_for_test());
-  REQUIRE_FALSE(e.sidebar_section_resize_dragging_for_test());
-  REQUIRE(e.sidebar_sections_for_test().outline_open);
-
-  // The first row of movement starts the resize; the outline grows upward
-  // into the explorer's rows with every step, and the release ends the drag
-  // without ever toggling the section.
-  e.mouse_event_for_test(x, start.outline.header_y - 1, /*bstate=*/32);
-  REQUIRE(e.sidebar_section_resize_dragging_for_test());
-  REQUIRE_FALSE(e.sidebar_section_resize_pending_for_test());
-  e.mouse_event_for_test(x, start.outline.header_y - 4, /*bstate=*/32);
-  e.mouse_event_for_test(x, start.outline.header_y - 4, /*bstate=*/2);
-  REQUIRE_FALSE(e.sidebar_section_resize_dragging_for_test());
-  REQUIRE_FALSE(e.sidebar_section_resize_pending_for_test());
-
-  const auto dragged = e.sidebar_layout_for_test();
-  REQUIRE(e.sidebar_sections_for_test().outline_open);
-  REQUIRE(e.sidebar_outline_height_for_test() == start.outline.h + 4);
-  REQUIRE(dragged.outline.h == start.outline.h + 4);
-  REQUIRE(dragged.explorer.h == start.explorer.h - 4);
-  REQUIRE(dragged.timeline.h == start.timeline.h); // the far boundary stays put
-
-  // A press that never moves is still the toggle: the release closes the
-  // section the same click always did.
-  e.mouse_event_for_test(x, dragged.outline.header_y, /*bstate=*/1);
-  REQUIRE(e.sidebar_section_resize_pending_for_test());
-  e.mouse_event_for_test(x, dragged.outline.header_y, /*bstate=*/2);
-  REQUIRE_FALSE(e.sidebar_section_resize_pending_for_test());
-  REQUIRE_FALSE(e.sidebar_sections_for_test().outline_open);
-
-  // The explorer's own header has no boundary above it: it toggles on the
-  // press, as always.
-  const auto closed_layout = e.sidebar_layout_for_test();
-  e.mouse_event_for_test(x, closed_layout.explorer.header_y, /*bstate=*/1);
-  REQUIRE_FALSE(e.sidebar_section_resize_pending_for_test());
-  REQUIRE_FALSE(e.sidebar_sections_for_test().explorer_open);
-  e.mouse_event_for_test(x, closed_layout.explorer.header_y, /*bstate=*/1);
-  REQUIRE(e.sidebar_sections_for_test().explorer_open);
-
-  // Leave the column as the next case finds it.
-  e.mouse_event_for_test(x, e.sidebar_layout_for_test().outline.header_y, /*bstate=*/1);
-  REQUIRE(e.sidebar_sections_for_test().outline_open);
-  e.set_sidebar_section_heights_for_test(0, 0);
-}
-
-TEST_CASE("Dragging the timeline's header trades rows with the outline only", "[jot]")
-{
-  Editor &e = probe_editor();
-  e.set_sidebar_sections_for_test(Editor::SidebarSectionsForTest()); // all open
-  e.set_sidebar_section_heights_for_test(6, 4);
-  e.apply_resize_for_test(120, 40);
-  e.render_for_test();
-
-  const auto start = e.sidebar_layout_for_test();
-  REQUIRE(start.outline.h == 6);
-  REQUIRE(start.timeline.h == 4);
-  const int x = 10;
-
-  // Boundary two moves: the timeline shrinks by the drag, the outline absorbs
-  // every row it gave up, and the explorer above neither grows nor shrinks.
-  e.mouse_event_for_test(x, start.timeline.header_y, /*bstate=*/1);
-  REQUIRE(e.sidebar_section_resize_pending_for_test());
-  e.mouse_event_for_test(x, start.timeline.header_y + 2, /*bstate=*/32);
-  REQUIRE(e.sidebar_section_resize_dragging_for_test());
-  e.mouse_event_for_test(x, start.timeline.header_y + 3, /*bstate=*/32);
-  e.mouse_event_for_test(x, start.timeline.header_y + 3, /*bstate=*/2);
-  REQUIRE_FALSE(e.sidebar_section_resize_dragging_for_test());
-
-  REQUIRE(e.sidebar_timeline_height_for_test() == 1); // one row is the floor
-  REQUIRE(e.sidebar_outline_height_for_test() == 9);
-  const auto dragged = e.sidebar_layout_for_test();
-  REQUIRE(dragged.timeline.h == 1);
-  REQUIRE(dragged.outline.h == 9);
-  REQUIRE(dragged.explorer.h == start.explorer.h);
-  REQUIRE(dragged.outline.h + dragged.timeline.h == start.outline.h + start.timeline.h);
-  REQUIRE(e.sidebar_sections_for_test().timeline_open);
-
-  e.set_sidebar_section_heights_for_test(0, 0);
-}
-
-TEST_CASE("The dragged section heights come back as they were left", "[jot]")
-{
-  char home[] = "/tmp/jot_sections_heights_XXXXXX";
-  mkdtemp(home);
-  setenv("JOT_CONFIG_HOME", home, 1);
-  setenv("JOT_CACHE_HOME", home, 1);
-  const std::string root = std::string(home) + "/ws";
-  fs::create_directories(root);
-
-  {
-    Editor e;
-    e.enable_workspace_session_for_test(root);
-    e.set_sidebar_section_heights_for_test(7, 3);
-    e.save_workspace_session_for_test();
-  }
-  {
-    Editor e2;
-    e2.enable_workspace_session_for_test(root);
-    (void)e2.restore_workspace_session_for_test();
-    REQUIRE(e2.sidebar_outline_height_for_test() == 7);
-    REQUIRE(e2.sidebar_timeline_height_for_test() == 3);
-  }
-}
-
-TEST_CASE("A section's cursor waits for rows before it is clamped", "[jot]")
-{
-  Editor &e = probe_editor();
-  char tmpl[] = "/tmp/jot_sections_wait_XXXXXX";
-  mkdtemp(tmpl);
-  const std::string root = tmpl;
-  write_file(root + "/only.txt", "one\n");
-
-  // No file is open, so the outline has no symbols to clamp against: a cursor
-  // from a session (or from the file before this one) has to survive the gap.
-  e.host().io.open_workspace(root);
-  Editor::SidebarSectionsForTest state;
-  state.outline_cursor = 2;
-  state.outline_scroll = 1;
-  e.set_sidebar_sections_for_test(state);
-  e.apply_resize_for_test(120, 40);
-  e.render_for_test();
-  const Editor::SidebarSectionsForTest after = e.sidebar_sections_for_test();
-  REQUIRE(after.outline_cursor == 2);
-  REQUIRE(after.outline_scroll == 1);
 }

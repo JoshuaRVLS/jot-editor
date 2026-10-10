@@ -2,7 +2,6 @@
 #define JOT_STATE_PANEL_STATE_H
 
 #include "editor/model/panels.h" // BottomPanelView, RightPanelTab, GitDiffPanel, OutlinePanelState
-#include "editor/model/sidebar_sections.h" // jot_sidebar::Section (the header-drag boundary)
 #include "lsp/client.h"          // LSPCodeAction
 #include <string>
 #include <vector>
@@ -98,22 +97,6 @@ struct PanelState
   int sidebar_resize_start_x = 0;
   int sidebar_resize_start_width = 0;
 
-  // Dragging a section header vertically resizes the sections around it: the
-  // OUTLINE and TIMELINE headers sit on the column's two boundaries, so their
-  // row is both the toggle and the splitter. A press arms the gesture instead
-  // of toggling right away -- the release is still the toggle -- and the first
-  // vertical row of movement turns it into this live resize, which then owns
-  // the pointer until the button comes up.
-  bool sidebar_section_resize_pending = false;
-  bool sidebar_section_resize_dragging = false;
-  // Which header is being dragged (the boundary's lower section), and the
-  // geometry captured when the drag started: the header's row plus the rows
-  // of the section above and below the boundary, so every motion is an
-  // absolute target and not a step that could drift.
-  jot_sidebar::Section sidebar_section_resize_boundary = jot_sidebar::SECTION_OUTLINE;
-  int sidebar_section_resize_start_y = 0;
-  int sidebar_section_resize_start_upper = 0;
-  int sidebar_section_resize_start_lower = 0;
 };
 
 #endif

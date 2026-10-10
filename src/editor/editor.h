@@ -35,6 +35,7 @@
 #include "editor/discord_controller.h"
 #include "editor/rest_client.h"
 #include "editor/search_controller.h"
+#include "editor/model/sidebar_sections.h" // jot_sidebar::Layout (the sidebar's geometry)
 #include "editor_state.h"
 #include "host_api.h"
 #include "lsp/client.h"

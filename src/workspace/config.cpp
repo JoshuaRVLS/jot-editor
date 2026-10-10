@@ -126,14 +126,16 @@ void Config::load_defaults()
   settings["show_line_numbers"] = "true";
   settings["relative_line_numbers"] = "false";
   // Statusline time chips (extras/status_clock.cpp): the local wall clock and
-  // how long was coded today, in the workspace in front of the user. Both are
-  // optional segments, so a narrow bar drops them before the diagnostics and git
+  // how long was coded today, in the workspace in front of the user. Off by
+  // default -- the bar is the file's news, and neither of these is about the
+  // file -- but the segments are still there for a session that wants them, and
+  // both are optional, so a narrow bar drops them before the diagnostics and git
   // chips. The coding chip is fed by the local store (extras/coding_time/probe.h)
   // and reports WakaTime's own total for today once that integration below is
   // on and has answered; the key keeps its historical name, and its label says
   // what it now shows.
-  settings["status_clock"] = "true";
-  settings["status_coding_time"] = "true";
+  settings["status_clock"] = "false";
+  settings["status_coding_time"] = "false";
   // WakaTime (extras/wakatime.h): the Extensions category's one integration so
   // far. Off by default, because it starts talking to an account and to
   // wakatime-cli. On, the editor sends heartbeats on saves and file changes and
@@ -335,7 +337,10 @@ void Config::load_defaults()
   settings["discord_remove_timestamp"] = "false";
   settings["discord_remove_repository_button"] = "false";
   settings["discord_idle_timeout"] = "0";
-  settings["discord_show_status"] = "true";
+  // Off by default: the presence chip reports the session's own plumbing
+  // (connected / idle / disconnected), which is not the bar's business unless
+  // the user asks for it. `:discord status` still carries the full detail.
+  settings["discord_show_status"] = "false";
   settings["discord_exclude_workspaces"] = "";
   settings["image_viewer_backend"] = "auto";
   settings["treesitter_library_paths"] = "";

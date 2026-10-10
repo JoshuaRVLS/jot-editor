@@ -268,7 +268,10 @@ void Editor::render_status_line()
     cursor_label = " " + std::to_string(active_buf->cursor.y + 1) + ":"
                    + std::to_string(active_buf->cursor.x + 1) + " ";
   }
-  left_segments.push_back({cursor_label, theme.fg_status, theme.bg_status, true, false, 100});
+  // The caret's place belongs with the file's own news, at the right-hand end:
+  // the left block is then the file (and a transient message), one thing to
+  // read, which is what the bar is for.
+  right_segments.push_back({cursor_label, theme.fg_status, theme.bg_status, true, false, 100});
 
   if (!show_home_menu && active_buf && active_buf->selection.active)
   {
@@ -276,7 +279,7 @@ void Editor::render_status_line()
     int cols = std::abs(active_buf->selection.end.x - active_buf->selection.start.x);
     std::string sel =
         lines > 1 ? " Sel " + std::to_string(lines) + "L " : " Sel " + std::to_string(cols) + "C ";
-    left_segments.push_back({sel, theme.fg_status_info, theme.bg_status_info, true, true, 90});
+    right_segments.push_back({sel, theme.fg_status_info, theme.bg_status_info, true, true, 90});
   }
 
   int diag_error = 0;
@@ -347,43 +350,10 @@ void Editor::render_status_line()
                               208});
   }
 
-  if (!lsp_clients.empty())
-  {
-    int running_clients = 0;
-    std::string first_language;
-    for (const auto &client : lsp_clients)
-    {
-      if (client && client->is_running())
-      {
-        running_clients++;
-        if (first_language.empty())
-        {
-          // Language alone: the server's root path used to ride here, a long
-          // static string the workspace label already answers for.
-          first_language = client->get_language();
-        }
-      }
-    }
-    std::string lsp_text;
-    int lsp_fg = theme.fg_status_muted;
-    int lsp_bg = theme.bg_status_muted;
-    if (running_clients > 0)
-    {
-      lsp_text = "  " + ui_truncate_cells(first_language.empty() ? "LSP" : first_language, 18);
-      if (running_clients > 1)
-      {
-        lsp_text += " x" + std::to_string(running_clients);
-      }
-      lsp_text += " ";
-      lsp_fg = theme.fg_status_info;
-      lsp_bg = theme.bg_status_info;
-    }
-    else
-    {
-      lsp_text = "  LSP off ";
-    }
-    right_segments.push_back({lsp_text, lsp_fg, lsp_bg, false, true, 60});
-  }
+  // The static language chip used to ride here -- the server's language, or
+  // "LSP off" -- a label that never changes while the file does not. What the
+  // server is *doing* is the progress chip below; whether one is attached at
+  // all is `:lsp status`, not a permanent cell on the bar.
 
   // LSP progress: what the servers are working on ("indexing", "3/12 files"),
   // the way helix puts a spinner beside the file name. The frame comes from the
@@ -548,19 +518,14 @@ void Editor::render_status_line()
   // fallback so the single bar always matches).
   std::string status_context_label = "  " + status_workspace_label(root_dir);
 
-  // The bar is one row (status_height), so what used to be a second row -- the
-  // transient `:message` or, normally, the workspace label -- rides as a
-  // segment after the left block. A message is kept (it is momentary and worth
-  // the space); the workspace label is optional and drops first.
+  // The bar is one row (status_height), so what used to be a second row rides as
+  // a segment after the left block. Only the transient `:message` does now: the
+  // workspace label sat there permanently, restating the window title on a bar
+  // whose job is the file in front of the user.
   if (!message.empty())
   {
     left_segments.push_back(
         {"  " + message, theme.fg_status_message, theme.bg_status, true, false, 95});
-  }
-  else
-  {
-    left_segments.push_back(
-        {status_context_label, theme.fg_status_muted, theme.bg_status, false, true, 50});
   }
 
   // Hand the raw model to a Lua UI handler when one is registered; it owns

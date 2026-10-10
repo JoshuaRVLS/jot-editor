@@ -42,10 +42,14 @@ def main():
             if width == 48:
                 results.append(("48 columns preserve code", "READABLE_CODE_AREA_0123456789" in text))
                 results.append(("48 columns hide sidebar", not any("│" in line[:26] for line in lines[2:-1])))
-            else:
-                results.append(("80 columns retain sidebar", any("│" in line[:26] for line in lines[2:-1])))
+                # The bar drops the low-priority left chrome before the right-side
+                # tooling, and the rule is read where the bar is really tight: the
+                # trimmed bar (no memory chip, time chips off) fits both at 80,
+                # which is the point of the trim, not a hierarchy change.
                 results.append(("tooling outranks social chrome", "TOOLING_READY" in lines[-1]
                                 and "SOCIAL_SECONDARY" not in lines[-1]))
+            else:
+                results.append(("80 columns retain sidebar", any("│" in line[:26] for line in lines[2:-1])))
                 # The explorer owns row 0 now: the strip spans only the pane area
                 # between the side columns, so the EXPLORER section header sits
                 # on the row the tabs are on instead of being covered by the

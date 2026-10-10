@@ -4,10 +4,8 @@
 #include "editor/model/buffer.h"           // GlobalMark
 #include "editor/model/explorer.h"         // FileNode, SidebarView, SidebarRenderCache
 #include "editor/model/session.h"          // ClosedBufferSnapshot
-#include "editor/model/sidebar_sections.h" // jot_sidebar::Section
-#include "git/git_panel_models.h"          // jot_git_panel::State
-#include "git/git_run.h"                   // jot_git::StatusSnapshot
-#include "workspace/timeline.h"            // jot_timeline::Commit
+#include "git/git_panel_models.h" // jot_git_panel::State
+#include "git/git_run.h"          // jot_git::StatusSnapshot
 #include <atomic>
 #include <map>
 #include <string>
@@ -42,37 +40,14 @@ struct WorkspaceState
   bool zen_saved_panel_ = false;
   int zen_saved_status_height_ = 1;
   SidebarView active_sidebar_view = SIDEBAR_VIEW_EXPLORER;
-  // The left column's stacked sections (explorer tree, outline, timeline):
-  // which ones are collapsed, which owns the sidebar cursor, and the outline
-  // and timeline cursors/windows. The tree keeps file_tree_selected/scroll,
-  // which live in the display space that now starts at the root row.
+  // The explorer section: whether it is expanded (the header row toggles it),
+  // and the tree's cursor and window, which live in the display space that
+  // starts at the pinned root row.
   bool sidebar_explorer_open = true;
-  bool sidebar_outline_open = true;
-  bool sidebar_timeline_open = true;
-  jot_sidebar::Section sidebar_section = jot_sidebar::SECTION_EXPLORER;
-  int sidebar_outline_selected = 0;
-  int sidebar_outline_scroll = 0;
-  int sidebar_timeline_selected = 0;
-  int sidebar_timeline_scroll = 0;
-  // The section heights the user dragged the column's boundaries to, in rows;
-  // 0 leaves the section on the layout's automatic share. The explorer has no
-  // field of its own: it is the flex, so these two fully describe where its
-  // bottom edge sits. Saved with the rest of the section state.
-  int sidebar_outline_height = 0;
-  int sidebar_timeline_height = 0;
-  // The row under the pointer (-1 = none): the hover highlight, the section it
-  // sits in, and its display row inside that section (-1 = the header row).
-  // Motion sets it; the render paints it and never lets it outrank a cursor.
-  int sidebar_hover_section = -1;
+  // The row under the pointer (-1 = none): the hover highlight and its display
+  // row inside the section (-1 = the header row). Motion sets it; the render
+  // paints it and never lets it outrank a cursor.
   int sidebar_hover_index = -2;
-  // The file timeline: the commits touching the buffer on screen, loaded
-  // asynchronously and cached per file (the sidebar is the only surface that
-  // shows them).
-  std::vector<jot_timeline::Commit> timeline_commits;
-  std::string timeline_path;
-  bool timeline_loading = false;
-  long long timeline_loaded_ms = 0;
-  bool timeline_dirty = true;
   int sidebar_width = 0;
   std::string root_dir;
   bool workspace_session_enabled = false;

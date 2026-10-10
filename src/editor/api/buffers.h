@@ -97,8 +97,6 @@ bool git_status_active() const
 std::string run_git_capture(const std::string &args) const;
 std::string to_git_relative_path(const std::string &path) const;
 bool open_git_diff_panel(const std::string &path, bool staged);
-// The file's diff at one commit, for a timeline row (git show rev -- path).
-bool open_commit_diff_panel(const std::string &hash, const std::string &path);
 void close_git_diff_panel();
 void scroll_git_diff_panel(int delta);
 bool git_stage_path(const std::string &path);

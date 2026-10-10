@@ -556,70 +556,46 @@ int sidebar_panel_h_for_test() const
 {
   return side_column().h;
 }
-// The left column's stacked sections: which are collapsed, which one holds
-// the cursor, and where that cursor and its window sit.
+// The left column's section: whether the explorer is expanded, and the tree
+// cursor's place in the display space that starts at the pinned root row.
 struct SidebarSectionsForTest
 {
   bool explorer_open = true;
-  bool outline_open = true;
-  bool timeline_open = true;
-  int section = 0;
-  int outline_cursor = 0;
-  int outline_scroll = 0;
-  int timeline_cursor = 0;
-  int timeline_scroll = 0;
 };
 SidebarSectionsForTest sidebar_sections_for_test() const
 {
   SidebarSectionsForTest state;
   state.explorer_open = sidebar_explorer_open;
-  state.outline_open = sidebar_outline_open;
-  state.timeline_open = sidebar_timeline_open;
-  state.section = (int)sidebar_section;
-  state.outline_cursor = sidebar_outline_selected;
-  state.outline_scroll = sidebar_outline_scroll;
-  state.timeline_cursor = sidebar_timeline_selected;
-  state.timeline_scroll = sidebar_timeline_scroll;
   return state;
 }
 void set_sidebar_sections_for_test(const SidebarSectionsForTest &state)
 {
   sidebar_explorer_open = state.explorer_open;
-  sidebar_outline_open = state.outline_open;
-  sidebar_timeline_open = state.timeline_open;
-  sidebar_section = (jot_sidebar::Section)state.section;
-  sidebar_outline_selected = state.outline_cursor;
-  sidebar_outline_scroll = state.outline_scroll;
-  sidebar_timeline_selected = state.timeline_cursor;
-  sidebar_timeline_scroll = state.timeline_scroll;
 }
-// The sidebar's stacked-section geometry, the model the painter, the hit-test
-// and the keyboard walk all read, so a case can aim a click at a row that is
-// really painted there.
+// The sidebar's geometry, the model the painter, the hit-test and the keyboard
+// walk all read, so a case can aim a click at a row that is really painted
+// there.
 jot_sidebar::Layout sidebar_layout_for_test() const
 {
   return sidebar_sections_layout();
 }
 // The data-row index a sidebar hit names (see sidebar_data_index): the case
-// checks the offset the sections' scroll windows add back.
-int sidebar_data_index_for_test(int section, int index) const
+// checks the offset the tree's scroll window adds back.
+int sidebar_data_index_for_test(int index) const
 {
   SidebarHit hit;
-  hit.section = section;
   hit.index = index;
   return sidebar_data_index(hit);
 }
-// The row the pointer sits on in the sidebar: `section` is the section enum,
-// `index` its display row inside it (-1 = the header, -2 = no row).
+// The row the pointer sits on in the sidebar: its display row inside the tree
+// (-1 = the header, -2 = no row).
 struct SidebarHoverForTest
 {
-  int section = -1;
   int index = -2;
 };
 SidebarHoverForTest sidebar_hover_for_test() const
 {
   SidebarHoverForTest hover;
-  hover.section = sidebar_hover_section;
   hover.index = sidebar_hover_index;
   return hover;
 }
@@ -691,46 +667,6 @@ bool terminal_resize_update_for_test(int y)
 void terminal_resize_end_for_test()
 {
   end_terminal_resize_drag();
-}
-// The section-header drag: a press on the OUTLINE / TIMELINE header arms it
-// (the toggle moves to the release), the first movement begins the resize, and
-// the heights it stores land in sidebar_outline_height / sidebar_timeline_height.
-void sidebar_section_resize_press_for_test(int y)
-{
-  sidebar_section_resize_press(y);
-}
-bool sidebar_section_resize_pending_for_test() const
-{
-  return sidebar_section_resize_pending;
-}
-bool sidebar_section_resize_dragging_for_test() const
-{
-  return sidebar_section_resize_dragging;
-}
-bool sidebar_section_resize_begin_for_test(int y)
-{
-  return begin_sidebar_section_resize_drag(y);
-}
-bool sidebar_section_resize_update_for_test(int y)
-{
-  return update_sidebar_section_resize_drag(y);
-}
-void sidebar_section_resize_end_for_test()
-{
-  end_sidebar_section_resize_drag();
-}
-int sidebar_outline_height_for_test() const
-{
-  return sidebar_outline_height;
-}
-int sidebar_timeline_height_for_test() const
-{
-  return sidebar_timeline_height;
-}
-void set_sidebar_section_heights_for_test(int outline_height, int timeline_height)
-{
-  sidebar_outline_height = outline_height;
-  sidebar_timeline_height = timeline_height;
 }
 int ui_width_for_test() const
 {

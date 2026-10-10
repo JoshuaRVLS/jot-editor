@@ -291,9 +291,10 @@ void Editor::render_tabline()
     // and the close cell is drawn separately, so without it the cleared
     // background showed through as a stray cell inside the tab's right edge.
     ui->fill_rect({tab.x, y, std::max(1, tab.end_x - tab.x), 1}, " ", fg, bg);
-    // The leading edge: inked on the active tab, a separator on the others.
-    ui->draw_text(tab.x, y, "▌", tab.active ? theme.fg_active_border : theme.fg_tab_separator, bg,
-                  tab.active);
+    // The leading cell stays blank: the strip used to ink a ▌ block on the
+    // active tab and a separator on the rest, which read as a row of bars over
+    // the names. What tells the tabs apart now is the band and the label's own
+    // weight, so the reserved cell is only the label's left padding.
     // Jump mode trades the file glyph for the letter the tab answers to.
     if (tab.jump_letter)
     {
@@ -316,7 +317,12 @@ void Editor::render_tabline()
         ui->draw_text(tab.marker_x + (tab.pinned ? 1 : 0), y, kElsewhereGlyph, theme.fg_tab_alt, bg);
       }
     }
-    ui->draw_text(tab.close_x, y, tab.hidden_close ? " " : "×",
+    // The close affordance belongs to the tab the user is on: the active one
+    // keeps it, a hovered one shows it as the invitation, and every other tab
+    // spends the cell on nothing -- a row of × glyphs beside every name was the
+    // strip's loudest detail.
+    const bool close_shown = !tab.hidden_close && (tab.active || tab.hovered);
+    ui->draw_text(tab.close_x, y, close_shown ? "×" : " ",
                   tab.active ? theme.fg_tab_close : theme.fg_comment, bg);
   }
   if (!layout.overflow_label.empty())

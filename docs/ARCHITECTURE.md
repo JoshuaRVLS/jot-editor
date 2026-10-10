@@ -23,7 +23,7 @@ src/
   input/           key/mouse routing: modes, palette, commands
   tools/           subprocess and protocol clients: discord, telescope, the
                    image viewer, the LeetCode keyring
-  workspace/       explorer, sidebar, right dock, tasks, timeline, project search
+  workspace/       explorer, sidebar, right dock, tasks, project search
   lsp/             the Language Server Protocol client, its wire format and
                    the completion ranking it feeds
   dap/             the Debug Adapter Protocol client and its wire format

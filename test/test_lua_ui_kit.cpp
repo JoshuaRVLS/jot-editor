@@ -1668,14 +1668,6 @@ TEST_CASE("Embedded Lua UI kit registers every handler from the binary copy")
   lua_close(L);
 }
 
-// The status line's memory segment (Lua-owned) must format jot.process
-// .memory() into a drop-first right segment: present on a wide bar, absent
-// once the bar runs out of room.
-static int stub_memory_120m(lua_State *L)
-{
-  lua_pushinteger(L, 125829120); // 120 MiB
-  return 1;
-}
 
 TEST_CASE("Status line drops social chrome before LSP across both sides")
 {
@@ -1711,22 +1703,17 @@ TEST_CASE("Status line drops social chrome before LSP across both sides")
   lua_close(L);
 }
 
-TEST_CASE("Status line renders the process memory segment")
+// The kit used to add a `mem` chip of its own from jot.process.memory(); it is
+// gone, because a number about the editor process sat beside the file's own
+// news and read as debug output. The bridge itself stays for plugins, so what
+// this guards is that nothing puts the segment back on the bar.
+TEST_CASE("Status line carries no memory chip")
 {
   g = StubState{};
   lua_State *L = luaL_newstate();
   REQUIRE(L != nullptr);
   luaL_openlibs(L);
   push_stub_jot(L);
-
-  // Stub the memory bridge the kit polls.
-  lua_getglobal(L, "jot");
-  lua_newtable(L);
-  lua_pushcfunction(L, stub_memory_120m);
-  lua_setfield(L, -2, "memory");
-  lua_setfield(L, -2, "process");
-  lua_pop(L, 1);
-
   REQUIRE(jot_lua::load_ui_kit_modules(L));
   const std::string path = std::string(JOT_LUA_SOURCE_DIR) + "/features/ui.lua";
   REQUIRE(luaL_loadfile(L, path.c_str()) == LUA_OK);
@@ -1766,18 +1753,22 @@ TEST_CASE("Status line renders the process memory segment")
     lua_setfield(L, -2, "segments");
   };
 
-  // Wide bar: the formatted " mem 120M " segment is rendered.
+  // Wide bar: the model the editor handed over is what is rendered, and no
+  // chip was added on top of it.
   push_payload(120);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
-  REQUIRE(g.last_row1.find(" mem 120M ") != std::string::npos);
+  REQUIRE(g.last_row1.find(" file.cpp ") != std::string::npos);
+  REQUIRE(g.last_row1.find("mem") == std::string::npos);
 
-  // Narrow bar: the optional memory segment (lowest priority) drops first.
+  // Narrow bar: the optional chrome drops and the file keeps its place -- the
+  // bar still answers for the thing being edited.
   push_payload(30);
   REQUIRE(lua_pcall(L, 1, 1, 0) == LUA_OK);
   REQUIRE(lua_toboolean(L, -1));
   lua_pop(L, 1);
+  REQUIRE(g.last_row1.find(" file.cpp ") != std::string::npos);
   REQUIRE(g.last_row1.find("mem") == std::string::npos);
 
   lua_close(L);

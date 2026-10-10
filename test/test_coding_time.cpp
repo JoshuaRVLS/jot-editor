@@ -199,7 +199,10 @@ TEST_CASE("Coding time: the chip shows the local total for this workspace", "[jo
   e.set_home_menu_visible(false);
   e.apply_resize_for_test(120, 30);
   e.set_workspace_root_for_test("/work/jot");
+  // The chip ships off; the key is what puts it on the bar.
+  e.config_set_for_test("status_coding_time", "true");
   e.set_coding_time_ms_for_test(12 * kMinute);
+  e.request_redraw_for_test();
   e.render_for_test();
   REQUIRE(status_row(e).find(" 12m ") != std::string::npos);
   REQUIRE(status_row(e).find(kTimerGlyph) != std::string::npos);
@@ -213,6 +216,7 @@ TEST_CASE("Coding time: WakaTime's total is what the chip shows when it has one"
   e.set_home_menu_visible(false);
   e.apply_resize_for_test(120, 30);
   e.set_workspace_root_for_test("/work/jot");
+  e.config_set_for_test("status_coding_time", "true");
   e.set_coding_time_ms_for_test(12 * kMinute);
 
   // Off (and with the site configured but nothing answered), the chip is the
@@ -262,6 +266,7 @@ TEST_CASE("Coding time: the total survives a restart for the same workspace", "[
     Editor e;
     e.set_home_menu_visible(false);
     e.set_workspace_root_for_test("/work/jot");
+    e.config_set_for_test("status_coding_time", "true");
     e.apply_resize_for_test(120, 30);
     e.render_frame_for_test();
     e.render_for_test();
@@ -274,6 +279,7 @@ TEST_CASE("Coding time: the total survives a restart for the same workspace", "[
     Editor e;
     e.set_home_menu_visible(false);
     e.set_workspace_root_for_test("/work/other");
+    e.config_set_for_test("status_coding_time", "true");
     e.apply_resize_for_test(120, 30);
     e.render_frame_for_test();
     e.render_for_test();

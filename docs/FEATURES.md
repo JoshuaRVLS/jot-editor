@@ -872,11 +872,12 @@ panels) sit over buffer content on every side, so they keep a full box. Everythi
 is drawn with flat corners; the colour comes from the theme's `WinSeparator` /
 `FloatBorder` / `SidebarBorder` slots.
 
-The status row's right-hand end carries two time chips: the local wall clock
+The status row's right-hand end can carry two time chips: the local wall clock
 (`status_clock`, 24-hour `HH:MM`) and how long was coded today in the workspace
-(`status_coding_time`). The second one has two sources, and which is speaking
-reads off its glyph - a clock outline for WakaTime's own total for today, a
-timer for the local store. Both chips are optional and both are small, so a
+(`status_coding_time`). Both ship off -- the bar is the file's news, and neither
+chip is about the file -- and a session that wants them turns them on. The
+second one has two sources, and which is speaking reads off its glyph - a clock
+outline for WakaTime's own total for today, a timer for the local store. Both chips are optional and both are small, so a
 narrow terminal gives them up before the diagnostics, git and LSP chips. They
 are also the only thing on screen that moves with nothing typed, which is why
 the frame loop watches them: each frame formats the two labels and asks for a
@@ -1627,7 +1628,7 @@ src/ui/          raw terminal and UI abstraction
 src/render/      buffer drawing, minimap, overlays, panels, UI views
 src/input/       keyboard, mouse, command palette, command dispatch
 src/tools/       subprocess and protocol clients: telescope, image viewer, discord
-src/workspace/   explorer, sidebar, right dock, tasks, timeline, project search
+src/workspace/   explorer, sidebar, right dock, tasks, project search
 src/lsp/         the language server protocol client and completion ranking
 src/dap/         the debug adapter protocol client
 src/terminal/    pty-backed terminal sessions and their panel

@@ -472,9 +472,9 @@ struct SidebarPanelRowView
   int fg = 0, bg = 0;
   bool bold = false;
   bool active_file = false; // draw the ▌ marker at the left edge
-  // A stacked section header (EXPLORER / OUTLINE / TIMELINE): the chevron is
-  // in `symbol`, the uppercase label in `text`, and the optional muted suffix
-  // (the timeline's file name) in `detail`.
+  // A section header (the sidebar's EXPLORER): the chevron is in `symbol`, the
+  // uppercase label in `text`, and `detail` is an optional muted right-aligned
+  // suffix a view may hand the Lua kit.
   bool section = false;
   bool section_open = true;
   std::string detail; // muted right-aligned suffix, may be empty

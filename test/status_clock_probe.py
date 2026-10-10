@@ -19,8 +19,8 @@ two chips cannot be checked without a real run:
     (Editor::status_time_due_soon); a start-and-end pair passes on that one
     unrelated jump alone. The samples all land inside the idle cap, so what they
     measure is the gate rather than the cap (which the unit tests pin);
-  * the two config keys take them away independently, so a user can keep the
-    clock and drop the coding chip (the settings are read per frame, so a config
+  * the two config keys are independent and both are off on a fresh install, so
+    a user can put either back (the settings are read per frame, so a config
     file is all it takes).
 
 Usage: test/status_clock_probe.py [path-to-jot-binary]
@@ -147,9 +147,10 @@ def main() -> int:
         return 2
     binary = os.path.abspath(binary)
 
-    # ── Scene 1: defaults, sampled over a stretch of pure idle ───────────────
+    # ── Scene 1: both chips on (the shipped default is off), sampled over a
+    # stretch of pure idle ─────────────────────────────────────────────────
     cfg = "/tmp/jot_status_clock_probe"
-    write_settings(cfg, [])
+    write_settings(cfg, ["status_clock=true", "status_coding_time=true"])
     labels = [f"t{i}" for i in range(IDLE_SAMPLES)]
     taken = run_jot(
         binary,
@@ -195,9 +196,10 @@ def main() -> int:
     print(f"status clock probe: ok - the coding chip advanced at every sample "
           f"({seconds[0]}s -> {seconds[-1]}s)")
 
-    # ── Scene 2: both keys off ───────────────────────────────────────────────
+    # ── Scene 2: the shipped default -- no settings at all, so both keys are
+    # at their default and the bar carries neither chip ─────────────────────
     cfg = "/tmp/jot_status_clock_probe_off"
-    write_settings(cfg, ["status_clock=false", "status_coding_time=false"])
+    write_settings(cfg, [])
     off = run_jot(binary, cfg, {"row": FIRST_SAMPLE_S}, timeout_s=FIRST_SAMPLE_S + 1.5)
     row = off.get("row", "")
     if not row:
@@ -206,11 +208,11 @@ def main() -> int:
     if CLOCK_GLYPH in row or TIMER_GLYPH in row or CODING_RE.search(row):
         print("status clock probe: FAIL - the chips are painted with both keys off")
         return 1
-    print("status clock probe: ok - both keys off drops both chips")
+    print("status clock probe: ok - the default bar carries neither chip")
 
     # ── Scene 3: the clock alone ─────────────────────────────────────────────
     cfg = "/tmp/jot_status_clock_probe_clock"
-    write_settings(cfg, ["status_coding_time=false"])
+    write_settings(cfg, ["status_clock=true", "status_coding_time=false"])
     only = run_jot(binary, cfg, {"row": FIRST_SAMPLE_S}, timeout_s=FIRST_SAMPLE_S + 1.5)
     row = only.get("row", "")
     if CLOCK_GLYPH not in row:

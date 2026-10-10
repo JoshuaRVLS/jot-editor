@@ -87,21 +87,10 @@ Editor::ContentColumn Editor::side_column() const
 jot_sidebar::Layout Editor::sidebar_sections_layout() const
 {
   const ContentColumn col = side_column();
-  // The explorer's display rows: the pinned root row plus the cached tree.
-  const int tree_count = 1 + (int)sidebar_render_cache_.rows.size();
-  const int outline_count = (int)outline_panel.visible.size();
-  const int timeline_count = (int)timeline_commits.size();
   return jot_sidebar::compute(col.top,
                               col.h,
-                              tree_count,
-                              outline_count,
-                              timeline_count,
                               sidebar_explorer_open,
-                              sidebar_outline_open,
-                              sidebar_timeline_open,
-                              /*show_footer=*/true,
-                              sidebar_outline_height,
-                              sidebar_timeline_height);
+                              /*show_footer=*/true);
 }
 
 int Editor::sidebar_list_rows() const

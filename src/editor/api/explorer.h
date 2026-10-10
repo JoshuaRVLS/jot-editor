@@ -45,15 +45,13 @@ ContentColumn side_column() const;
 // Rows the sidebar's list can show: the explorer section's content rows,
 // less the pinned root row.
 int sidebar_list_rows() const;
-// The left column's stacked sections (explorer, outline, timeline): the one
-// geometry model the painter, the hit-test and the cursor walk all read.
+// The left column's geometry (the explorer's header, its list and the footer):
+// the one model the painter, the hit-test and the cursor walk all read.
 jot_sidebar::Layout sidebar_sections_layout() const;
-// The section a sidebar row belongs to and the data-row index it carries:
-// -1 is the section's header, -2 the footer or the empty space under a
-// section.
+// The data-row index a sidebar row carries: -1 is the section's header, -2 the
+// footer or the empty space under it.
 struct SidebarHit
 {
-  int section = -1;
   int index = -2;
   bool header = false;
 };
@@ -69,25 +67,16 @@ int sidebar_content_x() const;
 // Pointer motion in the sidebar: moves the hover band to the row under the
 // pointer, or drops it when the pointer is anywhere else.
 void sidebar_update_hover(int x, int y);
-// The per-section cursors and row counts, shared by the keyboard walk, the
-// page/home/end keys and the render's clamps.
-int sidebar_section_row_count(jot_sidebar::Section section) const;
-int sidebar_section_cursor(jot_sidebar::Section section) const;
-int sidebar_section_view_rows(jot_sidebar::Section section) const;
-void sidebar_set_cursor(jot_sidebar::Section section, int index);
-// Keyboard cursor: moves inside the current section and across the section
-// boundaries; an empty section is skipped over.
+// The explorer's rows and cursor, shared by the keyboard walk and the render's
+// clamps. Page/home/end read sidebar_list_rows() for the window they can show.
+int sidebar_section_row_count() const;
+int sidebar_section_cursor() const;
+void sidebar_set_cursor(int index);
+// Keyboard cursor: moves down the tree, skipping what a collapsed row hides.
 void sidebar_move_cursor(int delta);
 void sidebar_activate_cursor();
-void sidebar_toggle_section(int section);
-// Jumps the buffer to the symbol the sidebar's outline row shows, and opens
-// the commit's file diff from a timeline row.
-void sidebar_jump_outline(int index);
-void sidebar_open_timeline_commit(int index);
-// Reloads the file timeline (async, cached per file). The sidebar render
-// calls it so the section always describes the buffer on screen.
-void refresh_timeline(bool force = false);
-std::string timeline_current_path() const;
+// Opens or collapses the explorer section (its header row toggles it).
+void sidebar_toggle_explorer();
 int sidebar_activity_rail_width() const
 {
   return 5;
@@ -107,16 +96,6 @@ bool sidebar_resize_hit_test(int x, int y) const;
 bool begin_sidebar_resize_drag(int x, int y);
 bool update_sidebar_resize_drag(int x);
 void end_sidebar_resize_drag();
-// Vertical resize of the stacked sections. A press on a boundary header
-// (OUTLINE's or TIMELINE's -- the rows between two sections) arms the gesture
-// with sidebar_section_resize_press instead of toggling on the spot: the
-// first row of movement starts the drag, a release without movement is still
-// the toggle click. The heights land in sidebar_outline_height /
-// sidebar_timeline_height (0 = the automatic share).
-void sidebar_section_resize_press(int y);
-bool begin_sidebar_section_resize_drag(int y);
-bool update_sidebar_section_resize_drag(int y);
-void end_sidebar_section_resize_drag();
 int min_right_panel_width() const
 {
   return 28;

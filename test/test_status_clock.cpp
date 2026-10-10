@@ -5,7 +5,8 @@
 // Three things are pinned here. The formatters, because they are pure and the
 // unit boundaries are exactly where a label would read wrong ("59m" becoming
 // "1h 0m", a 12-hour value leaking an AM/PM-shaped hour). The wiring, so the
-// chips are on the bar and the two config keys take them back off. And the
+// chips are available and the two config keys turn them on and off (a fresh
+// install ships with both off -- the bar is the file's news). And the
 // repaint gate, which is the part that cannot be seen in a screenshot: these
 // are the only labels on the bar that move with no input at all, so the frame
 // loop -- and not a timer of its own -- has to notice them move. Planting a
@@ -128,7 +129,11 @@ TEST_CASE("Status clock: both chips are painted at the right end of the bar", "[
   Editor e;
   e.set_home_menu_visible(false);
   e.apply_resize_for_test(120, 30);
+  // Both chips ship off; the keys are what a user puts back.
+  e.config_set_for_test("status_clock", "true");
+  e.config_set_for_test("status_coding_time", "true");
   e.set_coding_time_ms_for_test(61000);
+  e.request_redraw_for_test();
   e.render_for_test();
 
   const std::string row = status_row(e);

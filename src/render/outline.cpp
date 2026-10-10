@@ -49,7 +49,7 @@ void Editor::note_outline_edit()
 
 void Editor::ensure_outline_fresh(bool force)
 {
-  if (!outline_active() && !sidebar_outline_visible())
+  if (!outline_active())
   {
     return;
   }

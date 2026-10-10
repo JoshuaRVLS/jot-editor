@@ -1,5 +1,5 @@
-# The workspace module: the explorer, the sidebar, the right dock, tasks, the
-# timeline and the project search that walks it.
+# The workspace module: the explorer, the sidebar, the right dock, tasks and
+# the project search that walks it.
 set(JOT_WORKSPACE_SOURCES
   workspace/config.cpp
   workspace/file_tree.cpp
@@ -10,7 +10,6 @@ set(JOT_WORKSPACE_SOURCES
   workspace/search.cpp
   workspace/sidebar.cpp
   workspace/tasks.cpp
-  workspace/timeline.cpp
   workspace/web_completion.cpp
   workspace/workspace.cpp
 )

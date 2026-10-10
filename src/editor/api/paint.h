@@ -188,12 +188,6 @@ bool outline_active() const
 {
   return show_right_panel && active_right_panel_tab == RIGHT_PANEL_SYMBOLS;
 }
-// The sidebar's outline section keeps the same symbol list fresh: the model
-// is shared, only the cursor and the window differ.
-bool sidebar_outline_visible() const
-{
-  return show_sidebar && sidebar_outline_open;
-}
 void toggle_outline_panel();
 void close_outline_panel();
 void note_outline_edit();
