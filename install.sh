@@ -882,31 +882,38 @@ install_required_native_deps() {
   }
 
   install_build_tools() {
-    if build_tools_available && command -v ccache >/dev/null 2>&1; then
+    # mold is Linux-only (CMakeLists skips it elsewhere), so it is only
+    # required here on Linux.
+    local want_mold=0
+    if [[ "$(uname -s)" == "Linux" ]]; then
+      want_mold=1
+    fi
+    if build_tools_available && command -v ccache >/dev/null 2>&1 \
+       && { [[ "${want_mold}" -eq 0 ]] || command -v mold >/dev/null 2>&1; }; then
       return 0
     fi
 
-    log_step "Build tools (ninja, ccache)"
+    log_step "Build tools (ninja, ccache, mold)"
     if command -v pacman >/dev/null 2>&1; then
-      attempt_cmd "Installing ninja and ccache via pacman" \
-        run_maybe_sudo pacman -Sy --noconfirm ninja ccache || true
+      attempt_cmd "Installing ninja, ccache and mold via pacman" \
+        run_maybe_sudo pacman -Sy --noconfirm ninja ccache mold || true
     elif command -v apt-get >/dev/null 2>&1; then
-      attempt_cmd "Installing ninja-build and ccache via apt-get" \
-        run_maybe_sudo bash -lc "apt-get update && apt-get install -y ninja-build ccache" || true
+      attempt_cmd "Installing ninja-build, ccache and mold via apt-get" \
+        run_maybe_sudo bash -lc "apt-get update && apt-get install -y ninja-build ccache mold" || true
     elif command -v dnf >/dev/null 2>&1; then
-      attempt_cmd "Installing ninja-build and ccache via dnf" \
-        run_maybe_sudo dnf install -y ninja-build ccache || true
+      attempt_cmd "Installing ninja-build, ccache and mold via dnf" \
+        run_maybe_sudo dnf install -y ninja-build ccache mold || true
     elif command -v yum >/dev/null 2>&1; then
-      attempt_cmd "Installing ninja-build and ccache via yum" \
-        run_maybe_sudo yum install -y ninja-build ccache || true
+      attempt_cmd "Installing ninja-build, ccache and mold via yum" \
+        run_maybe_sudo yum install -y ninja-build ccache mold || true
     elif command -v zypper >/dev/null 2>&1; then
-      attempt_cmd "Installing ninja and ccache via zypper" \
-        run_maybe_sudo zypper --non-interactive install ninja ccache || true
+      attempt_cmd "Installing ninja, ccache and mold via zypper" \
+        run_maybe_sudo zypper --non-interactive install ninja ccache mold || true
     elif command -v brew >/dev/null 2>&1; then
-      attempt_cmd "Installing ninja and ccache via brew" \
-        brew install ninja ccache || true
+      attempt_cmd "Installing ninja, ccache and mold via brew" \
+        brew install ninja ccache mold || true
     else
-      log_warn "No supported package manager found for ninja/ccache"
+      log_warn "No supported package manager found for ninja/ccache/mold"
     fi
   }
 
@@ -1005,6 +1012,9 @@ if [[ -z "${NINJA_BIN}" ]]; then
 fi
 if ! command -v ccache >/dev/null 2>&1; then
   log_info "ccache not found; rebuilds will be slower"
+fi
+if [[ "$(uname -s)" == "Linux" ]] && ! command -v mold >/dev/null 2>&1; then
+  log_info "mold not found; linking will use the slower default linker"
 fi
 
 if [[ "${INSTALL_TREESITTER}" -eq 1 ]]; then

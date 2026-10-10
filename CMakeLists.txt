@@ -62,6 +62,21 @@ if(JOT_ENABLE_CCACHE)
     message(STATUS "ccache not found; compiler launcher disabled")
   endif()
 endif()
+# mold is the linker used when it is installed. It links the engine and the
+# test binary far faster than the default GNU ld, which is what dominates an
+# incremental rebuild. mold does not run on Windows or macOS, so it is only
+# looked for on the other platforms, and skipped silently when absent (like
+# ccache).
+option(JOT_ENABLE_MOLD "Link with mold when it is installed (Linux and BSD only)" ON)
+if(JOT_ENABLE_MOLD AND NOT WIN32 AND NOT APPLE)
+  find_program(MOLD_PROGRAM mold)
+  if(MOLD_PROGRAM)
+    add_link_options(-fuse-ld=mold)
+    message(STATUS "mold linker enabled: ${MOLD_PROGRAM}")
+  else()
+    message(STATUS "mold not found; using the default linker")
+  endif()
+endif()
 if(JOT_SANITIZE)
   add_compile_options(-fsanitize=address,undefined
                       -fno-omit-frame-pointer
