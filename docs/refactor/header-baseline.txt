@@ -5,18 +5,18 @@
 # the Editor class body, so they cannot compile alone by construction. They
 # disappear one collaborator at a time, as the Editor stops being
 # assembled from fragments (api/rest.h went first, to editor/rest_client.h).
+src/buffers/buffers.h	src/buffers/buffers.h:12:1: error: expected unqualified-id before ‘private’
+src/commands/commands.h	src/commands/commands.h:12:1: error: expected unqualified-id before ‘private’
+src/commands/cpp.h	src/commands/cpp.h:18:1: error: expected unqualified-id before ‘private’
+src/core/api/public_api.h	src/core/api/public_api.h:12:1: error: expected unqualified-id before ‘public’
+src/core/api/test_hooks.h	src/core/api/test_hooks.h:12:1: error: expected unqualified-id before ‘public’
+src/core/api/test_hooks_ui.h	src/core/api/test_hooks_ui.h:12:1: error: expected unqualified-id before ‘public’
+src/core/editing.h	src/core/editing.h:12:1: error: expected unqualified-id before ‘private’
+src/core/panels_api.h	src/core/panels_api.h:12:1: error: expected unqualified-id before ‘private’
+src/core/runtime.h	src/core/runtime.h:12:1: error: expected unqualified-id before ‘private’
 src/editor/api/bible.h	src/editor/api/bible.h:21:1: error: expected unqualified-id before ‘private’
-src/editor/api/buffers.h	src/editor/api/buffers.h:12:1: error: expected unqualified-id before ‘private’
 src/editor/api/coding_time.h	src/editor/api/coding_time.h:21:1: error: expected unqualified-id before ‘private’
-src/editor/api/commands.h	src/editor/api/commands.h:12:1: error: expected unqualified-id before ‘private’
-src/editor/api/cpp.h	src/editor/api/cpp.h:18:1: error: expected unqualified-id before ‘private’
-src/editor/api/editing.h	src/editor/api/editing.h:12:1: error: expected unqualified-id before ‘private’
-src/editor/api/explorer.h	src/editor/api/explorer.h:11:1: error: expected unqualified-id before ‘private’
 src/editor/api/lsp_ui.h	src/editor/api/lsp_ui.h:11:1: error: expected unqualified-id before ‘private’
-src/editor/api/paint.h	src/editor/api/paint.h:11:1: error: expected unqualified-id before ‘private’
-src/editor/api/panels.h	src/editor/api/panels.h:12:1: error: expected unqualified-id before ‘private’
-src/editor/api/panes.h	src/editor/api/panes.h:11:1: error: expected unqualified-id before ‘private’
-src/editor/api/public_api.h	src/editor/api/public_api.h:12:1: error: expected unqualified-id before ‘public’
-src/editor/api/runtime.h	src/editor/api/runtime.h:12:1: error: expected unqualified-id before ‘private’
-src/editor/api/test_hooks.h	src/editor/api/test_hooks.h:12:1: error: expected unqualified-id before ‘public’
-src/editor/api/test_hooks_ui.h	src/editor/api/test_hooks_ui.h:12:1: error: expected unqualified-id before ‘public’
+src/panes/panes.h	src/panes/panes.h:11:1: error: expected unqualified-id before ‘private’
+src/render/paint.h	src/render/paint.h:11:1: error: expected unqualified-id before ‘private’
+src/workspace/explorer.h	src/workspace/explorer.h:11:1: error: expected unqualified-id before ‘private’

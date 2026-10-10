@@ -403,21 +403,21 @@ private:
   static constexpr EditorFocus FOCUS_EDITOR = ::FOCUS_EDITOR;
   static constexpr EditorFocus FOCUS_SIDEBAR = ::FOCUS_SIDEBAR;
 
-#include "editor/api/cpp.h"
+#include "commands/cpp.h"
 #include "core/editing.h"
 #include "editor/api/lsp_ui.h"
-#include "editor/api/paint.h"
+#include "render/paint.h"
 #include "core/runtime.h"
 
 #include "core/api/public_api.h"
 
 #include "editor/api/bible.h"
-#include "editor/api/buffers.h"
+#include "buffers/buffers.h"
 #include "editor/api/coding_time.h"
-#include "editor/api/commands.h"
-#include "editor/api/explorer.h"
+#include "commands/commands.h"
+#include "workspace/explorer.h"
 #include "core/panels_api.h"
-#include "editor/api/panes.h"
+#include "panes/panes.h"
 public:
 #include "core/api/test_hooks.h"
 #include "core/api/test_hooks_ui.h"

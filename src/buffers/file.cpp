@@ -4,7 +4,7 @@
 #include "base/shell_util.h"
 #include "cpp_assist.h"
 #include "core/editor.h"
-#include "editor/app/file_internal.h"
+#include "buffers/file_internal.h"
 #include "folding.h"
 #include "lazy_line_provider.h"
 #include "lua/api.h"

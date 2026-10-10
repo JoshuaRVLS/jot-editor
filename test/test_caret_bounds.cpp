@@ -1,5 +1,5 @@
 // Where a caret may sit after the text under it gets shorter
-// (Editor::trim_trailing_whitespace in src/input/commands/actions.cpp, and the
+// (Editor::trim_trailing_whitespace in src/commands/actions.cpp, and the
 // insert paths in src/text/edit.cpp).
 //
 // Two halves of one shape. `:trim` shortens the lines a caret sat at the end

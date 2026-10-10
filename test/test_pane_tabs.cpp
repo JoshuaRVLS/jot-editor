@@ -7,7 +7,7 @@
 // while the groups draw their own lists (so the files are never inked twice);
 // these cases pin that handover, the pane-local strip, its row budget, and the
 // drag session (src/render/pane_tabs.cpp, src/input/mouse/pane_tabs.cpp,
-// src/editor/app/panes_tabs.cpp).
+// src/panes/panes_tabs.cpp).
 #include "core/editor.h"
 
 #include <algorithm>

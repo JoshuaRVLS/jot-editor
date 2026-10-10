@@ -1,6 +1,6 @@
 // Pane and sidebar resize interactions: hit tests, drag tracking, and split-ratio adjustment.
 #include "core/editor.h"
-#include "editor/app/panes_internal.h"
+#include "panes/panes_internal.h"
 #include <algorithm>
 #include <cctype>
 #include <functional>

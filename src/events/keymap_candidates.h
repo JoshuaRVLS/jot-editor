@@ -3,7 +3,7 @@
 // optional Ctrl+Shift fallback), and the JOT_KEYMAP_DEBUG trace log.
 #pragma once
 
-#include "editor/keybind_catalog.h"
+#include "events/keybind_catalog.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>

@@ -7,7 +7,7 @@
 //
 // Nothing here knows about the editor. The selection arrives as four plain
 // positions, and the caller turns the counts into a sentence
-// (editor/app/line_commands.cpp).
+// (commands/line_commands.cpp).
 
 #include <string>
 

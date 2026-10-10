@@ -1,7 +1,7 @@
 // Per-file fold-state persistence: save and restore fold ranges across
 // sessions via the state-file map.
 #include "core/editor.h"
-#include "editor/app/file_internal.h"
+#include "buffers/file_internal.h"
 #include "folding.h"
 #include "lua/api.h"
 

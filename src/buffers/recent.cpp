@@ -1,7 +1,7 @@
 // Recent files / workspaces tracking: state-file load, save, and the
 // :openrecent picker.
 #include "core/editor.h"
-#include "editor/app/file_internal.h"
+#include "buffers/file_internal.h"
 #include "folding.h"
 #include "lua/api.h"
 

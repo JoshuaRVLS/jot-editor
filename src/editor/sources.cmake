@@ -1,28 +1,28 @@
 set(JOT_EDITOR_SOURCES
-  editor/app/bookmarks.cpp
+  commands/bookmarks.cpp
   core/decorations_rebase.cpp
   core/editor.cpp
-  editor/app/auto_save.cpp
-  editor/app/buffers.cpp
-  editor/app/cpp_definitions.cpp
+  buffers/auto_save.cpp
+  buffers/buffers.cpp
+  commands/cpp_definitions.cpp
   editor/app/web_index.cpp
-  editor/app/file.cpp
-  editor/app/fold_state.cpp
-  editor/app/jumplist.cpp
-  editor/app/line_commands.cpp
-  editor/app/recent.cpp
+  buffers/file.cpp
+  buffers/fold_state.cpp
+  commands/jumplist.cpp
+  commands/line_commands.cpp
+  buffers/recent.cpp
   core/test_hooks.cpp
-  editor/app/folding.cpp
-  editor/app/panes_layout.cpp
-  editor/app/panes_navigate.cpp
-  editor/app/panes_tabs.cpp
-  editor/app/panes_resize.cpp
+  commands/folding.cpp
+  panes/panes_layout.cpp
+  panes/panes_navigate.cpp
+  panes/panes_tabs.cpp
+  panes/panes_resize.cpp
   core/relaunch.cpp
   editor/app/rest_client.cpp
   tools/leetcode_credentials.cpp
   core/resize.cpp
   core/smooth_scroll.cpp
-  editor/app/undo.cpp
+  buffers/undo.cpp
   core/utils.cpp
   editor/integrations/debugger_adapters.cpp
   editor/integrations/debugger_breakpoints.cpp
@@ -45,15 +45,15 @@ set(JOT_EDITOR_SOURCES
   editor/integrations/lsp/status.cpp
   editor/integrations/syntax.cpp
   editor/integrations/tree_sitter_commands.cpp
-  editor/event/main_loop.cpp
-  editor/event/terminal_events.cpp
-  editor/event/which_key.cpp
+  events/main_loop.cpp
+  events/terminal_events.cpp
+  events/which_key.cpp
   editor/markdown/http_message.cpp
   editor/markdown/preview_server.cpp
-  editor/surfaces/home.cpp
+  surfaces/home.cpp
   core/host_api.cpp
-  editor/surfaces/popup.cpp
-  editor/surfaces/quick_pick.cpp
-  editor/surfaces/settings.cpp
-  editor/surfaces/theme.cpp
+  surfaces/popup.cpp
+  surfaces/quick_pick.cpp
+  surfaces/settings.cpp
+  surfaces/theme.cpp
 )

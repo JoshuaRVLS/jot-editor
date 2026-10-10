@@ -416,7 +416,7 @@ if(JOT_GUI AND NOT WIN32)
          gui/gui_input.cpp
          gui/gui_ligatures.cpp
          "${JOT_GUI_ICON_CPP}")
-    list(APPEND JOT_EDITOR_SOURCES editor/event/gui_events.cpp)
+    list(APPEND JOT_EDITOR_SOURCES events/gui_events.cpp)
   else()
     message(STATUS "JOT_GUI requested but SDL2/freetype2 not found; building terminal-only")
     set(JOT_GUI_ENABLED FALSE CACHE INTERNAL "GUI frontend compiled into the engine" FORCE)

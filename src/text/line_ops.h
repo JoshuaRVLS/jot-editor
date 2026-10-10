@@ -5,7 +5,7 @@
 // `:uniquelines`, `:trimblank` and `:join`. Each takes the buffer's lines and an
 // inclusive range the caller has already clamped to the buffer, and touches
 // nothing else -- the undo step, the cursor, the message line and the redraws
-// belong to the caller (editor/app/line_commands.cpp).
+// belong to the caller (commands/line_commands.cpp).
 //
 // This is the half of those commands that has nothing to do with the editor, so
 // it is the half that lives in the module the editor is above.

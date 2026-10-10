@@ -9,7 +9,7 @@
 // commands they invoke, and then checks every one of those names against a real
 // editor.
 #include "core/editor.h"
-#include "input/commands/utils.h"
+#include "commands/utils.h"
 #include "lua/api.h"
 
 #include <algorithm>

@@ -95,7 +95,7 @@ void split_pane_direction(int dx, int dy);
 // list (the keyboard split); the drag-and-drop path passes false so the new
 // group holds only the dropped tab. `announce` writes the status message.
 int split_pane_at(int target_pane, int dx, int dy, int buffer_id, bool inherit_tabs, bool announce);
-// Per-pane tab moves (src/editor/app/panes_tabs.cpp): the drag that carries a tab
+// Per-pane tab moves (src/panes/panes_tabs.cpp): the drag that carries a tab
 // between panes (`move_pane_tab`), the insert form on its own, and the tab
 // list repair both use (a pane whose last tab left closes, the VSCode merge).
 void move_pane_tab(int buffer_id, int source_pane, const PaneTabDrop &drop);

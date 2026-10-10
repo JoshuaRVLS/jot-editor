@@ -1,7 +1,7 @@
 // Buffer close / reopen lifecycle: close_buffer_at with unsaved-change
 // prompts, close_buffer, and reopening the last closed buffer.
 #include "core/editor.h"
-#include "editor/app/file_internal.h"
+#include "buffers/file_internal.h"
 #include "folding.h"
 #include "lua/api.h"
 
