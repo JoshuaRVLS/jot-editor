@@ -61,11 +61,14 @@ jobs:
             libtree-sitter-dev libcurl4-openssl-dev \
             libsdl2-dev libfreetype-dev libharfbuzz-dev
 
+      # makensis compiles the installer on Linux too, so this entry ends the
+      # same way the release job does: a setup exe the user can run against the
+      # tree the import gate just passed.
       - name: Install Windows cross toolchain
         if: matrix.platform == 'windows'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes cmake ninja-build mingw-w64
+          sudo apt-get install --yes cmake ninja-build mingw-w64 nsis
 
       - name: Configure Linux build
         if: matrix.platform == 'linux'
@@ -102,3 +105,15 @@ jobs:
             "${GITHUB_WORKSPACE}" \
             "${GITHUB_WORKSPACE}/build-windows-x86_64" \
             "${GITHUB_WORKSPACE}/dist/jot-windows-x86_64"
+
+      # The installer is part of what ships, so it is built here rather than
+      # only in the release job: a script that stops compiling is caught on the
+      # pull request that broke it, not on the next tag.
+      - name: Build Windows installer
+        if: matrix.platform == 'windows'
+        run: |
+          packaging/windows/build-installer.sh \
+            "${GITHUB_WORKSPACE}/dist/jot-windows-x86_64" \
+            "${GITHUB_WORKSPACE}/dist/jot-windows-x86_64-setup.exe" \
+            "v0.0.0"
+          test -s "${GITHUB_WORKSPACE}/dist/jot-windows-x86_64-setup.exe"

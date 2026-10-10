@@ -1,4 +1,5 @@
 #include "lua/lua_loader.h"
+#include "base/exe_path.h"
 #include "lua/embedded_lua.h"
 
 #include <cstdint>
@@ -6,10 +7,6 @@
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 namespace
 {
@@ -132,29 +129,26 @@ std::vector<std::filesystem::path> jot_lua_override_dirs()
     }
   }
 #endif
+  // The tree the binary was shipped in (<exe>/../share/jot/lua), which is what
+  // a release archive or a per-user install actually is: unpacked wherever the
+  // user wanted it, so it outranks the prefix the build machine compiled in.
+  {
+    const std::filesystem::path data = exe_path::data_dir();
+    if (!data.empty())
+    {
+      const std::filesystem::path rel = data / "lua";
+      if (std::filesystem::is_directory(rel))
+      {
+        out.push_back(rel);
+      }
+    }
+  }
 #ifdef JOT_DEFAULT_DATA_DIR
   {
     const std::filesystem::path inst = std::filesystem::path(JOT_DEFAULT_DATA_DIR) / "lua";
     if (std::filesystem::is_directory(inst))
     {
       out.push_back(inst);
-    }
-  }
-#endif
-#ifdef _WIN32
-  // Installed layout fallback: <exe>\..\share\jot\lua. Per-user installers
-  // unpack to arbitrary locations, so JOT_DEFAULT_DATA_DIR rarely matches.
-  {
-    wchar_t buf[MAX_PATH];
-    const DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
-    if (n > 0 && n < MAX_PATH)
-    {
-      const std::filesystem::path exe(buf);
-      const std::filesystem::path rel = exe.parent_path().parent_path() / "share" / "jot" / "lua";
-      if (std::filesystem::is_directory(rel))
-      {
-        out.push_back(rel);
-      }
     }
   }
 #endif

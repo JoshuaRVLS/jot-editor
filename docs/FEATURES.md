@@ -1541,6 +1541,18 @@ See [THEMES.md](THEMES.md) for authoring colorschemes and
 - The terminal emulator (libvterm) is bundled under `third_party/libvterm`, so
   POSIX and Windows share the same renderer with no platform dependency.
 
+### Windows releases
+
+`jot-windows-x86_64-setup.exe` installs for the current user
+(`%LOCALAPPDATA%\Programs\jot`), so there is no admin prompt: it writes
+`bin\jot.exe` and `share\jot`, adds the `bin` directory to the user's `PATH`,
+creates a Start menu entry and (optionally) a desktop shortcut, and registers
+itself under Apps & features with an uninstaller that leaves `%APPDATA%\jot`
+intact. `jot-windows-x86_64.zip` carries the same tree for a portable copy:
+unpack it anywhere and run `bin\jot.exe`. Both are built by
+`packaging/windows/build-static-exe.sh` (the static exe, import-gated) and
+`packaging/windows/build-installer.sh` (the NSIS installer around it).
+
 ### Windows / MSVC (experimental)
 
 ```bat
@@ -1559,6 +1571,15 @@ Installed files:
 - `$prefix/bin/jot`
 - `$prefix/share/jot/lua/`
 - `$prefix/share/jot/configs/`
+
+Every artifact uses that layout (`bin/jot` above `share/jot`) and ships it
+complete: the colour schemes, the Lua runtime and any vendored LSP payload are
+found relative to the binary itself, so a release archive unpacked anywhere and
+a per-user install into an arbitrary directory both work with nothing copied
+into place by hand. The prefix compiled in at build time
+(`JOT_DEFAULT_DATA_DIR`) is only a fallback for a system-wide install; the
+lookup itself is `src/base/exe_path.h`. What the user owns stays in
+`%APPDATA%\jot` on Windows and `~/.config/jot` elsewhere.
 
 ## Building from source
 

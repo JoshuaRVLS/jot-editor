@@ -28,7 +28,7 @@ local state = {
   rel = nil,         -- `path` relative to `root`, which is what the URL says
   last_text = nil,   -- last text pushed for the document
   debounce = nil,
-}
+  }
 
 function M.state()
   return {
@@ -36,7 +36,7 @@ function M.state()
     port = state.port,
     url = state.url,
     path = state.path,
-  }
+    }
 end
 
 function M.is_running()
@@ -57,7 +57,7 @@ end
 -- thing that knows the path is the session.
 function M.encode_path(path)
   return (to_url_path(path):gsub("[^%w%-%._~/]", function(c)
-    return string.format("%%%02X", string.byte(c))
+                                               return string.format("%%%02X", string.byte(c))
   end))
 end
 
@@ -177,8 +177,8 @@ function M.schedule_refresh()
   end
   local interval = math.max(50, tonumber(config.get("refresh_interval")) or 150)
   state.debounce = jot.timer.set_timeout(interval, function()
-    state.debounce = nil
-    M.refresh(false)
+                                         state.debounce = nil
+                                         M.refresh(false)
   end)
 end
 
@@ -205,7 +205,7 @@ function M.start(opts)
       port = config.get("port"),
       host = config.get("host"),
       file_root = root,
-    })
+      })
     if not ok then
       jot.ui.show_message("html preview: " .. tostring(port_or_error))
       return false

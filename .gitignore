@@ -3,6 +3,8 @@ build/
 build*/
 **/build*/
 out/
+# Where packaging/windows/*.sh stage the release tree and the installer.
+dist/
 _deps/
 Testing/
 CMakeFiles/

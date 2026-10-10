@@ -1,3 +1,4 @@
+#include "base/exe_path.h"
 #include "editor.h"
 #include "lua/api.h"
 #include "ui/xterm_palette.h"
@@ -17,10 +18,6 @@ extern "C"
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 namespace
 {
@@ -59,22 +56,18 @@ namespace
     out.push_back(fs::path(JOT_LUA_SOURCE_DIR).parent_path().parent_path() / ".configs" / "configs"
                   / "colors");
 #endif
-#ifdef JOT_DEFAULT_DATA_DIR
-    out.push_back(fs::path(JOT_DEFAULT_DATA_DIR) / "configs" / "colors");
-#endif
-#ifdef _WIN32
-    // Installed layout fallback: <exe>\..\share\jot\configs\colors.  Per-user
-    // installers unpack to arbitrary locations, so the compile-time default
-    // (JOT_DEFAULT_DATA_DIR) rarely matches the real install path.
+    // The tree the binary was shipped in (<exe>/../share/jot/configs/colors):
+    // a release unpacked anywhere finds its own schemes, which is why this
+    // outranks the prefix the build machine compiled in.
     {
-      wchar_t buf[MAX_PATH];
-      const DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
-      if (n > 0 && n < MAX_PATH)
+      const fs::path data = exe_path::data_dir();
+      if (!data.empty())
       {
-        fs::path exe(buf);
-        out.push_back(exe.parent_path().parent_path() / "share" / "jot" / "configs" / "colors");
+        out.push_back(data / "configs" / "colors");
       }
     }
+#ifdef JOT_DEFAULT_DATA_DIR
+    out.push_back(fs::path(JOT_DEFAULT_DATA_DIR) / "configs" / "colors");
 #endif
     out.push_back(fs::current_path() / ".configs" / "configs" / "colors");
     out.push_back(fs::current_path() / "configs" / "colors");

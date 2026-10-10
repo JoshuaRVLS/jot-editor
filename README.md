@@ -18,6 +18,13 @@ cmake --build build -j
 cmake --install build --prefix "$HOME/.local"
 ```
 
+On Windows, run `jot-windows-x86_64-setup.exe` from the latest release. It
+installs for the current user - no admin prompt - and does the rest itself: the
+binary, the bundled colour schemes, Lua runtime and clangd payload, `jot` on
+your `PATH`, a Start menu entry. `jot-windows-x86_64.zip` is the same tree for a
+portable copy: unpack it anywhere and run `bin\jot.exe`. Settings live in
+`%APPDATA%\jot`.
+
 ## Run
 
 ```bash

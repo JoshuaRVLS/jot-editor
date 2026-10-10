@@ -22,10 +22,14 @@ jobs:
             archive: jot-linux-x86_64.tar.gz
           # Cross-compiled with mingw-w64 on the Linux runner; the same script CI
           # runs, so the exe in the release is the one the import gate passed.
+          # The installer is built from that same staged tree, and both it and
+          # the zip carry the whole tree (bin/jot.exe + share/jot), so neither
+          # needs the user to copy anything into place afterwards.
           - name: Windows x86_64
             os: ubuntu-latest
             platform: windows
             archive: jot-windows-x86_64.zip
+            installer: jot-windows-x86_64-setup.exe
 
     steps:
       - name: Checkout
@@ -84,7 +88,7 @@ jobs:
         if: matrix.platform == 'windows'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes cmake ninja-build mingw-w64
+          sudo apt-get install --yes cmake ninja-build mingw-w64 nsis
 
       - name: Build Windows exe (static, cross-compiled)
         if: matrix.platform == 'windows'
@@ -94,14 +98,26 @@ jobs:
             "${GITHUB_WORKSPACE}/build-windows-x86_64" \
             "${GITHUB_WORKSPACE}/dist/jot-windows-x86_64"
 
+      # The installer wraps the staged tree, so it has to be built before the
+      # zip so both artifacts are the same bytes; the version is the tag the
+      # release is cut from (v3.2.0 -> 3.2.0).
+      - name: Build Windows installer
+        if: matrix.platform == 'windows'
+        run: |
+          packaging/windows/build-installer.sh \
+            "${GITHUB_WORKSPACE}/dist/jot-windows-x86_64" \
+            "${GITHUB_WORKSPACE}/jot-windows-x86_64-setup.exe" \
+            "${GITHUB_REF_NAME}"
+          test -s "${GITHUB_WORKSPACE}/jot-windows-x86_64-setup.exe"
+
       - name: Package Windows zip
         if: matrix.platform == 'windows'
         run: |
           # Only the runtime tree goes in: bin/jot.exe and share/jot, the layout
-          # the exe resolves its own data directory from (see the _WIN32 fallback
-          # in src/editor/lua/lua_loader.cpp). The staged include/ and lib/ hold
-          # development files the package does not need, and the build gate left
-          # no DLL of its own for the exe to find.
+          # the exe resolves its own data directory from (see src/base/exe_path.h).
+          # The staged include/ and lib/ hold development files the package does
+          # not need, and the build gate left no DLL of its own for the exe to
+          # find.
           cd "${GITHUB_WORKSPACE}/dist/jot-windows-x86_64"
           cmake -E tar cf "${GITHUB_WORKSPACE}/${{ matrix.archive }}" --format=zip bin share
 
@@ -110,6 +126,18 @@ jobs:
         with:
           name: ${{ matrix.archive }}
           path: ${{ matrix.archive }}
+          if-no-files-found: error
+
+      # Separate from Upload package so the installer is one named asset on the
+      # release, next to the zip it was built from. Guarded on the matrix entry
+      # having an installer, so the Linux entry skips it without needing a
+      # placeholder name.
+      - name: Upload Windows installer
+        if: matrix.installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.installer }}
+          path: ${{ matrix.installer }}
           if-no-files-found: error
 
   publish:

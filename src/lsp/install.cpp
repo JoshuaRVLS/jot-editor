@@ -1,4 +1,5 @@
 #include "lsp/install.h"
+#include "base/exe_path.h"
 #include "base/shell_util.h"
 #include "base/string_util.h"
 
@@ -8,17 +9,6 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
-
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#elif defined(__APPLE__)
-#include <climits>
-#include <mach-o/dyld.h>
-#else
-#include <climits>
-#include <unistd.h>
-#endif
 
 namespace fs = std::filesystem;
 
@@ -70,38 +60,6 @@ namespace
     return ec ? fs::temp_directory_path() : dir;
   }
 
-  // Directory the running executable lives in, or empty when it cannot be
-  // resolved. A release tarball can be unpacked anywhere, so the payload tree
-  // is looked up relative to the binary (`<exe>/../share/jot/payload`) rather
-  // than trusting the prefix compiled into JOT_DEFAULT_DATA_DIR.
-  fs::path exe_dir()
-  {
-#ifdef _WIN32
-    wchar_t buf[MAX_PATH];
-    const DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
-    if (n > 0 && n < MAX_PATH)
-    {
-      return fs::path(buf).parent_path();
-    }
-#elif defined(__APPLE__)
-    char buf[PATH_MAX];
-    uint32_t size = sizeof(buf);
-    if (_NSGetExecutablePath(buf, &size) == 0)
-    {
-      return fs::path(buf).parent_path();
-    }
-#else
-    char buf[PATH_MAX];
-    const ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-    if (n > 0)
-    {
-      buf[n] = '\0';
-      return fs::path(buf).parent_path();
-    }
-#endif
-    return {};
-  }
-
 } // namespace
 
 namespace LspInstall
@@ -144,10 +102,13 @@ namespace LspInstall
     }
     else
     {
-      const fs::path exe = exe_dir();
-      if (!exe.empty())
+      // A release tarball can be unpacked anywhere, so the tree the binary
+      // itself sits in is tried before the compiled-in prefix
+      // (base/exe_path.h).
+      const fs::path data = exe_path::data_dir();
+      if (!data.empty())
       {
-        roots.push_back(exe.parent_path() / "share" / "jot" / "payload");
+        roots.push_back(data / "payload");
       }
 #ifdef JOT_DEFAULT_DATA_DIR
       roots.emplace_back(fs::path(JOT_DEFAULT_DATA_DIR) / "payload");
