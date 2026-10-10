@@ -861,8 +861,14 @@ void Editor::render_pane(const SplitPane &pane, int pane_index)
   // chrome, but that row is the pane's own last row: in the status colour it
   // made the two-row status line look three rows tall and hid the fact that the
   // row was the pane's.
+  // While the dock is being resized, the separator it shares with this pane
+  // lights up the way the sidebar's border does (sidebar.cpp).
+  const int dock_w = effective_right_panel_width();
+  const int render_w = ui ? ui->get_render_width() : 0;
+  const bool dock_edge = right_panel_resize_dragging && dock_w > 0
+                         && pane.x + draw_w >= render_w - dock_w;
   ui->draw_border(rect,
-                  theme.fg_panel_border,
+                  dock_edge ? theme.fg_active_border : theme.fg_panel_border,
                   theme.bg_panel_border,
                   pane_layout::border_edges(rect, pane_neighbours(pane, draw_w)));
 

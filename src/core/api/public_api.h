@@ -68,6 +68,11 @@ int right_panel_width_for_test() const
 {
   return effective_right_panel_width();
 }
+// Whether a press at (x, y) grabs the dock's resize handle.
+bool right_panel_resize_hit_for_test(int x, int y) const
+{
+  return right_panel_resize_hit_test(x, y);
+}
 int topbar_height_for_test() const
 {
   return topbar_height();

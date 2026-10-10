@@ -398,6 +398,36 @@ TEST_CASE("Right dock: Esc and q stay with the focused editor", "[jot]")
   REQUIRE(e.focus_state_for_test() == (int)FOCUS_EDITOR);
 }
 
+// The dock's separator is the pane's last column, drawn on the dock's left. A
+// press on that line must grab the dock and a drag from it must resize the dock;
+// the grab used to sit one column right of the line, so a press there fell into
+// the pane and the border could be neither clicked nor dragged.
+TEST_CASE("Right dock: the drawn separator grabs and drags the resize", "[jot]")
+{
+  char home[] = "/tmp/jot_dock_resize_XXXXXX";
+  mkdtemp(home);
+  setenv("JOT_CONFIG_HOME", home, 1);
+  setenv("JOT_CACHE_HOME", home, 1);
+
+  Editor e;
+  e.set_home_menu_visible(false);
+  e.apply_resize_for_test(120, 32);
+  e.host().io.show_plugin_panel("LeetCode");
+  REQUIRE(e.right_panel_visible());
+
+  const int dock_x = e.ui_width_for_test() - e.right_panel_width_for_test();
+  const int start_w = e.right_panel_width_for_test();
+  REQUIRE(e.right_panel_resize_hit_for_test(dock_x - 1, 5)); // the drawn line
+  REQUIRE(e.right_panel_resize_hit_for_test(dock_x, 5));     // the dock's own column
+  REQUIRE_FALSE(e.right_panel_resize_hit_for_test(dock_x - 2, 5));
+
+  // Press on the line, drag six cells to the left: the dock grows by six.
+  e.mouse_event_for_test(dock_x - 1, 5, /*bstate=*/1);
+  e.mouse_event_for_test(dock_x - 7, 5, /*bstate=*/32);
+  e.mouse_event_for_test(dock_x - 7, 5, /*bstate=*/2);
+  REQUIRE(e.right_panel_width_for_test() == start_w + 6);
+}
+
 // The three dock chords VS Code uses: Ctrl+B for the primary sidebar,
 // Ctrl+Alt+B for the secondary sidebar and Ctrl+J for the bottom panel. The
 // primary/secondary pair share the letter B, so Alt has to be read from the

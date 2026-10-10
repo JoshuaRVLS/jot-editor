@@ -337,8 +337,12 @@ bool Editor::right_panel_resize_hit_test(int x, int y) const
   {
     return false;
   }
-  int handle_x = ui->get_render_width() - w;
-  if (x != handle_x)
+  const int dock_x = ui->get_render_width() - w;
+  // The separator the pane draws on the dock's left is the pane's last column
+  // (pane_edges.h), so that column is the handle the user sees and grabs; the
+  // dock's own first column grabs too, as it always has. Matching the drawn
+  // line is what the sidebar's handle does (sidebar_resize_hit_test).
+  if (x != dock_x - 1 && x != dock_x)
   {
     return false;
   }
