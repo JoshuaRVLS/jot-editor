@@ -246,7 +246,7 @@ void toggle_sidebar_for_test()
 {
   toggle_sidebar();
 }
-// Discord presence session (editor/discord_controller.h) for headless
+// Discord presence session (extras/discord_controller.h) for headless
 // tests: the same entry points the 1s timer, focus reporting and :discord
 // use.
 void discord_poll_for_test(long long now_ms)

@@ -3,7 +3,7 @@
 // every open buffer it touches, reusing the shared LSPTextEdit applier.
 // Results are drained in lifecycle.cpp's poll loop alongside format results.
 #include "core/editor.h"
-#include "editor/integrations/lsp/common.h"
+#include "lsp/common.h"
 #include "lsp/client.h"
 
 void Editor::lsp_rename_symbol(const std::string &new_name)

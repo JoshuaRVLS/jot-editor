@@ -1,7 +1,7 @@
 #ifndef JOT_EDITOR_DISCORD_CONTROLLER_H
 #define JOT_EDITOR_DISCORD_CONTROLLER_H
 
-#include "tools/discord_rpc.h" // DiscordRPC (which pulls in the presence model)
+#include "extras/discord_rpc.h" // DiscordRPC (which pulls in the presence model)
 #include <string>
 
 class Editor;

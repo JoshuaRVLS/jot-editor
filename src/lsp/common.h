@@ -6,7 +6,7 @@
 
 #include "base/shell_util.h"
 #include "base/string_util.h"
-#include "editor/integrations/lsp_attach_data.h"
+#include "lsp/lsp_attach_data.h"
 #include "lsp/client.h"
 #include "lsp/install.h"
 #include <algorithm>

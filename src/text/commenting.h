@@ -3,7 +3,7 @@
 // line-toggle logic shared by the editor and tests.
 #pragma once
 
-#include "editor/integrations/comment_style_data.h"
+#include "syntax/comment_style_data.h"
 #include <string>
 #include <string_view>
 #include <vector>

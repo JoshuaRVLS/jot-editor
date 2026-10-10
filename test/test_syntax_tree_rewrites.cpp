@@ -1,5 +1,5 @@
 // The parse tree under a rewrite that does not go through the edit hooks
-// (Editor::invalidate_syntax_cache, src/editor/integrations/syntax.cpp).
+// (Editor::invalidate_syntax_cache, src/syntax/syntax_editor.cpp).
 //
 // Every text command funnels through save_state(), which snapshots the text the
 // tree is about to lose (ts_begin_edit) before the lines move. The paths that

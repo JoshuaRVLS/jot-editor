@@ -14,9 +14,9 @@ src/core/api/test_hooks_ui.h	src/core/api/test_hooks_ui.h:12:1: error: expected 
 src/core/editing.h	src/core/editing.h:12:1: error: expected unqualified-id before ‘private’
 src/core/panels_api.h	src/core/panels_api.h:12:1: error: expected unqualified-id before ‘private’
 src/core/runtime.h	src/core/runtime.h:12:1: error: expected unqualified-id before ‘private’
-src/editor/api/bible.h	src/editor/api/bible.h:21:1: error: expected unqualified-id before ‘private’
-src/editor/api/coding_time.h	src/editor/api/coding_time.h:21:1: error: expected unqualified-id before ‘private’
-src/editor/api/lsp_ui.h	src/editor/api/lsp_ui.h:11:1: error: expected unqualified-id before ‘private’
+src/extras/bible_api.h	src/extras/bible_api.h:21:1: error: expected unqualified-id before ‘private’
+src/extras/coding_time.h	src/extras/coding_time.h:21:1: error: expected unqualified-id before ‘private’
+src/lsp/lsp_ui.h	src/lsp/lsp_ui.h:11:1: error: expected unqualified-id before ‘private’
 src/panes/panes.h	src/panes/panes.h:11:1: error: expected unqualified-id before ‘private’
 src/render/paint.h	src/render/paint.h:11:1: error: expected unqualified-id before ‘private’
 src/workspace/explorer.h	src/workspace/explorer.h:11:1: error: expected unqualified-id before ‘private’

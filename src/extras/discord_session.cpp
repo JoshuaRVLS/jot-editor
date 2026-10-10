@@ -1,4 +1,4 @@
-// Discord Rich Presence session (editor/discord_controller.h): turns live
+// Discord Rich Presence session (extras/discord_controller.h): turns live
 // editor state into presence content and drives the IPC client
 // (discord_rpc.cpp), plus the :discord command and the status chip's state.
 //
@@ -10,7 +10,7 @@
 // The session used to be Editor members; it is a collaborator now, so the
 // shared state it reads (buffers, config, the diagnostics and debugger models,
 // the message line and the redraw flag) is reached through `editor_`.
-#include "editor/discord_controller.h"
+#include "extras/discord_controller.h"
 
 #include "core/editor.h"
 

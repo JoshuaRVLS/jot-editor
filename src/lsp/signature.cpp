@@ -1,7 +1,7 @@
 // Editor-side LSP signature help: detecting when the caret is inside a call's
 // argument list, requesting fresh help, and adopting the server's answer.
 #include "core/editor.h"
-#include "editor/integrations/lsp/common.h"
+#include "lsp/common.h"
 #include "lsp/client.h"
 #include <algorithm>
 #include <string>

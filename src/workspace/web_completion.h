@@ -17,7 +17,7 @@
 //
 // The engine is pure: text in, names out, plus one context test that says
 // whether the caret is somewhere these names belong. The editor side
-// (src/editor/app/web_index.cpp) runs the walk off the main thread and splices the
+// (src/extras/web_index.cpp) runs the walk off the main thread and splices the
 // names into the completion list, so every rule here is testable without an
 // editor and without a server.
 namespace WebCompletion

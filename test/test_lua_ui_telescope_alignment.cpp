@@ -24,7 +24,7 @@ extern "C"
 #include <lualib.h>
 }
 
-#include "tools/telescope.h"
+#include "extras/telescope.h"
 #include "ui/text.h"
 
 namespace

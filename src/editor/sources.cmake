@@ -5,7 +5,7 @@ set(JOT_EDITOR_SOURCES
   buffers/auto_save.cpp
   buffers/buffers.cpp
   commands/cpp_definitions.cpp
-  editor/app/web_index.cpp
+  extras/web_index.cpp
   buffers/file.cpp
   buffers/fold_state.cpp
   commands/jumplist.cpp
@@ -18,38 +18,38 @@ set(JOT_EDITOR_SOURCES
   panes/panes_tabs.cpp
   panes/panes_resize.cpp
   core/relaunch.cpp
-  editor/app/rest_client.cpp
-  tools/leetcode_credentials.cpp
+  extras/rest_client.cpp
+  extras/leetcode_credentials.cpp
   core/resize.cpp
   core/smooth_scroll.cpp
   buffers/undo.cpp
   core/utils.cpp
-  editor/integrations/debugger_adapters.cpp
-  editor/integrations/debugger_breakpoints.cpp
-  editor/integrations/debugger_config.cpp
-  editor/integrations/debugger_session.cpp
-  editor/integrations/integrated_terminal.cpp
-  editor/integrations/terminal_float.cpp
-  editor/integrations/lsp/attach.cpp
-  editor/integrations/lsp/code_actions.cpp
-  editor/integrations/lsp/completion.cpp
-  editor/integrations/lsp/diagnostics.cpp
-  editor/integrations/lsp/format.cpp
-  editor/integrations/lsp/hover.cpp
-  editor/integrations/lsp/inlay_hints.cpp
-  editor/integrations/lsp/install.cpp
-  editor/integrations/lsp/lifecycle.cpp
-  editor/integrations/lsp/rename.cpp
-  editor/integrations/lsp/references.cpp
-  editor/integrations/lsp/signature.cpp
-  editor/integrations/lsp/status.cpp
-  editor/integrations/syntax.cpp
-  editor/integrations/tree_sitter_commands.cpp
+  dap/debugger_adapters.cpp
+  dap/debugger_breakpoints.cpp
+  dap/debugger_config.cpp
+  dap/debugger_session.cpp
+  terminal/integrated_terminal.cpp
+  terminal/terminal_float.cpp
+  lsp/attach.cpp
+  lsp/code_actions.cpp
+  lsp/completion.cpp
+  lsp/diagnostics.cpp
+  lsp/format.cpp
+  lsp/hover.cpp
+  lsp/inlay_hints.cpp
+  lsp/install_editor.cpp
+  lsp/lifecycle.cpp
+  lsp/rename.cpp
+  lsp/references.cpp
+  lsp/signature.cpp
+  lsp/status.cpp
+  syntax/syntax_editor.cpp
+  syntax/tree_sitter_commands.cpp
   events/main_loop.cpp
   events/terminal_events.cpp
   events/which_key.cpp
-  editor/markdown/http_message.cpp
-  editor/markdown/preview_server.cpp
+  extras/markdown/http_message.cpp
+  extras/markdown/preview_server.cpp
   surfaces/home.cpp
   core/host_api.cpp
   surfaces/popup.cpp

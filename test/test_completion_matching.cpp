@@ -1,7 +1,7 @@
 // Completion popup matching: byte offsets into the label of the characters
 // the typed query consumed, mirroring the ranker's priority (exact, prefix,
 // substring, greedy subsequence) -- nvim-cmp's CmpItemAbbrMatch highlight.
-#include "editor/integrations/lsp/matching.h"
+#include "lsp/matching.h"
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 #include <vector>

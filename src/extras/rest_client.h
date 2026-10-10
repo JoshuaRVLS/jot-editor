@@ -18,7 +18,7 @@ class Editor;
 // answer does not take three seconds of keystrokes with it; what comes back
 // lands on the main thread, into one scratch tab every later run re-uses --
 // re-running replaces the content where it is instead of stacking a new tab per
-// request (see editor/app/rest_client.cpp). The request file's format and its
+// request (see extras/rest_client.cpp). The request file's format and its
 // pure half are workspace/http_file.h.
 //
 // This used to be a RestState block plus five Editor methods; the session and

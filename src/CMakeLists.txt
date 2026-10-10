@@ -23,6 +23,7 @@ function(jot_configure_object_target target_name)
   target_include_directories(${target_name} PRIVATE
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/src/base
+    ${PROJECT_SOURCE_DIR}/src/core
     ${PROJECT_SOURCE_DIR}/src/editor
     ${PROJECT_SOURCE_DIR}/src/input
     ${PROJECT_SOURCE_DIR}/src/render
@@ -36,6 +37,12 @@ function(jot_configure_object_target target_name)
     ${PROJECT_SOURCE_DIR}/src/workspace
     ${PROJECT_SOURCE_DIR}/src/git
     ${PROJECT_SOURCE_DIR}/src/lua
+    ${PROJECT_SOURCE_DIR}/src/buffers
+    ${PROJECT_SOURCE_DIR}/src/panes
+    ${PROJECT_SOURCE_DIR}/src/commands
+    ${PROJECT_SOURCE_DIR}/src/events
+    ${PROJECT_SOURCE_DIR}/src/surfaces
+    ${PROJECT_SOURCE_DIR}/src/gui
     ${PROJECT_SOURCE_DIR}/src/tools
   )
 
@@ -320,6 +327,7 @@ function(jot_expose_module_api target_name)
   target_include_directories(${target_name} PUBLIC
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/src/base
+    ${PROJECT_SOURCE_DIR}/src/core
     ${PROJECT_SOURCE_DIR}/src/editor
     ${PROJECT_SOURCE_DIR}/src/input
     ${PROJECT_SOURCE_DIR}/src/render
@@ -332,6 +340,13 @@ function(jot_expose_module_api target_name)
     ${PROJECT_SOURCE_DIR}/src/ui
     ${PROJECT_SOURCE_DIR}/src/workspace
     ${PROJECT_SOURCE_DIR}/src/git
+    ${PROJECT_SOURCE_DIR}/src/lua
+    ${PROJECT_SOURCE_DIR}/src/buffers
+    ${PROJECT_SOURCE_DIR}/src/panes
+    ${PROJECT_SOURCE_DIR}/src/commands
+    ${PROJECT_SOURCE_DIR}/src/events
+    ${PROJECT_SOURCE_DIR}/src/surfaces
+    ${PROJECT_SOURCE_DIR}/src/gui
     ${PROJECT_SOURCE_DIR}/src/tools
   )
 endfunction()

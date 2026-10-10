@@ -2,7 +2,7 @@
 // reusing clients, and broadcasting document lifecycle notifications.
 #include "core/editor.h"
 #include "core/editor_models.h"
-#include "editor/integrations/lsp/common.h"
+#include "lsp/common.h"
 #include "lsp/client.h"
 #include "lua/api.h"
 #include "lua/lua_loader.h"

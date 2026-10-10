@@ -1,10 +1,10 @@
-// Discord IPC client (src/tools/discord_rpc.cpp) against a fake Discord server.
+// Discord IPC client (src/extras/discord_rpc.cpp) against a fake Discord server.
 //
 // The bug this pins down: the client used to probe a single socket directory, so
 // it silently never connected on installs whose socket lives somewhere else. The
 // fake server therefore listens on discord-ipc-2 inside a scratch
 // XDG_RUNTIME_DIR -- not index 0 -- and the client must find it anyway.
-#include "tools/discord_rpc.h"
+#include "extras/discord_rpc.h"
 
 #include <catch2/catch_test_macros.hpp>
 

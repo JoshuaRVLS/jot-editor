@@ -13,10 +13,10 @@
 // written and then never shown -- which is exactly how a refused run used to
 // look like a run that silently did nothing.
 //
-// The session and the behaviour are RestClient (editor/rest_client.h); this
+// The session and the behaviour are RestClient (extras/rest_client.h); this
 // file used to define them as Editor:: methods over a RestState block, and the
 // only change is that the shared editor state is reached through `editor_`.
-#include "editor/rest_client.h"
+#include "extras/rest_client.h"
 #include "base/shell_util.h"
 #include "base/string_util.h"
 #include "core/editor.h"

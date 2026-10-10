@@ -1,16 +1,16 @@
 set(JOT_TOOLS_SOURCES
-  tools/discord_presence.cpp
-  tools/imageviewer.cpp
-  tools/telescope.cpp
-  tools/telescope_async.cpp
+  extras/discord_presence.cpp
+  extras/imageviewer.cpp
+  extras/telescope.cpp
+  extras/telescope_async.cpp
 )
 
 set(JOT_TOOLS_POSIX_SOURCES
-  tools/discord_rpc.cpp
-  tools/discord_rpc_transport_unix.cpp
+  extras/discord_rpc.cpp
+  extras/discord_rpc_transport_unix.cpp
 )
 
 set(JOT_TOOLS_WINDOWS_SOURCES
-  tools/discord_rpc.cpp
-  tools/discord_rpc_win32.cpp
+  extras/discord_rpc.cpp
+  extras/discord_rpc_win32.cpp
 )

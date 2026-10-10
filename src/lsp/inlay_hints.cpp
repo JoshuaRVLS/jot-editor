@@ -5,7 +5,7 @@
 // (debounced through the normal did_change flow) or when scrolling leaves
 // the cached range.
 #include "core/editor.h"
-#include "editor/integrations/lsp/common.h"
+#include "lsp/common.h"
 #include "lsp/client.h"
 #include "text/column_utils.h"
 #include "ui/text.h"

@@ -3,7 +3,7 @@
 // diagnostics leading the content), and jump-to-definition with a back stack.
 #include "core/editor.h"
 #include "core/editor_models.h"
-#include "editor/integrations/lsp/common.h"
+#include "lsp/common.h"
 #include "lsp/client.h"
 #include "lua/api.h"
 #include "render/gutter.h"

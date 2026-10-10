@@ -1,5 +1,5 @@
 // The statusline's coding-time chip and the two sources behind it (see
-// editor/api/coding_time.h for the shape and extras/coding_time/probe.h /
+// extras/coding_time.h for the shape and extras/coding_time/probe.h /
 // extras/wakatime.h for the two pure halves).
 //
 // The two runs that leave this module are opposites, which is what the comments
@@ -11,7 +11,7 @@
 //     file is where its complaints go.
 //   * today's total is a value on screen, so it is read back: the cli's stdout
 //     is captured on the worker queue and landed on the main thread, the same
-//     shape as the REST client (editor/app/rest_client.cpp).
+//     shape as the REST client (extras/rest_client.cpp).
 //   * the local store writes a file, so it is written on a timer of its own
 //     rather than per keystroke, and flushed for good when the editor goes away.
 #include "base/shell_util.h"

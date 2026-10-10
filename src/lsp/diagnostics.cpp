@@ -3,7 +3,7 @@
 // diagnostics, dropping a server's contributions when it goes away, and holding
 // fresh findings back while the user is typing in the file they describe.
 #include "core/editor.h"
-#include "editor/integrations/lsp/common.h"
+#include "lsp/common.h"
 #include <iterator>
 #include <string>
 #include <utility>

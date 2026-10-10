@@ -44,7 +44,16 @@ MODULE_ORDER = [
     "terminal",
     "git",
     "extras",
-    "editor",
+    # core/ holds the Editor class, so it takes the slot editor/ used to have.
+    "core",
+    # The domains editor/ used to keep inside itself are editor implementation
+    # code: they include core/editor.h and sit just above it.
+    "buffers",
+    "panes",
+    "commands",
+    "events",
+    "surfaces",
+    "gui",
     "lua",
 ]
 RANK = {name: i for i, name in enumerate(MODULE_ORDER)}
@@ -54,7 +63,7 @@ RANK = {name: i for i, name in enumerate(MODULE_ORDER)}
 INCLUDE_DIRS = [
     "src",
     "src/base",
-    "src/editor",
+    "src/core",
     "src/input",
     "src/render",
     "src/text",
@@ -67,7 +76,12 @@ INCLUDE_DIRS = [
     "src/workspace",
     "src/git",
     "src/lua",
-    "src/tools",
+    "src/buffers",
+    "src/panes",
+    "src/commands",
+    "src/events",
+    "src/surfaces",
+    "src/gui",
 ]
 
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"')

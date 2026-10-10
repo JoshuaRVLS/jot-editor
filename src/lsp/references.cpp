@@ -3,7 +3,7 @@
 // pick, one entry per location with the source line as preview. Selecting an
 // entry jumps to it via the generic quick-pick handler.
 #include "core/editor.h"
-#include "editor/integrations/lsp/common.h"
+#include "lsp/common.h"
 #include "lsp/client.h"
 #include <fstream>
 

@@ -1,4 +1,4 @@
-#include "tools/leetcode_credentials.h"
+#include "extras/leetcode_credentials.h"
 
 #ifdef _WIN32
 #ifndef NOMINMAX

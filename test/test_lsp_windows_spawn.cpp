@@ -3,7 +3,7 @@
 // POSIX: a managed bin there can be a .cmd launcher (anything npm installed
 // publishes one), which CreateProcess cannot start, and a Windows PATH is
 // ';'-separated with drive-letter entries and executable extensions.
-#include "editor/integrations/lsp/common.h"
+#include "lsp/common.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>

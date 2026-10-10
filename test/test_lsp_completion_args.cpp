@@ -1,5 +1,5 @@
 // Accepting a function completion: the call goes in without the server's
-// argument placeholders (src/editor/integrations/lsp/completion.cpp).
+// argument placeholders (src/lsp/completion.cpp).
 //
 // clangd answers a function completion with a snippet that carries the
 // parameter list as placeholder defaults -- `add(${1:int left}, ${2:int

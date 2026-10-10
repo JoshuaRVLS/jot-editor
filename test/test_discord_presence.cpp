@@ -1,8 +1,8 @@
-// Discord Rich Presence content model (src/tools/discord_presence.cpp).
+// Discord Rich Presence content model (src/extras/discord_presence.cpp).
 // The rules ported from iCrawl/discord-vscode are pinned here: the asset-key
 // tables and their order-sensitive lookup, the placeholder templates, the
 // idling / editing / debugging states and the remove-* switches.
-#include "tools/discord_presence.h"
+#include "extras/discord_presence.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <string>

@@ -2,7 +2,7 @@
 #include "bracket.h"
 #include "column_utils.h"
 #include "core/editor.h"
-#include "editor/integrations/lsp/matching.h"
+#include "lsp/matching.h"
 #include "folding.h"
 #include "lua/api.h"
 #include "render/gutter.h"

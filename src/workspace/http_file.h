@@ -3,7 +3,7 @@
 
 // The `.http` / `.rest` request files -- the HTTP-client syntax IntelliJ
 // invented and rest.nvim brought to editors -- parsed, resolved and executed
-// here, with the editor side (editor/app/rest_client.cpp) only feeding a buffer in
+// here, with the editor side (extras/rest_client.cpp) only feeding a buffer in
 // and painting a buffer out.
 //
 // Everything in this header is pure text work so it can be pinned by tests:

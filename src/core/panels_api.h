@@ -41,7 +41,7 @@ void end_terminal_resize_drag();
 void close_integrated_terminal(int index);
 void activate_integrated_terminal(int index, bool focus = true);
 // The floating terminal: its own shell in a box over the active pane
-// (src/editor/integrations/terminal_float.cpp). Esc hides it without ending the
+// (src/terminal/terminal_float.cpp). Esc hides it without ending the
 // shell, so the next toggle returns to the same prompt.
 void toggle_floating_terminal();
 void open_floating_terminal();

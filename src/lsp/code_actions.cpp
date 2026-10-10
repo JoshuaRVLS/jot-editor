@@ -4,7 +4,7 @@
 // action titles in the quick pick. Selecting one applies its WorkspaceEdit
 // through the shared text-edit applier.
 #include "core/editor.h"
-#include "editor/integrations/lsp/common.h"
+#include "lsp/common.h"
 #include "lsp/client.h"
 #include <algorithm>
 

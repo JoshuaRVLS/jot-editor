@@ -1,7 +1,7 @@
 #include "extras/leetcode_http.h"
 #include "lua/api.h"
 #include "lua/bindings_internal.h"
-#include "tools/leetcode_credentials.h"
+#include "extras/leetcode_credentials.h"
 
 #include <string>
 

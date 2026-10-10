@@ -9,7 +9,7 @@
 // `class="..."` or `var(--)` can offer them (see workspace/web_completion.h for
 // the scan itself).
 //
-// The scan runs on a worker thread (editor/app/web_index.cpp); what lives here is
+// The scan runs on a worker thread (extras/web_index.cpp); what lives here is
 // the index it leaves behind and the bookkeeping that keeps a result from a
 // workspace that has since changed out of it. The shape mirrors CppDefsState,
 // which is the same pattern over the same worker queue.

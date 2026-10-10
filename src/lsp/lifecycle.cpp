@@ -2,7 +2,7 @@
 // fans results out to the feature modules, fd watching, and stop / restart /
 // enable / disable.
 #include "core/editor.h"
-#include "editor/integrations/lsp/common.h"
+#include "lsp/common.h"
 #include "lsp/client.h"
 #include "lua/api.h"
 #include <algorithm>

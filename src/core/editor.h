@@ -27,13 +27,13 @@
 //   api/test_hooks_ui.h  the suite's hooks (surfaces and lifecycle)
 //
 // Behaviour that owns its state lives in a collaborator instead
-// (editor/*_controller.h, editor/rest_client.h); the state itself is split
+// (editor/*_controller.h, extras/rest_client.h); the state itself is split
 // under src/editor/state/ (see editor_state.h).
 
 #include "autoclose.h"
 #include "bracket.h"
-#include "editor/discord_controller.h"
-#include "editor/rest_client.h"
+#include "extras/discord_controller.h"
+#include "extras/rest_client.h"
 #include "core/search_controller.h"
 #include "core/sidebar_sections.h" // jot_sidebar::Layout (the sidebar's geometry)
 #include "core/editor_state.h"
@@ -405,15 +405,15 @@ private:
 
 #include "commands/cpp.h"
 #include "core/editing.h"
-#include "editor/api/lsp_ui.h"
+#include "lsp/lsp_ui.h"
 #include "render/paint.h"
 #include "core/runtime.h"
 
 #include "core/api/public_api.h"
 
-#include "editor/api/bible.h"
+#include "extras/bible_api.h"
 #include "buffers/buffers.h"
-#include "editor/api/coding_time.h"
+#include "extras/coding_time.h"
 #include "commands/commands.h"
 #include "workspace/explorer.h"
 #include "core/panels_api.h"

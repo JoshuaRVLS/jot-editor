@@ -1,7 +1,7 @@
 // Debug adapter resolution: binary lookup, command-line construction, and shell-word splitting.
 #include "commands/utils.h"
 #include "core/editor.h"
-#include "editor/integrations/debugger_internal.h"
+#include "dap/debugger_internal.h"
 #include "lua/api.h"
 
 #include <algorithm>
