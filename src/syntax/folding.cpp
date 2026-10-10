@@ -589,7 +589,10 @@ namespace Folding
   {
     // The folded set outlives a re-detection: the ranges are re-derived from
     // the lines, and whatever was collapsed and still exists is folded again.
-    // The write happens once, so the prepared index retires once.
+    // The write happens once, so the prepared index retires once. A block the
+    // re-detection moved wholesale cannot be recognized here -- the old text is
+    // gone by the time this runs, and a line number alone would fold whichever
+    // block landed on it -- so a formatter that shifts lines drops its folds.
     std::set<std::pair<int, int>> collapsed;
     for (const auto &range : folds.ranges())
     {

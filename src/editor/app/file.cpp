@@ -801,7 +801,8 @@ bool Editor::save_buffer_at(int index, bool announce)
     std::vector<std::string> refreshed_lines;
     if (!read_file_lines(buf.filepath, refreshed_lines))
       return false;
-    if (refreshed_lines != buf.lines)
+    const bool formatter_changed = refreshed_lines != buf.lines;
+    if (formatter_changed)
     {
       // The formatter rewrote the file under the buffer, so the swap is an
       // edit: save_state_for() snapshots the text the tree was parsed from
@@ -814,7 +815,12 @@ bool Editor::save_buffer_at(int index, bool announce)
     }
     buf.lines.swap(refreshed_lines);
     clamp_buffer_positions(buf);
-    buf.fold_ranges.clear();
+    if (formatter_changed)
+    {
+      // Re-derive the fold ranges from the new lines instead of dropping them:
+      // clearing here reopened every fold the user had on a formatted save.
+      buf.mark_edited(0);
+    }
     invalidate_syntax_cache(buf);
     return true;
   };
@@ -869,7 +875,8 @@ bool Editor::save_buffer_at(int index, bool announce)
           if (b.filepath.empty())
             return;
 
-          if (!refreshed.empty() && refreshed != b.lines)
+          const bool formatter_changed = !refreshed.empty() && refreshed != b.lines;
+          if (formatter_changed)
           {
             // Same contract as the synchronous path above: the formatter
             // replaced the bytes the tree describes, so snapshot the text
@@ -882,7 +889,12 @@ bool Editor::save_buffer_at(int index, bool announce)
             b.lines.swap(refreshed);
           }
           clamp_buffer_positions(b);
-          b.fold_ranges.clear();
+          if (formatter_changed)
+          {
+            // Re-derive the fold ranges from the new lines instead of dropping
+            // them: clearing here reopened every fold the user had.
+            b.mark_edited(0);
+          }
           invalidate_syntax_cache(b);
           b.modified = false;
           b.is_placeholder = false;
