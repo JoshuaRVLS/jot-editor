@@ -8,7 +8,7 @@
 # The output defines, inside namespace jot_gui:
 #   const unsigned char kWindowIconPixels[];  // RGBA8888, SIZE x SIZE
 #   const int kWindowIconSize;
-# which src/ui/gui/gui_setup.cpp hands to SDL_SetWindowIcon, so the official
+# which src/gui/gui_setup.cpp hands to SDL_SetWindowIcon, so the official
 # artwork ships inside the binary instead of an installed data file.
 
 if(NOT DEFINED INPUT OR NOT DEFINED OUTPUT OR NOT DEFINED SIZE)

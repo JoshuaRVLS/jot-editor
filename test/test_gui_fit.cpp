@@ -1,10 +1,10 @@
-// GUI grid geometry (src/ui/gui/gui_fit.cpp).
+// GUI grid geometry (src/gui/gui_fit.cpp).
 //
 // These pin the unit split that caused the "editor only fills part of the
 // window" bug: window sizes arrive in logical points, cells and the renderer
 // work in device pixels. Fitting points against device-pixel cells yields a
 // grid of 1/scale the window on any scaled (HiDPI / fractional) display.
-#include "ui/gui/gui_fit.h"
+#include "gui/gui_fit.h"
 
 #include <catch2/catch_test_macros.hpp>
 

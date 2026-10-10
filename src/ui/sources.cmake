@@ -1,7 +1,7 @@
 set(JOT_UI_SOURCES
   ui/components.cpp
   ui/cursor_blink.cpp
-  ui/gui/gui_fit.cpp
+  gui/gui_fit.cpp
   ui/smooth_scroll.cpp
   ui/tab_order.cpp
   ui/text.cpp

@@ -130,7 +130,7 @@ scrim to the panel:
   the same predicate again for the re-dim: floats repaint their own rectangles
   with `dim = false`, so without it the sidebar and status line would wipe the
   scrim over themselves every frame.
-- `UIGui::paint_float_overlays`'s `is_modal_float` in `ui/gui/gui_render.cpp`:
+- `UIGui::paint_float_overlays`'s `is_modal_float` in `gui/gui_render.cpp`:
   the GUI draws the scrim as a quad between two float layers, so its copy of the
   set decides what stays bright.
 - The native input paths do not consult the set (they gate per surface): a

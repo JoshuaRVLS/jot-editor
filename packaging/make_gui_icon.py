@@ -3,7 +3,7 @@
 
 The .rgba file is raw RGBA8888 (128x128, straight alpha, rounded corners
 already cut away) that cmake/embed_icon.cmake embeds into the binary so the
-SDL window icon (SDL_SetWindowIcon in src/ui/gui/gui_setup.cpp) never needs a
+SDL window icon (SDL_SetWindowIcon in src/gui/gui_setup.cpp) never needs a
 file on disk.
 
 The decoding and rendering are borrowed from packaging/windows/make_ico.py so

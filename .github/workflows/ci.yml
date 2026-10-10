@@ -49,7 +49,7 @@ jobs:
       # only when the GUI is enabled. Without these packages the configure step
       # cannot find freetype, so the header check compiles font_catalog.h with no
       # way to reach ft2build.h and fails it as a header that does not stand alone.
-      # Installing them also means CI finally compiles src/ui/gui, which nothing
+      # Installing them also means CI finally compiles src/gui, which nothing
       # here did before: the frontend shipped unbuilt and unchecked.
       - name: Install Linux dependencies
         if: matrix.platform == 'linux'

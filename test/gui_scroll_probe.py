@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Probe: wheel scrolling in the GUI glides; it does not kick or teleport.
 
-The GUI slide is pixel animation (ui/gui/gui_anim.cpp), so a terminal screen
+The GUI slide is pixel animation (gui/gui_anim.cpp), so a terminal screen
 cannot show it. This drives the real binary on a private Xvfb display, sends
 real wheel notches with XTEST, and reads the window back between frames to
 watch the content move.

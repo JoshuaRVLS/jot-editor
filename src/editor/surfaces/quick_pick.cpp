@@ -2,7 +2,7 @@
 #include "editor.h"
 #include "lua/api.h"
 #include "syntax/index.h"
-#include "ui/gui/gui.h"
+#include "gui/gui.h"
 #include "ui/text.h"
 #include "workspace/search.h"
 

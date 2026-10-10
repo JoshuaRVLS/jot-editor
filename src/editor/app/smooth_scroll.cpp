@@ -61,7 +61,7 @@ bool Editor::scroll_view_smooth(int lines, int base_ms)
   const int step = destination - before;
 
   // The GUI frontend already eases each pane's content shift pixel by pixel
-  // (ui/gui's neovide-style slide), so a second, line-stepped animation on top
+  // (gui's neovide-style slide), so a second, line-stepped animation on top
   // would only multiply the viewports it has to retain. Smooth scrolling is a
   // terminal feature.
   if (!smooth_scroll_enabled_ || gui_mode)

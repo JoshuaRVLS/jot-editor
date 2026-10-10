@@ -364,7 +364,7 @@ set(JOT_GUI_ENABLED FALSE)
 if(JOT_GUI AND NOT WIN32)
   pkg_check_modules(SDL2 QUIET sdl2)
   pkg_check_modules(FREETYPE2 QUIET freetype2)
-  # Ligature shaping (ui/gui/gui_ligatures.cpp): optional, like the rest of the
+  # Ligature shaping (gui/gui_ligatures.cpp): optional, like the rest of the
   # GUI. Without harfbuzz the frontend still builds and paints every cell with
   # its own cmap glyph -- joins render as the plain characters, which is what
   # the frontend always did.
@@ -404,17 +404,17 @@ if(JOT_GUI AND NOT WIN32)
       message(STATUS "harfbuzz not found; the GUI will not shape ligatures")
     endif()
     list(APPEND JOT_UI_SOURCES
-         ui/gui/font_catalog.cpp
-         ui/gui/gui_setup.cpp
-         ui/gui/gui_glyphs.cpp
-         ui/gui/gui_batch.cpp
-         ui/gui/gui_colors.cpp
-         ui/gui/gui_utf8.cpp
-         ui/gui/gui_anim.cpp
-         ui/gui/gui_render.cpp
-         ui/gui/gui_cursor.cpp
-         ui/gui/gui_input.cpp
-         ui/gui/gui_ligatures.cpp
+         gui/font_catalog.cpp
+         gui/gui_setup.cpp
+         gui/gui_glyphs.cpp
+         gui/gui_batch.cpp
+         gui/gui_colors.cpp
+         gui/gui_utf8.cpp
+         gui/gui_anim.cpp
+         gui/gui_render.cpp
+         gui/gui_cursor.cpp
+         gui/gui_input.cpp
+         gui/gui_ligatures.cpp
          "${JOT_GUI_ICON_CPP}")
     list(APPEND JOT_EDITOR_SOURCES editor/event/gui_events.cpp)
   else()
@@ -432,7 +432,7 @@ jot_configure_object_target(jot_editor_obj)
 target_include_directories(jot_editor_obj SYSTEM PRIVATE ${LIBUV_INCLUDE_DIRS})
 target_compile_options(jot_editor_obj PRIVATE ${LIBUV_CFLAGS_OTHER})
 # Unconditional (not tied to JOT_GUI): engine sources that are always compiled
-# include ui/gui/gui.h, which pulls in glad/gl.h.
+# include gui/gui.h, which pulls in glad/gl.h.
 target_link_libraries(jot_editor_obj PRIVATE jot_glad)
 
 add_library(jot_text_obj OBJECT ${JOT_TEXT_SOURCES})
@@ -650,7 +650,7 @@ if(JOT_GUI_ENABLED)
 endif()
 target_link_libraries(jot_terminal PUBLIC jot_vterm)
 target_link_libraries(jot_engine PUBLIC jot_vterm)
-# Always propagated, not just when the GUI is enabled: ui/gui/gui.h is included
+# Always propagated, not just when the GUI is enabled: gui/gui.h is included
 # by engine sources that are always compiled (editor.cpp, settings.cpp) and its
 # inline atlas guard calls gl* functions.
 target_link_libraries(jot_engine PUBLIC jot_glad)

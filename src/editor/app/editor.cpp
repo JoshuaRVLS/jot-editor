@@ -2,7 +2,7 @@
 #include "editor/app/relaunch.h"
 #include "host_api.h"
 #include "lua/api.h"
-#include "ui/gui/gui.h"
+#include "gui/gui.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>

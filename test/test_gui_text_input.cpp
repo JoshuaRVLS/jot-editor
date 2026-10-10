@@ -1,4 +1,4 @@
-// GUI text input: the composing (IME) text of src/ui/gui/gui_input.cpp and
+// GUI text input: the composing (IME) text of src/gui/gui_input.cpp and
 // gui_cursor.cpp, and the window title of gui_setup.cpp.
 //
 // A composition never reaches the buffer -- the input method holds it until it
@@ -7,7 +7,7 @@
 // the cells that state turns into. Both are SDL-free, so they are testable
 // without a window; the event plumbing around them is what the probes on a real
 // display cover.
-#include "ui/gui/gui.h"
+#include "gui/gui.h"
 
 #include <catch2/catch_test_macros.hpp>
 

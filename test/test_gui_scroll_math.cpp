@@ -1,11 +1,11 @@
-// GUI pane slide motion (src/ui/gui/gui_scroll_math.h).
+// GUI pane slide motion (src/gui/gui_scroll_math.h).
 //
 // Pins the curve behind wheel scrolling: a critically damped spring whose
 // retargeting keeps the velocity the glide already had. The offset ease it
 // replaced kicked by delta/tau on every notch and flipped that kick instantly
 // on a reversal, which is what made wheel scrolling read as the content being
 // yanked around.
-#include "ui/gui/gui_scroll_math.h"
+#include "gui/gui_scroll_math.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>

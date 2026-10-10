@@ -5,8 +5,8 @@
 // so input-to-paint latency is a few milliseconds and the vsync'd swap
 // paces the actual presentation to the monitor refresh.
 #include "editor.h"
-#include "ui/gui/gui.h"
-#include "ui/gui/gui_fit.h"
+#include "gui/gui.h"
+#include "gui/gui_fit.h"
 
 #include <chrono>
 

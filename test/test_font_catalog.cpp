@@ -1,10 +1,10 @@
-// Font catalog: choosing a typeface by name (src/ui/gui/font_catalog.cpp).
+// Font catalog: choosing a typeface by name (src/gui/font_catalog.cpp).
 //
 // The parsing rules are tested directly because they are where this goes
 // wrong: a font's family name, its filename and what a user types are three
 // different spellings of the same thing, and a style word on the end must not
 // make a family unfindable.
-#include "ui/gui/font_catalog.h"
+#include "gui/font_catalog.h"
 
 #include <catch2/catch_test_macros.hpp>
 

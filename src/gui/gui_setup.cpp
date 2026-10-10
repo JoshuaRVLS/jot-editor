@@ -5,7 +5,7 @@
 #include "gui/gui.h"
 #include "gui/gui_fit.h"
 #include "gui/gui_icon.h"
-#include "ui/gui/font_catalog.h"
+#include "gui/font_catalog.h"
 
 #include <SDL2/SDL.h>
 

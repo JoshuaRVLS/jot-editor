@@ -1,4 +1,4 @@
-// GUI keysym translation (src/ui/gui/gui_input.cpp).
+// GUI keysym translation (src/gui/gui_input.cpp).
 //
 // SDL delivers a printable key twice: once as SDL_KEYDOWN and once as
 // SDL_TEXTINPUT. jot forwards both to the editor as EVENT_KEY, so any printable
@@ -9,7 +9,7 @@
 //
 // The terminal backend has no such duplication: termkey produces one key per
 // keystroke, which is the convention the GUI has to match.
-#include "ui/gui/gui.h"
+#include "gui/gui.h"
 
 #include <SDL2/SDL.h>
 #include <catch2/catch_test_macros.hpp>

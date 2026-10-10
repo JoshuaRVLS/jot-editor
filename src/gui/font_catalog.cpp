@@ -1,4 +1,4 @@
-#include "ui/gui/font_catalog.h"
+#include "gui/font_catalog.h"
 
 #include <algorithm>
 #include <cctype>
