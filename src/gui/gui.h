@@ -17,6 +17,7 @@
 #ifndef UI_GUI_H
 #define UI_GUI_H
 
+#include "gui/gui_fit.h"
 #include "gui/gui_ligatures.h"
 #include "gui/gui_scroll_math.h"
 #include "ui.h"
@@ -316,9 +317,16 @@ private:
   // ASCII punctuation cells sharing one ink, or `c` when there is no run of at
   // least two (see gui_ligatures.h for the rule).
   int ligature_run_end(const std::vector<UICell> &src, int c, int col1) const;
-  // Recomputes cell_w_/cell_h_/ascent_ from the regular face's metrics
-  // (shared by init_freetype and apply_font_zoom).
+  // Recomputes font_cell_w_/font_cell_h_/ascent_ from the regular face's
+  // metrics (shared by init_freetype and apply_font_zoom). The font's own cell
+  // size is kept apart from cell_w_/cell_h_, which are the *pitch* the grid is
+  // drawn at: fit_grid_to_drawable spreads the sub-cell remainder over the grid
+  // so it covers the drawable, and re-fitting has to start from the font's cell
+  // again or that stretch would compound on every resize.
   void refresh_cell_metrics();
+  // Fits the grid to the current drawable and adopts the pitch that covers it.
+  // The caller passes the returned grid to resize().
+  jot_gui::GridFit fit_grid_to_drawable();
   // Re-reads the window and drawable sizes and refreshes scale_ (the
   // device-pixel per point ratio the resize and input paths need).
   void refresh_scale();
@@ -439,8 +447,12 @@ private:
   jot_gui::LigatureShaper lig_shaper_;
   bool ligatures_ = true;
 
+  // The pitch the renderer draws with (see fit_grid_to_drawable), and the
+  // font's own cell metrics it is derived from.
   float cell_w_ = 10.0f;
   float cell_h_ = 20.0f;
+  float font_cell_w_ = 10.0f;
+  float font_cell_h_ = 20.0f;
   float ascent_ = 0.0f;
   int font_px_ = 16;
   // The typeface in use, when one was selected rather than the built-in

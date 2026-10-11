@@ -47,6 +47,16 @@ namespace jot_gui
     return fit;
   }
 
+  CellPitch pitch_to_fill(int drawable_w, int drawable_h, int cols, int rows)
+  {
+    CellPitch pitch;
+    const int c = std::max(1, cols);
+    const int r = std::max(1, rows);
+    pitch.cell_w = (float)std::max(1, drawable_w) / (float)c;
+    pitch.cell_h = (float)std::max(1, drawable_h) / (float)r;
+    return pitch;
+  }
+
   float point_cell_size(float cell_px, float scale)
   {
     if (!(scale > 0.0f))

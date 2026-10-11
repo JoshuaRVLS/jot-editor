@@ -31,6 +31,21 @@ namespace jot_gui
   // momentarily zero-sized window cannot produce an empty grid.
   GridFit fit_grid(int drawable_w, int drawable_h, float cell_w_px, float cell_h_px);
 
+  // The pitch the renderer draws (and hit-tests) with: the font's cell plus its
+  // share of the pixels `fit_grid` could not fit. The fitted grid is whole
+  // cells, so flooring left up to a cell of bare background along the right and
+  // bottom edges -- a visible gap under the last row, which is where the status
+  // line lives. Spreading that remainder makes the grid end exactly on the
+  // window edge, at a pitch the font cannot resolve as different (well under a
+  // pixel per cell on any sane window).
+  struct CellPitch
+  {
+    float cell_w = 1.0f;
+    float cell_h = 1.0f;
+  };
+
+  CellPitch pitch_to_fill(int drawable_w, int drawable_h, int cols, int rows);
+
   // Logical (point) size of one cell, for translating SDL point coordinates
   // onto grid columns and rows.
   float point_cell_size(float cell_px, float scale);

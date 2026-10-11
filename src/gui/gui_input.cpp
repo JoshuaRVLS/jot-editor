@@ -163,7 +163,7 @@ bool UIGui::poll_event(Event &out)
       window_w_ = ev.window.data1;
       window_h_ = ev.window.data2;
       refresh_scale();
-      const jot_gui::GridFit fit = jot_gui::fit_grid(pixel_w_, pixel_h_, cell_w_, cell_h_);
+      const jot_gui::GridFit fit = fit_grid_to_drawable();
       const int cols = fit.cols;
       const int rows = fit.rows;
       if (std::getenv("JOT_GUI_DEBUG"))

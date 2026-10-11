@@ -58,6 +58,56 @@ TEST_CASE("Gui fit fills the drawable with whole cells", "[jot]")
   REQUIRE(bad_cells.rows == 1);
 }
 
+// The fitted grid is whole cells, so flooring left up to a cell of bare
+// background along the right and bottom edges of the window. At the bottom that
+// read as an empty margin under the status line, which is the last row of the
+// grid: the window was resized to a pixel height the cell height did not divide.
+// The pitch spreads that remainder over the cells that fit.
+TEST_CASE("Gui fit spreads the sub-cell remainder so the grid covers the drawable", "[jot]")
+{
+  // An exact division leaves the font's own cell alone.
+  const CellPitch exact = pitch_to_fill(800, 480, 100, 30);
+  REQUIRE(exact.cell_w == 8.0f);
+  REQUIRE(exact.cell_h == 16.0f);
+  const GridFit exact_fit = fit_grid(800, 480, 8.0f, 16.0f);
+  REQUIRE(exact_fit.cols == 100);
+  REQUIRE(exact_fit.rows == 30);
+
+  // 1897x194 px of window at a 10x20 px cell: 9 rows fit (a tenth would need
+  // 200 px), and the 14 px left over used to sit below the grid as background.
+  const GridFit fit = fit_grid(1897, 194, 10.0f, 20.0f);
+  REQUIRE(fit.cols == 189);
+  REQUIRE(fit.rows == 9);
+  const CellPitch pitch = pitch_to_fill(1897, 194, fit.cols, fit.rows);
+
+  // The grid covers the drawable exactly, to both edges.
+  REQUIRE(pitch.cell_w * (float)fit.cols >= 1897.0f - 0.01f);
+  REQUIRE(pitch.cell_h * (float)fit.rows >= 194.0f - 0.01f);
+  // What it adds is the remainder and nothing else: less than one cell in
+  // total, and no cell stretched by a whole cell.
+  REQUIRE((pitch.cell_w - 10.0f) * (float)fit.cols < 10.0f);
+  REQUIRE((pitch.cell_h - 20.0f) * (float)fit.rows < 20.0f);
+  REQUIRE(pitch.cell_w < 20.0f);
+  REQUIRE(pitch.cell_h < 40.0f);
+  // And it only ever grows: the cell count came from flooring, so the pitch can
+  // never come out below the font's cell.
+  REQUIRE(pitch.cell_w >= 10.0f - 0.01f);
+  REQUIRE(pitch.cell_h >= 20.0f - 0.01f);
+
+  // A 2x drawable: the same reasoning, and the result is still the font's cell
+  // when the division is exact.
+  const GridFit hidpi = fit_grid(2560, 1440, 16.0f, 32.0f);
+  const CellPitch hidpi_pitch = pitch_to_fill(2560, 1440, hidpi.cols, hidpi.rows);
+  REQUIRE(hidpi_pitch.cell_w == 16.0f);
+  REQUIRE(hidpi_pitch.cell_h == 32.0f);
+
+  // Degenerate sizes: a 1x1 grid in a zero-sized drawable must not divide by
+  // zero or come out as a zero-sized cell.
+  const CellPitch empty = pitch_to_fill(0, 0, 0, 0);
+  REQUIRE(empty.cell_w >= 1.0f);
+  REQUIRE(empty.cell_h >= 1.0f);
+}
+
 TEST_CASE("Gui fit translates pointer coordinates through the point cell", "[jot]")
 {
   // Unscaled: the point cell is the pixel cell.

@@ -309,10 +309,30 @@ void UIGui::refresh_cell_metrics()
   {
     return;
   }
-  cell_w_ = (float)regular->size->metrics.max_advance / 64.0f;
+  font_cell_w_ = (float)regular->size->metrics.max_advance / 64.0f;
   ascent_ = (float)regular->size->metrics.ascender / 64.0f;
   float descender = (float)regular->size->metrics.descender / 64.0f;
-  cell_h_ = std::max(1.0f, ascent_ - descender + 1.0f);
+  font_cell_h_ = std::max(1.0f, ascent_ - descender + 1.0f);
+  // Until the grid is fitted, draw at the font's own cell: something (the
+  // cursor's IME rect, the window minimum) reads the pitch before a fit.
+  cell_w_ = font_cell_w_;
+  cell_h_ = font_cell_h_;
+}
+
+jot_gui::GridFit UIGui::fit_grid_to_drawable()
+{
+  // The font's cell decides how many whole cells fit, and then the pitch is the
+  // drawable divided by that grid: the cells that fit take up the whole window
+  // instead of leaving the remainder as bare background along the right and
+  // bottom edges. That remainder is the gap under the last row of the grid,
+  // which is where the status line sits -- a floor()ed grid left a strip of
+  // background below it on every window size that did not divide evenly.
+  const jot_gui::GridFit fit =
+      jot_gui::fit_grid(pixel_w_, pixel_h_, font_cell_w_, font_cell_h_);
+  const jot_gui::CellPitch pitch = jot_gui::pitch_to_fill(pixel_w_, pixel_h_, fit.cols, fit.rows);
+  cell_w_ = pitch.cell_w;
+  cell_h_ = pitch.cell_h;
+  return fit;
 }
 
 void UIGui::apply_font_zoom(int step)
@@ -380,17 +400,20 @@ void UIGui::refit_grid()
   // synthesized EVENT_RESIZE by the pump, which relayouts the panes.
   refresh_scale();
   apply_window_minimum();
-  const jot_gui::GridFit fit = jot_gui::fit_grid(pixel_w_, pixel_h_, cell_w_, cell_h_);
+  const jot_gui::GridFit fit = fit_grid_to_drawable();
   resize(fit.cols, fit.rows);
   if (std::getenv("JOT_GUI_DEBUG"))
   {
     std::fprintf(stderr,
-                 "jot-gui: font_px=%d cell=%.1fx%.1f grid=%dx%d scale=%.2f family=%s\n",
+                 "jot-gui: font_px=%d cell=%.2fx%.2f grid=%dx%d drawable=%dx%d scale=%.2f "
+                 "family=%s\n",
                  font_px_,
                  cell_w_,
                  cell_h_,
                  fit.cols,
                  fit.rows,
+                 pixel_w_,
+                 pixel_h_,
                  (double)scale_,
                  font_family_.empty() ? "(default)" : font_family_.c_str());
   }
