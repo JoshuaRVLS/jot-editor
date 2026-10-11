@@ -1,14 +1,11 @@
-// Home screen navigation, end to end through the real paint: the project scan,
-// the launch-folder listing, the per-row key hints and the typed filter are
-// read off the painted grid, so the model and the Lua kit that draws it are
-// pinned together. Opening a row runs the real action, which is why the tests
+// Home screen navigation, end to end through the real paint: the two lists, the
+// per-row key hints and the typed filter are read off the painted grid, so the
+// model and the Lua kit that draws it are pinned together. Opening a row runs the real action, which is why the tests
 // assert on where the editor ended up rather than on the model alone.
 #include "core/editor.h"
-#include "extras/bible.h"
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
-#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -39,15 +36,25 @@ namespace
     out << text;
   }
 
-  // A fresh tree per case, with the editor started inside `work` so the scan
-  // reaches the launch folder and its parent only.
+  // Where the editor keeps what it remembers between sessions.
+  fs::path configs()
+  {
+    return fs::path(getenv("JOT_CONFIG_HOME")) / "configs";
+  }
+
+  // A fresh tree per case, with the editor started inside `work`. Nothing on
+  // the screen reads the tree any more -- its lists are the recents and the
+  // pins -- so the folders and the file are seeded as recents, the way a
+  // session that had visited them would have left them. `gamma` carries every
+  // marker a scanner could look for and is seeded nowhere: the cases below
+  // assert it never reaches the screen.
   struct HomeTree
   {
     std::string base;
     std::string work;
     fs::path previous_cwd;
 
-    HomeTree()
+    explicit HomeTree(Editor &e)
     {
       std::error_code ec;
       previous_cwd = fs::current_path(ec);
@@ -58,9 +65,15 @@ namespace
       fs::create_directories(work);
       fs::create_directories(base + "/alpha");
       fs::create_directories(base + "/beta");
+      fs::create_directories(base + "/gamma");
       write_file(base + "/alpha/package.json", "{\"name\":\"alpha\"}\n");
       write_file(base + "/beta/go.mod", "module beta\n");
+      write_file(base + "/gamma/Cargo.toml", "[package]\nname = \"gamma\"\n");
       write_file(work + "/notes.txt", "hello\n");
+      write_file((configs() / "recent_workspaces.txt").string(),
+                 base + "/alpha\n" + base + "/beta\n");
+      write_file((configs() / "recent_files.txt").string(), work + "/notes.txt\n");
+      e.home_reload_recents_for_test();
       fs::current_path(work, ec);
       REQUIRE(!ec);
     }
@@ -73,10 +86,10 @@ namespace
     }
 
     // A pinned folder is listed without any marker to find it by.
-    void unpin_alpha()
+    void strip_gamma_marker()
     {
       std::error_code ec;
-      fs::remove(base + "/alpha/package.json", ec);
+      fs::remove(base + "/gamma/Cargo.toml", ec);
     }
   };
 
@@ -92,9 +105,8 @@ namespace
     return text;
   }
 
-  // The first painted row holding `needle`, with the rows above it as well: a
-  // section can list the same name twice (here and in Projects).
-  // The last row is the status line, which names the open workspace: a scan
+  // The first painted row holding `needle`, searched from `after_y` down.
+  // The last row is the status line, which names the open workspace: a check
   // that must not see a filtered-out row stops above it.
   int row_containing(Editor &e, const std::string &needle, int after_y = -1)
   {
@@ -162,9 +174,8 @@ namespace
 TEST_CASE("A keystroke that outruns the frame acts on the rows on screen", "[jot]")
 {
   Editor &e = probe_editor();
-  HomeTree tree;
+  HomeTree tree(e);
 
-  e.home_scan_cache_clear_for_test();
   e.set_home_menu_visible(true);
   e.render_for_test();
 
@@ -199,9 +210,8 @@ TEST_CASE("A keystroke that outruns the frame acts on the rows on screen", "[jot
 TEST_CASE("Reopening home starts on the lists, not on the last query", "[jot]")
 {
   Editor &e = probe_editor();
-  HomeTree tree;
+  HomeTree tree(e);
 
-  e.home_scan_cache_clear_for_test();
   e.set_home_menu_visible(true);
   e.render_for_test();
   for (char c : std::string("zzz"))
@@ -229,9 +239,8 @@ TEST_CASE("Reopening home starts on the lists, not on the last query", "[jot]")
 TEST_CASE("The home selection band hugs the label instead of the row", "[jot]")
 {
   Editor &e = probe_editor();
-  HomeTree tree;
+  HomeTree tree(e);
 
-  e.home_scan_cache_clear_for_test();
   e.set_home_menu_visible(true);
   e.render_for_test();
 
@@ -304,24 +313,26 @@ TEST_CASE("The home selection band hugs the label instead of the row", "[jot]")
   e.render_for_test();
 }
 
-TEST_CASE("Home lists the projects around the launch folder and its own files", "[jot]")
+TEST_CASE("Home lists what it remembers, not what it can scan for", "[jot]")
 {
   Editor &e = probe_editor();
-  HomeTree tree;
+  HomeTree tree(e);
 
-  e.home_scan_cache_clear_for_test();
   e.set_home_menu_visible(true);
   e.render_for_test();
 
-  // The scan finds both checkouts above the launch folder, and "Here" lists the
-  // one file next to it. No recent list is involved: this is the tree on disk.
+  // What the editor remembers is listed, and only that: `gamma` sits beside the
+  // other two with a project marker of its own, and no scan reaches it.
   REQUIRE(has_path(e, tree.base + "/alpha"));
   REQUIRE(has_path(e, tree.base + "/beta"));
   REQUIRE(has_path(e, tree.work + "/notes.txt"));
+  REQUIRE_FALSE(has_path(e, tree.base + "/gamma"));
+  REQUIRE(row_containing(e, "gamma") < 0);
+  REQUIRE(row_containing(e, "Projects") < 0);
 
-  const std::string projects_row = row_text(e, row_containing(e, "Projects"));
-  REQUIRE(projects_row.find("Projects") != std::string::npos);
-  REQUIRE(row_containing(e, "notes.txt") > 0);
+  // The two lists are the sections that paint, each with its own title.
+  REQUIRE(row_containing(e, "Recent Folders") > 0);
+  REQUIRE(row_containing(e, "Recent Files") > 0);
 
   // The command rows carry letters and the list rows digits, handed out in
   // layout order so the Nth list row is always 'N'.
@@ -334,7 +345,6 @@ TEST_CASE("Home lists the projects around the launch folder and its own files", 
       digits.push_back(key);
     }
   }
-  REQUIRE(digits.size() >= 3);
   for (std::size_t i = 0; i < digits.size(); ++i)
   {
     REQUIRE(digits[i] == (char)('1' + (int)i));
@@ -347,13 +357,16 @@ TEST_CASE("Home lists the projects around the launch folder and its own files", 
 TEST_CASE("Home prints the key each row opens on", "[jot]")
 {
   Editor &e = probe_editor();
-  HomeTree tree;
+  HomeTree tree(e);
 
-  e.home_scan_cache_clear_for_test();
   e.set_home_menu_visible(true);
   e.render_for_test();
 
-  const int alpha_y = row_containing(e, "alpha");
+  // The folder list, not the whole screen: the first row's Resume entry names a
+  // path of its own, and a digit inside it is not this row's key.
+  const int list_y = row_containing(e, "Recent Folders");
+  REQUIRE(list_y > 0);
+  const int alpha_y = row_containing(e, "alpha", list_y);
   REQUIRE(alpha_y > 0);
   const char printed = row_key(e, alpha_y);
   REQUIRE(printed != 0);
@@ -390,9 +403,8 @@ TEST_CASE("Home prints the key each row opens on", "[jot]")
 TEST_CASE("Typing on home filters the rows instead of dismissing the screen", "[jot]")
 {
   Editor &e = probe_editor();
-  HomeTree tree;
+  HomeTree tree(e);
 
-  e.home_scan_cache_clear_for_test();
   e.set_home_menu_visible(true);
   e.render_for_test();
   REQUIRE(has_path(e, tree.base + "/alpha"));
@@ -454,108 +466,71 @@ TEST_CASE("Typing on home filters the rows instead of dismissing the screen", "[
   e.render_for_test();
 }
 
-TEST_CASE("A pinned folder stays on home after its project marker is gone", "[jot]")
+TEST_CASE("A pinned folder is listed on home, and unpinning takes it off", "[jot]")
 {
   Editor &e = probe_editor();
-  HomeTree tree;
+  HomeTree tree(e);
 
-  e.home_scan_cache_clear_for_test();
+  // `gamma` is nothing to the editor -- no recent entry, and the marker that
+  // would make a scan call it a project is gone -- so the pin is the whole
+  // reason it can appear.
+  tree.strip_gamma_marker();
+  const fs::path pins = configs() / "home_pins.txt";
+  {
+    std::ofstream out(pins);
+    out << tree.base + "/gamma\n";
+  }
+  e.home_reload_pins_for_test();
   e.set_home_menu_visible(true);
   e.render_for_test();
-  const int alpha_y = row_containing(e, "alpha");
-  REQUIRE(alpha_y > 0);
 
-  // Walk the selection down to the project row and pin it with 'f'.
-  const std::string alpha_path = tree.base + "/alpha";
-  const std::vector<std::string> paths = e.home_row_paths_for_test();
-  for (int i = 0; i < 40 && paths[(std::size_t)e.home_selected_for_test()] != alpha_path; ++i)
-  {
-    e.home_input_for_test('j');
-  }
-  REQUIRE(paths[(std::size_t)e.home_selected_for_test()] == alpha_path);
-  e.home_input_for_test('f');
-  e.render_for_test();
-  REQUIRE(e.home_visible_for_test());
-
-  // The pin is a star on the row, and the folder is listed above the scan now.
+  const std::string gamma_path = tree.base + "/gamma";
+  REQUIRE(has_path(e, gamma_path));
   const int starred_y = row_containing(e, "\u2605");
   REQUIRE(starred_y > 0);
-  REQUIRE(row_text(e, starred_y).find("alpha") != std::string::npos);
+  REQUIRE(row_text(e, starred_y).find("gamma") != std::string::npos);
 
-  // Drop what made alpha look like a project: the pin is the only reason it is
-  // still on the screen.
-  tree.unpin_alpha();
-  e.home_scan_cache_clear_for_test();
-  e.render_for_test();
-  REQUIRE(has_path(e, tree.base + "/alpha"));
-  REQUIRE(row_containing(e, "\u2605") > 0);
-
-  // Unpinning with 'f' again takes it off (the scan has nothing to find).
-  const std::vector<std::string> pinned_paths = e.home_row_paths_for_test();
-  for (int i = 0; i < 40 && pinned_paths[(std::size_t)e.home_selected_for_test()] != alpha_path;
-       ++i)
+  // Unpinning from the screen ('f' on the row) takes it off again: nothing else
+  // was listing it.
+  const std::vector<std::string> paths = e.home_row_paths_for_test();
+  for (int i = 0; i < 40 && paths[(std::size_t)e.home_selected_for_test()] != gamma_path; ++i)
   {
     e.home_input_for_test('j');
   }
-  REQUIRE(pinned_paths[(std::size_t)e.home_selected_for_test()] == alpha_path);
+  REQUIRE(paths[(std::size_t)e.home_selected_for_test()] == gamma_path);
   e.home_input_for_test('f');
-  e.home_scan_cache_clear_for_test();
   e.render_for_test();
-  REQUIRE_FALSE(has_path(e, tree.base + "/alpha"));
+  REQUIRE_FALSE(has_path(e, gamma_path));
+  REQUIRE(row_containing(e, "\u2605") < 0);
 
+  // Leave the shared config home the way the other cases expect to find it.
+  {
+    std::ofstream out(pins);
+  }
+  e.home_reload_pins_for_test();
   e.set_home_menu_visible(false);
   e.render_for_test();
 }
 
-TEST_CASE("Home centers the verse of the day on the bottom strip", "[jot]")
+TEST_CASE("Home paints nothing below the lists", "[jot]")
 {
-  // Its own config and cache home: the day's chapter is pre-seeded in the cache
-  // the Bible reader reads, so the model gets the verse synchronously and the
-  // strip lands on the first painted frame.
-  char home[] = "/tmp/jot_home_votd_XXXXXX";
-  REQUIRE(mkdtemp(home) != nullptr);
-  setenv("JOT_CONFIG_HOME", home, 1);
-  setenv("JOT_CACHE_HOME", home, 1);
-
-  const long long day = (long long)(std::time(nullptr) / 86400);
-  const Bible::Reference chapter = Bible::chapter_for_day(day);
-  const std::string url =
-      Bible::chapter_url("https://bible.helloao.org/api", "BSB", chapter.book->id, chapter.chapter);
-  const fs::path cache_dir = fs::path(home) / "bible";
-  fs::create_directories(cache_dir);
-  {
-    std::ofstream out(cache_dir / Bible::cache_file_name(url));
-    out << "{\"translation\":{\"id\":\"BSB\",\"englishName\":\"Berean Standard Bible\"},"
-           "\"book\":{\"id\":\"JHN\",\"commonName\":\"John\"},"
-           "\"chapter\":{\"number\":1,\"content\":[{\"type\":\"verse\",\"number\":1,"
-           "\"text\":\"For God so loved the world that he gave his one and only Son, that "
-           "whoever believes in him shall not perish but have eternal life.\"}]}}";
-  }
-
-  Editor e;
+  // The panel used to end in a strip: the verse of the day centered over its
+  // reference, then a footer with the build date and the credit line. All of it
+  // is gone -- the rows under the header belong to the two lists -- so a screen
+  // that paints a footer again fails here.
+  Editor &e = probe_editor();
   e.apply_resize_for_test(120, 32);
   e.set_home_menu_visible(true);
   e.render_for_test();
 
-  // The verse wraps to two centered lines on the bottom strip, the reference sits
-  // under them, and the footer row carries the build date and the credit.
-  const int first_row = row_containing(e, "For God so loved");
-  REQUIRE(first_row > 0);
-  REQUIRE(first_row > e.ui_height_for_test() * 6 / 10);
-  const std::string line = row_text(e, first_row);
-  const size_t left = line.find_first_not_of(' ');
-  const size_t right = line.find_last_not_of(' ');
-  REQUIRE(left != std::string::npos);
-  REQUIRE(std::abs((int)(left + right + 1) - e.ui_width_for_test()) <= 12);
-  REQUIRE(row_containing(e, "eternal life") == first_row + 1);
+  REQUIRE(row_containing(e, "Recent Files") > 0);
+  REQUIRE(row_containing(e, "Last updated") < 0);
+  REQUIRE(row_containing(e, "Developed by") < 0);
 
-  Bible::Reference shown = chapter;
-  shown.has_verse = true;
-  shown.verse_first = Bible::verse_for_day(day, 1);
-  shown.verse_last = shown.verse_first;
-  REQUIRE(row_containing(e, Bible::reference_label(shown)) == first_row + 2);
-  REQUIRE(row_containing(e, "Last updated") > 0);
-  REQUIRE(row_containing(e, "Developed by Joshua Ravael") > 0);
+  // The last row the panel owns is empty: the lists stop above it and nothing
+  // is centered under them.
+  const std::string last = row_text(e, e.ui_height_for_test() - 2);
+  REQUIRE(last.find_first_not_of(' ') == std::string::npos);
 
   e.set_home_menu_visible(false);
   e.render_for_test();

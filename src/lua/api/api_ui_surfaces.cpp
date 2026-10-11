@@ -812,17 +812,6 @@ bool LuaAPI::emit_home(const HomeView &view)
                        lua_set_str_field(L, t, "context_icon", view.context_icon);
                        lua_set_str_field(L, t, "filter", view.filter);
                        lua_set_str_field(L, t, "hint", view.hint);
-                       lua_newtable(L); // quote_lines: the wrapped verse
-                       const int quote = lua_gettop(L);
-                       for (size_t i = 0; i < view.quote_lines.size(); i++)
-                       {
-                         lua_pushstring(L, view.quote_lines[i].c_str());
-                         lua_rawseti(L, quote, (lua_Integer)i + 1);
-                       }
-                       lua_setfield(L, t, "quote_lines");
-                       lua_set_str_field(L, t, "quote_ref", view.quote_ref);
-                       lua_set_str_field(L, t, "last_updated", view.last_updated);
-                       lua_set_str_field(L, t, "developed_by", view.developed_by);
                        lua_newtable(L);
                        const int arr = lua_gettop(L);
                        for (size_t i = 0; i < view.rows.size(); i++)

@@ -405,14 +405,6 @@ struct HomeView
   std::string context_icon; // glyph before the context line (may be empty)
   std::string filter;       // typed query; empty unless the rows are filtered
   std::string hint;         // the key legend on the tagline row
-  // The quote at the bottom of the panel: the verse of the day, already wrapped
-  // to the panel by the model, centered by the painter, with its reference under
-  // it and the footer line at the panel's last row. Any field may be empty and
-  // that part of the strip is then absent.
-  std::vector<std::string> quote_lines;
-  std::string quote_ref;    // "John 3:16"
-  std::string last_updated; // "Last updated Oct 6, 2026"
-  std::string developed_by; // "Developed by Joshua Ravael"
   // Section titles and item rows in layout order with absolute rects (mouse
   // hit-testing uses the same rects natively).
   std::vector<HomeEntryView> rows;

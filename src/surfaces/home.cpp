@@ -87,244 +87,6 @@ namespace
   // screen the actions column, the section titles and their items all have to
   // fit under the header.
   constexpr int kHomeBigWordmarkRows = 26;
-  // Usable rows below which the bottom strip is dropped: on a short terminal the
-  // lists need the rows more than the quote does.
-  constexpr int kHomeStripMinRows = 18;
-
-  long long home_now_ms()
-  {
-    using namespace std::chrono;
-    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-  }
-
-  struct HomeProject
-  {
-    std::string path;
-    int score = 0;
-  };
-
-  struct BrowseEntry
-  {
-    std::string path;
-    std::string name;
-    bool dir = false;
-  };
-
-  // The two scans below are cached for a few seconds because the model is
-  // rebuilt on every frame, hover included. File scope (and not a function
-  // local) so a test can drop the cache after reshaping the tree on disk.
-  struct HomeScanCache
-  {
-    long long projects_at_ms = 0;
-    std::vector<HomeProject> projects;
-    long long browse_at_ms = 0;
-    std::string browse_key;
-    std::vector<BrowseEntry> browse_entries;
-
-    void clear()
-    {
-      projects_at_ms = 0;
-      projects.clear();
-      browse_at_ms = 0;
-      browse_key.clear();
-      browse_entries.clear();
-    }
-  };
-
-  HomeScanCache &scan_cache()
-  {
-    static HomeScanCache cache;
-    return cache;
-  }
-
-  // What makes a directory look like a project, strongest first: the scan stops
-  // at the first hit, so a repository costs a single stat.
-  const char *const kProjectMarkers[] = {".git",
-                                         "package.json",
-                                         "Cargo.toml",
-                                         "go.mod",
-                                         "pyproject.toml",
-                                         "CMakeLists.txt",
-                                         "composer.json",
-                                         "Gemfile",
-                                         "pom.xml",
-                                         "build.gradle",
-                                         "deno.json"};
-
-  bool project_marker_score(const fs::path &dir, int &score)
-  {
-    std::error_code ec;
-    for (int i = 0; i < (int)(sizeof(kProjectMarkers) / sizeof(kProjectMarkers[0])); i++)
-    {
-      if (fs::exists(dir / kProjectMarkers[i], ec) && !ec)
-      {
-        score = 100 - i;
-        return true;
-      }
-    }
-    return false;
-  }
-
-  std::string user_home_path()
-  {
-    if (const char *home = std::getenv("HOME"); home && *home)
-    {
-      return home;
-    }
-#ifdef _WIN32
-    if (const char *profile = std::getenv("USERPROFILE"); profile && *profile)
-    {
-      return profile;
-    }
-#endif
-    return "";
-  }
-
-  // Where to look for projects: the launch folder, its parent (starting jot
-  // inside a subdirectory still finds the repo), and the usual dev folders.
-  std::vector<fs::path> project_roots()
-  {
-    std::vector<fs::path> roots;
-    std::error_code ec;
-    auto push = [&](const fs::path &p)
-    {
-      if (p.empty() || !fs::is_directory(p, ec) || ec)
-      {
-        return;
-      }
-      for (const auto &existing : roots)
-      {
-        if (existing == p)
-        {
-          return;
-        }
-      }
-      roots.push_back(p);
-    };
-
-    const fs::path cwd = fs::current_path(ec);
-    push(cwd);
-    push(cwd.parent_path());
-    const std::string home = user_home_path();
-    if (!home.empty())
-    {
-      for (const char *name :
-           {"Projects", "projects", "dev", "Dev", "src", "code", "repos", "work"})
-      {
-        push(fs::path(home) / name);
-      }
-    }
-    return roots;
-  }
-
-  const std::vector<HomeProject> &scan_projects()
-  {
-    HomeScanCache &cache = scan_cache();
-    std::vector<HomeProject> &found = cache.projects;
-    const long long now = home_now_ms();
-    if (cache.projects_at_ms != 0 && now - cache.projects_at_ms < 5000)
-    {
-      return found;
-    }
-    cache.projects_at_ms = now;
-    found.clear();
-
-    std::error_code ec;
-    for (const auto &root : project_roots())
-    {
-      int score = 0;
-      if (project_marker_score(root, score))
-      {
-        found.push_back({root.string(), score + 50});
-      }
-      int seen = 0;
-      for (const auto &entry : fs::directory_iterator(root, ec))
-      {
-        if (ec || ++seen > 200)
-        {
-          break;
-        }
-        const std::string name = entry.path().filename().string();
-        if (name.empty() || name[0] == '.' || name == "node_modules")
-        {
-          continue;
-        }
-        if (!entry.is_directory(ec) || ec)
-        {
-          continue;
-        }
-        if (project_marker_score(entry.path(), score))
-        {
-          found.push_back({entry.path().string(), score});
-        }
-      }
-    }
-
-    std::sort(found.begin(),
-              found.end(),
-              [](const HomeProject &a, const HomeProject &b)
-              {
-                if (a.score != b.score)
-                {
-                  return a.score > b.score;
-                }
-                return a.path < b.path;
-              });
-    // One row per directory: the same project is reachable from the launch
-    // folder and from its parent.
-    std::vector<HomeProject> unique;
-    std::unordered_set<std::string> seen_paths;
-    for (auto &project : found)
-    {
-      if (seen_paths.insert(project.path).second)
-      {
-        unique.push_back(std::move(project));
-      }
-    }
-    found = std::move(unique);
-    return found;
-  }
-
-  // Subdirectories first, then files, so the launch folder reads like a file
-  // manager's list and the arrow keys walk it predictably.
-  const std::vector<BrowseEntry> &browse_dir(const std::string &dir)
-  {
-    HomeScanCache &cache = scan_cache();
-    std::vector<BrowseEntry> &entries = cache.browse_entries;
-    const long long now = home_now_ms();
-    if (cache.browse_at_ms != 0 && cache.browse_key == dir && now - cache.browse_at_ms < 5000)
-    {
-      return entries;
-    }
-    cache.browse_at_ms = now;
-    cache.browse_key = dir;
-    entries.clear();
-
-    std::error_code ec;
-    std::vector<BrowseEntry> dirs, files;
-    int seen = 0;
-    for (const auto &entry : fs::directory_iterator(dir, ec))
-    {
-      if (ec || ++seen > 400)
-      {
-        break;
-      }
-      const std::string name = entry.path().filename().string();
-      if (name.empty() || name[0] == '.' || name == "node_modules")
-      {
-        continue;
-      }
-      const bool is_dir = entry.is_directory(ec) && !ec;
-      (is_dir ? dirs : files).push_back({entry.path().string(), name, is_dir});
-    }
-    auto by_name = [](const BrowseEntry &a, const BrowseEntry &b) { return a.name < b.name; };
-    std::sort(dirs.begin(), dirs.end(), by_name);
-    std::sort(files.begin(), files.end(), by_name);
-    entries = std::move(dirs);
-    entries.insert(entries.end(), files.begin(), files.end());
-    return entries;
-  }
-
   // "2h ago" from a path's own timestamp: for two checkouts with the same name
   // it is what tells which one was touched last.
   std::string relative_age(const std::string &path)
@@ -415,86 +177,6 @@ namespace
     return text.substr(0, (size_t)(max_len - 3)) + "...";
   }
 
-  // The verse of the day, wrapped to the panel and capped at `max_lines`: the
-  // bottom strip is a hint, so a long passage is cut with an ellipsis rather
-  // than read as the screen's own text. Whitespace runs (the API sends the text
-  // with newlines in it) fold to single spaces.
-  std::vector<std::string> wrap_quote(const std::string &text, int width, int max_lines)
-  {
-    std::vector<std::string> lines;
-    if (width <= 0 || max_lines <= 0)
-    {
-      return lines;
-    }
-    std::string line;
-    bool more = false;
-    size_t i = 0;
-    while (i < text.size())
-    {
-      while (i < text.size() && std::isspace((unsigned char)text[i]))
-      {
-        i++;
-      }
-      const size_t start = i;
-      while (i < text.size() && !std::isspace((unsigned char)text[i]))
-      {
-        i++;
-      }
-      if (start == i)
-      {
-        break;
-      }
-      const std::string word = text.substr(start, i - start);
-      if (!line.empty() && ui_cell_count(line) + 1 + ui_cell_count(word) > width)
-      {
-        lines.push_back(line);
-        line.clear();
-        if ((int)lines.size() >= max_lines)
-        {
-          more = true;
-          break;
-        }
-      }
-      if (!line.empty())
-      {
-        line += " ";
-      }
-      line += word;
-    }
-    if (more)
-    {
-      if (!lines.empty())
-      {
-        lines.back() = ellipsize_right(lines.back() + " ...", width);
-      }
-      return lines;
-    }
-    if (!line.empty())
-    {
-      lines.push_back(line);
-    }
-    return lines;
-  }
-
-  // The day this binary was built, spelled for the footer: __DATE__ is
-  // "Mmm dd yyyy" with a space-padded day, and the strip reads better without
-  // the pad. It is the only "last updated" a self-contained binary can honestly
-  // report about itself.
-  std::string build_date_label()
-  {
-    const std::string raw = __DATE__;
-    if (raw.size() < 11)
-    {
-      return raw;
-    }
-    std::string day = raw.substr(4, 2);
-    if (!day.empty() && day[0] == ' ')
-    {
-      day.erase(0, 1);
-    }
-    return raw.substr(0, 3) + " " + day + ", " + raw.substr(7, 4);
-  }
-
   // The folder glyph every directory row leads with; the color comes from the
   // caller, so the same glyph works on the lists and in the actions column.
   std::string folder_icon()
@@ -557,8 +239,8 @@ HomeView Editor::build_home_menu_model()
   home_menu_panel_w = content_w;
   home_menu_panel_h = content_h;
 
-  // The context line names the launch folder, which is also what the "Here"
-  // section lists: this is the directory jot was started in.
+  // The context line names the launch folder: this is the directory jot was
+  // started in.
   std::error_code cwd_ec;
   const fs::path launch_path = fs::current_path(cwd_ec);
   const std::string launch = cwd_ec ? std::string() : launch_path.string();
@@ -577,20 +259,10 @@ HomeView Editor::build_home_menu_model()
   const bool big_wordmark = usable_h >= kHomeBigWordmarkRows;
   const int section_y = content_y + (big_wordmark ? kHomeHeaderRows : kHomeCompactHeaderRows);
 
-  // The bottom strip: the verse of the day centered over its reference, with the
-  // footer on the panel's last row. The verse is wrapped here so `strip_rows`
-  // counts the rows it really takes -- its lines plus the reference under them;
-  // the `- 1` in `row_limit` reserves the footer row, which the strip always
-  // owns. A terminal too short to spare those rows keeps the lists and drops the
-  // verse instead.
-  const std::string votd_text = bible_verse_of_the_day();
-  std::vector<std::string> votd_lines;
-  if (usable_h >= kHomeStripMinRows && !votd_text.empty())
-  {
-    votd_lines = wrap_quote(votd_text, std::max(8, content_w - 6), 2);
-  }
-  const int strip_rows = votd_lines.empty() ? 0 : (int)votd_lines.size() + 1;
-  const int row_limit = std::max(section_y + 1, usable_h - 1 - strip_rows);
+  // The two lists own every row under the header: the screen paints nothing
+  // below them, so the panel's last row is theirs too. The `- 1` keeps the row
+  // the status line's own bottom edge leaves free.
+  const int row_limit = std::max(section_y + 1, usable_h - 1);
 
   home_menu_entries.clear();
 
@@ -696,18 +368,21 @@ HomeView Editor::build_home_menu_model()
                              { return !keep(row.label, row.secondary, row.path); }),
               items.end());
 
-  // ---- The lists: projects, this folder, then the recents ----
+  // ---- The two lists: folders, then files ----
   // Each keeps more candidates than it can show so a filter can still reach a
   // row the layout would not have had room for.
   const int kCandidateCap = 24;
   std::vector<HomeSection> sections;
 
-  HomeSection projects;
-  projects.title = "Projects";
-  projects.icon = folder_icon();
-  projects.fg = theme.fg_function;
-  projects.empty_label = "  Nothing found nearby";
-  projects.cap = 6;
+  HomeSection folders;
+  folders.title = "Recent Folders";
+  folders.icon = "\uf07c";
+  folders.fg = theme.fg_type;
+  folders.empty_label = "  No recent folders";
+  folders.cap = 8;
+  // Pins lead the list, the way they lead Recent Files: with the Projects
+  // section gone this is the only place a pinned folder shows, so it keeps its
+  // star (and is not repeated when it is also in the recents below it).
   for (const auto &dir : pinned_dirs)
   {
     HomeMenuRenderItem row;
@@ -719,69 +394,9 @@ HomeView Editor::build_home_menu_model()
     row.secondary = join_meta(dir);
     if (keep(row.label, row.secondary, row.path))
     {
-      projects.items.push_back(std::move(row));
+      folders.items.push_back(std::move(row));
     }
   }
-  for (const auto &project : scan_projects())
-  {
-    if (pinned_dir(project.path))
-    {
-      continue;
-    }
-    HomeMenuRenderItem row;
-    row.action = HOME_ACTION_OPEN_PATH;
-    row.path = project.path;
-    row.icon = folder_icon();
-    row.icon_fg = theme.fg_sidebar_directory;
-    row.label = get_filename(project.path);
-    row.secondary = join_meta(project.path);
-    if (keep(row.label, row.secondary, row.path))
-    {
-      projects.items.push_back(std::move(row));
-    }
-    if ((int)projects.items.size() >= kCandidateCap)
-    {
-      break;
-    }
-  }
-  sections.push_back(std::move(projects));
-
-  HomeSection here;
-  here.title = launch.empty() ? "Here" : "Here  " + get_filename(launch);
-  here.icon = "\uf015";
-  here.fg = theme.fg_string;
-  here.empty_label = "  This folder is empty";
-  here.cap = 7;
-  if (!launch.empty())
-  {
-    for (const auto &entry : browse_dir(launch))
-    {
-      HomeMenuRenderItem row;
-      row.action = HOME_ACTION_OPEN_PATH;
-      row.path = entry.path;
-      row.icon = entry.dir ? folder_icon() : icon_for_path(entry.path);
-      row.icon_fg =
-          entry.dir ? theme.fg_sidebar_directory : jot_icons::file_type_icon(entry.path).color;
-      row.label = entry.name;
-      row.secondary = relative_age(entry.path);
-      if (keep(row.label, row.secondary, row.path))
-      {
-        here.items.push_back(std::move(row));
-      }
-      if ((int)here.items.size() >= kCandidateCap)
-      {
-        break;
-      }
-    }
-  }
-  sections.push_back(std::move(here));
-
-  HomeSection folders;
-  folders.title = "Recent Folders";
-  folders.icon = "\uf07c";
-  folders.fg = theme.fg_type;
-  folders.empty_label = "  No recent folders";
-  folders.cap = 5;
   for (int i = 0; i < (int)recent_workspaces.size() && (int)folders.items.size() < kCandidateCap;
        i++)
   {
@@ -810,7 +425,7 @@ HomeView Editor::build_home_menu_model()
   files.icon = "\uf15b";
   files.fg = theme.fg_number;
   files.empty_label = "  No recent files";
-  files.cap = 5;
+  files.cap = 8;
   for (const auto &pin : pinned_files)
   {
     HomeMenuRenderItem row;
@@ -914,11 +529,6 @@ HomeView Editor::build_home_menu_model()
   // the whole day, so the fetch this triggers is a no-op after the day's first
   // frame: while it is in flight the strip is simply absent, and the delivery
   // repaints into the next build.
-  view.quote_lines = std::move(votd_lines);
-  view.quote_ref = view.quote_lines.empty() ? std::string() : bible_votd_label;
-  view.last_updated = "Last updated " + build_date_label();
-  view.developed_by = "Developed by Joshua Ravael";
-
   // The command rows keep their glyph at the head of the label -- the label is
   // what the filter reads -- so the view splits it back out here and gives it
   // the row's accent. List rows bring their own icon and stay on the text
@@ -1198,41 +808,6 @@ void Editor::render_home_menu()
                     theme.bg_default);
     }
   }
-
-  // The bottom strip's rows, painted the shape the Lua kit composes
-  // (features/ui/home.lua): the verse centered over its reference, the footer on
-  // the panel's last row. The model leaves these rows to the lists, so nothing
-  // above paints into them.
-  const auto centered_x = [&](const std::string &text)
-  { return content_x + std::max(0, (content_w - ui_cell_count(text)) / 2); };
-  int strip_y = content_y + content_h - 1; // the panel's last row
-  if (!view.last_updated.empty() || !view.developed_by.empty())
-  {
-    if (!view.last_updated.empty())
-    {
-      ui->draw_text(content_x + 2, strip_y, view.last_updated, theme.fg_comment, theme.bg_default);
-    }
-    if (!view.developed_by.empty())
-    {
-      ui->draw_text(content_x + content_w - ui_cell_count(view.developed_by) - 2,
-                    strip_y,
-                    view.developed_by,
-                    theme.fg_comment,
-                    theme.bg_default);
-    }
-    strip_y--;
-  }
-  if (!view.quote_ref.empty())
-  {
-    ui->draw_text(
-        centered_x(view.quote_ref), strip_y, view.quote_ref, theme.fg_keyword, theme.bg_default);
-    strip_y--;
-  }
-  for (auto it = view.quote_lines.rbegin(); it != view.quote_lines.rend(); ++it)
-  {
-    ui->draw_text(centered_x(*it), strip_y, *it, theme.fg_comment, theme.bg_default);
-    strip_y--;
-  }
 }
 
 // --- home screen (test) ---
@@ -1264,11 +839,6 @@ std::vector<char> Editor::home_row_keys_for_test() const
 void Editor::home_input_for_test(int ch)
 {
   handle_input(ch, false, false, false, ch);
-}
-
-void Editor::home_scan_cache_clear_for_test()
-{
-  scan_cache().clear();
 }
 
 bool Editor::handle_home_menu_input(int ch, bool is_ctrl, bool is_shift, bool is_alt)

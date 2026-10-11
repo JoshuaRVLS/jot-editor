@@ -171,13 +171,26 @@ int home_selected_for_test() const
 {
   return home_menu_selected;
 }
+// The pins are read once, at startup: a case that seeds the pins file (or wants
+// the shared one put back the way it found it) asks for the reload.
+void home_reload_pins_for_test()
+{
+  load_home_pins();
+}
+// The same for the lists the screen starts from: a case writes the folders and
+// the file it just made into the config home and asks for the read the next
+// startup would have done.
+void home_reload_recents_for_test()
+{
+  load_recent_files();
+  load_recent_workspaces();
+}
 const std::string &home_filter_for_test() const
 {
   return home_filter;
 }
 // The project and folder scans are cached for a few seconds (the model is
 // rebuilt per frame); a case that reshapes the tree on disk drops them.
-void home_scan_cache_clear_for_test();
 // --- smooth scrolling (test) ---
 // Requests an animation and steps it at explicit timestamps, so the easing
 // curve can be asserted on without a clock.
