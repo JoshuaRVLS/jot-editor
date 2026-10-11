@@ -50,16 +50,6 @@ int Editor::max_right_panel_width() const
   return std::max(0, total_w - left_w - kMinPaneWidth);
 }
 
-int Editor::zen_content_margin(int available_w) const
-{
-  if (!zen_mode)
-  {
-    return 0;
-  }
-  const int zen_w = std::clamp(config.get_int("zen_content_width", 100), 40, 240);
-  return std::max(0, (available_w - zen_w) / 2);
-}
-
 Editor::ContentColumn Editor::content_column() const
 {
   // The bottom panel reserves its height from the pane area; 0 while the shell
@@ -108,10 +98,6 @@ Editor::PaneArea Editor::compute_pane_area() const
   int origin_x = show_sidebar ? effective_sidebar_width() : 0;
   const int right_w = effective_right_panel_width();
   int available_w = std::max(1, total_w - origin_x - right_w);
-  // Zen focus mode narrows the pane area to zen_content_width and centers it.
-  const int zen_margin = zen_content_margin(available_w);
-  origin_x += zen_margin;
-  available_w = std::max(1, available_w - zen_margin * 2);
   return PaneArea{origin_x, col.top, available_w, total_h};
 }
 

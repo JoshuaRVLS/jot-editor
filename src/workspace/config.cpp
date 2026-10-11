@@ -309,7 +309,8 @@ void Config::load_defaults()
   // "always" / "off" force the row on or off.
   settings["pane_tabs"] = "auto";
   settings["right_panel_width"] = "42";
-  settings["zen_content_width"] = "100";
+  // Zen focus mode, remembered across starts (F12 or :zen toggles it).
+  settings["zen_mode"] = "false";
   settings["terminal_height"] = "10";
   // The floating terminal (Alt+Shift+T, :termfloat): a box centered over the
   // active pane's text rows, sized as a percentage of that area (100 = all of

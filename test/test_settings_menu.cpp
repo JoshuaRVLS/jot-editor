@@ -237,11 +237,11 @@ TEST_CASE("Settings menu covers Lua-registered and LSP keys", "[jot]")
   REQUIRE(e.settings_entries_for_test()[(size_t)inline_diag].type
           == SettingsEntry::Type::Bool);
 
-  const int zen = entry_index(e, "zen_content_width");
+  const int zen = entry_index(e, "zen_mode");
   REQUIRE(zen >= 0);
   REQUIRE(e.settings_entries_for_test()[(size_t)zen].type
-          == SettingsEntry::Type::Int);
-  REQUIRE(e.settings_entries_for_test()[(size_t)zen].label == "Zen content width");
+          == SettingsEntry::Type::Bool);
+  REQUIRE(e.settings_entries_for_test()[(size_t)zen].label == "Zen focus mode");
 
   // The Lua feature keys registered as defaults are editable ints/bools.
   const int toast_w = entry_index(e, "toast.max_width");

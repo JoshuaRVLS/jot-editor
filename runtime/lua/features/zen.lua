@@ -1,8 +1,9 @@
 -- Zen focus mode (features/zen.lua).
 --
 -- F12 toggles between the normal layout and a distraction-free one: the
--- sidebar, right panel and status line hide, and the pane area narrows to
--- the zen_content_width config (default 100 columns) and centers.
+-- sidebar, right dock, tab strip and status line hide and the pane area takes
+-- the whole window. It is persistent (the zen_mode config key), so the next
+-- start lands the same way.
 --
 -- This module owns everything user-facing (key, toast, description); the
 -- actual layout flip is native (jot.ui.toggle_zen) because only the C++

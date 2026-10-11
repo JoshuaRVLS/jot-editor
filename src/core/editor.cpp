@@ -218,6 +218,15 @@ void Editor::apply_config_live()
       update_pane_layout();
     }
   }
+  // Zen focus mode is persistent: F12 / :zen writes it, so a start (this runs
+  // from the constructor) and :reload land in the layout it was left in.
+  {
+    const bool zen_wanted = config.get_bool("zen_mode", false);
+    if (zen_wanted != zen_mode)
+    {
+      set_zen_mode(zen_wanted, false);
+    }
+  }
   // WakaTime (extras/wakatime.h) mirrors its own switch here rather than
   // reading it per keystroke, and its one-time cli/api-key check waits for the
   // worker queue -- which does not exist yet when this runs from the

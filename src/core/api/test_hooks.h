@@ -463,6 +463,10 @@ int config_int_for_test(const std::string &key)
 {
   return config.get_int(key, 0);
 }
+bool config_bool_for_test(const std::string &key)
+{
+  return config.get_bool(key, false);
+}
 // Sets one the way the settings menu or Lua would, so a test can drive a
 // behaviour the editor reads out of its config.
 void set_config_for_test(const std::string &key, const std::string &value)

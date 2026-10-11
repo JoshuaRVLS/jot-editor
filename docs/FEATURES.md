@@ -966,12 +966,15 @@ link keeps its `)`). The same rules read the integrated terminal's own output: a
 URL a command printed opens on `Ctrl+click` there too, with `Ctrl+hover`
 underlining exactly it, in the docked panel and the floating box alike.
 
-**Zen focus mode** (`F12` or `:zen`) strips the chrome: sidebar, right
-panel, and status line hide, and the pane area narrows to the
-`zen_content_width` config (default 100 columns) and centers - a
-distraction-free editing column. Toggling back restores the exact layout
-from before, and the F12 binding is rebindable via the usual `jot.keymap`
-API.
+**Zen focus mode** (`F12` or `:zen`) strips the chrome: the sidebar, the right
+dock, the workspace tab strip and the status line all hide, and the pane area
+takes the whole window - a distraction-free full-width view. It is persistent
+(`zen_mode` in settings.conf, also a `:settings` row): F12 writes the key, so
+the next start (and `:reload`) lands in the same layout, opening a workspace
+cannot put the chrome back, and the chrome keys (`Ctrl+B`, `Ctrl+Shift+B`)
+report instead of taking effect while it is on. Leaving zen restores the layout
+it was entered from, and the F12 binding is rebindable via the usual
+`jot.keymap` API.
 
 ## Keybindings
 
@@ -1105,7 +1108,7 @@ move the place the next edit will land.
 | `Ctrl+T` or `Alt+T` | Theme chooser |
 | `` Ctrl+` `` | Open / focus / hide terminal panel |
 | `Alt+Shift+T` | Open / hide the floating terminal (Esc hides it) |
-| `F12` | Toggle zen focus mode (hide chrome, center buffer) |
+| `F12` | Toggle zen focus mode (hide chrome, full width) |
 | `Alt+Shift+A C` | AI: open or close the chat |
 | `Alt+Shift+A N` | AI: start a fresh chat |
 | `Alt+Shift+A S` | AI: send the prompt |

@@ -232,7 +232,7 @@ namespace
        "Word highlight: delay after typing (ms)",
        SettingsEntry::Type::Int},
       {"word_wrap", "Word wrap", SettingsEntry::Type::Bool},
-      {"zen_content_width", "Zen content width", SettingsEntry::Type::Int},
+      {"zen_mode", "Zen focus mode", SettingsEntry::Type::Bool},
   };
 
   // The selectable rows: a fixed set of choices, so Left/Right walks them and
@@ -310,7 +310,6 @@ namespace
       {"toast.max_visible", 1, 1, 20},
       {"toast.max_width", 5, 20, 500},
       {"word_highlight_delay_ms", 50, 0, 5000},
-      {"zen_content_width", 10, 40, 400},
   };
 
   // The panel's sections, in listing order. A section claims a key by naming it,
@@ -355,7 +354,7 @@ namespace
       "truecolor",          "tui_text_scale",
       "winbar",             "word_highlight",
       "word_highlight_delay_ms",
-      "word_wrap",          "zen_content_width",
+      "word_wrap",          "zen_mode",
   };
   const char *const kAppearanceFamilies[] = {"smooth_scroll_"};
   const char *const kColorPreviewKeys[] = {"colorizer", "colorizer_mode"};

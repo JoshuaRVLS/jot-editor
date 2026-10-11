@@ -73,6 +73,11 @@ class Editor : private EditorState
   friend class SearchController;
 
 private:
+  // Zen focus mode's layout: sidebar, right dock, status line and tab strip off,
+  // panes across the full width. `remember` re-captures the layout to return to,
+  // for the callers that turn chrome back on (a workspace session restore).
+  void zen_hide_chrome(bool remember);
+
   // Temporary presentation gate. Keep the underlying feature intact while the
   // compact editor layout is evaluated. This is only the native *menu bar*
   // (File/Edit/... and its drop-downs); the row it used now belongs to the tab
@@ -133,7 +138,7 @@ private:
   // would be the same files inked twice.
   bool tabline_shown() const
   {
-    return tabline_active() && tabline_visible && !pane_strips_own_tabs()
+    return !zen_mode && tabline_active() && tabline_visible && !pane_strips_own_tabs()
            && (int)tab_order.indices(buffers).size() > tabline_auto_hide;
   }
 

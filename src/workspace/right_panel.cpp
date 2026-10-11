@@ -69,6 +69,11 @@ namespace
 
 void Editor::toggle_right_panel()
 {
+  if (zen_mode)
+  {
+    set_message("Zen mode: F12 to leave");
+    return;
+  }
   if (show_right_panel)
   {
     show_right_panel = false;

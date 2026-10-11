@@ -115,6 +115,11 @@ namespace
 } // namespace
 void Editor::toggle_sidebar()
 {
+  if (zen_mode)
+  {
+    set_message("Zen mode: F12 to leave");
+    return;
+  }
   show_sidebar = !show_sidebar;
   // An explicit toggle settles the question: the width-driven auto-hide must
   // not fight the user by re-showing (or re-hiding) the sidebar later.
@@ -134,21 +139,35 @@ void Editor::toggle_sidebar()
   update_pane_layout();
   needs_redraw = true;
 }
-bool Editor::toggle_zen_mode()
+void Editor::zen_hide_chrome(bool remember)
 {
-  zen_mode = !zen_mode;
-  if (zen_mode)
+  if (remember)
   {
     zen_saved_sidebar_ = show_sidebar;
     zen_saved_panel_ = show_right_panel;
     zen_saved_status_height_ = status_height;
-    show_sidebar = false;
-    show_right_panel = false;
-    if (focus_state == FOCUS_SIDEBAR)
-    {
-      focus_state = FOCUS_EDITOR;
-    }
-    status_height = 0;
+  }
+  show_sidebar = false;
+  show_right_panel = false;
+  if (focus_state == FOCUS_SIDEBAR)
+  {
+    focus_state = FOCUS_EDITOR;
+  }
+  status_height = 0;
+}
+
+void Editor::set_zen_mode(bool on, bool persist)
+{
+  if (on && !zen_mode)
+  {
+    zen_saved_sidebar_ = show_sidebar;
+    zen_saved_panel_ = show_right_panel;
+    zen_saved_status_height_ = status_height;
+  }
+  zen_mode = on;
+  if (on)
+  {
+    zen_hide_chrome(false);
   }
   else
   {
@@ -157,13 +176,23 @@ bool Editor::toggle_zen_mode()
     status_height = zen_saved_status_height_;
   }
   // The side panel float is keyed off show_right_panel; drop it explicitly so
-  // it does not linger over the centered pane area.
+  // it does not linger over a hidden dock.
   if (lua_api)
   {
     lua_api->emit_lua_ui_close("side_panel");
   }
+  if (persist)
+  {
+    config.set_bool("zen_mode", on);
+    config.save();
+  }
   update_pane_layout();
   needs_redraw = true;
+}
+
+bool Editor::toggle_zen_mode()
+{
+  set_zen_mode(!zen_mode, true);
   return zen_mode;
 }
 void Editor::open_workspace(const std::string &path, bool restore_session)
@@ -252,6 +281,17 @@ void Editor::open_workspace(const std::string &path, bool restore_session)
   // class names and custom properties this tree declares, offered inside
   // class="..." and var(--) (workspace/web_completion.h).
   request_web_index_scan();
+  // Opening a workspace shows the explorer and the session restore can show the
+  // dock; zen mode stays on, and takes this workspace's chrome choice as what
+  // leaving it gives back (the status line is not a workspace thing and stays
+  // whatever zen entered with).
+  if (zen_mode)
+  {
+    zen_saved_sidebar_ = show_sidebar;
+    zen_saved_panel_ = show_right_panel;
+    zen_hide_chrome(false);
+    update_pane_layout();
+  }
   needs_redraw = true;
   if (lua_api)
     lua_api->fire_autocmd("WorkspaceEnter", normalized, -1);
