@@ -48,6 +48,17 @@ option(JOT_BUILD_BENCHMARKS "Build the opt-in jot benchmark suite" OFF)
 option(JOT_GUI "Compile the SDL2/OpenGL GUI frontend into the engine (available via 'jot --gui') when SDL2 + FreeType are available" ON)
 option(JOT_ENABLE_CCACHE "Use ccache as the C/C++ compiler launcher when available" ON)
 option(JOT_FETCH_DEPS "Fetch missing third-party dependencies when CMake packages are unavailable" ON)
+# Precompiled headers: each object library parses the standard headers its
+# sources share once per target instead of once per translation unit. Measured
+# on this engine: about 10% off a real compile (3.20 s to 2.87 s for one
+# translation unit of lua/api), against 1.5 s to build the header per target.
+# It is a poor fit for ccache, which cannot cache a translation unit that uses a
+# precompiled header unless the header's baked-in defines and the compiler's
+# __DATE__/__TIME__ are allowed to go unverified -- without that, every compile
+# is uncacheable and a warm rebuild of one library goes from 1.8 s to 16.7 s.
+# The two are wired together below rather than left to fight.
+option(JOT_ENABLE_PCH "Precompile the standard-library headers the engine's object libraries share" ON)
+set(JOT_CCACHE_ACTIVE OFF)
 if(JOT_ENABLE_CCACHE)
   find_program(CCACHE_PROGRAM ccache)
   if(CCACHE_PROGRAM)
@@ -57,10 +68,25 @@ if(JOT_ENABLE_CCACHE)
     if(NOT DEFINED CMAKE_CXX_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER STREQUAL "")
       set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}" CACHE STRING "C++ compiler launcher" FORCE)
     endif()
+    set(JOT_CCACHE_ACTIVE ON)
     message(STATUS "ccache enabled: ${CCACHE_PROGRAM}")
   else()
     message(STATUS "ccache not found; compiler launcher disabled")
   endif()
+endif()
+# A precompiled header bakes its own defines and the compiler's __DATE__/__TIME__
+# into the .gch, and ccache cannot see either from the command line, so it
+# refuses to cache every translation unit that uses one. Letting those two
+# checks go unverified, scoped to jot's own compiles by wrapping the launcher,
+# puts the cache back (2.6 s, every call a hit) without touching the cache
+# behaviour of anything else built on the machine.
+if(JOT_ENABLE_PCH AND JOT_CCACHE_ACTIVE AND CMAKE_CXX_COMPILER_LAUNCHER STREQUAL "${CCACHE_PROGRAM}")
+  set(CMAKE_C_COMPILER_LAUNCHER
+      "${CMAKE_COMMAND};-E;env;CCACHE_SLOPPINESS=pch_defines,time_macros;${CCACHE_PROGRAM}"
+      CACHE STRING "C compiler launcher" FORCE)
+  set(CMAKE_CXX_COMPILER_LAUNCHER
+      "${CMAKE_COMMAND};-E;env;CCACHE_SLOPPINESS=pch_defines,time_macros;${CCACHE_PROGRAM}"
+      CACHE STRING "C++ compiler launcher" FORCE)
 endif()
 # mold is the linker used when it is installed. It links the engine and the
 # test binary far faster than the default GNU ld, which is what dominates an

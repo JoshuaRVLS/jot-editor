@@ -20,6 +20,46 @@ add_custom_command(
   VERBATIM)
 
 function(jot_configure_object_target target_name)
+  # Only standard-library headers go in the precompiled header: they are stable
+  # across edits, so the PCH stays valid while the project's own sources change.
+  # The list is the headers five or more of the engine's own files include, so
+  # it is worth parsing once per target rather than once per file.
+  if(JOT_ENABLE_PCH)
+    target_precompile_headers(${target_name} PRIVATE
+      <algorithm>
+      <array>
+      <atomic>
+      <cctype>
+      <cerrno>
+      <chrono>
+      <cmath>
+      <csignal>
+      <cstddef>
+      <cstdint>
+      <cstdio>
+      <cstdlib>
+      <cstring>
+      <ctime>
+      <filesystem>
+      <fstream>
+      <functional>
+      <iostream>
+      <limits>
+      <map>
+      <memory>
+      <optional>
+      <set>
+      <sstream>
+      <stdexcept>
+      <string>
+      <system_error>
+      <thread>
+      <unordered_map>
+      <unordered_set>
+      <utility>
+      <vector>
+    )
+  endif()
   target_include_directories(${target_name} PRIVATE
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/src/base
