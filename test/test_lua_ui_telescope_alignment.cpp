@@ -473,9 +473,14 @@ TEST_CASE("Telescope Lua render: straight separator, bounded rows, byte-aligned 
     }
   }
   REQUIRE(saw_path);
+  // 0-based, like every other row index in this case: the body rows the kit
+  // returns start at the float's first row, so the offset from `lay.y` IS the
+  // index into them (the 1-based form is `r.line`, which spans carry). Taking
+  // the index as `query_row - 1` read the row above the prompt -- the last
+  // result -- and reported the prompt missing while it was on screen.
   const int query_row = lay.query_y - lay.y;
   REQUIRE(query_row == lay.h - 2); // the row above the bottom border
-  const std::string &qrow = cap.lines[(size_t)(query_row - 1)];
+  const std::string &qrow = cap.lines[(size_t)query_row];
   const size_t prompt_at = qrow.find("> c");
   REQUIRE(prompt_at != std::string::npos);
   // Its column, counted in cells (the row's frame glyphs and the wide CJK names
