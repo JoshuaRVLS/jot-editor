@@ -173,12 +173,15 @@ void Editor::render_telescope()
     }
   }
 
-  // The picker's own background (one colour, no per-pane tint) lives inside the
-  // borders and nowhere else: each box paints it, and the column between the two
-  // boxes keeps the float's colour -- the same backdrop every other float sits
-  // on, so the panes read as two surfaces rather than one wide panel with two
-  // frames drawn in it.
-  const int picker_bg = theme.bg_telescope;
+  // The picker sits on the editor's own background (one colour, no per-pane
+  // tint), painted inside the borders and nowhere else: each box paints it, and
+  // the column between the two boxes keeps the float's colour -- the same
+  // backdrop every other float sits on, so the panes read as two surfaces rather
+  // than one wide panel with two frames drawn in it. Using the buffer's ground
+  // is what keeps the frames smooth: a background of its own would plate the
+  // whole rectangle, borders included, and each frame would read as the edge of
+  // a lighter box instead of a line on the text.
+  const int picker_bg = theme.bg_default;
   const int border_fg = theme.fg_panel_border;
   ui->fill_rect({layout.x, layout.y, layout.region_w, layout.h},
                 " ",

@@ -194,15 +194,17 @@ Git status colors for file rows (git view), file tabs, and the diff panel use
 and `git_conflict` (`fg` text / `bg` row tint). Themes that omit them fall
 back to the built-in ANSI defaults, which do not match the colorscheme.
 
-The `Telescope*` slots paint the file finder. `TelescopeNormal` is the picker's
-one background: it fills both boxes, their frames included, and stops at their
-borders -- the column between the two boxes keeps the float's own colour -- so
-its `bg` should match `Sidebar`/`Pmenu`. `TelescopeSelection` is the band on the
-selected and hovered row, the only thing painted over that background. The query
-field and the file view are not surfaces of their own: they draw on
-`TelescopeNormal` too, and `TelescopeQuery` / `TelescopePreviewNormal` now
-supply only their `fg` (`TelescopePreviewNormal`'s `bg` is ignored -- it was the
-view's own background when the two panes were tinted apart).
+The `Telescope*` slots paint the file finder. The picker is drawn on the editor's
+own background (`Normal`): it fills both boxes, their frames included, and stops
+at their borders -- the column between the two boxes keeps the float's own colour
+-- so the frames sit on the buffer's ground and a border reads as a line on the
+text rather than the edge of a lighter plate. `TelescopeNormal` therefore
+supplies the picker's `fg` only, and a `bg` on it is ignored (like
+`TelescopePreviewNormal`'s -- both are leftovers from when the panes were tinted
+apart from the editor). `TelescopeSelection` is the band on the selected and
+hovered row, the only thing painted over that background. The query field and the
+file view are not surfaces of their own either, and `TelescopeQuery` supplies
+only its `fg` as well.
 
 ## Authoring a theme
 

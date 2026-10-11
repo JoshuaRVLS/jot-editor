@@ -12,9 +12,11 @@
 --   │ > autosave     12 / 48     │ │                            │
 --   └─────  Find Files · src  ───┘ └────  240 lines  8.1 KB  ───┘
 --
--- * one background (TelescopeNormal) inside each border and none outside one:
---   the panes are told apart by their frames, and the column between them keeps
---   the float's own colour -- the picker's fill stops where its border does;
+-- * one background inside each border and none outside one -- the editor's
+--   (TelescopeNormal supplies ink only, so the frames sit on the buffer's own
+--   ground): the panes are told apart by their frames, and the column between
+--   them keeps the float's own colour -- the picker's fill stops where its
+--   border does;
 -- * a row is the file's path from the picker's scope -- the name alone cannot
 --   tell src/render/frame.cpp from src/input/frame.cpp -- after its file icon;
 -- * the selection is a `>` pointer in the rows' gutter plus the row's band:
@@ -75,7 +77,11 @@ local function telescope(p)
   end
   local colors = p.colors or {}
   local t_fg = colors.t_fg or colors.fg or 7
-  local t_bg = colors.t_bg or colors.bg or 0
+  -- The picker is drawn on the editor's own background rather than on a plate
+  -- of its own, so its frames sit on the same ground as the buffer behind the
+  -- float and the border stays a line on the text. `t_bg` is the theme's
+  -- TelescopeNormal slot, which now supplies ink only.
+  local t_bg = colors.default_bg or colors.t_bg or colors.bg or 0
   local t_sel_fg = colors.t_sel_fg or colors.selection_fg or 0
   local t_sel_bg = colors.t_sel_bg or colors.selection_bg or 6
   local t_prev_fg = colors.t_prev_fg or t_fg
@@ -105,8 +111,8 @@ local function telescope(p)
     if existing then
       return existing
     end
-    -- Each box paints its own background across the row -- border included -- so
-    -- nothing of the picker's colour shows outside a border: the column between
+    -- Each box paints the background across the row -- border included -- so
+    -- nothing of the picker's fill shows outside a border: the column between
     -- the two boxes keeps the float's own fill, the way two separate windows
     -- would. A band per box rather than one span across the float, because a
     -- span that wide would also be the span the selection band repaints -- and

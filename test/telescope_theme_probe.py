@@ -1,21 +1,28 @@
 #!/usr/bin/env python3
-"""Probe: the telescope picker paints one background, and only inside its borders.
+"""Probe: the telescope picker paints the editor's background, inside its borders.
 
-The design the picker was rebuilt to: each box is a pane with a single background
-(`TelescopeNormal`) covering its frame and its contents, the selected row is the
-only thing painted over that background (`TelescopeSelection`), and the picker's
-colour stops at the border -- the column between the two boxes keeps the float's
-own background, the way two separate windows would, instead of one wide panel
-with two frames drawn in it.
+The design the picker was rebuilt to: each box is a pane drawn on the editor's
+own background (`Normal`) -- its frame and its contents alike -- so a border is a
+line on the buffer's ground rather than the edge of a lighter plate, the selected
+row is the only thing painted over that background (`TelescopeSelection`), and
+the fill stops at the border -- the column between the two boxes keeps the
+float's own background, the way two separate windows would, instead of one wide
+panel with two frames drawn in it.
+
+`TelescopeNormal` supplies the picker's ink only now: its `bg` is retired, and
+the probe asserts that colour appears nowhere in the picker region -- painting it
+is what plated the whole rectangle and made the borders look like edges of a
+lighter box.
 
 This guards that mapping on both render paths. It fails on the older shape (a
 panel-tinted list next to an editor-tinted preview, a query field with a band of
 its own, and a fill that covered the whole region including the gap), and on the
-tempting regression of flattening everything to one colour.
+tempting regression of flattening the two boxes into one surface.
 
-The theme is jot, where the slots are distinct colours (#282828 picker, #453d41
-selection, #181818 float/editor), so "which slot is this cell using" is a
-decidable question.
+The theme is jot, which still carries the retired slot's colour (#282828
+`TelescopeNormal`) beside the ground it should be using (#181818 `Normal`, the
+float's colour too) and the band (#453d41 `TelescopeSelection`), so "which slot
+is this cell using" is a decidable question.
 
 Usage: test/telescope_theme_probe.py [path-to-jot]
 Exit codes: 0 pass, 1 fail, 2 binary missing.
@@ -61,13 +68,16 @@ def theme_slots() -> dict:
     path = os.path.join(".configs", "configs", "colors", f"{THEME}.json")
     data = json.load(open(path))
     return {
-        # The picker's one background, and the band on the selected row.
-        "picker": code(data["TelescopeNormal"]["bg"]),
+        # What the boxes are drawn on: the editor's own background, so the frames
+        # sit on the same ground as the buffer behind the float.
+        "ground": code(data["Normal"]["bg"]),
+        # The band on the selected row -- the only thing painted over the ground.
         "selection": code(data["TelescopeSelection"]["bg"]),
         # The float's own colour: what the column between the boxes keeps now
         # that the picker's fill stops at its border.
         "float": code(data["FloatBorder"]["bg"]),
-        "editor": code(data["Normal"]["bg"]),
+        # TelescopeNormal's background is retired: the picker must not paint it.
+        "retired": code(data["TelescopeNormal"]["bg"]),
     }
 
 
@@ -154,43 +164,43 @@ def probe(screen, slots: dict, c: Checks) -> None:
     list_first, list_last = left + 1, list_right - 1
     view_first, view_last = view_x + 1, view_right - 1
 
-    # --- the list box: one background, and the band on the selected row --------
+    # --- the list box: the editor's ground, and the band on the selected row ---
     list_rows_bgs = {}
     for y in range(top + 1, bottom):
         list_rows_bgs[y] = body_bgs(screen, y, list_first, list_last)
-    plain = {y: b for y, b in list_rows_bgs.items() if b == {slots["picker"]}}
+    plain = {y: b for y, b in list_rows_bgs.items() if b == {slots["ground"]}}
     banded = {y: b for y, b in list_rows_bgs.items() if b == {slots["selection"]}}
-    c.check("the list box is drawn on the picker's background",
+    c.check("the list box is drawn on the editor's background",
             len(plain) >= 2, f"bgs by row: {list_rows_bgs}")
     c.check("exactly one row is the selection band", len(banded) == 1,
             f"banded rows: {sorted(banded)}")
-    c.check("the band is not the picker's colour",
-            slots["selection"] != slots["picker"])
+    c.check("the band is not the editor's background",
+            slots["selection"] != slots["ground"])
     c.check("the band spans the whole interior row",
             all(len(b) == 1 for b in banded.values()), f"banded: {banded}")
     c.check("no list row mixes backgrounds",
             all(len(b) == 1 for b in list_rows_bgs.values()),
             f"bgs by row: {list_rows_bgs}")
     # The prompt is a row of the box, not an inset field with a band of its own.
-    c.check("the prompt row shares the picker's background",
-            list_rows_bgs.get(prompt_y) == {slots["picker"]},
+    c.check("the prompt row shares the editor's background",
+            list_rows_bgs.get(prompt_y) == {slots["ground"]},
             str(list_rows_bgs.get(prompt_y)))
 
-    # --- the frame itself sits on the box's background -------------------------
-    c.check("the box's border cells carry its own background",
-            screen.bg[top][left] == slots["picker"] and screen.bg[bottom][left] == slots["picker"],
+    # --- the frame itself sits on that same ground -----------------------------
+    c.check("the box's border cells carry the editor's background",
+            screen.bg[top][left] == slots["ground"] and screen.bg[bottom][left] == slots["ground"],
             f"{screen.bg[top][left]} / {screen.bg[bottom][left]}")
 
-    # --- the file view: the same picker background, not a second surface -------
+    # --- the file view: the same ground, not a second surface ------------------
     view_bgs = {y: body_bgs(screen, y, view_first, view_last)
                 for y in range(top + 1, bottom)}
-    c.check("the file view is drawn on the picker's background",
-            all(b == {slots["picker"]} for b in view_bgs.values()),
+    c.check("the file view is drawn on the editor's background",
+            all(b == {slots["ground"]} for b in view_bgs.values()),
             f"bgs by row: {view_bgs}")
     c.check("the view's border cells carry it too",
-            screen.bg[top][view_x] == slots["picker"], str(screen.bg[top][view_x]))
+            screen.bg[top][view_x] == slots["ground"], str(screen.bg[top][view_x]))
 
-    # --- between the boxes: the float's colour, not the picker's ---------------
+    # --- between the boxes: the float's colour, not a third one ---------------
     gap_cols = range(list_right + 1, view_x)
     glyphs = [rows(screen)[y][x] for y in range(top + 1, bottom) for x in gap_cols]
     c.check("the column between the boxes holds no border",
@@ -198,10 +208,16 @@ def probe(screen, slots: dict, c: Checks) -> None:
     gap_bgs = {screen.bg[y][x] for y in range(top + 1, bottom) for x in gap_cols}
     c.check("the gap is the float's own background",
             gap_bgs == {slots["float"]}, str(gap_bgs))
-    c.check("the picker's background stops at its border",
-            slots["picker"] not in gap_bgs, str(gap_bgs))
-    c.check("the picker's background is not the float's",
-            slots["picker"] != slots["float"])
+
+    # --- no plate: the retired TelescopeNormal background is nowhere in the -----
+    # picker region, which is what keeps the frames smooth.
+    region_bgs = {screen.bg[y][x] for y in range(top, bottom + 1)
+                  for x in range(left, view_right + 1)}
+    c.check("the retired TelescopeNormal background is nowhere in the picker",
+            slots["retired"] not in region_bgs, str(region_bgs))
+    c.check("the region is the editor's ground, the band and the float only",
+            region_bgs <= {slots["ground"], slots["selection"], slots["float"]},
+            str(region_bgs))
 
     # --- no retired chrome -----------------------------------------------------
     text = "\n".join(rows(screen))
