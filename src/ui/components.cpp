@@ -50,7 +50,7 @@ void ui_draw_selectable_rows(UI &ui,
     UIRect row_rect = {x, y + i, w, 1};
     ui.fill_rect(row_rect, " ", fg, bg);
     ui.draw_text(
-        x + 1, y + i, ui_truncate_cells(row.label, w - 1), fg, bg, row.selected && row.enabled);
+      x + 1, y + i, ui_truncate_cells(row.label, w - 1), fg, bg, row.selected && row.enabled);
   }
 }
 

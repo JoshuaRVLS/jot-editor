@@ -520,7 +520,7 @@ bool LuaAPI::emit_telescope(const TelescopeView &view)
                          lua_newtable(L);
                          const int it = lua_gettop(L);
                          lua_set_str_field(L, it, "name", r.name);
-                         lua_set_str_field(L, it, "parent_path", r.parent_path);
+                         lua_set_str_field(L, it, "path", r.path);
                          lua_set_bool_field(L, it, "is_directory", r.is_directory);
                          lua_set_bool_field(L, it, "opened", r.opened);
                          lua_set_str_field(L, it, "icon", r.icon);

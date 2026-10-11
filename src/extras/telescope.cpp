@@ -192,14 +192,17 @@ telescope_layout_for(int render_width, int screen_height, int top_bound, int bot
   layout.inner_w = std::max(1, layout.w - 2);
   layout.inner_h = std::max(1, layout.h - 2);
 
-  // Input row first, then one clear row of air, then the results -- the input
-  // reads as a field of its own instead of another row of the list.
-  layout.query_x = layout.inner_x + 1;
-  layout.query_y = layout.inner_y;
+  // The results fill the box and the prompt is its last interior row: the
+  // picker reads top-down as what was found, then what was typed, and the
+  // bottom border closes under the prompt. The prompt starts on the interior's
+  // first cell, so it lines up with the result rows above it rather than sitting
+  // on an inset field of its own.
+  layout.query_x = layout.inner_x;
+  layout.query_y = layout.inner_y + layout.inner_h - 1;
   layout.query_w = std::max(1, layout.inner_w - 2);
-  layout.body_y = layout.inner_y + 2;
+  layout.body_y = layout.inner_y;
   layout.footer_y = layout.y + layout.h - 1;
-  layout.body_h = std::max(1, layout.footer_y - layout.body_y);
+  layout.body_h = std::max(1, layout.query_y - layout.body_y);
   layout.list_x = layout.inner_x;
   layout.list_y = layout.body_y;
   layout.list_w = layout.inner_w;
@@ -334,10 +337,10 @@ void Telescope::publish_filtered()
 
   for (auto match : all_entries_)
   {
-    // Folders are walked, never listed: the picker's result rows are files,
-    // and where a file lives is carried by its (dimmed) path on the row. The
-    // walk still descends through them, so a query that names a folder is how
-    // you scope to one.
+    // Folders are walked, never listed: the picker's result rows are files, and
+    // where a file lives is carried by the row's own path label. The walk still
+    // descends through them, so a query that names a folder is how you scope to
+    // one.
     if (match.is_directory)
     {
       continue;

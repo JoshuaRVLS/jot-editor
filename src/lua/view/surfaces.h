@@ -170,10 +170,13 @@ struct TsStatusView
 struct TelescopeResultView
 {
   std::string name;
-  std::string parent_path; // the file's folder, shown dimmed on the row
+  // The file's path relative to the picker's scope -- the row's whole label.
+  // `name` is its last segment, and the match offsets below index into that
+  // segment, so a renderer highlighting them has to offset by the prefix.
+  std::string path;
   bool is_directory = false;
-  // True when this file already has a tab: the row's leading dot is lit for an
-  // open file and hollow for one that is not.
+  // True when this file already has a tab: the row's leading pointer is lit for
+  // an open file.
   bool opened = false;
   std::vector<int> match; // byte offsets into name matched by the query
   std::string icon;       // per-language file glyph (empty for directories)

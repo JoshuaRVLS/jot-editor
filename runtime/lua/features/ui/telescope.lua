@@ -3,22 +3,26 @@
 -- focused; features/ui.lua is the orchestrator that requires
 -- every module and registers the handlers.
 --
--- The picker is two boxes, not one panel with a divider:
+-- The picker is one flat surface with two straight-bordered boxes in it:
 --
---   ┌─  Files · src/render ───────────────┐ ┌─ frame.cpp ─────────────┐
---   │   query                             │ │     1 #include <x>      │
---   │                                     │ │     2 ...               │
---   │   name.cpp              src/render/ │ │                         │
---   └─ 12 files ──────────────────────────┘ └─ 240 lines  8.1 KB ─────┘
+--   ┌────────  Results  ─────────┐ ┌────────  Preview  ─────────┐
+--   │   src/render/frame.cpp     │ │    1 // frame paint        │
+--   │ > src/input/keys.cpp       │ │    2 int paint_frame(...)  │
+--   │   notes.txt                │ │                            │
+--   │ > autosave     12 / 48     │ │                            │
+--   └─────  Find Files · src  ───┘ └────  240 lines  8.1 KB  ───┘
 --
--- * the list holds files only: where a file lives is the dimmed folder path
---   on its own row, clipped from the left so the deepest part survives;
--- * the dot in front of the name is the file's tab state -- lit when the file
---   is already open, hollow when it is not;
--- * the selection (and the row under the pointer, which selects it) is a
---   filled background band, not a gutter marker;
--- * the file view is drawn like a small editor: the file name in its own top
---   border, line numbers in the gutter, content in syntax colors.
+-- * one background (TelescopeNormal) inside each border and none outside one:
+--   the panes are told apart by their frames, and the column between them keeps
+--   the float's own colour -- the picker's fill stops where its border does;
+-- * a row is the file's path from the picker's scope -- the name alone cannot
+--   tell src/render/frame.cpp from src/input/frame.cpp -- after its file icon;
+-- * the selection is a `>` pointer in the rows' gutter plus the row's band:
+--   the two cells are reserved on every row, so the names never shift;
+-- * the prompt is the list box's last interior row, with `N / M` at its right
+--   end, so what was typed sits under what it filtered;
+-- * the labels are centred in the borders: the pane's name on top, and the
+--   finder plus its folder scope at the foot.
 --
 -- The float covers both boxes and carries no border of its own: each box draws
 -- its frame as text, which is exactly what keeps the two borders separate.
@@ -33,32 +37,35 @@ local pad_cells = h.pad_cells
 local present_panel = h.present_panel
 
 local BOX = { tl = "┌", tr = "┐", bl = "└", br = "┘", hz = "─", vt = "│" }
--- Nerd Fonts glyphs, built from their code points so this file stays ASCII:
--- the tab-state dot, the magnifier in the list title and the chevron in the
--- query field. They mirror the native renderer's kDotOpen / kDotClosed /
--- kSearchGlyph / kPromptGlyph.
-local DOT_OPEN = utf8.char(0xf111)   -- nf-fa-circle: the file has a tab
-local DOT_CLOSED = utf8.char(0xf10c) -- nf-fa-circle_o: it does not
-local FIND_GLYPH = utf8.char(0xf002)
-local PROMPT_GLYPH = utf8.char(0xf054)
+-- The prompt's marker and the row gutter's pointer. ASCII on purpose: a Nerd
+-- Font chevron only renders on a patched font, and the picker's rows are the
+-- one place a patchy font costs the most.
+local PROMPT = "> "
+local POINTER = "> "
+local GUTTER = "  "
+local ELLIPSIS = "…"
 
--- Keeps the tail of a path, prefixed with an ellipsis, within `w` cells.
-local function path_tail(s, w)
+-- Keeps the tail of a path within `w` cells, prefixed with an ellipsis, and
+-- returns that text plus the byte index into `s` it starts at. The index is what
+-- translates the query highlights -- whose offsets index the original label --
+-- onto what is actually drawn.
+local function tail_keep(s, w)
   if w <= 0 or s == "" then
-    return ""
+    return 1, ""
   end
   if cell_len(s) <= w then
-    return s
+    return 1, s
   end
   if w <= 1 then
-    return trunc_cells(s, w)
+    return #s + 1, ELLIPSIS
   end
   local starts = {}
   for pos in utf8.codes(s) do
     starts[#starts + 1] = pos
   end
   local keep = math.min(#starts, w - 1)
-  return "…" .. s:sub(starts[#starts - keep + 1])
+  local from = starts[#starts - keep + 1]
+  return from, ELLIPSIS .. s:sub(from)
 end
 
 local function telescope(p)
@@ -72,13 +79,9 @@ local function telescope(p)
   local t_sel_fg = colors.t_sel_fg or colors.selection_fg or 0
   local t_sel_bg = colors.t_sel_bg or colors.selection_bg or 6
   local t_prev_fg = colors.t_prev_fg or t_fg
-  local t_prev_bg = colors.t_prev_bg or t_bg
-  local t_query_fg = colors.t_query_fg or colors.fg_command or t_fg
-  local t_query_bg = colors.t_query_bg or colors.bg_command or t_bg
   local border = colors.border or t_fg
   local comment = colors.comment or 8
   local accent = colors.accent or 6
-  local info = colors.info or accent
   local line_nr = colors.line_nr or comment
 
   local height = math.max(2, p.h or 2)
@@ -102,14 +105,24 @@ local function telescope(p)
     if existing then
       return existing
     end
+    -- Each box paints its own background across the row -- border included -- so
+    -- nothing of the picker's colour shows outside a border: the column between
+    -- the two boxes keeps the float's own fill, the way two separate windows
+    -- would. A band per box rather than one span across the float, because a
+    -- span that wide would also be the span the selection band repaints -- and
+    -- the selection band is the list's interior, not the screen.
     local fresh = { text = "", spans = {}, bands = {} }
+    fresh.bands[1] = { col = 0, cells = box_w, bg = t_bg }
+    if show_view then
+      fresh.bands[2] = { col = view_col, cells = view_w, bg = t_bg }
+    end
     rows[i] = fresh
     return fresh
   end
 
   -- Appends `text` at cell column `col`, recording its span, and returns the
-  -- byte offset it landed at. nil fg/bg leave those attributes to the float, so
-  -- a nil bg keeps whatever background span is underneath.
+  -- byte offset it landed at. nil fg/bg leave those attributes to the picker's
+  -- background span, so only the selection band has to name its own bg.
   local function put(rw, col, text, fg, bg)
     if col < 0 or text == "" then
       return -1
@@ -126,8 +139,7 @@ local function telescope(p)
 
   -- Records a background band over `cells` cells starting at `col`. A band is a
   -- span, not a write: `put` only ever appends, so reserving the band's cells up
-  -- front (as this used to) pushed every glyph after it to the end of the row --
-  -- the query field and the selected row rendered half a box wide.
+  -- front would push every glyph after it to the end of the row.
   local function band(rw, col, cells, bg)
     if cells > 0 and bg ~= nil and col >= 0 then
       rw.bands[#rw.bands + 1] = { col = col, cells = cells, bg = bg }
@@ -137,9 +149,10 @@ local function telescope(p)
   -- Applies a row's bands. Called once the row's text is complete, because the
   -- band's byte range has to be measured against the finished line (and the
   -- spans it covers have to take its background: a span with no bg is painted on
-  -- the float's own background, which would punch holes in the band). Returns
+  -- the picker's own background, which would punch holes in the band). Returns
   -- the band spans to append -- appending them here would run after the glyph
-  -- spans they sit under, and a stable sort by start would then draw them on top.
+  -- spans they sit under, and a stable sort by start would then draw them on
+  -- top.
   local function apply_bands(rw)
     local extra = {}
     for _, b in ipairs(rw.bands) do
@@ -160,54 +173,47 @@ local function telescope(p)
   -- Everything below writes strictly left to right: `put` appends, so a cell
   -- drawn out of order would land past the end of the row instead of in it.
 
-  -- Left end of a top border: corner, a bit of line, then the title.
-  local function frame_top_left(rw, col, title, title_fg)
-    put(rw, col, BOX.tl, border)
-    put(rw, col + 1, BOX.hz, border)
-    if title and title ~= "" then
-      put(rw, col + 2, " " .. title .. " ", title_fg or t_fg)
+  -- A box row is written in three ordered pieces -- left cap, contents, right
+  -- cap -- because `put` only appends: the right cap is the *last* cell of the
+  -- row, so drawing it before the contents pushes them past the box.
+  local function frame_cap_left(rw, col, glyph)
+    put(rw, col, glyph, border)
+  end
+
+  local function frame_cap_right(rw, col, width, glyph)
+    put(rw, col + width - 1, glyph, border)
+  end
+
+  -- The middle of a border row: the rule with its label centred in it, as in
+  -- `────  Results  ────`.
+  local function frame_rule(rw, col, width, title, title_fg)
+    local span = math.max(0, width - 2)
+    local text = (title and title ~= "") and (" " .. title .. " ") or ""
+    if cell_len(text) > span then
+      text = trunc_cells(text, span)
+    end
+    local text_w = cell_len(text)
+    local lead = math.max(0, math.floor((span - text_w) / 2))
+    if lead > 0 then
+      put(rw, col + 1, string.rep(BOX.hz, lead), border)
+    end
+    if text_w > 0 then
+      put(rw, col + 1 + lead, text, title_fg or t_fg)
+    end
+    local tail = span - lead - text_w
+    if tail > 0 then
+      put(rw, col + 1 + lead + text_w, string.rep(BOX.hz, tail), border)
     end
   end
 
-  -- Runs the top border out to its right corner from wherever the row's text
-  -- currently ends (the title, or the corner and its leading line).
-  local function frame_top_corner(rw, col, width)
-    local cur = cell_len(rw.text)
-    local fill = math.max(0, (col + width - 2) - cur + 1)
-    if fill > 0 then
-      put(rw, cur, string.rep(BOX.hz, fill), border)
+  local function cap_glyph(is_top, is_bottom, left)
+    if is_top then
+      return left and BOX.tl or BOX.tr
     end
-    put(rw, col + width - 1, BOX.tr, border)
-  end
-
-  local function frame_bottom_left(rw, col)
-    put(rw, col, BOX.bl, border)
-  end
-
-  -- Bottom border: the rule, the status chip at its right end, the corner.
-  local function frame_bottom_corner(rw, col, width, status)
-    local cur = cell_len(rw.text)
-    local chip = (status and status ~= "") and (" " .. status .. " ") or ""
-    if cell_len(chip) > width - 4 then
-      chip = ""
+    if is_bottom then
+      return left and BOX.bl or BOX.br
     end
-    local chip_w = cell_len(chip)
-    local run = math.max(0, (col + width - 1 - chip_w) - cur)
-    if run > 0 then
-      put(rw, cur, string.rep(BOX.hz, run), border)
-    end
-    if chip_w > 0 then
-      put(rw, col + width - 1 - chip_w, chip, comment)
-    end
-    put(rw, col + width - 1, BOX.br, border)
-  end
-
-  local function frame_side_left(rw, col)
-    put(rw, col, BOX.vt, border)
-  end
-
-  local function frame_side_right(rw, col, width)
-    put(rw, col + width - 1, BOX.vt, border)
+    return BOX.vt
   end
 
   local results = p.results or {}
@@ -221,18 +227,26 @@ local function telescope(p)
   local preview_plain = preview.is_directory or preview.skipped or extension == ""
 
   local folder = p.folder or ""
-  local list_title = FIND_GLYPH .. " Files" .. (folder ~= "" and (" · " .. folder) or "")
-  local count = (p.result_count or 0) .. ((p.result_count or 0) == 1 and " file" or " files")
-  if p.scan_pending then
-    count = "scanning…"
-  end
+  -- The foot of the list box names the finder and the folder it is looking in,
+  -- so `:find src` says where it is scoped without a chrome row of its own.
+  local list_footer = "Find Files" .. (folder ~= "" and (" · " .. folder) or "")
 
-  local selected_name = ""
-  local selected_icon = ""
-  if (p.selected or -1) >= 0 and (p.selected or -1) < #results then
-    selected_name = results[(p.selected or 0) + 1].name or ""
-    selected_icon = results[(p.selected or 0) + 1].icon or ""
+  -- The prompt's own right end: which match of how many, exactly as the native
+  -- renderer reports it.
+  local count = ""
+  if p.scan_pending then
+    count = "scanning..."
+  elseif #results > 0 then
+    local pos = math.min(math.max((p.selected or 0) + 1, 1), p.result_count or 1)
+    count = pos .. " / " .. (p.result_count or 0)
+  else
+    count = (p.result_count or 0) .. ((p.result_count or 0) == 1 and " file" or " files")
   end
+  local count_w = cell_len(count)
+  local prompt_w = cell_len(PROMPT)
+  local query_budget = math.max(1, list_w - prompt_w - (count_w > 0 and (count_w + 1) or 0))
+  local show_count = count_w > 0 and count_w <= math.max(0, list_w - prompt_w - 2)
+
   -- Bottom border of the file view: the same summary the native renderer puts
   -- there (line count, size, and why there is nothing to show).
   local view_status = ""
@@ -264,40 +278,36 @@ local function telescope(p)
 
   for i = 1, height do
     local rw = row(i)
+    local is_top = i == 1
+    local is_bottom = i == height
 
-    -- ---- the list box: left edge, contents, right edge ----
-    if i == 1 then
-      frame_top_left(rw, 0, list_title, t_fg)
-    elseif i == height then
-      frame_bottom_left(rw, 0)
-    else
-      frame_side_left(rw, 0)
+    -- ---- the list box: left cap, contents, right cap ----
+    frame_cap_left(rw, 0, cap_glyph(is_top, is_bottom, true))
+    if is_top then
+      frame_rule(rw, 0, box_w, "Results", t_fg)
+    elseif is_bottom then
+      frame_rule(rw, 0, box_w, list_footer, comment)
     end
-    -- The list box sits on its own background (TelescopeNormal) -- frame
-    -- included, exactly like the native renderer's fill -- so the two boxes read
-    -- as two surfaces: the picker's panel on the left, the file's own editor
-    -- background on the right, with the float's colour in the column between
-    -- them.
-    band(rw, 0, box_w, t_bg)
 
     if i == query_row_idx then
-      local prompt = PROMPT_GLYPH .. " "
-      local typed = trunc_cells(query, math.max(0, list_w - cell_len(prompt) - 1))
-      local field_bg = query_focus and t_query_bg or nil
-      put(rw, query_col, prompt .. typed, query_focus and t_query_fg or comment, field_bg)
+      -- The prompt shares the picker's background -- it is a row of the box,
+      -- not an inset field -- and the row above it is the last result.
+      local typed = trunc_cells(query, query_budget)
+      put(rw, query_col, PROMPT, accent)
+      put(rw, query_col + prompt_w, typed, t_fg)
       if query == "" then
-        put(rw,
-            query_col + cell_len(prompt),
-            trunc_cells("type to filter files", math.max(0, list_w - cell_len(prompt) - 1)),
-            comment,
-            field_bg)
+        put(rw, query_col + prompt_w,
+            trunc_cells("type to filter files", query_budget), comment)
       end
-      -- The field's own band, inset from both borders like the native renderer
-      -- (query_w = list_w - 2).
-      band(rw, query_col, list_w - 2, field_bg)
+      if show_count then
+        put(rw, list_col + list_w - count_w, count, comment)
+      end
       if query_focus and jot.ui.set_cursor then
-        local caret = query_col + cell_len(prompt) + cell_len(query)
-        jot.ui.set_cursor(math.min(query_col + list_w - 1, caret), p.query_y or 0)
+        -- Absolute screen cells: the caret is placed by the terminal, not drawn
+        -- into the row, so a float-relative column parks it outside the picker
+        -- (it landed on whatever the editor had there).
+        local caret = (p.query_x or 0) + prompt_w + cell_len(typed)
+        jot.ui.set_cursor(math.min((p.list_x or 0) + list_w - 1, caret), p.query_y or 0)
       end
     elseif i >= list_row0 and i < list_row0 + #results then
       local index = i - list_row0          -- 0-based within the window
@@ -305,71 +315,56 @@ local function telescope(p)
       local is_selected = (p.selected or -1) == (p.list_scroll or 0) + index
       local row_fg = is_selected and t_sel_fg or t_fg
       local row_bg = is_selected and t_sel_bg or nil
-      local dot = result.opened and (DOT_OPEN .. " ") or (DOT_CLOSED .. " ")
-      local dot_fg = is_selected and t_sel_fg or (result.opened and info or comment)
+      local pointer = is_selected and POINTER or GUTTER
       local icon = (result.icon ~= nil and result.icon ~= "" and (result.icon .. " ")) or "  "
       local icon_fg = is_selected and t_sel_fg
         or (result.icon_fg ~= nil and result.icon_fg >= 0 and result.icon_fg or t_fg)
-      local parent = result.parent_path or ""
-      local parent_w = parent ~= ""
-          and math.min(cell_len(parent), math.max(0, math.floor(list_w / 3)))
-        or 0
-      local fixed = cell_len(dot) + cell_len(icon)
-      local name_budget = math.max(1, list_w - fixed - parent_w - (parent_w > 0 and 1 or 0))
-      local name = trunc_cells(result.name or "", name_budget)
-      put(rw, list_col, dot, dot_fg, row_bg)
-      put(rw, list_col + cell_len(dot), icon, icon_fg, row_bg)
-      local name_off = put(rw, list_col + fixed, name, row_fg, row_bg)
-      -- Highlight the characters the query consumed: byte offsets into the raw
-      -- name, and the rendered name is a prefix of it.
-      -- The highlight is the accent, except on the selected row: there the
-      -- accent can be the row's own background (the bundled dark theme's pink
-      -- is both), and a match drawn in its own row's background is invisible --
-      -- the characters the query just consumed would vanish. Every other
-      -- match-highlighting surface takes this same branch.
-      if name_off >= 0 and result.match and #result.match > 0 then
+      -- The row is the file's path, keeping its tail when the row is too narrow:
+      -- the name is the half of a path worth reading.
+      local label = result.path or result.name or ""
+      local name = result.name or ""
+      local shared = cell_len(pointer) + cell_len(icon)
+      local label_start, shown = tail_keep(label, math.max(1, list_w - shared))
+      put(rw, list_col, pointer, is_selected and t_sel_fg or comment, row_bg)
+      put(rw, list_col + cell_len(pointer), icon, icon_fg, row_bg)
+      local label_off = put(rw, list_col + shared, shown, row_fg, row_bg)
+      -- Highlight the characters the query consumed. They are byte offsets into
+      -- the name, which is the tail of the label, so they land on the drawn text
+      -- only once the folder prefix and any front the row clipped away are
+      -- accounted for: `dropped` bytes of label are gone, and the ellipsis that
+      -- replaced them takes three of its own.
+      if label_off >= 0 and result.match and #result.match > 0 then
         local match_fg = is_selected and t_sel_fg or accent
+        local name_at = #label - #name
+        local dropped = label_start - 1
+        local ellipsis_bytes = #shown - (#label - dropped)
         for _, m in ipairs(result.match) do
-          if m >= 0 and m < #name then
-            rw.spans[#rw.spans + 1] = { start = name_off + m, len = 1, fg = match_fg }
+          local drawn = name_at + m - dropped + ellipsis_bytes
+          if m >= 0 and m < #name and drawn >= 0 and drawn < #shown then
+            rw.spans[#rw.spans + 1] = { start = label_off + drawn, len = 1, fg = match_fg }
           end
         end
       end
-      if parent_w > 0 then
-        put(rw,
-            list_col + list_w - parent_w,
-            path_tail(parent, parent_w),
-            is_selected and t_sel_fg or comment,
-            row_bg)
-      end
-      -- The selection band spans the list's interior, borders excluded, exactly
-      -- like the native renderer's row fill.
+      -- The band spans the list's interior, borders excluded.
       band(rw, list_col, list_w, row_bg)
     end
 
     -- Nothing matched (or the scan is still running): one dim line where the
     -- first result would have been, near the middle of the list.
-    if #results == 0 and i == list_row0 + math.max(0, math.floor((p.list_h or 1) / 2)) then
+    if not is_top and not is_bottom and #results == 0
+        and i == list_row0 + math.max(0, math.floor((p.list_h or 1) / 2)) then
       local scan_error = p.scan_error or ""
       local empty = p.scan_pending and "Scanning files..."
         or (scan_error ~= "" and scan_error
             or (query == "" and "No files found in this workspace."
                 or "No files match the current query."))
-      put(rw, list_col, trunc_cells(empty, math.max(1, list_w)), comment)
+      put(rw, list_col + cell_len(GUTTER), trunc_cells(empty, math.max(1, list_w - 2)), comment)
     end
 
-    if i == 1 then
-      frame_top_corner(rw, 0, box_w)
-    elseif i == height then
-      frame_bottom_corner(rw, 0, box_w, count)
-    else
-      frame_side_right(rw, 0, box_w)
-    end
+    frame_cap_right(rw, 0, box_w, cap_glyph(is_top, is_bottom, false))
 
     -- ---- the file view box (after the list, so rows stay left to right) ----
     if show_view then
-      -- The whole view box sits on the preview background (the editor's own),
-      -- so the code pane does not read as part of the list.
       local cur_col = cell_len(rw.text)
       if cur_col < view_col then
         rw.text = rw.text .. string.rep(" ", view_col - cur_col)
@@ -379,53 +374,46 @@ local function telescope(p)
       local text_w = math.max(1, view_w - 2)
       local line_idx = i - view_text_row0
       local lines = preview.lines or {}
-      if i == 1 then
-        local view_title = (selected_icon ~= "" and (selected_icon .. " ") or "") .. selected_name
-        frame_top_left(rw, view_col, view_title, t_prev_fg)
-        frame_top_corner(rw, view_col, view_w)
-      elseif i == height then
-        frame_bottom_left(rw, view_col)
-        frame_bottom_corner(rw, view_col, view_w, view_status)
-      else
-        frame_side_left(rw, view_col)
-        if line_idx >= 0 and line_idx < #lines then
-          local line = lines[line_idx + 1]
-          if preview_plain then
-            put(rw, text_col, trunc_cells(line, text_w), comment)
-          else
-            local line_no = (preview.start_line or 0) + line_idx + 1
-            put(rw, text_col, string.format("%5d ", line_no), line_nr)
-            local clipped = trunc_cells(line, math.max(1, text_w - 6))
-            local code_off = put(rw, text_col + 6, clipped, t_prev_fg)
-            if code_off >= 0 and jot.syntax and jot.syntax.highlight then
-              local ok, caps = pcall(jot.syntax.highlight, extension, clipped)
-              if ok and type(caps) == "table" then
-                for _, cap in ipairs(caps) do
-                  local cap_fg = colors[cap.kind]
-                  if cap_fg then
-                    rw.spans[#rw.spans + 1] = { start = code_off + (cap.start or 0), len = cap.len or 0, fg = cap_fg }
-                  end
+      frame_cap_left(rw, view_col, cap_glyph(is_top, is_bottom, true))
+      if is_top then
+        frame_rule(rw, view_col, view_w, "Preview", t_fg)
+      elseif is_bottom then
+        frame_rule(rw, view_col, view_w, view_status, comment)
+      elseif line_idx >= 0 and line_idx < #lines then
+        local line = lines[line_idx + 1]
+        if preview_plain then
+          put(rw, text_col, trunc_cells(line, text_w), comment)
+        else
+          local line_no = (preview.start_line or 0) + line_idx + 1
+          put(rw, text_col, string.format("%5d ", line_no), line_nr)
+          local clipped = trunc_cells(line, math.max(1, text_w - 6))
+          local code_off = put(rw, text_col + 6, clipped, t_prev_fg)
+          if code_off >= 0 and jot.syntax and jot.syntax.highlight then
+            local ok, caps = pcall(jot.syntax.highlight, extension, clipped)
+            if ok and type(caps) == "table" then
+              for _, cap in ipairs(caps) do
+                local cap_fg = colors[cap.kind]
+                if cap_fg then
+                  rw.spans[#rw.spans + 1] = { start = code_off + (cap.start or 0), len = cap.len or 0, fg = cap_fg }
                 end
               end
             end
           end
         end
-        frame_side_right(rw, view_col, view_w)
       end
-      -- The file view sits on the editor's own background, chrome included: the
-      -- band covers the frame and its content, and every span it overlaps takes
-      -- that background -- the syntax spans included -- so the code pane does
-      -- not read as part of the list.
-      band(rw, view_col, view_w, t_prev_bg)
+      frame_cap_right(rw, view_col, view_w, cap_glyph(is_top, is_bottom, false))
     end
 
-    -- Band spans go to the front: the renderer sorts spans by start byte and a
-    -- band shares its start with the glyph that opens the range (the dot of a
-    -- selected row, the prompt of the query field), so the glyph spans must be
-    -- drawn after it to keep their own colours over the band.
+    -- The row is padded before its bands are measured: the background band has
+    -- to cover the padding as well, and a band's byte range is taken from the
+    -- finished line. Band spans then go in ahead of the glyphs -- the renderer
+    -- sorts spans by start byte and a band shares its start with the glyph that
+    -- opens the range (the pointer of a selected row), so the glyph spans, which
+    -- carry their own colours, have to be drawn after it.
+    rw.text = pad_cells(rw.text, p.w or 1)
     local band_spans = apply_bands(rw)
-    for i = #band_spans, 1, -1 do
-      table.insert(rw.spans, 1, band_spans[i])
+    for b = #band_spans, 1, -1 do
+      table.insert(rw.spans, 2, band_spans[b])
     end
   end
 
@@ -433,7 +421,7 @@ local function telescope(p)
   local spans_by_line = {}
   for i = 1, height do
     local rw = rows[i]
-    body_list[i] = pad_cells(rw and rw.text or "", p.w or 1)
+    body_list[i] = rw and rw.text or ""
     if rw then
       spans_by_line[i] = rw.spans
     end
@@ -444,5 +432,4 @@ end
 
 return {
   telescope = telescope,
-  path_tail = path_tail,
 }

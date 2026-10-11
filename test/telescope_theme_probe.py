@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""Probe: each telescope box is painted with the theme slots it stands for.
+"""Probe: the telescope picker paints one background, and only inside its borders.
 
-The redesign made the picker two surfaces: the list box is a panel (the
-theme's TelescopeNormal background, with TelescopeSelection as the band on the
-selected row and TelescopeQuery on the query field), and the file view is an
-editor (its own background, TelescopePreviewNormal). This guards that mapping
-on both render paths -- a later change that fills both boxes with one colour,
-or drops the selection band back to a caret, fails here.
+The design the picker was rebuilt to: each box is a pane with a single background
+(`TelescopeNormal`) covering its frame and its contents, the selected row is the
+only thing painted over that background (`TelescopeSelection`), and the picker's
+colour stops at the border -- the column between the two boxes keeps the float's
+own background, the way two separate windows would, instead of one wide panel
+with two frames drawn in it.
 
-The theme is jot, where the four slots are four distinct colours (#282828 list,
-#453d41 selection, #181818 view, #101010 query), so "which slot is this cell
-using" is a decidable question. The file view's background is also required to
-be the editor's own Normal background: the right box is meant to read as a
-normal editor, not as a preview pane in a different palette.
+This guards that mapping on both render paths. It fails on the older shape (a
+panel-tinted list next to an editor-tinted preview, a query field with a band of
+its own, and a fill that covered the whole region including the gap), and on the
+tempting regression of flattening everything to one colour.
+
+The theme is jot, where the slots are distinct colours (#282828 picker, #453d41
+selection, #181818 float/editor), so "which slot is this cell using" is a
+decidable question.
 
 Usage: test/telescope_theme_probe.py [path-to-jot]
 Exit codes: 0 pass, 1 fail, 2 binary missing.
@@ -33,11 +36,10 @@ WS = "/tmp/jot_telescope_theme_probe"
 CFG = "/tmp/jot_telescope_theme_probe_cfg"
 COLS, ROWS = 120, 32
 BOX = set("│┌┐└┘─┬┴├┤╭╮╯╰")
-# Chrome the picker used to spell out: the key-hint footer it no longer has, and
-# the "Preview" label the right box no longer is. The probe files are named so
-# none of these can arrive as content by accident.
+# Chrome the picker used to spell out: the key-hint footer it no longer has. The
+# probe files are named so none of these can arrive as content by accident.
 STALE = ["Enter open", "Esc close", "↑/↓ move", "Up/Down move", "PgUp/PgDn",
-         "Up/Down scroll", "Preview"]
+         "Up/Down scroll"]
 
 
 def code(value) -> int:
@@ -59,14 +61,13 @@ def theme_slots() -> dict:
     path = os.path.join(".configs", "configs", "colors", f"{THEME}.json")
     data = json.load(open(path))
     return {
-        "list": code(data["TelescopeNormal"]["bg"]),
+        # The picker's one background, and the band on the selected row.
+        "picker": code(data["TelescopeNormal"]["bg"]),
         "selection": code(data["TelescopeSelection"]["bg"]),
-        "view": code(data["TelescopePreviewNormal"]["bg"]),
-        "query": code(data["TelescopeQuery"]["bg"]),
+        # The float's own colour: what the column between the boxes keeps now
+        # that the picker's fill stops at its border.
+        "float": code(data["FloatBorder"]["bg"]),
         "editor": code(data["Normal"]["bg"]),
-        # The float's own colour, which is what the picker paints the column
-        # between the boxes with (theme.panel_border / the kit's float fill).
-        "backdrop": code(data["FloatBorder"]["bg"]),
     }
 
 
@@ -103,6 +104,7 @@ def geometry(screen):
     """(top, left, list_right, view_x, view_right, bottom) from the borders, or
     None when the picker is not up."""
     top = bottom = None
+    left = list_right = view_x = view_right = None
     for y, row in enumerate(rows(screen)):
         if top is None and row.count("┌") == 2:
             top = y
@@ -147,59 +149,61 @@ def probe(screen, slots: dict, c: Checks) -> None:
     if geo is None:
         return
     top, left, list_right, view_x, view_right, bottom = geo
-    query_y = top + 1
-    # The query field is inset one cell from either border (query_w = list_w-2).
-    query_first, query_last = left + 2, list_right - 2
+    # The prompt is the list box's last interior row.
+    prompt_y = bottom - 1
     list_first, list_last = left + 1, list_right - 1
     view_first, view_last = view_x + 1, view_right - 1
 
-    # --- the query field ------------------------------------------------------
-    c.check("the query field carries the TelescopeQuery band",
-            body_bgs(screen, query_y, query_first, query_last) == {slots["query"]},
-            str(body_bgs(screen, query_y, query_first, query_last)))
-
-    # --- the list box: a panel, with the selection as a band ------------------
+    # --- the list box: one background, and the band on the selected row --------
     list_rows_bgs = {}
-    for y in range(query_y + 1, bottom):
+    for y in range(top + 1, bottom):
         list_rows_bgs[y] = body_bgs(screen, y, list_first, list_last)
-    plain = {y: b for y, b in list_rows_bgs.items() if b == {slots["list"]}}
+    plain = {y: b for y, b in list_rows_bgs.items() if b == {slots["picker"]}}
     banded = {y: b for y, b in list_rows_bgs.items() if b == {slots["selection"]}}
-    c.check("the list box is drawn on TelescopeNormal",
-            len(plain) >= 1, f"bgs by row: {list_rows_bgs}")
+    c.check("the list box is drawn on the picker's background",
+            len(plain) >= 2, f"bgs by row: {list_rows_bgs}")
     c.check("exactly one row is the selection band", len(banded) == 1,
             f"banded rows: {sorted(banded)}")
-    c.check("the selection band is TelescopeSelection, not the list colour",
-            slots["selection"] != slots["list"])
+    c.check("the band is not the picker's colour",
+            slots["selection"] != slots["picker"])
     c.check("the band spans the whole interior row",
-            all(len(b) == 1 for b in banded.values()),
-            f"banded: {banded}")
+            all(len(b) == 1 for b in banded.values()), f"banded: {banded}")
     c.check("no list row mixes backgrounds",
             all(len(b) == 1 for b in list_rows_bgs.values()),
             f"bgs by row: {list_rows_bgs}")
+    # The prompt is a row of the box, not an inset field with a band of its own.
+    c.check("the prompt row shares the picker's background",
+            list_rows_bgs.get(prompt_y) == {slots["picker"]},
+            str(list_rows_bgs.get(prompt_y)))
 
-    # --- the file view: an editor surface of its own --------------------------
+    # --- the frame itself sits on the box's background -------------------------
+    c.check("the box's border cells carry its own background",
+            screen.bg[top][left] == slots["picker"] and screen.bg[bottom][left] == slots["picker"],
+            f"{screen.bg[top][left]} / {screen.bg[bottom][left]}")
+
+    # --- the file view: the same picker background, not a second surface -------
     view_bgs = {y: body_bgs(screen, y, view_first, view_last)
                 for y in range(top + 1, bottom)}
-    flat = {y: b for y, b in view_bgs.items() if b == {slots["view"]}}
-    c.check("the file view is drawn on TelescopePreviewNormal",
-            len(flat) == len(view_bgs), f"bgs by row: {view_bgs}")
-    c.check("the view's background is the editor's own",
-            slots["view"] == slots["editor"],
-            f"view {slots['view']}, editor {slots['editor']}")
-    c.check("the two boxes are two surfaces", slots["list"] != slots["view"])
+    c.check("the file view is drawn on the picker's background",
+            all(b == {slots["picker"]} for b in view_bgs.values()),
+            f"bgs by row: {view_bgs}")
+    c.check("the view's border cells carry it too",
+            screen.bg[top][view_x] == slots["picker"], str(screen.bg[top][view_x]))
 
-    # --- between the boxes ----------------------------------------------------
+    # --- between the boxes: the float's colour, not the picker's ---------------
     gap_cols = range(list_right + 1, view_x)
     glyphs = [rows(screen)[y][x] for y in range(top + 1, bottom) for x in gap_cols]
     c.check("the column between the boxes holds no border",
             not any(g in BOX for g in glyphs), "".join(sorted(set(glyphs))))
     gap_bgs = {screen.bg[y][x] for y in range(top + 1, bottom) for x in gap_cols}
-    c.check("the list box's fill stops at its border",
-            slots["list"] not in gap_bgs, str(gap_bgs))
-    c.check("the gap is the picker's own float colour",
-            gap_bgs == {slots["backdrop"]}, str(gap_bgs))
+    c.check("the gap is the float's own background",
+            gap_bgs == {slots["float"]}, str(gap_bgs))
+    c.check("the picker's background stops at its border",
+            slots["picker"] not in gap_bgs, str(gap_bgs))
+    c.check("the picker's background is not the float's",
+            slots["picker"] != slots["float"])
 
-    # --- no retired chrome ----------------------------------------------------
+    # --- no retired chrome -----------------------------------------------------
     text = "\n".join(rows(screen))
     for stale in STALE:
         c.check(f"no stale chrome {stale!r}", stale not in text)

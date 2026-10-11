@@ -261,12 +261,17 @@ settles, so scrolling a long way does not grow the process.
 - Selection-scoped replace via `Ctrl+Shift+F` - or project-wide search when
   nothing is selected.
 - Go to line, bookmarks, and a fuzzy file finder (telescope) with mouse
-  support. The picker is two boxes: the result list on the left (files only --
-  each row carries the dimmed path to the file and a dot that lights up when
-  the file already has a tab) and a small editor showing the selected file on
-  the right, with line numbers and the file name in its top border. The
-  selection is a filled band, followed by hover and click, so the row under the
-  pointer is the one the view shows.
+  support. The picker is two straight-bordered boxes on one background: the
+  result list on the left -- files only, each row the file's own path from the
+  picker's scope, behind a `>` pointer and a band on the selected row -- and a
+  small editor showing the selected file on the right, with line numbers. Each
+  box names itself in its top border (`Results`, `Preview`), the finder and the
+  folder it is scoped to are centred in the list box's foot, and the prompt --
+  with `N / M` at its right end -- is that box's last interior row, under the
+  rows it filtered. The picker's background stops at its borders: the column
+  between the two boxes keeps the float's own colour, so they read as two panes
+  rather than one slab with two frames in it. The selection band follows hover
+  and click, so the row under the pointer is the one the view shows.
 - Picker for project-wide text search, diagnostics, and document symbols, plus
   a persistent outline panel (`:outline`).
 
@@ -1250,7 +1255,10 @@ to editor
 ### Picker and completion
 
 Type to filter, `↑`/`↓` to move, `Home`/`End` to jump, `Enter` to accept,
-`Backspace` to edit, `Esc` to close. In LSP completion, `Enter` or `Tab`
+`Backspace` to edit, `Esc` to close. The finder's prompt owns the keyboard: a
+printable key always goes into the query, `j`/`k` included, which are list
+motions only while the focus is off the prompt (`Tab` cycles it). In LSP
+completion, `Enter` or `Tab`
 applies and `Esc` closes; the popup's own box owns the mouse, so the wheel
 walks the list three rows there (the palette's step) and a click takes the row
 under the pointer -- neither scrolls the code behind the list or moves the

@@ -24,13 +24,10 @@ using namespace overlay_internal;
 
 namespace
 {
-  // Nerd Fonts glyphs the picker draws itself: the open/closed dot on each row
-  // (the file's tab state), the magnifier in the list title and the chevron in
-  // the query field.
-  constexpr const char *kDotOpen = "\uf111";   // nf-fa-circle
-  constexpr const char *kDotClosed = "\uf10c"; // nf-fa-circle_o
-  constexpr const char *kSearchGlyph = "\uf002";
-  constexpr const char *kPromptGlyph = "\uf054";
+  // The prompt's own marker: the plain `>` the picker's author knows, not a
+  // Nerd Font chevron -- the row is a pointer into the list, and a glyph that
+  // only renders on a patched font is not worth the ambiguity.
+  constexpr const char *kPrompt = "> ";
 
   std::string telescope_row_icon(const FileMatch &match, bool use_nerd_icons)
   {
@@ -59,49 +56,6 @@ namespace
     return (fti.glyph && fti.glyph[0]) ? fti.color : -1;
   }
 
-  // The dimmed folder a file sits in, "src/render/", clipped from the left when
-  // the row cannot hold all of it (the deepest part is the useful part).
-  std::string telescope_row_folder(const FileMatch &match)
-  {
-    if (match.is_directory || match.parent_path.empty() || match.parent_path == ".")
-    {
-      return "";
-    }
-    return match.parent_path + "/";
-  }
-
-  // The paths of the files that currently have a tab, normalised once per frame
-  // so the per-row "is this file open" question stays a string compare.
-  std::vector<std::string> open_buffer_paths(const std::vector<FileBuffer> &buffers)
-  {
-    std::vector<std::string> out;
-    out.reserve(buffers.size());
-    for (const FileBuffer &buf : buffers)
-    {
-      if (!buf.filepath.empty())
-      {
-        out.push_back(std::filesystem::path(buf.filepath).lexically_normal().string());
-      }
-    }
-    return out;
-  }
-
-  bool path_is_open_buffer(const std::vector<std::string> &open_paths, const std::string &path)
-  {
-    if (path.empty())
-    {
-      return false;
-    }
-    const std::string normalised = std::filesystem::path(path).lexically_normal().string();
-    for (const std::string &open : open_paths)
-    {
-      if (open == normalised)
-      {
-        return true;
-      }
-    }
-    return false;
-  }
 } // namespace
 
 void Editor::render_telescope()
@@ -120,12 +74,8 @@ void Editor::render_telescope()
   const bool scan_pending = telescope.scan_pending();
   telescope.ensure_selected_visible(layout.list_h);
 
-  const std::vector<std::string> open_paths = open_buffer_paths(buffers);
   const std::string folder = telescope.get_relative_root();
   const std::string selected_path = telescope.get_selected_path();
-  const std::string selected_name =
-      !selected_path.empty() ? std::filesystem::path(selected_path).filename().string()
-                             : std::string();
 
   // A registered Lua UI handler renders the whole picker from this state; the
   // native geometry is passed through unchanged so mouse hit-testing (row
@@ -185,9 +135,8 @@ void Editor::render_telescope()
       const FileMatch &match = results[(size_t)i];
       TelescopeResultView rv;
       rv.name = match.name;
-      rv.parent_path = telescope_row_folder(match);
+      rv.path = match.relative_path;
       rv.is_directory = match.is_directory;
-      rv.opened = path_is_open_buffer(open_paths, match.path);
       rv.match = match.match;
       if (!match.is_directory)
       {
@@ -224,89 +173,116 @@ void Editor::render_telescope()
     }
   }
 
+  // The picker's own background (one colour, no per-pane tint) lives inside the
+  // borders and nowhere else: each box paints it, and the column between the two
+  // boxes keeps the float's colour -- the same backdrop every other float sits
+  // on, so the panes read as two surfaces rather than one wide panel with two
+  // frames drawn in it.
+  const int picker_bg = theme.bg_telescope;
   const int border_fg = theme.fg_panel_border;
-  const int list_bg = theme.bg_telescope;
-  const int view_bg = theme.bg_telescope_preview;
-
-  // Backdrop for the whole picker: the two boxes sit in it, so the column
-  // between them is part of the picker instead of dimmed editor content showing
-  // through. The Lua kit's float fills the same region with the same colour
-  // (panel_bg = the float colour), which keeps the two renders identical.
   ui->fill_rect({layout.x, layout.y, layout.region_w, layout.h},
                 " ",
-                theme.fg_default,
+                theme.fg_telescope,
                 theme.bg_panel_border);
+
+  // A label centred in a border run: `──── Results ────`. The rule is already
+  // drawn, so this only overwrites the cells the label covers.
+  auto draw_border_label = [&](int x, int w, int y, const std::string &label, int fg)
+  {
+    if (label.empty())
+    {
+      return;
+    }
+    const std::string text = " " + label + " ";
+    const int cells = ui_cell_count(text);
+    if (cells <= w - 2)
+    {
+      ui->draw_text(x + (w - cells) / 2, y, text, fg, picker_bg);
+    }
+  };
 
   // ---- the list box ------------------------------------------------------
   UIRect list_rect = {layout.x, layout.y, layout.w, layout.h};
-  ui->fill_rect(list_rect, " ", theme.fg_telescope, list_bg);
-  ui->draw_border(list_rect, border_fg, list_bg);
+  ui->fill_rect(list_rect, " ", theme.fg_telescope, picker_bg);
+  ui->draw_border(list_rect, border_fg, picker_bg);
+  // The box's own name on top, what the finder is doing at its foot -- plus the
+  // folder it is scoped to, so `:find src` says where it is looking.
+  draw_border_label(layout.x, layout.w, layout.y, "Results", theme.fg_telescope);
+  draw_border_label(layout.x,
+                    layout.w,
+                    layout.footer_y,
+                    folder.empty() ? "Find Files" : "Find Files \u00b7 " + folder,
+                    theme.fg_telescope);
 
-  // Title sits in the top border: the magnifier, "Find Files", and the folder
-  // the picker is scoped to (nothing to show while it is at the root).
-  std::string list_title = std::string(" ") + kSearchGlyph + " Find Files ";
-  if (!folder.empty())
-  {
-    list_title += "\u00b7 " + folder + " ";
-  }
-  ui->draw_text(layout.x + 1, layout.y, clip_text(list_title, layout.w - 4), theme.fg_telescope, list_bg);
-
-  // Match count in the bottom border -- the box's own status line.
-  std::string count = scan_pending ? "Scanning..." : std::to_string(result_count) + " file";
-  if (!scan_pending && result_count != 1)
-  {
-    count += "s";
-  }
-  if (!scan_pending && !results.empty())
-  {
-    count += "  " + std::to_string(std::clamp(selected + 1, 1, result_count)) + "/"
-             + std::to_string(result_count);
-  }
-  const std::string count_text = " " + count + " ";
-  if (ui_cell_count(count_text) < layout.w - 3)
-  {
-    ui->draw_text(layout.x + layout.w - 1 - ui_cell_count(count_text),
-                  layout.footer_y,
-                  count_text,
-                  theme.fg_comment,
-                  list_bg);
-  }
-
-  // Query field: its own band, so the typed text reads as an input rather than
-  // another row of the list.
+  // The prompt is the box's last interior row: `> what was typed` on the left,
+  // the match count on the right. It shares the picker's background rather than
+  // sitting on an inset field, and the row above it is the last result.
   const bool query_focus = telescope.focus() == TelescopeFocus::Query;
-  const std::string query_text =
-      std::string(kPromptGlyph) + " " + telescope.get_query();
-  const int query_bg = query_focus ? theme.bg_telescope_query : list_bg;
-  const int query_fg = query_focus ? theme.fg_telescope_query : theme.fg_comment;
-  UIRect query_rect = {layout.query_x, layout.query_y, layout.query_w, 1};
-  ui->fill_rect(query_rect, " ", query_fg, query_bg);
-  ui->draw_text(layout.query_x,
+  const std::string prompt = kPrompt;
+  const int prompt_cells = ui_cell_count(prompt);
+  // Which match of how many, or the size of an empty list -- and whether the
+  // scan that fills it is still running.
+  std::string count;
+  if (scan_pending)
+  {
+    count = "scanning...";
+  }
+  else if (!results.empty())
+  {
+    count = std::to_string(std::clamp(selected + 1, 1, result_count)) + " / "
+            + std::to_string(result_count);
+  }
+  else
+  {
+    count = std::to_string(result_count) + " file";
+    if (result_count != 1)
+    {
+      count += "s";
+    }
+  }
+  const int count_cells = ui_cell_count(count);
+  // Two cells of air at each end, and the count never crowds the query out.
+  const int query_budget =
+      std::max(1, layout.x + layout.w - 3 - count_cells - (layout.query_x + prompt_cells));
+  ui->draw_text(layout.query_x, layout.query_y, prompt, theme.fg_keyword, picker_bg);
+  const std::string query_text = clip_text(telescope.get_query(), query_budget);
+  ui->draw_text(layout.query_x + prompt_cells,
                 layout.query_y,
-                clip_text(query_text, layout.query_w),
-                query_fg,
-                query_bg);
+                query_text,
+                theme.fg_telescope,
+                picker_bg);
   if (telescope.get_query().empty())
   {
-    const int hint_x = layout.query_x + ui_cell_count(std::string(kPromptGlyph) + " ");
-    ui->draw_text(hint_x,
+    ui->draw_text(layout.query_x + prompt_cells,
                   layout.query_y,
-                  clip_text("type to filter files", std::max(1, layout.query_w - (hint_x - layout.query_x))),
+                  clip_text("type to filter files", query_budget),
                   theme.fg_comment,
-                  query_bg);
+                  picker_bg);
+  }
+  if (count_cells <= layout.x + layout.w - 3 - (layout.query_x + prompt_cells))
+  {
+    // Right-aligned against the box's last interior cell, exactly where the Lua
+    // kit puts it.
+    ui->draw_text(layout.x + layout.w - 1 - count_cells,
+                  layout.query_y,
+                  count,
+                  theme.fg_comment,
+                  picker_bg);
   }
   if (query_focus)
   {
-    const int caret_x =
-        layout.query_x
-        + std::min(layout.query_w - 1,
-                   std::max(0, ui_cell_count(std::string(kPromptGlyph) + " " + telescope.get_query())));
+    const int caret_x = std::min(layout.x + layout.w - 2,
+                                 layout.query_x + prompt_cells
+                                     + ui_cell_count(query_text));
     ui->set_cursor(caret_x, layout.query_y);
   }
 
   // ---- the result rows ---------------------------------------------------
   const int start_idx = telescope.get_list_scroll_offset();
   const int end_idx = std::min((int)results.size(), start_idx + layout.list_h);
+  // The pointer's two cells are reserved on every row, so the names stay in one
+  // column as the selection moves instead of shifting with its marker.
+  const int pointer_cells = ui_cell_count(kPrompt);
   if (results.empty())
   {
     std::string empty;
@@ -326,11 +302,11 @@ void Editor::render_telescope()
     {
       empty = "No files match the current query.";
     }
-    ui->draw_text(layout.list_x + 1,
+    ui->draw_text(layout.list_x + pointer_cells,
                   layout.list_y + std::max(0, (layout.list_h - 1) / 2),
-                  clip_text(empty, std::max(1, layout.list_w - 2)),
+                  clip_text(empty, std::max(1, layout.list_w - pointer_cells)),
                   theme.fg_comment,
-                  list_bg);
+                  picker_bg);
   }
 
   for (int i = start_idx; i < end_idx; i++)
@@ -339,53 +315,41 @@ void Editor::render_telescope()
     const int row_y = layout.list_y + (i - start_idx);
     const bool selected_row = (i == selected);
 
-    // Selection (and hover, which moves the selection) is a filled band across
-    // the row -- no gutter marker, so the row itself is the highlight.
-    int name_fg = theme.fg_telescope;
-    int row_bg = list_bg;
+    // The selection is the pointer plus the row's band: the band gives the row
+    // presence under the eye, the pointer says where the keyboard is.
+    int row_fg = theme.fg_telescope;
+    int row_bg = picker_bg;
     if (selected_row)
     {
       row_bg = theme.bg_telescope_selected;
-      name_fg = theme.fg_telescope_selected;
+      row_fg = theme.fg_telescope_selected;
       UIRect row_rect = {layout.list_x, row_y, layout.list_w, 1};
-      ui->fill_rect(row_rect, " ", name_fg, row_bg);
+      ui->fill_rect(row_rect, " ", row_fg, row_bg);
     }
 
-    const bool opened = path_is_open_buffer(open_paths, match.path);
-    const std::string dot = opened ? std::string(kDotOpen) + " " : std::string(kDotClosed) + " ";
-    const int dot_fg = opened ? theme.fg_status_info : theme.fg_comment;
     const std::string icon = telescope_row_icon(match, use_nerd_icons);
     const int icon_fg = telescope_icon_fg(match, use_nerd_icons);
-    const std::string folder_text = telescope_row_folder(match);
-
-    const int dot_cells = ui_cell_count(dot);
     const int icon_cells = ui_cell_count(icon);
-    const int fixed = dot_cells + icon_cells;
-    const int row_w = std::max(1, layout.list_w);
-    // The dimmed folder keeps at most a third of the row, so a deep path can
-    // never squeeze the file name out.
-    const int folder_w = std::min(ui_cell_count(folder_text), std::max(0, row_w / 3));
-    const int name_w = std::max(1, row_w - fixed - folder_w - 1);
+    // The label is the file's path from the picker's scope, clipped from the
+    // left: a name alone cannot tell src/render/frame.cpp from the one in
+    // src/input, and the name is the half of the path worth keeping.
+    const int path_w = std::max(1, layout.list_w - pointer_cells - icon_cells);
 
-    ui->draw_text(layout.list_x, row_y, dot, selected_row ? theme.fg_telescope_selected : dot_fg, row_bg);
-    ui->draw_text(layout.list_x + dot_cells,
+    ui->draw_text(layout.list_x,
+                  row_y,
+                  selected_row ? kPrompt : "  ",
+                  selected_row ? row_fg : theme.fg_comment,
+                  row_bg);
+    ui->draw_text(layout.list_x + pointer_cells,
                   row_y,
                   icon,
-                  selected_row ? theme.fg_telescope_selected : (icon_fg >= 0 ? icon_fg : name_fg),
+                  selected_row ? row_fg : (icon_fg >= 0 ? icon_fg : row_fg),
                   row_bg);
-    ui->draw_text(layout.list_x + fixed,
+    ui->draw_text(layout.list_x + pointer_cells + icon_cells,
                   row_y,
-                  clip_text(match.name, name_w),
-                  name_fg,
+                  clip_path_left(match.relative_path, path_w),
+                  row_fg,
                   row_bg);
-    if (folder_w > 0)
-    {
-      ui->draw_text(layout.list_x + row_w - folder_w,
-                    row_y,
-                    clip_path_left(folder_text, folder_w),
-                    selected_row ? theme.fg_telescope_selected : theme.fg_comment,
-                    row_bg);
-    }
   }
 
   // ---- the file view box -------------------------------------------------
@@ -395,26 +359,12 @@ void Editor::render_telescope()
   }
 
   UIRect view_rect = {layout.preview_x, layout.preview_y, layout.preview_w, layout.preview_h};
-  ui->fill_rect(view_rect, " ", theme.fg_telescope_preview, view_bg);
-  ui->draw_border(view_rect, border_fg, view_bg);
+  ui->fill_rect(view_rect, " ", theme.fg_telescope, picker_bg);
+  ui->draw_border(view_rect, border_fg, picker_bg);
+  draw_border_label(layout.preview_x, layout.preview_w, layout.preview_y, "Preview", theme.fg_telescope);
 
   const bool has_selection = selected >= 0 && selected < (int)results.size();
   const TelescopePreview preview = has_selection ? telescope.get_selected_preview() : TelescopePreview();
-
-  // The file name is the box's title, in its top border, with the folder it
-  // lives in dimmed behind it -- this is the "which file am I looking at" line.
-  if (has_selection)
-  {
-    const std::string glyph = telescope_row_icon(results[(size_t)selected], use_nerd_icons);
-    const std::string view_title = " " + glyph + selected_name;
-    ui->draw_text(layout.preview_x + 1, layout.preview_y, view_title, theme.fg_telescope_preview, view_bg);
-    const int used = 1 + ui_cell_count(glyph + selected_name);
-    const std::string sub = folder.empty() ? std::string() : "\u00b7 " + folder + " ";
-    if (!sub.empty() && used + ui_cell_count(sub) < layout.preview_w - 3)
-    {
-      ui->draw_text(layout.preview_x + 1 + used, layout.preview_y, sub, theme.fg_comment, view_bg);
-    }
-  }
 
   // Content: line numbers in the gutter, the file's own syntax colors after
   // them, exactly like the editor paints a buffer.
@@ -439,12 +389,12 @@ void Editor::render_telescope()
                       row_y,
                       clip_text(line, layout.preview_inner_w),
                       theme.fg_comment,
-                      view_bg);
+                      picker_bg);
         continue;
       }
       char line_no[24];
       std::snprintf(line_no, sizeof(line_no), "%5d ", line_idx + 1);
-      ui->draw_text(layout.preview_inner_x, row_y, line_no, theme.fg_line_num, view_bg);
+      ui->draw_text(layout.preview_inner_x, row_y, line_no, theme.fg_line_num, picker_bg);
       const int text_col = 6;
       const int text_w = std::max(1, layout.preview_inner_w - text_col);
       const std::string clipped = clip_text(line, text_w);
@@ -470,7 +420,7 @@ void Editor::render_telescope()
                           row_y,
                           clipped.substr(chunk_start, c - chunk_start),
                           syntax_preview_color(theme, chunk_token),
-                          view_bg);
+                          picker_bg);
           }
           chunk_start = c;
           chunk_token = token;
@@ -520,13 +470,9 @@ void Editor::render_telescope()
       status += "  truncated";
     }
   }
-  const std::string status_text = " " + status + " ";
-  if (ui_cell_count(status_text) < layout.preview_w - 3)
-  {
-    ui->draw_text(layout.preview_x + layout.preview_w - 1 - ui_cell_count(status_text),
-                  layout.preview_status_y,
-                  status_text,
-                  theme.fg_comment,
-                  view_bg);
-  }
+  draw_border_label(layout.preview_x,
+                    layout.preview_w,
+                    layout.preview_status_y,
+                    status,
+                    theme.fg_comment);
 }

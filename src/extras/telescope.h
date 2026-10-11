@@ -54,9 +54,9 @@ struct TelescopeLayout
   //
   //   x/y/w/h            the list box, its border included
   //   inner_*            inside that border
-  //   query_*            the input row (first interior row)
-  //   list_*/body_*      the result rows below it
-  //   footer_y           the list box's bottom border (match count)
+  //   query_*            the prompt row (last interior row)
+  //   list_*/body_*      the result rows above it
+  //   footer_y           the list box's bottom border
   //   preview_*          the file view box, its border included
   //   preview_inner_*    inside it (the code rows)
   //   preview_text_y     first code row inside the file view box

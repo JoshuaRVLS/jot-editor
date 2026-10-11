@@ -100,14 +100,20 @@ void Editor::handle_telescope(int ch)
     return;
   }
 
-  if (ch == 1008 || ch == 'k' || ch == 16)
+  // `j`/`k` are list motions, but the prompt is a text field: while it owns the
+  // keyboard they are characters like any other, or no query could contain them
+  // (`keys.cpp` was untypable -- the `k` moved the selection and was swallowed).
+  // The arrows and Ctrl+N/P still move from the prompt, and the other two foci
+  // keep the vim motions.
+  const bool query_typing = telescope.focus() == TelescopeFocus::Query;
+  if (ch == 1008 || (!query_typing && ch == 'k') || ch == 16)
   { // Up or Ctrl+P
     telescope.set_focus(TelescopeFocus::Results);
     telescope.move_up();
     needs_redraw = true;
     return;
   }
-  if (ch == 1009 || ch == 'j' || ch == 14)
+  if (ch == 1009 || (!query_typing && ch == 'j') || ch == 14)
   { // Down or Ctrl+N
     telescope.set_focus(TelescopeFocus::Results);
     telescope.move_down();

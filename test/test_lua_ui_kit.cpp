@@ -921,23 +921,26 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   lua_setfield(L, -2, "inner_w");
   lua_pushinteger(L, 16);
   lua_setfield(L, -2, "inner_h");
-  lua_pushinteger(L, 2);
+  // The prompt is the box's last interior row (inner_y + inner_h - 1) and the
+  // results fill the box above it, which is the relationship the native layout
+  // hands over.
+  lua_pushinteger(L, 1);
   lua_setfield(L, -2, "query_x");
-  lua_pushinteger(L, 2);
+  lua_pushinteger(L, 17);
   lua_setfield(L, -2, "query_y");
   lua_pushinteger(L, 54);
   lua_setfield(L, -2, "query_w");
-  lua_pushinteger(L, 4);
+  lua_pushinteger(L, 2);
   lua_setfield(L, -2, "body_y");
-  lua_pushinteger(L, 14);
+  lua_pushinteger(L, 15);
   lua_setfield(L, -2, "body_h");
   lua_pushinteger(L, 1);
   lua_setfield(L, -2, "list_x");
-  lua_pushinteger(L, 4);
+  lua_pushinteger(L, 2);
   lua_setfield(L, -2, "list_y");
   lua_pushinteger(L, 56);
   lua_setfield(L, -2, "list_w");
-  lua_pushinteger(L, 14);
+  lua_pushinteger(L, 15);
   lua_setfield(L, -2, "list_h");
   lua_pushinteger(L, 59);
   lua_setfield(L, -2, "preview_x");
@@ -983,12 +986,12 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   lua_newtable(L);
   lua_pushstring(L, "main.cpp");
   lua_setfield(L, -2, "name");
-  lua_pushstring(L, "src");
-  lua_setfield(L, -2, "parent_path");
+  // The row's label is the path; the name is its tail, which is where the match
+  // offsets below index into.
+  lua_pushstring(L, "src/main.cpp");
+  lua_setfield(L, -2, "path");
   lua_pushboolean(L, 0);
   lua_setfield(L, -2, "is_directory");
-  lua_pushboolean(L, 0);
-  lua_setfield(L, -2, "opened");
   lua_newtable(L); // match: 0-based offsets of the query's `mai`
   lua_pushinteger(L, 0);
   lua_rawseti(L, -2, 1);
@@ -1023,8 +1026,26 @@ TEST_CASE("Bundled Lua UI kit renders surfaces from Lua")
   REQUIRE(g.open_count == 11);
   REQUIRE(g.lines_count == 18);     // the borderless float's whole height
   REQUIRE(g.set_cursor_count == 1); // query focus caret
-  REQUIRE(g.last_cursor_y == 2);
-  REQUIRE(g.last_cursor_x >= 1);
+  // Absolute screen cells, in the prompt row: past the `> ` prompt and after the
+  // query. A float-relative column parks the caret outside the picker, on
+  // whatever the editor had there.
+  REQUIRE(g.last_cursor_y == 17);
+  REQUIRE(g.last_cursor_x == 1 + 2 + 3);
+
+  // The picker's own chrome: each box names itself in its top border and the
+  // finder in its foot, a row is the file's path behind a selection pointer, and
+  // the prompt -- with the match count at its end -- is the box's last interior
+  // row, under the rows it filtered.
+  const std::vector<std::string> &tel = g.line_sets.back();
+  REQUIRE(tel.size() == 18);
+  REQUIRE(tel[0].find("Results") != std::string::npos);
+  REQUIRE(tel[17].find("Find Files") != std::string::npos);
+  REQUIRE(tel[1].find("src/main.cpp") != std::string::npos);
+  // The box's left border glyph is three bytes, so the row's first cell -- the
+  // pointer's -- begins at byte 3.
+  REQUIRE(tel[1].substr(3, 2) == "> ");
+  REQUIRE(tel[16].substr(3, 5) == "> mai");
+  REQUIRE(tel[16].find("1 / 3") != std::string::npos);
 
   // The query's characters are highlighted on the SELECTED row, and the accent
   // is allowed to be the selection's own background (the bundled dark theme's

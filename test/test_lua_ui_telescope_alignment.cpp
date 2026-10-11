@@ -332,11 +332,14 @@ TEST_CASE("Telescope Lua render: straight separator, bounded rows, byte-aligned 
   {
     lua_newtable(L);
     push_str(L, "name", names[i - 1]);
-    push_str(L, "parent_path", parents[i - 1]);
+    // The row's label is the path from the picker's scope: the folder the file
+    // lives in followed by its name, or the name alone at the root.
+    const std::string parent = parents[i - 1];
+    const std::string path =
+        parent == "." ? std::string(names[i - 1]) : parent + "/" + names[i - 1];
+    push_str(L, "path", path.c_str());
     lua_pushboolean(L, 0);
     lua_setfield(L, -2, "is_directory");
-    lua_pushboolean(L, (i % 2) == 1);
-    lua_setfield(L, -2, "opened");
     lua_rawseti(L, -2, i);
   }
   lua_setfield(L, -2, "results");
@@ -456,6 +459,28 @@ TEST_CASE("Telescope Lua render: straight separator, bounded rows, byte-aligned 
   REQUIRE(saw_return);
   REQUIRE(saw_int);
   REQUIRE(span_recs.size() >= 4); // bg + text spans per row
+
+  // 5. A row is the file's path from the picker's scope (a name alone cannot
+  //    tell two same-named files apart), and the prompt is the box's LAST
+  //    interior row, under the rows it filtered -- the layout puts it there, and
+  //    the renderer has to draw it there.
+  bool saw_path = false;
+  for (int i = 0; i < cap.count; i++)
+  {
+    if (cap.lines[(size_t)i].find("src/editor/lua/api_core.cpp") != std::string::npos)
+    {
+      saw_path = true;
+    }
+  }
+  REQUIRE(saw_path);
+  const int query_row = lay.query_y - lay.y;
+  REQUIRE(query_row == lay.h - 2); // the row above the bottom border
+  const std::string &qrow = cap.lines[(size_t)(query_row - 1)];
+  const size_t prompt_at = qrow.find("> c");
+  REQUIRE(prompt_at != std::string::npos);
+  // Its column, counted in cells (the row's frame glyphs and the wide CJK names
+  // above make a byte offset a different number).
+  REQUIRE(ui_cell_count(qrow.substr(0, prompt_at)) == (size_t)(lay.query_x - lay.x));
 
   lua_close(L);
 }
