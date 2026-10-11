@@ -35,6 +35,18 @@ int integrated_terminal_panel_w() const;
 // Height the terminal reserves from the pane area (0 while zoomed).
 int integrated_terminal_reserved_h() const;
 void toggle_terminal_zoom();
+// Text scale of the terminal frontend, 1 (the classic one character per cell)
+// to kMaxTuiTextScale. A terminal program cannot change its own font -- the
+// emulator owns the glyphs -- so asking for a bigger grid means asking the
+// terminal to draw each cell as a scale x scale block, which is what kitty's
+// text sizing protocol provides (see Terminal::write_scaled_text). A terminal
+// without it keeps the screen at 1:1 and says so.
+void set_tui_text_scale(int scale, bool persist = true);
+// Ctrl/Alt +/= and -/_: one step up or down, clamped at the ends.
+void tui_text_zoom(int step);
+// The GUI frontend's zoom, which is its font size: one step in or out, with the
+// grid re-fitted to the window. A no-op on a build without the GUI.
+void gui_font_zoom(int step);
 bool begin_terminal_resize_drag(int x, int y);
 bool update_terminal_resize_drag(int y);
 void end_terminal_resize_drag();

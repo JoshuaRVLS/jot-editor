@@ -182,6 +182,111 @@ static bool cursor_probe_size(int &width, int &height, int budget_ms = 200)
   return false;
 }
 
+// Reads one DSR cursor-position reply (`ESC [ rows ; cols R`) within a total
+// deadline, handing back any other bytes the wait swallowed so a keystroke
+// that arrived mid-probe still reaches the editor.
+static bool read_cpr_reply(int &row, int &col, int budget_ms)
+{
+  const auto deadline = std::chrono::steady_clock::now()
+                        + std::chrono::milliseconds(budget_ms);
+  char buf[32] = {};
+  int i = 0;
+  bool answered = false;
+  while (i < 31)
+  {
+    const auto now = std::chrono::steady_clock::now();
+    if (now >= deadline)
+    {
+      break;
+    }
+    const int remain = (int)std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now)
+                           .count();
+    if (!g_input.read(buf[i], std::max(1, remain)))
+    {
+      break;
+    }
+    i++;
+    std::size_t at = 0;
+    std::size_t end = 0;
+    answered = probe_reply_span(buf, i, at, end);
+    if (answered)
+    {
+      if (sscanf(buf + at, "\x1b[%d;%d", &row, &col) != 2)
+      {
+        answered = false;
+      }
+      // Everything that was not the reply goes back, in order.
+      char keep[sizeof(buf)];
+      int kept = 0;
+      for (int k = 0; k < i && kept < (int)sizeof(keep); k++)
+      {
+        if ((std::size_t)k >= at && (std::size_t)k < end)
+        {
+          continue;
+        }
+        keep[kept++] = buf[k];
+      }
+      if (kept > 0)
+      {
+        g_input.unread(keep, (std::size_t)kept);
+      }
+      return true;
+    }
+  }
+  if (i > 0 && !answered)
+  {
+    g_input.unread(buf, (std::size_t)i);
+  }
+  return false;
+}
+
+// The protocol's own test for its scale part: ask for the cursor position,
+// draw a two-cell space, ask again, draw a double-sized space, ask once more.
+// A terminal without the protocol ignores both and the cursor never moves; one
+// that implements only the width part moves for the first space and not the
+// second. Both have to move -- the scale alone would not make the grid we draw
+// line up -- so the check is strictly four cells of movement, two per frame.
+static bool text_scale_probe()
+{
+  if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))
+  {
+    return false;
+  }
+  static const char kSave[] = "\x1b" "7\x1b[1;1H\x1b[6n";
+  static const char kWidthFrame[] = "\x1b]66;w=2; \a\x1b[6n";
+  static const char kScaleFrame[] = "\x1b]66;s=2; \a\x1b[6n";
+  // The probe writes straight to the tty: the frame the editor is composing
+  // rides behind it in the same frame, so the two scaled blanks it leaves are
+  // painted over before anything is read on screen.
+  ::write(STDOUT_FILENO, kSave, sizeof(kSave) - 1);
+
+  int row = 0, col = 0;
+  bool ok = false;
+  if (read_cpr_reply(row, col, 120) && col == 1)
+  {
+    ::write(STDOUT_FILENO, kWidthFrame, sizeof(kWidthFrame) - 1);
+    int width_col = 0;
+    if (read_cpr_reply(row, width_col, 120) && width_col == 3)
+    {
+      ::write(STDOUT_FILENO, kScaleFrame, sizeof(kScaleFrame) - 1);
+      int scale_col = 0;
+      if (read_cpr_reply(row, scale_col, 120) && scale_col == 5)
+      {
+        ok = true;
+      }
+    }
+  }
+
+  // Erase the probe's two blocks and put the caret back. Plain spaces do it:
+  // writing over a block's top-left cell erases the whole block, row under it
+  // included. No erase-to-end and no frame of our own here -- a refused zoom
+  // schedules no repaint, so anything destructive would be left on the screen
+  // until something else happened to redraw it.
+  static const char kCleanup[] = "\x1b[1;1H    \x1b" "8";
+  ::write(STDOUT_FILENO, kCleanup, sizeof(kCleanup) - 1);
+  return ok;
+}
+
 static int termkey_modifier_flags(int mod)
 {
   int flags = 0;
@@ -541,6 +646,19 @@ void Terminal::cleanup()
   }
 }
 
+bool Terminal::probe_text_scale()
+{
+  // Diagnostic escape hatch, in the spirit of JOT_RENDER_CHUNK_BYTES: asking the
+  // terminal only works on a real one, so a pty-driven test (or someone behind a
+  // multiplexer that strips OSC 66) can force the answer here.
+  const char *force = getenv("JOT_TEXT_SCALE_FORCE");
+  if (force && force[0] != '\0' && force[0] != '0')
+  {
+    return true;
+  }
+  return text_scale_probe();
+}
+
 int Terminal::read_termkey_result()
 {
   if (!termkey_)
@@ -762,8 +880,10 @@ void Terminal::parse_mouse_event(int ch, MouseEvent &event)
       return;
     }
     event.button = button;
-    event.x = x - 1;
-    event.y = y - 1;
+    // Terminal cell -> grid cell: the report names the cell under the pointer,
+    // and at a scale above 1 the grid cell it is part of is scale cells wide.
+    event.x = (x - 1) / cell_scale_;
+    event.y = (y - 1) / cell_scale_;
     event.ctrl = (button & 16) != 0;
     event.shift = (button & 4) != 0;
     event.alt = (button & 8) != 0;
@@ -1160,8 +1280,10 @@ void Terminal::clear()
 
 void Terminal::move_cursor(int x, int y)
 {
+  // Grid cell -> terminal cell: at a scale above 1 a cell is drawn as a scale
+  // x scale block, so its top-left corner is `scale` cells further along.
   char buf[32];
-  snprintf(buf, sizeof(buf), "\x1b[%d;%dH", y + 1, x + 1);
+  snprintf(buf, sizeof(buf), "\x1b[%d;%dH", y * cell_scale_ + 1, x * cell_scale_ + 1);
   buffer += buf;
 }
 

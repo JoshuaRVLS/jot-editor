@@ -129,6 +129,13 @@ void Editor::apply_config_live()
       set_lsp_globally_enabled(lsp_wanted);
     }
   }
+  // The terminal frontend's text scale (see set_tui_text_scale). Applied only
+  // where a Terminal backend draws the grid: the GUI zooms through its font
+  // size, so reading this there could never be honoured.
+  if (!gui_mode)
+  {
+    set_tui_text_scale(config.get_int("tui_text_scale", 1), false);
+  }
   integrated_terminal_height = std::clamp(config.get_int("terminal_height", 10), 5, 20);
   floating_terminal_width = std::clamp(config.get_int("terminal_float_width", 85), 20, 100);
   floating_terminal_height = std::clamp(config.get_int("terminal_float_height", 75), 20, 100);
@@ -217,6 +224,58 @@ void Editor::apply_config_live()
   // constructor, so run() calls in again once it does.
   sync_wakatime();
   needs_redraw = true;
+}
+
+// The largest scale the text zoom offers. The protocol allows seven; past four
+// a normal terminal (24-30 rows) has too few grid rows left for the layout to
+// say anything, so the range stops where the screen still works.
+constexpr int kMaxTuiTextScale = 4;
+
+void Editor::set_tui_text_scale(int scale, bool persist)
+{
+  if (gui_mode || !ui)
+  {
+    // The GUI frontend owns its glyphs and zooms through the font size
+    // (Ctrl+= / gui_font_size); this scale is the terminal backend's alone.
+    return;
+  }
+  const int wanted = std::clamp(scale, 1, kMaxTuiTextScale);
+  if (wanted > 1 && !terminal.text_scale_supported())
+  {
+    // Drawing a grid the terminal will not scale would leave the screen in
+    // pieces, so the request is refused rather than approximated.
+    set_message("This terminal cannot scale text (needs the text sizing protocol: kitty 0.40+)");
+    return;
+  }
+  if (wanted == ui->get_cell_scale())
+  {
+    set_message(wanted == 1 ? "Text scale reset" : "Text scale " + std::to_string(wanted) + "x");
+    return;
+  }
+  // One cell now covers a block of terminal cells: the grid re-fits and every
+  // pane re-lays out around the new size, exactly as a terminal resize does.
+  ui->set_cell_scale(wanted);
+  apply_resize(terminal.get_width(), terminal.get_height());
+  if (persist)
+  {
+    config.set_int("tui_text_scale", wanted);
+    config.save();
+  }
+  set_message(wanted == 1 ? "Text scale reset" : "Text scale " + std::to_string(wanted) + "x");
+}
+
+void Editor::tui_text_zoom(int step)
+{
+  if (gui_mode || !ui)
+  {
+    return;
+  }
+  if (step == 0)
+  {
+    set_tui_text_scale(1);
+    return;
+  }
+  set_tui_text_scale(ui->get_cell_scale() + step);
 }
 
 void Editor::reload_config()

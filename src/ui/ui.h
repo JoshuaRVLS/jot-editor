@@ -143,7 +143,14 @@ protected:
   // the cell diff would consider them identical and skip them even though the
   // terminal may show restored content there.
   bool full_repaint_pending_ = false;
+  // Grid geometry in cells, and the terminal size that produced it. They differ
+  // only while a text scale is in effect: a scaled cell covers scale x scale
+  // terminal cells, so the grid the editor paints is the terminal's size
+  // divided by the scale (see set_cell_scale).
   int width, height;
+  int phys_width_ = 0;
+  int phys_height_ = 0;
+  int cell_scale_ = 1;
   int cursor_x, cursor_y;
   UICursorShape cursor_shape;
   bool cursor_hidden;
@@ -204,7 +211,19 @@ protected:
 public:
   UI(Terminal *t);
   virtual ~UI();
+  // `w`/`h` are the terminal's own size in cells; the grid becomes that divided
+  // by the text scale. Only the terminal backend ever sees a scale above 1: the
+  // GUI frontend owns its glyphs and zooms by font size instead.
   void resize(int w, int h);
+  // The grid's text scale, 1 when the terminal is drawn one character per cell.
+  int get_cell_scale() const
+  {
+    return cell_scale_;
+  }
+  // Re-fits the grid to the terminal at this scale and repaints it: above 1 the
+  // renderer hands each chunk of cell text to the terminal framed in OSC 66, so
+  // one grid cell covers a scale x scale block of terminal cells.
+  void set_cell_scale(int scale);
   // Virtual so GUI backends can repaint without clearing a terminal.
   virtual void invalidate();
   // Forget what was last written to the terminal: the next render() must

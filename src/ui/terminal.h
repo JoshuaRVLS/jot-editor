@@ -1,7 +1,9 @@
 #ifndef TERMINAL_H
 #define TERMINAL_H
 
+#include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <functional>
 #include <string>
 #include <vector>
@@ -129,6 +131,18 @@ private:
   // Set once at init (detect_truecolor). Defaults to false so the quantised
   // path is what any test that never runs init() exercises.
   bool truecolor_ = false;
+  // Text scale of the cell grid: 1 is the classic one character per cell, and
+  // above it every grid cell is drawn as a `cell_scale_` x `cell_scale_` block
+  // through kitty's text sizing protocol (see write_scaled_text). Cursor moves
+  // and mouse reports are translated between grid cells and terminal cells by
+  // it, so everything above this class keeps working in grid cells.
+  int cell_scale_ = 1;
+  // Whether the terminal implements the scale part of that protocol, and
+  // whether it has been asked: the probe runs at most once, the first time a
+  // scale above 1 is requested, so a terminal that never answers costs its
+  // budget on that request instead of on startup.
+  bool cell_scale_probed_ = false;
+  bool cell_scale_supported_ = false;
   // Cell size in pixels, 0 when unreported. Kitty places images in cells and
   // needs none of this; Sixel output is sized in pixels.
   int cell_px_w_ = 0;
@@ -141,6 +155,9 @@ private:
   int read_key();
   int read_termkey_result();
   void parse_mouse_event(int ch, MouseEvent &event);
+  // Asks the terminal whether it draws OSC 66 text at the requested scale. A
+  // backend whose console cannot (the Windows console) answers false.
+  bool probe_text_scale();
 
 public:
   Terminal();
@@ -175,12 +192,40 @@ public:
   bool flush();
 
   void clear();
+  // Parks the cursor at grid cell (x, y), converting to the terminal cell the
+  // block that cell is drawn in starts at when a scale is in effect.
   void move_cursor(int x, int y);
   void hide_cursor();
   void show_cursor();
   // True once any source has produced a size, so the DSR probe (which parks and
   // restores the cursor) only runs when there is nothing to go on.
   bool size_known_ = false;
+
+public:
+  // The grid's text scale (1 = one character per terminal cell).
+  int cell_scale() const
+  {
+    return cell_scale_;
+  }
+  // Sets it. Callers keep working in grid cells: cursor moves and mouse
+  // reports translate between the two.
+  void set_cell_scale(int scale)
+  {
+    cell_scale_ = scale > 0 ? scale : 1;
+  }
+  // Whether the terminal implements the scale part of OSC 66, probing once on
+  // the first call (the probe is the protocol's own cursor-position test, and
+  // a terminal that does not answer -- a pipe, a CI pty, an emulator without
+  // the protocol -- reads as unsupported).
+  bool text_scale_supported()
+  {
+    if (!cell_scale_probed_)
+    {
+      cell_scale_probed_ = true;
+      cell_scale_supported_ = probe_text_scale();
+    }    return cell_scale_supported_;
+  }
+
   // Writes fg/bg as SGR. Indices are always xterm-256 palette entries; when a
   // 24-bit colour is supplied (kNoRgb means "none") it is used verbatim if the
   // terminal understands 38;2/48;2, and quantised to the nearest palette entry
@@ -227,6 +272,42 @@ public:
 
   void write(const std::string &str);
   void write_char(char c);
+
+  // Queues one chunk of cell text. At scale 1 this is a plain write; above it
+  // the chunk is framed in OSC 66, which is the only way a program running in
+  // a terminal can make its own text bigger: the emulator owns the glyphs, so
+  // a cell-grid program asks it to draw the text in a scale x scale block
+  // instead. The frame's text may not exceed 4096 bytes (the protocol's cap),
+  // so a long run is split at a UTF-8 boundary, and control bytes are folded
+  // to spaces because a BEL would end the frame early.
+  void write_scaled_text(const std::string &text)
+  {
+    if (cell_scale_ <= 1 || text.empty())
+    {
+      buffer += text;
+      return;
+    }
+    constexpr std::size_t kMaxFrameText = 4096;
+    std::size_t at = 0;
+    while (at < text.size())
+    {
+      std::size_t end = std::min(text.size(), at + kMaxFrameText);
+      while (end > at && end < text.size() && ((unsigned char)text[end] & 0xC0) == 0x80)
+      {
+        end--; // never split a UTF-8 sequence across two frames
+      }
+      char head[24];
+      snprintf(head, sizeof(head), "\x1b]66;s=%d;", cell_scale_);
+      buffer += head;
+      for (std::size_t i = at; i < end; i++)
+      {
+        const unsigned char byte = (unsigned char)text[i];
+        buffer += (byte < 0x20 || byte == 0x7F) ? ' ' : (char)byte;
+      }
+      buffer += '\a';
+      at = end;
+    }
+  }
 
   int get_input_fd() const
   {
@@ -318,6 +399,15 @@ public:
   void clear_pending_output_for_test()
   {
     buffer.clear();
+  }
+
+  // Parses one SGR mouse report the way poll_event() does, so a case can pin
+  // the cell translation without a live pointer.
+  bool parse_mouse_report_for_test(const std::string &report, MouseEvent &event)
+  {
+    mouse_event_buffer = report;
+    parse_mouse_event(0, event);
+    return event.x >= 0;
   }
 
   // Drain the output buffer to the kernel PTY without blocking. If

@@ -69,6 +69,7 @@ namespace
        "Color preview: skip extensions",
        SettingsEntry::Type::String},
       {"truecolor", "24-bit color (auto/on/off)", SettingsEntry::Type::String},
+      {"tui_text_scale", "Terminal text scale", SettingsEntry::Type::Int},
       {"completion_rich_labels", "Completion: rich labels", SettingsEntry::Type::Bool},
       {"completion_align_type", "Completion: align type", SettingsEntry::Type::Bool},
       {"completion_dim_arguments", "Completion: dim arguments", SettingsEntry::Type::Bool},
@@ -301,6 +302,7 @@ namespace
       {"terminal_float_height", 5, 20, 100},
       {"terminal_float_width", 5, 20, 100},
       {"terminal_height", 1, 5, 20},
+      {"tui_text_scale", 1, 1, 4},
       {"toast.duration_ms", 250, 500, 60000},
       {"toast.fade_ms", 50, 0, 5000},
       {"toast.gap", 1, 0, 10},
@@ -350,8 +352,9 @@ namespace
       "smooth_scroll",      "status_clock",
       "status_coding_time", "tabline",
       "tabline_auto_hide",  "tabline_insert",
-      "truecolor",          "winbar",
-      "word_highlight",     "word_highlight_delay_ms",
+      "truecolor",          "tui_text_scale",
+      "winbar",             "word_highlight",
+      "word_highlight_delay_ms",
       "word_wrap",          "zen_content_width",
   };
   const char *const kAppearanceFamilies[] = {"smooth_scroll_"};
@@ -749,6 +752,24 @@ bool Editor::step_settings_value(bool increase)
     return true;
   }
   return true;
+}
+
+void Editor::gui_font_zoom(int step)
+{
+#ifdef JOT_GUI
+  // The GUI's zoom is its glyph size, so this is the Ctrl+= path: step the font,
+  // keep the choice, and re-fit the grid to the window at the new cell size.
+  if (auto *gui = gui_ui())
+  {
+    gui->apply_font_zoom(step);
+    config.set_int("gui_font_size", gui->font_px());
+    config.save();
+    apply_resize(gui->get_width(), gui->get_height());
+    needs_redraw = true;
+  }
+#else
+  (void)step;
+#endif
 }
 
 void Editor::apply_settings_value(const std::string &key, const std::string &value)

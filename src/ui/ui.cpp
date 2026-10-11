@@ -224,6 +224,23 @@ namespace
     }
     write_sanitized_cell_text(term, text);
   }
+
+  // The same cell, written where the terminal scales the grid: the chunk goes
+  // out framed (see Terminal::write_scaled_text) so one grid cell covers the
+  // scale x scale block the layout assumed for it.
+  void write_scaled_cell_for_remaining_width(Terminal *term, const std::string &text, int remaining)
+  {
+    std::string out;
+    if (rendered_cell_width(text) > remaining)
+    {
+      out.assign((size_t)remaining, ' ');
+    }
+    else
+    {
+      append_sanitized_cell_text(out, text);
+    }
+    term->write_scaled_text(out);
+  }
 } // namespace
 
 UI::~UI() = default;
@@ -303,9 +320,22 @@ void UI::forget_last_frame()
 
 void UI::resize(int w, int h)
 {
-  int new_w = std::max(1, w);
-  int new_h = std::max(1, h);
+  // The caller passes the terminal's size; the grid is what the scale leaves of
+  // it. A scale that does not divide the terminal exactly leaves up to a cell's
+  // worth of columns and rows at the far edges unpainted, which is what the
+  // full clear below is for.
+  phys_width_ = std::max(1, w);
+  phys_height_ = std::max(1, h);
+  int new_w = std::max(1, phys_width_ / cell_scale_);
+  int new_h = std::max(1, phys_height_ / cell_scale_);
   const bool dim_changed = (new_w != width) || (new_h != height);
+  if (dim_changed && cell_scale_ > 1 && term)
+  {
+    // Scaled cells do not tile the terminal exactly: a resize can expose an
+    // edge strip the renderer never writes and a scale change re-tiles the whole
+    // screen. One erase here keeps those strips blank instead of stale.
+    term->clear();
+  }
   width = new_w;
   height = new_h;
   cursor_x = -1;
@@ -349,6 +379,25 @@ void UI::resize(int w, int h)
   {
     full_repaint_pending_ = true;
   }
+}
+
+void UI::set_cell_scale(int scale)
+{
+  const int wanted = std::max(1, scale);
+  if (wanted == cell_scale_)
+  {
+    return;
+  }
+  cell_scale_ = wanted;
+  if (term)
+  {
+    term->set_cell_scale(wanted);
+  }
+  // Every cell moved: re-fit the grid to the terminal size (the physical size is
+  // what stays fixed) and paint it all again rather than diffing a frame drawn
+  // for a different geometry.
+  resize(phys_width_ > 0 ? phys_width_ : width, phys_height_ > 0 ? phys_height_ : height);
+  invalidate();
 }
 
 void UI::invalidate()
@@ -596,7 +645,7 @@ void UI::render()
         if (cell.underline_fg != -1)
           term->set_underline_color(cell.underline_fg, cell.underline_rgb);
         emit_cell_colors(cell);
-        write_cell_for_remaining_width(term, cell.ch, row_width - x);
+        write_scaled_cell_for_remaining_width(term, cell.ch, row_width - x);
         x += std::min(rendered_cell_width(cell.ch), row_width - x);
       }
     }
@@ -826,14 +875,15 @@ void UI::emit_full_row(int y, int row_width)
       x += cell_w;
     }
 
-    term->write(body);
+    term->write_scaled_text(body);
     written += (x - run_start);
   }
 
-  while (written < row_width)
+  if (written < row_width)
   {
-    term->write(" ");
-    written++;
+    // One frame for the whole tail rather than one per cell: at a scale above 1
+    // every cell would otherwise carry its own escape header.
+    term->write_scaled_text(std::string((size_t)(row_width - written), ' '));
   }
 }
 
@@ -933,6 +983,12 @@ void UI::emit_row_diff(int y, int row_width)
     else if (r.start == last_x)
     {
       // The previous write already left the cursor here.
+    }
+    else if (cell_scale_ > 1)
+    {
+      // A relative step counts terminal cells, and one grid cell is now a block
+      // of them: address the run absolutely instead of scaling the count here.
+      term->move_cursor(r.start, y);
     }
     else if (r.start > last_x && r.start - last_x <= 64)
     {
@@ -1063,7 +1119,7 @@ void UI::emit_row_diff(int y, int row_width)
         append_cell_for_remaining_width(body, ch, r.end - x);
         x += cell_w;
       }
-      term->write(body);
+      term->write_scaled_text(body);
     }
     last_x = x;
   }

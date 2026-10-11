@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -487,6 +488,28 @@ bool Editor::execute_ex_command(const std::string &input_line)
   else if (lcmd == "termfloat" || lcmd == "terminalfloat")
   {
     toggle_floating_terminal();
+  }
+  else if (lcmd == "textzoom" || lcmd == "textscale")
+  {
+    // The grid's own text size, which is not what :termzoom does (that is the
+    // terminal panel across the whole pane area). No argument, or in/out,
+    // steps it; a number sets the level; reset puts it back to 1:1.
+    if (arg.empty() || arg == "in" || arg == "+")
+    {
+      tui_text_zoom(1);
+    }
+    else if (arg == "out" || arg == "-")
+    {
+      tui_text_zoom(-1);
+    }
+    else if (arg == "reset" || arg == "0")
+    {
+      tui_text_zoom(0);
+    }
+    else
+    {
+      set_tui_text_scale(std::atoi(arg.c_str()));
+    }
   }
   else if (lcmd == "task")
   {

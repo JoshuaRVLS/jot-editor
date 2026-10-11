@@ -136,6 +136,29 @@ void Editor::handle_terminal_event(const Event &ev)
       return;
     }
 
+    // Text scale for the terminal frontend, claimed before any mode can
+    // swallow the chord (the GUI intercepts its Ctrl+= the same way, and for
+    // the same reason). Alt is the form that travels everywhere: Ctrl+'=' has
+    // no control byte to ride as, so a terminal without an enhanced-keyboard
+    // mode never reports it. Ctrl is accepted too for the terminals that do.
+    if (!gui_mode && (is_alt || is_ctrl)
+        && (ch == '=' || ch == '+' || ch == '-' || ch == '_' || ch == '0'))
+    {
+      if (ch == '=' || ch == '+')
+      {
+        tui_text_zoom(1);
+      }
+      else if (ch == '-' || ch == '_')
+      {
+        tui_text_zoom(-1);
+      }
+      else
+      {
+        tui_text_zoom(0);
+      }
+      return;
+    }
+
     bool ctrl_q_shortcut =
         (is_ctrl && (ch == 'q' || ch == 'Q' || original_ch == 'q' || original_ch == 'Q'))
         || ch == 17 || original_ch == 17;
@@ -289,6 +312,27 @@ void Editor::handle_terminal_event(const Event &ev)
     bool is_h_wheel = (wheel_base == 66 || wheel_base == 67)
                       || (shift_held && (wheel_base == 64 || wheel_base == 65));
     bool is_wheel = (wheel_base >= 64 && wheel_base <= 67);
+
+    // Ctrl+wheel zooms the text, the mouse form of Alt+= / Alt+- (the GUI turns
+    // it into Ctrl+= instead, which zooms its font). Claimed before anything
+    // under the pointer can scroll instead: a zoom chord should not depend on
+    // what happens to be there, the same reason the GUI's Ctrl+= is intercepted
+    // ahead of dispatch.
+    if (is_wheel && !is_h_wheel && ev.mouse.ctrl)
+    {
+      const int step = (wheel_base == 64) ? 1 : -1;
+      if (gui_mode)
+      {
+        // The GUI zooms its font instead of the grid; the call lives with the
+        // rest of the frontend's font handling rather than here.
+        gui_font_zoom(step);
+      }
+      else
+      {
+        tui_text_zoom(step);
+      }
+      return;
+    }
 
     // A click outside the helper dismisses it (like Esc).
     if (show_which_key && ev.mouse.pressed && wheel_base != 64 && wheel_base != 65)

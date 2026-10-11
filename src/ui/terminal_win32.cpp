@@ -854,6 +854,14 @@ void Terminal::parse_mouse_event(int, MouseEvent &event)
   reset_mouse_event(event);
 }
 
+bool Terminal::probe_text_scale()
+{
+  // The Windows console has no text sizing protocol: there is nothing to ask
+  // and no glyph scale a program can request, so a scale above 1 is refused
+  // rather than drawn at coordinates the console would not honour.
+  return false;
+}
+
 Event Terminal::poll_event()
 {
   Event ev{};
@@ -1095,8 +1103,11 @@ void Terminal::clear()
 
 void Terminal::move_cursor(int x, int y)
 {
+  // Grid cell -> console cell (see the POSIX backend): a cell drawn as a scale
+  // x scale block starts `scale` cells along. The console never supports the
+  // protocol that draws those blocks, so the scale stays 1 here.
   char buf[32];
-  snprintf(buf, sizeof(buf), "\x1b[%d;%dH", y + 1, x + 1);
+  snprintf(buf, sizeof(buf), "\x1b[%d;%dH", y * cell_scale_ + 1, x * cell_scale_ + 1);
   buffer += buf;
 }
 

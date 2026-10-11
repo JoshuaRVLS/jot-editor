@@ -100,6 +100,7 @@ add_executable(jot_tests
   test_settings_menu.cpp
   test_themes.cpp
   test_terminal_panel.cpp
+  test_text_scale.cpp
   test_terminal_float.cpp
   test_terminal_links.cpp
   test_bottom_panel.cpp

@@ -77,8 +77,21 @@ face. Only fixed-width families are listed, since a proportional face cannot
 fill a cell grid. Lookups read `~/.local/share/fonts`, `~/.fonts`,
 `/usr/local/share/fonts`, `/usr/share/fonts` (plus the macOS and Windows font
 directories), and an unknown name is reported and ignored, leaving the
-current font in place. `JOT_GUI_FONT` still overrides the regular face with
-an explicit font file.
+current font in place.`JOT_GUI_FONT` still overrides the regular face with an
+explicit font file.
+
+In a terminal there is no font of jot's own to size -- the emulator owns the
+glyphs -- so the zoom is asked of the terminal instead: `tui_text_scale` (1-4,
+`:textzoom in|out|reset|N`) has the grid drawn in cells that cover that many
+terminal cells each, through the text sizing protocol kitty 0.40+ implements,
+and the whole UI scales together -- buffer, panels, status line -- without the
+terminal's own size changing at any point. `Alt+=` / `Alt+-` step it while the
+editor is up (`Ctrl+=` / `Ctrl+-` too, where the terminal reports those chords),
+`Ctrl+wheel-up` / `Ctrl+wheel-down` do it with the wheel, and `Alt+0` puts it
+back to 1:1. A terminal without the protocol keeps the screen at 1:1 and says so
+rather than painting a grid it cannot fill; `JOT_TEXT_SCALE_FORCE=1` forces the
+zoom anyway, for a terminal whose support the probe cannot see (a multiplexer
+that strips the protocol, a diagnostic run).
 
 The GUI also shapes what the font joins. A programming face inks `->` and `!=`
 through its own OpenType lookups, and a cell grid that resolves one codepoint

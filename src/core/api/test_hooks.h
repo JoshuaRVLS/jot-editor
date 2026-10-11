@@ -489,6 +489,39 @@ bool terminal_zoom_active_for_test() const
 {
   return terminal_zoom_active;
 }
+// --- terminal text scale (test) ---
+// The zoom keys and :textzoom both end in set_tui_text_scale; a case drives the
+// same call (persisting included) and reads the grid it left behind.
+void set_tui_text_scale_for_test(int scale)
+{
+  set_tui_text_scale(scale);
+}
+// Puts a known message on the channel, so a case can tell "this input said
+// nothing" from "this input said what the last case left behind".
+void set_message_for_test(const std::string &msg)
+{
+  set_message(msg, false);
+}
+// Feeds one SGR-style mouse event through the real dispatch, so a case pins what
+// a notch does (Ctrl+wheel zooms, a plain wheel still scrolls) without a pty.
+void terminal_mouse_for_test(int x, int y, int button, bool pressed, bool ctrl)
+{
+  Event ev{};
+  ev.type = EVENT_MOUSE;
+  ev.mouse.x = x;
+  ev.mouse.y = y;
+  ev.mouse.button = button;
+  ev.mouse.pressed = pressed;
+  ev.mouse.released = !pressed;
+  ev.mouse.ctrl = ctrl;
+  ev.mouse.shift = false;
+  ev.mouse.alt = false;
+  handle_terminal_event(ev);
+}
+int tui_text_scale_for_test() const
+{
+  return ui ? ui->get_cell_scale() : 1;
+}
 bool terminal_visible_for_test() const
 {
   return show_integrated_terminal;

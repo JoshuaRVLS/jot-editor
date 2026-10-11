@@ -216,6 +216,12 @@ void Config::load_defaults()
   // Terminal frontends do this themselves, so this is only about jot's own
   // window; needs harfbuzz at build time (UIGui::ligatures_supported()).
   settings["gui_ligatures"] = "true";
+  // Text scale of the terminal frontend (1 = one character per cell). Above 1
+  // the grid is drawn in cells that cover scale x scale of the terminal's,
+  // which needs a terminal that implements the text sizing protocol (kitty
+  // 0.40+); anywhere else the screen stays at 1 and says so. The GUI frontend
+  // scales through gui_font_size instead.
+  settings["tui_text_scale"] = "1";
   settings["highlight_cursor_line"] = "true";
   // Tint every place the identifier under the caret shows in the viewport, VS
   // Code's occurrencesHighlight: a rename's blast radius without a search.

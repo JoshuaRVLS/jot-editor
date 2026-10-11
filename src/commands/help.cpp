@@ -28,6 +28,7 @@ void Editor::show_command_help(const std::string &topic_text)
                 ":update [run] :reload :reloadconfig :reloadplugins "
                 ":task [name] :tasknew <name> :taskrerun "
                 ":term :termnew :termzoom :termfloat "
+                ":textzoom [in|out|reset|1-4] "
                 ":debug <program> :debugconfig [name] :debugstop "
                 ":debugcontinue :debugnext :debugstep :debugout "
                 ":gitstatus :gitdiff [file] :gitdiffstaged [file] "
