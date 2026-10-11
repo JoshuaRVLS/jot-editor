@@ -18,6 +18,10 @@
 
 namespace
 {
+  // How long a message stays on the bar before it takes itself down: the read
+  // time set_transient_message defaults to (commands.h).
+  constexpr int kStatusMessageLingerMs = 5000;
+
   std::string status_path_basename(const std::string &path, const std::string &fallback)
   {
     if (path.empty())
@@ -522,6 +526,41 @@ void Editor::render_status_line()
   // a segment after the left block. Only the transient `:message` does now: the
   // workspace label sat there permanently, restating the window title on a bar
   // whose job is the file in front of the user.
+  //
+  // Whatever put the text there -- set_message, or one of the older call sites
+  // that still writes `message` itself -- it comes down on its own. Keying on the
+  // text keeps the clock chip's repaints from pushing the deadline back, and an
+  // explicit set_transient_message rides its own timer.
+  if (message.empty())
+  {
+    status_message_armed.clear();
+  }
+  else if (message != status_message_armed)
+  {
+    status_message_armed = message;
+    if (status_message_linger_timer != 0)
+    {
+      event_loop_.cancel_timer(status_message_linger_timer);
+      status_message_linger_timer = 0;
+    }
+    if (transient_message_timer == 0 && event_loop_.is_main_thread())
+    {
+      const std::string text = message;
+      status_message_linger_timer =
+          event_loop_.set_timeout(kStatusMessageLingerMs,
+                                  [this, text]
+                                  {
+                                    status_message_linger_timer = 0;
+                                    if (message != text)
+                                    {
+                                      return; // a newer message owns the bar
+                                    }
+                                    status_message_armed.clear();
+                                    message.clear();
+                                    needs_redraw = true;
+                                  });
+    }
+  }
   if (!message.empty())
   {
     left_segments.push_back(

@@ -124,6 +124,10 @@ struct ViewState
   std::string last_message;
   std::uint64_t transient_message_timer = 0;
   std::uint64_t message_generation = 0;
+  // The text the bar's own linger timer was armed for, and that timer (see
+  // render_status_line).
+  std::string status_message_armed;
+  std::uint64_t status_message_linger_timer = 0;
   std::string clipboard;
 };
 
