@@ -140,11 +140,12 @@ jobs:
       - name: Package Windows zip
         if: matrix.platform == 'windows'
         run: |
-          # Only the runtime tree goes in: bin/jot.exe and share/jot, the layout
-          # the exe resolves its own data directory from (see src/base/exe_path.h).
-          # The staged include/ and lib/ hold development files the package does
-          # not need, and the build gate left no DLL of its own for the exe to
-          # find.
+          # The staged tree is already trimmed to what ships (see
+          # packaging/windows/build-static-exe.sh): bin/jot.exe, share/jot --
+          # the layout the exe resolves its own data directory from, see
+          # src/base/exe_path.h -- and share/doc with the license texts. The
+          # staged include/ and lib/ hold development files the package does not
+          # need, and the build gate left no DLL of its own for the exe to find.
           cd "${GITHUB_WORKSPACE}/dist/jot-windows-x86_64"
           cmake -E tar cf "${GITHUB_WORKSPACE}/${{ matrix.archive }}" --format=zip bin share
 

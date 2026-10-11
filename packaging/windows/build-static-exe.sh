@@ -70,4 +70,13 @@ echo "windows build: imports are Windows-only: $(printf '%s ' ${imports})"
 
 echo "windows build: installing to ${stage_dir}"
 cmake --install "${build_dir}" --prefix "${stage_dir}"
+
+# cmake --install also runs the install rules of the dependencies this build
+# compiles from source, so curl's curl-config and mk-ca-bundle.pl and
+# tree-sitter's pkg-config file land in the same prefix. The staged tree is the
+# payload the installer and the zip carry, so bin/ keeps the exe alone and
+# share/ keeps the runtime and the licenses.
+find "${stage_dir}/bin" -mindepth 1 -maxdepth 1 ! -name 'jot.exe' -exec rm -rf {} +
+find "${stage_dir}/share" -mindepth 1 -maxdepth 1 ! -name 'jot' ! -name 'doc' -exec rm -rf {} +
+
 echo "windows build: $(du -h "${stage_dir}/bin/jot.exe" | cut -f1) exe at ${stage_dir}/bin/jot.exe"
