@@ -132,6 +132,18 @@ def header_row(screen) -> str:
     return ""
 
 
+def status_row(screen) -> str:
+    """The status line, which jot draws on the screen's last row.
+
+    The file and cursor position it carries are what say where a jump landed.
+    It used to be found by the "cpp @ /path" its LSP chip painted; that chip
+    was trimmed to the language alone (src/render/status_line.cpp), which left
+    the row's position as the stable thing to read it by.
+    """
+    rows = screen.text().split("\n")
+    return rows[screen.rows - 1].rstrip() if len(rows) >= screen.rows else ""
+
+
 def main() -> int:
     binary = sys.argv[1] if len(sys.argv) > 1 else "build/apps/jot/jot"
     dump = "--dump" in sys.argv
@@ -205,7 +217,7 @@ def main() -> int:
     # lands on the first one the walk would visit (the repeated body in
     # shapes.cpp), the status line says where it went, and the list's marker
     # follows so opening the panel lands on the same row.
-    status = next((line for line in text.split("\n") if "cpp @" in line), "")
+    status = status_row(screen)
     if "shapes.cpp" not in status or "5:5" not in status:
         failures.append(f":cppcheck did not land on the first finding: {status.strip()!r}")
     marked = marked_row(screen)
@@ -228,7 +240,7 @@ def main() -> int:
         print("-" * 70)
     text = screen.text()
 
-    status = next((line for line in text.split("\n") if "cpp @" in line), "")
+    status = status_row(screen)
     if "shapes.h" not in status or "3:5" not in status:
         failures.append(f":cppcheck next did not walk to the header's finding: {status.strip()!r}")
 

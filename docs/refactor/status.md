@@ -241,14 +241,22 @@ wrapper in `editor/app/line_commands.cpp`.
 
 ## Known red, verified not ours
 
-`test/test_home_open.cpp:292` fails in every full run of the suite (956 cases,
-954 passed, 1 failed). It fails identically on the tree before this work.
+None of the three below is red on the current tree.
 
-`fold_probe.py` and `cpp_defs_probe.py` fail. They were run against a clean
-`git worktree` of the commit before the syntax module moved and fail there too,
-with the same messages (`fold probe: FAIL (2)`, `cpp defs probe: FAIL -
-:cppcheck next did not walk to the header's finding: ''`). They are not caused
-by the moves.
+`test/test_home_open.cpp:292` passes again: the whole suite is 1003 cases and
+71108 assertions, exit 0 (was 956 cases, 1 failed).
+
+`fold_probe.py` passes; the ranges it asserts on moved to an index cached on the
+buffer and that index invalidates on every write.
+
+`cpp_defs_probe.py` passes, and the reason it did not was the probe rather than
+the editor: it read the status line by grepping for the LSP chip's old "cpp @
+/path" label, which `src/render/status_line.cpp` had already trimmed to the
+language alone. The jumps it was checking had been landing correctly the whole
+time -- `:cppcheck` on the repeated body in `shapes.cpp:5:5`, then `:cppcheck
+next` on the header's declaration at `shapes.h:3:5`. It now reads the row the
+status line is drawn on (the screen's last) instead of a label that no longer
+exists.
 
 `tabline_probe.py` is timing-flaky on this machine rather than red: it passed 3
 of 4 runs against this tree and 3 of 4 against a clean build of the commit
