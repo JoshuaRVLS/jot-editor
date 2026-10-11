@@ -109,19 +109,25 @@ def run_chord(binary: str, root: str, path: str, keys: bytes, cfg: str,
                       cols=110, rows=32, cfg=cfg, cwd=root)
 
 
+def status_row(screen) -> str:
+    """The status line, which jot draws on the screen's last row."""
+    rows = screen.text().split("\n")
+    return rows[screen.rows - 1].rstrip() if len(rows) >= screen.rows else ""
+
+
 def current_file(screen) -> str:
     """The file the editor is showing, read from the status line.
 
-    The status line is the one row carrying the language-server indicator; the
-    file it names is the current buffer. The tab strip and the explorer both
-    show every open or listed file, so neither can answer this.
+    The status line names the current buffer. It used to be found by the
+    `@ server` chip it carried; that chip was trimmed to the language alone
+    (src/render/status_line.cpp), so the row is read by position, the way
+    cpp_defs_probe.py reads it. The tab strip and the explorer both show every
+    open or listed file, so neither can answer this.
     """
-    for line in screen.text().split("\n"):
-        if " @ " not in line:
-            continue
-        for name in ("main.cpp", "util.cpp", "util.h"):
-            if name in line:
-                return name
+    row = status_row(screen)
+    for name in ("main.cpp", "util.cpp", "util.h"):
+        if name in row:
+            return name
     return ""
 
 

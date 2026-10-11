@@ -206,13 +206,19 @@ def run_settled(binary: str, root: str, keys: bytes, cfg: str, needle: str,
 
 
 def caret(screen):
-    """The (line, column) the status line reports, 1-based, or None."""
-    for line in screen.text().split("\n"):
-        if " @ " not in line:
-            continue
-        match = re.search(r"\s(\d+):(\d+)\s", line)
-        if match:
-            return int(match.group(1)), int(match.group(2))
+    """The (line, column) the status line reports, 1-based, or None.
+
+    jot draws the status line on the screen's last row. It used to be found by
+    the `@ server` chip that row carried; the chip was trimmed to the language
+    alone (src/render/status_line.cpp), so the row is read by position now, the
+    way link_click_probe.py reads it.
+    """
+    rows = screen.text().split("\n")
+    if len(rows) < screen.rows:
+        return None
+    match = re.search(r"\b(\d+):(\d+)\b", rows[screen.rows - 1])
+    if match:
+        return int(match.group(1)), int(match.group(2))
     return None
 
 

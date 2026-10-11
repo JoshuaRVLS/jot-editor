@@ -241,7 +241,7 @@ wrapper in `editor/app/line_commands.cpp`.
 
 ## Known red, verified not ours
 
-None of the three below is red on the current tree.
+Nothing below is red on the current tree.
 
 `test/test_home_open.cpp:292` passes again: the whole suite is 1003 cases and
 71108 assertions, exit 0 (was 956 cases, 1 failed).
@@ -257,6 +257,25 @@ time -- `:cppcheck` on the repeated body in `shapes.cpp:5:5`, then `:cppcheck
 next` on the header's declaration at `shapes.h:3:5`. It now reads the row the
 status line is drawn on (the screen's last) instead of a label that no longer
 exists.
+
+`cpp_nav_probe.py` and `ctrl_click_probe.py` were red for that same reason and
+are green by the same fix. Both read the status line by grepping for the `@
+server` chip: `cpp_nav_probe.py` read the current file from it, `ctrl_click_probe`
+read the caret from it. With the chip gone, every scene reported "nothing" or
+"(none)" -- twelve ctrl+click scenes and all five navigation scenes -- while the
+editor was landing each jump correctly. `cpp_nav_probe.py` now puts every lookup
+where it belongs (declaration and type definition in `util.h`, a virtual
+implementation into the header/source pair, the header/source flip both ways,
+and `Alt+C h` through the keymap chord). `ctrl_click_probe.py` lands all twelve
+chain positions on their own symbol, draws the Ctrl+hover underline over exactly
+the symbol the click jumps to, and arrives in the 119-line file at `42:5` with
+the lines either side of the definition on screen.
+
+Both were found by `tools/run_probes.py`, which runs every `test/*_probe.py`
+against one binary and reports each probe's own verdict (`--jobs`, `--only`,
+`--skip`, `--timeout`). Nothing ran them together before: each is a script with
+its own usage line, so a stale reader could sit red for a release, and these
+two did.
 
 `tabline_probe.py` is timing-flaky on this machine rather than red: it passed 3
 of 4 runs against this tree and 3 of 4 against a clean build of the commit

@@ -164,7 +164,9 @@ records, shared helpers).
   painted screen; `test/pty_screen.py` is the shared harness. `test/gui_screen.py`
   is the same for the GUI probes (`gui_scroll_probe.py`, `gui_ram_probe.py`): it
   runs the binary on a private Xvfb display, injects input with XTEST and reads
-  the window back.
+  the window back. `tools/run_probes.py` runs them all against one binary and
+  reports each one's own verdict -- they are not in ctest because they need a
+  pty, a language server and minutes rather than milliseconds.
 - `benchmarks/` -- the frame and fold-index benchmarks.
 - `tools/leak_check.sh [build-dir] [filter]` -- builds the `JOT_SANITIZE=ON`
   tree and runs the suite under AddressSanitizer + LeakSanitizer, failing if
