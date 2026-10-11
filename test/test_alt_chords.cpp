@@ -27,8 +27,9 @@
 
 namespace
 {
-  // The input path's Alt modifier bit (see src/ui/terminal.h).
+  // The input path's Alt and Shift modifier bits (see src/ui/terminal.h).
   const int ALT = 0x40000;
+  const int SHIFT = 0x80000;
 
   void seed_config_home()
   {
@@ -130,6 +131,44 @@ TEST_CASE(
   REQUIRE(e.focus_state_for_test() == (int)FOCUS_SIDEBAR);
   e.raw_key_for_test('z');
   REQUIRE(e.buffer_for_test().line(0) == "xalpha");
+}
+
+// The pane splits, as the native handler keeps them for a build without Lua
+// (src/input/modes/dispatch.cpp). The Lua family (Ctrl+W, declared in
+// runtime/lua/features/keymaps.lua) is covered by test_keymap_grammar.cpp; what
+// this pins is the fallback and, just as important, that the chords it replaced
+// are gone. Alt+Shift+<letter> could not be made to work: the GUI reports
+// Shift+Alt+letter as a lowercase keycode, Alt+Shift+L is the LeetCode prefix,
+// and a desktop that binds Alt+Shift takes the letter first.
+TEST_CASE("Pane splits: Alt+Shift+Arrow splits, the old letter chords do not", "[jot]")
+{
+  seed_config_home();
+  Editor e;
+  e.set_home_menu_visible(false);
+  open_file(e);
+  REQUIRE(e.panes_for_test().size() == 1);
+
+  // Arrows carry their modifiers as a real terminal sequence (CSI 1;4A) and as
+  // an arrow keycode in the GUI, so this is the chord that reaches both -- one
+  // press, no prefix.
+  e.raw_key_for_test(1011 | SHIFT | ALT);
+  REQUIRE(e.panes_for_test().size() == 2);
+  e.raw_key_for_test(1009 | SHIFT | ALT);
+  REQUIRE(e.panes_for_test().size() == 3);
+  e.raw_key_for_test(1008 | SHIFT | ALT);
+  REQUIRE(e.panes_for_test().size() == 4);
+  e.raw_key_for_test(1010 | SHIFT | ALT);
+  REQUIRE(e.panes_for_test().size() == 5);
+
+  // The letters that used to sit here are inert: not a split, and (like every
+  // other unclaimed chord) not text either -- Alt+Shift+Q in particular no
+  // longer quits from a single pane, which Ctrl+Q owns.
+  for (const char chord : {'H', 'J', 'K', 'L', 'Q'})
+  {
+    e.raw_key_for_test(chord | SHIFT | ALT);
+    INFO("Alt+Shift+" << chord << " must not split");
+    REQUIRE(e.panes_for_test().size() == 5);
+  }
 }
 
 TEST_CASE("Alt chords: the Problems panel is not a keyboard dead zone", "[jot]")

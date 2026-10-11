@@ -586,7 +586,8 @@ Install helpers also cover Rust, Go, Lua, and Bash.
   anywhere else goes to what is under the pointer -- the buffer, the explorer,
   a dock -- so a click in the code brings focus and the keys back to editing
   while the list is up, and the list still answers while its own rows are hit.
-- **Fullscreen zoom** (like pane zoom): `Alt+Shift+Z` while focused, or
+- **Fullscreen zoom** (the terminal's own; pane zoom is `Ctrl+W o`):
+  `Alt+Shift+Z` while focused, or
   `:termzoom`, toggles the terminal across the whole pane area. `Esc` exits
   fullscreen too. While zoomed, the sidebar and right dock are hidden so
   nothing overlaps the fullscreen terminal.
@@ -890,6 +891,11 @@ by the border. Floats (hover, completion, dialogs, telescope, the tool dock's
 panels) sit over buffer content on every side, so they keep a full box. Everything
 is drawn with flat corners; the colour comes from the theme's `WinSeparator` /
 `FloatBorder` / `SidebarBorder` slots.
+
+The row's left-hand end is the file, and while the screen is split it carries the
+pane's place among the panes (`2/3`) right after the file name -- the one chip
+that answers "where am I" once two panes show a file each. A zoomed pane appends
+`zoom`, so the chip does not read as a split whose other panes vanished.
 
 The status row's right-hand end can carry two time chips: the local wall clock
 (`status_clock`, 24-hour `HH:MM`) and how long was coded today in the workspace
@@ -1210,12 +1216,20 @@ levels below it again.
 
 | Shortcut | Action |
 | --- | --- |
+| `Ctrl+W` (alone) | Show the pane menu (which-key lists every chord below) |
+| `Ctrl+W` then `h`/`j`/`k`/`l` | Focus the pane left/down/up/right |
+| `Ctrl+W` then `s` / `v` | Split the pane in two: below / right |
+| `Ctrl+W` then `Shift+S` / `Shift+V` | Split above / left |
+| `Alt+Shift+Arrow` | Split left/down/up/right (one chord, no prefix) |
+| `Ctrl+W` then `w` / `p` | Next / previous pane |
+| `Ctrl+W` then `c`, or `Ctrl+Q` | Close the focused pane |
+| `Ctrl+W` then `o` / `x` / `e` / `r` | Zoom / swap / equalize / rotate the layout |
 | `Alt+H/J/K/L` | Focus pane (or explorer) left/down/up/right |
-| `Alt+Shift+H/J/K/L` | Split left/down/up/right |
 | `Ctrl+Alt+Arrow` | Focus pane in that direction |
-| `Alt+Shift+Q` or `Ctrl+Q` | Close current pane |
 | `Ctrl+Shift+H/J/K/L` | Resize pane |
 | `Ctrl+Shift+Arrow` | Resize pane |
+| drag a divider | Resize that split (the pointer turns into a resize arrow over it) |
+| double-click a divider | Put that one split back in the middle |
 
 The bare `Ctrl+Arrow` chords are navigation (`Ctrl+Left`/`Ctrl+Right` move by
 word, `Ctrl+Up`/`Ctrl+Down` scroll the view), which is why the resize arrows
@@ -1225,11 +1239,25 @@ chord moves the caret instead of reporting, so they are live on a single-pane
 screen. `Alt+J`/`Alt+K` have no second meaning and say `No pane in that
 direction`.
 
-The split keys are `Alt+Shift+<letter>`, so a desktop that binds `Alt+Shift` to
-switching keyboard layouts (the XKB `grp:alt_shift_toggle` option, KDE, Windows)
-will eat them before the terminal sees the letter. `Ctrl+Shift+P` and the pane
-commands are the way round that: `split`, `splitleft`, `splitright`, `splitup`,
-`splitdown` each do one of the four.
+The pane family is the `Ctrl+W` prefix, Vim's window prefix, so the whole
+vocabulary is one menu rather than a chord per action: press `Ctrl+W` alone and
+which-key lists the children, or press `Ctrl+W` and the key under it. `Ctrl+W` is
+a control byte, so every terminal and `--gui` deliver it the same way, and no
+window manager claims it.
+
+It replaces `Alt+Shift+<letter>`, which could not be made to work: a desktop that
+binds `Alt+Shift` (hyprland, KDE, XKB's `grp:alt_shift_toggle`, Windows) eats the
+letter before the terminal sees it; the GUI's SDL path reports
+`Shift+Alt+<letter>` as a lowercase keycode, so a handler keyed on the uppercase
+letter never fired there; and the chords were compiled in, so a conflict left
+nothing to rebind. `Alt+Shift+L` was worse than that: it is the LeetCode menu
+prefix, and the Lua keymap path runs before the built-in handler, so the split
+never happened even where the terminal delivered the chord.
+
+Every pane action is also an ex command, which is the way round a still-broken
+chord: `:split`, `:splitleft`, `:splitright`, `:splitup`, `:splitdown`,
+`:wincmd h|j|k|l|=|z|x|q|r`, `:nextpane`, `:prevpane`, `:equalizepanes`,
+`:panezoom`, `:swappanes`.
 
 Shortcuts are global: the explorer having focus (which is where `jot <folder>`
 starts, and where opening a file from the tree leaves it) does not stop `Alt+S`,

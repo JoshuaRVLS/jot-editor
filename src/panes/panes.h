@@ -33,6 +33,7 @@ bool focus_pane_direction(char dir);
 void equalize_panes();
 void toggle_pane_zoom();
 void swap_panes();
+void rotate_panes();
 bool pane_zoomed() const
 {
   return pane_zoom_active;
@@ -61,6 +62,9 @@ int pane_split_at_position(int x, int y) const;
 bool begin_pane_resize_drag(int x, int y);
 bool update_pane_resize_drag(int x, int y);
 void end_pane_resize_drag();
+// 0 = not on a divider, 1 = vertical divider, 2 = horizontal one (the GUI's
+// pointer shape over a draggable edge).
+int pane_resize_hover_axis(int x, int y) const;
 bool is_pane_resize_dragging() const
 {
   return pane_resize_dragging;

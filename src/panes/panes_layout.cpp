@@ -819,6 +819,65 @@ void Editor::swap_panes()
   needs_redraw = true;
 }
 
+// Rotates the layout around the focused pane (:wincmd r, Ctrl+W r): the two
+// children of that pane's parent node trade places, so the pane walks to the
+// other side of the divider and pressing again walks it back -- which is how a
+// side-by-side pair becomes a stacked one at the top level, and how a pane
+// nested under a divider moves out from under it.
+//
+// The panes travel with their views (the tree is what moved, not the buffers),
+// so this is the layout counterpart of swap_panes: that one exchanges what two
+// panes show, this one moves where they are.
+void Editor::rotate_panes()
+{
+  if (pane_zoom_active)
+  {
+    pane_zoom_active = false;
+    pane_zoom_pane = -1;
+    update_pane_layout();
+  }
+  if (panes.size() < 2)
+  {
+    message = "No other pane to rotate with";
+    needs_redraw = true;
+    return;
+  }
+
+  int leaf = -1;
+  std::function<void(int)> find_leaf = [&](int node_index)
+  {
+    if (leaf >= 0 || node_index < 0 || node_index >= (int)pane_tree.size())
+    {
+      return;
+    }
+    const PaneTreeNode &node = pane_tree[node_index];
+    if (node.leaf)
+    {
+      if (node.pane_index == current_pane)
+      {
+        leaf = node_index;
+      }
+      return;
+    }
+    find_leaf(node.first);
+    find_leaf(node.second);
+  };
+  find_leaf(pane_root);
+
+  const int parent = (leaf >= 0) ? pane_tree[(size_t)leaf].parent : -1;
+  if (parent < 0 || parent >= (int)pane_tree.size() || pane_tree[(size_t)parent].leaf)
+  {
+    message = "Pane rotate failed: invalid pane tree";
+    needs_redraw = true;
+    return;
+  }
+
+  std::swap(pane_tree[(size_t)parent].first, pane_tree[(size_t)parent].second);
+  update_pane_layout();
+  message = "Pane layout rotated";
+  needs_redraw = true;
+}
+
 int Editor::pane_split_at_position(int x, int y) const
 {
   if (pane_root < 0 || pane_root >= (int)pane_tree.size())

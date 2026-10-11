@@ -306,91 +306,49 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     return;
   }
 
-  // Split and pane operations:
-  // - Alt+Shift+H/J/K/L (split left/down/up/right)
-  // - Alt+Shift+Q (close pane / quit), Alt+Shift+E (equalize),
-  //   Alt+Shift+Z (zoom), Alt+Shift+X (swap)
-  // Alt+letter is pane focus (handled below); Shift distinguishes split from
-  // focus. Alt+Shift was chosen over Ctrl+Alt because Ctrl+Alt+letter is not
-  // delivered at all on Alacritty for Windows (winit drops the text for
-  // Ctrl+Alt+[a-z]), while Alt+Shift+letter is plain ESC + uppercase and
-  // works everywhere. Alt+Shift always decodes to an uppercase letter, so
-  // only the uppercase forms are matched.
-  if (is_alt && is_shift)
+  // Split left/down/up/right: Alt+Shift+Arrow.
+  //
+  // The pane vocabulary itself is the Lua keymap family Ctrl+W
+  // (runtime/lua/features/keymaps.lua), which which-key lists and a config can
+  // rebind; what is left here is the native fallback for a build without Lua,
+  // on the same four chords. Arrows and not letters on purpose: an arrow report
+  // carries its modifiers as a real terminal sequence (CSI 1;4A) and as an
+  // arrow keycode in the GUI, while Shift+Alt+letter is swallowed before the
+  // terminal sees it on any desktop that binds Alt+Shift (hyprland, KDE, XKB's
+  // grp:alt_shift_toggle), and arrives in the GUI as a lowercase keycode that a
+  // case-sensitive letter match (the old Alt+Shift+H/J/K/L here) never fired
+  // on. Alt+Shift+Arrow was chosen over Ctrl+Alt+Arrow because Ctrl+Alt+Arrow
+  // is pane focus (above), and over Ctrl+Shift+Arrow, which resizes.
+  if (is_alt && is_shift
+      && (ch == 1008 || ch == 1009 || ch == 1010 || ch == 1011 || original_ch == 1008
+          || original_ch == 1009 || original_ch == 1010 || original_ch == 1011))
   {
-    if (ch == 'Q' || original_ch == 'Q')
-    {
-      if (panes.size() > 1)
-      {
-        close_pane();
-      }
-      else
-      {
-        bool unsaved = false;
-        for (const auto &b : buffers)
-        {
-          if (b.modified)
-          {
-            unsaved = true;
-            break;
-          }
-        }
-        if (unsaved)
-        {
-          show_quit_prompt = true;
-          needs_redraw = true;
-        }
-        else
-        {
-          running = false;
-        }
-      }
-      return;
-    }
-    if (ch == 'H' || original_ch == 'H')
+    if (ch == 1011 || original_ch == 1011)
     {
       split_pane_left();
-      return;
     }
-    if (ch == 'J' || original_ch == 'J')
+    else if (ch == 1009 || original_ch == 1009)
     {
       split_pane_down();
-      return;
     }
-    if (ch == 'K' || original_ch == 'K')
+    else if (ch == 1008 || original_ch == 1008)
     {
       split_pane_up();
-      return;
     }
-    if (ch == 'L' || original_ch == 'L')
+    else
     {
       split_pane_right();
-      return;
     }
-    // Pane operations: equalize, zoom, swap. Kept on Alt+Shift like the
-    // splits above so the whole pane vocabulary shares one modifier family.
-    if (ch == 'E' || original_ch == 'E')
-    {
-      equalize_panes();
-      return;
-    }
-    if (ch == 'Z' || original_ch == 'Z')
-    {
-      toggle_pane_zoom();
-      return;
-    }
-    if (ch == 'X' || original_ch == 'X')
-    {
-      swap_panes();
-      return;
-    }
-    // The terminal family shares this block with the pane ops: T is the
-    // floating shell (the docked ones are Ctrl+` and Ctrl+Shift+T).
-    if (ch == 'T' || original_ch == 'T')
-    {
-      toggle_floating_terminal();
-      return;
-    }
+    return;
+  }
+
+  // The floating shell: Alt+Shift+T (the docked ones are Ctrl+` and
+  // Ctrl+Shift+T).
+  if (is_alt && is_shift
+      && (ch == 'T' || original_ch == 'T' || ch == 't' || original_ch == 't'))
+  {
+    toggle_floating_terminal();
+    return;
   }
 
   if (is_alt)

@@ -153,6 +153,12 @@ bool UIGui::poll_event(Event &out)
     case SDL_WINDOWEVENT_FOCUS_LOST:
       out.type = EVENT_FOCUS_OUT;
       return true;
+    case SDL_WINDOWEVENT_LEAVE:
+      // The pointer left the window: whatever shape the edge under it asked
+      // for no longer describes anything (motion events stop at the boundary,
+      // so nothing else would take it back).
+      set_pointer_axis(0);
+      return false;
     case SDL_WINDOWEVENT_RESIZED:
     case SDL_WINDOWEVENT_SIZE_CHANGED:
     {
@@ -331,6 +337,10 @@ bool UIGui::poll_event(Event &out)
     const float pcell_h = jot_gui::point_cell_size(cell_h_, scale_);
     int cx = std::clamp((int)(ev.motion.x / pcell_w), 0, width - 1);
     int cy = std::clamp((int)(ev.motion.y / pcell_h), 0, height - 1);
+    // Remembered for the pump, which asks the editor what is under the pointer
+    // (the resize shape over a pane divider).
+    pointer_cell_x_ = cx;
+    pointer_cell_y_ = cy;
     // SGR motion encoding: 0x20 bit + the held button (0/1/2), or 3 when
     // no button is held (plain hover).
     int base = 3;
@@ -462,6 +472,33 @@ bool UIGui::poll_event(Event &out)
   default:
     return false;
   }
+}
+
+void UIGui::set_pointer_axis(int axis)
+{
+  if (axis == pointer_axis_)
+  {
+    return;
+  }
+  pointer_axis_ = axis;
+  if (!window_)
+  {
+    return;
+  }
+  if (axis == 0)
+  {
+    // NULL resets to the system's default pointer: the shape only exists while
+    // the pointer is over something draggable.
+    SDL_SetCursor(nullptr);
+    return;
+  }
+  SDL_Cursor *&cursor = (axis == 1) ? cursor_ew_ : cursor_ns_;
+  if (!cursor)
+  {
+    cursor = SDL_CreateSystemCursor(axis == 1 ? SDL_SYSTEM_CURSOR_SIZEWE
+                                             : SDL_SYSTEM_CURSOR_SIZENS);
+  }
+  SDL_SetCursor(cursor);
 }
 
 bool UIGui::set_clipboard_text(const std::string &text)

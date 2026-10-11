@@ -3,10 +3,26 @@
 #include "panes/panes_internal.h"
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <functional>
 #include <limits>
 
 using namespace pane_internal;
+
+namespace
+{
+  // The window a second press on the same divider counts as a double click.
+  // The same 350ms the explorer uses for its rows, so a double click means one
+  // thing across the editor.
+  constexpr long long kPaneResizeDoubleClickMs = 350;
+
+  long long now_ms()
+  {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+  }
+} // namespace
 bool Editor::collapsed_sidebar_handle_hit_test(int x, int y) const
 {
   if (zen_mode || show_sidebar || show_home_menu || !ui || panes.empty())
@@ -463,6 +479,30 @@ bool Editor::begin_pane_resize_drag(int x, int y)
   {
     return false;
   }
+
+  // A second press on the same divider inside the double-click window resets
+  // that split instead of grabbing it again: the gesture every desktop
+  // splitter has (double-click the divider to put it back in the middle), and
+  // the quickest way back from a ratio a drag left lopsided. Only the divider
+  // under the pointer moves -- "put them all back" is Ctrl+W e.
+  const long long click_ms = now_ms();
+  const bool double_click = pane_resize_last_click_node == node && pane_resize_last_click_ms > 0
+                            && click_ms - pane_resize_last_click_ms <= kPaneResizeDoubleClickMs;
+  if (double_click)
+  {
+    pane_resize_last_click_ms = 0;
+    pane_resize_last_click_node = -1;
+    pane_tree[(size_t)node].ratio = 0.5f;
+    pane_layout_mode =
+        pane_tree[(size_t)node].vertical ? PANE_LAYOUT_VERTICAL : PANE_LAYOUT_HORIZONTAL;
+    update_pane_layout();
+    set_message("Pane split reset");
+    needs_redraw = true;
+    return true;
+  }
+  pane_resize_last_click_ms = click_ms;
+  pane_resize_last_click_node = node;
+
   pane_resize_dragging = true;
   pane_resize_node = node;
   pane_resize_vertical = pane_tree[node].vertical;
@@ -501,4 +541,24 @@ void Editor::end_pane_resize_drag()
   pane_resize_start_ratio = 0.5f;
   set_message("Pane resized");
   needs_redraw = true;
+}
+
+// Which divider the pointer is on, so the GUI can shape its pointer over a
+// draggable edge: 0 = none, 1 = a vertical divider (side-by-side panes, so
+// resize east-west), 2 = a horizontal one. The same hit test the press uses, so
+// the pointer changes exactly where the drag would begin -- a cursor that
+// promises a drag the press does not deliver is worse than no cursor. The
+// terminal is never asked: it has no pointer to shape.
+int Editor::pane_resize_hover_axis(int x, int y) const
+{
+  if (panes.size() < 2 || !ui)
+  {
+    return 0;
+  }
+  const int node = pane_split_at_position(x, y);
+  if (node < 0 || node >= (int)pane_tree.size() || pane_tree[(size_t)node].leaf)
+  {
+    return 0;
+  }
+  return pane_tree[(size_t)node].vertical ? 1 : 2;
 }

@@ -266,6 +266,24 @@ void Editor::render_status_line()
                            " " + file_symbol,
                            file_symbol_fg});
 
+  // Pane chip: the pane's place among the split ones, beside the file it is
+  // showing. Only while the screen is actually split -- with one pane the
+  // question it answers does not exist, and the bar stays the file's own news.
+  // A zoomed pane says so, or the layout reads as a split that lost its
+  // siblings (the chip would still say 2/3 with one pane on screen).
+  if (panes.size() > 1)
+  {
+    std::string pane_text =
+        " " + std::to_string(std::clamp(current_pane, 0, (int)panes.size() - 1) + 1) + "/"
+        + std::to_string(panes.size());
+    if (pane_zoom_active)
+    {
+      pane_text += " zoom";
+    }
+    pane_text += " ";
+    left_segments.push_back({pane_text, theme.fg_status, theme.bg_status, true, false, 95});
+  }
+
   std::string cursor_label = " Ready ";
   if (!show_home_menu && active_buf)
   {

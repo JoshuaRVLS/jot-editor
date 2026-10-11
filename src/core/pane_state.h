@@ -58,6 +58,11 @@ struct PaneState
   // pane over the others (VSCode's "maximize editor group").
   bool pane_resize_dragging = false;
   int pane_resize_node = 0;
+  // The last press on a divider, so a second one inside the double-click
+  // window resets that split (the gesture every desktop splitter has) instead
+  // of grabbing it again. Node -1 means "no press yet".
+  long long pane_resize_last_click_ms = 0;
+  int pane_resize_last_click_node = -1;
   bool pane_resize_vertical = false;
   int pane_resize_start_pos = 0;
   float pane_resize_start_ratio = 0;

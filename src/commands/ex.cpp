@@ -452,9 +452,15 @@ bool Editor::execute_ex_command(const std::string &input_line)
       close_pane();
       return true;
     }
+    else if (dir == "r")
+    {
+      // Vim's rotate: the focused pane swaps places with its sibling.
+      rotate_panes();
+      return true;
+    }
     if (focus_dir == '\0')
     {
-      set_message("Usage: :wincmd h|j|k|l|=|z|x|q");
+      set_message("Usage: :wincmd h|j|k|l|=|z|x|q|r");
     }
     else if (!focus_pane_direction(focus_dir))
     {

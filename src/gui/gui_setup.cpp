@@ -168,6 +168,16 @@ UIGui::UIGui(
 
 UIGui::~UIGui()
 {
+  // The system cursors are ours to release (SDL keeps no reference to them),
+  // and they have to go before the window does.
+  if (cursor_ew_)
+  {
+    SDL_FreeCursor(cursor_ew_);
+  }
+  if (cursor_ns_)
+  {
+    SDL_FreeCursor(cursor_ns_);
+  }
   if (gl_context_)
   {
     SDL_GL_DeleteContext(static_cast<SDL_GLContext>(gl_context_));

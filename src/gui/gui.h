@@ -32,6 +32,7 @@
 #include <vector>
 
 struct SDL_Window;
+struct SDL_Cursor;
 typedef struct FT_LibraryRec_ *FT_Library;
 typedef struct FT_FaceRec_ *FT_Face;
 
@@ -184,6 +185,23 @@ public:
   // True while a scroll or cursor animation is in flight; the editor pump
   // keeps repainting so the animation advances at the monitor's refresh.
   bool needs_repaint() const;
+
+  // The cell the pointer was last seen over (-1 before the first motion). The
+  // pump reads these to ask the editor what is under the pointer.
+  int pointer_cell_x() const
+  {
+    return pointer_cell_x_;
+  }
+  int pointer_cell_y() const
+  {
+    return pointer_cell_y_;
+  }
+
+  // Shapes the pointer for what is under it: 0 = the default arrow, 1 = an
+  // east-west resize (a vertical pane divider), 2 = north-south (a horizontal
+  // one). Applied only when the axis changes, so the compositor keeps its own
+  // cursor handling the rest of the time.
+  void set_pointer_axis(int axis);
 
   // Pops one native SDL event, translated into jot's Event convention
   // (same key codes / modifier bits / SGR mouse buttons as the terminal
@@ -605,6 +623,15 @@ private:
   // caret does not re-issue the request every frame.
   int text_rect_x_ = -1;
   int text_rect_y_ = -1;
+
+  // Pointer tracking for the resize shape: the cell of the last motion, the
+  // axis currently applied, and the two system cursors once created (kept, so
+  // hovering a divider does not allocate a cursor handle per frame).
+  int pointer_cell_x_ = -1;
+  int pointer_cell_y_ = -1;
+  int pointer_axis_ = 0;
+  SDL_Cursor *cursor_ew_ = nullptr;
+  SDL_Cursor *cursor_ns_ = nullptr;
   // The window title currently set; see set_window_title.
   std::string window_title_ = "jot";
 

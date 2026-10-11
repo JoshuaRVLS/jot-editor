@@ -110,6 +110,13 @@ void Editor::pump_gui_events()
     needs_redraw = true;
   }
 
+  // The pointer shape: a pane divider under the pointer is draggable, and the
+  // cursor is the only place the GUI can say so before the drag is tried. The
+  // frontend applies it only when it changes, so this is safe to ask every
+  // frame.
+  gui->set_pointer_axis(
+      pane_resize_hover_axis(gui->pointer_cell_x(), gui->pointer_cell_y()));
+
   // The window's title: the active file, which is what the window list, the
   // taskbar and a screen reader call this window. The frontend only renames the
   // window when the title actually changes, so this is safe to recompute at the

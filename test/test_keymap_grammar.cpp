@@ -479,6 +479,78 @@ TEST_CASE("The grammar resolves through the which-key path", "[jot][keymap]")
   lua_close(L);
 }
 
+TEST_CASE("The pane family is Ctrl+W, and every child reaches a real command", "[jot][keymap]")
+{
+  // Panes used to be Alt+Shift+H/J/K/L, compiled into the dispatcher: the GUI's
+  // SDL path reports Shift+Alt+letter as a lowercase keycode, so the uppercase
+  // letter those arms matched on never arrived there; Alt+Shift+L was already
+  // the LeetCode prefix, and the Lua keymap path runs before the built-in
+  // handler, so that split lost even where the terminal delivered the chord;
+  // and a desktop that binds Alt+Shift (hyprland, KDE, grp:alt_shift_toggle)
+  // took the letter before the terminal saw it. The family is a prefix now,
+  // which is what this pins: Ctrl+W opens a menu whose every child is a
+  // command, and none of the dead chords is registered.
+  lua_State *L = luaL_newstate();
+  REQUIRE(L != nullptr);
+  REQUIRE(load_grammar(L));
+
+  LuaAPI api(nullptr);
+  for (const auto &entry : g.entries)
+  {
+    api.register_keymap(entry.chords, "", "", entry.detail, "global");
+  }
+
+  REQUIRE(api.plugin_keymap_is_prefix("Ctrl+W", "editor"));
+  const std::map<std::string, std::string> pane_leaves = {
+      {"s", "splitdown"},      {"v", "splitright"},  {"Shift+S", "splitup"},
+      {"Shift+V", "splitleft"}, {"h", "wincmd h"},   {"j", "wincmd j"},
+      {"k", "wincmd k"},        {"l", "wincmd l"},    {"w", "nextpane"},
+      {"p", "prevpane"},        {"c", "wincmd q"},   {"e", "equalizepanes"},
+      {"o", "panezoom"},        {"r", "wincmd r"},    {"x", "swappanes"},
+  };
+  std::vector<std::string> keys;
+  for (const auto &child : api.plugin_keymap_children("Ctrl+W", "editor"))
+  {
+    keys.push_back(child.key);
+  }
+  for (const auto &leaf : pane_leaves)
+  {
+    INFO("leaf Ctrl+W " << leaf.first << " -> :" << leaf.second);
+    REQUIRE(std::find(keys.begin(), keys.end(), leaf.first) != keys.end());
+    const KeymapRecord *record = find("Ctrl+W " + leaf.first);
+    REQUIRE(record != nullptr);
+    REQUIRE(record->command == leaf.second);
+  }
+  REQUIRE(keys.size() == pane_leaves.size());
+
+  // The one-chord splits that need no prefix: arrows, because a desktop's
+  // Alt+Shift binding cannot turn an arrow into another key the way it eats a
+  // letter, and because the GUI reports the arrow with its modifiers attached.
+  const std::map<std::string, std::string> arrow_leaves = {
+      {"Alt+Shift+Left", "splitleft"},
+      {"Alt+Shift+Down", "splitdown"},
+      {"Alt+Shift+Up", "splitup"},
+      {"Alt+Shift+Right", "splitright"},
+  };
+  for (const auto &leaf : arrow_leaves)
+  {
+    const KeymapRecord *record = find(leaf.first);
+    INFO("split chord " << leaf.first << " -> :" << leaf.second);
+    REQUIRE(record != nullptr);
+    REQUIRE(record->command == leaf.second);
+  }
+
+  // And nothing is left on the old chords: the Alt+Shift+letter space belongs to
+  // the AI (Alt+Shift+A) and LeetCode (Alt+Shift+L) menus, and a second
+  // registration there is exactly the collision that made the splits dead.
+  for (const char *old : {"Alt+Shift+H", "Alt+Shift+J", "Alt+Shift+K", "Alt+Shift+L"})
+  {
+    REQUIRE(find(old) == nullptr);
+  }
+
+  lua_close(L);
+}
+
 // Two children of one prefix that differ only in case are a single binding in
 // practice: which-key matches the pressed key case-insensitively (a plain letter
 // is canonicalised to uppercase) and sorts the uppercase child first, so a

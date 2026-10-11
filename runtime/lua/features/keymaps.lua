@@ -172,3 +172,51 @@ jot.keymap.set("Alt+Backspace", ":deleteword", "Delete the word at the caret")
 jot.keymap.set("Alt+X", "", "Clear inside")
 jot.keymap.set("Alt+X S", ":changeinside string", "Clear inside the string")
 jot.keymap.set("Alt+X B", ":changeinside bracket", "Clear inside the brackets")
+
+-- ---------------------------------------------------------------------------
+-- Panes: Ctrl+W, the prefix Vim puts its window commands behind.
+--
+-- The family this replaces was Alt+Shift+<letter>, and it failed in ways no
+-- change inside the editor could repair: a desktop that binds Alt+Shift
+-- (hyprland, KDE, XKB's grp:alt_shift_toggle) takes the letter before the
+-- terminal sees it; the GUI's SDL path reports Shift+Alt+letter as a lowercase
+-- keycode, so a matcher keyed on the uppercase letter never fired there at all;
+-- and the chords were hardcoded, so a user who did hit the conflict had nothing
+-- to rebind. Ctrl+W is a single control byte, so it arrives identically from
+-- every terminal and from --gui, and no window manager claims it -- and being
+-- registered here it is listed by which-key and can be overridden from a config
+-- like any other binding.
+--
+-- Ctrl+W is a group, not an action (Alt+W is the close-buffer chord): pressing
+-- it opens the menu below, so the family is found rather than memorised. The
+-- children follow :wincmd -- s/v split down/right, Shift+S/Shift+V up/left, a
+-- shifted letter being a step of its own (which is what lets the two splits sit
+-- beside the plain letters instead of shadowing them), h/j/k/l move the focus,
+-- w/p walk the panes, c closes, o zooms, r rotates the layout, x swaps.
+jot.keymap.set("Ctrl+W", "", "Pane")
+jot.keymap.set("Ctrl+W s", ":splitdown", "Split down")
+jot.keymap.set("Ctrl+W v", ":splitright", "Split right")
+jot.keymap.set("Ctrl+W Shift+S", ":splitup", "Split up")
+jot.keymap.set("Ctrl+W Shift+V", ":splitleft", "Split left")
+jot.keymap.set("Ctrl+W h", ":wincmd h", "Focus the pane left")
+jot.keymap.set("Ctrl+W j", ":wincmd j", "Focus the pane below")
+jot.keymap.set("Ctrl+W k", ":wincmd k", "Focus the pane above")
+jot.keymap.set("Ctrl+W l", ":wincmd l", "Focus the pane right")
+jot.keymap.set("Ctrl+W w", ":nextpane", "Next pane")
+jot.keymap.set("Ctrl+W p", ":prevpane", "Previous pane")
+jot.keymap.set("Ctrl+W c", ":wincmd q", "Close the pane")
+jot.keymap.set("Ctrl+W e", ":equalizepanes", "Equalize the panes")
+jot.keymap.set("Ctrl+W o", ":panezoom", "Zoom the pane")
+jot.keymap.set("Ctrl+W r", ":wincmd r", "Rotate the layout")
+jot.keymap.set("Ctrl+W x", ":swappanes", "Swap two panes")
+
+-- The four splits also answer on Alt+Shift+Arrow, which is one chord instead of
+-- two. Arrows and not letters: an arrow report carries its modifiers as a real
+-- terminal sequence (CSI 1;4A) and as an arrow keycode in the GUI, so neither a
+-- layout switch nor a window manager's Alt+Shift binding can turn the chord
+-- into a different one. This is the same set the native handler keeps for a
+-- build with no Lua (src/input/modes/dispatch.cpp).
+jot.keymap.set("Alt+Shift+Left", ":splitleft", "Split left")
+jot.keymap.set("Alt+Shift+Down", ":splitdown", "Split down")
+jot.keymap.set("Alt+Shift+Up", ":splitup", "Split up")
+jot.keymap.set("Alt+Shift+Right", ":splitright", "Split right")
