@@ -20,6 +20,10 @@ jobs:
             os: ubuntu-latest
             platform: linux
             archive: jot-linux-x86_64.tar.gz
+            # The same staged tree, packaged for the two Linux install paths
+            # that do not want to unpack a tarball by hand: one file to run
+            # (AppImage) and one for `pacman -U` (.pkg.tar.zst).
+            appimage: jot-linux-x86_64.AppImage
           # Cross-compiled with mingw-w64 on the Linux runner; the same script CI
           # runs, so the exe in the release is the one the import gate passed.
           # The installer is built from that same staged tree, and both it and
@@ -38,9 +42,12 @@ jobs:
       - name: Install Linux dependencies
         if: matrix.platform == 'linux'
         run: |
+          # zstd and bsdtar are what the Arch package is assembled with (its
+          # .PKGINFO/.MTREE and its zstd-compressed payload); curl downloads
+          # appimagetool for the AppImage.
           sudo apt-get update
           sudo apt-get install --yes \
-            cmake ninja-build pkg-config unzip \
+            cmake ninja-build pkg-config unzip curl zstd libarchive-tools \
             libvterm-dev libtermkey-dev libuv1-dev libutf8proc-dev \
             libtree-sitter-dev libcurl4-openssl-dev
 
@@ -84,6 +91,26 @@ jobs:
           cmake --install build --prefix stage
           tar -C stage -czf "${{ matrix.archive }}" .
 
+      # Both of the next two pack the tree just staged, so all three Linux
+      # artifacts hold the same binary and the same share/jot data. Each script
+      # verifies its own output (the AppImage is extracted through its own
+      # runtime, the package is read back by pacman when it is installed).
+      - name: Build Linux AppImage
+        if: matrix.platform == 'linux'
+        run: |
+          packaging/linux/build-appimage.sh \
+            "${GITHUB_WORKSPACE}/stage" \
+            "${GITHUB_WORKSPACE}/${{ matrix.appimage }}" \
+            "${GITHUB_REF_NAME}"
+
+      - name: Build Arch package
+        if: matrix.platform == 'linux'
+        run: |
+          packaging/linux/make-arch-package.sh \
+            "${GITHUB_WORKSPACE}/stage" \
+            "${GITHUB_WORKSPACE}" \
+            "${GITHUB_REF_NAME}"
+
       - name: Install Windows cross toolchain
         if: matrix.platform == 'windows'
         run: |
@@ -126,6 +153,24 @@ jobs:
         with:
           name: ${{ matrix.archive }}
           path: ${{ matrix.archive }}
+          if-no-files-found: error
+
+      - name: Upload AppImage
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.appimage }}
+          path: ${{ matrix.appimage }}
+          if-no-files-found: error
+
+      # The file name carries the version, so the artifact is uploaded by glob
+      # and the release asset keeps the name the package was built with.
+      - name: Upload Arch package
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jot-arch-package
+          path: ${{ github.workspace }}/*.pkg.tar.zst
           if-no-files-found: error
 
       # Separate from Upload package so the installer is one named asset on the

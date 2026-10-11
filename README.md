@@ -18,6 +18,13 @@ cmake --build build -j
 cmake --install build --prefix "$HOME/.local"
 ```
 
+On Linux, the latest release also carries a one-file build and a package:
+`jot-linux-x86_64.AppImage` (`chmod +x` it, run it - the libraries jot links
+against travel inside, so there is nothing to install first) and
+`jot-<version>-1-x86_64.pkg.tar.zst` for Arch and its derivatives
+(`sudo pacman -U jot-*.pkg.tar.zst`, which pulls in what the binary needs).
+`jot-linux-x86_64.tar.gz` is the same tree for a manual install.
+
 On Windows, run `jot-windows-x86_64-setup.exe` from the latest release. It
 installs for the current user - no admin prompt - and does the rest itself: the
 binary, the bundled colour schemes, Lua runtime and clangd payload, `jot` on
