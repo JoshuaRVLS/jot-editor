@@ -408,7 +408,17 @@ void UI::invalidate()
   cursor_hidden = true;
   cursor_dirty = true;
   term->clear();
-  // The physical screen was cleared; the next frame must repaint every row.
+  // The physical screen was cleared, so the next frame has to write every row
+  // out in full -- and marking the rows dirty is not enough to get that. Dirty
+  // only makes a row a *candidate*: render() still compares it against
+  // last_grid and skips a cell-identical row, and the screen this clear wiped
+  // is exactly the screen last_grid describes. A caller that invalidates
+  // without changing the picture -- the theme re-applied to the colours already
+  // up, which is what a config holding a legacy alias asks for on every apply --
+  // then wrote nothing back and left the editor blank until some other input
+  // changed a cell. full_repaint_pending_ is the one-shot "paint every cell"
+  // the resize path uses for the same reason.
+  full_repaint_pending_ = true;
   mark_all_rows_dirty();
 }
 

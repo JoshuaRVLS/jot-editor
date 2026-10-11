@@ -203,8 +203,14 @@ void Editor::apply_config_live()
       terminal.set_truecolor_supported(terminal_env_supports_truecolor());
     }
   }
+  // What the name *resolves* to is what current_theme_name holds, so the
+  // comparison has to go through the same resolution: a config written before
+  // the catalog changed keeps an alias in it (`jot-dark`, `light`, ...), and
+  // comparing the raw value against the resolved active name re-applied the
+  // theme -- clearing the screen and re-deriving an identical palette -- on
+  // every unrelated config change.
   const std::string scheme = config.get("color_scheme", "");
-  if (!scheme.empty() && scheme != current_theme_name)
+  if (!scheme.empty() && resolve_theme_name(scheme) != current_theme_name)
   {
     apply_theme(scheme, false, false);
   }

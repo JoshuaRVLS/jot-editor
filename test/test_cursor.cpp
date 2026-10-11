@@ -54,6 +54,53 @@ TEST_CASE("UI render skips rows unchanged since the last frame", "[jot][ui]")
   REQUIRE(one_row_bytes < full_bytes - 300);
 }
 
+// invalidate() clears the physical screen -- it is what a caller reaches for
+// when what the terminal shows cannot be trusted -- so the frame that follows
+// has to write every row back out. Marking the rows dirty is not enough: the
+// diff still skips a row whose cells equal last_grid, and last_grid describes
+// exactly the picture this clear wiped. A settings change ran into it end to
+// end: a config naming a legacy theme alias (jot-dark) re-applied the theme to
+// the colours already up, cleared the screen, and then wrote nothing back, so
+// the editor sat black until some other input changed a cell.
+TEST_CASE("invalidate() makes the next frame repaint every row", "[jot][ui]")
+{
+  Terminal term;
+  UI ui(&term);
+  ui.resize(40, 10);
+
+  for (int y = 0; y < 10; y++)
+  {
+    UIRect r{0, y, 40, 1};
+    ui.fill_rect(r, " ", 7, 30 + y);
+  }
+  ui.render();
+  const int full_bytes = term.render_capture_bytes_since_last_flush();
+  REQUIRE(full_bytes > 500);
+
+  // The same picture, painted onto a screen that was just cleared: the rows
+  // are cell-identical to last_grid, so nothing short of a forced full repaint
+  // can put them back on the terminal.
+  ui.invalidate();
+  for (int y = 0; y < 10; y++)
+  {
+    UIRect r{0, y, 40, 1};
+    ui.fill_rect(r, " ", 7, 30 + y);
+  }
+  ui.render();
+  const int after_invalidate = term.render_capture_bytes_since_last_flush();
+  REQUIRE(after_invalidate >= full_bytes);
+
+  // And the skip the frame above must not take is still there: with no
+  // invalidate, the same byte-identical repaint writes nothing.
+  for (int y = 0; y < 10; y++)
+  {
+    UIRect r{0, y, 40, 1};
+    ui.fill_rect(r, " ", 7, 30 + y);
+  }
+  ui.render();
+  REQUIRE(term.render_capture_bytes_since_last_flush() < 300);
+}
+
 TEST_CASE("Visual columns map tabs and wide graphemes", "[jot]")
 {
   const std::string line = "a\t"

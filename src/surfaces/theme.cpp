@@ -55,19 +55,21 @@ std::vector<std::string> Editor::list_available_themes()
   return themes;
 }
 
-bool Editor::apply_theme(const std::string &name, bool persist, bool announce)
+// The name a requested theme resolves to: the installed theme that matches it
+// case-insensitively, else the theme a retired catalog name is aliased to, else
+// the request itself (so a nonexistent name still reaches apply_theme and gets
+// reported there). Shared with the config-apply path, which has to compare what
+// a name *resolves* to rather than the raw string: a config holding an alias
+// never equals the resolved active name, and would otherwise re-apply the theme
+// on every unrelated settings change.
+std::string Editor::resolve_theme_name(const std::string &name)
 {
+  // Trimmed here rather than at the call sites, so a config value padded with
+  // spaces compares as the name it means.
   const std::string requested = string_util::trim_copy(name);
-  if (requested.empty())
-  {
-    set_message("Theme name is empty");
-    return false;
-  }
-
   std::string resolved = requested;
   const std::string needle = string_util::lower_copy(requested);
-  const auto themes = list_available_themes();
-  for (const auto &theme_name : themes)
+  for (const auto &theme_name : list_available_themes())
   {
     if (string_util::lower_copy(theme_name) == needle)
     {
@@ -87,6 +89,19 @@ bool Editor::apply_theme(const std::string &name, bool persist, bool announce)
       resolved = alias;
     }
   }
+  return resolved;
+}
+
+bool Editor::apply_theme(const std::string &name, bool persist, bool announce)
+{
+  const std::string requested = string_util::trim_copy(name);
+  if (requested.empty())
+  {
+    set_message("Theme name is empty");
+    return false;
+  }
+
+  const std::string resolved = resolve_theme_name(requested);
 
   if (!lua_api)
   {

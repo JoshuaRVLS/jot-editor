@@ -754,6 +754,12 @@ std::vector<std::string> available_themes_for_test()
 {
   return list_available_themes();
 }
+// The name a requested theme resolves to (alias included), which is what the
+// config-apply path has to compare against the active name.
+std::string resolve_theme_name_for_test(const std::string &name)
+{
+  return resolve_theme_name(name);
+}
 // The name of the active theme, as the chooser reports it (the resolved
 // name, so a legacy alias reads back as the theme it resolved to).
 const std::string &theme_name_for_test() const

@@ -480,6 +480,32 @@ TEST_CASE("A file the user writes under a legacy name beats the alias", "[jot][t
   REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0x181818);
 }
 
+TEST_CASE("A config holding a legacy alias is not re-applied on every change", "[jot][theme]")
+{
+  Editor &e = probe_editor();
+  REQUIRE(e.apply_theme_for_test("jot"));
+
+  // What a config value has to be compared against is what that value
+  // *resolves to*, because that is what the active theme's name holds. The
+  // config-apply path used the raw string, so a config written before the
+  // catalog changed (`color_scheme = jot-dark`, which resolves to jot) looked
+  // like a request for a different theme on every single settings change: the
+  // theme was re-applied -- clearing the screen to repaint a palette that was
+  // already up -- each time a row was toggled.
+  REQUIRE(e.resolve_theme_name_for_test("jot-dark") == e.theme_name_for_test());
+  REQUIRE(e.resolve_theme_name_for_test("jot-light") == e.theme_name_for_test());
+  REQUIRE(e.resolve_theme_name_for_test("dark") == e.theme_name_for_test());
+  REQUIRE(e.resolve_theme_name_for_test("JOT") == e.theme_name_for_test());
+  // Padding is not a different name either.
+  REQUIRE(e.resolve_theme_name_for_test("  jot  ") == e.theme_name_for_test());
+
+  // A name that resolves to another theme, or to nothing at all, still reads
+  // as a change: a real switch has to reach apply_theme (and report itself
+  // there when it cannot).
+  REQUIRE(e.resolve_theme_name_for_test("flexoki-dark") != e.theme_name_for_test());
+  REQUIRE(e.resolve_theme_name_for_test("gruvbox") != e.theme_name_for_test());
+}
+
 TEST_CASE("The chooser lists the schemes jot bundles and nothing else", "[jot][theme]")
 {
   // jot ships no third-party catalog any more: the chooser (what `:theme`

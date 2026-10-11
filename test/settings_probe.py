@@ -140,13 +140,20 @@ def main() -> int:
     cfgs: dict[str, str] = {}
     screens: dict[str, object] = {}
 
-    def scene(name: str, extra, tail: float = TAIL) -> str:
+    def scene(name: str, extra, tail: float = TAIL, seed: str = "") -> str:
         # A fresh config home per scene per run: the panel *writes* settings
         # (a stepped number is saved), so a reused directory would hand the
         # next run a starting point left over from this one.
         cfg = f"/tmp/jot_settings_probe_cfg_{name}_{os.getpid()}"
         shutil.rmtree(cfg, ignore_errors=True)
         cfgs[name] = cfg
+        if seed:
+            # A config that already exists, so the scene starts on it: what a
+            # scene asserts about a setting the editor *reads* at startup needs
+            # the file in place before the session opens.
+            os.makedirs(os.path.join(cfg, "configs"))
+            with open(os.path.join(cfg, "configs", "settings.conf"), "w") as fh:
+                fh.write(seed)
         screen = settings_run(binary, root, cfg, extra, tail)
         view = screen.text()
         # The escape stream as written: the glyph checks read this, because a
@@ -376,6 +383,33 @@ def main() -> int:
         fail("the panel is still up, so the buffer behind it was never read")
     elif "[No Name]" not in view:
         fail("the editor's statusline is not on screen after the panel closed")
+
+    # Scene 13: a settings change must not blank the screen, including on a
+    # config that names a legacy theme alias. `color_scheme = jot-dark`
+    # resolves to `jot`, the name the active theme reports, so a live compare of
+    # the raw config value against it read every settings change as a request to
+    # switch theme: the theme was re-applied over itself, which clears the
+    # screen -- and the frame that followed then diffed every cell as identical
+    # and wrote nothing back, so the panel and the buffer sat black until an
+    # input changed a cell (a mouse drag repaints the rows it passes). The
+    # control scene is the same session minus the toggle: its full-screen clears
+    # are the baseline the toggled session must not exceed, because a re-applied
+    # theme is what put one there.
+    seed_alias = "color_scheme=jot-dark\n"
+    control = scene("alias-control", [(TYPE, b"autosave")], seed=seed_alias)
+    view = scene("alias", [(TYPE, b"autosave"), (STEP, ENTER)], seed=seed_alias)
+    print("scene 13: a legacy theme alias does not blank the screen on a change")
+    row = row_of(view, "Auto save")
+    baseline_clears = raws["alias-control"].count(b"\x1b[2J")
+    clears = raws["alias"].count(b"\x1b[2J")
+    if "Settings" not in control or not row_of(control, "Auto save"):
+        fail("the control session never opened the panel on the row")
+    elif "Settings" not in view or not row:
+        fail("the panel is gone after a settings change (a re-applied theme cleared it)")
+    elif TOGGLE_ON not in row:
+        fail(f"the toggled row is not showing its new state: {row!r}")
+    elif clears != baseline_clears:
+        fail(f"the change cleared the screen: {baseline_clears} clears without it, {clears} with")
 
     if failures:
         print()

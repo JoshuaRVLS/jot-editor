@@ -47,6 +47,11 @@ void increment_number_at_cursor(int delta);
 void toggle_auto_indent_setting();
 void change_tab_size(int delta);
 std::vector<std::string> list_available_themes();
+// The theme `requested` names, as apply_theme would resolve it: the installed
+// theme matching it case-insensitively, the alias a retired catalog name maps
+// to, else the request verbatim. Exists so callers can ask "is this already the
+// active theme?" without re-applying one.
+std::string resolve_theme_name(const std::string &requested);
 // Applies a theme; when persist is set, also saves it to the config file so
 // it survives the next session. Returns true on success.
 bool apply_theme(const std::string &name, bool persist = true, bool announce = true);
