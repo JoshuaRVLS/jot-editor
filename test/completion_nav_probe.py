@@ -46,9 +46,9 @@ FOOTER = re.compile(r"│\s*(\d+)/(\d+)\s")
 # The popup's top border: `┌` at the box's left column, `┐` at its right.
 BOX_TOP = re.compile(r"┌─+┐")
 
-# The bundled dark theme's selection background (PmenuSel), where the selected
-# row's band is painted. Truecolour cells are stored as 1000 + rgb.
-SELECTION_BG = 1000 + 0x2A2216
+# jot's selection background (PmenuSel), where the selected row's band is
+# painted. Truecolour cells are stored as 1000 + rgb.
+SELECTION_BG = 1000 + 0x453D41
 
 
 def rows(screen):

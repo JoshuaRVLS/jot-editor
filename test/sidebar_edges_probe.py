@@ -97,9 +97,9 @@ def main() -> int:
     # change alone. In the status colour it read as the status line's own top
     # edge, made the bar look two rows tall and hid that the row was the panes'.
     # The sample column has to land in the pane area in every case: the sidebar
-    # and the dock have their own surfaces, and in the dark theme the sidebar's
-    # surface is the same #1C1710 as the status line's, so a sample inside the
-    # sidebar cannot tell the pane's last row from the status bar.
+    # and the dock have their own surfaces, and in jot the sidebar's surface is
+    # the same #282828 as the status line's, so a sample inside the sidebar
+    # cannot tell the pane's last row from the status bar.
     for name, keys, col in [("single pane", b"", 10), ("sidebar", b"\x1b[98;5u", 40),
                             ("dock", b"\x1b[98;6u", 10)]:
         screen = run_in_pty(binary, [path], keys, settle=2.5, after=1.5,
