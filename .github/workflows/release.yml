@@ -129,10 +129,21 @@ jobs:
             archlinux:latest bash -euo pipefail -c '
               # The image ships a keyring that can be older than the packages it
               # is about to verify, so refresh it before installing anything.
+              pacman-key --init
               pacman -Sy --noconfirm archlinux-keyring
               pacman -S --noconfirm --needed \
                 base-devel cmake ninja git python \
-                libvterm libtermkey tree-sitter libutf8proc libuv curl
+                libvterm tree-sitter libutf8proc libuv curl
+              # libtermkey left the Arch repositories -- install.sh points Arch
+              # users at the AUR for it -- so the container builds the source
+              # the AUR package builds and installs it where pkg-config finds
+              # it. The soname it installs (libtermkey.so.1) is the one the
+              # package asks for at run time.
+              curl -fsSL -o /tmp/termkey.tar.gz \
+                https://github.com/neovim/libtermkey/archive/refs/tags/v0.22.tar.gz
+              tar -xzf /tmp/termkey.tar.gz -C /tmp
+              make -C /tmp/libtermkey-0.22 PREFIX=/usr
+              make -C /tmp/libtermkey-0.22 install PREFIX=/usr
               cmake -S /src -B /build -G Ninja \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DBUILD_TESTING=OFF \
