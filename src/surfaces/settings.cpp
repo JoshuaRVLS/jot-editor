@@ -754,24 +754,6 @@ bool Editor::step_settings_value(bool increase)
   return true;
 }
 
-void Editor::gui_font_zoom(int step)
-{
-#ifdef JOT_GUI
-  // The GUI's zoom is its glyph size, so this is the Ctrl+= path: step the font,
-  // keep the choice, and re-fit the grid to the window at the new cell size.
-  if (auto *gui = gui_ui())
-  {
-    gui->apply_font_zoom(step);
-    config.set_int("gui_font_size", gui->font_px());
-    config.save();
-    apply_resize(gui->get_width(), gui->get_height());
-    needs_redraw = true;
-  }
-#else
-  (void)step;
-#endif
-}
-
 void Editor::apply_settings_value(const std::string &key, const std::string &value)
 {
   config.set(key, value);

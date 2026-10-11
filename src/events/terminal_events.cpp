@@ -305,34 +305,15 @@ void Editor::handle_terminal_event(const Event &ev)
     // So shift+wheel-up arrives as 68, shift+wheel-down as 69, etc. Strip
     // the modifiers (and motion bit) before comparing the base button.
     const int wheel_base = button & ~0x3C;
-    const bool shift_held = ev.mouse.shift;
-    // Horizontal scroll adjusts scroll_x instead: raw buttons 66/67, or
-    // Shift+vertical wheel (the fallback terminals send with no horizontal
-    // encoding).
+    // Horizontal scroll adjusts scroll_x instead: raw buttons 66/67, or a
+    // modified vertical wheel (the fallback terminals send with no horizontal
+    // encoding) -- Shift+wheel and Ctrl+wheel both. Ctrl+wheel used to zoom the
+    // text; the zoom is the keyboard's and :textzoom's alone, so the wheel is
+    // the sideways scroll it was before that.
+    const bool h_modifier = ev.mouse.shift || ev.mouse.ctrl;
     bool is_h_wheel = (wheel_base == 66 || wheel_base == 67)
-                      || (shift_held && (wheel_base == 64 || wheel_base == 65));
+                      || (h_modifier && (wheel_base == 64 || wheel_base == 65));
     bool is_wheel = (wheel_base >= 64 && wheel_base <= 67);
-
-    // Ctrl+wheel zooms the text, the mouse form of Alt+= / Alt+- (the GUI turns
-    // it into Ctrl+= instead, which zooms its font). Claimed before anything
-    // under the pointer can scroll instead: a zoom chord should not depend on
-    // what happens to be there, the same reason the GUI's Ctrl+= is intercepted
-    // ahead of dispatch.
-    if (is_wheel && !is_h_wheel && ev.mouse.ctrl)
-    {
-      const int step = (wheel_base == 64) ? 1 : -1;
-      if (gui_mode)
-      {
-        // The GUI zooms its font instead of the grid; the call lives with the
-        // rest of the frontend's font handling rather than here.
-        gui_font_zoom(step);
-      }
-      else
-      {
-        tui_text_zoom(step);
-      }
-      return;
-    }
 
     // A click outside the helper dismisses it (like Esc).
     if (show_which_key && ev.mouse.pressed && wheel_base != 64 && wheel_base != 65)
@@ -388,8 +369,8 @@ void Editor::handle_terminal_event(const Event &ev)
 
     if (is_h_wheel && !telescope.is_active() && !show_command_palette && !search.visible())
     {
-      bool left = (wheel_base == 66) || (shift_held && wheel_base == 64);
-      bool right = (wheel_base == 67) || (shift_held && wheel_base == 65);
+      bool left = (wheel_base == 66) || (h_modifier && wheel_base == 64);
+      bool right = (wheel_base == 67) || (h_modifier && wheel_base == 65);
       handle_mouse_input(ev.mouse.x, ev.mouse.y, false, false, false, left, right);
     }
     else if (is_wheel && !telescope.is_active() && !show_command_palette && !search.visible())

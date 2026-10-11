@@ -44,9 +44,6 @@ void toggle_terminal_zoom();
 void set_tui_text_scale(int scale, bool persist = true);
 // Ctrl/Alt +/= and -/_: one step up or down, clamped at the ends.
 void tui_text_zoom(int step);
-// The GUI frontend's zoom, which is its font size: one step in or out, with the
-// grid re-fitted to the window. A no-op on a build without the GUI.
-void gui_font_zoom(int step);
 bool begin_terminal_resize_drag(int x, int y);
 bool update_terminal_resize_drag(int y);
 void end_terminal_resize_drag();

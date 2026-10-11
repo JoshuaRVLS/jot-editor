@@ -133,6 +133,7 @@ add_executable(jot_tests
   test_resize_sync.cpp
   test_key_decode.cpp
   test_exe_path.cpp
+  test_word_motion.cpp
 )
 
 target_link_libraries(jot_tests PRIVATE

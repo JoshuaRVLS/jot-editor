@@ -226,16 +226,31 @@ TEST_CASE("A refused zoom leaves the setting alone and says why", "[jot][scale]"
   REQUIRE(e.message_for_test().find("cannot scale") != std::string::npos);
 }
 
-TEST_CASE("Ctrl+wheel zooms while a plain wheel still scrolls", "[jot][scale]")
+TEST_CASE("Ctrl+wheel scrolls sideways instead of zooming", "[jot][scale]")
 {
-  // The chords reach the zoom through the real mouse dispatch -- button 64 is a
-  // notch up, and the Ctrl bit is what makes it a zoom rather than a scroll.
+  // The zoom had the wheel for a while; it is the keyboard's (`Alt+=` / `Alt+-`)
+  // and `:textzoom`'s alone, and Ctrl+wheel is the horizontal scroll it was
+  // before -- the same notch Shift+wheel sends. Button 64 is one notch up, and
+  // the Ctrl bit is what routes it sideways rather than down the buffer.
   Editor &e = probe_editor();
+  // The home screen owns the wheel while it is up (a notch walks its rows), the
+  // same way it does for Shift+wheel, so the buffer has to be the surface here.
+  e.set_home_menu_visible(false);
   e.set_message_for_test("nothing yet");
+  e.buffer_for_test().scroll_x = 8;
+
+  e.terminal_mouse_for_test(40, 12, 64, true, true); // Ctrl+wheel-up
+  REQUIRE(e.message_for_test() == "nothing yet");
+  REQUIRE(e.tui_text_scale_for_test() == 1);
+  REQUIRE(e.buffer_for_test().scroll_x == 4); // four cells left, never a zoom
+  REQUIRE(e.buffer_for_test().scroll_offset == 0);
+
+  e.terminal_mouse_for_test(40, 12, 65, true, true); // Ctrl+wheel-down
+  REQUIRE(e.buffer_for_test().scroll_x == 8);
+
+  // A plain notch is still the vertical scroll, and does not touch the scale.
   e.terminal_mouse_for_test(40, 12, 64, true, false);
   REQUIRE(e.message_for_test() == "nothing yet");
-
-  e.terminal_mouse_for_test(40, 12, 64, true, true);
-  REQUIRE(e.message_for_test().find("cannot scale") != std::string::npos);
   REQUIRE(e.tui_text_scale_for_test() == 1);
+  REQUIRE(e.buffer_for_test().scroll_x == 8);
 }

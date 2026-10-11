@@ -144,6 +144,22 @@ void wheel_event_for_test(int x, int y, bool up, bool down)
 }
 void create_new_buffer_for_test();
 void move_to_line_start_for_test();
+// The word motions, driven the way the chord does (see the navigation tests):
+// the caret they land on is read back through buffer_for_test().
+void move_word_forward_for_test(bool extend_selection = false)
+{
+  move_word_forward(extend_selection);
+}
+void move_word_backward_for_test(bool extend_selection = false)
+{
+  move_word_backward(extend_selection);
+}
+// One key through the real modeless dispatch, so a case pins which chord a
+// motion is bound to rather than only the motion itself.
+void modeless_input_for_test(int ch, bool ctrl = false, bool shift = false, bool alt = false)
+{
+  handle_modeless_input(ch, ctrl, shift, alt);
+}
 void render_for_test();
 // One full frame-loop step (the per-frame blink/scheduling logic plus a
 // render), for tests that need to observe behaviour over time.
@@ -503,7 +519,8 @@ void set_message_for_test(const std::string &msg)
   set_message(msg, false);
 }
 // Feeds one SGR-style mouse event through the real dispatch, so a case pins what
-// a notch does (Ctrl+wheel zooms, a plain wheel still scrolls) without a pty.
+// a notch does (Ctrl+wheel scrolls sideways, a plain wheel scrolls the buffer)
+// without a pty.
 void terminal_mouse_for_test(int x, int y, int button, bool pressed, bool ctrl)
 {
   Event ev{};

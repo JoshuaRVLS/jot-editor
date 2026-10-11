@@ -7,14 +7,6 @@
 
 namespace
 {
-  bool ascii_space_at(const std::string &line, int pos)
-  {
-    if (pos < 0 || pos >= (int)line.size())
-      return false;
-    unsigned char c = static_cast<unsigned char>(line[pos]);
-    return c < 0x80 && std::isspace(c);
-  }
-
   bool word_grapheme_at(const std::string &line, int pos)
   {
     if (pos < 0 || pos >= (int)line.size())
@@ -23,6 +15,33 @@ namespace
     if (c >= 0x80)
       return true;
     return std::isalnum(c) || c == '_';
+  }
+
+  // The word motion's own view of a boundary: a word is what a reader would
+  // call one, so an identifier is several stops rather than one. `fooBar` stops
+  // at the capital, `x1` and `1x` at the digit run, and the underscores of
+  // `snake_case` are crossed rather than landed on -- which is what makes the
+  // motion usable in code, where the words are identifiers.
+  bool subword_break_between(const std::string &line, int before, int at)
+  {
+    if (before < 0 || at <= before || at >= (int)line.size())
+      return false;
+    const unsigned char prev = static_cast<unsigned char>(line[before]);
+    const unsigned char next = static_cast<unsigned char>(line[at]);
+    if (prev == '_' || next == '_')
+      return true;
+    if (std::isdigit(prev) != std::isdigit(next))
+      return true;
+    return std::islower(prev) != 0 && std::isupper(next) != 0;
+  }
+
+  // A character the word motion steps over on its way to the next stop: the
+  // separators between words, underscores included (see subword_break_between).
+  bool word_separator_at(const std::string &line, int pos)
+  {
+    if (pos < 0 || pos >= (int)line.size())
+      return true;
+    return !word_grapheme_at(line, pos) || line[pos] == '_';
   }
 } // namespace
 
@@ -269,17 +288,59 @@ void Editor::reveal_cursor_centered()
   ensure_cursor_visible();
 }
 
+// Forward word motion: the start of the next word, in the sense above -- across
+// the rest of the current one, across whatever separates them (whitespace,
+// punctuation, the end of the line, blank lines), and stopping on the first
+// character of what it found. A caret sitting on a separator moves to the word
+// after it, and one with nothing after it ends at the last line's end.
 void Editor::move_word_forward(bool extend_selection)
 {
   auto &buf = get_buffer();
   Cursor anchor = buf.cursor;
-  const std::string &line = buf.line(buf.cursor.y);
-  int len = line.length();
-  buf.cursor.x = ui_clamp_to_utf8_boundary(line, buf.cursor.x);
-  while (buf.cursor.x < len && !word_grapheme_at(line, buf.cursor.x))
-    buf.cursor.x = ui_next_grapheme_boundary(line, buf.cursor.x);
-  while (buf.cursor.x < len && word_grapheme_at(line, buf.cursor.x))
-    buf.cursor.x = ui_next_grapheme_boundary(line, buf.cursor.x);
+  const int line_count = (int)buf.line_count();
+  if (line_count <= 0)
+    return;
+
+  buf.cursor.y = std::clamp(buf.cursor.y, 0, line_count - 1);
+  buf.cursor.x = ui_clamp_to_utf8_boundary(buf.line(buf.cursor.y), buf.cursor.x);
+
+  int x = buf.cursor.x;
+  int y = buf.cursor.y;
+
+  // Leave the word the caret is standing on, hump by hump.
+  while (!word_separator_at(buf.line(y), x))
+  {
+    const int next = ui_next_grapheme_boundary(buf.line(y), x);
+    if (next <= x)
+      break;
+    const bool boundary = word_separator_at(buf.line(y), next)
+                          || subword_break_between(buf.line(y), x, next);
+    x = next;
+    if (boundary)
+      break;
+  }
+
+  // Cross the separator run -- lines, indentation and blank lines included --
+  // to the next word. A file that runs out of words leaves the caret at its end.
+  while (true)
+  {
+    const std::string &line = buf.line(y);
+    while (x < (int)line.size() && word_separator_at(line, x))
+      x = ui_next_grapheme_boundary(line, x);
+    if (x < (int)line.size())
+      break;
+    const int next_y = Folding::advance_visible_lines(buf.fold_ranges, y, 1, line_count);
+    if (next_y == y)
+    {
+      x = (int)line.size();
+      break;
+    }
+    y = next_y;
+    x = 0;
+  }
+
+  buf.cursor.x = x;
+  buf.cursor.y = y;
   clamp_cursor(get_pane().buffer_id);
   buf.preferred_x = buf.cursor.x;
   ensure_cursor_visible();
@@ -294,26 +355,58 @@ void Editor::move_word_forward(bool extend_selection)
   }
 }
 
+// Backward word motion: the start of the word before the caret, in the same
+// sense -- backwards over separators (the start of the line and blank lines
+// included), then back to the start of the word, hump by hump. From inside a
+// word this reaches that word's own start, which is what makes it the mirror of
+// the motion above.
 void Editor::move_word_backward(bool extend_selection)
 {
   auto &buf = get_buffer();
   Cursor anchor = buf.cursor;
-  const std::string &line = buf.line(buf.cursor.y);
-  buf.cursor.x = ui_clamp_to_utf8_boundary(line, buf.cursor.x);
-  while (buf.cursor.x > 0)
+  const int line_count = (int)buf.line_count();
+  if (line_count <= 0)
+    return;
+
+  buf.cursor.y = std::clamp(buf.cursor.y, 0, line_count - 1);
+  buf.cursor.x = ui_clamp_to_utf8_boundary(buf.line(buf.cursor.y), buf.cursor.x);
+
+  int x = buf.cursor.x;
+  int y = buf.cursor.y;
+
+  // Cross separators (and line starts) leftwards, stopping on the first word
+  // character, which is the end of the previous word.
+  while (true)
   {
-    int prev = ui_prev_grapheme_boundary(line, buf.cursor.x);
-    if (word_grapheme_at(line, prev))
+    if (x == 0)
+    {
+      const int prev_y = Folding::advance_visible_lines(buf.fold_ranges, y, -1, line_count);
+      if (prev_y == y)
+        break; // the start of the buffer: nowhere left to go
+      y = prev_y;
+      x = (int)buf.line(y).size();
+      continue;
+    }
+    const int prev = ui_prev_grapheme_boundary(buf.line(y), x);
+    if (!word_separator_at(buf.line(y), prev))
+    {
+      x = prev;
       break;
-    buf.cursor.x = prev;
+    }
+    x = prev;
   }
-  while (buf.cursor.x > 0)
+
+  // Then walk back to the start of that word's own hump.
+  while (x > 0)
   {
-    int prev = ui_prev_grapheme_boundary(line, buf.cursor.x);
-    if (!word_grapheme_at(line, prev) || ascii_space_at(line, prev))
+    const int prev = ui_prev_grapheme_boundary(buf.line(y), x);
+    if (word_separator_at(buf.line(y), prev) || subword_break_between(buf.line(y), prev, x))
       break;
-    buf.cursor.x = prev;
+    x = prev;
   }
+
+  buf.cursor.x = x;
+  buf.cursor.y = y;
   clamp_cursor(get_pane().buffer_id);
   buf.preferred_x = buf.cursor.x;
   ensure_cursor_visible();

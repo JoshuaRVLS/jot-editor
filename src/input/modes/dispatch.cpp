@@ -260,16 +260,20 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
 
   // Resize:
   // - Ctrl+Shift+H/J/K/L
-  // - Ctrl+Arrow
+  // - Ctrl+Shift+Arrow
+  // The Shift is what keeps the arrows navigational: Ctrl+Left / Ctrl+Right
+  // are the word motions and Ctrl+Up / Ctrl+Down scroll the view
+  // (handle_modeless_input), and this block runs first, so an ungated arrow
+  // arm would take all four chords for good. Ctrl+Shift+Arrow still resizes,
+  // which is what the H/J/K/L arm always did.
   // Alt is deliberately excluded: Ctrl+Alt+H/J/K/L are the split keys below,
   // and on kitty-protocol terminals they decode to the uppercase letters,
   // which would otherwise be swallowed here as a resize.
-  if (is_ctrl && !is_alt
-      && (((is_shift || std::isupper((unsigned char)ch))
-           && (ch == 'h' || ch == 'H' || ch == 'j' || ch == 'J' || ch == 'k' || ch == 'K'
-               || ch == 'l' || ch == 'L'))
-          || ch == 1008 || ch == 1009 || ch == 1010 || ch == 1011 || original_ch == 1008
-          || original_ch == 1009 || original_ch == 1010 || original_ch == 1011))
+  if (is_ctrl && !is_alt && (is_shift || std::isupper((unsigned char)ch))
+      && (ch == 'h' || ch == 'H' || ch == 'j' || ch == 'J' || ch == 'k' || ch == 'K'
+          || ch == 'l' || ch == 'L' || ch == 1008 || ch == 1009 || ch == 1010 || ch == 1011
+          || original_ch == 1008 || original_ch == 1009 || original_ch == 1010
+          || original_ch == 1011))
   {
     bool resized = false;
     if (ch == 'h' || ch == 'H' || original_ch == 'h' || original_ch == 'H' || ch == 1011
@@ -436,8 +440,17 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     }
     if (alt_direction)
     {
-      set_message("No pane in that direction");
-      return;
+      // Alt+H and Alt+L are also the word motions (see the Navigation table in
+      // docs/FEATURES.md), and this is where they stop being dead keys: with
+      // nothing in that direction to focus -- a single pane, no sidebar -- the
+      // chord falls through to handle_modeless_input below and moves the
+      // caret. Alt+J / Alt+K have no such second meaning, so they report
+      // rather than do nothing.
+      if (!alt_h && !alt_l)
+      {
+        set_message("No pane in that direction");
+        return;
+      }
     }
   }
 

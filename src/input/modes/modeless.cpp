@@ -1,4 +1,5 @@
 #include "core/editor.h"
+#include "ui/smooth_scroll.h"
 #include <cctype>
 
 void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_alt)
@@ -64,7 +65,10 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
     }
   }
 
-  if (lsp_completion_visible)
+  // The popup owns the bare arrows, Enter, Tab and Esc while it is up. A
+  // chord is not one of those: Ctrl+Up/Down still scrolls the view (and
+  // Ctrl+Left/Right still moves by word) instead of stepping the selection.
+  if (lsp_completion_visible && !is_ctrl && !is_alt)
   {
     if (ch == 1008)
     {
@@ -399,6 +403,52 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
       return;
     case 1001:
       delete_word_forward();
+      return;
+    // Ctrl+Left / Ctrl+Right (Shift extends) are the word motions every other
+    // editor answers this chord with, and the hand is already on the arrow
+    // keys: the same movement Alt+H / Alt+L make. This is where the chord has
+    // to be claimed, ahead of the bare arrows below, which would otherwise
+    // take it as a plain one-cell step; the pane-resize block in dispatch.cpp
+    // runs first and claims the same arrows, which is why that one is gated on
+    // Shift (Ctrl+Shift+Arrow) and these are not. Deleting a word is
+    // Ctrl+Delete / Ctrl+Backspace (case 1001), so the arrows stay free to
+    // move.
+    case 1010:
+      hide_lsp_completion();
+      move_word_forward(is_shift);
+      return;
+    case 1011:
+      hide_lsp_completion();
+      move_word_backward(is_shift);
+      return;
+    // Ctrl+Up / Ctrl+Down scroll the view a line at a time and leave the caret
+    // where it is: reading through a file without losing the place, the wheel's
+    // gesture with the hand still on the keys (and the same animation). The
+    // caret walking out of the viewport is expected here -- the next movement
+    // pulls the view back to it -- which is why this is not move_cursor.
+    case 1008:
+      hide_lsp_completion();
+      if (scroll_view_smooth(-1, SmoothScroll::kWheelDurationMs))
+      {
+        needs_redraw = true;
+      }
+      return;
+    case 1009:
+      hide_lsp_completion();
+      if (scroll_view_smooth(1, SmoothScroll::kWheelDurationMs))
+      {
+        needs_redraw = true;
+      }
+      return;
+    // Ctrl+Home / Ctrl+End reach the file's ends (Shift selects): the vertical
+    // counterpart of the pair above, and the chord the same editors use.
+    case 1012:
+      hide_lsp_completion();
+      move_to_file_start(is_shift);
+      return;
+    case 1013:
+      hide_lsp_completion();
+      move_to_file_end(is_shift);
       return;
     case ' ':
       request_lsp_completion(true);

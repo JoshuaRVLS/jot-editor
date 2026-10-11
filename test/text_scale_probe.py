@@ -11,9 +11,11 @@ most, because a grid drawn at scaled coordinates a terminal does not scale comes
 out in pieces -- text in every other cell, the rest stale.
 
   * a persisted `tui_text_scale = 2` frames the grid on the way up (startup path),
-  * Alt+= and Ctrl+wheel-up both zoom in once the editor is up, and the frames
-    appear in the stream only after those bytes,
-  * on a terminal that does not report the protocol, the same chords leave the
+  * Alt+= zooms in once the editor is up, and the frames appear in the stream
+    only after those bytes,
+  * Ctrl+wheel does not: it is the horizontal scroll, so a notch leaves the
+    stream unframed and shifts the line under the pointer sideways,
+  * on a terminal that does not report the protocol, the zoom keys leave the
     stream unframed and say why.
 
 The terminal's answer is forced where the framing is what is being pinned
@@ -35,12 +37,16 @@ from pty_screen import run_in_pty  # noqa: E402
 ROOT = "/tmp/jtscale"
 CFG = "/tmp/jtscale_cfg"
 
-# The SGR encoding of a Ctrl+wheel-up report over the middle of the screen:
-# button 64 (wheel up) plus the 16 bit that says Ctrl.
-CTRL_WHEEL_UP = b"\x1b[<80;40;12M"
+# The SGR encoding of wheel reports over the middle of the screen: 64/65 are
+# wheel up/down, plus the 16 bit that says Ctrl.
+CTRL_WHEEL_DOWN = b"\x1b[<81;40;12M"
 ALT_EQUALS = b"\x1b="
 
 HOME_UP = "Recent Folders"
+
+# A line wider than the pane: a sideways scroll is only readable from one, and
+# its head is what tells a scroll of four cells from no scroll at all.
+LONG_LINE = "STARTHERE" + "z" * 200
 
 
 def write_workspace() -> str:
@@ -49,6 +55,8 @@ def write_workspace() -> str:
     os.makedirs(work)
     with open(os.path.join(work, "notes.txt"), "w") as fh:
         fh.write("hello\n")
+    with open(os.path.join(work, "long.txt"), "w") as fh:
+        fh.write(LONG_LINE + "\n")
     return work
 
 
@@ -60,13 +68,14 @@ def write_config(scale: int) -> None:
         fh.write(f"tui_text_scale = {scale}\n")
 
 
-def run(binary: str, work: str, scale: int, force: bool, phases=None, keys: bytes = b""):
+def run(binary: str, work: str, scale: int, force: bool, phases=None, keys: bytes = b"",
+        args=None):
     """One run, returning (screen, the raw bytes the child wrote)."""
     write_config(scale)
     chunks: list[bytes] = []
     env = {"JOT_TEXT_SCALE_FORCE": "1"} if force else None
-    screen = run_in_pty(binary, [], keys, settle=1.5, after=1.0, cols=110, rows=30,
-                        cfg=CFG, cwd=work, env=env, phases=phases,
+    screen = run_in_pty(binary, args if args else [], keys, settle=1.5, after=1.0,
+                        cols=110, rows=30, cfg=CFG, cwd=work, env=env, phases=phases,
                         on_output=lambda _fd, chunk: chunks.append(chunk))
     return screen, b"".join(chunks)
 
@@ -103,11 +112,20 @@ def main() -> int:
     if b"\x1b]66;s=2;" not in raw:
         failures.append("Alt+= did not scale the grid")
 
-    # 3. Ctrl+wheel-up is the mouse form of the same chord.
-    screen, raw = run(binary, work, scale=1, force=True, phases=[started, (0.1, CTRL_WHEEL_UP)])
-    shot(screen, raw, "Ctrl+wheel-up zooms in")
-    if b"\x1b]66;s=2;" not in raw:
-        failures.append("Ctrl+wheel-up did not scale the grid")
+    # 3. Ctrl+wheel is the horizontal scroll, not the zoom it used to be: the
+    # grid stays unframed, and the notch shifts the view four cells right -- the
+    # long line loses the head it was found by and keeps the rest of it.
+    opened = (0.5, lambda s: "STARTHERE" in s.text())
+    screen, raw = run(binary, work, scale=1, force=True,
+                      phases=[opened, (0.1, CTRL_WHEEL_DOWN)],
+                      args=[os.path.join(work, "long.txt")])
+    shot(screen, raw, "Ctrl+wheel-down scrolls sideways")
+    if b"\x1b]66;" in raw:
+        failures.append("Ctrl+wheel framed the grid instead of scrolling")
+    if "STARTHERE" in screen.text():
+        failures.append("Ctrl+wheel-down did not scroll the view sideways")
+    elif "THERE" not in screen.text():
+        failures.append("the long line left the screen entirely")
 
     # 4. The same chord on a terminal that does not report the protocol: nothing
     # is framed, the editor is still on screen, and it says why.

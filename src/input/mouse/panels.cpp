@@ -448,7 +448,7 @@ void Editor::handle_mouse_input(int x,
     focus_state = FOCUS_EDITOR;
   }
 
-  // Horizontal wheel (SGR buttons 66/67, or Shift+vertical wheel): shift
+  // Horizontal wheel (SGR buttons 66/67, or Shift/Ctrl+vertical wheel): shift
   // the viewport sideways. Handled before the pane-hit test so scrolling
   // works in single-pane and multi-pane alike, even when the cursor sits
   // on a gutter, border, or dead spot the hit test would reject.

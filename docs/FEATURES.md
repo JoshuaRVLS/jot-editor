@@ -87,11 +87,12 @@ terminal cells each, through the text sizing protocol kitty 0.40+ implements,
 and the whole UI scales together -- buffer, panels, status line -- without the
 terminal's own size changing at any point. `Alt+=` / `Alt+-` step it while the
 editor is up (`Ctrl+=` / `Ctrl+-` too, where the terminal reports those chords),
-`Ctrl+wheel-up` / `Ctrl+wheel-down` do it with the wheel, and `Alt+0` puts it
-back to 1:1. A terminal without the protocol keeps the screen at 1:1 and says so
-rather than painting a grid it cannot fill; `JOT_TEXT_SCALE_FORCE=1` forces the
-zoom anyway, for a terminal whose support the probe cannot see (a multiplexer
-that strips the protocol, a diagnostic run).
+and `Alt+0` puts it back to 1:1. The wheel is not a zoom chord: `Ctrl+wheel`
+scrolls the viewport sideways, the way `Shift+wheel` does. A terminal without
+the protocol keeps the screen at 1:1 and says so rather than painting a grid it
+cannot fill; `JOT_TEXT_SCALE_FORCE=1` forces the zoom anyway, for a terminal
+whose support the probe cannot see (a multiplexer that strips the protocol, a
+diagnostic run).
 
 The GUI also shapes what the font joins. A programming face inks `->` and `!=`
 through its own OpenType lookups, and a cell grid that resolves one codepoint
@@ -1052,6 +1053,9 @@ it just left.
 | --- | --- |
 | Arrow keys | Move cursor |
 | `Shift+Arrow` | Extend selection |
+| `Ctrl+Left` / `Ctrl+Right` | Previous / next word (`Ctrl+Shift` extends the selection) |
+| `Ctrl+Up` / `Ctrl+Down` | Scroll the view a line, leaving the caret where it is |
+| `Ctrl+Home` / `Ctrl+End` | File start / end (`Ctrl+Shift` extends the selection) |
 | `Home` / `End` | Smart line start / end |
 | `Page Up` / `Page Down` | Move by 10 lines |
 | `Alt+I` / `Alt+A` | Smart line start / end |
@@ -1059,6 +1063,19 @@ it just left.
 | `Alt+H` / `Alt+L` | Previous / next word |
 | `Alt+Up` / `Alt+Down` | Move line or selection up / down |
 | `Tab` / `Shift+Tab` | Indent / outdent selection |
+
+A word is what a reader would call one, not what a tokenizer would: the word
+motions stop inside identifiers as well as between them, so `alpha_beta` is two
+stops and `fooBarBaz` is three (one at each capital), and a digit run is a stop
+of its own (`abc123def` walks as `abc`, `123`, `def`). "Next word" from the end
+of a line is the first word of the next one -- blank lines and indentation
+included -- rather than a wall, and "previous word" is the same motion
+backwards from the start of one.
+
+`Ctrl+Up`/`Ctrl+Down` are the reading pair: the view scrolls a line at a time
+and the caret stays put (the wheel's own animation), so reading on does not
+move the place the next edit will land.
+
 
 ### Buffers, tabs, panes, and tools
 
@@ -1190,7 +1207,15 @@ levels below it again.
 | `Ctrl+Alt+Arrow` | Focus pane in that direction |
 | `Alt+Shift+Q` or `Ctrl+Q` | Close current pane |
 | `Ctrl+Shift+H/J/K/L` | Resize pane |
-| `Ctrl+Arrow` | Resize pane |
+| `Ctrl+Shift+Arrow` | Resize pane |
+
+The bare `Ctrl+Arrow` chords are navigation (`Ctrl+Left`/`Ctrl+Right` move by
+word, `Ctrl+Up`/`Ctrl+Down` scroll the view), which is why the resize arrows
+carry the Shift the letters already had. `Alt+H` and `Alt+L` are the two word
+motions as well: with no pane (or explorer) in that direction to focus, the
+chord moves the caret instead of reporting, so they are live on a single-pane
+screen. `Alt+J`/`Alt+K` have no second meaning and say `No pane in that
+direction`.
 
 The split keys are `Alt+Shift+<letter>`, so a desktop that binds `Alt+Shift` to
 switching keyboard layouts (the XKB `grp:alt_shift_toggle` option, KDE, Windows)
@@ -1464,6 +1489,11 @@ other navigation path keep scrolling instantly, and moving the viewport another
 way (a jump, a fold, the caret pulled back into view) ends the animation where
 it stands. The GUI frontend already slides its content pixel by pixel and is
 left alone.
+
+Sideways is a separate gesture with no animation: a horizontal wheel report
+(buttons 66/67), or `Shift+wheel` / `Ctrl+wheel` where the terminal only sends
+vertical ones, moves `scroll_x` four cells per notch and leaves the caret, the
+vertical position and the text scale alone.
 
 The caret's colours come from the theme (`cursor`, or `fg_cursor`/`bg_cursor`).
 Where the caret is painted by jot - the GUI - it uses whichever of the two
