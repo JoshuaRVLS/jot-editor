@@ -51,7 +51,7 @@ if GuiSession is not None:
 # the warning band on palette 58 (the same shape test/diagnostic_line_bg_probe
 # pins in the terminal).
 THEME = """{
-  "extends": "jot-dark",
+  "extends": "jot",
   "Normal": {"fg": 7, "bg": 0},
   "DiagnosticWarn": {"bg": 58}
 }

@@ -151,7 +151,7 @@ void LuaAPI::push_ui_colors(lua_State *L, int t)
   // Tab strips (the right dock's panel tabs and the git/debugger view tabs) draw
   // the same pairs the native strips do. Without them the Lua sides fall back to
   // accent over selection_bg, which collide in any theme where the two are equal
-  // (the original jot-dark incked both with one pink), painting the active tab
+  // (a scheme that inks both with one colour), painting the active tab
   // invisible.
   lua_set_int_field(L, c, "fg_terminal_tab_focused", th.fg_terminal_tab_focused);
   lua_set_int_field(L, c, "bg_terminal_tab_focused", th.bg_terminal_tab_focused);

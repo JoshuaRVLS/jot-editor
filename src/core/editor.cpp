@@ -496,8 +496,8 @@ void Editor::initialize_state_defaults()
   // Easter egg
   easter_egg_timer = 0;
 
-  // Default embedded-runtime theme name (jot's own dark scheme).
-  current_theme_name = "jot-dark";
+  // Default embedded-runtime theme name (jot's own scheme).
+  current_theme_name = "jot";
 }
 
 void Editor::initialize_lua_runtime()
@@ -518,7 +518,7 @@ void Editor::initialize_lua_runtime()
 
   // Restore saved color scheme now that embedded runtime is ready.
   {
-    std::string saved = config.get("color_scheme", "jot-dark");
+    std::string saved = config.get("color_scheme", "jot");
     apply_theme(saved, false, false);
   }
 }

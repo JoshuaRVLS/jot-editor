@@ -35,7 +35,7 @@ RIGHT = b"\x1b[C"
 # digits, e.g. "q!" or "term2").
 TOKEN = re.compile(r"[a-z][a-z0-9]*")
 
-THEME = "jot-dark"
+THEME = "jot"
 CFG = "/tmp/jot_palette_grid_probe_cfg"
 
 

@@ -101,7 +101,7 @@ TEST_CASE("Diagnostic band: error and warning rows are painted edge to edge", "[
   seed_config_home();
   write_theme("bandprobe",
               "{\n"
-              "  \"extends\": \"jot-dark\",\n"
+              "  \"extends\": \"jot\",\n"
               "  \"DiagnosticError\": {\"bg\": 52},\n"
               "  \"DiagnosticWarn\": {\"bg\": 58}\n"
               "}\n");
@@ -159,7 +159,7 @@ TEST_CASE("Diagnostic band: the band is a base, so the overlays still win", "[jo
   seed_config_home();
   write_theme("bandprobe",
               "{\n"
-              "  \"extends\": \"jot-dark\",\n"
+              "  \"extends\": \"jot\",\n"
               "  \"DiagnosticError\": {\"bg\": 52},\n"
               "  \"DiagnosticWarn\": {\"bg\": 58}\n"
               "}\n");

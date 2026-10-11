@@ -8,11 +8,11 @@ editor (its own background, TelescopePreviewNormal). This guards that mapping
 on both render paths -- a later change that fills both boxes with one colour,
 or drops the selection band back to a caret, fails here.
 
-The theme is jot-light, where the four slots are four distinct colours
-(#f7ecda list, #e8d0a4 selection, #fcf4e3 view, #fffaee query), so "which slot
-is this cell using" is a decidable question. The file view's background is also
-required to be the editor's own Normal background: the right box is meant to
-read as a normal editor, not as a preview pane in a different palette.
+The theme is jot, where the four slots are four distinct colours (#282828 list,
+#453d41 selection, #181818 view, #101010 query), so "which slot is this cell
+using" is a decidable question. The file view's background is also required to
+be the editor's own Normal background: the right box is meant to read as a
+normal editor, not as a preview pane in a different palette.
 
 Usage: test/telescope_theme_probe.py [path-to-jot]
 Exit codes: 0 pass, 1 fail, 2 binary missing.
@@ -28,7 +28,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pty_screen import run_in_pty  # noqa: E402
 
-THEME = "jot-light"
+THEME = "jot"
 WS = "/tmp/jot_telescope_theme_probe"
 CFG = "/tmp/jot_telescope_theme_probe_cfg"
 COLS, ROWS = 120, 32

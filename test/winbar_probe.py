@@ -39,11 +39,11 @@ from pty_screen import run_in_pty  # noqa: E402
 DOWN = b"\x1b[B"
 # The chevron a folder row wears (nf-fa-chevron_right, U+F054).
 CHEVRON = "\uf054"
-# The Winbar group's background and Normal's in jot-dark (the default scheme),
-# as the harness records a truecolour cell (1000 + rgb). The first bug here was
-# the whole group resolving to nothing, which left the row on the struct default
+# The Winbar group's background and Normal's in jot (the default scheme), as
+# the harness records a truecolour cell (1000 + rgb). The first bug here was the
+# whole group resolving to nothing, which left the row on the struct default
 # (palette 0, black) -- no band at all on the theme's panel surface.
-WINBAR_BG, PANE_BG = 1000 + 0x1C1710, 1000 + 0x14100B
+WINBAR_BG, PANE_BG = 1000 + 0x282828, 1000 + 0x181818
 
 SOURCE = """// winbar probe
 class Widget

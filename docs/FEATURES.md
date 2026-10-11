@@ -27,8 +27,8 @@ pitch and install steps, see the [README](../README.md).
   rewrites previewed as diffs, and adapters for OpenAI-compatible endpoints,
   Anthropic and any CLI on `PATH`, all in bundled Lua over `jot.job`.
 - **Lua plugins and JSON colorschemes** for customization, with behavior owned
-  by the C++ core. The shipped schemes (`jot-dark`, `jot-light` and the
-  Flexoki pair) are exact 24-bit palettes authored in hex; a theme file may also
+  by the C++ core. The shipped schemes (`jot` and the Flexoki pair) are exact
+  24-bit palettes authored in hex; a theme file may also
   use xterm-256 indices, or mix the two.
 
 ## Running jot
@@ -1365,7 +1365,7 @@ Example `config.lua`:
 ```lua
 jot.config.set("tab_size", 4)
 jot.config.set("show_indent_guides", true)
-jot.config.set("color_scheme", "jot-light")
+jot.config.set("color_scheme", "jot")
 jot.config.set("auto_save", true)
 jot.config.set("auto_save_interval_ms", 5000)
 ```

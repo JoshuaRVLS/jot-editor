@@ -1,7 +1,7 @@
-// The bundled themes: jot-dark ("amber lamp": warm brown-black neutrals with
-// amber as the one hero hue and a single teal complement), jot-light ("amber
-// paper": the same inks on warm paper), the schemes jot maintains, plus the
-// flexoki pair ported from kepano's Flexoki palette.
+// The bundled themes: jot (a port of gruber-darker -- John Gruber's scheme:
+// the #181818 ground, the #e4e4e4 ink, yellow keywords, niagara-blue functions
+// and quartz types), plus the flexoki pair ported from kepano's Flexoki
+// palette.
 //
 // A theme is data that fails quietly. A typo'd group name paints nothing and is
 // invisible until someone notices one token type is the wrong colour; a name
@@ -10,10 +10,10 @@
 // other silently falls back to that same default; and a colour the reader cannot
 // parse leaves the slot at whatever it inherited. This copies the shipped files
 // into the config dir the editor reads, applies them, and asserts the colours
-// that came out of the engine -- plus the two names that used to be bundled
-// (`dark`, `light`) and still have to work.
+// that came out of the engine -- plus the names that used to be bundled
+// (`dark`, `light`, `jot-dark`, `jot-light`) and still have to resolve.
 //
-// Both shipped themes name exact 24-bit colours ("#FFB454") rather than xterm
+// Every shipped theme names exact 24-bit colours ("#FFDD33") rather than xterm
 // palette indices, so a case that wants a slot's colour reads it back through
 // the same conversion the renderer uses instead of comparing an index.
 #include "core/editor.h"
@@ -59,12 +59,11 @@ namespace
   const std::vector<std::string> &bundled_theme_files()
   {
     static const std::vector<std::string> files = {
-        "flexoki-dark.json", "flexoki-light.json", "jot-dark.json", "jot-light.json"};
+        "flexoki-dark.json", "flexoki-light.json", "jot.json"};
     return files;
   }
 
-  // "jot-dark.json" -> "jot-dark": what the chooser lists and `:colorscheme`
-  // takes.
+  // "jot.json" -> "jot": what the chooser lists and `:colorscheme` takes.
   std::string theme_name_of(const std::string &file)
   {
     return file.substr(0, file.size() - std::string(".json").size());
@@ -207,38 +206,40 @@ namespace
   };
 } // namespace
 
-TEST_CASE("jot-dark is the amber lamp palette", "[jot][theme]")
+TEST_CASE("jot is the gruber darker palette", "[jot][theme]")
 {
   Editor &e = probe_editor();
-  REQUIRE(e.apply_theme_for_test("jot-dark"));
-  REQUIRE(e.theme_name_for_test() == "jot-dark");
+  REQUIRE(e.apply_theme_for_test("jot"));
+  REQUIRE(e.theme_name_for_test() == "jot");
 
   const Theme &t = e.theme_for_test();
   // Exact colours, not palette entries: the whole point of the hex form is that
   // the scheme is authored in 24-bit space.
   REQUIRE(jot_ui::is_exact_color(t.fg_default));
-  REQUIRE(rgb_of(t.fg_default) == 0xEDE4D1); // warm ivory ink
-  REQUIRE(rgb_of(t.bg_default) == 0x14100B); // brown-black ground, hue-locked to amber
+  REQUIRE(rgb_of(t.fg_default) == 0xE4E4E4); // the scheme's ink
+  REQUIRE(rgb_of(t.bg_default) == 0x181818); // John Gruber's near-black ground
   REQUIRE(jot_ui::is_exact_color(t.bg_default));
-  // The amber family is the scheme's spine: keywords burn amber, types and
-  // modules take the paler gold, numbers and tags the hot coral.
-  REQUIRE(rgb_of(t.fg_keyword) == 0xFFB454);
-  REQUIRE(rgb_of(t.fg_type) == 0xFFD98A);
-  REQUIRE(rgb_of(t.fg_number) == 0xFF8066);
-  // One cool complement carries the actions: functions and builtins are teal,
-  // strings sit warm sage beside them, properties a softer rose.
-  REQUIRE(rgb_of(t.fg_function_method) == 0x5FD3D8);
-  REQUIRE(rgb_of(t.fg_string) == 0xA9C97A);
-  REQUIRE(rgb_of(t.fg_field) == 0xFF9EB5);
-  REQUIRE(rgb_of(t.fg_module) == 0xFFD98A);
-  REQUIRE(rgb_of(t.fg_tag) == 0xFF8066);
-  // The accent is the amber itself, spent where a hand goes: the active
-  // border, the cursor line number and the focused terminal tab.
-  REQUIRE(rgb_of(t.fg_active_border) == 0xFFB454);
-  // The chrome sits on the theme's own lamp-lit surface, one step behind the
-  // editor's ground: the sidebar and the status line share it.
-  REQUIRE(rgb_of(t.bg_sidebar) == 0x1C1710);
-  REQUIRE(rgb_of(t.bg_status) == 0x1C1710);
+  // gruber-darker's roles, read off the upstream port: comments are the brown,
+  // keywords and control flow the yellow, types, constants and directives the
+  // quartz grey-green, numbers the wisteria, strings the green.
+  REQUIRE(rgb_of(t.fg_comment) == 0xCC8C3C);
+  REQUIRE(rgb_of(t.fg_keyword) == 0xFFDD33);
+  REQUIRE(rgb_of(t.fg_type) == 0x95A99F);
+  REQUIRE(rgb_of(t.fg_number) == 0x9E95C7);
+  REQUIRE(rgb_of(t.fg_string) == 0x73D936);
+  // Functions, methods and fields share the niagara blue, and a builtin takes
+  // the scheme's own yellow.
+  REQUIRE(rgb_of(t.fg_function_method) == 0x96A6C8);
+  REQUIRE(rgb_of(t.fg_field) == 0x96A6C8);
+  REQUIRE(rgb_of(t.fg_module) == 0x95A99F);
+  REQUIRE(rgb_of(t.fg_tag) == 0xFFDD33);
+  // The accent is gruber's yellow, spent where a hand goes: the active border,
+  // the cursor line number and the focused terminal tab.
+  REQUIRE(rgb_of(t.fg_active_border) == 0xFFDD33);
+  // The chrome sits above the editor's ground on the scheme's own raised step:
+  // the sidebar and the status line share it.
+  REQUIRE(rgb_of(t.bg_sidebar) == 0x282828);
+  REQUIRE(rgb_of(t.bg_status) == 0x282828);
 }
 
 TEST_CASE("Jot themes keep separators visible and selected rows distinct", "[jot][theme]")
@@ -258,7 +259,11 @@ TEST_CASE("Jot themes keep separators visible and selected rows distinct", "[jot
     const double x = luminance(a), y = luminance(b);
     return (std::max(x, y) + 0.05) / (std::min(x, y) + 0.05);
   };
-  for (const std::string name : {"jot-dark.json", "jot-light.json"})
+  // jot's own scheme, and only it: the ported Flexoki pair is exempt because a
+  // separator is part of what a port reproduces and Flexoki's own is quieter
+  // than jot's 3:1 floor (1.52 on its dark surfaces, 1.39 on paper), so holding
+  // it here would mean repainting kepano's palette with jot's tuning.
+  for (const std::string name : {"jot.json"})
   {
     const auto slots = parse_theme(bundled_themes_dir() / name);
     INFO(name);
@@ -278,35 +283,16 @@ TEST_CASE("The breadcrumb groups reach the Winbar slots", "[jot][theme]")
   // breadcrumb row painted in the built-in black band, which on a near-black
   // scheme is no band at all.
   Editor &e = probe_editor();
-  REQUIRE(e.apply_theme_for_test("jot-dark"));
+  REQUIRE(e.apply_theme_for_test("jot"));
   const Theme &t = e.theme_for_test();
   REQUIRE(jot_ui::is_exact_color(t.bg_winbar));
-  REQUIRE(rgb_of(t.bg_winbar) == 0x1C1710);
-  REQUIRE(rgb_of(t.fg_winbar) == 0xEDE4D1);
-  REQUIRE(rgb_of(t.fg_winbar_crumb) == 0x8F8168);
-  REQUIRE(rgb_of(t.bg_winbar_crumb) == 0x1C1710);
-  REQUIRE(rgb_of(t.fg_winbar_separator) == 0x3A3020);
-  REQUIRE(rgb_of(t.fg_winbar_hover) == 0xEDE4D1);
-  REQUIRE(rgb_of(t.bg_winbar_hover) == 0x33291A);
-}
-
-TEST_CASE("jot-light is the amber lamp seen on paper", "[jot][theme]")
-{
-  Editor &e = probe_editor();
-  REQUIRE(e.apply_theme_for_test("jot-light"));
-  REQUIRE(e.theme_name_for_test() == "jot-light");
-
-  const Theme &t = e.theme_for_test();
-  REQUIRE(jot_ui::is_exact_color(t.fg_default));
-  REQUIRE(rgb_of(t.fg_default) == 0x2A2118);
-  REQUIRE(rgb_of(t.bg_default) == 0xFCF4E3); // warm paper, not white
-  // The dark scheme's inks darkened until they clear 4.5:1 on the paper:
-  // burnt amber keywords, olive-gold types, sage strings, deep teal functions.
-  REQUIRE(rgb_of(t.fg_keyword) == 0xA85A00);
-  REQUIRE(rgb_of(t.fg_string) == 0x5A7A2E);
-  REQUIRE(rgb_of(t.fg_function_method) == 0x0F7A7E);
-  REQUIRE(rgb_of(t.fg_type) == 0x82631A);
-  REQUIRE(rgb_of(t.fg_active_border) == 0xA85A00);
+  REQUIRE(rgb_of(t.bg_winbar) == 0x282828);
+  REQUIRE(rgb_of(t.fg_winbar) == 0xE4E4E4);
+  REQUIRE(rgb_of(t.fg_winbar_crumb) == 0x95A99F);
+  REQUIRE(rgb_of(t.bg_winbar_crumb) == 0x282828);
+  REQUIRE(rgb_of(t.fg_winbar_separator) == 0x52494E);
+  REQUIRE(rgb_of(t.fg_winbar_hover) == 0xE4E4E4);
+  REQUIRE(rgb_of(t.bg_winbar_hover) == 0x453D41);
 }
 
 TEST_CASE("flexoki carries kepano's palette, not an approximation", "[jot][theme]")
@@ -362,7 +348,7 @@ TEST_CASE("Hex theme colours accept every documented form", "[jot][theme]")
   Editor &e = probe_editor();
   const UserThemeFile theme("hex_forms",
                             "{\n"
-                            "  \"extends\": \"jot-dark\",\n"
+                            "  \"extends\": \"jot\",\n"
                             "  \"Normal\": {\"fg\": \"#abc\", \"bg\": \"#010203\"},\n"
                             "  \"Keyword\": {\"fg\": \"#A0B0C0FF\"},\n"
                             "  \"Comment\": {\"fg\": \"#12345\"},\n"
@@ -380,9 +366,9 @@ TEST_CASE("Hex theme colours accept every documented form", "[jot][theme]")
   REQUIRE(rgb_of(t.fg_keyword) == 0xA0B0C0);
   REQUIRE(rgb_of(t.fg_cursor) == 0x00FF00);
   // Unparseable colours are ignored: the slot keeps what the base theme set.
-  REQUIRE(rgb_of(t.fg_comment) == 0x8F8168);
-  REQUIRE(rgb_of(t.fg_string) == 0xA9C97A);
-  REQUIRE(rgb_of(t.fg_number) == 0xFF8066);
+  REQUIRE(rgb_of(t.fg_comment) == 0xCC8C3C);
+  REQUIRE(rgb_of(t.fg_string) == 0x73D936);
+  REQUIRE(rgb_of(t.fg_number) == 0x9E95C7);
 }
 
 TEST_CASE("A hex and an index can name the same slot value", "[jot][theme]")
@@ -394,7 +380,7 @@ TEST_CASE("A hex and an index can name the same slot value", "[jot][theme]")
   Editor &e = probe_editor();
   const UserThemeFile theme("mixed_forms",
                             "{\n"
-                            "  \"extends\": \"jot-dark\",\n"
+                            "  \"extends\": \"jot\",\n"
                             "  \"Normal\": {\"fg\": \"#123456\", \"bg\": 17},\n"
                             "  \"Keyword\": {\"fg\": 215, \"bg\": \"#0a0b0c\"}\n"
                             "}\n");
@@ -444,63 +430,62 @@ TEST_CASE("The names the removed catalog used still resolve", "[jot][theme]")
 {
   Editor &e = probe_editor();
 
-  // Both aliases land on the jot theme that replaced them, and say so: a config
-  // written as `color_scheme = "dark"` keeps working, and the chooser shows what
-  // is actually painted.
-  REQUIRE(e.apply_theme_for_test("dark"));
-  REQUIRE(e.theme_name_for_test() == "jot-dark");
-  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0x14100B);
-
-  REQUIRE(e.apply_theme_for_test("light"));
-  REQUIRE(e.theme_name_for_test() == "jot-light");
-  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0xFCF4E3);
+  // Every retired name lands on the jot theme that replaced it, and says so: a
+  // config written as `color_scheme = "dark"` or "jot-dark" keeps working, and
+  // the chooser shows what is actually painted.
+  for (const char *alias : {"dark", "light", "jot-dark", "jot-light"})
+  {
+    INFO("alias: " << alias);
+    REQUIRE(e.apply_theme_for_test(alias));
+    REQUIRE(e.theme_name_for_test() == "jot");
+    REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0x181818);
+  }
 
   // Case does not matter, the same way it never did for a real theme name.
   REQUIRE(e.apply_theme_for_test("DARK"));
-  REQUIRE(e.theme_name_for_test() == "jot-dark");
+  REQUIRE(e.theme_name_for_test() == "jot");
 
   // A theme that does not exist fails and leaves the current one alone, rather
   // than half-applying a palette.
   REQUIRE_FALSE(e.apply_theme_for_test("gruvbox"));
-  REQUIRE(e.theme_name_for_test() == "jot-dark");
-  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0x14100B);
+  REQUIRE(e.theme_name_for_test() == "jot");
+  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0x181818);
 }
 
 TEST_CASE("A file the user writes under a legacy name beats the alias", "[jot][theme]")
 {
-  // The aliases exist for configs written before the catalog shrank, not to
-  // take a name away from the user: their own `light.json` is the theme they
-  // asked for, and it is applied as written (here on top of jot-light, which it
+  // The aliases exist for configs written before the catalog changed, not to
+  // take a name away from the user: their own `jot-dark.json` is the theme they
+  // asked for, and it is applied as written (here on top of jot, which it
   // extends). It mixes an index with the base's hex colours, so both forms have
   // to survive one resolution pass.
   Editor &e = probe_editor();
-  const UserThemeFile mine("light",
+  const UserThemeFile mine("jot-dark",
                            "{\n"
-                           "  \"extends\": \"jot-light\",\n"
+                           "  \"extends\": \"jot\",\n"
                            "  \"Normal\": {\"fg\": 16, \"bg\": 17}\n"
                            "}\n");
 
-  REQUIRE(e.apply_theme_for_test("light"));
-  REQUIRE(e.theme_name_for_test() == "light");
+  REQUIRE(e.apply_theme_for_test("jot-dark"));
+  REQUIRE(e.theme_name_for_test() == "jot-dark");
   REQUIRE(e.theme_for_test().bg_default == 17);
-  // The base it extends is still jot-light, so everything the user did not
-  // override keeps the shipped look.
-  REQUIRE(rgb_of(e.theme_for_test().fg_keyword) == 0xA85A00);
+  // The base it extends is still jot, so everything the user did not override
+  // keeps the shipped look.
+  REQUIRE(rgb_of(e.theme_for_test().fg_keyword) == 0xFFDD33);
 
   const std::string name = mine.name();
   fs::remove(fs::path(getenv("JOT_CONFIG_HOME")) / "configs" / "colors" / (name + ".json"));
-  REQUIRE(e.apply_theme_for_test("light"));
-  REQUIRE(e.theme_name_for_test() == "jot-light");
-  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0xFCF4E3);
+  REQUIRE(e.apply_theme_for_test("jot-dark"));
+  REQUIRE(e.theme_name_for_test() == "jot");
+  REQUIRE(rgb_of(e.theme_for_test().bg_default) == 0x181818);
 }
 
 TEST_CASE("The chooser lists the schemes jot bundles and nothing else", "[jot][theme]")
 {
   // jot ships no third-party catalog any more: the chooser (what `:theme`
-  // opens) shows the schemes the editor actually maintains -- the two jot
-  // palettes and the Flexoki pair. The test's config dir holds a copy of each
-  // and the bundled tree holds the originals, and they resolve to the same
-  // names.
+  // opens) shows the schemes the editor actually maintains -- the jot scheme
+  // and the Flexoki pair. The test's config dir holds a copy of each and the
+  // bundled tree holds the originals, and they resolve to the same names.
   Editor &e = probe_editor();
   const auto themes = e.available_themes_for_test();
   REQUIRE(themes.size() == bundled_theme_files().size());
@@ -512,9 +497,11 @@ TEST_CASE("The chooser lists the schemes jot bundles and nothing else", "[jot][t
   }
 
   // None of the names the removed catalog was keyed on is listed, including the
-  // two that still resolve as aliases: a stale name must not look selectable.
+  // four that still resolve as aliases: a stale name must not look selectable.
   for (const char *gone : {"dark",
                            "light",
+                           "jot-dark",
+                           "jot-light",
                            "gruvbox",
                            "tokyonight",
                            "catppuccin",
@@ -533,8 +520,8 @@ TEST_CASE("Every bundled theme defines the same slots", "[jot][theme]")
 {
   // A slot in one file but not another does not fail loudly -- it falls back to
   // the struct default, which is a 16-colour value on the wrong palette.
-  // jot-dark is the reference; every other scheme has to carry the same set.
-  const auto reference = parse_theme(bundled_themes_dir() / "jot-dark.json");
+  // jot is the reference; every other scheme has to carry the same set.
+  const auto reference = parse_theme(bundled_themes_dir() / "jot.json");
   REQUIRE(reference.size() > 70);
 
   for (const std::string &file : bundled_theme_files())
@@ -552,7 +539,7 @@ TEST_CASE("Every bundled theme defines the same slots", "[jot][theme]")
       if (reference.find(entry.first) == reference.end())
         only_theme.insert(entry.first);
     }
-    INFO(file << " -- jot-dark only: " << only_reference.size()
+    INFO(file << " -- jot only: " << only_reference.size()
               << ", this theme only: " << only_theme.size());
     REQUIRE(only_reference.empty());
     REQUIRE(only_theme.empty());

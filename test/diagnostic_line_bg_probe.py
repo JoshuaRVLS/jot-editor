@@ -51,9 +51,9 @@ CLEAN_LINE, ERROR_LINE, WARNING_LINE = "int fine = 2;", "int broken = 1;", "int 
 SOURCE = ERROR_LINE + "\n" + CLEAN_LINE + "\n" + WARNING_LINE + "\n"
 
 # The probe theme: a plain palette, so the pane background is index 0, plus the
-# two bands. Everything else stays on what jot-dark sets.
+# two bands. Everything else stays on what jot sets.
 THEME = """{
-  "extends": "jot-dark",
+  "extends": "jot",
   "Normal": {"fg": 7, "bg": 0},
   "DiagnosticError": {"bg": 52},
   "DiagnosticWarn": {"bg": 58}

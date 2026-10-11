@@ -3,63 +3,46 @@
 Themes are native JSON data. The primary location is
 `~/.config/jot/configs/colors/`; legacy `~/.config/jot/themes/` is also scanned.
 
-jot ships four themes: the jot pair -- one amber scheme in a dark and a paper
-variant -- and a port of kepano's Flexoki.
+jot ships three themes: its own scheme -- a port of gruber-darker -- and a port
+of kepano's Flexoki.
 
 | Theme | Look |
 |---|---|
-| `jot-dark` (default) - *amber lamp* | jot's own scheme: brown-black neutrals cut from the amber's own hue, amber (`#ffb454`) keywords and accent, gold types, coral numbers, sage strings and one teal complement for the actions |
-| `jot-light` - *amber paper* | the same scheme read by daylight: warm paper (`#fcf4e3`), burnt-amber keywords (`#a85a00`), every ink darkened until it clears 4.5:1 |
+| `jot` (default) - *gruber darker* | a port of John Gruber's gruber-darker: the `#181818` ground, the `#e4e4e4` ink, yellow keywords, quartz types, wisteria numbers, green strings, niagara-blue functions, brown comments, one raised `#282828` chrome |
 | `flexoki-dark` | Flexoki's ink palette: black (`#100f0f`) paper, base-200 text, green keywords, cyan strings |
 | `flexoki-light` | the same scheme on Flexoki paper (`#fffcf0`) with the 600-step accents |
 
-### jot-dark - "amber lamp"
+### jot - gruber darker
 
-jot's own dark scheme, and the one it is known by. Everything in it is cut from
-a single hue. The neutrals are amber's own hue at almost no saturation and
-almost no light -- the `#14100b` editor ground, the `#1c1710` chrome (sidebar,
-winbar, tab strip, status line), the `#2a2216` band a selected row sits on, the
-`#453823` amber glass of the sidebar's selection -- so the window reads as one
-warm lamp in a dark room, not a blue-black IDE with orange accents bolted on.
+The default scheme, and the one jot is known by. It is a port of
+[gruber-darker](https://github.com/blazkowolf/gruber-darker.nvim), John Gruber's
+working scheme, with its roles mapped onto jot's slots: the `#181818` near-black
+ground, the `#e4e4e4` ink, and one yellow (`#ffdd33`) for the language itself.
 
-The words keep that story, in the amber's own family: **amber** (`#ffb454`) is
-the hero hue and takes the keywords, and the **pale gold** (`#ffd98a`) is the
-family's light step - types, constructors, namespaces, imported modules. **Hot
-coral** (`#ff8066`) burns a little hotter for numbers, constants, attributes and
-markup tags, **ember** (`#f0a245`) for macros, directives and warnings, and
-**rose** (`#ff9eb5`) for properties. Strings sit in a warm **sage**
-(`#a9c97a`). Nothing else takes a hue: comments and punctuation recede to warm
-greys (`#8f8168`, `#b7a98f`), which is what keeps the screen quiet enough for
-the colour that is left to mean something.
+The port reads its roles off the upstream scheme rather than guessing at them.
+Yellow is the keyword and control-flow ink, and the accent a hand lands on: the
+active pane border, the cursor line number, the focused terminal tab, the pin on
+a tab, the cursor block. **Quartz** (`#95a99f`) takes types, constants and
+directives, **wisteria** (`#9e95c7`) numbers, brackets and hints, **green**
+(`#73d936`) strings and the info diagnostic, **niagara** (`#96a6c8`) functions,
+methods, fields and renames, **brown** (`#cc8c3c`) comments, **red**
+(`#f43841`) errors and deletions. The scheme is deliberately loud: the ground is
+black and every ink is a bright one.
 
-One cool complement carries the actions, and only the actions: **teal**
-(`#5fd3d8`) functions, methods, builtins, string escapes and the info
-diagnostic -- the single cold pixel family on screen, and what makes the rest
-read as genuinely amber rather than merely orange. The amber itself is also
-spent where a hand goes, never on a token: the active pane border, the cursor
-line number, the focused terminal tab, the search band and the cursor block.
-The frame stays visible against the ground through the `#776444` separator
-(a terminal window has no shadows to separate its panes), and the diagnostic
-bands are tints of the family (`#3a1e17` error, `#3a2a14` warning).
+The neutrals are Gruber's own steps: the `#282828` chrome (sidebar, winbar, tab
+strip, status line, popup menus), the `#453d41` band a selected row, a matched
+bracket or a hovered row sits on, the `#101010` query field, and his `#52494e`
+line numbers and borders. The frame separates the panes through a `#6a7180`
+separator -- Gruber's blue-grey lifted one step, because a terminal window has
+no shadows and his own separator step is too close to the ground to read. The
+diagnostic bands are his red and yellow tinted over the ground (`#401e1f`
+error, `#3a351c` warning), and the search band is his own light one
+(`#f4f4ff` under the muted `#565f73`).
 
-### jot-light - "amber paper"
-
-The same scheme read by daylight: warm paper (`#fcf4e3`) with the chrome a
-shade behind it (`#f7ecda`) and a real tan selection (`#d9bb82`), never a grey.
-Every ink keeps its role and is darkened until it clears 4.5:1 on the paper --
-**burnt amber** (`#a85a00`) keywords and accent, **olive gold** (`#82631a`)
-types, **brick** (`#b5432f`) numbers and errors, **plum rose** (`#b23a66`)
-properties, warm **sage** (`#5a7a2e`) strings, **deep teal** (`#0f7a7e`)
-functions and the info diagnostic, **ember** (`#8a5a00`) warnings. The fills
-that can afford it keep the bright amber the dark scheme's text uses: the
-cursor, the `#ffc24d` search band and the focused terminal tab all wear it
-under the dark ink, so the scheme still reads as amber at a glance even though
-no amber text could be legible at this contrast.
-
-The two jot schemes are one design on two grounds, not a dark theme and an
-unrelated light one: the same seven roles in the same slots, re-tuned -- never
-re-hued -- for the paper. The Flexoki pair is tuned the same way (its 600-step
-accents included).
+The reference for the port is the Neovim one
+([blazkowolf/gruber-darker.nvim](https://github.com/blazkowolf/gruber-darker.nvim)),
+with [rexim's Emacs theme](https://github.com/rexim/gruber-darker-theme) behind
+it; both descend from John Gruber's original BBEdit scheme.
 
 The Flexoki pair is [Flexoki](https://stephango.com/flexoki) by kepano (MIT
 licensed), ported slot by slot from the official VS Code and Helix themes: the
@@ -73,14 +56,16 @@ colour, and jot paints it verbatim (SGR `38;2`/`48;2`, or the exact value in the
 GUI) instead of rounding it to the nearest of 256 entries. A slot still accepts
 an xterm 256 index for a theme written that way, and the two forms can be mixed
 in one file. Tune any slot by copying a file to `~/.config/jot/configs/colors/`.
-The names of the themes that used to be bundled (`dark` and `light`) still
-resolve to the jot theme that replaced them, so a `color_scheme` written before
-the change keeps working. Any other name now needs a file of its own.
+Every name the bundled catalog has been keyed on before -- `dark`, `light`, and
+the `jot-dark` / `jot-light` pair that replaced them -- still resolves to the
+jot theme that superseded them, so a `color_scheme` written before the change
+keeps working. Any other name needs a file of its own (and a file you write
+under one of those names is yours, not an alias).
 
-Apply with `:colorscheme jot-light` or from Lua:
+Apply with `:colorscheme jot` or from Lua:
 
 ```lua
-set_hl("Normal", { fg = "#ede4d1", bg = "#14100b" })
+set_hl("Normal", { fg = "#e4e4e4", bg = "#181818" })
 set_hl("Keyword", { fg = 215 }) -- an xterm index still works
 ```
 
@@ -93,9 +78,9 @@ is neither is ignored, leaving the slot at whatever it inherited. Use `-1` or
 
 ```json
 {
-  "Normal": {"fg": "#ede4d1", "bg": "#14100b"},
-  "Comment": {"fg": "#8f8168", "bg": "#14100b"},
-  "Keyword": {"fg": "#ffb454", "bg": "#14100b"},
+  "Normal": {"fg": "#e4e4e4", "bg": "#181818"},
+  "Comment": {"fg": "#cc8c3c", "bg": "#181818"},
+  "Keyword": {"fg": "#ffdd33", "bg": "#181818"},
   "Visual": {"fg": 231, "bg": 240}
 }
 ```
@@ -226,7 +211,7 @@ syntax - by extending it:
 
 ```json
 {
-  "extends": "jot-dark",
+  "extends": "jot",
   "Comment": {"fg": 244},
   "keyword.control": {"fg": 214},
   "StatusLine": {"fg": 188, "bg": 236}
@@ -245,26 +230,26 @@ then tune the syntax slots:
 
 ```bash
 mkdir -p ~/.config/jot/configs/colors
-cp .configs/configs/colors/jot-dark.json ~/.config/jot/configs/colors/mine.json
+cp .configs/configs/colors/jot.json ~/.config/jot/configs/colors/mine.json
 ```
 
 A minimal annotated theme:
 
 ```json
 {
-  "Normal": {"fg": "#ede4d1", "bg": "#14100b"},         // plain text / editor background
-  "Comment": {"fg": "#8f8168", "bg": "#14100b"},        // comments
-  "keyword": {"fg": "#ffb454", "bg": "#14100b"},        // all keywords
-  "keyword.control": {"fg": "#ffb454", "bg": "#14100b"}, // if/for/while - override control
-  "string": {"fg": "#a9c97a", "bg": "#14100b"},         // string literals
-  "number": {"fg": "#ff8066", "bg": "#14100b"},         // numbers, constants fall back here
-  "function": {"fg": "#5fd3d8", "bg": "#14100b"},       // function names
-  "function.method": {"fg": "#5fd3d8", "bg": "#14100b"}, // method names (optional: keep = function)
-  "type": {"fg": "#ffd98a", "bg": "#14100b"},           // type identifiers
-  "property": {"fg": "#ff9eb5", "bg": "#14100b"},       // obj.field members
-  "punctuation": {"fg": "#b7a98f", "bg": "#14100b"},    // punctuation carries no hue
-  "tag": {"fg": "#ff8066", "bg": "#14100b"},            // HTML/JSX tags
-  "attribute": {"fg": "#ff8066", "bg": "#14100b"}       // HTML/JSX tag attributes
+  "Normal": {"fg": "#e4e4e4", "bg": "#181818"},         // plain text / editor background
+  "Comment": {"fg": "#cc8c3c", "bg": "#181818"},        // comments
+  "keyword": {"fg": "#ffdd33", "bg": "#181818"},        // all keywords
+  "keyword.control": {"fg": "#ffdd33", "bg": "#181818"}, // if/for/while - override control
+  "string": {"fg": "#73d936", "bg": "#181818"},         // string literals
+  "number": {"fg": "#9e95c7", "bg": "#181818"},         // numbers, constants fall back here
+  "function": {"fg": "#96a6c8", "bg": "#181818"},       // function names
+  "function.method": {"fg": "#96a6c8", "bg": "#181818"}, // method names (optional: keep = function)
+  "type": {"fg": "#95a99f", "bg": "#181818"},           // type identifiers
+  "property": {"fg": "#96a6c8", "bg": "#181818"},       // obj.field members
+  "punctuation": {"fg": "#e4e4e4", "bg": "#181818"},    // punctuation carries no hue
+  "tag": {"fg": "#ffdd33", "bg": "#181818"},            // HTML/JSX tags
+  "attribute": {"fg": "#96a6c8", "bg": "#181818"}       // HTML/JSX tag attributes
 }
 ```
 
@@ -272,8 +257,8 @@ A minimal annotated theme:
 
 `tools/vscode_themes_import.py <pack-dir> <output-dir>` converts a VSCode theme
 pack (colors + TextMate scopes) into jot schemes; point the output at
-`~/.config/jot/configs/colors` so the imports stay yours. jot's own two themes
-are never overwritten by an import. The source's colours are written through as
+`~/.config/jot/configs/colors` so the imports stay yours. jot's own scheme is
+never overwritten by an import. The source's colours are written through as
 hex, so an imported scheme keeps the 24-bit values it was designed with instead
 of landing on the nearest palette entry.
 
@@ -290,5 +275,5 @@ Rules:
   leading `@` is ignored so tree-sitter capture names can be used as-is.
 - `:colorscheme <name>` switches live; the choice persists in the settings
   file (`color_scheme`). Names resolve case-insensitively.
-- After editing a theme file, switch away and back (`:colorscheme jot-dark`,
+- After editing a theme file, switch away and back (`:colorscheme jot`,
   `:colorscheme mine`) or restart to reload it.

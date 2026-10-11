@@ -35,11 +35,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pty_screen import run_in_pty  # noqa: E402
 
-# jot-dark's tab inks, tagged as truecolour cells (1000 + 0xRRGGBB).
-TAB_INACTIVE_FG = 1000 + 0x8F8168  # TabLine   fg
-TAB_ACTIVE_FG = 1000 + 0xEDE4D1  # TabLineSel fg
-TAB_BG = 1000 + 0x1C1710  # TabLine   bg
-BODY_BG = 1000 + 0x14100B  # Normal    bg
+# jot's tab inks, tagged as truecolour cells (1000 + 0xRRGGBB).
+TAB_INACTIVE_FG = 1000 + 0x95A99F  # TabLine   fg
+TAB_ACTIVE_FG = 1000 + 0xFFDD33  # TabLineSel fg
+TAB_BG = 1000 + 0x282828  # TabLine   bg
+BODY_BG = 1000 + 0x181818  # Normal    bg
 
 # Ex commands run through the command palette (Ctrl+P, the query, Enter): the
 # editor has no `:` command line of its own.

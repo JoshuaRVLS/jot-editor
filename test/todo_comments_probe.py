@@ -40,18 +40,19 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pty_screen import run_in_pty  # noqa: E402
 
-# The jot-dark groups the feature resolves: DiagnosticInfo for TODO,
+# The jot groups the feature resolves: DiagnosticInfo for TODO,
 # DiagnosticError for FIXME. A truecolour cell is tagged as 1000 + 0xRRGGBB.
-INFO = 1000 + 0x5FD3D8
-ERROR = 1000 + 0xFF8066
-# jot-dark's PmenuSel pair: the selected picker row keeps the theme's own
-# selection ink, because the family colours are too close to it to read.
-SELECTION_FG = 1000 + 0xEDE4D1
-SELECTION_BG = 1000 + 0x2A2216
-# The theme's normal background. Both bands are light enough that the contrast
-# pick (upstream's maximize_contrast) lands on this dark ink, not on #EDE4D1.
-# Tagged like every truecolour cell (1000 + 0xRRGGBB).
-INK = 1000 + 0x14100B
+INFO = 1000 + 0x73D936
+ERROR = 1000 + 0xF43841
+# jot's PmenuSel pair: the selected picker row keeps the theme's own selection
+# ink, because the family colours are too close to it to read.
+SELECTION_FG = 1000 + 0xF5F5F5
+SELECTION_BG = 1000 + 0x453D41
+# The theme's normal background. Both chip fills are light enough that the
+# contrast pick (upstream's maximize_contrast) lands on this dark ink, not on
+# the #E4E4E4 the scheme inks text with. Tagged like every truecolour cell
+# (1000 + 0xRRGGBB).
+INK = 1000 + 0x181818
 
 SOURCE = """\
 local a = 1

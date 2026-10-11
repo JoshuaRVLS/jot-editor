@@ -35,9 +35,9 @@ CTRL_P = b"\x10"
 ENTER = b"\r"
 DOCK = b"\x1b[98;6u"  # Ctrl+Shift+B, the right dock toggle
 
-# jot-dark's chrome pair, tagged as truecolour cells (1000 + 0xRRGGBB).
-TAB_BG = 1000 + 0x14100B  # TabLineSel / the editor's own surface
-BAND_BG = 1000 + 0x1C1710  # TabLine / the sidebar's chrome surface
+# jot's chrome pair, tagged as truecolour cells (1000 + 0xRRGGBB).
+TAB_BG = 1000 + 0x181818  # TabLineSel / the editor's own surface
+BAND_BG = 1000 + 0x282828  # TabLine / the sidebar's chrome surface
 
 
 def row_text(screen, y: int) -> str:
@@ -89,12 +89,17 @@ def main() -> int:
     r0 = row_text(screen, 0)
     r1 = row_text(screen, 1)
     sep = r0.find("│")  # the explorer's right edge
-    tab_x = r0.find("▌")  # the first tab's leading edge
+    # Where the first tab begins: two cells left of its name (a file glyph and a
+    # space, the tab's reserved leading cell). The check used to read the ▌ block
+    # the strip inked on the active tab; a0c81c1 dropped that bar for the label's
+    # own weight, so the name is what says where the tab starts now.
+    label = r0.find("alpha.txt")
+    tab_x = label - 2 if label >= 0 else -1
     if "CHROME_ROW0_ALPHA" not in r1:
         failures.append("the first code row is not row 1 (%r)" % r1.strip()[:40])
     if "alpha.txt" not in r0:
         failures.append("the workspace strip lost its tab (%r)" % r0)
-    if sep < 0 or tab_x < 0 or tab_x <= sep:
+    if sep < 0 or label < 0 or tab_x <= sep:
         failures.append("the strip starts at %d, not right of the explorer's border %d (%r)"
                         % (tab_x, sep, r0))
     if "EXPLORER" not in r0[:max(0, sep)]:

@@ -24,8 +24,8 @@ def main():
         for width in (48, 80):
             cfg = os.path.join(base, "cfg" + str(width))
             os.makedirs(os.path.join(cfg, "configs", "colors"))
-            shutil.copyfile(".configs/configs/colors/jot-dark.json",
-                            os.path.join(cfg, "configs", "colors", "jot-dark.json"))
+            shutil.copyfile(".configs/configs/colors/jot.json",
+                            os.path.join(cfg, "configs", "colors", "jot.json"))
             with open(os.path.join(cfg, "configs", "settings.conf"), "w") as file:
                 file.write("lsp_enabled=false\nstatus_clock=false\nstatus_coding_time=false\n")
             with open(os.path.join(cfg, "init.lua"), "w") as file:
@@ -64,8 +64,8 @@ def main():
                 # editor background, not a full-width TabLine band.
                 text0 = "".join(screen.cells[0])
                 close_x = text0.rfind("×")
-                tab_bg = 1000 + 0x14100B
-                band_bg = 1000 + 0x1C1710
+                tab_bg = 1000 + 0x181818
+                band_bg = 1000 + 0x282828
                 results.append(("selected tab wears the editor surface",
                                 close_x >= 0 and screen.bg[0][close_x] == tab_bg))
                 results.append(("no TabLine band right of the last tab",
@@ -73,7 +73,7 @@ def main():
                 # The explorer's right edge is the separator between the side
                 # column and the pane; it is inked with the theme's chrome
                 # border colour (SidebarBorder), not left at the background.
-                results.append(("separator uses visible ink", any(1000 + 0x3A3020 in row for row in screen.fg)))
+                results.append(("separator uses visible ink", any(1000 + 0x52494E in row for row in screen.fg)))
             if "--dump" in sys.argv:
                 print(text)
     for label, passed in results:

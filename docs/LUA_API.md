@@ -153,7 +153,7 @@ Configuration is **Lua-first**: `~/.config/jot/config.lua` (next to
 -- ~/.config/jot/config.lua
 jot.config.set("tab_size", 4)
 jot.config.set("show_indent_guides", true)
-jot.config.set("color_scheme", "jot-light")
+jot.config.set("color_scheme", "jot")
 jot.config.set("auto_save", true)
 jot.config.set("auto_save_interval_ms", 5000)
 ```

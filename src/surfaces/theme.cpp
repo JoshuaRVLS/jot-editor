@@ -6,22 +6,19 @@
 
 namespace
 {
-  // jot ships two pairs: `jot-dark` ("amber lamp": brown-black neutrals that
-  // share the amber's hue, one hero amber and its gold/coral family for the
-  // words, a single teal complement for the actions) and `jot-light` ("amber
-  // paper": the same inks darkened until they clear 4.5:1 on warm paper),
-  // plus the flexoki pair ported from kepano's Flexoki palette (flexoki-dark / flexoki-light, MIT
-  // licensed, https://stephango.com/flexoki). The names the two jot themes
-  // replaced -- `dark` and `light`, which the whole bundled catalog used to be
-  // keyed off -- still resolve, so a config written before the change keeps the
-  // colour scheme it asked for.
+  // jot ships `jot` -- a port of gruber-darker (John Gruber's scheme, via
+  // https://github.com/blazkowolf/gruber-darker.nvim: the #181818 ground, the
+  // #e4e4e4 ink, yellow keywords and niagara-blue functions) -- plus the flexoki
+  // pair ported from kepano's Flexoki palette (flexoki-dark / flexoki-light,
+  // MIT licensed, https://stephango.com/flexoki). Every name the bundled catalog
+  // has been keyed on before -- `dark` and `light`, and the `jot-dark` /
+  // `jot-light` pair that replaced them -- resolves to `jot`, so a config
+  // written before the change keeps the colour scheme it asked for.
   const char *legacy_theme_alias(const std::string &name)
   {
     const std::string needle = string_util::lower_copy(name);
-    if (needle == "dark" || needle == "jot-dark")
-      return "jot-dark";
-    if (needle == "light" || needle == "jot-light")
-      return "jot-light";
+    if (needle == "dark" || needle == "light" || needle == "jot-dark" || needle == "jot-light")
+      return "jot";
     return nullptr;
   }
 } // namespace
@@ -40,8 +37,7 @@ std::vector<std::string> Editor::list_available_themes()
     // scheme the install ships. `apply_theme` reports the failure itself.
     themes.push_back("flexoki-dark");
     themes.push_back("flexoki-light");
-    themes.push_back("jot-dark");
-    themes.push_back("jot-light");
+    themes.push_back("jot");
     return themes;
   }
 
@@ -79,11 +75,11 @@ bool Editor::apply_theme(const std::string &name, bool persist, bool announce)
       break;
     }
   }
-  // The two names the removed catalog was keyed on resolve to the jot theme
-  // that replaced them: a config written as `color_scheme = "light"` keeps
-  // working, including on an install that still has the old file lying in its
-  // data directory. A file the user wrote under that name is theirs, so their
-  // theme wins and the alias is left alone.
+  // The names the removed catalog was keyed on resolve to the jot theme that
+  // replaced them: a config written as `color_scheme = "jot-dark"` or
+  // `color_scheme = "light"` keeps working, including on an install that still
+  // has an old file lying in its data directory. A file the user wrote under
+  // that name is theirs, so their theme wins and the alias is left alone.
   if (const char *alias = legacy_theme_alias(requested))
   {
     if (!lua_api || !lua_api->theme_file_is_user_owned(requested))

@@ -9,7 +9,7 @@ shows up in a unit test of the palette -- the file is copied into a temp config
 dir there -- so this drives the real binary with only the shipped themes on disk
 and reads the cell backgrounds back out of the pty stream.
 
-Both themes name exact 24-bit colours, so the same run also pins the depth: the
+Every bundled theme names exact 24-bit colours, so the same run also pins the depth: the
 backgrounds must arrive as 48;2 and the accent (the active pane's tab-strip
 edge, which a split puts on screen -- the workspace strip no longer inks the
 accent) as 38;2. A slot that fell back to a palette index would still paint,
@@ -21,9 +21,9 @@ wavy underline with a hex colour through init.lua and reads the SGR 58 sequence
 back out of the stream: an underline is where a quantised colour would be
 hardest to notice and easiest to ship.
 
-Scenes: the default scheme (jot-dark), jot-light, the ported flexoki pair, the
-legacy `dark` name, the theme chooser's list, and a decoration's exact underline
-colour. Every scheme scene opens a split, which is what pins the pane strip's
+Scenes: the default scheme (jot), the four names the retired catalog was keyed
+on, the ported flexoki pair, the theme chooser's list, and a decoration's exact
+underline colour. Every scheme scene opens a split, which is what pins the pane strip's
 accent ink; the surfaces it reads (body and status backgrounds) do not move.
 
 Usage: test/theme_probe.py [path-to-jot] [--dump]
@@ -60,15 +60,14 @@ def truecolour(rgb: int) -> int:
 
 
 # The backgrounds the bundled themes set for the editor body and the status
-# line. Both themes name exact 24-bit colours, so what has to arrive on the wire
+# line. Every theme names exact 24-bit colours, so what has to arrive on the wire
 # is a 48;2 sequence -- the themes are the one place a palette index would be a
-# silent downgrade of the whole scheme. jot-dark's ground is the amber scheme's
-# #14100b, so the harness's 1000 + rgb tag is also what tells the themed cell
-# from the ANSI default an unthemed editor would paint (0).
-JOT_DARK_BODY = truecolour(0x14100B)
-JOT_DARK_STATUS = truecolour(0x1C1710)
-JOT_LIGHT_BODY = truecolour(0xFCF4E3)
-JOT_LIGHT_STATUS = truecolour(0xF7ECDA)
+# silent downgrade of the whole scheme. jot's ground is gruber-darker's #181818
+# and its chrome the scheme's own raised step, #282828; the harness's 1000 + rgb
+# tag is also what tells the themed cell from the ANSI default an unthemed editor
+# would paint (0).
+JOT_BODY = truecolour(0x181818)
+JOT_STATUS = truecolour(0x282828)
 # The ported Flexoki pair: `black` and `base-950` for the dark editor, `paper`
 # and `base-50` for the light one (see .configs/configs/colors/flexoki-*.json).
 FLEXOKI_DARK_BODY = truecolour(0x100F0F)
@@ -77,8 +76,7 @@ FLEXOKI_LIGHT_BODY = truecolour(0xFFFCF0)
 FLEXOKI_LIGHT_STATUS = truecolour(0xF2F0E5)
 # The accent each theme inks its active pane tab strip's leading edge with, as
 # it must appear in the escape stream: 38;2;r;g;b, never 38;5;n.
-JOT_DARK_ACCENT = b"\x1b[38;2;255;180;84m"  # #ffb454, the amber
-JOT_LIGHT_ACCENT = b"\x1b[38;2;168;90;0m"  # #a85a00, burnt amber
+JOT_ACCENT = b"\x1b[38;2;255;221;51m"  # #ffdd33, gruber-darker's yellow
 FLEXOKI_DARK_ACCENT = b"\x1b[38;2;58;169;159m"  # #3aa99f, cyan-400
 FLEXOKI_LIGHT_ACCENT = b"\x1b[38;2;35;127;119m"  # #237f77, cyan-600
 # A decoration's underline colour as SGR 58's 24-bit colon form.
@@ -168,13 +166,14 @@ def main() -> int:
     failures = []
 
     scenes = [
-        ("default", None, JOT_DARK_BODY, JOT_DARK_STATUS, JOT_DARK_ACCENT),
-        ("jot-light", "jot-light", JOT_LIGHT_BODY, JOT_LIGHT_STATUS, JOT_LIGHT_ACCENT),
-        ("jot-dark", "jot-dark", JOT_DARK_BODY, JOT_DARK_STATUS, JOT_DARK_ACCENT),
-        # The name the removed catalog used: it must still resolve, and to the
+        ("default", None, JOT_BODY, JOT_STATUS, JOT_ACCENT),
+        ("jot", "jot", JOT_BODY, JOT_STATUS, JOT_ACCENT),
+        # The names the retired catalog used: each must still resolve, and to the
         # jot theme that replaced it rather than to the ANSI fallback.
-        ("dark (legacy name)", "dark", JOT_DARK_BODY, JOT_DARK_STATUS, JOT_DARK_ACCENT),
-        ("light (legacy name)", "light", JOT_LIGHT_BODY, JOT_LIGHT_STATUS, JOT_LIGHT_ACCENT),
+        ("dark (legacy name)", "dark", JOT_BODY, JOT_STATUS, JOT_ACCENT),
+        ("light (legacy name)", "light", JOT_BODY, JOT_STATUS, JOT_ACCENT),
+        ("jot-dark (legacy name)", "jot-dark", JOT_BODY, JOT_STATUS, JOT_ACCENT),
+        ("jot-light (legacy name)", "jot-light", JOT_BODY, JOT_STATUS, JOT_ACCENT),
         # The ported palette is a file like any other: it has to resolve, paint
         # its own 24-bit surfaces, and ink the border with its own accent.
         ("flexoki-dark", "flexoki-dark", FLEXOKI_DARK_BODY, FLEXOKI_DARK_STATUS,
@@ -210,7 +209,7 @@ def main() -> int:
     # A decoration's underline colour: the exact value has to reach SGR 58's
     # 24-bit form rather than being folded onto the nearest palette entry.
     cfg = "/tmp/jot_theme_probe_cfg_deco"
-    write_config(cfg, "jot-dark")
+    write_config(cfg, "jot")
     write_decoration_init(cfg)
     screen = run(binary, path, root, cfg)
     if dump:
@@ -228,17 +227,21 @@ def main() -> int:
     # The chooser offers the installed themes as argument completions of
     # `:theme`. The palette only switches to argument completion once the query
     # has an argument, so the query letter is part of the key sequence; `j`
-    # matches both jot names.
+    # matches the jot scheme, and the names the retired catalog was keyed on must
+    # not come back as entries -- they resolve as aliases, not as themes.
     cfg = "/tmp/jot_theme_probe_cfg_chooser"
     screen = run(binary, path, root, cfg, keys=PALETTE + b"theme j")
     if dump:
         print(screen.text())
         print("-" * 70)
     view = screen.text()
-    listed = [name for name in ("jot-dark", "jot-light") if name in view]
-    print(f"chooser: lists {listed}")
-    if len(listed) != 2:
-        failures.append(f"chooser did not list both jot themes (saw {listed})")
+    listed = "jot" in view
+    retired = [name for name in ("jot-dark", "jot-light") if name in view]
+    print(f"chooser: lists jot {listed}, retired names {retired}")
+    if not listed:
+        failures.append("chooser did not list jot")
+    if retired:
+        failures.append(f"chooser still lists the retired names {retired}")
 
     # ...and the Flexoki pair, which is named `flexoki-*`: the query letter has
     # to be its own (the palette filters on the argument).

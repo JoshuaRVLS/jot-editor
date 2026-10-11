@@ -8,8 +8,8 @@ directory (default: ~/VSCode-Ultimate-Themes-Pack/multi-bg-extension/themes)
 and writes one self-contained jot theme per input file into
 .configs/configs/colors/<name>.json.
 
-The output directory defaults to jot's bundled set. jot ships only its own two
-schemes (jot-dark, jot-light) and never overwrites them, so pass your own
+The output directory defaults to jot's bundled set. jot ships one scheme of its
+own (jot) and never overwrites it, so pass your own
 config directory -- `~/.config/jot/configs/colors` -- to keep imports personal
 instead of adding them to the tree.
 
@@ -473,7 +473,7 @@ def output_name(path):
 # jot's own themes: hand-maintained, and never replaced by an import whose
 # name happens to collide. Everything else in the output directory is fair game.
 BUNDLED_THEMES = {
-    "jot-dark", "jot-light",
+    "jot",
 }
 
 
