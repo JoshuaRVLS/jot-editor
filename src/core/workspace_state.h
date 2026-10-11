@@ -31,10 +31,10 @@ struct WorkspaceState
   // for it. Growing the window back re-shows it; a sidebar the user closed
   // themselves stays closed.
   bool sidebar_hidden_for_width_ = false;
-  // Zen focus mode: sidebar + right panel hidden, status line suppressed and
-  // the pane area narrowed to zen_content_width and centered. Sidebar / panel
-  // / status-height values are remembered on entry so leaving zen restores
-  // the exact pre-zen layout.
+  // Zen focus mode: sidebar, right dock, tab strip and status line hidden, the
+  // pane area across the full width. Sidebar / panel / status-height values are
+  // remembered on entry so leaving zen restores the layout it was entered from,
+  // and `zen_mode` is persisted so a start lands in the same place.
   bool zen_mode = false;
   bool zen_saved_sidebar_ = true;
   bool zen_saved_panel_ = false;

@@ -128,11 +128,11 @@ be written entirely in Lua.
 ### Zen mode
 
 `jot.ui.toggle_zen()` flips zen focus mode and returns the new state
-(`true` = on): the sidebar and right panel hide, the status line
-suppresses, and the pane area narrows to the `zen_content_width` config
-(default 100 columns) and centers. Leaving zen restores the layout from
-before. The built-in `F12` binding (features/zen.lua) calls this and shows
-a toast; the viewport info exposes the current state as
+(`true` = on): the sidebar, right dock, tab strip and status line hide and the
+pane area takes the whole window. It is persistent (`zen_mode` in
+settings.conf), so a start or `:reload` lands in the same layout. Leaving zen
+restores the layout from before. The built-in `F12` binding (features/zen.lua)
+calls this and shows a toast; the viewport info exposes the current state as
 `jot.viewport.info().zen`.
 
 ### Process
