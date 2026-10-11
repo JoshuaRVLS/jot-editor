@@ -34,10 +34,15 @@ pkgver=${version#v}
 # Arch's version fields take no dash (that is the separator before pkgrel), so a
 # pre-release tag keeps its suffix as an underscore.
 pkgver=${pkgver//-/_}
-if ! printf '%s' "${pkgver}" | grep -qE '^[A-Za-z0-9._+]+$'; then
-  echo "arch package: unusable version '${version}'" >&2
-  exit 1
-fi
+# A case pattern rather than `printf | grep`: this runs with pipefail, and a
+# `grep -q` that exits on its first match leaves the writer with a broken pipe,
+# which would read as a failed check instead of a passed one.
+case "${pkgver}" in
+  '' | *[!A-Za-z0-9._+]*) 
+    echo "arch package: unusable version '${version}'" >&2
+    exit 1
+    ;;
+esac
 
 if [ ! -x "${stage_dir}/bin/jot" ]; then
   echo "arch package: no binary at ${stage_dir}/bin/jot (run cmake --install into it first)" >&2
@@ -195,10 +200,17 @@ fi
 echo "arch package: verifying ${pkgfile}"
 zstd -tq "${pkgfile}"
 listing=$(tar -tf "${pkgfile}")
-for needed in .PKGINFO usr/bin/jot usr/share/jot; do
-  # tar lists the directories with a trailing slash and the files without one;
-  # the dot in .PKGINFO is escaped so it cannot match another character.
-  if ! printf '%s\n' "${listing}" | grep -qE "^\.?/?${needed//./\\.}/?$"; then
+# grep -c, not -q: -q exits at its first match and the printf feeding it then
+# fails with a broken pipe, which pipefail turns into a failed check. -c reads
+# the whole listing, and -F keeps the dot in .PKGINFO literal. Entries are
+# checked by the spelling tar uses: files plain, directories with a slash.
+has_entry() {
+  local count
+  count=$(printf '%s\n' "${listing}" | grep -cF "$1" || true)
+  [ "${count}" -gt 0 ]
+}
+for needed in .PKGINFO usr/bin/jot "usr/share/jot/"; do
+  if ! has_entry "${needed}"; then
     echo "arch package: FAIL - ${needed} is missing from the package" >&2
     exit 1
   fi
