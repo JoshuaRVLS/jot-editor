@@ -1,6 +1,7 @@
 #include "syntax/manager.h"
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -302,6 +303,29 @@ bool TreeSitterManager::set_query_source(const std::string &extension,
     error = "language not registered";
     return false;
   }
+  // An empty bundled query is the registry's "no bundled query" placeholder,
+  // not a query. It compiles, so caching it would report "Lua query loaded" and
+  // capture nothing -- shadowing the query an installed parser ships with and
+  // leaving the language active on a highlightless buffer.
+  const bool no_bundled_query = std::all_of(
+      source.begin(), source.end(), [](unsigned char c) { return std::isspace(c) != 0; });
+  if (no_bundled_query)
+  {
+    entry_it->second.highlight_query_source.clear();
+#ifdef JOT_TREESITTER
+    auto cached = query_cache_.find(language_id);
+    if (cached != query_cache_.end())
+    {
+      ts_query_delete(cached->second);
+      query_cache_.erase(cached);
+    }
+    runtime_query_used_[language_id] = false;
+    builtin_query_used_[language_id] = false;
+    query_diagnostics_[language_id] = "no bundled query; runtime query or regex is used";
+#endif
+    return true;
+  }
+
   // Store the Lua-provided source first. A parser may not be installed yet;
   // the query is compiled lazily (or validated now when possible).
   entry_it->second.highlight_query_source = source;

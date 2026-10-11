@@ -10,7 +10,9 @@ library loading, ABI checks, parsers, trees, queries, incremental parsing,
 caches, and capture rendering. It has no compiled language catalog or query
 fallback. A bundled query that is missing or does not compile against the
 installed parser never disables the language: runtime queries shipped with the
-parser (or regex syntax) are used instead.
+parser (or regex syntax) are used instead. An empty query file counts as
+missing, not as an empty query: that would compile, match nothing, and shadow
+the parser's own query.
 
 The registry covers 180 languages. Beyond the hand-written queries, the
 highlight queries for the bulk of the languages are adapted from

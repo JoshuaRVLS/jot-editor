@@ -2,10 +2,15 @@
 #include "syntax/manager.h"
 #include "core/types.h"
 #include <catch2/catch_test_macros.hpp>
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <set>
 #include <string>
+#include <vector>
+
+namespace fs = std::filesystem;
 
 namespace
 {
@@ -446,6 +451,7 @@ TEST_CASE("Bundled Queries Compile When Their Parser Is Installed", "[jot]")
   const Bundled bundled[] = {
       {"c", ".c", "libtree-sitter-c.so"},
       {"cpp", ".cpp", "libtree-sitter-cpp.so"},
+      {"java", ".java", "libtree-sitter-java.so"},
       {"markdown", ".md", "libtree-sitter-markdown.so"},
       {"djot", ".dj", "libtree-sitter-djot.so"},
   };
@@ -493,6 +499,54 @@ TEST_CASE("Bundled Queries Compile When Their Parser Is Installed", "[jot]")
     INFO(entry.language << " -- " << status.query_message);
     REQUIRE(query != nullptr);
   }
+}
+
+TEST_CASE("An empty bundled query leaves the runtime query in charge", "[jot]")
+{
+  // A language whose bundled query file is empty is one :tsinstall supplies the
+  // query for. The empty source compiles, so caching it made the language report
+  // "Lua query loaded" while the query the installed parser ships with was never
+  // reached. `java` shipped that way: its parser loaded and its buffer stayed
+  // flat.
+  TreeSitterManager manager;
+  const fs::path runtime_dir = fs::temp_directory_path() / "jot_empty_query_probe";
+  fs::remove_all(runtime_dir);
+  fs::create_directories(runtime_dir / "java");
+  {
+    std::ofstream(runtime_dir / "java" / "highlights.scm")
+        << "(class_declaration name: (identifier) @type)\n";
+  }
+  manager.register_language("java",
+                            {".java"},
+                            "",
+                            "",
+                            "",
+                            "tree_sitter_java",
+                            {"libtree-sitter-java.so"});
+#ifndef _WIN32
+  std::vector<std::string> library_paths;
+  if (const char *home = getenv("HOME"))
+  {
+    library_paths.push_back(std::string(home) + "/.local/share/jot/treesitter/parsers");
+  }
+  library_paths.push_back("/usr/lib");
+  library_paths.push_back("/usr/local/lib");
+  manager.set_runtime_options(library_paths, {runtime_dir.string()}, {});
+#endif
+
+  std::string error;
+  REQUIRE(manager.set_query_source(".java", "  \n\t\n", error));
+  TSQuery *query = manager.get_highlight_query(".java");
+  TreeSitterRuntimeStatus status = manager.runtime_status_for_extension(".java");
+  fs::remove_all(runtime_dir);
+  if (!status.parser_loaded)
+  {
+    return; // no parser on this machine: nothing to compile against
+  }
+  INFO("java -- " << status.query_message);
+  REQUIRE(status.used_runtime_query);
+  REQUIRE_FALSE(status.used_builtin_query);
+  REQUIRE(query != nullptr);
 }
 
 TEST_CASE("Tree Sitter JS TS Queries Available When Parsers Installed", "[jot]")
