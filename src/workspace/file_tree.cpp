@@ -260,12 +260,27 @@ std::string Editor::build_file_tree_signature() const
     return "";
   }
 
+  // The signature is rebuilt and compared on every watch tick, so it is
+  // bounded: a workspace with hundreds of thousands of entries (a build tree,
+  // with the explorer's expand-all on top of it) grew this string without
+  // limit until the allocation failed inside the timer callback, where an
+  // escaping exception is std::terminate. Entries past the cap are left out;
+  // a change that deep still moves at least one of the entries that are in.
+  constexpr size_t kMaxSignatureEntries = 50000;
+  size_t entries = 0;
+
   std::ostringstream sig;
   sig << root.string() << '\n';
   sig << "hidden=" << (sidebar_show_hidden ? 1 : 0) << '\n';
 
   auto append_path = [&](const fs::path &path, bool expanded)
   {
+    if (entries >= kMaxSignatureEntries)
+    {
+      return;
+    }
+    ++entries;
+
     std::error_code stat_ec;
     const bool is_dir = fs::is_directory(path, stat_ec);
     const bool exists = !stat_ec && fs::exists(path, stat_ec);
@@ -319,35 +334,50 @@ void Editor::refresh_file_tree_watch_baseline()
 }
 void Editor::poll_file_tree_changes()
 {
-  if (root_dir.empty() || file_tree.empty())
+  // This runs from a timer and a filesystem watch, over a workspace that can be
+  // replaced under the editor at any moment (a checkout, a build, a directory
+  // deleted). An exception out of here is an uncaught exception in a callback,
+  // which is std::terminate: it took the editor down and left the terminal in
+  // raw mode with mouse reporting on, printing escape sequences into the shell
+  // on every mouse move. A failed scan just forgets its baseline; the next tick
+  // picks the tree up again.
+  try
+  {
+    if (root_dir.empty() || file_tree.empty())
+    {
+      file_tree_watch_signature_.clear();
+      file_tree_watch_ready_ = false;
+      return;
+    }
+
+    const std::string signature = build_file_tree_signature();
+    if (signature.empty())
+    {
+      file_tree_watch_signature_.clear();
+      file_tree_watch_ready_ = false;
+      return;
+    }
+
+    if (!file_tree_watch_ready_)
+    {
+      file_tree_watch_signature_ = signature;
+      file_tree_watch_ready_ = true;
+      return;
+    }
+
+    if (signature == file_tree_watch_signature_)
+    {
+      return;
+    }
+
+    load_file_tree(root_dir);
+    needs_redraw = true;
+  }
+  catch (...)
   {
     file_tree_watch_signature_.clear();
     file_tree_watch_ready_ = false;
-    return;
   }
-
-  const std::string signature = build_file_tree_signature();
-  if (signature.empty())
-  {
-    file_tree_watch_signature_.clear();
-    file_tree_watch_ready_ = false;
-    return;
-  }
-
-  if (!file_tree_watch_ready_)
-  {
-    file_tree_watch_signature_ = signature;
-    file_tree_watch_ready_ = true;
-    return;
-  }
-
-  if (signature == file_tree_watch_signature_)
-  {
-    return;
-  }
-
-  load_file_tree(root_dir);
-  needs_redraw = true;
 }
 void Editor::arm_file_tree_watch()
 {

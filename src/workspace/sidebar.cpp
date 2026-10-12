@@ -387,16 +387,28 @@ void Editor::handle_sidebar_input(int ch)
 
   if (ch == '*' || ch == 'Z')
   {
+    // A symlinked directory is followed once per level and the tree keeps no
+    // record of where it has already been, so a link that leads back to an
+    // ancestor (build trees make these: `_deps/<name>-src`) expands into an
+    // endless chain of rows and an unbounded amount of work. The depth cap is
+    // the same guard for a real tree deep enough to matter.
+    constexpr int kMaxExpandDepth = 16;
     std::function<void(std::vector<FileNode> &)> expand_all = [&](std::vector<FileNode> &nodes)
     {
       for (auto &node : nodes)
       {
-        if (node.is_dir)
+        if (!node.is_dir || node.depth >= kMaxExpandDepth)
         {
-          node.expanded = true;
-          refresh_tree_children(node);
-          expand_all(node.children);
+          continue;
         }
+        std::error_code link_ec;
+        if (fs::is_symlink(fs::path(node.path), link_ec) || link_ec)
+        {
+          continue;
+        }
+        node.expanded = true;
+        refresh_tree_children(node);
+        expand_all(node.children);
       }
     };
     expand_all(file_tree);

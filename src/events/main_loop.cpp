@@ -2,6 +2,31 @@
 #include "core/editor.h"
 #include "lua/api/api.h"
 #include "ui/cursor_blink.h"
+#include <cstdlib>
+#include <exception>
+
+namespace
+{
+  // The terminal a terminate handler has to put back. Until run() sets it, a
+  // throw has nothing to restore and only aborts.
+  Terminal *g_terminate_terminal = nullptr;
+
+  // An uncaught exception in a callback (an allocation failure in a background
+  // scan, a filesystem error out of a timer) used to take the editor down with
+  // the terminal still in raw mode and mouse reporting still on: the shell then
+  // printed a mouse report as text on every move, which reads as a broken
+  // terminal. Restoring it first leaves the session usable after the abort.
+  void restore_terminal_on_terminate()
+  {
+    Terminal *terminal = g_terminate_terminal;
+    g_terminate_terminal = nullptr;
+    if (terminal)
+    {
+      terminal->cleanup();
+    }
+    std::abort();
+  }
+} // namespace
 
 void Editor::render_frame()
 {
@@ -160,6 +185,9 @@ void Editor::render_frame()
 
 void Editor::run()
 {
+  g_terminate_terminal = &terminal;
+  std::set_terminate(restore_terminal_on_terminate);
+
   task_queue_ = std::make_unique<TaskQueue>(&event_loop_);
 
   // The workspace main() opens is opened before this queue exists, so its C++
