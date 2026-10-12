@@ -83,7 +83,12 @@ bool Editor::jump_to(const JumpLocation &loc)
   jump_pending_location = loc;
   jump_pending = true;
   open_file(loc.filepath, loc.preview);
-  const bool moved = apply_pending_jump();
+  // finish_open_file applies an armed jump itself -- the cursor can only be
+  // placed once the buffer exists -- which consumes it, so a pending flag that is
+  // gone means the jump has already landed. One that is still armed is applied
+  // here for a file that was already open, and stays armed for a file a worker
+  // thread is still reading (the open applies it when the buffer arrives).
+  const bool moved = jump_pending ? apply_pending_jump() : true;
   jump_restoring = was_restoring;
   needs_redraw = true;
   return moved;

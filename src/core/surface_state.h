@@ -7,13 +7,26 @@
 #include "core/quick_pick.h" // CommandPaletteSuggestion, QuickPickKind, QuickPickItem, SettingsEntry
 #include "core/tasks.h" // TreeSitterInstallJob
 #include "telescope.h"          // Telescope
+#include <cstdint>
 #include <string>
 #include <vector>
 
+// What the status-line prompt (the minibuffer) is asking for. One value per
+// command that rides on it; the prompt itself only knows how to collect a line
+// of input and how to complete a path.
+enum MinibufferKind
+{
+  MINIBUFFER_NONE,
+  MINIBUFFER_COMPILE,   // "Compile command: ": what `:compile` should run
+  MINIBUFFER_ISEARCH,   // "I-search: ": an incremental search of the buffer
+  MINIBUFFER_FIND_FILE // "Find file: ": a path, completed from the filesystem
+};
+
 // The surfaces that float over the editor: the command palette, quick pick,
 // telescope, the text prompts (save / quit / rename), which-key, the menu bar
-// and home menu, the settings menu, the status modals, the popup surface, and
-// the remembered visibility that tells the Lua UI kit when one closed.
+// and home menu, the settings menu, the status modals, the popup surface, the
+// status-line prompt, and the remembered visibility that tells the Lua UI kit
+// when one closed.
 struct SurfaceState
 {
   bool show_command_palette = false;
@@ -42,6 +55,34 @@ struct SurfaceState
   int quick_pick_selected = 0;
 
   Telescope telescope;
+
+  // The status-line prompt: Emacs' minibuffer, kept on the editor's own last
+  // row. While it is up it owns the keyboard, and what was typed goes to the
+  // command that opened it -- the build to run, the file to open, the search to
+  // walk. `minibuffer_cursor` is a byte offset into the input, so the caret can
+  // sit inside the text rather than only at its end.
+  bool show_minibuffer = false;
+  MinibufferKind minibuffer_kind = MINIBUFFER_NONE;
+  std::string minibuffer_label;
+  std::string minibuffer_input;
+  int minibuffer_cursor = 0;
+  // Find-file completion: the candidates for the typed path, which one Tab has
+  // reached, and the directory the last listing came from.
+  std::vector<std::string> minibuffer_matches;
+  int minibuffer_selected = 0;
+  // I-search: where the caret was when the search started (Esc puts it back),
+  // whether the query is a pattern, and where the last match landed so the next
+  // Ctrl+S continues from there instead of re-finding the same one.
+  int isearch_origin_line = 0;
+  int isearch_origin_col = 0;
+  int isearch_origin_scroll = 0;
+  bool isearch_regex = false;
+  bool isearch_failed = false;
+  // The highlight on the current match, and the id counter behind it: the
+  // decoration is dropped when the search steps to another line or the prompt
+  // closes, so one match is lit at a time.
+  std::uint64_t isearch_decoration = 0;
+  std::uint64_t isearch_decoration_id = 0;
 
   bool show_save_prompt = false;
   std::string save_prompt_input;

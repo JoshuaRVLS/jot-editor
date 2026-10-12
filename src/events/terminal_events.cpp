@@ -122,6 +122,14 @@ void Editor::handle_terminal_event(const Event &ev)
     bool is_alt = ev.key.alt;
     int original_ch = ch;
 
+    // A live macro records here, ahead of every mode: this is the one point a
+    // key passes through before anything can consume it, so a recording holds
+    // chords a Lua keymap owns (Alt+D f, Ctrl+W s, the user's own bindings) and
+    // not just the keys that reach handle_input. A replay is the same event
+    // with macro_replaying set, which the recorder ignores -- otherwise every
+    // played key would be appended to the register it came from.
+    macro_note_key(ch, is_ctrl, is_shift, is_alt, original_ch);
+
     // Modal prompts own their answer keys before editor chrome callbacks (for
     // example the explorer's Lua `y` keymap) can consume them.
     if (show_quit_prompt)

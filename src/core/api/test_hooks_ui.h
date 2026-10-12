@@ -384,6 +384,25 @@ bool pane_shows_tab_strip_for_test(int pane_index) const
   return pane_index >= 0 && pane_index < (int)panes.size()
          && pane_shows_tab_strip(panes[(size_t)pane_index]);
 }
+// The workspace strip's list (test): what the window counts as an opened file
+// tab, so a case can check that a view shown in a pane is not one.
+int tabline_tab_count_for_test()
+{
+  sync_tab_order();
+  return (int)tab_order.indices(buffers).size();
+}
+bool tabline_shows_buffer_for_test(int buffer_id)
+{
+  sync_tab_order();
+  for (int index : tab_order.indices(buffers))
+  {
+    if (index == buffer_id)
+    {
+      return true;
+    }
+  }
+  return false;
+}
 PaneTabLayout pane_tab_layout_for_test(int pane_index) const
 {
   return build_pane_tab_layout(pane_index);
@@ -519,7 +538,124 @@ const WinbarMenuLevel &winbar_menu_level(int level) const
   }
   return winbar_menus[(size_t)level];
 }
+// --- The compile session (:compile) -----------------------------------------
+// A test drives the real path: the job is a shell process, so these start one,
+// ask what it wrote, and jump the way a key would.
+void compile_run_for_test(const std::string &command)
+{
+  compile_run(command);
+}
+std::string compile_command_for_test() const
+{
+  return compile.command;
+}
+int compile_buffer_id_for_test() const
+{
+  return compile.buffer_id;
+}
+int compile_pane_index_for_test() const
+{
+  return compile.pane_index;
+}
+bool compile_running_for_test() const
+{
+  return compile.running;
+}
+int compile_exit_code_for_test() const
+{
+  return compile.exit_code;
+}
+int compile_finding_count_for_test() const
+{
+  return (int)compile.findings.size();
+}
+std::string compile_finding_file_for_test(int index) const
+{
+  return index >= 0 && index < (int)compile.findings.size()
+             ? compile.findings[(size_t)index].filepath
+             : std::string();
+}
+int compile_finding_line_for_test(int index) const
+{
+  return index >= 0 && index < (int)compile.findings.size() ? compile.findings[(size_t)index].line
+                                                            : 0;
+}
+int compile_finding_row_for_test(int index) const
+{
+  return index >= 0 && index < (int)compile.finding_rows.size()
+             ? compile.finding_rows[(size_t)index]
+             : -1;
+}
+bool compile_jump_next_for_test()
+{
+  return compile_jump(1);
+}
+bool compile_jump_row_for_test(int row)
+{
+  return compile_jump_from_row(row);
+}
+void poll_compile_job_for_test()
+{
+  poll_compile_job();
+}
+bool compile_buffer_focused_for_test() const
+{
+  return compile_buffer_focused();
+}
 int lua_float_count_for_test(const std::string &surface) const;
+// --- The status-line prompt (the minibuffer) --------------------------------
+bool show_minibuffer_for_test() const
+{
+  return show_minibuffer;
+}
+std::string minibuffer_label_for_test() const
+{
+  return minibuffer_label;
+}
+std::string minibuffer_input_for_test() const
+{
+  return minibuffer_input;
+}
+int minibuffer_cursor_for_test() const
+{
+  return minibuffer_cursor;
+}
+bool minibuffer_key_for_test(int ch, bool ctrl = false, bool shift = false, bool alt = false)
+{
+  return handle_minibuffer_input(ch, ctrl, shift, alt);
+}
+void open_compile_prompt_for_test()
+{
+  open_compile_prompt();
+}
+void open_isearch_prompt_for_test()
+{
+  open_isearch_prompt();
+}
+void open_find_file_prompt_for_test()
+{
+  open_find_file_prompt();
+}
+void minibuffer_complete_for_test()
+{
+  minibuffer_complete();
+}
+int isearch_decoration_count_for_test() const
+{
+  if (buffers.empty() || current_buffer < 0 || current_buffer >= (int)buffers.size())
+  {
+    return 0;
+  }
+  int count = 0;
+  for (const Decoration &decoration : buffers[(size_t)current_buffer].decorations)
+  {
+    if (decoration.hl == "CurSearch")
+    {
+      count++;
+    }
+  }
+  return count;
+}
 void load_file(const std::string &fname);
 void run();
 // Reloads configuration from disk (settings.conf overlay + config.lua) and

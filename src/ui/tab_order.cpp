@@ -65,7 +65,14 @@ bool TabOrder::is_real_tab(const FileBuffer &buffer)
 {
   // The rule the strip has always drawn by: a fresh unnamed placeholder is not
   // a tab, but one that was edited or pointed at a file is.
-  return !(buffer.is_placeholder && !buffer.modified && buffer.filepath.empty());
+  if (buffer.is_placeholder && !buffer.modified && buffer.filepath.empty())
+  {
+    return false;
+  }
+  // Neither is a rendered view that is no file at all: the compilation log
+  // (:compile) shows itself in a pane of its own, so the strip, the strip's
+  // order and the keys that walk it all leave it alone (core/buffer.h).
+  return !is_compile_log_path(buffer.filepath);
 }
 
 long long TabOrder::ensure_uid(FileBuffer &buffer)

@@ -509,6 +509,26 @@ bool terminal_zoom_active_for_test() const
 {
   return terminal_zoom_active;
 }
+// --- macros (test) ---
+// The recorder runs from the frontend's key path, so a case drives it with
+// terminal_key_for_test / run_ex_for_test and reads the state back here: whether
+// a recording is live, what the registers hold, and which one Alt+Z p would
+// play. `macro_keys_for_test` is the length of one register, which is what a
+// case about "the chords themselves stay out of the recording" counts.
+bool macro_recording_for_test() const
+{
+  return macro_recording;
+}
+std::string macro_list_for_test() const
+{
+  return macro_list_text();
+}
+size_t macro_keys_for_test(char letter = 0) const
+{
+  const char which = letter != 0 ? letter : macro_register;
+  const auto found = macro_registers.find(which);
+  return found == macro_registers.end() ? 0 : found->second.size();
+}
 // --- terminal text scale (test) ---
 // The zoom keys and :textzoom both end in set_tui_text_scale; a case drives the
 // same call (persisting included) and reads the grid it left behind.

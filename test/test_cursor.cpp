@@ -1,4 +1,5 @@
 #include "column_utils.h"
+#include "ui/cursor_probe.h"
 #include "ui/ui.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
@@ -248,6 +249,121 @@ TEST_CASE("flush reports a frame the terminal did not take", "[jot][ui]")
     chunked.flush_if_buffer_exceeds();
     REQUIRE(chunked.flush());
   }
+}
+
+// A hidden cursor is still *somewhere*. DECTCEM makes the terminal draw none, but
+// the cursor is only ever at some cell, and every row write moves it: hiding it
+// where the painting left it parks it at the end of the last row written -- the
+// bottom-right corner of the status row. Anything that reveals it before the
+// next frame puts it back on the caret (a repaint that is not this frame's, a
+// read chunk boundary mid-frame, the window regaining focus) then shows the
+// caret away from the text: the caret jumping to the corner of the screen. Both
+// cursor paths therefore park it on the caret before hiding it.
+TEST_CASE("A hidden cursor is parked on the caret rather than on the last row write", "[jot][ui]")
+{
+  Terminal term;
+  UI ui(&term);
+  ui.resize(40, 10);
+
+  // Where the cursor is put: the caret's own cell when this frame placed one, the
+  // last cell a caret was placed on when it did not (the palette, a popup, a menu
+  // -- those place no caret of their own), and always inside the right margin.
+  int px = -1;
+  int py = -1;
+  ui.set_cursor(3, 2);
+  ui.cursor_park_cell(px, py);
+  REQUIRE(px == 3);
+  REQUIRE(py == 2);
+  ui.reset_cursor_state(); // nothing placed a caret: the frame is a menu's
+  ui.cursor_park_cell(px, py);
+  REQUIRE(px == 3);
+  REQUIRE(py == 2);
+  term.set_render_margin(1);
+  ui.set_cursor(39, 9); // the right-edge cell the renderer never writes
+  ui.cursor_park_cell(px, py);
+  REQUIRE(px == 38);
+  REQUIRE(py == 9);
+  term.set_render_margin(0);
+
+  // The blink's idle half is a cursor-only frame, and it carries the move as well
+  // as the hide: a bare hide leaves the cursor wherever the last frame's rows put
+  // it.
+  ui.set_cursor(3, 2);
+  ui.set_cursor_blink_visible(true);
+  ui.flush_cursor();
+  CHECK(term.render_capture_bytes_since_last_flush()
+        == (int)std::string("\033[?7l\033[3;4H\033[?25h\033[2 q").size());
+  ui.set_cursor_blink_visible(false);
+  ui.flush_cursor();
+  CHECK(term.render_capture_bytes_since_last_flush()
+        == (int)std::string("\033[?7l\033[3;4H\033[?25l").size());
+  // The terminal is told which of the two it just got: the DSR size probe parks
+  // the cursor in the corner and has to put that visibility back.
+  CHECK_FALSE(term.cursor_visible());
+  ui.set_cursor_blink_visible(true);
+  ui.flush_cursor();
+  CHECK(term.cursor_visible());
+
+  // A frame that paints every row and ends hidden. Both frames below write every
+  // row (each row's colour changes), so their row bytes are the same width and
+  // the only difference left is the caret: shown writes `?25h` plus the `[2 q`
+  // shape (11 bytes) where hidden writes `?25l` (6) -- and the same move to the
+  // caret, which is what keeps the hidden cursor off the last row it wrote.
+  const auto paint_all = [&](int bg)
+  {
+    for (int y = 0; y < 10; y++)
+    {
+      UIRect r{0, y, 40, 1};
+      ui.fill_rect(r, " ", 7, bg + y);
+    }
+  };
+  ui.set_cursor(3, 2);
+  ui.set_cursor_blink_visible(true);
+  paint_all(30);
+  ui.render();
+  const int rows_shown = term.render_capture_bytes_since_last_flush();
+  ui.set_cursor(3, 2);
+  ui.set_cursor_blink_visible(false);
+  paint_all(50);
+  ui.render();
+  const int rows_hidden = term.render_capture_bytes_since_last_flush();
+  REQUIRE(rows_shown - rows_hidden == 5);
+}
+
+// The DSR size probe is the one thing that still moves the cursor by itself: it
+// parks at (999, 999) -- the bottom-right corner, the only cell whose report is
+// the whole viewport -- and main_loop's slow fallback runs it every couple of
+// seconds. A visible cursor there is the caret flashing up in the corner, so the
+// probe hides it for the round trip and puts back exactly the visibility it
+// found. DECTCEM is not part of DECSC, so the restore has to say so itself.
+TEST_CASE("A cursor probe parks hidden and restores the caret's visibility", "[jot][ui]")
+{
+  const std::string hide = "\033[?25l";
+  const std::string save = "\0337"; // ESC 7: DECSC
+  const std::string back = "\0338"; // ESC 8: DECRC
+  const std::string park = jot_ui::cursor_probe_park_bytes(999, 999);
+  // The hide leads the write: the park can never land with a cursor on screen.
+  REQUIRE(park.rfind(hide) == 0);
+  REQUIRE(park.find(save) != std::string::npos);            // the DECSC
+  REQUIRE(park.find("\033[999;999H") != std::string::npos); // the park
+  REQUIRE(park.find("\033[6n") != std::string::npos);       // DSR
+  // Hide, save, park, ask -- in that order.
+  REQUIRE(park.find(hide) < park.find(save));
+  REQUIRE(park.find(save) < park.find("\033[999;999H"));
+  REQUIRE(park.find("\033[999;999H") < park.find("\033[6n"));
+  // The scale probe parks on the first cell instead; same shape of write.
+  REQUIRE(jot_ui::cursor_probe_park_bytes(1, 1).find("\033[1;1H") != std::string::npos);
+
+  // Restoring a cursor that was on screen shows it *after* the DECRC: a show
+  // before it would flash the caret in the corner the probe parked it in.
+  const std::string shown = jot_ui::cursor_probe_restore_bytes(true);
+  REQUIRE(shown.rfind(back) == 0);
+  REQUIRE(shown.find("\033[?25h") != std::string::npos);
+  REQUIRE(shown.find(back) < shown.find("\033[?25h"));
+  // And one that was hidden stays hidden: no show anywhere in the restore.
+  const std::string hidden = jot_ui::cursor_probe_restore_bytes(false);
+  REQUIRE(hidden == back);
+  REQUIRE(hidden.find("\033[?25h") == std::string::npos);
 }
 
 // The caret's terminal bytes. Composed in one place (UI::cursor_sequence) because

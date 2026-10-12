@@ -1,5 +1,8 @@
 add_executable(jot_tests
   test_string_util.cpp
+  test_ansi_spans.cpp
+  test_compile_parse.cpp
+  test_status_prompts.cpp
   test_line_ops.cpp
   test_productivity.cpp
   test_smooth_scroll.cpp
@@ -43,6 +46,7 @@ add_executable(jot_tests
   test_jumplist.cpp
   test_textobjects.cpp
   test_keymap_grammar.cpp
+  test_macros.cpp
   test_debugger.cpp
   test_imageviewer.cpp
   test_syntax.cpp

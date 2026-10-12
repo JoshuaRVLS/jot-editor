@@ -16,6 +16,12 @@ std::string get_buffer_text(const FileBuffer &buf) const;
 // decorations through the pending edit window once, on the next render.
 void decoration_rebase_begin(FileBuffer &buf);
 void ensure_decorations_anchored(FileBuffer &buf);
+// The two writes the feature code makes to that store: an incremental search's
+// match, a compile finding's log row. Members rather than the free helpers
+// (core/decorations_rebase.h) so the modules that draw them -- input/ and
+// workspace/ -- do not have to reach up into core for them.
+void add_decoration(FileBuffer &buf, Decoration decoration);
+bool remove_decoration(FileBuffer &buf, std::uint64_t id);
 // Resolves a theme group name ("DiagnosticError", "@keyword", "status")
 // to the theme's current fg/bg; returns false when unknown.
 bool theme_group_color(const std::string &name, int &fg, int &bg) const;

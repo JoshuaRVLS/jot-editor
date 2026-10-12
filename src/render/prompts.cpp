@@ -212,6 +212,59 @@ void Editor::render_rename_prompt()
                 panel_theme.bg_command);
 }
 
+// The status-line prompt (the minibuffer). It is painted over the row the
+// message line lives on, rather than in a box of its own: what the reader typed
+// is the last thing on screen and the caret sits in it, so Enter is the same
+// key it was in a shell.
+void Editor::render_minibuffer()
+{
+  if (!show_minibuffer || !ui)
+  {
+    return;
+  }
+  const int w = ui->get_render_width();
+  const int y = ui->get_height() - 1;
+  const std::string text = minibuffer_label + minibuffer_input;
+  // A failing search is the one state of the prompt worth a colour: the label
+  // and the text stay the command slots every other input uses.
+  const int fg = isearch_failed ? theme.fg_status_error : theme.fg_command;
+  ui->fill_rect({0, y, w, 1}, " ", fg, theme.bg_command);
+  ui->draw_text(0, y, ui_truncate_cells(text, w), fg, theme.bg_command);
+
+  // What the prompt is offering, right-aligned and quieter: Tab's candidate
+  // count for a path, the mode for a search.
+  std::string hint;
+  if (minibuffer_kind == MINIBUFFER_FIND_FILE && !minibuffer_matches.empty())
+  {
+    hint = std::to_string((int)minibuffer_matches.size()) + " match(es)";
+  }
+  else if (minibuffer_kind == MINIBUFFER_ISEARCH)
+  {
+    hint = isearch_regex ? "regexp" : "plain";
+  }
+  if (!hint.empty())
+  {
+    const int hint_w = ui_cell_count(hint);
+    if (hint_w + 2 < w)
+    {
+      ui->draw_text(w - hint_w - 1, y, hint, theme.fg_comment, theme.bg_command);
+    }
+  }
+}
+
+void Editor::place_minibuffer_cursor()
+{
+  if (!show_minibuffer || !ui)
+  {
+    return;
+  }
+  const int cursor =
+      std::clamp(minibuffer_cursor, 0, (int)minibuffer_input.size());
+  const int x = ui_cell_count(minibuffer_label + minibuffer_input.substr(0, (size_t)cursor));
+  const int y = ui->get_height() - 1;
+  ui->set_cursor(std::min(std::max(0, x), std::max(0, ui->get_render_width() - 1)), y);
+}
+
 void Editor::place_rename_prompt_cursor()
 {
   if (!show_rename_prompt)

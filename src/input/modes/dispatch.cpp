@@ -15,6 +15,18 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
   note_editing_activity(false);
   clear_debugger_breakpoint_hover();
 
+  // The macro chords (Alt+Z q/p/l) are handled here rather than at the end with
+  // the other modeless bindings so they keep working while a prompt owns the
+  // keyboard: a recording has to be stoppable from wherever the user is, and
+  // the prompts return before anything below them runs. A build with Lua gets
+  // the same three chords from runtime/lua/features/keymaps.lua, which the
+  // frontend consults before this dispatch (so a config can rebind them); this
+  // is the fallback, and the Alt+Z press alone only arms the prefix.
+  if (handle_macro_key(ch, is_ctrl, is_shift, is_alt))
+  {
+    return;
+  }
+
   // A quit confirmation owns every answer key, regardless of which surface had
   // focus when Ctrl+Q opened it.
   if (show_quit_prompt)
@@ -31,6 +43,14 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
       needs_redraw = true;
       set_message("Quit cancelled");
     }
+    return;
+  }
+
+  // The status-line prompt owns the keyboard while it is up: its keys are read
+  // before any surface or buffer shortcut, so a stray chord cannot edit the
+  // buffer underneath the line being typed on there.
+  if (handle_minibuffer_input(ch, is_ctrl, is_shift, is_alt))
+  {
     return;
   }
 

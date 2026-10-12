@@ -17,6 +17,7 @@
 //   core/runtime.h              smooth scroll, timers/pollers, LSP lifecycle
 //   lsp/lsp_ui.h                pickers, completion/signature/hover, navigation
 //   commands/cpp.h              the C++ definition checks (`:cppcheck`)
+//   input/macros.h              the recordable macro registers (input/macros.cpp)
 //   core/editing.h              syntax/decorations, input dispatch, edit commands
 //   core/api/public_api.h       the public command surface
 //   workspace/explorer.h        file tree, sidebar caches and resize
@@ -215,10 +216,17 @@ private:
   // the workspace strip is turned off (`tabline = false`) and the pane's list
   // is the only one left. A lone pane with the workspace strip on top paints no
   // second row, because that would be the same list twice. `always` shows the
-  // row for every pane with a buffer, `off` for none.
+  // row for every pane with a buffer, `off` for none. A pane whose only tab is
+  // the compilation log draws none either: a build's log is shown in its pane,
+  // not opened as a tab of it.
   bool pane_shows_tab_strip(const SplitPane &pane) const
   {
     if (pane_tabs_mode == PANE_TABS_OFF || pane.tab_buffer_ids.empty())
+    {
+      return false;
+    }
+    const int visible = pane_visible_tab_count(pane);
+    if (visible == 0)
     {
       return false;
     }
@@ -230,7 +238,32 @@ private:
     {
       return true;
     }
-    return !tabline_visible && pane.tab_buffer_ids.size() > 1;
+    return !tabline_visible && visible > 1;
+  }
+
+  // Whether a buffer is a tab a pane's strip draws. Every buffer is, except the
+  // compilation log (:compile): it takes a pane to be read in, but it is not an
+  // opened tab of it (core/buffer.h -- is_compile_log_path).
+  bool pane_tab_shown(int buffer_id) const
+  {
+    return buffer_id >= 0 && buffer_id < (int)buffers.size()
+           && !is_compile_log_path(buffers[(size_t)buffer_id].filepath);
+  }
+
+  // How many of the pane's tabs its strip would list. The count is what the row
+  // rules above read, so a pane holding only the compilation log spends no row
+  // on a strip and the log fills the pane instead.
+  int pane_visible_tab_count(const SplitPane &pane) const
+  {
+    int count = 0;
+    for (int id : pane.tab_buffer_ids)
+    {
+      if (pane_tab_shown(id))
+      {
+        count++;
+      }
+    }
+    return count;
   }
 
   // The row this pane spends on its own strip (0 when it shows none).
@@ -412,6 +445,7 @@ private:
   static constexpr EditorFocus FOCUS_SIDEBAR = ::FOCUS_SIDEBAR;
 
 #include "commands/cpp.h"
+#include "input/macros.h"
 #include "core/editing.h"
 #include "lsp/lsp_ui.h"
 #include "render/paint.h"

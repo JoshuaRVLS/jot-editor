@@ -21,18 +21,22 @@
 //   state/lsp_state.h         clients, diagnostics, completion/hover/inlay
 //   state/cpp_defs_state.h    the C++ definition checks and their diagnostics
 //   state/input_state.h       mouse selection, click/hover, keystroke bookkeeping
+//   state/macro_state.h       the recorded keystroke registers (macros)
 //   state/view_state.h        layout metrics, theme, paint caches, message line
 //   state/navigation_state.h  jump history and the armed jump
 //   state/engine_state.h      config, terminals, debugger, UI, Lua host
 //   state/bible_state.h       the Bible reader's session (:bible)
+//   state/compile_state.h     the compile session (:compile) and its findings
 //   state/web_index_state.h   the workspace's CSS vocabulary, for completions
 //
 // New code that needs one slice is encouraged to include that header directly
 // (the groups are independent: no group includes another).
 
+#include "core/compile_state.h"
 #include "core/cpp_defs_state.h"
 #include "core/engine_state.h"
 #include "core/input_state.h"
+#include "core/macro_state.h"
 #include "lsp/lsp_state.h"
 #include "core/navigation_state.h"
 #include "core/pane_state.h"
@@ -46,10 +50,12 @@
 #include "extras/bible_state.h"
 
 struct EditorState : BibleState,
+                     CompileSessionState,
                      CppDefsState,
                      EngineState,
                      InputState,
                      LspUiState,
+                     MacroState,
                      NavigationState,
                      PaneState,
                      PanelState,

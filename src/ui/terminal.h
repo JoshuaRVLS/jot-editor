@@ -197,6 +197,23 @@ public:
   void move_cursor(int x, int y);
   void hide_cursor();
   void show_cursor();
+  // Whether the cursor is on screen right now (DECTCEM). Kept by hide_cursor() /
+  // show_cursor() and by the UI's own cursor emission, because the DSR size
+  // probe parks the cursor in the bottom-right corner to read the viewport and
+  // has to put back the visibility it found -- a probe that showed a cursor the
+  // editor had hidden (or hid one it had shown) is a caret that jumps or blinks
+  // when nothing asked it to.
+  bool cursor_visible() const
+  {
+    return cursor_visible_;
+  }
+  // Records the visibility of the bytes the UI just emitted for the caret
+  // (UI::cursor_sequence), which the probe's restore writes back.
+  void note_cursor_visible(bool visible)
+  {
+    cursor_visible_ = visible;
+  }
+  bool cursor_visible_ = true;
   // True once any source has produced a size, so the DSR probe (which parks and
   // restores the cursor) only runs when there is nothing to go on.
   bool size_known_ = false;

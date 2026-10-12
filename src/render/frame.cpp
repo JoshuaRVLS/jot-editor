@@ -159,6 +159,15 @@ void Editor::render()
       return;
     }
 
+    // The minibuffer owns the caret while it is up, and nothing else may place
+    // one: the row it lives on is the status line, not the buffer's text.
+    if (show_minibuffer)
+    {
+      place_minibuffer_cursor();
+      ui->flush_cursor();
+      return;
+    }
+
     // Keep cursor visibility in sync even when no redraw is needed.
     if (show_menu_bar_dropdown || show_context_menu || show_quick_pick
         || show_tree_sitter_status_modal || show_lsp_status_modal || show_settings_menu)
@@ -454,11 +463,20 @@ void Editor::render()
     // frame or corners after it is drawn.
     render_floating_terminal();
 
+    // The status-line prompt is painted last of all: it is the only thing on
+    // screen that has to be readable whatever else is there, the Lua kit's own
+    // status row included.
+    render_minibuffer();
+
     // Set cursor state BEFORE ui->render() so the full-row paint emits the
     // correct cursor at the end of the frame.
-    if ((popup.visible && popup.presentation == POPUP_MODAL) || show_menu_bar_dropdown
-        || show_context_menu || show_quick_pick || show_tree_sitter_status_modal
-        || show_lsp_status_modal)
+    if (show_minibuffer)
+    {
+      place_minibuffer_cursor();
+    }
+    else if ((popup.visible && popup.presentation == POPUP_MODAL) || show_menu_bar_dropdown
+             || show_context_menu || show_quick_pick || show_tree_sitter_status_modal
+             || show_lsp_status_modal)
     {
       ui->hide_cursor();
     }
@@ -662,6 +680,12 @@ bool Editor::switch_to_local_tab(int target_index)
   {
     return false;
   }
+  // A tab no strip draws (the compilation log) is not one the keyboard lands
+  // on either: Alt+<digit> and Ctrl+Tab walk the tabs that are on screen.
+  if (!pane_tab_shown(buffer_id))
+  {
+    return false;
+  }
   capture_pane_view(current_pane);
   pane.buffer_id = buffer_id;
   current_buffer = buffer_id;
@@ -689,11 +713,21 @@ bool Editor::cycle_local_tab(int delta)
   {
     current_idx = 0;
   }
-  int n = (int)pane.tab_buffer_ids.size();
-  int next_idx = (current_idx + delta) % n;
-  if (next_idx < 0)
+  const int n = (int)pane.tab_buffer_ids.size();
+  int next_idx = current_idx;
+  // Step until a drawn tab: a pane that also holds the compilation log must not
+  // cycle into a tab its own strip leaves out.
+  for (int step = 0; step < n; step++)
   {
-    next_idx += n;
+    next_idx = ((next_idx + delta) % n + n) % n;
+    if (pane_tab_shown(pane.tab_buffer_ids[(size_t)next_idx]))
+    {
+      break;
+    }
+  }
+  if (next_idx == current_idx)
+  {
+    return false;
   }
   return switch_to_local_tab(next_idx);
 }

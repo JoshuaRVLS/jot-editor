@@ -159,6 +159,16 @@ protected:
   // unified blink clock each frame): visible emits the show sequence with the
   // steady DECSCUSR shape, hidden emits the hide sequence.
   bool cursor_blink_visible = true;
+  // The last cell a caret was placed on (set_cursor), kept so a *hidden* cursor
+  // still has somewhere correct to be. DECTCEM makes the terminal draw no
+  // cursor, but the cursor itself is only ever *somewhere*: every row write
+  // moves it, so hiding it where the painting left it parks it in the
+  // bottom-right corner of the last row written -- and anything that reveals it
+  // (a repaint that is not this frame's, a chunk boundary mid-frame, a focus
+  // change) shows the caret away from the text. Parked on the caret, a reveal is
+  // invisible. See cursor_park_cell().
+  int last_caret_x = -1;
+  int last_caret_y = -1;
   // The theme's cursor pair (fg_cursor/bg_cursor). Backends that paint the caret
   // themselves (the GUI) pick between the two by contrast against the cell; the
   // terminal leaves the hardware cursor's colour to the emulator, which owns it.
@@ -349,10 +359,21 @@ public:
   // Only marks the cursor dirty when the state actually changed, so idle
   // frames never re-emit cursor bytes.
   void set_cursor_blink_visible(bool visible);
+  // Whether the caret is on screen: nothing hides it (a menu, a popup, the
+  // blink's hidden half) and this frame placed one. The single predicate behind
+  // both cursor_sequence()'s bytes and the visibility the terminal records for
+  // the DSR probe's restore.
+  bool cursor_shown() const;
   // The caret's terminal bytes for the current state: hide, or show plus the
   // steady shape. Composed in one place so a hidden cursor can never be
   // re-shown by the shape write that follows it.
   std::string cursor_sequence() const;
+  // The cell the terminal cursor is put on: the caret's own cell when this
+  // frame placed one, else the last cell a caret was placed on, else the frame
+  // origin. Clamped one cell inside the right margin, like the caret itself, so
+  // a parked cursor can never sit on the pending-wrap column. Shared by render()
+  // and flush_cursor() so the two cannot park it in different places.
+  void cursor_park_cell(int &x, int &y) const;
   // Emits the pending cursor to the physical screen. The base
   // implementation writes terminal escapes; GUI backends override this to
   // a no-op (their render() paints the cursor from the same state).

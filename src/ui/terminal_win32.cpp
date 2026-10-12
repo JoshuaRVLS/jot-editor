@@ -1113,10 +1113,12 @@ void Terminal::move_cursor(int x, int y)
 
 void Terminal::hide_cursor()
 {
+  cursor_visible_ = false;
   buffer += "\x1b[?25l";
 }
 void Terminal::show_cursor()
 {
+  cursor_visible_ = true;
   buffer += "\x1b[?25h";
 }
 

@@ -209,6 +209,56 @@ settles, so scrolling a long way does not grow the process.
   increment/decrement the number under the cursor; format document; word-wise
   deletion; smart line-start movement; file/page movement.
 
+### Macros
+
+- A macro is the *keystrokes* between its start and its stop, filed under a
+  register and replayed through the same key path a live key takes -- so a
+  replayed chord is matched by whatever the keymap says when it is replayed (a
+  rebinding of your own included), and the edits land in whatever buffer is
+  current. It is not a recording of edits: play a register over another file and
+  it does its work there.
+- `Alt+Z q` starts a recording and stops it again, `Alt+Z p` plays the last
+  register back, and `Alt+Z l` lists the registers with their lengths. On the
+  command line the same state is `:macrorecord [a-z]`, `:macrostop`,
+  `:macroplay [a-z] [count]` and `:macrolist`, so a register can be replayed
+  three times over with `:macroplay z 3`. A build without Lua gets the three
+  chords from the native prefix in `input/modes/dispatch.cpp`.
+- Registers are the letters `a`-`z`, each holding its own list, and starting a
+  recording on one throws away what it held: a fresh take, not an append. An
+  empty register reports that instead of replaying something else, and the status
+  line names the register being recorded and then how many keys it took. The
+  recorder's own chords stay out of the recording -- otherwise playing a macro
+  would stop the recording it was played from -- a play inside a play is refused
+  rather than left to recurse, and a play that somehow loops stops at a reported
+  keystroke ceiling instead of freezing the editor.
+
+### The status-line prompt (the minibuffer)
+
+- The prompt sits on the editor's own status row, Emacs' minibuffer: Enter hands
+  the line over, Esc abandons it, Tab completes, the arrows move the caret inside
+  what has been typed, and every printable byte extends it. The prompt owns the
+  keyboard while it is up, so a stray chord cannot edit the buffer underneath the
+  line being typed on. `:isearch`, `:findfile` and the `:compile` prompt are the
+  three that use it -- the ex commands are the whole way in for a build without
+  Lua -- and `Alt+Q s` / `Alt+Q f` / `Alt+Q c` are the chords onto them
+  (`Alt+Q k` stops a running build).
+- Incremental search walks the buffer as the query is typed: each keystroke
+  restarts from where the search began, so deleting a character walks back to the
+  shorter query's match, while `Ctrl+S` and `Ctrl+R` move to the next and previous
+  hit without touching the query. `Alt+R` switches the pattern between literal and
+  regexp and the label says which is on, and a query with an uppercase letter is
+  matched case-sensitively -- Emacs' own rule. The hit wears the `CurSearch` band,
+  the view scrolls to reach it, and Esc puts the caret back where the search
+  started.
+- Find file takes a path completed from the directory typed so far: Tab extends
+  to the shared prefix and then walks the candidates, a directory candidate is
+  offered with its trailing slash, and dotfiles appear only once the dot is typed.
+  A relative path is resolved against the workspace root, so `src/render/frame.cpp`
+  means the file in this project.
+- `:compile` with no argument opens the same prompt pre-filled with the last
+  command (or `build_command` from the config) and hands the line to `/bin/sh`
+  exactly as typed; see Compilation above.
+
 ### Buffers, tabs, and panes
 
 - Any number of open buffers, saved or unsaved.
@@ -558,6 +608,54 @@ Install helpers also cover Rust, Go, Lua, and Bash.
   of the match key (a wrong return type still counts as implementing the
   declaration), and reachability -- whether the definition is seen where the
   call is -- is left to clangd.
+
+### Compilation (`:compile`)
+
+- `:compile` asks for the command on the status line -- the `M-x compile`
+  prompt, pre-filled with the last command (or `build_command` from the
+  config) -- and `:make` is the alias for it. The line is the shell's, not the
+  editor's: quotes, pipes and `&&` go to `/bin/sh` as typed, so `make`,
+  `cmake --build build` and `cargo test -- --nocapture` are all just lines the
+  prompt hands over. It runs in the workspace root rather than wherever jot
+  was started, which is also what the relative paths in its output resolve
+  against.
+- The output lands in a `[Compile]` split *below* the pane being read: that
+  pane keeps the file it was showing, and the log opens with the command, the
+  time it started and (when it ends) the exit -- `Compilation finished` or
+  `Compilation exited abnormally with code N`. The log is shown in that split
+  rather than opened in it: no tab strip lists it (the pane spends no row on
+  one) and the keys that walk tabs, `Alt+<digit>` and `Ctrl+Tab` included,
+  step over it, so a build's output never becomes one of the opened files. `:compile` again stops the
+  running build first, and `:ckill` (with `:compilekill` / `:compilestop`)
+  stops it by hand; the output read so far stays in the log.
+- The job runs under a pseudo-terminal of its own, which is what lets the same
+  prompt run a program rather than only a compiler: `:compile ./build/app`
+  gets a stdin (a command that asks a question reads end-of-input, the way the
+  silent job's `/dev/null` answered it, instead of waiting for a keyboard the
+  log does not have) and sees a tty, so a tool that colourises does it without
+  being told. On a platform with no pty the job falls back to the silent pipe
+  and only the colour environment is forced, so the log still arrives coloured;
+  the tty itself is the part missing there.
+- The colours a command prints are shown rather than spelled out: the escape
+  sequences are read as the output arrives (text/ansi_spans.h) and become
+  coloured spans on the log's rows, from the sixteen base colours through the
+  `38;5;N` palette entries to exact `38;2;R;G;B` values, with bold, faint and
+  underline carried across as the attributes they are. A colour set once stays
+  set for the rows that follow, the way it does on a terminal. A carriage
+  return rewriting a row -- a progress bar -- leaves only the state it ended
+  on, and a command whose last line has no final newline still gets that row.
+- Findings are parsed out of the output the way a reader's eye would pick
+  them: gcc/clang's `file:line:col: error:`, rustc's message-plus-arrow pair,
+  a Python traceback frame, the parenthesised `(line, col)` form msvc and tsc
+  print, and paths with spaces in them. A row that names a problem is tinted
+  with the severity colour the editor's own findings use, so the errors are
+  the rows the eye lands on.
+- `:cnext` / `:cprev` walk those findings (the same rule `:diagnext` uses:
+  the next one in this file, else the first in a file that sorts after it,
+  wrapping at the ends), and `Enter` on a row of the log opens the finding on
+  that row -- in a pane that already holds text, not in the log, so the caret
+  lands in the source. `Ctrl+O` comes back, because a compile jump is a jump
+  like any other.
 
 ### Integrated terminal and tasks
 
@@ -1352,7 +1450,8 @@ without a curated entry shows its one-line detail instead, so the box never
 goes blank. The buffer stays fully visible while you type.
 
 **Files & sessions:** `:q` `:w` `:wq` `:x` `:e` `:new` `:bd` `:home`
-`:resume` `:recent` `:reopen` `:autosave`
+`:resume` `:recent` `:reopen` `:autosave` `:findfile [path]` (`:projectfile`,
+`:ff`) - type a path on the status line, Tab completing it
 
 **Panes & UI:** `:sp` `:vsp` `:splitleft|right|up|down` `:bn` `:bp`
 `:focusleft|right|up|down` `:wincmd` `:resize*` `:minimap` `:theme`
@@ -1365,6 +1464,7 @@ goes blank. The buffer stays fully visible while you type.
 `:outline` `:line` `:goto` `:format` `:trim` `:upper` `:lower`
 `:sortlines|desc|reverselines|uniquelines|shufflelines|joinlines` `:dupe`
 `:replace*` `:surround` `:fold*` `:incnum` `:decnum` `:copypath` `:copyname`
+`:isearch` (incremental search typed on the status line)
 `:datetime` `:stats` `:Todo [keywords=TODO,FIX]` `:TodoNext` `:TodoPrev`
 
 **LSP:** `:lspinstall` `:lspremove` `:lspstatus` `:hover` `:definition`
@@ -1378,6 +1478,14 @@ goes blank. The buffer stays fully visible while you type.
 `:CodeCompanionSend` `:CodeCompanionStop` `:CodeCompanionActions`
 `:CodeCompanionStatus` `:CodeCompanion <text>` (rewrite the selection or line)
 `:CodeCompanionPrompt <name>`
+
+**Build:** `:compile [command]` (no argument asks for the command on the status
+line, pre-filled with the last one) `:make` `:cnext` `:cprev` `:ckill`
+(alias `:compilekill`, `:compilestop`)
+
+**Macros:** `:macrorecord [register]` (alias `:macrorec`, `Alt+Z q`)
+`:macrostop` `:macroplay [register] [count]` (`Alt+Z p`) `:macrolist` (alias
+`:macros`, `Alt+Z l`)
 
 **Terminal & tasks:** `:term` `:termnew` `:termfloat` `:task [name]` `:tasknew <name>`
 `:taskrerun`
@@ -1513,7 +1621,15 @@ The caret is configured with two keys:
   of that pause, so the half after it is a whole one rather than whatever
   fragment a keystroke-timed clock had left. A mouse click is not a typing
   burst: it re-anchors the phase with no hold, so the caret shows at the clicked
-  cell and blinks a normal half from there.
+  cell and blinks a normal half from there. A hidden caret is put back on its
+  own cell first and hidden second: the terminal's cursor is still *somewhere*
+  while DECTCEM hides it, and left at the last cell a row write moved it to (the
+  bottom-right corner of the status row) it flashed up there whenever the
+  terminal repainted the cursor on its own. The same rule covers the size probe
+  that reads the viewport with a cursor-position query: it has to park the cursor
+  in the bottom-right corner to ask, so it hides the cursor for the round trip
+  and puts back exactly the visibility it found, instead of sending the caret to
+  the corner every couple of seconds.
 
 The mouse wheel can scroll smoothly. `smooth_scroll` is off by default - the
 wheel jumps a notch per event, as it always has - and `smooth_scroll=true`

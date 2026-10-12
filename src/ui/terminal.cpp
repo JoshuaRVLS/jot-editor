@@ -1,5 +1,6 @@
 #include "terminal.h"
 #include "events/keybind_catalog.h"
+#include "ui/cursor_probe.h"
 #include "ui/input_reader.h"
 #include "ui/xterm_palette.h"
 
@@ -113,17 +114,23 @@ static bool probe_reply_span(const char *buf, int n, std::size_t &at, std::size_
   return false;
 }
 
-static bool cursor_probe_size(int &width, int &height, int budget_ms = 200)
+static bool cursor_probe_size(int &width, int &height, int budget_ms = 200,
+                              bool cursor_shown = false)
 {
   // Park the cursor at (999, 999) and ask for its position with DSR (CSI 6 n):
   // the reply gives the real viewport size even when ioctl and $COLUMNS are
   // stale. Park and ask in one write, and restore with DECRC (homing left the
   // caret visibly in the top-left corner until the next frame).
+  // The park is a move to the corner, so the probe hides the cursor for the
+  // round trip and shows it again only if it was on screen before
+  // (cursor_probe.h): without that, a reader watches the caret jump to the
+  // bottom right every couple of seconds, which is how often main_loop's slow
+  // DSR fallback runs this.
   // The wait is a strict total deadline spread across the reply's bytes, so a
   // terminal that never answers (piped stdin, CI ptys, some tmux/SSH) costs at
   // most budget_ms instead of blocking startup.
-  static const char kProbePark[] = "\x1b" "7" "\x1b[999;999H\x1b[6n";
-  ::write(STDOUT_FILENO, kProbePark, sizeof(kProbePark) - 1);
+  const std::string probe_park = jot_ui::cursor_probe_park_bytes(999, 999);
+  ::write(STDOUT_FILENO, probe_park.data(), probe_park.size());
 
   const auto deadline = std::chrono::steady_clock::now()
                         + std::chrono::milliseconds(budget_ms);
@@ -168,7 +175,10 @@ static bool cursor_probe_size(int &width, int &height, int budget_ms = 200)
   if (kept > 0)
     g_input.unread(keep, (std::size_t)kept);
 
-  ::write(STDOUT_FILENO, "\x1b" "8", 2); // DECRC: put the caret back
+  // DECRC puts the caret back, and the visibility the probe hid goes back with
+  // the same write when the cursor was on screen.
+  const std::string probe_restore = jot_ui::cursor_probe_restore_bytes(cursor_shown);
+  ::write(STDOUT_FILENO, probe_restore.data(), probe_restore.size());
 
   int rows = 0, cols = 0;
   if (answered && sscanf(buf + reply_at, "\x1b[%d;%d", &rows, &cols) == 2)
@@ -246,19 +256,21 @@ static bool read_cpr_reply(int &row, int &col, int budget_ms)
 // that implements only the width part moves for the first space and not the
 // second. Both have to move -- the scale alone would not make the grid we draw
 // line up -- so the check is strictly four cells of movement, two per frame.
-static bool text_scale_probe()
+static bool text_scale_probe(bool cursor_shown)
 {
   if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))
   {
     return false;
   }
-  static const char kSave[] = "\x1b" "7\x1b[1;1H\x1b[6n";
   static const char kWidthFrame[] = "\x1b]66;w=2; \a\x1b[6n";
   static const char kScaleFrame[] = "\x1b]66;s=2; \a\x1b[6n";
   // The probe writes straight to the tty: the frame the editor is composing
   // rides behind it in the same frame, so the two scaled blanks it leaves are
-  // painted over before anything is read on screen.
-  ::write(STDOUT_FILENO, kSave, sizeof(kSave) - 1);
+  // painted over before anything is read on screen. Its park is a move to the
+  // first cell, so it hides the cursor for the round trip like the size probe
+  // does and shows it again only if it was on screen (cursor_probe.h).
+  const std::string probe_park = jot_ui::cursor_probe_park_bytes(1, 1);
+  ::write(STDOUT_FILENO, probe_park.data(), probe_park.size());
 
   int row = 0, col = 0;
   bool ok = false;
@@ -282,8 +294,9 @@ static bool text_scale_probe()
   // included. No erase-to-end and no frame of our own here -- a refused zoom
   // schedules no repaint, so anything destructive would be left on the screen
   // until something else happened to redraw it.
-  static const char kCleanup[] = "\x1b[1;1H    \x1b" "8";
-  ::write(STDOUT_FILENO, kCleanup, sizeof(kCleanup) - 1);
+  std::string cleanup = "\x1b[1;1H    ";
+  cleanup += jot_ui::cursor_probe_restore_bytes(cursor_shown);
+  ::write(STDOUT_FILENO, cleanup.data(), cleanup.size());
   return ok;
 }
 
@@ -602,7 +615,7 @@ bool Terminal::refresh_size(bool force_probe)
     // reply within a few milliseconds. Only when the probe is the sole
     // source of a size (ioctl/env failed) keep the generous budget.
     const int probe_budget = got ? 30 : 200;
-    if (cursor_probe_size(probe_w, probe_h, probe_budget))
+    if (cursor_probe_size(probe_w, probe_h, probe_budget, cursor_visible()))
     {
       if (probe_w > 0)
         new_width = probe_w;
@@ -656,7 +669,7 @@ bool Terminal::probe_text_scale()
   {
     return true;
   }
-  return text_scale_probe();
+  return text_scale_probe(cursor_visible());
 }
 
 int Terminal::read_termkey_result()
@@ -1289,11 +1302,13 @@ void Terminal::move_cursor(int x, int y)
 
 void Terminal::hide_cursor()
 {
+  cursor_visible_ = false;
   buffer += "\x1b[?25l";
 }
 
 void Terminal::show_cursor()
 {
+  cursor_visible_ = true;
   buffer += "\x1b[?25h";
 }
 

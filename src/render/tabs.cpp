@@ -741,6 +741,13 @@ bool Editor::tabline_scroll(int delta)
 
 void Editor::reveal_tabline_position(int position)
 {
+  // -1 is "this buffer holds no position on the strip" -- the compilation log,
+  // a view shown in a pane rather than opened in it. There is nothing to
+  // reveal, and a scroll index of -1 is not one either.
+  if (position < 0)
+  {
+    return;
+  }
   const int before = tabline_scroll_index;
   if (position < tabline_scroll_index)
   {

@@ -1,4 +1,5 @@
 set(JOT_INPUT_SOURCES
+  input/macros.cpp
   input/menu_bar.cpp
   input/modes/dispatch.cpp
   input/modes/modeless.cpp

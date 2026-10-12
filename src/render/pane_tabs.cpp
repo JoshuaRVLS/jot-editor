@@ -68,7 +68,24 @@ PaneTabLayout Editor::build_pane_tab_layout(int pane_index) const
   layout.y = pane.y;
   layout.w = std::max(1, pane.w);
 
-  const std::vector<int> &ids = pane.tab_buffer_ids;
+  // The tabs the strip draws, with the slot each one holds in the pane's list:
+  // a buffer that is shown rather than opened (the compilation log) is taken
+  // out before anything is measured, so it costs the strip neither a tab nor
+  // its row. `pane_shows_tab_strip` counts the same way, so an empty strip is
+  // never laid out here.
+  std::vector<int> ids;
+  std::vector<int> slots;
+  ids.reserve(pane.tab_buffer_ids.size());
+  slots.reserve(pane.tab_buffer_ids.size());
+  for (int i = 0; i < (int)pane.tab_buffer_ids.size(); i++)
+  {
+    const int id = pane.tab_buffer_ids[(size_t)i];
+    if (pane_tab_shown(id))
+    {
+      ids.push_back(id);
+      slots.push_back(i);
+    }
+  }
   const int total = (int)ids.size();
   if (total == 0)
   {
@@ -154,7 +171,9 @@ PaneTabLayout Editor::build_pane_tab_layout(int pane_index) const
     const int width = widths[(size_t)(i - start)];
     PaneTabSegment segment;
     segment.buffer_id = id;
-    segment.tab_index = i;
+    // The slot in the pane's own list, not in this window: a drop lands by the
+    // list the pane holds, not by the tabs that happen to be drawn.
+    segment.tab_index = slots[(size_t)i];
     segment.x = x;
     segment.end_x = std::min(layout.w, x + width);
     segment.active = id == pane.buffer_id;

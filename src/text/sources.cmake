@@ -1,8 +1,10 @@
 set(JOT_TEXT_SOURCES
+  text/ansi_spans.cpp
   text/autoclose.cpp
   text/bracket_text_object.cpp
   text/clipboard.cpp
   text/buffer_stats.cpp
+  text/compile_parse.cpp
   text/cursor.cpp
   text/datetime.cpp
   text/duplicate.cpp

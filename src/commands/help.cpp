@@ -10,33 +10,42 @@ void Editor::show_command_help(const std::string &topic_text)
   const std::string topic = to_lower_copy(trim_copy(topic_text));
   if (topic == "commands" || topic == "cmd" || topic == "ex")
   {
-    set_message("Commands: :w :q :wq :e <file> :find [dir] :mkfile <p> :mkdir <p> "
-                ":rename <old> <new> :rm <p> :cpppair <p> :cppimpl [p] "
-                ":cppcheck [on|off|next|prev] :rest [name|last] "
-                ":line N[:C] :bd :sp "
-                "[left|right|up|down] :vsp [left|right] "
-                ":splitleft/:splitright/:splitup/:splitdown :bn :bp :home "
-                ":resume :recent :openrecent [n] :reopen :autosave [on/off/ms] "
-                ":grep <text> :diagnostics :diagnext :diagprev :symbols :outline "
-                ":format :trim "
-                ":trimblank :upper :lower :sortlines :sortdesc :reverselines "
-                ":uniquelines :shufflelines :joinlines :dupe :copypath :copyname "
-                ":datetime :stats :replace :replacei :replaceword :replacere "
-                ":surround :unsurround :fold :unfold :togglefold :foldall "
-                ":unfoldall :incnum :decnum :lspinstall <server> :lspremove <server> :lspstatus "
-                ":tsinstall <language> :tsstatus :tsreload "
-                ":update [run] :reload :reloadconfig :reloadplugins "
-                ":task [name] :tasknew <name> :taskrerun "
-                ":term :termnew :termzoom :termfloat "
-                ":textzoom [in|out|reset|1-4] "
-                ":debug <program> :debugconfig [name] :debugstop "
-                ":debugcontinue :debugnext :debugstep :debugout "
-                ":gitstatus :gitdiff [file] :gitdiffstaged [file] "
-                ":gitstage [file] :gitunstage [file] :gitstageall "
-                ":gitunstageall :gitcommit <message> :gitlog :gitblame "
-                ":gitrefresh :theme <name>"
-                ":gitdiffclose"
-                ":gitdiffrefresh");
+    // A popup, like the keybind help below: the list is long enough to wrap
+    // over several rows, which is what the popup is for. (On the status line it
+    // was a message the Lua status handler no longer draws -- the command list
+    // has to be read, not glimpsed.)
+    const std::string commands =
+        "Commands: :w :q :wq :e <file> :find [dir] :mkfile <p> :mkdir <p> "
+        ":rename <old> <new> :rm <p> :cpppair <p> :cppimpl [p] "
+        ":cppcheck [on|off|next|prev] :rest [name|last] "
+        ":line N[:C] :bd :sp "
+        "[left|right|up|down] :vsp [left|right] "
+        ":splitleft/:splitright/:splitup/:splitdown :bn :bp :home "
+        ":resume :recent :openrecent [n] :reopen :autosave [on/off/ms] "
+        ":grep <text> :diagnostics :diagnext :diagprev :symbols :outline "
+        ":format :trim "
+        ":trimblank :upper :lower :sortlines :sortdesc :reverselines "
+        ":uniquelines :shufflelines :joinlines :dupe :copypath :copyname "
+        ":datetime :stats :replace :replacei :replaceword :replacere "
+        ":surround :unsurround :fold :unfold :togglefold :foldall "
+        ":unfoldall :incnum :decnum :lspinstall <server> :lspremove <server> :lspstatus "
+        ":tsinstall <language> :tsstatus :tsreload "
+        ":update [run] :reload :reloadconfig :reloadplugins "
+        ":task [name] :tasknew <name> :taskrerun "
+        ":term :termnew :termzoom :termfloat "
+        ":textzoom [in|out|reset|1-4] "
+        ":debug <program> :debugconfig [name] :debugstop "
+        ":debugcontinue :debugnext :debugstep :debugout "
+        ":compile [cmd] :make :cnext :cprev :ckill "
+        ":isearch :findfile [path] "
+        ":macrorecord [a-z] :macrostop :macroplay [a-z] [n] :macrolist "
+        ":gitstatus :gitdiff [file] :gitdiffstaged [file] "
+        ":gitstage [file] :gitunstage [file] :gitstageall "
+        ":gitunstageall :gitcommit <message> :gitlog :gitblame "
+        ":gitrefresh :theme <name>"
+        ":gitdiffclose"
+        ":gitdiffrefresh";
+    show_popup(commands, "Command Help");
     return;
   }
 
@@ -132,6 +141,15 @@ void Editor::show_command_help(const std::string &topic_text)
       "  Alt+I / Alt+A      Smart line start / line end",
       "  Alt+Shift+T        Floating terminal (Esc hides it)",
       "  Alt+G / Alt+Shift+G File start / file end",
+      "",
+      "Macros & prompt",
+      "  Alt+Z q            Record a macro / stop recording",
+      "  Alt+Z p            Play the last macro back",
+      "  Alt+Z l            List the recorded macros",
+      "  Alt+Q c            Compile: type any shell command on the status line",
+      "  Alt+Q s            Incremental search on the status line",
+      "  Alt+Q f            Find a file by path, typed on the status line",
+      "  Alt+Q k            Stop the running build",
       "",
       "Tips",
       "  :help commands     Show ex-command summary",

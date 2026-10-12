@@ -714,31 +714,17 @@ void UI::render()
   term->reset_color();
 
   // Same rule as flush_cursor(): the -1 sentinel means nothing placed a caret,
-  // and folding it to 0,0 showed a caret in the top-left corner.
-  if (cursor_hidden || !cursor_blink_visible || cursor_x < 0 || cursor_y < 0)
-  {
-    term->hide_cursor();
-  }
-  else
-  {
-    int cx = cursor_x;
-    int cy = cursor_y;
-    // Clamp x one cell inside the render margin so the cursor itself is
-    // never parked on a right-edge cell. This applies to all widths
-    // greater than 1; on a single-column terminal we obviously cannot
-    // move the cursor further left.
-    const int cursor_max_x = (width > 1) ? (width - margin - 1) : (width - 1);
-    if (cx > cursor_max_x)
-      cx = cursor_max_x;
-    if (cx < 0)
-      cx = 0;
-    if (cy >= height)
-      cy = height - 1;
-    if (cy < 0)
-      cy = 0;
-    term->move_cursor(cx, cy);
-    term->write(cursor_sequence());
-  }
+  // and folding it to 0,0 showed a caret in the top-left corner. The hidden
+  // branch parks before hiding for the same reason flush_cursor() does: the
+  // rows painted above left the cursor on the last cell they wrote (the bottom
+  // right), and a hidden cursor is still somewhere.
+  int cx = 0;
+  int cy = 0;
+  cursor_park_cell(cx, cy);
+  term->move_cursor(cx, cy);
+  term->write(cursor_sequence());
+  // Which of the two the terminal just got, for the DSR probe's restore.
+  term->note_cursor_visible(cursor_shown());
 
   const bool frame_written = term->flush();
   cursor_dirty = false;
@@ -1142,6 +1128,11 @@ void UI::set_cursor(int x, int y, UICursorShape shape)
 {
   cursor_x = std::clamp(x, 0, std::max(0, width - 1));
   cursor_y = std::clamp(y, 0, std::max(0, height - 1));
+  // Remembered so a later frame that hides the cursor (a menu, the blink's
+  // hidden half) can still park it on the caret instead of on whatever cell the
+  // last row write happened to leave it. See last_caret_x.
+  last_caret_x = cursor_x;
+  last_caret_y = cursor_y;
   cursor_shape = shape;
   cursor_hidden = false;
   cursor_dirty = true;
@@ -1175,6 +1166,30 @@ void UI::set_cursor_blink_visible(bool visible)
   }
 }
 
+// Where the cursor goes before it is hidden. Hidden is not "nowhere": the
+// terminal keeps the cursor at the last cell it was put on, and the rows this
+// frame paints put it on the last one written -- the bottom-right corner of the
+// status row, in the editor's case. Anything that reveals it before the next
+// frame parks it again shows the caret there. Parked on the caret (or on the
+// last cell a caret was put on, for a surface that places none), a reveal is
+// invisible, which is what hiding the cursor is for.
+void UI::cursor_park_cell(int &x, int &y) const
+{
+  x = cursor_x >= 0 ? cursor_x : last_caret_x;
+  y = cursor_y >= 0 ? cursor_y : last_caret_y;
+  if (x < 0 || y < 0)
+  {
+    // Nothing has ever placed a caret (the very first frames of a session, a
+    // home screen). The frame origin is the one cell that is always paintable.
+    x = 0;
+    y = 0;
+  }
+  const int margin = term->render_margin();
+  const int park_max_x = (width > 1) ? (width - margin - 1) : (width - 1);
+  x = std::clamp(x, 0, std::max(0, park_max_x));
+  y = std::clamp(y, 0, std::max(0, height - 1));
+}
+
 std::string UI::cursor_shape_sequence(UICursorShape shape) const
 {
   // Steady DECSCUSR shapes: bar -> steady bar (6), block -> steady block (2).
@@ -1188,13 +1203,23 @@ std::string UI::cursor_shape_sequence(UICursorShape shape) const
   return "\033[?25h\033[2 q";
 }
 
+// Whether the caret is on screen: nothing is hiding it -- a menu, a palette, a
+// popup, the blink's hidden half -- and this frame placed one (-1 is the
+// sentinel reset_cursor_state leaves). The one predicate behind both the bytes
+// cursor_sequence() returns and the visibility the terminal is told about, so
+// the two cannot disagree about a caret that is or is not there.
+bool UI::cursor_shown() const
+{
+  return !cursor_hidden && cursor_blink_visible && cursor_x >= 0 && cursor_y >= 0;
+}
+
 // The caret's bytes for the current state. Composed in one place because the
 // show sequence used to be written unconditionally after the hide branch, which
 // promptly re-showed a cursor the editor had deliberately hidden (menus,
 // palettes, popups) and parked it over the frame.
 std::string UI::cursor_sequence() const
 {
-  if (cursor_hidden || !cursor_blink_visible)
+  if (!cursor_shown())
   {
     return "\033[?25l";
   }
@@ -1208,32 +1233,20 @@ std::string UI::cursor_sequence() const
 void UI::flush_cursor()
 {
   term->disable_autowrap();
-  const int margin = term->render_margin();
   // A caret with no placed cell (reset_cursor_state parks x/y at -1) has
   // nothing correct to show. Substituting 0,0 here put a visible caret in the
-  // top-left corner on any flush that ran before something placed one.
-  if (cursor_hidden || !cursor_blink_visible || cursor_x < 0 || cursor_y < 0)
-  {
-    term->hide_cursor();
-  }
-  else
-  {
-    int cx = cursor_x;
-    int cy = cursor_y;
-    // Same right-edge clamp as render(): never park the cursor on the
-    // rightmost cell the renderer leaves untouched.
-    const int cursor_max_x = (width > 1) ? (width - margin - 1) : (width - 1);
-    if (cx > cursor_max_x)
-      cx = cursor_max_x;
-    if (cx < 0)
-      cx = 0;
-    if (cy >= height)
-      cy = height - 1;
-    if (cy < 0)
-      cy = 0;
-    term->move_cursor(cx, cy);
-    term->write(cursor_sequence());
-  }
+  // top-left corner on any flush that ran before something placed one. A
+  // hidden cursor still gets parked, though: hide-in-place would leave it at
+  // the last cell a row write moved it to (see cursor_park_cell).
+  int cx = 0;
+  int cy = 0;
+  cursor_park_cell(cx, cy);
+  // Parked first, hidden second: the hide applies to where the cursor is.
+  term->move_cursor(cx, cy);
+  term->write(cursor_sequence());
+  // And the terminal is told which of the two it just got: the DSR size probe
+  // parks the cursor in the corner and puts this state back (terminal.h).
+  term->note_cursor_visible(cursor_shown());
   const bool cursor_written = term->flush();
   // A cursor-only frame carries nothing but the caret bytes -- no grid cell
   // rides with it -- so a failed flush is repaired by re-sending them. Leave the

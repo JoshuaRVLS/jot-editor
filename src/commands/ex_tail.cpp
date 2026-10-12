@@ -391,6 +391,50 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     goto_next_diagnostic(-1);
   }
+  else if (lcmd == "compile" || lcmd == "make")
+  {
+    // `:compile` with no argument asks for the command on the status line --
+    // the M-x compile prompt -- and with one runs it as typed: the line is the
+    // shell's, so `make -j8`, `cmake --build build` and a bare script all mean
+    // what they say.
+    const std::string command = trim_copy(arg);
+    if (command.empty())
+    {
+      open_compile_prompt();
+    }
+    else
+    {
+      compile_run(command);
+    }
+  }
+  else if (lcmd == "ckill" || lcmd == "compilekill" || lcmd == "compilestop")
+  {
+    compile_stop();
+  }
+  else if (lcmd == "cnext" || lcmd == "nextcompileerror")
+  {
+    compile_jump(1);
+  }
+  else if (lcmd == "cprev" || lcmd == "prevcompileerror")
+  {
+    compile_jump(-1);
+  }
+  else if (lcmd == "isearch" || lcmd == "searchprompt")
+  {
+    open_isearch_prompt();
+  }
+  else if (lcmd == "findfile" || lcmd == "projectfile" || lcmd == "ff")
+  {
+    const std::string path = trim_copy(arg);
+    if (path.empty())
+    {
+      open_find_file_prompt();
+    }
+    else
+    {
+      open_file(path);
+    }
+  }
   else if (lcmd == "symbols")
   {
     show_symbol_picker();
@@ -1097,6 +1141,42 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
         apply_theme(resolved);
       }
     }
+  }
+  else if (lcmd == "macrorecord" || lcmd == "macrorec")
+  {
+    // `:macrorecord [a-z]` starts recording (or stops the running one, and a
+    // second form `:macrostop`). The keys that follow are the macro; Alt+Z q
+    // and Alt+Z p (runtime/lua/features/keymaps.lua, and the native fallback in
+    // src/input/modes/dispatch.cpp) are the same two calls without the typing.
+    macro_record_toggle(arg);
+  }
+  else if (lcmd == "macrostop")
+  {
+    macro_stop();
+  }
+  else if (lcmd == "macroplay")
+  {
+    // `:macroplay [a-z] [count]`: the register defaults to the last one played,
+    // else the one recordings go to.
+    const auto tokens = parse_quoted_tokens(arg);
+    int count = 1;
+    if (tokens.size() >= 2)
+    {
+      try
+      {
+        count = std::stoi(tokens[1]);
+      }
+      catch (const std::exception &)
+      {
+        set_message("Macro: count must be a number", true);
+        return true;
+      }
+    }
+    macro_play(tokens.empty() ? "" : tokens[0], count, true);
+  }
+  else if (lcmd == "macrolist" || lcmd == "macros")
+  {
+    set_message(macro_list_text(), true);
   }
   else if (lcmd == "help" || lcmd == "h")
   {

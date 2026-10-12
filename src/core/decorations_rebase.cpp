@@ -7,6 +7,7 @@
 // common prefix/suffix over the two versions yields the single edit window,
 // and every decoration is pushed through that window's transform. The render
 // loop only pays for this when decoration_dirty is set, i.e. once per edit.
+#include "core/decorations_rebase.h"
 #include "core/editor.h"
 
 #include <algorithm>
@@ -199,6 +200,16 @@ void decoration_anchor_transform(std::vector<Decoration> &decorations,
     d.row = rc.first;
     d.col = rc.second;
   }
+}
+
+void Editor::add_decoration(FileBuffer &buf, Decoration decoration)
+{
+  decoration_insert(buf, std::move(decoration));
+}
+
+bool Editor::remove_decoration(FileBuffer &buf, std::uint64_t id)
+{
+  return decoration_erase(buf, id);
 }
 
 void Editor::ensure_decorations_anchored(FileBuffer &buf)

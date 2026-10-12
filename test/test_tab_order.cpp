@@ -234,3 +234,37 @@ TEST_CASE("A letter goes back into the pool when its buffer closes", "[jot][tabl
   REQUIRE(order.position_of(buffers, 1) >= 0);
   REQUIRE(order.letter_for(1, buffers) == 'a');
 }
+
+TEST_CASE("A view that is no file is not an opened tab", "[jot][tabline]")
+{
+  std::vector<FileBuffer> buffers;
+  buffers.push_back(file("/w/a.cpp"));
+  // The compilation log (:compile): a buffer of its own, shown in a pane, but
+  // not a file the window has open.
+  buffers.push_back(file("[Compile]"));
+  buffers.push_back(file("/w/b.cpp"));
+  TabOrder order;
+  order.sync(buffers, buffers[0].tab_uid, TabInsert::TAB_INSERT_END);
+
+  // The strip lists the files, in their own order, with no gap where the log
+  // would have been; the log has no position, so the strip's cursor and its
+  // keys cannot land on it either.
+  REQUIRE(names(order, buffers) == expect({"a.cpp", "b.cpp"}));
+  REQUIRE(order.position_of(buffers, 1) == -1);
+  REQUIRE(order.position_of(buffers, 2) == 1);
+  REQUIRE(order.index_at(buffers, 1) == 2);
+  // The letters are handed out to the tabs the strip shows, so the window can
+  // never be told to jump to the log.
+  order.letter_for(0, buffers);
+  order.letter_for(2, buffers);
+  REQUIRE(order.buffer_for_letter(buffers, 'a') == 0);
+  REQUIRE(order.buffer_for_letter(buffers, 'b') == 2);
+  REQUIRE(order.buffer_for_letter(buffers, 'c') == -1);
+
+  // Closing the files leaves the log alone in the window: the strip is empty
+  // rather than listing the one thing that is not a tab.
+  buffers.erase(buffers.begin());
+  buffers.erase(buffers.begin() + 1);
+  order.sync(buffers, 0, TabInsert::TAB_INSERT_END);
+  REQUIRE(order.indices(buffers).empty());
+}

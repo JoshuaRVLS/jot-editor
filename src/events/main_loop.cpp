@@ -380,6 +380,13 @@ void Editor::run()
   }
   if (!safe_mode)
   {
+    // A build writes far faster than the LSP poll ticks, and a log that appears
+    // in 250ms steps reads as a hang: this one runs at the frame rate and
+    // returns immediately when no compile job is running.
+    event_loop_.set_timer(100, true, [this] { poll_compile_job(); });
+  }
+  if (!safe_mode)
+  {
     event_loop_.set_timer(500, true, [this] { poll_debugger_sessions(); });
   }
   if (!safe_mode)

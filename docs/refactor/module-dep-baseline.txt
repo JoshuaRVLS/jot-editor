@@ -54,6 +54,7 @@ src/git/git_panel.cpp	src/core/editor.h
 src/git/git_panel_paint.cpp	src/core/editor.h
 src/git/git_panel_paint.cpp	src/core/file_icons.h
 src/git/git_panel_paint.cpp	src/lua/api/api.h
+src/input/macros.cpp	src/core/editor.h
 src/input/menu_bar.cpp	src/core/editor.h
 src/input/modes/dispatch.cpp	src/core/editor.h
 src/input/modes/modeless.cpp	src/core/editor.h

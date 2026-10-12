@@ -125,6 +125,9 @@ local jumps = {
   { "f", ":nextfunction", ":prevfunction", "function" },
   { "c", ":nextclass", ":prevclass", "class" },
   { "d", ":diagnext", ":diagprev", "diagnostic" },
+  -- Compile errors join the same family: a build's findings are walked exactly
+  -- the way the language server's are, which is what makes :cnext findable.
+  { "e", ":cnext", ":cprev", "compile error" },
 }
 -- The TODO-comment jump (`Alt+] t` / `Alt+[ t`) joins this family from its own
 -- feature: features/todo_comments.lua owns both the command and the chord, so
@@ -145,6 +148,23 @@ end
 -- definition what an `auto` or a typedef really is, and the implementation the
 -- override body -- which is why they get a key each instead of one "go to".
 -- Alt+C h is clangd's switchSourceHeader, the CLion header/source flip.
+-- ---------------------------------------------------------------------------
+-- The status-line prompt (Emacs' minibuffer).
+--
+-- One prefix for the three commands that ask for a line instead of acting on
+-- the buffer: Alt+Q. Its children are the Emacs keys people already reach for
+-- (M-x compile, C-s, C-x C-f), spelled as chords because Alt+X, Alt+S and
+-- Alt+F are taken -- and the prompt they open is the point, not the chord: a
+-- build command, a search and a path all arrive typed, not chosen.
+--
+-- The natives for a build with no Lua are the ex commands (:compile :isearch
+-- :findfile), which this family is a shortcut onto.
+jot.keymap.set("Alt+Q", "", "Prompt")
+jot.keymap.set("Alt+Q c", ":compile", "Compile command (any shell command)")
+jot.keymap.set("Alt+Q s", ":isearch", "Incremental search on the status line")
+jot.keymap.set("Alt+Q f", ":findfile", "Find a file by path")
+jot.keymap.set("Alt+Q k", ":ckill", "Stop the running build")
+
 jot.keymap.set("Alt+C", "", "Code")
 jot.keymap.set("Alt+C d", ":gd", "Go to definition")
 jot.keymap.set("Alt+C c", ":lspdecl", "Go to declaration")
@@ -209,6 +229,21 @@ jot.keymap.set("Ctrl+W e", ":equalizepanes", "Equalize the panes")
 jot.keymap.set("Ctrl+W o", ":panezoom", "Zoom the pane")
 jot.keymap.set("Ctrl+W r", ":wincmd r", "Rotate the layout")
 jot.keymap.set("Ctrl+W x", ":swappanes", "Swap two panes")
+
+-- ---------------------------------------------------------------------------
+-- Macros: Alt+Z, the recorder's prefix.
+--
+-- "q" is Vim's key, and here it starts the recording and stops it; "p" plays
+-- the last register back; "l" lists what the registers hold. A macro is the
+-- keystrokes, not the edits, so playing one re-runs it against whatever buffer
+-- is current. The commands behind the chords (:macrorecord, :macroplay,
+-- :macrolist) are the other way in, and the same three chords are handled
+-- natively in src/input/modes/dispatch.cpp for a build without Lua.
+-- ---------------------------------------------------------------------------
+jot.keymap.set("Alt+Z", "", "Macro")
+jot.keymap.set("Alt+Z q", ":macrorecord", "Record a macro / stop recording")
+jot.keymap.set("Alt+Z p", ":macroplay", "Play the last macro")
+jot.keymap.set("Alt+Z l", ":macrolist", "List the recorded macros")
 
 -- The four splits also answer on Alt+Shift+Arrow, which is one chord instead of
 -- two. Arrows and not letters: an arrow report carries its modifiers as a real

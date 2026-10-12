@@ -468,13 +468,23 @@ struct FileBuffer
 
 // A buffer named for something it renders rather than a file it holds: the REST
 // response tab (app/rest_client.cpp), the Bible reader's passage tab
-// (extras/bible_client.cpp) and the AI chat (features/ai/chat.lua). There is
-// nothing behind the name, so a save is refused and a workspace session does
-// not reopen one.
+// (extras/bible_client.cpp), the AI chat (features/ai/chat.lua) and the
+// compilation buffer (:compile, workspace/tasks.cpp). There is nothing behind
+// the name, so a save is refused and a workspace session does not reopen one.
 inline bool is_rendered_view_path(const std::string &path)
 {
   return path.rfind("[Response]", 0) == 0 || path.rfind("[Bible]", 0) == 0
-         || path.rfind("[Chat]", 0) == 0;
+         || path.rfind("[Chat]", 0) == 0 || path.rfind("[Compile]", 0) == 0;
+}
+
+// The compilation log a `:compile` run streams into (workspace/tasks.cpp). It
+// keeps a buffer of its own -- that is what the incremental parse and the row
+// decorations read -- and a pane to show itself in, but it is nobody's file:
+// no tab strip lists it and the tab keys walk past it, so a build's output is
+// never one of the opened tabs.
+inline bool is_compile_log_path(const std::string &path)
+{
+  return path.rfind("[Compile]", 0) == 0;
 }
 
 #endif
