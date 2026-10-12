@@ -191,10 +191,15 @@ bool Editor::insert_char(char c)
           start_line.insert(s.x, 1, c);
         }
 
-        buf.selection.start = {s.x + 1, s.y};
-        buf.selection.end = {e.x + 1, e.y};
-        buf.selection.active = true;
-        buf.cursor = buf.selection.end;
+        // The wrap is done, so the selection is: the caret is left on the text
+        // between the pair, which is where the auto-close path leaves it for a
+        // pair typed with nothing selected. The next keystroke then goes inside
+        // the pair rather than replacing what was just wrapped, and the closer
+        // steps the caret out the way it does for a pair of its own. Leaving
+        // the selection live did the opposite: the second key of "wrap, then
+        // step out" deleted the word the first key had just bracketed.
+        buf.selection.active = false;
+        buf.cursor = {e.x + 1, e.y};
         buf.preferred_x = buf.cursor.x;
         buf.modified = true;
         buf.is_placeholder = false;

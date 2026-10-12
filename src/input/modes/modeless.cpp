@@ -1,3 +1,4 @@
+#include "autoclose.h"
 #include "core/editor.h"
 #include "ui/smooth_scroll.h"
 #include <algorithm>
@@ -765,11 +766,30 @@ void Editor::handle_modeless_input(int ch, bool is_ctrl, bool is_shift, bool is_
   if (!is_ctrl && !is_alt && ch >= 32 && ch < 1000)
   {
     auto &buf = get_buffer();
-    if (buf.selection.active)
+    // A pair opener is the one key that does not mean "replace what I marked":
+    // over a selection it puts the pair around it, and insert_char does the
+    // insert. Deleting the selection here first (as every other printable key
+    // does) is what used to reduce that selection to the single typed
+    // character, which is the opposite of what quoting or bracketing a word is
+    // asked for.
+    const bool wraps_selection = buf.selection.active && AutoClose::should_auto_close((char)ch);
+    if (buf.selection.active && !wraps_selection)
+    {
       delete_selection();
+    }
     bool had_completion = lsp_completion_visible;
     bool inserted_html_closing_tag = insert_char((char)ch);
     char typed = (char)ch;
+
+    if (wraps_selection)
+    {
+      // The pair went around the marked text, so no call is being opened and no
+      // word is being completed: none of what follows a typed key applies. The
+      // closer is where a closer belongs -- the next `)` steps over it.
+      hide_lsp_completion();
+      needs_redraw = true;
+      return;
+    }
 
     if (inserted_html_closing_tag)
     {

@@ -21,6 +21,11 @@ from pty_screen import run_in_pty  # noqa: E402
 COLS, ROWS = 100, 24
 
 
+def alt(letter: str) -> bytes:
+    """The kitty report for Alt+<letter> (Alt = bitmask 2, so modifier = 3)."""
+    return b"\x1b[" + str(ord(letter)).encode() + b";3u"
+
+
 def workspace(tmp: str) -> str:
     shutil.rmtree(tmp, ignore_errors=True)
     os.makedirs(tmp)
@@ -79,6 +84,35 @@ def main() -> int:
             failures.append("%s: %r never reached the buffer" % (label, want))
         if reject is not None and reject in got:
             failures.append("%s: %r was typed as well" % (label, reject))
+
+    # A pair typed over a selection goes around it: the word the user marked is
+    # quoted or bracketed rather than replaced by the one character. These go
+    # through the key path a typed character takes (the cases above are the pair
+    # rules on their own), which is where the selection used to be dropped
+    # before anything was inserted. The caret is left inside the pair, so the
+    # closer typed next steps over its twin -- the same two keys as a pair typed
+    # with nothing selected -- and no selection is left for the next key to eat.
+    wraps = [
+        # (label, keys, expected fragment, fragment that must not appear, status)
+        ("quote around a selected word", alt("v") + b'w"', '"int" main()', '""int"', "1:5"),
+        ("single quote around a selected word", alt("v") + b"w'", "'int' main()", "''int'", "1:5"),
+        ("brackets around a selected word", alt("v") + b"w(", "(int) main()", None, "1:5"),
+        ("the closer steps out of the pair it wrapped", alt("v") + b"w()",
+         "(int) main()", "() main()", "1:6"),
+    ]
+    for index, (label, keys, want, reject, status) in enumerate(wraps):
+        got = type_keys(binary, "/tmp/jot_autoclose_wrap_%d" % index, keys, dump)
+        row = got.split("\n")[-1]
+        ok = want in got and (reject is None or reject not in got) and status in row
+        print("%-38s want %-12r %s" % (label, want, "ok" if ok else "FAILED"))
+        if ok:
+            continue
+        if want not in got:
+            failures.append("%s: %r never reached the buffer" % (label, want))
+        if reject is not None and reject in got:
+            failures.append("%s: %r was typed as well" % (label, reject))
+        if status not in row:
+            failures.append("%s: the caret is not at %s; the bar reads %r" % (label, status, row))
 
     if failures:
         print("autoclose probe: FAIL")

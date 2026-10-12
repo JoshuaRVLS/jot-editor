@@ -83,6 +83,7 @@ void Editor::show_command_help(const std::string &topic_text)
       "",
       "Modeless Editing",
       "  Type text         Insert at cursor",
+      "  Type \" ' ( with a selection  Wrap the selection in that pair",
       "  Esc               Clear selection or close active popup",
       "  Arrow keys        Move cursor",
       "  Shift+Arrows      Expand selection",

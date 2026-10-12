@@ -380,3 +380,60 @@ TEST_CASE("Every caret steps over the closer it types", "[jot][autoclose]")
   REQUIRE(core.cursor().second == 2);
   REQUIRE(probe_editor().buffer_for_test().extra_carets[0].end.x == 5);
 }
+
+// The wrap above is pinned through the host API, which is not the path a typed
+// character takes: the frontend's modeless handler deleted the selection before
+// inserting anything, so a pair typed over a marked word came out as the pair
+// alone -- the word it was meant to go around was gone. These drive the real
+// key path (terminal_key_for_test is the frontend's own entry point) to pin both
+// halves: the wrap, and the state it leaves the caret and the selection in.
+TEST_CASE("A pair typed over a selection wraps it, and the closer steps out", "[jot][autoclose]")
+{
+  Editor &e = probe_editor();
+  // The home surface owns plain keys while it is up, and this case types.
+  e.set_home_menu_visible(false);
+  const auto type = [&e](char c) { e.terminal_key_for_test(c); };
+  auto &core = e.host().core;
+
+  seed("foo bar");
+  REQUIRE(core.select_next_occurrence());
+  type('(');
+  REQUIRE(core.buffer_content() == "(foo) bar");
+  // The wrap ends the selection and leaves the caret on the text inside the
+  // pair, so the closer typed next steps over its twin: it neither replaces the
+  // word it just bracketed nor leaves a doubled pair behind.
+  REQUIRE(core.selected_text().empty());
+  REQUIRE(core.cursor() == std::make_pair(0, 4));
+  type(')');
+  REQUIRE(core.buffer_content() == "(foo) bar");
+  REQUIRE(core.cursor() == std::make_pair(0, 5));
+
+  // Both quotes the same way, and a word with an apostrophe is still just one
+  // quote wrapped around it.
+  seed("alpha beta");
+  REQUIRE(core.select_next_occurrence());
+  type('"');
+  REQUIRE(core.buffer_content() == "\"alpha\" beta");
+
+  seed("alpha beta");
+  REQUIRE(core.select_next_occurrence());
+  type('\'');
+  REQUIRE(core.buffer_content() == "'alpha' beta");
+
+  // A selection spanning lines is wrapped at its two ends, which is what makes
+  // a count of lines one gesture with this (Alt+V 3 Shift+L then a quote).
+  seed("one\ntwo\nthree\n");
+  e.terminal_key_for_test('v', false, false, true); // Alt+V
+  e.terminal_key_for_test('2');
+  e.terminal_key_for_test('L', false, true, false); // Shift+L
+  REQUIRE(core.selected_text() == "one\ntwo");
+  type('"');
+  REQUIRE(core.buffer_content() == "\"one\ntwo\"\nthree\n");
+
+  // A key that is not a pair character still replaces the selection: the wrap
+  // is the pair keys' doing, not a change to what typing means.
+  seed("foo bar");
+  REQUIRE(core.select_next_occurrence());
+  type('X');
+  REQUIRE(core.buffer_content() == "X bar");
+}

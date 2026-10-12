@@ -1169,6 +1169,14 @@ around the caret's selection or word (`Alt+X W`, `Alt+X U`). There is no insert
 mode to change into, so clearing one leaves the caret where the text was and
 typing takes its place.
 
+A pair character typed over a selection goes around it instead of replacing it:
+`"` on a marked word quotes it (`"word"`), `'` and `(` likewise, so the word is
+bracketed without a trip through a chord. The selection ends there and the caret
+is left inside the pair, which is where a pair typed with nothing selected leaves
+it -- the closer typed next steps over its twin, so `(` then `)` brackets a word
+and carries on after it. Everything else typed over a selection still replaces
+it.
+
 `Alt+X W` is typed as the pair that should go around: `Alt+X W "` wraps in
 quotes, `Alt+X W (` in parentheses, `[`, `{` and `'` likewise. The selection is
 wrapped when there is one and the word at the caret when there is not, and
