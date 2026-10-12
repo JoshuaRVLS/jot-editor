@@ -12,7 +12,9 @@ did:
   2. jot.screen.text / jot.screen.cell read back what the painter just wrote;
   3. a key the hook consumes never reaches the buffer, while a key it declines
      still types;
-  4. jot.term.write's bytes are in the frame's stream.
+  4. jot.term.write's bytes are in the frame's stream;
+  5. the painter is not limited to an editor frame: it paints on the home screen
+     and over an open picker, which are the frame paths that return early.
 
 Exit 0 pass, 1 fail, 2 skip.
 """
@@ -79,6 +81,34 @@ def row_text(screen, row: int) -> str:
     return "".join(screen.cells[row]).rstrip()
 
 
+def check_other_paths(binary: str) -> list[str]:
+    """The frame paths that return before the shared tail.
+
+    A painter that only ran on a normal editor frame would leave a script's
+    overlay missing exactly when the editor is showing something of its own, so
+    both of the early paths are checked on screen: the home screen (a bare run)
+    and an open picker.
+    """
+    failures: list[str] = []
+    home = run_in_pty(binary, [], b"", settle=3.0, after=1.5, cfg=CFG, cwd=WORK)
+    if not any("LUALAYER" in "".join(cells) for cells in home.cells):
+        failures.append("the painter's cells are missing from the home screen frame")
+
+    picker = run_in_pty(binary,
+                        [os.path.join(WORK, "probe.txt")],
+                        b"\x10find probe\r",
+                        settle=3.0,
+                        after=3.5,
+                        cfg=CFG,
+                        cwd=WORK)
+    picker_text = picker.text()
+    if "LUALAYER" not in picker_text:
+        failures.append("the painter's cells are missing from the frame with the picker open")
+    if "Results" not in picker_text and "results" not in picker_text:
+        failures.append("the picker never opened, so the picker frame was not exercised")
+    return failures
+
+
 def main() -> int:
     if not os.path.exists(BINARY):
         print(f"skip: {BINARY} is not built")
@@ -134,13 +164,16 @@ def main() -> int:
             f"the buffer's first line reads {buffer_row!r}, wanted it to hold "
             "\"yline 0 of\": the consumed 'x' must not be typed and the declined 'y' must be")
 
+    failures += check_other_paths(BINARY)
+
     if failures:
         for line in failures:
             print("FAIL:", line)
         print("--- screen ---")
         print(screen.text())
         return 1
-    print("ok: painter cells, grid read-back, key consumption and raw terminal bytes")
+    print("ok: painter cells (editor frame, home and picker), grid read-back, "
+          "key consumption and raw terminal bytes")
     return 0
 
 
