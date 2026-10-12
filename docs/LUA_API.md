@@ -1113,6 +1113,12 @@ transports, LSP/DAP protocol handling, Tree-sitter parser ownership, and
 platform integration. Lua receives typed wrappers and never receives native
 pointers.
 
+The boundary is a floor rather than a ceiling: `jot.screen`, `jot.input` and
+`jot.term` expose the cell grid, the event stream and the terminal's own bytes
+(see The Raw Layer below), so what C++ keeps is the machinery that produces
+frames and events, not the decision about what they contain. A script can paint
+any cell on screen and see any key or click before the editor does.
+
 Tree-sitter parser, tree, and query values are positive opaque integer handles.
 Delete them with `delete_parser`, `delete_tree`, and `delete_query`. Handles
 become invalid after `reload`; native functions return Lua errors for invalid
@@ -1164,3 +1170,138 @@ A key callback gets `{key=..., ctrl=..., shift=..., alt=..., window=...}` where
 `{button=..., row=..., col=..., ...}`. `jot.ui.float.set_spans(win, row, spans)`
 paints colored runs on a row, where each span is `{start=, len=, fg=}` in bytes
 of that row's text.
+
+## The Raw Layer
+
+`jot.screen`, `jot.input` and `jot.term` are the bottom of the stack. Every
+surface the editor has (floats, the UI kit, the sidebar, the status line, the
+panes) is written on top of them, so a script that needs something the editor
+has no concept of builds it here: a canvas, a chart, a game, an overlay, an
+input mode of its own. Cells are grid cells (one character each, two for a wide
+glyph), 0-based, and clipped to the grid.
+
+```lua
+jot.screen.on_paint(function(w, h)                      -- runs on every painted frame
+  jot.screen.write(2, 1, "LUA", { fg = "#ff8800", bold = true })
+  jot.screen.fill(2, 2, 12, 1, "-", { fg = 8 })
+end)
+
+jot.input.on_key(function(event)
+  if event.name == "F2" then
+    return true                                         -- consumed: nothing else sees it
+  end
+end)
+```
+
+### jot.screen
+
+`jot.screen.size()` returns the grid's `width, height`. `jot.screen.cell(x, y)`
+returns one cell as `{text=, fg=, bg=, fg_rgb=, bg_rgb=, bold=, italic=, dim=,
+reverse=, underline=, underline_fg=}`, or `nil` when the coordinates are off the
+grid. `jot.screen.text(x, y, w)` returns the text of `w` cells from `(x, y)`
+(the second half of a wide glyph reads as a space).
+
+`jot.screen.write(x, y, text, opts)` paints `text` from that cell and returns the
+number of cells painted. Grapheme clusters stay whole, a wide cluster takes two
+cells, a newline ends the run, and text past the right edge or on a row off the
+grid is not painted. `jot.screen.fill(x, y, w, h, glyph, opts)` paints one
+character over a rect, `glyph` defaulting to a space (a table in that slot is
+read as `opts`).
+
+`opts` is the same table everywhere: `fg` and `bg` take an xterm-256 index or an
+exact colour as `"#rrggbb"` (whatever the theme and `set_hl` take), and an
+absent field means the theme's default foreground or background. `bold`,
+`italic`, `dim` and `reverse` are booleans, and `underline` is `0` (none), `1`
+(straight) or `2` (wavy) with `underline_fg` for its colour.
+
+`jot.screen.on_paint(fn)` registers the painter. It runs after the editor has
+drawn everything it knows about and before the frame is emitted, so its cells
+land over the buffer, the sidebar and a picker alike. It runs on every frame
+that paints (the home screen and the modals included) and not on an idle frame
+that paints nothing. A frame starts by clearing the grid, so cells belong in the
+painter rather than somewhere else that writes once. Returning `true` asks for
+another frame immediately, which is the animation loop; returning nothing lets
+the editor idle again, so a painter that animates returns `true` while it is
+moving only. A painter that raises an error is dropped and logged rather than
+retried on every frame, and `on_paint(nil)` unregisters it.
+
+`jot.screen.redraw()` queues a repaint, the same request a timer makes
+(`jot.timer.set_interval(16, jot.screen.redraw)` is the frame clock for a script
+that prefers its own timing over the painter's return value).
+
+### jot.input
+
+`jot.input.on_key(fn)` and `jot.input.on_mouse(fn)` register the raw event
+hooks; passing `nil` in place of the function removes one. Both receive a table
+and consume the event by returning a truthy value.
+
+A key hook gets `{key=, char=, original_key=, name=, ctrl=, shift=, alt=}`.
+`key` is the coded key (a printable key is its own code, `Enter` is 13, `Esc` is
+27, the function keys live in a high range), `char` is the character for a
+printable key and `nil` otherwise, and `name` is the canonical chord the rest of
+the system uses (`"F2"`, `"Ctrl+K"`, `"S"`), which is the field to match on. A
+mouse hook gets `{x=, y=, button=, pressed=, released=, motion=, ctrl=, shift=,
+alt=}`, with `x`/`y` in grid cells and `button` the raw SGR button code (`0`
+left, `1` middle, `2` right, `64`/`65` the vertical wheel, `66`/`67` the
+horizontal one, `0x20` set on motion).
+
+The key hook sits above every mode: it is the first thing a key reaches after a
+live macro recording has logged it, so it also sees the chords the editor keeps
+for itself (a modal prompt's answer, `Ctrl+Q`, text zoom). A hook that consumes
+every key is a locked keyboard, so the script owns letting the keys it does not
+want through. The mouse hook sits above the floats, so a consumed click or wheel
+notch never reaches a pane, a picker or a hit test.
+
+### jot.term
+
+`jot.term.write(bytes)` appends raw bytes to this frame's output, after the cells
+and before the caret, which is how a script emits a protocol sequence the cell
+model cannot express (a title, an OSC 8 link, a kitty graphics placement). A
+sequence that only sets state is safe; one that moves the cursor or paints text
+is overwritten by the next frame.
+
+`jot.term.info()` returns `{width=, height=, columns=, rows=, cell_scale=,
+truecolor=, cell_pixel_width=, cell_pixel_height=}`: the grid size, the
+terminal's own size in cells (they differ only while a text scale is in effect),
+whether the terminal takes 24-bit colour, and its cell size in device pixels
+(`0` when the terminal does not report one).
+
+## Writing A Feature In Lua
+
+A feature can be files under the config directory instead of code compiled into
+the binary. Nothing here needs a rebuild or a restart.
+
+```
+~/.config/jot/
+  init.lua                     runs first, after config.lua
+  config.lua                   settings
+  plugins/*.lua                one file per plugin, loaded in name order
+  plugins/<name>/plugin.lua    a plugin that is a directory
+  lua/<module>.lua             modules for require, not loaded on their own
+```
+
+`package.path` is given the config dir, its `lua/` and its `plugins/`
+directories (each with `?.lua` and `?/init.lua`), ahead of the built-in path, so
+`require("mystuff.util")` resolves out of `~/.config/jot/lua/mystuff/util.lua`
+and a user file wins over a bundled one of the same name.
+
+`jot.lua.dir()` returns that config directory and `jot.lua.path()` the search
+path in force. `jot.lua.reload(name)` drops `name` and everything loaded under it
+from `package.loaded` and requires it again, returning `(true, module)` or
+`(false, error)`, which is the loop for iterating on a module:
+
+```lua
+local ok, mod = jot.lua.reload("mystuff")
+```
+
+`jot.lua.reload()` with no name re-runs `init.lua` and every plugin file, the
+same work as `:reloadplugins`. `:reload` also re-applies `config.lua` and the
+tree-sitter grammar set.
+
+The pieces to build with are already there: `jot.command` and `jot.keymap` for
+entry points, `jot.autocmd` and `jot.events` for reactions, `jot.buffer` and
+`jot.pane` for content, `jot.ui.float` (with `jot.ui.handler` for a whole
+surface) for boxes, `jot.decoration` and `jot.status` for text and the status
+line, `jot.timer` and `jot.job` for time and processes, `jot.file` and
+`jot.workspace` for the disk, and the raw layer above when none of them fits.
+`jot.capabilities()` lists the namespaces this build answers to.

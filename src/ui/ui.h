@@ -236,6 +236,13 @@ public:
   void set_cell_scale(int scale);
   // Virtual so GUI backends can repaint without clearing a terminal.
   virtual void invalidate();
+  // Whether the grid is usable (a UI backend exists). The Lua screen layer
+  // checks this before answering a size, so a headless run reports 0x0 instead
+  // of dereferencing a backend that was never built.
+  bool has_grid() const
+  {
+    return width > 0 && height > 0;
+  }
   // Forget what was last written to the terminal: the next render() must
   // repaint every row from scratch instead of diffing against last_grid.
   // Used when the terminal surface may have changed without us (window
@@ -290,6 +297,11 @@ public:
                    const UIBorderEdges &edges = UIBorderEdges{},
                    int bottom_bg = -1);
   void fill_rect(const UIRect &rect, const std::string &ch, int fg, int bg);
+  // One cell, every attribute, no coalescing. The entry point for the Lua
+  // screen layer (jot.screen.write/fill), which paints cells the editor has no
+  // painter for: it goes through set_cell() like every other painter, so an
+  // exact colour resolves and the row is marked dirty.
+  void paint_cell(int x, int y, const UICell &cell);
   // Dims a region of the grid (modal scrim). GUI backends override this to
   // skip the grid paint and draw their own eased scrim overlay instead, so
   // the dim fades in/out smoothly.

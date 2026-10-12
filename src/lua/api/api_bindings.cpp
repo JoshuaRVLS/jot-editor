@@ -111,6 +111,10 @@ bool LuaAPI::init()
   if (!L)
     return false;
   luaL_openlibs(L);
+  // The user's Lua directory on package.path: everything `require` resolves
+  // (jot.lua, api_runtime.cpp) -- a feature in Lua is a module tree under the
+  // config dir, not a file compiled into the binary.
+  setup_lua_module_path(L);
   lua_state = L;
   lua_initialized = true;
   inject(L, this, "show_message", l_show_message);
@@ -624,6 +628,28 @@ bool LuaAPI::init()
   field(L, "sync", l_preview_sync);
   field(L, "take_scroll", l_preview_take_scroll);
   lua_setfield(L, -2, "preview");
+  // The raw layer: the cell grid itself (jot.screen), the raw event stream
+  // (jot.input) and the terminal's own bytes (jot.term). Everything the editor
+  // draws and dispatches is built on these, so they are registered last: they
+  // are the bottom of the stack, and nothing above them may be shadowed by the
+  // convenience namespaces (see api_screen.cpp).
+  lua_newtable(L);
+  field(L, "write", l_screen_write);
+  field(L, "fill", l_screen_fill);
+  field(L, "cell", l_screen_cell);
+  field(L, "text", l_screen_text);
+  field(L, "size", l_screen_size);
+  field(L, "on_paint", l_screen_on_paint);
+  field(L, "redraw", l_screen_redraw);
+  lua_setfield(L, -2, "screen");
+  lua_newtable(L);
+  field(L, "on_key", l_input_on_key);
+  field(L, "on_mouse", l_input_on_mouse);
+  lua_setfield(L, -2, "input");
+  lua_newtable(L);
+  field(L, "write", l_term_write);
+  field(L, "info", l_term_info);
+  lua_setfield(L, -2, "term");
   lua_setglobal(L, "jot");
   lua_getglobal(L, "jot");
   lua_getfield(L, -1, "ui");
@@ -708,6 +734,13 @@ bool LuaAPI::init()
   // the same file/workspace. Returns false when unsaved buffers block it.
   lua_pushcfunction(L, l_editor_restart);
   lua_setfield(L, -2, "restart");
+  // jot.lua: the module surface for features written in Lua. Registered here,
+  // next to the other things a plugin reaches for at load time.
+  lua_newtable(L);
+  field(L, "path", l_lua_path);
+  field(L, "dir", l_lua_dir);
+  field(L, "reload", l_lua_reload);
+  lua_setfield(L, -2, "lua");
   lua_pop(L, 1);
   // Bundled feature: inline diagnostics as anchored decorations (see
   // lua/features/decorations.lua). Loaded after user plugins: load_plugins()

@@ -301,9 +301,14 @@ void Editor::render()
       // A registered home_screen handler paints its float on this early path.
       lua_api->render_floats();
     }
+    bool raw_wants_next_frame = false;
+    if (lua_api)
+    {
+      raw_wants_next_frame = lua_api->run_paint_hook();
+    }
     ui->hide_cursor();
     ui->render();
-    needs_redraw = frame_needs_repaint();
+    needs_redraw = frame_needs_repaint() || raw_wants_next_frame;
     return;
   }
 
@@ -365,8 +370,16 @@ void Editor::render()
     {
       ui->hide_cursor();
     }
+    // jot.screen.on_paint paints over the picker too: a raw painter is the
+    // outermost layer on purpose, so a script can annotate or replace any
+    // surface without the editor having to know about it.
+    bool raw_wants_next_frame = false;
+    if (lua_api)
+    {
+      raw_wants_next_frame = lua_api->run_paint_hook();
+    }
     ui->render();
-    needs_redraw = frame_needs_repaint();
+    needs_redraw = frame_needs_repaint() || raw_wants_next_frame;
     return;
   }
   else
@@ -572,8 +585,17 @@ void Editor::render()
 #ifdef JOT_TREESITTER
     evict_stale_syntax_trees();
 #endif
+    // Last: the jot.screen painter runs once the editor has drawn everything it
+    // knows about, and every cell it writes goes into the grid ui->render() is
+    // about to diff out. A painter that returned true asked for another frame
+    // (the animation loop); the editor idles again when it stops asking.
+    bool raw_wants_next_frame = false;
+    if (lua_api)
+    {
+      raw_wants_next_frame = lua_api->run_paint_hook();
+    }
     ui->render();
-    needs_redraw = frame_needs_repaint();
+    needs_redraw = frame_needs_repaint() || raw_wants_next_frame;
   }
 }
 

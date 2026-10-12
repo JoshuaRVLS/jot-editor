@@ -1352,6 +1352,11 @@ void UI::draw_text(int x,
   }
 }
 
+void UI::paint_cell(int x, int y, const UICell &cell)
+{
+  set_cell(x, y, cell);
+}
+
 void UI::draw_rect(const UIRect &rect, int fg, int bg)
 {
   for (int y = rect.y; y < rect.y + rect.h && y < height; y++)

@@ -249,7 +249,8 @@ namespace lua_bind
         "job",      "edit",       "search",    "folds",     "bookmarks",   "workspace",
         "terminal", "tasks",      "theme",     "config",    "lsp",         "debugger",
         "git",      "treesitter", "symbols",   "image",     "diagnostics", "marks",
-        "status",   "timer",      "motion",    "sidebar",   "toast",       "process"};
+        "status",   "timer",      "motion",    "sidebar",   "toast",       "process",
+        "screen",   "input",      "term",      "lua"};
     for (const char *name : names)
     {
       lua_pushboolean(L, 1);

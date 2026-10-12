@@ -130,6 +130,18 @@ void Editor::handle_terminal_event(const Event &ev)
     // played key would be appended to the register it came from.
     macro_note_key(ch, is_ctrl, is_shift, is_alt, original_ch);
 
+    // jot.input.on_key: the raw stream, above every mode. A script that asked
+    // for the raw stream is asking for the keys the editor would otherwise keep
+    // for itself (a modal prompt's y/n, Ctrl+Q, text zoom), so the hook sits
+    // here, before the modal branches, and hands back what it does not want by
+    // returning false. A hook that consumes everything is a locked keyboard:
+    // the script owns letting Esc through.
+    if (lua_api && lua_api->raw_key_input(ch, is_ctrl, is_shift, is_alt, original_ch))
+    {
+      needs_redraw = true;
+      return;
+    }
+
     // Modal prompts own their answer keys before editor chrome callbacks (for
     // example the explorer's Lua `y` keymap) can consume them.
     if (show_quit_prompt)
@@ -327,6 +339,24 @@ void Editor::handle_terminal_event(const Event &ev)
     if (show_which_key && ev.mouse.pressed && wheel_base != 64 && wheel_base != 65)
     {
       close_which_key();
+    }
+
+    // jot.input.on_mouse: same contract as the key hook, one layer lower than
+    // the floats: a click, a wheel notch or a hover that it consumes never
+    // reaches the panes, the picker or the editor's own hit tests.
+    if (lua_api
+        && lua_api->raw_mouse_input(ev.mouse.x,
+                                    ev.mouse.y,
+                                    button,
+                                    ev.mouse.pressed,
+                                    ev.mouse.released,
+                                    (button & 0x20) != 0,
+                                    ev.mouse.ctrl,
+                                    ev.mouse.shift,
+                                    ev.mouse.alt))
+    {
+      needs_redraw = true;
+      return;
     }
 
     if (lua_api

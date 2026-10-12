@@ -54,6 +54,12 @@ private:
   // Registry ref (LUA_NOREF when unset) of the jot.lsp snippet-completion
   // handler (registered by the bundled snippet engine).
   int lsp_snippet_handler_ref_ = -2;
+  // Registry refs (LUA_NOREF when unset) of the raw layer's callbacks: the
+  // jot.screen painter and the jot.input key / mouse hooks (api_screen.cpp).
+  // Dropped on plugin reload and on shutdown with the rest of the runtime.
+  int paint_hook_ref_ = -2;
+  int raw_key_ref_ = -2;
+  int raw_mouse_ref_ = -2;
   // Surface name -> registered handler (jot.ui.handler). Values are registry
   // refs; -1 entries are removed lazily on next emit.
   std::map<std::string, int> lua_ui_handlers_;
@@ -684,6 +690,69 @@ public:
   // toasts sit above both (see runtime/lua/features/ui/toast.lua).
   static constexpr int kModalFloatZindex = 50000;
 
+  // The raw layer (jot.screen / jot.input / jot.term), see api_screen.cpp.
+  // Everything above it -- floats, the UI kit, the editor's own chrome -- is
+  // built on cells and events; this is that layer exposed to Lua, so a script
+  // can draw anything the cell model can express and see any event before the
+  // editor does.
+  //
+  // One cell's ink. Unset fields are -1 for colours ("the theme's default") and
+  // false/0 for the attributes.
+  struct ScreenStyle
+  {
+    int fg = -1;
+    int bg = -1;
+    int underline = 0;
+    int underline_fg = -1;
+    bool bold = false;
+    bool italic = false;
+    bool dim = false;
+    bool reverse = false;
+  };
+  // jot.screen: writes a run of grapheme clusters starting at (x, y), one cell
+  // each (two for a wide cluster), clipped to the grid. Returns the number of
+  // cells painted.
+  int screen_write(int x, int y, const std::string &text, const ScreenStyle &style);
+  // jot.screen.fill: the same ink over a rect. Returns cells painted.
+  int screen_fill(int x, int y, int w, int h, const std::string &text, const ScreenStyle &style);
+  // jot.screen.cell / text / size: reads back what is in the grid right now.
+  void screen_cell_to_lua(lua_State *L, int x, int y);
+  void screen_text_to_lua(lua_State *L, int x, int y, int w);
+  void screen_size_to_lua(lua_State *L);
+  // jot.screen.on_paint: the per-frame painter, called after the editor has
+  // drawn everything it knows about and before the frame is diffed out. A
+  // registered painter that returns true asks for another frame immediately
+  // (the animation loop); returning nothing lets the editor idle again.
+  void set_paint_hook(lua_State *L, int fn_index);
+  bool run_paint_hook();
+  bool has_paint_hook() const
+  {
+    return paint_hook_ref_ >= 0;
+  }
+  // jot.screen.redraw: queue a repaint (the same call a timer uses to drive an
+  // animation).
+  void screen_redraw();
+  // jot.input.on_key / on_mouse: every key and mouse event, before any mode
+  // sees it. True consumes the event. See terminal_events.cpp for where they
+  // sit in the dispatch order.
+  void set_raw_key_hook(lua_State *L, int fn_index);
+  void set_raw_mouse_hook(lua_State *L, int fn_index);
+  bool raw_key_input(int ch, bool ctrl, bool shift, bool alt, int original_ch);
+  bool raw_mouse_input(int x,
+                       int y,
+                       int button,
+                       bool pressed,
+                       bool released,
+                       bool motion,
+                       bool ctrl,
+                       bool shift,
+                       bool alt);
+  // jot.term: the terminal itself. write() appends bytes to this frame's
+  // output, ahead of the caret, which is the only way Lua can emit a protocol
+  // sequence the cell model cannot express (kitty graphics, OSC links).
+  bool term_write(const std::string &bytes);
+  void term_info_to_lua(lua_State *L);
+
   // Whether a modal surface (quick pick, a popup, the status modals, the
   // telescope, the settings menu) is up. A modal paints above the background
   // floats and is the only surface that takes the mouse.
@@ -717,9 +786,28 @@ public:
   void preview_sync_from_lua(lua_State *L);
   void preview_take_scroll_from_lua(lua_State *L);
 
+  // jot.lua: the module surface (see api_runtime.cpp). A feature written in
+  // Lua is a directory of files under the config dir, resolved through
+  // package.path, and reloaded in place -- no rebuild, no restart.
+  //
+  // path()/dir() answer where `require` looks and where the user's Lua lives.
+  void lua_path_to_lua(lua_State *L);
+  void lua_dir_to_lua(lua_State *L);
+  // reload(name) re-runs one module: it drops name and everything under it from
+  // package.loaded and requires it again, returning (true, module) or
+  // (false, error). With no name, every user file (init.lua and every plugin)
+  // re-runs, the way :reloadplugins does.
+  void lua_reload_from_lua(lua_State *L);
+  // Installs the module search path above the built-in one. Called once, right
+  // after the standard libraries are opened.
+  static void setup_lua_module_path(lua_State *L);
+
 private:
   PreviewServer *ensure_preview_server();
   std::unique_ptr<PreviewServer> preview_server_;
+  // Unrefs the raw layer's three callbacks (see api_screen.cpp). Called from
+  // the shutdown and plugin-reload paths, before the Lua state is closed.
+  void clear_raw_hooks();
 };
 
 #endif

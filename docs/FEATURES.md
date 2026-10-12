@@ -1030,6 +1030,29 @@ repaint only when one of them would come out different, so the bar ticks once a
 second while the coding total is still moving and an idle editor paints nothing
 except when a label actually moved.
 
+### Features written in Lua
+
+A feature does not have to be compiled in. The editor's own machinery is
+reachable from Lua: commands, keymaps, autocmds, buffers, panes, floats, the
+decoration layer, status-line segments, timers, jobs, the file and workspace
+APIs, and the LSP/DAP/git bridges. Underneath all of them are three namespaces
+that are the bottom of the stack.
+
+`jot.screen` is the cell grid itself: read any cell, write text or a filled
+rect anywhere with colours (`"#ff8800"` or a palette index) and the cell
+attributes, and register a painter that runs after the editor has drawn, on
+every frame, over anything. `jot.input` is the raw event stream: a key hook that
+sees a chord before any mode does (including a modal prompt's answer) and
+consumes it, and a mouse hook above the floats. `jot.term` appends raw bytes to
+the frame, for the protocol sequences a cell grid cannot express.
+
+A feature is files under the config directory rather than code in the binary.
+`package.path` is pointed at `~/.config/jot`, its `lua/` and its `plugins/`
+directories first, so `require("mystuff.util")` resolves there, and
+`jot.lua.reload("mystuff")` re-runs a module in place. The loop is: edit a Lua
+file, `:reloadplugins` (or a keymap calling `jot.lua.reload()`), look at the
+screen. No rebuild, no restart.
+
 ### Coding time
 
 The chip is `status_coding_time`, and what it shows is the time coded today for

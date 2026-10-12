@@ -246,5 +246,21 @@ namespace lua_bind
   int l_emmet_expand(lua_State *L);
   int l_buf_get_line(lua_State *L);
   int l_git_diff(lua_State *L);
+  // The raw layer (jot.screen / jot.input / jot.term), see bindings_screen.cpp.
+  int l_screen_write(lua_State *L);
+  int l_screen_fill(lua_State *L);
+  int l_screen_cell(lua_State *L);
+  int l_screen_text(lua_State *L);
+  int l_screen_size(lua_State *L);
+  int l_screen_on_paint(lua_State *L);
+  int l_screen_redraw(lua_State *L);
+  int l_input_on_key(lua_State *L);
+  int l_input_on_mouse(lua_State *L);
+  int l_term_write(lua_State *L);
+  int l_term_info(lua_State *L);
+  // jot.lua: the module surface, see bindings_plugin.cpp.
+  int l_lua_path(lua_State *L);
+  int l_lua_dir(lua_State *L);
+  int l_lua_reload(lua_State *L);
   const char *syntax_token_kind_name(int token);
 } // namespace lua_bind

@@ -39,6 +39,66 @@ namespace fs = std::filesystem;
 #pragma comment(lib, "psapi.lib")
 #endif
 
+namespace
+{
+  // The user's Lua directory: $JOT_CONFIG_HOME when set (which is what the
+  // probes pin), else the platform config dir. Shared by the plugin scan, the
+  // config file and the module path, so the three can never disagree about
+  // where "the user's Lua" lives.
+  fs::path lua_config_root()
+  {
+    const char *env = getenv("JOT_CONFIG_HOME");
+    if (env && *env)
+    {
+      return env;
+    }
+    const char *app = getenv("APPDATA");
+    if (app && *app)
+    {
+      return fs::path(app) / "jot";
+    }
+    const char *home = getenv("HOME");
+    if (home)
+    {
+      return fs::path(home) / ".config" / "jot";
+    }
+    return {};
+  }
+} // namespace
+
+void LuaAPI::setup_lua_module_path(lua_State *L)
+{
+  // package.path for the user's own files. Without this a Lua feature is one
+  // file, because `require` resolves against Lua's built-in paths (the process
+  // CWD and LUA_PATH), never the editor's config dir -- so a feature that wants
+  // a module tree had to be compiled into the binary. The config dir and its
+  // lua/ and plugins/ subdirectories come first, so a user file of the same
+  // name always wins over a bundled one.
+  const fs::path root = lua_config_root();
+  std::string prefix;
+  if (!root.empty())
+  {
+    for (const fs::path &dir : {root, root / "lua", root / "plugins"})
+    {
+      prefix += (dir / "?.lua").string() + ";";
+      prefix += (dir / "?" / "init.lua").string() + ";";
+    }
+  }
+  lua_getglobal(L, "package");
+  if (!lua_istable(L, -1))
+  {
+    lua_pop(L, 1);
+    return;
+  }
+  lua_getfield(L, -1, "path");
+  const char *existing = lua_tostring(L, -1);
+  const std::string path = prefix + (existing ? existing : "");
+  lua_pop(L, 1);
+  lua_pushlstring(L, path.data(), path.size());
+  lua_setfield(L, -2, "path");
+  lua_pop(L, 1);
+}
+
 void LuaAPI::cleanup()
 {
   if (!lua_state)
@@ -55,6 +115,8 @@ void LuaAPI::cleanup()
     luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, lsp_snippet_handler_ref_);
     lsp_snippet_handler_ref_ = LUA_NOREF;
   }
+  // The raw layer's callbacks: unref before the state goes away.
+  clear_raw_hooks();
   for (auto &[name, ref] : lua_ui_handlers_)
   {
     (void)name;
@@ -105,6 +167,10 @@ void LuaAPI::clear_runtime_state()
     luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, lsp_snippet_handler_ref_);
     lsp_snippet_handler_ref_ = LUA_NOREF;
   }
+  // A plugin reload drops the raw layer's callbacks with everything else: a
+  // painter or key hook left over from the previous run would keep running
+  // against a state that no longer defines it.
+  clear_raw_hooks();
 }
 bool LuaAPI::load_script_path(const std::string &module, const std::string &path)
 {
@@ -127,19 +193,7 @@ void LuaAPI::load_config_file()
 {
   if (!lua_initialized)
     return;
-  fs::path root;
-  const char *env = getenv("JOT_CONFIG_HOME");
-  if (env && *env)
-    root = env;
-  else
-  {
-    const char *home = getenv("HOME");
-    const char *app = getenv("APPDATA");
-    if (app && *app)
-      root = fs::path(app) / "jot";
-    else if (home)
-      root = fs::path(home) / ".config" / "jot";
-  }
+  const fs::path root = lua_config_root();
   if (root.empty())
     return;
   fs::path cfg = root / "config.lua";
@@ -150,19 +204,7 @@ void LuaAPI::load_plugins()
 {
   if (!lua_initialized)
     return;
-  fs::path root;
-  const char *env = getenv("JOT_CONFIG_HOME");
-  if (env && *env)
-    root = env;
-  else
-  {
-    const char *home = getenv("HOME");
-    const char *app = getenv("APPDATA");
-    if (app && *app)
-      root = fs::path(app) / "jot";
-    else if (home)
-      root = fs::path(home) / ".config" / "jot";
-  }
+  const fs::path root = lua_config_root();
   if (root.empty())
     return;
   fs::create_directories(root / "plugins");
@@ -186,6 +228,105 @@ void LuaAPI::load_plugins()
     editor->apply_config_live();
   fire_autocmd("EditorEnter");
 }
+void LuaAPI::lua_dir_to_lua(lua_State *L)
+{
+  lua_pushstring(L, lua_config_root().string().c_str());
+}
+
+void LuaAPI::lua_path_to_lua(lua_State *L)
+{
+  lua_getglobal(L, "package");
+  if (!lua_istable(L, -1))
+  {
+    lua_settop(L, 0);
+    lua_pushstring(L, "");
+    return;
+  }
+  lua_getfield(L, -1, "path");
+  const char *path = lua_tostring(L, -1);
+  lua_pushstring(L, path ? path : "");
+  // Return the string, dropping `package` below it.
+  lua_replace(L, -3);
+  lua_settop(L, 1);
+}
+
+void LuaAPI::lua_reload_from_lua(lua_State *L)
+{
+  const char *name = luaL_optstring(L, 1, "");
+  if (!lua_state)
+  {
+    lua_pushboolean(L, 0);
+    lua_pushstring(L, "Lua runtime is not initialized");
+    return;
+  }
+  if (!name || !*name)
+  {
+    // No module named: the whole user runtime, init.lua and every plugin file,
+    // re-runs. That is the same work as :reloadplugins, reachable from a
+    // keymap, an autocmd or another module. The second return is nil: there is
+    // no single module value to hand back.
+    reload_plugins();
+    lua_pushboolean(L, 1);
+    lua_pushnil(L);
+    return;
+  }
+  lua_State *S = static_cast<lua_State *>(lua_state);
+  const int top = lua_gettop(S);
+  // Drop the module and anything loaded under it from package.loaded, so the
+  // next require re-runs the file instead of handing back the cached table.
+  // A module that was never required is simply absent, which is not an error.
+  const std::string prefix = std::string(name) + ".";
+  std::vector<std::string> stale;
+  lua_getglobal(S, "package");
+  if (lua_istable(S, -1))
+  {
+    lua_getfield(S, -1, "loaded");
+    if (lua_istable(S, -1))
+    {
+      lua_pushnil(S);
+      while (lua_next(S, -2))
+      {
+        if (lua_type(S, -2) == LUA_TSTRING)
+        {
+          const std::string key = lua_tostring(S, -2);
+          if (key == name || key.compare(0, prefix.size(), prefix) == 0)
+          {
+            stale.push_back(key);
+          }
+        }
+        lua_pop(S, 1);
+      }
+      for (const std::string &key : stale)
+      {
+        lua_pushnil(S);
+        lua_setfield(S, -2, key.c_str());
+      }
+    }
+  }
+  lua_settop(S, top);
+  lua_getglobal(L, "require");
+  if (!lua_isfunction(L, -1))
+  {
+    lua_settop(L, top);
+    lua_pushboolean(L, 0);
+    lua_pushstring(L, "require is not available");
+    return;
+  }
+  lua_pushstring(L, name);
+  if (lua_pcall(L, 1, 1, 0) != LUA_OK)
+  {
+    // false, error: a module that throws while reloading reports what it threw
+    // instead of leaving the script with a bare failure.
+    lua_pushboolean(L, 0);
+    lua_insert(L, -2);
+    return;
+  }
+  // true, the module's value: the file ran again (stale.size() entries were
+  // dropped from package.loaded to make that happen).
+  lua_pushboolean(L, 1);
+  lua_insert(L, -2);
+}
+
 void LuaAPI::reload_plugins()
 {
   load_plugins();

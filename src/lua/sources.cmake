@@ -15,6 +15,7 @@ set(JOT_LUA_SOURCES
   lua/bindings/bindings_state.cpp
   lua/bindings/bindings_syntax.cpp
   lua/bindings/bindings_task.cpp
+  lua/bindings/bindings_screen.cpp
   lua/bindings/bindings_ui.cpp
   lua/bindings/bindings_viewport.cpp
   lua/api/api_buffer.cpp
@@ -33,6 +34,7 @@ set(JOT_LUA_SOURCES
   lua/api/api_git.cpp
   lua/api/api_events.cpp
   lua/api/api_float.cpp
+  lua/api/api_screen.cpp
   lua/api/api_lsp_bridge.cpp
   lua/api/api_lsp_install.cpp
   lua/api/api_viewport.cpp

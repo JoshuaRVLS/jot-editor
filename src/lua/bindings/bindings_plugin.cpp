@@ -87,4 +87,21 @@ namespace lua_bind
     api(L).unregister_status_segment(L);
     return 0;
   }
+  int l_lua_path(lua_State *L)
+  {
+    api(L).lua_path_to_lua(L);
+    return 1;
+  }
+  int l_lua_dir(lua_State *L)
+  {
+    api(L).lua_dir_to_lua(L);
+    return 1;
+  }
+  int l_lua_reload(lua_State *L)
+  {
+    // Always (ok, result): a module on success, the error on failure, and nil
+    // for a whole-runtime reload.
+    api(L).lua_reload_from_lua(L);
+    return 2;
+  }
 } // namespace lua_bind
