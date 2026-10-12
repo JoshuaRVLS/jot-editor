@@ -54,6 +54,10 @@ void ensure_cursor_visible(bool adjust_horizontal = true);
 void reveal_cursor_centered();
 void select_all();
 void select_current_line();
+// The caret's line and the `count - 1` under it as one whole-line selection, so
+// a count of lines is a single gesture (Alt+V 3 Shift+L). select_current_line()
+// is this with a count of one.
+void select_lines(int count);
 void clear_selection();
 
 void open_file(const std::string &path, bool preview = false);

@@ -118,15 +118,24 @@ void Editor::select_all()
 
 void Editor::select_current_line()
 {
+  select_lines(1);
+}
+
+// The end of the selection is the end of the last line rather than its start:
+// typing over a whole-line selection then replaces the lines, and the caret is
+// left where the text it replaced stopped. The last line is clamped to the
+// buffer, so a count past the end selects what is there instead of failing.
+void Editor::select_lines(int count)
+{
   auto &buf = get_buffer();
   if (buf.line_count() == 0)
   {
     return;
   }
-  int y = std::max(0, std::min(buf.cursor.y, (int)buf.line_count() - 1));
-  int line_len = (int)buf.line(y).length();
-  buf.selection.start = {0, y};
-  buf.selection.end = {line_len, y};
+  const int first = std::max(0, std::min(buf.cursor.y, (int)buf.line_count() - 1));
+  const int last = std::min(first + std::max(1, count) - 1, (int)buf.line_count() - 1);
+  buf.selection.start = {0, first};
+  buf.selection.end = {(int)buf.line(last).length(), last};
   buf.selection.active = true;
   buf.cursor = buf.selection.end;
   buf.preferred_x = buf.cursor.x;

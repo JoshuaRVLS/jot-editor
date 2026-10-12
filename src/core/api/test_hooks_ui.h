@@ -238,6 +238,16 @@ void terminal_key_for_test(int ch, bool ctrl = false, bool shift = false, bool a
   ev.key = {ch, ctrl, shift, alt};
   handle_terminal_event(ev);
 }
+// The prefix walk a multi-chord keymap opens, and the count typed between the
+// prefix and the chord that ends it (test_keymap_grammar.cpp).
+bool which_key_open_for_test() const
+{
+  return show_which_key;
+}
+int which_key_count_for_test() const
+{
+  return which_key_count;
+}
 int tabline_y_for_test() const
 {
   return tabline_y();

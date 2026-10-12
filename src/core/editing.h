@@ -187,6 +187,12 @@ void delete_word_backward();
 void delete_word_forward();
 void delete_selection();
 void delete_line();
+// `count` whole lines from the caret's line down, as one undo step and one
+// register entry (Vim's 3dd): the multi-line counterpart of delete_line, which
+// is this with a count of one.
+void delete_lines_at_cursor(int count);
+// The yank half: the same lines into the register, nothing changed.
+void yank_lines_at_cursor(int count);
 
 void new_line();
 void insert_line_below();

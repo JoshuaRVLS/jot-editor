@@ -242,10 +242,60 @@ TEST_CASE("The keymap grammar registers the menus which-key renders", "[jot][key
   {
     REQUIRE(find(chords) != nullptr);
   }
-  for (const char *chords : {"Alt+] f", "Alt+] c", "Alt+] d", "Alt+[ f", "Alt+[ c", "Alt+[ d"})
+  for (const char *chords : {"Alt+] f",
+                             "Alt+] c",
+                             "Alt+] d",
+                             "Alt+] b",
+                             "Alt+[ f",
+                             "Alt+[ c",
+                             "Alt+[ d",
+                             "Alt+[ b"})
   {
     REQUIRE(find(chords) != nullptr);
   }
+
+  // The code family's everyday actions, and the fold menu with the single
+  // chord beside it (which is what makes "z" still open the menu).
+  for (const char *chords : {"Alt+C f",
+                             "Alt+C o",
+                             "Alt+C p",
+                             "Alt+C b",
+                             "Alt+C z",
+                             "Alt+C z a",
+                             "Alt+C z c",
+                             "Alt+C z o",
+                             "Alt+C z m",
+                             "Alt+C z r",
+                             "Alt+C Shift+Z"})
+  {
+    REQUIRE(find(chords) != nullptr);
+  }
+  const KeymapRecord *fold_group = find("Alt+C z");
+  REQUIRE(fold_group != nullptr);
+  REQUIRE(fold_group->command.empty());
+  REQUIRE_FALSE(fold_group->detail.empty());
+  const KeymapRecord *fold_shortcut = find("Alt+C Shift+Z");
+  REQUIRE(fold_shortcut != nullptr);
+  REQUIRE(fold_shortcut->command == "togglefold");
+
+  // Selection and in-place edits: word/line selection, join, unwrap, and the
+  // wrap family whose chords are the pair itself.
+  for (const char *chords : {"Alt+V w",
+                             "Alt+V Shift+L",
+                             "Alt+X j",
+                             "Alt+X u",
+                             "Alt+X w",
+                             "Alt+X w (",
+                             "Alt+X w [",
+                             "Alt+X w {",
+                             "Alt+X w \"",
+                             "Alt+X w '"})
+  {
+    REQUIRE(find(chords) != nullptr);
+  }
+  const KeymapRecord *wrap_paren = find("Alt+X w (");
+  REQUIRE(wrap_paren != nullptr);
+  REQUIRE(wrap_paren->command == "surround (");
 
   lua_close(L);
 }
@@ -256,11 +306,22 @@ TEST_CASE("Every command a keymap names exists", "[jot][keymap]")
   REQUIRE(L != nullptr);
   REQUIRE(load_grammar(L));
 
-  // The chords this grammar owns. The shipped file also binds the debugger keys,
-  // and those are not what is under test here.
+  // The chords this grammar owns. The shipped file also binds the debugger keys
+  // and the two line-insertion keys, and those are not what is under test here.
+  // Every prefix family is listed, so a name added to any of them is checked --
+  // the guard is worth nothing over the one family it happens to watch.
   const auto in_grammar = [](const std::string &chords)
   {
-    for (const char *prefix : {"Alt+D", "Alt+Y", "Alt+V", "Alt+]", "Alt+["})
+    for (const char *prefix : {"Alt+D",
+                              "Alt+Y",
+                              "Alt+V",
+                              "Alt+]",
+                              "Alt+[",
+                              "Alt+C",
+                              "Alt+X",
+                              "Alt+Q",
+                              "Alt+Z",
+                              "Ctrl+W"})
     {
       if (chords.rfind(prefix, 0) == 0)
       {
@@ -460,6 +521,12 @@ TEST_CASE("The grammar resolves through the which-key path", "[jot][keymap]")
       {"s", "symbols"},
       {"w", "wsymbols"},
       {"k", "hover"},
+      // The everyday actions: format, outline, the bracket walk and the
+      // bookmark. Same rule as the lookups -- each has to reach a real command.
+      {"f", "format"},
+      {"o", "outline"},
+      {"p", "matchbracket"},
+      {"b", "bookmark"},
   };
   std::vector<std::string> code_keys;
   for (const auto &child : api.plugin_keymap_children("Alt+C", "editor"))
@@ -474,7 +541,39 @@ TEST_CASE("The grammar resolves through the which-key path", "[jot][keymap]")
     REQUIRE(record != nullptr);
     REQUIRE(record->command == leaf.second);
   }
-  REQUIRE(code_keys.size() == code_leaves.size());
+  // ...plus the fold menu and the single chord beside it, which are the two
+  // children that are not leaves of this family.
+  REQUIRE(code_keys.size() == code_leaves.size() + 2);
+  REQUIRE(std::find(code_keys.begin(), code_keys.end(), "Shift+Z") != code_keys.end());
+
+  // Folding, Vim's z keys: the group opens, every child reaches its command,
+  // and Shift+Z is a step of its own so the menu survives it.
+  REQUIRE(api.plugin_keymap_is_prefix("Alt+C z", "editor"));
+  const std::map<std::string, std::string> fold_leaves = {
+      {"a", "togglefold"},
+      {"c", "fold"},
+      {"o", "unfold"},
+      {"m", "foldall"},
+      {"r", "unfoldall"},
+  };
+  std::vector<std::string> fold_keys;
+  for (const auto &child : api.plugin_keymap_children("Alt+C z", "editor"))
+  {
+    fold_keys.push_back(child.key);
+  }
+  for (const auto &leaf : fold_leaves)
+  {
+    INFO("leaf Alt+C z " << leaf.first << " -> :" << leaf.second);
+    REQUIRE(std::find(fold_keys.begin(), fold_keys.end(), leaf.first) != fold_keys.end());
+    const KeymapRecord *record = find("Alt+C z " + leaf.first);
+    REQUIRE(record != nullptr);
+    REQUIRE(record->command == leaf.second);
+  }
+  REQUIRE(fold_keys.size() == fold_leaves.size());
+  const KeymapRecord *fold_fast = find("Alt+C Shift+Z");
+  REQUIRE(fold_fast != nullptr);
+  REQUIRE(fold_fast->command == "togglefold");
+  REQUIRE(api.plugin_keymap_children("Alt+C z a", "editor").empty());
 
   lua_close(L);
 }
@@ -608,3 +707,91 @@ TEST_CASE("No two keymap children of a prefix differ only by case", "[jot][keyma
 
   lua_close(L);
 }
+
+// A count, the way Vim spells one: the digits go between the prefix and the
+// chord that ends the sequence (Alt+D 3 l). The walk collects them in the input
+// layer, where a prefix already lives (events/which_key.cpp), and the command
+// that ends the sequence reads them through action_count(). Driving the chords
+// through a real editor is what makes this a check on the whole path --
+// registration, the count and the command -- rather than on either half, and it
+// is the only way to see the two things the count must not do: land in the
+// buffer, or turn into an argument for the command (Alt+C 3 n must not rename a
+// symbol to "3").
+TEST_CASE("A count typed after a prefix applies to the chord that ends it", "[jot][keymap]")
+{
+  Editor &e = probe_editor();
+  // The home surface owns plain keys while it is up (it is where typing goes
+  // with no file open), and this case types to see that the digits did not
+  // become text.
+  e.set_home_menu_visible(false);
+  const auto alt = [&e](char key) { e.terminal_key_for_test(key, false, false, true); };
+  const auto type = [&e](char key) { e.terminal_key_for_test(key); };
+  const auto type_shift = [&e](char key) { e.terminal_key_for_test(key, false, true, false); };
+
+  const auto seed = [&e](const std::string &text)
+  {
+    e.host().core.set_buffer_content(text);
+    e.host().core.set_cursor(0, 0);
+  };
+
+  // Alt+D opens the delete group, 3 is the count, l is the line object: three
+  // whole lines go, with no blank line left where they were.
+  seed("one\ntwo\nthree\nfour\nfive\n");
+  alt('d');
+  REQUIRE(e.which_key_open_for_test());
+  type('3');
+  REQUIRE(e.which_key_count_for_test() == 3);
+  type('l');
+  REQUIRE_FALSE(e.which_key_open_for_test());
+  REQUIRE(e.host().core.buffer_content() == "four\nfive\n");
+  // The count belonged to that one chord; the next sequence starts clean.
+  REQUIRE(e.which_key_count_for_test() == 0);
+
+  // The selection reads the count as a line total too, and a selection is what
+  // makes a multi-line replacement one gesture: typing over it replaces all of
+  // it (Alt+V 3 Shift+L then the text).
+  seed("one\ntwo\nthree\nfour\nfive\n");
+  alt('v');
+  type('3');
+  type_shift('L');
+  REQUIRE(e.host().core.selected_text() == "one\ntwo\nthree");
+  type('X');
+  REQUIRE(e.host().core.buffer_content() == "X\nfour\nfive\n");
+
+  // Digits accumulate and Backspace takes the last one back: 12 then Backspace
+  // is a count of one, so only the caret's line goes.
+  seed("one\ntwo\nthree\nfour\nfive\n");
+  alt('d');
+  type('1');
+  type('2');
+  REQUIRE(e.which_key_count_for_test() == 12);
+  e.terminal_key_for_test(127); // Backspace
+  REQUIRE(e.which_key_count_for_test() == 1);
+  type('l');
+  REQUIRE(e.host().core.buffer_content() == "two\nthree\nfour\nfive\n");
+
+  // Esc abandons the sequence and the count with it: nothing is deleted, and
+  // the digits never reached the buffer either.
+  seed("one\ntwo\nthree\nfour\nfive\n");
+  alt('d');
+  type('3');
+  e.terminal_key_for_test(27);
+  REQUIRE_FALSE(e.which_key_open_for_test());
+  REQUIRE(e.which_key_count_for_test() == 0);
+  REQUIRE(e.host().core.buffer_content() == "one\ntwo\nthree\nfour\nfive\n");
+
+  // A command that takes an argument does not take the count: the wrap family
+  // is a pair, and Alt+X 3 w " is still a wrap in quotes (the count is ignored,
+  // not appended to the command the way a naive :surround \" 3 would be).
+  seed("alpha beta\n");
+  alt('x');
+  type('3');
+  type('w');
+  type('"');
+  REQUIRE(e.host().core.buffer_content() == "\"alpha\" beta\n");
+
+  // The walks read it too (Alt+] 2 f is the second definition on): what that
+  // needs is a file with a grammar, so it is measured on a real buffer in
+  // test/keymap_probe.py rather than here on a scratch one.
+}
+

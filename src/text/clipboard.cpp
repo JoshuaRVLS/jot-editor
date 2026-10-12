@@ -470,6 +470,32 @@ void Editor::copy()
   write_system_clipboard(clipboard);
 }
 
+// The whole-line yank: `count` lines from the caret's line down into the
+// register and the system clipboard, nothing changed (Vim's 3yy). The text is
+// exactly what delete_lines_at_cursor would have removed, so a yank and the
+// delete of the same lines agree on where the lines end.
+void Editor::yank_lines_at_cursor(int count)
+{
+  auto &buf = get_buffer();
+  const int total = (int)buf.line_count();
+  if (total == 0)
+  {
+    return;
+  }
+  const int first = std::max(0, std::min(buf.cursor.y, total - 1));
+  const int lines = std::min(std::max(1, count), total - first);
+  std::string text;
+  for (int i = first; i < first + lines; i++)
+  {
+    if (i > first)
+      text += '\n';
+    text += buf.line(i);
+  }
+  set_clipboard_text(text);
+  set_message("Yanked " + std::to_string(lines) + (lines == 1 ? " line" : " lines"));
+  needs_redraw = true;
+}
+
 void Editor::set_clipboard_text(const std::string &text)
 {
   clipboard = text;

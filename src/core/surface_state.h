@@ -98,6 +98,14 @@ struct SurfaceState
   bool show_which_key = false;
   std::vector<std::string> which_key_path;
   int which_key_selected = 0;
+  // The count typed between a prefix and its last chord (Alt+D 3 l), Vim's
+  // v:count. It is read through action_count() by the commands that honor one
+  // -- the line operations and the jumps -- and by nothing else, which is what
+  // keeps a digit from turning into an argument for a command that takes a
+  // string (:lsprename 3, :surround { 3). Cleared when the sequence ends, so a
+  // later command cannot pick up a stale one.
+  int which_key_count = 0;
+  int action_count() const { return which_key_count > 0 ? which_key_count : 1; }
 
   // Lua UI surface close-tracking: remembered visibility from the previous
   // frame so render() can notify handlers (fn(nil)) when a surface closes.

@@ -311,7 +311,12 @@ settles, so scrolling a long way does not grow the process.
 - Selection-scoped replace via `Ctrl+Shift+F` - or project-wide search when
   nothing is selected.
 - Go to line, bookmarks, and a fuzzy file finder (telescope) with mouse
-  support. The picker is two straight-bordered boxes on one background: the
+  support. A bookmark is a line marked in the buffer (`Alt+C B`, `:bookmark`)
+  and walked with `Alt+] B` / `Alt+[ B` (`:bookmarknext` / `:bookmarkprev`),
+  wrapping at the ends like the diagnostic and compile walks -- the per-file
+  counterpart of the jumplist, which remembers where you were where a bookmark
+  remembers where you will go back to. The picker is two straight-bordered
+  boxes on one background: the
   result list on the left -- files only, each row the file's own path from the
   picker's scope, behind a `>` pointer and a band on the selected row -- and a
   small editor showing the selected file on the right, with line numbers. Each
@@ -333,7 +338,12 @@ settles, so scrolling a long way does not grow the process.
 - Rich token mapping (variables, parameters, types, functions, keywords,
   operators, etc.) with theme slots for both classic and Tree-sitter captures.
 - Code folding with toggle/collapse/expand, mouse toggling, and persisted
-  collapsed ranges.
+  collapsed ranges. The keyboard has it twice over: `Alt+C Z` then `A` toggles,
+  `C` folds, `O` unfolds, `M` folds every block and `R` unfolds every block,
+  while `Alt+C Shift+Z` toggles the block at the caret in one chord -- the one
+  pressed while editing rather than while skimming. A file can also be skimmed
+  by its structure instead of folded: `Alt+C O` opens the outline panel and
+  `Alt+C S` the symbol picker.
 
 The built-in fallback covers the usual suspects: C/C++, Python, JavaScript/
 TypeScript (incl. JSX/TSX), HTML/XML, Rust, CSS, Java, Go, Markdown, JSON,
@@ -1121,10 +1131,25 @@ so the grammar is learnt once:
 | `Alt+D W` / `Alt+D L` | Delete the word / the line (objects that need no inside/around) |
 | `Alt+D A F`, `Alt+D I A` | Delete around a function, inside an argument |
 | `Alt+Y A C`, `Alt+Y W` | Yank around a class, yank the word |
-| `Alt+V` | Selection: `E` expand, `C` shrink, `K` keep primary, `R` rotate, `A`/`B` cursor above/below, `L` split lines, `M` match all occurrences, `S` the object menu, `Shift+S` the current statement |
-| `Alt+]` / `Alt+[` | Next / previous: `F` function, `C` class, `D` diagnostic (`Alt+E` remains an alias), `T` TODO comment |
-| `Alt+C` | Code: `D` definition, `C` declaration, `T` type definition, `I` implementation, `H` switch header/source, `R` references, `N` rename, `A` code actions, `S` symbols, `W` workspace symbols, `K` documentation |
-| `Alt+X` | Clear inside: `S` the string, `B` the brackets (then type the replacement) |
+| `Alt+V` | Selection: `E` expand, `C` shrink, `K` keep primary, `R` rotate, `A`/`B` cursor above/below, `L` split lines, `M` match all occurrences, `W` the word, `Shift+L` the line, `S` the object menu, `Shift+S` the current statement |
+| `Alt+]` / `Alt+[` | Next / previous: `F` function, `C` class, `D` diagnostic (`Alt+E` remains an alias), `B` bookmark, `T` TODO comment |
+| `Alt+C` | Code: `D` definition, `C` declaration, `T` type definition, `I` implementation, `H` switch header/source, `R` references, `N` rename, `A` code actions, `S` symbols, `W` workspace symbols, `K` documentation, `F` format the document, `O` outline panel, `P` matching bracket, `B` bookmark the line |
+| `Alt+C Z` | Fold, Vim's `z`: then `A` toggle, `C` fold, `O` unfold, `M` fold every block, `R` unfold every block (the toggle also answers on `Alt+C Shift+Z`) |
+| `Alt+X` | Clear inside: `S` the string, `B` the brackets (then type the replacement); `J` join with the next line, `U` remove the pair around, `W` wrap in a pair (`(`, `[`, `{`, `"`, `'`) |
+| a count, then the chord | The number typed after the prefix applies to the chord that ends the sequence -- `Alt+D 3 L` deletes three lines, `Alt+V 3 Shift+L` selects three, `Alt+X 3 J` joins three, `Alt+] 3 F` walks three functions (Vim's `3dd`, `3yy`) |
+
+A count is Vim's, spelled the same way: type the digits after the prefix and
+before the chord that acts. It is read by the line operations (`Alt+D`/`Alt+Y`
+`L`, `Alt+V Shift+L`, `Alt+X J`) and by the walks (`Alt+]` / `Alt+[` over
+functions, classes, diagnostics and compile errors), and it is ignored
+everywhere else -- a digit never becomes an argument for a command that takes
+a string, so `Alt+C N` cannot rename a symbol to `3`. The count shows on the
+status line as it is typed (`Count: 3`) and Backspace takes it back a digit at a
+time before it steps out of the sequence. Deleting with a count takes whole
+lines as one undo step and one register entry, leaving no blank line behind;
+selecting with a count (`Alt+V 3 Shift+L`) is what to reach for when the
+replacement is longer than one line, since typing over the selection replaces
+all of it.
 
 Objects available today are `F` function, `C` class or type, `A`
 argument/parameter, `S` statement, `W` word, `L` line - the syntax objects come
@@ -1136,11 +1161,22 @@ with expand takes a press per level.
 
 ### In-place edits
 
-The two things that come up mid-edit get a chord instead of a sequence: the word
-the caret is standing on (`Alt+Backspace`) and the inside of the string or the
-bracket pair it is standing in (`Alt+X S`, `Alt+X B`). There is no insert mode to
-change into, so clearing one leaves the caret where the text was and typing takes
-its place.
+The things that come up mid-edit get a chord instead of a sequence: the word
+the caret is standing on (`Alt+Backspace`), the inside of the string or the
+bracket pair it is standing in (`Alt+X S`, `Alt+X B`), the line the caret ends
+on when a statement has been split over several rows (`Alt+X J`), and the pair
+around the caret's selection or word (`Alt+X W`, `Alt+X U`). There is no insert
+mode to change into, so clearing one leaves the caret where the text was and
+typing takes its place.
+
+`Alt+X W` is typed as the pair that should go around: `Alt+X W "` wraps in
+quotes, `Alt+X W (` in parentheses, `[`, `{` and `'` likewise. The selection is
+wrapped when there is one and the word at the caret when there is not, and
+`Alt+X U` takes the innermost pair back off -- a string, a call, an `if`
+condition -- reading the three literal kinds the way `Alt+X S` does. Anything
+the five chords do not cover is still `:surround <left> [right]` from the
+palette, where a quote is written `\"` (the command line reads a bare `"` as
+the start of a quoted run, and one that never closes reports its usage).
 
 `Alt+Backspace` takes the span `Ctrl+D` would have selected, which is what makes
 it different from `Ctrl+Backspace` and `Alt+D W`: those eat from the caret's edge
@@ -1175,6 +1211,10 @@ it just left.
 | `Alt+H` / `Alt+L` | Previous / next word |
 | `Alt+Up` / `Alt+Down` | Move line or selection up / down |
 | `Tab` / `Shift+Tab` | Indent / outdent selection |
+| `Alt+C P` | Jump to the bracket matching the one at the caret |
+| `Alt+C B` | Bookmark this line (press again to clear it) |
+| `Alt+] B` / `Alt+[ B` | Next / previous bookmark in this file (the walk wraps) |
+| `Alt+C Z A` / `Alt+C Shift+Z` | Fold or unfold the block at the caret |
 
 A word is what a reader would call one, not what a tokenizer would: the word
 motions stop inside identifiers as well as between them, so `alpha_beta` is two
@@ -1314,7 +1354,7 @@ levels below it again.
 
 | Shortcut | Action |
 | --- | --- |
-| `Ctrl+W` (alone) | Show the pane menu (which-key lists every chord below) |
+| `Ctrl+W` (alone) | Start the pane family: the chord that follows picks it (listed in the table below) |
 | `Ctrl+W` then `h`/`j`/`k`/`l` | Focus the pane left/down/up/right |
 | `Ctrl+W` then `s` / `v` | Split the pane in two: below / right |
 | `Ctrl+W` then `Shift+S` / `Shift+V` | Split above / left |
@@ -1338,8 +1378,8 @@ screen. `Alt+J`/`Alt+K` have no second meaning and say `No pane in that
 direction`.
 
 The pane family is the `Ctrl+W` prefix, Vim's window prefix, so the whole
-vocabulary is one menu rather than a chord per action: press `Ctrl+W` alone and
-which-key lists the children, or press `Ctrl+W` and the key under it. `Ctrl+W` is
+vocabulary is one prefix rather than a chord per action: press `Ctrl+W` and then
+the key of the one you want (the table below is the list). `Ctrl+W` is
 a control byte, so every terminal and `--gui` deliver it the same way, and no
 window manager claims it.
 
@@ -1462,6 +1502,8 @@ goes blank. The buffer stays fully visible while you type.
 
 **Search & edit:** `:search` `:grep` `:diagnostics` `:diagnext` `:symbols`
 `:outline` `:line` `:goto` `:format` `:trim` `:upper` `:lower`
+`:matchbracket` (`:percent`) `:bookmark` (`:bm`) `:bookmarknext` (`:bmnext`)
+`:bookmarkprev` (`:bmprev`)
 `:sortlines|desc|reverselines|uniquelines|shufflelines|joinlines` `:dupe`
 `:replace*` `:surround` `:fold*` `:incnum` `:decnum` `:copypath` `:copyname`
 `:isearch` (incremental search typed on the status line)

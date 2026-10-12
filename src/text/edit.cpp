@@ -903,6 +903,61 @@ void Editor::delete_line()
     notify_lsp_change(buf.filepath);
 }
 
+// Whole lines, not a character-wise span: with a count the point is "these
+// lines are gone", and deleting the span a whole-line selection describes would
+// leave an empty line where the span ended. One undo step and one register
+// entry for however many lines, which is what Vim's 3dd does. The register is
+// the register alone, like delete_line -- the clipboard is written by the
+// commands that mean to put something on it (copy, cut).
+void Editor::delete_lines_at_cursor(int count)
+{
+  if (!edit_allowed())
+    return;
+  auto &buf = get_buffer();
+  if (buf.is_lazy())
+    buf.materialize();
+  const int total = (int)buf.line_count();
+  if (total == 0)
+    return;
+  const int first = std::max(0, std::min(buf.cursor.y, total - 1));
+  const int lines = std::min(std::max(1, count), total - first);
+
+  save_state();
+  std::string removed;
+  for (int i = first; i < first + lines; i++)
+  {
+    if (i > first)
+      removed += '\n';
+    removed += buf.line(i);
+  }
+  clipboard = removed;
+
+  // A buffer keeps one line: it is where the caret lives, and nothing in the
+  // insert paths can index a file that has no lines at all.
+  if (lines == total)
+  {
+    buf.lines.assign(1, "");
+    buf.cursor = {0, 0};
+  }
+  else
+  {
+    buf.lines.erase(buf.lines.begin() + first, buf.lines.begin() + first + lines);
+    buf.cursor.y = std::min(first, (int)buf.lines.size() - 1);
+    buf.cursor.x = std::min(buf.cursor.x, (int)buf.lines[(size_t)buf.cursor.y].size());
+  }
+  buf.modified = true;
+  buf.selection.active = false;
+  buf.preferred_x = buf.cursor.x;
+  clamp_cursor(get_pane().buffer_id);
+  ensure_cursor_visible();
+  needs_redraw = true;
+  set_message("Deleted " + std::to_string(lines) + (lines == 1 ? " line" : " lines"));
+  if (lua_api)
+    lua_api->on_buffer_change(buf.filepath, "");
+  if (!buf.filepath.empty())
+    notify_lsp_change(buf.filepath);
+}
+
 void Editor::new_line()
 {
   if (!edit_allowed())

@@ -23,6 +23,8 @@ void Editor::show_command_help(const std::string &topic_text)
         ":splitleft/:splitright/:splitup/:splitdown :bn :bp :home "
         ":resume :recent :openrecent [n] :reopen :autosave [on/off/ms] "
         ":grep <text> :diagnostics :diagnext :diagprev :symbols :outline "
+        ":matchbracket :selectword :selectline :bookmark :bookmarknext "
+        ":bookmarkprev "
         ":format :trim "
         ":trimblank :upper :lower :sortlines :sortdesc :reverselines "
         ":uniquelines :shufflelines :joinlines :dupe :copypath :copyname "
@@ -141,6 +143,24 @@ void Editor::show_command_help(const std::string &topic_text)
       "  Alt+I / Alt+A      Smart line start / line end",
       "  Alt+Shift+T        Floating terminal (Esc hides it)",
       "  Alt+G / Alt+Shift+G File start / file end",
+      "",
+      "Code & edit (the prefix families)",
+      "  Alt+C d/c/t/i/h    Definition / declaration / type / impl / header",
+      "  Alt+C r/n/a/k      References / rename / code actions / docs",
+      "  Alt+C f/o/p/b      Format / outline / matching bracket / bookmark",
+      "  Alt+C z            Fold menu; Alt+C Shift+Z folds the caret's block",
+      "  Alt+V w / Shift+L  Select the word / the line",
+      "  Alt+V e / c        Selection: expand / shrink one level",
+      "  Alt+V s, Shift+S   Pick a syntax object; Shift+S takes the statement",
+      "  Alt+X j / u / w    Join lines / unwrap / wrap in a pair",
+      "  Alt+X S / Alt+X B  Clear inside the string / the brackets",
+      "  Alt+D, Alt+Y       Delete / yank an object: then i|a, then f|c|a|s|w|l",
+      "  Alt+] / Alt+[      Next / previous: f function, c class, d diagnostic,",
+      "                     e compile error, b bookmark",
+      "  a count, then it   Alt+D 3 l deletes three lines, Alt+V 3 Shift+L",
+      "                     selects three, Alt+X 3 j joins three, Alt+] 3 f",
+      "                     walks three functions (Vim's 3dd); Backspace takes",
+      "                     the count back a digit at a time",
       "",
       "Macros & prompt",
       "  Alt+Z q            Record a macro / stop recording",

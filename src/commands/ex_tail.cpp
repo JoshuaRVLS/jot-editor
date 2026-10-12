@@ -101,6 +101,20 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
                 + std::to_string(buf.cursor.x + 1));
   };
 
+  // A count on a walk (Alt+] 3 f) repeats it: the loop stops when the walk runs
+  // out of places to go, so "three more" ends on the last one there is rather
+  // than wrapping back to the first.
+  auto walk = [&](auto step)
+  {
+    for (int i = 0, steps = action_count(); i < steps; i++)
+    {
+      if (!step())
+      {
+        break;
+      }
+    }
+  };
+
   int parsed_line = 0, parsed_col = 1;
   if (lcmd == "lspinstall" || lcmd == "lspremove")
   {
@@ -164,6 +178,29 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     show_jumplist_picker();
   }
+  // Bookmarks: a line marked in the buffer and walked from the keyboard, the
+  // way the menu bar's own entries do it (commands/bookmarks.cpp). They are the
+  // per-file counterpart of the jumplist above: a jump is somewhere you were,
+  // a bookmark is somewhere you will go back to.
+  else if (lcmd == "bookmark" || lcmd == "bm")
+  {
+    toggle_bookmark();
+  }
+  else if (lcmd == "bookmarknext" || lcmd == "bmnext")
+  {
+    next_bookmark();
+  }
+  else if (lcmd == "bookmarkprev" || lcmd == "bmprev")
+  {
+    prev_bookmark();
+  }
+  else if (lcmd == "matchbracket" || lcmd == "percent")
+  {
+    // Vim's %: the caret goes to the bracket that closes (or opens) the one it
+    // is on or beside. The pair is highlighted already; this is the motion that
+    // walks it, so a block can be read without scrolling to its end.
+    jump_to_matching_bracket();
+  }
   // Operator side of the keymap grammar (Alt+D / Alt+Y then an object): one
   // command per verb, so the keymap tables stay pure data.
   else if (lcmd == "yankselection")
@@ -208,15 +245,30 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
     }
     const std::string object = trim_copy(spec);
     const bool deleting = lcmd == "deleteobject";
+    // A count typed after the prefix (Alt+D 3 l) reaches the command through
+    // action_count(): 3 for "three of these", 1 when none was typed. Only the
+    // line object reads it -- it is the one whose plural is a range of lines,
+    // and deleting whole lines without leaving the empty line a character-wise
+    // delete would is what the count is for. The syntax objects still take the
+    // one object the caret is in, so a count there is ignored rather than
+    // guessed at.
+    const int count = action_count();
+    if (object == "line")
+    {
+      if (deleting)
+      {
+        delete_lines_at_cursor(count);
+      }
+      else
+      {
+        yank_lines_at_cursor(count);
+      }
+      return true;
+    }
     bool selected = false;
     if (object == "word")
     {
       selected = select_word_at_cursor();
-    }
-    else if (object == "line")
-    {
-      select_current_line();
-      selected = true;
     }
     else if (!object.empty())
     {
@@ -267,11 +319,15 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   }
   else if (lcmd == "selectline")
   {
-    select_current_line();
+    // Alt+V Shift+L selects the caret's line; with a count, that many lines,
+    // which is the selection the line operations then work over (and what
+    // typing over it replaces).
+    select_lines(action_count());
   }
   else if (lcmd == "nextclass" || lcmd == "prevclass")
   {
-    goto_relative_object("class", lcmd == "nextclass" ? 1 : -1);
+    const int direction = lcmd == "nextclass" ? 1 : -1;
+    walk([&] { return goto_relative_object("class", direction); });
   }
   else if (lcmd == "keepprimary" || lcmd == "keepselection")
   {
@@ -341,11 +397,11 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   }
   else if (lcmd == "nextfunction" || lcmd == "nextfunc")
   {
-    goto_relative_function(1);
+    walk([&] { return goto_relative_function(1); });
   }
   else if (lcmd == "prevfunction" || lcmd == "prevfunc")
   {
-    goto_relative_function(-1);
+    walk([&] { return goto_relative_function(-1); });
   }
   else if (lcmd == "wsymbols" || lcmd == "workspacesymbols")
   {
@@ -385,11 +441,11 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   }
   else if (lcmd == "diagnext" || lcmd == "diagnosticnext")
   {
-    goto_next_diagnostic(1);
+    walk([&] { return goto_next_diagnostic(1); });
   }
   else if (lcmd == "diagprev")
   {
-    goto_next_diagnostic(-1);
+    walk([&] { return goto_next_diagnostic(-1); });
   }
   else if (lcmd == "compile" || lcmd == "make")
   {
@@ -413,11 +469,11 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   }
   else if (lcmd == "cnext" || lcmd == "nextcompileerror")
   {
-    compile_jump(1);
+    walk([&] { return compile_jump(1); });
   }
   else if (lcmd == "cprev" || lcmd == "prevcompileerror")
   {
-    compile_jump(-1);
+    walk([&] { return compile_jump(-1); });
   }
   else if (lcmd == "isearch" || lcmd == "searchprompt")
   {
@@ -921,7 +977,10 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   }
   else if (lcmd == "joinlines")
   {
-    join_lines_selection_or_current();
+    // A count is a line total: Alt+X 3 j folds three lines into one, while the
+    // bare Alt+X j keeps its own default of the caret's line and the one under
+    // it (Vim's J).
+    join_lines_selection_or_current(which_key_count > 0 ? which_key_count : 2);
   }
   else if (lcmd == "dupe")
   {

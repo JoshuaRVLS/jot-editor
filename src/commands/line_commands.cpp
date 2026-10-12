@@ -297,7 +297,7 @@ void Editor::trim_blank_lines_in_selection()
   }
 }
 
-void Editor::join_lines_selection_or_current()
+void Editor::join_lines_selection_or_current(int lines)
 {
   auto &buf = get_buffer();
   if (buf.is_lazy())
@@ -308,10 +308,12 @@ void Editor::join_lines_selection_or_current()
     return;
   }
 
-  // With nothing selected the join is the cursor's line and the one under it.
+  // With nothing selected the join is `lines` lines from the caret down: two by
+  // default (the caret's line and the one under it), or the count typed after
+  // the prefix (Alt+X 3 j folds three lines into one).
   LineRange range;
   range.first = std::clamp(buf.cursor.y, 0, (int)buf.lines.size() - 1);
-  range.last = std::clamp(buf.cursor.y + 1, 0, (int)buf.lines.size() - 1);
+  range.last = std::clamp(buf.cursor.y + std::max(2, lines) - 1, 0, (int)buf.lines.size() - 1);
   if (buf.selection.active)
   {
     (void)range.selected(buf);

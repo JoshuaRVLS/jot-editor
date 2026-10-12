@@ -7,6 +7,38 @@
 #include <cctype>
 #include <cstring>
 
+namespace
+{
+  // The count's home while it is being typed. The bar's text slot is the one
+  // surface that shows what has been typed before the chord that consumes it,
+  // which is what a count is; the prefix is also how the walk recognises its
+  // own text when it takes it back down.
+  constexpr const char *kCountPrefix = "Count: ";
+} // namespace
+
+// The count goes on the bar directly rather than through set_message, the way
+// the older commands that report on it do (:matchbracket): set_message
+// deliberately leaves that slot alone once the Lua status line owns the bar,
+// and a toast per digit would stack. A toast is also the wrong shape -- the
+// count is not a report, it is the keystrokes so far.
+void Editor::show_which_key_count()
+{
+  message = which_key_count > 0 ? kCountPrefix + std::to_string(which_key_count) : std::string();
+  needs_redraw = true;
+}
+
+// Takes the count down, and only while the bar still holds the text this walk
+// put there: a command that reported something in the meantime keeps it.
+void Editor::hide_which_key_count()
+{
+  if (message.rfind(kCountPrefix, 0) != 0)
+  {
+    return;
+  }
+  message.clear();
+  needs_redraw = true;
+}
+
 void Editor::open_which_key(const std::string &chord)
 {
   if (!lua_api || chord.empty())
@@ -15,14 +47,34 @@ void Editor::open_which_key(const std::string &chord)
   }
   which_key_path = {chord};
   which_key_selected = 0;
+  which_key_count = 0;
   show_which_key = true;
 }
 
 void Editor::close_which_key()
 {
+  // Before the count is zeroed, and before any command runs: the bar goes back
+  // to what it showed before the walk unless the command reports something.
+  hide_which_key_count();
   show_which_key = false;
   which_key_path.clear();
   which_key_selected = 0;
+  which_key_count = 0;
+}
+
+// Ends the sequence and runs the chord it resolved to. The count outlives
+// close_which_key -- it is the argument the command reads (action_count) -- and
+// is cleared once the command has run, so the next one starts from nothing.
+void Editor::run_which_key_leaf(const std::string &path)
+{
+  const int count = which_key_count;
+  close_which_key();
+  which_key_count = count;
+  if (lua_api)
+  {
+    lua_api->run_plugin_keymap(path, "editor");
+  }
+  which_key_count = 0;
 }
 
 bool Editor::handle_which_key_input(
@@ -60,9 +112,29 @@ bool Editor::handle_which_key_input(
   {
     return true;
   }
-  // Backspace steps up a level; at the top level it closes the helper.
+  // A count, the way Vim spells one: digits typed after the prefix and before
+  // the chord that ends the sequence (Alt+D 3 l = delete three lines). It is
+  // read here rather than matched against the children, so a family whose keys
+  // are letters gains "three of these" without a binding per digit; a leading
+  // 0 is not a count (nothing in the grammar takes "0 of these"), so it falls
+  // through to the ordinary path and types itself.
+  if (ch >= '0' && ch <= '9' && (ch != '0' || which_key_count > 0))
+  {
+    which_key_count = std::min(999, which_key_count * 10 + (ch - '0'));
+    show_which_key_count();
+    return true;
+  }
+
+  // Backspace steps up a level; at the top level it closes the helper. A count
+  // is undone first, digit by digit, the way it was typed.
   if (ch == 8 || ch == 127)
   {
+    if (which_key_count > 0)
+    {
+      which_key_count /= 10;
+      show_which_key_count();
+      return true;
+    }
     if (which_key_path.size() > 1)
     {
       which_key_path.pop_back();
@@ -111,12 +183,14 @@ bool Editor::handle_which_key_input(
     const bool deeper = !lua_api->plugin_keymap_children(next_path, "editor").empty();
     if (deeper)
     {
+      // The count survives the walk into a submenu (Alt+X 3 w " is the count,
+      // then the pair), because where the sequence ends is not known until it
+      // ends.
       which_key_path.push_back(child.key);
       which_key_selected = 0;
       return true;
     }
-    close_which_key();
-    lua_api->run_plugin_keymap(next_path, "editor");
+    run_which_key_leaf(next_path);
     return true;
   };
 

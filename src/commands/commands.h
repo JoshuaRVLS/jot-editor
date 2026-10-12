@@ -25,7 +25,11 @@ void sort_selected_lines_desc();
 void reverse_selected_lines();
 void unique_selected_lines();
 void shuffle_selected_lines();
-void join_lines_selection_or_current();
+// Joins the selected lines, or `lines` lines from the caret down (two by
+// default: the caret's line and the one under it, which is Vim's J). A count
+// typed after the prefix becomes the line total, so Alt+X 3 j folds three lines
+// into one.
+void join_lines_selection_or_current(int lines = 2);
 void duplicate_selection_or_line();
 void trim_blank_lines_in_selection();
 void copy_current_file_path();

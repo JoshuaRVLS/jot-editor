@@ -229,6 +229,13 @@ void render_quick_pick();
 // panel above the status line, which was more distraction than help.
 void open_which_key(const std::string &chord);
 void close_which_key();
+// Runs the command a finished sequence resolved to, with the count (if any) the
+// walk collected left where the command reads it.
+void run_which_key_leaf(const std::string &path);
+// The count typed so far, on the bar (and the same text taken back down when
+// the sequence ends or is abandoned).
+void show_which_key_count();
+void hide_which_key_count();
 bool handle_which_key_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int original_ch);
 void sync_lua_ui_surfaces();
 void place_command_palette_cursor();

@@ -38,17 +38,20 @@ jot.keymap.set("Ctrl+PageDown", function() jot.debugger.scroll_output(-6) end, "
 -- The keymap grammar: operators, selection, next/previous.
 --
 -- Thirty unrelated chords are not memorisable, so the bindings with a family
--- shape live behind a prefix whose letter says what it is, and what follows is
--- chosen from the menu which-key shows. Vim's d/y + i/a + object grammar is the
--- one most people already have in their fingers, and it is what makes the
--- tree-sitter textobjects composable: "delete around function" is Alt+D a f
--- rather than a chord per verb and object.
+-- shape live behind a prefix whose letter says what it is and the sequence after
+-- it is typed through, with nothing prompting in between. Vim's d/y + i/a +
+-- object grammar is the one most people already have in their fingers, and it is
+-- what makes the tree-sitter textobjects composable: "delete around function"
+-- is Alt+D a f rather than a chord per verb and object. (A panel used to print
+-- the possible next chords on every prefix press; it was removed as noise, so
+-- the reference is the `## Keybindings` tables in docs/FEATURES.md and the
+-- `Code & edit` block of :help.)
 --
--- A bare key with an empty action is a group title (which-key marks it with a
--- marker of its own, so the label carries no ellipsis), and every child carries the
--- description which-key prints, so a binding can be found without memorising it.
--- Both properties are already part of jot.keymap.set; nothing here needs new
--- input machinery.
+-- A bare key with an empty action is a pending step rather than a command: the
+-- matcher keeps it as a prefix to walk through, and its description is the
+-- documentation the binding is found by. Every child carries its command's own
+-- description for the same reason. Both properties are part of jot.keymap.set;
+-- nothing here needs new input machinery.
 
 -- Operators. There is deliberately no "change": with no insert mode, changing an
 -- object is deleting it and typing, so a second verb would be the same command
@@ -98,6 +101,12 @@ jot.keymap.set("Alt+V b", ":addcaretbelow", "Add a cursor on the line below")
 jot.keymap.set("Alt+V a", ":addcaretabove", "Add a cursor on the line above")
 jot.keymap.set("Alt+V l", ":splitlines", "One cursor per line of the selection")
 jot.keymap.set("Alt+V m", ":selectoccurrences", "Every occurrence becomes a cursor")
+-- The two selections that come up while reading rather than while deciding:
+-- the word the caret is on and the whole line. They are the shapes an operator
+-- is then pointed at (Alt+D w already names the word as an object), so both
+-- ends of the grammar agree on what "the word" and "the line" are.
+jot.keymap.set("Alt+V w", ":selectword", "Select the word at the caret")
+jot.keymap.set("Alt+V Shift+L", ":selectline", "Select the line")
 -- Command strings, like every other leaf here: `jot.command` registers a named
 -- command, it does not run an ex command, so a callback that called it left the
 -- key doing nothing at all.
@@ -111,12 +120,12 @@ end
 -- written over several rows), so it gets a chord without the menu: one press
 -- selects it instead of walking out with expand.
 --
--- Shift+S and not S: which-key matches the pressed key against a child
--- case-insensitively (a plain letter is canonicalised to its uppercase form),
--- and the uppercase children sort first. "Alt+V S" would therefore be the child
--- a plain `s` matched, and the object menu below it would never open. A shifted
--- letter canonicalises to "Shift+S", which is a token of its own, so the menu
--- keeps its `s` and the shortcut sits beside it.
+-- Shift+S and not S: the pending-step matcher compares the pressed key with a
+-- step case-insensitively (a plain letter is canonicalised to its uppercase
+-- form). "Alt+V S" would therefore be the step a plain `s` matched, and the
+-- object sequences below it would never be reached. A shifted letter
+-- canonicalises to "Shift+S", which is a token of its own, so the `s` step stays
+-- what a plain `s` takes and the shortcut sits beside it.
 jot.keymap.set("Alt+V Shift+S", ":textobject around statement", "Select the current statement")
 
 -- Next/previous: one rule, many things (the unimpaired family). Diagnostics gain
@@ -125,6 +134,9 @@ local jumps = {
   { "f", ":nextfunction", ":prevfunction", "function" },
   { "c", ":nextclass", ":prevclass", "class" },
   { "d", ":diagnext", ":diagprev", "diagnostic" },
+  -- Bookmarks join it too: a marked line is another thing to walk, and the
+  -- walk wraps like the rest of them.
+  { "b", ":bookmarknext", ":bookmarkprev", "bookmark" },
   -- Compile errors join the same family: a build's findings are walked exactly
   -- the way the language server's are, which is what makes :cnext findable.
   { "e", ":cnext", ":cprev", "compile error" },
@@ -177,6 +189,28 @@ jot.keymap.set("Alt+C a", ":lspactions", "Code actions")
 jot.keymap.set("Alt+C s", ":symbols", "Document symbols")
 jot.keymap.set("Alt+C w", ":wsymbols", "Workspace symbols")
 jot.keymap.set("Alt+C k", ":hover", "Show documentation")
+-- The everyday actions that had no chord at all -- all four were palette (or
+-- menu bar) trips: the formatter, the outline panel, the bracket walk and the
+-- bookmark. They are used while reading the code, not while deciding what to
+-- do to it, which is why they belong beside the go-to family rather than
+-- behind a menu of their own.
+jot.keymap.set("Alt+C f", ":format", "Format the document")
+jot.keymap.set("Alt+C o", ":outline", "Outline panel for this file")
+jot.keymap.set("Alt+C p", ":matchbracket", "Jump to the matching bracket")
+jot.keymap.set("Alt+C b", ":bookmark", "Bookmark this line (toggle)")
+-- Folding keeps Vim's z keys, under the code family because what is folded is
+-- the syntax tree. All five operations are one step each after Alt+C z, and the
+-- one pressed mid-edit (toggle) also sits on a single chord beside them, the
+-- way the statement does in the selection family above: a shifted letter is a
+-- step of its own, so a plain "z" still walks the fold steps while Shift+Z
+-- folds in one press.
+jot.keymap.set("Alt+C z", "", "Fold")
+jot.keymap.set("Alt+C z a", ":togglefold", "Fold or unfold the block at the caret")
+jot.keymap.set("Alt+C z c", ":fold", "Fold the block at the caret")
+jot.keymap.set("Alt+C z o", ":unfold", "Unfold the block at the caret")
+jot.keymap.set("Alt+C z m", ":foldall", "Fold every block in the file")
+jot.keymap.set("Alt+C z r", ":unfoldall", "Unfold every block in the file")
+jot.keymap.set("Alt+C Shift+Z", ":togglefold", "Fold or unfold the block at the caret")
 
 -- ---------------------------------------------------------------------------
 -- In-place edits: act on the word or the pair the caret is already in.
@@ -192,6 +226,24 @@ jot.keymap.set("Alt+Backspace", ":deleteword", "Delete the word at the caret")
 jot.keymap.set("Alt+X", "", "Clear inside")
 jot.keymap.set("Alt+X S", ":changeinside string", "Clear inside the string")
 jot.keymap.set("Alt+X B", ":changeinside bracket", "Clear inside the brackets")
+-- The other two edits that finish something already in progress: a statement
+-- split over several rows, and a pair that is no longer wanted.
+jot.keymap.set("Alt+X j", ":joinlines", "Join the line with the next")
+jot.keymap.set("Alt+X u", ":unsurround", "Remove the surrounding pair")
+-- Wrap: the chords are the pair itself, so the gesture is typed the way it
+-- reads (Alt+X w " wraps the selection -- or the word at the caret -- in
+-- quotes). The pairs are the ones that come up while editing; anything else is
+-- still `:surround <left> [right]`.
+jot.keymap.set("Alt+X w", "", "Wrap in")
+jot.keymap.set("Alt+X w (", ":surround (", "Wrap in parentheses")
+jot.keymap.set("Alt+X w [", ":surround [", "Wrap in brackets")
+jot.keymap.set("Alt+X w {", ":surround {", "Wrap in braces")
+-- The two quotes are escaped for the command line: :surround reads its
+-- arguments with a quoted-token parser, and a bare " opens a quoted run that
+-- never closes (the command then reports its usage instead of wrapping), so the
+-- argument has to be written \" -- one quote character.
+jot.keymap.set('Alt+X w "', ':surround \\"', "Wrap in double quotes")
+jot.keymap.set("Alt+X w '", ":surround \\'", "Wrap in single quotes")
 
 -- ---------------------------------------------------------------------------
 -- Panes: Ctrl+W, the prefix Vim puts its window commands behind.
