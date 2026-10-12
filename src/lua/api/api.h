@@ -60,6 +60,19 @@ private:
   int paint_hook_ref_ = -2;
   int raw_key_ref_ = -2;
   int raw_mouse_ref_ = -2;
+  // One entry of the jot.input mode stack (api_screen.cpp): the handle
+  // pop_mode takes, a name for introspection, and a registry ref per event kind
+  // it handles (-1 when it handles none of that kind).
+  struct InputMode
+  {
+    int handle = 0;
+    std::string name;
+    int key_ref = -1;
+    int mouse_ref = -1;
+  };
+  // The stack, back() is the top: the owner that sees an event first.
+  std::vector<InputMode> input_modes_;
+  int next_input_mode_handle_ = 1;
   // Surface name -> registered handler (jot.ui.handler). Values are registry
   // refs; -1 entries are removed lazily on next emit.
   std::map<std::string, int> lua_ui_handlers_;
@@ -734,9 +747,31 @@ public:
   void screen_redraw();
   // jot.input.on_key / on_mouse: every key and mouse event, before any mode
   // sees it. True consumes the event. See terminal_events.cpp for where they
-  // sit in the dispatch order.
+  // sit in the dispatch order. These two are the base of the stack below.
   void set_raw_key_hook(lua_State *L, int fn_index);
   void set_raw_mouse_hook(lua_State *L, int fn_index);
+  // jot.input.push_mode / pop_mode / modes: a stack of owners above the base
+  // hooks, so an overlay that takes the keyboard (a menu inside a menu, a text
+  // prompt inside an overlay) composes instead of every surface hand-consuming
+  // the keys it does not want. An event is offered from the top down and the
+  // first handler that returns true consumes it; when nothing consumes, the
+  // base hook runs and then the editor does.
+  //
+  // One entry per push: the handle is what pop_mode takes and `name` is for
+  // introspection (jot.input.modes); either callback may be absent.
+  // Reads a Lua function (key handler) or a table {name, on_key, on_mouse} from
+  // `arg_index` and pushes it. Returns the handle (> 0), or 0 when the argument
+  // was neither.
+  int push_input_mode_from_lua(lua_State *L, int arg_index);
+  // Removes the mode `handle` names, or the top one when the argument is absent.
+  // False when the stack is empty or the handle is not in it.
+  bool pop_input_mode_from_lua(lua_State *L);
+  // The stack top-first, as a table of {handle=, name=} entries.
+  void input_modes_to_lua(lua_State *L);
+  int input_mode_depth() const
+  {
+    return (int)input_modes_.size();
+  }
   bool raw_key_input(int ch, bool ctrl, bool shift, bool alt, int original_ch);
   bool raw_mouse_input(int x,
                        int y,

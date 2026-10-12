@@ -98,6 +98,25 @@ namespace lua_bind
     api(L).set_raw_mouse_hook(L, 1);
     return 0;
   }
+  int l_input_push_mode(lua_State *L)
+  {
+    // A function is a key handler; a table is {name, on_key, on_mouse}. The
+    // handle that comes back is what pop_mode takes.
+    lua_pushinteger(L, api(L).push_input_mode_from_lua(L, 1));
+    return 1;
+  }
+  int l_input_pop_mode(lua_State *L)
+  {
+    // pop_mode() removes the top mode; pop_mode(handle) removes that one (which
+    // is how an overlay closes out of order, or closes another one it owns).
+    lua_pushboolean(L, api(L).pop_input_mode_from_lua(L));
+    return 1;
+  }
+  int l_input_modes(lua_State *L)
+  {
+    api(L).input_modes_to_lua(L);
+    return 1;
+  }
   int l_term_write(lua_State *L)
   {
     // Length-carrying read: a protocol payload can hold a NUL (a graphics

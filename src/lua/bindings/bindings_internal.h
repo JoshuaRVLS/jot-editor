@@ -256,6 +256,9 @@ namespace lua_bind
   int l_screen_redraw(lua_State *L);
   int l_input_on_key(lua_State *L);
   int l_input_on_mouse(lua_State *L);
+  int l_input_push_mode(lua_State *L);
+  int l_input_pop_mode(lua_State *L);
+  int l_input_modes(lua_State *L);
   int l_term_write(lua_State *L);
   int l_term_info(lua_State *L);
   // jot.lua: the module surface, see bindings_plugin.cpp.

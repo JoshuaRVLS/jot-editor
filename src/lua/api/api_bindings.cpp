@@ -645,6 +645,9 @@ bool LuaAPI::init()
   lua_newtable(L);
   field(L, "on_key", l_input_on_key);
   field(L, "on_mouse", l_input_on_mouse);
+  field(L, "push_mode", l_input_push_mode);
+  field(L, "pop_mode", l_input_pop_mode);
+  field(L, "modes", l_input_modes);
   lua_setfield(L, -2, "input");
   lua_newtable(L);
   field(L, "write", l_term_write);

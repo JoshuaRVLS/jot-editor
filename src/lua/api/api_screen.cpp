@@ -56,6 +56,94 @@ namespace
   {
     return std::max(1, ui_cell_count(cluster));
   }
+
+  // The key payload every key handler gets, base hook and mode alike. `mode` is
+  // the stack handle of the owner being called, 0 for the base hook, so a
+  // handler can tell whether it is the one on top (and, in a shared callback,
+  // which layer it is acting for).
+  void push_key_event(
+      lua_State *L, int ch, bool ctrl, bool shift, bool alt, int original_ch, int mode)
+  {
+    lua_newtable(L);
+    // The raw key code: a printable key is its own byte, Enter is 13, Esc 27 and
+    // the function keys live in KeyCode's high range. `char` is the same code
+    // when it is a printable ASCII byte and nil otherwise, so a script that
+    // wants to type what it does not consume does not have to test the range.
+    lua_pushinteger(L, ch);
+    lua_setfield(L, -2, "key");
+    if (ch >= 32 && ch < 127)
+    {
+      lua_pushlstring(L, (const char *)&ch, 1);
+      lua_setfield(L, -2, "char");
+    }
+    lua_pushinteger(L, original_ch);
+    lua_setfield(L, -2, "original_key");
+    // The chord name the rest of the system uses for this key ("F2", "Ctrl+K",
+    // "S"): matching on the raw code means hard-coding KeyCode's high range, so
+    // the name is the field a hook normally switches on.
+    const std::string chord =
+        jot::keybind_detail::chord_name(ch, ctrl, shift, alt, original_ch);
+    lua_pushlstring(L, chord.data(), chord.size());
+    lua_setfield(L, -2, "name");
+    lua_pushboolean(L, ctrl);
+    lua_setfield(L, -2, "ctrl");
+    lua_pushboolean(L, shift);
+    lua_setfield(L, -2, "shift");
+    lua_pushboolean(L, alt);
+    lua_setfield(L, -2, "alt");
+    lua_pushinteger(L, mode);
+    lua_setfield(L, -2, "mode");
+  }
+
+  // Calls the handler sitting on the stack directly under its event table, with
+  // that one argument, and answers whether it consumed the event. An error is
+  // reported and the event counts as declined, so a broken handler costs its own
+  // key instead of the session (the caller sets the stack back either way).
+  bool call_event_handler(lua_State *L, const char *what)
+  {
+    if (lua_pcall(L, 1, 1, 0) != LUA_OK)
+    {
+      std::cerr << "Lua " << what << " handler error: " << lua_tostring(L, -1) << "\n";
+      return false;
+    }
+    return lua_toboolean(L, -1) != 0;
+  }
+
+  // The mouse payload, same contract.
+  void push_mouse_event(lua_State *L,
+                        int x,
+                        int y,
+                        int button,
+                        bool pressed,
+                        bool released,
+                        bool motion,
+                        bool ctrl,
+                        bool shift,
+                        bool alt,
+                        int mode)
+  {
+    lua_newtable(L);
+    lua_pushinteger(L, x);
+    lua_setfield(L, -2, "x");
+    lua_pushinteger(L, y);
+    lua_setfield(L, -2, "y");
+    lua_pushinteger(L, button);
+    lua_setfield(L, -2, "button");
+    lua_pushboolean(L, pressed);
+    lua_setfield(L, -2, "pressed");
+    lua_pushboolean(L, released);
+    lua_setfield(L, -2, "released");
+    lua_pushboolean(L, motion);
+    lua_setfield(L, -2, "motion");
+    lua_pushboolean(L, ctrl);
+    lua_setfield(L, -2, "ctrl");
+    lua_pushboolean(L, shift);
+    lua_setfield(L, -2, "shift");
+    lua_pushboolean(L, alt);
+    lua_setfield(L, -2, "alt");
+    lua_pushinteger(L, mode);
+    lua_setfield(L, -2, "mode");
+  }
 } // namespace
 
 int LuaAPI::screen_write(int x, int y, const std::string &text, const ScreenStyle &style)
@@ -261,6 +349,107 @@ bool LuaAPI::run_paint_hook()
   return again;
 }
 
+int LuaAPI::push_input_mode_from_lua(lua_State *L, int arg_index)
+{
+  InputMode mode;
+  if (lua_isfunction(L, arg_index))
+  {
+    lua_pushvalue(L, arg_index);
+    mode.key_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  }
+  else if (lua_istable(L, arg_index))
+  {
+    mode.name = jot_lua::table_string(L, arg_index, "name", "");
+    for (const char *field : {"on_key", "on_mouse"})
+    {
+      lua_getfield(L, arg_index, field);
+      if (lua_isfunction(L, -1))
+      {
+        const int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+        if (std::string(field) == "on_key")
+        {
+          mode.key_ref = ref;
+        }
+        else
+        {
+          mode.mouse_ref = ref;
+        }
+      }
+      else
+      {
+        lua_pop(L, 1);
+      }
+    }
+    if (mode.key_ref < 0 && mode.mouse_ref < 0)
+    {
+      luaL_error(L, "jot.input.push_mode: the table needs on_key or on_mouse");
+      return 0;
+    }
+  }
+  else
+  {
+    luaL_error(L, "jot.input.push_mode: expected a function or a table");
+    return 0;
+  }
+  mode.handle = next_input_mode_handle_++;
+  input_modes_.push_back(mode);
+  return mode.handle;
+}
+
+bool LuaAPI::pop_input_mode_from_lua(lua_State *L)
+{
+  if (input_modes_.empty())
+  {
+    return false;
+  }
+  const int wanted = (int)luaL_optinteger(L, 1, 0);
+  auto remove_at = [this, L](std::vector<InputMode>::iterator it)
+  {
+    if (lua_state)
+    {
+      lua_State *S = static_cast<lua_State *>(lua_state);
+      for (int ref : {it->key_ref, it->mouse_ref})
+      {
+        if (ref >= 0)
+        {
+          luaL_unref(S, LUA_REGISTRYINDEX, ref);
+        }
+      }
+    }
+    input_modes_.erase(it);
+  };
+  if (wanted <= 0)
+  {
+    remove_at(input_modes_.end() - 1); // no handle named: the top one
+    return true;
+  }
+  for (auto it = input_modes_.begin(); it != input_modes_.end(); ++it)
+  {
+    if (it->handle == wanted)
+    {
+      remove_at(it);
+      return true;
+    }
+  }
+  return false;
+}
+
+void LuaAPI::input_modes_to_lua(lua_State *L)
+{
+  lua_newtable(L);
+  int index = 1;
+  // Top first: the order they are asked in, so a script can see who owns the
+  // keyboard right now by looking at entry 1.
+  for (auto it = input_modes_.rbegin(); it != input_modes_.rend(); ++it)
+  {
+    lua_newtable(L);
+    jot_lua::lua_push_int_field(L, "handle", it->handle);
+    lua_pushlstring(L, it->name.data(), it->name.size());
+    lua_setfield(L, -2, "name");
+    lua_rawseti(L, -2, index++);
+  }
+}
+
 void LuaAPI::set_raw_key_hook(lua_State *L, int fn_index)
 {
   if (raw_key_ref_ >= 0)
@@ -295,47 +484,33 @@ void LuaAPI::set_raw_mouse_hook(lua_State *L, int fn_index)
 
 bool LuaAPI::raw_key_input(int ch, bool ctrl, bool shift, bool alt, int original_ch)
 {
-  if (raw_key_ref_ < 0 || !lua_state || !editor || !editor->event_loop_.is_main_thread())
+  if (!lua_state || !editor || !editor->event_loop_.is_main_thread())
+    return false;
+  if (raw_key_ref_ < 0 && input_modes_.empty())
     return false;
   lua_State *L = static_cast<lua_State *>(lua_state);
   const int top = lua_gettop(L);
+  // Top down: the innermost owner gets the key first and the first one that
+  // returns true ends the walk. A mode under it only sees the key the mode above
+  // declined, which is what makes nesting compose.
+  for (auto it = input_modes_.rbegin(); it != input_modes_.rend(); ++it)
+  {
+    if (it->key_ref < 0)
+      continue;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, it->key_ref);
+    push_key_event(L, ch, ctrl, shift, alt, original_ch, it->handle);
+    if (call_event_handler(L, "key"))
+    {
+      lua_settop(L, top);
+      return true;
+    }
+    lua_settop(L, top);
+  }
+  if (raw_key_ref_ < 0)
+    return false;
   lua_rawgeti(L, LUA_REGISTRYINDEX, raw_key_ref_);
-  lua_newtable(L);
-  // The raw key code: a printable key is its own byte, Enter is 13, Esc 27 and
-  // the function keys live in KeyCode's high range. `char` is the same code
-  // when it is a printable ASCII byte and nil otherwise, so a script that wants
-  // to type what it does not consume does not have to test the range itself.
-  lua_pushinteger(L, ch);
-  lua_setfield(L, -2, "key");
-  if (ch >= 32 && ch < 127)
-  {
-    lua_pushlstring(L, (const char *)&ch, 1);
-    lua_setfield(L, -2, "char");
-  }
-  lua_pushinteger(L, original_ch);
-  lua_setfield(L, -2, "original_key");
-  // The chord name the rest of the system uses for this key ("F2", "Ctrl+K",
-  // "S"): matching on the raw code means hard-coding KeyCode's high range, so
-  // the name is the field a hook normally switches on.
-  const std::string chord =
-      jot::keybind_detail::chord_name(ch, ctrl, shift, alt, original_ch);
-  lua_pushlstring(L, chord.data(), chord.size());
-  lua_setfield(L, -2, "name");
-  lua_pushboolean(L, ctrl);
-  lua_setfield(L, -2, "ctrl");
-  lua_pushboolean(L, shift);
-  lua_setfield(L, -2, "shift");
-  lua_pushboolean(L, alt);
-  lua_setfield(L, -2, "alt");
-  bool consume = false;
-  if (lua_pcall(L, 1, 1, 0) == LUA_OK)
-  {
-    consume = lua_toboolean(L, -1) != 0;
-  }
-  else
-  {
-    std::cerr << "Lua key hook error: " << lua_tostring(L, -1) << "\n";
-  }
+  push_key_event(L, ch, ctrl, shift, alt, original_ch, 0);
+  const bool consume = call_event_handler(L, "key");
   lua_settop(L, top);
   return consume;
 }
@@ -350,39 +525,30 @@ bool LuaAPI::raw_mouse_input(int x,
                              bool shift,
                              bool alt)
 {
-  if (raw_mouse_ref_ < 0 || !lua_state || !editor || !editor->event_loop_.is_main_thread())
+  if (!lua_state || !editor || !editor->event_loop_.is_main_thread())
+    return false;
+  if (raw_mouse_ref_ < 0 && input_modes_.empty())
     return false;
   lua_State *L = static_cast<lua_State *>(lua_state);
   const int top = lua_gettop(L);
+  for (auto it = input_modes_.rbegin(); it != input_modes_.rend(); ++it)
+  {
+    if (it->mouse_ref < 0)
+      continue;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, it->mouse_ref);
+    push_mouse_event(L, x, y, button, pressed, released, motion, ctrl, shift, alt, it->handle);
+    if (call_event_handler(L, "mouse"))
+    {
+      lua_settop(L, top);
+      return true;
+    }
+    lua_settop(L, top);
+  }
+  if (raw_mouse_ref_ < 0)
+    return false;
   lua_rawgeti(L, LUA_REGISTRYINDEX, raw_mouse_ref_);
-  lua_newtable(L);
-  lua_pushinteger(L, x);
-  lua_setfield(L, -2, "x");
-  lua_pushinteger(L, y);
-  lua_setfield(L, -2, "y");
-  lua_pushinteger(L, button);
-  lua_setfield(L, -2, "button");
-  lua_pushboolean(L, pressed);
-  lua_setfield(L, -2, "pressed");
-  lua_pushboolean(L, released);
-  lua_setfield(L, -2, "released");
-  lua_pushboolean(L, motion);
-  lua_setfield(L, -2, "motion");
-  lua_pushboolean(L, ctrl);
-  lua_setfield(L, -2, "ctrl");
-  lua_pushboolean(L, shift);
-  lua_setfield(L, -2, "shift");
-  lua_pushboolean(L, alt);
-  lua_setfield(L, -2, "alt");
-  bool consume = false;
-  if (lua_pcall(L, 1, 1, 0) == LUA_OK)
-  {
-    consume = lua_toboolean(L, -1) != 0;
-  }
-  else
-  {
-    std::cerr << "Lua mouse hook error: " << lua_tostring(L, -1) << "\n";
-  }
+  push_mouse_event(L, x, y, button, pressed, released, motion, ctrl, shift, alt, 0);
+  const bool consume = call_event_handler(L, "mouse");
   lua_settop(L, top);
   return consume;
 }
@@ -433,7 +599,18 @@ void LuaAPI::clear_raw_hooks()
         luaL_unref(L, LUA_REGISTRYINDEX, *ref);
       }
     }
+    for (InputMode &mode : input_modes_)
+    {
+      for (int ref : {mode.key_ref, mode.mouse_ref})
+      {
+        if (ref >= 0)
+        {
+          luaL_unref(L, LUA_REGISTRYINDEX, ref);
+        }
+      }
+    }
   }
+  input_modes_.clear();
   paint_hook_ref_ = LUA_NOREF;
   raw_key_ref_ = LUA_NOREF;
   raw_mouse_ref_ = LUA_NOREF;
