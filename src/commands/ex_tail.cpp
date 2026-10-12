@@ -1255,12 +1255,12 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
       set_message("Update runtime unavailable (features/update.lua not loaded)");
     }
   }
-  else if (lua_api && lua_api->run_plugin_command(lcmd, arg))
-  {
-    needs_redraw = true;
-  }
   else
   {
+    // No Lua fallback here: execute_ex_command consults the plugin registry
+    // before it starts this chain, so a Lua command of this name never reaches
+    // the tail (and a Lua command now replaces a built-in rather than sitting
+    // behind it). Reaching this branch means the name is nobody's.
     set_message("Unknown command: " + line);
   }
   return true;

@@ -43,6 +43,20 @@ bool Editor::execute_ex_command(const std::string &input_line)
   arg = trim_copy(arg);
   std::string lcmd = to_lower_copy(cmd);
 
+  // A Lua command wins over a built-in of the same name. It used to be the
+  // last branch of this dispatcher, which meant a plugin could add a command
+  // but never replace one: the 292 built-in bodies were closed to Lua, and the
+  // only way to change one was to shadow its keybinding. Policy belongs to
+  // Lua (see docs/LUA_API.md, "Writing A Feature In Lua"), so the Lua registry
+  // answers first and the built-in chain is what a name gets when no Lua
+  // command claims it. Ctrl+Q is a key rather than an ex command, so a plugin
+  // that shadows :q or :wq leaves the user the chord out.
+  if (lua_api && lua_api->run_plugin_command(lcmd, arg))
+  {
+    needs_redraw = true;
+    return true;
+  }
+
   auto goto_line_col = [&](int line_1based, int col_1based)
   {
     auto &buf = get_buffer();
