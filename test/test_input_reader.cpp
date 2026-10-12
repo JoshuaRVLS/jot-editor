@@ -50,10 +50,13 @@ struct Pipe
   }
 };
 
-// A reader with a claim window short enough to wait out in a test.
-jot_ui::InputReader reader_for(const Pipe &pipe, int claim_ms = 40)
+// A reader with claim windows short enough to wait out in a test. The window
+// for what a terminal sends is passed separately because production gives it a
+// long one.
+jot_ui::InputReader reader_for(const Pipe &pipe, int claim_ms = 40,
+                               int machine_claim_ms = 40)
 {
-  return jot_ui::InputReader(pipe.read_fd(), claim_ms);
+  return jot_ui::InputReader(pipe.read_fd(), claim_ms, machine_claim_ms);
 }
 
 std::string drain(jot_ui::InputReader &input)
@@ -133,18 +136,133 @@ TEST_CASE("Input reader stops claiming once the tail is owed no more", "[jot][in
   Pipe pipe;
   jot_ui::InputReader input = reader_for(pipe, 30);
 
-  input.abandon(jot_ui::OwedTail::MouseReport);
+  // A CSI's tail is the case with a short window: what follows a `ESC [` can be
+  // a keystroke (a bracket, then the rest of what the user is typing), so the
+  // claim ends rather than eat it.
+  input.abandon(jot_ui::OwedTail::CsiBody);
   REQUIRE(input.claiming());
 
   ::usleep(60 * 1000);
-  pipe.write("91;24Mz");
+  pipe.write("12Mz");
   input.settle();
 
   REQUIRE_FALSE(input.claiming());
   // The window is gone, so a tail that came too late is the editor's problem:
   // it is past the point where a keystroke and a tail can be told apart, and
   // eating input for longer is worse than missing one.
-  REQUIRE(drain(input) == "91;24Mz");
+  REQUIRE(drain(input) == "12Mz");
+}
+
+TEST_CASE("Input reader holds a report's tail past a CSI's window", "[jot][input]")
+{
+  // The general window is the short one here, as it is in production relative
+  // to a report's: a terminal's tail waits for the app to come back from a
+  // frame, which is longer than a keystroke can be told apart from it.
+  const jot_ui::OwedTail kReports[] = {
+      jot_ui::OwedTail::MouseReport,
+      jot_ui::OwedTail::KeyReport,
+      jot_ui::OwedTail::Reply,
+  };
+  const char *kTails[] = {"91;24M", "105;5u", "?62;4c"};
+
+  for (std::size_t i = 0; i < 3; i++)
+  {
+    Pipe pipe;
+    jot_ui::InputReader input = reader_for(pipe, 30, 5000);
+
+    input.abandon(kReports[i]);
+    REQUIRE(input.claiming());
+
+    ::usleep(60 * 1000);
+    pipe.write(kTails[i]);
+    input.settle();
+
+    REQUIRE_FALSE(input.claiming());
+    REQUIRE_FALSE(has_queued(input));
+  }
+}
+
+TEST_CASE("Input reader drops a report's claim at its own window", "[jot][input]")
+{
+  Pipe pipe;
+  jot_ui::InputReader input = reader_for(pipe, 5000, 30);
+
+  input.abandon(jot_ui::OwedTail::KeyReport);
+  REQUIRE(input.claiming());
+
+  ::usleep(60 * 1000);
+  pipe.write("105;5u");
+  input.settle();
+
+  REQUIRE_FALSE(input.claiming());
+  // A tail that outlived even this window is typed, which is the cost of not
+  // holding the claim for the rest of the session.
+  REQUIRE(drain(input) == "105;5u");
+}
+
+TEST_CASE("Input reader keeps a report's claim alive while its tail arrives", "[jot][input]")
+{
+  Pipe pipe;
+  // The general window is the short one here, as it is in production against
+  // the machine window: losing this tail to the short one is the bug.
+  jot_ui::InputReader input = reader_for(pipe, 40, 400);
+
+  input.abandon(jot_ui::OwedTail::MouseReport);
+  pipe.write("35;");
+  input.settle();
+  // Half the tail is in, and the gap after it is longer than a CSI's whole
+  // window: those bytes restarted the machine window, the head did not.
+  ::usleep(150 * 1000);
+  pipe.write("30;19M");
+  input.settle();
+
+  REQUIRE_FALSE(input.claiming());
+  REQUIRE_FALSE(has_queued(input));
+}
+
+TEST_CASE("Input reader tells a key report's tail from a keystroke", "[jot][input]")
+{
+  Pipe pipe;
+  jot_ui::InputReader input = reader_for(pipe);
+
+  input.abandon(jot_ui::OwedTail::KeyReport);
+  pipe.write("1;5:3u");
+  input.settle();
+  REQUIRE_FALSE(input.claiming());
+  REQUIRE_FALSE(has_queued(input));
+
+  // A letter is not part of a key report, so it is typing and is handed back.
+  input.abandon(jot_ui::OwedTail::KeyReport);
+  pipe.write("q");
+  input.settle();
+  REQUIRE(input.claiming());
+  REQUIRE(drain(input) == "q");
+}
+
+TEST_CASE("Input reader takes either answer under a bare ESC [", "[jot][input]")
+{
+  // Which answer follows `ESC [` is open, so the claim behind it accepts both a
+  // mouse report and the replies a terminal sends unasked. What it does not
+  // accept is text, which is handed back.
+  Pipe pipe;
+  jot_ui::InputReader input = reader_for(pipe);
+
+  input.abandon(jot_ui::OwedTail::Reply);
+  pipe.write("<35;30;19M");
+  input.settle();
+  REQUIRE_FALSE(input.claiming());
+  REQUIRE_FALSE(has_queued(input));
+
+  input.abandon(jot_ui::OwedTail::Reply);
+  pipe.write("12;40R");
+  input.settle();
+  REQUIRE_FALSE(input.claiming());
+  REQUIRE_FALSE(has_queued(input));
+
+  input.abandon(jot_ui::OwedTail::Reply);
+  pipe.write("[0]");
+  input.settle();
+  REQUIRE(drain(input) == "[0]");
 }
 
 TEST_CASE("Input reader tells a mouse report's tail from a keystroke", "[jot][input]")

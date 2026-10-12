@@ -688,6 +688,22 @@ struct ProbeReplySpan
   int end = 0;
 };
 
+// Whether the CSI read so far is the head of a kitty keyboard report: `ESC [`
+// then digits, `;` and `:` only. Every key report starts with those bytes, and
+// nothing else this app reads from a terminal does.
+static bool key_report_prefix(const std::string &bytes)
+{
+  if (bytes.size() < 3 || bytes[0] != '\x1b' || bytes[1] != '[')
+    return false;
+  for (std::size_t i = 2; i < bytes.size(); i++)
+  {
+    const char c = bytes[i];
+    if (!((c >= '0' && c <= '9') || c == ';' || c == ':'))
+      return false;
+  }
+  return true;
+}
+
 static bool graphics_reply_span(const char *buf, int n, ProbeReplySpan &span)
 {
   for (int i = 0; i + 2 < n; i++)
@@ -984,8 +1000,12 @@ int Terminal::read_key()
             {
               // A CSI is provably in progress (a bare `ESC [` would not have
               // entered this loop), so its tail is ours to eat, not to hand on
-              // to libtermkey as a fragment whose remainder types itself.
-              g_input.abandon(jot_ui::OwedTail::CsiBody);
+              // to libtermkey as a fragment whose remainder types itself. A
+              // body of digits, `;` and `:` so far is a key report, which is
+              // the app's other machine traffic and waits as long as a mouse
+              // report does; anything else keeps the editor's own window.
+              g_input.abandon(key_report_prefix(bytes) ? jot_ui::OwedTail::KeyReport
+                                                       : jot_ui::OwedTail::CsiBody);
               return -1;
             }
             bytes.push_back(third);
@@ -1013,6 +1033,19 @@ int Terminal::read_key()
           {
             return csi_u_key;
           }
+        }
+        else
+        {
+          // `ESC [` arrived inside one window and its body did not, which is
+          // the same case the loop above claims for: a CSI is provably in
+          // progress. Both bytes reaching the same 5ms window is what makes it
+          // machine traffic rather than a person pressing Escape and then a
+          // bracket, and a report the pty chopped after two bytes is what this
+          // leaves to be typed if the tail is not claimed. Which answer it is
+          // is still open -- a mouse report, a key report, a cursor or
+          // attributes answer -- so the claim takes every one of those shapes.
+          g_input.abandon(jot_ui::OwedTail::Reply);
+          return -1;
         }
       }
       else if (second == 'O')

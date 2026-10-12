@@ -19,11 +19,21 @@ namespace jot_ui
 
 // The grammar of a tail still owed, so the bytes skipped are provably the
 // sequence the head belonged to and never a keystroke that raced it.
+//
+// The last three are the shapes only a terminal sends. They keep their claims
+// far longer than the others (see kMachineTailMs) because a terminal's writes
+// are chopped by a full pty while the app is drawing, and the app can spend
+// seconds on a frame between a report's head and its tail. Each keeps its own
+// narrow grammar so that holding the claim longer cannot swallow typing.
 enum class OwedTail
 {
   CsiBody,     // parameter and intermediate bytes, then any final byte
   FinalByte,   // a single final byte: the last byte of an SS3 sequence
   MouseReport, // digits, `;` and `?`, then `M` or `m`: an SGR mouse report
+  KeyReport,   // digits, `;` and `:`, then `u`: a kitty keyboard report
+  Reply,       // a terminal's own answer, head unread: a mouse report, a key
+               // report, a cursor report (`R`), a device-attributes answer
+               // (`c`), a focus event (`I`/`O`), or a paste marker (`~`)
 };
 
 class InputReader
@@ -35,9 +45,20 @@ public:
   static constexpr int kTailBudgetMs = 50;
   static constexpr int kClaimMs = 1000;
 
-  // `claim_ms` is how long a claim outlives the drain; the default is the
-  // editor's, and a test passes something short instead of waiting it out.
-  explicit InputReader(int fd, int claim_ms = kClaimMs);
+  // How long a claim on what a terminal sends waits for its tail. A terminal's
+  // report is machine traffic, and its tail can be a whole frame late: the
+  // terminal writes one in a single call, the pty takes it in pieces when the
+  // app is not draining it, and the app can then spend seconds drawing before
+  // it reads again. The one-second window the other tails get expired inside
+  // that gap, and the tail was typed into the buffer instead ("35;30;19M" and
+  // "105;5u", the run of either a pointer storm or a keypress leaves).
+  static constexpr int kMachineTailMs = 10000;
+
+  // `claim_ms` is how long a claim outlives the drain and `machine_claim_ms`
+  // is the same for the shapes only a terminal sends; the defaults are the
+  // editor's, and a test passes short ones instead of waiting them out.
+  explicit InputReader(int fd, int claim_ms = kClaimMs,
+                       int machine_claim_ms = kMachineTailMs);
 
   // The next byte: one handed back, else one off the fd. A negative timeout
   // does not wait, and a handed-back byte never waits.
@@ -95,6 +116,7 @@ private:
 
   int fd_;
   int claim_ms_;
+  int machine_claim_ms_;
   std::deque<char> pending_;
   Claim claim_ = Claim::None;
   OwedTail owed_ = OwedTail::CsiBody;

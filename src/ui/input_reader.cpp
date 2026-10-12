@@ -14,9 +14,20 @@ namespace
 const char kPasteEnd[] = "\x1b[201~";
 constexpr int kPasteBodyTimeoutMs = 1000;
 constexpr int kPasteEndTimeoutMs = 20;
+
+// Whether this tail is one only a terminal sends (see OwedTail): those wait out
+// the app's busy stretches, the rest keep the editor's window.
+bool machine_traffic(jot_ui::OwedTail owed)
+{
+  return owed == jot_ui::OwedTail::MouseReport || owed == jot_ui::OwedTail::KeyReport
+         || owed == jot_ui::OwedTail::Reply;
+}
 } // namespace
 
-InputReader::InputReader(int fd, int claim_ms) : fd_(fd), claim_ms_(claim_ms) {}
+InputReader::InputReader(int fd, int claim_ms, int machine_claim_ms)
+    : fd_(fd), claim_ms_(claim_ms), machine_claim_ms_(machine_claim_ms)
+{
+}
 
 bool InputReader::read(char &out, int timeout_ms)
 {
@@ -80,6 +91,33 @@ bool InputReader::accepts(char c, bool &is_final)
     return true;
   }
 
+  if (owed_ == OwedTail::KeyReport)
+  {
+    // Kitty keyboard protocol: `ESC [ code ; modifiers : event u`.
+    if ((u >= '0' && u <= '9') || u == ';' || u == ':')
+      return true;
+    if (u != 'u')
+      return false;
+    is_final = true;
+    return true;
+  }
+
+  if (owed_ == OwedTail::Reply)
+  {
+    // `ESC [` arrived and nothing of the body did, so which answer this is is
+    // still open: parameter bytes until a byte a terminal ends an answer with.
+    // A mouse report is the `<` lead and its own digits, `;` and `M`/`m`; the
+    // rest are the replies and events a terminal sends unasked (`R`, `c`, `I`,
+    // `O`, `~`) and the key reports it sends once the app pushes the protocol.
+    if ((u >= '0' && u <= '9') || u == ';' || u == ':' || u == '?' || u == '<')
+      return true;
+    if (u != 'M' && u != 'm' && u != 'u' && u != 'R' && u != 'c' && u != 'I' && u != 'O'
+        && u != '~')
+      return false;
+    is_final = true;
+    return true;
+  }
+
   if (owed_ == OwedTail::FinalByte)
   {
     if (u < 0x40 || u > 0x7e)
@@ -99,7 +137,8 @@ bool InputReader::accepts(char c, bool &is_final)
 void InputReader::open_claim()
 {
   claim_ = claim_ == Claim::Fixed ? Claim::Fixed : Claim::Grammar;
-  deadline_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(claim_ms_);
+  const int window = machine_traffic(owed_) ? machine_claim_ms_ : claim_ms_;
+  deadline_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(window);
 }
 
 void InputReader::abandon(OwedTail owed, int per_byte_ms, int budget_ms)
@@ -137,6 +176,10 @@ void InputReader::abandon(OwedTail owed, int per_byte_ms, int budget_ms)
 
 void InputReader::claim_remaining(const char *bytes, std::size_t consumed, std::size_t len)
 {
+  // A fixed tail is not a grammar: accepts() reads fixed_ and never looks at
+  // the owed shape, so the shape is reset to keep a report's window from
+  // carrying over to a paste terminator.
+  owed_ = OwedTail::CsiBody;
   fixed_len_ = std::min(len, sizeof(fixed_));
   fixed_at_ = std::min(consumed, fixed_len_);
   for (std::size_t i = 0; i < fixed_len_; i++)
@@ -194,7 +237,16 @@ void InputReader::settle()
       return;
     }
     if (is_final)
+    {
       claim_ = Claim::None;
+    }
+    else if (machine_traffic(owed_))
+    {
+      // The tail is still arriving, so its window runs from its last byte
+      // rather than from the head: a long report cannot be cut off by it.
+      deadline_ = std::chrono::steady_clock::now()
+                  + std::chrono::milliseconds(machine_claim_ms_);
+    }
   }
 }
 
