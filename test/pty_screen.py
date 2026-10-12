@@ -365,6 +365,12 @@ def run_in_pty(binary: str, args, keys: bytes, settle: float = 2.5, after: float
     if pid == 0:
         os.environ["TERM"] = "xterm-256color"
         os.environ["COLORTERM"] = "truecolor"
+        # jot refuses to start on a terminal that does not answer the kitty
+        # graphics protocol's handshake, which a pty never does. A probe fixes
+        # the answer here, the way JOT_TEXT_SCALE_FORCE fixes the text-scale
+        # probe; the gate itself is tested without a pty
+        # (test_imageviewer.cpp).
+        os.environ["JOT_KITTY_PROTOCOL"] = "1"
         os.environ["JOT_CONFIG_HOME"] = cfg
         os.environ["JOT_CACHE_HOME"] = cfg
         for key, value in (env or {}).items():

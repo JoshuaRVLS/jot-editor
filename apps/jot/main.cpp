@@ -1,5 +1,6 @@
 #include "core/relaunch.h"
 #include "core/editor.h"
+#include "ui/terminal.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -114,6 +115,28 @@ int main(int argc, char *argv[])
     else if (target == nullptr)
     {
       target = argv[i];
+    }
+  }
+
+  // Every picture jot draws is a kitty graphics placement: there is no cell-art
+  // replacement for a real image, so a terminal that does not answer the
+  // protocol's own handshake is not a terminal jot can run in, and saying so is
+  // better than a session whose image tabs come up empty. This runs before the
+  // redirection below, because after it stderr is a log file and the refusal
+  // would never reach the screen. The GUI frontend is exempt: it paints its own
+  // window and never asks a terminal for anything.
+  if (!gui_mode)
+  {
+    const bool kitty = Terminal::kitty_graphics_probe();
+    Terminal::remember_kitty_graphics(kitty);
+    if (!kitty)
+    {
+      std::fprintf(stderr,
+                   "jot: this terminal does not support the kitty graphics protocol.\n"
+                   "jot draws every image through it and has no fallback, so it needs a\n"
+                   "terminal that implements it (kitty, wezterm, ghostty, konsole, ...).\n"
+                   "Set JOT_KITTY_PROTOCOL=1 to run anyway.\n");
+      return 1;
     }
   }
 

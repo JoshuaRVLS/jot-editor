@@ -44,6 +44,11 @@ jot path/to/project # open a folder as the workspace
 add --gui flag to use the GUI.
 ```
 
+jot draws every image with the kitty graphics protocol, so it must run in a
+terminal that implements it (kitty, WezTerm, Ghostty, Konsole). It checks with
+the protocol's own handshake at startup and exits with a message anywhere else.
+`JOT_KITTY_PROTOCOL=1` skips the check.
+
 ## Docs
 
 - [Features, keybindings & commands](docs/FEATURES.md) - what jot can do and how to drive it
@@ -58,8 +63,11 @@ add --gui flag to use the GUI.
 
 ## Platform support
 
-Linux (x86_64/arm64) and macOS (Intel/Apple Silicon) are supported. Windows
-10/11 + MSVC + Windows Terminal is experimental.
+Linux (x86_64/arm64) and macOS (Intel/Apple Silicon) are supported, in a
+terminal that speaks the kitty graphics protocol (kitty, WezTerm, Ghostty,
+Konsole). Windows 10/11 + MSVC + Windows Terminal is experimental: the console
+implements no graphics protocol, so the image viewer is limited to the cell
+preview there and `JOT_KITTY_PROTOCOL=1` is needed to start at all.
 
 ## License
 

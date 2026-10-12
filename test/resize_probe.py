@@ -97,6 +97,9 @@ def main() -> int:
     env["JOT_CONFIG_HOME"] = str(work / "home")
     env["JOT_CACHE_HOME"] = str(work / "home")
     env["TERM"] = env.get("TERM", "xterm-256color")
+    # A pty does not answer the kitty graphics protocol's handshake, and jot
+    # refuses to start on a terminal that does not: fix the answer here.
+    env["JOT_KITTY_PROTOCOL"] = "1"
     # A pty renders at whatever size it is told; keep the renderer's self-heal
     # from being the only thing that repaints.
     env.pop("JOT_SAFE_MODE", None)

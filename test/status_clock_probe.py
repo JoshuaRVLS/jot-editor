@@ -75,6 +75,7 @@ def run_jot(binary: str, cfg: str, samples: dict[str, float], timeout_s: float):
     if pid == 0:  # child
         os.environ["TERM"] = "xterm-256color"
         os.environ["COLORTERM"] = "truecolor"
+        os.environ["JOT_KITTY_PROTOCOL"] = "1"
         os.environ["JOT_CONFIG_HOME"] = cfg
         os.environ["JOT_CACHE_HOME"] = cfg
         try:

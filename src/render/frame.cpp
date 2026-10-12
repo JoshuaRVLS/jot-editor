@@ -243,11 +243,18 @@ void Editor::render()
       auto &buf = get_buffer(pane.buffer_id);
       int display_x = 0;
       int display_y = 0;
-      // The caret is only drawn where it belongs: when its line is scrolled out
-      // of view (or the pane is too narrow to hold it) it is hidden. Parking it
-      // on the last row instead made it travel to and ride the bottom edge,
-      // which read as the caret being dragged along by the scroll.
-      if (compute_code_cursor_screen_pos(pane,
+      // An image tab shows a picture and no text: there is no caret to place,
+      // and the cell the text cursor would occupy is on the picture.
+      if (image_viewer.is_image_file(buf.filepath))
+      {
+        ui->hide_cursor();
+      }
+      // Otherwise the caret is only drawn where it belongs: when its line is
+      // scrolled out of view (or the pane is too narrow to hold it) it is
+      // hidden. Parking it on the last row instead made it travel to and ride
+      // the bottom edge, which read as the caret being dragged along by the
+      // scroll.
+      else if (compute_code_cursor_screen_pos(pane,
                                          buf,
                                          show_minimap,
                                          minimap_width,
@@ -527,9 +534,14 @@ void Editor::render()
         auto &buf = get_buffer(pane.buffer_id);
         int display_x = 0;
         int display_y = 0;
-        // Same policy as the idle path above: hide the caret when its line is
-        // not on screen instead of parking it on the last code row.
-        if (compute_code_cursor_screen_pos(pane,
+        // Same policy as the idle path above: an image tab has no caret to
+        // place, and a caret whose line is not on screen is hidden rather than
+        // parked on the last code row.
+        if (image_viewer.is_image_file(buf.filepath))
+        {
+          ui->hide_cursor();
+        }
+        else if (compute_code_cursor_screen_pos(pane,
                                            buf,
                                            show_minimap,
                                            minimap_width,

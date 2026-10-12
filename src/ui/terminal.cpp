@@ -43,10 +43,11 @@ static bool probe_terminal_size_via_ioctl(int fd, struct winsize &ws)
 // claiming those tails (see ui/input_reader.h).
 static jot_ui::InputReader g_input(STDIN_FILENO);
 
-// cell_px_* are left at 0 when the terminal does not report a
-// pixel size (the env fallback cannot know it).
-static bool get_terminal_size(int &width, int &height, int *cell_px_w = nullptr,
-                              int *cell_px_h = nullptr)
+// win_px_* are the *window* in pixels (the only pixel size a terminal
+// reports), left at 0 when it does not report one (the env fallback cannot
+// know it). refresh_size() turns them into a cell size.
+static bool get_terminal_size(int &width, int &height, int *win_px_w = nullptr,
+                              int *win_px_h = nullptr)
 {
   struct winsize ws;
 
@@ -56,10 +57,10 @@ static bool get_terminal_size(int &width, int &height, int *cell_px_w = nullptr,
   {
     width = std::max(1, (int)ws.ws_col);
     height = std::max(1, (int)ws.ws_row);
-    if (cell_px_w)
-      *cell_px_w = (int)ws.ws_xpixel;
-    if (cell_px_h)
-      *cell_px_h = (int)ws.ws_ypixel;
+    if (win_px_w)
+      *win_px_w = (int)ws.ws_xpixel;
+    if (win_px_h)
+      *win_px_h = (int)ws.ws_ypixel;
     return true;
   }
 
@@ -73,10 +74,10 @@ static bool get_terminal_size(int &width, int &height, int *cell_px_w = nullptr,
       {
         width = std::max(1, (int)ws.ws_col);
         height = std::max(1, (int)ws.ws_row);
-        if (cell_px_w)
-          *cell_px_w = (int)ws.ws_xpixel;
-        if (cell_px_h)
-          *cell_px_h = (int)ws.ws_ypixel;
+        if (win_px_w)
+          *win_px_w = (int)ws.ws_xpixel;
+        if (win_px_h)
+          *win_px_h = (int)ws.ws_ypixel;
         return true;
       }
     }
@@ -595,9 +596,11 @@ bool Terminal::refresh_size(bool force_probe)
 {
   int new_width = width;
   int new_height = height;
+  int win_px_w = 0;
+  int win_px_h = 0;
 
   // First source: ioctl and env vars.
-  bool got = get_terminal_size(new_width, new_height, &cell_px_w_, &cell_px_h_);
+  bool got = get_terminal_size(new_width, new_height, &win_px_w, &win_px_h);
 
   // On a forced probe, or when the ioctl/env path failed, fall back to the ANSI
   // cursor-position probe: it is the only recovery from stale dimensions (after
@@ -634,6 +637,15 @@ bool Terminal::refresh_size(bool force_probe)
     new_width = 1;
   if (new_height < 1)
     new_height = 1;
+  // The ioctl reports the window in pixels, which is all a terminal offers:
+  // the cell is that window divided by the columns (rows) it is drawn in. Done
+  // here rather than in get_terminal_size() because the cursor-position probe
+  // below can correct the row/column count the division has to use. Zero on
+  // either side means "no cell size told", which is a different answer from a
+  // size -- an image shown at its own resolution falls back on its own
+  // assumption rather than dividing by nothing.
+  cell_px_w_ = (win_px_w > 0) ? std::max(1, win_px_w / new_width) : 0;
+  cell_px_h_ = (win_px_h > 0) ? std::max(1, win_px_h / new_height) : 0;
   bool changed = (new_width != width) || (new_height != height);
   width = new_width;
   height = new_height;
@@ -657,6 +669,192 @@ void Terminal::cleanup()
     fclose(render_capture_);
     render_capture_ = nullptr;
   }
+}
+
+// The kitty protocol's handshake, exactly as the protocol prescribes: a query
+// placement of a 1x1 RGBA image (the terminal answers it with OK or an error
+// and stores nothing), immediately followed by a primary device-attributes
+// request. A terminal that implements the protocol answers the query; one that
+// does not answers the device-attributes request alone, which is the "no".
+static const char kKittyGraphicsQuery[] =
+    "\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[c";
+
+// One reply in the probe's buffer: the span from its ESC to its final byte.
+// The graphics answer is an APC (ESC _ G ... ESC \); the device-attributes
+// answer is a CSI ending in 'c'.
+struct ProbeReplySpan
+{
+  int at = 0;
+  int end = 0;
+};
+
+static bool graphics_reply_span(const char *buf, int n, ProbeReplySpan &span)
+{
+  for (int i = 0; i + 2 < n; i++)
+  {
+    if (buf[i] != '\x1b' || buf[i + 1] != '_' || buf[i + 2] != 'G')
+      continue;
+    span.at = i;
+    int q = i + 3;
+    while (q + 1 < n && !(buf[q] == '\x1b' && buf[q + 1] == '\\'))
+      q++;
+    span.end = (q + 1 < n) ? q + 2 : n;
+    return true;
+  }
+  return false;
+}
+
+static bool attributes_reply_span(const char *buf, int n, ProbeReplySpan &span)
+{
+  for (int i = 0; i + 2 < n; i++)
+  {
+    if (buf[i] != '\x1b' || buf[i + 1] != '[')
+      continue;
+    int q = i + 2;
+    while (q < n && ((buf[q] >= '0' && buf[q] <= '9') || buf[q] == ';' || buf[q] == '?'))
+      q++;
+    if (q < n && buf[q] >= '@' && buf[q] <= '~')
+    {
+      span.at = i;
+      span.end = q + 1;
+      return true;
+    }
+  }
+  return false;
+}
+
+// The environment's own claim about the protocol, which is what the probe
+// checks first and what the remembered answer falls back on. kitty sets
+// KITTY_WINDOW_ID; a session opened over ssh keeps TERM=xterm-kitty.
+static bool kitty_graphics_from_env()
+{
+  const char *forced = getenv("JOT_KITTY_PROTOCOL");
+  if (forced && forced[0] != '\0')
+  {
+    return forced[0] != '0';
+  }
+  if (getenv("KITTY_WINDOW_ID") != nullptr)
+  {
+    return true;
+  }
+  const char *term = getenv("TERM");
+  return term != nullptr && std::string(term).find("kitty") != std::string::npos;
+}
+
+// -1 until something answers: the handshake, the environment, or a caller that
+// recorded one (main).
+static int g_kitty_graphics = -1;
+
+bool Terminal::kitty_graphics_available()
+{
+  if (g_kitty_graphics < 0)
+  {
+    g_kitty_graphics = kitty_graphics_from_env() ? 1 : 0;
+  }
+  return g_kitty_graphics == 1;
+}
+
+void Terminal::remember_kitty_graphics(bool available)
+{
+  g_kitty_graphics = available ? 1 : 0;
+}
+
+bool Terminal::kitty_graphics_probe()
+{
+  // The escape hatch comes first: a pty-driven test, or a session behind
+  // something that strips APC codes, can answer for the terminal.
+  const char *forced = getenv("JOT_KITTY_PROTOCOL");
+  if (forced && forced[0] != '\0')
+  {
+    return forced[0] != '0';
+  }
+  // A terminal that names the protocol in its own environment is not asked.
+  if (getenv("KITTY_WINDOW_ID") != nullptr)
+  {
+    return true;
+  }
+  const char *term = getenv("TERM");
+  if (term != nullptr && std::string(term).find("kitty") != std::string::npos)
+  {
+    return true;
+  }
+  // Nothing to ask, and nowhere to read the answer from.
+  if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))
+  {
+    return false;
+  }
+
+  // Non-canonical, no-echo input for the round trip: neither reply carries a
+  // newline, so a canonical read would wait for one that never comes and the
+  // probe would report "unsupported" on every terminal.
+  struct termios saved {};
+  const bool had_termios = tcgetattr(STDIN_FILENO, &saved) == 0;
+  if (had_termios)
+  {
+    struct termios raw = saved;
+    raw.c_lflag &= ~(ECHO | ICANON);
+    raw.c_cc[VMIN] = 0;
+    raw.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+  }
+
+  ::write(STDOUT_FILENO, kKittyGraphicsQuery, sizeof(kKittyGraphicsQuery) - 1);
+
+  char buf[64] = {};
+  int n = 0;
+  bool graphics_answer = false;
+  bool attributes_answer = false;
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
+  while (n < (int)sizeof(buf))
+  {
+    const auto now = std::chrono::steady_clock::now();
+    if (now >= deadline)
+    {
+      break;
+    }
+    const int remain =
+        (int)std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count();
+    if (!g_input.read(buf[n], std::max(1, remain)))
+    {
+      break;
+    }
+    n++;
+    ProbeReplySpan span;
+    graphics_answer = graphics_answer || graphics_reply_span(buf, n, span);
+    attributes_answer = attributes_answer || attributes_reply_span(buf, n, span);
+    // The device-attributes answer is the protocol's own "done talking"
+    // marker: with both in hand the round trip is over, and a terminal that is
+    // not kitty has answered everything it is going to.
+    if (graphics_answer && attributes_answer)
+    {
+      break;
+    }
+  }
+
+  if (had_termios)
+  {
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved);
+  }
+
+  // Both answers are the probe's; anything else it read -- a keystroke that
+  // raced its window -- goes back to the input reader, or startup eats it (the
+  // same rule the size probe follows).
+  std::string keep;
+  for (int i = 0; i < n; i++)
+  {
+    ProbeReplySpan span;
+    const bool in_graphics = graphics_reply_span(buf, n, span) && i >= span.at && i < span.end;
+    const bool in_attributes = attributes_reply_span(buf, n, span) && i >= span.at && i < span.end;
+    if (!in_graphics && !in_attributes)
+    {
+      keep.push_back(buf[i]);
+    }
+  }
+  if (!keep.empty())
+  {
+    g_input.unread(keep.data(), keep.size());
+  }
+  return graphics_answer;
 }
 
 bool Terminal::probe_text_scale()

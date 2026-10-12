@@ -862,6 +862,39 @@ bool Terminal::probe_text_scale()
   return false;
 }
 
+// The console implements no graphics protocol to handshake with -- neither
+// conhost nor Windows Terminal answers an APC query -- so the answer is false
+// unless JOT_KITTY_PROTOCOL fixes it, the way JOT_TEXT_SCALE_FORCE fixes the
+// text-scale probe. That hatch is what a pty-driven test runs under.
+static bool win_kitty_graphics_forced()
+{
+  const char *forced = getenv("JOT_KITTY_PROTOCOL");
+  return forced != nullptr && forced[0] != '\0' && forced[0] != '0';
+}
+
+// -1 until something answers: the environment, or a caller that recorded one
+// (main). Mirrors the Unix side, minus the handshake there is no protocol for.
+static int g_kitty_graphics = -1;
+
+bool Terminal::kitty_graphics_probe()
+{
+  return win_kitty_graphics_forced();
+}
+
+bool Terminal::kitty_graphics_available()
+{
+  if (g_kitty_graphics < 0)
+  {
+    g_kitty_graphics = win_kitty_graphics_forced() ? 1 : 0;
+  }
+  return g_kitty_graphics == 1;
+}
+
+void Terminal::remember_kitty_graphics(bool available)
+{
+  g_kitty_graphics = available ? 1 : 0;
+}
+
 Event Terminal::poll_event()
 {
   Event ev{};

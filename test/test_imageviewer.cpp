@@ -1,6 +1,8 @@
 #include "imageviewer.h"
+#include "ui/terminal.h"
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -17,6 +19,15 @@ namespace
     out << "P3\n1 1\n255\n255 0 0\n";
     out.close();
     return path.string();
+  }
+
+  void set_env_var(const char *name, const char *value)
+  {
+#ifdef _WIN32
+    _putenv_s(name, value);
+#else
+    setenv(name, value, 1);
+#endif
   }
 } // namespace
 
@@ -49,6 +60,20 @@ TEST_CASE("Image Viewer Recognises Image Paths", "[jot]")
   REQUIRE(viewer.is_image_file("scan.tiff"));
   REQUIRE_FALSE(viewer.is_image_file("/tmp/notes.txt"));
   REQUIRE_FALSE(viewer.is_image_file("/tmp/Makefile"));
+}
+
+TEST_CASE("Image Viewer Leaves The Box To The Picture", "[jot]")
+{
+  // A picture with no readable pixel size (the viewer has not been opened on
+  // anything yet) asks for the pane's own box: natural_box is the arithmetic
+  // behind the fit, with the file's size and the cell size already in hand.
+  ImageViewer viewer;
+  int w = 0;
+  int h = 0;
+  viewer.set_cell_pixel_size(0, 0);
+  viewer.natural_box(64, 30, w, h);
+  REQUIRE(w == 64);
+  REQUIRE(h == 30);
 }
 
 TEST_CASE("Image Viewer Previews Scroll", "[jot]")
@@ -135,13 +160,54 @@ TEST_CASE("Image Viewer Kitty Command", "[jot]")
   REQUIRE(cmd.find("\x1b\\") != std::string::npos);
 }
 
+TEST_CASE("Image Viewer Places A Picture At Its Own Resolution", "[jot]")
+{
+  int w = 0;
+  int h = 0;
+
+  // One image pixel per screen pixel: 300x200 through a 10x20 cell is 30x10
+  // cells, and it stays that size in a pane with room to spare. A picture is
+  // not enlarged to fill the pane -- that is what "stretched" was.
+  ImageViewer::fit_image_to_cells(300, 200, 10, 20, 200, 50, w, h);
+  REQUIRE(w == 30);
+  REQUIRE(h == 10);
+
+  // A picture too big for the pane is scaled down once, with whichever side
+  // runs out of room deciding the scale for both, so the shape survives: the
+  // 400x100 cell box a 4000x2000 file asks for becomes 100x25 in a 100x50
+  // pane, which is still 2:1 in pixels.
+  ImageViewer::fit_image_to_cells(4000, 2000, 10, 20, 100, 50, w, h);
+  REQUIRE(w == 100);
+  REQUIRE(h == 25);
+
+  // A tiny picture stays tiny: 16x16 pixels is 2x1 cells, not the pane.
+  ImageViewer::fit_image_to_cells(16, 16, 10, 20, 100, 50, w, h);
+  REQUIRE(w == 2);
+  REQUIRE(h == 1);
+
+  // A terminal that reports no cell size is measured with the 8x16 the sixel
+  // conversion has always assumed.
+  ImageViewer::fit_image_to_cells(80, 32, 0, 0, 200, 50, w, h);
+  REQUIRE(w == 10);
+  REQUIRE(h == 2);
+
+  // No pixel size at all (no identify, an unreadable header) leaves the pane's
+  // own box, which is the only thing the caller has to fall back on.
+  ImageViewer::fit_image_to_cells(0, 0, 8, 16, 42, 17, w, h);
+  REQUIRE(w == 42);
+  REQUIRE(h == 17);
+}
+
 TEST_CASE("Image Viewer Sixel Command", "[jot]")
 {
-  std::string cmd = ImageViewer::build_sixel_command("/tmp/a b.png", 10, 5);
+  // The helper's raster is in pixels, and both sides come from the picture's
+  // own shape: asking for two sides that disagree with it is what squeezed the
+  // placement into a pane-shaped box.
+  std::string cmd = ImageViewer::build_sixel_command("/tmp/a b.png", 80, 40);
 
   REQUIRE(cmd.find("img2sixel") != std::string::npos);
   REQUIRE(cmd.find("-w 80") != std::string::npos);
-  REQUIRE(cmd.find("-h 80") != std::string::npos);
+  REQUIRE(cmd.find("-h 40") != std::string::npos);
   // The command is read back through a pipe, so only stderr may be silenced:
   // the sixel payload arrives on stdout, and swallowing it leaves the viewer
   // with nothing to place.
@@ -154,4 +220,27 @@ TEST_CASE("Image Viewer Sixel Command", "[jot]")
   REQUIRE(cmd.find(" 2>/dev/null") != std::string::npos);
   REQUIRE(cmd.find(" >/dev/null") == std::string::npos);
 #endif
+}
+
+TEST_CASE("Image Viewer Requires The Kitty Protocol", "[jot]")
+{
+  // An image is drawn with the kitty graphics protocol and nothing else, so
+  // the session is gated on the protocol's handshake. Only a real terminal can
+  // answer it, so the tests fix the answer the way JOT_TEXT_SCALE_FORCE fixes
+  // the text-scale probe: any value but "0" claims the protocol.
+  set_env_var("JOT_KITTY_PROTOCOL", "1");
+  REQUIRE(Terminal::kitty_graphics_probe());
+  set_env_var("JOT_KITTY_PROTOCOL", "0");
+  REQUIRE_FALSE(Terminal::kitty_graphics_probe());
+  set_env_var("JOT_KITTY_PROTOCOL", "");
+
+  // What main() records after the probe is what the picture path reads, so the
+  // two can never disagree about a terminal.
+  Terminal::remember_kitty_graphics(true);
+  REQUIRE(Terminal::kitty_graphics_available());
+  Terminal::remember_kitty_graphics(false);
+  REQUIRE_FALSE(Terminal::kitty_graphics_available());
+  // Left refusing: that is the state an unprobed process (a test that builds
+  // an Editor with no main() in front of it) starts in.
+  Terminal::remember_kitty_graphics(false);
 }

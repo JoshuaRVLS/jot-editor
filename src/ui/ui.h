@@ -390,6 +390,19 @@ public:
     return cursor_hidden;
   }
 
+  // The terminal's cell size in device pixels, 0 when it does not report one.
+  // An image tab measures its picture's own pixel size through this so one
+  // image pixel lands on one screen pixel (ImageViewer::fit_image_to_cells);
+  // the GUI frontend owns its glyphs and reports no cell size.
+  int cell_pixel_width() const
+  {
+    return term ? term->cell_pixel_width() : 0;
+  }
+  int cell_pixel_height() const
+  {
+    return term ? term->cell_pixel_height() : 0;
+  }
+
   int get_width() const
   {
     return width;

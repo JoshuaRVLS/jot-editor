@@ -47,6 +47,17 @@ private:
   Backend graphics_backend;
   int graphics_x, graphics_y, graphics_w, graphics_h;
   std::string status_text;
+  // The picture's own pixel size, which is what makes a placement land on the
+  // picture's resolution instead of on the pane's box. Read with the info line
+  // below (that is the one place `identify` runs), 0 when the size cannot be
+  // read.
+  int image_px_w = 0;
+  int image_px_h = 0;
+  // The terminal's cell size in device pixels, handed in by the renderer (0
+  // when the terminal does not report one). The placement box and the sixel
+  // raster are both derived through it.
+  int cell_px_w = 0;
+  int cell_px_h = 0;
   // get_image_info() shells out to identify, so its answer is kept: this is
   // asked for on the render path and used to spawn a process per frame.
   std::string cached_info_for;
@@ -92,6 +103,11 @@ public:
   bool is_image_file(const std::string &path);
   static Backend parse_backend(const std::string &name);
   static std::string backend_name(Backend backend);
+  // Whether this session's terminal speaks the kitty graphics protocol: the
+  // handshake main() runs at startup, remembered for the session (see
+  // Terminal::kitty_graphics_available). The viewer's backend resolution reads
+  // it, so a terminal that answered "yes" is the one every picture is placed
+  // on.
   static bool terminal_supports_kitty();
   static bool terminal_may_support_sixel();
   // The narrower question the Auto backend asks: a terminal recognised as
@@ -106,14 +122,31 @@ public:
   static std::string cursor_move(int x, int y);
   static std::string build_kitty_file_command(const std::string &path, int x, int y, int w, int h);
   static std::string build_kitty_delete_command();
-  static std::string build_sixel_command(const std::string &path, int w, int h);
-  // What makes two sixel conversions interchangeable. Used to key the payload
-  // cache, so it is part of the invalidation contract rather than a detail.
-  static std::string sixel_cache_key(const std::string &path, int w, int h);
+  // `px_w`/`px_h` are the raster the sixel helper is asked to produce, in
+  // pixels (the helper is frame-buffer sized, not cell sized).
+  static std::string build_sixel_command(const std::string &path, int px_w, int px_h);
+  // What makes two sixel conversions interchangeable: the raster size, in
+  // pixels. Used to key the payload cache, so it is part of the invalidation
+  // contract rather than a detail.
+  static std::string sixel_cache_key(const std::string &path, int px_w, int px_h);
+  // The cell box a picture of `px_w` x `px_h` pixels wants in a pane of
+  // `max_w` x `max_h` cells: its own resolution converted through the cell
+  // size, never enlarged, and scaled down -- aspect ratio intact -- only when
+  // it does not fit. A picture with no readable pixel size gets the pane's own
+  // box, which is all the caller has to fall back on.
+  static void fit_image_to_cells(int px_w, int px_h, int cell_px_w, int cell_px_h,
+                                 int max_w, int max_h, int &out_w, int &out_h);
 
   void configure_backend(const std::string &backend);
   void open(const std::string &path);
   void close();
+  // The terminal's cell size, from the renderer: the placement box and the
+  // sixel raster are measured through it (0,0 leaves the 8x16 assumption).
+  void set_cell_pixel_size(int w, int h);
+  // The box this picture wants in a pane of `max_w` x `max_h` cells. See
+  // fit_image_to_cells; this is the same arithmetic with the picture's own
+  // pixel size and the cell size already in hand.
+  void natural_box(int max_w, int max_h, int &out_w, int &out_h) const;
   void render(int x, int y, int w, int h, int border_fg, int border_bg);
   std::string take_graphics_output();
 

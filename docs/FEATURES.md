@@ -738,10 +738,22 @@ Local tasks override global ones of the same name. `:task` lists them,
 
 ### Image viewer
 
-Open image files in a right-side viewer that uses real terminal graphics when
-available - Kitty graphics first, Sixel (`img2sixel`) second, and a 256-color
-cell preview as the fallback. Configure with `image_viewer_backend = auto`
-(`kitty`, `sixel`, `cell`, or `off`).
+Open image files in a viewer inside the pane that holds them, drawn with the
+kitty graphics protocol at the picture's own resolution: one image pixel per
+screen pixel until the picture is bigger than the pane, when it is scaled down
+once with its shape intact. A smaller picture is never enlarged.
+
+jot requires that protocol. On startup it sends the protocol's own handshake - a
+query placement followed by a device-attributes request - and refuses to run on
+a terminal that does not answer it, with an error naming what to use instead.
+Terminals that implement it: kitty, WezTerm, Ghostty, Konsole.
+`JOT_KITTY_PROTOCOL=1` sets the answer without asking (a session behind a
+multiplexer that strips APC codes, a test harness); `0` refuses without asking.
+
+The cell-art preview (ImageMagick or `chafa`) and the Sixel conversion
+(`img2sixel`) stay as the paths a terminal without a working kitty placement
+falls back on, and `image_viewer_backend = auto` (`kitty`, `sixel`, `cell`, or
+`off`) selects the renderer.
 
 ### Markdown preview
 

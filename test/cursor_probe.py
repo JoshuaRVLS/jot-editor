@@ -77,6 +77,7 @@ def run_jot(binary: str, seconds: float, cols: int = 100, rows: int = 30):
     pid, fd = pty.fork()
     if pid == 0:  # child
         os.environ["TERM"] = "xterm-256color"
+        os.environ["JOT_KITTY_PROTOCOL"] = "1"
         os.environ["JOT_CONFIG_HOME"] = "/tmp/jot_cursor_probe_cfg"
         os.environ["JOT_CACHE_HOME"] = "/tmp/jot_cursor_probe_cfg"
         try:

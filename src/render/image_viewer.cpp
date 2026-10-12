@@ -38,8 +38,36 @@ void Editor::render_image_viewer(const SplitPane &pane)
   UIRect clear_area = {area_x, area_y, area_w, area_h};
   ui->fill_rect(clear_area, " ", theme.fg_default, theme.bg_default);
 
-  int img_w = std::clamp(area_w * 3 / 4, std::min(area_w, 40), area_w);
-  int img_h = std::clamp(area_h * 3 / 4, std::min(area_h, 12), area_h);
+  image_viewer.set_cell_pixel_size(ui->cell_pixel_width(), ui->cell_pixel_height());
+  int img_w = 0;
+  int img_h = 0;
+  if (image_viewer.uses_real_graphics())
+  {
+    // The panel is the picture's own box plus its padding -- a column either
+    // side, a row for the caption above and one below -- so the placement lands
+    // exactly on the box the picture asked for. That box is the file's own
+    // resolution, measured through the terminal's cell size, until it does not
+    // fit the pane (see ImageViewer::natural_box); sizing the panel to a
+    // fraction of the pane instead is what drew every picture scaled up over
+    // it.
+    const int max_box_w = std::max(1, area_w - 2);
+    const int max_box_h = std::max(1, area_h - 3);
+    int box_w = max_box_w;
+    int box_h = max_box_h;
+    image_viewer.natural_box(max_box_w, max_box_h, box_w, box_h);
+    img_w = std::clamp(box_w + 2, 1, area_w);
+    img_h = std::clamp(box_h + 3, 1, area_h);
+  }
+  else
+  {
+    // The cell-art preview is drawn text, not a picture, so it keeps the roomy
+    // panel a pane can give it: the art block is tens of rows tall and a panel
+    // hugging the file's own size would clip most of it away. A placement that
+    // resolved to this path (no conversion helper, nothing to convert) lands
+    // here on the frame after it failed, when the pane grows to hold the art.
+    img_w = std::clamp(area_w * 3 / 4, std::min(area_w, 40), area_w);
+    img_h = std::clamp(area_h * 3 / 4, std::min(area_h, 12), area_h);
+  }
   int img_x = area_x + std::max(0, (area_w - img_w) / 2);
   int img_y = area_y + std::max(0, (area_h - img_h) / 2);
 

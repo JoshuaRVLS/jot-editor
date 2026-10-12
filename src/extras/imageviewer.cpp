@@ -1,8 +1,10 @@
 #include "imageviewer.h"
 #include "base/shell_util.h"
 #include "base/string_util.h"
+#include "ui/terminal.h"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -45,6 +47,48 @@ namespace
     const char *value = std::getenv(name);
     return value ? std::string(value) : std::string();
   }
+
+  // The preview block's ceiling in cells: as wide as a pane's text area used
+  // to be sampled, and as tall as fits above the status line without scrolling.
+  constexpr int kPreviewMaxW = 56;
+  constexpr int kPreviewMaxH = 24;
+
+  // A terminal cell is about twice as tall as it is wide (8x16 is the ratio
+  // every terminal this runs in is within a cell of). Both the cell-art
+  // preview and a picture's placement are measured in cells, so the ratio has
+  // to be applied whenever a pixel size is turned into one -- otherwise a
+  // 16:9 photograph reads as a squashed 56x24 block, which is what
+  // "stretched" looked like.
+  constexpr double kCellAspect = 2.0;
+
+  // The cell grid a preview should be sampled at for a picture of px_w x px_h
+  // pixels: one cell per pixel, with the cell aspect above folded in so the art
+  // keeps the picture's shape. A 1920x1080 file asks for 56x16, a 1080x1920 one
+  // for 27x24. Without a pixel size the full block is used, as it always was.
+  void fit_preview_cells(int px_w, int px_h, int &cells_w, int &cells_h)
+  {
+    cells_w = kPreviewMaxW;
+    cells_h = kPreviewMaxH;
+    if (px_w <= 0 || px_h <= 0)
+    {
+      return;
+    }
+    const double cells_per_height = kCellAspect * (double)px_w / (double)px_h;
+    cells_h = (int)std::lround((double)kPreviewMaxW / cells_per_height);
+    if (cells_h > kPreviewMaxH)
+    {
+      cells_h = kPreviewMaxH;
+      cells_w = (int)std::lround((double)kPreviewMaxH * cells_per_height);
+    }
+    cells_w = std::clamp(cells_w, 1, kPreviewMaxW);
+    cells_h = std::clamp(cells_h, 1, kPreviewMaxH);
+  }
+
+  // The default cell size a picture is measured against when the terminal does
+  // not report one (most do not: they report the window in pixels far more
+  // often than a cell). Same 8x16 the sixel conversion always assumed.
+  constexpr int kAssumedCellPxW = 8;
+  constexpr int kAssumedCellPxH = 16;
 
   int grayscale_to_char_index(int gray)
   {
@@ -229,6 +273,10 @@ ImageViewer::ImageViewer()
   graphics_backend = Backend::Auto;
   graphics_x = graphics_y = graphics_w = graphics_h = 0;
   status_text.clear();
+  image_px_w = 0;
+  image_px_h = 0;
+  cell_px_w = 0;
+  cell_px_h = 0;
   graphics_file.clear();
   remove_graphics_file = false;
   preview_scroll = 0;
@@ -269,10 +317,10 @@ std::string ImageViewer::backend_name(Backend backend)
 
 bool ImageViewer::terminal_supports_kitty()
 {
-  if (env_present("KITTY_WINDOW_ID"))
-    return true;
-  std::string term = string_util::lower_copy(getenv_string("TERM"));
-  return term.find("kitty") != std::string::npos;
+  // The session-wide answer, not a guess from the environment: jot is started
+  // only on a terminal that passed the protocol's own handshake (main), and a
+  // unit test that never runs one reads the environment instead.
+  return Terminal::kitty_graphics_available();
 }
 
 bool ImageViewer::terminal_may_support_sixel()
@@ -369,24 +417,28 @@ std::string ImageViewer::build_kitty_delete_command()
   return "\x1b_Ga=d,d=i,i=" + std::to_string(kKittyImageId) + ",q=2;\x1b\\";
 }
 
-std::string ImageViewer::sixel_cache_key(const std::string &path, int w, int h)
+std::string ImageViewer::sixel_cache_key(const std::string &path, int px_w, int px_h)
 {
   // A unit separator keeps a path from ever reading as part of a size (a path
   // ending in digits must not alias a larger raster).
-  return path + "\x1f" + std::to_string(w) + "x" + std::to_string(h);
+  return path + "\x1f" + std::to_string(px_w) + "x" + std::to_string(px_h);
 }
 
-std::string ImageViewer::build_sixel_command(const std::string &path, int w, int h)
+std::string ImageViewer::build_sixel_command(const std::string &path, int px_w, int px_h)
 {
-  if (path.empty() || w <= 0 || h <= 0)
+  if (path.empty() || px_w <= 0 || px_h <= 0)
     return "";
-  int px_w = std::max(1, w * 8);
-  int px_h = std::max(1, h * 16);
+  // Both sides are given, and both come from the picture's own ratio: a sixel
+  // placement is a raster in the frame buffer, so the size the helper is asked
+  // for *is* the picture's size. Asking for two sides that disagreed with the
+  // source's shape is what used to squeeze it into a pane-shaped box.
+  //
   // Only stderr is silenced: stdout is the sixel payload this call reads back
   // through the pipe. The cursor move that aims the placement at the pane is
   // added to that payload, not to the shell command.
-  return "img2sixel -w " + std::to_string(px_w) + " -h " + std::to_string(px_h) + " "
-         + shell_util::shell_quote(path) + shell_util::null_redirect();
+  return "img2sixel -w " + std::to_string(std::max(1, px_w)) + " -h "
+         + std::to_string(std::max(1, px_h)) + " " + shell_util::shell_quote(path)
+         + shell_util::null_redirect();
 }
 
 namespace
@@ -396,15 +448,15 @@ namespace
   constexpr size_t kSixelCacheMax = 4;
 } // namespace
 
-const std::string &ImageViewer::sixel_payload_for(const std::string &path, int w, int h)
+const std::string &ImageViewer::sixel_payload_for(const std::string &path, int px_w, int px_h)
 {
   static const std::string empty;
-  if (path.empty() || w <= 0 || h <= 0)
+  if (path.empty() || px_w <= 0 || px_h <= 0)
   {
     return empty;
   }
 
-  const std::string key = sixel_cache_key(path, w, h);
+  const std::string key = sixel_cache_key(path, px_w, px_h);
   const auto cached = sixel_cache.find(key);
   if (cached != sixel_cache.end())
   {
@@ -412,7 +464,7 @@ const std::string &ImageViewer::sixel_payload_for(const std::string &path, int w
   }
 
   std::string payload;
-  FILE *pipe = shell_util::open_command_pipe(build_sixel_command(path, w, h), "r");
+  FILE *pipe = shell_util::open_command_pipe(build_sixel_command(path, px_w, px_h), "r");
   if (pipe)
   {
     char buffer[4096];
@@ -591,6 +643,18 @@ std::string ImageViewer::get_image_info(const std::string &path)
       }
     }
 
+    // The picture's own size, taken from the same identify call the info line
+    // comes from: the placement box is measured from it (see natural_box), so
+    // reading it here is what keeps the render path free of subprocesses.
+    image_px_w = 0;
+    image_px_h = 0;
+    const size_t times = dims.find('x');
+    if (times != std::string::npos)
+    {
+      image_px_w = std::atoi(dims.substr(0, times).c_str());
+      image_px_h = std::atoi(dims.substr(times + 1).c_str());
+    }
+
     if (!dims.empty())
     {
       return ext + " | " + dims + " | " + size_str;
@@ -623,10 +687,15 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
   ascii_preview.push_back(info);
   ascii_preview.push_back("");
 
+  // The grid the art is sampled at is the picture's own shape (see
+  // fit_preview_cells): a fixed block stretched every file into the same
+  // 56x24 rectangle.
+  int target_w = kPreviewMaxW;
+  int target_h = kPreviewMaxH;
+  fit_preview_cells(image_px_w, image_px_h, target_w, target_h);
+
   if (shell_util::command_exists("convert"))
   {
-    const int target_w = 56;
-    const int target_h = 24;
     // -thumbnail rather than -resize: it decodes the source at the size it
     // needs instead of at full resolution and scaling afterwards, which is the
     // difference between a brief pause and an apparently hung editor on a
@@ -635,7 +704,7 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
     std::string cmd = "convert -limit time 5 -limit thread 1 " + shell_util::shell_quote(path)
                       + " -auto-orient "
                         "-thumbnail "
-                      + std::to_string(target_w) + "x" + std::to_string(target_h) + "\\! txt:-"
+                      + std::to_string(target_w) + "x" + std::to_string(target_h) + " txt:-"
                       + shell_util::null_redirect();
     FILE *pipe = shell_util::open_command_pipe(cmd, "r");
     if (pipe)
@@ -679,8 +748,6 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
   // Best quality terminal preview path.
   if (shell_util::command_exists("chafa"))
   {
-    const int target_w = 56;
-    const int target_h = 24;
     std::string cmd = "chafa --format=symbols --colors=none --size=" + std::to_string(target_w)
                       + "x" + std::to_string(target_h) + " " + shell_util::shell_quote(path) + shell_util::null_redirect();
     FILE *pipe = shell_util::open_command_pipe(cmd, "r");
@@ -716,13 +783,11 @@ void ImageViewer::generate_ascii_preview(const std::string &path)
   bool rendered_ascii = false;
   if (shell_util::command_exists("convert"))
   {
-    const int target_w = 56;
-    const int target_h = 24;
     std::string cmd = "convert " + shell_util::shell_quote(path)
                       + " -auto-orient "
                         "-resize "
                       + std::to_string(target_w) + "x" + std::to_string(target_h)
-                      + "\\! -colorspace Gray -contrast-stretch 1%x10% txt:-" + shell_util::null_redirect();
+                      + " -colorspace Gray -contrast-stretch 1%x10% txt:-" + shell_util::null_redirect();
     FILE *pipe = shell_util::open_command_pipe(cmd, "r");
     if (pipe)
     {
@@ -857,6 +922,54 @@ void ImageViewer::close()
   preview_scroll = 0;
 }
 
+void ImageViewer::set_cell_pixel_size(int w, int h)
+{
+  cell_px_w = std::max(0, w);
+  cell_px_h = std::max(0, h);
+}
+
+// One image pixel per screen pixel, through the terminal's cell size, is what
+// "its own resolution" means here: a 300x200 picture in a cell of 9x18 asks
+// for 33x11 cells, and a 6000x4000 photograph asks for more cells than any
+// pane has, so it is scaled down -- once, with the aspect ratio deciding both
+// sides -- to the pane's own box. A smaller picture is never enlarged: a 4x2
+// cell picture stays 4x2, which is how a thumbnail is supposed to look.
+void ImageViewer::fit_image_to_cells(int px_w, int px_h, int cell_px_w, int cell_px_h,
+                                     int max_w, int max_h, int &out_w, int &out_h)
+{
+  out_w = std::max(1, max_w);
+  out_h = std::max(1, max_h);
+  if (px_w <= 0 || px_h <= 0)
+  {
+    return;
+  }
+  const int cell_w = cell_px_w > 0 ? cell_px_w : kAssumedCellPxW;
+  const int cell_h = cell_px_h > 0 ? cell_px_h : kAssumedCellPxH;
+
+  // Rounded to the nearest cell: half a cell of rounding is not a rescale, and
+  // flooring would show every picture a little smaller than it is.
+  const int natural_w = std::max(1, (px_w + cell_w / 2) / cell_w);
+  const int natural_h = std::max(1, (px_h + cell_h / 2) / cell_h);
+  if (natural_w <= out_w && natural_h <= out_h)
+  {
+    out_w = natural_w;
+    out_h = natural_h;
+    return;
+  }
+
+  // Too big for the pane: shrink as far as the pane asks and no further, so
+  // whichever side runs out of room first is the side that decides the scale.
+  const double scale = std::min((double)out_w / (double)natural_w,
+                                (double)out_h / (double)natural_h);
+  out_w = std::clamp((int)(natural_w * scale), 1, std::max(1, max_w));
+  out_h = std::clamp((int)(natural_h * scale), 1, std::max(1, max_h));
+}
+
+void ImageViewer::natural_box(int max_w, int max_h, int &out_w, int &out_h) const
+{
+  fit_image_to_cells(image_px_w, image_px_h, cell_px_w, cell_px_h, max_w, max_h, out_w, out_h);
+}
+
 void ImageViewer::render(int x, int y, int w, int h, int border_fg, int border_bg)
 {
   if (!is_open)
@@ -962,17 +1075,27 @@ std::string ImageViewer::take_graphics_output()
       status_text = "Image conversion unavailable; using cell preview";
       return out;
     }
+    // c/r are the box the cat is placed in, and the box is the picture's own
+    // resolution: kitty scales the image into it and, with both sides given,
+    // letterboxes rather than distorts, so the placement keeps the file's
+    // shape at the size it asked for.
     out += build_kitty_file_command(file, graphics_x, graphics_y, graphics_w, graphics_h);
     graphics_visible = true;
     graphics_backend = Backend::Kitty;
-    status_text = "Real image: kitty";
+    // No status line of its own: the panel's caption is the picture's own info
+    // line (see open), which the cell preview shows the same way.
     return out;
   }
   if (active_backend == Backend::Sixel)
   {
     // Sent on every draw, so the conversion is cached per image and raster size
-    // rather than re-run for each redraw.
-    const std::string &payload = sixel_payload_for(current_image, graphics_w, graphics_h);
+    // rather than re-run for each redraw. The raster is the placement box in
+    // pixels -- the cell size, real or assumed -- so the helper is asked for
+    // the size the picture is actually shown at.
+    const int cell_w = cell_px_w > 0 ? cell_px_w : kAssumedCellPxW;
+    const int cell_h = cell_px_h > 0 ? cell_px_h : kAssumedCellPxH;
+    const std::string &payload =
+        sixel_payload_for(current_image, graphics_w * cell_w, graphics_h * cell_h);
     if (!payload.empty())
     {
       // Aim the placement at the panel first: the frame writes its graphics
@@ -982,7 +1105,6 @@ std::string ImageViewer::take_graphics_output()
       out += payload;
       graphics_visible = true;
       graphics_backend = Backend::Sixel;
-      status_text = "Real image: sixel";
       return out;
     }
     active_backend = Backend::Cell;

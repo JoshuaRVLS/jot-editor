@@ -143,8 +143,11 @@ private:
   // budget on that request instead of on startup.
   bool cell_scale_probed_ = false;
   bool cell_scale_supported_ = false;
-  // Cell size in pixels, 0 when unreported. Kitty places images in cells and
-  // needs none of this; Sixel output is sized in pixels.
+  // Cell size in pixels, 0 when unreported. A terminal reports the window in
+  // pixels (winsize.ws_xpixel), so refresh_size() divides that by the columns
+  // and rows it is drawn in; with no pixel size there is nothing to divide and
+  // these stay 0. Kitty places images in cells; sixel output is sized in
+  // pixels, and an image shown at its own resolution is measured through this.
   int cell_px_w_ = 0;
   int cell_px_h_ = 0;
 
@@ -267,6 +270,27 @@ public:
   {
     return cell_px_h_;
   }
+
+  // Whether this terminal speaks the kitty graphics protocol, by the handshake
+  // the protocol itself prescribes: a query placement followed by a primary
+  // device-attributes request. A terminal that implements the protocol answers
+  // the query; one that does not answers the device-attributes request alone.
+  // Every picture jot draws goes through this protocol (there is no cell-art
+  // replacement for a real image), so main() refuses to start without it.
+  //
+  // The probe reads the tty: it puts the terminal in non-canonical mode for
+  // the round trip, and hands back any byte it read that was not one of its two
+  // answers. JOT_KITTY_PROTOCOL fixes the answer without asking, the way
+  // JOT_TEXT_SCALE_FORCE fixes the text-scale probe, for the pty-driven tests
+  // and for a session behind something that strips APC codes.
+  static bool kitty_graphics_probe();
+  // The remembered answer, defaulting to what the environment claims (kitty
+  // sets KITTY_WINDOW_ID, and a session opened over ssh keeps TERM=xterm-kitty)
+  // for the code paths that run with no handshake behind them -- a unit test
+  // that constructs an Editor, say. main() replaces it with the real answer.
+  static bool kitty_graphics_available();
+  // Records what the probe found.
+  static void remember_kitty_graphics(bool available);
   void set_cell_pixel_size(int w, int h)
   {
     cell_px_w_ = w;
