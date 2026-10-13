@@ -8,6 +8,11 @@ extern "C"
 #include <lualib.h>
 }
 
+// install_bundled_utf8: the one step the editor's host takes that a raw state
+// here has to take too, so the bundled feature sees the dialect it is written
+// to (docs/LUA_API.md, "The scripting dialect").
+#include "lua/api/api_internal.h"
+
 namespace
 {
   const char *kPrelude = R"LUA(
@@ -92,6 +97,10 @@ namespace
     {
       REQUIRE(L != nullptr);
       luaL_openlibs(L);
+      // The dialect the bundled LeetCode feature is written to (docs/LUA_API.md):
+      // the host installs the bundled utf8 before any bundled file runs, and
+      // this state runs the same files, so it gets the same step.
+      jot_lua::install_bundled_utf8(L);
       const std::string dir = std::string(JOT_LUA_SOURCE_DIR) + "/features/leetcode/";
       REQUIRE(luaL_loadstring(L, kPrelude) == LUA_OK);
       lua_pushlstring(L, dir.data(), dir.size());

@@ -12,6 +12,10 @@ extern "C"
 #include <lualib.h>
 }
 
+// The engine this build carries ("LuaJIT 2.1..." or "Lua 5.4.9") and the
+// 5.2+ entry points below it, on whichever runtime it is.
+#include "lua/lua_compat.h"
+
 namespace
 {
   int probe_ok(lua_State *)
@@ -42,7 +46,7 @@ TEST_CASE("Windows CI tree-sitter boot probe")
 {
   const char *dir = JOT_LUA_SOURCE_DIR;
   std::printf("[probe] JOT_LUA_SOURCE_DIR=%s\n", dir);
-  std::printf("[probe] lua %d.%d (%s)\n", LUA_VERSION_MAJOR, LUA_VERSION_MINOR, LUA_RELEASE);
+  std::printf("[probe] %s\n", jot_lua::engine_name());
   std::fflush(stdout);
 
   lua_State *L = luaL_newstate();

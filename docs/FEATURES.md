@@ -1870,7 +1870,8 @@ Requirements:
 
 - CMake 3.16+
 - A C++17 compiler
-- Lua 5.3+ development headers (or let CMake fetch Lua 5.4.7)
+- LuaJIT 2.1 (or Lua 5.3+ development headers with `-DJOT_LUA_ENGINE=lua`;
+  `JOT_FETCH_DEPS` fetches and builds whichever is missing)
 - `vterm`, `termkey`, and `libuv` development packages
 - A Unix-like environment with POSIX terminal APIs
 

@@ -170,6 +170,10 @@ namespace
 
   void push_stub_jot(lua_State *L)
   {
+    // The dialect the bundled kit is written to (docs/LUA_API.md): the host
+    // installs the bundled utf8 before any bundled file runs, and this state
+    // runs the same files, so it gets the same step.
+    jot_lua::install_bundled_utf8(L);
     lua_newtable(L); // jot
     lua_newtable(L); // jot.ui
     lua_pushcfunction(L, stub_handler);

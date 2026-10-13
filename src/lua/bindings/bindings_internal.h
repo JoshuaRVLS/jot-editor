@@ -10,6 +10,8 @@ extern "C"
 #include <lualib.h>
 }
 
+#include "lua/lua_compat.h"
+
 class LuaAPI;
 
 namespace lua_bind

@@ -21,6 +21,9 @@ extern "C"
 #include <lualib.h>
 }
 
+// lua_rawlen on a runtime older than 5.2, which is what LuaJIT is.
+#include "lua/lua_compat.h"
+
 namespace
 {
   // The `jot` stub: a config store, a buffer whose text the test sets, a

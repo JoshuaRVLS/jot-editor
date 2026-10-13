@@ -17,8 +17,12 @@ local ESCAPES = {
   ["\t"] = "\\t",
 }
 
+-- A control byte, a quote or a backslash. The range starts at %z rather than a
+-- literal \0 because a Lua 5.1 pattern stops at an embedded zero (its matcher
+-- reads the pattern as a C string), and %z is that byte on both engines -- the
+-- same spelling features/leetcode/json.lua uses.
 local function quote(s)
-  return '"' .. (s:gsub('[\0-\31"\\]', function(c)
+  return '"' .. (s:gsub('[%z\1-\31"\\]', function(c)
     return ESCAPES[c] or ("\\u%04x"):format(c:byte())
   end)) .. '"'
 end

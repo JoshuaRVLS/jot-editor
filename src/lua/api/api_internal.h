@@ -24,6 +24,8 @@ extern "C"
 #include <lualib.h>
 }
 
+#include "lua/lua_compat.h"
+
 class LuaAPI;
 
 // Runs a one-shot Lua callback (registered under `id` in `callbacks`) with a
@@ -165,6 +167,20 @@ namespace jot_lua
       return false;
     }
     return true;
+  }
+
+  // Gives a state the bundled utf8 when the runtime it booted on has none:
+  // the one half of the scripting dialect (docs/LUA_API.md, "The scripting
+  // dialect") that is not a C shim in lua/lua_compat.h. LuaAPI::init runs this
+  // before any bundled file, and a test that builds its own lua_State and then
+  // loads a bundled file runs it too, so the file sees what a session sees.
+  // A runtime that ships utf8 (stock Lua) keeps its own and nothing is loaded.
+  inline bool install_bundled_utf8(lua_State *L)
+  {
+    lua_getglobal(L, "utf8");
+    const bool present = !lua_isnil(L, -1);
+    lua_pop(L, 1);
+    return present || load_bundled_lua_file(L, "compat/utf8.lua", "utf8");
   }
 
   // Loads a bundled Lua *module* - a file whose chunk returns a table - and

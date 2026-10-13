@@ -8,6 +8,9 @@ extern "C"
 #include <lualib.h>
 }
 
+// lua_rawlen on a runtime older than 5.2, which is what LuaJIT is.
+#include "lua/lua_compat.h"
+
 namespace
 {
   int ok(lua_State *L)

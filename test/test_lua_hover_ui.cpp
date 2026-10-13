@@ -12,6 +12,11 @@ extern "C"
 #include <lualib.h>
 }
 
+// lua_rawlen on a runtime older than 5.2, which is what LuaJIT is, and the
+// bundled loader that gives this state the dialect's utf8.
+#include "lua/api/api_internal.h"
+#include "lua/lua_compat.h"
+
 namespace
 {
   struct StubState
@@ -224,6 +229,10 @@ namespace
   // Pushes jot.lsp.hover_ui onto the stack (caller pops).
   void push_stub_jot(lua_State *L)
   {
+    // The dialect the bundled hover UI is written to (docs/LUA_API.md): the
+    // host installs the bundled utf8 before any bundled file runs, and this
+    // state runs the same file, so it gets the same step.
+    jot_lua::install_bundled_utf8(L);
     lua_newtable(L); // jot
     lua_pushcfunction(L, stub_hover_ui);
     lua_setfield(L, -2, "hover_ui"); // jot.hover_ui (flat, harmless extra)

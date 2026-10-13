@@ -111,6 +111,9 @@ bool LuaAPI::init()
   if (!L)
     return false;
   luaL_openlibs(L);
+  // Whatever the runtime's own libraries are, the bundled files can count on
+  // utf8 being there (a Lua 5.1 engine brings none).
+  jot_lua::install_bundled_utf8(L);
   // The user's Lua directory on package.path: everything `require` resolves
   // (jot.lua, api_runtime.cpp) -- a feature in Lua is a module tree under the
   // config dir, not a file compiled into the binary.
@@ -730,6 +733,11 @@ bool LuaAPI::init()
   lua_getglobal(L, "jot");
   lua_pushstring(L, jot_lua_repo_root().string().c_str());
   lua_setfield(L, -2, "source_dir");
+  // The engine behind the dialect ("LuaJIT 2.1..." or "Lua 5.4.9"): the same
+  // bundled files run on either, and something that cares which one it got --
+  // a feature that wants the JIT, a bug report -- can read it here.
+  lua_pushstring(L, jot_lua::engine_name());
+  lua_setfield(L, -2, "engine");
   // Native :update dispatches here (features/update.lua registers the fn).
   lua_pushcfunction(L, l_register_update_handler);
   lua_setfield(L, -2, "register_update_handler");

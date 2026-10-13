@@ -1,10 +1,45 @@
 # Lua Runtime API
 
-Jot embeds Lua 5.4 and exposes the runtime as the global `jot` table. Scripts
-are loaded after the editor, terminal, and initial buffer are ready. No package
+Jot embeds Lua and exposes the runtime as the global `jot` table. Scripts are
+loaded after the editor, terminal, and initial buffer are ready. No package
 import is required.
 
 Lua line and column values are 1-based. Native C++ state remains private.
+
+## The scripting dialect
+
+The engine is LuaJIT where the build can use one and stock Lua otherwise, so
+what a plugin may assume is the intersection the bundled runtime is written to:
+**Lua 5.1 plus `utf8`**. Write that and the same file runs on either engine.
+
+| | |
+|---|---|
+| Which engine | `jot.engine` (`"LuaJIT 2.1.1788856981"`, `"Lua 5.4.9"`); the `jit` library is there only on LuaJIT |
+| Build selection | `-DJOT_LUA_ENGINE=auto` (default: LuaJIT when available, else stock Lua), `luajit`, or `lua` |
+| Not on LuaJIT | `//`, `<close>` / `<const>` attributes, `math.type`, `string.pack`, `string.unpack`, `table.pack`, `table.unpack`, `coroutine.close` |
+| Lua patterns | no literal `\0` in a pattern on LuaJIT (5.2 and newer allow one, 5.1 stops there); `%z` is that byte on both engines |
+| Only on LuaJIT | `bit`, `jit` (`jit.status()`, `jit.p` for profiling), `ffi` through `require("ffi")`, the global `unpack` |
+
+`utf8` is the one library worth spelling out. LuaJIT has none, so a runtime
+without it gets the bundled implementation at
+[runtime/lua/compat/utf8.lua](../runtime/lua/compat/utf8.lua), installed before
+any bundled file or plugin runs. It answers what Lua 5.4's library answers,
+including what each function does with bytes that are not UTF-8: `codes` and
+`codepoint` raise, `len` returns nil plus the byte offset where it stopped, and
+`offset` returns nil for a character that is not in the subject. A stock Lua
+build keeps its own C implementation.
+
+One difference between the engines to keep in mind when a value is shown to a
+user: LuaJIT has no integers, so `tostring(3.0)` is `"3"` there and `"3.0"` on
+stock Lua. Format counts with `string.format("%d", ...)` or compare numbers
+rather than their text.
+
+On the C side, [lua/lua_compat.h](../src/lua/lua_compat.h) defines the four
+entry points LuaJIT lacks, `lua_rawlen`, `lua_absindex`, `lua_len` and
+`lua_isinteger`, under those same names when the runtime's own header is older
+than the version that added them, so no call site carries an `#ifdef` and the
+same source builds on either engine. [test/lua_engine_probe.py](../test/lua_engine_probe.py) holds
+a session to the dialect above on whichever engine it booted on.
 
 ## Core
 

@@ -18,6 +18,12 @@ cmake --build build -j
 cmake --install build --prefix "$HOME/.local"
 ```
 
+The embedded scripting runtime is LuaJIT when the build can find one (or fetch
+and build one itself, with `JOT_FETCH_DEPS`) and stock Lua otherwise. Pin it
+with `-DJOT_LUA_ENGINE=lua` for the stock interpreter, `-DJOT_LUA_ENGINE=luajit`
+to require LuaJIT. Plugins target Lua 5.1 plus `utf8` either way:
+[docs/LUA_API.md](docs/LUA_API.md#the-scripting-dialect).
+
 On Linux, the latest release also carries a one-file build and a package:
 `jot-linux-x86_64.AppImage` (`chmod +x` it, run it - the libraries jot links
 against travel inside, so there is nothing to install first) and
