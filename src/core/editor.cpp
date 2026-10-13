@@ -1029,6 +1029,11 @@ bool Editor::policy_has_field(const char *name, const std::string &key, const ch
   return lua_api ? lua_api->lua_policy_has_field(name, key, field) : false;
 }
 
+bool Editor::policy_has_entry(const char *name, const std::string &key)
+{
+  return lua_api ? lua_api->lua_policy_has_entry(name, key) : false;
+}
+
 std::vector<std::string> Editor::policy_str_list(const char *name,
                                                  const std::string &key,
                                                  const char *field)

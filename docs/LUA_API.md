@@ -1194,7 +1194,26 @@ file edited on disk.
 
 The native tables in src/surfaces/settings.cpp stay as the fallback for a build
 or a test with no Lua runtime. `tools/settings_catalog_import.py` converts them
-into the Lua module, so the two can be asked to agree entry for entry. Providers are dropped with the rest of the
+into the Lua module, so the two can be asked to agree entry for entry.
+
+`text.comments` is the second, owned by `features/comments/styles.lua`, and it
+is what `Ctrl+/` reads for the file type it is commenting. Keys are extensions
+with their dot, and a field the entry leaves out keeps the native answer, so
+naming one field is enough:
+
+```lua
+jot.policy.set("text.comments", {
+  [".probe"] = { line = "#" },
+})
+```
+
+`line` is the per-line prefix, `suffix` a per-line closer for a type whose line
+comment wraps (`<!--` / `-->`), and `block_open` / `block_close` the type's real
+block form, which a multi-line selection wraps in one pair. A file type with no
+entry gets the C-family form. `tools/comment_style_import.py` converts
+src/syntax/comment_style_data.h into that module the same way as the settings
+catalog, and the native table there answers when the module is absent or leaves
+a field out. Providers are dropped with the rest of the
 runtime on `:reloadplugins`, and the bundled module registers again as the
 reload reaches it, so an edit to `reference.lua` is live after a reload and not
 only after a restart. `jot.lua.reload()` with no name is the same work.

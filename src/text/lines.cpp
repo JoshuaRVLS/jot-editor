@@ -8,6 +8,12 @@
 
 namespace
 {
+  // The provider that owns the per-file-type comment markers: a table keyed by
+  // extension (runtime/lua/features/comments/styles.lua, docs/LUA_API.md). The
+  // native table in syntax/comment_style_data.h answers when it has nothing to
+  // say about the extension or about a particular marker.
+  const char *kCommentStyleProvider = "text.comments";
+
   int count_one_indent_level(const std::string &line, int tab_size)
   {
     if (line.empty())
@@ -238,7 +244,29 @@ void Editor::toggle_comment()
   auto &buf = get_buffer();
   if (buf.is_lazy())
     buf.materialize();
-  const commenting::Style style = commenting::style_for(get_file_extension(buf.filepath));
+  // Which markers this file type gets: the text.comments provider first
+  // (runtime/lua/features/comments/styles.lua), the native table for a field it
+  // leaves out or for a build with no Lua runtime. The native Style holds views
+  // into the compiled table, so a provider's answer is kept in strings of its
+  // own and the views point at those for the rest of the toggle.
+  const std::string extension = get_file_extension(buf.filepath);
+  commenting::Style native_style = commenting::style_for(extension);
+  const std::string native_prefix(native_style.prefix);
+  const std::string native_suffix(native_style.suffix);
+  const std::string native_block_open(native_style.block_open);
+  const std::string native_block_close(native_style.block_close);
+  std::string prefix = native_prefix;
+  std::string suffix = native_suffix;
+  std::string block_open = native_block_open;
+  std::string block_close = native_block_close;
+  if (policy_has_entry(kCommentStyleProvider, extension))
+  {
+    prefix = policy_str(kCommentStyleProvider, extension, "line", native_prefix);
+    suffix = policy_str(kCommentStyleProvider, extension, "suffix", native_suffix);
+    block_open = policy_str(kCommentStyleProvider, extension, "block_open", native_block_open);
+    block_close = policy_str(kCommentStyleProvider, extension, "block_close", native_block_close);
+  }
+  const commenting::Style style{prefix, suffix, block_open, block_close};
 
   const bool multi_line = buf.selection.active && buf.selection.start.y != buf.selection.end.y;
   int start_y =

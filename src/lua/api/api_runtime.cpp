@@ -350,6 +350,7 @@ void LuaAPI::reload_plugins()
     // provider it owns is in place first and keeps the name.
     load_bible_runtime(static_cast<lua_State *>(lua_state));
     load_settings_runtime(static_cast<lua_State *>(lua_state));
+    load_comments_runtime(static_cast<lua_State *>(lua_state));
   }
   fire_autocmd("PluginReload");
   if (editor)
@@ -581,6 +582,18 @@ bool LuaAPI::load_bible_runtime(lua_State *L)
     return false;
   }
   return load_bundled_lua_file(L, "features/bible/init.lua", "Bible");
+}
+
+bool LuaAPI::load_comments_runtime(lua_State *L)
+{
+  // The comment markers each file type gets (features/comments/*.lua): the table
+  // `Ctrl+/` reads through jot.policy. The toggle itself is native
+  // (text/commenting.h, text/lines.cpp) and keeps its own table as the fallback.
+  if (!jot_lua::load_bundled_lua_module(L, "features/comments/styles.lua", "jot_comments"))
+  {
+    return false;
+  }
+  return load_bundled_lua_file(L, "features/comments/init.lua", "Comments");
 }
 
 bool LuaAPI::load_settings_runtime(lua_State *L)

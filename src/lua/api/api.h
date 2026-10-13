@@ -233,6 +233,7 @@ public:
   bool load_snippet_runtime(lua_State *L);
   bool load_bible_runtime(lua_State *L);
   bool load_settings_runtime(lua_State *L);
+  bool load_comments_runtime(lua_State *L);
   bool load_leetcode_runtime(lua_State *L);
   // Bundled AI assistant (features/ai/*.lua): the CodeCompanion-style chat,
   // inline rewrite and provider adapters. Loaded after the snippet runtime

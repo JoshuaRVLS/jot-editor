@@ -31,5 +31,8 @@ int policy_int(const char *name, const std::string &key, const char *field, int 
 // Whether the entry has this field at all, which is how a caller tells "no
 // range declared" from "a range whose step is the default".
 bool policy_has_field(const char *name, const std::string &key, const char *field);
+// Whether the provider has an entry for `key` at all, which is what tells a
+// caller to read that entry's fields instead of its own defaults.
+bool policy_has_entry(const char *name, const std::string &key);
 // A field holding an array of strings, in order; empty when there is none.
 std::vector<std::string> policy_str_list(const char *name, const std::string &key, const char *field);

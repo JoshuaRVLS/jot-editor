@@ -800,6 +800,9 @@ bool LuaAPI::init()
   // Lua now (features/settings/*), with the native tables in
   // surfaces/settings.cpp as the fallback for a build with no Lua runtime.
   load_settings_runtime(L);
+  // Comment markers per file type (`Ctrl+/`), Lua first with
+  // src/syntax/comment_style_data.h as the fallback.
+  load_comments_runtime(L);
   // AI assistant (features/ai/*.lua) is disabled for now: skipping
   // load_ai_runtime leaves no :CodeCompanion* commands and no Alt+Shift+A
   // keymap family registered. The module tree and the loader stay in place, so
