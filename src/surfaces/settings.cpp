@@ -527,8 +527,45 @@ namespace
     return true;
   }
 
-  SettingsEntry::Type infer_type(const std::string &key, const std::string &value)
+  // The catalog provider: a Lua table of entries keyed by the setting's own key
+  // (runtime/lua/features/settings/catalog.lua). The native tables below answer
+  // when nothing is registered or an entry leaves a field out, so the menu keeps
+  // every row either way, and a config's own catalog needs only the keys it
+  // wants to change.
+  const char *kCatalogName = "settings.catalog";
+
+  // The entry's field, or `fallback` when the catalog has nothing to say. The
+  // reads go through the Editor (core/editor.cpp), which is where the Lua API
+  // sits, so this surface never includes it.
+  std::string catalog_str(Editor *editor, const std::string &key, const char *field, const std::string &fallback)
   {
+    if (!editor)
+    {
+      return fallback;
+    }
+    const std::string value = editor->policy_str(kCatalogName, key, field, "");
+    return value.empty() ? fallback : value;
+  }
+
+  SettingsEntry::Type type_of(const std::string &name)
+  {
+    if (name == "bool")
+      return SettingsEntry::Type::Bool;
+    if (name == "int")
+      return SettingsEntry::Type::Int;
+    if (name == "enum")
+      return SettingsEntry::Type::Enum;
+    return SettingsEntry::Type::String;
+  }
+
+  SettingsEntry::Type infer_type(Editor *editor, const std::string &key, const std::string &value)
+  {
+    if (editor)
+    {
+      const std::string declared = editor->policy_str(kCatalogName, key, "type", "");
+      if (!declared.empty())
+        return type_of(declared);
+    }
     for (const KnownSetting &k : kKnownSettings)
     {
       if (key == k.key)
@@ -564,24 +601,43 @@ void Editor::rebuild_settings_entries()
     const std::string value = config.get(key, "");
     SettingsEntry e;
     e.key = key;
-    e.type = infer_type(key, value);
+    e.type = infer_type(this, key, value);
     e.value = value;
     e.label = key; // fallback label; replaced below when known
-    for (const KnownSetting &k : kKnownSettings)
+    const std::string declared_label = catalog_str(this, key, "label", "");
+    if (!declared_label.empty())
     {
-      if (key == k.key)
+      e.label = declared_label;
+    }
+    else
+    {
+      for (const KnownSetting &k : kKnownSettings)
       {
-        e.label = k.label;
-        break;
+        if (key == k.key)
+        {
+          e.label = k.label;
+          break;
+        }
       }
     }
-    for (const EnumChoices &choices : kEnumChoices)
+    // An enum row's choices come from the catalog first, so a config can offer
+    // its own set; the native table answers for a build without Lua.
+    std::vector<std::string> declared_options = policy_str_list(kCatalogName, key, "options");
+    if (!declared_options.empty())
     {
-      if (key != choices.key)
-        continue;
       e.type = SettingsEntry::Type::Enum;
-      e.options.assign(choices.options, choices.options + choices.count);
-      break;
+      e.options = std::move(declared_options);
+    }
+    if (e.options.empty())
+    {
+      for (const EnumChoices &choices : kEnumChoices)
+      {
+        if (key != choices.key)
+          continue;
+        e.type = SettingsEntry::Type::Enum;
+        e.options.assign(choices.options, choices.options + choices.count);
+        break;
+      }
     }
     // The themes are not a constant (they depend on what is installed), so the
     // one discovered row has its choices filled from the live registry here.
@@ -590,15 +646,25 @@ void Editor::rebuild_settings_entries()
       e.type = SettingsEntry::Type::Enum;
       e.options = list_available_themes();
     }
-    for (const IntRange &range : kIntRanges)
+    if (policy_has_field(kCatalogName, key, "step"))
     {
-      if (key != range.key)
-        continue;
-      e.step = range.step;
+      e.step = policy_int(kCatalogName, key, "step", 1);
       e.has_range = true;
-      e.min_value = range.min;
-      e.max_value = range.max;
-      break;
+      e.min_value = policy_int(kCatalogName, key, "min", 0);
+      e.max_value = policy_int(kCatalogName, key, "max", 0);
+    }
+    else
+    {
+      for (const IntRange &range : kIntRanges)
+      {
+        if (key != range.key)
+          continue;
+        e.step = range.step;
+        e.has_range = true;
+        e.min_value = range.min;
+        e.max_value = range.max;
+        break;
+      }
     }
     e.section = section_of(key);
     settings_entries.push_back(std::move(e));

@@ -97,6 +97,145 @@ bool LuaAPI::has_lua_policy(const char *name) const
   return name && lua_policies_.find(name) != lua_policies_.end();
 }
 
+int LuaAPI::push_lua_policy_table(const char *name)
+{
+  if (!lua_state)
+  {
+    return 0;
+  }
+  auto it = lua_policies_.find(name);
+  if (it == lua_policies_.end() || it->second < 0)
+  {
+    return 0;
+  }
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  lua_rawgeti(L, LUA_REGISTRYINDEX, it->second);
+  if (!lua_istable(L, -1))
+  {
+    lua_pop(L, 1);
+    return 0;
+  }
+  return 1;
+}
+
+bool LuaAPI::lua_policy_has_entry(const char *name, const std::string &key)
+{
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  // The readers below all follow the same rule: a table is read on the main
+  // thread only, and anything missing answers like "no provider at all".
+  if (!L || !editor || !editor->event_loop_.is_main_thread() || !push_lua_policy_table(name))
+  {
+    return false;
+  }
+  const int top = lua_gettop(L);
+  lua_getfield(L, -1, key.c_str());
+  const bool found = lua_istable(L, -1);
+  lua_settop(L, top - 1);
+  return found;
+}
+
+bool LuaAPI::lua_policy_has_field(const char *name, const std::string &key, const char *field)
+{
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  if (!L || !editor || !editor->event_loop_.is_main_thread() || !push_lua_policy_table(name))
+  {
+    return false;
+  }
+  const int top = lua_gettop(L);
+  lua_getfield(L, -1, key.c_str());
+  if (!lua_istable(L, -1))
+  {
+    lua_settop(L, top - 1);
+    return false;
+  }
+  lua_getfield(L, -1, field);
+  const bool present = !lua_isnil(L, -1);
+  lua_settop(L, top - 1);
+  return present;
+}
+
+std::string LuaAPI::lua_policy_str(const char *name,
+                                   const std::string &key,
+                                   const char *field,
+                                   const std::string &fallback)
+{
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  if (!L || !editor || !editor->event_loop_.is_main_thread() || !push_lua_policy_table(name))
+  {
+    return fallback;
+  }
+  const int top = lua_gettop(L);
+  lua_getfield(L, -1, key.c_str());
+  if (!lua_istable(L, -1))
+  {
+    lua_settop(L, top - 1);
+    return fallback;
+  }
+  lua_getfield(L, -1, field);
+  size_t size = 0;
+  const char *value = lua_tolstring(L, -1, &size);
+  const std::string out = value ? std::string(value, size) : fallback;
+  lua_settop(L, top - 1);
+  return out;
+}
+
+int LuaAPI::lua_policy_int(const char *name, const std::string &key, const char *field, int fallback)
+{
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  if (!L || !editor || !editor->event_loop_.is_main_thread() || !push_lua_policy_table(name))
+  {
+    return fallback;
+  }
+  const int top = lua_gettop(L);
+  lua_getfield(L, -1, key.c_str());
+  if (!lua_istable(L, -1))
+  {
+    lua_settop(L, top - 1);
+    return fallback;
+  }
+  lua_getfield(L, -1, field);
+  const int out = lua_isnumber(L, -1) ? (int)lua_tointeger(L, -1) : fallback;
+  lua_settop(L, top - 1);
+  return out;
+}
+
+std::vector<std::string> LuaAPI::lua_policy_str_list(const char *name,
+                                                     const std::string &key,
+                                                     const char *field)
+{
+  std::vector<std::string> out;
+  lua_State *L = static_cast<lua_State *>(lua_state);
+  if (!L || !editor || !editor->event_loop_.is_main_thread() || !push_lua_policy_table(name))
+  {
+    return out;
+  }
+  const int top = lua_gettop(L);
+  lua_getfield(L, -1, key.c_str());
+  if (!lua_istable(L, -1))
+  {
+    lua_settop(L, top - 1);
+    return out;
+  }
+  lua_getfield(L, -1, field);
+  if (lua_istable(L, -1))
+  {
+    const int count = (int)lua_rawlen(L, -1);
+    for (int i = 1; i <= count; i++)
+    {
+      lua_rawgeti(L, -1, i);
+      size_t size = 0;
+      const char *value = lua_tolstring(L, -1, &size);
+      if (value)
+      {
+        out.emplace_back(value, size);
+      }
+      lua_pop(L, 1);
+    }
+  }
+  lua_settop(L, top - 1);
+  return out;
+}
+
 int LuaAPI::push_lua_policy_field(const char *name, const char *field)
 {
   if (!lua_state)

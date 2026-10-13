@@ -1167,7 +1167,34 @@ A book travels as the id its requests use (`"JHN"`), never as an index or a
 pointer, so the native canon stays the authority on which books exist: a
 reference is accepted only once its id resolves there, and a provider therefore
 cannot open a book the reader cannot fetch. A provider that raises costs a
-fallback rather than the command. Providers are dropped with the rest of the
+fallback rather than the command.
+
+A provider may carry plain fields instead of functions, which is a table of
+entries rather than a decision. The native side reads the entry it needs when it
+builds something, not while it paints, so a table of a few hundred rows costs
+nothing per frame. `settings.catalog` is the first of these, owned by
+`features/settings/catalog.lua`: the settings menu asks it for each row's label
+and type.
+
+```lua
+jot.policy.set("settings.catalog", {
+  tab_size = { label = "Indent width", type = "int", step = 1, min = 1, max = 16 },
+  colorizer_mode = { label = "Color preview mode", type = "enum",
+                     options = { "background", "foreground", "virtualtext" } },
+})
+```
+
+`label` is the row's text; `type` is `"bool"`, `"int"`, `"string"` or
+`"enum"`; `options` are the values an enum row walks; `step`, `min` and `max`
+are an int row's stepper and its clamp. Declaring one key is enough, and the
+rows you leave out keep theirs. A key with no entry still gets a row, labelled
+with the key itself, which is what a plugin's own config key gets. An edited
+catalog is live the next time the menu opens, and `:reloadplugins` picks up a
+file edited on disk.
+
+The native tables in src/surfaces/settings.cpp stay as the fallback for a build
+or a test with no Lua runtime. `tools/settings_catalog_import.py` converts them
+into the Lua module, so the two can be asked to agree entry for entry. Providers are dropped with the rest of the
 runtime on `:reloadplugins`, and the bundled module registers again as the
 reload reaches it, so an edit to `reference.lua` is live after a reload and not
 only after a restart. `jot.lua.reload()` with no name is the same work.

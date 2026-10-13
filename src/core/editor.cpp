@@ -9,6 +9,8 @@
 #include <ctime>
 #include <filesystem>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace
 {
@@ -959,4 +961,108 @@ bool Editor::restart_editor(bool force)
   // new instance is running, so stop the event loop and exit cleanly.
   running = false;
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// jot.policy reads (core/policy_api.h, lua/api/api_provider.cpp)
+// ---------------------------------------------------------------------------
+// What a surface or an optional feature asks when a table of its own, or a
+// decision of its own, is owned by a Lua provider: the named entry's field, or
+// the caller's fallback. Each reader hands straight off to the Lua API, which
+// refuses a read from a worker thread and answers the same fallback when there
+// is no provider, no such entry, or a field of another type, so a caller never
+// has to know whether Lua is there or replace its own defaults.
+//
+// The Bible reader's two calls are the same idea with a body each: ask the
+// bible.reference provider first, and use the native parser or labeller when
+// its answer is missing or names a book the canon cannot address (see
+// extras/bible.cpp and runtime/lua/features/bible/reference.lua).
+namespace
+{
+  // The native struct out to the view a provider is handed, and a provider's
+  // view back in once its book id has been resolved against the canon.
+  bool bible_reference_view(const Bible::Reference &reference, LuaAPI::BibleRefView &view)
+  {
+    if (!reference.book)
+    {
+      return false;
+    }
+    view.book_id = reference.book->id;
+    view.chapter = reference.chapter;
+    view.has_verse = reference.has_verse;
+    view.verse_first = reference.verse_first;
+    view.verse_last = reference.verse_last;
+    return true;
+  }
+
+  bool bible_reference_from_view(const LuaAPI::BibleRefView &view, Bible::Reference &out)
+  {
+    const Bible::Book *book = Bible::find_book(view.book_id);
+    if (!book || view.chapter <= 0)
+    {
+      return false;
+    }
+    out.book = book;
+    out.chapter = view.chapter;
+    out.has_verse = view.has_verse;
+    out.verse_first = view.has_verse ? view.verse_first : 0;
+    out.verse_last = view.has_verse ? std::max(view.verse_first, view.verse_last) : 0;
+    return true;
+  }
+} // namespace
+
+std::string Editor::policy_str(const char *name,
+                               const std::string &key,
+                               const char *field,
+                               const std::string &fallback)
+{
+  return lua_api ? lua_api->lua_policy_str(name, key, field, fallback) : fallback;
+}
+
+int Editor::policy_int(const char *name, const std::string &key, const char *field, int fallback)
+{
+  return lua_api ? lua_api->lua_policy_int(name, key, field, fallback) : fallback;
+}
+
+bool Editor::policy_has_field(const char *name, const std::string &key, const char *field)
+{
+  return lua_api ? lua_api->lua_policy_has_field(name, key, field) : false;
+}
+
+std::vector<std::string> Editor::policy_str_list(const char *name,
+                                                 const std::string &key,
+                                                 const char *field)
+{
+  if (!lua_api)
+  {
+    return {};
+  }
+  return lua_api->lua_policy_str_list(name, key, field);
+}
+
+bool Editor::bible_parse_reference(const std::string &text, Bible::Reference &out)
+{
+  if (lua_api)
+  {
+    LuaAPI::BibleRefView view;
+    if (lua_api->bible_policy_parse(text, view) && bible_reference_from_view(view, out))
+    {
+      return true;
+    }
+  }
+  return Bible::parse_reference(text, out);
+}
+
+std::string Editor::bible_reference_label(const Bible::Reference &reference)
+{
+  if (lua_api)
+  {
+    LuaAPI::BibleRefView view;
+    std::string label;
+    if (bible_reference_view(reference, view) && lua_api->bible_policy_label(view, label))
+    {
+      return label;
+    }
+  }
+  return Bible::reference_label(reference);
 }

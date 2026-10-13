@@ -452,6 +452,7 @@ private:
 #include "core/runtime.h"
 
 #include "core/api/public_api.h"
+#include "core/policy_api.h"
 
 #include "extras/bible_api.h"
 #include "buffers/buffers.h"

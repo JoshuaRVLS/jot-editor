@@ -13,6 +13,7 @@ src/core/api/test_hooks.h	src/core/api/test_hooks.h:12:1: error: expected unqual
 src/core/api/test_hooks_ui.h	src/core/api/test_hooks_ui.h:12:1: error: expected unqualified-id before ‘public’
 src/core/editing.h	src/core/editing.h:12:1: error: expected unqualified-id before ‘private’
 src/core/panels_api.h	src/core/panels_api.h:13:1: error: expected unqualified-id before ‘private’
+src/core/policy_api.h	src/core/policy_api.h:23:1: error: expected unqualified-id before ‘public’
 src/core/runtime.h	src/core/runtime.h:12:1: error: expected unqualified-id before ‘private’
 src/extras/bible_api.h	src/extras/bible_api.h:21:1: error: expected unqualified-id before ‘private’
 src/extras/coding_time.h	src/extras/coding_time.h:21:1: error: expected unqualified-id before ‘private’

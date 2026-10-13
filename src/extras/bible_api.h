@@ -75,10 +75,16 @@ void bible_show_lines(const std::string &label,
 std::string bible_verse_of_the_day();
 
 // The reference policy, with Lua in front of C++ when a provider is registered
-// (runtime/lua/features/bible/reference.lua does it through jot.policy). One
-// call site per native entry point, so the two implementations are held to the
-// same answers and the native one is what answers when the module is absent,
-// fails to load or reports a book the canon does not have.
+// (runtime/lua/features/bible/reference.lua does it through jot.policy).
+//
+// One call site per native entry point, so the two implementations are held to
+// the same answers and the native one is what answers when the module is
+// absent, fails to load or reports a book the canon does not have. Both are
+// implemented in core/editor.cpp, where the Lua API is already in reach, so
+// this feature keeps asking for a policy without including it.
+bool bible_parse_reference(const std::string &text, Bible::Reference &out);
+std::string bible_reference_label(const Bible::Reference &reference);
+
 std::string bible_translation();
 std::string bible_commentary();
 std::string bible_api_base();

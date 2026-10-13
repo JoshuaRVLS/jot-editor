@@ -796,6 +796,10 @@ bool LuaAPI::init()
   // native parser in src/extras/bible.cpp as the fallback when this fails to
   // load.
   load_bible_runtime(L);
+  // Settings menu: its catalog (labels, row types, enum choices, int ranges) is
+  // Lua now (features/settings/*), with the native tables in
+  // surfaces/settings.cpp as the fallback for a build with no Lua runtime.
+  load_settings_runtime(L);
   // AI assistant (features/ai/*.lua) is disabled for now: skipping
   // load_ai_runtime leaves no :CodeCompanion* commands and no Alt+Shift+A
   // keymap family registered. The module tree and the loader stay in place, so

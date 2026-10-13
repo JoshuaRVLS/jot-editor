@@ -349,6 +349,7 @@ void LuaAPI::reload_plugins()
     // session where a fresh boot would be. User config has already re-run, so a
     // provider it owns is in place first and keeps the name.
     load_bible_runtime(static_cast<lua_State *>(lua_state));
+    load_settings_runtime(static_cast<lua_State *>(lua_state));
   }
   fire_autocmd("PluginReload");
   if (editor)
@@ -580,6 +581,19 @@ bool LuaAPI::load_bible_runtime(lua_State *L)
     return false;
   }
   return load_bundled_lua_file(L, "features/bible/init.lua", "Bible");
+}
+
+bool LuaAPI::load_settings_runtime(lua_State *L)
+{
+  // The settings menu's catalog (features/settings/*.lua): labels, row types,
+  // enum choices and int ranges, registered with jot.policy so the menu asks
+  // Lua first. Nothing here touches the menu itself -- the rows, the search bar
+  // and the editing stay native (surfaces/settings.cpp).
+  if (!jot_lua::load_bundled_lua_module(L, "features/settings/catalog.lua", "jot_settings"))
+  {
+    return false;
+  }
+  return load_bundled_lua_file(L, "features/settings/init.lua", "Settings");
 }
 
 bool LuaAPI::load_leetcode_runtime(lua_State *L)

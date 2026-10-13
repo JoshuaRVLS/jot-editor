@@ -79,6 +79,8 @@ private:
   // Pushes the provider's `field` function for `name`, or pushes nothing and
   // answers 0 when there is no such provider or function.
   int push_lua_policy_field(const char *name, const char *field);
+  // Pushes the provider table for `name`, or nothing and 0 when there is none.
+  int push_lua_policy_table(const char *name);
   // Surface name -> registered handler (jot.ui.handler). Values are registry
   // refs; -1 entries are removed lazily on next emit.
   std::map<std::string, int> lua_ui_handlers_;
@@ -230,6 +232,7 @@ public:
   bool load_html_runtime(lua_State *L);
   bool load_snippet_runtime(lua_State *L);
   bool load_bible_runtime(lua_State *L);
+  bool load_settings_runtime(lua_State *L);
   bool load_leetcode_runtime(lua_State *L);
   // Bundled AI assistant (features/ai/*.lua): the CodeCompanion-style chat,
   // inline rewrite and provider adapters. Loaded after the snippet runtime
@@ -828,10 +831,17 @@ public:
   void preview_sync_from_lua(lua_State *L);
   void preview_take_scroll_from_lua(lua_State *L);
 
-  // jot.policy (see api_provider.cpp): a named piece of native policy owned by
-  // a bundled Lua module. C++ keeps the mechanism and asks the provider first;
-  // with no provider registered its own implementation answers, so a ported
-  // policy degrades to the old behavior instead of failing.
+  // jot.policy (see api_provider.cpp): a named table owned by a bundled Lua
+  // module. C++ keeps the mechanism and asks the provider first; with no
+  // provider registered its own implementation answers, so a ported policy
+  // degrades to the old behavior instead of failing.
+  //
+  // A provider carries either functions (a decision) or plain fields (a table
+  // of entries, the settings menu's catalog being the first). Functions are
+  // named calls, one per entry point; fields are read with the lua_policy_*
+  // readers below, entry by entry, which is what keeps a table of a few
+  // hundred rows off the per-frame path: the native side reads what it needs
+  // when it builds the list, not while it paints.
   //
   // The exchange carries plain fields only. A book travels as the id its URLs
   // use ("JHN"), never as a pointer or an index into the native table, so the
@@ -845,10 +855,24 @@ public:
     int verse_first = 0;
     int verse_last = 0;
   };
-  // `index` is a Lua table of functions (or nil to unregister).
+  // `index` is a Lua table (or nil to unregister).
   void set_lua_policy(lua_State *L, const char *name, int index);
   bool has_lua_policy(const char *name) const;
   void lua_policy_names_to_lua(lua_State *L);
+  // The field readers: the entry named `key` in the provider `name`, its
+  // `field` read as the asked-for type. Each answers `fallback` (or an empty
+  // list) when there is no provider, no such entry, or the field is missing or
+  // of another type, so a caller never branches on whether Lua is there.
+  bool lua_policy_has_entry(const char *name, const std::string &key);
+  bool lua_policy_has_field(const char *name, const std::string &key, const char *field);
+  std::string lua_policy_str(const char *name,
+                             const std::string &key,
+                             const char *field,
+                             const std::string &fallback);
+  int lua_policy_int(const char *name, const std::string &key, const char *field, int fallback);
+  std::vector<std::string> lua_policy_str_list(const char *name,
+                                               const std::string &key,
+                                               const char *field);
   // The bible.reference provider's two calls: the one `:bible` reads its
   // argument with, and the one the tab strip and the toasts print. Each
   // answers false when there is no provider, when its field is missing, or
