@@ -98,7 +98,7 @@ local function refresh_button()
   end
 end
 
--- Byte-safe helpers over UTF-8 runes (stock Lua 5.4 utf8 library).
+-- Byte-safe helpers over UTF-8 runes (utf8, with Lua 5.4's answers).
 
 local function visual_len(s)
   local n = 0

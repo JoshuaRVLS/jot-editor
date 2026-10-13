@@ -169,18 +169,40 @@ namespace jot_lua
     return true;
   }
 
-  // Gives a state the bundled utf8 when the runtime it booted on has none:
-  // the one half of the scripting dialect (docs/LUA_API.md, "The scripting
-  // dialect") that is not a C shim in lua/lua_compat.h. LuaAPI::init runs this
-  // before any bundled file, and a test that builds its own lua_State and then
-  // loads a bundled file runs it too, so the file sees what a session sees.
-  // A runtime that ships utf8 (stock Lua) keeps its own and nothing is loaded.
+  // Gives a state the bundled utf8, which LuaJIT does not have: the one half of
+  // the dialect (docs/LUA_API.md, "The scripting dialect") that is not a C shim
+  // in lua/lua_compat.h. LuaAPI::init runs this before any bundled file, and a
+  // test that builds its own lua_State and then loads a bundled file runs it
+  // too, so the file sees what a session sees. Installing is once per state:
+  // an utf8 already there is left alone.
   inline bool install_bundled_utf8(lua_State *L)
   {
     lua_getglobal(L, "utf8");
     const bool present = !lua_isnil(L, -1);
     lua_pop(L, 1);
     return present || load_bundled_lua_file(L, "compat/utf8.lua", "utf8");
+  }
+
+  // Which release of the engine is running, read off the runtime itself:
+  // jit.version is "LuaJIT 2.1.1788856981". It is read here and not from
+  // <luajit.h>, because that header is written by LuaJIT's own build, so
+  // including it would put every translation unit that touches Lua behind that
+  // build instead of only the link. Falls back to the Lua version string.
+  inline std::string lua_engine_name(lua_State *L)
+  {
+    std::string name = LUA_RELEASE;
+    lua_getglobal(L, "jit");
+    if (lua_istable(L, -1))
+    {
+      lua_getfield(L, -1, "version");
+      if (lua_type(L, -1) == LUA_TSTRING)
+      {
+        name = lua_tostring(L, -1);
+      }
+      lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+    return name;
   }
 
   // Loads a bundled Lua *module* - a file whose chunk returns a table - and

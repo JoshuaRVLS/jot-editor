@@ -8,38 +8,37 @@ Lua line and column values are 1-based. Native C++ state remains private.
 
 ## The scripting dialect
 
-The engine is LuaJIT where the build can use one and stock Lua otherwise, so
-what a plugin may assume is the intersection the bundled runtime is written to:
-**Lua 5.1 plus `utf8`**. Write that and the same file runs on either engine.
+The embedded engine is LuaJIT, which is Lua 5.1 plus the JIT, and the bundled
+runtime is written to one dialect on top of it: **Lua 5.1 plus `utf8`**. That is
+what a plugin may assume, and it is the same in a session, in a test and on
+every platform, because there is only one engine to run on.
 
 | | |
 |---|---|
-| Which engine | `jot.engine` (`"LuaJIT 2.1.1788856981"`, `"Lua 5.4.9"`); the `jit` library is there only on LuaJIT |
-| Build selection | `-DJOT_LUA_ENGINE=auto` (default: LuaJIT when available, else stock Lua), `luajit`, or `lua` |
-| Not on LuaJIT | `//`, `<close>` / `<const>` attributes, `math.type`, `string.pack`, `string.unpack`, `table.pack`, `table.unpack`, `coroutine.close` |
-| Lua patterns | no literal `\0` in a pattern on LuaJIT (5.2 and newer allow one, 5.1 stops there); `%z` is that byte on both engines |
-| Only on LuaJIT | `bit`, `jit` (`jit.status()`, `jit.p` for profiling), `ffi` through `require("ffi")`, the global `unpack` |
+| Which release | `jot.engine` (`"LuaJIT 2.1.1788856981"`) |
+| Beyond 5.1 | the JIT itself, `jit` (`jit.status()`, `jit.p` for profiling), `bit`, `ffi` through `require("ffi")`, the global `unpack` |
+| Not in 5.1 | `//` and the other bitwise operators, `goto`, `math.type` and the integer subtype, `string.pack` / `string.unpack`, `table.pack`, `<close>` / `<const>` attributes, `coroutine.close` |
+| Lua patterns | a literal `\0` stops the matcher, because 5.1 reads the pattern as a C string; 5.2 and newer allow one. `%z` is that byte |
 
-`utf8` is the one library worth spelling out. LuaJIT has none, so a runtime
-without it gets the bundled implementation at
-[runtime/lua/compat/utf8.lua](../runtime/lua/compat/utf8.lua), installed before
-any bundled file or plugin runs. It answers what Lua 5.4's library answers,
-including what each function does with bytes that are not UTF-8: `codes` and
-`codepoint` raise, `len` returns nil plus the byte offset where it stopped, and
-`offset` returns nil for a character that is not in the subject. A stock Lua
-build keeps its own C implementation.
+`utf8` is the one library worth spelling out, because LuaJIT ships none: the
+host installs the bundled implementation at
+[runtime/lua/compat/utf8.lua](../runtime/lua/compat/utf8.lua) before any bundled
+file or plugin runs, so `utf8.*` is always there. It answers what Lua 5.4's
+library answers, including what each function does with bytes that are not
+UTF-8: `codes` and `codepoint` raise, `len` returns nil plus the byte offset
+where it stopped, and `offset` returns nil for a character that is not in the
+subject.
 
-One difference between the engines to keep in mind when a value is shown to a
-user: LuaJIT has no integers, so `tostring(3.0)` is `"3"` there and `"3.0"` on
-stock Lua. Format counts with `string.format("%d", ...)` or compare numbers
-rather than their text.
+Numbers are 5.1's: one type, no integer subtype, so `tostring(3.0)` is `"3"`.
+A count shown next to text from elsewhere is worth formatting with
+`string.format("%d", ...)` rather than left to `tostring`.
 
 On the C side, [lua/lua_compat.h](../src/lua/lua_compat.h) defines the four
 entry points LuaJIT lacks, `lua_rawlen`, `lua_absindex`, `lua_len` and
 `lua_isinteger`, under those same names when the runtime's own header is older
-than the version that added them, so no call site carries an `#ifdef` and the
-same source builds on either engine. [test/lua_engine_probe.py](../test/lua_engine_probe.py) holds
-a session to the dialect above on whichever engine it booted on.
+than the version that added them, so a call site carries no `#ifdef` and reads
+like the newer interface. [test/lua_engine_probe.py](../test/lua_engine_probe.py)
+holds a session to the dialect above.
 
 ## Core
 

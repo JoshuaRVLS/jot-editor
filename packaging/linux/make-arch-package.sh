@@ -77,9 +77,6 @@ map_soname() {
     libutf8proc.so.*) printf '%s' libutf8proc ;;
     libtree-sitter.so.*) printf '%s' tree-sitter ;;
     libcurl.so.*) printf '%s' curl ;;
-    liblua5.4.so.*) printf '%s' lua54 ;;
-    # The default engine (see JOT_LUA_ENGINE in src/CMakeLists.txt); lua54 is
-    # only needed by a build configured with -DJOT_LUA_ENGINE=lua.
     libluajit-5.1.so.*) printf '%s' luajit ;;
     libvterm.so.*) printf '%s' libvterm ;;
     # Only when the GUI frontend was compiled in (SDL2 + FreeType found at

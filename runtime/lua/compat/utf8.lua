@@ -1,17 +1,16 @@
--- utf8 for a runtime that does not ship it.
+-- utf8 for LuaJIT, which does not ship one.
 --
 -- LuaJIT is Lua 5.1 plus the JIT, so it has no utf8 library -- and the bundled
 -- features read text by codepoint in nine files (cell widths, word wrap, toast
 -- truncation, JSON escapes). Rather than wrap every one of those call sites in
--- a runtime check, the Lua host loads this file when the engine it booted on
--- does not provide utf8 itself (install_bundled_utf8, lua/api/api_internal.h),
--- so bundled code writes utf8.* either way and gets the C library on a stock
--- build.
+-- a check for the library, the Lua host installs this file into every state it
+-- opens (install_bundled_utf8, lua/api/api_internal.h), so bundled code just
+-- writes utf8.*.
 --
--- The surface and the outcomes are Lua 5.4's, because a feature that walks
--- malformed bytes has to behave the same on both engines: an invalid sequence
--- makes codes / codepoint error, len reports nil plus the byte offset where it
--- stopped, and offset reports nil for a character that is not in the subject.
+-- The surface and the outcomes are Lua 5.4's, because a plugin should not have
+-- to learn a private dialect: an invalid sequence makes codes / codepoint
+-- error, len reports nil plus the byte offset where it stopped, and offset
+-- reports nil for a character that is not in the subject.
 -- Overlong forms, surrogates and codepoints above U+10FFFF are invalid here
 -- for the same reason they are invalid there, while char still writes the old
 -- five- and six-byte forms for wide integers, exactly as that library does.

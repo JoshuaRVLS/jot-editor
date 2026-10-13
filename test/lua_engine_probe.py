@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-"""Probe: the scripting dialect a session runs on, whichever engine it booted.
+"""Probe: the scripting dialect a session runs on.
 
-The build picks a Lua engine (JOT_LUA_ENGINE: LuaJIT when it is available,
-stock Lua otherwise) and the bundled runtime is written to one dialect so the
-same feature files run on either. What only a real session proves is that the
-dialect is actually there at runtime: that utf8 exists, that it answers what
-Lua 5.4 answers down to the byte, and that a runtime without it gets the
-bundled implementation rather than a nil global three features deep.
+The embedded runtime is LuaJIT, which is Lua 5.1 plus the JIT, and the bundled
+files are written to one dialect on top of it: Lua 5.1 plus utf8, which LuaJIT
+does not ship, so the host installs the bundled module before any feature runs.
+What only a real session proves is that the dialect is there at runtime: that
+the JIT is engaged, that utf8 is the bundled implementation rather than a nil
+global three features deep, and that it answers what Lua 5.4 answers down to
+the byte, including where it refuses malformed bytes.
 
-The probe's config dir carries an init.lua that walks the same cases a stock
-Lua 5.4 answers (their expected answers are written down next to them) and
-paints the outcome on the screen, so every claim below is read off a real
-terminal:
+The probe's config dir carries an init.lua that walks the cases Lua 5.4 answers
+(their expected answers are written down next to them) and paints the outcome on
+the screen, so every claim below is read off a real terminal:
 
-  1. jot.engine names the runtime, and a jit library is there exactly when that
-     name says LuaJIT;
-  2. utf8 is the runtime's own C library on a stock build and the bundled
-     runtime/lua/compat/utf8.lua on one without it (debug.getinfo says which);
+  1. jot.engine names the runtime and a jit library is on the session;
+  2. utf8 is the bundled runtime/lua/compat/utf8.lua (debug.getinfo says which);
   3. all 32 dialect cases answer exactly what Lua 5.4 answers;
   4. the session boots without a Lua failure in its log.
 
@@ -230,18 +228,13 @@ def main() -> int:
         failures.append("the boot log carried a Lua failure: " + " | ".join(log[:3]))
     if not engine:
         failures.append(f"row 3 is {rows[3]!r}, wanted it to report the engine")
-    if engine.startswith("LuaJIT"):
-        if jit_version == "none":
-            failures.append(f"engine {engine!r} but no jit library on the session")
-        if utf8_source != "Lua":
-            failures.append(f"engine {engine!r} has no utf8 of its own, so the bundled one"
-                            f" should be in place, not a {utf8_source} function")
-    else:
-        if jit_version != "none":
-            failures.append(f"engine {engine!r} but a jit library is present: {jit_version}")
-        if utf8_source != "C":
-            failures.append(f"engine {engine!r} ships utf8 as a C library, but the session"
-                            f" has a {utf8_source} one instead")
+    elif not engine.startswith("LuaJIT"):
+        failures.append(f"the session reports {engine!r}, wanted a LuaJIT release")
+    if jit_version == "none":
+        failures.append(f"engine {engine!r} but no jit library on the session")
+    if utf8_source != "Lua":
+        failures.append(f"LuaJIT ships no utf8, so the bundled module should be in"
+                        f" place, not a {utf8_source} function")
     if cases != "32/32":
         failures.append(f"the dialect cases answered {cases!r}, first mismatch: {first_bad or 'unknown'}")
 
@@ -251,8 +244,7 @@ def main() -> int:
         print("--- screen ---")
         print(screen.text())
         return 1
-    print(f"ok: {engine} shipped utf8 as {utf8_source}, jit={jit_version},"
-          f" 32 dialect cases match stock Lua 5.4")
+    print(f"ok: {engine} runs the bundled utf8, and 32 dialect cases match Lua 5.4")
     if DUMP:
         print("--- screen ---")
         print(screen.text())

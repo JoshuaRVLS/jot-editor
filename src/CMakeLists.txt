@@ -203,131 +203,101 @@ if(NOT CURL_FOUND)
   endif()
 endif()
 
-# The embedded Lua runtime.
+# The embedded Lua runtime: LuaJIT, and nothing else.
 #
-# LuaJIT is what gets built when it is available (JOT_LUA_ENGINE=auto). It is
-# Lua 5.1 plus the JIT, so the bundled runtime is written to that dialect --
-# docs/LUA_API.md, "The scripting dialect" -- and lua/lua_compat.h stands in
-# for the four C entry points LuaJIT lacks. JOT_LUA_ENGINE=lua is the stock
-# interpreter path, kept for a platform that cannot host LuaJIT.
-set(JOT_LUA_ENGINE "auto" CACHE STRING
-  "Embedded Lua runtime: auto (LuaJIT when available), luajit (require it), or lua (stock Lua 5.3+)")
-set_property(CACHE JOT_LUA_ENGINE PROPERTY STRINGS auto luajit lua)
+# LuaJIT is Lua 5.1 plus the JIT, and the bundled runtime is written to exactly
+# that dialect -- docs/LUA_API.md, "The scripting dialect" -- with
+# lua/lua_compat.h standing in for the four C entry points it lacks. One engine
+# means one set of answers: a feature file behaves the same on every machine.
+#
+# A system LuaJIT first: a distribution package keeps the build offline and is
+# the same runtime the distro's own tools link against. A machine without one
+# builds the pinned release from source, with JOT_FETCH_DEPS.
+if(WIN32)
+  find_path(LUAJIT_INCLUDE_DIR luajit.h PATH_SUFFIXES luajit-2.1 luajit-2.0)
+  find_library(LUAJIT_LIBRARY NAMES luajit-5.1 luajit)
+  if(LUAJIT_INCLUDE_DIR AND LUAJIT_LIBRARY)
+    set(LUAJIT_FOUND TRUE)
+    set(LUAJIT_INCLUDE_DIRS ${LUAJIT_INCLUDE_DIR})
+    set(LUAJIT_LIBRARIES ${LUAJIT_LIBRARY})
+  endif()
+else()
+  pkg_check_modules(LUAJIT QUIET luajit)
+endif()
 
-set(JOT_LUA_LUAJIT FALSE)
-
-if(NOT JOT_LUA_ENGINE STREQUAL "lua")
-  # A system LuaJIT first: a distribution package keeps the build offline and
-  # is the same runtime the distro's own tools link against.
+if(LUAJIT_FOUND)
+  set(LUA_INCLUDE_DIRS ${LUAJIT_INCLUDE_DIRS})
+  set(LUA_LIBRARIES ${LUAJIT_LIBRARIES})
+  if(LUAJIT_VERSION)
+    message(STATUS "Embedded Lua runtime: LuaJIT ${LUAJIT_VERSION} (${LUAJIT_LIBRARIES})")
+  else()
+    message(STATUS "Embedded Lua runtime: LuaJIT (${LUAJIT_LIBRARIES})")
+  endif()
+else()
+  if(NOT JOT_FETCH_DEPS)
+    message(FATAL_ERROR "LuaJIT is required. Install its development files or set JOT_FETCH_DEPS=ON.")
+  endif()
+  # LuaJIT has no CMake build of its own: it generates the interpreter's tables
+  # with a host build of its own tools, so this wraps `src/Makefile` instead of
+  # reimplementing it.
+  include(FetchContent)
+  FetchContent_Declare(luajit
+    GIT_REPOSITORY https://github.com/LuaJIT/LuaJIT.git
+    GIT_TAG v2.1
+    GIT_SHALLOW TRUE
+  )
+  FetchContent_MakeAvailable(luajit)
+  include(ProcessorCount)
+  ProcessorCount(JOT_LUAJIT_JOBS)
+  if(JOT_LUAJIT_JOBS EQUAL 0)
+    set(JOT_LUAJIT_JOBS 1)
+  endif()
+  find_program(JOT_MAKE_EXECUTABLE NAMES make gmake REQUIRED)
+  set(JOT_LUAJIT_LIB "${luajit_SOURCE_DIR}/src/libluajit.a")
+  set(JOT_LUAJIT_MAKE_ARGS libluajit.a)
   if(WIN32)
-    find_path(LUAJIT_INCLUDE_DIR luajit.h PATH_SUFFIXES luajit-2.1 luajit-2.0)
-    find_library(LUAJIT_LIBRARY NAMES luajit-5.1 luajit)
-    if(LUAJIT_INCLUDE_DIR AND LUAJIT_LIBRARY)
-      set(LUAJIT_FOUND TRUE)
-      set(LUAJIT_INCLUDE_DIRS ${LUAJIT_INCLUDE_DIR})
-      set(LUAJIT_LIBRARIES ${LUAJIT_LIBRARY})
-    endif()
+    # The Windows release cross-builds with mingw, so the target system is
+    # Windows and the tools carry the toolchain prefix off the compiler CMake
+    # was given. LuaJIT builds its host tools from HOST_CC either way, and
+    # BUILDMODE=static is what keeps a lua51.dll out of the import table.
+    get_filename_component(JOT_LUAJIT_CC "${CMAKE_C_COMPILER}" NAME)
+    string(REGEX REPLACE "gcc(\\.exe)?$" "" JOT_LUAJIT_CROSS "${JOT_LUAJIT_CC}")
+    find_program(JOT_HOST_CC NAMES cc gcc clang REQUIRED)
+    list(APPEND JOT_LUAJIT_MAKE_ARGS
+      HOST_CC=${JOT_HOST_CC}
+      CROSS=${JOT_LUAJIT_CROSS}
+      TARGET_SYS=Windows
+      BUILDMODE=static)
   else()
-    pkg_check_modules(LUAJIT QUIET luajit)
+    # CFLAGS=-fPIC because the archive lands in an executable this project
+    # builds as PIE.
+    list(APPEND JOT_LUAJIT_MAKE_ARGS CFLAGS=-fPIC)
   endif()
-  if(LUAJIT_FOUND)
-    set(JOT_LUA_LUAJIT TRUE)
-    set(LUA_INCLUDE_DIRS ${LUAJIT_INCLUDE_DIRS})
-    set(LUA_LIBRARIES ${LUAJIT_LIBRARIES})
-    set(JOT_LUA_ENGINE_LABEL "LuaJIT")
-    if(LUAJIT_VERSION)
-      set(JOT_LUA_ENGINE_LABEL "LuaJIT ${LUAJIT_VERSION}")
-    endif()
-    message(STATUS "Embedded Lua runtime: ${JOT_LUA_ENGINE_LABEL} (${LUAJIT_LIBRARIES})")
-  elseif(JOT_FETCH_DEPS AND NOT WIN32)
-    # No system LuaJIT: build the one the project pins. LuaJIT has no CMake
-    # build of its own -- it generates the interpreter's tables with a host
-    # build of its own tools -- so this wraps `src/Makefile` instead of
-    # reimplementing it. CFLAGS=-fPIC because the archive lands in an
-    # executable this project builds as PIE.
-    include(FetchContent)
-    FetchContent_Declare(luajit
-      GIT_REPOSITORY https://github.com/LuaJIT/LuaJIT.git
-      GIT_TAG v2.1
-      GIT_SHALLOW TRUE
-    )
-    FetchContent_MakeAvailable(luajit)
-    include(ProcessorCount)
-    ProcessorCount(JOT_LUAJIT_JOBS)
-    if(JOT_LUAJIT_JOBS EQUAL 0)
-      set(JOT_LUAJIT_JOBS 1)
-    endif()
-    find_program(JOT_MAKE_EXECUTABLE NAMES make gmake REQUIRED)
-    set(JOT_LUAJIT_LIB "${luajit_SOURCE_DIR}/src/libluajit.a")
-    add_custom_command(
-      OUTPUT "${JOT_LUAJIT_LIB}"
-      COMMAND "${JOT_MAKE_EXECUTABLE}" -C src libluajit.a CFLAGS=-fPIC -j${JOT_LUAJIT_JOBS}
-      WORKING_DIRECTORY "${luajit_SOURCE_DIR}"
-      COMMENT "Building LuaJIT (${luajit_SOURCE_DIR})"
-      VERBATIM)
-    add_custom_target(jot_luajit_make DEPENDS "${JOT_LUAJIT_LIB}")
-    add_library(jot_luajit STATIC IMPORTED GLOBAL)
-    set_target_properties(jot_luajit PROPERTIES IMPORTED_LOCATION "${JOT_LUAJIT_LIB}")
-    # LuaJIT writes its generated headers (luajit.h and the arch tables) into
-    # src/ while that make runs, so the include dir and the archive are one
-    # dependency: the interface target here, the build its prerequisite.
-    add_library(jot_luajit_dep INTERFACE)
-    target_include_directories(jot_luajit_dep INTERFACE "${luajit_SOURCE_DIR}/src")
-    target_link_libraries(jot_luajit_dep INTERFACE jot_luajit ${CMAKE_DL_LIBS})
-    add_dependencies(jot_luajit_dep jot_luajit_make)
-    set(JOT_LUA_LUAJIT TRUE)
-    set(LUA_INCLUDE_DIRS "${luajit_SOURCE_DIR}/src")
-    set(LUA_LIBRARIES jot_luajit_dep)
-    message(STATUS "Embedded Lua runtime: LuaJIT (built from source)")
-  elseif(JOT_LUA_ENGINE STREQUAL "luajit")
-    message(FATAL_ERROR "JOT_LUA_ENGINE=luajit but no LuaJIT was found. Install LuaJIT development files or set JOT_FETCH_DEPS=ON.")
-  endif()
+  add_custom_command(
+    OUTPUT "${JOT_LUAJIT_LIB}"
+    COMMAND "${JOT_MAKE_EXECUTABLE}" -C src ${JOT_LUAJIT_MAKE_ARGS} -j${JOT_LUAJIT_JOBS}
+    WORKING_DIRECTORY "${luajit_SOURCE_DIR}"
+    COMMENT "Building LuaJIT (${luajit_SOURCE_DIR})"
+    VERBATIM)
+  add_custom_target(jot_luajit_make DEPENDS "${JOT_LUAJIT_LIB}")
+  add_library(jot_luajit STATIC IMPORTED GLOBAL)
+  set_target_properties(jot_luajit PROPERTIES IMPORTED_LOCATION "${JOT_LUAJIT_LIB}")
+  # LuaJIT writes its generated headers (luajit.h and the arch tables) into
+  # src/ while that make runs, so the include dir and the archive are one
+  # dependency: the interface target here, the build its prerequisite.
+  add_library(jot_luajit_dep INTERFACE)
+  target_include_directories(jot_luajit_dep INTERFACE "${luajit_SOURCE_DIR}/src")
+  target_link_libraries(jot_luajit_dep INTERFACE jot_luajit ${CMAKE_DL_LIBS})
+  add_dependencies(jot_luajit_dep jot_luajit_make)
+  set(LUA_INCLUDE_DIRS "${luajit_SOURCE_DIR}/src")
+  set(LUA_LIBRARIES jot_luajit_dep)
+  message(STATUS "Embedded Lua runtime: LuaJIT (built from source at ${luajit_SOURCE_DIR})")
 endif()
 
-# Nothing else is keyed off which runtime won: lua/lua_compat.h reads the
-# runtime's own version number out of <lua.h>, so the shims are selected by the
-# headers a target compiles against rather than by a definition that would have
-# to be threaded to every target that touches Lua.
-if(NOT JOT_LUA_LUAJIT)
-  find_path(LUA_INCLUDE_DIR lua.h PATH_SUFFIXES lua5.4 lua54 lua5.3 lua53)
-  find_library(LUA_LIBRARY NAMES lua5.4 lua54 lua5.3 lua53 lua)
-  if(LUA_INCLUDE_DIR AND LUA_LIBRARY)
-    set(LUA_INCLUDE_DIRS ${LUA_INCLUDE_DIR})
-    set(LUA_LIBRARIES ${LUA_LIBRARY})
-    message(STATUS "Embedded Lua runtime: stock Lua (${LUA_LIBRARY})")
-  else()
-    if(NOT JOT_FETCH_DEPS)
-      message(FATAL_ERROR "Lua 5.3 or newer is required. Install Lua development files or set JOT_FETCH_DEPS=ON.")
-    endif()
-    include(FetchContent)
-    FetchContent_Declare(lua
-      URL https://www.lua.org/ftp/lua-5.4.7.tar.gz
-      DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    )
-    FetchContent_MakeAvailable(lua)
-    set(LUA_INCLUDE_DIRS ${lua_SOURCE_DIR}/src)
-    message(STATUS "Embedded Lua runtime: stock Lua 5.4.7 (built from source)")
-    add_library(jot_lua STATIC
-      ${lua_SOURCE_DIR}/src/lapi.c ${lua_SOURCE_DIR}/src/lauxlib.c
-      ${lua_SOURCE_DIR}/src/lbaselib.c ${lua_SOURCE_DIR}/src/lcode.c
-      ${lua_SOURCE_DIR}/src/lcorolib.c ${lua_SOURCE_DIR}/src/lctype.c
-      ${lua_SOURCE_DIR}/src/ldblib.c ${lua_SOURCE_DIR}/src/ldebug.c
-      ${lua_SOURCE_DIR}/src/ldo.c ${lua_SOURCE_DIR}/src/ldump.c
-      ${lua_SOURCE_DIR}/src/lfunc.c ${lua_SOURCE_DIR}/src/lgc.c
-      ${lua_SOURCE_DIR}/src/linit.c ${lua_SOURCE_DIR}/src/liolib.c
-      ${lua_SOURCE_DIR}/src/llex.c ${lua_SOURCE_DIR}/src/lmathlib.c
-      ${lua_SOURCE_DIR}/src/lmem.c ${lua_SOURCE_DIR}/src/loadlib.c
-      ${lua_SOURCE_DIR}/src/lobject.c ${lua_SOURCE_DIR}/src/lopcodes.c
-      ${lua_SOURCE_DIR}/src/loslib.c ${lua_SOURCE_DIR}/src/lparser.c
-      ${lua_SOURCE_DIR}/src/lstate.c ${lua_SOURCE_DIR}/src/lstring.c
-      ${lua_SOURCE_DIR}/src/lstrlib.c ${lua_SOURCE_DIR}/src/ltable.c
-      ${lua_SOURCE_DIR}/src/ltablib.c ${lua_SOURCE_DIR}/src/ltm.c
-      ${lua_SOURCE_DIR}/src/lundump.c ${lua_SOURCE_DIR}/src/lutf8lib.c
-      ${lua_SOURCE_DIR}/src/lvm.c ${lua_SOURCE_DIR}/src/lzio.c)
-    target_include_directories(jot_lua PUBLIC ${LUA_INCLUDE_DIRS})
-    set(LUA_LIBRARIES jot_lua)
-  endif()
-endif()
+# lua/lua_compat.h reads the runtime's version out of <lua.h>, so the shims a
+# translation unit gets are chosen by the headers it compiles against instead
+# of by a definition threaded to every target that touches Lua.
+
 if(NOT UTF8PROC_FOUND)
   find_path(UTF8PROC_INCLUDE_DIR utf8proc.h)
   find_library(UTF8PROC_LIBRARY NAMES utf8proc libutf8proc)

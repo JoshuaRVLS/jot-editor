@@ -18,10 +18,9 @@ cmake --build build -j
 cmake --install build --prefix "$HOME/.local"
 ```
 
-The embedded scripting runtime is LuaJIT when the build can find one (or fetch
-and build one itself, with `JOT_FETCH_DEPS`) and stock Lua otherwise. Pin it
-with `-DJOT_LUA_ENGINE=lua` for the stock interpreter, `-DJOT_LUA_ENGINE=luajit`
-to require LuaJIT. Plugins target Lua 5.1 plus `utf8` either way:
+The embedded scripting runtime is LuaJIT: the build links the one the machine
+has, and with `JOT_FETCH_DEPS` it builds the pinned release itself when there
+is none. Plugins target Lua 5.1 plus `utf8`:
 [docs/LUA_API.md](docs/LUA_API.md#the-scripting-dialect).
 
 On Linux, the latest release also carries a one-file build and a package:
