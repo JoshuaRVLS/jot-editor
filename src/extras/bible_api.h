@@ -74,6 +74,11 @@ void bible_show_lines(const std::string &label,
 // day has not been seen yet, and returns the text when it has.
 std::string bible_verse_of_the_day();
 
+// The reference policy, with Lua in front of C++ when a provider is registered
+// (runtime/lua/features/bible/reference.lua does it through jot.policy). One
+// call site per native entry point, so the two implementations are held to the
+// same answers and the native one is what answers when the module is absent,
+// fails to load or reports a book the canon does not have.
 std::string bible_translation();
 std::string bible_commentary();
 std::string bible_api_base();

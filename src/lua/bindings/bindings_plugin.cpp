@@ -97,6 +97,25 @@ namespace lua_bind
     api(L).lua_dir_to_lua(L);
     return 1;
   }
+  int l_policy_set(lua_State *L)
+  {
+    // jot.policy.set(name, table) hands the named piece of native policy to a
+    // Lua module; set(name, nil) hands it back.
+    const char *name = luaL_checkstring(L, 1);
+    api(L).set_lua_policy(L, name, 2);
+    lua_pushboolean(L, api(L).has_lua_policy(name));
+    return 1;
+  }
+  int l_policy_has(lua_State *L)
+  {
+    lua_pushboolean(L, api(L).has_lua_policy(luaL_checkstring(L, 1)));
+    return 1;
+  }
+  int l_policy_names(lua_State *L)
+  {
+    api(L).lua_policy_names_to_lua(L);
+    return 1;
+  }
   int l_lua_reload(lua_State *L)
   {
     // Always (ok, result): a module on success, the error on failure, and nil

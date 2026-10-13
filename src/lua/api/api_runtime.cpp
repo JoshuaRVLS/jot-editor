@@ -115,8 +115,10 @@ void LuaAPI::cleanup()
     luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, lsp_snippet_handler_ref_);
     lsp_snippet_handler_ref_ = LUA_NOREF;
   }
-  // The raw layer's callbacks: unref before the state goes away.
+  // The raw layer's callbacks and the policy providers: unref before the state
+  // goes away.
   clear_raw_hooks();
+  clear_lua_policies();
   for (auto &[name, ref] : lua_ui_handlers_)
   {
     (void)name;
@@ -167,10 +169,13 @@ void LuaAPI::clear_runtime_state()
     luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, lsp_snippet_handler_ref_);
     lsp_snippet_handler_ref_ = LUA_NOREF;
   }
-  // A plugin reload drops the raw layer's callbacks with everything else: a
-  // painter or key hook left over from the previous run would keep running
-  // against a state that no longer defines it.
+  // A plugin reload drops the raw layer's callbacks and the policy providers
+  // with everything else: a painter or key hook left over from the previous run
+  // would keep running against a state that no longer defines it, and a policy
+  // provider would keep answering for a module that is gone (the bundled one
+  // registers again as it reloads, so the fallback covers the gap).
   clear_raw_hooks();
+  clear_lua_policies();
 }
 bool LuaAPI::load_script_path(const std::string &module, const std::string &path)
 {
@@ -339,6 +344,11 @@ void LuaAPI::reload_plugins()
         static_cast<lua_State *>(lua_state), "features/decorations.lua", "Decorations");
     jot_lua::load_bundled_lua_file(
         static_cast<lua_State *>(lua_state), "features/todo_comments.lua", "TodoComments");
+    // The bundled policy providers register here for the same reason: the
+    // clear_runtime_state() above dropped them, and a reload must leave the
+    // session where a fresh boot would be. User config has already re-run, so a
+    // provider it owns is in place first and keeps the name.
+    load_bible_runtime(static_cast<lua_State *>(lua_state));
   }
   fire_autocmd("PluginReload");
   if (editor)
@@ -557,6 +567,19 @@ bool LuaAPI::load_snippet_runtime(lua_State *L)
     }
   }
   return load_bundled_lua_file(L, "features/snippet/init.lua", "Snippets");
+}
+
+bool LuaAPI::load_bible_runtime(lua_State *L)
+{
+  // The Bible reader's reference policy (features/bible/*.lua): a module tree
+  // loaded into package.loaded["jot_bible.*"], then init.lua registers it with
+  // jot.policy so the native reference parser falls back to it. Nothing here
+  // fetches anything -- the transport stays in C++ (extras/bible_client.cpp).
+  if (!jot_lua::load_bundled_lua_module(L, "features/bible/reference.lua", "jot_bible"))
+  {
+    return false;
+  }
+  return load_bundled_lua_file(L, "features/bible/init.lua", "Bible");
 }
 
 bool LuaAPI::load_leetcode_runtime(lua_State *L)

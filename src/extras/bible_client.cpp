@@ -18,7 +18,9 @@
 #include "core/editor.h"
 #include "core/decorations_rebase.h"
 #include "extras/bible.h"
+#include "extras/bible_policy.h"
 #include "extras/leetcode_http.h"
+#include "lua/api/api.h" // LuaAPI: the policy provider the wrappers ask first
 
 #include <cstdlib>
 #include <ctime>
@@ -150,6 +152,67 @@ namespace
   }
 } // namespace
 
+namespace
+{
+  // The native struct out to the view a provider is handed, and a provider's
+  // view back in once its book id has been resolved against the canon.
+  bool reference_view(const Bible::Reference &reference, LuaAPI::BibleRefView &view)
+  {
+    if (!reference.book)
+    {
+      return false;
+    }
+    view.book_id = reference.book->id;
+    view.chapter = reference.chapter;
+    view.has_verse = reference.has_verse;
+    view.verse_first = reference.verse_first;
+    view.verse_last = reference.verse_last;
+    return true;
+  }
+
+  bool reference_from_view(const LuaAPI::BibleRefView &view, Bible::Reference &out)
+  {
+    const Bible::Book *book = Bible::find_book(view.book_id);
+    if (!book || view.chapter <= 0)
+    {
+      return false;
+    }
+    out.book = book;
+    out.chapter = view.chapter;
+    out.has_verse = view.has_verse;
+    out.verse_first = view.has_verse ? view.verse_first : 0;
+    out.verse_last = view.has_verse ? std::max(view.verse_first, view.verse_last) : 0;
+    return true;
+  }
+} // namespace
+
+bool bible_parse_reference(LuaAPI *api, const std::string &text, Bible::Reference &out)
+{
+  if (api)
+  {
+    LuaAPI::BibleRefView view;
+    if (api->bible_policy_parse(text, view) && reference_from_view(view, out))
+    {
+      return true;
+    }
+  }
+  return Bible::parse_reference(text, out);
+}
+
+std::string bible_reference_label(LuaAPI *api, const Bible::Reference &reference)
+{
+  if (api)
+  {
+    LuaAPI::BibleRefView view;
+    std::string label;
+    if (reference_view(reference, view) && api->bible_policy_label(view, label))
+    {
+      return label;
+    }
+  }
+  return Bible::reference_label(reference);
+}
+
 std::string Editor::bible_translation()
 {
   std::string id = string_util::trim_copy(config.get("bible_translation", "BSB"));
@@ -226,7 +289,7 @@ void Editor::bible_run(const std::string &arg)
   if (string_util::starts_with_icase(lower, "commentary "))
   {
     Bible::Reference reference;
-    if (!Bible::parse_reference(trimmed.substr(11), reference))
+    if (!bible_parse_reference(lua_api, trimmed.substr(11), reference))
     {
       set_message("Bible: cannot read \"" + trimmed.substr(11) + "\"", true);
       return;
@@ -249,7 +312,7 @@ void Editor::bible_run(const std::string &arg)
   {
     const size_t space = trimmed.find(' ');
     Bible::Reference reference;
-    if (!Bible::parse_reference(trimmed.substr(space + 1), reference))
+    if (!bible_parse_reference(lua_api, trimmed.substr(space + 1), reference))
     {
       set_message("Bible: cannot read \"" + trimmed.substr(space + 1) + "\"", true);
       return;
@@ -259,7 +322,7 @@ void Editor::bible_run(const std::string &arg)
   }
 
   Bible::Reference reference;
-  if (!Bible::parse_reference(trimmed, reference))
+  if (!bible_parse_reference(lua_api, trimmed, reference))
   {
     set_message("Bible: cannot read \"" + trimmed
                     + "\" -- try `:bible John 3:16`, `:bible ps23`, `:bible random`",
@@ -477,8 +540,8 @@ bool Editor::bible_fetch(const std::string &url,
   bible_request_running = true;
   if (announce)
   {
-    const std::string label =
-        reference.book ? Bible::reference_label(reference) : std::string("the Bible");
+    const std::string label = reference.book ? bible_reference_label(lua_api, reference)
+                                           : std::string("the Bible");
     set_transient_message("Bible: " + label + " ...", 4000);
   }
   task_queue_->submit_val<std::pair<std::string, bool>>(
@@ -560,7 +623,7 @@ void Editor::bible_deliver(BibleJob job,
     const Bible::Reference shown = narrowed(reference, verse);
     const std::string *text = Bible::verse_text(chapter, verse);
     bible_votd_day = day;
-    bible_votd_label = Bible::reference_label(shown);
+    bible_votd_label = bible_reference_label(lua_api, shown);
     bible_votd_text = text ? *text : std::string();
     needs_redraw = true;
     return;
@@ -576,11 +639,11 @@ void Editor::bible_deliver(BibleJob job,
     }
     const std::vector<std::string> lines =
         Bible::render_xrefs(xrefs, reference, bible_render_width());
-    bible_show_lines(Bible::reference_label(reference) + " xref",
+    bible_show_lines(bible_reference_label(lua_api, reference) + " xref",
                      lines,
                      Bible::highlight(lines, Bible::Layout::Xrefs));
     set_message("Bible: " + std::to_string(xrefs.size()) + " cross references for "
-                    + Bible::reference_label(reference),
+                    + bible_reference_label(lua_api, reference),
                 true);
     return;
   }
@@ -613,7 +676,7 @@ void Editor::bible_deliver(BibleJob job,
     bible_has_last = true;
     const std::string *text = Bible::verse_text(chapter, verse);
     bible_votd_day = day;
-    bible_votd_label = Bible::reference_label(shown);
+    bible_votd_label = bible_reference_label(lua_api, shown);
     bible_votd_text = text ? *text : std::string();
   }
 
@@ -621,13 +684,13 @@ void Editor::bible_deliver(BibleJob job,
   options.width = bible_render_width();
   options.context = bible_context_verses();
   const std::vector<std::string> lines = Bible::render_chapter(chapter, shown, options);
-  const std::string label = Bible::reference_label(shown);
+  const std::string label = bible_reference_label(lua_api, shown);
   bible_show_lines(job == BibleJob::Commentary ? label + " commentary" : label,
                    lines,
                    Bible::highlight(lines, Bible::Layout::Chapter));
   if (announce)
   {
-    set_message("Bible: " + Bible::reference_label(shown) + " - "
+    set_message("Bible: " + bible_reference_label(lua_api, shown) + " - "
                     + (chapter.translation_name.empty() ? chapter.translation_id
                                                         : chapter.translation_name),
                 true);

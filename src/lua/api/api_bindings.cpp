@@ -744,6 +744,14 @@ bool LuaAPI::init()
   field(L, "dir", l_lua_dir);
   field(L, "reload", l_lua_reload);
   lua_setfield(L, -2, "lua");
+  // jot.policy: a bundled module owning a named piece of native policy, so
+  // policy can move to Lua one piece at a time with the native path kept as the
+  // fallback (see api_provider.cpp and docs/LUA_API.md).
+  lua_newtable(L);
+  field(L, "set", l_policy_set);
+  field(L, "has", l_policy_has);
+  field(L, "names", l_policy_names);
+  lua_setfield(L, -2, "policy");
   lua_pop(L, 1);
   // Bundled feature: inline diagnostics as anchored decorations (see
   // lua/features/decorations.lua). Loaded after user plugins: load_plugins()
@@ -784,6 +792,10 @@ bool LuaAPI::init()
   // LeetCode workspace: the question browser, file-backed solutions, judge
   // workflow and OS-keychain-backed session API (features/leetcode/*).
   load_leetcode_runtime(L);
+  // Bible reader: its reference policy is Lua now (features/bible/*), with the
+  // native parser in src/extras/bible.cpp as the fallback when this fails to
+  // load.
+  load_bible_runtime(L);
   // AI assistant (features/ai/*.lua) is disabled for now: skipping
   // load_ai_runtime leaves no :CodeCompanion* commands and no Alt+Shift+A
   // keymap family registered. The module tree and the loader stay in place, so

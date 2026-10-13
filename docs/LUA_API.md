@@ -1125,6 +1125,53 @@ become invalid after `reload`; native functions return Lua errors for invalid
 handles. The bundled runtime loads before user plugins and compiled catalog
 data remains the fallback when no Lua override is present.
 
+## Policy Providers
+
+Some of what the editor does is policy rather than mechanism: how a command's
+argument is read, what a passage is called, which spellings count. `jot.policy`
+lets a module own a named piece of that. The native call site asks the provider
+first and keeps its own implementation as the fallback, so a decision moves to
+Lua one piece at a time and a build without the module behaves as it did before.
+
+`jot.policy.set(name, table)` registers `table` under `name` and returns `true`;
+`set(name, nil)` hands the name back. `jot.policy.has(name)` is `true` while a
+provider owns it, and `jot.policy.names()` lists the names in use, sorted. The
+table's shape is whatever the name's contract calls for; a provider is not
+verified on registration, so a call that is missing or answers with something
+the native side cannot use is treated as no answer at all.
+
+One name exists today. `bible.reference` is the reference grammar and label of
+the Bible reader, ported from `src/extras/bible.cpp` into
+`runtime/lua/features/bible/reference.lua` and registered as the module loads;
+the C++ copy answers when the module is absent, fails to load, or answers with
+something unusable. The contract is two functions:
+
+```lua
+jot.policy.set("bible.reference", {
+  -- The command's argument in, a reference out, or nil when it is not one.
+  parse = function(text)
+    if text:match("^gospeljn 3:16$") then
+      return { id = "JHN", chapter = 3, has_verse = true,
+               verse_first = 16, verse_last = 16 }
+    end
+    return nil
+  end,
+  -- A reference in, the name the tab strip and the toast print out.
+  label = function(ref)
+    return "John " .. ref.chapter .. ":" .. ref.verse_first
+  end,
+})
+```
+
+A book travels as the id its requests use (`"JHN"`), never as an index or a
+pointer, so the native canon stays the authority on which books exist: a
+reference is accepted only once its id resolves there, and a provider therefore
+cannot open a book the reader cannot fetch. A provider that raises costs a
+fallback rather than the command. Providers are dropped with the rest of the
+runtime on `:reloadplugins`, and the bundled module registers again as the
+reload reaches it, so an edit to `reference.lua` is live after a reload and not
+only after a restart. `jot.lua.reload()` with no name is the same work.
+
 ## Floating Windows
 
 `jot.ui.buffer` and `jot.ui.float` provide native Jot buffer and floating-window
@@ -1301,7 +1348,8 @@ tree-sitter grammar set.
 The pieces to build with are already there: `jot.command` and `jot.keymap` for
 entry points, `jot.autocmd` and `jot.events` for reactions, `jot.buffer` and
 `jot.pane` for content, `jot.ui.float` (with `jot.ui.handler` for a whole
-surface) for boxes, `jot.decoration` and `jot.status` for text and the status
+surface) for boxes, `jot.policy` for a decision the native side would otherwise
+keep, `jot.decoration` and `jot.status` for text and the status
 line, `jot.timer` and `jot.job` for time and processes, `jot.file` and
 `jot.workspace` for the disk, and the raw layer above when none of them fits.
 `jot.capabilities()` lists the namespaces this build answers to.

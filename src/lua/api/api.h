@@ -73,6 +73,12 @@ private:
   // The stack, back() is the top: the owner that sees an event first.
   std::vector<InputMode> input_modes_;
   int next_input_mode_handle_ = 1;
+  // jot.policy providers, by name, holding a registry ref to each table
+  // (api_provider.cpp). Dropped with the rest of the runtime on reload.
+  std::map<std::string, int> lua_policies_;
+  // Pushes the provider's `field` function for `name`, or pushes nothing and
+  // answers 0 when there is no such provider or function.
+  int push_lua_policy_field(const char *name, const char *field);
   // Surface name -> registered handler (jot.ui.handler). Values are registry
   // refs; -1 entries are removed lazily on next emit.
   std::map<std::string, int> lua_ui_handlers_;
@@ -223,6 +229,7 @@ public:
   bool load_markdown_runtime(lua_State *L);
   bool load_html_runtime(lua_State *L);
   bool load_snippet_runtime(lua_State *L);
+  bool load_bible_runtime(lua_State *L);
   bool load_leetcode_runtime(lua_State *L);
   // Bundled AI assistant (features/ai/*.lua): the CodeCompanion-style chat,
   // inline rewrite and provider adapters. Loaded after the snippet runtime
@@ -821,6 +828,35 @@ public:
   void preview_sync_from_lua(lua_State *L);
   void preview_take_scroll_from_lua(lua_State *L);
 
+  // jot.policy (see api_provider.cpp): a named piece of native policy owned by
+  // a bundled Lua module. C++ keeps the mechanism and asks the provider first;
+  // with no provider registered its own implementation answers, so a ported
+  // policy degrades to the old behavior instead of failing.
+  //
+  // The exchange carries plain fields only. A book travels as the id its URLs
+  // use ("JHN"), never as a pointer or an index into the native table, so the
+  // canon the reader can actually fetch stays the authority on which books
+  // exist.
+  struct BibleRefView
+  {
+    std::string book_id;
+    int chapter = 0;
+    bool has_verse = false;
+    int verse_first = 0;
+    int verse_last = 0;
+  };
+  // `index` is a Lua table of functions (or nil to unregister).
+  void set_lua_policy(lua_State *L, const char *name, int index);
+  bool has_lua_policy(const char *name) const;
+  void lua_policy_names_to_lua(lua_State *L);
+  // The bible.reference provider's two calls: the one `:bible` reads its
+  // argument with, and the one the tab strip and the toasts print. Each
+  // answers false when there is no provider, when its field is missing, or
+  // when what came back cannot be used, which is the caller's signal to use
+  // the native implementation.
+  bool bible_policy_parse(const std::string &text, BibleRefView &out);
+  bool bible_policy_label(const BibleRefView &ref, std::string &out);
+
   // jot.lua: the module surface (see api_runtime.cpp). A feature written in
   // Lua is a directory of files under the config dir, resolved through
   // package.path, and reloaded in place -- no rebuild, no restart.
@@ -843,6 +879,8 @@ private:
   // Unrefs the raw layer's three callbacks (see api_screen.cpp). Called from
   // the shutdown and plugin-reload paths, before the Lua state is closed.
   void clear_raw_hooks();
+  // Drops every jot.policy provider (see api_provider.cpp), same two paths.
+  void clear_lua_policies();
 };
 
 #endif

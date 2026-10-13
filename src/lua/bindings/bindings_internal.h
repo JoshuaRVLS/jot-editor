@@ -261,6 +261,11 @@ namespace lua_bind
   int l_input_modes(lua_State *L);
   int l_term_write(lua_State *L);
   int l_term_info(lua_State *L);
+  // jot.policy: named native policy owners, see bindings_plugin.cpp and
+  // api_provider.cpp.
+  int l_policy_set(lua_State *L);
+  int l_policy_has(lua_State *L);
+  int l_policy_names(lua_State *L);
   // jot.lua: the module surface, see bindings_plugin.cpp.
   int l_lua_path(lua_State *L);
   int l_lua_dir(lua_State *L);

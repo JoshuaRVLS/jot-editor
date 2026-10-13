@@ -27,6 +27,7 @@ set(JOT_LUA_SOURCES
   lua/api/api_mark.cpp
   lua/api/api_plugin.cpp
   lua/api/api_preview.cpp
+  lua/api/api_provider.cpp
   lua/api/api_runtime.cpp
   lua/api/api_status.cpp
   lua/api/api_task.cpp
