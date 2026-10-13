@@ -1,7 +1,8 @@
 # Plugins
 
-`jot` runs trusted local Lua plugins in an embedded Lua 5.4 runtime. API
-functions are injected as globals; plugins do not import a package.
+`jot` runs trusted local Lua plugins on the embedded LuaJIT runtime, in the
+dialect docs/LUA_API.md calls "The scripting dialect" (Lua 5.1 plus `utf8`).
+API functions are injected as globals; plugins do not import a package.
 
 Load order:
 
