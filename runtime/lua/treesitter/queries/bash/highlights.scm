@@ -15,7 +15,9 @@
 "declare" @keyword
 "local" @keyword
 "export" @keyword
-"return" @keyword
+; No "return" rule: tree-sitter-bash has no such token (the word is a plain
+; `word` inside a command), and naming a token the grammar does not define
+; fails the whole query rather than the one line.
 (string) @string
 (raw_string) @string
 (comment) @comment

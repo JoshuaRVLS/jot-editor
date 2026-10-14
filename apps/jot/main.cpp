@@ -1,3 +1,4 @@
+#include "base/signal_exit.h"
 #include "core/relaunch.h"
 #include "core/editor.h"
 #include "ui/terminal.h"
@@ -168,6 +169,12 @@ int main(int argc, char *argv[])
   // A target opens it; a bare `jot` lands on the home screen. The last
   // workspace stays one key away there (and `:resume` still restores it), but
   // startup must not reopen a project the user did not ask for.
+  // A signal that means the session is over is turned into an ordinary exit by
+  // the loop's own tick, so the state a session keeps only in memory is written
+  // out and the terminal is handed back (base/signal_exit.h). Installed after
+  // the editor exists: before that there is nothing to write out.
+  signal_exit::install();
+
   if (target)
   {
     editor->set_home_menu_visible(false);

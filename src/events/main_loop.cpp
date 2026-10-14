@@ -1,4 +1,5 @@
 // The editor main loop: run(), the frame render step, and idle drain.
+#include "base/signal_exit.h"
 #include "core/editor.h"
 #include "lua/api/api.h"
 #include "ui/cursor_blink.h"
@@ -462,11 +463,15 @@ void Editor::run()
                           });
   }
 
+  // The once-a-frame exit check, which is also where a signal that means "the
+  // session is over" is noticed: leaving through this door -- rather than dying
+  // in the handler -- is what lets the unwinding write the coding-time total and
+  // the workspace session out and hand the terminal back (base/signal_exit.h).
   event_loop_.set_timer(50,
                         true,
                         [this]
                         {
-                          if (!running)
+                          if (!running || signal_exit::requested())
                             event_loop_.stop();
                         });
 

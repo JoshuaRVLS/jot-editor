@@ -151,7 +151,10 @@ namespace coding_time
 
   void set_total(Totals &totals, const std::string &key, long long ms)
   {
-    if (ms <= 0)
+    // Nothing, or nothing a day could hold: a total past the cap is dropped
+    // rather than written back out, and the reader drops such rows for the same
+    // reason (see kMaxDayMs).
+    if (ms <= 0 || ms > kMaxDayMs)
     {
       totals.erase(key);
       return;
@@ -215,6 +218,13 @@ namespace coding_time
       // of one directory, or a hand edit that added up a day -- are summed
       // rather than the later one replacing the earlier.
       totals[key_for(string_util::unescape_field(parts[0]), date)] += ms;
+    }
+    // A day cannot be longer than a day, so rows that fold past the cap go too:
+    // two spellings of one place can each look plausible and still add up to a
+    // total nobody earned, and showing nothing beats showing that (kMaxDayMs).
+    for (auto it = totals.begin(); it != totals.end();)
+    {
+      it = it->second > kMaxDayMs ? totals.erase(it) : std::next(it);
     }
     return totals;
   }

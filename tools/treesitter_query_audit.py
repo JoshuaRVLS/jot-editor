@@ -7,11 +7,17 @@ to the regex fallback while :tsstatus still reports its parser as installed.
 That is how `(preproc_endif)` in the bundled `c` query disabled highlighting for
 every .c and .h file.
 
-This walks runtime/lua/treesitter/queries/<language>/highlights.scm, pulls the
-node names each query references, and compares them with the named node types of
-the grammar the registry points at (its generated src/node-types.json). A name
-the grammar does not define is reported; names starting with `_` are supertypes
-and wildcards, and ERROR / MISSING are query built-ins, so they are ignored.
+This walks runtime/lua/treesitter/queries/<language>/highlights.scm, pulls every
+node name and literal token each query references, and compares them with the
+node types of the grammar the registry points at (its generated
+src/node-types.json): named types for `(name)` references, anonymous ones for
+`"token"` references. Either kind fails the whole file when the grammar does not
+define it, and the anonymous kind is the one that slips through a check written
+for names alone -- `"return"` in the bundled bash query is exactly that, while
+the tokens a grammar used to spell as literals (`"True"`, now the named `true`)
+move the other way. Names starting with `_` are supertypes and wildcards, and
+ERROR / MISSING are query built-ins, so they are ignored, and a quoted string
+inside a `(#predicate "...")` is an argument rather than a token.
 
 The grammar files are downloaded once and cached under the cache directory, so a
 second run needs no network. A grammar whose node-types.json cannot be fetched
@@ -20,6 +26,7 @@ is reported as unchecked rather than guessed at.
 Usage:
     tools/treesitter_query_audit.py [--queries DIR] [--registry FILE]
                                     [--cache DIR] [--json] [--jobs N]
+                                    [--language a,b]
 
 Exit codes: 0 clean (or nothing checkable), 1 findings, 2 bad arguments.
 """
@@ -104,6 +111,69 @@ def node_names(path: str) -> set[str]:
     return {name for name in NODE_REF.findall(stripped) if not name.startswith("_")}
 
 
+TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"')
+
+
+def strip_predicates(text: str) -> str:
+    """Query source without `;` comments or `(#predicate ...)` forms.
+
+    The quoted arguments of a predicate look exactly like literal tokens
+    (`(#match? @x "^(break|return)$")`), so the form is dropped whole -- its
+    strings and its parentheses -- before tokens are read off what is left.
+    """
+    out = []
+    i = 0
+    while i < len(text):
+        char = text[i]
+        if char == ";":
+            while i < len(text) and text[i] != "\n":
+                i += 1
+            continue
+        if char == "(" and text.startswith("(#", i):
+            depth = 0
+            while i < len(text):
+                if text[i] == '"':
+                    i += 1
+                    while i < len(text) and text[i] != '"':
+                        i += 2 if text[i] == "\\" else 1
+                    i += 1
+                    continue
+                if text[i] == "(":
+                    depth += 1
+                elif text[i] == ")":
+                    depth -= 1
+                    i += 1
+                    if depth == 0:
+                        break
+                    continue
+                i += 1
+            continue
+        out.append(char)
+        i += 1
+    return "".join(out)
+
+
+def unescape_token(token: str) -> str:
+    """A query string literal as the token it names: `\n` is a real newline."""
+    escapes = {"n": "\n", "r": "\r", "t": "\t", "0": "\0", "\\": "\\", '"': '"'}
+    out = []
+    i = 0
+    while i < len(token):
+        if token[i] == "\\" and i + 1 < len(token):
+            out.append(escapes.get(token[i + 1], token[i + 1]))
+            i += 2
+            continue
+        out.append(token[i])
+        i += 1
+    return "".join(out)
+
+
+def query_tokens(path: str) -> set[str]:
+    """Anonymous node types a highlights.scm references, as literal tokens."""
+    text = strip_predicates(open(path, encoding="utf-8").read())
+    return {unescape_token(token) for token in TOKEN.findall(text)}
+
+
 def raw_candidates(url: str, name: str, subdir: str) -> list[str]:
     match = re.match(r"https://github\.com/([^/]+)/([^/]+?)(?:\.git)?$", url)
     if not match:
@@ -131,13 +201,24 @@ def raw_candidates(url: str, name: str, subdir: str) -> list[str]:
     return out
 
 
-def fetch_node_types(name: str, url: str, subdir: str, cache_dir: str) -> tuple[str, set[str] | None]:
-    """The grammar's named node types, or None when they could not be fetched."""
+def node_types(data: list[dict]) -> tuple[set[str], set[str]]:
+    """The grammar's named and anonymous node types, as node-types.json lists
+    them (anonymous entries carry the literal tokens a query can name)."""
+    named = {entry["type"] for entry in data if entry.get("named")}
+    tokens = {entry["type"] for entry in data if not entry.get("named")}
+    return named, tokens
+
+
+def fetch_node_types(
+    name: str, url: str, subdir: str, cache_dir: str
+) -> tuple[str, set[str] | None, set[str] | None]:
+    """The grammar's named and anonymous node types, or None for each when they
+    could not be fetched."""
     cache = os.path.join(cache_dir, f"{name}.json")
     if os.path.exists(cache):
         try:
             data = json.load(open(cache, encoding="utf-8"))
-            return name, {entry["type"] for entry in data if entry.get("named")}
+            return (name, *node_types(data))
         except (ValueError, KeyError):
             os.remove(cache)
 
@@ -154,8 +235,8 @@ def fetch_node_types(name: str, url: str, subdir: str, cache_dir: str) -> tuple[
         os.makedirs(cache_dir, exist_ok=True)
         with open(cache, "wb") as fh:
             fh.write(raw)
-        return name, {entry["type"] for entry in data if entry.get("named")}
-    return name, None
+        return (name, *node_types(data))
+    return name, None, None
 
 
 def main() -> int:
@@ -165,6 +246,8 @@ def main() -> int:
     parser.add_argument("--cache", default=DEFAULT_CACHE)
     parser.add_argument("--json", action="store_true", help="machine-readable report")
     parser.add_argument("--jobs", type=int, default=8)
+    parser.add_argument("--language", default="",
+                        help="only these languages (comma-separated)")
     args = parser.parse_args()
 
     for path in (args.queries, args.registry):
@@ -173,6 +256,14 @@ def main() -> int:
             return 2
 
     languages = parse_registry(args.registry)
+    if args.language:
+        wanted = {name.strip() for name in args.language.split(",") if name.strip()}
+        unknown = sorted(wanted - set(languages))
+        if unknown:
+            print(f"treesitter query audit: not in the registry: {', '.join(unknown)}",
+                  file=sys.stderr)
+            return 2
+        languages = {name: meta for name, meta in languages.items() if name in wanted}
     report = {"checked": 0, "unchecked": [], "findings": {}, "clean": []}
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
@@ -181,18 +272,19 @@ def main() -> int:
             for name, meta in languages.items()
         }
         for future in concurrent.futures.as_completed(futures):
-            name, known = future.result()
-            if known is None:
+            name, known, tokens = future.result()
+            if known is None or tokens is None:
                 report["unchecked"].append(name)
                 continue
             query = os.path.join(args.queries, name, "highlights.scm")
             if not os.path.exists(query):
                 continue
-            used = node_names(query)
-            unknown = sorted(used - known - BUILTINS)
+            unknown = sorted(node_names(query) - known - BUILTINS)
+            unknown_tokens = [f'"{token}"' for token in sorted(query_tokens(query) - tokens)]
+            found = unknown + unknown_tokens
             report["checked"] += 1
-            if unknown:
-                report["findings"][name] = unknown
+            if found:
+                report["findings"][name] = found
             else:
                 report["clean"].append(name)
 
@@ -204,7 +296,7 @@ def main() -> int:
         print(f"{name}: {', '.join(report['findings'][name])}")
     print(
         f"\nchecked {report['checked']} grammars, "
-        f"{len(report['findings'])} with unknown node names, "
+        f"{len(report['findings'])} with unknown node names or tokens, "
         f"{len(report['unchecked'])} not checkable"
     )
     if report["unchecked"]:

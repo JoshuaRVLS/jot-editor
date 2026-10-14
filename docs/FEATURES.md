@@ -1088,7 +1088,9 @@ the workspace in front of you, from one of two places:
   project is one line: the key is the workspace path, canonicalized (a trailing
   separator dropped, a relative spelling resolved against the directory the
   editor was started in), and rows already in the file that fold onto the same
-  project and day add up.
+  project and day add up. A row past a day (86400000 ms) is dropped rather than
+  reported: a day cannot hold more than a day, and the store carried impossible
+  24 and 67 hour days while the counter was credited against the wrong clock.
 
 The chip shows WakaTime's answer whenever it carries a total, and the locally
 stored one otherwise. A total that reports no time at all (`0 secs`) does not
@@ -1100,7 +1102,10 @@ glyph beside the number says which of the two is speaking.
 Today's WakaTime total is fetched at most once a minute, on the worker queue, so
 a slow API never stalls a keystroke; a heartbeat is spawned detached for the same
 reason. The local total is written out at most once a minute while it is moving,
-and once more when the editor shuts down.
+and once more when the editor shuts down. A session ended by a signal -- a
+`kill`, a service manager stopping it, the terminal being closed -- shuts down
+the same way instead of dying where it stands, so today's total and the
+workspace session survive it and the terminal is handed back.
 
 [waka]: https://wakatime.com/help/creating-plugin
 

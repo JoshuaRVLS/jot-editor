@@ -26,6 +26,12 @@ namespace coding_time
   // same two minutes WakaTime's own heartbeat limit uses.
   constexpr long long kIdleCapMs = 120000;
 
+  // The most one day can hold, which is the most a stored total for one day can
+  // honestly be. A row past it is damage rather than a day's work -- totals
+  // credited against a wall clock instead of the monotonic one landed at 24 and
+  // 67 hours -- and the chip must not report one of those as today's coding.
+  constexpr long long kMaxDayMs = 24 * 60 * 60 * 1000;
+
   // The milliseconds worth crediting at `now_ms`, given when the user was last
   // seen and when the total was last brought up to date. Zero once the editor
   // has been idle past the cap, and never more than the cap, so a long absence

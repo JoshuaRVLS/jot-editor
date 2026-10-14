@@ -179,6 +179,26 @@ TEST_CASE("Coding time: one project is one key, however it is spelled", "[jot][c
   // A row of nothing adds nothing rather than dropping the day with it.
   REQUIRE(total_for(parse("/work/jot\t" + day + "\t0\n"), project) == 0);
   REQUIRE(parse("/work/jot\t" + day + "\t0\n").empty());
+
+  // A day cannot be longer than a day. The store held 24 and 67 hour days while
+  // the counter was credited against the wall clock, and those rows are damage,
+  // not work: they are dropped rather than reported as a day's coding.
+  const std::string cap = std::to_string(kMaxDayMs);
+  const Totals damaged =
+      parse("/work/jot\t" + day + "\t" + std::to_string(kMaxDayMs + 1) + "\n"
+            + "/work/other\t" + day + "\t" + cap + "\n"
+            + "/work/third\t" + day + "\t86399999\n");
+  REQUIRE(damaged.size() == 2);
+  REQUIRE(total_for(damaged, project) == 0);
+  REQUIRE(total_for(damaged, key_for("/work/other", day)) == kMaxDayMs);
+  // Two spellings that each pass the cap but fold past it are dropped as well.
+  REQUIRE(parse("/work/jot\t" + day + "\t60000000\n/work/jot/\t" + day
+                + "\t60000000\n")
+              .empty());
+  // The writer refuses one too, so a wrong total cannot reach the file.
+  Totals written;
+  set_total(written, project, kMaxDayMs + 1);
+  REQUIRE(written.empty());
 }
 
 TEST_CASE("Coding time: the store lives under the config home", "[jot][coding-time]")

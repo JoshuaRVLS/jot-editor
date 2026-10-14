@@ -30,9 +30,9 @@
 "while" @keyword
 "with" @keyword
 "yield" @keyword
-"True" @keyword
-"False" @keyword
-"None" @keyword
+(true) @keyword
+(false) @keyword
+(none) @keyword
 (string) @string
 (comment) @comment
 (integer) @number

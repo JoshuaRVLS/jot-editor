@@ -19,6 +19,16 @@ reads the Active section: the language's row has to say it is active in the open
 buffer. A language whose parser is not on the machine is skipped; if none is
 runnable the probe skips (exit 2).
 
+The same failure has a second tell that :tsstatus covers up, and the probe reads
+that too: the boot log. A bundled query that does not compile is reported there
+line by line ("Tree-sitter bundled query skipped (bash: query compilation failed
+...)"), which is what the editor shows as a message on the way in. No such line
+is allowed at all: the languages with an installed parser are exactly the ones
+whose bundled queries are compiled on the way up, so a skip means a language
+whose curated query is dead weight -- `bash` named the literal token `"return"`
+and `python` the literals `"True"`, `"False"` and `"None"`, none of which the
+current grammars define (python spells them as the named nodes true/false/none).
+
 Usage: test/treesitter_query_probe.py [path-to-jot] [--dump]
 Exit codes: 0 pass, 1 fail, 2 skipped (no binary or no parser).
 """
@@ -71,6 +81,14 @@ def write_workspace(name: str, source: str) -> str:
     return path
 
 
+def skipped_queries(log_path: str) -> list[str]:
+    """The bundled-query skips the boot log reports, one line each."""
+    if not os.path.exists(log_path):
+        return []
+    with open(log_path, errors="replace") as fh:
+        return [line.strip() for line in fh if "bundled query skipped" in line]
+
+
 def active_rows(view: str) -> list[str]:
     """The language column of every row that says `active in open buffer`."""
     rows = []
@@ -96,6 +114,7 @@ def main() -> int:
         return 2
 
     failures = []
+    skipped: set[str] = set()
     for language, name, source in runnable:
         shutil.rmtree(CFG, ignore_errors=True)
         path = write_workspace(name, source)
@@ -105,6 +124,9 @@ def main() -> int:
         if dump:
             print(view)
             print("-" * 70)
+        # Read on every scene and reported once: the compile happens once, at
+        # boot, for every language with an installed parser.
+        skipped.update(skipped_queries(os.path.join(CFG, "logs", "jot_stderr.log")))
         rows = active_rows(view)
         print(f"{language}: active in open buffer: {rows}")
         if language not in rows:
@@ -115,6 +137,10 @@ def main() -> int:
                     break
             failures.append(f"{language}: the {name} buffer is not using tree-sitter; "
                             f"its row reads {detail!r}")
+
+    for reason in sorted(skipped):
+        failures.append(f"a bundled query did not compile, so its language is on "
+                        f"another source: {reason}")
 
     if failures:
         for failure in failures:
