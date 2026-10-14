@@ -349,6 +349,18 @@ settles, so scrolling a long way does not grow the process.
   own, and a parenthesized language is skipped when it has no query. A predicate
   this build does not know is treated as satisfied rather than as a failure, so
   a query file written for another editor still highlights.
+- Embedded languages: a language's `injections.scm` names the nodes that hold a
+  different language -- a SQL string in Python, CSS in HTML, a shell here-doc, a
+  fenced code block in Markdown -- and that text is parsed with its own grammar
+  and coloured by its own query, over the host's colours inside the region. The
+  language can be a literal (`(#set! injection.language "sql")`), the text of an
+  `@injection.language` capture (a fenced block's info string, a variable's
+  name) or an `@injection.filename` capture's extension. A region whose language
+  has no parser installed keeps the host's colouring. Work stays with the
+  visible line: only the regions touching it are parsed, and a line's colours
+  are cached, so a long block costs one parse per line rather than one per
+  frame. Regions named by `(#set! injection.combined)` are parsed one by one
+  rather than as one document.
 - Code folding with toggle/collapse/expand, mouse toggling, and persisted
   collapsed ranges. A language's `folds.scm` (the same file nvim-treesitter
   ships, read from the query paths `:tsinstall` writes to) decides the ranges

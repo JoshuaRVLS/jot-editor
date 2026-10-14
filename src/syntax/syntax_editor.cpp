@@ -5,6 +5,7 @@
 #include "syntax/manager.h"
 #include "syntax/query_predicates.h"
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #if defined(__GLIBC__)
 #include <malloc.h>
@@ -192,13 +193,23 @@ namespace
     return offsets[line_idx];
   }
 
-  // Source text a predicate compares a captured node against, read out of the
-  // buffer by the tree points the match carries. A row past the last line can
-  // only come from a tree older than the buffer; those read as empty, which the
-  // text predicates treat as satisfied.
-  jot_query::TextReader buffer_text_reader(FileBuffer &buf)
+  // Byte-range reading of the buffer, for predicates that compare a captured
+  // node against its own text and for the text an injected region parses. A row
+  // past the last line can only come from a tree older than the buffer; those
+  // read as empty, which the text predicates treat as satisfied.
+  jot_query::TextReader buffer_text_reader(FileBuffer &buf, TSPoint origin = {0, 0})
   {
-    return [&buf](TSPoint start, TSPoint end) {
+    return [&buf, origin](TSPoint start, TSPoint end) {
+      // A child tree's points are relative to the region it was parsed from:
+      // every row moves by the region's first row, and a point on the region's
+      // own first row moves by its first column too.
+      if (origin.row != 0 || origin.column != 0)
+      {
+        start = {(uint32_t)(origin.row + start.row),
+                 (uint32_t)(start.row == 0 ? origin.column + start.column : start.column)};
+        end = {(uint32_t)(origin.row + end.row),
+               (uint32_t)(end.row == 0 ? origin.column + end.column : end.column)};
+      }
       std::string out;
       const int line_count = buf.line_count();
       for (uint32_t row = start.row; row <= end.row && row < (uint32_t)line_count; row++)
@@ -266,8 +277,290 @@ namespace
     point.column = (uint32_t)column;
   }
 
+  // The `.ext` of a file name, lowercased, or an empty string when it has none.
+  // The name arrives as node text from an injection capture, so it is a bare
+  // name (or a path) rather than a buffer path.
+  std::string extension_of_file_name(const std::string &file_name)
+  {
+    const size_t slash = file_name.find_last_of("/\\");
+    const size_t dot = file_name.find_last_of('.');
+    if (dot == std::string::npos || (slash != std::string::npos && dot < slash))
+    {
+      return "";
+    }
+    std::string extension = file_name.substr(dot);
+    std::transform(extension.begin(),
+                   extension.end(),
+                   extension.begin(),
+                   [](unsigned char c) { return (char)std::tolower(c); });
+    return extension;
+  }
+
+  std::string trim_spaces(const std::string &text)
+  {
+    size_t begin = 0;
+    size_t end = text.size();
+    while (begin < end && std::isspace((unsigned char)text[begin]))
+    {
+      begin++;
+    }
+    while (end > begin && std::isspace((unsigned char)text[end - 1]))
+    {
+      end--;
+    }
+    return text.substr(begin, end - begin);
+  }
+
+  // Paints the colours of an embedded language over the cells its region owns.
+  //
+  // A host file often holds a whole other language inside one node -- a SQL
+  // string in Python, CSS in HTML, a shell here-doc, a fenced code block in
+  // Markdown -- and the host grammar can only call that text a string. The
+  // language's own `injections.scm` says which nodes those are and what
+  // language each one holds; the region's text is parsed with that language's
+  // grammar and its captures are painted over the host's inside the region.
+  //
+  // The work is bounded to the line being coloured: the injection query runs
+  // over that line's byte window, and only the regions touching it are parsed.
+  // A line's colours are then cached, so a 300-line block costs one parse per
+  // line rather than one per frame.
+  void paint_injected_highlights(FileBuffer &buf,
+                                 int line_idx,
+                                 const std::string &extension,
+                                 int limit,
+                                 std::vector<std::pair<int, int>> &colors,
+                                 TreeSitterManager &manager)
+  {
+    if (!buf.ts_tree || limit <= 0 || colors.empty())
+    {
+      return;
+    }
+    TSQuery *injection_query = manager.get_injection_query(extension);
+    if (!injection_query)
+    {
+      return;
+    }
+    const uint32_t line_start = line_start_byte(buf, line_idx);
+    const bool has_conditions = jot_query::query_has_conditions(injection_query);
+    const jot_query::TextReader read_buffer_text = buffer_text_reader(buf);
+
+    TSQueryCursor *cursor = ts_query_cursor_new();
+    if (!cursor)
+    {
+      return;
+    }
+    ts_query_cursor_set_byte_range(cursor, line_start, line_start + (uint32_t)limit);
+    ts_query_cursor_exec(cursor, injection_query, ts_tree_root_node(buf.ts_tree));
+
+    // Child captures are painted over the host's inside the region, so the one
+    // question they answer is which child capture wins a cell: the priorities
+    // only order them among themselves.
+    std::vector<int> child_priorities(colors.size(), 0);
+
+    TSQueryMatch match;
+    while (ts_query_cursor_next_match(cursor, &match))
+    {
+      if (has_conditions && !jot_query::match_satisfies(injection_query, match, read_buffer_text))
+      {
+        continue;
+      }
+      const jot_query::InjectionDirectives directives =
+          jot_query::injection_directives(injection_query, match.pattern_index);
+      std::string language = directives.language;
+      TSNode content = {};
+      bool have_content = false;
+      for (uint16_t ci = 0; ci < match.capture_count; ci++)
+      {
+        const TSQueryCapture cap = match.captures[ci];
+        uint32_t name_len = 0;
+        const char *name = ts_query_capture_name_for_id(injection_query, cap.index, &name_len);
+        const std::string capture_name(name, name_len);
+        if (capture_name == "injection.content")
+        {
+          content = cap.node;
+          have_content = true;
+        }
+        else if (capture_name == "injection.language")
+        {
+          // The language for this match can be data rather than a constant:
+          // a fenced block's info string (` ```python `) names it.
+          language = trim_spaces(
+              read_buffer_text(ts_node_start_point(cap.node), ts_node_end_point(cap.node)));
+        }
+        else if (capture_name == "injection.filename")
+        {
+          // Some queries name a file instead, and its extension says the
+          // language (`(comment) @injection.content (#set! injection.filename)
+          // ...`): the capture's own text is the file name.
+          const std::string file_name = trim_spaces(
+              read_buffer_text(ts_node_start_point(cap.node), ts_node_end_point(cap.node)));
+          language = manager.language_id_for_extension(extension_of_file_name(file_name));
+        }
+      }
+      if (!have_content)
+      {
+        continue;
+      }
+      const std::string child_id = manager.language_for_extension(language);
+      if (child_id.empty())
+      {
+        continue;
+      }
+      const TSPoint region_start = ts_node_start_point(content);
+      const TSPoint region_end = ts_node_end_point(content);
+      const int child_row = line_idx - (int)region_start.row;
+      const int child_last_row = (int)region_end.row - (int)region_start.row;
+      if (child_row < 0 || child_row > child_last_row)
+      {
+        continue;
+      }
+      TSQuery *child_query = manager.get_highlight_query_for_language(child_id);
+      if (!child_query)
+      {
+        continue;
+      }
+      TSParser *child_parser = manager.create_parser_for_language(child_id);
+      if (!child_parser)
+      {
+        continue;
+      }
+      const std::string region =
+          read_buffer_text(region_start, region_end);
+      TSTree *child_tree = ts_parser_parse_string(
+          child_parser, nullptr, region.c_str(), (uint32_t)region.size());
+      ts_parser_delete(child_parser);
+      if (!child_tree)
+      {
+        continue;
+      }
+
+      // The child's row `child_row` is this buffer line, and its byte range is
+      // what bounds the child query to it. region_line_offsets[r] is where row r
+      // of the region text starts, which is also how a child point turns into a
+      // byte offset inside the region.
+      std::vector<uint32_t> region_line_offsets;
+      region_line_offsets.push_back(0);
+      for (size_t i = 0; i < region.size(); i++)
+      {
+        if (region[i] == '\n')
+        {
+          region_line_offsets.push_back((uint32_t)i + 1);
+        }
+      }
+      region_line_offsets.push_back((uint32_t)region.size());
+      const auto region_byte = [&region, &region_line_offsets](TSPoint point) -> uint32_t {
+        if (point.row + 1 >= region_line_offsets.size())
+        {
+          return (uint32_t)region.size();
+        }
+        const uint32_t base = region_line_offsets[point.row];
+        const uint32_t line_end = region_line_offsets[point.row + 1];
+        const uint32_t line_size = line_end > base ? line_end - base - 1 : 0;
+        return base + std::min(point.column, line_size);
+      };
+      // Predicates in the child query compare the child's own text.
+      const jot_query::TextReader read_region_text = [&region, &region_byte](TSPoint start,
+                                                                            TSPoint end) {
+        const uint32_t from = region_byte(start);
+        const uint32_t to = region_byte(end);
+        return to > from ? region.substr(from, to - from) : std::string();
+      };
+      const uint32_t child_line_start = region_line_offsets[(size_t)child_row];
+      const uint32_t child_line_end = region_line_offsets[(size_t)child_row + 1];
+      const int column_shift = child_row == 0 ? (int)region_start.column : 0;
+
+      const bool child_has_conditions = jot_query::query_has_conditions(child_query);
+      ts_query_cursor_set_byte_range(cursor, child_line_start, child_line_end);
+      ts_query_cursor_exec(cursor, child_query, ts_tree_root_node(child_tree));
+      const uint32_t child_line_len = child_line_end - child_line_start;
+      while (ts_query_cursor_next_match(cursor, &match))
+      {
+        if (child_has_conditions
+            && !jot_query::match_satisfies(child_query, match, read_region_text))
+        {
+          continue;
+        }
+        for (uint16_t ci = 0; ci < match.capture_count; ci++)
+        {
+          const TSQueryCapture cap = match.captures[ci];
+          uint32_t name_len = 0;
+          const char *name = ts_query_capture_name_for_id(child_query, cap.index, &name_len);
+          const std::string capture_name(name, name_len);
+          const int token = tree_sitter_capture_token_for_name(capture_name);
+          if (token == TS_TOKEN_NONE)
+          {
+            continue;
+          }
+          int priority = tree_sitter_capture_priority_for_name(capture_name);
+          uint32_t s = ts_node_start_byte(cap.node);
+          uint32_t e = ts_node_end_byte(cap.node);
+          if (child_has_conditions)
+          {
+            const jot_query::CaptureDirectives capture_directives =
+                jot_query::capture_directives(child_query, match, capture_name);
+            if (capture_directives.has_priority)
+            {
+              priority = capture_directives.priority;
+            }
+            if (capture_directives.has_offset)
+            {
+              // A shifted child capture walks the region's own rows, not the
+              // buffer's: the child tree does not know this file.
+              const auto shifted = [&](TSPoint point, int rows, int columns) -> uint32_t {
+                int row = (int)point.row + rows;
+                int column = (int)point.column + columns;
+                const int last_row = (int)region_line_offsets.size() - 2;
+                while (column < 0 && row > 0)
+                {
+                  column += (int)(region_line_offsets[(size_t)row]
+                                  - region_line_offsets[(size_t)row - 1]);
+                }
+                row = std::clamp(row, 0, std::max(last_row, 0));
+                const uint32_t base = region_line_offsets[(size_t)row];
+                const uint32_t line_size = region_line_offsets[(size_t)row + 1] > base
+                                               ? region_line_offsets[(size_t)row + 1] - base - 1
+                                               : 0;
+                column = std::clamp(column, 0, (int)line_size);
+                return base + (uint32_t)column;
+              };
+              s = shifted(ts_node_start_point(cap.node),
+                          capture_directives.start_row,
+                          capture_directives.start_column);
+              e = shifted(ts_node_end_point(cap.node),
+                          capture_directives.end_row,
+                          capture_directives.end_column);
+            }
+          }
+          uint32_t start = s > child_line_start ? s - child_line_start : 0;
+          uint32_t end = e > child_line_start ? e - child_line_start : 0;
+          end = std::min(end, child_line_len);
+          if (start >= child_line_len)
+          {
+            continue;
+          }
+          for (uint32_t col = start; col < end; col++)
+          {
+            const int target = column_shift + (int)col;
+            if (target < 0 || target >= (int)colors.size())
+            {
+              continue;
+            }
+            if (priority >= child_priorities[(size_t)target])
+            {
+              child_priorities[(size_t)target] = priority;
+              colors[(size_t)target] = {1, token};
+            }
+          }
+        }
+      }
+      ts_tree_delete(child_tree);
+    }
+    ts_query_cursor_delete(cursor);
+  }
+
   std::vector<std::pair<int, int>>
-  query_ts_highlights(FileBuffer &buf, int line_idx, TSQuery *query, TSTree *tree, int byte_limit)
+  query_ts_highlights(FileBuffer &buf, int line_idx, TSQuery *query, TSTree *tree, int byte_limit,
+                      const std::string &extension, TreeSitterManager &manager)
   {
     if (!query || !tree)
     {
@@ -363,6 +656,7 @@ namespace
       }
     }
     ts_query_cursor_delete(cursor);
+    paint_injected_highlights(buf, line_idx, extension, limit, colors, manager);
     return colors;
   }
 #endif
@@ -917,7 +1211,8 @@ Editor::get_line_syntax_colors(FileBuffer &buf, int line_idx, int byte_limit)
 #ifdef JOT_TREESITTER
   if (query)
   {
-    cache.colors = query_ts_highlights(buf, line_idx, query, buf.ts_tree, limit);
+    cache.colors =
+        query_ts_highlights(buf, line_idx, query, buf.ts_tree, limit, ts_extension, ts_manager_);
     cache.line_hash = line_hash;
     cache.line_length = line.length();
     cache.colors_upto = (std::size_t)limit;

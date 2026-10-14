@@ -221,6 +221,15 @@ public:
   // :tsinstall writes it), or nullptr when the language has none. Cached the
   // same way the highlight query is.
   TSQuery *get_fold_query(const std::string &extension);
+  // The query that says where this language embeds another one
+  // (`injections.scm`, same paths), or nullptr when it embeds nothing.
+  TSQuery *get_injection_query(const std::string &extension);
+  // The highlight query of a language named by an injection directive, or
+  // nullptr when that language has none registered.
+  TSQuery *get_highlight_query_for_language(const std::string &language_id);
+  // A parser for a language named by an injection directive (the name in the
+  // directive is the registry's, not an extension).
+  TSParser *create_parser_for_language(const std::string &language_id) const;
 
   // Reparse `text` reusing `tree`, which must describe `base`. One bounded
   // ts_tree_edit covering the diff between `base` and `text` is applied first,
@@ -298,9 +307,12 @@ private:
     bool used_builtin = false;
   };
 
-  // Candidates, modelines, compile, cache: what a query lookup does for both
-  // query kinds.
-  QueryLookup lookup_query(const std::string &extension,
+  // Candidates, modelines, compile, cache: what a query lookup does for every
+  // query kind. The language is already resolved and its parser loaded by the
+  // caller, which is what lets the injection pass ask for a *child* language's
+  // highlight query without going through an extension.
+  QueryLookup lookup_query(const std::string &language_id,
+                           const TSLanguage *lang,
                            const char *file_name,
                            const std::string &stored_source,
                            std::unordered_map<std::string, TSQuery *> &cache);
@@ -340,6 +352,8 @@ private:
   std::unordered_map<std::string, TSQuery *> query_cache_;
   std::unordered_map<std::string, TSQuery *> fold_query_cache_;
   mutable std::unordered_map<std::string, std::string> fold_query_diagnostics_;
+  std::unordered_map<std::string, TSQuery *> injection_query_cache_;
+  mutable std::unordered_map<std::string, std::string> injection_query_diagnostics_;
   std::unordered_map<TreeSitterHandle, TSParser *> lua_parsers_;
   std::unordered_map<TreeSitterHandle, TSTree *> lua_trees_;
   std::unordered_map<TreeSitterHandle, TSQuery *> lua_queries_;

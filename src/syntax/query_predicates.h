@@ -81,6 +81,19 @@ namespace jot_query
   // line skips the per-match predicate and per-capture directive lookups (and
   // the source text they compare against) entirely for those files.
   bool query_has_conditions(const TSQuery *query);
+
+  // What a pattern says about injecting another language into its content:
+  //
+  //   (#set! injection.language "sql")   the language to parse it with
+  //
+  // The language can also come from an `@injection.language` capture, whose
+  // node text names it; that one is read from the match, not from here.
+  struct InjectionDirectives
+  {
+    std::string language;
+  };
+
+  InjectionDirectives injection_directives(const TSQuery *query, uint32_t pattern_index);
 #endif // JOT_TREESITTER
 
   // Lua patterns, for the `#lua-match?` predicate: anchors (^ $), character

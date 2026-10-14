@@ -179,36 +179,22 @@ std::string TreeSitterManager::expand_query_modelines(const std::string &source,
 // (the bundled one), which only the highlight query has -- the fold queries
 // come from the query paths, where :tsinstall writes them.
 TreeSitterManager::QueryLookup
-TreeSitterManager::lookup_query(const std::string &extension,
+TreeSitterManager::lookup_query(const std::string &language_id,
+                               const TSLanguage *lang,
                                const char *file_name,
                                const std::string &stored_source,
                                std::unordered_map<std::string, TSQuery *> &cache)
 {
   QueryLookup result;
-  auto ext_it = ext_to_lang_.find(extension);
-  if (ext_it == ext_to_lang_.end())
-  {
-    return result;
-  }
-  const std::string &language_id = ext_it->second;
-  auto cached = cache.find(language_id);
-  if (cached != cache.end())
-  {
-    result.query = cached->second;
-    return result;
-  }
-
-  TSParser *parser = create_parser(extension);
-  if (!parser)
+  if (lang == nullptr)
   {
     result.diagnostic = "parser unavailable";
     return result;
   }
-  const TSLanguage *lang = ts_parser_language(parser);
-  ts_parser_delete(parser);
-  if (!lang)
+  auto cached = cache.find(language_id);
+  if (cached != cache.end())
   {
-    result.diagnostic = "parser has no language";
+    result.query = cached->second;
     return result;
   }
 
@@ -319,25 +305,80 @@ TreeSitterManager::lookup_query(const std::string &extension,
 TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension)
 {
   const std::string language_id = language_for_extension(extension);
+  const TSLanguage *lang = load_language(language_id);
+  if (!lang)
+  {
+    query_diagnostics_[language_id] = "parser unavailable";
+    return nullptr;
+  }
   std::string stored_source;
   auto entry_it = languages_.find(language_id);
   if (entry_it != languages_.end())
   {
     stored_source = entry_it->second.highlight_query_source;
   }
-  QueryLookup lookup = lookup_query(extension, "highlights.scm", stored_source, query_cache_);
+  QueryLookup lookup = lookup_query(
+      language_id, lang, "highlights.scm", stored_source, query_cache_);
   runtime_query_used_[language_id] = lookup.used_runtime;
   builtin_query_used_[language_id] = lookup.used_builtin;
   query_diagnostics_[language_id] = lookup.diagnostic;
   return lookup.query;
 }
 
+TSQuery *TreeSitterManager::get_highlight_query_for_language(const std::string &language_id)
+{
+  const TSLanguage *lang = load_language(language_id);
+  if (!lang)
+  {
+    return nullptr;
+  }
+  std::string stored_source;
+  auto entry_it = languages_.find(language_id);
+  if (entry_it != languages_.end())
+  {
+    stored_source = entry_it->second.highlight_query_source;
+  }
+  return lookup_query(language_id, lang, "highlights.scm", stored_source, query_cache_).query;
+}
+
 TSQuery *TreeSitterManager::get_fold_query(const std::string &extension)
 {
   const std::string language_id = language_for_extension(extension);
-  QueryLookup lookup = lookup_query(extension, "folds.scm", std::string(), fold_query_cache_);
+  QueryLookup lookup = lookup_query(
+      language_id, load_language(language_id), "folds.scm", std::string(), fold_query_cache_);
   fold_query_diagnostics_[language_id] = lookup.diagnostic;
   return lookup.query;
+}
+
+TSQuery *TreeSitterManager::get_injection_query(const std::string &extension)
+{
+  const std::string language_id = language_for_extension(extension);
+  QueryLookup lookup = lookup_query(language_id,
+                                    load_language(language_id),
+                                    "injections.scm",
+                                    std::string(),
+                                    injection_query_cache_);
+  injection_query_diagnostics_[language_id] = lookup.diagnostic;
+  return lookup.query;
+}
+
+TSParser *TreeSitterManager::create_parser_for_language(const std::string &language_id) const
+{
+  const TSLanguage *language = load_language(language_id);
+  if (!language)
+  {
+    return nullptr;
+  }
+  TSParser *parser = ts_parser_new();
+  if (!parser || !ts_parser_set_language(parser, language))
+  {
+    if (parser)
+    {
+      ts_parser_delete(parser);
+    }
+    return nullptr;
+  }
+  return parser;
 }
 #endif
 

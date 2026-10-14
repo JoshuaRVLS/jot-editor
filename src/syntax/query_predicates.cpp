@@ -777,6 +777,34 @@ namespace jot_query
     return false;
   }
 
+  InjectionDirectives injection_directives(const TSQuery *query, uint32_t pattern_index)
+  {
+    InjectionDirectives out;
+    if (!query)
+    {
+      return out;
+    }
+    for (const Form &form : forms_of(query, pattern_index))
+    {
+      if (form.name != "set!")
+      {
+        continue;
+      }
+      // Both forms appear: `(#set! injection.language "sql")` and, for
+      // completeness, `(#set! @capture injection.language "sql")`.
+      const size_t key = (form.args.size() >= 1 && form.args[0].capture) ? 1 : 0;
+      if (form.args.size() <= key)
+      {
+        continue;
+      }
+      if (form.args[key].value == "injection.language" && form.args.size() > key + 1)
+      {
+        out.language = form.args[key + 1].value;
+      }
+    }
+    return out;
+  }
+
   bool query_has_conditions(const TSQuery *query)
   {
     if (!query)
