@@ -559,6 +559,91 @@ namespace
     ts_query_cursor_delete(cursor);
   }
 
+  // What a `textobjects.scm` capture name says: which kind of object it names
+  // and whether it is the object's contents or the object itself.
+  //
+  // The two spellings in the wild are nvim-treesitter's (`@function.inner`,
+  // `@function.outer`) and Helix's (`@function.inside`, `@function.around`),
+  // and this editor calls a parameter an `argument`, so all of them are read
+  // here rather than making the query files pick a dialect.
+  struct TextobjectCapture
+  {
+    std::string kind;
+    bool inner = false;
+  };
+
+  TextobjectCapture parse_textobject_capture(const std::string &capture_name)
+  {
+    TextobjectCapture out;
+    const size_t dot = capture_name.rfind('.');
+    if (dot == std::string::npos)
+    {
+      return out;
+    }
+    const std::string base = capture_name.substr(0, dot);
+    const std::string side = capture_name.substr(dot + 1);
+    out.kind = base == "parameter" ? "argument" : base;
+    if (side == "inner" || side == "inside")
+    {
+      out.inner = true;
+    }
+    else if (side != "outer" && side != "around")
+    {
+      out.kind.clear();
+    }
+    return out;
+  }
+
+  struct TextobjectRange
+  {
+    uint32_t start = 0;
+    uint32_t end = 0;
+    bool inner = false;
+  };
+
+  // Every object of `kind` the language's textobjects.scm names. The query runs
+  // over the whole tree, which is the same order of work as walking it: the
+  // file names the nodes directly, so nothing has to be looked up per node.
+  std::vector<TextobjectRange>
+  gather_textobjects(FileBuffer &buf, TSQuery *query, const std::string &kind)
+  {
+    std::vector<TextobjectRange> objects;
+    TSQueryCursor *cursor = ts_query_cursor_new();
+    if (!cursor)
+    {
+      return objects;
+    }
+    const bool has_conditions = jot_query::query_has_conditions(query);
+    const jot_query::TextReader read_text = buffer_text_reader(buf);
+    ts_query_cursor_exec(cursor, query, ts_tree_root_node(buf.ts_tree));
+    TSQueryMatch match;
+    while (ts_query_cursor_next_match(cursor, &match))
+    {
+      if (has_conditions && !jot_query::match_satisfies(query, match, read_text))
+      {
+        continue;
+      }
+      for (uint16_t i = 0; i < match.capture_count; i++)
+      {
+        uint32_t name_len = 0;
+        const char *name = ts_query_capture_name_for_id(query, match.captures[i].index, &name_len);
+        const TextobjectCapture capture = parse_textobject_capture(std::string(name, name_len));
+        if (capture.kind != kind)
+        {
+          continue;
+        }
+        const uint32_t start = ts_node_start_byte(match.captures[i].node);
+        const uint32_t end = ts_node_end_byte(match.captures[i].node);
+        if (end > start)
+        {
+          objects.push_back({start, end, capture.inner});
+        }
+      }
+    }
+    ts_query_cursor_delete(cursor);
+    return objects;
+  }
+
   // What an `indents.scm` capture asks of the node it is on (query_predicates.h
   // names the file; these are its capture names).
   struct IndentMarks
@@ -972,6 +1057,124 @@ void Editor::refresh_fold_ranges(FileBuffer &buf)
   }
 #endif
   Folding::refresh_ranges(buf.fold_ranges, buf.lines, get_file_extension(buf.filepath));
+}
+
+// The syntax object `kind` the language's `textobjects.scm` names at `at`:
+// the smallest one whose range contains it, taken on the inner or the outer
+// side (the object's contents, or the object itself).
+//
+// `exclude_start`/`exclude_end` is the range the caller already has selected;
+// the matching object is skipped, which is what lets a second press of the same
+// key walk out to the enclosing object instead of standing still. Returns false
+// when the language has no textobject query or names no such object there, so
+// the caller's own table answers instead.
+bool Editor::query_textobject_at(FileBuffer &buf,
+                                 const std::string &extension,
+                                 const std::string &kind,
+                                 bool inner,
+                                 uint32_t at,
+                                 uint32_t exclude_start,
+                                 uint32_t exclude_end,
+                                 uint32_t &start,
+                                 uint32_t &end)
+{
+  if (extension.empty() || !buf.ts_tree)
+  {
+    return false;
+  }
+  TSQuery *query = ts_manager_.get_textobject_query(extension);
+  if (!query)
+  {
+    return false;
+  }
+  const std::vector<TextobjectRange> objects = gather_textobjects(buf, query, kind);
+  // The side asked for, then the other one: a file may name only one side of a
+  // kind (`(function_call) @call.outer` with no inner), and taking the object
+  // itself beats taking nothing.
+  const std::vector<bool> sides = inner ? std::vector<bool>{true, false} : std::vector<bool>{false};
+  for (bool want_inner : sides)
+  {
+    const TextobjectRange *best = nullptr;
+    for (const TextobjectRange &object : objects)
+    {
+      if (object.inner != want_inner)
+      {
+        continue;
+      }
+      if (at < object.start || at > object.end)
+      {
+        continue;
+      }
+      if (object.start == exclude_start && object.end == exclude_end)
+      {
+        continue;
+      }
+      // The innermost object wins: a parameter inside an argument list inside a
+      // call is three objects, and the caret is in the smallest.
+      if (!best || (object.end - object.start) < (best->end - best->start))
+      {
+        best = &object;
+      }
+    }
+    if (best)
+    {
+      start = best->start;
+      end = best->end;
+      return true;
+    }
+  }
+  return false;
+}
+
+// The start of the nearest syntax object of `kind` from `from`, in `direction`
+// (positive is forward). False when the language names none that way.
+bool Editor::query_textobject_relative(FileBuffer &buf,
+                                       const std::string &extension,
+                                       const std::string &kind,
+                                       uint32_t from,
+                                       int direction,
+                                       uint32_t *target)
+{
+  if (!target || extension.empty() || !buf.ts_tree)
+  {
+    return false;
+  }
+  TSQuery *query = ts_manager_.get_textobject_query(extension);
+  if (!query)
+  {
+    return false;
+  }
+  // Jumps land on the object itself when the file names it, and on its contents
+  // only when that is all there is: landing inside a body rather than on the
+  // definition's line would be a different key's job.
+  const std::vector<TextobjectRange> objects = gather_textobjects(buf, query, kind);
+  for (bool want_inner : {false, true})
+  {
+    bool found = false;
+    uint32_t best = 0;
+    for (const TextobjectRange &object : objects)
+    {
+      if (object.inner != want_inner)
+      {
+        continue;
+      }
+      if (direction > 0 ? object.start <= from : object.start >= from)
+      {
+        continue;
+      }
+      if (!found || (direction > 0 ? object.start < best : object.start > best))
+      {
+        best = object.start;
+        found = true;
+      }
+    }
+    if (found)
+    {
+      *target = best;
+      return true;
+    }
+  }
+  return false;
 }
 
 // The indent of the empty line a new line takes below buffer line `line_idx`,

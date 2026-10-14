@@ -371,6 +371,14 @@ settles, so scrolling a long way does not grow the process.
   and `(#set! indent.start_at_same_line)` for a block written before its body
   exists. `@indent.align` is not applied: a line an aligned block would place at
   its opening delimiter's column gets its enclosing block's level instead.
+- Syntax objects from the language's `textobjects.scm`: which node is the
+  function, the class, the parameter, the comment, the statement, and what each
+  one's inside is. The query names them (`@function.inner` / `@function.outer`,
+  and Helix's `@function.inside` / `@function.around` spellings), so a language
+  the bundled table has never heard of still has working text objects. The same
+  query drives select-inside/around, delete/yank-inside/around and the
+  next/previous class walk and next/previous function jump; a language with no
+  query keeps the bundled node-name table.
 - Code folding with toggle/collapse/expand, mouse toggling, and persisted
   collapsed ranges. A language's `folds.scm` (the same file nvim-treesitter
   ships, read from the query paths `:tsinstall` writes to) decides the ranges

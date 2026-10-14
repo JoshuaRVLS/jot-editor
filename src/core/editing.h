@@ -48,6 +48,28 @@ void refresh_fold_ranges(FileBuffer &buf);
 // indent query (or no tree yet), which leaves the caller's own estimate - the
 // text heuristics in EditorFeatures - in place.
 bool query_indent_for_new_line(FileBuffer &buf, int line_idx, int *indent_columns);
+// The syntax object `kind` the language's `textobjects.scm` names at `at`, on
+// the inner or the outer side. The range the caller already has selected
+// (`exclude_start`..`exclude_end`) is skipped, so pressing the key again walks
+// out to the enclosing object. False when the language has no textobject query
+// or names no such object there.
+bool query_textobject_at(FileBuffer &buf,
+                         const std::string &extension,
+                         const std::string &kind,
+                         bool inner,
+                         uint32_t at,
+                         uint32_t exclude_start,
+                         uint32_t exclude_end,
+                         uint32_t &start,
+                         uint32_t &end);
+// The start byte of the nearest syntax object of `kind` from `from`, in
+// `direction` (positive is forward). False when the language names none.
+bool query_textobject_relative(FileBuffer &buf,
+                               const std::string &extension,
+                               const std::string &kind,
+                               uint32_t from,
+                               int direction,
+                               uint32_t *target);
 // Memoizes its filesystem/content probe on the buffer (see syntax.cpp), so
 // the buffer reference is mutable.
 std::string tree_sitter_extension_for_buffer(FileBuffer &buf);

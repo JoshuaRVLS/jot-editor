@@ -162,7 +162,11 @@ void TreeSitterManager::clear_cached_queries()
 {
 #ifdef JOT_TREESITTER
   for (std::unordered_map<std::string, TSQuery *> *cache :
-       {&query_cache_, &fold_query_cache_, &injection_query_cache_, &indent_query_cache_})
+       {&query_cache_,
+        &fold_query_cache_,
+        &injection_query_cache_,
+        &indent_query_cache_,
+        &textobject_query_cache_})
   {
     for (auto &entry : *cache)
     {
@@ -176,6 +180,7 @@ void TreeSitterManager::clear_cached_queries()
   fold_query_diagnostics_.clear();
   injection_query_diagnostics_.clear();
   indent_query_diagnostics_.clear();
+  textobject_query_diagnostics_.clear();
 #endif
 }
 

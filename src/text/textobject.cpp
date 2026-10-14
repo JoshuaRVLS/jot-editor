@@ -331,13 +331,8 @@ bool Editor::select_textobject(const std::string &kind, bool inner)
   {
     return false;
   }
-  const jot_textobjects::Names names =
-      jot_textobjects::names_for_extension(tree_sitter_extension_for_buffer(buf));
-  if (names.empty())
-  {
-    set_message("No syntax objects for this file type");
-    return false;
-  }
+  const std::string extension = tree_sitter_extension_for_buffer(buf);
+  const jot_textobjects::Names names = jot_textobjects::names_for_extension(extension);
   const uint32_t at = byte_for_cursor(buf, buf.cursor);
   // The selection as byte offsets, so "is this already selected?" is a range
   // comparison rather than a guess.
@@ -353,6 +348,25 @@ bool Editor::select_textobject(const std::string &kind, bool inner)
     }
     sel_start = byte_for_cursor(buf, from);
     sel_end = byte_for_cursor(buf, to);
+  }
+
+  // The language's own textobjects.scm names the objects when it has one: the
+  // node types behind "the function here" are the file's business, not a table
+  // this editor keeps. A range already selected is skipped, so a second press
+  // walks out to the next object of the same kind, and when the query names
+  // nothing here the bundled name table answers as before.
+  {
+    uint32_t start = 0;
+    uint32_t end = 0;
+    if (query_textobject_at(buf, extension, kind, inner, at, sel_start, sel_end, start, end))
+    {
+      return select_byte_range(start, end);
+    }
+    if (names.empty())
+    {
+      set_message("No " + kind + " here");
+      return false;
+    }
   }
 
   TSNode node = node_for_range(ts_tree_root_node(buf.ts_tree), at, at);
@@ -429,13 +443,21 @@ bool Editor::goto_relative_object(const std::string &kind, int direction)
   {
     return false;
   }
-  const jot_textobjects::Names names =
-      jot_textobjects::names_for_extension(tree_sitter_extension_for_buffer(buf));
+  const std::string extension = tree_sitter_extension_for_buffer(buf);
+  const jot_textobjects::Names names = jot_textobjects::names_for_extension(extension);
   const uint32_t from = byte_for_cursor(buf, buf.cursor);
+  uint32_t query_target = 0;
 
-  // A flat scan of the whole tree, in document order, filtering to the kind asked
+  // The language's textobjects.scm decides what counts as the next one when it
+  // has one; either way the walk is a flat scan of the whole tree, in document
+  // order, filtering to the kind asked
   // for: cheap enough to run on a keystroke and it cannot miss a definition
   // nested in a class or a namespace the way a sibling walk would.
+  if (query_textobject_relative(buf, extension, kind, from, direction, &query_target))
+  {
+    return select_byte_range(query_target, query_target);
+  }
+
   TSNode found = {};
   bool have_found = false;
   std::vector<TSNode> stack{ts_tree_root_node(buf.ts_tree)};

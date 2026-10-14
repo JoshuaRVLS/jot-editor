@@ -227,6 +227,9 @@ public:
   // The query that says how this language indents (`indents.scm`, same paths),
   // or nullptr when it has none.
   TSQuery *get_indent_query(const std::string &extension);
+  // The query that names this language's syntax objects (`textobjects.scm`,
+  // same paths), or nullptr when it has none.
+  TSQuery *get_textobject_query(const std::string &extension);
   // The highlight query of a language named by an injection directive, or
   // nullptr when that language has none registered.
   TSQuery *get_highlight_query_for_language(const std::string &language_id);
@@ -362,6 +365,8 @@ private:
   mutable std::unordered_map<std::string, std::string> injection_query_diagnostics_;
   std::unordered_map<std::string, TSQuery *> indent_query_cache_;
   mutable std::unordered_map<std::string, std::string> indent_query_diagnostics_;
+  std::unordered_map<std::string, TSQuery *> textobject_query_cache_;
+  mutable std::unordered_map<std::string, std::string> textobject_query_diagnostics_;
   std::unordered_map<TreeSitterHandle, TSParser *> lua_parsers_;
   std::unordered_map<TreeSitterHandle, TSTree *> lua_trees_;
   std::unordered_map<TreeSitterHandle, TSQuery *> lua_queries_;
