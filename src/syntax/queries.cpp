@@ -362,6 +362,15 @@ TSQuery *TreeSitterManager::get_injection_query(const std::string &extension)
   return lookup.query;
 }
 
+TSQuery *TreeSitterManager::get_indent_query(const std::string &extension)
+{
+  const std::string language_id = language_for_extension(extension);
+  QueryLookup lookup = lookup_query(
+      language_id, load_language(language_id), "indents.scm", std::string(), indent_query_cache_);
+  indent_query_diagnostics_[language_id] = lookup.diagnostic;
+  return lookup.query;
+}
+
 TSParser *TreeSitterManager::create_parser_for_language(const std::string &language_id) const
 {
   const TSLanguage *language = load_language(language_id);

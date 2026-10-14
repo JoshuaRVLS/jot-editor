@@ -144,20 +144,7 @@ TreeSitterManager::~TreeSitterManager()
     ts_tree_delete(entry.second);
   for (auto &entry : lua_queries_)
     ts_query_delete(entry.second);
-  for (auto &entry : query_cache_)
-  {
-    if (entry.second)
-    {
-      ts_query_delete(entry.second);
-    }
-  }
-  for (auto &entry : fold_query_cache_)
-  {
-    if (entry.second)
-    {
-      ts_query_delete(entry.second);
-    }
-  }
+  clear_cached_queries();
   for (auto &entry : library_handles_)
   {
     if (entry.second)
@@ -165,6 +152,30 @@ TreeSitterManager::~TreeSitterManager()
       close_library_handle(entry.second);
     }
   }
+#endif
+}
+
+// Deletes every compiled query the caches own. One place, so a new query kind
+// cannot be added without its cache being released here too: the destructor and
+// a language reload both have to give all of them back.
+void TreeSitterManager::clear_cached_queries()
+{
+#ifdef JOT_TREESITTER
+  for (std::unordered_map<std::string, TSQuery *> *cache :
+       {&query_cache_, &fold_query_cache_, &injection_query_cache_, &indent_query_cache_})
+  {
+    for (auto &entry : *cache)
+    {
+      if (entry.second)
+      {
+        ts_query_delete(entry.second);
+      }
+    }
+    cache->clear();
+  }
+  fold_query_diagnostics_.clear();
+  injection_query_diagnostics_.clear();
+  indent_query_diagnostics_.clear();
 #endif
 }
 
@@ -511,23 +522,7 @@ void TreeSitterManager::reload()
   lua_parsers_.clear();
   lua_trees_.clear();
   lua_queries_.clear();
-  for (auto &entry : query_cache_)
-  {
-    if (entry.second)
-    {
-      ts_query_delete(entry.second);
-    }
-  }
-  query_cache_.clear();
-  for (auto &entry : fold_query_cache_)
-  {
-    if (entry.second)
-    {
-      ts_query_delete(entry.second);
-    }
-  }
-  fold_query_cache_.clear();
-  fold_query_diagnostics_.clear();
+  clear_cached_queries();
   parser_languages_.clear();
   for (auto &entry : library_handles_)
   {

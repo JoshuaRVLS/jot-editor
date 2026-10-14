@@ -94,6 +94,20 @@ namespace jot_query
   };
 
   InjectionDirectives injection_directives(const TSQuery *query, uint32_t pattern_index);
+
+  // The `#set!` properties an `indents.scm` pattern carries, which change how a
+  // node's capture is applied:
+  //
+  //   (#set! indent.immediate 1)          a one-line node still opens a block
+  //   (#set! indent.start_at_same_line 1) a node starting on the line being
+  //                                       indented still opens one
+  struct IndentProperties
+  {
+    bool immediate = false;
+    bool start_at_same_line = false;
+  };
+
+  IndentProperties indent_properties(const TSQuery *query, uint32_t pattern_index);
 #endif // JOT_TREESITTER
 
   // Lua patterns, for the `#lua-match?` predicate: anchors (^ $), character

@@ -73,8 +73,15 @@ void Editor::insert_line_below()
   if (auto_indent)
   {
     const std::string &line = buf.lines[buf.cursor.y];
-    const int indent =
+    int indent =
         EditorFeatures::indent_for_new_line(buf.filepath, line, (int)line.size(), tab_size);
+    // The grammar decides when the language ships an `indents.scm`; the text
+    // rules above are the fallback for the ones that do not.
+    int query_indent = 0;
+    if (query_indent_for_new_line(buf, buf.cursor.y, &query_indent))
+    {
+      indent = query_indent;
+    }
     indent_str = EditorFeatures::get_indent_string(indent, tab_size);
   }
   buf.lines.insert(buf.lines.begin() + buf.cursor.y + 1, indent_str);

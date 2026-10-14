@@ -43,6 +43,11 @@ bool query_fold_ranges(FileBuffer &buf, std::vector<FoldRange> &ranges);
 // one, the bracket/indent detector otherwise. The single entry point every
 // caller that recomputes folds should use.
 void refresh_fold_ranges(FileBuffer &buf);
+// The indent (in columns) of the empty line a new line takes below buffer line
+// `line_idx`, from the language's `indents.scm`. False when the language has no
+// indent query (or no tree yet), which leaves the caller's own estimate - the
+// text heuristics in EditorFeatures - in place.
+bool query_indent_for_new_line(FileBuffer &buf, int line_idx, int *indent_columns);
 // Memoizes its filesystem/content probe on the buffer (see syntax.cpp), so
 // the buffer reference is mutable.
 std::string tree_sitter_extension_for_buffer(FileBuffer &buf);

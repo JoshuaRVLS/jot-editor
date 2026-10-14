@@ -224,6 +224,9 @@ public:
   // The query that says where this language embeds another one
   // (`injections.scm`, same paths), or nullptr when it embeds nothing.
   TSQuery *get_injection_query(const std::string &extension);
+  // The query that says how this language indents (`indents.scm`, same paths),
+  // or nullptr when it has none.
+  TSQuery *get_indent_query(const std::string &extension);
   // The highlight query of a language named by an injection directive, or
   // nullptr when that language has none registered.
   TSQuery *get_highlight_query_for_language(const std::string &language_id);
@@ -307,6 +310,9 @@ private:
     bool used_builtin = false;
   };
 
+  // Frees every compiled query the caches hold (destructor and reload).
+  void clear_cached_queries();
+
   // Candidates, modelines, compile, cache: what a query lookup does for every
   // query kind. The language is already resolved and its parser loaded by the
   // caller, which is what lets the injection pass ask for a *child* language's
@@ -354,6 +360,8 @@ private:
   mutable std::unordered_map<std::string, std::string> fold_query_diagnostics_;
   std::unordered_map<std::string, TSQuery *> injection_query_cache_;
   mutable std::unordered_map<std::string, std::string> injection_query_diagnostics_;
+  std::unordered_map<std::string, TSQuery *> indent_query_cache_;
+  mutable std::unordered_map<std::string, std::string> indent_query_diagnostics_;
   std::unordered_map<TreeSitterHandle, TSParser *> lua_parsers_;
   std::unordered_map<TreeSitterHandle, TSTree *> lua_trees_;
   std::unordered_map<TreeSitterHandle, TSQuery *> lua_queries_;

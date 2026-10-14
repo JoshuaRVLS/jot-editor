@@ -6,6 +6,7 @@
 #include "syntax/query_predicates.h"
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <filesystem>
 #if defined(__GLIBC__)
 #include <malloc.h>
@@ -558,6 +559,143 @@ namespace
     ts_query_cursor_delete(cursor);
   }
 
+  // What an `indents.scm` capture asks of the node it is on (query_predicates.h
+  // names the file; these are its capture names).
+  struct IndentMarks
+  {
+    bool begin = false;
+    bool end = false;
+    bool branch = false;
+    bool dedent = false;
+    bool auto_indent = false;
+    bool ignore = false;
+    bool zero = false;
+    bool align = false;
+    jot_query::IndentProperties properties;
+  };
+
+  bool indent_marks_add(IndentMarks &marks, const std::string &capture_name)
+  {
+    if (capture_name == "indent.begin")
+      marks.begin = true;
+    else if (capture_name == "indent.end")
+      marks.end = true;
+    else if (capture_name == "indent.branch")
+      marks.branch = true;
+    else if (capture_name == "indent.dedent")
+      marks.dedent = true;
+    else if (capture_name == "indent.auto")
+      marks.auto_indent = true;
+    else if (capture_name == "indent.ignore")
+      marks.ignore = true;
+    else if (capture_name == "indent.zero")
+      marks.zero = true;
+    else if (capture_name == "indent.align")
+      marks.align = true;
+    else
+      return false;
+    return true;
+  }
+
+  // The indent captures of `node`, looked up by node identity. A node can carry
+  // several at once (Lua's `end` is both a branch and an end), and the begin
+  // ones also carry the pattern's properties.
+  IndentMarks indent_marks_for(const std::vector<std::pair<TSNode, IndentMarks>> &captures,
+                              TSNode node)
+  {
+    IndentMarks marks;
+    for (const auto &capture : captures)
+    {
+      if (!ts_node_eq(capture.first, node))
+      {
+        continue;
+      }
+      marks.begin = marks.begin || capture.second.begin;
+      marks.end = marks.end || capture.second.end;
+      marks.branch = marks.branch || capture.second.branch;
+      marks.dedent = marks.dedent || capture.second.dedent;
+      marks.auto_indent = marks.auto_indent || capture.second.auto_indent;
+      marks.ignore = marks.ignore || capture.second.ignore;
+      marks.zero = marks.zero || capture.second.zero;
+      marks.align = marks.align || capture.second.align;
+      if (capture.second.begin)
+      {
+        marks.properties = capture.second.properties;
+      }
+    }
+    return marks;
+  }
+
+  // Every `indents.scm` capture on the nodes that overlap [start, end): the
+  // blocks, branches and closers the indentation of one line is decided by.
+  // Bounded to that byte window, and an ancestor of a node in the window always
+  // overlaps the window, so the walk below never needs the rest of the file.
+  std::vector<std::pair<TSNode, IndentMarks>> gather_indent_captures(FileBuffer &buf,
+                                                                    TSQuery *query,
+                                                                    TSNode root,
+                                                                    uint32_t start,
+                                                                    uint32_t end)
+  {
+    std::vector<std::pair<TSNode, IndentMarks>> captures;
+    TSQueryCursor *cursor = ts_query_cursor_new();
+    if (!cursor)
+    {
+      return captures;
+    }
+    const bool has_conditions = jot_query::query_has_conditions(query);
+    const jot_query::TextReader read_text = buffer_text_reader(buf);
+    ts_query_cursor_set_byte_range(cursor, start, end);
+    ts_query_cursor_exec(cursor, query, root);
+    TSQueryMatch match;
+    while (ts_query_cursor_next_match(cursor, &match))
+    {
+      if (has_conditions && !jot_query::match_satisfies(query, match, read_text))
+      {
+        continue;
+      }
+      const jot_query::IndentProperties properties =
+          jot_query::indent_properties(query, match.pattern_index);
+      for (uint16_t i = 0; i < match.capture_count; i++)
+      {
+        uint32_t name_len = 0;
+        const char *name = ts_query_capture_name_for_id(query, match.captures[i].index, &name_len);
+        const std::string capture_name(name, name_len);
+        // A leading underscore marks a capture that only feeds a predicate.
+        if (!capture_name.empty() && capture_name[0] == '_')
+        {
+          continue;
+        }
+        IndentMarks marks;
+        if (!indent_marks_add(marks, capture_name))
+        {
+          continue;
+        }
+        marks.properties = properties;
+        captures.push_back({match.captures[i].node, marks});
+      }
+    }
+    ts_query_cursor_delete(cursor);
+    return captures;
+  }
+
+  // The column of the last non-whitespace character of `line`, or UINT32_MAX
+  // when it has none: the position the indenter reads the previous line from.
+  uint32_t last_content_column(const std::string &line)
+  {
+    const size_t at = line.find_last_not_of(" \t\r");
+    return at == std::string::npos ? UINT32_MAX : (uint32_t)at;
+  }
+
+  TSNode node_at_byte(TSTree *tree, uint32_t byte)
+  {
+    if (!tree || byte == UINT32_MAX || byte > ts_node_end_byte(ts_tree_root_node(tree)))
+    {
+      return {};
+    }
+    TSNode root = ts_tree_root_node(tree);
+    return ts_node_descendant_for_byte_range(root, byte, byte);
+  }
+
   std::vector<std::pair<int, int>>
   query_ts_highlights(FileBuffer &buf, int line_idx, TSQuery *query, TSTree *tree, int byte_limit,
                       const std::string &extension, TreeSitterManager &manager)
@@ -834,6 +972,165 @@ void Editor::refresh_fold_ranges(FileBuffer &buf)
   }
 #endif
   Folding::refresh_ranges(buf.fold_ranges, buf.lines, get_file_extension(buf.filepath));
+}
+
+// The indent of the empty line a new line takes below buffer line `line_idx`,
+// from the language's own `indents.scm`.
+//
+// The grammar knows where the blocks are, which is what the text heuristics in
+// EditorFeatures have to guess: the line after `if(A)` belongs one step in, the
+// line after `endif()` does not, a continuation inside a multi-line argument
+// list keeps the indentation the user gave it. The file names those nodes
+// (`@indent.begin`, `@indent.branch`, `@indent.end`, `@indent.auto`), so the
+// answer is a walk up the ancestors of the node the previous line ends with: an
+// open block steps in, a branch or a dedent steps out, and a multiline string
+// or comment asks for the previous line's indentation to be kept.
+//
+// Returns false when the language has no indent query or no usable tree, which
+// leaves the caller's own estimate in place. This is nvim-treesitter's
+// algorithm (indent.lua) without its `@indent.align` delimiter handling, which
+// needs per-capture delimiter metadata no query here uses.
+bool Editor::query_indent_for_new_line(FileBuffer &buf, int line_idx, int *indent_columns)
+{
+  if (!indent_columns)
+  {
+    return false;
+  }
+  const std::string extension = tree_sitter_extension_for_buffer(buf);
+  if (extension.empty() || !ts_manager_.has_language(extension))
+  {
+    return false;
+  }
+  // The parse is asked for here rather than through syntax_tree_ready, which
+  // reports a missing tree in the message line: Enter must not do that.
+  init_ts_for_buffer(buf);
+  if (!buf.ts_tree || !buf.ts_tree_in_sync)
+  {
+    return false;
+  }
+  TSQuery *query = ts_manager_.get_indent_query(extension);
+  if (!query)
+  {
+    return false;
+  }
+  if (line_idx < 0 || line_idx >= buf.line_count())
+  {
+    return false;
+  }
+  TSTree *tree = buf.ts_tree;
+  TSNode root = ts_tree_root_node(tree);
+  const uint32_t shift = (uint32_t)std::max(1, tab_size);
+  const int target_row = line_idx + 1;
+
+  // The line a new line creates is empty, so its indent is decided by the line
+  // above it: the indenter starts from the last node of the previous non-blank
+  // line. A blank previous line means no node of its own to read.
+  int previous = line_idx;
+  while (previous >= 0 && EditorFeatures::is_whitespace(buf.line(previous)))
+  {
+    previous--;
+  }
+  if (previous < 0)
+  {
+    *indent_columns = 0;
+    return true;
+  }
+  const std::string &previous_line = buf.line(previous);
+  const uint32_t previous_start = line_start_byte(buf, previous);
+  const uint32_t previous_end = previous_start + (uint32_t)previous_line.size();
+  const std::vector<std::pair<TSNode, IndentMarks>> captures =
+      gather_indent_captures(buf, query, root, previous_start, previous_end);
+
+  uint32_t column = last_content_column(previous_line);
+  if (column == UINT32_MAX)
+  {
+    *indent_columns = 0;
+    return true;
+  }
+  // A trailing comment is not what the line ends with as far as the grammar of
+  // the code is concerned: `end -- done` ends with `end`. A comment that starts
+  // the line is the line's content, and is read as it is.
+  TSNode node = node_at_byte(tree, previous_start + column);
+  if (!ts_node_is_null(node) && std::string(ts_node_type(node)).find("comment") != std::string::npos)
+  {
+    const uint32_t comment_column = ts_node_start_point(node).column;
+    const std::string before_comment = previous_line.substr(0, std::min<size_t>(comment_column, previous_line.size()));
+    const size_t code_column = before_comment.find_last_not_of(" \t");
+    if (code_column != std::string::npos)
+    {
+      node = node_at_byte(tree, previous_start + (uint32_t)code_column);
+    }
+  }
+  // A node that closes an indented region (`")" @indent.end`) ends the walk:
+  // the line below it belongs to the construct *after* it, so the walk starts
+  // from the node the new line would hold instead.
+  if (!ts_node_is_null(node) && indent_marks_for(captures, node).end)
+  {
+    node = node_at_byte(tree, previous_end + 1);
+  }
+
+  if (!ts_node_is_null(node) && indent_marks_for(captures, node).zero)
+  {
+    *indent_columns = 0;
+    return true;
+  }
+
+  int indent = 0;
+  // Which rows have already contributed a step, so nested nodes starting on one
+  // row cannot each add their own: that is what keeps `[ (a) (b) ] @indent.begin`
+  // from indenting a line twice.
+  std::unordered_map<int, bool> processed_rows;
+  while (!ts_node_is_null(node))
+  {
+    const IndentMarks marks = indent_marks_for(captures, node);
+    const int start_row = (int)ts_node_start_point(node).row;
+    const int end_row = (int)ts_node_end_point(node).row;
+    const bool spans_target = start_row < target_row && target_row <= end_row;
+    // A node the query marks auto/ignore owns the indentation of its own
+    // contents (a multi-line string, a comment, an argument list): the user's
+    // indentation stands, or the line goes to column 0.
+    if (!marks.begin && !marks.align && marks.auto_indent && spans_target)
+    {
+      *indent_columns = EditorFeatures::get_indent_level(previous_line);
+      return true;
+    }
+    if (!marks.begin && marks.ignore && spans_target)
+    {
+      *indent_columns = 0;
+      return true;
+    }
+    const bool should_process = !processed_rows[start_row];
+    bool processed = false;
+    // A branch (`else`, `elif`) starts a region one step out, but only the line
+    // the branch itself is on is dedented: the line after it is its body. A
+    // dedent applies to the lines after the node instead.
+    if (should_process
+        && ((marks.branch && start_row == target_row) || (marks.dedent && start_row != target_row)))
+    {
+      indent -= (int)shift;
+      processed = true;
+    }
+    bool in_error = false;
+    if (should_process)
+    {
+      TSNode parent = ts_node_parent(node);
+      in_error = !ts_node_is_null(parent) && ts_node_has_error(parent);
+    }
+    // An open block steps in. A node that begins and ends on one row does not
+    // unless the query says the block is immediate or it sits inside a parse
+    // error (typing a block before its body exists), and a node starting on the
+    // line being indented does not either unless the query asks for that.
+    if (should_process && marks.begin && (start_row != end_row || in_error || marks.properties.immediate)
+        && (start_row != target_row || marks.properties.start_at_same_line))
+    {
+      indent += (int)shift;
+      processed = true;
+    }
+    processed_rows[start_row] = processed_rows[start_row] || processed;
+    node = ts_node_parent(node);
+  }
+  *indent_columns = std::max(0, indent);
+  return true;
 }
 
 // Open-time whole-file parses that would stall the first paint (e.g. ~460ms

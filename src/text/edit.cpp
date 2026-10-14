@@ -974,6 +974,10 @@ void Editor::new_line()
   std::string current_line = buf.line_mut(buf.cursor.y);
   buf.cursor.x = ui_clamp_to_utf8_boundary(current_line, buf.cursor.x);
   std::string remaining = current_line.substr(buf.cursor.x);
+  // Before the split: the indent query reads the tree, whose byte offsets
+  // describe the line as it still stands.
+  int query_indent = 0;
+  const bool have_query_indent = query_indent_for_new_line(buf, buf.cursor.y, &query_indent);
   buf.line_mut(buf.cursor.y) = current_line.substr(0, buf.cursor.x);
 
   std::string new_line_str = "";
@@ -994,6 +998,11 @@ void Editor::new_line()
       new_line_str = EditorFeatures::get_indent_string(inner_indent, tab_size);
       closing_line_str = EditorFeatures::get_indent_string(closing_indent, tab_size) + remaining;
       split_closing_bracket_line = true;
+    }
+    else if (have_query_indent)
+    {
+      // The language's own `indents.scm` decides where the new line lands.
+      indent = query_indent;
     }
     else
     {

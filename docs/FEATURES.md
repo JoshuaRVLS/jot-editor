@@ -361,6 +361,16 @@ settles, so scrolling a long way does not grow the process.
   are cached, so a long block costs one parse per line rather than one per
   frame. Regions named by `(#set! injection.combined)` are parsed one by one
   rather than as one document.
+- Query-driven indentation: a language's `indents.scm` decides where the line
+  Enter creates starts, in place of the text rules. The grammar knows what the
+  text heuristics have to guess - the line after a control statement or a
+  branch steps in, the line after the block's closer steps back out, a line
+  inside a multi-line argument list keeps the indentation it was given - and the
+  file names those nodes (`@indent.begin`, `@indent.branch`, `@indent.end`,
+  `@indent.auto`, `@indent.dedent`, `@indent.zero`), with `(#set! indent.immediate)`
+  and `(#set! indent.start_at_same_line)` for a block written before its body
+  exists. `@indent.align` is not applied: a line an aligned block would place at
+  its opening delimiter's column gets its enclosing block's level instead.
 - Code folding with toggle/collapse/expand, mouse toggling, and persisted
   collapsed ranges. A language's `folds.scm` (the same file nvim-treesitter
   ships, read from the query paths `:tsinstall` writes to) decides the ranges

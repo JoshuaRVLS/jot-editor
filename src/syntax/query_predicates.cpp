@@ -805,6 +805,49 @@ namespace jot_query
     return out;
   }
 
+  namespace
+  {
+    // A `#set!` value counts as set unless it is explicitly empty or zero:
+    // the queries in the wild write `1`, `true` or nothing at all.
+    bool property_is_set(const std::string &value)
+    {
+      return !value.empty() && value != "0" && value != "false";
+    }
+  } // namespace
+
+  IndentProperties indent_properties(const TSQuery *query, uint32_t pattern_index)
+  {
+    IndentProperties out;
+    if (!query)
+    {
+      return out;
+    }
+    for (const Form &form : forms_of(query, pattern_index))
+    {
+      if (form.name != "set!" || form.args.empty())
+      {
+        continue;
+      }
+      // The key is the first argument; `(#set! @capture key value)` puts a
+      // capture first, and these properties are always pattern-wide.
+      const size_t key = form.args[0].capture ? 1 : 0;
+      if (form.args.size() <= key)
+      {
+        continue;
+      }
+      if (form.args[key].value == "indent.immediate")
+      {
+        out.immediate = form.args.size() > key + 1 ? property_is_set(form.args[key + 1].value) : true;
+      }
+      else if (form.args[key].value == "indent.start_at_same_line")
+      {
+        out.start_at_same_line =
+            form.args.size() > key + 1 ? property_is_set(form.args[key + 1].value) : true;
+      }
+    }
+    return out;
+  }
+
   bool query_has_conditions(const TSQuery *query)
   {
     if (!query)
