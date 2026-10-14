@@ -474,6 +474,29 @@ public:
   void config_has_from_lua(lua_State *L);
   void push_config_keys(lua_State *L);
   void push_config_path(lua_State *L);
+  // The schema behind a key: what it is called, what type it takes, which scope
+  // it has, what it defaults to and what the value in force is (api_config.cpp,
+  // `jot.config.info` / `jot.config.list`).
+  void push_config_info(lua_State *L);
+  void push_config_list(lua_State *L);
+
+  // The scoped readers and writers: `jot.config.get/set/unset` with an opts
+  // table, and the `jot.buffer` / `jot.window` option accessors built on the
+  // same store (api_config.cpp). `namespace_scope` is "buffer" or "window" for
+  // those two namespaces, where the target is the 1-based index argument, and
+  // empty for `jot.config`, where the opts table names it.
+  void option_get_from_lua(lua_State *L, const char *namespace_scope);
+  void option_set_from_lua(lua_State *L, const char *namespace_scope);
+  void option_unset_from_lua(lua_State *L, const char *namespace_scope);
+  // The buffer or pane an option call names (1-based, 0 = the one in front), as
+  // an index into Editor::buffers / Editor::panes, or -1 when there is none.
+  int option_buffer_index(int named) const;
+  int option_pane_index(int named) const;
+  // The local value a buffer or a window holds for `key`, if any: what a local
+  // scope reads and what a set overwrites. `named` is 1-based, 0 = the one in
+  // front.
+  bool buffer_option_local(int named, const std::string &key, std::string &out) const;
+  bool window_option_local(int named, const std::string &key, std::string &out) const;
   void push_editor_info(lua_State *L);
   void push_theme_current(lua_State *L);
   // Resolved colours of a decoration highlight group as 24-bit hex (the

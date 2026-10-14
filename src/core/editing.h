@@ -11,6 +11,17 @@
 // sit in class scope exactly as if they were written in editor.h.
 private:
   std::string get_buffer_text(const FileBuffer &buf) const;
+  // The effective value of an option for one buffer or one window
+  // (core/options.h): the value set on that buffer or pane when it has one
+  // (jot.buffer.set_option / jot.window.set_option), else `global`, which the
+  // caller passes in, usually the editor's own field for the key. The indent
+  // paths and the render walk call these with the buffer or the pane in hand,
+  // which is what makes a local value real rather than a number in a table.
+  int option_int(const FileBuffer &buf, const char *key, int global) const;
+  bool option_bool(const FileBuffer &buf, const char *key, bool global) const;
+  bool window_option_bool(const SplitPane &pane, const char *key, bool global) const;
+  std::string
+  window_option_str(const SplitPane &pane, const char *key, const std::string &global) const;
   // Anchored decorations (see core/app/decorations.cpp): rebase_begin runs
   // before every edit (snapshot + mark dirty), ensure_* lazily shifts the
   // decorations through the pending edit window once, on the next render.

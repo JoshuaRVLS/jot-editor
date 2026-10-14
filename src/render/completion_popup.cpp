@@ -129,6 +129,10 @@ void Editor::render_lsp_completion()
 
   auto &pane = get_pane();
   auto &buf = get_buffer(pane.buffer_id);
+  // The box is anchored on the caret's column, measured the way the pane paints
+  // it: this buffer's own tab width when it holds one (jot.buffer.set_option),
+  // else the session's.
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
   if (!lsp_completion_filepath.empty() && buf.filepath != lsp_completion_filepath)
   {
     hide_lsp_completion();

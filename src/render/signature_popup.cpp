@@ -23,6 +23,10 @@ void Editor::render_lsp_signature()
 
   auto &pane = get_pane();
   auto &buf = get_buffer(pane.buffer_id);
+  // The popup hangs off the caret's column, so it is measured with the width
+  // this buffer's tabs take: its own when it holds one (jot.buffer.set_option),
+  // else the session's, which is what the pane painted the caret at.
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
   if (buf.filepath != lsp_signature_filepath)
   {
     hide_lsp_signature();

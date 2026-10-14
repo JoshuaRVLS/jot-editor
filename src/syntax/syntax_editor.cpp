@@ -1297,7 +1297,10 @@ bool Editor::query_indent_for_new_line(FileBuffer &buf, int line_idx, int *inden
   }
   TSTree *tree = buf.ts_tree;
   TSNode root = ts_tree_root_node(tree);
-  const uint32_t shift = (uint32_t)std::max(1, tab_size);
+  // One indent level is a byte shift in the query's `@indent` handling, so it
+  // is read at the width this buffer indents by: its own when it holds one
+  // (jot.buffer.set_option), else the session's.
+  const uint32_t shift = (uint32_t)std::max(1, option_int(buf, "tab_size", tab_size));
   const int target_row = line_idx + 1;
 
   // The line a new line creates is empty, so its indent is decided by the line

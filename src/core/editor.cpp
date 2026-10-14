@@ -6,8 +6,10 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <ctime>
 #include <filesystem>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -1020,6 +1022,87 @@ namespace
     return true;
   }
 } // namespace
+
+namespace
+{
+  // The stored spelling of a local option (a buffer's or a pane's own value for
+  // a key): the same strings the config store holds, parsed the same way.
+  bool local_option_lookup(const std::map<std::string, std::string> &values,
+                           const char *key,
+                           std::string &out)
+  {
+    if (!key)
+    {
+      return false;
+    }
+    const auto it = values.find(key);
+    if (it == values.end())
+    {
+      return false;
+    }
+    out = it->second;
+    return true;
+  }
+} // namespace
+
+int Editor::option_int(const FileBuffer &buf, const char *key, int global) const
+{
+  std::string stored;
+  if (!local_option_lookup(buf.options, key, stored))
+  {
+    return global;
+  }
+  char *end = nullptr;
+  const long parsed = std::strtol(stored.c_str(), &end, 10);
+  if (end == stored.c_str() || *end != '\0')
+  {
+    return global;
+  }
+  return (int)parsed;
+}
+
+bool Editor::option_bool(const FileBuffer &buf, const char *key, bool global) const
+{
+  std::string stored;
+  if (!local_option_lookup(buf.options, key, stored))
+  {
+    return global;
+  }
+  if (stored == "true" || stored == "1" || stored == "yes" || stored == "on")
+  {
+    return true;
+  }
+  if (stored == "false" || stored == "0" || stored == "no" || stored == "off")
+  {
+    return false;
+  }
+  return global;
+}
+
+bool Editor::window_option_bool(const SplitPane &pane, const char *key, bool global) const
+{
+  std::string stored;
+  if (!local_option_lookup(pane.options, key, stored))
+  {
+    return global;
+  }
+  if (stored == "true" || stored == "1" || stored == "yes" || stored == "on")
+  {
+    return true;
+  }
+  if (stored == "false" || stored == "0" || stored == "no" || stored == "off")
+  {
+    return false;
+  }
+  return global;
+}
+
+std::string
+Editor::window_option_str(const SplitPane &pane, const char *key, const std::string &global) const
+{
+  std::string stored;
+  return local_option_lookup(pane.options, key, stored) ? stored : global;
+}
 
 std::string Editor::policy_str(const char *name,
                                const std::string &key,

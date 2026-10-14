@@ -276,6 +276,16 @@ bool Editor::word_highlight_due_soon()
 void Editor::render_buffer_content(const SplitPane &pane, int pane_index, int buffer_id)
 {
   auto &buf = get_buffer(buffer_id);
+  // The options in force for this pane and this buffer, read once so the walk
+  // below asks no more questions than it did before: the width the text in
+  // front of it indents by (jot.buffer.set_option), and the two decorations
+  // that belong to the view (jot.window.set_option). Each falls back to the
+  // session's value, which is what most panes and buffers hold.
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
+  const bool relative_line_numbers =
+      window_option_bool(pane, "relative_line_numbers", this->relative_line_numbers);
+  const bool show_indent_guides =
+      window_option_bool(pane, "show_indent_guides", this->show_indent_guides);
   int x = pane.x;
   int y = pane_content_top(pane);
   int w = std::max(1, pane.w);

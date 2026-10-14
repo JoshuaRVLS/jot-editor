@@ -721,8 +721,10 @@ bool Editor::save_buffer_at(int index, bool announce)
     std::vector<std::string> cleaned = buf.lines;
     if (rebase_indent)
     {
+      // Rebased on the width this buffer indents by: its own when it holds one
+      // (jot.buffer.set_option), else the session's.
       std::vector<std::string> rebased =
-          SaveHygiene::reindent_lines(cleaned, buf.filepath, tab_size);
+          SaveHygiene::reindent_lines(cleaned, buf.filepath, option_int(buf, "tab_size", tab_size));
       if (rebased.size() == cleaned.size())
       {
         cleaned.swap(rebased);

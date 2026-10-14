@@ -9,6 +9,11 @@ class Config
 {
 private:
   std::map<std::string, std::string> settings;
+  // The built-in values, as load_defaults() set them and before settings.conf
+  // and the session changed anything. Kept apart from `settings` so a key can
+  // answer what it is meant to be (jot.config.info's `default`) after it was
+  // changed.
+  std::map<std::string, std::string> builtin_defaults;
   std::string config_path;
 
   void load_defaults();
@@ -30,6 +35,9 @@ public:
   get_list(const std::string &key, char delimiter = ',', bool trim_items = true);
   bool has(const std::string &key) const;
   void unset(const std::string &key);
+  // The built-in value of a key, "" when it has none (a key a plugin invented
+  // has no default to report).
+  std::string default_of(const std::string &key) const;
   // All currently-known keys (defaults + loaded/overridden values).
   std::vector<std::string> keys() const;
   const std::string &path() const

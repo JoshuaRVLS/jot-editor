@@ -117,7 +117,8 @@ jot.buffer       get_text, set_text, get_selection, replace_selection,
                  insert, cursor, set_cursor, list, current, count,
                  text, lines, meta, selection, bookmarks, folds, tokens,
                  select, clear_selection, switch, filetype, get_line,
-                 set_var, get_var, del_var
+                 set_var, get_var, del_var,
+                 get_option, set_option, unset_option
 jot.cursor       get, set, select_all, select_line
 jot.clipboard    copy, cut, paste, get
 jot.motion       word_next, word_prev, line_start, line_end, file_start,
@@ -136,7 +137,9 @@ jot.workspace    open, path, recent, execute, search
 jot.symbols      list
 jot.lib          the shipped library: json, base64, text, fs, inspect, iter,
                  version, table (see above)
-jot.config       get, get_number, get_bool, set, unset, has, keys, path
+jot.config       get, get_number, get_bool, set, unset, has, keys, path,
+                 info, list
+jot.window       get_option, set_option, unset_option
 jot.theme        list, apply, current, set_color, palette, get
 jot.diagnostics  get
 jot.marks        set, get, jump, del, list
@@ -252,7 +255,9 @@ jot.config.set("auto_save_interval_ms", 5000)
 ```
 
 `jot.config.get(key[, default])` returns a string (`nil` when unset and no
-default given); `get_number` and `get_bool` return typed values.
+default given); `get_number` and `get_bool` return typed values. Pass a table
+as the second argument to name a scope and a target instead of a default
+(see **Options: scopes and the schema** below).
 `jot.config.set(key, value)` accepts a string, number, or boolean, persists
 it immediately, and **live-applies** every setting that maps to editor state
 (no restart needed): `tab_size`, `show_indent_guides`, `rainbow_brackets`,
@@ -292,6 +297,106 @@ jot.config.set("tab_size", 4)
 local wrap = jot.config.get_bool("word_wrap", false)
 for _, key in ipairs(jot.config.keys()) do print(key) end
 ```
+
+#### Options: scopes and the schema
+
+Most settings are one value for the session. Five of them are also a property
+of one buffer or one window, and for those a value can be set where it belongs
+instead of for everything:
+
+```text
+tab_size, auto_indent                    a buffer
+relative_line_numbers, show_indent_guides, winbar   a window (a pane)
+```
+
+```lua
+-- A 4-space C++ file next to a 2-space one, both open at once.
+jot.buffer.set_option("tab_size", 4)
+jot.buffer.set_option("auto_indent", true, 3) -- buffer 3, as jot.buffer.list()
+                                              -- reports it
+jot.editor.request_redraw()
+
+-- Indent guides off in this pane only, breadcrumbs off in the other one.
+jot.window.set_option("show_indent_guides", false)
+jot.window.set_option("winbar", "off", 2)
+```
+
+`jot.buffer.get_option(key[, buffer])` and `jot.window.get_option(key[, pane])`
+answer the value **in force**, typed the way the key is declared: a number for
+`tab_size`, a boolean for `auto_indent`, one of the three strings for `winbar`.
+They return the buffer's or the window's own value when it has one and the
+session's value when it does not, so a plugin asks one question and does not
+care which of the two answered; the second return is `false` only when the key
+is not set anywhere. `unset_option` drops the local value, which puts the
+session's value back in force.
+
+Buffers are numbered the way `jot.buffer.list()` reports them and panes the way
+`jot.pane.list()` does, both 1-based; leaving the index out means the buffer or
+the pane in front.
+
+A scope a key does not take is refused rather than quietly written somewhere
+else: `jot.buffer.set_option("winbar", "off")` returns `false` and the message
+`"winbar" has no buffer value`. A local value stays in memory with the buffer or
+the window it was set on (nothing is written to `settings.conf`), so it travels
+with the buffer through a reorder, a close and a reopen, and no other buffer
+inherits it.
+
+The same store is reachable through `jot.config`, with the scope in the opts
+table. Without a `scope` field the call reads the value in force:
+
+```lua
+jot.config.get("tab_size")                          -- "2": the store's value
+jot.config.get("tab_size", {scope = "effective"})   -- "4": the buffer in front
+                                                    -- holds one of its own
+jot.config.get("tab_size", {buffer = 3})            -- in force in buffer 3
+jot.config.get("tab_size", {scope = "global"})      -- "2", the session's
+jot.config.get("auto_indent", {scope = "buffer"})   -- nil: nothing set here yet
+jot.config.set("tab_size", 8, {scope = "buffer"})   -- this buffer only
+jot.config.set("relative_line_numbers", true,
+               {scope = "window", pane = 2})         -- this window only
+jot.config.unset("auto_indent", {scope = "buffer"})
+```
+
+With no opts table `jot.config.get` is the store's own reader, the session value
+the settings menu edits; the table is what asks the scoped question, and without
+a `scope` field it reads the value in force. An explicit local scope asks for
+that buffer's or that window's own value alone, which is `nil` until something
+sets one. Asking for a local scope a key does not have is the same refusal as
+above (`jot.window.get_option("tab_size")` reports it), and `jot.config.get`
+keeps answering the stored spelling of a value whatever the scope; the typed
+readers are the `get_option` pair.
+
+A set with a table but no `scope` field writes the key's own scope, the way
+`jot.buffer.set_option` does; a set with no table at all is the session write it
+has always been.
+
+The settings menu edits the session value of every key, so a buffer's or a
+pane's own value is set from Lua (or from a plugin that wants a per-project
+indent); the row a buffer changed still shows what the session would use.
+
+What a key is supposed to be is readable too, so a plugin can build a settings
+surface or a completion file without carrying its own copy of the answer:
+
+```lua
+local info = jot.config.info("tab_size")
+-- { name = "tab_size", label = "Tab size", type = "int", scope = "buffer",
+--   live = true, default = 2, value = "4", known = true,
+--   min = 1, max = 16, step = 1 }
+
+for _, key in ipairs(jot.config.list()) do      -- every key, sorted
+  local row = jot.config.info(key)
+  if row.scope ~= "global" then print(key, row.scope, row.value) end
+end
+```
+
+`scope` is `"global"`, `"buffer"` or `"window"`, `default` is the built-in
+value (still what it is after a change), `value` is the store's value in its own
+spelling (the session's, which is what a `jot.config.set` would change; ask
+`get_option` for the value in force in one buffer), and `live` says whether a
+change reaches the editor without a restart. The `options` field carries an enum's choices, and `min`, `max` and
+`step` an int key's range, which is what the settings menu's rows read. A key
+with no entry in the catalog still answers, described by its name, the type its
+value reads as and the `global` scope, because a plugin's own key is a key.
 
 ### Git
 

@@ -21,7 +21,10 @@ bool Editor::lsp_format_active_buffer()
   {
     return false;
   }
-  if (!client->request_format(buf.filepath, std::max(1, tab_size)))
+  // The width the request carries is the one this buffer indents by when it
+  // holds its own (jot.buffer.set_option), else the session's: a formatter told
+  // 8 spaces while the buffer is 4 would hand back a reindented file.
+  if (!client->request_format(buf.filepath, std::max(1, option_int(buf, "tab_size", tab_size))))
   {
     return false;
   }

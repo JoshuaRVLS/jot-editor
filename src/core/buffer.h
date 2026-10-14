@@ -185,6 +185,14 @@ struct FileBuffer
   int last_comment_start = -1;
   int last_comment_end = -1;
   std::unordered_map<std::string, std::string> lua_vars;
+  // Options this buffer holds a value of its own for (jot.buffer.set_option),
+  // for the keys whose scope allows it (core/options.h). Kept on the buffer
+  // rather than in the config store so the value travels with it: a buffer that
+  // is closed, reopened or moved in the tab order keeps what it was given, and
+  // no other buffer inherits it. Read through Editor::option_int /
+  // option_bool, which the indent and render paths call with the buffer in
+  // hand. Spelled as the config store spells it ("4", "true").
+  std::map<std::string, std::string> options;
   std::map<char, Cursor> marks; // buffer-local marks ('a'-'z')
   // Anchored decorations, sorted by (row, col, priority desc, id). The
   // rebase machinery snapshots the full text before every edit and lazily

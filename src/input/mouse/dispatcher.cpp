@@ -988,6 +988,11 @@ void Editor::handle_mouse(void *event_ptr)
 
   auto &pane = get_pane(current_pane);
   auto &buf = get_buffer(pane.buffer_id);
+  // The column a click lands on is measured with the width this buffer's tabs
+  // take: its own when it holds one (jot.buffer.set_option), else the
+  // session's. A pane painted at its own width and read at another would put
+  // the caret beside the character the pointer is on.
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
   refresh_folds(buf);
   // One prepared view for this event's fold questions: the minimap jump, the
   // drag auto-scroll and the click-to-line mapping below all need visibility

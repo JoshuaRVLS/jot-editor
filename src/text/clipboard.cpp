@@ -542,6 +542,10 @@ void Editor::paste_text(const std::string &text)
   auto &buf = get_buffer();
   if (buf.is_lazy())
     buf.materialize();
+  // The indented paste follows this buffer's own width and auto-indent choice
+  // when it holds them (jot.buffer.set_option), else the session's.
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
+  const bool auto_indent = option_bool(buf, "auto_indent", this->auto_indent);
   if (buf.selection.active || !buf.extra_carets.empty())
   {
     delete_selection();

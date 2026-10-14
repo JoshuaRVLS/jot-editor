@@ -6,7 +6,8 @@ runtime/lua/features/settings/catalog.lua, which the menu asks first through
 jot.policy. The tables in src/surfaces/settings.cpp stay as the fallback for a
 build or a test with no Lua runtime, and this tool is how the Lua copy was
 produced from them: run it again after editing the native tables and the two
-agree, entry for entry, in name order.
+agree, entry for entry, in name order. Each entry's scope comes from the lists
+in src/core/options.h, the other native half of the same fact.
 
     python3 tools/settings_catalog_import.py
 
@@ -19,6 +20,7 @@ import re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOURCE = os.path.join(ROOT, "src", "surfaces", "settings.cpp")
+OPTIONS = os.path.join(ROOT, "src", "core", "options.h")
 OUT = os.path.join(ROOT, "runtime", "lua", "features", "settings", "catalog.lua")
 
 HEADER = """\
@@ -41,10 +43,14 @@ HEADER = """\
 --            accepts a typed number, "string" opens the text field, "enum"
 --            walks `options` with Left and Right
 --   options  the values an "enum" row offers, in order
+--   scope    "buffer" or "window" for the few keys whose value can be set on
+--            one buffer or one window instead of for the session (the lists in
+--            src/core/options.h, which this tool reads too). Left out for a
+--            session-wide key, which is most of them.
 --
 -- Example:
 --
---   tab_size = { label = "Indent width", type = "int", step = 1, min = 1, max = 16 },
+--   tab_size = { label = "Indent width", type = "int", scope = "buffer", step = 1, min = 1, max = 16 },
 
 local M = {
 """
@@ -85,8 +91,26 @@ def lua_key(key: str) -> str:
     return "[" + lua_string(key) + "]"
 
 
+def scope_keys(source: str, function: str) -> list[str]:
+    """The keys one of options.h's scope lists holds.
+
+    The lists are the native half of the scope fact: the settings catalog
+    carries the same answer for the menu and for jot.config.info, and a build
+    with no Lua runtime reads these. Both lists sit in the same file under
+    `buffer_keys` / `window_keys`, in the shape name -> kKeys[] = { ... }.
+    """
+    at = source.index("const char *const *" + function)
+    braced = source.index("kKeys[] = {", at)
+    return re.findall(r'"([^"]+)"', source[braced : source.index("};", braced)])
+
+
 def main() -> int:
     source = open(SOURCE, encoding="utf-8").read()
+    options = open(OPTIONS, encoding="utf-8").read()
+    scopes: dict[str, str] = {}
+    for function, scope in (("buffer_keys", "buffer"), ("window_keys", "window")):
+        for key in scope_keys(options, function):
+            scopes[key] = scope
     entries: dict[str, dict] = {}
 
     known = flat(block(source, "kKnownSettings[] ="))
@@ -122,6 +146,8 @@ def main() -> int:
         if "label" in entry:
             parts.append("label = " + lua_string(entry["label"]))
         parts.append("type = " + lua_string(entry["type"]))
+        if key in scopes:
+            parts.append("scope = " + lua_string(scopes[key]))
         if "options" in entry:
             parts.append("options = {" + ", ".join(lua_string(o) for o in entry["options"]) + "}")
         if "step" in entry:
@@ -139,7 +165,10 @@ def main() -> int:
         handle.write(HEADER)
         handle.write("\n".join(lines))
         handle.write("\n}\n\nreturn M\n")
-    print("wrote %s: %d entries" % (os.path.relpath(OUT, ROOT), len(entries)))
+    print(
+        "wrote %s: %d entries, %d with a scope"
+        % (os.path.relpath(OUT, ROOT), len(entries), len(scopes))
+    )
     return 0
 
 

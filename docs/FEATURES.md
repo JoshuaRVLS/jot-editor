@@ -1485,7 +1485,10 @@ folders down to the file, the file, and then the symbols enclosing the caret
 and bold; the rest stays quiet. The row is the pane's own, so a split pays it
 twice and the panes line up either way. `winbar` picks the mode: `off` never
 shows it, `auto` (the default) shows it for code files only, `on` for every named
-file.
+file. It is a window option, so one pane can run a different mode from the rest
+(`jot.window.set_option("winbar", "off")` for the focused one): the pane that
+turns the row off gives the row back to its text, and the panes beside it keep
+theirs.
 
 Every crumb is a press away from its siblings: a folder crumb lists what is
 inside it, a file crumb its folder, a symbol crumb the symbols sharing its scope,
@@ -1758,6 +1761,25 @@ jot.config.set("auto_save_interval_ms", 5000)
 `:reload` re-reads `settings.conf`, re-runs `config.lua`, live-applies it, and
 reloads Lua plugins and Tree-sitter; `:reloadconfig` is the config-only
 variant. A bundled starter config lives in `.configs/configs/`.
+
+Five keys are a property of one buffer or one window rather than of the
+session, and those can be given a local value of their own: `tab_size` and
+`auto_indent` on a buffer, `relative_line_numbers`, `show_indent_guides` and
+`winbar` on a window (a pane). The code that uses them - the indent paths, the
+column math, the render walk, the caret, the mouse hit test - reads the local
+value when there is one and the session's when there is not, so a 4-space file
+open next to a 2-space one indents by four and the other by two:
+
+```lua
+jot.buffer.set_option("tab_size", 4)          -- this file only
+jot.window.set_option("show_indent_guides", false)  -- this pane only
+```
+
+A local value stays in memory with the buffer or the pane it was set on (it is
+not written to `settings.conf`), `jot.config.get` with a scope table reads it,
+and `jot.config.info(key)` says which scope a key takes. The settings menu keeps
+editing the session value of every key. See the options section of
+docs/LUA_API.md for the whole surface.
 
 Built-in defaults include `explorer_width=25`, `minimap_width=15`,
 `tab_size=2`, `show_line_numbers=true`, `rainbow_brackets=true`,

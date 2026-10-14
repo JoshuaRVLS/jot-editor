@@ -39,6 +39,9 @@ bool Editor::expand_emmet_abbreviation()
 
   // One level of indentation for the lines a markup expansion adds, and the
   // current line's own leading whitespace for a CSS chain's continuation lines.
+  // The level is the width this buffer indents by: its own when it holds one
+  // (jot.buffer.set_option), else the session's.
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
   const std::string indent_unit = EditorFeatures::get_indent_string(tab_size, tab_size);
   std::string leading;
   for (char c : line)

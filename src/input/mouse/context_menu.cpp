@@ -175,6 +175,9 @@ bool Editor::open_context_menu_for_mouse(int x, int y)
   }
   auto &pane = get_pane(current_pane);
   auto &buf = get_buffer(pane.buffer_id);
+  // The same width the pane paints this buffer's tabs at: its own when the
+  // buffer holds one (jot.buffer.set_option), else the session's.
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
   context_menu_target_pane = current_pane;
 
   // The workspace strip carries the tab actions; a tab that is on screen

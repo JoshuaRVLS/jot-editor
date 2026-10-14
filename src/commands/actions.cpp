@@ -18,6 +18,9 @@ void Editor::format_document()
     }
   }
   save_state();
+  // Re-indent at the width this buffer indents by: its own when it holds one
+  // (jot.buffer.set_option), else the session's.
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
   for (size_t i = 0; i < buf.line_count(); i++)
   {
     EditorFeatures::format_line(buf.line_mut(i), tab_size);

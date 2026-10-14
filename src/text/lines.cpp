@@ -68,6 +68,10 @@ void Editor::insert_line_below()
   auto &buf = get_buffer();
   if (buf.is_lazy())
     buf.materialize();
+  // This buffer's own indent width and auto-indent choice when it holds them
+  // (jot.buffer.set_option), else the session's.
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
+  const bool auto_indent = option_bool(buf, "auto_indent", this->auto_indent);
   // Compute indent from current line
   std::string indent_str = "";
   if (auto_indent)
@@ -103,6 +107,8 @@ void Editor::insert_line_above()
   auto &buf = get_buffer();
   if (buf.is_lazy())
     buf.materialize();
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
+  const bool auto_indent = option_bool(buf, "auto_indent", this->auto_indent);
   std::string indent_str = "";
   if (auto_indent)
   {
@@ -156,6 +162,9 @@ void Editor::indent_selection()
 
   const int start_y = std::min(buf.selection.start.y, buf.selection.end.y);
   const int end_y = std::max(buf.selection.start.y, buf.selection.end.y);
+  // One indent level is this buffer's own width when it holds one, so indenting
+  // a 4-space file by 4 moves it one level, not two.
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
   const std::string indent(tab_size, ' ');
 
   for (int y = start_y; y <= end_y; y++)
@@ -184,6 +193,7 @@ void Editor::outdent_selection()
   auto &buf = get_buffer();
   if (buf.is_lazy())
     buf.materialize();
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
 
   if (!buf.selection.active)
   {

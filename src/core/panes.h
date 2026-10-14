@@ -39,6 +39,11 @@ struct SplitPane
   Selection view_selection{{0, 0}, {0, 0}, false};
   int view_scroll_offset = 0;
   int view_scroll_x = 0;
+  // Options this window holds a value of its own for (jot.window.set_option),
+  // for the keys whose scope allows it (core/options.h): the gutter decorations
+  // and the breadcrumb row, which are properties of the view and not of the
+  // text. Same spelling as the config store ("true", "auto").
+  std::map<std::string, std::string> options;
 };
 
 // The first row of a pane's text and the rows it has to paint text in. Take a

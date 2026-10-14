@@ -374,6 +374,13 @@ bool LuaAPI::init()
   field(L, "set_var", l_buf_set_var);
   field(L, "get_var", l_buf_get_var);
   field(L, "del_var", l_buf_del_var);
+  // The options this buffer holds a value of its own for (core/options.h): its
+  // indent width and whether Enter indents. The indent paths and the render
+  // walk read the local value, so setting one changes this buffer alone, and
+  // the value travels with the buffer rather than being tracked by index.
+  field(L, "get_option", l_buffer_option_get);
+  field(L, "set_option", l_buffer_option_set);
+  field(L, "unset_option", l_buffer_option_unset);
   lua_pop(L, 2);
   lua_getglobal(L, "jot");
   lua_getfield(L, -1, "job");
@@ -647,7 +654,19 @@ bool LuaAPI::init()
   field(L, "has", l_config_has);
   field(L, "keys", l_config_keys);
   field(L, "path", l_config_path);
+  // The schema behind a key, so a plugin can ask what a setting is supposed to
+  // be instead of carrying its own copy of the answer (api_config.cpp).
+  field(L, "info", l_config_info);
+  field(L, "list", l_config_list);
   lua_setfield(L, -2, "config");
+  // The per-window half of the same store (core/options.h): which gutter
+  // decorations and which breadcrumb row a pane shows. Panes are numbered the
+  // way jot.pane.list() reports them, 1-based; no index means the focused one.
+  lua_newtable(L);
+  field(L, "get_option", l_window_option_get);
+  field(L, "set_option", l_window_option_set);
+  field(L, "unset_option", l_window_option_unset);
+  lua_setfield(L, -2, "window");
   lua_newtable(L);
   field(L, "get", l_diagnostics_get);
   lua_setfield(L, -2, "diagnostics");

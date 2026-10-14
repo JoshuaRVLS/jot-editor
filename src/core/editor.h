@@ -150,31 +150,60 @@ private:
     return kTopBarVisible ? 1 : 0;
   }
 
-  // Whether the winbar is on at all (`winbar = off` turns the row off for
-  // every pane).
+  // Whether the winbar is on at all in this session (`winbar = off`), which is
+  // the value every pane starts from.
   bool winbar_shown() const
   {
     return winbar_mode != Winbar::WINBAR_MODE_OFF;
   }
 
-  // The row count a pane pays when it shows the winbar. Set once per layout
-  // pass by update_pane_layout, like tab_height, because the panes' geometry is
-  // resolved there and every later question goes through pane_content_top.
-  int winbar_row_height() const
+  // The mode this pane runs its breadcrumb row under: its own `winbar` value
+  // when the pane holds one (jot.window.set_option), else the session's. An
+  // unknown value falls back to the session's rather than turning the row on or
+  // off for a typo, the way the session setting itself is read.
+  Winbar::WinbarMode pane_winbar_mode(const SplitPane &pane) const
   {
-    return winbar_shown() ? 1 : 0;
+    const std::string value = window_option_str(pane, "winbar", "");
+    if (value == "off")
+    {
+      return Winbar::WINBAR_MODE_OFF;
+    }
+    if (value == "on")
+    {
+      return Winbar::WINBAR_MODE_ON;
+    }
+    if (value == "auto")
+    {
+      return Winbar::WINBAR_MODE_AUTO;
+    }
+    return winbar_mode;
   }
 
-  // Whether this pane's buffer pays a breadcrumb row. Only the file itself can
-  // answer: `auto` keeps the row for code (a breadcrumb of a .png is noise),
-  // `on` shows it for every named file, and a buffer with no name -- an untitled
-  // scratch buffer, a lazy placeholder -- never pays one.
+  // The row count a pane pays when it shows the winbar: one when any pane shows
+  // one. Set once per layout pass by update_pane_layout, like tab_height,
+  // because the panes' geometry is resolved there and every later question goes
+  // through pane_content_top -- and because a pane that wants the row is not
+  // held back by the session's `winbar = off`, nor does it spend a row the
+  // session did not ask for on a pane that does not want one.
+  int winbar_row_height() const
+  {
+    for (const SplitPane &pane : panes)
+    {
+      if (pane_has_winbar(pane))
+      {
+        return 1;
+      }
+    }
+    return 0;
+  }
+
+  // Whether this pane's buffer pays a breadcrumb row. The pane's own mode says
+  // whether it wants one at all; only the file can answer the rest: `auto`
+  // keeps the row for code (a breadcrumb of a .png is noise), `on` shows it for
+  // every named file, and a buffer with no name -- an untitled scratch buffer, a
+  // lazy placeholder -- never pays one.
   bool pane_has_winbar(const SplitPane &pane) const
   {
-    if (!winbar_shown() || winbar_height <= 0)
-    {
-      return false;
-    }
     if (pane.buffer_id < 0 || pane.buffer_id >= (int)buffers.size())
     {
       return false;
@@ -184,7 +213,12 @@ private:
     {
       return false;
     }
-    if (winbar_mode == Winbar::WINBAR_MODE_ON)
+    const Winbar::WinbarMode mode = pane_winbar_mode(pane);
+    if (mode == Winbar::WINBAR_MODE_OFF)
+    {
+      return false;
+    }
+    if (mode == Winbar::WINBAR_MODE_ON)
     {
       return true;
     }

@@ -158,6 +158,10 @@ bool Editor::insert_char(char c)
     return false;
   save_state();
   auto &buf = get_buffer();
+  // The width this buffer indents by and whether it indents at all: its own
+  // values when it holds them (jot.buffer.set_option), else the session's.
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
+  const bool auto_indent = option_bool(buf, "auto_indent", this->auto_indent);
 
   if (buf.selection.active && AutoClose::should_auto_close(c))
   {
@@ -971,6 +975,10 @@ void Editor::new_line()
   auto &buf = get_buffer();
   if (buf.is_lazy())
     buf.materialize();
+  // This buffer's own indent width and auto-indent choice when it holds them,
+  // else the session's: Enter lands where this buffer's own width says.
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
+  const bool auto_indent = option_bool(buf, "auto_indent", this->auto_indent);
   std::string current_line = buf.line_mut(buf.cursor.y);
   buf.cursor.x = ui_clamp_to_utf8_boundary(current_line, buf.cursor.x);
   std::string remaining = current_line.substr(buf.cursor.x);

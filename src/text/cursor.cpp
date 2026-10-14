@@ -164,6 +164,10 @@ void Editor::ensure_cursor_visible(bool adjust_horizontal)
     return;
   auto &pane = get_pane();
   auto &buf = get_buffer(pane.buffer_id);
+  // A tab in this buffer is this wide when the buffer holds a width of its own
+  // (jot.buffer.set_option), else as wide as the session says. The horizontal
+  // reveal below measures the caret's column the same way the painter does.
+  const int tab_size = option_int(buf, "tab_size", this->tab_size);
 
   int viewport_h = pane_viewport_h(pane);
   if (viewport_h < 1)

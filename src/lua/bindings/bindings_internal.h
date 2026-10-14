@@ -196,6 +196,16 @@ namespace lua_bind
   int l_buf_select(lua_State *L);
   int l_buf_clear_selection(lua_State *L);
   int l_buf_apply_edit(lua_State *L);
+  int l_config_info(lua_State *L);
+  int l_config_list(lua_State *L);
+  // jot.buffer.*_option / jot.window.*_option: the same store as jot.config,
+  // scoped to the buffer or the window the call names (api_config.cpp).
+  int l_buffer_option_get(lua_State *L);
+  int l_buffer_option_set(lua_State *L);
+  int l_buffer_option_unset(lua_State *L);
+  int l_window_option_get(lua_State *L);
+  int l_window_option_set(lua_State *L);
+  int l_window_option_unset(lua_State *L);
   int l_file_list(lua_State *L);
   int l_file_read(lua_State *L);
   int l_file_write(lua_State *L);

@@ -364,6 +364,10 @@ void Config::load_defaults()
   settings["toast.max_width"] = "56";
   settings["update.build_dir"] = "";
   settings["update.check_on_startup"] = "true";
+  // What the session starts from, kept for jot.config.info: `settings` is about
+  // to take settings.conf's overrides and the session's own writes, and a key
+  // that has been changed still has to be able to say what it defaults to.
+  builtin_defaults = settings;
 }
 
 void Config::parse_line(const std::string &line)
@@ -547,6 +551,12 @@ bool Config::has(const std::string &key) const
 void Config::unset(const std::string &key)
 {
   settings.erase(key);
+}
+
+std::string Config::default_of(const std::string &key) const
+{
+  const auto it = builtin_defaults.find(key);
+  return it == builtin_defaults.end() ? std::string() : it->second;
 }
 
 std::vector<std::string> Config::keys() const

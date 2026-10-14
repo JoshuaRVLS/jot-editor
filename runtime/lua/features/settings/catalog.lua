@@ -17,10 +17,14 @@
 --            accepts a typed number, "string" opens the text field, "enum"
 --            walks `options` with Left and Right
 --   options  the values an "enum" row offers, in order
+--   scope    "buffer" or "window" for the few keys whose value can be set on
+--            one buffer or one window instead of for the session (the lists in
+--            src/core/options.h, which this tool reads too). Left out for a
+--            session-wide key, which is most of them.
 --
 -- Example:
 --
---   tab_size = { label = "Indent width", type = "int", step = 1, min = 1, max = 16 },
+--   tab_size = { label = "Indent width", type = "int", scope = "buffer", step = 1, min = 1, max = 16 },
 
 local M = {
   ai_adapter = { label = "AI adapter", type = "string" },
@@ -33,7 +37,7 @@ local M = {
   ai_system_prompt = { label = "AI system prompt", type = "string" },
   ai_temperature = { label = "AI temperature", type = "string" },
   auto_detect_indent = { label = "Auto-detect indent", type = "bool" },
-  auto_indent = { label = "Auto indent", type = "bool" },
+  auto_indent = { label = "Auto indent", type = "bool", scope = "buffer" },
   auto_save = { label = "Auto save", type = "bool" },
   auto_save_interval_ms = { label = "Auto save interval (ms)", type = "int", step = 100, min = 100, max = 600000 },
   bible_api_base = { label = "Bible: API base", type = "string" },
@@ -150,11 +154,11 @@ local M = {
   prettier_on_save = { label = "Prettier on save", type = "bool" },
   rainbow_brackets = { label = "Rainbow brackets", type = "bool" },
   reindent_on_save = { label = "Reindent on save", type = "bool" },
-  relative_line_numbers = { label = "Relative line numbers", type = "bool" },
+  relative_line_numbers = { label = "Relative line numbers", type = "bool", scope = "window" },
   render_fps = { label = "Render FPS", type = "int", step = 10, min = 30, max = 240 },
   right_panel_width = { label = "Right panel width", type = "int", step = 1, min = 28, max = 80 },
   show_explorer = { label = "Show explorer", type = "bool" },
-  show_indent_guides = { label = "Indent guides", type = "bool" },
+  show_indent_guides = { label = "Indent guides", type = "bool", scope = "window" },
   show_line_numbers = { label = "Line numbers", type = "bool" },
   show_minimap = { label = "Show minimap", type = "bool" },
   smart_paste_indent = { label = "Smart paste indent", type = "bool" },
@@ -180,7 +184,7 @@ local M = {
   snippet_tab_key = { label = "Snippets: expand/jump key", type = "string" },
   status_clock = { label = "Statusline: local time", type = "bool" },
   status_coding_time = { label = "Statusline: coding time", type = "bool" },
-  tab_size = { label = "Tab size", type = "int", step = 1, min = 1, max = 16 },
+  tab_size = { label = "Tab size", type = "int", scope = "buffer", step = 1, min = 1, max = 16 },
   terminal_float_height = { label = "Floating terminal height (%)", type = "int", step = 5, min = 20, max = 100 },
   terminal_float_width = { label = "Floating terminal width (%)", type = "int", step = 5, min = 20, max = 100 },
   terminal_height = { label = "Terminal panel height", type = "int", step = 1, min = 5, max = 20 },
@@ -203,7 +207,12 @@ local M = {
   wakatime = { label = "Extension: WakaTime tracking", type = "bool" },
   wakatime_api_key = { label = "Extension: WakaTime API key", type = "string" },
   wakatime_api_url = { label = "Extension: WakaTime API url", type = "string" },
-  winbar = { label = "Breadcrumbs: auto / on / off", type = "enum", options = {"auto", "on", "off"} },
+  winbar = {
+    label = "Breadcrumbs: auto / on / off",
+    type = "enum",
+    scope = "window",
+    options = {"auto", "on", "off"},
+  },
   word_highlight = { label = "Highlight word occurrences", type = "bool" },
   word_highlight_delay_ms = { label = "Word highlight: delay after typing (ms)", type = "int", step = 50, min = 0, max = 5000 },
   word_wrap = { label = "Word wrap", type = "bool" },
