@@ -46,6 +46,7 @@
 #include "smooth_scroll.h"
 #include "syntax/language.h"
 #include <algorithm>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>

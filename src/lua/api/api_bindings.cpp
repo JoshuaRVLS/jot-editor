@@ -4,6 +4,7 @@
 // jot.* namespaces. The bindings themselves live in bindings_*.cpp.
 #include "core/editor.h"
 #include "core/host_api.h"
+#include "events/keybind_catalog.h"
 #include "lua/api/api.h"
 #include "lua/api/api_internal.h"
 #include "lua/bindings/bindings_internal.h"
@@ -199,6 +200,32 @@ bool LuaAPI::init()
   setup_lua_module_path(L);
   lua_state = L;
   lua_initialized = true;
+  // The keyboard a plugin panel claims (the undo tree's, first of all) reaches
+  // this module through a callback: input/modes/dispatch.cpp runs the panel's
+  // key past every modal branch and input/ may not name the Lua API or the
+  // chord-name helper (tools/check_module_deps.py). The panel's name and the
+  // chord's spelling are this side's to know, so both are read here, when the
+  // key fires and not when the callback is installed.
+  if (editor)
+  {
+    editor->plugin_panel_key_handler = [this](int ch,
+                                               bool is_ctrl,
+                                               bool is_shift,
+                                               bool is_alt,
+                                               int original_ch)
+    {
+      if (editor->active_plugin_panel.empty())
+      {
+        return false;
+      }
+      return plugin_panel_key(
+          editor->active_plugin_panel,
+          jot::keybind_detail::chord_name(ch, is_ctrl, is_shift, is_alt, original_ch),
+          is_ctrl,
+          is_shift,
+          is_alt);
+    };
+  }
   inject(L, this, "show_message", l_show_message);
   inject(L, this, "show_transient_message", l_show_transient_message);
   inject(L, this, "command", l_register_command);

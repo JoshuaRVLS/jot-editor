@@ -128,6 +128,13 @@ private:
 
   void handle_input(
     int ch, bool is_ctrl = false, bool is_shift = false, bool is_alt = false, int original_ch = 0);
+  // A keyboard-owning plugin panel (the undo tree) sees a key before the buffer
+  // does and answers whether it used it. Installed by the Lua runtime at init
+  // (lua/api/api_bindings.cpp) rather than called by name, because input/ sits
+  // below lua/ and below events/, so dispatch.cpp may name neither the API nor
+  // the chord-name helper (tools/check_module_deps.py).
+  std::function<bool(int ch, bool is_ctrl, bool is_shift, bool is_alt, int original_ch)>
+      plugin_panel_key_handler;
   void handle_mouse_input(int x,
                           int y,
                           bool is_click,
