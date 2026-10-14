@@ -1084,7 +1084,18 @@ the workspace in front of you, from one of two places:
   `configs/coding_time.tsv`, so reopening the editor later today continues
   today's number rather than restarting a session timer nobody reads. Time is
   credited between two activity ticks, and any gap past two minutes is dropped,
-  so an editor left open overnight does not log eight hours of nothing.
+  so an editor left open overnight does not log eight hours of nothing. One
+  project is one line: the key is the workspace path, canonicalized (a trailing
+  separator dropped, a relative spelling resolved against the directory the
+  editor was started in), and rows already in the file that fold onto the same
+  project and day add up.
+
+The chip shows WakaTime's answer whenever it carries a total, and the locally
+stored one otherwise. A total that reports no time at all (`0 secs`) does not
+count as one: that is what the cli prints while the heartbeats it is holding have
+not reached the server yet, and what an account with nothing logged says, so the
+chip keeps the local total rather than sitting on a zero through real work. The
+glyph beside the number says which of the two is speaking.
 
 Today's WakaTime total is fetched at most once a minute, on the worker queue, so
 a slow API never stalls a keystroke; a heartbeat is spawned detached for the same

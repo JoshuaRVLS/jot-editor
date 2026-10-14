@@ -24,6 +24,10 @@ Scenes:
   * the record holds a `--today --output json` run, and the bar shows the total
     the stub answered with -- so the fetch, the parse and the chip are one
     chain, on a real screen;
+  * a stub whose total reports no time at all ("0 secs", what the cli prints
+    while its queued heartbeats are still offline) leaves the locally stored
+    total on the bar and the timer glyph beside it -- the chip is the time coded
+    today in this workspace, not whatever a delayed integration can say;
   * with no cli on PATH the install runs against the stub curl/unzip: this
     machine's release asset is fetched and unpacked into
     $WAKATIME_HOME/.wakatime/wakatime-cli, and every run after that comes from
@@ -69,6 +73,12 @@ FILE = "notes.txt"
 FILE_BODY = "alpha\nbeta\ngamma\n"
 
 TODAY_TEXT = "1 hr 30 mins"
+STUB_TODAY = '{"has_team_features":false,"text":"1 hr 30 mins","total_seconds":5400}'
+# What the same cli prints while its queued heartbeats have not reached the
+# server yet: a total reporting no time at all. The stub can be handed either
+# payload, which is how the probe tells an answer from the absence of one.
+ZERO_TEXT = "0 secs"
+ZERO_TODAY = '{"has_team_features":false,"text":"0 secs","total_seconds":0}'
 # Nerd Fonts codepoints the coding chip leads with: nf-md-clock_outline is
 # WakaTime's answer, nf-md-timer_outline is the local store's total.
 CLOCK_GLYPH = "\U000F0150"
@@ -80,9 +90,11 @@ TIMER_GLYPH = "\U000F051B"
 # path: which binary answered is what tells an install from a PATH lookup.
 STUB_CLI = """#!/bin/sh
 printf '%s|%s\\n' "$0" "$*" >> "$JOT_WAKATIME_RECORD"
+today=$JOT_WAKATIME_TODAY
+[ -z "$today" ] && today='{"has_team_features":false,"text":"1 hr 30 mins","total_seconds":5400}'
 for arg in "$@"; do
   if [ "$arg" = "--today" ]; then
-    printf '%s\\n' '{"has_team_features":false,"text":"1 hr 30 mins","total_seconds":5400}'
+    printf '%s\\n' "$today"
     exit 0
   fi
 done
@@ -174,6 +186,15 @@ def preinstall(home: str) -> None:
     write_stub(installed_cli(home), STUB_CLI)
 
 
+def seed_local_total(cfg: str, ms: int) -> None:
+    """The local store's line for this workspace and day, as an earlier session
+    would have written it, so the chip's fallback has a real number to show."""
+    os.makedirs(os.path.join(cfg, "configs"), exist_ok=True)
+    key = f"{ROOT}\t{time.strftime('%Y-%m-%d')}"
+    with open(os.path.join(cfg, "configs", "coding_time.tsv"), "w") as fh:
+        fh.write(f"{key}\t{ms}\n")
+
+
 def write_settings(cfg: str, lines: list[str]) -> None:
     os.makedirs(os.path.join(cfg, "configs"), exist_ok=True)
     with open(os.path.join(cfg, "configs", "settings.conf"), "w") as fh:
@@ -197,13 +218,15 @@ def recorded(record: str, want: int, timeout: float = 2.0) -> list[str]:
 
 def run(binary: str, cfg: str, record: str, home: str, keys: bytes = b"",
         path: str = BIN + ":/usr/bin:/bin", phases=None, settle: float = 2.5,
-        after: float = 0.5, until_timeout: float = 10.0, sink: list = None):
+        after: float = 0.5, until_timeout: float = 10.0, sink: list = None,
+        env_extra: dict = None):
     env = {
         "PATH": path,
         "JOT_WAKATIME_RECORD": record,
         "WAKATIME_HOME": home,
         "JOT_WAKATIME_CLI_STUB": CLI_STUB,
     }
+    env.update(env_extra or {})
     # `sink` collects every byte the child wrote. A toast is painted once and
     # fades, so the report can be gone from the final screen while its text is
     # still the record of what the editor said -- which is what is being asked.
@@ -271,7 +294,12 @@ def main() -> int:
     # writes it out, which is the spec's is_write heartbeat. Both come from the
     # real paths -- the input dispatch and Editor::save_buffer_at -- so nothing
     # here is a seam the editor does not already have.
+    # The coding chip ships off (workspace/config.cpp holds both time chips off
+    # by default), so the scenes that read it ask for it: what is being checked
+    # here is which source the chip reports, not whether it is on to begin with
+    # (status_clock_probe.py covers the default).
     write_settings(cfg, ["wakatime=true", "wakatime_api_key=probe-key",
+                         "status_coding_time=true",
                          "auto_save=true", "auto_save_interval_ms=200"])
     screen = run(binary, cfg, record, home, keys=b"x", phases=[
         (0.5, lambda _s, r=record: len(heartbeat_runs(recorded(r, 1, 0.05))) >= 1),
@@ -337,12 +365,48 @@ def main() -> int:
     if TIMER_GLYPH in screen.text():
         failures.append("the local-store glyph is up while WakaTime has an answer")
 
+    # ── Scene 1b: a cli that can only say "0 secs" ────────────────────────────
+    # The heartbeats the cli is holding have not reached the server yet, which is
+    # what its own offline queue looks like from here, and what an account with
+    # nothing logged yet says. Either way there is no total to put on the bar: the
+    # local store counted the same minutes, so the chip keeps that number and the
+    # glyph that names it rather than sitting on a zero through real work.
+    cfg = "/tmp/jot_wakatime_probe_cfg_zero"
+    record = "/tmp/jot_wakatime_probe_record_zero"
+    home = HOME + "_zero"
+    shutil.rmtree(home, ignore_errors=True)
+    if os.path.exists(record):
+        os.remove(record)
+    write_settings(cfg, ["wakatime=true", "wakatime_api_key=probe-key",
+                         "status_coding_time=true"])
+    seed_local_total(cfg, 9 * 60 * 1000)
+    zero = run(binary, cfg, record, home, keys=b"x", after=1.5,
+               env_extra={"JOT_WAKATIME_TODAY": ZERO_TODAY})
+    if dump:
+        print(zero.text())
+        print("-" * 70)
+    if not today_runs(recorded(record, 1, 1.0)):
+        failures.append("the cli was never asked for today's total in the zero scene")
+    if ZERO_TEXT in zero.text():
+        failures.append("the bar sat on the cli's zero while the local store held 9m")
+    # The chip is the last thing on the row, so its trailing space is not part of
+    # the extracted text: the label is matched where it starts.
+    if not re.search(r"\s9m\b", zero.text()):
+        failures.append("the locally stored total is not what the chip shows when the "
+                        "cli reports no time")
+    if TIMER_GLYPH not in zero.text():
+        failures.append("the chip does not say it is showing the local total when the "
+                        "cli reports no time")
+    if CLOCK_GLYPH in zero.text():
+        failures.append("the chip claims WakaTime's total while the cli reported none")
+
     # ── Scene 2: tracking off, nothing spawned and the local total shown ─────
     cfg = "/tmp/jot_wakatime_probe_cfg_off"
     record = "/tmp/jot_wakatime_probe_record_off"
     if os.path.exists(record):
         os.remove(record)
-    write_settings(cfg, ["wakatime=false", "wakatime_api_key=probe-key"])
+    write_settings(cfg, ["wakatime=false", "wakatime_api_key=probe-key",
+                         "status_coding_time=true"])
     off = run(binary, cfg, record, HOME + "_off", keys=b"x", after=1.5)
     if dump:
         print(off.text())
@@ -353,7 +417,7 @@ def main() -> int:
         failures.append("the local total is not on the bar with WakaTime off")
     if TODAY_TEXT in off.text():
         failures.append("the bar shows a WakaTime total with the extension off")
-    if not re.search(r"\s\d+(s|m|h \d+m)\s", off.text()):
+    if not re.search(r"\s\d+(s|m|h \d+m)", off.text()):
         failures.append("the chip carries no local total with WakaTime off")
 
     if not host_cli:
@@ -384,7 +448,8 @@ def install_scenes(binary: str, dump: bool, asset: str) -> list[str]:
     shutil.rmtree(home, ignore_errors=True)
     if os.path.exists(record):
         os.remove(record)
-    write_settings(cfg, ["wakatime=true", "wakatime_api_key=probe-key"])
+    write_settings(cfg, ["wakatime=true", "wakatime_api_key=probe-key",
+                         "status_coding_time=true"])
     sink: list = []
     # No key is sent until the install has landed: a keystroke before the cli is
     # ready is dropped on purpose (nothing can be reported yet), so the scene
@@ -439,7 +504,8 @@ def install_scenes(binary: str, dump: bool, asset: str) -> list[str]:
     preinstall(home)
     if os.path.exists(record):
         os.remove(record)
-    write_settings(cfg, ["wakatime=true", "wakatime_api_key=probe-key"])
+    write_settings(cfg, ["wakatime=true", "wakatime_api_key=probe-key",
+                         "status_coding_time=true"])
     present = run(binary, cfg, record, home, keys=b"x", path=INSTALL_BIN + ":/usr/bin:/bin",
                   phases=[(0.5, lambda _s, r=record: len(heartbeat_runs(recorded(r, 1, 0.05))) >= 1)])
     if dump:
@@ -465,7 +531,8 @@ def install_scenes(binary: str, dump: bool, asset: str) -> list[str]:
     shutil.rmtree(home, ignore_errors=True)
     if os.path.exists(record):
         os.remove(record)
-    write_settings(cfg, ["wakatime=true", "wakatime_api_key=probe-key"])
+    write_settings(cfg, ["wakatime=true", "wakatime_api_key=probe-key",
+                         "status_coding_time=true"])
     sink = []
     failed = run(binary, cfg, record, home, keys=b"x", sink=sink, after=2.0,
                  path=FAIL_BIN + ":/usr/bin:/bin")

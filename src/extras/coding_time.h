@@ -68,5 +68,10 @@ void coding_time_tick(long long now_ms, bool activity);
 void flush_coding_time(long long now_ms, bool force);
 
 // The chip's label: WakaTime's total for today when the integration has
-// answered, the locally stored total for this workspace otherwise.
+// answered with one, the locally stored total for this workspace otherwise.
 std::string status_coding_label(long long now_ms);
+
+// Whether that label is WakaTime's number rather than the local one, which is
+// what the glyph beside it says (extras/wakatime.h's activity_label is the rule
+// both read, so the two cannot disagree about which source is speaking).
+bool coding_label_from_wakatime() const;

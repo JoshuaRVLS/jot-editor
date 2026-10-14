@@ -156,6 +156,31 @@ TEST_CASE("Coding time: the file is one line per workspace and day", "[jot][codi
   REQUIRE(total_for(ragged, key_for("/ work ", "2026-09-28")) == 1000);
 }
 
+TEST_CASE("Coding time: one project is one key, however it is spelled", "[jot][coding-time]")
+{
+  const std::string day = "2026-09-28";
+  const std::string project = key_for("/work/jot", day);
+  // The explorer's absolute path and the same path with a trailing separator are
+  // one place, not two: one project's day cannot live on two lines, or neither
+  // line is the total the chip reports.
+  REQUIRE(key_for("/work/jot/", day) == project);
+  REQUIRE(key_for("/work//jot", day) == project);
+  // A session started in the project's own directory keeps the "." it was
+  // opened with, and that is the same place as its absolute path.
+  REQUIRE(key_for(".", day) == key_for(fs::current_path().string(), day));
+
+  // Rows that fold onto one key add up, so a file already carrying two spellings
+  // still reports the day's real total.
+  const std::string text = "/work/jot\t" + day + "\t60000\n/work/jot/\t" + day
+                           + "\t30000\n/work/jot\t2026-09-27\t1000\n";
+  const Totals totals = parse(text);
+  REQUIRE(totals.size() == 2);
+  REQUIRE(total_for(totals, project) == 90000);
+  // A row of nothing adds nothing rather than dropping the day with it.
+  REQUIRE(total_for(parse("/work/jot\t" + day + "\t0\n"), project) == 0);
+  REQUIRE(parse("/work/jot\t" + day + "\t0\n").empty());
+}
+
 TEST_CASE("Coding time: the store lives under the config home", "[jot][coding-time]")
 {
   const std::string home = seed_config_home();
@@ -234,6 +259,17 @@ TEST_CASE("Coding time: WakaTime's total is what the chip shows when it has one"
   REQUIRE(status_row(e).find(" 2 hrs 5 mins ") != std::string::npos);
   REQUIRE(status_row(e).find(kClockGlyph) != std::string::npos);
   REQUIRE(status_row(e).find(" 12m ") == std::string::npos);
+
+  // A cli that can only say "0 secs" has no total to report: its queued
+  // heartbeats have not reached the server yet, so the bar keeps the local
+  // total and its glyph rather than sitting on a zero while the user codes.
+  e.set_wakatime_state_for_test(true, true, "0 secs");
+  e.request_redraw_for_test();
+  e.render_for_test();
+  REQUIRE(status_row(e).find(" 12m ") != std::string::npos);
+  REQUIRE(status_row(e).find(kTimerGlyph) != std::string::npos);
+  REQUIRE(status_row(e).find("0 secs") == std::string::npos);
+  REQUIRE(status_row(e).find(kClockGlyph) == std::string::npos);
 
   // An empty answer (offline, or an account with nothing logged yet) puts the
   // local total back rather than leaving a blank chip.

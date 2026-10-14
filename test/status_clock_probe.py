@@ -21,7 +21,13 @@ two chips cannot be checked without a real run:
     measure is the gate rather than the cap (which the unit tests pin);
   * the two config keys are independent and both are off on a fresh install, so
     a user can put either back (the settings are read per frame, so a config
-    file is all it takes).
+    file is all it takes);
+  * the series keeps reading seconds while the editor is *typed* into, which is
+    what says the two places that credit the chip -- the frame loop's pass and
+    every keystroke -- are measuring with one clock. They were not: a keystroke's
+    timestamp came off the epoch wall clock, so the gap the next credit measured
+    was the epoch offset capped at the store's two minutes, and a typed run
+    banked a couple of minutes per second.
 
 Usage: test/status_clock_probe.py [path-to-jot-binary]
 Set JOT_PROBE_DUMP=1 to print the sampled rows.
@@ -68,8 +74,13 @@ def write_settings(cfg: str, lines: list[str]) -> None:
             fh.write(line + "\n")
 
 
-def run_jot(binary: str, cfg: str, samples: dict[str, float], timeout_s: float):
-    """Run jot in a pty and return {label: status row text} at each timestamp."""
+def run_jot(binary: str, cfg: str, samples: dict[str, float], timeout_s: float,
+            typing: list[tuple[float, bytes]] = None):
+    """Run jot in a pty and return {label: status row text} at each timestamp.
+
+    `typing` sends bytes at given offsets from the start, which is what a scene
+    needs when what is being measured is what input does to the chip.
+    """
     os.makedirs(cfg, exist_ok=True)
     pid, fd = pty.fork()
     if pid == 0:  # child
@@ -86,6 +97,7 @@ def run_jot(binary: str, cfg: str, samples: dict[str, float], timeout_s: float):
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", ROWS, COLS, 0, 0))
     screen = Screen(COLS, ROWS)
     taken: dict[str, str] = {}
+    sent: list[tuple[float, bytes]] = []
     start = time.monotonic()
     try:
         while time.monotonic() - start < timeout_s:
@@ -99,6 +111,10 @@ def run_jot(binary: str, cfg: str, samples: dict[str, float], timeout_s: float):
                     break
                 screen.feed(data)
             elapsed = time.monotonic() - start
+            for at, keys in typing or []:
+                if elapsed >= at and (at, keys) not in sent:
+                    sent.append((at, keys))
+                    os.write(fd, keys)
             for label, at in samples.items():
                 if label not in taken and elapsed >= at:
                     taken[label] = "".join(screen.cells[ROWS - 1])
@@ -196,6 +212,58 @@ def main() -> int:
             return 1
     print(f"status clock probe: ok - the coding chip advanced at every sample "
           f"({seconds[0]}s -> {seconds[-1]}s)")
+
+    # ── Scene 1b: the same series while the user types ──────────────────────
+    # The chip is credited from two places: this once-a-second pass and every
+    # keystroke that reaches a buffer. Both have to be talking about one clock,
+    # or a keystroke's "now" is the epoch while the pass's is the time since
+    # boot: the gap between them is then the epoch offset, capped at two minutes
+    # and banked on the next keystroke. A run of seconds must read seconds.
+    cfg = "/tmp/jot_status_clock_probe_typing"
+    write_settings(cfg, ["status_clock=true", "status_coding_time=true"])
+    # `n` opens a scratch buffer off the home menu, so the keys after it land in
+    # one; a keystroke on the home menu itself is menu navigation, not editing.
+    typing = [(2.2, b"n")] + [(2.8 + 0.4 * i, b"x") for i in range(30)]
+    typed_rows = run_jot(
+        binary,
+        cfg,
+        {label: FIRST_SAMPLE_S + i * SAMPLE_STEP_S for i, label in enumerate(labels)},
+        timeout_s=FIRST_SAMPLE_S + (IDLE_SAMPLES - 1) * SAMPLE_STEP_S + 1.5,
+        typing=typing,
+    )
+    typed = [typed_rows.get(label, "") for label in labels]
+    if not all(typed):
+        print("status clock probe: FAIL - typing left no status row to read")
+        return 1
+    typed_seconds = [coded_seconds(row) for row in typed]
+    if any(s is None for s in typed_seconds):
+        shown = "  ".join("-" if s is None else f"{s}s" for s in typed_seconds)
+        print("status clock probe: FAIL - the typed run's chip left the seconds "
+              "field: " + shown + "\n"
+              "  a chip that jumps to minutes within seconds of the editor starting "
+              "is banking the two-minute cap per keystroke (its activity ticks and "
+              "its frame-loop ticks are on different clocks)")
+        return 1
+    # Every sample is 2 s after the one before, so a 10 s run of typing cannot
+    # have earned more than a handful of seconds. The bound is what catches a
+    # counter moving faster than the clock it is supposed to be measuring, and
+    # the lower one catches a counter that stopped moving instead.
+    budget = FIRST_SAMPLE_S + (IDLE_SAMPLES - 1) * SAMPLE_STEP_S
+    if typed_seconds[-1] > budget + 3:
+        print(f"status clock probe: FAIL - {budget:g}s of typing banked "
+              f"{typed_seconds[-1]}s: " + "  ".join(f"{s}s" for s in typed_seconds))
+        return 1
+    if typed_seconds[-1] < 3:
+        print("status clock probe: FAIL - typing banked almost nothing: "
+              + "  ".join(f"{s}s" for s in typed_seconds))
+        return 1
+    for i in range(1, len(typed_seconds)):
+        if typed_seconds[i] <= typed_seconds[i - 1]:
+            print(f"status clock probe: FAIL - the typed run's chip stalled: "
+                  f"{typed_seconds[i - 1]}s then {typed_seconds[i]}s")
+            return 1
+    print("status clock probe: ok - typing banked real time "
+          f"({typed_seconds[0]}s -> {typed_seconds[-1]}s over {budget:g}s)")
 
     # ── Scene 2: the shipped default -- no settings at all, so both keys are
     # at their default and the bar carries neither chip ─────────────────────

@@ -96,6 +96,20 @@ namespace
         .count();
   }
 
+  // The local counter's own clock, and the one thing the two callers have to
+  // agree on: the frame loop's once-a-second pass (render/status_line.cpp), the
+  // shutdown flush (core/editor.cpp) and the activity ticks below all speak the
+  // time since boot. Wall-clock milliseconds are for the cli, which timestamps
+  // heartbeats against the epoch; handing them to the counter instead made
+  // "now minus the last credit" the epoch offset, capped to two minutes and
+  // credited on the next keystroke.
+  long long steady_clock_ms()
+  {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+  }
+
   // What the one-time cli check found, which nowadays includes the install that
   // check now does: whether tracking can start, which binary the runs go to, and
   // whether a failure is worth another look on the next config apply.
@@ -164,9 +178,10 @@ namespace
 
 void Editor::note_editing_activity(bool is_write)
 {
-  const long long now_ms = wall_clock_ms();
-  coding_time_tick(now_ms, true);
-  wakatime_heartbeat(is_write, now_ms);
+  // Two clocks, one per reader: the local counter measures a duration and takes
+  // the monotonic one, while the heartbeat below is a timestamp on the epoch.
+  coding_time_tick(steady_clock_ms(), true);
+  wakatime_heartbeat(is_write, wall_clock_ms());
 }
 
 // ---------------------------------------------------------------------------
@@ -474,9 +489,15 @@ void Editor::flush_coding_time(long long now_ms, bool force)
 
 std::string Editor::status_coding_label(long long now_ms)
 {
-  if (wakatime_enabled && !wakatime_today_text.empty())
-  {
-    return wakatime_today_text;
-  }
-  return status_clock::format_duration(coding_time.live_ms(now_ms));
+  const std::string local = status_clock::format_duration(coding_time.live_ms(now_ms));
+  return jot_wakatime::activity_label(wakatime_enabled ? wakatime_today_text : std::string(),
+                                      local);
+}
+
+bool Editor::coding_label_from_wakatime() const
+{
+  // The same rule the label above applies, asked only for which source won: the
+  // chip's glyph has to name the number beside it, so the two readers of this
+  // decision are kept on one expression rather than two that can drift.
+  return wakatime_enabled && !jot_wakatime::activity_label(wakatime_today_text, "").empty();
 }

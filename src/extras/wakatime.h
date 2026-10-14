@@ -87,8 +87,12 @@ namespace jot_wakatime
   // field reads as empty, which is the caller's signal to fall back.
   std::string today_text(const std::string &cli_stdout);
 
-  // The activity chip's label: the cli's total when there is one, else the
-  // local session duration it stands in for, so the chip is never blank.
+  // The activity chip's label: the cli's total when it carries one, else the
+  // local session duration it stands in for, so the chip is never blank. A
+  // total that reports no time at all ("0 secs") counts as no answer: it is
+  // what the cli prints while its queued heartbeats have not reached the server
+  // yet, and a bar that showed it would sit on a zero through a session of real
+  // work while the local store knew better.
   std::string activity_label(const std::string &today, const std::string &fallback);
 
   // The api_key out of a ~/.wakatime.cfg's `[settings]` section (up to the next

@@ -353,7 +353,26 @@ namespace jot_wakatime
 
   std::string activity_label(const std::string &today, const std::string &fallback)
   {
-    return today.empty() ? fallback : today;
+    if (today.empty())
+    {
+      return fallback;
+    }
+    // A total that reports no time at all is not an answer. The cli prints one
+    // while the heartbeats it is holding have not reached the server yet (the
+    // spec's own offline queue), so a chip trusting it reads "0 secs" through a
+    // whole session of real work; an account with nothing logged yet reads the
+    // same. Either way the local store, which counted the same minutes, is what
+    // the bar shows.
+    bool digit = false;
+    for (char c : today)
+    {
+      if (c >= '1' && c <= '9')
+      {
+        return today;
+      }
+      digit = digit || c == '0';
+    }
+    return digit ? fallback : today;
   }
 
   namespace

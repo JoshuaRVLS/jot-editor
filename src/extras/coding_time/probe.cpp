@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <system_error>
 
 namespace fs = std::filesystem;
 
@@ -45,6 +46,37 @@ namespace coding_time
       }
 #endif
       return {};
+    }
+
+    // One directory, one spelling. The workspace arrives as whatever the editor
+    // holds at the time: an absolute path from the explorer, or the "." a
+    // session with no folder open keeps, and either can carry a trailing
+    // separator. Two spellings of one place have to land on one key -- otherwise
+    // a project's time is split between them and neither line is the total the
+    // chip reports. A relative spelling is resolved here, against the directory
+    // the editor was started in, which is the one it was written from.
+    std::string canonical_workspace(const std::string &workspace)
+    {
+      if (workspace.empty())
+      {
+        return workspace;
+      }
+      std::error_code ec;
+      fs::path path = fs::absolute(fs::path(workspace), ec);
+      if (ec)
+      {
+        path = fs::path(workspace);
+      }
+      path = path.lexically_normal();
+      std::string out = path.string();
+      // lexically_normal() keeps a trailing separator on "a/b/", and the root
+      // keeps its own ("C:\\"): drop separators down to the root and no further.
+      const std::string root = path.root_path().string();
+      while (out.size() > root.size() && (out.back() == '/' || out.back() == '\\'))
+      {
+        out.pop_back();
+      }
+      return out;
     }
   } // namespace
 
@@ -88,7 +120,7 @@ namespace coding_time
   std::string key_for(const std::string &workspace, const std::string &date)
   {
     // Escaped, so a workspace path with a tab in it cannot split its own key.
-    return string_util::escape_field(workspace) + "\t" + date;
+    return string_util::escape_field(canonical_workspace(workspace)) + "\t" + date;
   }
 
   std::string workspace_of(const std::string &key)
@@ -172,12 +204,17 @@ namespace coding_time
       {
         continue;
       }
+      const long long ms = std::strtoll(std::string(ms_text).c_str(), nullptr, 10);
+      if (ms <= 0)
+      {
+        continue; // a row of nothing adds nothing to the total
+      }
       // The key is put back together from the two fields rather than trusting
       // the line's own spacing, so a stray blank in a hand edit is not a second
-      // entry for the same place.
-      set_total(totals,
-                key_for(string_util::unescape_field(parts[0]), date),
-                std::strtoll(std::string(ms_text).c_str(), nullptr, 10));
+      // entry for the same place. Rows that fold onto one key -- two spellings
+      // of one directory, or a hand edit that added up a day -- are summed
+      // rather than the later one replacing the earlier.
+      totals[key_for(string_util::unescape_field(parts[0]), date)] += ms;
     }
     return totals;
   }

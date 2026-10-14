@@ -310,4 +310,13 @@ TEST_CASE("WakaTime: the chip falls back to the local total", "[jot][wakatime]")
   REQUIRE(activity_label("1 hr 24 mins", "12m") == "1 hr 24 mins");
   REQUIRE(activity_label("", "12m") == "12m");
   REQUIRE(activity_label("", "") == "");
+  // A total reporting no time at all is not an answer: the cli prints one while
+  // its queued heartbeats are still offline, and the local store counted the
+  // same minutes, so it is what the chip shows instead.
+  REQUIRE(activity_label("0 secs", "12m") == "12m");
+  REQUIRE(activity_label("0 mins", "12m") == "12m");
+  REQUIRE(activity_label("0 hrs 0 mins", "12m") == "12m");
+  REQUIRE(activity_label("0 secs", "") == "");
+  // A worded total with no digits is a real answer and stays.
+  REQUIRE(activity_label("less than a minute", "12m") == "less than a minute");
 }

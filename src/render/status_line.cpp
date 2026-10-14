@@ -517,12 +517,13 @@ void Editor::render_status_line()
     if (config.get_bool("status_coding_time", true))
     {
       // That chip reports WakaTime's total for today once the integration is on
-      // and has an answer, and the locally stored total for this workspace until
-      // then and whenever it is off -- one chip with two sources, not a second
-      // chip beside it (extras/coding_time/wiring.cpp). Which one is showing reads off
-      // the glyph: the clock outline the VS Code plugin leads its own status bar
-      // with, against the timer the local store stands in with.
-      const bool from_wakatime = wakatime_enabled && !wakatime_today_text.empty();
+      // and has a real answer, and the locally stored total for this workspace
+      // until then, whenever it is off, and whenever the cli can only say
+      // "0 secs" (extras/coding_time/wiring.cpp) -- one chip with two sources,
+      // not a second chip beside it. Which one is showing reads off the glyph:
+      // the clock outline the VS Code plugin leads its own status bar with,
+      // against the timer the local store stands in with.
+      const bool from_wakatime = coding_label_from_wakatime();
       right_segments.push_back({" " + status_coding_label(now_ms) + " ",
                                 theme.fg_status_muted,
                                 theme.bg_status,

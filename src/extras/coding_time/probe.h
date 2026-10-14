@@ -54,6 +54,12 @@ namespace coding_time
   // because the file is then one line per place, in order.
   using Totals = std::map<std::string, long long>;
 
+  // The key for one place on one day. The workspace is canonicalized here, which
+  // is what keeps one project's time on one line: a trailing separator is
+  // dropped and a relative spelling (the "." of a session with no folder open)
+  // is resolved against the directory the editor was started in. Both the store
+  // and the reader of the file go through this, so rows written before this rule
+  // existed fold onto the same key as the ones after it.
   std::string key_for(const std::string &workspace, const std::string &date);
   // The workspace part of a key, for a caller that wants to report where a
   // total came from.
@@ -66,6 +72,8 @@ namespace coding_time
   // keeping empty rows around forever.
   void set_total(Totals &totals, const std::string &key, long long ms);
   std::string serialize(const Totals &totals);
+  // Reads a store back. Rows that fold onto one key are summed, and a malformed
+  // or zero row is dropped rather than costing the rest of the file anything.
   Totals parse(const std::string &text);
 
   // The store's own file, and the two calls that move it: the same shape as the
