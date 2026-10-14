@@ -72,6 +72,10 @@ struct TSLanguageEntry
   std::string symbol;
   std::string source_subdir;
   std::vector<std::string> library_names;
+  // Grammar commit :tsinstall/:tsupdate build, from the vendored lockfile.
+  // Empty for a grammar with no upstream pin: that one clones its default
+  // branch, which is how every language behaved before pinning.
+  std::string revision;
 };
 
 struct TreeSitterRuntimeStatus
@@ -110,6 +114,11 @@ public:
 
   const TSLanguageEntry *get_language(const std::string &extension) const;
   std::vector<std::string> language_names() const;
+  // Languages with a parser library already in one of the installed search
+  // roots: what :tsupdate has to rebuild. A filesystem check, so it answers for
+  // a parser the editor has never loaded and never pays a dlopen per language.
+  bool has_installed_parser(const std::string &language_id) const;
+  std::vector<std::string> installed_languages() const;
 
   bool has_language(const std::string &extension) const;
   bool has_language_override(const std::string &extension) const;
@@ -193,7 +202,8 @@ public:
                          const std::string &source_subdir = "",
                          const std::string &symbol = "",
                          const std::vector<std::string> &library_names = {},
-                         const std::string &minimal_query = "");
+                         const std::string &minimal_query = "",
+                         const std::string &revision = "");
   void disable_language(const std::string &language_id);
   std::string language_for_extension(const std::string &extension) const;
   TreeSitterRuntimeStatus status(const std::string &language_or_extension) const;

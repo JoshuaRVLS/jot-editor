@@ -208,6 +208,8 @@ namespace CommandLineUtils
                                                       "outline",
                                                       "tsinstall",
                                                       "treesitterinstall",
+                                                      "tsupdate",
+                                                      "treesitterupdate",
                                                       "tsstatus",
                                                       "tsreload",
                                                       "treesitterreload",
@@ -302,6 +304,8 @@ namespace CommandLineUtils
            || lc == "bible"
            || lc == "tsinstall"
            || lc == "treesitterinstall"
+           || lc == "tsupdate"
+           || lc == "treesitterupdate"
            || lc == "replace" || lc == "replacei" || lc == "replaceword" || lc == "replacere"
            || lc == "surround" || lc == "changeinside";
   }

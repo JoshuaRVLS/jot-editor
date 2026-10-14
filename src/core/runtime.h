@@ -145,7 +145,13 @@ bool remove_lsp_server(const std::string &name);
 void install_web_toolchain();
 // Registry-owned "id1|id2|..." list for usage messages / completions.
 std::string lsp_install_usage_hint() const;
-bool install_tree_sitter_language(const std::string &language);
+// Builds `language`'s parser from source. `updating` only changes the wording:
+// the command is the same clone-and-check-out either way, since :tsinstall and
+// :tsupdate both build the pinned revision.
+bool install_tree_sitter_language(const std::string &language, bool updating = false);
+// :tsupdate [language ...]: rebuild already-installed parsers at their pinned
+// revision. With no argument, every installed language that has a pin.
+bool update_tree_sitter_languages(const std::string &argument);
 void show_tree_sitter_status();
 void reload_tree_sitter();
 void poll_tree_sitter_installs();

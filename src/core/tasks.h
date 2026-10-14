@@ -15,6 +15,9 @@ struct TerminalTask
 struct TreeSitterInstallJob
 {
   std::string language;
+  // :tsupdate rather than :tsinstall. The work is identical (both build the
+  // pinned revision); only the wording of the progress and result differs.
+  bool updating = false;
   // Silent background job (pid >= 0) writes its output to output_path and is
   // polled via read_appended(); terminal_index is the fallback used when a
   // background job could not be started.

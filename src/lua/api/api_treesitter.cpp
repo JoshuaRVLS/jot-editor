@@ -110,7 +110,8 @@ namespace
                                            luaL_optstring(L, 5, ""),
                                            luaL_optstring(L, 6, ""),
                                            libraries,
-                                           luaL_optstring(L, 8, ""));
+                                           luaL_optstring(L, 8, ""),
+                                           luaL_optstring(L, 9, ""));
     lua_pushboolean(L, ok);
     return 1;
   }

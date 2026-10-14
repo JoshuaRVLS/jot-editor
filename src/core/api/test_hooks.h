@@ -542,6 +542,37 @@ void set_message_for_test(const std::string &msg)
 {
   set_message(msg, false);
 }
+// --- tree-sitter install metadata (test) ---
+// Registers a language the way registry.lua does, revision included, so a case
+// can drive :tsupdate over install metadata without booting the Lua registry.
+bool register_tree_sitter_language_for_test(const std::string &name, const std::string &revision)
+{
+  return ts_manager_.register_language(name,
+                                       {"." + name},
+                                       "",
+                                       "https://github.com/jot-test/tree-sitter-" + name,
+                                       "",
+                                       "tree_sitter_" + name,
+                                       {"libtree-sitter-" + name + ".so"},
+                                       "",
+                                       revision);
+}
+// Whether the manager counts a language as installed, the check :tsupdate makes
+// before it rebuilds anything (a filesystem look, no dlopen).
+bool tree_sitter_parser_installed_for_test(const std::string &name) const
+{
+  return ts_manager_.has_installed_parser(name);
+}
+int tree_sitter_installed_language_count_for_test() const
+{
+  return (int)ts_manager_.installed_languages().size();
+}
+// Runs :tsupdate's own path and reports whether it queued anything. Refusals
+// land on the message channel instead, which is what the cases read.
+bool update_tree_sitter_languages_for_test(const std::string &argument)
+{
+  return update_tree_sitter_languages(argument);
+}
 // Feeds one SGR-style mouse event through the real dispatch, so a case pins what
 // a notch does (Ctrl+wheel scrolls sideways, a plain wheel scrolls the buffer)
 // without a pty.

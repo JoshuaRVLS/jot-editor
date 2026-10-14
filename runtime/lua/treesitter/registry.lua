@@ -1,5 +1,9 @@
 local M = {}
 
+-- The grammar revisions, generated from nvim-treesitter's lockfile by
+-- tools/treesitter_lockfile_import.py. Language -> commit.
+local lockfile = dofile(jot.treesitter.runtime_path .. "/lockfile.lua")
+
 -- This table is the complete Tree-sitter policy. Native code only owns handles,
 -- loading, parsing, caching, and ABI validation.
 local data = {
@@ -247,6 +251,10 @@ for _, item in ipairs(data) do
 (preproc_include) @keyword
 ]]
   end
+  -- The revision :tsinstall/:tsupdate build, from the vendored lockfile. Empty
+  -- for a grammar nvim-treesitter does not ship: that one clones whatever its
+  -- default branch holds, which is how every language behaved before pinning.
+  language.revision = lockfile[language.name] or ""
   table.insert(M.languages, language)
 end
 
@@ -254,11 +262,11 @@ function M.register(native)
   for _, language in ipairs(M.languages) do
     native.register_language(language.name, language.extensions, "", language.url,
       language.source_subdir, language.symbol, language.library_names,
-      language.minimal_query)
+      language.minimal_query, language.revision)
     for _, alias in ipairs(language.aliases) do
       native.register_language(language.name, {"." .. alias}, "", language.url,
         language.source_subdir, language.symbol, language.library_names,
-        language.minimal_query)
+        language.minimal_query, language.revision)
     end
   end
 end

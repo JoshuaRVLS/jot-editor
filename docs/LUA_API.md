@@ -796,7 +796,10 @@ script must work across different Jot builds.
 
 `runtime/lua/treesitter/registry.lua` is the sole language registry. Each entry
 contains `name`, `extensions`, `aliases`, `url`, `source_subdir`, `symbol`,
-`library_names`, and `query_file`. Queries live at
+`library_names`, `query_file`, and `revision` (the grammar commit to build, read
+from `runtime/lua/treesitter/lockfile.lua` and passed to
+`jot.treesitter.register_language` as its ninth argument; empty means the
+repository's default branch). Queries live at
 `runtime/lua/treesitter/queries/<language>/highlights.scm`, one directory per
 language.
 The bundled registry covers every parser previously shipped by Jot. Lua loads
@@ -816,7 +819,8 @@ ${XDG_DATA_HOME:-$HOME/.local/share}/jot/treesitter/
 Set `JOT_TREESITTER_PREFIX` for an explicit writable root. `JOT_TREESITTER_PATH`
 and `JOT_TREESITTER_QUERY_PATH` remain search-path overrides. `:tsreload` reloads
 Lua registry/query policy and clears native parser, tree, query, and library
-caches together.
+caches together. `:tsupdate [language ...]` rebuilds installed parsers at their
+pinned revision.
 
 ## Diagnostics
 

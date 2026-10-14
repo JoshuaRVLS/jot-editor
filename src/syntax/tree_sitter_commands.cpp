@@ -42,7 +42,7 @@ namespace
   }
 } // namespace
 
-bool Editor::install_tree_sitter_language(const std::string &language)
+bool Editor::install_tree_sitter_language(const std::string &language, bool updating)
 {
   TreeSitterInstallCommand install = TreeSitterInstall::command_for_language(language);
   if (!install.supported)
@@ -50,6 +50,9 @@ bool Editor::install_tree_sitter_language(const std::string &language)
     set_message(install.message);
     return false;
   }
+  // One verb per intent, so the panel and the message line read as what the
+  // user asked for rather than as an install that happens to be an update.
+  const std::string verb = updating ? "Updating" : "Installing";
 
   // Open the status modal immediately; it shows the job's live progress
   // (cloning → building → … → installed) as the background job reports it.
@@ -62,7 +65,8 @@ bool Editor::install_tree_sitter_language(const std::string &language)
                               { return job.language == install.language && job.running; });
   if (running != tree_sitter_install_jobs.end())
   {
-    set_message("Tree-sitter install already running: " + install.language);
+    set_message("Tree-sitter " + std::string(updating ? "update" : "install")
+                + " already running: " + install.language);
     needs_redraw = true;
     return true;
   }
@@ -70,6 +74,7 @@ bool Editor::install_tree_sitter_language(const std::string &language)
   TreeSitterInstallJob job;
   job.language = install.language;
   job.progress = "starting";
+  job.updating = updating;
 
   // Preferred path: a silent background job with its output streamed into a
   // log file the poll loop reads for markers - no terminal panel is opened.
@@ -85,7 +90,7 @@ bool Editor::install_tree_sitter_language(const std::string &language)
                                                   { return old.language == install.language; }),
                                    tree_sitter_install_jobs.end());
     tree_sitter_install_jobs.push_back(std::move(job));
-    set_message(install.message);
+    set_message(verb + " Tree-sitter " + install.language + "…");
     needs_redraw = true;
     return true;
   }
@@ -109,9 +114,81 @@ bool Editor::install_tree_sitter_language(const std::string &language)
                                  tree_sitter_install_jobs.end());
   tree_sitter_install_jobs.push_back(std::move(job));
   term->send_text(install.command + "\r");
-  set_message(install.message);
+  set_message(verb + " Tree-sitter " + install.language + "…");
   needs_redraw = true;
   return true;
+}
+
+bool Editor::update_tree_sitter_languages(const std::string &argument)
+{
+#ifndef JOT_TREESITTER
+  set_message("Tree-sitter inactive: runtime not available");
+  return false;
+#else
+  std::vector<std::string> requested;
+  std::istringstream stream(argument);
+  std::string word;
+  while (stream >> word)
+  {
+    requested.push_back(word);
+  }
+  if (requested.empty())
+  {
+    // No argument: every installed parser that has a pin, which is what a
+    // bare :TSUpdate does in nvim-treesitter.
+    for (const auto &name : ts_manager_.installed_languages())
+    {
+      if (TreeSitterInstall::has_revision(name))
+      {
+        requested.push_back(name);
+      }
+    }
+    if (requested.empty())
+    {
+      set_message("No installed Tree-sitter parser to update; :tsinstall <language> adds one");
+      needs_redraw = true;
+      return false;
+    }
+  }
+
+  int queued = 0;
+  for (const auto &language : requested)
+  {
+    TreeSitterInstallCommand install = TreeSitterInstall::command_for_language(language);
+    if (!install.supported)
+    {
+      set_message(install.message);
+      continue;
+    }
+    if (!TreeSitterInstall::has_revision(install.language))
+    {
+      // Honest rather than silent: a grammar with no upstream pin is already
+      // built from its default branch, so there is no earlier revision to
+      // move back to.
+      set_message("Tree-sitter " + install.language
+                  + " has no pinned revision; :tsinstall " + install.language
+                  + " rebuilds it from the repository's default branch");
+      continue;
+    }
+    if (!ts_manager_.has_installed_parser(install.language))
+    {
+      set_message("Tree-sitter " + install.language + " is not installed; :tsinstall "
+                  + install.language + " installs it");
+      continue;
+    }
+    if (install_tree_sitter_language(install.language, true))
+    {
+      queued++;
+    }
+  }
+
+  if (queued > 1)
+  {
+    set_message("Updating " + std::to_string(queued) + " Tree-sitter parsers…");
+  }
+  needs_redraw = true;
+  return queued > 0;
+#endif
 }
 
 void Editor::show_tree_sitter_status()
@@ -287,6 +364,10 @@ void Editor::poll_tree_sitter_installs()
       {
         job.progress = "cloning";
       }
+      else if (phase == "pin")
+      {
+        job.progress = "checking out the pinned revision";
+      }
       else if (phase == "build")
       {
         job.progress = "building";
@@ -337,7 +418,8 @@ void Editor::poll_tree_sitter_installs()
             init_ts_for_buffer(buf);
           }
         }
-        set_message("Tree-sitter installed: " + job.language);
+        set_message("Tree-sitter " + std::string(job.updating ? "updated: " : "installed: ")
+                    + job.language);
       }
       else
       {
@@ -375,7 +457,8 @@ void Editor::poll_tree_sitter_installs()
       job.running = false;
       job.failed = true;
       job.succeeded = false;
-      set_message("Tree-sitter install failed: " + job.language);
+      set_message("Tree-sitter " + std::string(job.updating ? "update" : "install")
+                  + " failed: " + job.language);
       changed = true;
     }
 

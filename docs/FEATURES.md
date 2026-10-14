@@ -335,6 +335,16 @@ settles, so scrolling a long way does not grow the process.
 - Tree-sitter highlighting when the runtime and grammars are available, with a
   regex fallback for common file types.
 - Commands to install grammars, inspect status, and reload parser/query caches.
+- Grammar revisions are pinned. `runtime/lua/treesitter/lockfile.lua` carries the
+  commit nvim-treesitter last verified each grammar at (167 of the 180 registry
+  languages; the rest are forks it does not ship), and `:tsinstall` builds that
+  commit rather than whatever the default branch holds that day. Two machines
+  installing the same language get the same parser, and a grammar repository
+  that lands a broken release cannot break an install here. `:tsupdate`
+  rebuilds every installed parser at its pin (`:tsupdate <language>` for one),
+  and for a grammar with no upstream pin it says so instead of pretending the
+  default branch is an update. The pinning data is generated, not hand-written:
+  `tools/treesitter_lockfile_import.py` rewrites it from upstream's lockfile.
 - Rich token mapping (variables, parameters, types, functions, keywords,
   operators, etc.) with theme slots for both classic and Tree-sitter captures.
 - The query language as the files in the grammar repositories actually write it,
@@ -1620,7 +1630,7 @@ goes blank. The buffer stays fully visible while you type.
 `:typedefinition` `:implementation` `:switchheader`
 
 **Tree-sitter:** `:tsinstall <lang>` (e.g. `:tsinstall javascript` or
-`:tsinstall jsx`) `:tsstatus` `:tsreload`
+`:tsinstall jsx`) `:tsupdate [lang]` `:tsstatus` `:tsreload`
 
 **AI:** `:CodeCompanionChat` / `:Cc` `:CodeCompanionNewChat`
 `:CodeCompanionSend` `:CodeCompanionStop` `:CodeCompanionActions`

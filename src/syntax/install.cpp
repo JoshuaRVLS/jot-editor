@@ -178,6 +178,18 @@ namespace
     line("if exist " + win_quote(work) + " rd /s /q " + win_quote(work));
     line("echo [jot:treesitter] clone " + entry.name);
     line("git clone --depth 1 " + win_quote(entry.url) + " " + win_quote(work));
+    if (!entry.revision.empty())
+    {
+      // Same pin as the POSIX script: fetch the commit, check it out, and set
+      // the flag the success gate reads. A checkout that did not land on the
+      // commit leaves the flag unset, so a library file left over from an
+      // earlier run cannot make a failed update look installed.
+      line("echo [jot:treesitter] pin " + entry.name);
+      line("git -C " + win_quote(work) + " fetch --depth 1 origin " + entry.revision
+           + " || git -C " + win_quote(work) + " fetch --tags origin");
+      line("git -C " + win_quote(work) + " checkout --detach " + entry.revision
+           + " && set \"_jot_pin=1\"");
+    }
     line("echo [jot:treesitter] build " + entry.name);
     // -x forces the language per source: parser.c is C99, which the C++ front
     // end would reject.
@@ -199,8 +211,12 @@ namespace
     line("if exist " + win_quote(work) + " rd /s /q " + win_quote(work));
     // The library on disk is the only honest completion signal: cmd has no
     // equivalent of `set -e`, so exit codes from the steps above are not one.
+    if (entry.revision.empty())
+    {
+      line("set \"_jot_pin=1\"");
+    }
     line("set \"_jot_ts=\"");
-    line("if exist " + win_quote(libfile) + " set \"_jot_ts=1\"");
+    line("if defined _jot_pin if exist " + win_quote(libfile) + " set \"_jot_ts=1\"");
     line("if defined _jot_ts echo [jot:treesitter] success " + entry.name);
     line("if not defined _jot_ts echo [jot:treesitter] failed " + entry.name + " exit=1");
     return cmd.str();
@@ -250,6 +266,19 @@ namespace
     cmd << "mkdir -p \"$libdir\" \"$querydir\"; ";
     cmd << "echo '[jot:treesitter] clone " << entry.name << "'; ";
     cmd << "git clone --depth 1 " << shell_util::shell_quote(entry.url) << " \"$work\"; ";
+    if (!entry.revision.empty())
+    {
+      // The pinned commit, not the default branch: two machines installing the
+      // same language must build the same grammar. A shallow fetch of one
+      // commit is what GitHub answers; a server that refuses it gets a full
+      // fetch of the tags. The checkout names the commit itself rather than
+      // FETCH_HEAD, so a fetch that brought nothing usable fails here (and set
+      // -e aborts to the trap) instead of quietly building the default branch.
+      cmd << "echo '[jot:treesitter] pin " << entry.name << "'; ";
+      cmd << "git -C \"$work\" fetch --depth 1 origin " << entry.revision
+          << " || git -C \"$work\" fetch --tags origin; ";
+      cmd << "git -C \"$work\" checkout --detach " << entry.revision << "; ";
+    }
     cmd << "src=\"$work";
     if (!entry.source_subdir.empty())
     {
@@ -325,6 +354,12 @@ namespace TreeSitterInstall
     return metadata.find(normalized) != metadata.end()
            || language.rfind("https://github.com/", 0) == 0
            || language.rfind("github.com/", 0) == 0;
+  }
+
+  bool has_revision(const std::string &language)
+  {
+    auto found = metadata.find(normalize_install_language(language));
+    return found != metadata.end() && !found->second.revision.empty();
   }
 
   TreeSitterInstallCommand command_for_language(const std::string &language)

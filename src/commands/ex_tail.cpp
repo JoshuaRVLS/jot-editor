@@ -516,6 +516,10 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
       install_tree_sitter_language(arg);
     }
   }
+  else if (lcmd == "tsupdate" || lcmd == "treesitterupdate")
+  {
+    update_tree_sitter_languages(arg);
+  }
   else if (lcmd == "tsstatus")
   {
     show_tree_sitter_status();

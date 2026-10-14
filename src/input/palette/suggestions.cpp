@@ -225,6 +225,9 @@ namespace
         {"outline", "Navigation", "Toggle symbols/outline panel", 76},
         {"tsinstall", "Tree-sitter", "Install Tree-sitter grammar", 68},
         {"treesitterinstall", "Tree-sitter", "Install Tree-sitter grammar", 64},
+        {"tsupdate", "Tree-sitter", "Rebuild installed grammars at their pinned revision", 66},
+        {"treesitterupdate", "Tree-sitter", "Rebuild installed grammars at their pinned revision",
+         62},
         {"tsstatus", "Tree-sitter", "Show syntax engine status", 66},
         {"tsreload", "Tree-sitter", "Reload parser libraries", 64},
         {"treesitterreload", "Tree-sitter", "Reload parser libraries", 60},
@@ -771,6 +774,15 @@ void Editor::refresh_command_palette()
       for (const auto &opt : TreeSitterInstall::supported_languages())
       {
         add_arg(opt, "Tree-sitter", "Grammar language", 110);
+      }
+    }
+    else if (lcmd == "tsupdate" || lcmd == "treesitterupdate")
+    {
+      // Only what is installed: :tsupdate rebuilds an existing parser, and
+      // offering the other 180 languages would be an offer it has to refuse.
+      for (const auto &opt : ts_manager_.installed_languages())
+      {
+        add_arg(opt, "Tree-sitter", "Installed grammar", 110);
       }
     }
     else if (lcmd == "lspinstall" || lcmd == "lspremove")

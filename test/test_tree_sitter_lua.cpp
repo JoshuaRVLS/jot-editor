@@ -60,7 +60,8 @@ namespace
                                             luaL_optstring(L, 5, ""),
                                             luaL_optstring(L, 6, ""),
                                             libraries,
-                                            luaL_optstring(L, 8, ""));
+                                            luaL_optstring(L, 8, ""),
+                                            luaL_optstring(L, 9, ""));
     lua_pushboolean(L, ok);
     return 1;
   }
@@ -169,6 +170,38 @@ TEST_CASE("Real Lua runtime boot keeps every registry language registered")
   INFO("cpp parser_message: " << status.parser_message);
   REQUIRE(status.has_language);
   REQUIRE(status.parser_message != "unsupported language");
+
+  // Grammar revisions come from the vendored lockfile through registry.lua and
+  // the binding, and are what :tsinstall builds. A language with no upstream
+  // pin registers an empty revision (its default branch), and the install
+  // metadata has to see the same thing the native entry carries.
+  int pinned = 0;
+  int unpinned = 0;
+  for (const auto &name : names)
+  {
+    if (TreeSitterInstall::has_revision(name))
+    {
+      pinned++;
+      continue;
+    }
+    unpinned++;
+    INFO("no upstream pin: " << name);
+  }
+  INFO("pinned: " << pinned << ", unpinned: " << unpinned);
+  // The bulk of the registry is nvim-treesitter's; the handful of forks it does
+  // not ship keep cloning their default branch, which is how every language
+  // behaved before pinning.
+  REQUIRE(pinned > 160);
+  REQUIRE(pinned + unpinned == (int)names.size());
+  // The native entry carries the same revision, and the binding is what put it
+  // there: a 40-character lowercase commit hash, never a branch or a tag.
+  const auto *cpp = manager.get_language(".cpp");
+  REQUIRE(cpp != nullptr);
+  INFO("cpp revision: " << cpp->revision);
+  REQUIRE(cpp->revision.size() == 40);
+  REQUIRE(cpp->revision.find_first_not_of("0123456789abcdef") == std::string::npos);
+  const auto command = TreeSitterInstall::command_for_language("cpp");
+  REQUIRE(command.command.find(cpp->revision) != std::string::npos);
   lua_close(L);
 }
 

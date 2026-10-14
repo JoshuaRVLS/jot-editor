@@ -37,17 +37,27 @@ namespace
     bool had_ = false;
   };
 
+  // The commit :tsinstall builds for cpp in this test. Real lockfile revisions
+  // are 40-character hashes; the renderers must pass this through untouched, so
+  // the value only has to be distinctive.
+  const char *CPP_REVISION = "e5cea0ec884c5c3d2d1e41a741a66ce13da4d945";
+
   void register_install_metadata()
   {
     for (const auto &name : {"cpp", "javascript", "typescript", "tsx", "zig"})
     {
       std::string repo =
           name == std::string("typescript") || name == std::string("tsx") ? "typescript" : name;
+      // cpp is pinned, zig deliberately is not: the URL-install path and the
+      // registry's forks have no upstream revision, and they must still render
+      // a script that clones and builds.
+      const std::string revision = name == std::string("cpp") ? CPP_REVISION : "";
       TreeSitterInstall::register_language(
           {name,
            std::string("https://github.com/tree-sitter/tree-sitter-") + repo,
            name == std::string("typescript") || name == std::string("tsx") ? name : "",
-           {std::string("libtree-sitter-") + name + ".so"}});
+           {std::string("libtree-sitter-") + name + ".so"},
+           revision});
     }
   }
 } // namespace
@@ -94,6 +104,31 @@ TEST_CASE("Tree Sitter Install Command Mapping", "[jot]")
   REQUIRE(cpp.command.find("[jot:treesitter] failed cpp exit=$rc") != std::string::npos);
   REQUIRE(cpp.command.find("find \"$work/queries\"") != std::string::npos);
   REQUIRE(cpp.command.find("-name '*.scm'") != std::string::npos);
+
+  // The pin: the clone is followed by a shallow fetch of the recorded commit
+  // and a detached checkout of that commit. The checkout names the commit
+  // rather than FETCH_HEAD, so a fetch that landed on nothing usable fails
+  // under `set -e` instead of silently building the default branch.
+  REQUIRE(TreeSitterInstall::has_revision("cpp"));
+  REQUIRE(TreeSitterInstall::has_revision("CPP"));
+  REQUIRE_FALSE(TreeSitterInstall::has_revision("zig"));
+  REQUIRE(cpp.command.find("echo '[jot:treesitter] pin cpp'") != std::string::npos);
+  REQUIRE(cpp.command.find("git -C \"$work\" fetch --depth 1 origin " + std::string(CPP_REVISION))
+          != std::string::npos);
+  REQUIRE(cpp.command.find("git -C \"$work\" checkout --detach " + std::string(CPP_REVISION))
+          != std::string::npos);
+  REQUIRE(cpp.command.find("checkout --detach FETCH_HEAD") == std::string::npos);
+  // A server that refuses to fetch one commit by hash still gets a full fetch
+  // of the tags, which is where the commit then comes from.
+  REQUIRE(cpp.command.find("fetch --tags origin") != std::string::npos);
+  REQUIRE(cpp.command.find("git clone --depth 1")
+          < cpp.command.find("fetch --depth 1 origin " + std::string(CPP_REVISION)));
+  REQUIRE(cpp.command.find("fetch --depth 1 origin " + std::string(CPP_REVISION))
+          < cpp.command.find("[jot:treesitter] build cpp"));
+  // An unpinned language keeps the plain clone-and-build script.
+  auto unpinned = TreeSitterInstall::command_for_language("zig");
+  REQUIRE(unpinned.command.find("[jot:treesitter] pin") == std::string::npos);
+  REQUIRE(unpinned.command.find("fetch --depth 1 origin") == std::string::npos);
 
   auto javascript = TreeSitterInstall::command_for_language("javascript");
   REQUIRE(javascript.supported);
@@ -175,6 +210,27 @@ TEST_CASE("Tree Sitter Install Renders A cmd.exe Build On Windows", "[jot]")
   REQUIRE(cpp.command.find("echo [jot:treesitter] success cpp") != std::string::npos);
   REQUIRE(cpp.command.find("echo [jot:treesitter] failed cpp exit=1") != std::string::npos);
   REQUIRE(cpp.command.find("treesitter") != std::string::npos);
+  // The pin is fetched and checked out with cmd.exe lines (no for/f, which
+  // spells its loop variable differently in a batch than on a command line),
+  // and success is gated on the checkout having landed: a DLL left from an
+  // earlier build must not report an update that never happened.
+  REQUIRE(TreeSitterInstall::has_revision("cpp"));
+  REQUIRE(cpp.command.find("echo [jot:treesitter] pin cpp") != std::string::npos);
+  REQUIRE(cpp.command.find("jot-tree-sitter-cpp\" fetch --depth 1 origin "
+                           + std::string(CPP_REVISION))
+          != std::string::npos);
+  REQUIRE(cpp.command.find("jot-tree-sitter-cpp\" checkout --detach " + std::string(CPP_REVISION)
+                           + " && set \"_jot_pin=1\"")
+          != std::string::npos);
+  REQUIRE(cpp.command.find("if defined _jot_pin if exist") != std::string::npos);
+  REQUIRE(cpp.command.find("for /f") == std::string::npos);
+  // An unpinned language writes the same flag unconditionally, so the success
+  // gate is not tied to a pin it does not have.
+  auto unpinned = TreeSitterInstall::command_for_language("zig");
+  REQUIRE(unpinned.command.find("[jot:treesitter] pin") == std::string::npos);
+  REQUIRE(unpinned.command.find("set \"_jot_pin=1\"") != std::string::npos);
+  REQUIRE(unpinned.command.find("if defined _jot_pin if exist") != std::string::npos);
+
   // Nothing POSIX may survive: no shell, no uname, no mktemp, no find.
   REQUIRE(cpp.command.find("$HOME") == std::string::npos);
   REQUIRE(cpp.command.find("uname") == std::string::npos);

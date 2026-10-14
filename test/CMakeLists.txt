@@ -79,6 +79,7 @@ add_executable(jot_tests
   test_lua_ui_kit.cpp
   test_lua_ui_telescope_alignment.cpp
   test_tree_sitter_lua.cpp
+  test_tree_sitter_update.cpp
   test_lua_treesitter_module.cpp
   test_tree_sitter_incremental.cpp
   test_decorations.cpp

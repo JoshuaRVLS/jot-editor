@@ -208,7 +208,8 @@ bool TreeSitterManager::register_language(const std::string &language_id,
                                           const std::string &source_subdir,
                                           const std::string &symbol,
                                           const std::vector<std::string> &library_names,
-                                          const std::string &minimal_query)
+                                          const std::string &minimal_query,
+                                          const std::string &revision)
 {
   std::string language = language_id;
   std::transform(language.begin(),
@@ -228,7 +229,8 @@ bool TreeSitterManager::register_language(const std::string &language_id,
   entry.source_subdir = source_subdir;
   entry.symbol = symbol;
   entry.library_names = library_names;
-  TreeSitterInstall::register_language({language, url, source_subdir, library_names});
+  entry.revision = revision;
+  TreeSitterInstall::register_language({language, url, source_subdir, library_names, revision});
   languages_[language] = std::move(entry);
   for (auto extension : extensions)
   {
@@ -250,6 +252,41 @@ std::vector<std::string> TreeSitterManager::language_names() const
   std::vector<std::string> names;
   for (const auto &entry : languages_)
     names.push_back(entry.first);
+  std::sort(names.begin(), names.end());
+  return names;
+}
+
+bool TreeSitterManager::has_installed_parser(const std::string &language_id) const
+{
+  auto entry = languages_.find(language_id);
+  if (entry == languages_.end())
+  {
+    return false;
+  }
+  std::error_code ec;
+  for (const auto &root : runtime_library_paths_)
+  {
+    for (const auto &name : entry->second.library_names)
+    {
+      if (fs::is_regular_file(fs::path(root) / name, ec))
+      {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+std::vector<std::string> TreeSitterManager::installed_languages() const
+{
+  std::vector<std::string> names;
+  for (const auto &entry : languages_)
+  {
+    if (has_installed_parser(entry.first))
+    {
+      names.push_back(entry.first);
+    }
+  }
   std::sort(names.begin(), names.end());
   return names;
 }

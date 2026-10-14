@@ -233,6 +233,14 @@ TEST_CASE("Bundled language registry does not claim plain .txt for vimdoc")
   lua_State *L = luaL_newstate();
   REQUIRE(L != nullptr);
   luaL_openlibs(L);
+  // registry.lua is loaded against a runtime root, the way init.lua loads it:
+  // its grammar revisions come from the lockfile beside it.
+  lua_newtable(L); // jot
+  lua_newtable(L); // jot.treesitter
+  lua_pushstring(L, JOT_LUA_SOURCE_DIR "/treesitter");
+  lua_setfield(L, -2, "runtime_path");
+  lua_setfield(L, -2, "treesitter");
+  lua_setglobal(L, "jot");
   const std::string script =
       "local f,e=loadfile('" JOT_LUA_SOURCE_DIR "/treesitter/registry.lua'); "
       "assert(f,e); local m=f(); "
@@ -249,7 +257,12 @@ TEST_CASE("Bundled language registry does not claim plain .txt for vimdoc")
       "  if ext == '.vimdoc' then has_vimdoc_ext = true end "
       "end "
       "assert(has_vimdoc_ext, 'vimdoc lost its .vimdoc extension'); "
-      "assert(#claims == 0, 'still claims .txt: ' .. table.concat(claims, ','))";
+      "assert(#claims == 0, 'still claims .txt: ' .. table.concat(claims, ',')); "
+      // The grammar revision rides along from the lockfile: a 40-character
+      // commit, or empty for a grammar nvim-treesitter does not ship.
+      "assert(vimdoc.revision ~= nil, 'vimdoc has no revision field'); "
+      "assert(vimdoc.revision == '' or #vimdoc.revision == 40, "
+      "'unexpected revision: ' .. vimdoc.revision)";
   int result = luaL_dostring(L, script.c_str());
   INFO(lua_tostring(L, -1));
   REQUIRE(result == LUA_OK);
