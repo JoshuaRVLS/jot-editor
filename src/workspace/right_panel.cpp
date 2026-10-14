@@ -33,6 +33,7 @@ namespace
   constexpr const char *kIconSymbols = "\uF0CA"; // list-ul
   constexpr const char *kIconDebug = "\uF121";   // bug
   constexpr const char *kIconPlugin = "\uF12E";  // puzzle-piece
+  constexpr const char *kIconTree = "\uF1BB";    // fa-tree
 
   // Label for a dock tab: " icon Name ". The plugin tab is named after the
   // panel it is showing, so the strip says what the tab will bring back; with
@@ -59,6 +60,10 @@ namespace
     case RIGHT_PANEL_PLUGIN:
       icon = kIconPlugin;
       name = plugin_panel.empty() ? "Plugin" : plugin_panel;
+      break;
+    case RIGHT_PANEL_TREESITTER:
+      icon = kIconTree;
+      name = "Tree";
       break;
     default:
       break;

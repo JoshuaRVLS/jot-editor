@@ -191,6 +191,71 @@ bool Editor::update_tree_sitter_languages(const std::string &argument)
 #endif
 }
 
+void Editor::open_tree_sitter_playground()
+{
+  const bool showing = show_right_panel && active_right_panel_tab == RIGHT_PANEL_TREESITTER;
+  if (showing)
+  {
+    close_right_panel_tab(RIGHT_PANEL_TREESITTER);
+    set_message("Tree-sitter playground closed");
+    return;
+  }
+  if (zen_mode)
+  {
+    set_message("Zen mode: F12 to leave");
+    return;
+  }
+  open_right_panel_tab(RIGHT_PANEL_TREESITTER);
+  // The panel describes the line the cursor is on, so the keyboard stays with
+  // the buffer: moving the cursor is what makes it update.
+  focus_state = FOCUS_EDITOR;
+  tree_sitter_playground_scroll = 0;
+  rebuild_tree_sitter_playground(true);
+  needs_redraw = true;
+}
+
+void Editor::rebuild_tree_sitter_playground(bool force)
+{
+  if (!show_right_panel || active_right_panel_tab != RIGHT_PANEL_TREESITTER)
+  {
+    return;
+  }
+  FileBuffer &buf = get_buffer();
+  if (buf.line_count() == 0)
+  {
+    tree_sitter_playground_buffer = current_buffer;
+    tree_sitter_playground_line = -1;
+    tree_sitter_playground_text.clear();
+    tree_sitter_playground_subtitle.clear();
+    tree_sitter_playground_rows.clear();
+    return;
+  }
+  const int line_idx = std::clamp(buf.cursor.y, 0, (int)buf.line_count() - 1);
+  // The panel follows the buffer in front, the cursor line and that line's own
+  // text. The dump costs a query run over the line, so it is rebuilt on those
+  // changes (and on `r`), not once per frame. The buffer is part of that: the
+  // tab outlives the file it was opened on, and another file's line 6 is not
+  // this one's.
+  if (!force && current_buffer == tree_sitter_playground_buffer
+      && line_idx == tree_sitter_playground_line
+      && tree_sitter_playground_text == buf.line(line_idx))
+  {
+    return;
+  }
+  tree_sitter_playground_buffer = current_buffer;
+  tree_sitter_playground_line = line_idx;
+  tree_sitter_playground_text = buf.line(line_idx);
+#ifdef JOT_TREESITTER
+  tree_sitter_playground_dump(
+      buf, line_idx, tree_sitter_playground_rows, tree_sitter_playground_subtitle);
+#else
+  tree_sitter_playground_subtitle.clear();
+  tree_sitter_playground_rows.clear();
+  tree_sitter_playground_rows.push_back(
+      {"", "this build has no tree-sitter runtime", "Nothing to show"});
+#endif
+}
+
 void Editor::show_tree_sitter_status()
 {
   FileBuffer &buf = get_buffer();

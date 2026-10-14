@@ -153,6 +153,12 @@ bool install_tree_sitter_language(const std::string &language, bool updating = f
 // revision. With no argument, every installed language that has a pin.
 bool update_tree_sitter_languages(const std::string &argument);
 void show_tree_sitter_status();
+// :tsplayground: the parse tree around the cursor line and the highlight
+// captures that land on it, drawn in the tree-sitter status panel's surface.
+void open_tree_sitter_playground();
+// Rebuilds that body when the cursor moved to another line or that line's text
+// changed; `force` rebuilds for the same line too (:tsplayground, `r`).
+void rebuild_tree_sitter_playground(bool force);
 void reload_tree_sitter();
 void poll_tree_sitter_installs();
 bool handle_tree_sitter_status_input(int ch);

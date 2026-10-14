@@ -39,6 +39,25 @@ metadata registered by Lua. `JOT_TREESITTER_PREFIX` explicitly replaces the
 root; it is checked for writability before clone/build. `:tsreload` reloads Lua
 metadata and queries, then clears all native runtime caches.
 
+## Playground
+
+`:tsplayground` shows what the queries do to the cursor line. It walks the parse
+tree from the outermost node that begins on that line (children carry their
+field name), then asks each query kind a language can ship the same question:
+what does it match here, and where. The five kinds are `highlights.scm` (the
+colours), `folds.scm` (collapsible ranges), `indents.scm` (where a new line
+lands), `injections.scm` (embedded languages) and `textobjects.scm` (the syntax
+objects a motion selects). Every entry carries the byte range the query
+reported, so a colour one cell off its token reads as an off-by-one range right
+there instead of as a rendering mystery.
+
+A section reading `no query file` means the language has no such query
+installed, which is the common case for the four kinds besides highlights: they
+arrive with the grammar repository `:tsinstall` clones. A section reading `none`
+means the query file is loaded and matched nothing on that line. The panel rides
+on the `:tsstatus` surface, so its scroll, `Esc` and mouse handling are the same
+ones.
+
 ## Pinned Revisions
 
 An install clones the repository shallowly and then fetches one commit: the

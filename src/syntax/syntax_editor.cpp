@@ -1578,6 +1578,184 @@ void Editor::install_finished_parses()
   }
 }
 
+bool Editor::tree_sitter_playground_dump(FileBuffer &buf,
+                                         int line_idx,
+                                         std::vector<TreeSitterPlaygroundRow> &rows,
+                                         std::string &subtitle)
+{
+  rows.clear();
+  subtitle.clear();
+  if (line_idx < 0 || line_idx >= buf.line_count())
+  {
+    return false;
+  }
+  const std::string ext = tree_sitter_extension_for_buffer(buf);
+  if (ext.empty() || !ts_manager_.has_language(ext))
+  {
+    rows.push_back({"", "no tree-sitter grammar for this filetype", "Nothing to show"});
+    return false;
+  }
+  init_ts_for_buffer(buf);
+  if (!buf.ts_tree)
+  {
+    rows.push_back({"",
+                    "the parser for " + ext + " is not loaded (:tsinstall " + ext + ")",
+                    "No tree yet"});
+    return false;
+  }
+
+  const std::string &line = buf.line(line_idx);
+  const std::string language = buf.ts_language_id.empty() ? ext : buf.ts_language_id;
+  subtitle = language + "  line " + std::to_string(line_idx + 1);
+  // The panel header row doubles as the thing being explained: the line as the
+  // buffer holds it, which is what every byte range below is relative to.
+  rows.push_back({"Line " + std::to_string(line_idx + 1),
+                  line.empty() ? "(blank)" : line,
+                  ""});
+
+  const uint32_t line_start = line_start_byte(buf, line_idx);
+  const uint32_t line_end = line_start + (uint32_t)line.size();
+  const uint32_t probe_byte = line_end > line_start ? line_end - 1 : line_start;
+  const jot_query::TextReader read_text = buffer_text_reader(buf);
+  auto node_sample = [&](TSNode node)
+  {
+    std::string text = read_text(ts_node_start_point(node), ts_node_end_point(node));
+    for (char &c : text)
+    {
+      if (c == '\n' || c == '\r' || c == '\t')
+      {
+        c = ' ';
+      }
+    }
+    std::string out = trim_spaces(text);
+    if (out.size() > 28)
+    {
+      out = out.substr(0, 27) + "…";
+    }
+    return out;
+  };
+
+  TSNode root = ts_tree_root_node(buf.ts_tree);
+  TSNode node = ts_node_descendant_for_byte_range(root, line_start, probe_byte);
+  // Up to the outermost node that still begins on this line, so the dump reads
+  // as where this line sits rather than as the whole construct above it.
+  while (!ts_node_is_null(node))
+  {
+    const TSNode parent = ts_node_parent(node);
+    if (ts_node_is_null(parent) || ts_node_start_byte(parent) == ts_node_start_byte(root))
+    {
+      break;
+    }
+    if ((int)ts_node_start_point(parent).row != line_idx)
+    {
+      break;
+    }
+    node = parent;
+  }
+
+  std::vector<TreeSitterPlaygroundRow> tree_rows;
+  constexpr int kMaxTreeRows = 160;
+  constexpr int kMaxDepth = 6;
+  auto walk = [&](auto &&self, TSNode current, int depth, const std::string &field) -> void
+  {
+    if ((int)tree_rows.size() >= kMaxTreeRows || depth > kMaxDepth)
+    {
+      return;
+    }
+    std::string label = ts_node_type(current);
+    if (!ts_node_is_named(current))
+    {
+      label = "\"" + label + "\"";
+    }
+    std::string detail;
+    if (!field.empty())
+    {
+      detail = field + ": ";
+    }
+    const std::string text = node_sample(current);
+    if (!text.empty())
+    {
+      detail += "\"" + text + "\"";
+    }
+    tree_rows.push_back({"", detail, label, depth * 2});
+    const uint32_t children = ts_node_child_count(current);
+    for (uint32_t i = 0; i < children; i++)
+    {
+      const TSNode child = ts_node_child(current, i);
+      // Children that do not touch this line belong to the rows above, which
+      // are not drawn here.
+      if (ts_node_end_byte(child) <= line_start || ts_node_start_byte(child) >= line_end)
+      {
+        continue;
+      }
+      const char *field_name = ts_node_field_name_for_child(current, i);
+      self(self, child, depth + 1, field_name ? std::string(field_name) : std::string());
+    }
+  };
+  if (!ts_node_is_null(node))
+  {
+    walk(walk, node, 0, std::string());
+  }
+
+  // Each of the five query kinds a language can ship, asked the same question:
+  // what do you match on this line, and where. A section with no rows is the
+  // answer when colours, folds or an indent behave unexpectedly (the query
+  // does not name anything here) as much as a row is when they do.
+  auto add_query_section = [&](TSQuery *query, const char *title)
+  {
+    std::vector<TreeSitterPlaygroundRow> section_rows;
+    if (query)
+    {
+      if (TSQueryCursor *cursor = ts_query_cursor_new())
+      {
+        ts_query_cursor_set_byte_range(cursor, line_start, line_end);
+        ts_query_cursor_exec(cursor, query, root);
+        TSQueryMatch match;
+        while (ts_query_cursor_next_match(cursor, &match))
+        {
+          for (uint16_t ci = 0; ci < match.capture_count; ci++)
+          {
+            const TSQueryCapture capture = match.captures[ci];
+            uint32_t name_len = 0;
+            const char *name = ts_query_capture_name_for_id(query, capture.index, &name_len);
+            const uint32_t start = ts_node_start_byte(capture.node);
+            const uint32_t end = ts_node_end_byte(capture.node);
+            if (end <= line_start || start >= line_end)
+            {
+              continue;
+            }
+            const uint32_t from = start > line_start ? start - line_start : 0;
+            const uint32_t to = end > line_start ? end - line_start : 0;
+            section_rows.push_back(
+                {"",
+                 "\"" + node_sample(capture.node) + "\"  [" + std::to_string(from) + ","
+                     + std::to_string(to) + ")",
+                 "@" + std::string(name, name_len)});
+          }
+        }
+        ts_query_cursor_delete(cursor);
+      }
+    }
+    // "not installed" and "none" are different answers: the first says the
+    // language ships no query file of that kind (or :tsinstall never copied
+    // it), the second that the query matched nothing on this line.
+    const std::string detail = !query ? "no query file"
+                                       : (section_rows.empty() ? "none"
+                                                               : std::to_string(section_rows.size()));
+    rows.push_back({title, detail, "", 0});
+    rows.insert(rows.end(), section_rows.begin(), section_rows.end());
+  };
+
+  rows.push_back({"Tree", std::to_string(tree_rows.size()) + " nodes on this line", "", 0});
+  rows.insert(rows.end(), tree_rows.begin(), tree_rows.end());
+  add_query_section(ts_manager_.get_highlight_query(ext), "Highlights");
+  add_query_section(ts_manager_.get_fold_query(ext), "Folds");
+  add_query_section(ts_manager_.get_indent_query(ext), "Indents");
+  add_query_section(ts_manager_.get_injection_query(ext), "Injections");
+  add_query_section(ts_manager_.get_textobject_query(ext), "Text objects");
+  return true;
+}
+
 void Editor::confirm_pending_syntax_edits()
 {
   // A command announces its edit before it mutates: save_state snapshots the

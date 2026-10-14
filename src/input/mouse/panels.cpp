@@ -272,6 +272,34 @@ void Editor::handle_mouse_input(int x,
     }
   }
 
+  if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_TREESITTER && ui)
+  {
+    int panel_w = effective_right_panel_width();
+    int panel_x = std::max(0, ui->get_render_width() - panel_w);
+    int panel_y = side_column_top();
+    int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
+    bool inside = x >= panel_x && x < panel_x + panel_w && y >= panel_y && y < panel_y + panel_h;
+    if (inside)
+    {
+      if (is_scroll_up)
+      {
+        tree_sitter_playground_scroll = std::max(0, tree_sitter_playground_scroll - 3);
+      }
+      else if (is_scroll_down)
+      {
+        tree_sitter_playground_scroll += 3;
+      }
+      else if (is_click)
+      {
+        // Clicking the body focuses the panel, which is what hands it j/k and
+        // makes q close it; clicking the buffer gives the keyboard back.
+        focus_state = FOCUS_RIGHT_PANEL;
+      }
+      needs_redraw = true;
+      return;
+    }
+  }
+
   if (show_right_panel && active_right_panel_tab == RIGHT_PANEL_SYMBOLS && ui)
   {
     int panel_w = effective_right_panel_width();

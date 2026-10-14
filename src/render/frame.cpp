@@ -341,6 +341,7 @@ void Editor::render()
       render_git_diff_panel();
       render_outline_panel();
       render_plugin_panel();
+      render_tree_sitter_playground_panel();
     }
     render_status_line();
     ui->dim_rect({0, 0, ui->get_render_width(), ui->get_height()});
@@ -408,6 +409,7 @@ void Editor::render()
       render_git_diff_panel();
       render_outline_panel();
       render_plugin_panel();
+      render_tree_sitter_playground_panel();
     }
 
     // The picture is drawn inside its pane, so the viewer is only "open" while

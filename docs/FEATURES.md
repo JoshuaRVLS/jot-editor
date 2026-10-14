@@ -345,6 +345,13 @@ settles, so scrolling a long way does not grow the process.
   and for a grammar with no upstream pin it says so instead of pretending the
   default branch is an update. The pinning data is generated, not hand-written:
   `tools/treesitter_lockfile_import.py` rewrites it from upstream's lockfile.
+- `:tsplayground` opens the parse tree around the cursor line, and the five
+  query kinds a language can ship (highlights, folds, indents, injections,
+  textobjects) asked what they match there, each entry carrying the byte range
+  the query reported. A missing colour, a fold that ignores a block or an
+  indent that lands in the wrong column then has its answer on screen: a
+  section reading `no query file` means the language has no such query
+  installed, `none` that the query matched nothing on that line.
 - Rich token mapping (variables, parameters, types, functions, keywords,
   operators, etc.) with theme slots for both classic and Tree-sitter captures.
 - The query language as the files in the grammar repositories actually write it,
@@ -1630,7 +1637,7 @@ goes blank. The buffer stays fully visible while you type.
 `:typedefinition` `:implementation` `:switchheader`
 
 **Tree-sitter:** `:tsinstall <lang>` (e.g. `:tsinstall javascript` or
-`:tsinstall jsx`) `:tsupdate [lang]` `:tsstatus` `:tsreload`
+`:tsinstall jsx`) `:tsupdate [lang]` `:tsstatus` `:tsplayground` `:tsreload`
 
 **AI:** `:CodeCompanionChat` / `:Cc` `:CodeCompanionNewChat`
 `:CodeCompanionSend` `:CodeCompanionStop` `:CodeCompanionActions`

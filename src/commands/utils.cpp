@@ -211,6 +211,8 @@ namespace CommandLineUtils
                                                       "tsupdate",
                                                       "treesitterupdate",
                                                       "tsstatus",
+                                                      "tsplayground",
+                                                      "treesitterplayground",
                                                       "tsreload",
                                                       "treesitterreload",
                                                       "update",

@@ -229,6 +229,8 @@ namespace
         {"treesitterupdate", "Tree-sitter", "Rebuild installed grammars at their pinned revision",
          62},
         {"tsstatus", "Tree-sitter", "Show syntax engine status", 66},
+        {"tsplayground", "Tree-sitter", "Parse tree and captures for the cursor line", 65},
+        {"treesitterplayground", "Tree-sitter", "Parse tree and captures for the cursor line", 60},
         {"tsreload", "Tree-sitter", "Reload parser libraries", 64},
         {"treesitterreload", "Tree-sitter", "Reload parser libraries", 60},
         {"lazygit", "Git", "Open lazygit in the terminal", 72},

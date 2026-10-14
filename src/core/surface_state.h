@@ -187,6 +187,24 @@ struct SurfaceState
   int tree_sitter_status_hover_row = -1;
   std::vector<TreeSitterInstallJob> tree_sitter_install_jobs;
 
+  // :tsplayground. A dock tab after the git/symbols/debug ones, so it shares
+  // the strip, the wheel scroll and Ctrl+Shift+B with them. The body follows
+  // the cursor: rows are rebuilt when the cursor line or its text changes,
+  // never per frame (the rebuild runs a query over that line).
+  struct TreeSitterPlaygroundRow
+  {
+    std::string section; // set on a section header row
+    std::string detail;
+    std::string label;
+    int indent = 0; // tree rows nest by their depth
+  };
+  std::vector<TreeSitterPlaygroundRow> tree_sitter_playground_rows;
+  std::string tree_sitter_playground_subtitle;
+  int tree_sitter_playground_scroll = 0;
+  int tree_sitter_playground_buffer = -1;
+  int tree_sitter_playground_line = -1;
+  std::string tree_sitter_playground_text;
+
   // Context menu (right click / the contextmenu command): the surface it was
   // opened for, its items and box, and what it was opened on.
   bool show_context_menu = false;

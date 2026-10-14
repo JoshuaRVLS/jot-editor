@@ -241,6 +241,8 @@ void sync_lua_ui_surfaces();
 void place_command_palette_cursor();
 void render_context_menu();
 void render_tree_sitter_status_modal();
+// :tsplayground: the right dock's tree/captures tab.
+void render_tree_sitter_playground_panel();
 void render_save_prompt();
 // Interactive LSP rename: opened by :lsprename with no argument or Ctrl+Shift+R.
 void open_rename_prompt();

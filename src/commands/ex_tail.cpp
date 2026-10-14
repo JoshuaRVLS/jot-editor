@@ -524,6 +524,10 @@ bool Editor::execute_ex_command_tail(const std::string &lcmd,
   {
     show_tree_sitter_status();
   }
+  else if (lcmd == "tsplayground" || lcmd == "treesitterplayground")
+  {
+    open_tree_sitter_playground();
+  }
   else if (lcmd == "lspstatus")
   {
     show_lsp_status();

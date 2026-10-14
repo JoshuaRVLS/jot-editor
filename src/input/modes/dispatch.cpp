@@ -679,6 +679,49 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
     return;
   }
 
+  if (show_right_panel && right_panel_focused && active_right_panel_tab == RIGHT_PANEL_TREESITTER
+      && !is_ctrl && !is_alt)
+  {
+    if (ch == 'q' || ch == 'Q' || ch == 27)
+    {
+      close_right_panel_tab(RIGHT_PANEL_TREESITTER);
+      set_message("Tree-sitter playground closed");
+      return;
+    }
+    if (ch == 'j' || ch == 'J' || ch == 1009)
+    {
+      tree_sitter_playground_scroll++;
+      needs_redraw = true;
+      return;
+    }
+    if (ch == 'k' || ch == 'K' || ch == 1008)
+    {
+      tree_sitter_playground_scroll = std::max(0, tree_sitter_playground_scroll - 1);
+      needs_redraw = true;
+      return;
+    }
+    if (ch == 'g')
+    {
+      tree_sitter_playground_scroll = 0;
+      needs_redraw = true;
+      return;
+    }
+    if (ch == 'G')
+    {
+      tree_sitter_playground_scroll = 1000000;
+      needs_redraw = true;
+      return;
+    }
+    if (ch == 'r' || ch == 'R')
+    {
+      // The line can change under the panel (an LSP format, a background
+      // parse landing); this asks for the dump again without waiting.
+      rebuild_tree_sitter_playground(true);
+      needs_redraw = true;
+      return;
+    }
+  }
+
   if (show_right_panel && right_panel_focused && active_right_panel_tab == RIGHT_PANEL_SYMBOLS
       && !is_ctrl && !is_alt)
   {

@@ -338,6 +338,11 @@ void Editor::initialize_state_defaults()
   plugin_quick_pick_select_callback.clear();
   show_tree_sitter_status_modal = false;
   tree_sitter_status_scroll = 0;
+  tree_sitter_playground_scroll = 0;
+  tree_sitter_playground_buffer = -1;
+  tree_sitter_playground_line = -1;
+  tree_sitter_playground_text.clear();
+  tree_sitter_playground_rows.clear();
   show_lsp_status_modal = false;
   lsp_status_scroll = 0;
   tree_sitter_install_jobs.clear();

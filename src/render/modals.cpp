@@ -6,6 +6,7 @@
 
 using namespace ui_internal;
 #include "lsp/install.h"
+#include "render/pane_edges.h"
 #include "syntax/manager.h"
 #include "ui/components.h"
 #include "ui/text.h"
@@ -41,6 +42,103 @@ namespace
   // when `plain_bold`). Splits only on UTF-8 character boundaries and advances
   // the pen by cell width, so wide glyphs keep column alignment.
 } // namespace
+
+void Editor::render_tree_sitter_playground_panel()
+{
+  if (!show_right_panel || active_right_panel_tab != RIGHT_PANEL_TREESITTER || !ui)
+  {
+    return;
+  }
+  // The body follows the cursor: this is what makes the panel live. The dump
+  // is only rebuilt when the cursor line or that line's text changed.
+  rebuild_tree_sitter_playground(false);
+  const std::vector<TreeSitterPlaygroundRow> &rows = tree_sitter_playground_rows;
+
+  const int panel_w = effective_right_panel_width();
+  if (panel_w <= 0)
+  {
+    return;
+  }
+  const int panel_x = std::max(0, ui->get_render_width() - panel_w);
+  const int panel_y = side_column_top();
+  const int panel_h = std::max(1, ui->get_height() - status_height - panel_y);
+  const UIRect panel = {panel_x, panel_y, panel_w, panel_h};
+
+  ui->fill_rect(panel, " ", theme.fg_terminal, theme.bg_terminal);
+  ui->draw_border(panel, theme.fg_panel_border, theme.bg_terminal, pane_layout::kNoEdges);
+
+  // Title row, then the dock's tab strip on the row below it, like every other
+  // right panel.
+  const std::string title = tree_sitter_playground_subtitle.empty()
+                                ? " Tree-sitter "
+                                : " " + tree_sitter_playground_subtitle + " ";
+  ui->draw_text(panel_x + 1,
+                panel_y,
+                ui_truncate_cells(title, panel_w - 2),
+                theme.fg_terminal_tab_focused,
+                theme.bg_terminal_tab_focused,
+                true);
+  render_right_panel_tab_strip(panel_x, panel_y, panel_w);
+
+  const int list_y = panel_y + 3;
+  const int list_h = std::max(0, panel_h - 4);
+  const int max_scroll = std::max(0, (int)rows.size() - list_h);
+  tree_sitter_playground_scroll = std::clamp(tree_sitter_playground_scroll, 0, max_scroll);
+
+  // Two columns: the node or capture name, and what the query said about it
+  // (field, sample text, byte range). The label column takes the indent so a
+  // tree reads as a tree at sidebar width.
+  const int detail_x = std::max(14, std::min(26, panel_w / 2));
+  for (int i = 0; i < list_h; i++)
+  {
+    const int idx = tree_sitter_playground_scroll + i;
+    if (idx < 0 || idx >= (int)rows.size())
+    {
+      break;
+    }
+    const auto &row = rows[idx];
+    const int row_y = list_y + i;
+    if (!row.section.empty())
+    {
+      const std::string header = row.section + " (" + row.detail + ")";
+      ui->draw_text(panel_x + 1,
+                    row_y,
+                    ui_truncate_cells(header, panel_w - 2),
+                    theme.fg_comment,
+                    theme.bg_terminal,
+                    true);
+      continue;
+    }
+    const int indent = std::min(row.indent, std::max(0, detail_x - 6));
+    ui->draw_text(panel_x + 1,
+                  row_y,
+                  std::string((size_t)indent, ' '),
+                  theme.fg_terminal,
+                  theme.bg_terminal);
+    ui->draw_text(panel_x + 1 + indent,
+                  row_y,
+                  ui_truncate_cells(row.label, std::max(4, detail_x - 2 - indent)),
+                  theme.fg_command,
+                  theme.bg_terminal,
+                  true);
+    ui->draw_text(panel_x + detail_x,
+                  row_y,
+                  ui_truncate_cells(row.detail, std::max(4, panel_w - detail_x - 1)),
+                  theme.fg_comment,
+                  theme.bg_terminal);
+  }
+
+  if (max_scroll > 0)
+  {
+    const std::string counter = std::to_string(tree_sitter_playground_scroll + 1) + "/"
+                                + std::to_string(max_scroll + 1);
+    ui->draw_text(panel_x + 1,
+                  panel_y + panel_h - 1,
+                  counter,
+                  theme.fg_comment,
+                  theme.bg_terminal);
+  }
+}
 
 void Editor::render_tree_sitter_status_modal()
 {

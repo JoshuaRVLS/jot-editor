@@ -31,7 +31,7 @@ void Editor::show_command_help(const std::string &topic_text)
         ":datetime :stats :replace :replacei :replaceword :replacere "
         ":surround :unsurround :fold :unfold :togglefold :foldall "
         ":unfoldall :incnum :decnum :lspinstall <server> :lspremove <server> :lspstatus "
-        ":tsinstall <language> :tsupdate [language] :tsstatus :tsreload "
+        ":tsinstall <language> :tsupdate [language] :tsstatus :tsplayground :tsreload "
         ":update [run] :reload :reloadconfig :reloadplugins "
         ":task [name] :tasknew <name> :taskrerun "
         ":term :termnew :termzoom :termfloat "
