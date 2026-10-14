@@ -15,6 +15,8 @@
 -- box it cannot see.
 local PANEL = "Undotree"
 
+local textlib = require("jot.lib.text")
+
 -- The cursor's state, kept between frames. The panel callback runs on every
 -- painted frame, so the tree, the two texts of the selected pair and the diff
 -- are cached under a key that changes only when something did.
@@ -92,46 +94,20 @@ local function layout(states)
   return depth, tips
 end
 
--- The lines that differ between two states: a plain LCS walk, because the two
--- texts are a few states apart and the answer is only ever a handful of lines.
--- Past the cap it reports the removal and the addition rather than hanging.
+-- The lines that differ between two states, without the ones both hold: the
+-- walk is jot.lib.text.diff, shared with the inline assistant. The two texts
+-- are a few states apart, so past the cap below the panel says the pair is too
+-- big rather than spending the frame on it; the walk's own budget is raised out
+-- of the way because this cap is the tighter one.
 local function changed_lines(a, b)
   if #a + #b > MAX_DIFF_LINES then return nil, true end
-  local lcs = {}
-  for i = 0, #a do lcs[i] = {} end
-  for i = 1, #a do
-    for j = 1, #b do
-      if a[i] == b[j] then
-        lcs[i][j] = (lcs[i - 1][j - 1] or 0) + 1
-      else
-        lcs[i][j] = math.max(lcs[i - 1][j] or 0, lcs[i][j - 1] or 0)
-      end
-    end
-  end
+  local rows = textlib.diff(a, b, { max_cells = MAX_DIFF_LINES * MAX_DIFF_LINES })
+  if not rows then return nil, true end
   local out = {}
-  local i, j = #a, #b
-  while i > 0 and j > 0 do
-    if a[i] == b[j] then
-      i, j = i - 1, j - 1
-    elseif (lcs[i - 1][j] or 0) > (lcs[i][j - 1] or 0) then
-      out[#out + 1] = { kind = "del", text = a[i] }
-      i = i - 1
-    else
-      out[#out + 1] = { kind = "add", text = b[j] }
-      j = j - 1
-    end
+  for _, row in ipairs(rows) do
+    if row.kind ~= "same" then out[#out + 1] = row end
   end
-  while i > 0 do
-    out[#out + 1] = { kind = "del", text = a[i] }
-    i = i - 1
-  end
-  while j > 0 do
-    out[#out + 1] = { kind = "add", text = b[j] }
-    j = j - 1
-  end
-  local ordered = {}
-  for k = #out, 1, -1 do ordered[#ordered + 1] = out[k] end
-  return ordered, false
+  return out, false
 end
 
 -- The changes the selected state would bring back: what the buffer holds now

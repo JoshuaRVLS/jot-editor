@@ -18,7 +18,7 @@
 // functions.
 //
 // The Lua-side half of the dialect (utf8, which LuaJIT also lacks) is the
-// bundled module runtime/lua/compat/utf8.lua, loaded by the host. docs/LUA_API.md,
+// bundled module runtime/lua/lib/utf8.lua, loaded by the host. docs/LUA_API.md,
 // "The scripting dialect", is the contract both halves keep.
 #include <lauxlib.h>
 #include <lua.h>

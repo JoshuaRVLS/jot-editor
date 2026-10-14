@@ -8,9 +8,10 @@ extern "C"
 #include <lualib.h>
 }
 
-// install_bundled_utf8: the one step the editor's host takes that a raw state
-// here has to take too, so the bundled feature sees the dialect it is written
-// to (docs/LUA_API.md, "The scripting dialect").
+// install_bundled_utf8 + install_bundled_lua_lib: the two steps the editor's
+// host takes that a raw state here has to take too, so the bundled feature sees
+// the dialect it is written to (docs/LUA_API.md, "The scripting dialect") and
+// the shared library it requires at load time (runtime/lua/lib/json.lua).
 #include "lua/api/api_internal.h"
 
 namespace
@@ -98,9 +99,11 @@ namespace
       REQUIRE(L != nullptr);
       luaL_openlibs(L);
       // The dialect the bundled LeetCode feature is written to (docs/LUA_API.md):
-      // the host installs the bundled utf8 before any bundled file runs, and
-      // this state runs the same files, so it gets the same step.
+      // the host installs the bundled utf8 and the shared library before any
+      // bundled file runs, and this state runs the same files, so it gets the
+      // same steps.
       jot_lua::install_bundled_utf8(L);
+      jot_lua::install_bundled_lua_lib(L);
       const std::string dir = std::string(JOT_LUA_SOURCE_DIR) + "/features/leetcode/";
       REQUIRE(luaL_loadstring(L, kPrelude) == LUA_OK);
       lua_pushlstring(L, dir.data(), dir.size());
@@ -124,6 +127,19 @@ namespace
       return value;
     }
   };
+}
+
+TEST_CASE("LeetCode JSON is the runtime's JSON, not a second copy", "[leetcode][lua]")
+{
+  State state;
+
+  // features/leetcode/json.lua used to be its own encoder and decoder; it is
+  // now a require of jot.lib.json, so the two features and every plugin share
+  // one implementation.
+  REQUIRE(state.run("return tostring(package.loaded['jot_lc.json'] == require('jot.lib.json'))")
+          == "true");
+  REQUIRE(state.run("return tostring(package.loaded['jot_lc.json'].null == require('jot.lib.json').null)")
+          == "true");
 }
 
 TEST_CASE("LeetCode JSON parser decodes data without evaluating it", "[leetcode][lua]")

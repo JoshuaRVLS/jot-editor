@@ -130,6 +130,29 @@ namespace
     lua_pushcfunction(L, fn);
     lua_setfield(L, -2, name);
   }
+  // jot.lib mirrors the modules api_internal.h loaded into package.loaded, so
+  // the library is reachable as a table (jot.lib.json.encode) as well as by
+  // require, and appears in jot.api like every other namespace. The tables are
+  // the same ones: this copies the references, it does not load anything again.
+  void register_lua_lib_table(lua_State *L)
+  {
+    size_t count = 0;
+    const char *const *modules = jot_lua::bundled_lib_modules(count);
+    lua_getglobal(L, "jot");        // jot
+    lua_newtable(L);                 // jot, lib
+    lua_getglobal(L, "package");    // jot, lib, package
+    lua_getfield(L, -1, "loaded");  // jot, lib, package, loaded
+    for (size_t i = 0; i < count; i++)
+    {
+      const std::string name = std::string("jot.lib.") + modules[i];
+      lua_getfield(L, -1, name.c_str()); // jot, lib, package, loaded, module
+      lua_setfield(L, -4, modules[i]);   // lib[name] = module
+    }
+    lua_pop(L, 2);               // jot, lib
+    lua_setfield(L, -2, "lib");  // jot.lib = lib
+    lua_pop(L, 1);               //
+  }
+
   void command_field(lua_State *L, LuaAPI *a, const char *name, const char *command)
   {
     lua_pushlightuserdata(L, a);
@@ -156,6 +179,10 @@ bool LuaAPI::init()
   luaL_openlibs(L);
   // LuaJIT brings no utf8 of its own, and the bundled files count on it.
   jot_lua::install_bundled_utf8(L);
+  // The general-purpose library (runtime/lua/lib): installed here, before any
+  // bundled feature or plugin loads, so a feature may require it at load time
+  // (require("jot.lib.json")) and the modules are shared rather than copied.
+  jot_lua::install_bundled_lua_lib(L);
   // The user's Lua directory on package.path: everything `require` resolves
   // (jot.lua, api_runtime.cpp) -- a feature in Lua is a module tree under the
   // config dir, not a file compiled into the binary.
@@ -818,6 +845,7 @@ bool LuaAPI::init()
   lua_getfield(L, -1, "ui");
   field(L, "register_panel", l_register_panel);
   lua_pop(L, 2);
+  register_lua_lib_table(L);
   load_treesitter_runtime(L);
   load_hover_ui_runtime(L);
   load_ui_kit_runtime(L);

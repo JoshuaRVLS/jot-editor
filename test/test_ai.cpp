@@ -21,9 +21,10 @@ extern "C"
 #include <lualib.h>
 }
 
-// install_bundled_utf8: the one step the editor's host takes that a raw state
-// here has to take too, so the bundled feature sees the dialect it is written
-// to (docs/LUA_API.md, "The scripting dialect").
+// install_bundled_utf8 + install_bundled_lua_lib: the steps the editor's host
+// takes that a raw state here has to take too, so the bundled feature sees the
+// dialect it is written to (docs/LUA_API.md, "The scripting dialect") and the
+// shared library it requires at load time (runtime/lua/lib/json.lua).
 #include "lua/api/api_internal.h"
 
 namespace
@@ -180,9 +181,11 @@ namespace
       REQUIRE(L != nullptr);
       luaL_openlibs(L);
       // The dialect the bundled ai feature is written to (docs/LUA_API.md): the
-      // host installs the bundled utf8 before any bundled file runs, and this
-      // state runs the same files, so it gets the same step.
+      // host installs the bundled utf8 and the shared library (runtime/lua/lib)
+      // before any bundled file runs, and this state runs the same files, so it
+      // gets the same steps.
       jot_lua::install_bundled_utf8(L);
+      jot_lua::install_bundled_lua_lib(L);
       const std::string dir = std::string(JOT_LUA_SOURCE_DIR) + "/features/ai/";
       REQUIRE(luaL_loadstring(L, kPrelude) == LUA_OK);
       lua_pushstring(L, dir.c_str());
@@ -303,6 +306,21 @@ TEST_CASE("AI JSON encodes false, arrays and objects as they are", "[ai][lua]")
   REQUIRE(state.run("return ai.json.encode({ s = 'a\"b\\\\c\\nd\\te' })")
           == R"({"s":"a\"b\\c\nd\te"})");
   REQUIRE(state.run("return ai.json.encode({ s = '\\1' })") == R"({"s":"\u0001"})");
+}
+
+TEST_CASE("AI JSON is the runtime's JSON, not a second copy", "[ai][lua]")
+{
+  AiState state;
+
+  // features/ai/json.lua used to be its own encoder and decoder; it is now a
+  // require of jot.lib.json, so a fix to the shared one lands here too.
+  REQUIRE(state.run("return tostring(package.loaded['jot_ai.json'] == require('jot.lib.json'))")
+          == "true");
+  // Which means the shared decoder's rules hold here, including the one that a
+  // document is the whole input.
+  REQUIRE(state.run("local v, e = ai.json.decode('{\"a\":1} 2') "
+                    "return v == nil and tostring(e):find('invalid', 1, true) and 'invalid' or 'no'")
+          == "invalid");
 }
 
 TEST_CASE("AI JSON decodes provider frames", "[ai][lua]")

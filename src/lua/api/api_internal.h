@@ -180,7 +180,7 @@ namespace jot_lua
     lua_getglobal(L, "utf8");
     const bool present = !lua_isnil(L, -1);
     lua_pop(L, 1);
-    return present || load_bundled_lua_file(L, "compat/utf8.lua", "utf8");
+    return present || load_bundled_lua_file(L, "lib/utf8.lua", "utf8");
   }
 
   // Which release of the engine is running, read off the runtime itself:
@@ -266,6 +266,39 @@ namespace jot_lua
     lua_setfield(L, -2, name.c_str()); // [module, package, loaded]
     lua_settop(L, top);
     return true;
+  }
+
+  // The modules under runtime/lua/lib/: the library every bundled feature and
+  // every plugin is written against (JSON, base64, text, fs, inspect, iter,
+  // version, table helpers). One list, in load order, so a module can use the
+  // ones before it. utf8 is not in it: that one installs the global `utf8`
+  // (install_bundled_utf8) rather than answering a table.
+  inline const char *const *bundled_lib_modules(size_t &count)
+  {
+    static const char *kModules[] = {
+        "json", "base64", "text", "fs", "inspect", "iter", "version", "table",
+    };
+    count = sizeof(kModules) / sizeof(kModules[0]);
+    return kModules;
+  }
+
+  // Installs the library into a state as package.loaded["jot.lib.<name>"], so
+  // require("jot.lib.json") answers in a session, in --api-info, and in a test
+  // that builds its own state to run a bundled file. LuaAPI::init calls this
+  // before any feature or plugin runs, so a bundled file may require the
+  // library at load time. Returns false if any module failed to load; each
+  // failure is reported by load_bundled_lua_module.
+  inline bool install_bundled_lua_lib(lua_State *L)
+  {
+    size_t count = 0;
+    const char *const *modules = bundled_lib_modules(count);
+    bool ok = true;
+    for (size_t i = 0; i < count; i++)
+    {
+      const std::string rel = std::string("lib/") + modules[i] + ".lua";
+      ok = load_bundled_lua_module(L, rel.c_str(), "jot.lib") && ok;
+    }
+    return ok;
   }
 
   // Loads every module of the split UI kit (features/ui/*.lua) into

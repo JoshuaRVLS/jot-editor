@@ -14,6 +14,7 @@ local M = {}
 
 local config = require("jot_ai.config")
 local http = require("jot_ai.http")
+local textlib = require("jot.lib.text")
 
 -- Above this many lines the diff is a plain before/after listing: the LCS table
 -- costs lines x lines entries and a 2000-line pair would be four million of
@@ -35,18 +36,10 @@ local function notify(message)
   jot.ui.show_message("[ai] " .. message)
 end
 
-local function split_lines(text)
-  local out = {}
-  for line in (text .. "\n"):gmatch("(.-)\n") do
-    out[#out + 1] = line
-  end
+local function split_lines(body)
+  local out = textlib.split_lines(body)
   if #out == 0 then
     out[1] = ""
-  end
-  -- A trailing newline ends the last line; it does not add an empty one.
-  -- Without this, an answer that ends with one diffs as a removed blank row.
-  if #out > 1 and out[#out] == "" then
-    table.remove(out)
   end
   return out
 end
@@ -67,11 +60,13 @@ function M.strip_fence(text)
 end
 
 -- A unified line diff of two texts: {{kind = "same"|"del"|"add", text = ...}}.
+-- The walk itself is jot.lib.text.diff, shared with the undo tree panel; the
+-- line budget above is this feature's own, because a preview is worth less
+-- work than a diff you asked for.
 function M.diff(before, after)
   local a, b = split_lines(before), split_lines(after)
-  local out = {}
   if #a + #b > MAX_DIFF_LINES then
-    out.cut = true
+    local out = { cut = true }
     for _, line in ipairs(a) do
       out[#out + 1] = { kind = "del", text = line }
     end
@@ -80,48 +75,20 @@ function M.diff(before, after)
     end
     return out
   end
-  local lcs = {}
-  for i = 0, #a do
-    lcs[i] = {}
-  end
-  for i = 1, #a do
-    for j = 1, #b do
-      if a[i] == b[j] then
-        lcs[i][j] = (lcs[i - 1][j - 1] or 0) + 1
-      else
-        lcs[i][j] = math.max(lcs[i - 1][j] or 0, lcs[i][j - 1] or 0)
-      end
+  -- The budget was just checked, so the walk cannot refuse the pair; a refusal
+  -- is still handled as a plain listing rather than an error.
+  local rows = textlib.diff(a, b, { max_cells = MAX_DIFF_LINES * MAX_DIFF_LINES })
+  if not rows then
+    local out = { cut = true }
+    for _, line in ipairs(a) do
+      out[#out + 1] = { kind = "del", text = line }
     end
-  end
-  local reversed = {}
-  local i, j = #a, #b
-  while i > 0 and j > 0 do
-    if a[i] == b[j] then
-      reversed[#reversed + 1] = { kind = "same", text = a[i] }
-      i, j = i - 1, j - 1
-    elseif (lcs[i - 1][j] or 0) > (lcs[i][j - 1] or 0) then
-      -- The reversed walk is flipped at the end, so removal-first comes out of
-      -- the *else* branch: a changed line reads `- old` then `+ new`, the way
-      -- a diff does.
-      reversed[#reversed + 1] = { kind = "del", text = a[i] }
-      i = i - 1
-    else
-      reversed[#reversed + 1] = { kind = "add", text = b[j] }
-      j = j - 1
+    for _, line in ipairs(b) do
+      out[#out + 1] = { kind = "add", text = line }
     end
+    return out
   end
-  while i > 0 do
-    reversed[#reversed + 1] = { kind = "del", text = a[i] }
-    i = i - 1
-  end
-  while j > 0 do
-    reversed[#reversed + 1] = { kind = "add", text = b[j] }
-    j = j - 1
-  end
-  for k = #reversed, 1, -1 do
-    out[#out + 1] = reversed[k]
-  end
-  return out
+  return rows
 end
 
 local function palette()

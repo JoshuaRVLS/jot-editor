@@ -4,6 +4,13 @@
 dialect docs/LUA_API.md calls "The scripting dialect" (Lua 5.1 plus `utf8`).
 API functions are injected as globals; plugins do not import a package.
 
+The runtime also ships a small library at `runtime/lua/lib/` (JSON, base64,
+text, fs, inspect, iter, version, table helpers), installed before any plugin
+runs: reach it as `jot.lib.json.encode(...)` or
+`local json = require("jot.lib.json")`. Both are the same table, and both work
+from the first line of an `init.lua`. docs/LUA_API.md, "The bundled library",
+lists what each module answers.
+
 Load order:
 
 ```text

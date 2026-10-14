@@ -2056,7 +2056,9 @@ src/extras/      optional features: WakaTime, coding time, the Bible, LeetCode
 src/editor/      the editor engine: state, buffers, panes, integrations, surfaces
 src/lua/         C++ bridge for the embedded Lua plugin/theme API
 runtime/lua/     bundled Lua features (ui kit, snippets, previews, the AI
-                 assistant under features/ai/), embedded into the binary
+                 assistant under features/ai/) plus lib/, the shipped runtime
+                 library (json, base64, text, fs, inspect, iter, version,
+                 table, utf8), all embedded into the binary
 docs/            user-facing documentation
 test/           unit tests
 ```

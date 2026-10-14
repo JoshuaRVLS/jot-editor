@@ -22,7 +22,7 @@ every platform, because there is only one engine to run on.
 
 `utf8` is the one library worth spelling out, because LuaJIT ships none: the
 host installs the bundled implementation at
-[runtime/lua/compat/utf8.lua](../runtime/lua/compat/utf8.lua) before any bundled
+[runtime/lua/lib/utf8.lua](../runtime/lua/lib/utf8.lua) before any bundled
 file or plugin runs, so `utf8.*` is always there. It answers what Lua 5.4's
 library answers, including what each function does with bytes that are not
 UTF-8: `codes` and `codepoint` raise, `len` returns nil plus the byte offset
@@ -39,6 +39,63 @@ entry points LuaJIT lacks, `lua_rawlen`, `lua_absindex`, `lua_len` and
 than the version that added them, so a call site carries no `#ifdef` and reads
 like the newer interface. [test/lua_engine_probe.py](../test/lua_engine_probe.py)
 holds a session to the dialect above.
+
+## The bundled library
+
+`runtime/lua/lib/` is the general-purpose library every bundled feature and
+every plugin is written against. The host installs all of it before any bundled
+file or plugin runs, so both spellings answer from the first line of an
+`init.lua`: `require("jot.lib.json")` and `jot.lib.json` are the same table, and
+the second is in `jot.capabilities()` and in `jot --api-info` like any other
+namespace.
+
+```text
+jot.lib.json     encode, decode, null
+jot.lib.base64   encode, decode
+jot.lib.text     split_lines, join_lines, split, trim, starts_with, ends_with,
+                 hexencode, hexdecode, diff
+jot.lib.fs       join, normalize, parent, name, extension, is_absolute,
+                 exists, is_dir, read, write, mkdir, remove, workspace,
+                 relative, glob
+jot.lib.inspect  inspect
+jot.lib.iter     each, list, map, filter, count, find, for_each, reduce,
+                 sorted, reverse, slice, concat, lines
+jot.lib.version  parse, compare, eq, lt, le, gt, ge, tostring, range
+jot.lib.table    deepcopy, is_list, keys, values, count, has, append, defaults
+```
+
+What is worth knowing before using it:
+
+- **json.** `decode(text)` answers `(value)` or `(nil, message)`, and the
+  message starts with `invalid JSON` so a caller can tell a malformed frame
+  from a missing one. `null` decodes to `nil`; ask for the sentinel with
+  `decode(text, {keep_null = true})` and compare against `json.null` when a
+  reply distinguishes an explicit null from an absent field. A decoded document
+  must be the whole input: bytes after the value are an error rather than
+  ignored, which is what makes a malformed streamed frame visible.
+- **text.diff(before, after)** answers lines as
+  `{kind = "same"|"del"|"add", text = line}`, or `nil, reason` when the pair
+  is past the LCS budget (`opts.max_cells`, 250000 by default). The undo tree
+  panel and the inline assistant both walk through it.
+- **fs.** Paths are written with forward slashes; a backslash from a path the
+  host handed back on Windows is read as a separator and written as a slash.
+  `fs.relative(path)` is against the workspace root, and `fs.glob(pattern)`
+  walks the workspace (name-matched, hidden directories skipped, `opts.depth`
+  and `opts.limit` bounded) rather than a whole filesystem.
+- **inspect.** `inspect(value)` prints a table as Lua reads it, notes a table
+  that holds itself rather than following it, and stops at `opts.depth` (3) with
+  a count of what is left below, so printing a decoded reply cannot hang a
+  frame.
+- **version.** `parse` accepts the spellings tools print (`1.2.3`,
+  `v1.2`, `1.2.3-rc.1`, `1.2.3+build`); `compare` orders a prerelease before its
+  release; `range(spec, version)` takes `>=1.2 <2`, `^1.2`, `~1.2` and
+  `1.2.0 - 2.0.0`.
+
+Two features used to carry their own copy of JSON
+(`features/ai/json.lua`, `features/leetcode/json.lua`); those files are now a
+`require` of the one implementation, so a fix lands in both.
+`test/lua_lib_probe.py` walks the library through a real session and
+`test/lua_engine_probe.py` holds the dialect underneath it.
 
 ## Core
 
@@ -77,6 +134,8 @@ jot.pane         layout, list, split_horizontal, split_vertical,
                  focus_next, focus_previous, resize
 jot.workspace    open, path, recent, execute, search
 jot.symbols      list
+jot.lib          the shipped library: json, base64, text, fs, inspect, iter,
+                 version, table (see above)
 jot.config       get, get_number, get_bool, set, unset, has, keys, path
 jot.theme        list, apply, current, set_color, palette, get
 jot.diagnostics  get

@@ -14,7 +14,7 @@ The probe's config dir carries an init.lua that walks the cases Lua 5.4 answers
 the screen, so every claim below is read off a real terminal:
 
   1. jot.engine names the runtime and a jit library is on the session;
-  2. utf8 is the bundled runtime/lua/compat/utf8.lua (debug.getinfo says which);
+  2. utf8 is the bundled runtime/lua/lib/utf8.lua (debug.getinfo says which);
   3. all 32 dialect cases answer exactly what Lua 5.4 answers;
   4. the session boots without a Lua failure in its log.
 
