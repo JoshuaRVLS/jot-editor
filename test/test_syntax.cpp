@@ -1,5 +1,6 @@
 #include "lua/embedded_lua.h"
 #include "syntax/manager.h"
+#include "syntax/query_predicates.h"
 #include "core/types.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
@@ -594,6 +595,131 @@ TEST_CASE("Tree Sitter Reload Reattempts Parser And Query", "[jot]")
   }
 }
 #endif
+
+// `#lua-match?` is written in Lua's own pattern dialect, so the matcher has to
+// behave like Lua's and not like the regex engine the rest of the predicates
+// use. Every assertion here is a case a query file relies on: anchored vs
+// scanned, the `%` classes and their complements, sets with ranges, the `$`
+// anchor, and the four quantifiers.
+TEST_CASE("Lua patterns match the way Lua's matcher does", "[jot]")
+{
+  using jot_query::lua_pattern_match;
+
+  // Scan by default, anchor with ^, end with $.
+  REQUIRE(lua_pattern_match("%d+", "abc123"));
+  REQUIRE_FALSE(lua_pattern_match("^%d+$", "abc123"));
+  REQUIRE(lua_pattern_match("^%d+$", "123"));
+  REQUIRE_FALSE(lua_pattern_match("^%d+$", "123a"));
+  REQUIRE_FALSE(lua_pattern_match("^b", "abc"));
+  REQUIRE(lua_pattern_match("b", "abc"));
+  REQUIRE(lua_pattern_match("c$", "abc"));
+  REQUIRE_FALSE(lua_pattern_match("b$", "abc"));
+
+  // The pattern the cmake and make query files narrow macro names with.
+  const std::string upper = "^[%u@][%u%d_]+$";
+  REQUIRE(lua_pattern_match(upper, "ALPHA"));
+  REQUIRE(lua_pattern_match(upper, "MAX_VALUE"));
+  REQUIRE_FALSE(lua_pattern_match(upper, "beta"));
+  REQUIRE_FALSE(lua_pattern_match(upper, "_PRIVATE"));
+
+  // Classes, complements, and a set with a range.
+  REQUIRE(lua_pattern_match("^[a-c]+$", "abc"));
+  REQUIRE_FALSE(lua_pattern_match("^[a-c]+$", "abd"));
+  REQUIRE(lua_pattern_match("^[^%d]+$", "abc"));
+  REQUIRE_FALSE(lua_pattern_match("^[^%d]+$", "a1"));
+  REQUIRE(lua_pattern_match("^%s*$", "  \t"));
+  REQUIRE(lua_pattern_match("^%w+$", "A9"));
+  // Lua's %w is alphanumeric only: an underscore is not a word character the
+  // way it is in a regex engine's \w, and query files that need it spell out
+  // [%w_].
+  REQUIRE_FALSE(lua_pattern_match("^%w+$", "A_9"));
+  REQUIRE(lua_pattern_match("^[%w_]+$", "A_9"));
+  REQUIRE_FALSE(lua_pattern_match("^%w+$", "A-9"));
+  REQUIRE(lua_pattern_match("^%p+$", "!?;"));
+  REQUIRE(lua_pattern_match("^%A+$", "...."));
+  REQUIRE_FALSE(lua_pattern_match("^%A+$", "...x"));
+
+  // An escaped magic character is the character itself.
+  REQUIRE(lua_pattern_match("%.", "a.b"));
+  REQUIRE(lua_pattern_match("^%.", ".ab"));
+  // `^` anchors the match at the first character without demanding the whole
+  // subject, exactly as string.find does.
+  REQUIRE_FALSE(lua_pattern_match("^%.", "a.b"));
+  REQUIRE_FALSE(lua_pattern_match("%.", "axb"));
+
+  // Quantifiers, including the reluctant one query files reach for to trim a
+  // capture down to what is between two delimiters.
+  REQUIRE(lua_pattern_match("^a*$", ""));
+  REQUIRE(lua_pattern_match("^a*$", "aaa"));
+  REQUIRE_FALSE(lua_pattern_match("^a+$", ""));
+  REQUIRE(lua_pattern_match("^a+$", "aaa"));
+  REQUIRE(lua_pattern_match("^a?b$", "b"));
+  REQUIRE(lua_pattern_match("^a?b$", "ab"));
+  REQUIRE_FALSE(lua_pattern_match("^a?b$", "aab"));
+  REQUIRE(lua_pattern_match("^a.*c$", "abbbc"));
+  REQUIRE(lua_pattern_match("^a.-c$", "abbbc"));
+  // `-` is a quantifier only where an item precedes it: in `a.*-c` it is the
+  // literal dash the pattern asks for.
+  REQUIRE(lua_pattern_match("^a.*-c$", "abbb-c"));
+  REQUIRE_FALSE(lua_pattern_match("^a.*-c$", "abbbc"));
+  REQUIRE(lua_pattern_match("^*%d$", "*7"));
+
+  // An empty pattern matches, and a pattern that runs off its own end fails
+  // rather than looping.
+  REQUIRE(lua_pattern_match("", "anything"));
+  REQUIRE_FALSE(lua_pattern_match("^[abc", "abc"));
+}
+
+// The modeline a query file opens with says how it relates to the one it would
+// otherwise replace, and getting it wrong is silent: `;; extends` read as a
+// comment means a user file replaces the curated query instead of adding to it.
+TEST_CASE("Query modelines are read from the file's header", "[jot]")
+{
+  using jot_query::Modeline;
+
+  {
+    const auto result = jot_query::parse_modeline("(pattern) @capture\n");
+    REQUIRE(result.kind == Modeline::None);
+    REQUIRE(result.languages.empty());
+  }
+  {
+    const auto result = jot_query::parse_modeline(";; extends\n(pattern) @capture\n");
+    REQUIRE(result.kind == Modeline::Extends);
+  }
+  {
+    // A CRLF file and a blank line before the modeline are both still a header.
+    const auto result = jot_query::parse_modeline("\n;; extends\r\n(pattern) @capture\n");
+    REQUIRE(result.kind == Modeline::Extends);
+  }
+  {
+    const auto result = jot_query::parse_modeline(";; inherits: bash,c\n");
+    REQUIRE(result.kind == Modeline::Inherits);
+    REQUIRE(result.languages == std::vector<std::string>{"bash", "c"});
+    REQUIRE(result.optional == std::vector<bool>{false, false});
+  }
+  {
+    // A parenthesised language is optional: skipped when its query is absent.
+    const auto result = jot_query::parse_modeline(";; inherits: bash, (markdown)\n");
+    REQUIRE(result.kind == Modeline::Inherits);
+    REQUIRE(result.languages == std::vector<std::string>{"bash", "markdown"});
+    REQUIRE(result.optional == std::vector<bool>{false, true});
+  }
+  {
+    // Not a modeline when it is not part of the header.
+    const auto result = jot_query::parse_modeline("(pattern) @capture\n;; extends\n");
+    REQUIRE(result.kind == Modeline::None);
+  }
+  {
+    const auto result = jot_query::parse_modeline("; a plain comment\n;; extends\n");
+    REQUIRE(result.kind == Modeline::None);
+  }
+  {
+    const auto result = jot_query::parse_modeline(
+        ";; extends\n;; inherits: cmake\n(pattern) @capture\n");
+    REQUIRE(result.kind == Modeline::Inherits);
+    REQUIRE(result.languages == std::vector<std::string>{"cmake"});
+  }
+}
 
 // The bracket-depth prefix cache (types.h FileBuffer) keeps absolute depth
 // entries valid up to bracket_depth_prefix_upto and mark_edited(anchor)

@@ -1,4 +1,5 @@
 #include "syntax/manager.h"
+#include "syntax/query_predicates.h"
 
 #include <algorithm>
 #include <cctype>
@@ -65,6 +66,113 @@ TreeSitterManager::load_query_source(const std::string &language_name) const
 }
 
 #ifdef JOT_TREESITTER
+namespace
+{
+  // How deep `;; inherits:` chains are followed. A query that inherits from
+  // another that inherits back is a cycle the file's author cannot see, and
+  // compiling it would otherwise not terminate.
+  constexpr int kMaxQueryInheritance = 4;
+} // namespace
+
+std::string TreeSitterManager::extending_query_sources(const std::string &language_id) const
+{
+  std::string extensions;
+  for (const auto &root : runtime_query_paths_)
+  {
+    const fs::path base(root);
+    for (const auto &candidate : {
+             base / language_id / "highlights.scm",
+             base / (language_id + ".scm"),
+         })
+    {
+      if (!fs::exists(candidate))
+      {
+        continue;
+      }
+      const std::string source = read_file(candidate);
+      if (jot_query::parse_modeline(source).kind != jot_query::Modeline::Extends)
+      {
+        continue;
+      }
+      extensions += source;
+      if (!extensions.empty() && extensions.back() != '\n')
+      {
+        extensions += '\n';
+      }
+    }
+  }
+  return extensions;
+}
+
+std::string TreeSitterManager::expand_query_modelines(const std::string &source,
+                                                      const std::string &base_source,
+                                                      int depth,
+                                                      std::string *note) const
+{
+  const jot_query::ModelineResult modeline = jot_query::parse_modeline(source);
+  if (modeline.kind == jot_query::Modeline::None || depth >= kMaxQueryInheritance)
+  {
+    return source;
+  }
+  std::string expanded;
+  if (modeline.kind == jot_query::Modeline::Inherits)
+  {
+    for (size_t i = 0; i < modeline.languages.size(); i++)
+    {
+      const std::string &parent_id = modeline.languages[i];
+      const bool optional = i < modeline.optional.size() && modeline.optional[i];
+      const QuerySource parent = load_query_source(parent_id);
+      if (parent.source.empty())
+      {
+        // A missing query can only be reported, never invented: the language
+        // may simply not be installed. A parenthesised name asks for exactly
+        // that silence.
+        if (!optional && note)
+        {
+          *note += "; inherited language " + parent_id + " has no query";
+        }
+        continue;
+      }
+      // A parent with a modeline of its own is resolved the same way, against
+      // no base: an inherited query has nothing of its own to extend.
+      const std::string inherited =
+          expand_query_modelines(parent.source, std::string(), depth + 1, note);
+      if (!inherited.empty())
+      {
+        expanded += inherited;
+        if (expanded.back() != '\n')
+        {
+          expanded += '\n';
+        }
+      }
+    }
+    if (note)
+    {
+      *note += "; ;; inherits " + std::to_string(modeline.languages.size()) + " language(s)";
+    }
+  }
+  else // Modeline::Extends
+  {
+    // The base is the query this file would otherwise replace, which the
+    // caller knows and this file does not: it is the source that wins ahead of
+    // it, not any source it can look up by name.
+    if (!base_source.empty())
+    {
+      expanded += base_source;
+      if (expanded.back() != '\n')
+      {
+        expanded += '\n';
+      }
+      if (note)
+      {
+        *note += "; ;; extends the query it would replace";
+      }
+    }
+  }
+  expanded += source;
+  return expanded;
+}
+
 TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension)
 {
   auto ext_it = ext_to_lang_.find(extension);
@@ -130,6 +238,21 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension)
     query_diagnostics_[language_id] = "query unavailable; Lua policy not loaded";
     return nullptr;
   }
+  // A query file may open with a modeline that changes what it contributes:
+  // `;; extends` adds its patterns to the query it would otherwise replace, and
+  // `;; inherits: a,b` pulls those languages' queries in ahead of its own. The
+  // expansion runs here, after the whole candidate list exists, because
+  // `extends` needs the source ahead of it in the list.
+  for (size_t i = 0; i < candidates.size(); i++)
+  {
+    // The base for `;; extends` is the source that would win ahead of this
+    // one: the first candidate, unless this is it (then the next one down).
+    const std::string base =
+        i == 0 ? (candidates.size() > 1 ? candidates[1].source : std::string())
+               : candidates[0].source;
+    candidates[i].source =
+        expand_query_modelines(candidates[i].source, base, 0, &candidates[i].note);
+  }
 
   std::string first_failure; // diagnostics for the highest-priority source
   for (const QuerySource &source : candidates)
@@ -148,6 +271,10 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension)
       builtin_query_used_[language_id] = source.stored;
       query_diagnostics_[language_id] =
           source.runtime ? ("runtime query loaded: " + source.path) : "Lua query loaded";
+      if (!source.note.empty())
+      {
+        query_diagnostics_[language_id] += source.note;
+      }
       return query;
     }
     const std::string error = "query failed: error " + std::to_string((int)error_type)
@@ -182,7 +309,15 @@ TreeSitterHandle TreeSitterManager::compile_query_handle(const std::string &exte
     return 0;
   std::string query_source = source;
   if (query_source.empty())
+  {
+    // The runtime/bundled file a Lua caller asked for by extension, with its
+    // modeline resolved: `native.query(ext)` is the same query the highlighter
+    // uses, so it has to see the same patterns. There is no base here -- this
+    // resolves one file, not the candidate list -- and a bundled source already
+    // carries the `;; extends` files folded into it (set_query_source).
     query_source = load_query_source(language_id).source;
+    query_source = expand_query_modelines(query_source, std::string(), 0, nullptr);
+  }
   uint32_t offset = 0;
   TSQueryError error = TSQueryErrorNone;
   TSQuery *query = ts_query_new(
@@ -223,6 +358,12 @@ TreeSitterManager::captures_for_handles(TreeSitterHandle query_handle,
   TSQueryMatch match;
   while (ts_query_cursor_next_match(cursor, &match))
   {
+    // The C library hands a pattern's predicates back instead of applying them.
+    // This path parses and queries in one step and keeps no source text, so the
+    // predicates that compare node text report themselves satisfied and only
+    // the tree-shape ones (#kind-eq?, #has-parent?, #has-ancestor?) decide.
+    if (!jot_query::match_satisfies(query_it->second, match, jot_query::TextReader()))
+      continue;
     for (uint16_t i = 0; i < match.capture_count; ++i)
     {
       const TSQueryCapture &capture = match.captures[i];
@@ -328,7 +469,15 @@ bool TreeSitterManager::set_query_source(const std::string &extension,
 
   // Store the Lua-provided source first. A parser may not be installed yet;
   // the query is compiled lazily (or validated now when possible).
-  entry_it->second.highlight_query_source = source;
+  //
+  // Runtime files that open with `;; extends` are folded in here rather than
+  // joined with the source later: this stored string is what all three compile
+  // paths read (the synchronous one below, the deferred boot worker, and the
+  // highlighter's candidate list through load_query_source), and a file that
+  // says it extends the language's query has to be part of all three or it is
+  // silently dropped by whichever one runs.
+  const std::string effective_source = source + extending_query_sources(language_id);
+  entry_it->second.highlight_query_source = effective_source;
 
 #ifdef JOT_TREESITTER
   if (deferred_compile_mode_ && deferred_compile_state_ == DeferredCompileState::Idle)
@@ -337,8 +486,10 @@ bool TreeSitterManager::set_query_source(const std::string &extension,
     // return success immediately. The worker compiles it (or records the
     // precise failure) off the main thread.
     std::lock_guard<std::mutex> lock(deferred_mutex_);
-    deferred_query_jobs_.push_back(
-        {language_id, entry_it->second.symbol, entry_it->second.library_names, source});
+    deferred_query_jobs_.push_back({language_id,
+                                    entry_it->second.symbol,
+                                    entry_it->second.library_names,
+                                    effective_source});
     return true;
   }
 
@@ -353,11 +504,14 @@ bool TreeSitterManager::set_query_source(const std::string &extension,
 
   uint32_t offset = 0;
   TSQueryError query_error = TSQueryErrorNone;
-  TSQuery *query = ts_query_new(
-      language, source.c_str(), static_cast<uint32_t>(source.size()), &offset, &query_error);
+  TSQuery *query = ts_query_new(language,
+                                effective_source.c_str(),
+                                static_cast<uint32_t>(effective_source.size()),
+                                &offset,
+                                &query_error);
   if (!query)
   {
-    error = tree_sitter_query_compile_error(offset, query_error, source);
+    error = tree_sitter_query_compile_error(offset, query_error, effective_source);
     query_diagnostics_[language_id] = error;
     runtime_query_used_[language_id] = false;
     builtin_query_used_[language_id] = false;
@@ -370,7 +524,8 @@ bool TreeSitterManager::set_query_source(const std::string &extension,
   query_cache_[language_id] = query;
   runtime_query_used_[language_id] = false;
   builtin_query_used_[language_id] = true;
-  query_diagnostics_[language_id] = "Lua query loaded";
+  query_diagnostics_[language_id] =
+      effective_source == source ? "Lua query loaded" : "Lua query loaded; ;; extends applied";
 #endif
   return true;
 }

@@ -19,6 +19,7 @@ set(JOT_SYNTAX_SOURCES
   syntax/language.cpp
   syntax/manager.cpp
   syntax/queries.cpp
+  syntax/query_predicates.cpp
   syntax/runtime.cpp
   syntax/syntax.cpp
   syntax/syntax_editor.cpp

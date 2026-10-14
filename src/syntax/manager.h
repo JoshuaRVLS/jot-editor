@@ -238,9 +238,30 @@ private:
     std::string path;
     bool runtime = false;
     bool stored = false;
+    // What the modeline did to this source, for the diagnostics line.
+    std::string note;
   };
 
   QuerySource load_query_source(const std::string &language_name) const;
+
+#ifdef JOT_TREESITTER
+  // The source a query file actually contributes once its modeline is read:
+  // `;; extends` adds its patterns to `base_source` (the query it would
+  // otherwise replace), and `;; inherits: a,b` pulls those languages' queries
+  // in ahead of its own. `depth` bounds inheritance (a query cannot chain them
+  // forever), and `note` receives a line for :tsstatus when one was applied.
+  std::string expand_query_modelines(const std::string &source,
+                                     const std::string &base_source,
+                                     int depth,
+                                     std::string *note) const;
+
+  // Every runtime query file for `language_id` that opens with `;; extends`,
+  // concatenated. Those files add to the language's bundled query rather than
+  // replacing it, so set_query_source folds them into the source it stores --
+  // the one place the synchronous compile, the deferred boot compile and the
+  // highlighter's candidate list all read from.
+  std::string extending_query_sources(const std::string &language_id) const;
+#endif
 
 #ifdef JOT_TREESITTER
   struct DeferredQueryJob

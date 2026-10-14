@@ -337,6 +337,18 @@ settles, so scrolling a long way does not grow the process.
 - Commands to install grammars, inspect status, and reload parser/query caches.
 - Rich token mapping (variables, parameters, types, functions, keywords,
   operators, etc.) with theme slots for both classic and Tree-sitter captures.
+- The query language as the files in the grammar repositories actually write it,
+  not just bare node patterns. Predicates decide whether a pattern's match
+  counts at all (`#eq?`, `#match?` with a regex, `#lua-match?` with a Lua
+  pattern, `#contains?`, `#any-of?`, `#kind-eq?`, `#has-parent?`,
+  `#has-ancestor?`, plus the `any-` and `not-` forms), directives move and rank
+  the captures that do (`#offset!` in rows and columns, `#set! priority`
+  pattern-wide or for one capture), and a file's modeline says how it merges
+  with the query around it: `;; extends` adds its patterns to the one it would
+  replace, `;; inherits: a,b,(c)` pulls those languages' queries in ahead of its
+  own, and a parenthesized language is skipped when it has no query. A predicate
+  this build does not know is treated as satisfied rather than as a failure, so
+  a query file written for another editor still highlights.
 - Code folding with toggle/collapse/expand, mouse toggling, and persisted
   collapsed ranges. The keyboard has it twice over: `Alt+C Z` then `A` toggles,
   `C` folds, `O` unfolds, `M` folds every block and `R` unfolds every block,

@@ -2,6 +2,7 @@
 #include "core/editor.h"
 #include "lsp_attach_data.h"
 #include "syntax/manager.h"
+#include "syntax/query_predicates.h"
 #include <algorithm>
 #include <filesystem>
 #if defined(__GLIBC__)
@@ -190,6 +191,49 @@ namespace
     return offsets[line_idx];
   }
 
+  // Byte offset of a tree point, clamped into its line. A row past the last
+  // line can only come from a tree older than the buffer, and reports itself as
+  // out of range so the capture is dropped instead of painted in a wrong spot.
+  uint32_t point_to_byte(FileBuffer &buf, TSPoint point)
+  {
+    if (point.row >= (uint32_t)buf.line_count())
+    {
+      return UINT32_MAX;
+    }
+    const std::string &line = buf.line((int)point.row);
+    const uint32_t base = line_start_byte(buf, (int)point.row);
+    return base + std::min(point.column, (uint32_t)line.size());
+  }
+
+  // Moves a tree point by whole rows and columns. A column underflow carries
+  // into the previous row, which is what makes `(#offset! @x 0 0 0 -1)` drop a
+  // trailing newline from a capture that ran to the end of its line.
+  void shift_point(FileBuffer &buf, TSPoint &point, int rows, int columns)
+  {
+    int row = (int)point.row + rows;
+    int column = (int)point.column + columns;
+    while (column < 0 && row > 0)
+    {
+      row--;
+      column += (int)buf.line(row).size() + 1;
+    }
+    if (row < 0)
+    {
+      row = 0;
+    }
+    if (column < 0)
+    {
+      column = 0;
+    }
+    if (row < buf.line_count())
+    {
+      const int line_size = (int)buf.line(row).size();
+      column = std::min(column, line_size);
+    }
+    point.row = (uint32_t)row;
+    point.column = (uint32_t)column;
+  }
+
   std::vector<std::pair<int, int>>
   query_ts_highlights(FileBuffer &buf, int line_idx, TSQuery *query, TSTree *tree, int byte_limit)
   {
@@ -206,6 +250,39 @@ namespace
 
     const uint32_t line_start = line_start_byte(buf, line_idx);
 
+    // Predicates and directives are steps the C library hands back rather than
+    // applies: the pattern decides here whether its captures count at all
+    // (predicates) and where they land and how strongly (directives). Most
+    // query files carry neither, and this gate keeps the per-match lookups and
+    // the source text they read off their path entirely.
+    const bool has_conditions = jot_query::query_has_conditions(query);
+    // A predicate compares a captured node against its own text, so this
+    // resolves a tree point back into the buffer. Rows past the last line can
+    // only come from a tree older than the buffer; those read as empty.
+    const jot_query::TextReader read_text = [&buf](TSPoint start, TSPoint end) {
+      std::string out;
+      const int line_count = buf.line_count();
+      for (uint32_t row = start.row; row <= end.row && row < (uint32_t)line_count; row++)
+      {
+        const std::string &text_line = buf.line((int)row);
+        const uint32_t from = (row == start.row)
+                                  ? std::min(start.column, (uint32_t)text_line.size())
+                                  : 0;
+        const uint32_t to = (row == end.row)
+                                ? std::min(end.column, (uint32_t)text_line.size())
+                                : (uint32_t)text_line.size();
+        if (from < to)
+        {
+          out.append(text_line, from, to - from);
+        }
+        if (row != end.row)
+        {
+          out += '\n';
+        }
+      }
+      return out;
+    };
+
     TSNode root = ts_tree_root_node(tree);
     TSQueryCursor *cursor = ts_query_cursor_new();
 
@@ -218,11 +295,45 @@ namespace
     TSQueryMatch match;
     while (ts_query_cursor_next_match(cursor, &match))
     {
+      // A pattern whose predicate fails contributes nothing. This is what keeps
+      // a query written for one grammar (or a `#match?` narrowing a node type to
+      // keywords) from painting every node the pattern could match.
+      if (has_conditions && !jot_query::match_satisfies(query, match, read_text))
+      {
+        continue;
+      }
       for (uint16_t ci = 0; ci < match.capture_count; ci++)
       {
         TSQueryCapture cap = match.captures[ci];
+        uint32_t name_len;
+        const char *name = ts_query_capture_name_for_id(query, cap.index, &name_len);
+        const std::string capture_name(name, name_len);
+        const int token = tree_sitter_capture_token_for_name(capture_name);
+        if (token == TS_TOKEN_NONE)
+        {
+          continue;
+        }
+        int priority = tree_sitter_capture_priority_for_name(capture_name);
         uint32_t s = ts_node_start_byte(cap.node);
         uint32_t e = ts_node_end_byte(cap.node);
+        if (has_conditions)
+        {
+          const jot_query::CaptureDirectives directives =
+              jot_query::capture_directives(query, match, capture_name);
+          if (directives.has_priority)
+          {
+            priority = directives.priority;
+          }
+          if (directives.has_offset)
+          {
+            TSPoint start_point = ts_node_start_point(cap.node);
+            TSPoint end_point = ts_node_end_point(cap.node);
+            shift_point(buf, start_point, directives.start_row, directives.start_column);
+            shift_point(buf, end_point, directives.end_row, directives.end_column);
+            s = point_to_byte(buf, start_point);
+            e = point_to_byte(buf, end_point);
+          }
+        }
         uint32_t start = (s > line_start) ? (s - line_start) : 0;
         uint32_t end = (e > line_start) ? (e - line_start) : 0;
         if (end > (uint32_t)limit)
@@ -230,15 +341,6 @@ namespace
           end = (uint32_t)limit;
         }
         if (start >= (uint32_t)limit)
-        {
-          continue;
-        }
-
-        uint32_t name_len;
-        const char *name = ts_query_capture_name_for_id(query, cap.index, &name_len);
-        const int token = tree_sitter_capture_token_for_name(std::string(name, name_len));
-        const int priority = tree_sitter_capture_priority_for_name(std::string(name, name_len));
-        if (token == TS_TOKEN_NONE)
         {
           continue;
         }
