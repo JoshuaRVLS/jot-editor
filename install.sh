@@ -16,7 +16,7 @@ BUILD_TYPE="Release"
 RUN_TESTS=0
 USE_SUDO=0
 INSTALL_TREESITTER=1
-JOBS="2"
+JOBS="10"
 PREFIX_EXPLICIT=0
 BUILD_DIR_EXPLICIT=0
 # Comma-separated list of optional LSP / formatter components to install.
