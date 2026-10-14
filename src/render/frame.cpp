@@ -583,6 +583,11 @@ void Editor::render()
     // evict_stale_syntax_trees). Before ui->render() so the sweep is part of
     // the same frame that fed it, never racing the next repaint.
 #ifdef JOT_TREESITTER
+    // An edit batch that announced itself before mutating (see ts_begin_edit)
+    // is finished by now, so a snapshot that still matches the buffer means the
+    // tree is in sync again; asked before the panes highlight so the per-line
+    // highlight path never sees a pending snapshot.
+    confirm_pending_syntax_edits();
     evict_stale_syntax_trees();
 #endif
     // Last: the jot.screen painter runs once the editor has drawn everything it

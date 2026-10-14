@@ -194,6 +194,39 @@ namespace
     return offsets[line_idx];
   }
 
+  // True when the buffer's text is exactly `text` (lines joined by '\n', the
+  // same shape get_buffer_text builds). Answers "does the tree still match the
+  // buffer" for a pending edit snapshot without materialising the whole buffer;
+  // init_ts_for_buffer runs once per line of a frame, and a whole-file copy
+  // there would cost the file's size per visible row.
+  bool buffer_text_matches(const FileBuffer &buf, const std::string &text)
+  {
+    if (buf.is_lazy())
+    {
+      return text.empty();
+    }
+    size_t offset = 0;
+    for (int i = 0; i < buf.line_count(); i++)
+    {
+      if (i > 0)
+      {
+        if (offset >= text.size() || text[offset] != '\n')
+        {
+          return false;
+        }
+        offset++;
+      }
+      const std::string &line = buf.line(i);
+      if (offset + line.size() > text.size()
+          || text.compare(offset, line.size(), line) != 0)
+      {
+        return false;
+      }
+      offset += line.size();
+    }
+    return offset == text.size();
+  }
+
   // Byte-range reading of the buffer, for predicates that compare a captured
   // node against its own text and for the text an injected region parses. A row
   // past the last line can only come from a tree older than the buffer; those
@@ -920,6 +953,21 @@ void Editor::reparse_tree(FileBuffer &buf)
   {
     return;
   }
+
+  // An edit can be announced before it lands: save_state snapshots the text
+  // (ts_begin_edit) and the command mutates the buffer afterwards, and Enter
+  // asks for a tree in between -- the indent query runs before the split it
+  // indents for. The tree still matches the buffer at that moment, but it must
+  // not be pronounced in sync: dropping the snapshot here would let the split
+  // that follows go unseen, and every highlight past it would sit one byte off
+  // per inserted newline until the next whole-file rebuild. Keep the snapshot
+  // and stay out of sync so the mutation is diffed against the tree on the
+  // next rebuild.
+  if (buf.ts_tree && buf.ts_edit_base_valid && buffer_text_matches(buf, buf.ts_edit_base))
+  {
+    return;
+  }
+
   std::string text = get_buffer_text(buf);
 
   if (buf.ts_tree && buf.ts_edit_base_valid)
@@ -932,11 +980,27 @@ void Editor::reparse_tree(FileBuffer &buf)
     buf.ts_edit_base.clear();
     buf.ts_edit_base_valid = false;
     TSTree *result = TreeSitterManager::reparse_incremental(buf.ts_parser, buf.ts_tree, base, text);
-    // reparse_incremental returns the same pointer on no-op; if it also failed
-    // to parse (still matching base, not text), keep the edit pending so the
-    // next rebuild retries instead of querying a stale tree.
-    buf.ts_tree_in_sync = (result == buf.ts_tree && base != text) ? false : true;
+    if (result == buf.ts_tree)
+    {
+      // The parse did not take (the tree still matches base, not text): put the
+      // snapshot back so the next rebuild retries it rather than querying a
+      // stale tree.
+      buf.ts_tree_in_sync = false;
+      buf.ts_edit_base = std::move(base);
+      buf.ts_edit_base_valid = true;
+      return;
+    }
     buf.ts_tree = result;
+    // Keep the text the tree now matches rather than declaring the edit
+    // finished: a command can mutate, ask for a tree (Enter's indent query
+    // runs the previous Enter's diff here) and then mutate again, and only a
+    // pending snapshot lets that second mutation be diffed too. A snapshot
+    // that still matches the buffer is turned back into "in sync" by
+    // confirm_pending_syntax_edits once the frame starts, i.e. once the
+    // command has finished mutating.
+    buf.ts_tree_in_sync = false;
+    buf.ts_edit_base = std::move(text);
+    buf.ts_edit_base_valid = true;
     return;
   }
 
@@ -1207,7 +1271,18 @@ bool Editor::query_indent_for_new_line(FileBuffer &buf, int line_idx, int *inden
   // The parse is asked for here rather than through syntax_tree_ready, which
   // reports a missing tree in the message line: Enter must not do that.
   init_ts_for_buffer(buf);
-  if (!buf.ts_tree || !buf.ts_tree_in_sync)
+  if (!buf.ts_tree)
+  {
+    return false;
+  }
+  // Enter queries the tree after save_state, while the edit it indents for is
+  // still only announced (see reparse_tree): the tree matches the text the
+  // snapshot holds, which is the line as it still stands, so it answers this
+  // query even though it is not marked in sync.
+  const bool tree_matches_buffer =
+      buf.ts_tree_in_sync
+      || (buf.ts_edit_base_valid && buffer_text_matches(buf, buf.ts_edit_base));
+  if (!tree_matches_buffer)
   {
     return false;
   }
@@ -1500,6 +1575,40 @@ void Editor::install_finished_parses()
   if (repaint)
   {
     needs_redraw = true;
+  }
+}
+
+void Editor::confirm_pending_syntax_edits()
+{
+  // A command announces its edit before it mutates: save_state snapshots the
+  // text with ts_begin_edit, and the split or insert lands afterwards. A tree
+  // asked for inside that window (Enter's indent query, a Lua or LSP hook)
+  // must not have the snapshot dropped, or the mutation that follows goes
+  // unseen and every highlight past it sits one byte off per inserted newline.
+  // By the time a frame starts, the command has finished mutating, so a
+  // snapshot that still matches the buffer describes a finished edit batch:
+  // the tree, which always matches the snapshot, is in sync again. Resolving it
+  // here, once per frame, keeps the pending check out of the per-line highlight
+  // path.
+  for (auto &buf : buffers)
+  {
+    if (!buf.ts_tree || !buf.ts_edit_base_valid)
+    {
+      continue;
+    }
+    if (!buffer_text_matches(buf, buf.ts_edit_base))
+    {
+      // The batch changed the buffer since the snapshot: fold the change into
+      // the tree now (reparse_tree refreshes the snapshot to what it parsed).
+      reparse_tree(buf);
+      if (!buf.ts_edit_base_valid || !buffer_text_matches(buf, buf.ts_edit_base))
+      {
+        continue; // still out of step; the next frame retries
+      }
+    }
+    buf.ts_edit_base_valid = false;
+    buf.ts_edit_base.clear();
+    buf.ts_tree_in_sync = true;
   }
 }
 

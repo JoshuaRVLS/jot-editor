@@ -93,6 +93,13 @@ int buffer_index_of(const FileBuffer &buf) const;
 // does not sit in memory for the rest of the session. Called once per painted
 // frame, after the panes have stamped the buffers they drew.
 void evict_stale_syntax_trees();
+// Turns a finished edit batch back into "the tree is in sync". save_state
+// snapshots the text before a command mutates (ts_begin_edit), so a tree asked
+// for inside that window is deliberately left pending; once the frame starts,
+// the command has landed and a snapshot that still matches the buffer means the
+// tree describes it exactly. Called once per painted frame, before the panes
+// highlight, so the pending check never runs per highlighted line.
+void confirm_pending_syntax_edits();
 // Recency counter behind FileBuffer::ts_last_use_seq, bumped once per drawn
 // buffer; syntax_sweep_seq_ is where the previous sweep left it, so the
 // sweep can tell what was on screen since it last ran.
