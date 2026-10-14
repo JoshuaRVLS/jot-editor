@@ -151,6 +151,13 @@ TreeSitterManager::~TreeSitterManager()
       ts_query_delete(entry.second);
     }
   }
+  for (auto &entry : fold_query_cache_)
+  {
+    if (entry.second)
+    {
+      ts_query_delete(entry.second);
+    }
+  }
   for (auto &entry : library_handles_)
   {
     if (entry.second)
@@ -512,6 +519,15 @@ void TreeSitterManager::reload()
     }
   }
   query_cache_.clear();
+  for (auto &entry : fold_query_cache_)
+  {
+    if (entry.second)
+    {
+      ts_query_delete(entry.second);
+    }
+  }
+  fold_query_cache_.clear();
+  fold_query_diagnostics_.clear();
   parser_languages_.clear();
   for (auto &entry : library_handles_)
   {

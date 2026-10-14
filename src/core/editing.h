@@ -36,6 +36,13 @@ int bracket_depth_at_line_start(FileBuffer &buf, int line);
 #ifdef JOT_TREESITTER
 void reparse_tree(FileBuffer &buf);
 void init_ts_for_buffer(FileBuffer &buf);
+// The fold ranges the language's `folds.scm` asks for. False when the language
+// has no fold query, no parser, or nothing to fold.
+bool query_fold_ranges(FileBuffer &buf, std::vector<FoldRange> &ranges);
+// Re-derives a buffer's fold set: the language's `folds.scm` query when it has
+// one, the bracket/indent detector otherwise. The single entry point every
+// caller that recomputes folds should use.
+void refresh_fold_ranges(FileBuffer &buf);
 // Memoizes its filesystem/content probe on the buffer (see syntax.cpp), so
 // the buffer reference is mutable.
 std::string tree_sitter_extension_for_buffer(FileBuffer &buf);

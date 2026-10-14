@@ -569,6 +569,39 @@ TEST_CASE("Every fold-range writer invalidates the index", "[jot]")
   expect_current(5);
 }
 
+// A fold set computed from a language's folds.scm query arrives through its own
+// entry point, and it has to obey the rule the detector's re-detection obeys:
+// ranges are replaced, the folds inside them are kept. A query that drops a
+// user's fold on every repaint would be worse than no query at all.
+TEST_CASE("A query's fold ranges replace the detected ones and keep the folds", "[jot]")
+{
+  FoldRanges folds;
+  folds.assign({{0, 4, false}, {1, 3, false}});
+  folds.set_collapsed(0, true);
+  REQUIRE(folds[0].collapsed);
+
+  // Ranges the query found: the nested pair is gone from the new set, so its
+  // fold is gone with it, and the one that survived stays folded.
+  Folding::apply_detected_ranges(folds, {{0, 4, false}, {6, 9, false}});
+  REQUIRE(folds.size() == 2);
+  REQUIRE(folds[0].start_line == 0);
+  REQUIRE(folds[0].end_line == 4);
+  REQUIRE(folds[0].collapsed);
+  REQUIRE(folds[1].start_line == 6);
+  REQUIRE_FALSE(folds[1].collapsed);
+
+  // The same set again: nothing was folded, nothing changes.
+  Folding::apply_detected_ranges(folds, {{0, 4, false}, {6, 9, false}});
+  REQUIRE(folds[0].collapsed);
+  REQUIRE(folds.size() == 2);
+
+  // A query's range flags are ignored in favour of the current folded state:
+  // the store owns what is collapsed, the query only says where blocks are.
+  Folding::apply_detected_ranges(folds, {{0, 4, true}, {6, 9, true}});
+  REQUIRE(folds[0].collapsed);
+  REQUIRE_FALSE(folds[1].collapsed);
+}
+
 TEST_CASE("A change no writer made is caught by the checksum", "[jot]")
 {
   FoldRanges folds;

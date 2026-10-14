@@ -420,7 +420,7 @@ void Editor::save_workspace_session()
   {
     if (!buf->is_lazy())
     {
-      Folding::refresh_ranges(buf->fold_ranges, buf->lines, get_file_extension(buf->filepath));
+      refresh_fold_ranges(*buf);
       buf->folds_dirty = false;
     }
     std::string fold_payload = Folding::encode_collapsed_ranges(buf->fold_ranges);
@@ -707,7 +707,7 @@ bool Editor::restore_workspace_session()
       buf.is_preview = entry.preview;
       if (!buf.is_lazy())
       {
-        Folding::refresh_ranges(buf.fold_ranges, buf.lines, get_file_extension(buf.filepath));
+        refresh_fold_ranges(buf);
         buf.folds_dirty = false;
       }
       if (entry.has_collapsed_folds)

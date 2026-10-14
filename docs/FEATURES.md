@@ -350,7 +350,12 @@ settles, so scrolling a long way does not grow the process.
   this build does not know is treated as satisfied rather than as a failure, so
   a query file written for another editor still highlights.
 - Code folding with toggle/collapse/expand, mouse toggling, and persisted
-  collapsed ranges. The keyboard has it twice over: `Alt+C Z` then `A` toggles,
+  collapsed ranges. A language's `folds.scm` (the same file nvim-treesitter
+  ships, read from the query paths `:tsinstall` writes to) decides the ranges
+  when there is one, so constructs the text does not spell with braces or an
+  indent step -- a multi-line string argument, a table literal, a here-doc --
+  fold like the grammar says they should; without one, the bracket/indent
+  detector keeps folding as before. The keyboard has it twice over: `Alt+C Z` then `A` toggles,
   `C` folds, `O` unfolds, `M` folds every block and `R` unfolds every block,
   while `Alt+C Shift+Z` toggles the block at the caret in one chord -- the one
   pressed while editing rather than while skimming. A file can also be skimmed

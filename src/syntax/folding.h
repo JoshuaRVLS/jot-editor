@@ -76,6 +76,10 @@ namespace Folding
   void refresh_ranges(FoldRanges &folds,
                       const std::vector<std::string> &lines,
                       const std::string &extension);
+  // Installs a fold set computed elsewhere (a language's folds.scm query) in
+  // place of the detected one, keeping whatever was folded and still exists --
+  // the same rule refresh_ranges applies to its own re-detection.
+  void apply_detected_ranges(FoldRanges &folds, std::vector<FoldRange> ranges);
   std::string encode_collapsed_ranges(const std::vector<FoldRange> &ranges);
   std::vector<FoldRange> decode_collapsed_ranges(const std::string &payload);
   void apply_collapsed_ranges(FoldRanges &folds, const std::vector<FoldRange> &collapsed);

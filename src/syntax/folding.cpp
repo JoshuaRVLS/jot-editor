@@ -583,13 +583,11 @@ namespace Folding
     return folds.prepared_index();
   }
 
-  void refresh_ranges(FoldRanges &folds,
-                      const std::vector<std::string> &lines,
-                      const std::string &extension)
+  void apply_detected_ranges(FoldRanges &folds, std::vector<FoldRange> ranges)
   {
-    // The folded set outlives a re-detection: the ranges are re-derived from
-    // the lines, and whatever was collapsed and still exists is folded again.
-    // The write happens once, so the prepared index retires once. A block the
+    // The folded set outlives a re-detection: the ranges are re-derived, and
+    // whatever was collapsed and still exists is folded again. The write
+    // happens once, so the prepared index retires once. A block the
     // re-detection moved wholesale cannot be recognized here -- the old text is
     // gone by the time this runs, and a line number alone would fold whichever
     // block landed on it -- so a formatter that shifts lines drops its folds.
@@ -601,12 +599,18 @@ namespace Folding
         collapsed.insert({range.start_line, range.end_line});
       }
     }
-    std::vector<FoldRange> ranges = detect_ranges(lines, extension);
     for (auto &range : ranges)
     {
       range.collapsed = collapsed.count({range.start_line, range.end_line}) > 0;
     }
     folds.assign(std::move(ranges));
+  }
+
+  void refresh_ranges(FoldRanges &folds,
+                      const std::vector<std::string> &lines,
+                      const std::string &extension)
+  {
+    apply_detected_ranges(folds, detect_ranges(lines, extension));
   }
 
   std::string encode_collapsed_ranges(const std::vector<FoldRange> &ranges)

@@ -173,30 +173,43 @@ std::string TreeSitterManager::expand_query_modelines(const std::string &source,
   return expanded;
 }
 
-TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension)
+// The one lookup both query kinds go through (highlights.scm, folds.scm):
+// candidates in priority order, their modelines resolved, the first one that
+// compiles cached and returned. `stored_source` is the copy Lua handed over
+// (the bundled one), which only the highlight query has -- the fold queries
+// come from the query paths, where :tsinstall writes them.
+TreeSitterManager::QueryLookup
+TreeSitterManager::lookup_query(const std::string &extension,
+                               const char *file_name,
+                               const std::string &stored_source,
+                               std::unordered_map<std::string, TSQuery *> &cache)
 {
+  QueryLookup result;
   auto ext_it = ext_to_lang_.find(extension);
   if (ext_it == ext_to_lang_.end())
-    return nullptr;
-  const std::string &language_id = ext_it->second;
-  auto cached = query_cache_.find(language_id);
-  if (cached != query_cache_.end())
   {
-    return cached->second;
+    return result;
+  }
+  const std::string &language_id = ext_it->second;
+  auto cached = cache.find(language_id);
+  if (cached != cache.end())
+  {
+    result.query = cached->second;
+    return result;
   }
 
   TSParser *parser = create_parser(extension);
   if (!parser)
   {
-    query_diagnostics_[language_id] = "parser unavailable";
-    return nullptr;
+    result.diagnostic = "parser unavailable";
+    return result;
   }
   const TSLanguage *lang = ts_parser_language(parser);
   ts_parser_delete(parser);
   if (!lang)
   {
-    query_diagnostics_[language_id] = "parser has no language";
-    return nullptr;
+    result.diagnostic = "parser has no language";
+    return result;
   }
 
   // Candidate query sources in priority order. The bundled Lua query is the
@@ -205,38 +218,42 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension)
   // installed parser's grammar. Runtime-first here would let an older query
   // package shadow a newer bundled query on every cache miss.
   std::vector<QuerySource> candidates;
+  if (!stored_source.empty())
   {
-    auto entry_it = languages_.find(language_id);
-    if (entry_it != languages_.end() && !entry_it->second.highlight_query_source.empty())
+    QuerySource stored;
+    stored.source = stored_source;
+    stored.stored = true;
+    candidates.push_back(std::move(stored));
+  }
+  for (const auto &root : runtime_query_paths_)
+  {
+    fs::path base(root);
+    for (const auto &candidate : {
+             base / language_id / file_name,
+             base / (language_id + ".scm"),
+         })
     {
-      QuerySource stored;
-      stored.source = entry_it->second.highlight_query_source;
-      stored.stored = true;
-      candidates.push_back(std::move(stored));
-    }
-    for (const auto &root : runtime_query_paths_)
-    {
-      fs::path base(root);
-      for (const auto &candidate : {
-               base / language_id / "highlights.scm",
-               base / (language_id + ".scm"),
-           })
+      // The `<language>.scm` spelling is the highlight query's; a fold query
+      // lives in the language's own directory or nowhere.
+      if (std::strcmp(file_name, "highlights.scm") != 0
+          && candidate.filename().string() != file_name)
       {
-        if (fs::exists(candidate))
-        {
-          QuerySource runtime;
-          runtime.source = read_file(candidate);
-          runtime.path = candidate.string();
-          runtime.runtime = true;
-          candidates.push_back(std::move(runtime));
-        }
+        continue;
+      }
+      if (fs::exists(candidate))
+      {
+        QuerySource runtime;
+        runtime.source = read_file(candidate);
+        runtime.path = candidate.string();
+        runtime.runtime = true;
+        candidates.push_back(std::move(runtime));
       }
     }
   }
   if (candidates.empty())
   {
-    query_diagnostics_[language_id] = "query unavailable; Lua policy not loaded";
-    return nullptr;
+    result.diagnostic = "query unavailable; Lua policy not loaded";
+    return result;
   }
   // A query file may open with a modeline that changes what it contributes:
   // `;; extends` adds its patterns to the query it would otherwise replace, and
@@ -266,16 +283,17 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension)
                                   &error_type);
     if (query)
     {
-      query_cache_[language_id] = query;
-      runtime_query_used_[language_id] = source.runtime;
-      builtin_query_used_[language_id] = source.stored;
-      query_diagnostics_[language_id] =
+      cache[language_id] = query;
+      result.query = query;
+      result.used_runtime = source.runtime;
+      result.used_builtin = source.stored;
+      result.diagnostic =
           source.runtime ? ("runtime query loaded: " + source.path) : "Lua query loaded";
       if (!source.note.empty())
       {
-        query_diagnostics_[language_id] += source.note;
+        result.diagnostic += source.note;
       }
-      return query;
+      return result;
     }
     const std::string error = "query failed: error " + std::to_string((int)error_type)
                               + " at offset " + std::to_string(error_offset);
@@ -290,12 +308,36 @@ TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension)
     }
     message += error;
     if (first_failure.empty())
+    {
       first_failure = message;
+    }
   }
-  runtime_query_used_[language_id] = false;
-  builtin_query_used_[language_id] = false;
-  query_diagnostics_[language_id] = first_failure;
-  return nullptr;
+  result.diagnostic = first_failure;
+  return result;
+}
+
+TSQuery *TreeSitterManager::get_highlight_query(const std::string &extension)
+{
+  const std::string language_id = language_for_extension(extension);
+  std::string stored_source;
+  auto entry_it = languages_.find(language_id);
+  if (entry_it != languages_.end())
+  {
+    stored_source = entry_it->second.highlight_query_source;
+  }
+  QueryLookup lookup = lookup_query(extension, "highlights.scm", stored_source, query_cache_);
+  runtime_query_used_[language_id] = lookup.used_runtime;
+  builtin_query_used_[language_id] = lookup.used_builtin;
+  query_diagnostics_[language_id] = lookup.diagnostic;
+  return lookup.query;
+}
+
+TSQuery *TreeSitterManager::get_fold_query(const std::string &extension)
+{
+  const std::string language_id = language_for_extension(extension);
+  QueryLookup lookup = lookup_query(extension, "folds.scm", std::string(), fold_query_cache_);
+  fold_query_diagnostics_[language_id] = lookup.diagnostic;
+  return lookup.query;
 }
 #endif
 

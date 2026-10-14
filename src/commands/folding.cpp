@@ -51,7 +51,7 @@ void Editor::refresh_folds(FileBuffer &buf)
     return;
   }
   buf.folds_dirty = false;
-  Folding::refresh_ranges(buf.fold_ranges, buf.lines, get_file_extension(buf.filepath));
+  refresh_fold_ranges(buf);
   if (Folding::is_line_hidden(buf.fold_ranges, buf.cursor.y))
   {
     while (buf.cursor.y > 0 && Folding::is_line_hidden(buf.fold_ranges, buf.cursor.y))

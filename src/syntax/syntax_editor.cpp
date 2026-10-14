@@ -1,6 +1,7 @@
 #include "base/string_util.h"
 #include "core/editor.h"
 #include "lsp_attach_data.h"
+#include "syntax/folding.h"
 #include "syntax/manager.h"
 #include "syntax/query_predicates.h"
 #include <algorithm>
@@ -191,6 +192,37 @@ namespace
     return offsets[line_idx];
   }
 
+  // Source text a predicate compares a captured node against, read out of the
+  // buffer by the tree points the match carries. A row past the last line can
+  // only come from a tree older than the buffer; those read as empty, which the
+  // text predicates treat as satisfied.
+  jot_query::TextReader buffer_text_reader(FileBuffer &buf)
+  {
+    return [&buf](TSPoint start, TSPoint end) {
+      std::string out;
+      const int line_count = buf.line_count();
+      for (uint32_t row = start.row; row <= end.row && row < (uint32_t)line_count; row++)
+      {
+        const std::string &text_line = buf.line((int)row);
+        const uint32_t from = (row == start.row)
+                                  ? std::min(start.column, (uint32_t)text_line.size())
+                                  : 0;
+        const uint32_t to = (row == end.row)
+                                ? std::min(end.column, (uint32_t)text_line.size())
+                                : (uint32_t)text_line.size();
+        if (from < to)
+        {
+          out.append(text_line, from, to - from);
+        }
+        if (row != end.row)
+        {
+          out += '\n';
+        }
+      }
+      return out;
+    };
+  }
+
   // Byte offset of a tree point, clamped into its line. A row past the last
   // line can only come from a tree older than the buffer, and reports itself as
   // out of range so the capture is dropped instead of painted in a wrong spot.
@@ -256,32 +288,7 @@ namespace
     // query files carry neither, and this gate keeps the per-match lookups and
     // the source text they read off their path entirely.
     const bool has_conditions = jot_query::query_has_conditions(query);
-    // A predicate compares a captured node against its own text, so this
-    // resolves a tree point back into the buffer. Rows past the last line can
-    // only come from a tree older than the buffer; those read as empty.
-    const jot_query::TextReader read_text = [&buf](TSPoint start, TSPoint end) {
-      std::string out;
-      const int line_count = buf.line_count();
-      for (uint32_t row = start.row; row <= end.row && row < (uint32_t)line_count; row++)
-      {
-        const std::string &text_line = buf.line((int)row);
-        const uint32_t from = (row == start.row)
-                                  ? std::min(start.column, (uint32_t)text_line.size())
-                                  : 0;
-        const uint32_t to = (row == end.row)
-                                ? std::min(end.column, (uint32_t)text_line.size())
-                                : (uint32_t)text_line.size();
-        if (from < to)
-        {
-          out.append(text_line, from, to - from);
-        }
-        if (row != end.row)
-        {
-          out += '\n';
-        }
-      }
-      return out;
-    };
+    const jot_query::TextReader read_text = buffer_text_reader(buf);
 
     TSNode root = ts_tree_root_node(tree);
     TSQueryCursor *cursor = ts_query_cursor_new();
@@ -429,6 +436,110 @@ void Editor::reparse_tree(FileBuffer &buf)
   buf.ts_edit_base_valid = false;
   buf.ts_edit_base.clear();
   buf.ts_tree_in_sync = true;
+}
+
+// The fold ranges a language's own `folds.scm` asks for, in place of the
+// bracket/indent guess `Folding::detect_ranges` makes. The query file is the
+// same one nvim-treesitter ships and :tsinstall writes into the query paths,
+// and it knows the grammar: a multi-line string, a block that is not indented,
+// a table literal. Returns false (leaving `ranges` empty) when the language has
+// no fold query, no parser, or nothing to fold, and the caller falls back to
+// the heuristic.
+bool Editor::query_fold_ranges(FileBuffer &buf, std::vector<FoldRange> &ranges)
+{
+  ranges.clear();
+  const std::string extension = tree_sitter_extension_for_buffer(buf);
+  if (extension.empty() || !ts_manager_.has_language(extension))
+  {
+    return false;
+  }
+  if (!syntax_tree_ready(buf) || !buf.ts_tree)
+  {
+    return false;
+  }
+  TSQuery *query = ts_manager_.get_fold_query(extension);
+  if (!query)
+  {
+    return false;
+  }
+  const jot_query::TextReader read_text = buffer_text_reader(buf);
+  TSQueryCursor *cursor = ts_query_cursor_new();
+  if (!cursor)
+  {
+    return false;
+  }
+  ts_query_cursor_exec(cursor, query, ts_tree_root_node(buf.ts_tree));
+  const int line_count = buf.line_count();
+  TSQueryMatch match;
+  while (ts_query_cursor_next_match(cursor, &match))
+  {
+    if (!jot_query::match_satisfies(query, match, read_text))
+    {
+      continue;
+    }
+    for (uint16_t i = 0; i < match.capture_count; i++)
+    {
+      uint32_t name_length = 0;
+      const char *name =
+          ts_query_capture_name_for_id(query, match.captures[i].index, &name_length);
+      const std::string capture(name, name_length);
+      // `@fold`, and the namespaced forms (`@fold.inner`) that newer query
+      // files use to say which block a range belongs to.
+      if (capture != "fold" && capture.rfind("fold.", 0) != 0)
+      {
+        continue;
+      }
+      const TSPoint start = ts_node_start_point(match.captures[i].node);
+      const TSPoint end = ts_node_end_point(match.captures[i].node);
+      const int start_line = (int)start.row;
+      // A node that ends where a line begins -- a block's closing bracket on a
+      // row of its own -- does not fold that row in, only the ones it has text
+      // on.
+      int end_line = (int)end.row - (end.column == 0 ? 1 : 0);
+      end_line = std::min(end_line, line_count - 1);
+      if (end_line <= start_line)
+      {
+        continue;
+      }
+      ranges.push_back({start_line, end_line, false});
+    }
+  }
+  ts_query_cursor_delete(cursor);
+  if (ranges.empty())
+  {
+    return false;
+  }
+  std::sort(ranges.begin(), ranges.end(), [](const FoldRange &a, const FoldRange &b) {
+    if (a.start_line != b.start_line)
+    {
+      return a.start_line < b.start_line;
+    }
+    return a.end_line > b.end_line;
+  });
+  ranges.erase(std::unique(ranges.begin(),
+                           ranges.end(),
+                           [](const FoldRange &a, const FoldRange &b) {
+                             return a.start_line == b.start_line && a.end_line == b.end_line;
+                           }),
+               ranges.end());
+  return true;
+}
+
+void Editor::refresh_fold_ranges(FileBuffer &buf)
+{
+#ifdef JOT_TREESITTER
+  std::vector<FoldRange> query_ranges;
+  if (query_fold_ranges(buf, query_ranges))
+  {
+    // The language's own answer replaces the guess wholesale rather than
+    // merging with it: a query file folds the blocks the grammar has, and
+    // adding bracket pairs (or indent steps) a grammar does not mean on top of
+    // that is how a fold lands on an unrelated row.
+    Folding::apply_detected_ranges(buf.fold_ranges, std::move(query_ranges));
+    return;
+  }
+#endif
+  Folding::refresh_ranges(buf.fold_ranges, buf.lines, get_file_extension(buf.filepath));
 }
 
 // Open-time whole-file parses that would stall the first paint (e.g. ~460ms

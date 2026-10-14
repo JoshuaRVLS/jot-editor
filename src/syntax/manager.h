@@ -217,6 +217,10 @@ public:
   const TSLanguage *load_language(const std::string &language_id) const;
   TSParser *create_parser(const std::string &extension) const;
   TSQuery *get_highlight_query(const std::string &extension);
+  // The language's fold query (`folds.scm` under a runtime query path, where
+  // :tsinstall writes it), or nullptr when the language has none. Cached the
+  // same way the highlight query is.
+  TSQuery *get_fold_query(const std::string &extension);
 
   // Reparse `text` reusing `tree`, which must describe `base`. One bounded
   // ts_tree_edit covering the diff between `base` and `text` is applied first,
@@ -285,6 +289,21 @@ private:
 
   void deferred_query_compile_worker();
   void async_parse_worker(AsyncParseJob job);
+
+  struct QueryLookup
+  {
+    TSQuery *query = nullptr;
+    std::string diagnostic;
+    bool used_runtime = false;
+    bool used_builtin = false;
+  };
+
+  // Candidates, modelines, compile, cache: what a query lookup does for both
+  // query kinds.
+  QueryLookup lookup_query(const std::string &extension,
+                           const char *file_name,
+                           const std::string &stored_source,
+                           std::unordered_map<std::string, TSQuery *> &cache);
 #endif
 
   std::unordered_map<std::string, std::string> ext_to_lang_;
@@ -319,6 +338,8 @@ private:
   mutable std::unordered_map<std::string, bool> runtime_query_used_;
   mutable std::unordered_map<std::string, bool> builtin_query_used_;
   std::unordered_map<std::string, TSQuery *> query_cache_;
+  std::unordered_map<std::string, TSQuery *> fold_query_cache_;
+  mutable std::unordered_map<std::string, std::string> fold_query_diagnostics_;
   std::unordered_map<TreeSitterHandle, TSParser *> lua_parsers_;
   std::unordered_map<TreeSitterHandle, TSTree *> lua_trees_;
   std::unordered_map<TreeSitterHandle, TSQuery *> lua_queries_;
