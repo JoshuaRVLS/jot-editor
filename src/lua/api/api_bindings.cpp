@@ -995,6 +995,10 @@ bool LuaAPI::init()
   // in, in the right dock, walked with j/k and Enter. Loaded after keymaps so
   // the panel's own keys sit under the user's own bindings.
   jot_lua::load_bundled_lua_file(L, "features/undotree.lua", "Undo tree");
+  // Harpoon (features/harpoon.lua): a per-project list of marked files, the
+  // quick menu over it, and the Alt+H chords. Loaded after keymaps so a user
+  // binding on the same chords wins.
+  jot_lua::load_bundled_lua_file(L, "features/harpoon.lua", "Harpoon");
   // Self-update (:update + silent startup check, features/update.lua). Loaded
   // last so user config can tune update.* settings before the module boots.
   jot_lua::load_bundled_lua_file(L, "features/update.lua", "Update");

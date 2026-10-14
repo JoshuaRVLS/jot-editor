@@ -363,6 +363,38 @@ settles, so scrolling a long way does not grow the process.
 - Picker for project-wide text search, diagnostics, and document symbols, plus
   a persistent outline panel (`:outline`).
 
+### Harpoon
+
+- `Alt+Shift+H a` marks the file in front on the project's list, `Alt+Shift+H m`
+  shows the list, and `Alt+Shift+H 1`..`Alt+Shift+H 9` jump to a slot: the
+  [harpoon](https://github.com/ThePrimeagen/harpoon) idea, written in the bundled
+  Lua runtime on top of `jot.file` and `jot.cursor`. `Alt+Shift+H n` /
+  `Alt+Shift+H p` step through the marks and clamp at the ends,
+  `Alt+Shift+H d` drops the file in front, `Alt+Shift+H c` empties the list. The
+  same work is on the command line as `:HarpoonAdd`, `:HarpoonMenu`,
+  `:HarpoonJump <n>`, `:HarpoonNext`, `:HarpoonPrev`, `:HarpoonRemove` and
+  `:HarpoonClear`.
+- A mark is a file *and* the position it was last left at, so a jump lands where
+  you were rather than at the top of the file. Marking a file that is already on
+  the list refreshes that position instead of adding a second row for it.
+- The menu is a float over the pane: the slot, the path relative to the project,
+  and the line when it is past the first. `j`/`k` or the arrows move, `Enter` and
+  the digits jump, `d` drops the row under the cursor, `q`/`Esc` closes, the
+  wheel scrolls and a click jumps to the row it lands on.
+- Lists are per project, keyed by the workspace root, and kept in the cache
+  directory the other Lua features use (`jot/harpoon/lists.json` under
+  `$XDG_CACHE_HOME`, `%LOCALAPPDATA%` on Windows), so the next session opens with
+  the same marks. The whole thing is also on `jot` as
+  `jot.harpoon.list("term"):add()`, for chords of your own and for more than one
+  list ([Lua API](LUA_API.md#jotharpoon-bundled-feature)); `harpoon_nav_wrap`
+  makes `prev`/`next` wrap instead of stopping at the ends.
+- It is a Lua feature like any other
+  ([runtime/lua/features/harpoon.lua](../runtime/lua/features/harpoon.lua)): the
+  marks live in a module the runtime loads, so a config can rebind the chords
+  freely. harpoon2 refreshes a mark on `BufLeave`, which this editor does not
+  have, so the position follows `CursorMoved` instead and is written out with the
+  next change to the list, when the menu closes, and on `Shutdown`.
+
 ### Syntax highlighting and folding
 
 - Tree-sitter highlighting when the runtime and grammars are available, with a
@@ -1410,6 +1442,10 @@ move the place the next edit will land.
 | `:gitpanel` | Open the git panel (2-5 switch views) |
 | `:outline` | Persistent outline panel |
 | `:Undotree` / `Alt+Shift+U T` | Undo tree in the right dock (Alt+Shift+U S jumps to the state in front, `:UndotreeClear` drops the history) |
+| `Alt+Shift+H a` / `m` | Harpoon: mark the file in front / show the mark list |
+| `Alt+Shift+H 1..9` | Harpoon: jump to that slot (the menu's digits do the same) |
+| `Alt+Shift+H n` / `p` | Harpoon: next / previous mark (clamps at the ends, `harpoon_nav_wrap` wraps) |
+| `Alt+Shift+H d` / `c` | Harpoon: drop the file in front / empty this project's list |
 | `Ctrl+M` or `Alt+M` | Toggle minimap |
 | `Ctrl+T` or `Alt+T` | Theme chooser |
 | `` Ctrl+` `` | Open / focus / hide terminal panel |

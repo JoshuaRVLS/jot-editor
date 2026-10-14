@@ -198,6 +198,8 @@ jot.job          run, capture
 jot.ai           prompts, prompt, actions, status, adapters, active, config,
                  chat.{open, toggle, send, stop, reset, set_adapter, messages},
                  inline, setup
+jot.harpoon      list, ui.{toggle_quick_menu}, add, remove, clear, jump,
+                 next, prev
 jot.process      memory
 ```
 
@@ -1443,6 +1445,43 @@ end)
 The bundled engine registers one on load, so LSP completions with
 `insertTextFormat = 2` expand with real placeholders out of the box; passing
 `nil` unregisters it.
+
+## Harpoon
+
+`jot.harpoon` is the bundled feature that keeps a short per-project list of the
+files you come back to (`runtime/lua/features/harpoon.lua`), the
+[harpoon](https://github.com/ThePrimeagen/harpoon) idea over the file and cursor
+APIs. It is loaded with the other features, which is *after* the user's own
+`config.lua` and `plugins/`, so a callback reads the table when it runs, not
+while its file is being read:
+
+```lua
+jot.keymap.set("Ctrl+Shift+M", function()
+  jot.harpoon.list("notes"):add()
+  jot.harpoon.list("notes"):toggle_quick_menu()
+end, "Mark the note")
+```
+
+- `jot.harpoon.list([name])` - the list object for `name`, defaulting to the
+table's first string argument and otherwise to `"files"`. Naming a list makes it
+the one in front, which is the list the feature's chords and menu act on until
+another one is named. The object carries `items()`, `add()`, `get(index)`,
+`select(index)`, `remove()`, `remove_at(index)`, `clear()`, `prev()`, `next()`
+and `toggle_quick_menu()` - harpoon2's own shape, so a port of a config reads the
+same, minus the Neovim buffer window the menu used to be.
+- `jot.harpoon.ui.toggle_quick_menu()` - the menu on the list in front.
+- `jot.harpoon.add()` / `remove()` - the file in front on the list in front.
+- `jot.harpoon.clear([name])`, `jot.harpoon.jump(index)`,
+  `jot.harpoon.next()` / `prev()` - the commands the chords run.
+
+An item is `{ file, line, col }`, and `line`/`col` follow the cursor while the
+file is in front, so a jump lands where the file was left. Lists are keyed by
+project (the workspace root, or the current file's directory when there is no
+workspace) inside one JSON file in the cache directory, and the writes happen on
+the list's changes, on `Shutdown`, and when the menu closes. A jump to a file
+still being read is remembered and applied on its `BufOpen`. The chords
+(`Alt+Shift+H a` and the rest), the commands and the menu are in
+[Features](FEATURES.md#harpoon).
 
 ## Native Boundary
 
