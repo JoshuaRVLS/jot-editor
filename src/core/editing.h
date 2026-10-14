@@ -253,6 +253,17 @@ private:
   void outdent_selection();
   void toggle_comment();
 
+  // The undo tree (buffers/undo.cpp). reconcile turns the snapshot a command
+  // took into the state it reached, once the buffer says it changed anything;
+  // walk_to moves the buffer onto a state, one restore per step; goto does the
+  // same for the sequence number a panel names; state_lines answers what a
+  // state holds without moving; mark_saved stamps the state a write landed on.
+  void undo_reconcile(FileBuffer &buf);
+  bool undo_walk_to(FileBuffer &buf, int target);
+  bool undo_tree_goto(int seq);
+  bool undo_state_lines(FileBuffer &buf, int seq, std::vector<std::string> &out);
+  void undo_mark_saved(FileBuffer &buf);
+
   void show_popup(const std::string &text, const std::string &title = "");
   void show_hover_popup(const std::string &text, int x, int y);
   void hide_popup();

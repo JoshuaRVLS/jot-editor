@@ -588,7 +588,7 @@ void HostIOAPI::show_plugin_picker(const std::string &title,
       Editor::QUICK_PICK_PLUGIN, title.empty() ? "Plugin Picker" : title, std::move(items));
 }
 
-void HostIOAPI::show_plugin_panel(const std::string &name)
+void HostIOAPI::show_plugin_panel(const std::string &name, bool focus)
 {
   if (name.empty())
   {
@@ -596,6 +596,14 @@ void HostIOAPI::show_plugin_panel(const std::string &name)
   }
   editor.active_plugin_panel = name;
   editor.open_right_panel_tab(Editor::RIGHT_PANEL_PLUGIN);
+  // A panel that asked for the dock gets the keyboard the way the git, symbols
+  // and debugger panels do when their command opens them. Without the ask the
+  // focus does not move: a panel shown next to the text (the LeetCode console)
+  // must not stop the caret typing, and its q must not close it mid-word.
+  if (focus)
+  {
+    editor.focus_state = FOCUS_RIGHT_PANEL;
+  }
   editor.show_home_menu = false;
   editor.update_pane_layout();
   editor.needs_redraw = true;

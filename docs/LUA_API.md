@@ -630,6 +630,51 @@ flow (returning success), and `restart_all()` restarts every live client.
 `jot.git.diff(path[, staged])` opens the native right-panel diff for one
 file (the same one `:gitdiff` opens) and returns whether it opened.
 
+### Undo tree
+
+`jot.undo.tree()` returns the history of the buffer in front as the tree it is:
+`{states, current, last, writes, bytes}`. Each entry of `states` carries `seq`
+(the number a panel shows), `time` (when that state was reached, in epoch
+seconds), `saved` (`1` on the state the last write landed on, `2` on one written
+since, `0` on one never saved), `current` (the state the buffer is on) and
+`parent` (the seq behind it, `nil` for a root). `current` is the seq in front,
+`last` is the highest seq handed out, `writes` counts the saves and `bytes`
+reports what the history holds.
+
+`jot.undo.lines(seq)` returns that state's text as an array of lines, or `nil`
+when the state cannot be read. `jot.undo.goto(seq)` walks the buffer onto a
+state and returns whether it moved; the walk is one restore per state between,
+so it lands on exactly the text walking there would have produced.
+`jot.undo.clear()` drops the history.
+
+`:Undotree` is a bundled feature built on this table
+([runtime/lua/features/undotree.lua](../runtime/lua/features/undotree.lua)): it
+lists the states newest first with the cursor picked by `j`/`k`, diffs the one
+under the cursor against the buffer with `jot.undo.lines`, and commits with
+`jot.undo.goto` on `Enter`. `:UndotreeClear` is `jot.undo.clear`. A plugin can
+read the same history:
+
+```lua
+-- How many branches the buffer has left behind, and where it sits now.
+local tree = jot.undo.tree()
+local parented = {}
+for _, state in ipairs(tree.states) do
+  if state.parent then parented[state.parent] = true end
+end
+local tips = 0
+for _, state in ipairs(tree.states) do
+  if not parented[state.seq] then tips = tips + 1 end
+end
+jot.ui.show_message(tips .. " tips; state " .. tree.current .. " is in front")
+```
+
+`jot.ui.panel(name, focus)` shows a registered panel's tab in the right dock;
+`focus` (a boolean, off by default) moves the keyboard there, which a panel
+that reads keys wants: those keys then arrive as panel events (see
+[PLUGINS.md](PLUGINS.md)) and everything the panel does not use still reaches
+the buffer. `jot.ui.close_panel()` closes the dock's plugin tab, exactly as the
+focused panel's own `q` does.
+
 ### File tree
 
 `jot.filetree.root()` returns the workspace root. `jot.filetree.tree()`

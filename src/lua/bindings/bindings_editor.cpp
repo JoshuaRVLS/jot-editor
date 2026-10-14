@@ -186,7 +186,9 @@ namespace lua_bind
   }
   int l_panel_show(lua_State *L)
   {
-    api(L).show_panel(luaL_optstring(L, 1, ""));
+    // jot.ui.panel(name[, focus]): `focus` moves the keyboard to the dock, for
+    // a panel whose rows are walked with keys rather than clicked.
+    api(L).show_panel(luaL_optstring(L, 1, ""), lua_toboolean(L, 2) != 0);
     return 0;
   }
   int l_close_buffer(lua_State *L)
@@ -250,7 +252,7 @@ namespace lua_bind
         "terminal", "tasks",      "theme",     "config",    "lsp",         "debugger",
         "git",      "treesitter", "symbols",   "image",     "diagnostics", "marks",
         "status",   "timer",      "motion",    "sidebar",   "toast",       "process",
-        "screen",   "input",      "term",      "lua"};
+        "screen",   "input",      "term",      "lua",       "undo"};
     for (const char *name : names)
     {
       lua_pushboolean(L, 1);

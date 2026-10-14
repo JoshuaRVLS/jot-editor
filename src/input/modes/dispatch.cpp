@@ -1,4 +1,6 @@
 #include "core/editor.h"
+#include "events/keybind_catalog.h"
+#include "lua/api/api.h"
 #include <algorithm>
 #include <cctype>
 
@@ -774,6 +776,22 @@ void Editor::handle_input(int ch, bool is_ctrl, bool is_shift, bool is_alt, int 
   if (show_right_panel && right_panel_focused && active_right_panel_tab == RIGHT_PANEL_PLUGIN
       && !is_ctrl && !is_alt)
   {
+    // A panel that reads the keyboard (the undo tree) gets the key first and
+    // says whether it used it; the ones it passes on reach the buffer exactly
+    // as a read-only panel's keys do. This sits here, past every modal branch,
+    // so a prompt or the command palette never has its own typing stolen by a
+    // panel running behind it.
+    if (lua_api && !active_plugin_panel.empty()
+        && lua_api->plugin_panel_key(active_plugin_panel,
+                                     jot::keybind_detail::chord_name(
+                                         ch, is_ctrl, is_shift, is_alt, original_ch),
+                                     is_ctrl,
+                                     is_shift,
+                                     is_alt))
+    {
+      needs_redraw = true;
+      return;
+    }
     if (ch == 'q' || ch == 'Q' || ch == 27)
     {
       active_plugin_panel.clear();

@@ -127,7 +127,11 @@ public:
   void show_plugin_picker(const std::string &title,
                           const std::string &items_callback,
                           const std::string &select_callback);
-  void show_plugin_panel(const std::string &name);
+  // Opens the dock's plugin tab under `name`. Focus stays where it was unless
+  // `focus` asks for the dock: a read-only panel (the LeetCode console) leaves
+  // the caret typing, while one that reads the keyboard (the undo tree) has to
+  // be the surface the keys reach.
+  void show_plugin_panel(const std::string &name, bool focus = false);
 
 private:
   Editor &editor;

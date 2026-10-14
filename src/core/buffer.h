@@ -130,25 +130,52 @@ struct FileBuffer
   // from the middle), so the strip's order, its pinned set and its jump-to-
   // buffer letters all key on this instead (see ui/tab_order.h).
   long long tab_uid = 0;
-  std::stack<State> undo_stack;
-  std::stack<State> redo_stack;
-  // Bytes the two histories hold, maintained by undo.cpp as states are pushed,
-  // popped and trimmed (see kUndoHistoryBytes). Counts each state's line
-  // pointers plus the text of the lines it created; lines still shared by a
-  // newer state stay counted until the last holder goes, so the total is an
-  // upper bound on what the stacks retain.
-  std::size_t undo_stack_bytes = 0;
-  std::size_t redo_stack_bytes = 0;
+  // The undo tree: every state the buffer has been in, and how it got there.
+  // A node holds the content it reached, so coming back to it is a restore;
+  // undo walks to the parent, redo to the newest child, and a jump walks the
+  // path to any node. Editing after an undo does not throw the other branch
+  // away, it grows a second child.
+  struct UndoNode
+  {
+    State state;
+    int parent = -1; // -1 for a root: the oldest state kept, or the file
+    int seq = 0;
+    long long time_ms = 0; // wall clock, for the ages a panel prints
+    int saved_at = 0;      // the write this state was saved on, 0 = never
+    // The node in front is the live buffer, so its own content is not captured
+    // until something moves away from it (undo.cpp owns when).
+    bool state_known = false;
+  };
+  std::vector<UndoNode> undo_nodes;
+  int undo_current = -1;
+  int undo_seq_last = 0;
+  // Writes so far: a save stamps the state it lands on with the new count, so a
+  // panel can tell the newest saved state from the ones saved earlier.
+  int undo_writes = 0;
+  // Bytes the tree holds, maintained by undo.cpp as states are captured and
+  // dropped (see kUndoHistoryBytes). Counts each state's line pointers plus the
+  // text of the lines it created; a line a newer state still shares stays
+  // counted until the last holder goes, so the total is an upper bound.
+  std::size_t undo_tree_bytes = 0;
+  // The snapshot taken before the running command, and the edit generation it
+  // was taken at. save_state() cannot know whether the command will change the
+  // text, so the node for it is created later, by undo_reconcile, once the
+  // buffer says it did.
+  State undo_pending;
+  std::uint64_t undo_pending_generation = 0;
+  bool undo_pending_valid = false;
 
-  // Drops the recorded history: the two stacks and the byte accounting that
-  // bounds them, which every path that resets the stacks has to clear with
-  // them or the next push is charged against a budget that was never freed.
+  // Drops the recorded history: the tree and the byte accounting that bounds
+  // it, which every path that resets the history has to clear with them or the
+  // next capture is charged against a budget that was never freed.
   void clear_undo_history()
   {
-    undo_stack = std::stack<State>();
-    redo_stack = std::stack<State>();
-    undo_stack_bytes = 0;
-    redo_stack_bytes = 0;
+    undo_nodes.clear();
+    undo_current = -1;
+    undo_seq_last = 0;
+    undo_tree_bytes = 0;
+    undo_pending = State();
+    undo_pending_valid = false;
   }
   std::set<int> bookmarks;
   // Range of the last multi-line comment toggle (both comment and uncomment

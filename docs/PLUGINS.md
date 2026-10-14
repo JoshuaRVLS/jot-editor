@@ -89,7 +89,31 @@ calls the same callback with `event.action` set (and `event.index`), so a panel
 can run its own actions without registering a command per button. Showing a
 panel opens the dock's plugin tab under that panel's name, so
 `jot.ui.panel("LeetCode")` puts `LeetCode` on the tab; with no panel shown the
-tab keeps the generic `Plugin` name.
+tab keeps the generic `Plugin` name. `jot.ui.panel(name, true)` also moves the
+keyboard to the dock, for a panel whose rows are walked with keys rather than
+clicked; `jot.ui.close_panel()` closes the tab.
+
+A panel asked for the keyboard receives keys through the same callback, with
+`event.action == "key"`, `event.key` holding the canonical chord name (`"J"`,
+`"Enter"`, `"Shift+G"`) and `event.ctrl`/`event.shift`/`event.alt` the flags.
+The answer is a boolean: `true` means the panel used the key, and anything else
+(including the rows a paint returns) hands it back, so a panel that has no
+interest in keys is one that ignores this event. Keys only arrive while the
+dock's plugin tab holds focus and no prompt or palette is up, so a panel never
+takes a letter out of a search box it cannot see:
+
+```lua
+local function on_rows(name, event)
+  if type(event) == "table" and event.action == "key" then
+    if event.key == "Enter" then
+      run_the_selected_row()
+      return true
+    end
+    return false
+  end
+  return build_rows()
+end
+```
 
 Use `:reloadplugins` while developing. `:plugins` lists loaded files, commands,
 keymaps, panels, and errors.

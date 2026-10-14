@@ -1,27 +1,26 @@
-// Undo history memory (src/buffers/undo.cpp).
+// Undo tree memory (src/buffers/undo.cpp).
 //
 // A snapshot used to hold a copy of every line of the buffer and the history
-// keeps 500 of them, so one keystroke in a 2000-line file put ~190 KB on the
-// stack and the history grew to ~94 MB before the cap stopped it. Snapshots now
-// share the lines they did not change with the snapshot below them: a keystroke
-// holds the line it changed plus one pointer per line.
+// keeps 500 of them, so one keystroke in a 2000-line file put ~190 KB in the
+// history and it grew to ~94 MB before the cap stopped it. Snapshots now share
+// the lines they did not change with the state behind them: a keystroke holds
+// the line it changed plus one pointer per line.
 //
 // Three things are pinned here. The first is the sharing itself, measured as
-// the bytes the history holds with each shared line counted once. The second is
+// the bytes the tree holds with each shared line counted once. The second is
 // that sharing never aliases live text: a line an early edit changed still has
-// to restore correctly after many later snapshots, and the windowed path (files
+// to restore correctly after many later states, and the windowed path (files
 // past the full-snapshot line count) still has to restore its lines. The third
-// is the byte budget that bounds the history when the line pointers themselves
-// are the cost: 500 states of a 4000-line buffer is ~32 MB of pointers no
-// matter how well the lines are shared, so the history is trimmed by accounted
-// bytes as well as by state count.
+// is the byte budget that bounds the tree when the line pointers themselves are
+// the cost: 500 states of a 4000-line buffer is ~32 MB of pointers no matter
+// how well the lines are shared, so states are dropped by accounted bytes as
+// well as by count.
 
 #include "core/editor.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
 #include <set>
-#include <stack>
 #include <string>
 
 namespace
@@ -62,56 +61,65 @@ namespace
     return text;
   }
 
-  // Bytes the history holds, counting a line shared by several states once:
-  // the number the sharing moves, and the one a copy-per-state would inflate.
+  // Bytes the tree holds, counting a line shared by several states once: the
+  // number the sharing moves, and the one a copy-per-state would inflate. The
+  // state in front holds the live buffer rather than a snapshot, so it is the
+  // one node with nothing to count.
   std::size_t history_bytes(const FileBuffer &buf)
   {
     std::set<const std::string *> seen;
     std::size_t total = 0;
-    const auto walk = [&seen, &total](std::stack<State> stack)
+    for (const FileBuffer::UndoNode &node : buf.undo_nodes)
     {
-      while (!stack.empty())
+      if (!node.state_known)
       {
-        for (const SnapshotLine &line : stack.top().old_lines)
-        {
-          if (line && seen.insert(line.get()).second)
-          {
-            total += line->size() + sizeof(std::string);
-          }
-        }
-        stack.pop();
+        continue;
       }
-    };
-    walk(buf.undo_stack);
-    walk(buf.redo_stack);
+      for (const SnapshotLine &line : node.state.old_lines)
+      {
+        if (line && seen.insert(line.get()).second)
+        {
+          total += line->size() + sizeof(std::string);
+        }
+      }
+    }
     return total;
   }
 
-  // Bytes the history really holds, arrays included: every state's line-pointer
+  // Bytes the tree really holds, arrays included: every state's line-pointer
   // array plus each line's text counted once however many states share it. The
   // number the byte budget has to be an upper bound of.
   std::size_t history_bytes_with_arrays(const FileBuffer &buf)
   {
     std::size_t total = 0;
     std::set<const std::string *> seen;
-    const auto walk = [&seen, &total](std::stack<State> stack)
+    for (const FileBuffer::UndoNode &node : buf.undo_nodes)
     {
-      while (!stack.empty())
+      if (!node.state_known)
       {
-        total += stack.top().old_lines.size() * sizeof(SnapshotLine);
-        for (const SnapshotLine &line : stack.top().old_lines)
-        {
-          if (line && seen.insert(line.get()).second)
-          {
-            total += line->size() + sizeof(std::string);
-          }
-        }
-        stack.pop();
+        continue;
       }
-    };
-    walk(buf.undo_stack);
-    walk(buf.redo_stack);
+      total += node.state.old_lines.size() * sizeof(SnapshotLine);
+      for (const SnapshotLine &line : node.state.old_lines)
+      {
+        if (line && seen.insert(line.get()).second)
+        {
+          total += line->size() + sizeof(std::string);
+        }
+      }
+    }
     return total;
+  }
+
+  // How many undos the state in front is from the oldest one kept.
+  int depth_to_root(const FileBuffer &buf)
+  {
+    int depth = 0;
+    for (int n = buf.undo_current; n >= 0; n = buf.undo_nodes[(size_t)n].parent)
+    {
+      depth++;
+    }
+    return depth;
   }
 
   std::size_t text_bytes(const FileBuffer &buf)
@@ -137,27 +145,32 @@ namespace
   constexpr int kUndo = 'z' | kCtrl;
 } // namespace
 
-TEST_CASE("Undo history: a keystroke on a 2000-line file does not copy the file", "[jot][undo]")
+TEST_CASE("Undo history: keystrokes on a 2000-line file do not copy the file", "[jot][undo]")
 {
   Editor &e = probe_editor();
   seed(e, kLines);
   auto &core = e.host().core;
   FileBuffer &buf = e.buffer_for_test();
 
-  // The first snapshot has nothing to share with -- `seed` left the empty
-  // buffer on the stack -- so the keystroke measured is the second one, which
-  // has a full-size state under it.
-  core.insert_char_at_carets('x');
-  const std::size_t held_before = history_bytes(buf);
   const std::size_t text = text_bytes(buf);
-  core.insert_char_at_carets('y');
-  const std::size_t held_after = history_bytes(buf);
+  for (int i = 0; i < 20; i++)
+  {
+    core.insert_char_at_carets('x');
+  }
 
-  // The state was pushed, and what it added is the edited line plus a pointer
-  // per line -- not a second copy of the buffer, which would be more than all
-  // of `text` on its own.
-  REQUIRE(held_after > held_before);
-  REQUIRE(held_after - held_before < text / 2);
+  // Twenty states of the file as it stood before each keystroke. They share
+  // every line the typing did not touch, so what the tree holds is the twenty
+  // arrays of line pointers plus a line each, not twenty copies of the file.
+  // What the tree holds is the text once plus one array of line pointers per
+  // state, which is the floor this design accepts; a copy per state would be
+  // twenty copies of the text on top of that.
+  const std::size_t arrays = 20 * (std::size_t)kLines * sizeof(SnapshotLine);
+  const std::size_t held = history_bytes_with_arrays(buf);
+  REQUIRE(held > text / 2);
+  REQUIRE(held < text * 2 + arrays);
+  // The same count without the pointer arrays: the file's text once, not once
+  // per state.
+  REQUIRE(history_bytes(buf) < text * 2);
 }
 
 TEST_CASE("Undo history: an early edit still restores after many later snapshots", "[jot][undo]")
@@ -208,23 +221,24 @@ TEST_CASE("Undo history: the byte budget bounds a big buffer's history", "[jot][
     core.insert_char_at_carets('k');
   }
 
-  REQUIRE(buf.undo_stack.size() < kMaxUndoHistory);
-  REQUIRE(buf.undo_stack.size() >= kMinUndoStates);
-  REQUIRE(buf.undo_stack_bytes <= kUndoHistoryBytes);
+  REQUIRE(buf.undo_nodes.size() < kMaxUndoHistory);
+  REQUIRE(buf.undo_nodes.size() >= kMinUndoStates);
+  REQUIRE(buf.undo_tree_bytes <= kUndoHistoryBytes);
   // The accounting may overstate what is held (a line still shared by a newer
   // state keeps its creator's charge) but never understate it.
-  REQUIRE(buf.undo_stack_bytes >= history_bytes_with_arrays(buf));
+  REQUIRE(buf.undo_tree_bytes >= history_bytes_with_arrays(buf));
 
   // Undo still reaches the states the trim kept. The oldest states -- the ones
   // holding the seeded text -- were dropped, so walking the retained history
   // ends at the oldest state kept, not at the seed; what has to hold is that
-  // the newest edits come back and the walk never over-runs the stack.
-  const std::size_t depth = buf.undo_stack.size();
-  for (std::size_t i = 0; i < depth; i++)
+  // the newest edits come back and the walk never over-runs the tree.
+  const int depth = depth_to_root(buf);
+  REQUIRE(depth > 1);
+  for (int i = 0; i < depth; i++)
   {
     e.raw_key_for_test(kUndo);
   }
-  REQUIRE(buf.undo_stack.empty());
+  REQUIRE(buf.undo_nodes[(size_t)buf.undo_current].parent == -1);
   // The newest keystroke was on line 299 * 7 % 4000 = 2093, well inside what
   // the budget keeps.
   REQUIRE(core.buffer_content().find("kline 2093:") == std::string::npos);

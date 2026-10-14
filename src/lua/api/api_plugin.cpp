@@ -367,10 +367,18 @@ void LuaAPI::show_picker(const std::string &a, const std::string &b, const std::
   if (editor && editor->host_api)
     editor->host_api->io.show_plugin_picker(a, b, c);
 }
-void LuaAPI::show_panel(const std::string &s)
+void LuaAPI::show_panel(const std::string &s, bool focus)
 {
   if (editor && editor->host_api)
-    editor->host_api->io.show_plugin_panel(s);
+    editor->host_api->io.show_plugin_panel(s, focus);
+}
+void LuaAPI::close_plugin_panel()
+{
+  if (!editor)
+    return;
+  editor->active_plugin_panel.clear();
+  editor->close_right_panel_tab(Editor::RIGHT_PANEL_PLUGIN);
+  editor->needs_redraw = true;
 }
 std::vector<PluginPanelRow>
 LuaAPI::plugin_panel_rows(const std::string &name, const std::string &action, int index)
@@ -436,6 +444,49 @@ LuaAPI::plugin_panel_rows(const std::string &name, const std::string &action, in
       return out;
     }
   return {};
+}
+
+bool LuaAPI::plugin_panel_key(
+    const std::string &name, const std::string &key, bool ctrl, bool shift, bool alt)
+{
+  if (!lua_state)
+    return false;
+  for (auto &p : plugin_panels)
+    if (p.name == name)
+    {
+      auto i = lua_callbacks.find(p.callback);
+      if (i == lua_callbacks.end())
+        return false;
+      lua_State *L = static_cast<lua_State *>(lua_state);
+      const int top = lua_gettop(L);
+      lua_rawgeti(L, LUA_REGISTRYINDEX, i->second);
+      lua_pushstring(L, name.c_str());
+      lua_newtable(L);
+      lua_pushstring(L, "key");
+      lua_setfield(L, -2, "action");
+      lua_pushstring(L, key.c_str());
+      lua_setfield(L, -2, "key");
+      lua_pushboolean(L, ctrl ? 1 : 0);
+      lua_setfield(L, -2, "ctrl");
+      lua_pushboolean(L, shift ? 1 : 0);
+      lua_setfield(L, -2, "shift");
+      lua_pushboolean(L, alt ? 1 : 0);
+      lua_setfield(L, -2, "alt");
+      if (lua_pcall(L, 2, 1, 0))
+      {
+        std::cerr << "Lua plugin panel error: " << lua_tostring(L, -1) << "\n";
+        lua_settop(L, top);
+        return false;
+      }
+      // A key is answered with a boolean: only an explicit true means the
+      // panel used it. Rows are what a panel returns for a paint, so a panel
+      // that has no interest in keys (LeetCode) returns its rows here and the
+      // key carries on to whatever it would have reached anyway.
+      const bool consumed = lua_isboolean(L, -1) != 0 && lua_toboolean(L, -1) != 0;
+      lua_settop(L, top);
+      return consumed;
+    }
+  return false;
 }
 
 std::vector<std::string> LuaAPI::plugin_panel_lines(const std::string &name)

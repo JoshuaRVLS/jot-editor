@@ -1,8 +1,12 @@
 #include "core/editor.h"
 #include "lua/api/api.h"
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 #ifdef JOT_TREESITTER
 #include <tree_sitter/api.h>
 #endif
@@ -113,83 +117,15 @@ namespace
     return s;
   }
 
-  bool same_state(const FileBuffer &buf, const State &a, const State &b)
+  // Whether a state holds the same text the buffer does now. Only the lines the
+  // state covers are compared: the whole file for a full snapshot, the window
+  // around the carets for a delta one.
+  bool same_content(const FileBuffer &buf, const State &s)
   {
-    if (!(a.cursor == b.cursor) || a.preferred_x != b.preferred_x
-        || !(a.selection.start == b.selection.start) || !(a.selection.end == b.selection.end)
-        || a.selection.active != b.selection.active
-        || a.extra_carets.size() != b.extra_carets.size() || a.scroll_offset != b.scroll_offset
-        || a.scroll_x != b.scroll_x || a.modified != b.modified
-        || a.is_placeholder != b.is_placeholder)
-    {
-      return false;
-    }
-    for (size_t i = 0; i < a.extra_carets.size(); i++)
-    {
-      if (!(a.extra_carets[i].start == b.extra_carets[i].start)
-          || !(a.extra_carets[i].end == b.extra_carets[i].end)
-          || a.extra_carets[i].active != b.extra_carets[i].active)
-      {
-        return false;
-      }
-    }
-    if (a.full_snapshot != b.full_snapshot)
-    {
-      return false;
-    }
-    if (a.start_line != b.start_line || a.old_total_lines != b.old_total_lines
-        || a.old_lines.size() != b.old_lines.size())
-    {
-      return false;
-    }
-    for (size_t i = 0; i < a.old_lines.size(); i++)
-    {
-      const SnapshotLine &left = a.old_lines[i];
-      const SnapshotLine &right = b.old_lines[i];
-      // The same line object cannot differ; a shared line answers here, which
-      // is every line of a snapshot that only the edit touched.
-      if (left == right)
-      {
-        continue;
-      }
-      if (!left || !right || *left != *right)
-      {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  // True when applying this state would put the buffer back exactly where it
-  // already is. The fields compared are the ones apply_state writes, so a true
-  // answer means the restore would be a no-op in every respect.
-  bool state_matches_buffer(const FileBuffer &buf, const State &s)
-  {
-    if (!(s.cursor == buf.cursor) || s.preferred_x != buf.preferred_x
-        || !(s.selection.start == buf.selection.start) || !(s.selection.end == buf.selection.end)
-        || s.selection.active != buf.selection.active
-        || s.extra_carets.size() != buf.extra_carets.size() || s.scroll_offset != buf.scroll_offset
-        || s.scroll_x != buf.scroll_x || s.modified != buf.modified
-        || s.is_placeholder != buf.is_placeholder)
-    {
-      return false;
-    }
-    for (std::size_t i = 0; i < s.extra_carets.size(); i++)
-    {
-      const Selection &a = s.extra_carets[i];
-      const Selection &b = buf.extra_carets[i];
-      if (!(a.start == b.start) || !(a.end == b.end) || a.active != b.active)
-      {
-        return false;
-      }
-    }
     if (s.old_total_lines != (int)buf.line_count())
     {
       return false;
     }
-
-    // A full snapshot holds every line; a windowed one only the rows around the
-    // carets, which is all applying it would replace.
     const int from = s.full_snapshot ? 0 : s.start_line;
     if (from < 0 || from + (int)s.old_lines.size() > (int)buf.line_count())
     {
@@ -206,7 +142,7 @@ namespace
     return true;
   }
 
-  // What pushing `s` costs the history: its own line-pointer array plus the
+  // What capturing `s` costs the history: its own line-pointer array plus the
   // text of every line it created rather than shared with `prev`. Lines shared
   // with the state underneath cost nothing, which is the whole point of the
   // sharing in capture_state.
@@ -249,112 +185,230 @@ namespace
     bytes = amount >= bytes ? 0 : bytes - amount;
   }
 
-  // Drops the oldest states until the stack fits both the state cap and the
-  // byte budget, never going below kMinUndoStates. Undo pops the top, so the
-  // oldest state is the one to give up: the depth it costs is the one nobody
-  // walks to, and the newest states -- what undo actually reaches for -- stay.
-  void trim_stack(std::stack<State> &stack, std::size_t &bytes)
+  // The state a capture shares lines with: the snapshot the command took, which
+  // came from this very text, or the closest node behind the one in front.
+  const State *share_source(const FileBuffer &buf)
   {
-    if (stack.size() <= kMaxUndoHistory
-        && (bytes <= kUndoHistoryBytes || stack.size() <= kMinUndoStates))
+    if (buf.undo_pending_valid)
     {
-      return;
+      return &buf.undo_pending;
     }
-    std::vector<State> items;
-    items.reserve(stack.size());
-    while (!stack.empty())
+    for (int n = buf.undo_current; n >= 0; n = buf.undo_nodes[(size_t)n].parent)
     {
-      items.push_back(std::move(stack.top()));
-      stack.pop();
+      if (buf.undo_nodes[(size_t)n].state_known)
+      {
+        return &buf.undo_nodes[(size_t)n].state;
+      }
     }
-    // items is top-first: the newest state is items[0], the oldest is back().
-    // The drop walks the oldest states and releases each as it credits it: a
-    // line shared only by states of this same drop is credited when the last
-    // of them goes, so what the stacks hold stays an exact count rather than
-    // one inflated by states this pass is already letting go -- an inflation
-    // the state or byte cap could never spend its way back out of.
-    std::size_t keep = items.size();
-    while (keep > kMinUndoStates && (keep > kMaxUndoHistory || bytes > kUndoHistoryBytes))
-    {
-      keep--;
-      subtract_bytes(bytes, release_cost(items[keep]));
-      items[keep] = State();
-    }
-    std::stack<State> rebuilt;
-    for (std::size_t i = keep; i > 0; --i)
-    {
-      rebuilt.push(std::move(items[i - 1]));
-    }
-    stack = std::move(rebuilt);
+    return nullptr;
   }
 
-  // Pushes a state and charges the history for what it holds.
-  void push_state(std::stack<State> &stack, std::size_t &bytes, State s, const State *prev)
+  // The state behind `node`, which is what push_cost measures sharing against.
+  const State *behind_state(const FileBuffer &buf, int node)
   {
-    bytes += push_cost(s, prev);
-    stack.push(std::move(s));
-    trim_stack(stack, bytes);
+    if (node < 0)
+    {
+      return nullptr;
+    }
+    const int parent = buf.undo_nodes[(size_t)node].parent;
+    if (parent >= 0 && buf.undo_nodes[(size_t)parent].state_known)
+    {
+      return &buf.undo_nodes[(size_t)parent].state;
+    }
+    return nullptr;
   }
 
-  // Pops the newest state, crediting the history for what it releases. The
-  // moved-out state still holds the lines, so the credit is measured on it
-  // after the pop (a line another state shares is not released, and stays
-  // charged).
-  State pop_state(std::stack<State> &stack, std::size_t &bytes)
+  int create_node(FileBuffer &buf, int parent)
   {
-    State s = std::move(stack.top());
-    stack.pop();
-    subtract_bytes(bytes, release_cost(s));
-    return s;
+    FileBuffer::UndoNode node;
+    node.parent = parent;
+    node.seq = ++buf.undo_seq_last;
+    node.time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::system_clock::now().time_since_epoch())
+                       .count();
+    buf.undo_nodes.push_back(std::move(node));
+    return (int)buf.undo_nodes.size() - 1;
+  }
+
+  // Stamps a state as reached with its own text, charging the history for it.
+  void store_state(FileBuffer &buf, int node, State state, const State *prev)
+  {
+    FileBuffer::UndoNode &target = buf.undo_nodes[(size_t)node];
+    buf.undo_tree_bytes += push_cost(state, prev);
+    target.state = std::move(state);
+    target.state_known = true;
+  }
+
+  bool node_on_path(const FileBuffer &buf, int node, int ancestor)
+  {
+    for (int n = node; n >= 0; n = buf.undo_nodes[(size_t)n].parent)
+    {
+      if (n == ancestor)
+      {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  int find_node(const FileBuffer &buf, int seq)
+  {
+    for (int i = 0; i < (int)buf.undo_nodes.size(); i++)
+    {
+      if (buf.undo_nodes[(size_t)i].seq == seq)
+      {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  void drop_nodes(FileBuffer &buf, const std::vector<char> &drop)
+  {
+    std::vector<int> remap(buf.undo_nodes.size(), -1);
+    std::vector<FileBuffer::UndoNode> kept;
+    kept.reserve(buf.undo_nodes.size());
+    for (int i = 0; i < (int)buf.undo_nodes.size(); i++)
+    {
+      if (drop[(size_t)i])
+      {
+        subtract_bytes(buf.undo_tree_bytes, release_cost(buf.undo_nodes[(size_t)i].state));
+        continue;
+      }
+      remap[(size_t)i] = (int)kept.size();
+      kept.push_back(std::move(buf.undo_nodes[(size_t)i]));
+    }
+    for (FileBuffer::UndoNode &node : kept)
+    {
+      // A node whose parent was dropped becomes a root: what undo stops at.
+      node.parent = node.parent >= 0 ? remap[(size_t)node.parent] : -1;
+    }
+    buf.undo_current = buf.undo_current >= 0 ? remap[(size_t)buf.undo_current] : -1;
+    buf.undo_nodes = std::move(kept);
+  }
+
+  // Drops states until the tree fits the state cap and the byte budget, never
+  // below kMinUndoStates. A branch nothing can walk to any more goes first, and
+  // when only the path in front is left its oldest end goes instead, so the
+  // states a user reaches for by undoing are the ones that stay.
+  void trim_undo_tree(FileBuffer &buf)
+  {
+    while (((int)buf.undo_nodes.size() > kMaxUndoHistory || buf.undo_tree_bytes > kUndoHistoryBytes)
+           && (int)buf.undo_nodes.size() > kMinUndoStates)
+    {
+      int victim = -1;
+      for (int i = 0; i < (int)buf.undo_nodes.size(); i++)
+      {
+        if (node_on_path(buf, buf.undo_current, i))
+        {
+          continue;
+        }
+        if (victim < 0 || buf.undo_nodes[(size_t)i].seq < buf.undo_nodes[(size_t)victim].seq)
+        {
+          victim = i;
+        }
+      }
+      std::vector<char> drop(buf.undo_nodes.size(), 0);
+      if (victim >= 0)
+      {
+        for (int i = 0; i < (int)buf.undo_nodes.size(); i++)
+        {
+          if (node_on_path(buf, i, victim))
+          {
+            drop[(size_t)i] = 1;
+          }
+        }
+      }
+      else
+      {
+        int oldest = buf.undo_current;
+        for (int i = 0; i < (int)buf.undo_nodes.size(); i++)
+        {
+          if (buf.undo_nodes[(size_t)i].seq < buf.undo_nodes[(size_t)oldest].seq)
+          {
+            oldest = i;
+          }
+        }
+        if (oldest == buf.undo_current)
+        {
+          break;
+        }
+        drop[(size_t)oldest] = 1;
+      }
+      drop_nodes(buf, drop);
+    }
+  }
+
+  // The lines a restore replaces, and with what: the window a delta state
+  // covers, or every line for a full snapshot. A window is anchored on the
+  // capture's own line count, so the count is corrected for what the buffer
+  // holds now.
+  struct Patch
+  {
+    int start = 0;
+    int count = 0;
+    std::vector<std::string> lines;
+  };
+
+  Patch patch_for(const State &s, int curr_total)
+  {
+    Patch patch;
+    if (s.full_snapshot)
+    {
+      patch.start = 0;
+      patch.count = curr_total;
+      patch.lines = materialize_lines(s.old_lines);
+      if (patch.lines.empty())
+      {
+        patch.lines.push_back("");
+      }
+      return patch;
+    }
+    const int line_diff = curr_total - s.old_total_lines;
+    int start = s.start_line;
+    int count = (int)s.old_lines.size() + line_diff;
+    if (start < 0)
+    {
+      count += start;
+      start = 0;
+    }
+    if (start > curr_total)
+    {
+      start = curr_total;
+      count = 0;
+    }
+    if (count < 0)
+    {
+      count = 0;
+    }
+    if (start + count > curr_total)
+    {
+      count = curr_total - start;
+    }
+    patch.start = start;
+    patch.count = count;
+    patch.lines = materialize_lines(s.old_lines);
+    return patch;
   }
 
   void apply_state(FileBuffer &buf, const State &prev)
   {
-    const int prev_total = prev.old_total_lines;
-    const int curr_total = (int)buf.line_count();
-    const int line_diff = curr_total - prev_total;
-
+    const Patch patch = patch_for(prev, (int)buf.line_count());
     if (prev.full_snapshot)
     {
-      std::vector<std::string> saved_lines = materialize_lines(prev.old_lines);
-      if (saved_lines.empty())
-        saved_lines.push_back("");
-
       if (buf.is_lazy())
       {
-        buf.lazy_provider->set_all_lines(saved_lines);
+        buf.lazy_provider->set_all_lines(patch.lines);
         buf.lines.clear();
       }
       else
       {
-        buf.lines = std::move(saved_lines);
+        buf.lines = patch.lines;
       }
     }
     else
     {
-      const int old_window_size = (int)prev.old_lines.size();
-      const int curr_window_size = old_window_size + line_diff;
-      int start = prev.start_line;
-      int count = curr_window_size;
-      if (start < 0)
-      {
-        count += start;
-        start = 0;
-      }
-      if (start > curr_total)
-      {
-        start = curr_total;
-        count = 0;
-      }
-      if (count < 0)
-        count = 0;
-      if (start + count > curr_total)
-      {
-        count = curr_total - start;
-      }
-
-      const std::vector<std::string> window = materialize_lines(prev.old_lines);
-      buf.replace_lines(start, count, window);
+      buf.replace_lines(patch.start, patch.count, patch.lines);
     }
 
     buf.cursor = prev.cursor;
@@ -366,7 +420,120 @@ namespace
     buf.modified = prev.modified;
     buf.is_placeholder = prev.is_placeholder;
   }
+
+  // The states to restore, in order, to stand on `target` instead of `from`:
+  // the ones above the shared fork, then the ones below it on the other side.
+  // Empty when there is nowhere to walk.
+  std::vector<int> path_between(const FileBuffer &buf, int from, int target)
+  {
+    std::vector<int> from_chain, target_chain;
+    for (int n = from; n >= 0; n = buf.undo_nodes[(size_t)n].parent)
+    {
+      from_chain.push_back(n);
+    }
+    for (int n = target; n >= 0; n = buf.undo_nodes[(size_t)n].parent)
+    {
+      target_chain.push_back(n);
+    }
+    while (!from_chain.empty() && !target_chain.empty() && from_chain.back() == target_chain.back())
+    {
+      from_chain.pop_back();
+      target_chain.pop_back();
+    }
+    std::vector<int> enter;
+    enter.reserve(from_chain.size() + target_chain.size());
+    for (int n : from_chain)
+    {
+      const int parent = buf.undo_nodes[(size_t)n].parent;
+      if (parent < 0)
+      {
+        break;
+      }
+      enter.push_back(parent);
+    }
+    for (auto it = target_chain.rbegin(); it != target_chain.rend(); ++it)
+    {
+      enter.push_back(*it);
+    }
+    return enter;
+  }
+
+  // The same walk on a copy of the text, for the panel's preview: the buffer
+  // stays where it is while a state is looked at.
+  void patch_lines(std::vector<std::string> &lines, const State &s)
+  {
+    Patch patch = patch_for(s, (int)lines.size());
+    std::vector<std::string> spliced;
+    spliced.reserve((size_t)patch.start + patch.lines.size()
+                    + (lines.size() > (size_t)(patch.start + patch.count)
+                           ? lines.size() - (size_t)(patch.start + patch.count)
+                           : 0));
+    for (int i = 0; i < patch.start; i++)
+    {
+      spliced.push_back(std::move(lines[(size_t)i]));
+    }
+    for (std::string &line : patch.lines)
+    {
+      spliced.push_back(std::move(line));
+    }
+    for (std::size_t i = (std::size_t)(patch.start + patch.count); i < lines.size(); i++)
+    {
+      spliced.push_back(std::move(lines[i]));
+    }
+    lines = std::move(spliced);
+  }
 } // namespace
+
+// The node in front holds the live buffer, so its content is captured the
+// moment something else becomes the state to go back to. Every other node
+// carries the text it reached.
+void Editor::undo_reconcile(FileBuffer &buf)
+{
+  if (!buf.undo_pending_valid)
+  {
+    return;
+  }
+  // The edit generation is the cheap answer for the paths that bump it, and the
+  // comparison is the one that catches the rest: setting a buffer's content
+  // replaces the lines without going through mark_edited, and a command that
+  // ends where it started has to add no state at all.
+  const bool changed = buf.edit_generation != buf.undo_pending_generation
+                       || !same_content(buf, buf.undo_pending);
+  if (!changed)
+  {
+    buf.undo_pending = State();
+    buf.undo_pending_valid = false;
+    return;
+  }
+
+  if (buf.undo_current < 0)
+  {
+    // The first change: the snapshot is the file as it was, and it roots the
+    // tree everything after it grows from.
+    const int root = create_node(buf, -1);
+    store_state(buf, root, std::move(buf.undo_pending), nullptr);
+    buf.undo_current = root;
+  }
+  else
+  {
+    FileBuffer::UndoNode &outgoing = buf.undo_nodes[(size_t)buf.undo_current];
+    if (!outgoing.state_known)
+    {
+      // The snapshot was taken from the text this node holds, so it is this
+      // node's own content, and the node is about to stop being the one in
+      // front.
+      State state = std::move(buf.undo_pending);
+      const std::size_t bytes = push_cost(state, behind_state(buf, buf.undo_current));
+      outgoing.state = std::move(state);
+      outgoing.state_known = true;
+      buf.undo_tree_bytes += bytes;
+    }
+  }
+  buf.undo_pending = State();
+  buf.undo_pending_valid = false;
+  buf.undo_current = create_node(buf, buf.undo_current);
+  trim_undo_tree(buf);
+}
 
 void Editor::save_state()
 {
@@ -413,115 +580,205 @@ void Editor::save_state_for(FileBuffer &buf, bool as_modified)
 #endif
   decoration_rebase_begin(buf);
 
-  // The snapshot shares its unchanged lines with the state it is pushed on
-  // top of, so it is taken against the live top of the stack.
-  const State *prev = buf.undo_stack.empty() ? nullptr : &buf.undo_stack.top();
+  // The command has not run yet, so this is the text of the state it starts
+  // from: the snapshot is kept and turned into a node once the buffer says the
+  // command changed something (undo_reconcile).
+  undo_reconcile(buf);
+  const State *prev = share_source(buf);
   State s = capture_state(buf, prev);
   if (as_modified)
   {
     s.modified = true;
   }
-  if (prev != nullptr && same_state(buf, *prev, s))
+  buf.undo_pending = std::move(s);
+  buf.undo_pending_generation = buf.edit_generation;
+  buf.undo_pending_valid = true;
+}
+
+// Walks the buffer to `target`, one state at a time. Each step is the restore
+// an undo or a redo performs, so a jump over several states lands on the same
+// text walking there would.
+bool Editor::undo_walk_to(FileBuffer &buf, int target)
+{
+  if (target < 0 || target >= (int)buf.undo_nodes.size() || target == buf.undo_current)
   {
-    return;
+    return false;
+  }
+  if (!buf.undo_nodes[(size_t)target].state_known)
+  {
+    return false;
+  }
+  const std::vector<int> enter = path_between(buf, buf.undo_current, target);
+  if (enter.empty())
+  {
+    return false;
   }
 
-  push_state(buf.undo_stack, buf.undo_stack_bytes, std::move(s), prev);
-  // A new edit forks the history: whatever the redo branch held is released.
-  while (!buf.redo_stack.empty())
+  const int from = buf.undo_current;
+  if (from >= 0 && !buf.undo_nodes[(size_t)from].state_known)
   {
-    subtract_bytes(buf.redo_stack_bytes, release_cost(buf.redo_stack.top()));
-    buf.redo_stack.pop();
+    State state = capture_state(buf, share_source(buf));
+    const std::size_t bytes = push_cost(state, behind_state(buf, from));
+    buf.undo_nodes[(size_t)from].state = std::move(state);
+    buf.undo_nodes[(size_t)from].state_known = true;
+    buf.undo_tree_bytes += bytes;
   }
+
+#ifdef JOT_TREESITTER
+  ts_begin_edit(buf);
+#endif
+  decoration_rebase_begin(buf);
+  for (int node : enter)
+  {
+    if (!buf.undo_nodes[(size_t)node].state_known)
+    {
+      continue;
+    }
+    apply_state(buf, buf.undo_nodes[(size_t)node].state);
+  }
+  buf.undo_current = target;
+  buf.mark_edited(0);
+
+  if (lua_api)
+  {
+    lua_api->on_buffer_change(buf.filepath, "");
+  }
+  if (!buf.filepath.empty())
+  {
+    notify_lsp_change(buf.filepath);
+  }
+  clamp_cursor(get_pane().buffer_id);
+  ensure_cursor_visible();
+  trim_undo_tree(buf);
+  needs_redraw = true;
+  return true;
 }
 
 void Editor::undo()
 {
   if (!edit_allowed())
+  {
     return;
+  }
   auto &buf = get_buffer();
-
-  // A command that ends up changing nothing still takes its snapshot before it
-  // runs (save_state cannot know the outcome), and that snapshot describes the
-  // buffer as it already is. Undoing onto such a state changes nothing at all,
-  // which reads as a dead keypress, so the states are dropped here and the
-  // press reaches the previous real edit. A state whose restore would move the
-  // caret, the selection or the view is a real step and is left alone.
-  // The redo stack needs no such pass: its states are captured from the live
-  // buffer by undo() itself, after this loop, so by construction they differ
-  // from what the restore leaves behind.
-  while (!buf.undo_stack.empty() && state_matches_buffer(buf, buf.undo_stack.top()))
-  {
-    pop_state(buf.undo_stack, buf.undo_stack_bytes);
-  }
-  if (buf.undo_stack.empty())
+  undo_reconcile(buf);
+  if (buf.undo_current < 0)
   {
     return;
   }
 
-  const State *redo_prev = buf.redo_stack.empty() ? nullptr : &buf.redo_stack.top();
-  State redo_delta = capture_state(buf, redo_prev);
-  push_state(buf.redo_stack, buf.redo_stack_bytes, std::move(redo_delta), redo_prev);
-
-  State prev = pop_state(buf.undo_stack, buf.undo_stack_bytes);
-
-#ifdef JOT_TREESITTER
-  ts_begin_edit(buf);
-#endif
-  decoration_rebase_begin(buf);
-  apply_state(buf, prev);
-  // Full-snapshot restores replace buf.lines directly and would otherwise skip
-  // mark_edited (stale fold ranges / tree-sitter line offsets / bracket-depth
-  // prefix); incremental undo/redo restores went through replace_lines,
-  // which already anchors at prev.start_line. Anchoring at 0 here is safe:
-  // undo is discrete, so the prefix re-extends once on the next render.
-  buf.mark_edited(prev.full_snapshot ? 0 : prev.start_line);
-
-  if (lua_api)
+  // A command that ends where it started still gets a node, and undoing onto it
+  // would leave the text alone: the walk skips those, so one press reaches the
+  // previous real edit. The oldest state kept is never skipped, or the press
+  // would have nowhere to land.
+  int target = buf.undo_nodes[(size_t)buf.undo_current].parent;
+  while (target >= 0 && buf.undo_nodes[(size_t)target].parent >= 0
+         && buf.undo_nodes[(size_t)target].state_known
+         && same_content(buf, buf.undo_nodes[(size_t)target].state))
   {
-    lua_api->on_buffer_change(buf.filepath, "");
+    target = buf.undo_nodes[(size_t)target].parent;
   }
-  if (!buf.filepath.empty())
+  if (target < 0)
   {
-    notify_lsp_change(buf.filepath);
+    return;
   }
-  clamp_cursor(get_pane().buffer_id);
-  ensure_cursor_visible();
-  needs_redraw = true;
+  undo_walk_to(buf, target);
 }
 
 void Editor::redo()
 {
   if (!edit_allowed())
+  {
     return;
+  }
   auto &buf = get_buffer();
-  if (buf.redo_stack.empty())
+  undo_reconcile(buf);
+  if (buf.undo_current < 0)
   {
     return;
   }
 
-  const State *undo_prev = buf.undo_stack.empty() ? nullptr : &buf.undo_stack.top();
-  State undo_delta = capture_state(buf, undo_prev);
-  push_state(buf.undo_stack, buf.undo_stack_bytes, std::move(undo_delta), undo_prev);
-
-  State next = pop_state(buf.redo_stack, buf.redo_stack_bytes);
-
-#ifdef JOT_TREESITTER
-  ts_begin_edit(buf);
-#endif
-  decoration_rebase_begin(buf);
-  apply_state(buf, next);
-  buf.mark_edited(next.full_snapshot ? 0 : next.start_line);
-
-  if (lua_api)
+  // Redo takes the newest child: where the last edit on this state went, not
+  // the first branch it grew.
+  int child = -1;
+  for (int i = 0; i < (int)buf.undo_nodes.size(); i++)
   {
-    lua_api->on_buffer_change(buf.filepath, "");
+    if (buf.undo_nodes[(size_t)i].parent != buf.undo_current)
+    {
+      continue;
+    }
+    if (child < 0 || buf.undo_nodes[(size_t)i].seq > buf.undo_nodes[(size_t)child].seq)
+    {
+      child = i;
+    }
   }
-  if (!buf.filepath.empty())
+  if (child < 0)
   {
-    notify_lsp_change(buf.filepath);
+    return;
   }
-  clamp_cursor(get_pane().buffer_id);
-  ensure_cursor_visible();
-  needs_redraw = true;
+  undo_walk_to(buf, child);
+}
+
+bool Editor::undo_tree_goto(int seq)
+{
+  if (!edit_allowed())
+  {
+    return false;
+  }
+  auto &buf = get_buffer();
+  undo_reconcile(buf);
+  const int target = find_node(buf, seq);
+  if (target < 0 || target == buf.undo_current)
+  {
+    return false;
+  }
+  return undo_walk_to(buf, target);
+}
+
+bool Editor::undo_state_lines(FileBuffer &buf, int seq, std::vector<std::string> &out)
+{
+  undo_reconcile(buf);
+  const int target = find_node(buf, seq);
+  if (target < 0 || buf.is_lazy())
+  {
+    return false;
+  }
+
+  const int lines_total = (int)buf.line_count();
+  out.clear();
+  out.reserve((size_t)lines_total);
+  for (int i = 0; i < lines_total; i++)
+  {
+    out.push_back(buf.line(i));
+  }
+  if (target == buf.undo_current)
+  {
+    // The state in front is the buffer itself; nothing to walk.
+    return true;
+  }
+
+  const std::vector<int> enter = path_between(buf, buf.undo_current, target);
+  if (enter.empty())
+  {
+    return false;
+  }
+  for (int node : enter)
+  {
+    if (!buf.undo_nodes[(size_t)node].state_known)
+    {
+      return false;
+    }
+    patch_lines(out, buf.undo_nodes[(size_t)node].state);
+  }
+  return true;
+}
+
+void Editor::undo_mark_saved(FileBuffer &buf)
+{
+  undo_reconcile(buf);
+  ++buf.undo_writes;
+  if (buf.undo_current >= 0 && buf.undo_current < (int)buf.undo_nodes.size())
+  {
+    buf.undo_nodes[(size_t)buf.undo_current].saved_at = buf.undo_writes;
+  }
 }

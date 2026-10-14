@@ -90,6 +90,25 @@ void Editor::render_plugin_panel()
 
   // The window follows the selection the way the other lists do: a panel
   // longer than the dock keeps its highlighted row on screen.
+  if (body.h > 0)
+  {
+    for (int i = 0; i < (int)rows.size(); i++)
+    {
+      if (!rows[(size_t)i].selected)
+      {
+        continue;
+      }
+      if (i < plugin_panel_scroll)
+      {
+        plugin_panel_scroll = i;
+      }
+      else if (i >= plugin_panel_scroll + body.h)
+      {
+        plugin_panel_scroll = i - body.h + 1;
+      }
+      break;
+    }
+  }
   const int max_scroll = std::max(0, (int)rows.size() - body.h);
   plugin_panel_scroll = std::clamp(plugin_panel_scroll, 0, max_scroll);
 

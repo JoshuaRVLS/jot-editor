@@ -43,5 +43,6 @@ set(JOT_LUA_SOURCES
   lua/api/api_toast.cpp
   lua/api/api_ui_surfaces.cpp
   lua/api/api_treesitter.cpp
+  lua/api/api_undo.cpp
   lua/lua_loader.cpp
 )

@@ -56,6 +56,11 @@ void LuaAPI::push_viewport_info(lua_State *L)
   // The rendered width (clamped to the screen), not the configured one - // the toast stack and any
   // other Lua UI needs the real panel edge.
   lua_push_int_field(L, "width", editor->effective_right_panel_width());
+  // The panel on the dock's plugin tab, empty when it shows the generic name:
+  // jot.ui.panel(name) puts a script's own panel there, and the keys it hands
+  // to that panel are keyed on this name.
+  lua_pushstring(L, editor->active_plugin_panel.c_str());
+  lua_setfield(L, -2, "plugin");
   lua_setfield(L, -2, "right_panel");
   lua_push_bool_field(L, "zen", editor->zen_mode);
   if (!editor->panes.empty())

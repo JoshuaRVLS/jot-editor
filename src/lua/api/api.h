@@ -398,6 +398,16 @@ public:
   // ignored (the next frame renders the result).
   std::vector<PluginPanelRow>
   plugin_panel_rows(const std::string &name, const std::string &action = "", int index = -1);
+  // Hands one key to a registered panel, as a callback call with
+  // `event.action = "key"` plus `event.key` (the canonical chord name) and the
+  // modifier flags. The panel's truthy return says it used the key, and the
+  // caller only offers keys while the dock's plugin tab holds focus and no
+  // modal prompt owns the keyboard.
+  bool plugin_panel_key(const std::string &name,
+                        const std::string &key,
+                        bool ctrl,
+                        bool shift,
+                        bool alt);
   // Picker rows: a plain string item carries an empty value, a table item may
   // carry `value` (what the select callback receives instead of the display
   // text), `detail` (right-aligned secondary text) and `fg` (the row's own
@@ -541,6 +551,13 @@ public:
   // Sidebar (jot.sidebar): mirror/control the explorer/git activity views.
   void push_sidebar_info(lua_State *L);
   void sidebar_set_view_from_lua(lua_State *L);
+  // Undo tree (jot.undo): the states the buffer in front has been in, the text
+  // of any one of them, and the jump onto one. A panel draws the tree from
+  // this; the walking and the captures stay in buffers/undo.cpp.
+  void push_undo_tree(lua_State *L);
+  void push_undo_state_lines(lua_State *L);
+  void undo_tree_goto_from_lua(lua_State *L);
+  void undo_tree_clear_from_lua(lua_State *L);
   // Precise buffer edit (jot.buffer.apply_edit): replace a half-open range
   // with text, splitting on '\n'. 1-based lines and columns, end-exclusive.
   void apply_buffer_edit_from_lua(lua_State *L);
@@ -686,7 +703,11 @@ public:
   void show_picker(const std::string &title,
                    const std::string &items_callback,
                    const std::string &select_callback);
-  void show_panel(const std::string &name);
+  // jot.ui.panel(name[, focus]): show a registered panel's dock tab. `focus`
+  // hands the dock the keyboard, which a panel that reads keys needs.
+  void show_panel(const std::string &name, bool focus);
+  // Closes the dock's plugin tab, the way the focused panel's own q key does.
+  void close_plugin_panel();
 
   int create_scratch_buffer(bool listed, bool scratch);
   bool set_scratch_lines(

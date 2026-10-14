@@ -896,6 +896,7 @@ bool Editor::save_buffer_at(int index, bool announce)
             b.mark_edited(0);
           }
           invalidate_syntax_cache(b);
+          undo_mark_saved(b);
           b.modified = false;
           b.is_placeholder = false;
           if (b.is_preview)
@@ -926,6 +927,7 @@ bool Editor::save_buffer_at(int index, bool announce)
           request_cpp_definitions_scan(false);
           request_web_index_scan();
         });
+    undo_mark_saved(buf);
     buf.modified = false;
     buf.is_placeholder = false;
     return true;
@@ -938,6 +940,7 @@ bool Editor::save_buffer_at(int index, bool announce)
   if (!formatted_with_prettier && do_clang && run_formatter(clang_runner))
     formatted_with_clang = true;
 
+  undo_mark_saved(buf);
   buf.modified = false;
   buf.is_placeholder = false;
   if (buf.is_preview)

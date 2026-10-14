@@ -209,6 +209,39 @@ settles, so scrolling a long way does not grow the process.
   increment/decrement the number under the cursor; format document; word-wise
   deletion; smart line-start movement; file/page movement.
 
+### Undo tree
+
+- `:Undotree` (`Alt+Shift+U T`) opens the buffer's history in the right dock:
+  every state the buffer has been in, newest first, with the state it is on
+  starred and how long ago each one was reached. It is the
+  [undotree](https://github.com/jiaoshijie/undotree) idea, written in the
+  bundled Lua runtime on top of the editor's own history.
+- The history is a *tree*, not a pair of stacks: editing after an undo no longer
+  throws the other branch away. The branch you undid past stays in the list (it
+  ends in an `o`), and going back to it is a jump, not a retype. `Ctrl+Y` still
+  redoes along the newest child; the panel is for the branches it cannot reach.
+- Nothing moves until you say so. `j`/`k` put a cursor on a state without
+  touching the buffer, `g` `j` puts the cursor on that state's parent, and the
+  lines the state under the cursor would bring back are listed under it (`-` for
+  what the buffer holds now, `+` for what the state holds). `Enter` (or a click
+  on the row) is what walks the buffer there, one step per state between, so the
+  buffer lands on exactly the text walking there would have produced.
+- `J` and `K` move the buffer itself, applying the state they land on: `K`
+  steps back to the parent, `J` forward to the newest child, so the tree's undo
+  and redo are the editor's own. `S` re-reads the history, `q`/`Esc` closes the
+  tab. These are the [undotree](https://github.com/jiaoshijie/undotree) keys
+  that have a counterpart here; its `p` switches to a separate diff window,
+  which this panel has no need for because the changes are listed in it.
+- The dock holds the keyboard while the panel is up, and hands back every key
+  it does not use: typing still edits the buffer with the tree on screen. A
+  prompt or the command palette opened on top of it keeps its own keys.
+- It is a Lua feature like any other
+  ([runtime/lua/features/undotree.lua](../runtime/lua/features/undotree.lua)):
+  the states come from the `jot.undo` namespace
+  ([Lua API](LUA_API.md#undo-tree)), so a plugin can draw its own view of the
+  same history, and the panel's keys arrive as ordinary panel events.
+  `:UndotreeClear` drops the buffer's history.
+
 ### Macros
 
 - A macro is the *keystrokes* between its start and its stop, filed under a
@@ -1376,6 +1409,7 @@ move the place the next edit will land.
 | `Ctrl+Shift+O` | Document symbol picker |
 | `:gitpanel` | Open the git panel (2-5 switch views) |
 | `:outline` | Persistent outline panel |
+| `:Undotree` / `Alt+Shift+U T` | Undo tree in the right dock (Alt+Shift+U S jumps to the state in front, `:UndotreeClear` drops the history) |
 | `Ctrl+M` or `Alt+M` | Toggle minimap |
 | `Ctrl+T` or `Alt+T` | Theme chooser |
 | `` Ctrl+` `` | Open / focus / hide terminal panel |
@@ -1629,6 +1663,7 @@ goes blank. The buffer stays fully visible while you type.
 `:bookmarkprev` (`:bmprev`)
 `:sortlines|desc|reverselines|uniquelines|shufflelines|joinlines` `:dupe`
 `:replace*` `:surround` `:fold*` `:incnum` `:decnum` `:copypath` `:copyname`
+`:Undotree` `:UndotreeClear`
 `:isearch` (incremental search typed on the status line)
 `:datetime` `:stats` `:Todo [keywords=TODO,FIX]` `:TodoNext` `:TodoPrev`
 

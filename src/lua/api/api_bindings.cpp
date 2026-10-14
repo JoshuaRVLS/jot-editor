@@ -408,6 +408,12 @@ bool LuaAPI::init()
   field(L, "show_message", l_show_message);
   field(L, "picker", l_picker);
   field(L, "panel", l_panel_show);
+  field(L, "close_panel",
+        [](lua_State *s)
+        {
+          api(s).close_plugin_panel();
+          return 0;
+        });
   field(L, "popup", l_popup);
   field(L, "command_palette", l_ui_command_palette);
   lua_pop(L, 2);
@@ -612,6 +618,32 @@ bool LuaAPI::init()
   field(L, "children", l_filetree_children);
   lua_setfield(L, -2, "filetree");
   lua_newtable(L);
+  field(L, "tree",
+        [](lua_State *s)
+        {
+          api(s).push_undo_tree(s);
+          return 1;
+        });
+  field(L, "lines",
+        [](lua_State *s)
+        {
+          api(s).push_undo_state_lines(s);
+          return 1;
+        });
+  field(L, "goto",
+        [](lua_State *s)
+        {
+          api(s).undo_tree_goto_from_lua(s);
+          return 1;
+        });
+  field(L, "clear",
+        [](lua_State *s)
+        {
+          api(s).undo_tree_clear_from_lua(s);
+          return 0;
+        });
+  lua_setfield(L, -2, "undo");
+  lua_newtable(L);
   field(L, "register", l_status_register);
   field(L, "unregister", l_status_unregister);
   lua_setfield(L, -2, "status");
@@ -814,6 +846,10 @@ bool LuaAPI::init()
   // keymap family registered. The module tree and the loader stay in place, so
   // re-enabling is this one call.
   // load_ai_runtime(L);
+  // Undo tree (:undotree, features/undotree.lua): the states a buffer has been
+  // in, in the right dock, walked with j/k and Enter. Loaded after keymaps so
+  // the panel's own keys sit under the user's own bindings.
+  jot_lua::load_bundled_lua_file(L, "features/undotree.lua", "Undo tree");
   // Self-update (:update + silent startup check, features/update.lua). Loaded
   // last so user config can tune update.* settings before the module boots.
   jot_lua::load_bundled_lua_file(L, "features/update.lua", "Update");
