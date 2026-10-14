@@ -74,8 +74,51 @@ LuaAPI::~LuaAPI()
     g_lua_active_api = nullptr;
 }
 
+// The version `jot.api_version` and the `--api-info` header carry. Bump it when
+// a name is removed or changes meaning; new names are additive.
+constexpr const char *kLuaApiVersion = "3.0.0";
+
 namespace
 {
+  // Records a namespace's callables and nested namespaces as dotted names.
+  // Depth and count are capped: a table can reach itself, and the names are
+  // what is wanted here, not the values behind them.
+  void record_api_table(lua_State *L,
+                        int index,
+                        const std::string &prefix,
+                        int depth,
+                        int &budget,
+                        std::vector<LuaApiEntry> &out)
+  {
+    lua_pushnil(L);
+    while (budget > 0 && lua_next(L, index) != 0)
+    {
+      if (lua_type(L, -2) == LUA_TSTRING)
+      {
+        const std::string key = lua_tostring(L, -2);
+        if (!key.empty() && key[0] != '_')
+        {
+          const std::string dotted = prefix.empty() ? key : prefix + "." + key;
+          if (lua_isfunction(L, -1))
+          {
+            out.push_back({dotted, true});
+            --budget;
+          }
+          else if (lua_istable(L, -1))
+          {
+            out.push_back({dotted, false});
+            --budget;
+            if (depth < 3)
+            {
+              record_api_table(L, lua_gettop(L), dotted, depth + 1, budget, out);
+            }
+          }
+        }
+      }
+      lua_pop(L, 1);
+    }
+  }
+
   void inject(lua_State *L, LuaAPI *a, const char *name, lua_CFunction fn)
   {
     lua_pushlightuserdata(L, a);
@@ -152,7 +195,7 @@ bool LuaAPI::init()
   inject(L, this, "register_keymap", l_register_keymap);
   inject(L, this, "register_panel", l_register_panel);
   lua_newtable(L);
-  lua_pushstring(L, "3.0.0");
+  lua_pushstring(L, kLuaApiVersion);
   lua_setfield(L, -2, "api_version");
   lua_pushstring(L, "Lua coordinates are 1-based line/column");
   lua_setfield(L, -2, "coordinate_convention");
@@ -321,6 +364,34 @@ bool LuaAPI::init()
   lua_getglobal(L, "jot");
   lua_pushcfunction(L, l_capabilities);
   lua_setfield(L, -2, "capabilities");
+  // jot.api: the surface itself, read off this very table once the last
+  // binding is in (record_api_entries below).
+  lua_newtable(L);
+  field(L, "namespaces",
+        [](lua_State *s)
+        {
+          api(s).push_api_namespaces(s);
+          return 1;
+        });
+  field(L, "functions",
+        [](lua_State *s)
+        {
+          api(s).push_api_functions(s);
+          return 1;
+        });
+  field(L, "has",
+        [](lua_State *s)
+        {
+          api(s).push_api_has(s);
+          return 1;
+        });
+  field(L, "info",
+        [](lua_State *s)
+        {
+          api(s).push_api_info(s);
+          return 1;
+        });
+  lua_setfield(L, -2, "api");
   lua_newtable(L);
   field(L, "execute", l_editor_execute);
   field(L, "request_redraw", l_editor_redraw);
@@ -791,6 +862,9 @@ bool LuaAPI::init()
   field(L, "names", l_policy_names);
   lua_setfield(L, -2, "policy");
   lua_pop(L, 1);
+  // Recorded before the user's Lua runs, so config.lua and plugins get an
+  // answer from `jot.capabilities()` while they load.
+  record_api_entries(L);
   // Bundled feature: inline diagnostics as anchored decorations (see
   // lua/features/decorations.lua). Loaded after user plugins: load_plugins()
   // resets the autocmd table for plugin reloads, so registering before it
@@ -853,5 +927,124 @@ bool LuaAPI::init()
   // Self-update (:update + silent startup check, features/update.lua). Loaded
   // last so user config can tune update.* settings before the module boots.
   jot_lua::load_bundled_lua_file(L, "features/update.lua", "Update");
+
+  // Read again now the features have loaded, so their fields are in it too.
+  record_api_entries(L);
   return true;
+}
+
+void LuaAPI::record_api_entries(lua_State *L)
+{
+  api_entries_.clear();
+  if (!L)
+  {
+    return;
+  }
+  lua_getglobal(L, "jot");
+  if (lua_istable(L, -1))
+  {
+    int budget = 4000;
+    record_api_table(L, lua_gettop(L), "", 0, budget, api_entries_);
+    std::sort(api_entries_.begin(),
+              api_entries_.end(),
+              [](const LuaApiEntry &left, const LuaApiEntry &right)
+              { return left.name < right.name; });
+  }
+  lua_pop(L, 1);
+}
+
+std::vector<std::string> LuaAPI::api_info_lines() const
+{
+  std::vector<std::string> lines;
+  std::size_t functions = 0;
+  std::size_t namespaces = 0;
+  for (const LuaApiEntry &entry : api_entries_)
+  {
+    entry.callable ? ++functions : ++namespaces;
+  }
+  lines.push_back("# jot Lua API " + std::string(kLuaApiVersion) + ": "
+                  + std::to_string(namespaces) + " namespaces, " + std::to_string(functions)
+                  + " functions");
+  for (const LuaApiEntry &entry : api_entries_)
+  {
+    if (entry.callable)
+    {
+      lines.push_back(entry.name);
+    }
+  }
+  return lines;
+}
+
+void LuaAPI::push_api_namespaces(lua_State *L)
+{
+  lua_newtable(L);
+  int row = 0;
+  for (const LuaApiEntry &entry : api_entries_)
+  {
+    if (!entry.callable)
+    {
+      lua_pushlstring(L, entry.name.data(), entry.name.size());
+      lua_rawseti(L, -2, ++row);
+    }
+  }
+}
+
+void LuaAPI::push_api_functions(lua_State *L)
+{
+  lua_newtable(L);
+  int row = 0;
+  for (const LuaApiEntry &entry : api_entries_)
+  {
+    if (entry.callable)
+    {
+      lua_pushlstring(L, entry.name.data(), entry.name.size());
+      lua_rawseti(L, -2, ++row);
+    }
+  }
+}
+
+void LuaAPI::push_api_has(lua_State *L)
+{
+  const std::string wanted = luaL_optstring(L, 1, "");
+  bool found = false;
+  for (const LuaApiEntry &entry : api_entries_)
+  {
+    if (entry.name == wanted)
+    {
+      found = true;
+      break;
+    }
+  }
+  lua_pushboolean(L, found ? 1 : 0);
+}
+
+void LuaAPI::push_api_info(lua_State *L)
+{
+  lua_newtable(L);
+  int functions = 0;
+  int namespaces = 0;
+  for (const LuaApiEntry &entry : api_entries_)
+  {
+    entry.callable ? ++functions : ++namespaces;
+  }
+  lua_pushstring(L, kLuaApiVersion);
+  lua_setfield(L, -2, "version");
+  jot_lua::lua_push_int_field(L, "namespaces", namespaces);
+  jot_lua::lua_push_int_field(L, "functions", functions);
+}
+
+void LuaAPI::push_capabilities(lua_State *L)
+{
+  // What sits directly on `jot`, namespaces and top-level calls alike: the
+  // names a plugin gates on.
+  lua_newtable(L);
+  for (const LuaApiEntry &entry : api_entries_)
+  {
+    if (entry.name.find('.') != std::string::npos)
+    {
+      continue;
+    }
+    lua_pushboolean(L, 1);
+    lua_setfield(L, -2, entry.name.c_str());
+  }
 }

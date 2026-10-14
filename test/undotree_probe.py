@@ -82,6 +82,12 @@ class TreeRow:
     def __repr__(self) -> str:
         return "TreeRow(%r, %d, selected=%r)" % (self.glyph, self.seq, self.selected)
 
+    # Without this, a list of rows only equals itself, so a check comparing two
+    # frames fails whatever the panel did.
+    def __eq__(self, other: object) -> bool:
+        return (isinstance(other, TreeRow) and self.glyph == other.glyph
+                and self.seq == other.seq and self.selected == other.selected)
+
 
 def dock_rows(rows: list[str]) -> list[str]:
     return [row[PANEL_X:] for row in rows]
@@ -145,6 +151,38 @@ def starred_seq(rows: list[str]) -> object:
     return hit[0] if len(hit) == 1 else None
 
 
+def capture_when(seen: dict, key: str, ready, timeout: float = 8.0):
+    """A phase that waits for the screen to say `ready`, then records it.
+
+    A fixed sleep races the frame on a loaded machine: reading the walk before
+    the editor painted it looks exactly like the walk not happening.
+    """
+
+    def phase(screen) -> bool:
+        rows = screen.text().split("\n")
+        if not ready(rows):
+            return False
+        seen[key] = rows
+        return True
+
+    return (timeout, phase)
+
+
+def holds_the_typed_text(rows: list[str]) -> bool:
+    """The edits under test are still what the buffer holds."""
+    return "begammaone" in pane_text(rows)
+
+
+def walked_away(rows: list[str]) -> bool:
+    """A state other than the typed one is in front."""
+    return "begammaone" not in pane_text(rows)
+
+
+def shows_changes(rows: list[str]) -> bool:
+    """The panel is up with the cursor's state diffed under it."""
+    return "Changes" in dock_text(rows)
+
+
 def main() -> int:
     binary = sys.argv[1] if len(sys.argv) > 1 else "build/apps/jot/jot"
     show = "--dump" in sys.argv
@@ -206,9 +244,9 @@ def main() -> int:
     seen: dict = {}
     phases = open_panel([
         (0.5, b"j"),
-        (0.8, lambda s: seen.setdefault("before", s.text().split("\n"))),
+        capture_when(seen, "before", shows_changes),
         (0.5, ENTER),
-        (0.9, lambda s: seen.setdefault("after", s.text().split("\n"))),
+        capture_when(seen, "after", walked_away),
     ])
     screen = scene(binary, phases)
     rows = seen.get("after") or screen.text().split("\n")
@@ -249,17 +287,19 @@ def main() -> int:
     #    buffer. S is a re-read, so the tree is exactly where it was after it.
     seen: dict = {}
     phases = open_panel([
-        (0.8, lambda s: seen.setdefault("before", s.text().split("\n"))),
+        capture_when(seen, "before", holds_the_typed_text),
         (0.5, SHIFT_K),
-        (0.9, lambda s: seen.setdefault("back", s.text().split("\n"))),
+        capture_when(seen, "back", walked_away),
         (0.5, SHIFT_J),
+        capture_when(seen, "retake", holds_the_typed_text),
         (0.4, b"S"),
-        (0.9, lambda s: seen.setdefault("retake", s.text().split("\n"))),
+        capture_when(seen, "reread", holds_the_typed_text),
     ])
     screen = scene(binary, phases)
     before = seen.get("before") or screen.text().split("\n")
     back = seen.get("back") or []
     retake = seen.get("retake") or []
+    reread = seen.get("reread") or []
     if show:
         dump(screen, "step")
     check("begammaone" in pane_text(before), "the edits under test never reached the buffer")
@@ -271,6 +311,8 @@ def main() -> int:
           "Shift+J did not step forward onto the newest child: %r" % starred_seq(retake))
     check("begammaone" in pane_text(retake), "Shift+J did not bring the child's text back")
     check(len(tree_rows(retake)) > 3, "S dropped the tree: %r" % tree_rows(retake))
+    check(tree_rows(reread) == tree_rows(retake) and starred_seq(reread) == starred_seq(retake),
+          "S changed the tree: %r then %r" % (tree_rows(retake), tree_rows(reread)))
 
     # 7. S re-reads the history: the tree, the star and the cursor come back the
     #    same, which is what a key for a stale panel has to do.

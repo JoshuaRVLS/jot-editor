@@ -36,6 +36,14 @@ class UI;
 
 #include "lua/view/runtime.h"
 
+// One entry of the recorded Lua API surface. Recorded by walking the table
+// init() built, so the description cannot drift from the bindings.
+struct LuaApiEntry
+{
+  std::string name;      // "buffer.apply_edit", "decoration", "command"
+  bool callable = false; // a function rather than a namespace table
+};
+
 // The Lua API object itself. The view structs it hands to Lua live in
 // jot/lua/view/ (see their maps there); this header keeps the class, its
 // includes and the forward declarations the class needs.
@@ -47,6 +55,8 @@ private:
   std::vector<PluginKeymap> plugin_keymaps;
   std::vector<PluginAutocmd> plugin_autocmds;
   std::vector<PluginPanel> plugin_panels;
+  // What this build registered, as dotted names.
+  std::vector<LuaApiEntry> api_entries_;
   std::vector<PluginStatusSegment> status_segments_;
   std::vector<PluginLoadStatus> plugin_load_status;
   // Registry ref (LUA_NOREF when unset) of the jot.lsp.hover_ui handler.
@@ -408,6 +418,17 @@ public:
                         bool ctrl,
                         bool shift,
                         bool alt);
+  // Records the surface init() just registered, so `jot.api.*`,
+  // `jot.capabilities()` and `jot --api-info` answer from one place.
+  void record_api_entries(lua_State *L);
+  const std::vector<LuaApiEntry> &api_entries() const { return api_entries_; }
+  // One line per callable, sorted, behind a header with the counts.
+  std::vector<std::string> api_info_lines() const;
+  void push_api_namespaces(lua_State *L);
+  void push_api_functions(lua_State *L);
+  void push_api_info(lua_State *L);
+  void push_api_has(lua_State *L);
+  void push_capabilities(lua_State *L);
   // Picker rows: a plain string item carries an empty value, a table item may
   // carry `value` (what the select callback receives instead of the display
   // text), `detail` (right-aligned secondary text) and `fg` (the row's own

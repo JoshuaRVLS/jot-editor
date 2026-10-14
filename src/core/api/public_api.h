@@ -11,6 +11,9 @@
 // sit in class scope exactly as if they were written in editor.h.
 public:
 public:
+// What `jot --api-info` prints: a header with the counts, then one line per
+// callable. Empty when the build has no Lua runtime.
+std::vector<std::string> lua_api_info_lines() const;
 // Hint cells inserted before `byte_col` on `line` (text shift amount), for
 // caret placement, popup anchoring, and mouse mapping. Pure query helpers
 // shared with the renderer and input layers (and the test suite).

@@ -1,6 +1,7 @@
 #include "base/signal_exit.h"
 #include "core/relaunch.h"
 #include "core/editor.h"
+#include "lua/api/api.h"
 #include "ui/terminal.h"
 
 #include <cstdio>
@@ -45,6 +46,59 @@ namespace
 #endif
     return fs::temp_directory_path() / "jot-logs";
   }
+
+  // Holds stdout on the null device for as long as it is alive: building and
+  // tearing down the editor writes the alternate screen and mouse modes, which
+  // belong on a terminal and not in a dump a pipe is reading.
+  class StdoutParked
+  {
+  public:
+    StdoutParked()
+    {
+#ifdef _WIN32
+      saved_ = _dup(_fileno(stdout));
+      const int null_fd = _open("NUL", _O_WRONLY);
+      if (saved_ >= 0 && null_fd >= 0)
+      {
+        _dup2(null_fd, _fileno(stdout));
+      }
+      if (null_fd >= 0)
+      {
+        _close(null_fd);
+      }
+#else
+      saved_ = ::dup(STDOUT_FILENO);
+      const int null_fd = ::open("/dev/null", O_WRONLY);
+      if (saved_ >= 0 && null_fd >= 0)
+      {
+        ::dup2(null_fd, STDOUT_FILENO);
+      }
+      if (null_fd >= 0)
+      {
+        ::close(null_fd);
+      }
+#endif
+    }
+    ~StdoutParked()
+    {
+#ifdef _WIN32
+      if (saved_ >= 0)
+      {
+        _dup2(saved_, _fileno(stdout));
+        _close(saved_);
+      }
+#else
+      if (saved_ >= 0)
+      {
+        ::dup2(saved_, STDOUT_FILENO);
+        ::close(saved_);
+      }
+#endif
+    }
+
+  private:
+    int saved_ = -1;
+  };
 
   // The editor renders into an alternate screen owned by stdout. When jot is
   // started interactively, stderr is the *same* terminal, so any stray write
@@ -106,6 +160,7 @@ int main(int argc, char *argv[])
   // in the command line; the first non-flag argument is the file or
   // workspace to open, as usual.
   bool gui_mode = false;
+  bool api_info = false;
   const char *target = nullptr;
   for (int i = 1; i < argc; i++)
   {
@@ -113,10 +168,46 @@ int main(int argc, char *argv[])
     {
       gui_mode = true;
     }
+    else if (std::strcmp(argv[i], "--api-info") == 0)
+    {
+      api_info = true;
+    }
     else if (target == nullptr)
     {
       target = argv[i];
     }
+  }
+
+  // --api-info prints the registered Lua API and exits, before the graphics
+  // probe and any terminal setup: the editor is built for its runtime and never
+  // runs a frame.
+  if (api_info)
+  {
+    std::vector<std::string> lines;
+    {
+      // Covers the destructor too: the teardown writes the modes back.
+      StdoutParked parked;
+      try
+      {
+        std::unique_ptr<Editor> headless = std::make_unique<Editor>(false);
+        lines = headless->lua_api_info_lines();
+      }
+      catch (const std::exception &ex)
+      {
+        std::fprintf(stderr, "jot: %s\n", ex.what());
+        return 1;
+      }
+    }
+    if (lines.empty())
+    {
+      std::fprintf(stderr, "jot: no Lua runtime in this build\n");
+      return 1;
+    }
+    for (const std::string &line : lines)
+    {
+      std::printf("%s\n", line.c_str());
+    }
+    return 0;
   }
 
   // Every picture jot draws is a kitty graphics placement: there is no cell-art

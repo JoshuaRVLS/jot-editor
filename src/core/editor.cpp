@@ -581,6 +581,11 @@ void Editor::initialize_state_defaults()
   current_theme_name = "jot";
 }
 
+std::vector<std::string> Editor::lua_api_info_lines() const
+{
+  return lua_api ? lua_api->api_info_lines() : std::vector<std::string>();
+}
+
 void Editor::initialize_lua_runtime()
 {
   lua_api = new LuaAPI(this);

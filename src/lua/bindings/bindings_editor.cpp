@@ -244,20 +244,9 @@ namespace lua_bind
   }
   int l_capabilities(lua_State *L)
   {
-    lua_newtable(L);
-    const char *names[] = {
-        "buffer",   "cursor",     "selection", "clipboard", "picker",      "events",
-        "viewport", "filetree",   "pane",      "file",      "ui",          "keymap",
-        "job",      "edit",       "search",    "folds",     "bookmarks",   "workspace",
-        "terminal", "tasks",      "theme",     "config",    "lsp",         "debugger",
-        "git",      "treesitter", "symbols",   "image",     "diagnostics", "marks",
-        "status",   "timer",      "motion",    "sidebar",   "toast",       "process",
-        "screen",   "input",      "term",      "lua",       "undo"};
-    for (const char *name : names)
-    {
-      lua_pushboolean(L, 1);
-      lua_setfield(L, -2, name);
-    }
+    // Read off what init() registered, not a list kept by hand: the hand-written
+    // one carried `selection`, which is not a namespace, and missed `decoration`.
+    api(L).push_capabilities(L);
     return 1;
   }
   int l_command(lua_State *L)

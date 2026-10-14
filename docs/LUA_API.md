@@ -832,10 +832,32 @@ end)
 ```lua
 print(jot.api_version)
 local capabilities = jot.capabilities()
+local info = jot.api.info()
 ```
 
-`jot.capabilities()` returns the available runtime namespaces. Use it when a
-script must work across different Jot builds.
+`jot.capabilities()` returns the namespaces and top-level calls this build
+registered, as `name = true`. Use it when a script must work across different
+Jot builds: `if jot.capabilities().decoration then ... end`. It is not a list
+kept by hand next to the bindings, which is a list that drifts; it is read off
+the `jot` table after the last binding is in, so a namespace that exists here is
+in it and one that does not cannot be.
+
+`jot.api` is that same surface, in full:
+
+- `jot.api.functions()` - every callable as its dotted name (`"buffer.apply_edit"`),
+  sorted, so a script can search it or a tool can print it;
+- `jot.api.namespaces()` - every namespace, sorted;
+- `jot.api.has(name)` - whether one dotted name exists;
+- `jot.api.info()` - `{version, namespaces, functions}`, the counts.
+
+From outside a session, `jot --api-info` prints the same table to stdout: a
+header line with the version and both counts, then one callable per line,
+sorted. It answers before any terminal setup, so it works on a pipe, and it is
+how a completions file or an editor plugin is generated against a build instead
+of against a document. `test/api_info_probe.py` holds the two readers to each
+other: the counts and the version from the flag have to match the ones the
+running session reports, and `jot.capabilities()` has to carry the namespaces
+the old hand-written list had missed.
 
 ## Tree-sitter Runtime
 
