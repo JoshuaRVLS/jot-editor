@@ -835,9 +835,7 @@ local capabilities = jot.capabilities()
 ```
 
 `jot.capabilities()` returns the available runtime namespaces. Use it when a
-script must work across different Jot builds. What this API still lacks,
-measured against Neovim's, and the order it is worth closing in, is
-[LUA_API_PLAN.md](LUA_API_PLAN.md).
+script must work across different Jot builds.
 
 ## Tree-sitter Runtime
 
