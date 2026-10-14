@@ -111,46 +111,43 @@ def node_names(path: str) -> set[str]:
     return {name for name in NODE_REF.findall(stripped) if not name.startswith("_")}
 
 
-TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"')
-
-
-def strip_predicates(text: str) -> str:
-    """Query source without `;` comments or `(#predicate ...)` forms.
-
-    The quoted arguments of a predicate look exactly like literal tokens
-    (`(#match? @x "^(break|return)$")`), so the form is dropped whole -- its
-    strings and its parentheses -- before tokens are read off what is left.
-    """
+def read_string(text: str, start: int) -> tuple[str, int]:
+    """The literal inside the query string starting at `start`, and the index
+    just past it. An unterminated string runs to the end of the text."""
     out = []
-    i = 0
+    i = start + 1
+    while i < len(text):
+        if text[i] == "\\" and i + 1 < len(text):
+            out.append(text[i])
+            out.append(text[i + 1])
+            i += 2
+            continue
+        if text[i] == '"':
+            return "".join(out), i + 1
+        out.append(text[i])
+        i += 1
+    return "".join(out), i
+
+
+def skip_form(text: str, start: int) -> int:
+    """The index past the `(#predicate ...)` form that starts at `start`."""
+    depth = 0
+    i = start
     while i < len(text):
         char = text[i]
-        if char == ";":
-            while i < len(text) and text[i] != "\n":
-                i += 1
+        if char == '"':
+            _, i = read_string(text, i)
             continue
-        if char == "(" and text.startswith("(#", i):
-            depth = 0
-            while i < len(text):
-                if text[i] == '"':
-                    i += 1
-                    while i < len(text) and text[i] != '"':
-                        i += 2 if text[i] == "\\" else 1
-                    i += 1
-                    continue
-                if text[i] == "(":
-                    depth += 1
-                elif text[i] == ")":
-                    depth -= 1
-                    i += 1
-                    if depth == 0:
-                        break
-                    continue
-                i += 1
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            i += 1
+            if depth == 0:
+                return i
             continue
-        out.append(char)
         i += 1
-    return "".join(out)
+    return i
 
 
 def unescape_token(token: str) -> str:
@@ -169,9 +166,33 @@ def unescape_token(token: str) -> str:
 
 
 def query_tokens(path: str) -> set[str]:
-    """Anonymous node types a highlights.scm references, as literal tokens."""
-    text = strip_predicates(open(path, encoding="utf-8").read())
-    return {unescape_token(token) for token in TOKEN.findall(text)}
+    """Anonymous node types a highlights.scm references, as literal tokens.
+
+    Scanned rather than matched with one regex over the raw text, because two
+    things in a query hold quotes that are not tokens and desync quote pairing
+    for everything after them: a `;` comment (`; "return" is a word here`) and
+    the argument of a predicate (`(#match? @x "^(break|return)$")`). The first
+    version of this matched the raw text and reported tokens that were not in
+    the file at all, which is worse than reporting nothing.
+    """
+    text = open(path, encoding="utf-8").read()
+    tokens: set[str] = set()
+    i = 0
+    while i < len(text):
+        char = text[i]
+        if char == ";":
+            while i < len(text) and text[i] != "\n":
+                i += 1
+            continue
+        if char == "(" and text.startswith("(#", i):
+            i = skip_form(text, i)
+            continue
+        if char == '"':
+            literal, i = read_string(text, i)
+            tokens.add(unescape_token(literal))
+            continue
+        i += 1
+    return tokens
 
 
 def raw_candidates(url: str, name: str, subdir: str) -> list[str]:
