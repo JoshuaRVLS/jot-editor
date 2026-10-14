@@ -68,7 +68,17 @@ void Editor::sync_lua_ui_surfaces()
   // once the owning surface closes.
   const bool frame_owned = terminal_zoom_active || show_home_menu;
   sync(show_sidebar && !frame_owned, lua_ui_prev_sidebar, "sidebar");
-  sync(show_right_panel && !frame_owned, lua_ui_prev_side_panel, "side_panel");
+  // The dock's Lua surface follows the tab as well as the dock. Every dock tab
+  // but the tree-sitter playground hands the Lua kit a `side_panel` view and
+  // the kit paints it in its own float; the playground draws itself natively
+  // and never emits one, so a Lua float left over from the tab before it went
+  // on being painted over the playground: the strip showed both tabs, the
+  // playground was the active one, and the screen kept showing the plugin
+  // panel it replaced. Closing the surface the moment the active tab is the one
+  // without a Lua renderer is what lets the two be open side by side.
+  const bool dock_lua_panel =
+      show_right_panel && active_right_panel_tab != RIGHT_PANEL_TREESITTER;
+  sync(dock_lua_panel && !frame_owned, lua_ui_prev_side_panel, "side_panel");
   sync(lsp_completion_visible && !lsp_completion_items.empty() && !frame_owned,
        lua_ui_prev_lsp_completion,
        "lsp_completion");
