@@ -27,11 +27,22 @@ autocmd("BufSave", function(event) show_message("saved " .. event) end)
 register_keymap("Alt+H", function() show_message("hi") end, "Say hi")
 ```
 
+`autocmd` takes optional `{pattern = "*.c", once = true}` options (a plain
+string in that place is the pattern): `pattern` filters the hook against the
+event's file with a glob, `once` drops it after one run. A plugin can also fire
+its own event name: `jot.autocmd("User build", fn)` registers the hook and
+`jot.autocmd.exec("User build", { stage = "start" })` calls it, with
+`jot.autocmd.list(event)` reporting what is registered. `jot.events.subscribe`
+takes the same two options, and `jot.events.emit(name, data)` fires a bus event
+of your own. docs/LUA_API.md, "Event bus" and "UI And Events", has the details
+and the pattern dialect.
+
 Available injected globals include `command`, `autocmd`, `register_keymap`,
 `register_panel`, `show_message`, `get_current_buffer`, `set_current_buffer`,
 `get_selection`, `replace_selection`, `insert_text`, `cursor`, `set_cursor`,
 `current_file`, `open_file`, `save`, `execute`, `run_job`, `show_picker`, and
-`show_panel`. The `jot` global contains runtime metadata such as
+`show_panel`. `jot.autocmd` is the same callable as the global `autocmd`, with
+`exec` and `list` beside it. The `jot` global contains runtime metadata such as
 `jot.api_version` and the extended namespaces documented in
 `docs/LUA_API.md`: `jot.buffer.set_var/get_var/del_var` (buffer-local
 variables), `jot.diagnostics.get`, `jot.marks.*` (named marks),

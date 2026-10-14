@@ -76,7 +76,7 @@ LuaAPI::~LuaAPI()
 
 // The version `jot.api_version` and the `--api-info` header carry. Bump it when
 // a name is removed or changes meaning; new names are additive.
-constexpr const char *kLuaApiVersion = "3.0.0";
+constexpr const char *kLuaApiVersion = "3.1.0";
 
 namespace
 {
@@ -108,6 +108,16 @@ namespace
           {
             out.push_back({dotted, false});
             --budget;
+            // A callable table is both a namespace and a call: jot.autocmd
+            // registers a hook when it is called and carries exec()/list()
+            // beside that. Recording it under both kinds is what keeps
+            // jot.api.has and the --api-info dump honest about it.
+            if (luaL_getmetafield(L, -1, "__call") != LUA_TNIL)
+            {
+              out.push_back({dotted, true});
+              --budget;
+              lua_pop(L, 1);
+            }
             if (depth < 3)
             {
               record_api_table(L, lua_gettop(L), dotted, depth + 1, budget, out);
@@ -192,7 +202,19 @@ bool LuaAPI::init()
   inject(L, this, "show_message", l_show_message);
   inject(L, this, "show_transient_message", l_show_transient_message);
   inject(L, this, "command", l_register_command);
-  inject(L, this, "autocmd", l_register_autocmd);
+  // `autocmd` is called by every bundled feature (autocmd("BufSave", fn)) and
+  // is also a namespace, so it is a callable table: __call registers a hook and
+  // exec/list sit beside it. The global and jot.autocmd below are that one
+  // table, which is what keeps both call forms working.
+  lua_newtable(L);
+  lua_newtable(L);
+  field(L, "__call", l_register_autocmd);
+  lua_setmetatable(L, -2);
+  field(L, "exec", l_autocmd_exec);
+  field(L, "list", l_autocmd_list);
+  lua_pushvalue(L, -1);
+  lua_setglobal(L, "autocmd");
+  lua_pop(L, 1);
   inject(L,
          this,
          "set_hl",
@@ -694,6 +716,8 @@ bool LuaAPI::init()
   lua_newtable(L);
   field(L, "subscribe", l_events_subscribe);
   field(L, "unsubscribe", l_events_unsubscribe);
+  field(L, "emit", l_events_emit);
+  field(L, "list", l_events_list);
   lua_setfield(L, -2, "events");
   lua_newtable(L);
   field(L, "set_timeout", l_timer_set_timeout);

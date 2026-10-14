@@ -23,6 +23,8 @@ namespace lua_bind
   int l_register_update_handler(lua_State *L);
   int l_register_keymap(lua_State *L);
   int l_register_autocmd(lua_State *L);
+  int l_autocmd_exec(lua_State *L);
+  int l_autocmd_list(lua_State *L);
   int l_register_panel(lua_State *L);
   int l_get_buffer(lua_State *L);
   int l_set_buffer(lua_State *L);
@@ -184,6 +186,8 @@ namespace lua_bind
   int l_lsp_request_completion(lua_State *L);
   int l_events_subscribe(lua_State *L);
   int l_events_unsubscribe(lua_State *L);
+  int l_events_emit(lua_State *L);
+  int l_events_list(lua_State *L);
   int l_viewport_info(lua_State *L);
   int l_viewport_line_at(lua_State *L);
   int l_viewport_scroll_top(lua_State *L);

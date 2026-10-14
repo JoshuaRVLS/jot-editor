@@ -2,6 +2,7 @@
 // emit helpers (git.refreshed, buffer events, theme.switched) and the native
 // event-loop timer runtime with Lua callbacks. Split out of api_core.cpp.
 #include "core/editor.h"
+#include "core/pattern.h"
 #include "lua/api/api.h"
 #include "lua/api/api_internal.h"
 
@@ -22,21 +23,35 @@ using namespace jot_lua;
 
 void LuaAPI::events_subscribe_from_lua(lua_State *L)
 {
+  // jot.events.subscribe(name, fn [, opts]), where opts is {pattern = "*.py",
+  // once = true}. A plain string in that place is the pattern, the same
+  // shorthand jot.autocmd takes for the same option.
   const std::string name = luaL_checkstring(L, 1);
   luaL_checktype(L, 2, LUA_TFUNCTION);
+  std::string pattern;
+  bool once = false;
+  if (lua_isstring(L, 3))
+  {
+    pattern = lua_tostring(L, 3);
+  }
+  else if (lua_istable(L, 3))
+  {
+    pattern = table_string(L, 3, "pattern", "");
+    once = table_bool(L, 3, "once", false);
+  }
   lua_pushvalue(L, 2);
   const int ref = luaL_ref(L, LUA_REGISTRYINDEX);
   EventBusSubscriber sub;
   sub.ref = ref;
+  sub.pattern = pattern;
+  sub.once = once;
   sub.key = "ev." + name + "." + std::to_string(next_event_sub_id_++);
   event_subscribers_[name].push_back(std::move(sub));
   lua_pushstring(L, event_subscribers_[name].back().key.c_str());
 }
 
-void LuaAPI::events_unsubscribe_from_lua(lua_State *L)
+void LuaAPI::detach_event_subscriber(const std::string &name, const std::string &key)
 {
-  const std::string name = luaL_checkstring(L, 1);
-  const std::string key = luaL_checkstring(L, 2);
   auto it = event_subscribers_.find(name);
   if (it == event_subscribers_.end())
     return;
@@ -45,6 +60,8 @@ void LuaAPI::events_unsubscribe_from_lua(lua_State *L)
   {
     if (i->key == key)
     {
+      // A one-shot subscriber is detached while its own call is being set up,
+      // so only the registry entry goes; the function is on the Lua stack.
       if (lua_state)
       {
         luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, i->ref);
@@ -55,17 +72,40 @@ void LuaAPI::events_unsubscribe_from_lua(lua_State *L)
   }
 }
 
-void LuaAPI::emit_event_bus(const std::string &name, const std::function<void(lua_State *)> &build)
+void LuaAPI::events_unsubscribe_from_lua(lua_State *L)
+{
+  detach_event_subscriber(luaL_checkstring(L, 1), luaL_checkstring(L, 2));
+}
+
+bool LuaAPI::payload_wanted(lua_State *L, const std::string &pattern)
+{
+  if (!jot_pattern::is_filter(pattern))
+  {
+    return true;
+  }
+  if (!lua_istable(L, -1))
+  {
+    return false;
+  }
+  lua_getfield(L, -1, "path");
+  const char *path = lua_tostring(L, -1);
+  const bool wanted = path != nullptr && jot_pattern::path_match(pattern, path);
+  lua_pop(L, 1);
+  return wanted;
+}
+
+int LuaAPI::emit_event_bus(const std::string &name, const std::function<void(lua_State *)> &build)
 {
   if (!lua_initialized || !editor || !is_main_thread())
-    return;
+    return 0;
   auto it = event_subscribers_.find(name);
   if (it == event_subscribers_.end() || it->second.empty())
-    return;
+    return 0;
   lua_State *L = static_cast<lua_State *>(lua_state);
   const int top = lua_gettop(L);
   // Copy so a subscriber can unsubscribe itself mid-dispatch.
   const std::vector<EventBusSubscriber> subs = it->second;
+  int delivered = 0;
   for (const auto &sub : subs)
   {
     const int frame_top = lua_gettop(L);
@@ -74,6 +114,16 @@ void LuaAPI::emit_event_bus(const std::string &name, const std::function<void(lu
     lua_pushstring(L, name.c_str());
     lua_setfield(L, -2, "event");
     build(L);
+    if (!payload_wanted(L, sub.pattern))
+    {
+      lua_settop(L, frame_top);
+      continue;
+    }
+    if (sub.once)
+    {
+      detach_event_subscriber(name, sub.key);
+    }
+    delivered++;
     if (lua_pcall(L, 1, 0, 0) != LUA_OK)
     {
       std::cerr << "Lua event bus error (" << name << "): " << lua_tostring(L, -1) << "\n";
@@ -81,7 +131,63 @@ void LuaAPI::emit_event_bus(const std::string &name, const std::function<void(lu
     lua_settop(L, frame_top);
   }
   lua_settop(L, top);
+  return delivered;
 }
+
+void LuaAPI::events_emit_from_lua(lua_State *L)
+{
+  // jot.events.emit(name[, data]): an event the plugin fires itself, delivered
+  // to the bus like any native one. The count it answers back is how many
+  // subscribers took this payload, which is what makes a filter checkable from
+  // Lua instead of a matter of watching a log.
+  const std::string name = luaL_checkstring(L, 1);
+  if (!lua_isnoneornil(L, 2))
+  {
+    luaL_checktype(L, 2, LUA_TTABLE);
+  }
+  const int data = lua_isnoneornil(L, 2) ? 0 : 2;
+  const int delivered = emit_event_bus(name,
+                                       [&](lua_State *S)
+                                       {
+                                         if (data != 0)
+                                         {
+                                           copy_event_fields(S, data);
+                                         }
+                                       });
+  lua_pushinteger(L, delivered);
+}
+
+void LuaAPI::push_events_list(lua_State *L)
+{
+  // Rows with the file filter and the one-shot flag spelled out, so a plugin
+  // can see what is live instead of guessing why a subscriber did or did not
+  // run. Events come in name order (that is how they are held); the
+  // subscribers of one event keep their registration order.
+  const std::string only = luaL_optstring(L, 1, "");
+  lua_newtable(L);
+  int row = 0;
+  for (const auto &entry : event_subscribers_)
+  {
+    if (!only.empty() && entry.first != only)
+    {
+      continue;
+    }
+    for (const auto &sub : entry.second)
+    {
+      lua_newtable(L);
+      lua_pushstring(L, entry.first.c_str());
+      lua_setfield(L, -2, "event");
+      lua_pushstring(L, sub.key.c_str());
+      lua_setfield(L, -2, "key");
+      lua_pushstring(L, sub.pattern.c_str());
+      lua_setfield(L, -2, "pattern");
+      lua_pushboolean(L, sub.once ? 1 : 0);
+      lua_setfield(L, -2, "once");
+      lua_rawseti(L, -2, ++row);
+    }
+  }
+}
+
 
 void LuaAPI::emit_git_refreshed()
 {

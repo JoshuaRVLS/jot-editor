@@ -49,7 +49,7 @@ TEST_CASE("BufChange snapshots stay inside the line budget")
   use_temp_config_home();
   Editor e;
   LuaAPI api(&e);
-  api.register_autocmd("BufChange", "");
+  api.register_autocmd("BufChange", "", "", false);
 
   // Each edit snapshots its file: one copied line per line.
   const int a = add_buffer(e, "a.txt", 3000);

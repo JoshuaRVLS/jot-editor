@@ -125,7 +125,7 @@ jot.motion       word_next, word_prev, line_start, line_end, file_start,
                  file_end, matching_bracket, select_function
 jot.sidebar      info, set_view
 jot.picker       active, info, items, accept, close
-jot.events       subscribe, unsubscribe
+jot.events       subscribe, unsubscribe, emit, list
 jot.timer        set_timeout, set_interval, clear
 jot.viewport     info, line_at, scroll_top, scroll_lines, scroll_col, reveal
 jot.filetree     root, tree, children
@@ -144,6 +144,7 @@ jot.theme        list, apply, current, set_color, palette, get
 jot.diagnostics  get
 jot.marks        set, get, jump, del, list
 jot.status       register, unregister
+jot.autocmd      exec, list (and callable: jot.autocmd("BufSave", fn))
 ```
 
 ### Keymap groups
@@ -566,12 +567,43 @@ when multiple servers report on the same file and you need attribution.
 
 ### Event bus
 
-`jot.events.subscribe(name, fn)` registers an ambient listener and returns a
-subscription key; `jot.events.unsubscribe(name, key)` removes it. Each event
-payload includes an `event` field with the event name. Unlike the one-shot
-`jot.lsp.request_*` sinks, the bus does not consume anything: native UI keeps
-behaving normally and every matching native event reaches all subscribers.
-Subscriptions are dropped on `:reloadplugins`.
+`jot.events.subscribe(name, fn [, opts])` registers an ambient listener and
+returns a subscription key; `jot.events.unsubscribe(name, key)` removes it.
+Each event payload includes an `event` field with the event name. Unlike the
+one-shot `jot.lsp.request_*` sinks, the bus does not consume anything: native UI
+keeps behaving normally and every matching native event reaches all
+subscribers. Subscriptions are dropped on `:reloadplugins`.
+
+`opts` is `{pattern = "*.py", once = true}`, both optional:
+
+- `pattern` filters the subscription against the file the event is about, so a
+  listener on `buffer.save` hears about the Python files and nothing else. The
+  filter reads the payload's `path`; an event that carries no path (a toast, a
+  theme switch) does not reach a filtered subscriber, because there is no file
+  to check.
+- `once = true` drops the subscription after its first delivery.
+
+`jot.events.emit(name [, data])` fires an event of your own, the counterpart of
+`subscribe`: the optional table becomes the payload, so subscribers read
+`ev.stage` and a `pattern` filters against `data.path`. It answers how many
+subscribers the payload reached, which is what makes a filter checkable from Lua
+rather than a matter of watching a log. `jot.events.list([name])` reports the
+live subscriptions as `{event, key, pattern, once}` rows: the rows of one event
+in registration order, the events themselves by name (the order they are held
+in).
+
+```lua
+local key = jot.events.subscribe("build.finished", function(ev)
+  jot.notify(("%s: %s"):format(ev.path or "?", ev.stage or ""))
+end, { pattern = "*.c" })
+
+local reached = jot.events.emit("build.finished", { path = "/tmp/a.c", stage = "ok" })
+print(reached, #jot.events.list("build.finished"))  -- 1  1
+```
+
+The same `pattern` and `once` apply to `jot.autocmd` below; both filters read
+the file the event names, and neither is a Lua pattern (see the pattern dialect
+under `jot.autocmd`).
 
 Currently emitted native events:
 
@@ -936,6 +968,8 @@ jot.ui.command_palette(":reload")  -- open the command palette, pre-filled
 jot.autocmd("CursorMoved", function(event)
   jot.ui.show_message(event.path .. ":" .. event.line)
 end)
+-- only for the headers: the pattern is matched against the file path
+jot.autocmd("CursorMoved", highlight_header, { pattern = "**/include/*.h" })
 ```
 
 `jot.ui.command_palette([query])` opens the command palette (no-op when it
@@ -965,6 +999,42 @@ dimmed, and the panel surface, border, and title row all come from the theme's
 once. A prompt is one of these: `quit_prompt` gets the rect and the colors and
 paints its own row (the native painter, which runs when no handler is
 registered, writes the same sentence).
+
+`jot.autocmd(event, fn [, opts])` is the reaction surface for the editor's own
+events, called as `jot.autocmd(...)` or as the injected global `autocmd(...)`.
+`opts` takes the same two options the bus does, and a plain string in its place
+is the pattern:
+
+```lua
+jot.autocmd("BufSave", function(e) format(e.path) end, { pattern = "*.c" })
+jot.autocmd("WorkspaceEnter", function() reload_project() end, { once = true })
+```
+
+A pattern is a file glob matched against the event's path: `*` for a run of
+characters that stops at a separator, `**` for one that crosses them, `?` for
+one character that is not a separator, `[...]` for a set (with ranges and a
+leading `!` to invert), and
+`\` to escape. A pattern with no separator in it is tried against the last
+component as well, so `*.py` means "a Python file anywhere". A pattern with a
+separator is about the whole path; `**/proj/*.py` is how that is anchored
+anywhere. Matching is case-sensitive and covers the whole path, so `*.txt` does
+not take `notes.txt.bak`.
+
+A plugin can fire its own event name: `jot.autocmd("User build", fn)` registers
+a hook, and `jot.autocmd.exec("User build", { stage = "start" })` calls the hooks
+registered for that name, with your table as the payload. A pattern on such a
+hook filters against the payload's `path`. `jot.autocmd.list([event])` reports
+the hooks the session has registered as `{event, pattern, once}` rows, so you can
+see what is live instead of guessing why a hook did or did not run.
+
+```lua
+jot.autocmd("User build", function(e)
+  jot.notify("build " .. (e.stage or "?"))
+end, { pattern = "*.c" })
+
+jot.autocmd.exec("User build", { path = jot.editor.info().path, stage = "start" })
+print(#jot.autocmd.list("User build"))  -- 1
+```
 
 Events currently include `BufOpen`, `BufChange`, `BufSave`, `BufClose`,
 `CursorMoved`, `WorkspaceEnter`, `UIResize`, `DiagnosticChanged`, and

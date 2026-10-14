@@ -114,6 +114,10 @@ struct PluginAutocmd
 {
   std::string event;
   std::string callback;
+  // File filter ("*.py"; empty means every file), and whether the hook is
+  // dropped after its first run.
+  std::string pattern;
+  bool once = false;
 };
 
 // One row of a plugin picker (jot.ui.picker / jot.show_picker). `label` is what
@@ -181,6 +185,10 @@ struct EventBusSubscriber
 {
   std::string key;
   int ref;
+  // File filter for this subscriber (empty means every file), and whether it
+  // is dropped after its first delivery.
+  std::string pattern;
+  bool once = false;
 };
 
 #endif

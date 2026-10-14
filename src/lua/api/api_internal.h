@@ -389,6 +389,33 @@ namespace jot_lua
     lua_setfield(L, -2, k);
   }
 
+  // Copies a caller's table into the event payload on top of the stack
+  // (jot.events.emit, jot.autocmd.exec): its fields become the hook's fields.
+  // String keys only, since a payload is named fields, and `event` is left as
+  // the bus set it -- that name is what the hook is being called about.
+  inline void copy_event_fields(lua_State *L, int index)
+  {
+    if (!lua_istable(L, index))
+    {
+      return;
+    }
+    const int target = lua_gettop(L);
+    lua_pushvalue(L, index);
+    lua_pushnil(L);
+    while (lua_next(L, -2) != 0)
+    {
+      // source, key, value
+      if (lua_type(L, -2) == LUA_TSTRING && std::string(lua_tostring(L, -2)) != "event")
+      {
+        lua_pushvalue(L, -2); // the key
+        lua_pushvalue(L, -2); // the value
+        lua_settable(L, target);
+      }
+      lua_pop(L, 1); // the value; lua_next wants the key
+    }
+    lua_pop(L, 1); // the source table
+  }
+
   inline void lua_push_int_field(lua_State *L, const char *k, long long v)
   {
     lua_pushinteger(L, v);

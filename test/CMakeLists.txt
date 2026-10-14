@@ -1,5 +1,6 @@
 add_executable(jot_tests
   test_string_util.cpp
+  test_pattern.cpp
   test_ansi_spans.cpp
   test_compile_parse.cpp
   test_status_prompts.cpp

@@ -17,6 +17,16 @@ namespace lua_bind
     api(L).events_unsubscribe_from_lua(L);
     return 0;
   }
+  int l_events_emit(lua_State *L)
+  {
+    api(L).events_emit_from_lua(L);
+    return 1;
+  }
+  int l_events_list(lua_State *L)
+  {
+    api(L).push_events_list(L);
+    return 1;
+  }
   int l_timer_set_timeout(lua_State *L)
   {
     api(L).timer_set_from_lua(L, false);

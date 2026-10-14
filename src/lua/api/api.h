@@ -192,6 +192,17 @@ private:
                            const std::string &filepath,
                            int buffer,
                            const LuaEditDelta *edit = nullptr);
+  // Frees one callback by id: the registry ref goes away with the map entry.
+  void drop_callback(const std::string &callback);
+  // Whether a filtered hook or subscriber wants this payload, which is the
+  // table at the top of the stack: an empty pattern takes everything, anything
+  // else has to match the payload's `path`. A payload without a path is a file
+  // the filter cannot vouch for, so a filtered hook does not see it.
+  static bool payload_wanted(lua_State *L, const std::string &pattern);
+  // Takes a subscription out of the bus and frees its ref. Its function is on
+  // the Lua stack while it is being called, so a one-shot subscriber can be
+  // dropped before that call rather than after it.
+  void detach_event_subscriber(const std::string &name, const std::string &key);
 
 public:
   // Resolves the optional buffer argument (1-based index or filepath, or the
@@ -397,10 +408,23 @@ public:
   // Delivers coalesced rapid autocmds (BufChange, CursorMoved) to Lua; the
   // event loop calls this once per drain, just before a frame renders.
   void flush_pending_autocmds();
+  // Offers one event to the hooks registered for it, in registration order,
+  // and delivers the payload to each one whose pattern wants this file. The
+  // hooks are snapshotted first: a handler may register, drop or re-fire
+  // autocmds, and a one-shot hook is unregistered before it runs so a re-fire
+  // inside its own callback cannot reach it a second time.
   void dispatch_autocmd(const std::string &event,
                         const std::string &filepath,
                         int buffer,
                         const LuaEditDelta *edit);
+  // jot.autocmd.exec(event[, data]): fires the hooks registered for an event
+  // name the plugin fires itself, the way :doautocmd does. The optional table
+  // becomes the payload, so a hook reads `e.stage` and a pattern filters
+  // against the payload's `path`.
+  void autocmd_exec_from_lua(lua_State *L);
+  // jot.autocmd.list([event]): the hooks the session has registered, as
+  // {event, pattern, once} rows, so a plugin can audit what is live.
+  void push_autocmd_list(lua_State *L);
   std::vector<std::string> plugin_panel_lines(const std::string &name);
   // Structured rows of a registered panel. `action` empty means "render":
   // the callback returns the rows to draw. A non-empty action is a click on
@@ -442,7 +466,17 @@ public:
                        const std::string &command,
                        const std::string &detail,
                        const std::string &mode);
-  void register_autocmd(const std::string &event, const std::string &callback);
+  // A hook for a native event name ("BufSave", "CursorMoved"), or for a name
+  // the plugin fires itself with jot.autocmd.exec ("User ready"). `pattern`
+  // filters it against the event's file and `once` drops it after its first
+  // run; both are optional and an empty pattern means every file.
+  void register_autocmd(const std::string &event,
+                        const std::string &callback,
+                        const std::string &pattern,
+                        bool once);
+  // jot.autocmd(event, fn [, opts]): keeps the function's ref and registers the
+  // hook, reading `pattern` and `once` off the opts table (or a plain string).
+  void register_autocmd_from_lua(lua_State *L);
   void
   register_panel(const std::string &name, const std::string &callback, const std::string &title);
 
@@ -559,12 +593,22 @@ public:
   // Event bus: subscribe/unsubscribe from Lua, native broadcast entry point.
   void events_subscribe_from_lua(lua_State *L);
   void events_unsubscribe_from_lua(lua_State *L);
+  // jot.events.emit(name[, data]): delivers an event the plugin fires itself
+  // and pushes how many subscribers it reached.
+  void events_emit_from_lua(lua_State *L);
+  // jot.events.list([event]): the live subscriptions, as
+  // {event, key, pattern, once} rows. The rows of one event come in
+  // registration order; events themselves come in name order, the way the
+  // subscriptions are held.
+  void push_events_list(lua_State *L);
   bool has_event_subscribers(const std::string &name) const
   {
     auto it = event_subscribers_.find(name);
     return it != event_subscribers_.end() && !it->second.empty();
   }
-  void emit_event_bus(const std::string &name, const std::function<void(lua_State *)> &build);
+  // Delivers the payload to every subscriber of `name`, skipping the ones whose
+  // pattern does not take this file. Answers how many subscribers it reached.
+  int emit_event_bus(const std::string &name, const std::function<void(lua_State *)> &build);
   void emit_lsp_hover(const LSPHoverResult &hover);
   void emit_lsp_definition(const LSPDefinitionResult &definition);
   void emit_lsp_symbols(const LSPDocumentSymbolResult &symbols);

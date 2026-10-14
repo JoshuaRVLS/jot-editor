@@ -2,6 +2,7 @@
 // pickers - everything user scripts register and the editor dispatches.
 #include "core/editor.h"
 #include "core/host_api.h"
+#include "core/pattern.h"
 #include "lua/api/api.h"
 #include "lua/api/api_internal.h"
 
@@ -288,9 +289,7 @@ void LuaAPI::fire_autocmd(const std::string &e, const std::string &f, int b)
   // queue first, then dispatch immediately (which also covers events fired
   // from inside a Lua callback while the queue is being flushed).
   flush_pending_autocmds();
-  for (auto &x : plugin_autocmds)
-    if (x.event == e)
-      call_callback_event(x.callback, e, f, b, e == "BufChange" ? &last_edit_ : nullptr);
+  dispatch_autocmd(e, f, b, e == "BufChange" ? &last_edit_ : nullptr);
 }
 
 void LuaAPI::flush_pending_autocmds()
@@ -303,19 +302,48 @@ void LuaAPI::flush_pending_autocmds()
   std::vector<PendingAutocmd> queue = std::move(pending_autocmds_);
   for (const auto &pending : queue)
   {
-    for (auto &x : plugin_autocmds)
-    {
-      if (x.event == pending.event)
-      {
-        call_callback_event(x.callback,
-                            pending.event,
-                            pending.filepath,
-                            pending.buffer,
-                            pending.event == "BufChange" ? &pending.delta : nullptr);
-      }
-    }
+    dispatch_autocmd(pending.event,
+                     pending.filepath,
+                     pending.buffer,
+                     pending.event == "BufChange" ? &pending.delta : nullptr);
   }
   flushing_autocmds_ = false;
+}
+
+void LuaAPI::dispatch_autocmd(const std::string &event,
+                              const std::string &filepath,
+                              int buffer,
+                              const LuaEditDelta *edit)
+{
+  // Copy the hooks out first. A handler may register, drop or fire autocmds of
+  // its own, which would invalidate an iterator over the live vector, and a
+  // one-shot hook is unregistered before it runs so that a re-fire from inside
+  // its own callback cannot reach it a second time. Its callback ref is only
+  // freed after the call, because the call is what needs it.
+  std::vector<PluginAutocmd> hooks;
+  for (auto it = plugin_autocmds.begin(); it != plugin_autocmds.end();)
+  {
+    if (it->event != event || !jot_pattern::path_match(it->pattern, filepath))
+    {
+      ++it;
+      continue;
+    }
+    hooks.push_back(*it);
+    if (!it->once)
+    {
+      ++it;
+      continue;
+    }
+    it = plugin_autocmds.erase(it);
+  }
+  for (const auto &hook : hooks)
+  {
+    call_callback_event(hook.callback, event, filepath, buffer, edit);
+    if (hook.once)
+    {
+      drop_callback(hook.callback);
+    }
+  }
 }
 void LuaAPI::register_keymap(const std::string &k,
                              const std::string &c,
@@ -337,22 +365,153 @@ void LuaAPI::remove_keymap(const std::string &key, const std::string &mode)
     }
     if (!it->callback.empty())
     {
-      auto cb = lua_callbacks.find(it->callback);
-      if (cb != lua_callbacks.end())
-      {
-        if (lua_state)
-        {
-          luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, cb->second);
-        }
-        lua_callbacks.erase(cb);
-      }
+      drop_callback(it->callback);
     }
     it = plugin_keymaps.erase(it);
   }
 }
-void LuaAPI::register_autocmd(const std::string &e, const std::string &c)
+
+void LuaAPI::drop_callback(const std::string &callback)
 {
-  plugin_autocmds.push_back({e, c});
+  auto cb = lua_callbacks.find(callback);
+  if (cb == lua_callbacks.end())
+  {
+    return;
+  }
+  if (lua_state)
+  {
+    luaL_unref(static_cast<lua_State *>(lua_state), LUA_REGISTRYINDEX, cb->second);
+  }
+  lua_callbacks.erase(cb);
+}
+void LuaAPI::register_autocmd(const std::string &e,
+                              const std::string &c,
+                              const std::string &pattern,
+                              bool once)
+{
+  plugin_autocmds.push_back({e, c, pattern, once});
+}
+
+void LuaAPI::register_autocmd_from_lua(lua_State *L)
+{
+  // jot.autocmd(event, fn [, opts]), where opts is {pattern = "*.py",
+  // once = true}. A plain string in that place is the pattern, the same
+  // shorthand jot.events.subscribe takes for the same option.
+  //
+  // This is the callable table's __call, so the table arrives as argument 1
+  // (`autocmd(...)`, `jot.autocmd(...)` and `jot.autocmd:...` alike), and the
+  // event and the function follow it.
+  const int self = lua_istable(L, 1) ? 1 : 0;
+  luaL_checktype(L, 2 + self, LUA_TFUNCTION);
+  std::string pattern;
+  bool once = false;
+  if (lua_isstring(L, 3 + self))
+  {
+    pattern = lua_tostring(L, 3 + self);
+  }
+  else if (lua_istable(L, 3 + self))
+  {
+    pattern = table_string(L, 3 + self, "pattern", "");
+    once = table_bool(L, 3 + self, "once", false);
+  }
+  lua_pushvalue(L, 2 + self);
+  const int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  const std::string id = "lua." + std::to_string(ref);
+  lua_callbacks[id] = ref;
+  register_autocmd(luaL_optstring(L, 1 + self, ""), id, pattern, once);
+}
+
+void LuaAPI::autocmd_exec_from_lua(lua_State *L)
+{
+  // The hooks for one event name, called now, with the optional table as the
+  // payload. This is the other half of a named event: a plugin registers
+  // autocmd("User build", fn) and fires it itself, so the name does not have
+  // to exist in the editor for the hook to be reachable.
+  const std::string event = luaL_checkstring(L, 1);
+  if (!lua_isnoneornil(L, 2))
+  {
+    luaL_checktype(L, 2, LUA_TTABLE);
+  }
+  if (!lua_initialized || !editor || !editor->event_loop_.is_main_thread())
+  {
+    return;
+  }
+  lua_State *S = static_cast<lua_State *>(lua_state);
+  const int data = lua_isnoneornil(L, 2) ? 0 : 2;
+  // Same snapshot-then-run shape as dispatch_autocmd, with the payload built
+  // here instead of by the native event it came from.
+  std::vector<PluginAutocmd> hooks;
+  for (auto it = plugin_autocmds.begin(); it != plugin_autocmds.end();)
+  {
+    if (it->event != event)
+    {
+      ++it;
+      continue;
+    }
+    hooks.push_back(*it);
+    if (!it->once)
+    {
+      ++it;
+      continue;
+    }
+    it = plugin_autocmds.erase(it);
+  }
+  for (const auto &hook : hooks)
+  {
+    const int top = lua_gettop(S);
+    auto cb = lua_callbacks.find(hook.callback);
+    if (cb == lua_callbacks.end())
+    {
+      continue;
+    }
+    lua_rawgeti(S, LUA_REGISTRYINDEX, cb->second);
+    lua_newtable(S);
+    lua_pushstring(S, event.c_str());
+    lua_setfield(S, -2, "event");
+    if (data != 0)
+    {
+      copy_event_fields(S, data);
+    }
+    if (!payload_wanted(S, hook.pattern))
+    {
+      lua_settop(S, top);
+      continue;
+    }
+    if (lua_pcall(S, 1, 0, 0) != LUA_OK)
+    {
+      std::cerr << "Lua event callback error: " << lua_tostring(S, -1) << "\n";
+    }
+    lua_settop(S, top);
+    if (hook.once)
+    {
+      drop_callback(hook.callback);
+    }
+  }
+}
+
+void LuaAPI::push_autocmd_list(lua_State *L)
+{
+  // Rows in registration order, with the file filter and the one-shot flag
+  // spelled out, so a plugin can see what is live instead of guessing why a
+  // hook did or did not run.
+  const std::string only = luaL_optstring(L, 1, "");
+  lua_newtable(L);
+  int row = 0;
+  for (const auto &hook : plugin_autocmds)
+  {
+    if (!only.empty() && hook.event != only)
+    {
+      continue;
+    }
+    lua_newtable(L);
+    lua_pushstring(L, hook.event.c_str());
+    lua_setfield(L, -2, "event");
+    lua_pushstring(L, hook.pattern.c_str());
+    lua_setfield(L, -2, "pattern");
+    lua_pushboolean(L, hook.once ? 1 : 0);
+    lua_setfield(L, -2, "once");
+    lua_rawseti(L, -2, ++row);
+  }
 }
 void LuaAPI::register_panel(const std::string &n, const std::string &c, const std::string &t)
 {

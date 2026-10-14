@@ -52,14 +52,21 @@ namespace lua_bind
   }
   int l_register_autocmd(lua_State *L)
   {
-    auto &a = api(L);
-    luaL_checktype(L, 2, LUA_TFUNCTION);
-    lua_pushvalue(L, 2);
-    int ref = luaL_ref(L, LUA_REGISTRYINDEX);
-    std::string id = "lua." + std::to_string(ref);
-    a.lua_callbacks[id] = ref;
-    a.register_autocmd(luaL_optstring(L, 1, ""), id);
+    api(L).register_autocmd_from_lua(L);
     return 0;
+  }
+  // jot.autocmd.exec(event[, data]): fires the hooks registered for a name the
+  // plugin fires itself, the other half of autocmd("User build", fn).
+  int l_autocmd_exec(lua_State *L)
+  {
+    api(L).autocmd_exec_from_lua(L);
+    return 0;
+  }
+  // jot.autocmd.list([event]): what the session has registered.
+  int l_autocmd_list(lua_State *L)
+  {
+    api(L).push_autocmd_list(L);
+    return 1;
   }
   int l_register_panel(lua_State *L)
   {
