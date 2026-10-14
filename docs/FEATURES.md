@@ -386,7 +386,7 @@ settles, so scrolling a long way does not grow the process.
   `$XDG_CACHE_HOME`, `%LOCALAPPDATA%` on Windows), so the next session opens with
   the same marks. The whole thing is also on `jot` as
   `jot.harpoon.list("term"):add()`, for chords of your own and for more than one
-  list ([Lua API](LUA_API.md#jotharpoon-bundled-feature)); `harpoon_nav_wrap`
+  list ([Lua API](LUA_API.md#harpoon)); `harpoon_nav_wrap`
   makes `prev`/`next` wrap instead of stopping at the ends.
 - It is a Lua feature like any other
   ([runtime/lua/features/harpoon.lua](../runtime/lua/features/harpoon.lua)): the
